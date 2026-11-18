@@ -12,9 +12,10 @@ use super::frame::{
 use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::{
     AnovaSpec, BinSize, CorrelationSpec, CrosstabSpec, DiscSort, DiscreteFreqSpec, FreqOptions, FriedmanSpec,
-    HistogramSpec, KruskalWallisSpec, KsTwoSampleSpec, MannWhitneySpec, MeansComparison, MedianTestSpec, NormalitySpec,
-    OutlierSpec, RowStatsSpec, SignTestSpec, SignedRankKind, SignedRankSpec, StatisticsSpec, TTestKind, TTestSpec,
-    Tail, TwoWayAnovaSpec, TwoWayLayout,
+    GraphArrangement, GraphSummarySpec, HistogramSpec, KruskalWallisSpec, KsTwoSampleSpec, MannWhitneySpec,
+    MeansComparison, MedianTestSpec, NormalitySpec, OutlierSpec, PropPowerSpec, PropTestKind, PropTestSpec,
+    RowStatsSpec, SignTestSpec, SignedRankKind, SignedRankSpec, StatisticsSpec, TTestKind, TTestSpec, Tail,
+    TwoWayAnovaSpec, TwoWayLayout, VarTestKind, VarTestSpec,
 };
 use sheaf_core::analysis::{
     AreaType, BaselineSpec, Boundary, ColumnMathSpec, ConvolutionSpec, CrossingIndex, CurveMathSpec, CurveOp,
@@ -63,12 +64,26 @@ pub enum AnalysisKind {
     Ifft,
     /// Signal Processing > FFT Filters (Origin's `fft_filters`).
     FftFilter,
+    /// Signal Processing > IIR Filter (Origin's `dfilter`, OriginPro).
+    IirFilter,
+    /// Signal Processing > FIR Filter (Origin 2027's FIR Filter app).
+    FirFilter,
     /// Signal Processing > Envelope (Origin's `envelope`).
     Envelope,
     /// Signal Processing > Coherence (Origin's `cohere`).
     Coherence,
     /// Signal Processing > Decimation (Origin's `decimate`).
     Decimate,
+    /// Signal Processing > Wavelet > Decompose (Origin's `dwt`; options in `wavelet.rs`).
+    WaveletDecompose,
+    /// Signal Processing > Wavelet > Reconstruction (Origin's `idwt`).
+    WaveletReconstruct,
+    /// Signal Processing > Wavelet > Denoise (Origin's `wtdenoise`).
+    WaveletDenoise,
+    /// Signal Processing > Wavelet > Smooth (Origin's `wtsmooth`).
+    WaveletSmooth,
+    /// Signal Processing > Wavelet > Continuous Wavelet (Origin's `cwt`).
+    ContinuousWavelet,
     /// Mathematics > Trace Interpolation (Origin's `interp1trace`).
     TraceInterp,
     Interpolate,
@@ -78,6 +93,14 @@ pub enum AnalysisKind {
     Statistics,
     /// The Statistics menu: t-tests, one-way ANOVA, histogram and normality tests.
     TTest,
+    /// Statistics > Hypothesis Testing > One-Sample Test for Variance.
+    VarTestOne,
+    /// Statistics > Hypothesis Testing > Two-Sample Test for Variance.
+    VarTestTwo,
+    /// Statistics > Hypothesis Testing > One-Sample Proportion Test (counts typed in, no data).
+    PropTestOne,
+    /// Statistics > Hypothesis Testing > Two-Sample Proportion Test.
+    PropTestTwo,
     Anova,
     Histogram,
     /// Statistics > Descriptive Statistics > Discrete Frequency.
@@ -87,6 +110,14 @@ pub enum AnalysisKind {
     Normality,
     /// Statistics > ANOVA > Two-Way ANOVA.
     Anova2,
+    /// Statistics > ANOVA > Three-Way ANOVA (options in `stats3_options.rs`).
+    Anova3,
+    /// Statistics > ANOVA > One-Way Repeated Measures ANOVA (options in `rm_options.rs`).
+    RmAnova1,
+    /// Statistics > ANOVA > Two-Way Repeated Measures ANOVA.
+    RmAnova2,
+    /// Statistics > Descriptive Statistics > Partial Correlation Coefficient (options in `stats3_options.rs`).
+    PartialCorr,
     /// Statistics > Nonparametric Tests and Descriptive Statistics > Correlation Coefficient.
     MannWhitney,
     SignedRank,
@@ -109,12 +140,23 @@ pub enum AnalysisKind {
     DistFit,
     ProbPlot,
     QQPlot,
+    /// Statistics > Multivariate Analysis and ROC Curve (options in `multivariate_options.rs`).
+    Pca,
+    Roc,
+    /// Statistics > Survival Analysis > Kaplan-Meier Estimator (options in `multivariate_options.rs`).
+    KaplanMeier,
+    /// Statistics > Multivariate Analysis > K-Means Cluster Analysis (options in `multivariate_options.rs`).
+    Kmeans,
     /// Statistics > Descriptive Statistics > Cross Tabulation.
     Crosstab,
+    /// Statistics > Descriptive Statistics > Graphical Summary (T40).
+    GraphSummary,
     /// Analysis > Mathematics: Average Multiple Curves, Intersect and Polygon Area.
     AverageCurves,
     Intersect,
     PolygonArea,
+    /// Analysis > Mathematics > XYZ Surface Area (T91; options in `xyz_options.rs`).
+    XyzArea,
     /// Data Manipulation (options in `manip_options.rs`) and Mathematics > Median Filter.
     SubtractLine,
     ReduceDup,
@@ -125,7 +167,7 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 24] = [
+    pub const ALL: [AnalysisKind; 31] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -142,9 +184,16 @@ impl AnalysisKind {
         AnalysisKind::Fft,
         AnalysisKind::Ifft,
         AnalysisKind::FftFilter,
+        AnalysisKind::IirFilter,
+        AnalysisKind::FirFilter,
         AnalysisKind::Envelope,
         AnalysisKind::Coherence,
         AnalysisKind::Decimate,
+        AnalysisKind::WaveletDecompose,
+        AnalysisKind::WaveletReconstruct,
+        AnalysisKind::WaveletDenoise,
+        AnalysisKind::WaveletSmooth,
+        AnalysisKind::ContinuousWavelet,
         AnalysisKind::TraceInterp,
         AnalysisKind::Interpolate,
         AnalysisKind::Peaks,
@@ -171,21 +220,36 @@ impl AnalysisKind {
             AnalysisKind::Fft => "FFT...",
             AnalysisKind::Ifft => "IFFT...",
             AnalysisKind::FftFilter => "FFT Filters...",
+            AnalysisKind::IirFilter => "IIR Filter...",
+            AnalysisKind::FirFilter => "FIR Filter...",
             AnalysisKind::Envelope => "Envelope...",
             AnalysisKind::Coherence => "Coherence...",
             AnalysisKind::Decimate => "Decimation...",
+            AnalysisKind::WaveletDecompose => "Decompose...",
+            AnalysisKind::WaveletReconstruct => "Reconstruction...",
+            AnalysisKind::WaveletDenoise => "Denoise...",
+            AnalysisKind::WaveletSmooth => "Smooth...",
+            AnalysisKind::ContinuousWavelet => "Continuous Wavelet...",
             AnalysisKind::TraceInterp => "Trace Interpolation...",
             AnalysisKind::Interpolate => "Interpolate...",
             AnalysisKind::Peaks => "Find Peaks...",
             AnalysisKind::PeakChain => "Peak Analyzer...",
             AnalysisKind::Statistics => "Statistics on Columns...",
             AnalysisKind::TTest => "t-Test...",
+            AnalysisKind::VarTestOne => "One-Sample Test for Variance...",
+            AnalysisKind::VarTestTwo => "Two-Sample Test for Variance...",
+            AnalysisKind::PropTestOne => "One-Sample Proportion Test...",
+            AnalysisKind::PropTestTwo => "Two-Sample Proportion Test...",
             AnalysisKind::Anova => "One-Way ANOVA...",
             AnalysisKind::Histogram => "Histogram...",
             AnalysisKind::Binning2D => "2D Frequency Counts/Binning...",
             AnalysisKind::DiscreteFreq => "Discrete Frequency...",
             AnalysisKind::Normality => "Normality Test...",
             AnalysisKind::Anova2 => "Two-Way ANOVA...",
+            AnalysisKind::Anova3 => "Three-Way ANOVA...",
+            AnalysisKind::RmAnova1 => "One-Way Repeated Measures ANOVA...",
+            AnalysisKind::RmAnova2 => "Two-Way Repeated Measures ANOVA...",
+            AnalysisKind::PartialCorr => "Partial Correlation Coefficient...",
             AnalysisKind::MannWhitney => "Mann-Whitney Test...",
             AnalysisKind::SignedRank => "One-Sample Wilcoxon Signed Rank Test...",
             AnalysisKind::SignedRankPaired => "Paired Sample Wilcoxon Signed Rank Test...",
@@ -201,10 +265,16 @@ impl AnalysisKind {
             AnalysisKind::DistFit => "Distribution Fit...",
             AnalysisKind::ProbPlot => "Probability Plot...",
             AnalysisKind::QQPlot => "Q-Q Plot...",
+            AnalysisKind::Pca => "Principal Component Analysis...",
+            AnalysisKind::Roc => "ROC Curve...",
+            AnalysisKind::KaplanMeier => "Kaplan-Meier Estimator...",
+            AnalysisKind::Kmeans => "K-Means Cluster Analysis...",
             AnalysisKind::Crosstab => "Cross Tabulation...",
+            AnalysisKind::GraphSummary => "Graphical Summary...",
             AnalysisKind::AverageCurves => "Average Multiple Curves...",
             AnalysisKind::Intersect => "Intersect...",
             AnalysisKind::PolygonArea => "Polygon Area...",
+            AnalysisKind::XyzArea => "XYZ Surface Area...",
             AnalysisKind::SubtractLine => "Subtract Straight Line...",
             AnalysisKind::ReduceDup => "Reduce Duplicate X Data...",
             AnalysisKind::ReduceX => "Reduce to Evenly Spaced X...",
@@ -237,21 +307,36 @@ impl AnalysisKind {
             "fft" => AnalysisKind::Fft,
             "ifft" => AnalysisKind::Ifft,
             "fft-filter" => AnalysisKind::FftFilter,
+            "iir-filter" => AnalysisKind::IirFilter,
+            "fir-filter" => AnalysisKind::FirFilter,
             "envelope" => AnalysisKind::Envelope,
             "coherence" => AnalysisKind::Coherence,
             "decimate" => AnalysisKind::Decimate,
+            "wavelet-decompose" => AnalysisKind::WaveletDecompose,
+            "wavelet-reconstruct" => AnalysisKind::WaveletReconstruct,
+            "wavelet-denoise" => AnalysisKind::WaveletDenoise,
+            "wavelet-smooth" => AnalysisKind::WaveletSmooth,
+            "cwt" => AnalysisKind::ContinuousWavelet,
             "trace-interp" => AnalysisKind::TraceInterp,
             "interpolate" => AnalysisKind::Interpolate,
             "peaks" => AnalysisKind::Peaks,
             "peak-chain" => AnalysisKind::PeakChain,
             "statistics" => AnalysisKind::Statistics,
             "ttest" => AnalysisKind::TTest,
+            "vartest1" => AnalysisKind::VarTestOne,
+            "vartest2" => AnalysisKind::VarTestTwo,
+            "proptest1" => AnalysisKind::PropTestOne,
+            "proptest2" => AnalysisKind::PropTestTwo,
             "anova" => AnalysisKind::Anova,
             "histogram" => AnalysisKind::Histogram,
             "bin2d" => AnalysisKind::Binning2D,
             "discfreq" => AnalysisKind::DiscreteFreq,
             "normality" => AnalysisKind::Normality,
             "anova2" => AnalysisKind::Anova2,
+            "anova3" => AnalysisKind::Anova3,
+            "rmanova1" => AnalysisKind::RmAnova1,
+            "rmanova2" => AnalysisKind::RmAnova2,
+            "partial-corr" => AnalysisKind::PartialCorr,
             "mannwhitney" => AnalysisKind::MannWhitney,
             "signrank" => AnalysisKind::SignedRank,
             "signrank-paired" => AnalysisKind::SignedRankPaired,
@@ -267,10 +352,16 @@ impl AnalysisKind {
             "distfit" => AnalysisKind::DistFit,
             "probplot" => AnalysisKind::ProbPlot,
             "qqplot" => AnalysisKind::QQPlot,
+            "pca" => AnalysisKind::Pca,
+            "roc" => AnalysisKind::Roc,
+            "kaplanmeier" => AnalysisKind::KaplanMeier,
+            "kmeans" => AnalysisKind::Kmeans,
             "crosstab" => AnalysisKind::Crosstab,
+            "graphsummary" => AnalysisKind::GraphSummary,
             "average-curves" => AnalysisKind::AverageCurves,
             "intersect" => AnalysisKind::Intersect,
             "polygon-area" => AnalysisKind::PolygonArea,
+            "xyz-area" => AnalysisKind::XyzArea,
             "subtract-line" => AnalysisKind::SubtractLine,
             "reduce-dup" => AnalysisKind::ReduceDup,
             "reduce-x" => AnalysisKind::ReduceX,
@@ -386,6 +477,47 @@ const NORMALIZE_CHOICES: [(&str, NormalizeMethod); 12] = [
     ("Divide by a value", NormalizeMethod::Divide(1.0)),
 ];
 
+/// Confidence levels in percent typed as numbers separated by spaces or commas.
+fn parse_levels(text: &str) -> Result<Vec<f64>, String> {
+    text.split(|c: char| c.is_whitespace() || c == ',')
+        .filter(|w| !w.is_empty())
+        .map(|w| w.parse::<f64>().map_err(|_| format!("\"{w}\" is not a confidence level")))
+        .collect()
+}
+
+/// The Hypothetical Sample Size(s) box: whole numbers separated by spaces or commas.
+fn parse_sizes(text: &str) -> Result<Vec<u64>, String> {
+    text.split(|c: char| c.is_whitespace() || c == ',')
+        .filter(|w| !w.is_empty())
+        .map(|w| w.parse::<u64>().map_err(|_| format!("\"{w}\" is not a sample size")))
+        .collect()
+}
+
+/// The Alternate Hypothesis radios of the variance and proportion tests: `Variance <> 1`, `> 1`, `< 1`.
+fn alternative_radios(ui: &mut egui::Ui, tail: &mut Tail, what: &str, value: &str) {
+    ui.horizontal(|ui| {
+        ui.label("Alternate Hypothesis");
+        ui.radio_value(tail, Tail::Two, format!("{what} <> {value}"));
+        ui.radio_value(tail, Tail::Upper, format!("{what} > {value}"));
+        ui.radio_value(tail, Tail::Lower, format!("{what} < {value}"));
+    });
+}
+
+/// Significance Level, the Confidence Interval(s) tick and the Confidence Level(s) box.
+fn significance_and_intervals(ui: &mut egui::Ui, st: &mut StatsOptions) {
+    ui.horizontal(|ui| {
+        ui.label("Significance Level");
+        ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.4999));
+    });
+    ui.checkbox(&mut st.intervals, "Confidence Interval(s)");
+    ui.add_enabled_ui(st.intervals, |ui| {
+        ui.horizontal(|ui| {
+            ui.label("Confidence Level(s) in %");
+            ui.add(egui::TextEdit::singleline(&mut st.levels_text).desired_width(120.0));
+        });
+    });
+}
+
 /// The options of the Statistics menu windows.
 struct StatsOptions {
     /// 0 one-sample, 1 two-sample, 2 paired.
@@ -393,6 +525,27 @@ struct StatsOptions {
     mean: f64,
     difference: f64,
     equal_variance: bool,
+    /// Test of variance: the hypothesized variance or ratio of variances.
+    var_hyp: f64,
+    /// Proportion tests: counts of each sample, the test proportion and difference.
+    successes: [u64; 2],
+    sample_size: [u64; 2],
+    prop_hyp: f64,
+    prop_diff: f64,
+    /// Proportion tests: normal approximation and exact (binomial) test.
+    normal_method: bool,
+    binomial_method: bool,
+    /// Two-sample proportion test: "Use pooled p for test" (Origin: off).
+    pooled_p: bool,
+    /// Proportion tests, Power Analysis: Actual Power, Hypothetical Power, their significance level and the
+    /// hypothetical sample sizes as typed (Origin's defaults: off, 0.05, "50 100 200").
+    power_actual: bool,
+    power_hypothetical: bool,
+    power_alpha: f64,
+    power_sizes_text: String,
+    /// Confidence intervals of the variance and proportion tests, and their levels in percent as typed.
+    intervals: bool,
+    levels_text: String,
     tail: Tail,
     alpha: f64,
     comparison: Option<MeansComparison>,
@@ -401,6 +554,9 @@ struct StatsOptions {
     /// Cross tabulation: indexes into the sheet's columns, row variable and column variable.
     pair_columns: [usize; 2],
     cross: CrosstabSpec,
+    /// Graphical Summary: level and arrangement, and the group columns (indexes into the sheet's columns).
+    summary: GraphSummarySpec,
+    summary_groups: Vec<usize>,
     /// 0 automatic, 1 bin size, 2 number of bins.
     bins: usize,
     bin_size: f64,
@@ -441,12 +597,28 @@ impl Default for StatsOptions {
             mean: 0.0,
             difference: 0.0,
             equal_variance: true,
+            var_hyp: 1.0,
+            successes: [5, 5],
+            sample_size: [10, 10],
+            prop_hyp: 0.5,
+            prop_diff: 0.0,
+            normal_method: true,
+            binomial_method: false,
+            pooled_p: false,
+            power_actual: false,
+            power_hypothetical: false,
+            power_alpha: 0.05,
+            power_sizes_text: "50 100 200".to_string(),
+            intervals: false,
+            levels_text: "90 95 99".to_string(),
             tail: Tail::Two,
             alpha: 0.05,
             comparison: Some(MeansComparison::Tukey),
             control: 0,
             pair_columns: [0, 1],
             cross: CrosstabSpec::default(),
+            summary: GraphSummarySpec::default(),
+            summary_groups: Vec::new(),
             bins: 0,
             bin_size: 1.0,
             bin_count: 10,
@@ -586,6 +758,8 @@ pub struct AnalysisDialog {
     /// The wizard page shown: 0 is Goal, then the pages of the goal.
     chain_page: usize,
     chain_fit: PeakShape,
+    /// The function of each peak in the order found (`None`: the Function of `chain_fit`).
+    chain_fit_shapes: Vec<Option<PeakShape>>,
     chain_fit_linear: bool,
     /// X intervals of "Integrate Ranges".
     ranges: Vec<(f64, f64)>,
@@ -607,15 +781,25 @@ pub struct AnalysisDialog {
     fft: FftSpec,
     ifft: IfftSpec,
     fft_filter: FftFilterSpec,
+    /// IIR Filter and FIR Filter (options in `filter_options.rs`).
+    filters: super::filter_options::FilterOptions,
     envelope: EnvelopeSpec,
     /// Coherence: window, lengths, overlap and interval of Origin's `cohere`.
     coherence: CoherenceOptions,
     decimate: DecimateSpec,
+    /// The Wavelet tools: options of Decompose, Reconstruction, Denoise and Smooth.
+    wavelet: super::wavelet::WaveletOptions,
     trace_interp: TraceInterpSpec,
     stats: StatsOptions,
     dist: super::dist_options::DistOptions,
+    multi: super::multivariate_options::MultiOptions,
     curves: super::math_curves::CurveOptions,
     bin2d: super::bin2d_options::Bin2dState,
+    /// Partial correlation and three-way ANOVA windows.
+    partcorr: super::stats3_options::PartCorrState,
+    anova3: super::stats3_options::Anova3State,
+    xyz: super::xyz_options::XyzState,
+    rm: super::rm_options::RmState,
     discfreq: DiscreteFreqSpec,
     /// Options of the Data Manipulation windows and the median filter.
     manip: super::manip_options::ManipOptions,
@@ -991,7 +1175,12 @@ impl AnalysisDialog {
         // Convolution and Correlation may use an input itself (autocorrelation, as Origin).
         let signal = matches!(
             kind,
-            AnalysisKind::Convolution | AnalysisKind::SignalCorrelation | AnalysisKind::Ifft | AnalysisKind::Coherence
+            AnalysisKind::Convolution
+                | AnalysisKind::SignalCorrelation
+                | AnalysisKind::Ifft
+                | AnalysisKind::Coherence
+                | AnalysisKind::WaveletReconstruct
+                | AnalysisKind::ContinuousWavelet
         );
         let reference_choices = reference_choices(project, if signal { &[] } else { &columns });
         // IFFT: the column right after the (first) input is the imaginary part, as an FFT sheet has it.
@@ -1043,6 +1232,26 @@ impl AnalysisDialog {
             };
             stats.two_way_levels = vec![(String::new(), String::new()); columns.len()];
         }
+        let anova3 = if kind == AnalysisKind::Anova3 {
+            let chosen: Vec<usize> =
+                columns.iter().filter_map(|id| sheet_columns.iter().position(|(c, _)| c == id)).collect();
+            super::stats3_options::Anova3State::with_columns(&chosen, sheet_columns.len())
+        } else {
+            Default::default()
+        };
+        let xyz = {
+            let chosen: Vec<usize> =
+                columns.iter().filter_map(|id| sheet_columns.iter().position(|(c, _)| c == id)).collect();
+            let at = |id: ColumnId| sheet_columns.iter().position(|(c, _)| *c == id);
+            let default =
+                sheaf_core::analysis::xyz_default_columns(sheet).and_then(|[x, y, z]| Some([at(x)?, at(y)?, at(z)?]));
+            super::xyz_options::XyzState::new(&chosen, default, sheet_columns.len())
+        };
+        let rm = {
+            let chosen: Vec<usize> =
+                columns.iter().filter_map(|id| sheet_columns.iter().position(|(c, _)| c == id)).collect();
+            super::rm_options::RmState::new(kind == AnalysisKind::RmAnova2, &chosen, sheet_columns.len())
+        };
         Some(AnalysisDialog {
             kind,
             column_names: names.join(", "),
@@ -1065,9 +1274,11 @@ impl AnalysisDialog {
                 options: FftFilterOptions { keep_offset: true, ..Default::default() },
                 interval: None,
             },
+            filters: super::filter_options::FilterOptions::default(),
             envelope: EnvelopeSpec::default(),
             coherence: CoherenceOptions::default(),
             decimate: DecimateSpec::default(),
+            wavelet: super::wavelet::WaveletOptions::default(),
             trace_interp: TraceInterpSpec::default(),
             columns,
             rows_in_sheet,
@@ -1107,11 +1318,17 @@ impl AnalysisDialog {
             chain_goal: ChainGoal::Integrate,
             chain_page: 0,
             chain_fit: PeakShape::Gauss,
+            chain_fit_shapes: Vec::new(),
             chain_fit_linear: true,
             stats,
             dist: Default::default(),
+            multi: Default::default(),
             curves: Default::default(),
             bin2d: Default::default(),
+            partcorr: Default::default(),
+            anova3,
+            xyz,
+            rm,
             discfreq: Default::default(),
             manip: super::manip_options::ManipOptions::new(x_lo, x_hi),
             sheet_columns,
@@ -1328,8 +1545,38 @@ impl AnalysisDialog {
                     ui.label("Function");
                     ui.radio_value(&mut self.chain_fit, PeakShape::Gauss, "Gauss");
                     ui.radio_value(&mut self.chain_fit, PeakShape::Lorentz, "Lorentz");
+                    ui.radio_value(&mut self.chain_fit, PeakShape::Voigt, "Voigt");
                 });
                 ui.checkbox(&mut self.chain_fit_linear, "Sloped baseline in the fit");
+                // A function per peak, in the order found; peaks beyond the list take the Function
+                // above (Sheaf's own layout; Origin's Fit Control window was not opened).
+                ui.label("Function per peak (in the order found; the others use the Function above)");
+                let mut remove = None;
+                for (k, choice) in self.chain_fit_shapes.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        let text = choice.map_or("Same as above", PeakShape::name);
+                        egui::ComboBox::from_id_salt(("peak_fit_shape", k))
+                            .selected_text(text)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(choice, None, "Same as above");
+                                for s in [PeakShape::Gauss, PeakShape::Lorentz, PeakShape::Voigt] {
+                                    ui.selectable_value(choice, Some(s), s.name());
+                                }
+                            })
+                            .response
+                            .on_hover_text(format!("Peak {}", k + 1));
+                        ui.label(format!("Peak {}", k + 1));
+                        if ui.small_button("Remove").clicked() {
+                            remove = Some(k);
+                        }
+                    });
+                }
+                if let Some(k) = remove {
+                    self.chain_fit_shapes.remove(k);
+                }
+                if ui.button("Add Peak Function").clicked() {
+                    self.chain_fit_shapes.push(None);
+                }
             }
             _ => {
                 ui.label(format!("{}: press OK to run it.", self.chain_goal.name()));
@@ -1364,6 +1611,8 @@ impl AnalysisDialog {
             AnalysisKind::Hilbert => Tool::Hilbert,
             AnalysisKind::Fft => Tool::Fft(self.fft),
             AnalysisKind::FftFilter => Tool::FftFilter(self.fft_filter),
+            AnalysisKind::IirFilter => self.filters.iir_tool(),
+            AnalysisKind::FirFilter => self.filters.fir_tool(),
             AnalysisKind::Envelope => Tool::Envelope(self.envelope),
             AnalysisKind::Coherence => {
                 let other = self
@@ -1374,6 +1623,25 @@ impl AnalysisDialog {
                 Tool::Coherence(CoherenceSpec { other, options: self.coherence })
             }
             AnalysisKind::Decimate => Tool::Decimate(self.decimate),
+            AnalysisKind::WaveletDecompose => self.wavelet.decompose_tool(),
+            AnalysisKind::WaveletReconstruct => {
+                let detail = self
+                    .reference_choices
+                    .get(self.reference)
+                    .map(|(id, _)| *id)
+                    .ok_or("there is no other column with numbers to use as the detail coefficients")?;
+                self.wavelet.reconstruct_tool(detail)
+            }
+            AnalysisKind::WaveletDenoise => self.wavelet.denoise_tool(),
+            AnalysisKind::WaveletSmooth => self.wavelet.smooth_tool(),
+            AnalysisKind::ContinuousWavelet => {
+                let scales = self
+                    .reference_choices
+                    .get(self.reference)
+                    .map(|(id, _)| *id)
+                    .ok_or("there is no other column with numbers to use as the scales")?;
+                self.wavelet.cwt_tool(scales)
+            }
             AnalysisKind::TraceInterp => Tool::TraceInterp(self.trace_interp),
             AnalysisKind::Ifft => {
                 let imaginary = if self.use_reference {
@@ -1426,9 +1694,13 @@ impl AnalysisDialog {
             | AnalysisKind::MedianFilter => self.manip.tool(self.kind),
             AnalysisKind::Differentiate => Tool::Differentiate(self.diff),
             AnalysisKind::DistFit | AnalysisKind::ProbPlot | AnalysisKind::QQPlot => self.dist.tool(self.kind)?,
+            AnalysisKind::Pca | AnalysisKind::Roc | AnalysisKind::KaplanMeier | AnalysisKind::Kmeans => {
+                self.multi.tool(self.kind)?
+            }
             AnalysisKind::AverageCurves => self.curves.average_tool(),
             AnalysisKind::Intersect => self.curves.intersect_tool(),
             AnalysisKind::PolygonArea => Tool::PolygonArea,
+            AnalysisKind::XyzArea => Tool::XyzArea,
             AnalysisKind::Smooth => Tool::Smooth(SmoothOptions {
                 method: match self.smooth_kind {
                     SmoothKind::SavitzkyGolay => SmoothMethod::SavitzkyGolay { poly_order: self.smooth_poly },
@@ -1468,6 +1740,7 @@ impl AnalysisDialog {
                 ..self.peaks
             }),
             AnalysisKind::PeakChain => Tool::PeakChain(PeakChainSpec {
+                centers: Vec::new(),
                 chain: ChainOptions {
                     baseline: match self.chain_baseline {
                         ChainBaselineKind::Constant => match self.chain_const {
@@ -1493,9 +1766,11 @@ impl AnalysisDialog {
                     limits: if self.chain_half_height { LimitMode::HalfHeight } else { LimitMode::Baseline },
                 },
                 integrate: self.chain_goal == ChainGoal::Integrate,
-                fit: (self.chain_goal == ChainGoal::Fit).then_some(PeakFitSpec {
+                fit: (self.chain_goal == ChainGoal::Fit).then(|| PeakFitSpec {
                     shape: self.chain_fit,
                     baseline: if self.chain_fit_linear { FitBaseline::Linear } else { FitBaseline::Constant },
+                    shapes: self.chain_fit_shapes.iter().map(|s| s.unwrap_or(self.chain_fit)).collect(),
+                    peak_curves: false,
                 }),
             }),
             AnalysisKind::Statistics => Tool::Statistics(self.stats.desc),
@@ -1511,12 +1786,67 @@ impl AnalysisDialog {
                 tail: self.stats.tail,
                 alpha: self.stats.alpha,
             }),
+            AnalysisKind::VarTestOne | AnalysisKind::VarTestTwo => {
+                let st = &self.stats;
+                Tool::VarTest(VarTestSpec {
+                    kind: if self.kind == AnalysisKind::VarTestOne {
+                        VarTestKind::OneSample { variance: st.var_hyp }
+                    } else {
+                        VarTestKind::TwoSample { ratio: 1.0 }
+                    },
+                    tail: st.tail,
+                    alpha: st.alpha,
+                    intervals: st.intervals,
+                    levels: parse_levels(&st.levels_text)?,
+                })
+            }
+            AnalysisKind::PropTestOne | AnalysisKind::PropTestTwo => {
+                let st = &self.stats;
+                Tool::PropTest(PropTestSpec {
+                    kind: if self.kind == AnalysisKind::PropTestOne {
+                        PropTestKind::OneSample {
+                            successes: st.successes[0],
+                            size: st.sample_size[0],
+                            proportion: st.prop_hyp,
+                        }
+                    } else {
+                        PropTestKind::TwoSample {
+                            first: (st.successes[0], st.sample_size[0]),
+                            second: (st.successes[1], st.sample_size[1]),
+                            difference: st.prop_diff,
+                        }
+                    },
+                    tail: st.tail,
+                    alpha: st.alpha,
+                    intervals: st.intervals,
+                    levels: parse_levels(&st.levels_text)?,
+                    normal: st.normal_method,
+                    exact: st.binomial_method,
+                    pooled: st.pooled_p,
+                    power: PropPowerSpec {
+                        actual: st.power_actual,
+                        hypothetical: st.power_hypothetical,
+                        alpha: st.power_alpha,
+                        sizes: if st.power_hypothetical { parse_sizes(&st.power_sizes_text)? } else { Vec::new() },
+                    },
+                })
+            }
             AnalysisKind::Anova => Tool::Anova(AnovaSpec {
                 alpha: self.stats.alpha,
                 comparison: self.stats.comparison,
                 control: self.stats.control,
             }),
             AnalysisKind::Crosstab => Tool::Crosstab(CrosstabSpec { alpha: self.stats.alpha, ..self.stats.cross }),
+            AnalysisKind::GraphSummary => {
+                let groups = self
+                    .stats
+                    .summary_groups
+                    .iter()
+                    .filter_map(|&i| self.sheet_columns.get(i).map(|(id, _)| *id))
+                    .filter(|id| !self.columns.contains(id))
+                    .collect();
+                Tool::GraphSummary(GraphSummarySpec { groups, ..self.stats.summary })
+            }
             AnalysisKind::Histogram => Tool::Histogram(HistogramSpec {
                 freq: FreqOptions {
                     min: self.stats.own_range.then_some(self.stats.bin_min),
@@ -1553,6 +1883,9 @@ impl AnalysisDialog {
                     alpha: self.stats.alpha,
                 })
             }
+            AnalysisKind::Anova3 => Tool::ThreeWayAnova(self.anova3.spec()?),
+            AnalysisKind::RmAnova1 | AnalysisKind::RmAnova2 => Tool::RmAnova(self.rm.spec()?),
+            AnalysisKind::PartialCorr => Tool::PartialCorrelation(self.partcorr.spec(&self.sheet_columns)?),
             AnalysisKind::MannWhitney => Tool::MannWhitney(MannWhitneySpec {
                 tail: self.stats.tail,
                 exact: self.stats.exact,
@@ -1602,6 +1935,12 @@ impl AnalysisDialog {
                 (Some(a), Some(b), Some(y)) => vec![a, b, y],
                 _ => return Err("the sheet needs three columns: factor A, factor B and the data".to_string()),
             }
+        } else if self.kind == AnalysisKind::Anova3 {
+            self.anova3.picked(&self.sheet_columns)?
+        } else if self.kind == AnalysisKind::XyzArea {
+            self.xyz.picked(&self.sheet_columns)?
+        } else if matches!(self.kind, AnalysisKind::RmAnova1 | AnalysisKind::RmAnova2) {
+            self.rm.picked(&self.sheet_columns)?
         } else if self.kind == AnalysisKind::Crosstab {
             let pick = |i: usize| self.sheet_columns.get(i).map(|(id, _)| *id);
             match (pick(self.stats.pair_columns[0]), pick(self.stats.pair_columns[1])) {
@@ -1622,6 +1961,8 @@ impl AnalysisDialog {
             AnalysisKind::ColumnMath => "Column",
             AnalysisKind::Convolution => "Response",
             AnalysisKind::SignalCorrelation | AnalysisKind::Coherence => "Second signal",
+            AnalysisKind::WaveletReconstruct => "Detail Coefficients",
+            AnalysisKind::ContinuousWavelet => "Scale",
             AnalysisKind::Ifft => "Imaginary",
             _ => "Reference",
         };
@@ -1645,7 +1986,12 @@ impl AnalysisDialog {
         }
         if matches!(
             self.kind,
-            AnalysisKind::Convolution | AnalysisKind::SignalCorrelation | AnalysisKind::Ifft | AnalysisKind::Coherence
+            AnalysisKind::Convolution
+                | AnalysisKind::SignalCorrelation
+                | AnalysisKind::Ifft
+                | AnalysisKind::Coherence
+                | AnalysisKind::WaveletReconstruct
+                | AnalysisKind::ContinuousWavelet
         ) {
             return;
         }
@@ -1655,7 +2001,7 @@ impl AnalysisDialog {
         );
     }
 
-    fn options(&mut self, ui: &mut egui::Ui) {
+    fn options(&mut self, ui: &mut egui::Ui, filter_fs: Option<f64>) {
         match self.kind {
             AnalysisKind::IntegrateRanges => {
                 let mut remove = None;
@@ -1694,12 +2040,25 @@ impl AnalysisDialog {
             }
             AnalysisKind::Fft => fft_options(ui, &mut self.fft),
             AnalysisKind::FftFilter => fft_filter_options(ui, &mut self.fft_filter),
+            AnalysisKind::IirFilter => super::filter_options::iir_options(ui, &mut self.filters.iir, filter_fs),
+            AnalysisKind::FirFilter => super::filter_options::fir_options(ui, &mut self.filters.fir, filter_fs),
             AnalysisKind::Envelope => envelope_options(ui, &mut self.envelope),
             AnalysisKind::Coherence => {
                 self.reference_options(ui);
                 coherence_options(ui, &mut self.coherence);
             }
             AnalysisKind::Decimate => decimate_options(ui, &mut self.decimate),
+            AnalysisKind::WaveletDecompose => super::wavelet::decompose_options(ui, &mut self.wavelet.decompose),
+            AnalysisKind::WaveletReconstruct => {
+                self.reference_options(ui);
+                super::wavelet::reconstruct_options(ui, &mut self.wavelet.reconstruct);
+            }
+            AnalysisKind::WaveletDenoise => super::wavelet::denoise_options(ui, &mut self.wavelet.denoise),
+            AnalysisKind::WaveletSmooth => super::wavelet::smooth_options(ui, &mut self.wavelet.smooth),
+            AnalysisKind::ContinuousWavelet => {
+                self.reference_options(ui);
+                super::wavelet::cwt_options(ui, &mut self.wavelet.cwt);
+            }
             AnalysisKind::TraceInterp => trace_interp_options(ui, &mut self.trace_interp),
             AnalysisKind::Ifft => {
                 ui.add_enabled_ui(!self.reference_choices.is_empty(), |ui| {
@@ -1961,7 +2320,7 @@ impl AnalysisDialog {
                         ui.add(DragValue::new(&mut self.interp.smoothing).speed(0.01).range(0.0..=1.0e12));
                     });
                     ui.weak(
-                        "The factor is the allowed sum of squared residuals, as in Origin's sf. 0 gives the                          interpolating cubic spline, which is not Origin's automatic smoothing for 0.",
+                        "The factor is the allowed sum of squared residuals, as in Origin's sf. 0 chooses it from the data, as Origin does.",
                     );
                 }
                 if self.interp.method == InterpMethod::CubicSpline {
@@ -2099,6 +2458,87 @@ impl AnalysisDialog {
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
             }
+            AnalysisKind::VarTestOne | AnalysisKind::VarTestTwo => {
+                let one = self.kind == AnalysisKind::VarTestOne;
+                let st = &mut self.stats;
+                // Origin's two-sample dialog has no box for the ratio: its null hypothesis is fixed at 1.
+                if one {
+                    ui.horizontal(|ui| {
+                        ui.label("Test Variance");
+                        ui.add(DragValue::new(&mut st.var_hyp).speed(0.01).range(1e-12..=f64::MAX));
+                    });
+                }
+                let (what, shown) =
+                    if one { ("Variance", format!("{}", st.var_hyp)) } else { ("Variance 1/Variance 2", "1".into()) };
+                ui.horizontal(|ui| {
+                    ui.label("Null Hypothesis");
+                    read_only_box(ui, &format!("{what} = {shown}"), 140.0);
+                });
+                alternative_radios(ui, &mut st.tail, what, &shown);
+                if !one {
+                    ui.weak("Needs exactly two columns; the first over the second.");
+                }
+                significance_and_intervals(ui, st);
+            }
+            AnalysisKind::PropTestOne | AnalysisKind::PropTestTwo => {
+                let one = self.kind == AnalysisKind::PropTestOne;
+                let st = &mut self.stats;
+                let samples = if one { 1 } else { 2 };
+                ui.label("Input Data: Summarized");
+                for i in 0..samples {
+                    let tag = if one { String::new() } else { format!(" of Sample{}", i + 1) };
+                    ui.horizontal(|ui| {
+                        ui.label(format!("Number of Success{tag}"));
+                        ui.add(DragValue::new(&mut st.successes[i]).range(0..=u64::from(u32::MAX)));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label(format!("Sample Size{tag}"));
+                        ui.add(DragValue::new(&mut st.sample_size[i]).range(1..=u64::from(u32::MAX)));
+                    });
+                }
+                ui.label("Proportion Test");
+                let (what, value) = if one {
+                    ui.horizontal(|ui| {
+                        ui.label("Test Proportion");
+                        ui.add(DragValue::new(&mut st.prop_hyp).speed(0.01).range(0.0001..=0.9999));
+                    });
+                    ("Proportion", st.prop_hyp)
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.label("Test Difference");
+                        ui.add(DragValue::new(&mut st.prop_diff).speed(0.01).range(-0.9999..=0.9999));
+                    });
+                    ("Proportion1 - Proportion2", st.prop_diff)
+                };
+                let shown = format!("{value}");
+                ui.horizontal(|ui| {
+                    ui.label("Null Hypothesis");
+                    read_only_box(ui, &format!("{what} = {shown}"), 180.0);
+                });
+                alternative_radios(ui, &mut st.tail, what, &shown);
+                significance_and_intervals(ui, st);
+                ui.label("Test Method");
+                ui.checkbox(&mut st.normal_method, "Normal Approximation");
+                if !one {
+                    ui.checkbox(&mut st.pooled_p, "Use pooled p for test");
+                }
+                ui.checkbox(&mut st.binomial_method, if one { "Binomial Test" } else { "Fisher's Exact Test" });
+                ui.label("Power Analysis");
+                ui.checkbox(&mut st.power_actual, "Actual Power");
+                ui.add_enabled_ui(st.power_actual || st.power_hypothetical, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Significance Level");
+                        ui.add(DragValue::new(&mut st.power_alpha).speed(0.001).range(0.0001..=0.4999));
+                    });
+                });
+                ui.checkbox(&mut st.power_hypothetical, "Hypothetical Power");
+                ui.add_enabled_ui(st.power_hypothetical, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Hypothetical Sample Size(s)");
+                        ui.add(egui::TextEdit::singleline(&mut st.power_sizes_text).desired_width(120.0));
+                    });
+                });
+            }
             AnalysisKind::Anova => {
                 let st = &mut self.stats;
                 ui.label("Every chosen column is a group.");
@@ -2181,6 +2621,70 @@ impl AnalysisDialog {
                     ui.label("Significance level");
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
+            }
+            AnalysisKind::Anova3 => self.anova3.ui(ui, &self.sheet_columns),
+            AnalysisKind::XyzArea => self.xyz.ui(ui, &self.sheet_columns),
+            AnalysisKind::RmAnova1 | AnalysisKind::RmAnova2 => self.rm.ui(ui, &self.sheet_columns),
+            AnalysisKind::PartialCorr => self.partcorr.ui(ui, &self.sheet_columns, &self.columns),
+            AnalysisKind::GraphSummary => {
+                let st = &mut self.stats;
+                ui.label(
+                    "Every chosen column is a variable; each group of the group columns is summarized on its own.",
+                );
+                ui.horizontal(|ui| {
+                    ui.label("Groups");
+                    let chosen: Vec<&str> = st
+                        .summary_groups
+                        .iter()
+                        .filter_map(|&i| self.sheet_columns.get(i))
+                        .map(|(_, n)| n.split("  ").next().unwrap_or(""))
+                        .collect();
+                    let text = if chosen.is_empty() { "(none)".to_string() } else { chosen.join(", ") };
+                    egui::ComboBox::from_id_salt("summary_groups").selected_text(text).width(220.0).show_ui(ui, |ui| {
+                        for (j, (id, name)) in self.sheet_columns.iter().enumerate() {
+                            if self.columns.contains(id) {
+                                continue;
+                            }
+                            let mut on = st.summary_groups.contains(&j);
+                            if ui.checkbox(&mut on, name).changed() {
+                                if on {
+                                    st.summary_groups.push(j);
+                                } else {
+                                    st.summary_groups.retain(|k| *k != j);
+                                }
+                            }
+                        }
+                    });
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Confidence Level (%)");
+                    ui.add(DragValue::new(&mut st.summary.level).speed(0.1).range(0.01..=99.99));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Graph Arrangement");
+                    egui::ComboBox::from_id_salt("summary_arrangement")
+                        .selected_text(st.summary.arrangement.label())
+                        .show_ui(ui, |ui| {
+                            for a in GraphArrangement::ALL {
+                                let enabled = a.implemented();
+                                let r = ui.add_enabled(
+                                    enabled,
+                                    egui::Button::selectable(st.summary.arrangement == a, a.label()),
+                                );
+                                if enabled && r.clicked() {
+                                    st.summary.arrangement = a;
+                                }
+                                if !enabled {
+                                    r.on_disabled_hover_text("Not available yet; Sheaf makes Separate Graphs only.");
+                                }
+                            }
+                        });
+                });
+                ui.weak(
+                    "For each variable and group: Description Statistics, confidence intervals of the mean, median and \
+                     standard deviation, and the Anderson-Darling normality test, with a graph of a histogram and \
+                     normal curve, an interval plot and a normal probability plot.",
+                );
             }
             AnalysisKind::Crosstab => {
                 let st = &mut self.stats;
@@ -2349,6 +2853,9 @@ impl AnalysisDialog {
                 ui.checkbox(&mut st.graph, "Make a graph with a column plot of the counts");
             }
             AnalysisKind::DistFit | AnalysisKind::ProbPlot | AnalysisKind::QQPlot => self.dist.options(ui, self.kind),
+            AnalysisKind::Pca | AnalysisKind::Roc | AnalysisKind::KaplanMeier | AnalysisKind::Kmeans => {
+                self.multi.options(ui, self.kind)
+            }
             AnalysisKind::DiscreteFreq => {
                 let d = &mut self.discfreq;
                 egui::CollapsingHeader::new("Quantities to Compute").default_open(true).show(ui, |ui| {
@@ -2446,9 +2953,16 @@ impl AnalysisDialog {
             AnalysisKind::Hilbert => "hilbert",
             AnalysisKind::Fft => "fft1",
             AnalysisKind::FftFilter => "fft_filters",
+            AnalysisKind::IirFilter => "dfilter",
+            AnalysisKind::FirFilter => "",
             AnalysisKind::Envelope => "envelope",
             AnalysisKind::Coherence => "cohere",
             AnalysisKind::Decimate => "decimate",
+            AnalysisKind::WaveletDecompose => "dwt",
+            AnalysisKind::WaveletReconstruct => "idwt",
+            AnalysisKind::WaveletDenoise => "wtdenoise",
+            AnalysisKind::WaveletSmooth => "wtsmooth",
+            AnalysisKind::ContinuousWavelet => "cwt",
             AnalysisKind::TraceInterp => "interp1trace",
             AnalysisKind::Ifft => "ifft1",
             AnalysisKind::Interpolate => "interp1",
@@ -2456,12 +2970,20 @@ impl AnalysisDialog {
             AnalysisKind::PeakChain => "",
             AnalysisKind::Statistics => "DescStats",
             AnalysisKind::TTest => "ttest",
+            AnalysisKind::VarTestOne => "OneSampleTestVar",
+            AnalysisKind::VarTestTwo => "TwoSampleTestVar",
+            AnalysisKind::PropTestOne => "OneSampleProportionTest",
+            AnalysisKind::PropTestTwo => "TwoSampleProportionTest",
             AnalysisKind::Anova => "anova1",
             AnalysisKind::Histogram => "freqcounts",
             AnalysisKind::Binning2D => "twoDBinning",
             AnalysisKind::DiscreteFreq => "discfreqs",
             AnalysisKind::Normality => "normtest",
             AnalysisKind::Anova2 => "anova2",
+            AnalysisKind::Anova3 => "ANOVAThreeWay",
+            AnalysisKind::RmAnova1 => "ANOVAOneWayRM",
+            AnalysisKind::RmAnova2 => "ANOVATwoWayRM",
+            AnalysisKind::PartialCorr => "pcorrcoef",
             AnalysisKind::MannWhitney => "mannwhitney",
             AnalysisKind::SignedRank | AnalysisKind::SignedRankPaired => "signrank",
             AnalysisKind::KruskalWallis => "kwanova",
@@ -2473,12 +2995,18 @@ impl AnalysisDialog {
             AnalysisKind::KsTwoSample => "kstest2",
             AnalysisKind::MedianTest => "mediantest",
             AnalysisKind::Friedman => "friedman",
+            AnalysisKind::KaplanMeier => "kaplanmeier",
+            AnalysisKind::Kmeans => "kmeans",
             AnalysisKind::AverageCurves => "avecurves",
             AnalysisKind::Intersect => "intersect",
             AnalysisKind::PolygonArea => "polyarea",
+            AnalysisKind::XyzArea => "xyzarea",
             AnalysisKind::ReduceDup => "reducedup",
             // Origin's X-Function names for these were not looked up; the title shows the tool alone.
             AnalysisKind::Crosstab
+            | AnalysisKind::GraphSummary
+            | AnalysisKind::Pca
+            | AnalysisKind::Roc
             | AnalysisKind::SubtractLine
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
@@ -2518,9 +3046,18 @@ impl AnalysisDialog {
             AnalysisKind::Hilbert => "The Hilbert transform of the input signals",
             AnalysisKind::Fft => "The frequency spectrum of the input signals",
             AnalysisKind::FftFilter => "Remove frequencies from the input signals",
+            AnalysisKind::IirFilter => "Design an IIR filter and apply it to the input signals",
+            AnalysisKind::FirFilter => "Design an FIR filter and apply it to the input signals",
             AnalysisKind::Envelope => "The upper and lower envelope of the input curves",
             AnalysisKind::Coherence => "The magnitude-squared coherence of the input signals with a second signal",
             AnalysisKind::Decimate => "Keep every n-th point of the input signals",
+            AnalysisKind::WaveletDecompose => "One level of the discrete wavelet transform of the input signals",
+            AnalysisKind::WaveletReconstruct => "Rebuild a signal from approximation and detail coefficients",
+            AnalysisKind::WaveletDenoise => "Remove noise from the input signals by thresholding wavelet coefficients",
+            AnalysisKind::WaveletSmooth => "Smooth the input signals by dropping wavelet detail coefficients",
+            AnalysisKind::ContinuousWavelet => {
+                "The continuous wavelet transform of the input signals at the given scales"
+            }
             AnalysisKind::TraceInterp => {
                 "Resample curves whose X is not monotonic at evenly spaced points along the path"
             }
@@ -2530,12 +3067,24 @@ impl AnalysisDialog {
             AnalysisKind::PeakChain => "Baseline, peak search, integration and fit of the peaks",
             AnalysisKind::Statistics => "Descriptive statistics of the input columns",
             AnalysisKind::TTest => "Test the means of one or two samples",
+            AnalysisKind::VarTestOne => "Test the variance of a sample against a value (chi-square test)",
+            AnalysisKind::VarTestTwo => "Test the ratio of the variances of two samples (F test)",
+            AnalysisKind::PropTestOne => "Test a proportion of successes against a value, from counts you type in",
+            AnalysisKind::PropTestTwo => "Compare the proportions of two samples, from counts you type in",
             AnalysisKind::Anova => "One-way analysis of variance; every column is a group",
             AnalysisKind::Histogram => "Count the values of the input columns in bins",
             AnalysisKind::Binning2D => "Count the points of two variables in a grid of X and Y bins",
             AnalysisKind::DiscreteFreq => "Count how often each distinct value, text or number, occurs",
             AnalysisKind::Normality => "Test whether the input columns come from a normal distribution",
             AnalysisKind::Anova2 => "Two-way analysis of variance",
+            AnalysisKind::Anova3 => "Three-way analysis of variance with type III sums of squares",
+            AnalysisKind::RmAnova1 => "One-way analysis of variance of repeated measurements of the same subjects",
+            AnalysisKind::RmAnova2 => {
+                "Two-way analysis of variance of repeated measurements, both factors within subjects"
+            }
+            AnalysisKind::PartialCorr => {
+                "Partial correlation coefficients of the input columns, controlling for other columns"
+            }
             AnalysisKind::MannWhitney => "Compare two independent samples by their ranks",
             AnalysisKind::SignedRank => "Test the median of one sample by signed ranks",
             AnalysisKind::SignedRankPaired => "Test the difference of two paired samples by signed ranks",
@@ -2550,12 +3099,22 @@ impl AnalysisDialog {
             AnalysisKind::DistFit => "Fit distributions to the input columns by maximum likelihood and test the fit",
             AnalysisKind::ProbPlot => "Plot the data against the plotting positions on a probability axis",
             AnalysisKind::QQPlot => "Plot the quantiles of a distribution against the ordered data",
+            AnalysisKind::KaplanMeier => {
+                "Estimate the survival function of censored times, with quartiles, the mean and tests of groups"
+            }
+            AnalysisKind::Kmeans => "Group the rows into a chosen number of clusters of similar values",
+            AnalysisKind::Roc => "Judge how well a test variable separates the two states of a state column",
+            AnalysisKind::Pca => "Describe the variation of several columns by uncorrelated components",
             AnalysisKind::Crosstab => {
                 "Count the cases of every combination of two categorical variables and test their independence"
+            }
+            AnalysisKind::GraphSummary => {
+                "Descriptive statistics, confidence intervals and a normality test with a histogram, an interval plot and a probability plot"
             }
             AnalysisKind::AverageCurves => "Average several curves on a common set of X values",
             AnalysisKind::Intersect => "Find the points where two curves meet",
             AnalysisKind::PolygonArea => "Area, centroid and perimeter of each input curve taken as a closed polygon",
+            AnalysisKind::XyzArea => "Area of the surface through the points of three columns X, Y and Z",
             AnalysisKind::Correlation => "Correlation coefficients of the input columns",
             AnalysisKind::SubtractLine => "Subtract the straight line through two points from the input curves",
             AnalysisKind::ReduceDup => "Replace the points that share an X value by one point",
@@ -2581,10 +3140,20 @@ impl AnalysisDialog {
             | AnalysisKind::CurveMath
             | AnalysisKind::ColumnMath
             | AnalysisKind::Hilbert
-            | AnalysisKind::FftFilter => "New columns beside the input",
+            | AnalysisKind::FftFilter
+            | AnalysisKind::IirFilter
+            | AnalysisKind::FirFilter => "New columns beside the input",
             AnalysisKind::Envelope => "The envelopes of each input, each with its X, in a new sheet",
             AnalysisKind::Convolution => "The convolution of each input, with its X, in a new sheet",
             AnalysisKind::Decimate => "The kept points of each input, with their X, in a new sheet",
+            AnalysisKind::WaveletDecompose => "The approximation and detail coefficients of each input in a new sheet",
+            AnalysisKind::WaveletReconstruct => "The rebuilt signal in a new sheet",
+            AnalysisKind::ContinuousWavelet => {
+                "One column of coefficients per scale (rows are the samples) in a new sheet"
+            }
+            AnalysisKind::WaveletDenoise | AnalysisKind::WaveletSmooth => {
+                "The processed signal of each input, with its X, in a new sheet"
+            }
             AnalysisKind::SignalCorrelation => "The correlation of each input against the lag in a new sheet",
             AnalysisKind::LevelCrossing => "The crossing X values in a new column beside each input (CrossingX1, ...)",
             AnalysisKind::Fft => "Eight spectrum columns per input in a new sheet",
@@ -2598,6 +3167,12 @@ impl AnalysisDialog {
                 "The chosen quantities (count, mean, SD, SEM, quartiles, variance, skewness, confidence limits, ...)                  in a new sheet"
             }
             AnalysisKind::TTest => "The statistic, p-value and confidence interval in a new sheet",
+            AnalysisKind::VarTestOne | AnalysisKind::VarTestTwo => {
+                "The statistic, p-value and the confidence intervals asked for, in a new sheet"
+            }
+            AnalysisKind::PropTestOne | AnalysisKind::PropTestTwo => {
+                "The z statistic, the p-values of the ticked methods and the intervals, in a new sheet"
+            }
             AnalysisKind::Anova => "Group statistics, the ANOVA table and the comparisons in a new sheet",
             AnalysisKind::Histogram => "Bin centres, counts, cumulative counts and percentages in a new sheet",
             AnalysisKind::Binning2D => "One row per X bin and one column per Y bin in a new sheet",
@@ -2609,6 +3184,13 @@ impl AnalysisDialog {
                 "The tables (statistics, ANOVA, comparisons) in a new sheet; sums of squares are adjusted for the \
                  other terms, as in Origin"
             }
+            AnalysisKind::RmAnova1 | AnalysisKind::RmAnova2 => {
+                "The tables (within and between subjects, sphericity, descriptive statistics) in a new sheet"
+            }
+            AnalysisKind::Anova3 => {
+                "The tables (statistics, ANOVA, comparisons, Levene, power) in a new sheet; sums of squares are adjusted for the other terms, as in Origin"
+            }
+            AnalysisKind::PartialCorr => "The partial correlations, p-values and degrees of freedom in a new sheet",
             AnalysisKind::MannWhitney => "Ranks, U, Z and the p-values in a new sheet",
             AnalysisKind::SignedRank | AnalysisKind::SignedRankPaired => "Both p-values in a new sheet",
             AnalysisKind::KruskalWallis => "Mean ranks, the chi-square statistic and its p-value in a new sheet",
@@ -2629,14 +3211,30 @@ impl AnalysisDialog {
             AnalysisKind::ProbPlot | AnalysisKind::QQPlot => {
                 "The plotted points and the reference line in a new sheet, and a graph"
             }
+            AnalysisKind::KaplanMeier => {
+                "The survival table, quartile and mean survival times and tests of groups in a new sheet, and a graph of the curves"
+            }
+            AnalysisKind::Kmeans => {
+                "Cluster centres, sizes and distances, the analysis of variance and the cluster of every row in a new sheet, and a scatter graph"
+            }
+            AnalysisKind::Roc => {
+                "Area under the curve with its standard error, the curve points and the best cut-off in a new sheet, and a graph"
+            }
+            AnalysisKind::Pca => {
+                "Eigenvalues, percent of variance, loadings and scores in a new sheet, and a scree plot"
+            }
             AnalysisKind::Crosstab => {
                 "Counts, percentages, expected counts and the chi-square and Fisher tests in a new sheet"
+            }
+            AnalysisKind::GraphSummary => {
+                "Description Statistics, Confidence Intervals and Normality Test tables in a new sheet, and a graph for each variable and group"
             }
             AnalysisKind::AverageCurves => "X, the mean, its standard deviation and the count in a new sheet",
             AnalysisKind::Intersect => "X and Y of each intersection in a new sheet",
             AnalysisKind::PolygonArea => {
                 "Area, signed area, centroid, perimeter and a self-intersection flag in a new sheet"
             }
+            AnalysisKind::XyzArea => "The surface area with the points and triangles used in a new sheet",
             AnalysisKind::Correlation => "The matrices of coefficients and p-values in a new sheet",
             AnalysisKind::SubtractLine | AnalysisKind::TranslateY | AnalysisKind::MedianFilter => {
                 "New columns beside the input"
@@ -2661,6 +3259,8 @@ impl AnalysisDialog {
                 | AnalysisKind::SubtractRef
                 | AnalysisKind::CurveMath
                 | AnalysisKind::ColumnMath
+                | AnalysisKind::WaveletDenoise
+                | AnalysisKind::WaveletSmooth
         ) || super::manip_options::handles(self.kind)
     }
 
@@ -2677,7 +3277,12 @@ impl AnalysisDialog {
         self.column_names = names.join(", ");
         let signal = matches!(
             self.kind,
-            AnalysisKind::Convolution | AnalysisKind::SignalCorrelation | AnalysisKind::Ifft | AnalysisKind::Coherence
+            AnalysisKind::Convolution
+                | AnalysisKind::SignalCorrelation
+                | AnalysisKind::Ifft
+                | AnalysisKind::Coherence
+                | AnalysisKind::WaveletReconstruct
+                | AnalysisKind::ContinuousWavelet
         );
         self.reference_choices = reference_choices(project, if signal { &[] } else { &columns });
         self.reference = self.reference.min(self.reference_choices.len().saturating_sub(1));
@@ -2687,8 +3292,19 @@ impl AnalysisDialog {
         if self.kind == AnalysisKind::Anova2 {
             self.stats.two_way_levels.resize(columns.len(), (String::new(), String::new()));
         }
+        if self.kind == AnalysisKind::PartialCorr {
+            self.partcorr.drop_variables(&self.sheet_columns, &columns);
+        }
         // These tools run on the columns of their own boxes, not on the Input range: the picker sets the boxes.
-        if matches!(self.kind, AnalysisKind::Crosstab | AnalysisKind::Anova2) {
+        if matches!(
+            self.kind,
+            AnalysisKind::Crosstab
+                | AnalysisKind::Anova2
+                | AnalysisKind::Anova3
+                | AnalysisKind::XyzArea
+                | AnalysisKind::RmAnova1
+                | AnalysisKind::RmAnova2
+        ) {
             let chosen: Vec<usize> =
                 columns.iter().filter_map(|id| self.sheet_columns.iter().position(|(c, _)| c == id)).collect();
             if self.kind == AnalysisKind::Crosstab && chosen.len() >= 2 {
@@ -2696,6 +3312,16 @@ impl AnalysisDialog {
             }
             if self.kind == AnalysisKind::Anova2 && chosen.len() >= 3 {
                 self.stats.two_way_columns = [chosen[0], chosen[1], chosen[2]];
+            }
+            if self.kind == AnalysisKind::XyzArea && chosen.len() >= 3 {
+                self.xyz.columns = [chosen[0], chosen[1], chosen[2]];
+            }
+            if self.kind == AnalysisKind::Anova3 && chosen.len() >= 4 {
+                self.anova3.columns = [chosen[0], chosen[1], chosen[2], chosen[3]];
+            }
+            let need = if self.kind == AnalysisKind::RmAnova2 { 4 } else { 3 };
+            if matches!(self.kind, AnalysisKind::RmAnova1 | AnalysisKind::RmAnova2) && chosen.len() >= need {
+                self.rm.columns[..need].copy_from_slice(&chosen[..need]);
             }
         }
         self.columns = columns;
@@ -2719,6 +3345,8 @@ impl AnalysisDialog {
                 | AnalysisKind::ColumnMath
                 | AnalysisKind::Hilbert
                 | AnalysisKind::FftFilter
+                | AnalysisKind::IirFilter
+                | AnalysisKind::FirFilter
                 | AnalysisKind::SubtractLine
                 | AnalysisKind::TranslateY
                 | AnalysisKind::MedianFilter
@@ -2814,7 +3442,10 @@ impl AnalysisDialog {
         let output = self.output_target()?;
         let mode = if Project::can_link(&request.tool) { self.recalc } else { RecalcMode::None };
         // A histogram makes a graph that plots the new columns, which must stay.
-        let previous = if matches!(self.kind, AnalysisKind::Histogram | AnalysisKind::ProbPlot | AnalysisKind::QQPlot) {
+        let previous = if matches!(
+            self.kind,
+            AnalysisKind::Histogram | AnalysisKind::ProbPlot | AnalysisKind::QQPlot | AnalysisKind::GraphSummary
+        ) {
             None
         } else {
             self.applied.clone()
@@ -2837,6 +3468,22 @@ impl AnalysisDialog {
                 Err(e.to_string())
             }
         }
+    }
+
+    /// The sample frequency Auto gives the IIR and FIR filters for the first input: 1 / the mean X step (the
+    /// row number is the X without an X column), as the tools take it when they run.
+    fn auto_sample_frequency(&self, project: &Project) -> Option<f64> {
+        if !matches!(self.kind, AnalysisKind::IirFilter | AnalysisKind::FirFilter) {
+            return None;
+        }
+        let (_, sheet, first) = self.columns.first().and_then(|c| project.locate(*c))?;
+        let Some(x) = sheet.column_index(first.id).and_then(|i| sheet.x_for(i)).and_then(|x| x.numeric()) else {
+            return Some(1.0);
+        };
+        let a = x.iter().position(|v| v.is_finite())?;
+        let b = x.iter().rposition(|v| v.is_finite())?;
+        let step = (x[b] - x[a]) / (b.checked_sub(a).filter(|n| *n > 0)? as f64);
+        (step.is_finite() && step > 0.0).then(|| 1.0 / step).or(Some(1.0))
     }
 
     /// The range of the input in Origin's text form: `[Book1]Sheet1!(A"t",B"up")`.
@@ -2919,7 +3566,17 @@ impl AnalysisDialog {
             });
         });
         // The tools that take their variables from factor boxes have no X column to limit.
-        if matches!(self.kind, AnalysisKind::Crosstab | AnalysisKind::Anova2) {
+        if matches!(
+            self.kind,
+            AnalysisKind::Crosstab
+                | AnalysisKind::Anova2
+                | AnalysisKind::Anova3
+                | AnalysisKind::XyzArea
+                | AnalysisKind::RmAnova1
+                | AnalysisKind::RmAnova2
+                | AnalysisKind::PartialCorr
+                | AnalysisKind::GraphSummary
+        ) {
             return;
         }
         ui.horizontal(|ui| {
@@ -2992,6 +3649,7 @@ impl AnalysisDialog {
         let width = if with_pane { 800.0 } else { 520.0 };
         let pos = (avail.center() - egui::vec2(width, 520.0) / 2.0).max(avail.min);
         let title = self.window_title();
+        let filter_fs = self.auto_sample_frequency(doc.project());
         egui::Window::new(title)
             .id(egui::Id::new("analysis"))
             .open(&mut open)
@@ -3033,9 +3691,11 @@ impl AnalysisDialog {
                             .max_height(380.0)
                             .auto_shrink([false, true])
                             .show(ui, |ui| {
-                                tree_node(ui, "analysis_input", "Input", |ui| self.input_node(ui, doc.project()));
+                                if !matches!(self.kind, AnalysisKind::PropTestOne | AnalysisKind::PropTestTwo) {
+                                    tree_node(ui, "analysis_input", "Input", |ui| self.input_node(ui, doc.project()));
+                                }
                                 let title = self.kind.title();
-                                tree_node(ui, "analysis_options", title, |ui| self.options(ui));
+                                tree_node(ui, "analysis_options", title, |ui| self.options(ui, filter_fs));
                                 tree_node(ui, "analysis_output", "Output", |ui| self.output_node(ui));
                             });
                     });
@@ -3060,7 +3720,10 @@ impl AnalysisDialog {
                     ui.add_enabled(self.has_preview(), egui::Checkbox::new(&mut self.auto_preview, "Auto Preview"));
                     // The probability and Q-Q plots make a new sheet and a new graph on every run, so running them
                     // at each option change would pile those up; they run on OK and Apply only.
-                    let allowed = !matches!(self.kind, AnalysisKind::ProbPlot | AnalysisKind::QQPlot);
+                    let allowed = !matches!(
+                        self.kind,
+                        AnalysisKind::ProbPlot | AnalysisKind::QQPlot | AnalysisKind::GraphSummary
+                    );
                     if !allowed {
                         self.auto_apply = false;
                     }
@@ -3314,5 +3977,24 @@ impl FilterDialog {
             }
         }
         if open && !cancel { FilterOutcome::Open } else { FilterOutcome::Closed }
+    }
+}
+
+#[cfg(test)]
+mod filter_fs_tests {
+    use super::*;
+    use sheaf_core::{ColumnData, Designation};
+
+    #[test]
+    fn auto_sample_frequency_is_one_over_the_x_step() {
+        let mut p = Project::new();
+        let book = p.add_workbook("Book1");
+        let x: Vec<f64> = (0..50).map(|i| f64::from(i) * 0.01).collect();
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0; 50])).unwrap();
+        let d = AnalysisDialog::new(&p, AnalysisKind::IirFilter, vec![y]).unwrap();
+        assert!((d.auto_sample_frequency(&p).unwrap() - 100.0).abs() < 1e-9);
+        let other = AnalysisDialog::new(&p, AnalysisKind::Smooth, vec![y]).unwrap();
+        assert_eq!(other.auto_sample_frequency(&p), None);
     }
 }

@@ -132,6 +132,7 @@ impl OpjFolder {
             name: self.name.clone(),
             folders: self.folders.iter().map(|f| f.to_core(by_name)).collect(),
             windows: self.windows.iter().filter_map(|n| by_name.get(n).copied()).collect(),
+            ..Default::default()
         }
     }
 }
@@ -300,7 +301,15 @@ impl<R: Read + Seek> Builder<R> {
                 self.counts.stray += usize::from(d.stray_bytes > 0);
                 let id = self.new_id();
                 self.column_of_set.insert(set, id);
-                Ok(Some(Column::new(id, short_name, designation, d.data)))
+                let mut column = Column::new(id, short_name, designation, d.data);
+                if info.mask.len > 0 {
+                    let rows = column.len();
+                    column.mask = dataset::decode_mask(&self.f.read_extent(info.mask)?)
+                        .into_iter()
+                        .filter(|&r| r < rows)
+                        .collect();
+                }
+                Ok(Some(column))
             }
             Err(reason) => {
                 *self.skipped.entry(reason).or_insert(0) += 1;

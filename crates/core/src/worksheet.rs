@@ -5,18 +5,77 @@ use crate::column::{Column, Designation, default_short_name};
 use crate::ids::{ColumnId, WindowId};
 use serde::{Deserialize, Serialize};
 
+/// The most rows or columns that can be frozen (Origin: "an index between 1 and 10").
+pub const MAX_FROZEN: u8 = 10;
+
+/// View > Freeze Panes: how many displayed rows and visible columns stay in place while the rest
+/// of the sheet scrolls. A view setting of the sheet, saved with it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Frozen {
+    pub rows: u8,
+    pub columns: u8,
+}
+
+impl Frozen {
+    pub fn is_none(&self) -> bool {
+        self.rows == 0 && self.columns == 0
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Worksheet {
     pub name: String,
+    /// The sheet's long name (Origin's `wks.longname$`), shown on the tab when [`Worksheet::tab_label`]
+    /// asks for it (T90).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub long_name: String,
+    /// The sheet tab's Sheet Name to Show, per sheet as in Origin 2016.
+    #[serde(default, skip_serializing_if = "crate::sheet_tab::SheetLabel::is_default")]
+    pub tab_label: crate::sheet_tab::SheetLabel,
+    /// The corner menu's View switches: label rows, row labels and grid lines (T92).
+    #[serde(default, skip_serializing_if = "crate::sheet_view::SheetView::is_default")]
+    pub view: crate::sheet_view::SheetView,
     pub columns: Vec<Column>,
     /// Column > Filter: hides the rows that fail a condition (see [`crate::rowfilter`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filter: Option<crate::rowfilter::RowFilter>,
+    /// View > Freeze Panes (see [`Frozen`]).
+    #[serde(default, skip_serializing_if = "Frozen::is_none")]
+    pub frozen: Frozen,
+    /// Worksheet > Conditional Formatting (see [`crate::condformat`]); the earlier rule wins.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cond_formats: Vec<crate::condformat::CondFormat>,
+    /// Cell notes (see [`crate::notes`]), sorted by column and row.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<crate::notes::CellNote>,
+    /// Cell formats (see [`crate::cellformat`]): ranges of columns and rows; later ranges win.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cell_formats: Vec<crate::cellformat::FormatRange>,
+    /// Category fonts under per-range formatting (T59); absent in older project files.
+    #[serde(default, skip_serializing_if = "crate::sheet_fonts::WorksheetFonts::is_empty")]
+    pub font_defaults: crate::sheet_fonts::WorksheetFonts,
+    /// Set on the report sheet of a one-way ANOVA with a means comparison and of a two-sample t-test: the groups
+    /// the report was made from, so that "Multiple Comparisons Plot" (T64) can draw them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comparison_source: Option<crate::compplot::ComparisonSource>,
 }
 
 impl Worksheet {
     pub fn new(name: impl Into<String>) -> Self {
-        Worksheet { name: name.into(), columns: Vec::new(), filter: None }
+        Worksheet {
+            name: name.into(),
+            long_name: String::new(),
+            tab_label: Default::default(),
+            view: Default::default(),
+            columns: Vec::new(),
+            filter: None,
+            frozen: Frozen::default(),
+            cond_formats: Vec::new(),
+            notes: Vec::new(),
+            cell_formats: Vec::new(),
+            font_defaults: Default::default(),
+            comparison_source: None,
+        }
     }
 
     /// Number of rows: the length of the longest column.
@@ -112,6 +171,21 @@ pub struct ImportSource {
 }
 
 impl Workbook {
+    /// The title a graph made from this book takes: the book's long name, except that an imported
+    /// book titled with its whole file name (`data.csv`, as Origin titles imports) gives the name
+    /// without the extension, so graph titles and exported file names stay `data`.
+    pub fn title_for_graph(&self) -> String {
+        if let Some(src) = &self.source {
+            let path = std::path::Path::new(&src.path);
+            if path.file_name().is_some_and(|n| n.to_string_lossy() == self.long_name)
+                && let Some(stem) = path.file_stem()
+            {
+                return stem.to_string_lossy().into_owned();
+            }
+        }
+        self.long_name.clone()
+    }
+
     pub fn new(id: WindowId, name: impl Into<String>) -> Self {
         Workbook {
             id,
@@ -177,5 +251,37 @@ mod tests {
         assert_eq!(ws.x_for(0).unwrap().short_name, "B");
         ws.columns[1].designation = Designation::Y;
         assert!(ws.x_for(0).is_none());
+    }
+
+    #[test]
+    fn frozen_panes_round_trip_and_old_files_load_unfrozen() {
+        let mut ws = Worksheet::new("Sheet1");
+        let plain = serde_json::to_string(&ws).unwrap();
+        assert!(!plain.contains("frozen"), "an unfrozen sheet writes nothing: {plain}");
+        let back: Worksheet = serde_json::from_str(&plain).unwrap();
+        assert_eq!(back.frozen, Frozen::default());
+        ws.frozen = Frozen { rows: 3, columns: 2 };
+        let text = serde_json::to_string(&ws).unwrap();
+        let back: Worksheet = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.frozen, Frozen { rows: 3, columns: 2 });
+    }
+}
+
+#[cfg(test)]
+mod title_tests {
+    use super::*;
+
+    #[test]
+    fn a_graph_of_an_imported_book_is_titled_without_the_extension() {
+        let mut b = Workbook::new(WindowId(1), "Book1");
+        b.long_name = "data.csv".into();
+        b.source = Some(ImportSource { path: "C:/runs/data.csv".into(), importer: "ascii".into() });
+        assert_eq!(b.title_for_graph(), "data");
+        // a title the user changed, or a book that was not imported, is used as it is
+        b.long_name = "My data.csv run".into();
+        assert_eq!(b.title_for_graph(), "My data.csv run");
+        b.source = None;
+        b.long_name = "notes.txt".into();
+        assert_eq!(b.title_for_graph(), "notes.txt");
     }
 }

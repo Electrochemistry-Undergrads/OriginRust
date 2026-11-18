@@ -59,6 +59,26 @@ pub enum IoError {
     #[error("'{}' is not a Sheaf project file (its manifest does not say 'sheaf-project')", path.display())]
     NotAProject { path: PathBuf },
 
+    /// A window file (File > Save Window As) was given where a project is needed.
+    #[error("'{}' is a window file (one workbook or graph), not a project; open it to add its window to the open project", path.display())]
+    IsAWindowFile { path: PathBuf },
+
+    /// A file that is not a window file was given where one is needed.
+    #[error("'{}' is not a Sheaf window file (it is a project, or has no window marker in its manifest)", path.display())]
+    NotAWindowFile { path: PathBuf },
+
+    /// A user template file (File > Save Template As) was given where a project is needed.
+    #[error("'{}' is a graph template file, not a project; Plot > User Templates uses it", path.display())]
+    IsATemplateFile { path: PathBuf },
+
+    /// A file that is not a user template file was given where one is needed.
+    #[error("'{}' is not a Sheaf template file (it has no template marker in its manifest)", path.display())]
+    NotATemplateFile { path: PathBuf },
+
+    /// The window to save is not in the project.
+    #[error("cannot save the window: the project has no window with id {id}")]
+    NoSuchWindow { id: u64 },
+
     /// The project was saved by a newer program than this one.
     #[error(
         "'{}' uses project file format version {found}, but this program only reads versions up to \
@@ -97,6 +117,18 @@ pub enum IoError {
     /// A file named like the companion exists and Sheaf did not write it, so it is not replaced.
     #[error("'{}' already exists and is not a companion file written by Sheaf, so it was not replaced; move or rename it and save again", path.display())]
     CompanionExists { path: PathBuf },
+
+    /// An Excel workbook (xls, xlsx, xlsm) that cannot be read.
+    #[error("'{}' is not a readable Excel workbook: {reason}", path.display())]
+    ExcelRead { path: PathBuf, reason: String },
+
+    /// An Excel workbook (xlsx) that cannot be written.
+    #[error("cannot write the Excel workbook '{}': {reason}", path.display())]
+    ExcelWrite { path: PathBuf, reason: String },
+
+    /// An Excel export would replace a file that is not an Excel workbook.
+    #[error("'{}' already exists and is not an Excel (.xlsx) workbook, so it was not replaced; choose another name", path.display())]
+    ExportExists { path: PathBuf },
 
     /// Two columns of a project share one identifier, so their data would collide.
     #[error("'{}' cannot be saved: column id {id} is used by more than one column", path.display())]

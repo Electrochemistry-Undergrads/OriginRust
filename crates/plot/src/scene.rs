@@ -121,6 +121,12 @@ pub enum ObjectKind {
     Label(usize),
     /// A drawn line, arrow, rectangle or ellipse: its index in `Layer::shapes`.
     Shape(usize),
+    /// A slope annotation: its index in `Layer::slopes`.
+    Slope(usize),
+    /// A straight line at an axis value with its label: its index in `Layer::straight_lines`.
+    StraightLine(usize),
+    /// A colour scale or bubble scale: its index in `Layer::scales`.
+    Scale(usize),
     /// A plot: its index in `Layer::plots`.
     Plot(usize),
 }

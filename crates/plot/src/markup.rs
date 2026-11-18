@@ -1,8 +1,13 @@
 //! Text markup of labels (spec section 5): `\b(..)` bold, `\i(..)` italic,
 //! `\+(..)` superscript, `\-(..)` subscript, `\g(..)` Greek, `\pN(..)` size in percent,
 //! `\f:Name(..)` font switch, `\x(hhhh)` a character by its code, `\v(..)` literal text; the
-//! text of `\u(..)`, `\s(..)` and `\cN(..)` is kept without underline, strikethrough or color.
-//! Escapes nest. A backslash that does not start one of these escapes is literal.
+//! `\u(..)` underline, `\s(..)` strikethrough and `\cN(..)` indexed or RGB text color.
+//! `\=(sub,sup)` places paired scripts in one shared column. Escapes nest. A backslash
+//! that does not start one of these escapes is literal. The two prime escapes insert
+//! Unicode prime characters through the same styled glyph path.
+
+use crate::fonts::{SystemFonts, TextMeasurer};
+use sheaf_core::Color;
 
 /// Scale of superscript and subscript text relative to its surroundings.
 pub const SCRIPT_SCALE: f64 = 0.65;
@@ -20,16 +25,28 @@ pub struct Run {
     pub bold: bool,
     /// Italic on top of the label's own font.
     pub italic: bool,
+    /// Draw a line below this run.
+    pub underline: bool,
+    /// Draw a line through this run.
+    pub strikeout: bool,
+    /// An explicit palette or RGB colour, or the label's own colour when absent.
+    pub color: Option<Color>,
+    /// An inline font family, or the label's own family when absent.
+    pub family: Option<String>,
     /// Size relative to the label's font size (1 for normal text).
     pub scale: f64,
     /// Baseline shift in units of the label's font size; positive is up.
     pub rise: f64,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct Style {
     bold: bool,
     italic: bool,
+    underline: bool,
+    strikeout: bool,
+    color: Option<Color>,
+    family: Option<String>,
     greek: bool,
     scale: f64,
     rise: f64,
@@ -39,13 +56,48 @@ struct Style {
 /// so hostile input cannot overflow the stack.
 const MAX_DEPTH: usize = 24;
 
-/// Splits label text into styled runs. Empty text gives no runs.
+/// A layout segment. Script branches have absolute run styles but share one horizontal column.
+#[derive(Clone, Debug)]
+pub(crate) enum Segment {
+    Text(Run),
+    Pair { sub: Vec<Segment>, sup: Vec<Segment> },
+}
+
+/// Splits label text into styled runs, with paired scripts in logical sub/sup order.
+/// Use the internal layout tree when measuring or placing shared script columns.
 pub fn parse(text: &str) -> Vec<Run> {
+    fn flatten(segments: Vec<Segment>, out: &mut Vec<Run>) {
+        for segment in segments {
+            match segment {
+                Segment::Text(run) => out.push(run),
+                Segment::Pair { sub, sup } => {
+                    flatten(sub, out);
+                    flatten(sup, out);
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    flatten(segments(text, &|name| SystemFonts::shared().expand_inline_family(name)), &mut out);
+    out
+}
+
+pub(crate) fn segments(text: &str, expand_family: &impl Fn(&str) -> Option<String>) -> Vec<Segment> {
     let chars: Vec<char> = text.chars().collect();
     let mut pos = 0;
     let mut out = Vec::new();
-    let base = Style { bold: false, italic: false, greek: false, scale: 1.0, rise: 0.0 };
-    parse_seq(&chars, &mut pos, base, false, 0, &mut out);
+    let base = Style {
+        bold: false,
+        italic: false,
+        underline: false,
+        strikeout: false,
+        color: None,
+        family: None,
+        greek: false,
+        scale: 1.0,
+        rise: 0.0,
+    };
+    parse_seq(&chars, &mut pos, base, false, 0, &mut out, expand_family);
     out
 }
 
@@ -54,30 +106,48 @@ pub fn plain(text: &str) -> String {
     parse(text).into_iter().map(|r| r.text).collect()
 }
 
-fn push(out: &mut Vec<Run>, c: char, st: Style) {
+fn push(out: &mut Vec<Segment>, c: char, st: &Style) {
     let c = if st.greek { greek(c) } else { c };
-    if let Some(last) = out.last_mut()
+    if let Some(Segment::Text(last)) = out.last_mut()
         && last.bold == st.bold
         && last.italic == st.italic
+        && last.underline == st.underline
+        && last.strikeout == st.strikeout
+        && last.color == st.color
+        && last.family == st.family
         && last.scale == st.scale
         && last.rise == st.rise
     {
         last.text.push(c);
         return;
     }
-    out.push(Run { text: c.to_string(), bold: st.bold, italic: st.italic, scale: st.scale, rise: st.rise });
+    out.push(Segment::Text(Run {
+        text: c.to_string(),
+        bold: st.bold,
+        italic: st.italic,
+        underline: st.underline,
+        strikeout: st.strikeout,
+        color: st.color,
+        family: st.family.clone(),
+        scale: st.scale,
+        rise: st.rise,
+    }));
 }
 
 /// What a recognised escape does with the text in its parentheses.
 enum Escape {
     /// The text is parsed further with this style.
     Styled(Style),
+    /// A shared column containing subscript, then superscript, separated by the first outer comma.
+    Pair,
     /// `\v(..)`: the text is taken as it is, without escapes.
     Literal,
     /// `\x(hhhh)`: one character given by its hexadecimal code.
     Unicode,
     /// `\(nnn)`: one character given by its decimal code, for example `\(40)` for `(`.
     Decimal,
+    /// One of the two exact prime escapes, emitted without Greek remapping.
+    Prime(char),
 }
 
 /// Longest font name accepted in `\f:Name(..)`; longer text is not an escape.
@@ -85,8 +155,13 @@ const MAX_FONT_NAME: usize = 64;
 
 /// Recognises an escape starting at the backslash at `pos`. Returns what it does and the index of
 /// the first character inside its parentheses.
-fn escape_at(chars: &[char], pos: usize, st: Style) -> Option<(Escape, usize)> {
-    let mut inner = st;
+fn escape_at(
+    chars: &[char],
+    pos: usize,
+    st: &Style,
+    expand_family: &impl Fn(&str) -> Option<String>,
+) -> Option<(Escape, usize)> {
+    let mut inner = st.clone();
     let code = *chars.get(pos + 1)?;
     if code == '(' {
         return Some((Escape::Decimal, pos + 2));
@@ -115,32 +190,51 @@ fn escape_at(chars: &[char], pos: usize, st: Style) -> Option<(Escape, usize)> {
                 inner.scale = st.scale * SCRIPT_SCALE;
                 Escape::Styled(inner)
             }
-            // Underline and strikethrough are not drawn; their text is kept.
-            'u' | 's' => Escape::Styled(inner),
+            'u' => {
+                inner.underline = true;
+                Escape::Styled(inner)
+            }
+            's' => {
+                inner.strikeout = true;
+                Escape::Styled(inner)
+            }
+            '=' => Escape::Pair,
             'v' => Escape::Literal,
             'x' => Escape::Unicode,
+            'y' if chars.get(pos + 4) == Some(&')') => match chars.get(pos + 3) {
+                Some('\'') => Escape::Prime('\u{2032}'),
+                Some('"') => Escape::Prime('\u{2033}'),
+                _ => return None,
+            },
             _ => return None,
         };
         return Some((esc, pos + 3));
     }
     match code {
-        // `\f:Name(..)`: the font itself is not switched (labels keep their own font), but a
+        // `\f:Name(..)`: select this family for the span. A
         // switch away from the Symbol font ends Greek mapping, and a switch to it starts it.
         'f' if chars.get(pos + 2) == Some(&':') => {
             let start = pos + 3;
             let open = (start..chars.len().min(start + MAX_FONT_NAME + 1)).find(|&i| chars[i] == '(')?;
             let name: String = chars[start..open].iter().collect();
-            if name.contains(['\\', ')']) {
+            // Origin 2016 renders an empty-name escape literally (graphing 7.6).
+            if name.is_empty() || name.contains(['\\', ')']) {
                 return None;
             }
             inner.greek = name.trim().eq_ignore_ascii_case("symbol");
+            if name.trim() == name {
+                let name = expand_family(&name).unwrap_or(name);
+                inner.greek = name.eq_ignore_ascii_case("symbol");
+                inner.family = Some(name);
+            }
             Some((Escape::Styled(inner), open + 1))
         }
-        // `\pN(..)` size in percent of the surrounding text; `\cN(..)` color, which is not drawn.
+        // Size percentages retain their four-digit limit; colour codes use a bounded u32.
         'p' | 'c' => {
             let digits = chars[pos + 2..].iter().take_while(|c| c.is_ascii_digit()).count();
             let open = pos + 2 + digits;
-            if digits == 0 || digits > 4 || chars.get(open) != Some(&'(') {
+            let limit = if code == 'p' { 4 } else { 10 };
+            if digits == 0 || digits > limit || chars.get(open) != Some(&'(') {
                 return None;
             }
             if code == 'p' {
@@ -148,11 +242,61 @@ fn escape_at(chars: &[char], pos: usize, st: Style) -> Option<(Escape, usize)> {
                 if percent > 0.0 {
                     inner.scale = st.scale * percent / 100.0;
                 }
+            } else {
+                let index = chars[pos + 2..open].iter().collect::<String>().parse::<u32>().ok()?;
+                // Preserve the existing text and inherited style for zero codes. Origin's
+                // invalid zero escape discards its contents; supported indices are positive.
+                if index > 0 {
+                    inner.color = Some(match index {
+                        1..=0x0100_0000 => text_palette_color(index),
+                        0x0100_0001..=0x0200_0000 => {
+                            // Text escapes are one-based, including RGB-tagged values.
+                            // Color(r,g,b) returns 0x01BBGGRR; add one for the same RGB
+                            // in a text escape (Origin 2016 vector controls, graphing 7.3).
+                            let [r, g, b, _] = (index - 1).to_le_bytes();
+                            Color::rgb(r, g, b)
+                        }
+                        _ => return None,
+                    });
+                }
             }
             Some((Escape::Styled(inner), open + 1))
         }
         _ => None,
     }
+}
+
+/// Origin's original text palette. The low byte selects a one-based colour; unsupported
+/// byte values give black (Origin 2016 EMF fixtures in scratch/text-run-colors).
+fn text_palette_color(index: u32) -> Color {
+    const CLASSIC: [Color; 24] = [
+        Color::BLACK,
+        Color::RED,
+        Color::rgb(0, 255, 0),
+        Color::BLUE,
+        Color::rgb(0, 255, 255),
+        Color::rgb(255, 0, 255),
+        Color::rgb(255, 255, 0),
+        Color::rgb(128, 128, 0),
+        Color::rgb(0, 0, 128),
+        Color::rgb(128, 0, 128),
+        Color::rgb(128, 0, 0),
+        Color::rgb(0, 128, 0),
+        Color::rgb(0, 128, 128),
+        Color::rgb(0, 0, 160),
+        Color::rgb(255, 128, 0),
+        Color::rgb(128, 0, 255),
+        Color::rgb(255, 0, 128),
+        Color::WHITE,
+        Color::rgb(192, 192, 192),
+        Color::rgb(128, 128, 128),
+        Color::rgb(255, 255, 128),
+        Color::rgb(128, 255, 255),
+        Color::rgb(255, 128, 255),
+        Color::rgb(64, 64, 64),
+    ];
+    let index = (index & 255) as usize;
+    index.checked_sub(1).and_then(|i| CLASSIC.get(i)).copied().unwrap_or(Color::BLACK)
 }
 
 /// Copies text up to the `)` that matches an already opened `(`, balancing inner parentheses,
@@ -173,36 +317,79 @@ fn take_enclosed(chars: &[char], pos: &mut usize) -> String {
     text
 }
 
-fn parse_seq(chars: &[char], pos: &mut usize, st: Style, in_escape: bool, depth: usize, out: &mut Vec<Run>) {
+fn parse_seq(
+    chars: &[char],
+    pos: &mut usize,
+    st: Style,
+    in_escape: bool,
+    depth: usize,
+    out: &mut Vec<Segment>,
+    expand_family: &impl Fn(&str) -> Option<String>,
+) {
     let mut parens = 0usize;
     while *pos < chars.len() {
         let c = chars[*pos];
         if c == '\\'
             && depth < MAX_DEPTH
-            && let Some((esc, start)) = escape_at(chars, *pos, st)
+            && let Some((esc, start)) = escape_at(chars, *pos, &st, expand_family)
         {
             *pos = start;
             match esc {
-                Escape::Styled(inner) => parse_seq(chars, pos, inner, true, depth + 1, out),
+                Escape::Styled(inner) => parse_seq(chars, pos, inner, true, depth + 1, out, expand_family),
+                Escape::Pair => {
+                    let body: Vec<char> = take_enclosed(chars, pos).chars().collect();
+                    let mut nesting = 0usize;
+                    let comma = body.iter().position(|&c| match c {
+                        '(' => {
+                            nesting += 1;
+                            false
+                        }
+                        ')' => {
+                            nesting = nesting.saturating_sub(1);
+                            false
+                        }
+                        ',' => nesting == 0,
+                        _ => false,
+                    });
+                    let (lower, upper) =
+                        comma.map_or((&body[..], &body[body.len()..]), |at| (&body[..at], &body[at + 1..]));
+                    // Origin 2016 Arial vector controls: 60% size, baseline -49%/+35%.
+                    // Keep these pair measurements separate from the older standalone scripts.
+                    let branch = |chars: &[char], rise: f64| {
+                        let inner = Style { scale: st.scale * 0.6, rise: st.rise + rise * st.scale, ..st.clone() };
+                        let mut out = Vec::new();
+                        parse_seq(chars, &mut 0, inner, false, depth + 1, &mut out, expand_family);
+                        out
+                    };
+                    let sub = branch(lower, -0.35);
+                    let sup = branch(upper, 0.49);
+                    if !sub.is_empty() || !sup.is_empty() {
+                        out.push(Segment::Pair { sub, sup });
+                    }
+                }
                 Escape::Literal => {
-                    let plain = Style { greek: false, ..st };
-                    take_enclosed(chars, pos).chars().for_each(|c| push(out, c, plain));
+                    let plain = Style { greek: false, ..st.clone() };
+                    take_enclosed(chars, pos).chars().for_each(|c| push(out, c, &plain));
                 }
                 Escape::Unicode => {
                     let code = take_enclosed(chars, pos);
                     let ch =
                         u32::from_str_radix(code.trim(), 16).ok().and_then(char::from_u32).filter(|c| !c.is_control());
                     match ch {
-                        Some(ch) => push(out, ch, Style { greek: false, ..st }),
-                        None => format!("\\x({code})").chars().for_each(|c| push(out, c, st)),
+                        Some(ch) => push(out, ch, &Style { greek: false, ..st.clone() }),
+                        None => format!("\\x({code})").chars().for_each(|c| push(out, c, &st)),
                     }
+                }
+                Escape::Prime(ch) => {
+                    take_enclosed(chars, pos);
+                    push(out, ch, &Style { greek: false, ..st.clone() });
                 }
                 Escape::Decimal => {
                     let code = take_enclosed(chars, pos);
                     let ch = code.trim().parse::<u32>().ok().and_then(char::from_u32).filter(|c| !c.is_control());
                     match ch {
-                        Some(ch) => push(out, ch, Style { greek: false, ..st }),
-                        None => format!("\\({code})").chars().for_each(|c| push(out, c, st)),
+                        Some(ch) => push(out, ch, &Style { greek: false, ..st.clone() }),
+                        None => format!("\\({code})").chars().for_each(|c| push(out, c, &st)),
                     }
                 }
             }
@@ -219,7 +406,7 @@ fn parse_seq(chars: &[char], pos: &mut usize, st: Style, in_escape: bool, depth:
                 parens -= 1;
             }
         }
-        push(out, c, st);
+        push(out, c, &st);
         *pos += 1;
     }
 }

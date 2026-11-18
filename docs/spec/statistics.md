@@ -12,7 +12,7 @@ the raw output of the runs (`stats2-*.out.txt`, `stats2-*.cases.json`).
 
 The numerics are in `crates/calc` (`hypothesis`, `anova`, `anova2`, `nonparam`, `correlation`, `freq`,
 `normality`), the operations in `crates/core/src/analysis.rs` and its `statistics` submodule, the command line
-is `sheaf analyze ttest | anova | anova2 | mannwhitney | signrank | kruskal | corr | histogram | normality | crosstab | bin2d`, and
+is `sheaf analyze ttest | vartest | proptest | anova | anova2 | mannwhitney | signrank | kruskal | corr | histogram | normality | crosstab | bin2d`, and
 the app has a Statistics menu with one window.
 
 ## 1 t-tests
@@ -329,6 +329,8 @@ second lowest) and the highest value (gap to the second highest); the larger is 
 **Statistics on Rows** (`rowstats`; outputs mean and SD by default, standard error, minimum, maximum, number of
 points and sum optional). One number per worksheet row across the chosen columns; NaN ignored. A row with no
 number gives missing values in every output including the count and the sum; one number has no SD and no SE.
+Saved Begin/End ranges now intersect each contributor at original row indices (T127,
+workbook-model13f.2; explicit Sheaf range policy, no new Native measurement).
 Sheaf adds the chosen columns behind the last chosen column (`Tool::RowStatistics`, long names "Mean", "Standard
 Deviation", "SE of Mean", "Minimum", "Maximum", "Number of Points", "Sum"). Origin's own dialog has more options
 (for example row ranges as input) that were not measured.
@@ -679,6 +681,969 @@ against scipy's exact algorithm).
 - Not built: fitting a threshold, censored data, other families, a probability plot of several families on one
   graph.
 
+## 17 Principal component analysis (measured against Origin 2016)
+
+Statistics > Multivariate Analysis > Principal Component Analysis. Origin's X-Function is `pca`
+(`irng` input columns, `mtype` 0 correlation / 1 covariance, `npc` number of components, `missing` 0 listwise /
+1 pairwise, `std` standardize scores, `stat` descriptive statistics; outputs `rt` report sheet and `rd` score sheet).
+Runs: `tools/origin-ref/pca-suite1.lines.txt` (10 rows, 4 complete columns: correlation, covariance, standardized
+scores, descriptive statistics) and `pca-suite2.lines.txt` (12 rows, 5 columns with 3 missing numbers: the four
+combinations of correlation or covariance and listwise or pairwise); for the graphs and the report layout
+`pca-plots3.lines.txt` (seven runs with all four plots on: correlation and covariance, two data sets, one with missing
+numbers, standardized scores, components 2 and 3 on the axes; the window list, the axis limits of each layer, the
+datasets of each plot and a PNG export of every graph) and `t29-report-setup.labtalk.txt` with
+`t29-report-steps.txt` (`origin-screenshot.ps1`: the report sheet window maximized, sections opened, one picture per
+screen). Raw outputs and pictures are local (`re-workspace/scratch/t29/pca*.out.txt`, `plots/`). The numerics are `crates/calc/src/pca.rs` (`nalgebra`'s symmetric
+eigen-decomposition), the tool `crates/core/src/analysis/multivariate.rs`, the command line
+`sheaf analyze pca`, the window Statistics > Multivariate Analysis > Principal Component Analysis...
+(`dialogs/multivariate_options.rs`).
+
+### 17.1 What Origin does (measured)
+
+- **Matrix.** Correlation matrix (default) or covariance matrix with divisor n - 1. Eigenvalues in descending
+  order, percent of variance `100 lambda / sum(lambda)` (Origin prints two decimals), cumulative percent.
+- **Missing values.** Listwise: a row with a missing number in any column is left out entirely; N, mean and SD of
+  every column are over the complete rows (the "missing" count is still per column). Pairwise: N, mean and SD are per
+  column over all its numbers, and each matrix entry uses the rows where both columns have a number, with the means
+  of those rows. The scores of a row that is not used are empty (listwise); with pairwise exclusion rows with a gap
+  also have empty scores (the run shows scores only for complete rows).
+- **Loadings are the eigenvectors** (unit length), not eigenvectors times sqrt of the eigenvalue.
+- **Sign.** Origin makes the components of each eigenvector add up to a positive number (checked on 8 data sets,
+  4 or 5 variables, both matrices); Sheaf does the same. A component whose sum is zero up to rounding would be
+  ambiguous; none occurred.
+- **Scores** are `(x - mean)` (covariance) or `(x - mean) / SD` (correlation) times the eigenvectors; `std` divides
+  each score column by `sqrt(eigenvalue)`, giving unit variance.
+- **Equality of eigenvalues, covariance analysis only.** For each k, the test that the last `p - k + 1` eigenvalues
+  are equal: Bartlett's chi-square `(n - 1 - (2p + 5)/6) (q ln(mean) - sum ln lambda)` over the `q` eigenvalues
+  left, `(q + 2)(q - 1)/2` degrees of freedom; the last row is 0, 0, 0. `n` is the largest column count (also with
+  pairwise exclusion).
+- **Report sheet** (a tree of titled tables; `rt`), measured from the pictures and the cell dump: title "Principal
+  Component Analysis (date)", then **Notes** (X-Function, User Name, Time, Data Filter), **Input Data** ("Variables":
+  Data and Range, one row per column named by its short name), **Descriptive Statistics** (N analysis, N missing,
+  Mean, Standard Deviation), **Correlation Matrix** (always the correlation matrix, also for a covariance analysis),
+  **Eigenvalues of the Correlation Matrix** or **of the Covariance Matrix** (Eigenvalue, Percentage of Variance and
+  Cumulative as text with two decimals and a percent sign; for covariance also Chisq, Degrees of Freedom,
+  Significance Level, and a blue remark "At the 0.05 level, eigenvalues from 1 to 4 are significantly equal."),
+  **Extracted Eigenvectors** (Coefficients of PC1 ... PCk, rows named by the short names), then the embedded graphs
+  **Scree Plot**, **Loading Plot**, **Biplot** (and **Scores Plot** when asked). The scores are in a sheet of their
+  own (`rd`: columns "Principal Component 1 ..", comment "Scores") and the data of the graphs in a third (`rdplot`).
+- **The dialog's plot switches** (the X-Function's options): `screeplot` (default on), `lplot` Loading Plot (on),
+  `splot` Score Plot (off), `biplot` (on), `xcomp` and `ycomp` the components on the axes (1 and 2), `npc` number of
+  components, `label` observation labels (not run). With all four on, the windows are named "Scree Plot", "Loading
+  Plot", "Scores Plot" and "Biplot", in that creation order.
+- **Scree plot.** Eigenvalues against the component number: blue squares joined by a red line, bottom and left axes
+  only, horizontal axis "Principal Component Number" from 0.5 to p + 0.5 with step 1, vertical axis "Eigenvalues" from
+  0; no legend.
+- **Loading plot.** One vector from the origin to the eigenvector coefficients of the two chosen components for each
+  variable, thin blue lines with the variable's short name in blue at the tip, no symbols, black lines through zero,
+  a closed frame without ticks on top and right, both axes fixed from -1 to 1 with step 0.2 (also for a covariance
+  analysis, whose eigenvectors are also of unit length), titled "Principal Component 1" and "Principal Component 2"
+  (the long names of the score columns); no legend. Its data (`rdplot`): the component number and eigenvalue, then
+  for the vectors two columns of zeros, the two coefficient columns and the labels.
+- **Scores plot.** The scores of the two components as small red squares, black lines through zero, closed frame,
+  automatic axes, the same titles; no legend.
+- **Biplot.** Two layers: the scores as in the scores plot against the bottom and left axes (the automatic limits
+  of the scores: for example -2 to 4 and -2 to 2), the loading vectors against the **top and right axes, drawn in
+  blue**, whose limits are those of the bottom and left axes **times `max |loading| / min(|smallest score|, |largest
+  score|)`** of the component on that axis, so that zero lies on the same line in both and the longest loading reaches
+  the nearer end of the scores. Fits 13 of the 14 axes of the seven runs to the six digits Origin shows (the one miss is in 17.4; limits such as
+  -0.71618 to 1.43236 and -1.202706 to 1.202706 from scores -1.628..2.967 and -1.421..1.623 and loadings up to 0.583
+  and 0.854); the scores are the standardized ones when `std` is on, and those of the rows without missing values
+  with listwise exclusion.
+
+### 17.2 What Sheaf does
+
+The chosen columns are the variables (at least two), the chosen rows the cases. Options: correlation or covariance,
+listwise or pairwise, number of components (default 2, at most the number of columns), standardize scores, write
+scores, scree plot, loading plot, score plot, biplot and the two components on their axes. Result sheet `PCA1` (one
+row per variable, the rows beyond that only for the scores and plot data); its layout is given below. The table printed
+on the command line is the eigenvalue table; the loadings are in the notes. A column without spread, fewer than two columns or fewer than two usable rows is
+refused.
+
+**Result sheet layout (follows Origin's tables, 17.1).** The columns appear in Origin's table order and carry
+Origin's labels; the title of each table is in the comment row of its columns: Variable, N analysis, N missing,
+Mean, Standard Deviation ("Descriptive Statistics"); one column per variable named by its short name ("Correlation
+Matrix"); Component, Principal Component Number, Eigenvalue, Percentage of Variance, Cumulative and, for a covariance
+analysis, Chisq, Degrees of Freedom, Significance Level ("Eigenvalues of the Correlation Matrix" or "... Covariance
+Matrix"); Coefficients of PC1 ... PCk ("Extracted Eigenvectors"); the scores "Principal Component k" ("Scores", only
+when written); then the plot data. The printed table keeps Sheaf's own headers. Numbers are numbers (Origin's report
+shows the two percentages as text). A note repeats Origin's remark on the equality of eigenvalues in the one form
+measured.
+
+**Graphs.** Like Origin, a run makes up to four graphs, each its own window: the scree plot (default on), the loading
+plot (on), the score plot (off) and the biplot (on), looking as in 17.1 (own sizes: the point squares are 3 pt, the
+vectors 0.5 pt). The switches are the window's check boxes and `--no-graph`, `--no-loading-plot`, `--no-biplot`,
+`--score-plot`, `--x-component`, `--y-component` of `sheaf analyze pca`; the components on the axes default to 1 and
+2. When the two components are not both among those extracted or are equal, the three plots are left out and a note
+says so. The plots need the scores of their two components; when "write the scores" is off they are added to the sheet
+with the plot data. The vectors are one line plot with a gap after each vector (a missing number) and the labels come
+from a text column; the biplot's second layer is the `overlay` of the graph plan, with its own scales. One undo
+removes the sheet and all graphs.
+
+### 17.3 Fixtures and tolerances
+
+`crates/calc/tests/origin_pca.rs`: N, missing, mean and SD to 1e-12 relative; eigenvalues, loadings, scores and
+the equality tests to 1e-5 relative (Origin prints the eigenvalues and test statistics with six digits); percent of
+variance to 0.005 (two decimals printed). Hand-worked tests in `pca.rs` (two columns: eigenvalues `1 +- r`). The
+biplot axes: `crates/core/src/analysis/multivariate.rs` (`biplot_axes_match_origins_seven_runs`: the 14 axes of the
+seven runs to 2e-4 relative, 13 of them also in the limits of the score axes); the graphs, the report tables and the
+switches: the tests of the same file, `crates/cli/tests/analyze.rs` and the two window tests in `ui_tests.rs`.
+
+### 17.4 Not measured
+
+- The observation labels (`label`), the look of the points and vectors beyond what the pictures show (sizes, line
+  widths and fonts are matched by eye, not read), the score plot on data with missing numbers, the loading plot and
+  biplot of a covariance analysis with pairwise exclusion, the remark under the eigenvalue table when no group of
+  eigenvalues is equal or for a correlation analysis (Sheaf writes the remark only in the measured form), what Origin
+  does when `xcomp` or `ycomp` is beyond `npc`, other output options (the component-number selection by Kaiser or
+  percent rule, the "Quantities to Compute" ticks), the behaviour of Origin on a column without spread or with fewer
+  rows than columns, and a sign rule for a component whose sum is exactly zero. One vertical axis differed: the
+  automatic range of the scores in the covariance run (scores -6.33..7.33) is -7.5 to 10 with step 5 in Origin and
+  -8 to 9 in Sheaf's automatic range (`autorange.rs`); the loading axes then follow Sheaf's limits there.
+
+## 18 K-means cluster analysis (measured against Origin 2016)
+
+Statistics > Multivariate Analysis > K-Means Cluster Analysis. Origin's X-Function is `kmeans` (`ir` input columns,
+`num` number of clusters, `iter`, `anova` and `distance` ticks; outputs `rt` report sheet and `rd` membership
+sheet). Runs: `tools/origin-ref/kmeans-suite1.lines.txt` (12 cases, two variables, two and three clusters, with the
+analysis of variance and the membership sheet) and `kmeans-suite2.lines.txt` (ten cases in one variable with two,
+three and four clusters and the same cases in reverse order; 15 cases in two variables with three, four and five
+clusters and with `iter:=1`). Nine runs gave initial centres, final centres and sizes that fix the algorithm. Raw
+outputs are local (`re-workspace/scratch/t29/km2.out`, `km4.out`). The report layout comes from the pictures of the
+report sheet window (`t29-report-setup.labtalk.txt`, `t29-report-steps.txt`) and `kmeans-members.lines.txt` (the
+membership sheet's column labels). The numerics are `crates/calc/src/kmeans.rs`, the
+tool `crates/core/src/analysis/multivariate.rs`, the command line `sheaf analyze kmeans`, the window Statistics >
+Multivariate Analysis > K-Means Cluster Analysis... (`dialogs/multivariate_options.rs`).
+
+### 18.1 What Origin does (measured)
+
+- **Initial centres are cases**, picked by a replacement rule in sheet order (the SPSS quick-cluster rule): the
+  first `k` cases start as the centres; a later case `x` replaces the nearer of the two closest centres if its
+  distance to its nearest centre exceeds the smallest distance between two centres, otherwise it replaces its nearest
+  centre `m` if its distance to its second-nearest centre exceeds the distance of `m` to the centre nearest to `m`. This
+  gave Origin's initial centres, in Origin's cluster order, in all nine runs; pure "first k cases", "farthest points"
+  and "maximin" rules did not. Cluster numbers follow the order of the rows (the reversed ten cases give clusters in a
+  different order).
+- **Iteration.** The final centres are not what Lloyd's iterations give from those starts in six of the nine
+  runs (for example ten cases with k = 3: Origin ends with 3.25, 9.75 and 17.5, Lloyd's with 4, 11.75 and 20): they are a local optimum under single-case moves, the
+  Hartigan-Wong criterion, which Sheaf uses after the first nearest-centre assignment. Ties go to the lower cluster.
+  `iter:=1` gave the same result as the default (the meaning of the option was not worked out).
+- **Distances** are Euclidean on the raw values. **Report sheet** (columns side by side): per variable the mean, SD, N
+  and missing count; per cluster the initial centre and the final centre (one value per variable), N, the sum of squared
+  distances to the centre, and the mean and the largest distance to the centre, then the `k x k` table of distances
+  between the final centres; with `anova:=1` per variable the degrees of freedom (`k - 1`), the between mean square,
+  the error degrees of freedom (`n - k`), the error mean square, `F` and its probability. **Membership sheet** (`rd`):
+  the cluster number and, with `distance:=1`, the distance to the centre, one row per case.
+- The probability of `F` agrees with the exact `F` tail to 1e-9.
+- **Report layout** (measured from the pictures of the report sheet): title "K-Means Cluster Analysis (date)", then
+  **Notes**, **Input Data**, **Descriptive Statistics** (as in 17.1), **Initial Cluster Center** and **Final Cluster
+  Center** (rows Cluster1, Cluster2, ..., one column per variable named by its short name), **Cluster Summary**
+  (Number of Observations, Within Cluster Sum of Square, Average Distance, Maximum Distance), **Distance between Final
+  Cluster Centers** (a k x k table, rows and columns Cluster1 ...), **ANOVA** (rows per variable; Cluster DF, Cluster
+  SS, Error DF, Error SS, F Value, Prob>F). **The two "SS" columns hold the mean squares**: for the ten-case example
+  "Cluster SS" 178.9375 over "Error SS" 0.52083 is the F value 343.56. The membership sheet (`rd`) has the columns
+  "Membership" and (with `distance`) "Distance".
+
+### 18.2 What Sheaf does
+
+The chosen columns are the variables, the chosen rows the cases; a row with a missing number in any column is left out
+(not measured). Options: number of clusters (default 3, at least 2, at most the rows), maximum passes of single-case
+moves (default 100), analysis of variance, write the cluster of every row and its distance, scatter graph. Result sheet
+`KMeans1` follows Origin's tables (18.1), the title of each in the comment row of its columns: Variable, N analysis,
+N missing, Mean, Standard Deviation ("Descriptive Statistics"); Cluster (Cluster1 ...) and one column per variable
+("Initial Cluster Center"), the same again ("Final Cluster Center"); Number of Observations, Within Cluster Sum of
+Square, Average Distance, Maximum Distance ("Cluster Summary"); Cluster1 ... Clusterk ("Distance between Final Cluster
+Centers"); ANOVA variable, Cluster DF, Cluster SS, Error DF, Error SS, F Value, Prob>F ("ANOVA"; the two SS columns
+are the mean squares, as Origin's); Membership and Distance (rows of the input, empty for a left-out row). The scatter graph shows the
+first two variables with one plot per cluster (not made for one variable); one undo removes sheet and graph. Fewer than
+two clusters, more clusters than rows, an infinite number, or two identical rows among the initial centres (a cluster
+would stay empty) are refused.
+
+### 18.3 Fixtures and tolerances
+
+`crates/calc/tests/origin_kmeans.rs`: every run above; centres, SS and distances to 1e-12 relative, the probability of
+`F` to 1e-9, sizes and initial centres exact. Hand-worked tests in `kmeans.rs`; the table order and titles of the
+result sheet in `multivariate.rs`.
+
+### 18.4 Not measured
+
+- Missing values, the iteration limit (`iter`) and Origin's convergence test, standardized variables, k-means with a
+  user-chosen set of initial centres (Origin's dialog offers other initial-centre choices that were not run), a case
+  that ties between two centres at the first assignment other than the ones in the runs, k-medians, the graph that
+  Origin draws (`plot`, `iy`: not run, the call needs a range of plot variables), the Input Data and Notes tables
+  (not written by Sheaf), and the behaviour for more clusters than distinct rows.
+
+## 19 ROC curve (measured against Origin 2016, 19.5)
+
+**Source of the numbers: Origin 2016 since 2026-11-15 (19.5); before that scipy.** Statistics > ROC Curve is an Origin X-Function (`ROCCurve`) that is
+only for the menu: `ROCCurve;` from LabTalk returns false, and its definition file lists no usable LabTalk context.
+Its dialog was opened through the menu with `tools/origin-ref/origin-dialog.ps1 -MenuClicks "300,300;K:^a;K:%s;K:R"`
+(Alt+S, then R, on a selected worksheet; one run, 2026-11-14, picture in `re-workspace/scratch/t29/rocdlg`, local).
+Later attempts to drive it (typing the ranges, picking the positive value, OK) did not get the dialog up again while
+other sessions held the Origin lock, so **no Origin number was measured**. The numbers are from scipy 1.17 through
+`tools/roc-ref.py` into `crates/calc/tests/scipy_roc.rs`; the rules are the textbook ones.
+
+The numerics are `crates/calc/src/roc.rs` (the rules are in its header), the tool
+`crates/core/src/analysis/roc.rs`, the command line `sheaf analyze roc`, the window Statistics > ROC Curve...
+(`dialogs/multivariate_options.rs`).
+
+### 19.1 What Origin's dialog shows (measured: the control list of that one run)
+
+Window "ROCCurve" with the usual Recalculate row, then **Input Data** (Range 1: **Data**, the test variable column(s),
+and **State**, the state column; with the selection A:C the dialog proposed Data A:C and State C, so the state is the last
+selected column), **Computation Control** (**Positive State Value**, an editable list of the values found in the state
+column; **Threshold Method**: "Interpolation of data points" (default) or "Speed Mode"; **Test Direction**: "Positive
+v.s. High" (default) or "Positive v.s. Low"; a ticked **ROC Curve** group, which holds a hidden "With Diagonal Reference
+Line" setting; a ticked **Standard Error and Confidence Interval** group with a hidden "Confidence Levels in %"), and
+**Output** (Graph, an "Arrange Plots of Same Type in One Graph" setting, dataset identifier). The OK button stays off with
+the message "Please choose at least one value for the STATE Values" until a positive value is chosen.
+
+### 19.2 What Sheaf does
+
+The chosen columns are the test variables, then the state column last (numbers or text). The positive state is the
+value in "Positive state value" (default 1; a text cell "1" equals a numeric 1); rows with a missing state or test value
+are left out; "Positive v.s. High" (default) or "Positive v.s. Low" sets which end of the test variable is positive.
+
+- Curve: one point per distinct test value (a case is called positive at or above the cut-off, at or below it for
+  "Low"), from (0, 0) at an infinite cut-off to (1, 1). Sensitivity is the fraction of positives called positive,
+  specificity that of negatives called negative. Origin's "Interpolation of data points" is one point per data value
+  with the cut-offs between values (19.5); "Speed Mode" is not built.
+- Area: the trapezoid area, which equals the Mann-Whitney statistic U / (m n) with ties counting one half.
+- Standard error, interval, Z and p-value: Origin's (19.5): the curve-integrated Hanley-McNeil form, area -/+ z SE not
+  limited to [0, 1] (z from the confidence level, default 95 %), Z = (area - 0.5) / SE0 with SE0 the standard error of
+  an area of 0.5, and its two-sided p-value. (Until 2026-11-15: DeLong's standard error, a clipped interval and Z from
+  the observed SE.)
+- Best cut-off: the largest sensitivity + specificity - 1 (Youden), the highest cut-off among equal ones.
+
+Result sheet `ROC1`: Data, Positive, Negative, Area, Standard error, Lower limit, Upper limit, Z, Prob>|Z|, Best
+cut-off, Best sensitivity, Best specificity (one row per test variable), then per test variable Cut-off, 1 -
+Specificity and Sensitivity (the curve), then the two points of the diagonal. A new graph (a line plot per curve and
+the diagonal) unless "ROC curve" is off; one undo removes sheet and graph. All cases in one state, an unknown positive
+value, one column or a confidence level outside 0 to 100 are refused.
+
+### 19.3 Checked against scipy, tolerances
+
+Area and curve points against scipy: 1e-12 relative, three data sets (ties inside and across the states, a perfect
+separation, an overlap; `scipy_roc.rs`). The standard error, interval, p-value and cut-offs are checked against Origin
+(19.5, `origin_roc.rs`). Hand-worked tests in `roc.rs`.
+
+### 19.4 Not measured (Origin)
+
+- Settled by 19.5: the standard error, interval, p-value and curve cut-offs. Before that this read: whether Origin's
+  standard error is DeLong's or Hanley-McNeil's, whether its interval is
+  asymptotic normal and clipped, its p-value (and its null hypothesis), its curve points (interpolated thresholds), and
+  its choice of the best cut-off. To measure: run the dialog on the data of `scipy_roc.rs` (the dialog is the only way)
+  and read the report sheet.
+- The positive state when the state column holds text, the report sheet and graph layout, the sheet and graph names,
+  and the default confidence level.
+- Not built: Speed Mode, several state ranges, comparing curves, partial area.
+
+### 19.5 Measured in Origin 2016 (2026-11-15)
+
+Run through the window (Statistics > ROC Curve > Open Dialog..., the columns selected by dragging over their
+heads, Data set to the test column, the positive value picked from its list with a click, OK) with
+`tools/origin-ref/origin-dialog.ps1` (`re-workspace/scratch/t29roc`, local only). The report numbers were
+read at full precision by copying the report sheet's cells into a dataset (`wcol(c)[r]`). Four data sets:
+the three of `scipy_roc.rs` and one with 4 against 5 cases; in two of them Origin's list offered the state
+column's first value first, so 0 was the positive value. Fixtures: `crates/calc/tests/origin_roc.rs`; every
+number matches (the p-value to 1e-9 relative, the normal tail of `statrs`).
+
+- **Report** "ROC Curve1": Notes, Input Data, Case Processing Summary (Positive and Negative counts, "Larger
+  test measurement values indicates more positive test", "The positive actual state is 1"), Area Under the
+  Curve (Area, Std. Error, Asymptotic Prob, 95% LCL, 95% UCL) and the ROC Curve graph; no best cut-off
+  (Sheaf's best cut-off is its own). A second sheet "ROCValues1" holds the curve.
+- **Area**: the trapezoid area (the Mann-Whitney statistic, ties one half), as Sheaf already had.
+- **Standard error**: neither DeLong's nor Hanley and McNeil's exponential approximation. It is
+  `sqrt((A (1 - A) + (n_neg - 1) (Q1 - A^2) + (n_pos - 1) (Q2 - A^2)) / (n_pos n_neg))` with
+  `Q1 = integral of sensitivity^2 d(1 - specificity)` and `Q2 = integral of specificity^2 d(sensitivity)` along
+  the straight segments of the curve, so a segment of tied values counts `dx (y0^2 + y0 y1 + y1^2) / 3`. It
+  reproduces all four to the last digit (0.077493787947229317 with ties, 0.10327314252246217,
+  0.18708286933869706 and 0 without). Sheaf now uses it.
+- **Interval**: `A -/+ 1.96 SE`, **not limited to [0, 1]** (UCL 1.0503 and 1.0419, LCL -0.0667). Copied.
+- **Asymptotic Prob**: two-sided normal p-value of `(A - 0.5) / SE0` with `SE0 = sqrt((n_pos + n_neg + 1) /
+  (12 n_pos n_neg))`, the standard error when the area is 0.5 (0.0074055 where the observed SE would give
+  2e-7). Copied; Sheaf's `Z` is that statistic.
+- **Curve** ("Interpolation of data points"): one row per distinct value plus one, from (1, 1) to (0, 0),
+  columns cut-off, 1 - specificity, sensitivity. The cut-offs are the midpoints between neighbouring
+  distinct values (0.15 between 0.1 and 0.2) and, at the ends, the smallest value - 1 and the largest + 1
+  (-0.3 and 5.8 for data from 0.7 to 4.8), or 0 and 1 when every value lies in [0, 1]. Copied (Sheaf keeps
+  its order from (0, 0) to (1, 1)).
+- **"Positive v.s. Low"** (2026-11-15, `r-lowA`, `r-lowB`): the area is 1 - A of the same data, the standard error,
+  p-value and interval half-width are unchanged, and the cut-offs are the same midpoints and ends; the rows still run by
+  rising cut-off, which is now from (0, 0) (nobody positive below the smallest value - 1) to (1, 1). As Sheaf.
+- **Text states** (`r-txt`): a column of "no"/"yes" offers the values in order of appearance; with "yes" positive the
+  numbers are those of the numeric case (area 0.9375, SE 0.0897587913521567). As Sheaf.
+- **Speed Mode**: chosen by a message to the Threshold Method list it gave exactly the interpolated result on the
+  overlap set; that this setting took is not confirmed (a message did not set the positive value either), so Speed
+  Mode is still not measured and not built.
+- Not measured: several data columns, other confidence levels.
+
+## 20 Kaplan-Meier estimator (measured against Origin 2016)
+
+Statistics > Survival Analysis > Kaplan-Meier Estimator. Origin's X-Function is `kaplanmeier` (`irng` time, censor
+and optional group columns, `censor` the censoring value, `quartile`, `mean`, `logrank`, `breslow`, `tarone`;
+outputs `rt` report sheet and `rd` survival-function sheet). Runs: `tools/origin-ref/kaplan-suite1.lines.txt` (14
+cases with ties and 4 censored, one sample and two interleaved groups, with the three rank tests) and
+`kaplan-suite2.lines.txt` (12 cases whose last two are censored or events, and 19 cases in three groups, one of
+them a single case); `kaplan-probe.lines.txt` was a first look. Raw outputs are local
+(`re-workspace/scratch/t29/km1.out`, `km3.out`). The numerics are `crates/calc/src/survival.rs` (the rules are in its
+header), the tool `crates/core/src/analysis/survival.rs`, the command line `sheaf analyze kaplan-meier`, the window
+Statistics > Survival Analysis > Kaplan-Meier Estimator... (`dialogs/multivariate_options.rs`).
+
+### 20.1 What Origin does (measured)
+
+- **Table.** One row per case, sorted by time; at tied times the events come before the censored cases (a case censored
+  at `t` is at risk at `t`). The survival estimate and its standard error are printed on the last of the tied event rows
+  only (other rows show `--`), a `+` marks censored cases, and the running number of events and the number of cases
+  left at risk after the row follow.
+- **Estimate.** `S(t) = prod (1 - d/n)`; standard error Greenwood's `S sqrt(sum d / (n (n - d)))`, 0 once `S` is 0.
+  The `rd` sheet holds the step function (time and survival, the start `(0, 1)` first).
+- **Quartiles** (25, 50, 75 %): the estimate is the smallest event time with `S <= 1 - p`. Its lower and upper limits are
+  the smallest event times at which the **linear** limits `S -/+ z se` are at or below `1 - p` (lower limit of the quartile
+  from the lower limit of `S`, upper limit from the upper one; z for 95 %). When the upper limit is never reached Origin
+  gives the largest event time (seen once, for a quartile whose estimate is reached; for a quartile never reached Sheaf gives no limits, unmeasured).
+- **Mean** is the area under the curve up to the largest time, **censored or not**. Standard error `sqrt(f sum A^2 d /
+  (n (n - d)))`, `A` the area to the right of each event time, with `f = D / (D - 1)` (`D` the number of events) **only when
+  the curve reaches 0** (the largest time is an event); with a censored largest time `f = 1` (six runs). Limits mean -/+ z se.
+- **Tests of groups** (two or more groups): log-rank (weight 1), Breslow (generalised Wilcoxon, weight `n`) and
+  Tarone-Ware (weight `sqrt(n)`); chi-square with `groups - 1` degrees of freedom, hypergeometric variance. Measured with
+  two and three groups; the probability agrees with the exact chi-square tail to 4e-8 (Origin's own tail routine).
+- **Confidence limits of the curve** (`sfci:=1`; measured with 90, 95 and 99 percent, one and two groups, runs
+  `kaplan-plots2.lines.txt`, `kaplan-plots3.lines.txt`): the survival-function sheet (`rd`) has per group the columns
+  "Time", "Survival(g)", "95% UCI" and "95% LCI" (the level is the `conf` option; comment "Survival Function"), on the
+  event rows, the start `(0, 1, 1, 1)` first. The limits are the **linear limits `S -/+ z se`, not cut off** at 1 or 0
+  (the first upper limit of the two-group example is 1.1163677216739256, a lower limit -0.15141395101436683), 0 and 0
+  once the curve is 0. The call with `sfci:=1` returned false (nothing drawn) with `plotinone:=1`; with `plotinone:=0`
+  it made one graph per group. (The other plot options `omsf`, `hazard`, `lsf` write further column groups: 1 - S,
+  the hazard and ln S; not read further.)
+- **Survival graph** (picture): window "Survival Function" (a second group "Survival Function(2)"), boxed title
+  "Survival Function" with a shadow, a black step line "Survival(1)" (red for the second group when two groups share
+  a graph), the limits dotted and thin ("95% UCI", "95% LCI"), horizontal axis the time column from -5 left of 0 on, the
+  vertical axis "Survival Function" fixed from -0.02 to 1.02 (so a limit beyond 0 or 1 is cut by the frame), no marks for
+  censored cases, a legend at the top right.
+- **Report layout** (pictures of the report sheet): title "Kaplan-Meier Estimates (date)", **Notes** (X-Function, User
+  Name, Time, Data Filter), **Input Data** (Data and Range of the Time Range, Censor Range and Grouping Range
+  (Optional)), **Summary of Event and Censored Values** (rows 1, 2, ... per group: Total, Events, Censored, Percent
+  Censored as a fraction; note "Censored Value(s): 1"), then per group **Survival Analysis of Time (g)** with
+  **Kaplan-Meier Survival Estimates** (Time, Status, Cumulative Survival, Standard Error, Cumulative Event, Number
+  Remaining; a "+" and "--" on censored rows; note "Observations with status as + are censored ones."), **Quartile
+  Estimates** (Percent Failures 25, 50, 75; Estimate; "95% LCL"; "95% UCL"), **Mean Estimate** (Estimate, Std.Error, "95%
+  LCL", "95% UCL"; note "Estimation is underestimated because the largest observation is censored." when it is),
+  then **Survival Plots** (the graph) and **Test of Equality over Groups** (rows Log Rank, Breslow, Tarone-Ware;
+  Chi-Square, df, Prob>Chi-Square).
+
+### 20.2 What Sheaf does
+
+The chosen columns are the time, the censor column and, optionally, a grouping column (numbers or text), in that order.
+A case is censored where its censor cell equals the censoring value (default 1; numbers compare by value, text as text);
+rows with a missing time, censor or group cell are left out. Options: censoring value, confidence level (default 95 %),
+quartiles, mean, the three tests, a graph and the confidence limits in it. Result sheet `KaplanMeier1` follows Origin's tables (20.1), the title of each in the comment row of its columns and the
+group in the units row: Group, Total, Events, Censored, Percent Censored ("Summary of Event and Censored Values"); per
+group Time, Status, Cumulative Survival, Standard Error, Cumulative Event, Number Remaining ("Kaplan-Meier Survival
+Estimates"), Percent Failures, Estimate, "95% LCL", "95% UCL" ("Quartile Estimates") and Estimate, Std.Error, "95%
+LCL", "95% UCL" ("Mean Estimate"); Test (Log Rank, Breslow, Tarone-Ware), Chi-Square, df, Prob>Chi-Square ("Test of
+Equality over Groups"); then Sheaf's plot data per group ("Survival curve": the step curve starting at `(0, 1)` and
+running to the largest time, the censored cases at their survival and, optionally, "95% UCI" and "95% LCI", the
+limits of the curve `S -/+ z se` **not cut off**, as Origin's). The printed table keeps Sheaf's own headers. The graph
+has one step line per group, a symbol at every censored case (Origin draws none) and optionally the limits as dotted
+lines; its vertical axis runs from -0.02 to 1.02 like Origin's; one undo removes sheet and graph. Tests with fewer than
+two groups say so in the notes. A time that is negative or infinite, a confidence level outside 0 to 100, or other than two
+or three columns is refused.
+
+### 20.3 Fixtures and tolerances
+
+`crates/calc/tests/origin_survival.rs`: survival, standard errors, per-case events and at-risk columns, quartiles with
+limits, means with standard errors and limits, and the test statistics, to 1e-12 relative (Origin prints 14 digits in the
+table cells, so those use 1e-13); probabilities to 1e-6; the limits of the curve (two groups at 95 percent, one sample) in
+`curve_limits_are_linear_and_not_cut_off`, 1e-12 relative. Hand-worked tests in `survival.rs`; the table order,
+titles and the cut of the graph in `report_tables_and_unclamped_limits_follow_origin`.
+
+### 20.4 Not measured
+
+- Whether Origin offers other limit formulas (log, arcsine; its dialog showed one check box), why `sfci:=1` with
+  `plotinone:=1` returned false, the survival graph of several groups with limits in one window, the other plot
+  options (1 - S, hazard, ln S) beyond their first column group, the quartile limits when the estimate itself or the
+  lower limit is never reached (Sheaf gives none), the mean variance factor when there is exactly one event, more than
+  three groups, stratified and trend tests, left-truncated data, the Input Data and Notes tables (not written by
+  Sheaf), text censor values, and the default confidence level.
+
+## 21 Variance and proportion tests
+
+Statistics > Hypothesis Testing: One-Sample Test for Variance, Two-Sample Test for Variance, One-Sample
+Proportion Test, Two-Sample Proportion Test (OriginPro 2016). Numerics in `crates/calc/src/vartest.rs`, fixtures
+in `crates/calc/tests/origin_vartest.rs`, sheets in `crates/core/src/analysis/statistics.rs` (`var_test`,
+`prop_test`), CLI `sheaf analyze vartest | proptest`. The variance tests were measured through the X-functions
+`vartest1` and `vartest2` (probes `re-workspace/scratch/vartest/w/probe_v*`, `probe_m*`; no proportion X-function
+exists under any name tried) and through the report sheets of the dialogs; the proportion tests through the dialogs
+only (raw dumps in `re-workspace/scratch/vartest/w/<case>/out.txt`, screenshots `rep.png`; inputs in
+`steps_<case>.txt`; local, not in git). Data: A (8 numbers, `10 + 2 sin(3i) + i/4`), B (10 numbers,
+`11.5 + 2.5 cos(2i) + i/5`), C = (1, 4).
+
+### 21.1 Menu and dialogs
+
+Menu order: One-Sample t-Test, Pair-Sample t-Test, Two-Sample t-Test, One-Sample Test for Variance,
+Two-Sample Test for Variance, separator, Two-Sample t-test on Rows, Pair-Sample t-test on Rows, separator,
+One-Sample Proportion Test, Two-Sample Proportion Test. The dialogs are titled `<name>: OneSampleTestVar`,
+`TwoSampleTestVar`, `OneSampleProportionTest`, `TwoSampleProportionTest`.
+
+The four items with a trailing arrow in the menu open a short submenu: `1 <Last used>` and `Open Dialog...`; the
+reference scripts click `Open Dialog...` (screen position 30 pixels below the item, x 822 to 830). The older note
+that a single click on the item opens the dialog only held while Origin had no "last used" entry.
+
+Controls (read with `origin-dialog.ps1`; our dialogs copy the layout, not Origin's help text):
+
+- One-Sample Test for Variance: Results Log Output, Recalculate, Input (data range); group "Chi-Square Test for
+  Variance": Test Variance (1), Null Hypothesis (read-only, "Variance = 1"), Alternate Hypothesis `Variance <> 1`
+  / `> 1` / `< 1`, Significance Level 0.05, Confidence Interval(s) (off), Confidence Level(s) in % (`90 95 99`);
+  Plots (Histogram, Box Chart); Output.
+- Two-Sample Test for Variance: Input Data Form (Indexed, Raw), 1st Data Range, 2nd Data Range; group "F-test for
+  Variances Ratio": Null Hypothesis (read-only, "Variance1/Variance2 = 1"; there is no box for another ratio),
+  Alternate Hypothesis `Variance 1/Variance 2 <> 1` / `> 1` / `< 1`, Significance Level, Confidence Interval(s),
+  Confidence Level(s) in %. Our dialog fixes the ratio at 1 in the same way.
+- One-Sample Proportion Test: Input Data Form (Summarized, Raw), Number of Success, Sample Size; group
+  "Proportion Test": Test Proportion (0.5), Null Hypothesis, Alternative Hypothesis `Proportion <> 0.5` / `> 0.5` /
+  `< 0.5`, Significance Level, Confidence Intervals (off), Confidence Level(s) in %; group "Test Method":
+  Normal Approximation (on), Binomial Test (off); group "Power Analysis": Actual Power, Significance Level,
+  Hypothetical Power, Hypothetical Sample Size(s).
+- Two-Sample Proportion Test: Input Data Form (Summarized, Raw, Indexed), Number of Success of Sample1, Sample
+  Size of Sample1, the same of Sample2; "Proportion Test": Test Difference (0), Null Hypothesis, Alternative
+  Hypothesis `Proportion1 - Proportion2 <> 0` / `> 0` / `< 0`, Significance Level, Confidence Intervals, Confidence
+  Level(s) in %; "Test Method": Normal Approximation (on), Use pooled p for test (off), Fisher's Exact Test (off);
+  "Power Analysis" as above: Actual Power (off), Significance Level (0.05, greyed until a power box is ticked),
+  Hypothetical Power (off), Hypothetical Sample Size(s) (`50 100 200`, greyed until Hypothetical Power is ticked).
+  Sheaf offers the Summarized form only (the Raw and Indexed forms are unmeasured and not implemented).
+- A red line under the controls reads "Number of Success must not be less than 0" while the form is invalid and OK
+  is greyed. Typing `0` into a Number of Success box leaves the box empty, so 0 successes can not be entered in the
+  dialog at all (the runs for 0 of 10 and 0 of 8 produced no report); the hint is also there with every box empty.
+
+### 21.2 Variance tests
+
+- One sample: `chi2 = (n - 1) s^2 / sigma0^2`, `n - 1` df. Two-sided p = `2 min(P(X <= x), P(X >= x))`; upper p
+  `P(X >= x)`, lower p `P(X <= x)`. A, var 5: chi2 2.5515352796059867, p 0.1536666591362128 (two-sided),
+  0.9231666704318936 (upper), 0.0768333295681064 (lower).
+- Interval of the variance (`vartest1` lcl/ucl): `[(n-1)s^2 / chi2(1 - a/2), (n-1)s^2 / chi2(a/2)]`; for a
+  one-sided test the X-function gives the two-sided interval of level `1 - 2 alpha` (alpha 0.05 upper: 0.9069,
+  5.8863 = the 90 % interval). The dialog's report gives, for each confidence level c in "Confidence Level(s)":
+  two-sided test, the two-sided interval of level c; upper-tailed test, only a lower limit
+  `(n-1)s^2 / chi2(c)` (upper printed `--`); lower-tailed test, lower limit 0 and the upper limit
+  `(n-1)s^2 / chi2(1-c)`. A, upper, levels 90 95 99: lower limits 1.06163243873144, 0.906913265616178,
+  0.690525816643653; lower tail: upper limits 4.5030689390488, 5.88630183733099, 10.2964008644643; two-sided
+  levels 80 and 97.5, var 2: lower 1.06163243873144, 0.713319017255759, upper 4.5030689390488, 9.56153776351299.
+  The alpha of the dialog does not change the interval levels, only the conclusion sentence.
+- Two samples: `F = s1^2 / s2^2` with (n1-1, n2-1) df (A over B: 0.45323022914345851, df 7 and 9, p
+  0.30934827784074181; B over A: 2.2063841634964634, p 0.30934827784074165). Two-sided p as above (swapping
+  keeps it); upper 0.845325861079629, lower 0.15467413892037091 (A over B). Interval of the ratio
+  `[r / F(1 - a/2), r / F(a/2)]`, one-sided as for `vartest1` (alpha 0.1 two-sided: 0.13764506856862324,
+  1.6663801124937843). Origin's F quantiles carry errors up to 4e-6 relative (its 2.5 % point of F(7, 9) differs
+  from scipy's by 1.3e-6); the fixture tolerance for F-based numbers is 1e-5. The two-sample dialog report with the
+  intervals ticked (runs e1 to e3, f1 to f3 of 2026-11-15) follows the one-sample rule: two-sided tests give the
+  two-sided interval of the ratio of each level in "Confidence Level(s)" (80 and 97.5 with alpha 0.1: 0.180908333322787
+  to 1.23490469912963 and 0.0864579395572253 to 2.81524108445531 for A over B); an upper-tailed test only a lower
+  limit `r / F(c)` (upper `--`); a lower-tailed test lower limit 0 and upper limit `r / F(1 - c)`. A significant case
+  (A = `10 + sin 3i`, n 8; B = `10 + 6 sin 2i`, n 10; F 0.0198795620225935, df 7 and 9): two-sided p
+  3.11295523751483E-05, lower p 1.55647761875741E-05, upper p 0.999984435223812; limits at 90 95 99: two-sided
+  0.00603738122870874 to 0.0730906825481206, 0.00473656569603998 to 0.0958834430181464, 0.00288741737587226 to
+  0.169251014777939; lower tail upper limits 0.0541653291854217, 0.0730906825481206, 0.133565841332107; upper tail
+  lower limits 0.00793499241983704, 0.00603738122870874, 0.00354178496000994. The heading of the p column is
+  `Prob > F` for every tail (the one-sample report switches to `Prob<Chi-Square` for the lower tail).
+- Significance level: every value below 1 was accepted by `vartest1` for the two-sided test (0.6 gave the 40 %
+  interval 1.5218 to 2.7311); a one-sided test with alpha 0.5 or more was not measured (Sheaf: NaN limits).
+- Edge cases (`vartest1`/`vartest2`): variance 0 or negative fails (the call returns false, outputs untouched);
+  n = 2 works (C, var 2: chi2 2.25, df 1, p 0.26722880508204305, limits 0.8957, 4582.16); a flat sample gives
+  chi2 0, df 0, p 0, limits unset; as the second sample of the F test the statistic and p stay unset and the
+  limits are Infinity and Infinity, as the first sample 0 and 0. A missing value in a column is left out (n 8
+  with one missing: df 6). In the dialog the flat and missing-value cases were not run (unmeasured).
+- Report sheet (one sheet `OneSampleTestVar1` / `TwoSampleTestVar1`, a report with sections): Notes (X-Function,
+  User Name, Time, Data Filter), Input Data (Data = `[Book1]Sheet1!A`, Range = `[1:32]`; the two-sample table has
+  the rows "1st Data Range", "2nd Data Range"), Descriptive Statistics (N, Mean, SD, Variance; one row per
+  sample), Test Statistics (one sample: Chi-Square, DF, `Prob>Chi-Square` or `Prob<Chi-Square` for the lower tail;
+  two samples, titled "F Statistics": F, Numer. DF, Denom. DF, `Prob > F`), then the lines `Null Hypothesis:
+  Variance <= 5` and `Alternative Hypothesis: Variance > 5` (`=` and `<>` for the two-sided, `>=` and `<` for
+  the lower; two samples `Variance1/Variance2 = 1`), a blue conclusion line (`A: At the 0.1 level, the
+  population variance is NOT significantly greater than the test variance(5).`; `less than` and `different from`
+  for the other tails; two-sided two-sample: `At the 0.05 level, the two population variances are NOT
+  significantly different.`; the version without NOT and the one-sided two-sample wording were not seen:
+  unmeasured), and, when intervals are ticked, "Confidence Intervals for Variance": Conf. Levels in %, Lower
+  Limits, Upper Limits (`--` where there is no limit). Sheaf writes the same groups as columns (Data, N, Mean,
+  SD, Variance, Chi-Square, DF, Prob..., then Data, Conf. Levels in %, Lower Limits, Upper Limits) and the
+  hypotheses and conclusion as notes.
+
+### 21.3 One-sample proportion test
+
+- Report: Notes; "Normal Approximation" with Test Statistics (Success, N, Sample P, Z, P, `95% LCL`, `95% UCL`;
+  the percentage is `1 - alpha`: 0.1 gave `90% LCL`), the lines `Null Hypothesis: Proportion = 0.5`,
+  `Alternative Hypothesis: Proportion <> 0.5`, a warning line when the approximation is poor (seen for 20 of 20;
+  the two-sample runs of 21.4 show the rule: measured only for fewer than 10 failures) and Confidence Intervals (Conf. Levels in
+  %, Lower Limits, Upper Limits); then "Binomial Test" with Test Statistics (Success, N, Sample P, Exact P, LCL,
+  UCL), the hypothesis lines and its Confidence Intervals. Whether the LCL and UCL columns exist with the intervals
+  off was not measured (every run had them ticked); Sheaf shows them only with the intervals on.
+- Z = `(x - n p0) / sqrt(n p0 (1 - p0))`, but **0 when x < n p0** (Origin clips a negative z to 0 for every tail:
+  45 of 100 against 0.5 gave Z 0 and p 0.5 for the upper and lower tails, 20 of 100 two-sided gave Z 0 and p 1).
+  Two-sided p = `2 (1 - Phi(z))`, upper `1 - Phi(z)`, lower `Phi(z)`, all from the clipped z. 60 of 100 against 0.5:
+  Z 2, p 0.045500263896185 (two-sided), 0.022750131948092 (upper), 0.97724986805191 (lower); 700 of 1000 against
+  0.65: Z 3.314967720659, p 0.00091653707611106; 20 of 20: Z 4.4721359549996, p 7.744216431016E-06.
+- Wald interval `p +- z sqrt(p (1 - p) / n)` cut to [0, 1]; level c two-sided with `(1 - c)/2` per tail;
+  upper-tailed test `[lower at one-sided c, 1]`, lower-tailed `[0, upper]` (60 of 100, c 0.95: 0.6 -/+ 0.0960365;
+  45 of 100 upper: lower 0.368169565265201 = 0.45 - 1.6449 se). 20 of 20 gives 1 and 1. Dialog alpha 0.1 with
+  levels 90 95 99: the headline `90% LCL` equals the 90 % row of the table.
+- Exact p (binomial): upper `P(X >= x)`, lower `P(X <= x)`, two-sided the sum of the probabilities of all counts
+  no more likely than the observed one (700 of 1000 against 0.65: 0.00090671247636319; twice the smaller tail
+  would be 0.00090645). 60 of 100 against 0.5: 0.056887929303614, 0.028443964651807 (upper), 0.9823999004491
+  (lower). For tiny p Origin's value is off: 20 of 100 against 0.5 printed 6.9309254833213E-10 (exact 1.1159e-9);
+  the fixture tolerance for the exact p is 5e-10 absolute or 1e-6 relative.
+- Exact interval: Clopper-Pearson, same one- and two-sided rules as the Wald interval (60 of 100, 95 %:
+  0.49720915042233 to 0.69670523129712; 1 of 5: 0.00505076337946806 to 0.716417936118089). 20 of 20 two-sided:
+  lower 0.831566529016915, upper `--` (all successes has no upper limit). 0 successes: the dialog does not accept
+  0 in the Number of Success box (21.1), so no report exists (Sheaf: no lower limit).
+- Power analysis (Actual Power, Hypothetical Power; runs o1 to o4): a section "Powers" with the table Alpha, Sample
+  Size, Power, one row for the actual size (when Actual Power is ticked), then one row per hypothetical size (the
+  size 100 appears twice when it is typed again). Two-sided, 60 of 100 against 0.5, alpha 0.05, sizes 50 100 200:
+  powers 0.516323421027342 (100), 0.28904912956061, 0.516323421027342, 0.812291820591136; 30 of 100 against 0.4:
+  0.534629686422704, 0.290523649212481, 0.534629686422704, 0.839102957979036 (that run's z is clipped to 0 and p is
+  1, but the power uses the unclipped difference). Formula, matched to 1e-12: with `d = p1 - p0` (p1 the
+  observed proportion), `se0 = sqrt(p0 q0)`, `se1 = sqrt(p1 q1)` and `z` the `1 - alpha/2` quantile,
+  `Phi((d sqrt(n) - z se0) / se1) + Phi((-d sqrt(n) - z se0) / se1)`. For a one-sided test only one term remains,
+  with the `1 - alpha` quantile, and it is the term that looks like the wrong direction: the upper tail gave
+  9.96062005464234E-05 (the term with `-d`) and the lower tail 0.641499487271636 (the term with `+d`) for 60 of
+  100 against 0.5. The power alpha is its own box (Significance Level of the group, default 0.05) and does not
+  follow the test's.
+
+### 21.4 Two-sample proportion test
+
+Measured in 2026-11-15 runs through the dialog (Open Dialog, Summarized input, levels 90 95 99; raw outputs in
+`re-workspace/scratch/vartest/w/c*`, `d*`, `w*`, local only); the first run of 2026-11-14 was the pooled 30 of 50
+against 20 of 50. Each run gave one report sheet.
+
+- Report layout: Notes; "Normal Approximation" with Test Summary (rows Sample1, Sample2; Success, N, Sample P), Test
+  Statistics (Difference = `Sample1 - Sample2`, Estimate for difference, Z, P, `95% LCL`, `95% UCL`; the percentage
+  is `1 - alpha`, 0.1 gave `90%`), the hypothesis lines (`Proportion1 - Proportion2 = 0`, `<> 0`) and Confidence
+  Intervals (Conf. Levels in %, Lower Limits, Upper Limits); then, when ticked and the test difference is 0, the
+  section "Fisher's Exact Test" with its own Test Summary, Test Statistics (Difference, Estimate for difference,
+  Exact P, LCL, UCL), hypothesis lines and Confidence Intervals; then, when ticked, "Powers" (Alpha, Sample Size,
+  Power). With a test difference other than 0 the Fisher section is left out without a message (0.1, Fisher
+  ticked). The earlier run without a Fisher section had the Fisher box below the visible part of the dialog (the
+  dialog has to be scrolled): the click had missed it.
+- z: unpooled standard error `sqrt(p1 q1 / n1 + p2 q2 / n2)` by default (30 of 50 against 20 of 50: z
+  2.0412414523193, two-sided p 0.041226833337006), the pooled one `sqrt(p q (1/n1 + 1/n2))` with "Use pooled p for
+  test" (z 2, p 0.045500263896185). With a nonzero test difference the pooled box has no effect (0.1: z
+  1.0206207261597 = `(0.2 - 0.1) / sqrt(.6 .4 / 50 + .4 .6 / 50)`, p 0.30743416593004, with or without the box). The
+  sign of z is kept and nothing is clipped, unlike the one-sample test (20 of 50 against 30 of 50: z
+  -2.0412414523193, two-sided p 0.041226833337006, upper p 0.9793865833315, pooled lower p 0.022750131948092 for
+  z -2). Tails: upper `1 - Phi(z)` (pooled 30 of 50 against 20 of 50: 0.022750131948092), lower `Phi(z)`
+  (0.9793865833315 unpooled). Equal proportions give z 0 and p 1 (20 of 25 against 20 of 25). Both samples all
+  successes (10 of 10 against 8 of 8) give Z and P `--` (no spread), difference 0, limits 0 and 0, Fisher's p 1.
+- Intervals: always the unpooled Wald interval of the difference, not cut at 0 (cut at -1 and 1), whichever z was
+  used: 95 % 0.0079635329457877 to 0.39203646705421 for 30 of 50 against 20 of 50; the headline `95% LCL`
+  and `UCL` equal the table row of the level `1 - alpha`. Upper-tailed test: lower limits only, upper limit printed
+  `1` (90 95 99: 0.074434103414031, 0.0388379164961065, -0.0279346102243397); lower-tailed: lower limit `-1`, upper
+  limits 0.325565896585969, 0.361162083503893, 0.42793461022434; negative difference 20 of 50 against 30 of 50
+  (95 %): -0.39203646705421 to -0.0079635329457877. Fisher's section shows the same numbers as the normal section.
+- Fisher's exact p (hypergeometric; two-sided: every table no more likely than the observed one): 30 of 50 against
+  20 of 50 0.071342403485151 (two-sided), 0.035671201744004 (upper), 0.98634419171458 (lower); 3 of 10 against 1 of
+  8 0.5882352938664 (exact 10/17); 10 of 10 against 5 of 10 0.032507739937749; 15 of 40 against 25 of 35
+  0.0051489221075077. Origin's values differ from the exact ones by up to 3e-10 (the same table in the mirrored
+  order gave 0.98634419171744): tolerance 5e-10 absolute.
+- Warning line under the normal approximation's hypotheses (Origin's text says that with fewer than 10 successes
+  and a sample size below successes + 10 the approximation might be unsatisfactory; ours is worded differently): it
+  appears when some sample has fewer than 10 failures (Sheaf also warns for fewer than 10 successes, unmeasured): 3/10 and 1/8, 10/10 and 5/10,
+  10/10 and 8/8, 20/25 and 20/25 (5 failures), 3/10 and 30/50, 30/50 and 3/10 all show it; 30/50 and 20/50, 12/30
+  and 30/50, and 15/40 and 25/35 (the second sample has exactly 10 failures) do not. Every sample that showed it has fewer than 10 failures, and
+  every one without it has 10 or more. No run had fewer than 10 successes with 10 or more failures (nor exactly 10
+  successes), so Sheaf's "fewer than 10 successes" half of the rule is an unmeasured guess; Origin's own text only
+  describes the failures side. The one-sample report's warning follows the same rule.
+- Power analysis (Actual Power, Hypothetical Power; significance level of its own, default 0.05): table Alpha, Sample
+  Size, Power. "Actual Power" gives one row per distinct sample size, each taken as the size of both samples (30
+  of 50 against 20 of 50: one row, 50; 15 of 40 against 25 of 35: rows 40 and 35), then the hypothetical sizes (50 100
+  200) as typed. The test difference and the pooled box do not change it (0.1 gave the same 0.516323421027342). With
+  `d = p1 - p2`, `pbar = (p1 + p2) / 2`, `se0 = sqrt(2 pbar (1 - pbar) / n)`, `se1 = sqrt((p1 q1 + p2 q2) / n)`:
+  two-sided `Phi((d - z se0) / se1) + Phi((-d - z se0) / se1)` with the `1 - alpha/2` quantile (matched to 1e-12:
+  0.516323421027342 for 50 and 0.278367227355963 for alpha 0.01; 15/40 against 25/35: 0.87616102837545 (40),
+  0.828106373863776 (35), 0.938038580207161 (50), 0.998814261304273 (100), 0.999999877623331 (200)); one-sided:
+  upper tail only `Phi((-d - z se0) / se1)` (30/50 against 20/50: 9.96062005463871E-05, with test alpha 0.05 or 0.1),
+  lower tail only `Phi((d - z se0) / se1)` (15/40 against 25/35: 3.01679803625835E-07 at n 40, 8.72825092768114E-07 at
+  n 35), both with the `1 - alpha` quantile, as for the one-sample test.
+- Not entered: 0 successes (see 21.1). Unmeasured: the Raw and Indexed input forms, whether the headline LCL and UCL
+  columns exist with the intervals unticked (every run had them ticked), the pooled box together with the power
+  analysis for unequal sample sizes (the power formula always used the average proportion `pbar`).
+
+### 21.5 Sheaf
+
+`analyze` for the proportion tests reads no column (the first chosen column only names the workbook). The result
+sheet is named `VarTest1` or `PropTest1`. The proportion sheet is laid out as columns: the normal section (Sample,
+Success, N, Sample P, Difference, Estimate for difference, Z, P, LCL, UCL, level table), Fisher's section when
+ticked (the same summary, Exact P, LCL, UCL, level table), and the power table (Alpha, Sample Size, Power); the
+hypotheses and warnings go to the notes. The CLI takes `--power`, `--power-sizes 50,100,200` and `--power-alpha`
+beside `--exact`, `--pooled` and `--levels`. The dialogs have the Power Analysis group. Tolerances of the fixtures:
+1e-6 relative except the F quantiles (1e-5) and the exact p (5e-10 absolute; tiny exact p of the one-sample test
+likewise).
+
+## 22 Graphical Summary (T40)
+
+Statistics > Descriptive Statistics > Graphical Summary. Numerics in `crates/calc/src/graph_summary.rs`, tool in
+`crates/core/src/analysis/summary.rs`, window in `crates/app/src/dialogs/analysis.rs`
+(`AnalysisKind::GraphSummary`), CLI `sheaf analyze graphsummary` (MCP: the bridged tool `graphsummary`).
+Documentation facts only, nothing measured: Origin 2026 is not available to the sessions that built this.
+
+### 22.1 What Origin does (documentation, not measured)
+
+- Inputs: one or more columns (or a data table), optional Group column(s), Confidence Interval (%) level, Graph
+  Arrangement: Separate Graphs, Per Variable, Per Group, All in One. [W:origin-help/graphical-summary]
+- Separate Graphs: for each variable-group pair a graph with three plots (histogram with a distribution curve,
+  confidence interval plot, probability plot) and three tables "Description Statistics", "##% Confidence Intervals"
+  and "Normality Test", titled by variable and group. [W:origin-help/graphical-summary; blog.originlab.com/graphical-summary]
+- Per Variable and Per Group draw a histogram with curve, a box chart with outliers and a CI plot with a panel per
+  group or variable and one summary table; All in One puts all subsets in one graph. [same]
+- The table shows mean and median with their confidence intervals; the summary includes the Anderson-Darling normality
+  test (2026 release). [W:blog; press release]
+- Not stated by Origin: the full statistic list, the default level, the destination of the outputs, the curve, the
+  p-value method of the test, the interval formulas.
+
+### 22.2 What Sheaf does (Sheaf's choices)
+
+- **Arrangement**: only Separate Graphs. The other three are in the enum (`GraphArrangement`) and the dialog (greyed,
+  with a hover note) and are refused by the tool and by `--arrangement` with "not available yet".
+- **Groups**: any number of group columns (numbers or text); a group is one combination of their values. Rows with an
+  empty group cell are left out. The group key is exact, not the 4-digit text of other tools: a numeric cell is kept
+  as its f64 value (so 2023.5 and 2024 are two groups, -0 equals 0) and labelled with its full round-trip number
+  (`2023.5`); a text cell is its trimmed text. Keys are ordered per column, in the order of the group columns, by a
+  total order: numeric cells first, by `f64::total_cmp`, then text cells by bytes; numeric-ness comes from the cell
+  type, never from parsing text, so "nan", "inf" or "1a" are plain text. Variable-group pairs with fewer than two numbers are left out with a note; at least one must remain.
+  A variable-group whose mean, SD or variance is not finite (values such as 1e300 and -1e300) keeps its table rows
+  but gets no graph, with a note, like the constant sample.
+- **Statistics** (the Descriptive Statistics tool's own `calc::stats`, not redefined): N, missing, mean, standard
+  deviation (n - 1), SE of the mean, variance, bias-corrected skewness and kurtosis, minimum, Q1, median, Q3, maximum
+  (Origin's quartile rule of `calc::quantile_origin`).
+- **Confidence level**: percent, default 95, between 0 and 100 (exclusive).
+- **CI of the mean**: Student t, `mean +/- t(1 - a/2, n-1) * SE` (`calc::mean_confidence_limits`).
+- **CI of the standard deviation**: chi-square, `s sqrt((n-1)/chi2(1 - a/2, n-1))` to `s sqrt((n-1)/chi2(a/2, n-1))`.
+- **CI of the median**: distribution-free, from order statistics, exact binomial and not interpolated. With the sample
+  sorted ascending, `k` is the largest rank with `P(Binomial(n, 1/2) <= k-1) <= a/2` and the interval is
+  `[x(k), x(n+1-k)]`; both ends are sample values. Its real coverage `1 - 2 P(Binomial(n,1/2) <= k-1)` is at least the
+  level (conservative, so it is often wider than asked). When even `k = 1` cannot reach the level (n too small: n = 4
+  at 95 %) the interval is `[min, max]` and a note gives its real confidence. Minitab-style interpolation between
+  neighbouring order statistics is not used.
+- **Normality Test**: Anderson-Darling A-squared and its p-value exactly as `calc::anderson_darling` gives them (the
+  Normality Test tool; needs 8 numbers with spread, otherwise the cells are empty and a note says so).
+- **Report sheet** `GraphSummary1` (Sheaf's layout): the first seven columns are long-form tables, text columns
+  Variable, Group, Table, Statistic and number columns Value, Lower, Upper. The Table column holds "Description
+  Statistics" (13 rows: N ... Maximum), "<level>% Confidence Intervals" (Mean, Median, Standard Deviation with estimate
+  in Value and the limits in Lower and Upper) and "Normality Test" (A-Squared, P-Value). `Report.table` has one row per
+  variable-group with the same numbers as columns (also the limits and A-Squared, P-Value).
+- **Graph data** is written to the same sheet behind those seven columns, per variable-group: the histogram's columns
+  (the Frequency Counts tool, automatic bins), the normal curve (101 points over the bin range,
+  `N * bin width * pdf` of the sample mean and SD, so it is on the count axis), the two interval segments and the two
+  estimates with their labels, and the Probability Plot tool's columns (normal, T14).
+- **Graph** per variable-group, long name `<variable> <group>` (the variable alone without groups), page 11 x 7 in
+  with three layers (Sheaf's layout, not Origin's): top left the histogram (bars) with the red normal curve, bottom
+  left the interval plot (the mean and the median each a horizontal bar from lower to upper limit with a square at the
+  estimate and its name; bars are line plots because the median interval is asymmetric and X error bars are
+  symmetric), right the normal probability plot with the fitted line on a probability axis. The graph title is a text
+  label above the histogram. Graphs are numbered in the order variable, then group: `new_graph` is the first, the rest
+  are `more_graphs`.
+- **Dialog**: input columns from the selection; Groups (a drop-down of check boxes over the other columns of the
+  sheet), Confidence Level (%), Graph Arrangement. No X range (the tool takes row ranges only). Auto Apply is off for
+  it (each run makes sheets and graphs); no Recalculate (the tool is not linkable).
+
+### 22.3 Checked against scipy, tolerances
+
+Sample `[2.1, 3.4, 3.9, 4.4, 4.8, 5.0, 5.3, 6.1, 6.6, 7.2, 8.0, 11.5]` (n = 12), numpy/scipy 1.18:
+mean 5.691666666666667, SD 2.4640905876697032, skewness 1.058210251752913 (`scipy.stats.skew(bias=False)`), kurtosis
+1.866917485643393 (`kurtosis(bias=False)`), mean interval 4.1260582004245965 to 7.257275132908738 (`t.ppf`), SD
+interval 1.7455498235905689 to 4.183725242485017 (`chi2.ppf`), median interval 3.9 to 7.2 with coverage 0.96142578125
+(`binom.cdf`), A-squared 0.30557037512815555 (`scipy.stats.anderson`). Tests in `calc::graph_summary` use 1e-9 relative
+(1e-12 for the plain statistics). The p-value is not compared with scipy (scipy 1.18 gives none for `anderson` without
+a method; Sheaf's comes from the existing implementation, section 4).
+
+### 22.4 Not done or not known
+
+Per Variable, Per Group and All in One arrangements; Origin's exact table layout, table row names and order, the
+panel layout and styling, and its median/SD interval formulas (none was measured: the documentation does not give
+them); the box chart of the other arrangements; Origin's default level.
+
+## 23 Multiple comparisons plot (T64)
+
+Origin 2027 makes a "Multiple Comparisons Plot" directly from the report of a one-way ANOVA, a two-way ANOVA and the
+two-sample and paired t-tests (an icon in the report sheet), and a "Significance Plot" from a one-sample t-test. Plot
+types are bar, box, violin and scatter; error bars are SD, SEM or 95 % CI; the brackets and annotations can be
+customized and can sit outside the plot area; an option shows only the p-values that meet a threshold. [W:Origin 2027
+product page] The older free "Paired Comparison Plot" app offers "Letters on Top", "Asterisk with Bracket" and "P-Value
+with Bracket" and "Exclude n.s. in Group". [W:app/paired-comparison-plot] None of this was measured; everything below
+that the documents do not say is Sheaf's choice, **unmeasured**.
+
+**Made from.** The report sheet of a one-way ANOVA with a means comparison (any method, Dunnett included) and of a
+two-sample t-test (equal or unequal variances). Two-way ANOVA, the paired t-test and the one-sample "Significance
+Plot" are left. The report sheet keeps a copy of the groups as the test used them (`Worksheet::comparison_source`,
+saved with the project). The report sheet also stores the groups `(i, j)` of each row of the means comparison **by
+group index**, the analysis' alpha and, for the Holm methods, the step-down kind (only stored data; the report and the
+ANOVA are unchanged). The p-value of a pair is read from the report sheet: the "Prob" column of the means comparison or
+the t-test's "Prob"; the pair's groups come from the stored indices, so two groups with the same name, or a name with
+" - " in it, map correctly. A report without stored pairs (an older project) is read by the names in its row labels
+`"{name_j} - {name_i}"` and is **refused** with an error when a label fits more than one pair of groups (duplicate
+names, or names that make the text ambiguous).
+
+**Agreement with the report (Holm).** Holm-Bonferroni and Holm-Sidak list the plain pairwise p in "Prob" but judge each
+pair by the step-down (`alpha / (m - rank)`), so the raw p is not the decision. Holm: adjusted p derived from the
+report's raw p, matching its step-down decisions: with the raw p sorted ascending, `adj_(r) = max over k <= r of
+min(1, (m - k + 1) p_(k))` (Bonferroni) or `max over k <= r of 1 - (1 - p_(k))^(m - k + 1)` (Sidak), `holm_adjust`;
+a pair is significant at alpha exactly when its adjusted p is below alpha. Stars and p-value labels use the adjusted p.
+For every method the decision follows the report's "Significant" column at the analysis' alpha: with Asterisks a pair
+the report marks not significant reads `ns` (a significant one has at least one `*`), and when the threshold equals the
+analysis' alpha (a threshold of another value filters by p < threshold of the shown p) "Significant only" shows exactly
+the pairs the report marks. Example: three groups with raw p 0.04, 0.2, 0.3 give adjusted 0.12, 0.4, 0.4: no bracket,
+`ns`.
+
+**The graph** (`Project::comparison_plot`, one undo step): a new sheet `MultCompN` in the workbook holds the data; the
+graph has one X category per group, in report order, named by the group, at X = 1, 2, 3, ...
+- Bar: columns of the means with error bars (the error column of the sheet).
+- Box and Violin: one box or violin per group (the plots' own statistics; no error bars).
+- Scatter: the raw points, each shifted sideways by a fixed amount up to 0.18 either way (golden-ratio sequence, the same
+  every time), over a black diamond at the mean with its error bar.
+- Error bar (bar and scatter): SD; SEM; 95 % CI as the half-width `t(0.975, n - 1) * SEM` (Student's t).
+- Y axis title "Mean +- SD" (or SEM, 95% CI) with the unit, or "Value" for box and violin; no X title, no legend.
+
+**Brackets.** `Layer::brackets` is a list of `SignificanceBracket { group_a, group_b, p, label }` (groups from 0); the
+layer's `comparison` keeps the settings (plot type, error bar, label style, significant only, threshold, alpha) and every
+compared pair (with the shown p and the report's decision), so labels can be restyled (`ComparisonPlotOptions::brackets`) without the report. Old projects load
+without them (serde defaults).
+- Labels, Asterisks: `*` p < 0.05, `**` p < 0.01, `***` p < 0.001, `****` p < 0.0001, `ns` otherwise (strict, so p = 0.05
+  is `ns`). P-values: `p = 0.0123` (four decimals, trailing zeros dropped down to two decimals, `p = 0.50`) and
+  `p < 0.0001`.
+- Significant only (default on) with a threshold (default 0.05): a pair is shown when p < threshold (p adjusted for
+  Holm), or, when the threshold is the analysis' alpha, when the report marks it significant (see above).
+- Drawing (`crates/plot/src/brackets.rs`): a horizontal line over the two group centres with a 5 pt vertical end down
+  at each, black, 1 pt, the label centred above it in the legend font. Pairs are sorted by span (shortest first, then
+  report order). The levels are found in the **axis-transformed space** (data units on a linear axis, logarithms on a
+  log axis, so brackets stack multiplicatively there). One level step is 6 % of the data range (of the data with error
+  bars, whiskers, outliers and violin tips, including 0 for bars) at least, and never less than the label step: the
+  label's baseline gap (2.5 pt, or more for a big font whose descenders would reach the line), its height above the
+  baseline (ascent) and the 5 pt end of the bracket above it, plus 1 pt, converted to axis units **at the final axis
+  scale**. The layout resolves the axes, converts the label step with the frame it got, and resolves again until the step
+  stops growing (up to 30 times, 0.01 % tolerance; like hexbin's re-resolve). A stack taller than 60 % of the axis keeps
+  the step at that limit (the labels then crowd each other) instead of growing without end. Each bracket is placed one
+  step above the highest of the elements of the groups it spans and of the earlier brackets whose span touches its own
+  (closed intervals, so brackets that share a group stack). Brackets whose spans do not touch share the lowest level.
+- **On the axis** (linear or log Y axis with an automatic upper limit): the Y axis **grows** to hold the highest bracket
+  plus one step for its label (in log space on a log axis). Other plot kinds are drawn exactly as before (test).
+- **In a band** (the Y axis' upper limit is fixed, or a scale that is neither linear nor logarithmic): the axis is not
+  changed and the brackets stand in a band above the frame. The stack is made of the spans alone (no data to clear:
+  everything is inside the frame), the level step is the label step in points, and the lowest line stands 6 pt over the
+  frame. The layout **reserves the band's height** in its top label edge (`label_edges`), so the frame moves down just as
+  for a tall tick label; with the X axis on the top the band starts above that axis' tick labels and title, so
+  nothing overlaps them. A bracket whose label would still leave the page (the frame cannot give more than half its
+  height) is not drawn (clipped to the page). A free text label or a legend that the user placed over the band is not
+  moved.
+- Brackets are not pickable or draggable and have no properties window yet. They are not written to `.opj`: the save
+  warning names them ("layer N has K significance brackets that an Origin project file written here cannot hold") and
+  the `.opj.sheaf` companion keeps them.
+
+**Where.** The report sheet of such a test shows a "Multiple Comparisons Plot..." button at the right of the sheet tab
+strip, and Statistics > Multiple Comparisons Plot... works on the active sheet (a message when it is not such a report).
+The dialog has Plot Type, Error Bar (greyed for box and violin), Label (Asterisks or P-values), Significant only and
+its Threshold. `sheaf analyze anova ... --comparison-plot OUT.(png|svg|pdf)` and the same on `analyze ttest` (two-sample
+only) with `--plot-type bar|box|violin|scatter`, `--error-bar sd|sem|ci95`, `--labels asterisks|p-values`,
+`--all-pairs`, `--threshold`; the graph also stays in a project saved with `--save`. MCP: the same option names in
+`analyze` for `anova` and `ttest` (`comparison_plot` is a path inside the allowed folders); the reply has
+`comparison_plot: {graph, file}`.
+
+Tests: `crates/core/tests/comparison_plot.rs` (labels at the boundaries, p-values equal to the report rows for Tukey
+and Bonferroni, significant-only and threshold, SD/SEM/CI95 against hand values, the t-test's single bracket, settings
+round trip, Holm adjusted p against hand values, the three-group Holm example, decisions equal to the "Significant"
+column for Tukey, Bonferroni, Sidak, Fisher LSD, Scheffe, Holm-Bonferroni, Holm-Sidak and Dunnett at two alphas,
+groups named alike or with " - " by index, the refused ambiguous fallback), `crates/plot/src/brackets.rs` (stacking, axis,
+log axis inside the extended range, fixed maximum band and title, 15 pairs with p-value labels clear of every line,
+unchanged drawing), `crates/cli/tests/analyze.rs` (SVG,
+refusals), `crates/mcp` (bridge), the `.opj` warning, and the app test `comparison_plot`.
+
+## 24 Partial correlation coefficient (T81, measured against Origin 2016)
+
+Origin: Statistics > Descriptive Statistics > Partial Correlation Coefficient (`pcorrcoef`). Runs: `tools/origin-ref/stats6/gp.py`
+and `gp2.py` (line scripts, run through `run-labtalk-safe.ps1`); their data and Origin's numbers are in
+`tools/origin-ref/stats6/t81-origin.compact.json` (`pcorrcoef`), the raw output only in the git-ignored scratch folder. The numbers were
+re-computed with numpy and scipy and agree with Origin to every printed digit (r to 5 decimals, p to 6 digits).
+
+**Inputs.** `irng` the variables (at least two columns), `control` the controlling variables (at least one: a run with none is
+refused), `missing` Pairwise (default) or Listwise, `tail` One-tailed or Two-tailed (default two), `sig` "Show Significance in
+Result Table" (default off), `flag` "Flag Significant Correlations" (default off), `rt` the report and `corr` a plain sheet.
+Only Pearson exists (no Spearman or Kendall).
+
+**Numbers (confirmed on 9 runs: 2 and 3 variables, 1 and 2 controls, n = 20, 8 and 4, pairwise and listwise with missing
+cells).** For variables x, y and controls z1..zk take the correlation matrix R of (x, y, z1..zk); the partial correlation is
+`r = -P[x,y] / sqrt(P[x,x] P[y,y])` with P the inverse of R. The p-value is the t test with `t = r sqrt(df / (1 - r^2))` and
+`df = n - 2 - k`, halved for the one-tailed test (p = 7.0044E-8 against two-tailed 1.4009E-7 on the 3-variable run).
+Pairwise: every entry of R is the correlation of its own pair on the rows where both columns have a number, and n of a pair is
+the number of rows where both variables x and y have a number (the gaps of the controlling variables do not enter n: 17 rows,
+df 14 for a pair that lost three rows while a control lost another row). Listwise: only rows complete in all variables
+and controls (15 rows, df 12 everywhere). The diagonal shows r = 1, no p ("--") and df 0.
+With df 0 (n = 4, two controls) Origin still prints r = -1 or 1 and "--" for p.
+
+**Refused (no report, the command returns false):** one variable only; a control column that is constant; two identical
+control columns; a variable that is also a control; a perfect correlation between the two variables (y = 2x + 1);
+n = 3 with one control. Origin gives no message to the script; Sheaf says why in a message.
+
+**Report sheet** (a report tree, in the same book as the data): title "Partial Correlation Coefficients" with the time,
+then four sections: **Notes** (X-Function name, user name, time, "Data Filter" No), **Input Data** (a table `Data | Range` for
+the variables and one for the Controlling Variables, rows lettered A, B, C, D...), **Descriptive Statistics** (N, Mean, SD, Sum,
+Min, Max for each variable and then each control, same letters) and **Partial Correlations**: a matrix with one block of three
+rows per variable (`Partial Corr.`, `p-value`, `df`) and one column per variable. With "Show Significance" off the block has
+only the Partial Corr. row; with "Flag Significant" on, a coefficient whose p is below 0.05 carries `*`. Footer lines:
+"Controlling variables: D" (names of the controls), "Two-tailed test of significance is used." (or one-tailed) and, with
+flags, "*: The partial correlation is significantly different from zero at the 0.05 level." The plain sheet (`corr`) holds the
+matrix of r only, with the variable names in column 1 (the first column of the cells).
+
+Unmeasured: the exact message texts of the refusals, whether the flag threshold follows another alpha (there is no alpha field),
+how the report looks with listwise deletion (the Notes lines were not compared), and the sheet names of a default run.
+
+**What Sheaf does (T81; `crates/calc/src/partcorr.rs`, `crates/core/src/analysis/partcorr.rs`, `dialogs/stats3_options.rs`,
+`sheaf analyze partial-corr`).** The six measured runs with data (a, b, c, d, e, g; 2 and 3 variables, 1 and 2 controls,
+pairwise and listwise with gaps, one- and two-tailed) are reproduced to the printed digits (`crates/calc/tests/origin_t81.rs`).
+The refusals are the six measured ones, each with a message that says why. With df 0 and two or more controls the coefficient is
+printed as -1 or 1 and has no p (Origin printed the same); with df 0 and one control it is refused. The window and the command
+have Origin's inputs (variables, controlling variables, Pairwise/Listwise, One-/Two-tailed, Show Significance, Flag Significant;
+defaults as measured). The report is a Sheaf sheet, not a copy of Origin's report tree: a descriptive table (variables, then
+controls), the matrix of coefficients (text with a `*` when "Flag Significant" is on) with the p-value and df matrices when "Show
+Significance" is on, a pair table in the result and the footer lines as notes. **Sheaf's own, unmeasured:** the sheet name
+`PartialCorr1`, the refusal wording, the descriptive N under listwise deletion (the complete rows), the flag level fixed at 0.05.
+
+## 25 Three-way ANOVA (T81, measured against Origin 2016 through its dialog)
+
+Origin: Statistics > ANOVA > Three-Way ANOVA (a submenu with "1 <Last used>" and "Open Dialog..." once it has been run).
+The X-Function `ANOVAThreeWay` has no script arguments; it only runs from its dialog, so the runs automated the dialog
+(`tools/origin-ref/origin-dialog.ps1` with `-MenuClicks` and `-StepsFile`; the data generator is `stats6/g3.py`). The result
+is a new sheet `ANOVA3Way1` **in the input book** (353 columns, one block of columns per table), plus a plot-data sheet
+`ANOVAThreeWayPlots1` when graphs are asked for.
+
+**Dialog.** Tabs: Input, Model, Descriptive Statistics, Means Comparison, Power Analysis, Mean Plot, Output. Input: Indexed
+(Factor A, Factor B, Factor C and Data columns, each a range box) or Raw; "Homogeneity Tests (Levene's Test)" checkbox;
+Significance Level 0.05. Model: the model line `Data = A + B + C + A*B + A*C + B*C + A*B*C` with a checkbox per interaction
+(all four on). Descriptive Statistics: Factor A, B, C, A*B, A*C, B*C, A*B*C, Overall. Means Comparison: significance level and
+Tukey, Bonferroni, Dunn-Sidak, Fisher LSD, Scheffe, Holm-Bonferroni, Holm-Sidak (no Dunnett). Power Analysis: Actual Power,
+Hypothetical Power with significance level and "Hypothetical Sample Size(s)" (default `50 100 200`). Mean Plot: the same seven
+effects. Output: Dataset Identifier, Report Tables, Plot Data (book, sheet name `ANOVAThreeWayPlots1`), Optional Report Tables
+(Notes and Input Data on; Masked Data and Missing Data off). Levels are numbered in order of appearance.
+
+**Table (confirmed on a balanced 2 x 3 x 2 design with 2 numbers per cell and on an unbalanced one with 26 numbers).** Rows A, B,
+C, A*B, A*C, B*C, A*B*C, Model, Error, Total with DF, Sum of Squares, Mean Square, F Value, Prob>F. For both designs the sum of
+squares of a term is its **type III** value (the rise of the residual sum of squares when the term is removed from the full
+model with sum-to-zero coding). Unbalanced run: A 27.1973, B 4.87701, C 5.5441, A*B 11.77721, A*C 0.16264, B*C 8.69694, A*B*C
+1.42342, Model 66.66406 on 11 DF, Error 10.90593 on 14 DF, Total 77.56999 on 25 DF (type I gives 25.64596 for A and type II
+26.87056; both differ from Origin). The balanced run is the textbook table (A 20.23401, B 3.98318, C 4.63154, A*B 13.65266,
+A*C 0.00881, B*C 4.55638, A*B*C 6.43884, Model 53.50542 on 11 DF; F of A 43.28302, p 2.61651E-5). The Error row has no F; the
+Total row has no MS. Checked again with numpy to 6 digits. Model terms switched off in the Model tab were not run.
+
+**Descriptive statistics blocks** (when ticked): per level of a factor or per cell seven values: N, Mean, SD, SEM, Variance, then
+two more that were not identified (0 and N). The Overall block has the same seven values over all data.
+**Means comparison** (when ticked): per effect, for every pair of levels (cells for the interactions), blocks of ten values per
+method as in the one-way and two-way ANOVA (sections 2 and 7): the two level indices, mean difference, standard error
+(`sqrt(MSE (1/ni + 1/nj))`, divided by sqrt 2 for Tukey), t (Tukey: q), Prob, alpha, Sig (0/1), LCL, UCL; the Holm methods list
+the pairs by increasing p with the step alpha. Balanced run, factor A: difference 1.83639, SE 0.19737, Tukey q 13.15797, t
+9.30409, Bonferroni p 7.76269E-7.
+**Levene's test** (when ticked): a table of DF, SS, MS, F, p for the absolute deviations from the cell means. **Power**: per
+effect alpha, N and power for the actual sample size and each hypothetical size (A at N = 24: 0.99997; B: 0.62766).
+
+Unmeasured: the report as drawn (only cell values were read, no picture), the exact rule of the power column (noncentral F is the
+likely one), the Raw layout, empty cells, rows with missing values, the mean plot graphs, which interaction effects the means
+comparison lists, the Levene numbers on a design with spread (the run used 2 numbers per cell, which makes it degenerate) and the
+two unidentified descriptive values.
+
+**What Sheaf does (T81; `crates/calc/src/anova3.rs`, `crates/core/src/analysis/anova3.rs`, `dialogs/stats3_options.rs`,
+`sheaf analyze anova3`).** Reproduced to the printed digits from the report sheet (`crates/calc/tests/origin_t81.rs`): both type III
+tables (balanced and unbalanced, Error and Total rows included), the descriptive statistics of A, A*B, A*B*C and all data, the
+means comparisons (Tukey, Bonferroni, LSD, Scheffe of A and B; the first eight Tukey pairs of A*B), Levene's DF, SS and MS, and the
+power of all seven effects at the actual and the three hypothetical sizes. Findings from reading the sheet cell by cell, all
+implemented:
+- The standard error of every means comparison is `sqrt(MSE / 2 (1/ni + 1/nj))`, not the textbook `sqrt(MSE (1/ni + 1/nj))` (A: 0.19737,
+  A*B: 0.34186; t, q, p and the limits all follow from it). Tukey's q is `sqrt 2` times that t, with p from the studentized range for
+  the number of levels or cells. The difference is `mean(i) - mean(j)` (the first level minus the later one), the statistics carry its
+  sign, and Scheffe prints the signed t (its p comes from F = t^2 / (k - 1)).
+- Pairs run `(1,2), (1,3), ..., (1,k), (2,3), ...` (the first level changes slowest) for the cells of A*B; the means comparison lists
+  A, B, C and A*B only (the dump holds no block for A*C, B*C or A*B*C).
+- Power: the noncentrality is `df1 * F * N / n` (n = the number of data), the denominator degrees of freedom `N - rank` (rank = the
+  model's parameters, 12 here), and the "actual" size of an effect is `n` times the number of factors in it (24, 48 and 72); this
+  fits all 28 printed values, but it is one design, so it is Sheaf's reading of the rule.
+- Levene: a one-way ANOVA of the absolute deviations from the finest cell means over the cells (the run's DF 11 and 12 and SS 1.04913).
+**Not reproduced, labelled:** Origin's Dunn-Sidak block of the three-way ANOVA prints a "Prob" column above 1 and swapped limits
+(it looks broken), and its Holm blocks pair each p with a threshold in a rotated order; Sheaf prints the correct Dunn-Sidak p and
+lists the Holm methods by increasing p as in the one-way ANOVA. Not built: the Mean Plot tab and graphs, the Raw layout, the Output
+tab (Plot Data, optional tables). **Sheaf's own, unmeasured:** the sheet layout (one block per table, the long-format comparison
+blocks), the defaults of the dialog (all descriptive statistics, Tukey, Levene and power off), models with an interaction switched
+off (computed by the same type III rule), empty cells (refused), and Levene on a design with spread (the formula is the standard one,
+checked only by hand).
+
+## 26 Repeated measures ANOVA, one-way and two-way (T81, measured against Origin 2016 through its dialogs)
+
+Origin 2016's Statistics > ANOVA menu has **One-Way Repeated Measures ANOVA** (submenu "1 <Last used>", "Open Dialog..."),
+**Two-Way Repeated Measures ANOVA** and no single "Repeated Measures ANOVA..." item (that is the name in newer versions; Sheaf's
+greyed item is replaced by the two Origin 2016 items). The X-Functions `ANOVAOneWayRM` and `ANOVATwoWayRM` have no script
+arguments: measured by automating the dialogs as in section 25. The result is a new sheet `ANOVAOneWayRM1` or `ANOVATwoWayRM1` in
+the input book. Data, numbers and the decoded columns: `tools/origin-ref/stats6/t81-origin.compact.json` (`rmanova1`, `rmanova2`).
+
+**One-way dialog.** Tabs Input, Means Comparison, Output, Plots. Input: Indexed (Factor, Data, Subject columns) or Raw;
+Descriptive Statistics (on); Significance Level 0.05. Means Comparison: Tukey, Bonferroni, Dunn-Sidak, Fisher LSD, Scheffe,
+Dunnett (expandable: control group), Holm-Bonferroni, Holm-Sidak. **Two-way dialog.** Tabs Input, Descriptive Statistics, Means
+Comparison, Output. Input: Indexed with Factor A, Factor B, Data, Subject; an "Interactions" checkbox (off by default); a
+significance level. Descriptive Statistics: FactorA, FactorB, Interaction.
+
+**One-way numbers (8 subjects x 4 levels, indexed: A level, B data, C subject; confirmed with numpy to 6 digits).**
+- The within table has four rows per way of treating sphericity: *Sphericity Assumed*, *Greenhouse-Geisser*, *Huynh-Feldt*,
+  *Lower-bound*: SS of the factor 64.39032, DF 3 / 2.89097 / 3 / 1, MS 21.46344 / 22.27288 / 21.46344 / 64.39032, F 15.67215 (the
+  same in each row), Prob>F 1.40272E-5 / 1.93022E-5 / 1.40272E-5 / 0.00547. The error rows have SS 28.76007 and DF 21 / 20.23682 /
+  21 / 7 (the plain DFs times epsilon, MS = SS / DF).
+- Sphericity: **Mauchly's test** W 0.94848, chi-square 0.30267, DF 5 (k (k - 1) / 2 - 1), p 0.99759, chi-square =
+  `-(n - 1 - (2 (k-1)^2 + (k-1) + 2) / (6 (k-1))) ln W` with W of the covariance matrix of orthonormal contrasts. Epsilons:
+  Greenhouse-Geisser 0.96366 (`tr(C)^2 / ((k-1) tr(C C))`), Huynh-Feldt 1 (the formula gives 1.714, capped at 1), Lower-bound
+  0.33333 (1/(k-1)).
+- Multivariate tests of the factor: four rows (0.85546 and 0.14454 for the first two, 5.91835 for the last two), one F 9.86391
+  with DF 3 and 5 and p 0.01532 (Pillai's trace, Wilks' lambda, Hotelling's trace and Roy's largest root; identified by the
+  numbers, not by labels).
+- Between subjects: Intercept SS 15121.48321, DF 1, MS the same, F 804.75036, p 1.73883E-8; Subjects SS 131.53195, DF 7, MS
+  18.79028.
+- Descriptive statistics per level: Mean, SE, 95 % confidence limits (SE 0.96025 for the first level; worked out later from the
+  numbers: the standard deviation of the subjects' values over the square root of their number, limits with t of n - 1 degrees of
+  freedom). Means comparisons in blocks of ten columns (as sections 2 and 25) with SE `sqrt(2 MSE / n)` = 0.58513 and DF the
+  error DF 21: all six pairs for Tukey (q 3.54149, p 0.08833 for levels 1 and 2), Bonferroni (p 0.12354), Dunn-Sidak, Fisher LSD
+  (p 0.02059), Scheffe; Holm-Bonferroni and Holm-Sidak list the pairs by p with step alpha 0.05/6 = 0.00833 and 0.00851.
+
+**Two-way numbers (6 subjects x 2 x 3, one number per subject and cell, both factors repeated; confirmed with numpy).**
+Each effect has its own error term: A (SS 29.07798, DF 1) against A x Subject (SS 9.07567E-5, DF 5), B (SS 0.05025, DF 2)
+against B x Subject (SS 7.64333, DF 10), A*B (SS 0.15591, DF 2) against A x B x Subject (SS 8.33368, DF 10); F = MS effect / MS
+of its own error (A: 1.60197E6, p 5.84335E-15; B 0.03287, p 0.96777; A*B 0.09354, p 0.91149). Every effect with more than 1
+DF has the four sphericity rows of the one-way table (B: Mauchly W 0.96832, chi-square 0.12878, DF 2, p 0.93764, epsilon
+Greenhouse-Geisser 0.96929, Huynh-Feldt 1, Lower-bound 0.5; corrected DFs of B 1.93858 and 9.6929). Intercept SS 39236.00333,
+DF 1, F 2181.60088, p 8.4964E-8; Subjects SS 89.9248, DF 5, MS 17.98496. Descriptive statistics per level of A, B and per
+cell (Mean, SE, 95 % limits).
+
+Two-way descriptive statistics follow the same rule on the subjects' values averaged over the other factor (levels of A, of B) or
+taken as they are (cells): A level 1 mean 32.11473, SE 0.7067, limits 30.2981 / 33.93137 (t of 5 degrees of freedom); cell 1 SE
+0.67432.
+
+**What Sheaf does (T81, `sheaf_calc::rm_anova`, core `analysis/rmanova.rs`, `sheaf analyze rmanova`).** Menu items
+Statistics > ANOVA > One-Way Repeated Measures ANOVA... and Two-Way Repeated Measures ANOVA... (the single greyed "Repeated
+Measures ANOVA..." is gone). Indexed data only: columns factor, data, subject (one-way) or factor A, factor B, data, subject
+(two-way); levels and subjects may be text, levels are numbered in order of appearance. Each effect is tested on the subjects'
+scores of its orthonormal (Helmert) contrasts: SS = n times the squared length of the mean score vector, error SS = (n - 1) tr(S)
+with DF (n - 1) d, S the covariance matrix of the scores; Mauchly's W = det(S) / (tr(S) / d)^d, the chi-square and epsilons as above
+(epsilon of an effect with one DF is 1 and has no Mauchly row), the multivariate tests from the one non-zero eigenvalue
+`T^2 / (n - 1)` (Pillai lambda/(1+lambda), Wilks 1/(1+lambda), Hotelling and Roy lambda, F = (n - d) lambda / d). Intercept SS =
+n K grand-mean^2 against the Subjects mean square. The one-way means comparisons use `sqrt(2 MSE / n)` with the table's error DF,
+pairs row by row (1,2), (1,3), ..., difference mean(i) - mean(j), the statistic unsigned (q for Tukey, |t| for the others including
+Scheffe), Holm and Holm-Sidak listed by increasing p with the significance flag 1, then 0 for the first failure and -1 after it and
+the alpha column 0 after the first failure. The result sheet `ANOVAOneWayRM1` / `ANOVATwoWayRM1` has the blocks Multivariate Tests
+(one-way), Mauchly's Test of Sphericity with the epsilons, Within Subjects (effect and error rows under each of the four ways),
+Between Subjects, Descriptive Statistics, and the comparison blocks, in the order of the measured sheet; each block is a column
+group with its own label column, as for the three-way ANOVA. Every number of both measured runs, all five single-step comparison
+blocks (to the printed digits; Tukey limits to 3e-4 relative) and the Holm orders and thresholds are reproduced by
+`crates/calc/tests/origin_t81.rs`.
+
+Sheaf's own, unmeasured: Interactions off in the two-way design simply leaves the A*B rows out (the error terms of A and B stay
+those of the full design); a subject without a number in every cell is left out with a note, a repeated number in one subject
+and cell is refused; the two-way multivariate tests and the two-way means comparisons are not offered (the Means Comparison tab of
+the two-way window only says so); Dunnett is not offered (it belongs to the Dunnett work); the confidence limits use the Input
+tab's significance level.
+
+Unmeasured: the reports as drawn (no picture of either), the Raw layout, missing values or unequal numbers of observations per
+subject, the Dunnett and Holm blocks in the two-way run, the Plots and Output tabs' graphs, the rule of the means' standard
+errors, designs with a between-subjects factor (the dialog offers only the all-within design), and Interactions off.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",
@@ -718,8 +1683,8 @@ Not verified or not done:
   distribution curve on the histogram, normal probability plot) are not copied.
 - No test of equal variance (Levene, F test) next to the two-sample t-test, no t-test from summary data, no row-wise t-tests.
 - Power and sample size: only the t tests and the one-way ANOVA (section 12); no tests of proportions or variances, no power curve.
-- Three-way and repeated measures ANOVA and means plots of the
-  ANOVA, partial correlation, scatter matrices and confidence ellipses, outlier tests other than Grubbs and
+- Means plots of the
+  ANOVA (three-way and repeated measures ANOVA and partial correlation are sections 24 to 26), scatter matrices and confidence ellipses, outlier tests other than Grubbs and
   Dixon, Chen-Shapiro and Cramer-von Mises are not built (the Friedman, median, sign and two-sample
   Kolmogorov-Smirnov tests and the Grubbs and Dixon tests are in section 10).
 - Mann-Whitney and Kruskal-Wallis take one column per sample; Origin's indexed form (a group column and a

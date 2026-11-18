@@ -10,6 +10,7 @@
 
 pub mod anova;
 pub mod anova2;
+pub mod anova3;
 pub mod baseline;
 pub mod bin2d;
 pub mod coherence;
@@ -17,6 +18,7 @@ pub mod correlation;
 pub mod crosstab;
 pub mod curvemath;
 pub mod curves;
+pub mod cwt;
 pub mod decimate;
 pub mod dierckx;
 pub mod differentiate;
@@ -25,10 +27,16 @@ pub mod distfit;
 pub mod dunnett;
 pub mod envelope;
 pub mod fft;
+pub mod fir;
 pub mod freq;
+pub mod graph_summary;
+pub mod hexbin;
 pub mod hypothesis;
+pub mod iir;
 pub mod integrate;
 pub mod interp;
+pub mod kde;
+pub mod kmeans;
 pub mod levelcross;
 pub mod manip;
 pub mod nonparam;
@@ -36,20 +44,37 @@ pub mod normality;
 pub mod normalize;
 pub mod nptests;
 pub mod outlier;
+pub mod partcorr;
+pub mod pca;
 pub mod peakchain;
 pub mod peaks;
 pub mod power;
+pub mod qc;
+pub mod rmanova;
+pub mod roc;
 pub mod signal;
 pub mod smooth;
 pub mod stats;
+pub mod sunburst;
+pub mod survival;
 pub mod trace;
+pub mod treemap;
+pub mod treemap_tree;
+pub mod trend;
 mod util;
+pub mod vartest;
+pub mod wavelet;
+pub mod xyzarea;
 
 pub use anova::{
     Anova, AnovaError, AnovaRow, Comparison, MeansComparison, anova_one_way, compare_means, compare_to_control, ptukey,
     qtukey,
 };
 pub use anova2::{TwoWayAnova, TwoWayError, TwoWayRow, anova_two_way};
+pub use anova3::{
+    Effect as ThreeWayEffect, EffectPower, Levene, MAX_THREE_WAY_LEVELS, ThreeWayAnova, ThreeWayError, ThreeWayTerms,
+    anova_three_way,
+};
 pub use baseline::{BaselineMethod, subtract_baseline, subtract_constant, subtract_line};
 pub use bin2d::{AxisBins, AxisLayout, Bin, Bin2d, Bin2dOptions, Bin2dStat, axis_layout, bin2d};
 pub use coherence::{CoherenceOptions, CoherenceResult, CoherenceWindow, coherence, coherence_window};
@@ -60,6 +85,7 @@ pub use curves::{
     AverageMethod, AverageOptions, AverageResult, CommonX, CurveError, Intersection, MeetKind, PolygonArea, XRange,
     average_curves, intersections, polygon_area,
 };
+pub use cwt::{CwtError, CwtWavelet};
 pub use decimate::{DecimateError, DecimateFilter, DecimateOptions, decimate};
 pub use differentiate::{DiffOptions, differentiate};
 pub use discfreq::{Category, DiscSort, DiscreteFreq, DiscreteRow, discrete_frequency};
@@ -73,10 +99,21 @@ pub use fft::{
     FftFilterOptions, FftFilterType, FftOptions, FftResult, FftWindow, IfftOptions, IfftResult, PowerNorm,
     WindowCorrection, fft_filter, fft_spectrum, fft_window, ifft_spectrum,
 };
+pub use fir::{
+    FirFilter, FirMethod, FirSpec, FirWindow, MAX_FIR_ORDER, MagnitudeUnit, firls, firwin, kaiser_beta, kaiserord,
+    window as fir_window,
+};
 pub use freq::{BinSize, Freq, FreqOptions, FreqRow, auto_bin_range, auto_bin_size, freq_counts};
+pub use graph_summary::{SampleSummary, graph_summary, median_confidence_limits, sd_confidence_limits};
 pub use hypothesis::{SampleStats, TTest, Tail, ttest_one, ttest_paired, ttest_two};
+pub use iir::{
+    FilterError, FilterResponse, FreqUnit, IirFilter, IirMethod, IirSpec, MAX_ORDER as IIR_MAX_ORDER, iir_filter,
+    iir_order, sosfilt, sosfiltfilt,
+};
 pub use integrate::{AreaType, IntegrateOptions, IntegrateResult, charge, integrate};
-pub use interp::{Extrapolation, InterpMethod, InterpOptions, SplineBoundary, interp1, interp1xy};
+pub use interp::{Extrapolation, InterpMethod, InterpOptions, SplineBoundary, automatic_smoothing, interp1, interp1xy};
+pub use kde::{Bandwidth, Density, GRID_POINTS, bandwidth, density_at, kernel_density};
+pub use kmeans::{Cluster, Kmeans, KmeansError, KmeansOptions, VariableAnova, kmeans};
 pub use levelcross::{Crossing, CrossingIndex, level_crossings};
 pub use manip::{
     DUP_TOL, DupMethod, EvenGrid, LinePoint, MedianEdge, REDUCE_AUTO_FACTOR, REDUCE_EVEN_TOLERANCE_PCT, ReduceGroup,
@@ -97,16 +134,33 @@ pub use nptests::{
     SIGN_EXACT_MAX_N, SignTest, friedman, ks_two_sample, median_test, sign_test,
 };
 pub use outlier::{DixonQ, Grubbs, OutlierError, OutlierSide, dixon_q, grubbs};
+pub use partcorr::{PartialCorr, PartialCorrError, partial_correlation};
+pub use pca::{EigenTest, Pca, PcaError, PcaOptions, pca};
 pub use peakchain::{
     BaselineStat, ChainBaseline, ChainError, ChainOptions, ChainResult, FindMethod, FindOptions, LimitMode, PeakInfo,
-    analyze_peaks, auto_minima_anchors, find_peak_indices, integrate_peaks,
+    analyze_peaks, analyze_peaks_at, auto_minima_anchors, find_peak_indices, integrate_peaks,
 };
 pub use peaks::{PeakDirection, PeakFilter, PeakOptions, PeakResult, find_peaks};
 pub use power::{
     PowerError, PowerTest, SampleSizes, anova_power, anova_powers, anova_sample_sizes, pnf, pnt, t_power, t_powers,
     t_sample_sizes,
 };
+pub use rmanova::{
+    Correction as RmCorrection, Multivariate as RmMultivariate, RmAnova, RmBetween, RmEffect, RmError, RmLevel, RmRow,
+    RmTerm, Sphericity as RmSphericity, rm_anova,
+};
+pub use roc::{Roc, RocError, RocOptions, RocPoint, roc};
 pub use signal::{convolve, correlate, hilbert};
 pub use smooth::{Boundary, LocalSpan, SmoothMethod, SmoothOptions, smooth, smooth_xy};
 pub use stats::{RowStats, Stats, mean_confidence_limits, quantile_origin, row_stats, stats};
+pub use survival::{
+    KaplanMeier, Quartile, RankResult, RankTest, SurvivalError, SurvivalRow, SurvivalStep, kaplan_meier, rank_test,
+};
 pub use trace::{TraceMethod, trace_interp, trace_points};
+pub use vartest::{
+    OneProportion, TwoProportions, VarTest, exact_interval, power_one_proportion, power_two_proportions,
+    proportion_one, proportion_two, ratio_interval, two_sample_normal_doubtful, variance_interval, vartest_one,
+    vartest_two, wald_difference_interval, wald_interval,
+};
+pub use wavelet::{Extension as WaveletExtension, Threshold as WaveletThreshold, Wavelet, WaveletError};
+pub use xyzarea::{SurfaceArea, XyzAreaError, delaunay, xyz_surface_area};

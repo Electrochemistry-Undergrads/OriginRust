@@ -9,8 +9,32 @@ use crate::actions::{Action, CellOp, LabelRow, SheetOp};
 use crate::menus::{self, MenuContext, WindowKind};
 use eframe::egui::{self, Align, Color32, Layout, Pos2, Rect, RichText, Sense, Shape, Stroke, UiBuilder, vec2};
 use egui_extras::{Column as TableColumn, TableBuilder};
+use sheaf_core::cellformat::{HAlign, ResolvedStyle};
 use sheaf_core::{Column, ColumnId, Document, FormulaState, RecalcMode, WindowId, Worksheet};
+use std::collections::HashMap;
 use std::ops::Range;
+
+/// Conditional-format styles with what they were evaluated for.
+struct CondCache {
+    revision: u64,
+    sheet: usize,
+    styles: std::sync::Arc<sheaf_core::condformat::CellStyles>,
+}
+
+/// Cell-format lookup index with what it was built for (see `sheaf_core::cellformat`).
+struct FormatCache {
+    revision: u64,
+    sheet: usize,
+    index: std::sync::Arc<sheaf_core::cellformat::FormatIndex>,
+}
+
+struct LayoutCache {
+    revision: u64,
+    generation: u64,
+    sheet: usize,
+    fonts: usize,
+    value: std::sync::Arc<crate::worksheet_layout::Layout>,
+}
 
 /// What is selected in a worksheet.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -117,6 +141,8 @@ pub struct BookUi {
     reveal_rect: Option<Rect>,
     /// How many rows fit in the view (for Page Up and Page Down).
     page_rows: usize,
+    /// Destination to reveal while Go To leaves a row/column/range selection in place.
+    navigation_target: Option<(usize, usize)>,
     /// The grid keeps the keyboard (after a click in it or editing a cell) unless a text field
     /// takes it.
     focus_grid: bool,
@@ -125,16 +151,46 @@ pub struct BookUi {
     /// The short name of a column whose header menu opens by itself in the next frame (for
     /// pictures made with `--show column-menu:NAME`).
     pub open_header_menu: Option<String>,
+    /// The styles the conditional formats give the cells of the sheet shown, evaluated once per
+    /// change of the document (its revision) and sheet, not per frame or per cell.
+    cond_cache: Option<CondCache>,
+    /// Which cell-format ranges reach each column, built once per document revision and sheet.
+    fmt_cache: Option<FormatCache>,
+    layout_cache: Option<LayoutCache>,
     /// Horizontal scroll position and the sizes it ranges over, from the last frame; the bar
     /// next to the sheet tabs draws and changes them.
     h_offset: f32,
     h_content: f32,
     h_view: f32,
+    /// Frozen panes (see [`frozen_split`]), from the last frame's layout. The width in pixels
+    /// of the scrolling columns' heads, to start a frozen column from.
+    col_px: HashMap<ColumnId, f32>,
+    /// Widths the user gave frozen columns by dragging the edge of their heads.
+    frozen_widths: HashMap<ColumnId, f32>,
+    /// The screen x where the scrolling cells are not hidden by the frozen columns.
+    frozen_clip_x: f32,
+    /// Total width of the frozen block (row header and frozen columns), 0 without frozen columns.
+    frozen_w: f32,
+    /// The most the frozen block may take in this frame ([`frozen_cap`] of the body width).
+    frozen_max_w: f32,
+    /// The frozen columns and the frozen data rows as laid out in this frame.
+    frozen_cols: Vec<ColumnId>,
+    frozen_rows: Vec<usize>,
+    /// The cell to reveal sits in a frozen column (or row): it never scrolls along that axis.
+    reveal_frozen_x: bool,
+    reveal_frozen_y: bool,
 }
 
 impl BookUi {
+    /// The horizontal and vertical scroll positions of the last frame, for the tests.
+    #[cfg(test)]
+    pub fn scroll_offsets(&self) -> (f32, f32) {
+        (self.h_offset, self.v_offset)
+    }
+
     /// Forgets the selection (a different sheet was shown, a project was loaded).
     pub fn clear_selection(&mut self) {
+        self.navigation_target = None;
         self.selected.clear();
         self.sel = Sel::None;
         self.dragging = false;
@@ -177,13 +233,50 @@ impl BookUi {
 
     /// Edit > Go to: selects one cell and scrolls it into view.
     pub fn go_to(&mut self, sheet: &Worksheet, column: usize, row: usize) {
-        self.select_cells(sheet, (column, row), (column, row));
+        let to = visible_cell(sheet, (column, row), (column, row), row.max(sheet.row_count() + SPARE_ROWS - 1));
+        self.select_cells(sheet, to, to);
         self.reveal = 4;
         self.focus_grid = true;
     }
 
+    /// Origin's Go To keeps an omitted axis and extends from the opposite edge when moving
+    /// before a region, otherwise from its first edge (including a target inside the region).
+    pub fn go_to_selection(&mut self, sheet: &Worksheet, column: Option<usize>, row: Option<usize>, extend: bool) {
+        if (column.is_none() && row.is_none()) || sheet.columns.is_empty() {
+            return;
+        }
+        let column = column.map(|c| c.min(sheet.columns.len() - 1));
+        let row = row.map(|r| r.min(self.row_capacity(sheet) - 1));
+        let old = self.target(sheet);
+        let cols = old.as_ref().and_then(|t| Some((*t.columns.first()?, *t.columns.last()?))).unwrap_or((0, 0));
+        let rows = old.as_ref().map_or((0, 0), |t| (t.rows.start, t.rows.end.saturating_sub(1).max(t.rows.start)));
+        let axis = |(lo, hi): (usize, usize), destination: Option<usize>| match destination {
+            Some(to) if extend => (if to < lo { hi } else { lo }, to),
+            Some(to) => (to, to),
+            None => (lo, hi),
+        };
+        let (c0, c1) = axis(cols, column);
+        let (r0, r1) = axis(rows, row);
+        if row.is_none() && matches!(self.sel, Sel::Columns) {
+            self.selected = sheet.columns[c0.min(c1)..=c0.max(c1)].iter().map(|c| c.id).collect();
+            self.active = None;
+        } else {
+            self.select_cells(sheet, (c0, r0), (c1, r1));
+        }
+        let destination = (column.unwrap_or(c1), row.unwrap_or(r1));
+        self.navigation_target = Some(destination);
+        self.reveal_rect = None;
+        self.reveal = 4;
+        self.focus_grid = true;
+    }
+
+    pub fn row_capacity(&self, sheet: &Worksheet) -> usize {
+        sheet.row_count().saturating_add(SPARE_ROWS)
+    }
+
     /// Selects a block of cells and records which columns it touches.
     pub fn select_cells(&mut self, sheet: &Worksheet, anchor: (usize, usize), end: (usize, usize)) {
+        self.navigation_target = None;
         self.sel = Sel::Cells { anchor, end };
         self.active = None;
         let (lo, hi) = (anchor.0.min(end.0), anchor.0.max(end.0));
@@ -200,6 +293,7 @@ impl BookUi {
     }
 
     fn focus(&mut self, ctx: &egui::Context) {
+        self.navigation_target = None;
         self.focus_grid = true;
         if let Some(grid) = self.grid {
             ctx.memory_mut(|m| m.request_focus(grid));
@@ -232,6 +326,9 @@ impl BookUi {
 
     /// The cell the view follows after keys: the active cell of a block, else the moving corner.
     fn reveal_target(&self) -> Option<(usize, usize)> {
+        if self.reveal > 0 && self.navigation_target.is_some() {
+            return self.navigation_target;
+        }
         match &self.sel {
             Sel::Cells { anchor, end } if anchor != end && self.active.is_some() => self.active_cell(),
             _ => self.active_corner(),
@@ -244,6 +341,7 @@ impl BookUi {
     }
 
     fn select_rows(&mut self, anchor: usize, end: usize) {
+        self.navigation_target = None;
         self.sel = Sel::Rows { anchor, end };
         self.selected.clear();
     }
@@ -283,6 +381,26 @@ impl BookUi {
         {
             self.editing = None;
         }
+        if let Some((id, row, _)) = &self.editing
+            && (!sheet.row_shown(*row) || sheet.column(*id).is_none_or(|c| c.hidden))
+        {
+            self.editing = None;
+        }
+        if let Some((c, r)) = self.active_cell()
+            && (!sheet.row_shown(r) || sheet.columns.get(c).is_none_or(|c| c.hidden))
+            && let Sel::Cells { anchor, end } = self.sel
+        {
+            let col =
+                (anchor.0.min(end.0)..=anchor.0.max(end.0)).find(|c| sheet.columns.get(*c).is_some_and(|c| !c.hidden));
+            let row = (anchor.1.min(end.1)..=anchor.1.max(end.1)).find(|r| sheet.row_shown(*r));
+            if let (Some(c), Some(r)) = (col, row) {
+                self.active = Some((c, r));
+            } else {
+                let to = visible_cell(sheet, anchor, anchor, sheet.row_count() + SPARE_ROWS - 1);
+                self.select_cells(sheet, to, to);
+            }
+            self.reveal = 4;
+        }
         if let Some((id, ..)) = &self.editing_label
             && sheet.column(*id).is_none()
         {
@@ -301,15 +419,37 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         selected: &state.selected,
         sorting_columns: if matches!(state.sel, Sel::Label { .. }) { Vec::new() } else { state.selected.clone() },
         cells: state.sel != Sel::None,
+        whole_columns: matches!(state.sel, Sel::Columns | Sel::All),
+        imported: false,
         undo: None,
         redo: None,
+        undo_ai: false,
         windows: Vec::new(),
+        folders: Vec::new(),
+        folder: Vec::new(),
+        view_windows: Default::default(),
         open: None,
+        recent_projects: &[],
+        recent_books: &[],
+        recent_graphs: &[],
+        recent_commands: &crate::menus::NO_COMMANDS,
+        recent_exports: &[],
+        user_templates: &[],
+        templates: false,
+        recent_imports: &[],
         panels: [true; 4],
+        ai_link: false,
         layer: 0,
         tool: Default::default(),
         curve: None,
         layer_curves: Vec::new(),
+        stack: None,
+        can_cumulate: false,
+        can_color_scale: false,
+        selected_shape: None,
+        view_mode: Default::default(),
+        layer_icons: true,
+        active_layer_only: None,
     }
 }
 
@@ -330,6 +470,11 @@ const SPARE_ROWS: usize = 30;
 const TAB_BAR_HEIGHT: f32 = 20.0;
 
 const HEADER_GREY: Color32 = Color32::from_rgb(222, 222, 222);
+/// The heads and row numbers of frozen rows and columns (Origin shades them darker).
+const FROZEN_GREY: Color32 = Color32::from_rgb(184, 184, 192);
+/// The line between the frozen panes and the scrolling cells, in points.
+const FREEZE_LINE: f32 = 2.0;
+const FREEZE_LINE_COLOR: Color32 = Color32::from_rgb(70, 70, 82);
 const LABEL_YELLOW: Color32 = Color32::from_rgb(255, 255, 214);
 const ROW_SELECTED: Color32 = Color32::from_rgb(176, 196, 222);
 const BLOCK_BLACK: Color32 = Color32::from_rgb(16, 16, 24);
@@ -341,11 +486,189 @@ const TEXT: Color32 = Color32::BLACK;
 const MASK_FILL: Color32 = Color32::from_rgb(255, 224, 224);
 const MASK_TEXT: Color32 = Color32::from_rgb(190, 0, 0);
 
+/// The width in pixels a column is drawn with when it starts being frozen: its own fixed width, the
+/// width the user dragged it to in the frozen block, or the width it had in the scrolling table.
+fn column_px(state: &BookUi, column: &Column) -> f32 {
+    match column.width {
+        Some(chars) => column_pixels(chars),
+        None => state
+            .frozen_widths
+            .get(&column.id)
+            .or_else(|| state.col_px.get(&column.id))
+            .copied()
+            .unwrap_or(COLUMN_WIDTH),
+    }
+}
+
+/// The share of the body width that the frozen block (row header and frozen columns) may take.
+const FROZEN_MAX_SHARE: f32 = 0.5;
+
+/// The widest the frozen block may be in a body `body_width` pixels wide.
+fn frozen_cap(body_width: f32) -> f32 {
+    body_width * FROZEN_MAX_SHARE
+}
+
+/// The frozen panes as drawn: how many displayed rows and which column positions are frozen.
+/// The setting of the sheet is clamped here and never changed: the frozen rows leave at least
+/// three rows of the body to scroll, and the frozen block takes at most half the width.
+/// `data_rows` is the number of displayed rows that hold data (spare entry rows are never frozen).
+pub fn frozen_split(
+    sheet: &Worksheet,
+    data_rows: usize,
+    body_size: egui::Vec2,
+    header_height: f32,
+    width_of: &dyn Fn(&Column) -> f32,
+) -> (usize, Vec<usize>) {
+    let room = ((body_size.y - header_height) / ROW_HEIGHT).floor() as i64 - 3;
+    let rows = usize::from(sheet.frozen.rows).min(data_rows).min(room.max(0) as usize);
+    let mut used = ROW_HEADER_WIDTH;
+    let mut columns = Vec::new();
+    for (position, column) in
+        sheet.columns.iter().enumerate().filter(|(_, c)| !c.hidden).take(usize::from(sheet.frozen.columns))
+    {
+        let w = width_of(column);
+        if used + w > frozen_cap(body_size.x) {
+            break;
+        }
+        used += w;
+        columns.push(position);
+    }
+    (rows, columns)
+}
+
+/// The panes that Freeze Panes sets from the selection (Origin: the cell D4 freezes 3 rows and 3
+/// columns, a whole row only rows, a whole column only columns), or why it cannot.
+pub fn freeze_counts(state: &BookUi, sheet: &Worksheet) -> Result<sheaf_core::Frozen, &'static str> {
+    let before_row = |r: usize| match sheet.shown_rows(r + 1) {
+        Some(shown) => shown.iter().filter(|s| **s < r).count(),
+        None => r,
+    };
+    let before_column = |c: usize| sheet.columns.iter().take(c).filter(|c| !c.hidden).count();
+    let (rows, columns) = match &state.sel {
+        Sel::Cells { anchor, end } => (before_row(anchor.1.min(end.1)), before_column(anchor.0.min(end.0))),
+        Sel::Rows { anchor, end } => (before_row(*anchor.min(end)), 0),
+        Sel::Columns => {
+            let first = state.selected.iter().filter_map(|id| sheet.column_index(*id)).min();
+            (0, first.map_or(0, before_column))
+        }
+        _ => return Err("Select a cell, a row or a column to freeze panes above and left of it"),
+    };
+    let limit = usize::from(sheaf_core::MAX_FROZEN) - 1;
+    if rows > limit || columns > limit {
+        return Err("Freeze Panes needs a row or column index from 1 to 10: select a cell nearer the top left");
+    }
+    if rows == 0 && columns == 0 {
+        return Err("Nothing to freeze above or left of the selection: select a cell below or right of it");
+    }
+    Ok(sheaf_core::Frozen { rows: rows as u8, columns: columns as u8 })
+}
+
+/// The range a conditional format takes from the selection: the columns and rows of a block of
+/// cells, whole columns, whole rows or the whole sheet; or why there is none.
+/// The cell a note belongs to: the single selected data cell.
+pub fn note_cell(state: &BookUi, sheet: &Worksheet) -> Result<(ColumnId, usize), &'static str> {
+    match &state.sel {
+        Sel::Cells { anchor, end } if anchor == end => {
+            sheet.columns.get(anchor.0).map(|c| (c.id, anchor.1)).ok_or("Select a cell of the sheet first")
+        }
+        _ => Err("Select a single cell for a note"),
+    }
+}
+
+pub fn cond_range(state: &BookUi, sheet: &Worksheet) -> Result<sheaf_core::condformat::CondRange, &'static str> {
+    use sheaf_core::condformat::CondRange;
+    let all_columns = || sheet.columns.iter().map(|c| c.id).collect::<Vec<_>>();
+    match &state.sel {
+        Sel::Cells { anchor, end } => {
+            let (c0, c1) = (anchor.0.min(end.0), anchor.0.max(end.0));
+            let (r0, r1) = (anchor.1.min(end.1), anchor.1.max(end.1));
+            let columns: Vec<ColumnId> = sheet.columns.iter().skip(c0).take(c1 + 1 - c0).map(|c| c.id).collect();
+            if columns.is_empty() {
+                return Err("Select cells of the sheet first");
+            }
+            // A block that runs to the last row of the data keeps following the data (Origin: R0).
+            let last_data = sheet.row_count().saturating_sub(1);
+            Ok(CondRange { columns, first_row: r0, last_row: (r1 < last_data).then_some(r1) })
+        }
+        Sel::Columns => {
+            let columns: Vec<ColumnId> =
+                sheet.columns.iter().map(|c| c.id).filter(|id| state.selected.contains(id)).collect();
+            if columns.is_empty() {
+                return Err("Select cells or columns first");
+            }
+            Ok(CondRange::whole_columns(columns))
+        }
+        Sel::Rows { anchor, end } => {
+            let last_data = sheet.row_count().saturating_sub(1);
+            let (r0, r1) = (*anchor.min(end), *anchor.max(end));
+            Ok(CondRange { columns: all_columns(), first_row: r0, last_row: (r1 < last_data).then_some(r1) })
+        }
+        Sel::All => Ok(CondRange::whole_columns(all_columns())),
+        Sel::Label { .. } | Sel::None => Err("Select cells, rows or columns of the data first"),
+    }
+}
+
+/// The cells Format Cells works on, from the selection: a block of cells, whole columns or rows,
+/// the whole sheet, or one label cell. A selection that runs to the last row of the data keeps
+/// following the data (like [`cond_range`]), so formatting a column is one record however many
+/// rows it has.
+pub fn format_target(state: &BookUi, sheet: &Worksheet) -> Result<sheaf_core::cellformat::FormatTarget, &'static str> {
+    use sheaf_core::cellformat::FormatTarget;
+    if let Sel::Label { column, row } = &state.sel {
+        return Ok(FormatTarget::label_rows(vec![*column], vec![label_kind(row)]));
+    }
+    let r = cond_range(state, sheet).map_err(|_| "Select cells, rows, columns or a label cell first")?;
+    Ok(FormatTarget::cells(r.columns, r.first_row, r.last_row))
+}
+
+/// The part of `rect` where the pointer really reaches it: inside the clip of the ui that draws
+/// it and, for a cell that scrolls (not `overlay`), right of the frozen columns that cover it.
+fn visible_part(ui: &egui::Ui, rect: Rect, overlay: bool, state: &BookUi) -> Rect {
+    let mut r = rect.intersect(ui.clip_rect());
+    if !overlay {
+        r.min.x = r.min.x.max(state.frozen_clip_x);
+    }
+    r
+}
+
+/// A cell of the head or frozen block: a child ui bound to `rect` (clipped to it) with its own id.
+fn cell_scope(ui: &mut egui::Ui, rect: Rect, salt: impl std::hash::Hash, add: impl FnOnce(&mut egui::Ui)) {
+    ui.scope_builder(
+        UiBuilder::new().max_rect(rect).id_salt(salt).layout(Layout::left_to_right(Align::Center)),
+        |ui| {
+            ui.set_clip_rect(ui.clip_rect().intersect(rect));
+            add(ui);
+        },
+    );
+}
+
 /// The label rows of a sheet in order: the four fixed ones, then one per user parameter.
 fn label_rows(sheet: &Worksheet) -> Vec<LabelRow> {
-    let mut rows = vec![LabelRow::LongName, LabelRow::Units, LabelRow::Comments, LabelRow::Formula];
+    // The corner menu's View switches hide label rows (T92).
+    let v = &sheet.view;
+    let mut rows: Vec<LabelRow> = [
+        (v.long_name, LabelRow::LongName),
+        (v.units, LabelRow::Units),
+        (v.comments, LabelRow::Comments),
+        (v.formula, LabelRow::Formula),
+    ]
+    .into_iter()
+    .filter_map(|(shown, row)| shown.then_some(row))
+    .collect();
     rows.extend(sheet.parameter_names().into_iter().map(LabelRow::Param));
     rows
+}
+
+/// The model's name of a label row (for cell formats).
+pub fn label_kind(row: &LabelRow) -> sheaf_core::cellformat::LabelKind {
+    use sheaf_core::cellformat::LabelKind;
+    match row {
+        LabelRow::LongName => LabelKind::LongName,
+        LabelRow::Units => LabelKind::Units,
+        LabelRow::Comments => LabelKind::Comments,
+        LabelRow::Formula => LabelKind::Formula,
+        LabelRow::Param(name) => LabelKind::Param(name.clone()),
+    }
 }
 
 fn row_title(row: &LabelRow) -> String {
@@ -371,21 +694,7 @@ fn label_text(column: &Column, row: &LabelRow) -> String {
 /// The name in the grey row of the head: the letter and, in brackets, the kind of data and the
 /// number of the data set it belongs to ("A(X1)", "B(Y1)", "C(Y1)", "D(X2)").
 pub fn head_name(sheet: &Worksheet, position: usize) -> String {
-    use sheaf_core::Designation;
-    let column = &sheet.columns[position];
-    let tag = column.designation.tag();
-    if tag.is_empty() {
-        return column.short_name.clone();
-    }
-    match column.designation {
-        Designation::Label => format!("{}({tag})", column.short_name),
-        _ => {
-            // The data set number counts the X columns up to this one; columns before the first
-            // X belong to set 1.
-            let group = sheet.columns[..=position].iter().filter(|c| c.designation == Designation::X).count().max(1);
-            format!("{}({tag}{group})", column.short_name)
-        }
-    }
+    sheaf_core::sheet_print::head_name(sheet, position)
 }
 
 // ----- the window --------------------------------------------------------------------------
@@ -401,6 +710,27 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         return;
     };
     state.repair(sheet);
+    // Conditional formats: evaluated again only when the document changed (or another sheet shows).
+    if sheet.cond_formats.is_empty() {
+        state.cond_cache = None;
+    } else if !state.cond_cache.as_ref().is_some_and(|c| c.revision == doc.revision() && c.sheet == sheet_index) {
+        state.cond_cache = Some(CondCache {
+            revision: doc.revision(),
+            sheet: sheet_index,
+            styles: std::sync::Arc::new(sheaf_core::condformat::evaluate(sheet, &sheet.cond_formats)),
+        });
+    }
+
+    // Cell formats: the per-column index is rebuilt only when the document changed.
+    if sheet.cell_formats.is_empty() && sheet.font_defaults.is_empty() {
+        state.fmt_cache = None;
+    } else if !state.fmt_cache.as_ref().is_some_and(|c| c.revision == doc.revision() && c.sheet == sheet_index) {
+        state.fmt_cache = Some(FormatCache {
+            revision: doc.revision(),
+            sheet: sheet_index,
+            index: std::sync::Arc::new(sheet.format_index()),
+        });
+    }
 
     // The strip of sheet tabs along the bottom edge, the grid above it.
     let full = ui.max_rect();
@@ -411,12 +741,70 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         sheet_tabs(ui, book, sheet_index, book_id, state, actions);
     });
 
+    // The report of a one-way ANOVA or a two-sample t-test offers its multiple comparisons plot (T64).
+    if doc.project().can_comparison_plot(book_id, sheet_index) {
+        ui.scope_builder(UiBuilder::new().max_rect(tab_strip), |ui| {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.add_space(8.0);
+                if ui.small_button("Multiple Comparisons Plot...").clicked() {
+                    actions.push(Action::ComparisonPlot { book: book_id, sheet: Some(sheet_index) });
+                }
+            });
+        });
+    }
+
     let rows = sheet.row_count() + SPARE_ROWS;
     // With an active filter the grid shows only the rows that pass, with their own numbers.
     let shown: Option<Vec<usize>> = sheet.shown_rows(rows);
     let rows_drawn = shown.as_ref().map_or(rows, Vec::len);
     let label_rows = label_rows(sheet);
-    let header_height = ROW_HEIGHT * (1 + label_rows.len()) as f32;
+    let font_count = ui.ctx().fonts(|f| f.definitions().font_data.len());
+    if !state.layout_cache.as_ref().is_some_and(|c| {
+        c.revision == doc.revision()
+            && c.generation == doc.generation()
+            && c.sheet == sheet_index
+            && c.fonts == font_count
+    }) {
+        let index = state
+            .fmt_cache
+            .as_ref()
+            .map(|c| c.index.clone())
+            .unwrap_or_else(|| std::sync::Arc::new(sheet.format_index()));
+        state.layout_cache = Some(LayoutCache {
+            revision: doc.revision(),
+            generation: doc.generation(),
+            sheet: sheet_index,
+            fonts: font_count,
+            value: std::sync::Arc::new(crate::worksheet_layout::Layout::new(
+                ui.ctx(),
+                sheet,
+                &index,
+                &label_rows,
+                shown.as_deref(),
+            )),
+        });
+    }
+    let layout = state.layout_cache.as_ref().expect("worksheet layout").value.clone();
+    let row_heights = &layout.rows;
+    let header_height = layout.head_height();
+
+    // Frozen panes: the first displayed rows go under the head, the first visible columns sit in
+    // an overlay over the table, whose own cells for them stay empty placeholders of the same width.
+    let data_shown = shown.as_ref().map_or(sheet.row_count(), |s| s.iter().filter(|r| **r < sheet.row_count()).count());
+    let (mut nf_rows, frozen_positions) =
+        frozen_split(sheet, data_shown, body.size(), header_height, &|c| column_px(state, c));
+    while nf_rows > 0 && header_height + row_heights.offset(nf_rows + 3) as f32 > body.height() {
+        nf_rows -= 1;
+    }
+    let frozen_px: Vec<f32> = frozen_positions.iter().map(|p| column_px(state, &sheet.columns[*p])).collect();
+    let frozen_w = if frozen_positions.is_empty() { 0.0 } else { ROW_HEADER_WIDTH + frozen_px.iter().sum::<f32>() };
+    let header_total = header_height + row_heights.offset(nf_rows) as f32;
+    let frozen_rows: Vec<usize> = (0..nf_rows).map(|i| shown.as_ref().map_or(i, |s| s[i])).collect();
+    state.frozen_cols = frozen_positions.iter().map(|p| sheet.columns[*p].id).collect();
+    state.frozen_rows = frozen_rows.clone();
+    state.frozen_w = frozen_w;
+    state.frozen_max_w = frozen_cap(body.width());
+    state.frozen_clip_x = body.left() + frozen_w;
     // The primary button was released: a drag over cells is over.
     if !ui.input(|i| i.pointer.primary_down()) {
         state.dragging = false;
@@ -431,7 +819,9 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     let drag_on = state.dragging || state.head_drag.is_some() || state.row_drag;
     state.drag_pointer =
         if drag_on { ui.input(|i| i.pointer.latest_pos()).map(|p| clamp_to(p, cells_area)) } else { None };
-    state.page_rows = (((body.height() - header_height) / ROW_HEIGHT).floor() as usize).max(1);
+    let page_top = row_heights.offset(nf_rows) + f64::from(state.v_offset);
+    let page_bottom = page_top + f64::from((body.height() - header_total).max(0.0));
+    state.page_rows = row_heights.row_at(page_bottom).saturating_sub(row_heights.row_at(page_top)).max(1);
     // The keyboard belongs to the grid once something in it was clicked: Tab and the arrow keys
     // stay with it instead of moving the focus to other widgets.
     let grid = grid_id(book_id);
@@ -443,6 +833,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         )
     });
     state.reveal_rect = None;
+    state.reveal_frozen_x = false;
+    state.reveal_frozen_y = false;
     state.grid = Some(grid);
     if state.focus_grid && state.editing.is_none() && state.editing_label.is_none() {
         match ui.memory(|m| m.focused()) {
@@ -452,6 +844,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         }
     }
 
+    // Where the table drew the rows of the body this frame (row number, top y), for the overlay.
+    let mut drawn_rows: Vec<(usize, f32, f32)> = Vec::new();
     let output = ui
         .scope_builder(UiBuilder::new().max_rect(body), |ui| {
             egui::ScrollArea::horizontal()
@@ -468,8 +862,11 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                         .cell_layout(Layout::left_to_right(Align::Center))
                         .column(TableColumn::exact(ROW_HEADER_WIDTH))
                         .min_scrolled_height(0.0);
-                    for column in sheet.columns.iter().filter(|c| !c.hidden) {
+                    for (position, column) in sheet.columns.iter().enumerate().filter(|(_, c)| !c.hidden) {
                         table = match column.width {
+                            _ if frozen_positions.contains(&position) => {
+                                table.column(TableColumn::exact(column_px(state, column)))
+                            }
                             Some(chars) => table.column(TableColumn::exact(column_pixels(chars)).clip(true)),
                             None => table.column(TableColumn::initial(COLUMN_WIDTH).at_least(30.0).clip(true)),
                         };
@@ -480,8 +877,21 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                         && let Some(row) = state.reveal_target().map(|c| c.1)
                     {
                         let at = shown.as_ref().map_or(Some(row), |s| s.iter().position(|r| *r == row));
-                        if let Some(at) = at {
-                            table = table.scroll_to_row(at, None);
+                        // A frozen row is always in view: only the rows below them scroll.
+                        if let Some(at) = at
+                            && at >= nf_rows
+                        {
+                            let top = (row_heights.offset(at) - row_heights.offset(nf_rows)) as f32;
+                            let bottom = top + row_heights.height(at) as f32;
+                            let view = (body.height() - header_total).max(1.0);
+                            let offset = if top < state.v_offset {
+                                top
+                            } else if bottom > state.v_offset + view {
+                                bottom - view
+                            } else {
+                                state.v_offset
+                            };
+                            table = table.vertical_scroll_offset(offset.max(0.0));
                         }
                     }
                     if let Some(y) = state.v_set.take() {
@@ -489,11 +899,52 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                     }
 
                     table
-                        .header(header_height, |mut header| {
-                            header.col(|ui| corner_and_titles(ui, sheet, &label_rows, book_id, state, actions));
+                        .header(header_total, |mut header| {
+                            header.col(|ui| {
+                                // With frozen columns the row header is drawn by the overlay.
+                                if frozen_w > 0.0 {
+                                    return;
+                                }
+                                corner_and_titles(ui, sheet, &label_rows, book_id, state, actions);
+                                let rect = ui.max_rect();
+                                let band_top = rect.top() + header_height;
+                                for (i, r) in frozen_rows.iter().enumerate() {
+                                    let cell = Rect::from_min_size(
+                                        Pos2::new(rect.left(), band_top + row_heights.offset(i) as f32),
+                                        vec2(rect.width(), row_heights.height(i) as f32),
+                                    );
+                                    cell_scope(ui, cell, ("frozen_rowhead", *r), |ui| {
+                                        row_header_cell(ui, *r, false, book_id, state, actions)
+                                    });
+                                }
+                            });
                             for (position, column) in sheet.columns.iter().enumerate().filter(|(_, c)| !c.hidden) {
                                 header.col(|ui| {
-                                    column_head(ui, sheet, position, column, &label_rows, book_id, state, actions);
+                                    if frozen_positions.contains(&position) {
+                                        return;
+                                    }
+                                    column_head(
+                                        ui,
+                                        sheet,
+                                        position,
+                                        column,
+                                        &label_rows,
+                                        false,
+                                        book_id,
+                                        state,
+                                        actions,
+                                    );
+                                    let rect = ui.max_rect();
+                                    let band_top = rect.top() + header_height;
+                                    for (i, r) in frozen_rows.iter().enumerate() {
+                                        let cell = Rect::from_min_size(
+                                            Pos2::new(rect.left(), band_top + row_heights.offset(i) as f32),
+                                            vec2(rect.width(), row_heights.height(i) as f32),
+                                        );
+                                        cell_scope(ui, cell, ("frozen_row", column.id.0, *r), |ui| {
+                                            body_cell(ui, sheet, position, column, *r, false, book_id, state, actions)
+                                        });
+                                    }
                                 });
                             }
                             header.col(|ui| {
@@ -516,11 +967,22 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                             });
                         })
                         .body(|body| {
-                            body.rows(ROW_HEIGHT, rows_drawn, |mut row| {
-                                let r = shown.as_ref().map_or(row.index(), |s| s[row.index()]);
-                                row.col(|ui| row_header_cell(ui, r, book_id, state, actions));
+                            worksheet_rows(body, row_heights, nf_rows, rows_drawn, |i, mut row| {
+                                let r = shown.as_ref().map_or(i, |s| s[i]);
+                                if frozen_w > 0.0 {
+                                    // The cell's own rect (an empty cell's used rect sits at its middle).
+                                    let mut top = 0.0;
+                                    row.col(|ui| top = ui.max_rect().top());
+                                    drawn_rows.push((r, top, row_heights.height(i) as f32));
+                                } else {
+                                    row.col(|ui| row_header_cell(ui, r, false, book_id, state, actions));
+                                }
                                 for (position, column) in sheet.columns.iter().enumerate().filter(|(_, c)| !c.hidden) {
-                                    row.col(|ui| body_cell(ui, sheet, position, column, r, book_id, state, actions));
+                                    row.col(|ui| {
+                                        if !frozen_positions.contains(&position) {
+                                            body_cell(ui, sheet, position, column, r, false, book_id, state, actions);
+                                        }
+                                    });
                                 }
                                 row.col(|_ui| {});
                             });
@@ -530,10 +992,50 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         .inner;
     state.h_offset = output.state.offset.x;
     state.v_offset = output.inner.state.offset.y;
-    // Dragging a selection past the edge of the view scrolls the view that way.
+    if frozen_w > 0.0 {
+        let layout = FrozenView {
+            positions: &frozen_positions,
+            widths: &frozen_px,
+            rows: &frozen_rows,
+            heights: row_heights,
+            header_height,
+            header_total,
+            width: frozen_w,
+        };
+        frozen_overlay(ui, output.inner_rect, &layout, &drawn_rows, sheet, &label_rows, book_id, state, actions);
+    }
+    if nf_rows > 0 || frozen_w > 0.0 {
+        frozen_dividers(ui, output.inner_rect, frozen_w, if nf_rows > 0 { Some(header_total) } else { None });
+    }
+    // The wheel over the head and the frozen rows scrolls the body (only the sideways part of it
+    // belongs to the horizontal area that holds the head).
+    if nf_rows > 0 {
+        let band = Rect::from_min_size(output.inner_rect.min, vec2(output.inner_rect.width(), header_total));
+        let over = ui.input(|i| i.pointer.hover_pos()).is_some_and(|p| band.contains(p));
+        let dy = ui.input(|i| i.smooth_scroll_delta.y);
+        if over && dy != 0.0 {
+            state.v_set = Some((state.v_offset - dy).max(0.0));
+            ui.ctx().input_mut(|i| i.smooth_scroll_delta.y = 0.0);
+            ui.ctx().request_repaint();
+        }
+    }
+    // Dragging a selection past the edge of the view scrolls the view that way. The frozen
+    // panes do not scroll: the edge is where the scrolling cells start.
     if drag_on && let Some(p) = ui.input(|i| i.pointer.latest_pos()) {
         let dt = ui.input(|i| i.stable_dt).min(0.1);
-        let (dx, dy) = edge_scroll(p, cells_area, dt);
+        let scroll_area = Rect::from_min_max(
+            Pos2::new(cells_area.left() + frozen_w, cells_area.top() + row_heights.offset(nf_rows) as f32),
+            cells_area.max,
+        );
+        let (mut dx, mut dy) = edge_scroll(p, scroll_area, dt);
+        // A drag that began in a frozen column (row) and has not left it scrolls no further.
+        let (anchor_column, anchor_row) = drag_anchor(state, sheet);
+        if p.x < scroll_area.left() && anchor_column.is_some_and(|c| state.frozen_cols.contains(&c)) {
+            dx = 0.0;
+        }
+        if p.y < scroll_area.top() && anchor_row.is_some_and(|r| state.frozen_rows.contains(&r)) {
+            dy = 0.0;
+        }
         if dx != 0.0 && !state.row_drag {
             let max = (output.content_size.x - output.inner_rect.width()).max(0.0);
             state.h_offset = (state.h_offset + dx).clamp(0.0, max);
@@ -548,21 +1050,186 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     if state.reveal > 0 {
         state.reveal -= 1;
         if let Some(cell) = state.reveal_rect {
-            // Bring the cell into the horizontal view; the table scrolls to the row itself.
+            // Bring the cell into the horizontal view (right of the frozen columns); the table
+            // scrolls to the row itself. A frozen cell never scrolls along its frozen axis.
             let view = output.inner_rect;
-            if cell.left() < view.left() {
-                state.h_offset = (state.h_offset - (view.left() - cell.left())).max(0.0);
-            } else if cell.right() > view.right() {
-                state.h_offset += (cell.right() - view.right()).min(view.width());
+            let left = view.left() + frozen_w;
+            if !state.reveal_frozen_x {
+                if cell.left() < left - 0.5 {
+                    state.h_offset = (state.h_offset - (left - cell.left())).max(0.0);
+                } else if cell.right() > view.right() {
+                    let distance = cell.right() - view.right();
+                    let step = if state.navigation_target.is_some() { distance } else { distance.min(view.width()) };
+                    state.h_offset += step;
+                }
             }
-            if view.contains_rect(cell) {
+            let x_ok = state.reveal_frozen_x || (cell.left() >= left - 0.5 && cell.right() <= view.right() + 0.5);
+            let y_ok = state.reveal_frozen_y
+                || (cell.top() >= view.top() + header_total - 0.5 && cell.bottom() <= view.bottom() + 0.5);
+            if x_ok && y_ok {
                 state.reveal = 0;
             }
         }
         ui.ctx().request_repaint();
     }
+    if state.reveal == 0 {
+        state.navigation_target = None;
+    }
     state.h_content = output.content_size.x;
     state.h_view = output.inner_rect.width();
+}
+
+/// TableBody's heterogeneous iterator walks every data row each frame. Compact geometry lets
+/// us skip directly to the visible interval and use only two empty buffer rows.
+fn worksheet_rows<'a>(
+    mut body: egui_extras::TableBody<'a>,
+    heights: &sheaf_core::sheet_print::RowHeights,
+    first: usize,
+    end: usize,
+    mut draw: impl FnMut(usize, egui_extras::TableRow<'_, '_>),
+) {
+    if let Some(height) = heights.uniform_height() {
+        body.rows(height as f32, end - first, |row| draw(first + row.index(), row));
+        return;
+    }
+    let view = body.max_rect();
+    let mut origin = view.top();
+    body.row(0.0, |mut row| {
+        row.col(|ui| origin = ui.max_rect().top());
+    });
+    let base = heights.offset(first);
+    let offset = f64::from(view.top() - origin).max(0.0);
+    let start = heights.row_at(base + offset).clamp(first, end);
+    let stop = heights.row_at(base + offset + f64::from(view.height())).saturating_add(2).min(end);
+    let before = heights.offset(start) - base;
+    if before > 0.0 {
+        body.row(before as f32, |mut row| {
+            row.col(|_| {});
+        });
+    }
+    for i in start..stop {
+        body.row(heights.height(i) as f32, |row| draw(i, row));
+    }
+    let after = heights.offset(end) - heights.offset(stop);
+    if after > 0.0 {
+        body.row(after as f32, |mut row| {
+            row.col(|_| {});
+        });
+    }
+}
+
+/// What a drag in progress started on: the column and the row of its anchor, where it has one.
+fn drag_anchor(state: &BookUi, sheet: &Worksheet) -> (Option<ColumnId>, Option<usize>) {
+    if let Some(d) = &state.head_drag {
+        return (sheet.columns.get(d.anchor).map(|c| c.id), None);
+    }
+    match &state.sel {
+        Sel::Rows { anchor, .. } if state.row_drag => (None, Some(*anchor)),
+        Sel::Cells { anchor, .. } if state.dragging => (sheet.columns.get(anchor.0).map(|c| c.id), Some(anchor.1)),
+        _ => (None, None),
+    }
+}
+
+/// The frozen panes of one frame: the frozen column positions with their widths, the frozen rows,
+/// and the heights of the head without and with the frozen rows.
+struct FrozenView<'a> {
+    positions: &'a [usize],
+    widths: &'a [f32],
+    rows: &'a [usize],
+    heights: &'a sheaf_core::sheet_print::RowHeights,
+    header_height: f32,
+    header_total: f32,
+    /// Width of the row header and the frozen columns together.
+    width: f32,
+}
+
+/// The frozen columns, drawn over the table after it (so they are on top for drawing and for the
+/// pointer): the head with the row header, the frozen rows, and the frozen columns of each body
+/// row the table drew. The table keeps empty placeholders under them, so the scrolling columns
+/// pass beneath.
+#[allow(clippy::too_many_arguments)]
+fn frozen_overlay(
+    ui: &mut egui::Ui,
+    inner: Rect,
+    fv: &FrozenView,
+    body_rows: &[(usize, f32, f32)],
+    sheet: &Worksheet,
+    label_rows: &[LabelRow],
+    book_id: WindowId,
+    state: &mut BookUi,
+    actions: &mut Vec<Action>,
+) {
+    let area = Rect::from_min_size(inner.min, vec2(fv.width, inner.height()));
+    ui.scope_builder(UiBuilder::new().max_rect(area).id_salt("frozen_overlay"), |ui| {
+        ui.set_clip_rect(ui.clip_rect().intersect(area));
+        ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+        let (left, top) = (inner.left(), inner.top());
+        let band_top = top + fv.header_height;
+        // The corner with the titles of the label rows, and the numbers of the frozen rows.
+        let corner = Rect::from_min_size(Pos2::new(left, top), vec2(ROW_HEADER_WIDTH, fv.header_total));
+        cell_scope(ui, corner, "frozen_corner", |ui| corner_and_titles(ui, sheet, label_rows, book_id, state, actions));
+        for (i, r) in fv.rows.iter().enumerate() {
+            let cell = Rect::from_min_size(
+                Pos2::new(left, band_top + fv.heights.offset(i) as f32),
+                vec2(ROW_HEADER_WIDTH, fv.heights.height(i) as f32),
+            );
+            cell_scope(ui, cell, ("frozen_rowhead", *r), |ui| row_header_cell(ui, *r, true, book_id, state, actions));
+        }
+        // The heads and the frozen rows of each frozen column.
+        let mut x = left + ROW_HEADER_WIDTH;
+        for (&position, &w) in fv.positions.iter().zip(fv.widths) {
+            let column = &sheet.columns[position];
+            let head = Rect::from_min_size(Pos2::new(x, top), vec2(w, fv.header_total));
+            cell_scope(ui, head, ("frozen_head", column.id.0), |ui| {
+                column_head(ui, sheet, position, column, label_rows, true, book_id, state, actions)
+            });
+            for (i, r) in fv.rows.iter().enumerate() {
+                let cell = Rect::from_min_size(
+                    Pos2::new(x, band_top + fv.heights.offset(i) as f32),
+                    vec2(w, fv.heights.height(i) as f32),
+                );
+                cell_scope(ui, cell, ("frozen_cell", column.id.0, *r), |ui| {
+                    body_cell(ui, sheet, position, column, *r, true, book_id, state, actions)
+                });
+            }
+            x += w;
+        }
+        // The frozen columns of the body rows, clipped below the head.
+        let below = Rect::from_min_max(Pos2::new(left, top + fv.header_total), inner.right_bottom());
+        ui.scope_builder(UiBuilder::new().id_salt("frozen_body"), |ui| {
+            ui.set_clip_rect(ui.clip_rect().intersect(below));
+            for &(r, y, height) in body_rows {
+                if y + height < below.top() || y > below.bottom() {
+                    continue;
+                }
+                let cell = Rect::from_min_size(Pos2::new(left, y), vec2(ROW_HEADER_WIDTH, height));
+                cell_scope(ui, cell, ("frozen_rowhead", r), |ui| row_header_cell(ui, r, true, book_id, state, actions));
+                let mut x = left + ROW_HEADER_WIDTH;
+                for (&position, &w) in fv.positions.iter().zip(fv.widths) {
+                    let column = &sheet.columns[position];
+                    let cell = Rect::from_min_size(Pos2::new(x, y), vec2(w, height));
+                    cell_scope(ui, cell, ("frozen_cell", column.id.0, r), |ui| {
+                        body_cell(ui, sheet, position, column, r, true, book_id, state, actions)
+                    });
+                    x += w;
+                }
+            }
+        });
+    });
+}
+
+/// The lines between the frozen panes and the cells that scroll: right of the frozen columns,
+/// and under the frozen rows (`rows_bottom` is the height of the head with them).
+fn frozen_dividers(ui: &egui::Ui, inner: Rect, width: f32, rows_bottom: Option<f32>) {
+    let painter = ui.painter_at(inner);
+    let stroke = Stroke::new(FREEZE_LINE, FREEZE_LINE_COLOR);
+    if width > 0.0 {
+        painter.vline(inner.left() + width - FREEZE_LINE / 2.0, inner.y_range(), stroke);
+    }
+    if let Some(bottom) = rows_bottom {
+        painter.hline(inner.x_range(), inner.top() + bottom - FREEZE_LINE / 2.0, stroke);
+    }
 }
 
 /// The pointer pulled into a rectangle.
@@ -590,60 +1257,62 @@ fn edge_scroll(p: Pos2, area: Rect, dt: f32) -> (f32, f32) {
 /// The next cell inside a block when Enter (`dy` = 1), Tab (`dx` = 1) or their Shift versions
 /// (-1) are pressed: down the column and on at the top of the next column of the block (wrapping
 /// from the last column to the first), or along the row and on at the start of the next row.
-fn block_next(cols: (usize, usize), rows: (usize, usize), cur: (usize, usize), dx: isize, dy: isize) -> (usize, usize) {
-    let (mut c, mut r) = cur;
-    let (c0, c1, r0, r1) = (cols.0, cols.1, rows.0, rows.1);
-    if dy > 0 {
-        if r < r1 {
-            r += 1;
-        } else {
-            r = r0;
-            c = if c < c1 { c + 1 } else { c0 };
-        }
-    } else if dy < 0 {
-        if r > r0 {
-            r -= 1;
-        } else {
-            r = r1;
-            c = if c > c0 { c - 1 } else { c1 };
-        }
-    } else if dx > 0 {
-        if c < c1 {
-            c += 1;
-        } else {
-            c = c0;
-            r = if r < r1 { r + 1 } else { r0 };
-        }
-    } else if dx < 0 {
-        if c > c0 {
-            c -= 1;
-        } else {
-            c = c1;
-            r = if r > r0 { r - 1 } else { r1 };
-        }
+fn block_next(
+    cols: (usize, usize),
+    rows: (usize, usize),
+    cur: (usize, usize),
+    dx: isize,
+    dy: isize,
+    sheet: Option<&Worksheet>,
+) -> Option<(usize, usize)> {
+    let column_shown = |c: usize| sheet.is_none_or(|s| s.columns.get(c).is_some_and(|c| !c.hidden));
+    let row_shown = |r| sheet.is_none_or(|s| s.row_shown(r));
+    let (c, r) = cur;
+    if dy != 0 {
+        let (next_row, wrapped) = cycle_visible(rows, r, dy > 0, &row_shown)?;
+        let next_col = if wrapped { cycle_visible(cols, c, dy > 0, &column_shown)?.0 } else { c };
+        Some((next_col, next_row))
+    } else if dx != 0 {
+        let (next_col, wrapped) = cycle_visible(cols, c, dx > 0, &column_shown)?;
+        let next_row = if wrapped { cycle_visible(rows, r, dx > 0, &row_shown)?.0 } else { r };
+        Some((next_col, next_row))
+    } else {
+        Some(cur)
     }
-    (c, r)
+}
+
+/// Next visible position along one dimension, plus whether it wrapped to the other edge.
+fn cycle_visible(
+    (lo, hi): (usize, usize),
+    from: usize,
+    forward: bool,
+    visible: &dyn Fn(usize) -> bool,
+) -> Option<(usize, bool)> {
+    if forward {
+        (if from < hi { (from + 1..=hi).find(|i| visible(*i)) } else { None })
+            .map(|i| (i, false))
+            .or_else(|| (lo..=from).find(|i| visible(*i)).map(|i| (i, true)))
+    } else {
+        (if from > lo { (lo..from).rev().find(|i| visible(*i)) } else { None })
+            .map(|i| (i, false))
+            .or_else(|| (from..=hi).rev().find(|i| visible(*i)).map(|i| (i, true)))
+    }
 }
 
 impl BookUi {
     /// With a block of several cells selected and `from` inside it: moves the active cell as
     /// Enter and Tab do in Origin, keeping the block selected. Returns false when the selection
     /// is not such a block.
-    fn step_in_block(&mut self, from: (usize, usize), dx: isize, dy: isize, visible: &dyn Fn(usize) -> bool) -> bool {
+    fn step_in_block(&mut self, from: (usize, usize), dx: isize, dy: isize, sheet: &Worksheet) -> bool {
         let Sel::Cells { anchor, end } = self.sel else { return false };
         let (c0, c1) = (anchor.0.min(end.0), anchor.0.max(end.0));
         let (r0, r1) = (anchor.1.min(end.1), anchor.1.max(end.1));
         if anchor == end || !(c0..=c1).contains(&from.0) || !(r0..=r1).contains(&from.1) {
             return false;
         }
-        // A hidden column is stepped over.
-        let mut next = block_next((c0, c1), (r0, r1), from, dx, dy);
-        for _ in 0..(c1 - c0 + 1) {
-            if visible(next.0) {
-                break;
-            }
-            next = block_next((c0, c1), (r0, r1), next, dx, dy);
-        }
+        let Some(next) = block_next((c0, c1), (r0, r1), from, dx, dy, Some(sheet)) else {
+            return false;
+        };
         self.active = Some(next);
         self.reveal = 4;
         self.focus_grid = true;
@@ -688,13 +1357,15 @@ fn sheet_tabs(
         for (i, sheet) in book.sheets.iter().enumerate() {
             let is_active = i == active;
             let backdrop = ui.painter().add(Shape::Noop);
-            let text = if is_active { RichText::new(&sheet.name).strong() } else { RichText::new(&sheet.name) };
+            // Sheet Name to Show (T90): the short name, the long name or the long name if there is one.
+            let shown = sheet.tab_text();
+            let text = if is_active { RichText::new(shown).strong() } else { RichText::new(shown) };
             ui.add_space(8.0);
             let response = ui.add(egui::Label::new(text).sense(Sense::CLICK));
             ui.add_space(12.0);
             // For screen readers (and tests): a tab is a selectable item with the sheet's name.
             response.widget_info(|| {
-                egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, is_active, sheet.name.clone())
+                egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, is_active, shown.to_string())
             });
             let rect = Rect::from_min_max(
                 Pos2::new(response.rect.left() - 8.0, bar.top()),
@@ -721,7 +1392,7 @@ fn sheet_tabs(
                 actions.push(Action::SelectSheet { book: book_id, sheet: i });
             }
             response.context_menu(|ui| {
-                menus::show_context(ui, &menus::sheet_tab_menu(), &book_ctx(book_id, state), actions)
+                menus::show_context(ui, &menus::sheet_tab_menu(sheet.tab_label), &book_ctx(book_id, state), actions)
             });
         }
         ui.add_space(6.0);
@@ -777,16 +1448,24 @@ fn corner_and_titles(
         state.select_all(sheet);
         state.focus(ui.ctx());
     }
-    response.context_menu(|ui| menus::show_context(ui, &menus::corner_menu(), &book_ctx(book_id, state), actions));
+    response.context_menu(|ui| {
+        menus::show_context(ui, &menus::corner_menu(&sheet.view), &book_ctx(book_id, state), actions)
+    });
     for (i, row) in label_rows.iter().enumerate() {
         let cell = Rect::from_min_size(
-            Pos2::new(rect.left(), rect.top() + ROW_HEIGHT * (i + 1) as f32),
-            vec2(rect.width(), ROW_HEIGHT),
+            Pos2::new(
+                rect.left(),
+                rect.top() + state.layout_cache.as_ref().expect("worksheet layout").value.label_top(i),
+            ),
+            vec2(rect.width(), state.layout_cache.as_ref().expect("worksheet layout").value.labels[i]),
         );
-        title_text(ui, cell, &row_title(row));
+        // Row Labels for Column Label Rows off: the titles are left out (T92).
+        if sheet.view.row_labels {
+            title_text(ui, cell, &row_title(row));
+        }
     }
     for i in 0..=label_rows.len() {
-        let y = rect.top() + ROW_HEIGHT * (i + 1) as f32 - 0.5;
+        let y = rect.top() + state.layout_cache.as_ref().expect("worksheet layout").value.label_top(i) - 0.5;
         ui.painter().hline(rect.x_range(), y, line);
     }
     ui.painter().vline(rect.right() - 0.5, rect.y_range(), line);
@@ -807,18 +1486,32 @@ fn column_head(
     position: usize,
     column: &Column,
     label_rows: &[LabelRow],
+    overlay: bool,
     book_id: WindowId,
     state: &mut BookUi,
     actions: &mut Vec<Action>,
 ) {
     let rect = ui.max_rect();
+    let frozen = state.frozen_cols.contains(&column.id);
+    if !overlay {
+        // The width this column has in the table, where a frozen column starts from.
+        state.col_px.insert(column.id, rect.width());
+        state.frozen_widths.remove(&column.id);
+    }
     let selected = state.selected.contains(&column.id) && matches!(state.sel, Sel::Columns | Sel::All);
     let line = Stroke::new(1.0_f32, LINE_HEADER);
     let text_color = if selected { Color32::WHITE } else { TEXT };
 
     // The grey row with the name.
     let head = Rect::from_min_size(rect.min, vec2(rect.width(), ROW_HEIGHT));
-    ui.painter().rect_filled(head, 0.0, if selected { HEADER_DARK } else { HEADER_GREY });
+    let head_fill = if selected {
+        HEADER_DARK
+    } else if frozen {
+        FROZEN_GREY
+    } else {
+        HEADER_GREY
+    };
+    ui.painter().rect_filled(head, 0.0, head_fill);
     let head_response = ui.interact(head, ui.id().with(("col_header", column.id.0)), Sense::CLICK | Sense::DRAG);
     ui.scope_builder(
         UiBuilder::new().max_rect(head).layout(Layout::centered_and_justified(egui::Direction::LeftToRight)),
@@ -831,7 +1524,10 @@ fn column_head(
         select_column(state, sheet, column.id, modifiers);
         state.focus(ui.ctx());
     }
-    head_drag(ui, state, sheet, position, &head_response, head);
+    head_drag(ui, state, sheet, position, &head_response, head, overlay);
+    if overlay && column.width.is_none() {
+        frozen_resize(ui, state, column, head);
+    }
     if head_response.double_clicked() {
         actions.push(Action::ColumnProperties(column.id));
     }
@@ -854,13 +1550,16 @@ fn column_head(
     // The label rows.
     for (i, row) in label_rows.iter().enumerate() {
         let cell = Rect::from_min_size(
-            Pos2::new(rect.left(), rect.top() + ROW_HEIGHT * (i + 1) as f32),
-            vec2(rect.width(), ROW_HEIGHT),
+            Pos2::new(
+                rect.left(),
+                rect.top() + state.layout_cache.as_ref().expect("worksheet layout").value.label_top(i),
+            ),
+            vec2(rect.width(), state.layout_cache.as_ref().expect("worksheet layout").value.labels[i]),
         );
         label_cell(ui, cell, sheet, column, row, selected, book_id, state, actions);
     }
     for i in 0..=label_rows.len() {
-        let y = rect.top() + ROW_HEIGHT * (i + 1) as f32 - 0.5;
+        let y = rect.top() + state.layout_cache.as_ref().expect("worksheet layout").value.label_top(i) - 0.5;
         ui.painter().hline(rect.x_range(), y, line);
     }
     ui.painter().vline(rect.right() - 0.5, rect.y_range(), line);
@@ -881,8 +1580,17 @@ fn label_cell(
     let selected = matches!(&state.sel, Sel::Label { column: c, row: r } if *c == column.id && r == row);
     if selected {
         state.reveal_rect = Some(cell);
+        // The label rows never scroll away.
+        state.reveal_frozen_y = true;
+        state.reveal_frozen_x = state.frozen_cols.contains(&column.id);
     }
-    let fill = if column_selected { BLOCK_BLACK } else { LABEL_YELLOW };
+    let manual =
+        state.fmt_cache.as_ref().map(|c| c.index.resolve_label(sheet, column.id, &label_kind(row))).unwrap_or_default();
+    let fill = if column_selected {
+        BLOCK_BLACK
+    } else {
+        manual.fill.map_or(LABEL_YELLOW, |f| Color32::from_rgb(f.r, f.g, f.b))
+    };
     ui.painter().rect_filled(cell, 0.0, fill);
     if selected {
         ui.painter().rect_stroke(cell.shrink(0.5), 0.0, Stroke::new(1.5_f32, Color32::BLACK), egui::StrokeKind::Inside);
@@ -928,7 +1636,11 @@ fn label_cell(
         return;
     }
     let text = label_text(column, row);
-    let color = if column_selected { Color32::WHITE } else { TEXT };
+    let color = if column_selected {
+        Color32::WHITE
+    } else {
+        manual.text_color.map_or(TEXT, |c| Color32::from_rgb(c.r, c.g, c.b))
+    };
     let response = ui.interact(cell, ui.id().with(("label", column.id.0, row_title(row))), Sense::CLICK);
     response.widget_info(|| {
         egui::WidgetInfo::selected(
@@ -958,8 +1670,8 @@ fn label_cell(
         left = 17.0;
     }
     let inner = Rect::from_min_max(Pos2::new(cell.left() + left, cell.top()), cell.right_bottom());
-    ui.scope_builder(UiBuilder::new().max_rect(inner).layout(Layout::left_to_right(Align::Center)), |ui| {
-        ui.label(RichText::new(text).color(color));
+    ui.scope_builder(UiBuilder::new().max_rect(inner).layout(aligned_layout(manual.h_align, false)), |ui| {
+        formatted_text(ui, &text, color, &manual);
     });
     if response.clicked() {
         state.select_label(column.id, row.clone());
@@ -1003,7 +1715,8 @@ fn move_label(state: &mut BookUi, sheet: &Worksheet, column: ColumnId, row: &Lab
     let c = skip_hidden(sheet, position, position.saturating_add_signed(dx).min(sheet.columns.len() - 1));
     let r = r.saturating_add_signed(dy);
     if r >= rows.len() {
-        state.select_cells(sheet, (c, 0), (c, 0));
+        let row = skip_filtered(sheet, 0, 0, sheet.row_count() + SPARE_ROWS - 1);
+        state.select_cells(sheet, (c, row), (c, row));
         state.reveal = 4;
     } else {
         state.select_label(sheet.columns[c].id, rows[r].clone());
@@ -1115,6 +1828,22 @@ fn select_column(state: &mut BookUi, sheet: &Worksheet, id: ColumnId, modifiers:
     }
 }
 
+/// The strip at the right edge of a frozen column's head: dragging it sets the width of the column.
+/// The table's placeholder for the column follows in the next frame.
+fn frozen_resize(ui: &mut egui::Ui, state: &mut BookUi, column: &Column, head: Rect) {
+    let strip = Rect::from_min_max(Pos2::new(head.right() - 6.0, head.top()), head.right_bottom());
+    let response = ui
+        .interact(strip, ui.id().with(("resize", column.id.0)), Sense::drag())
+        .on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
+    if response.dragged() {
+        // Never wider than leaves the block within the cap, or the column would leave the block.
+        let room = state.frozen_max_w - (state.frozen_w - head.width());
+        let width = (head.width() + response.drag_delta().x).max(30.0).min(room.max(30.0) - 0.01);
+        state.frozen_widths.insert(column.id, width);
+        ui.ctx().request_repaint();
+    }
+}
+
 /// Selecting columns by pressing on one head and dragging over others, as if Shift-clicked; with
 /// Ctrl the dragged range is added to the columns that were selected before.
 fn head_drag(
@@ -1124,6 +1853,7 @@ fn head_drag(
     position: usize,
     response: &egui::Response,
     head: Rect,
+    overlay: bool,
 ) {
     if response.drag_started_by(egui::PointerButton::Primary) {
         let m = click_modifiers(ui);
@@ -1138,7 +1868,8 @@ fn head_drag(
         state.focus_grid = true;
     }
     let Some(drag) = state.head_drag.clone() else { return };
-    let over = state.pointer(ui).is_some_and(|p| p.x >= head.left() && p.x < head.right());
+    let reach = visible_part(ui, head, overlay, state);
+    let over = state.pointer(ui).is_some_and(|p| p.x >= reach.left() && p.x < reach.right());
     if !over || drag.last == position {
         return;
     }
@@ -1161,14 +1892,28 @@ pub fn grid_id(book: WindowId) -> egui::Id {
     egui::Id::new(("sheet_grid", book))
 }
 
-fn row_header_cell(ui: &mut egui::Ui, r: usize, book_id: WindowId, state: &mut BookUi, actions: &mut Vec<Action>) {
+fn row_header_cell(
+    ui: &mut egui::Ui,
+    r: usize,
+    overlay: bool,
+    book_id: WindowId,
+    state: &mut BookUi,
+    actions: &mut Vec<Action>,
+) {
     let rect = ui.max_rect();
     let selected = match &state.sel {
         Sel::Rows { anchor, end } => (*anchor.min(end)..=*anchor.max(end)).contains(&r),
         Sel::All => true,
         _ => false,
     };
-    ui.painter().rect_filled(rect, 0.0, if selected { ROW_SELECTED } else { HEADER_GREY });
+    let fill = if selected {
+        ROW_SELECTED
+    } else if state.frozen_rows.contains(&r) {
+        FROZEN_GREY
+    } else {
+        HEADER_GREY
+    };
+    ui.painter().rect_filled(rect, 0.0, fill);
     let line = Stroke::new(1.0_f32, LINE_HEADER);
     ui.painter().hline(rect.x_range(), rect.bottom() - 0.5, line);
     ui.painter().vline(rect.right() - 0.5, rect.y_range(), line);
@@ -1185,7 +1930,10 @@ fn row_header_cell(ui: &mut egui::Ui, r: usize, book_id: WindowId, state: &mut B
             _ => state.select_rows(r, r),
         }
     } else if state.row_drag
-        && state.pointer(ui).is_some_and(|p| p.y >= rect.top() && p.y < rect.bottom())
+        && state.pointer(ui).is_some_and(|p| {
+            let reach = visible_part(ui, rect, overlay, state);
+            p.y >= reach.top() && p.y < reach.bottom()
+        })
         && let Sel::Rows { anchor, end } = state.sel
         && end != r
     {
@@ -1252,6 +2000,7 @@ fn body_cell(
     position: usize,
     column: &Column,
     r: usize,
+    overlay: bool,
     book_id: WindowId,
     state: &mut BookUi,
     actions: &mut Vec<Action>,
@@ -1259,6 +2008,11 @@ fn body_cell(
     let rect = ui.max_rect();
     let look = cell_look(state, sheet, position, column, r);
     let single = matches!(&state.sel, Sel::Cells { anchor, end } if anchor == end);
+    let cond = state.cond_cache.as_ref().and_then(|c| c.styles.get(column.id, r));
+    let manual = state.fmt_cache.as_ref().map(|c| c.index.resolve(sheet, column.id, r)).unwrap_or_default();
+    // Conditional colours win over manual ones; the other manual properties stay.
+    let look_of_cell = manual.with_conditional(cond);
+    let noted = sheet.note(column.id, r);
     match look {
         Look::Dark => {
             ui.painter().rect_filled(rect, 0.0, BLOCK_BLACK);
@@ -1269,12 +2023,21 @@ fn body_cell(
         _ if column.mask.contains(&r) => {
             ui.painter().rect_filled(rect, 0.0, MASK_FILL);
         }
-        _ => {}
+        _ => {
+            if let Some(fill) = look_of_cell.fill {
+                ui.painter().rect_filled(rect, 0.0, Color32::from_rgb(fill.r, fill.g, fill.b));
+            }
+        }
     }
     let (right, bottom) = (rect.right() - 0.5, rect.bottom() - 0.5);
     let grid = Stroke::new(1.0_f32, LINE_BODY);
-    ui.painter().hline(rect.x_range(), bottom, grid);
-    ui.painter().vline(right, rect.y_range(), grid);
+    // Row Grid and Column Grid of the corner menu (T92).
+    if sheet.view.row_grid {
+        ui.painter().hline(rect.x_range(), bottom, grid);
+    }
+    if sheet.view.column_grid {
+        ui.painter().vline(right, rect.y_range(), grid);
+    }
     if look == Look::Anchor {
         ui.painter().rect_stroke(rect.shrink(0.5), 0.0, Stroke::new(1.5_f32, Color32::BLACK), egui::StrokeKind::Inside);
     }
@@ -1284,7 +2047,9 @@ fn body_cell(
         edit_cell(ui, state, sheet, book_id, actions);
         return;
     }
-    let text = if r < column.len() { column.shown_text(r) } else { String::new() };
+    // A cell outside the column's data range (Set As Begin / Set As End) shows blank, as in Origin.
+    let in_range = column.data_range.is_none_or(|d| d.contains(r));
+    let text = if r < column.len() && in_range { column.shown_text(r) } else { String::new() };
     let numeric = column.data.is_numeric();
     // A missing number shows as an empty cell, as in Origin.
     let is_text_cell = column.data.text_cell(r).is_some();
@@ -1297,6 +2062,8 @@ fn body_cell(
     let shift = click_modifiers(ui).shift;
     if state.reveal_target() == Some((position, r)) {
         state.reveal_rect = Some(rect);
+        state.reveal_frozen_x = state.frozen_cols.contains(&column.id);
+        state.reveal_frozen_y = state.frozen_rows.contains(&r);
     }
     if pressed && response.hovered() {
         state.dragging = true;
@@ -1309,7 +2076,7 @@ fn body_cell(
             _ => state.select_cells(sheet, (position, r), (position, r)),
         }
     } else if state.dragging
-        && pointer.is_some_and(|p| rect.contains(p))
+        && pointer.is_some_and(|p| visible_part(ui, rect, overlay, state).contains(p))
         && let Sel::Cells { anchor, end } = state.sel.clone()
         && end != (position, r)
     {
@@ -1322,22 +2089,120 @@ fn body_cell(
     let color = match look {
         Look::Dark => Color32::WHITE,
         _ if column.mask.contains(&r) => MASK_TEXT,
-        _ => TEXT,
+        _ => match look_of_cell.text_color {
+            Some(font) => Color32::from_rgb(font.r, font.g, font.b),
+            None => TEXT,
+        },
     };
-    let layout = if numeric && !is_text_cell {
-        Layout::right_to_left(Align::Center)
-    } else {
-        Layout::left_to_right(Align::Center)
-    };
+    let layout = aligned_layout(look_of_cell.h_align, numeric && !is_text_cell);
     ui.with_layout(layout, |ui| {
-        ui.add_space(4.0);
-        ui.label(RichText::new(&text).color(color));
+        if look_of_cell.h_align != Some(HAlign::Center) {
+            ui.add_space(4.0);
+        }
+        formatted_text(ui, &text, color, &look_of_cell);
     });
     // The values of a recalculating column come from its formula.
     if response.double_clicked() && !column.is_locked() {
         start_editing(state, column, r);
     }
-    response.context_menu(|ui| menus::show_context(ui, &menus::cell_menu(), &book_ctx(book_id, state), actions));
+    if let Some(note) = noted {
+        paint_note_tab(ui, rect);
+        response.clone().on_hover_ui(|ui| {
+            ui.set_max_width(NOTE_POPUP_WIDTH);
+            ui.label(popup_text(note));
+        });
+    }
+    response.context_menu(|ui| {
+        let before = actions.len();
+        menus::show_context(ui, &menus::cell_menu_for(noted.is_some()), &book_ctx(book_id, state), actions);
+        // A note belongs to the right-clicked cell even inside a larger selection.
+        if actions[before..].iter().any(|a| matches!(a, Action::NoteDialog(_) | Action::DeleteNote(_))) {
+            state.select_cells(sheet, (position, r), (position, r));
+        }
+    });
+}
+
+/// The layout of a cell's text: the manual alignment, or right for numbers and left otherwise.
+fn aligned_layout(h_align: Option<HAlign>, numeric: bool) -> Layout {
+    match h_align {
+        Some(HAlign::Left) => Layout::left_to_right(Align::Center),
+        Some(HAlign::Right) => Layout::right_to_left(Align::Center),
+        Some(HAlign::Center) => Layout::centered_and_justified(egui::Direction::LeftToRight),
+        Some(HAlign::Auto) | None if numeric => Layout::right_to_left(Align::Center),
+        Some(HAlign::Auto) | None => Layout::left_to_right(Align::Center),
+    }
+}
+
+/// Draws `text` in the current layout with the manual format of its cell. egui has no bold
+/// face when a system font is unavailable, so that fallback is drawn twice.
+fn formatted_text(ui: &mut egui::Ui, text: &str, color: Color32, f: &ResolvedStyle<'_>) {
+    let face = crate::worksheet_fonts::cell_font(ui.ctx(), f);
+    let mut rich = RichText::new(text).color(color).family(face.family);
+    if let Some(pt) = f.size_pt {
+        // Cell formats store physical points; egui uses logical 96-dpi pixels.
+        rich = rich.size(sheaf_core::cellformat::clamp_cell_pt(pt) * 4.0 / 3.0);
+    }
+    if face.synthetic_italic {
+        rich = rich.italics();
+    }
+    if f.underline {
+        rich = rich.underline();
+    }
+    if !face.synthetic_bold {
+        ui.label(rich);
+        return;
+    }
+    let enabled = ui.is_enabled();
+    let (pos, galley, response) = egui::Label::new(rich).selectable(false).layout_in_ui(ui);
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, enabled, text));
+    if ui.is_rect_visible(response.rect) {
+        for dx in [0.0, 0.6] {
+            ui.painter().add(egui::epaint::TextShape::new(pos + vec2(dx, 0.0), galley.clone(), color));
+        }
+    }
+}
+
+/// Longest note shown in the hover popup (tooltips cannot scroll): lines and characters.
+const NOTE_POPUP_LINES: usize = 20;
+const NOTE_POPUP_CHARS: usize = 1500;
+
+/// The note as the hover popup shows it: cut to about 20 lines / 1,500 characters, ending with "…".
+fn popup_text(note: &str) -> String {
+    let mut out = String::new();
+    for (i, line) in note.lines().enumerate() {
+        let used = out.chars().count();
+        if i >= NOTE_POPUP_LINES || used >= NOTE_POPUP_CHARS {
+            out.push('…');
+            return out;
+        }
+        if i > 0 {
+            out.push('\n');
+        }
+        let room = NOTE_POPUP_CHARS - out.chars().count();
+        if line.chars().count() > room {
+            out.extend(line.chars().take(room));
+            out.push('…');
+            return out;
+        }
+        out.push_str(line);
+    }
+    out
+}
+
+/// Width limit of the note popup; longer lines wrap.
+const NOTE_POPUP_WIDTH: f32 = 300.0;
+/// The note tab: a small filled triangle in the upper-right corner of a noted cell. Sheaf's own
+/// look (a dark red, as the comment marker of common spreadsheets); Origin's is unmeasured.
+const NOTE_TAB: Color32 = Color32::from_rgb(192, 0, 0);
+const NOTE_TAB_SIZE: f32 = 7.0;
+
+fn paint_note_tab(ui: &egui::Ui, rect: Rect) {
+    let (x, y) = (rect.right() - 1.0, rect.top() + 1.0);
+    ui.painter().add(egui::Shape::convex_polygon(
+        vec![Pos2::new(x - NOTE_TAB_SIZE, y), Pos2::new(x, y), Pos2::new(x, y + NOTE_TAB_SIZE)],
+        NOTE_TAB,
+        Stroke::NONE,
+    ));
 }
 
 /// The text a cell is edited with: for numbers the shortest text that reads back as exactly the
@@ -1444,16 +2309,19 @@ fn edit_cell(ui: &mut egui::Ui, state: &mut BookUi, sheet: &Worksheet, book_id: 
         }
         state.editing = None;
         let in_block = match (step, sheet.column_index(column)) {
-            (Some((dx, dy)), Some(position)) => {
-                state.step_in_block((position, row), dx, dy, &|c| sheet.columns.get(c).is_some_and(|c| !c.hidden))
-            }
+            (Some((dx, dy)), Some(position)) => state.step_in_block((position, row), dx, dy, sheet),
             _ => false,
         };
         if let (false, Some((dx, dy)), Some(position)) = (in_block, step, sheet.column_index(column)) {
             let last_col = sheet.columns.len().saturating_sub(1);
-            let to = (
-                position.saturating_add_signed(dx).min(last_col),
-                row.saturating_add_signed(dy).min(sheet.row_count() + SPARE_ROWS),
+            let to = visible_cell(
+                sheet,
+                (position, row),
+                (
+                    position.saturating_add_signed(dx).min(last_col),
+                    row.saturating_add_signed(dy).min(sheet.row_count() + SPARE_ROWS - 1),
+                ),
+                sheet.row_count() + SPARE_ROWS - 1,
             );
             state.select_cells(sheet, to, to);
             state.reveal = 4;
@@ -1545,6 +2413,27 @@ pub fn skip_hidden(sheet: &Worksheet, from: usize, to: usize) -> usize {
         if forward { (to..sheet.columns.len()).find(|i| visible(*i)) } else { (0..=to).rev().find(|i| visible(*i)) }
     };
     first(forward).or_else(|| first(!forward)).unwrap_or(from)
+}
+
+/// Skips filter-hidden rows, favouring the direction of travel and staying within the target
+/// range. Rows beyond the stored filter remain visible, including the spare entry rows.
+fn skip_filtered(sheet: &Worksheet, from: usize, to: usize, max_row: usize) -> usize {
+    let to = to.min(max_row);
+    if sheet.row_shown(to) {
+        return to;
+    }
+    let find = |forward| {
+        if forward {
+            (to..=max_row).find(|r| sheet.row_shown(*r))
+        } else {
+            (0..=to).rev().find(|r| sheet.row_shown(*r))
+        }
+    };
+    find(to >= from).or_else(|| find(to < from)).unwrap_or(from)
+}
+
+fn visible_cell(sheet: &Worksheet, from: (usize, usize), to: (usize, usize), max_row: usize) -> (usize, usize) {
+    (skip_hidden(sheet, from.0, to.0), skip_filtered(sheet, from.1, to.1, max_row))
 }
 
 /// The keys Sheaf takes from spreadsheet programs such as Excel (none of them is bound in Origin's
@@ -1702,7 +2591,7 @@ pub fn handle_keys(
                     let step = if shift { -1 } else { 1 };
                     let (dx, dy) = if *key == egui::Key::Tab { (step, 0) } else { (0, step) };
                     if let Some(from) = state.active_cell()
-                        && state.step_in_block(from, dx, dy, &|c| sheet.columns.get(c).is_some_and(|c| !c.hidden))
+                        && state.step_in_block(from, dx, dy, sheet)
                     {
                         consumed.push(*key);
                         taken = true;
@@ -1737,10 +2626,15 @@ pub fn handle_keys(
                     let from = origin(shift);
                     match from {
                         // Nothing selected yet: the first key press selects the first cell.
-                        None => (Some((0, 0)), false),
+                        None => (Some(visible_cell(sheet, (0, 0), (0, 0), max_row)), false),
                         Some(from) => {
                             let to = nav_target(nav, ctrl, from, &lens, max_row, state.page_rows.max(1));
-                            (Some((skip_hidden(sheet, from.0, to.0), to.1)), shift)
+                            let limit = if ctrl && matches!(nav, NavKey::Down | NavKey::End) {
+                                lens.get(to.0).copied().unwrap_or(0).saturating_sub(1).min(max_row)
+                            } else {
+                                max_row
+                            };
+                            (Some(visible_cell(sheet, from, to, limit)), shift)
                         }
                     }
                 } else if ctrl {
@@ -1751,12 +2645,20 @@ pub fn handle_keys(
                             let nav = if shift { NavKey::Left } else { NavKey::Right };
                             let from = origin(false).unwrap_or((0, 0));
                             let to = nav_target(nav, false, from, &lens, max_row, 1);
-                            (Some((skip_hidden(sheet, from.0, to.0), to.1)), false)
+                            (Some(visible_cell(sheet, from, to, max_row)), false)
                         }
                         egui::Key::Enter => {
                             let nav = if shift { NavKey::Up } else { NavKey::Down };
                             let from = origin(false).unwrap_or((0, 0));
-                            (Some(nav_target(nav, false, from, &lens, max_row, 1)), false)
+                            (
+                                Some(visible_cell(
+                                    sheet,
+                                    from,
+                                    nav_target(nav, false, from, &lens, max_row, 1),
+                                    max_row,
+                                )),
+                                false,
+                            )
                         }
                         egui::Key::F2 => {
                             edit_start = true;
@@ -1911,6 +2813,20 @@ pub fn color_swatch(ui: &mut egui::Ui, color: sheaf_core::Color) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn popup_text_is_cut_by_lines_and_by_characters() {
+        assert_eq!(popup_text("short"), "short");
+        let lines: String = (0..30).map(|i| i.to_string()).collect::<Vec<_>>().join("\n");
+        let cut = popup_text(&lines);
+        assert_eq!(cut.lines().count(), 20);
+        assert!(cut.ends_with('…'));
+        let wide = "x".repeat(5000);
+        let cut = popup_text(&wide);
+        assert_eq!(cut.chars().count(), 1501);
+        assert!(cut.ends_with('…'));
+        assert_eq!(popup_text(&"y".repeat(1500)).chars().count(), 1500);
+    }
     use sheaf_core::{ColumnData, Designation, Project};
 
     fn sheet() -> Worksheet {
@@ -1928,6 +2844,87 @@ mod tests {
         p.workbook(b).unwrap().sheet().clone()
     }
 
+    fn split(ws: &Worksheet, data_rows: usize, w: f32, h: f32) -> (usize, Vec<usize>) {
+        frozen_split(ws, data_rows, vec2(w, h), 80.0, &|_| 67.0)
+    }
+
+    #[test]
+    fn the_frozen_split_counts_visible_columns_and_clamps_to_the_body() {
+        let mut ws = sheet();
+        ws.frozen = sheaf_core::Frozen { rows: 3, columns: 2 };
+        assert_eq!(split(&ws, 40, 1000.0, 800.0), (3, vec![0, 1]));
+        ws.columns[0].hidden = true;
+        assert_eq!(split(&ws, 40, 1000.0, 800.0), (3, vec![1, 2]), "hidden columns are not counted");
+        ws.columns[0].hidden = false;
+        // The frozen rows leave three rows of the body to scroll.
+        assert_eq!(split(&ws, 40, 1000.0, 80.0 + 16.0 * 4.0).0, 1);
+        assert_eq!(split(&ws, 40, 1000.0, 80.0 + 16.0 * 3.0).0, 0);
+        assert_eq!(split(&ws, 40, 1000.0, 50.0).0, 0, "a body shorter than the head freezes no row");
+        // Spare entry rows are not frozen.
+        assert_eq!(split(&ws, 2, 1000.0, 800.0).0, 2);
+        // The frozen block (the row header and the columns) takes at most half of the width.
+        assert_eq!(split(&ws, 40, 440.0, 800.0).1, vec![0, 1]);
+        assert_eq!(split(&ws, 40, 430.0, 800.0).1, vec![0], "84 + 2 * 67 is over half of 430");
+        assert_eq!(split(&ws, 40, 300.0, 800.0).1, Vec::<usize>::new(), "84 + 67 is over half of 300");
+        // The setting itself is never changed by the clamp.
+        assert_eq!(ws.frozen, sheaf_core::Frozen { rows: 3, columns: 2 });
+        ws.frozen = sheaf_core::Frozen::default();
+        assert_eq!(split(&ws, 40, 1000.0, 800.0), (0, vec![]));
+    }
+
+    fn counts(ws: &Worksheet, sel: Sel) -> Result<(u8, u8), &'static str> {
+        let mut state = BookUi::default();
+        match &sel {
+            Sel::Cells { anchor, end } => state.select_cells(ws, *anchor, *end),
+            Sel::Columns => unreachable!("use counts_of_columns"),
+            other => state.sel = other.clone(),
+        }
+        freeze_counts(&state, ws).map(|f| (f.rows, f.columns))
+    }
+
+    #[test]
+    fn freeze_counts_follow_origins_d4_rule_in_displayed_rows_and_visible_columns() {
+        let ws = sheet();
+        let cell = |c, r| Sel::Cells { anchor: (c, r), end: (c, r) };
+        assert_eq!(counts(&ws, cell(3, 2)), Ok((2, 3)), "the cell D3 freezes 2 rows and 3 columns");
+        // The top left of a block counts.
+        assert_eq!(counts(&ws, Sel::Cells { anchor: (4, 3), end: (2, 1) }), Ok((1, 2)));
+        // A whole row freezes rows only, a whole column columns only.
+        assert_eq!(counts(&ws, Sel::Rows { anchor: 3, end: 3 }), Ok((3, 0)));
+        assert_eq!(counts(&ws, Sel::Rows { anchor: 3, end: 1 }), Ok((1, 0)));
+        let state =
+            BookUi { sel: Sel::Columns, selected: vec![ws.columns[3].id, ws.columns[2].id], ..Default::default() };
+        assert_eq!(freeze_counts(&state, &ws).map(|f| (f.rows, f.columns)), Ok((0, 2)));
+        // Hidden columns and filtered rows do not count.
+        let mut hidden = sheet();
+        hidden.columns[1].hidden = true;
+        assert_eq!(counts(&hidden, cell(3, 2)), Ok((2, 2)));
+        let filtered = filtered_sheet(vec![false, true, false, true, false]);
+        assert_eq!(counts(&filtered, cell(1, 3)), Ok((1, 1)), "only row 2 is shown above row 4");
+        assert_eq!(counts(&filtered, Sel::Rows { anchor: 3, end: 3 }), Ok((1, 0)));
+        // Nothing above or left, or nothing suitable selected.
+        assert!(counts(&ws, cell(0, 0)).unwrap_err().contains("Nothing to freeze"));
+        assert!(counts(&ws, Sel::Rows { anchor: 0, end: 0 }).is_err());
+        for sel in [Sel::None, Sel::All, Sel::Label { column: ws.columns[0].id, row: LabelRow::Units }] {
+            assert!(counts(&ws, sel).unwrap_err().contains("Select a cell"));
+        }
+    }
+
+    #[test]
+    fn freeze_counts_accept_an_index_up_to_ten_and_refuse_more() {
+        let ws = sheet();
+        assert_eq!(counts(&ws, Sel::Rows { anchor: 9, end: 9 }), Ok((9, 0)), "index 10");
+        assert!(counts(&ws, Sel::Rows { anchor: 10, end: 10 }).unwrap_err().contains("1 to 10"));
+        let mut wide = sheet();
+        for i in 0..8 {
+            let mut c = wide.columns[0].clone();
+            c.id = ColumnId(1000 + i);
+            wide.columns.push(c);
+        }
+        assert_eq!(counts(&wide, Sel::Cells { anchor: (9, 1), end: (9, 1) }), Ok((1, 9)));
+        assert!(counts(&wide, Sel::Cells { anchor: (10, 1), end: (10, 1) }).is_err());
+    }
+
     #[test]
     fn the_cursor_steps_over_hidden_columns_in_the_direction_it_travels() {
         let mut ws = sheet();
@@ -1939,6 +2936,75 @@ mod tests {
         ws.columns[3].hidden = true;
         ws.columns[4].hidden = true;
         assert_eq!(skip_hidden(&ws, 0, 1), 0, "nothing visible further right: stay");
+    }
+
+    fn filtered_sheet(keep: Vec<bool>) -> Worksheet {
+        let mut ws = sheet();
+        ws.filter = Some(sheaf_core::rowfilter::RowFilter { condition: "fixture".into(), enabled: true, keep });
+        ws
+    }
+
+    #[test]
+    fn filtered_row_targets_clamp_searches_and_reach_spare_entry_rows() {
+        let mut ws = filtered_sheet(vec![false, true, false, true, false]);
+        assert_eq!(skip_filtered(&ws, 1, 2, 30), 3);
+        assert_eq!(skip_filtered(&ws, 3, 2, 30), 1);
+        assert_eq!(skip_filtered(&ws, 3, 4, 30), 5, "new rows beyond the filter stay visible");
+        assert_eq!(skip_filtered(&ws, 1, 4, 4), 3, "a data-end jump stays within the data");
+        assert_eq!(skip_filtered(&ws, 3, 0, 30), 1, "Home reaches the first visible row");
+        ws.filter.as_mut().unwrap().enabled = false;
+        assert_eq!(skip_filtered(&ws, 1, 2, 30), 2);
+    }
+
+    #[test]
+    fn block_steps_skip_both_hidden_dimensions_and_wrap_in_both_orders() {
+        let mut ws = filtered_sheet(vec![true, false, true, false]);
+        ws.columns[1].hidden = true;
+        let step = |at, dx, dy| block_next((0, 2), (0, 3), at, dx, dy, Some(&ws));
+        assert_eq!(step((0, 0), 1, 0), Some((2, 0)));
+        assert_eq!(step((2, 0), 1, 0), Some((0, 2)));
+        assert_eq!(step((0, 0), -1, 0), Some((2, 2)));
+        assert_eq!(step((0, 0), 0, 1), Some((0, 2)));
+        assert_eq!(step((0, 2), 0, 1), Some((2, 0)));
+        assert_eq!(step((0, 0), 0, -1), Some((2, 2)));
+        assert_eq!(block_next((0, 2), (1, 1), (0, 1), 0, 1, Some(&ws)), None);
+        assert_eq!(block_next((1, 1), (0, 3), (1, 2), 1, 0, Some(&ws)), None);
+    }
+
+    #[test]
+    fn a_new_filter_repairs_the_active_cell_without_editing_hidden_data() {
+        let ws = filtered_sheet(vec![false, false, true, true]);
+        let mut state = BookUi::default();
+        state.select_cells(&ws, (1, 0), (1, 0));
+        state.repair(&ws);
+        assert_eq!(state.active_cell(), Some((1, 2)));
+        state.select_cells(&ws, (1, 0), (2, 3));
+        state.editing = Some((ws.columns[1].id, 0, "unsaved".into()));
+        state.repair(&ws);
+        assert!(state.editing.is_none(), "an editor hidden by filtering is cancelled");
+        assert_eq!(state.active_cell(), Some((1, 2)));
+        assert_eq!(
+            state.sel,
+            Sel::Cells { anchor: (1, 0), end: (2, 3) },
+            "a visible portion of a block stays selected"
+        );
+        let ws = filtered_sheet(vec![false; 4]);
+        state.select_cells(&ws, (0, 0), (1, 3));
+        state.repair(&ws);
+        assert_eq!(state.active_cell(), Some((0, 4)), "an entirely hidden block moves to a spare row");
+    }
+
+    #[test]
+    fn label_navigation_and_go_to_enter_a_visible_data_cell() {
+        let ws = filtered_sheet(vec![false, false, true, true]);
+        let mut state = BookUi::default();
+        state.go_to(&ws, 1, 0);
+        assert_eq!(state.active_cell(), Some((1, 2)));
+        state.go_to(&ws, 1, 1000);
+        assert_eq!(state.active_cell(), Some((1, 1000)), "an explicit Go to beyond current data keeps its row");
+        let labels = label_rows(&ws);
+        move_label(&mut state, &ws, ws.columns[1].id, labels.last().unwrap(), 0, 1);
+        assert_eq!(state.active_cell(), Some((1, 2)));
     }
 
     #[test]
@@ -2040,14 +3106,14 @@ mod tests {
     #[test]
     fn enter_and_tab_walk_a_block_and_wrap_to_the_next_column_or_row() {
         let (cols, rows) = ((1, 2), (0, 1));
-        assert_eq!(block_next(cols, rows, (1, 0), 0, 1), (1, 1));
-        assert_eq!(block_next(cols, rows, (1, 1), 0, 1), (2, 0), "the top of the next column");
-        assert_eq!(block_next(cols, rows, (2, 1), 0, 1), (1, 0), "from the end back to the start");
-        assert_eq!(block_next(cols, rows, (2, 0), 0, -1), (1, 1));
-        assert_eq!(block_next(cols, rows, (1, 0), 1, 0), (2, 0));
-        assert_eq!(block_next(cols, rows, (2, 0), 1, 0), (1, 1), "the start of the next row");
-        assert_eq!(block_next(cols, rows, (2, 1), 1, 0), (1, 0));
-        assert_eq!(block_next(cols, rows, (1, 1), -1, 0), (2, 0));
+        assert_eq!(block_next(cols, rows, (1, 0), 0, 1, None), Some((1, 1)));
+        assert_eq!(block_next(cols, rows, (1, 1), 0, 1, None), Some((2, 0)), "the top of the next column");
+        assert_eq!(block_next(cols, rows, (2, 1), 0, 1, None), Some((1, 0)), "from the end back to the start");
+        assert_eq!(block_next(cols, rows, (2, 0), 0, -1, None), Some((1, 1)));
+        assert_eq!(block_next(cols, rows, (1, 0), 1, 0, None), Some((2, 0)));
+        assert_eq!(block_next(cols, rows, (2, 0), 1, 0, None), Some((1, 1)), "the start of the next row");
+        assert_eq!(block_next(cols, rows, (2, 1), 1, 0, None), Some((1, 0)));
+        assert_eq!(block_next(cols, rows, (1, 1), -1, 0, None), Some((2, 0)));
     }
 
     #[test]
@@ -2068,16 +3134,17 @@ mod tests {
     #[test]
     fn stepping_in_a_block_moves_the_active_cell_and_keeps_the_block() {
         let mut state = BookUi { sel: Sel::Cells { anchor: (0, 0), end: (1, 1) }, ..Default::default() };
-        let all = |_: usize| true;
-        assert!(state.step_in_block((0, 0), 0, 1, &all));
+        let mut ws = sheet();
+        assert!(state.step_in_block((0, 0), 0, 1, &ws));
         assert_eq!(state.active_cell(), Some((0, 1)));
         assert_eq!(state.sel, Sel::Cells { anchor: (0, 0), end: (1, 1) });
         // A single cell is not stepped.
         state.sel = Sel::Cells { anchor: (0, 0), end: (0, 0) };
-        assert!(!state.step_in_block((0, 0), 0, 1, &all));
+        assert!(!state.step_in_block((0, 0), 0, 1, &ws));
         // Tab over a hidden column: from column 0 the next column 1 is hidden, so the walk goes on.
         state.sel = Sel::Cells { anchor: (0, 0), end: (2, 0) };
-        assert!(state.step_in_block((0, 0), 1, 0, &|c| c != 1));
+        ws.columns[1].hidden = true;
+        assert!(state.step_in_block((0, 0), 1, 0, &ws));
         assert_eq!(state.active_cell(), Some((2, 0)));
     }
 }

@@ -57,7 +57,8 @@ pub(super) fn crosstab(
         if !sheet.row_shown(row) {
             continue;
         }
-        let level = |c: &Column| if c.mask.contains(&row) { None } else { level_text(c, row) };
+        let level =
+            |c: &Column| if c.active_mask().is_some_and(|m| m.contains(&row)) { None } else { level_text(c, row) };
         match (level(cr), level(cc)) {
             (Some(a), Some(b)) => pairs.push((a, b)),
             (None, None) => {}
@@ -207,7 +208,7 @@ pub(super) fn crosstab(
     if left_out > 0 {
         notes.push(format!("{left_out} rows with a level in only one of the two columns were left out."));
     }
-    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new() })
+    Ok(Output { table: Some(table), on_sheet, notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
 #[cfg(test)]

@@ -1,7 +1,8 @@
 //! The "Set Values" window (Origin's Set Column Values): fill a column from a formula over the
 //! other columns of its sheet. Layout as Origin: a text menu line, the row range, the
 //! `Col(X)=` label with column navigation, the formula box, Recalculate with OK / Cancel / Apply,
-//! and a collapsible "Before Formula Scripts" box.
+//! and a collapsible "Before Formula Scripts" box. With several columns it is Set Multiple Columns
+//! Values: one formula for all of them, where `j` is the column position (T53).
 
 use eframe::egui::{self, RichText};
 use sheaf_core::{ColumnId, Document, Project, RecalcMode};
@@ -191,6 +192,119 @@ const SAMPLES: &[(&str, &str)] = &[
     ("Random numbers", "rnd()"),
 ];
 
+/// Extra formulas of the Formula menu in the multi-column window; `j` is the column position.
+const MULTI_SAMPLES: &[(&str, &str)] =
+    &[("Scale by column position", "{}*j"), ("Double the column to the left", "wcol(j-1)*2")];
+
+/// The selected columns as the window names them: `B:D` for three or more side by side, else the
+/// short names with commas (at most six, then "...").
+fn columns_text(selected: &[(usize, String)]) -> String {
+    let side_by_side = selected.windows(2).all(|w| w[1].0 == w[0].0 + 1);
+    match (selected.first(), selected.last()) {
+        (Some(first), Some(last)) if side_by_side && selected.len() > 2 => format!("{}:{}", first.1, last.1),
+        _ => {
+            let names: Vec<&str> = selected.iter().take(6).map(|s| s.1.as_str()).collect();
+            let more = if selected.len() > 6 { ", ..." } else { "" };
+            format!("{}{more}", names.join(", "))
+        }
+    }
+}
+
+/// Uses the same catalog and insertion path as the Function menu.
+#[derive(Default)]
+struct FunctionSearch {
+    query: String,
+    selected: Option<(usize, usize)>,
+    focus: bool,
+}
+
+impl FunctionSearch {
+    fn matches(&self) -> Vec<(usize, usize)> {
+        let query = self.query.to_lowercase();
+        let terms: Vec<&str> = query.split_whitespace().collect();
+        FUNCTIONS
+            .iter()
+            .enumerate()
+            .flat_map(|(g, (group, functions))| {
+                let terms = &terms;
+                functions.iter().enumerate().filter_map(move |(k, f)| {
+                    let searchable = format!("{group} {} {} {}", f.name, f.args, f.about).to_lowercase();
+                    terms.iter().all(|term| searchable.contains(term)).then_some((g, k))
+                })
+            })
+            .collect()
+    }
+
+    /// Returns the chosen catalog entry and whether the search window remains open.
+    fn show(&mut self, ctx: &egui::Context) -> (Option<(usize, usize)>, bool) {
+        let mut open = true;
+        let mut close = false;
+        let mut picked = None;
+        egui::Window::new("Search and Insert Functions")
+            .id(egui::Id::new("set_values_function_search"))
+            .order(egui::Order::Foreground)
+            .open(&mut open)
+            .collapsible(false)
+            .default_width(500.0)
+            .show(ctx, |ui| {
+                let label = ui.label("Search functions");
+                let search = ui
+                    .add(
+                        egui::TextEdit::singleline(&mut self.query)
+                            .id(egui::Id::new("set_values_function_query"))
+                            .desired_width(f32::INFINITY)
+                            .hint_text("Name, category or description"),
+                    )
+                    .labelled_by(label.id);
+                if self.focus {
+                    search.request_focus();
+                    self.focus = false;
+                }
+                let matches = self.matches();
+                if !self.selected.is_some_and(|p| matches.contains(&p)) {
+                    self.selected = matches.first().copied();
+                }
+                egui::ScrollArea::vertical().max_height(190.0).show(ui, |ui| {
+                    if matches.is_empty() {
+                        ui.label("No matching functions");
+                    }
+                    for &(g, k) in &matches {
+                        let function = &FUNCTIONS[g].1[k];
+                        let row = ui.selectable_label(
+                            self.selected == Some((g, k)),
+                            format!("{}({})", function.name, function.args),
+                        );
+                        if row.clicked() {
+                            self.selected = Some((g, k));
+                        }
+                        if row.double_clicked() {
+                            picked = Some((g, k));
+                        }
+                    }
+                });
+                ui.separator();
+                if let Some((g, k)) = self.selected {
+                    let function = &FUNCTIONS[g].1[k];
+                    ui.label(function.about);
+                    ui.monospace(format!("Example: {}", function.example));
+                }
+                ui.horizontal(|ui| {
+                    if ui.add_enabled(self.selected.is_some(), egui::Button::new("Add Function")).clicked() {
+                        picked = self.selected;
+                    }
+                    if ui.button("Cancel Search").clicked() {
+                        close = true;
+                    }
+                });
+                if search.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    picked = self.selected;
+                }
+                close |= ui.input(|i| i.key_pressed(egui::Key::Escape));
+            });
+        (picked, open && !close && picked.is_none())
+    }
+}
+
 /// What the dialog edits; two snapshots are compared to decide whether Apply is enabled.
 #[derive(Clone, PartialEq)]
 struct Fields {
@@ -199,10 +313,17 @@ struct Fields {
     from: String,
     to: String,
     mode: RecalcMode,
+    /// Multi-column window: the columns as sheet positions `j` (1-based), as typed; empty in the
+    /// single-column window. Origin's "Col (j): From .. To" row (expression-language 7.1).
+    j_from: String,
+    j_to: String,
 }
 
 pub struct SetValuesDialog {
+    /// The column shown (the first of `columns` in the sheet in the multi-column window).
     column: ColumnId,
+    /// The selected columns in sheet order; empty in the single-column window.
+    columns: Vec<ColumnId>,
     fields: Fields,
     /// The values as last applied (or as opened); Apply is enabled when `fields` differs.
     saved: Fields,
@@ -210,6 +331,7 @@ pub struct SetValuesDialog {
     focus: bool,
     /// The function whose description is shown below the formula box.
     described: Option<(usize, usize)>,
+    search: Option<FunctionSearch>,
     show_scripts: bool,
     scripts: String,
 }
@@ -219,14 +341,55 @@ impl SetValuesDialog {
         let fields = Self::read(project, column)?;
         Some(SetValuesDialog {
             column,
+            columns: Vec::new(),
             saved: fields.clone(),
             fields,
             problem: None,
             focus: true,
             described: None,
+            search: None,
             show_scripts: true,
             scripts: String::new(),
         })
+    }
+
+    /// The Set Multiple Columns Values window. `None` unless two or more different columns of one
+    /// sheet are given. The fields start from what the columns share: the same formula, rows and
+    /// recalculation on all of them, otherwise empty and Manual.
+    pub fn new_multiple(project: &Project, columns: &[ColumnId]) -> Option<Self> {
+        let (_, sheet, _) = project.locate(*columns.first()?)?;
+        let columns_in_sheet: Vec<ColumnId> =
+            sheet.columns.iter().map(|c| c.id).filter(|id| columns.contains(id)).collect();
+        // Every given column must be on this sheet.
+        if columns_in_sheet.len() < 2 || columns.iter().any(|c| !columns_in_sheet.contains(c)) {
+            return None;
+        }
+        let columns = columns_in_sheet;
+        let reads: Vec<Fields> = columns.iter().map(|&c| Self::read(project, c)).collect::<Option<_>>()?;
+        let fields = if reads.iter().all(|r| *r == reads[0]) {
+            reads[0].clone()
+        } else {
+            Fields {
+                formula: String::new(),
+                from: String::new(),
+                to: String::new(),
+                mode: RecalcMode::Manual,
+                j_from: String::new(),
+                j_to: String::new(),
+            }
+        };
+        let positions: Vec<usize> =
+            sheet.columns.iter().enumerate().filter(|(_, c)| columns.contains(&c.id)).map(|(k, _)| k + 1).collect();
+        let fields = Fields { j_from: positions.first()?.to_string(), j_to: positions.last()?.to_string(), ..fields };
+        let mut d = Self::new(project, columns[0])?;
+        d.columns = columns;
+        d.saved = fields.clone();
+        d.fields = fields;
+        Some(d)
+    }
+
+    fn is_multiple(&self) -> bool {
+        !self.columns.is_empty()
     }
 
     fn read(project: &Project, column: ColumnId) -> Option<Fields> {
@@ -241,7 +404,24 @@ impl SetValuesDialog {
             to,
             // Origin opens the dialog on Manual for a column that has no recalculating formula.
             mode: if c.is_locked() { c.recalc } else { RecalcMode::Manual },
+            j_from: String::new(),
+            j_to: String::new(),
         })
+    }
+
+    /// The columns the multi-column window sets: the selection while the "Col (j)" range still
+    /// spans it as opened, otherwise every column of the sheet at positions From to To (1-based,
+    /// as Origin's range of `j`). `ids` are the columns of the sheet in order.
+    fn targets(&self, ids: &[ColumnId]) -> Result<Vec<ColumnId>, String> {
+        if self.fields.j_from == self.saved.j_from && self.fields.j_to == self.saved.j_to {
+            return Ok(self.columns.clone());
+        }
+        let n = ids.len();
+        let parse = |t: &str| t.trim().parse::<usize>().ok().filter(|&j| (1..=n).contains(&j));
+        match (parse(&self.fields.j_from), parse(&self.fields.j_to)) {
+            (Some(a), Some(b)) if a <= b => Ok(ids[a - 1..b].to_vec()),
+            _ => Err(format!("Col (j) needs whole numbers from 1 to {n}, From not above To")),
+        }
     }
 
     /// Switches to another column of the sheet (the arrow buttons next to `Col(X)=`).
@@ -252,6 +432,7 @@ impl SetValuesDialog {
             self.fields = fields;
             self.problem = None;
             self.focus = true;
+            self.search = None;
         }
     }
 
@@ -259,6 +440,12 @@ impl SetValuesDialog {
     #[cfg(test)]
     pub fn set_formula(&mut self, formula: &str) {
         self.fields.formula = formula.to_string();
+    }
+
+    /// The formula as typed (tests).
+    #[cfg(test)]
+    pub fn formula(&self) -> &str {
+        &self.fields.formula
     }
 
     /// Types a row range (tests).
@@ -312,12 +499,26 @@ impl SetValuesDialog {
             return false;
         };
         let target = column.short_name.clone();
-        let title = format!(
-            "Set Values - [{}]{}!Col(\"{}\")",
-            book.name,
-            sheet.name,
-            if column.long_name.is_empty() { &target } else { &column.long_name }
-        );
+        let multiple = self.is_multiple();
+        // Short names of the selected columns, and whether they sit side by side in the sheet.
+        let selected: Vec<(usize, String)> = sheet
+            .columns
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| self.columns.contains(&c.id))
+            .map(|(k, c)| (k, c.short_name.clone()))
+            .collect();
+        let title = if multiple {
+            // Origin's title (expression-language 7.1); egui needs a unique one per sheet.
+            format!("Set Values - Multiple Columns - [{}]{}", book.name, sheet.name)
+        } else {
+            format!(
+                "Set Values - [{}]{}!Col(\"{}\")",
+                book.name,
+                sheet.name,
+                if column.long_name.is_empty() { &target } else { &column.long_name }
+            )
+        };
         let row_count = sheet.row_count();
         let position = sheet.columns.iter().position(|c| c.id == self.column).unwrap_or(0);
         let ids: Vec<ColumnId> = sheet.columns.iter().map(|c| c.id).collect();
@@ -326,7 +527,9 @@ impl SetValuesDialog {
             .iter()
             .map(|c| (c.short_name.clone(), if c.units.is_empty() { c.long_name.clone() } else { c.axis_title() }))
             .collect();
-        let sample_column = others.iter().map(|o| o.0.clone()).find(|s| *s != target).unwrap_or_else(|| target.clone());
+        let is_target = |short: &str| if multiple { selected.iter().any(|s| s.1 == short) } else { short == target };
+        let sample_column =
+            others.iter().map(|o| o.0.clone()).find(|s| !is_target(s)).unwrap_or_else(|| target.clone());
 
         let mut open = true;
         let mut close = false;
@@ -341,12 +544,14 @@ impl SetValuesDialog {
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
+            .enabled(self.search.is_none())
             .show(ctx, |ui| {
                 ui.set_width(405.0);
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 10.0;
                     ui.menu_button("Formula", |ui| {
-                        for (label, sample) in SAMPLES {
+                        let multi: &[(&str, &str)] = if multiple { MULTI_SAMPLES } else { &[] };
+                        for (label, sample) in multi.iter().chain(SAMPLES) {
                             if ui.button(*label).clicked() {
                                 replace = Some(sample.replace("{}", &format!("col({sample_column})")));
                                 ui.close();
@@ -354,6 +559,15 @@ impl SetValuesDialog {
                         }
                     });
                     ui.menu_button("wcol(1)", |ui| {
+                        if multiple {
+                            for text in ["wcol(j-1)", "wcol(j+1)"] {
+                                if ui.button(text).clicked() {
+                                    inserted = Some(text.to_string());
+                                    ui.close();
+                                }
+                            }
+                            ui.separator();
+                        }
                         for n in 1..=ids.len() {
                             if ui.button(format!("wcol({n})")).clicked() {
                                 inserted = Some(format!("wcol({n})"));
@@ -372,6 +586,11 @@ impl SetValuesDialog {
                         }
                     });
                     ui.menu_button("Function", |ui| {
+                        if ui.button("Search Functions...").clicked() {
+                            self.search = Some(FunctionSearch { focus: true, ..Default::default() });
+                            ui.close();
+                        }
+                        ui.separator();
                         for (g, (group, funcs)) in FUNCTIONS.iter().enumerate() {
                             ui.menu_button(*group, |ui| {
                                 for (k, func) in funcs.iter().enumerate() {
@@ -388,9 +607,12 @@ impl SetValuesDialog {
                         }
                     });
                     ui.menu_button("Variables", |ui| {
-                        for (text, hint) in
-                            [("i", "The row number, counted from 1"), ("pi", "3.14159..."), ("e", "2.71828...")]
-                        {
+                        let mut variables = vec![("i", "The row number, counted from 1")];
+                        if multiple {
+                            variables.push(("j", "The column position in the sheet, counted from 1"));
+                        }
+                        variables.extend([("pi", "3.14159..."), ("e", "2.71828...")]);
+                        for (text, hint) in variables {
                             if ui.button(text).on_hover_text(hint).clicked() {
                                 inserted = Some(text.to_string());
                                 ui.close();
@@ -418,17 +640,44 @@ impl SetValuesDialog {
                             .id(egui::Id::new("set_values_to")),
                     );
                 });
+                if multiple {
+                    // Origin's second row: the columns as sheet positions j, editable.
+                    ui.horizontal(|ui| {
+                        ui.label("Col (j):  From");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.fields.j_from)
+                                .desired_width(60.0)
+                                .id(egui::Id::new("set_values_j_from")),
+                        );
+                        ui.label("To");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.fields.j_to)
+                                .desired_width(60.0)
+                                .id(egui::Id::new("set_values_j_to")),
+                        );
+                    });
+                }
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("Col({target})=")).strong());
+                    let label = if multiple { "wcol(j) =".to_string() } else { format!("Col({target})=") };
+                    let shown = ui.label(RichText::new(label).strong());
+                    if multiple {
+                        shown.on_hover_text(format!("Sets the columns {}", columns_text(&selected)));
+                    }
                     ui.add_space(8.0);
-                    // First, previous, next, last column of the sheet.
-                    for (text, hint, to) in [
+                    if ui.button("Find...").on_hover_text("Search and insert a function").clicked() {
+                        self.search = Some(FunctionSearch { focus: true, ..Default::default() });
+                    }
+                    // First, previous, next, last column of the sheet. The window of several columns
+                    // edits them together: the buttons are there but greyed, as in Origin.
+                    let navigation: &[(&str, &str, Option<usize>)] = &[
                         ("|<", "First column", Some(0)),
                         ("<", "Previous column", position.checked_sub(1)),
                         (">", "Next column", (position + 1 < ids.len()).then_some(position + 1)),
                         (">|", "Last column", Some(ids.len().saturating_sub(1))),
-                    ] {
-                        let b = ui.add_enabled(to.is_some_and(|t| t != position), egui::Button::new(text).small());
+                    ];
+                    for &(text, hint, to) in navigation {
+                        let on = !multiple && to.is_some_and(|t| t != position);
+                        let b = ui.add_enabled(on, egui::Button::new(text).small());
                         if b.on_hover_text(hint).clicked() {
                             goto = to.map(|t| ids[t]);
                         }
@@ -516,6 +765,19 @@ impl SetValuesDialog {
                 }
             });
 
+        if !open || close {
+            self.search = None;
+        } else if let Some(search) = &mut self.search {
+            let (chosen, keep_open) = search.show(ctx);
+            if let Some(chosen) = chosen {
+                picked = Some(chosen);
+            }
+            if !keep_open {
+                self.search = None;
+                self.focus = true;
+            }
+        }
+
         if let Some(p) = picked {
             self.described = Some(p);
             if let Some(func) = FUNCTIONS.get(p.0).and_then(|g| g.1.get(p.1)) {
@@ -541,12 +803,36 @@ impl SetValuesDialog {
                 }
                 Ok(rows) => {
                     let (id, formula, mode) = (self.column, self.fields.formula.clone(), self.fields.mode);
-                    match doc.edit("Set column values", move |p| p.set_column_values_with(id, &formula, rows, mode)) {
+                    let targets = if multiple { self.targets(&ids) } else { Ok(Vec::new()) };
+                    let result = if multiple {
+                        match targets {
+                            Ok(targets) => {
+                                let r = doc.set_columns_values(&targets, &formula, rows, mode);
+                                if r.is_ok() {
+                                    self.column = targets[0];
+                                    self.columns = targets;
+                                }
+                                r.map_err(|e| e.to_string())
+                            }
+                            Err(e) => Err(e),
+                        }
+                    } else {
+                        doc.edit("Set column values", move |p| p.set_column_values_with(id, &formula, rows, mode))
+                            .map_err(|e| e.to_string())
+                    };
+                    match result {
                         Ok(()) => {
                             self.problem = None;
                             // Reread: a formula that reads its own column runs once, as "None".
-                            if let Some(f) = Self::read(doc.project(), self.column) {
-                                self.fields.mode = f.mode;
+                            let modes: Vec<RecalcMode> =
+                                if multiple { self.columns.clone() } else { vec![self.column] }
+                                    .iter()
+                                    .filter_map(|&c| Self::read(doc.project(), c).map(|f| f.mode))
+                                    .collect();
+                            if let Some(&first) = modes.first()
+                                && modes.iter().all(|m| *m == first)
+                            {
+                                self.fields.mode = first;
                             }
                             self.saved = self.fields.clone();
                         }
@@ -565,7 +851,145 @@ impl SetValuesDialog {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::{NodeT, Queryable};
     use sheaf_expr::{Expr, SimpleHost};
+
+    struct SearchState {
+        doc: Document,
+        dialog: Option<SetValuesDialog>,
+        target: ColumnId,
+    }
+
+    fn search_harness() -> Harness<'static, SearchState> {
+        let mut project = Project::new();
+        let book = project.add_workbook("");
+        project
+            .add_column(book, 0, sheaf_core::Designation::X, sheaf_core::ColumnData::numeric(vec![1.0, 4.0, 9.0]))
+            .unwrap();
+        let target =
+            project.add_column(book, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::default()).unwrap();
+        let dialog = SetValuesDialog::new(&project, target);
+        let mut harness = Harness::builder().with_size(egui::vec2(1050.0, 800.0)).with_step_dt(0.02).build_state(
+            |ctx, state: &mut SearchState| {
+                if let Some(dialog) = &mut state.dialog
+                    && !dialog.show(ctx, &mut state.doc)
+                {
+                    state.dialog = None;
+                }
+            },
+            SearchState { doc: Document::new(project), dialog, target },
+        );
+        harness.run_steps(6);
+        harness
+    }
+
+    fn open_search(h: &mut Harness<'static, SearchState>, query: &str) {
+        h.get_by_label("Find...").click();
+        h.run_steps(6);
+        h.get_by_label("Search functions").type_text(query);
+        h.run_steps(6);
+    }
+
+    #[test]
+    fn function_search_filters_names_descriptions_and_categories_without_copying_the_catalog() {
+        for (query, name) in
+            [("SQRt", "sqrt"), ("square root", "sqrt"), ("population", "stddevp"), ("date year", "year")]
+        {
+            let search = FunctionSearch { query: query.into(), ..Default::default() };
+            assert!(search.matches().iter().any(|&(g, k)| FUNCTIONS[g].1[k].name == name), "{query}");
+        }
+        assert!(FunctionSearch { query: "no_such_function".into(), ..Default::default() }.matches().is_empty());
+    }
+
+    #[test]
+    fn function_search_inserts_a_choice_and_apply_is_one_undo_step() {
+        let mut h = search_harness();
+        open_search(&mut h, "square root");
+        assert!(h.query_by_label("sqrt(x)").is_some());
+        h.get_by_label("Add Function").click();
+        h.run_steps(6);
+        assert!(h.state().dialog.as_ref().unwrap().search.is_none());
+        assert_eq!(h.state().dialog.as_ref().unwrap().fields.formula, "sqrt()");
+        assert!(!h.state().doc.dirty, "choosing a function only edits the formula");
+        h.key_press(egui::Key::ArrowLeft);
+        h.run_steps(2);
+        h.event(egui::Event::Text("col(A)".into()));
+        h.run_steps(6);
+        assert_eq!(h.state().dialog.as_ref().unwrap().fields.formula, "sqrt(col(A))");
+        h.get_by_label("Apply").click();
+        h.run_steps(6);
+        let target = h.state().target;
+        assert_eq!(h.state().doc.project().numeric(target).unwrap(), [1.0, 2.0, 3.0]);
+        h.state_mut().doc.undo();
+        assert!(h.state().doc.project().numeric(target).unwrap().is_empty());
+        h.state_mut().doc.redo();
+        assert_eq!(h.state().doc.project().numeric(target).unwrap(), [1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn cancel_search_and_no_results_leave_formula_and_data_unchanged() {
+        let mut h = search_harness();
+        open_search(&mut h, "no_such_function");
+        assert!(h.query_by_label("No matching functions").is_some());
+        assert!(h.state().dialog.as_ref().unwrap().search.as_ref().unwrap().selected.is_none());
+        assert!(h.get_by_label("Add Function").accesskit_node().is_disabled());
+        h.get_by_label("Cancel Search").click();
+        h.run_steps(6);
+        assert!(h.state().dialog.as_ref().unwrap().search.is_none());
+        assert_eq!(h.state().dialog.as_ref().unwrap().fields.formula, "");
+        assert!(!h.state().dialog.as_ref().unwrap().is_dirty());
+        assert!(!h.state().doc.dirty);
+    }
+
+    #[test]
+    fn escape_closes_only_search_and_enter_inserts_the_selected_function() {
+        let mut h = search_harness();
+        open_search(&mut h, "square root");
+        h.key_press(egui::Key::Escape);
+        h.run_steps(6);
+        assert!(h.state().dialog.as_ref().unwrap().search.is_none());
+        assert_eq!(h.state().dialog.as_ref().unwrap().fields.formula, "");
+        open_search(&mut h, "square root");
+        h.key_press(egui::Key::Enter);
+        h.run_steps(6);
+        assert!(h.state().dialog.as_ref().unwrap().search.is_none());
+        assert_eq!(h.state().dialog.as_ref().unwrap().fields.formula, "sqrt()");
+        assert!(!h.state().doc.dirty);
+    }
+
+    #[test]
+    fn searching_preserves_the_formula_cursor_with_unicode_text() {
+        let mut h = search_harness();
+        h.state_mut().dialog.as_mut().unwrap().set_formula("\"µ\" + 1");
+        h.run_steps(6);
+        let ctx = h.ctx.clone();
+        let id = egui::Id::new("set_values_formula");
+        let mut state = egui::TextEdit::load_state(&ctx, id).unwrap();
+        state.cursor.set_char_range(Some(egui::text::CCursorRange::one(egui::text::CCursor::new(6))));
+        state.store(&ctx, id);
+        open_search(&mut h, "square root");
+        h.get_by_label("Add Function").click();
+        h.run_steps(6);
+        assert_eq!(h.state().dialog.as_ref().unwrap().fields.formula, "\"µ\" + sqrt()1");
+        assert!(!h.state().doc.dirty);
+    }
+
+    #[test]
+    fn double_clicking_a_search_result_inserts_it_once() {
+        let mut h = search_harness();
+        open_search(&mut h, "square root");
+        // Egui counts consecutive clicks across widgets. Let the search-field click expire.
+        h.run_steps(20);
+        h.get_by_label("sqrt(x)").click();
+        h.run_steps(2);
+        assert!(h.state().dialog.as_ref().unwrap().search.is_some(), "a single click only selects");
+        h.get_by_label("sqrt(x)").click();
+        h.run_steps(6);
+        assert!(h.state().dialog.as_ref().unwrap().search.is_none());
+        assert_eq!(h.state().dialog.as_ref().unwrap().fields.formula, "sqrt()");
+        assert!(!h.state().doc.dirty);
+    }
 
     #[test]
     fn every_listed_function_evaluates_in_the_expression_engine() {

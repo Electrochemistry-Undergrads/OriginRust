@@ -126,6 +126,9 @@ fn a_full_session_over_pipes() {
         "filter_sheet",
         "list_fit_models",
         "fit",
+        "list_simulate_functions",
+        "simulate_curve",
+        "simulate_surface",
     ] {
         assert!(names.contains(&want), "missing tool {want}");
     }

@@ -9,6 +9,35 @@ A box is ticked only after the task was verified (tests pass, or the output was 
 Priorities: P0 is the owner's daily workflow (CH Instruments files, CSV, overlay plots, integration,
 publication figures), P1 is common Origin use, P2 is later.
 
+## Current execution order (2026-11-15)
+
+The owner's immediate priorities override the historical milestone order below. Follow
+[PLAN](tasks/PLAN.md) for agent ownership, dependencies and later waves; all entries here remain
+open until implemented and verified. The underlying milestones were not globally re-audited.
+
+- [ ] **P0 formatting, wave 1:** [T58](tasks/T58-graph-text-formatting.md), graph text styling,
+  escapes, editor and live Format toolbar; [T59](tasks/T59-worksheet-cell-formatting.md), worksheet
+  font/style/colour/alignment and Format Cells (toolbar adapter depends on T58).
+  T58 whole-object graph font/size/Bold/Italic/all 24 Classic and custom RGB colour controls and shared dispatch are implemented;
+  its shared label/title/legend editor offers installed-family and paired-script insertion plus all 24 Classic/custom RGB text colours.
+  T59 adds selected worksheet font/size/Bold/Italic/Underline, all 24 Classic and custom RGB text/fill colours and Ctrl+B/I/U,
+  installed faces and derived row geometry; Set Data Style > More opens Format Cells. Worksheet defaults, vertical alignment,
+  sticky heights, full palettes and remaining measurements stay open (GUI 3).
+- [ ] **P0 stacked figures, wave 2:** [T60](tasks/T60-merge-graphs-layer-management.md), merge
+  existing graphs/Layer Management (base done 2026-11-15; captured folder/recursive merge sources
+  and Display Background Color added;
+  border fill/outline measured and disabled pending separate geometry/storage, graphing 15.7d); [T61](tasks/T61-layers-and-multi-y.md), layers/insets/multi-Y and reversible Hide Layer and Hide Other Layers (graphing 21.13-21.14);
+  [T62](tasks/T62-stack-offset-leftovers.md), remaining offsets/Cumulative/stacked histograms/
+  waterfall colour mapping. Reuse working column-built panels, Double-Y and stacked bars/areas.
+- [ ] **Wave 3, independent groups:** [T63](tasks/T63-greyed-items-with-code-2.md), verify and wire
+  existing features through disabled entry points; defer items whose semantics are still missing.
+- [ ] **Waves 4–9:** graph editing, worksheet operations, analysis breadth, project/templates,
+  new windows, then 3D and scripting, as assigned in PLAN.
+
+The [tagged inventory](tasks/greyed-items.md) and `python3 tools/greyed-count.py --check` track
+listed disabled locations separately from parity rows. Claims live only in HANDOFF; existing
+owners finish their claimed work without waiting for these waves.
+
 ## Milestone 1: inventory and foundations
 
 - [x] Repository with ignore rules; local git history
@@ -145,15 +174,17 @@ the default project format.
   - [x] NLFit tabs and lower panel, iteration controls and Fit/Done/Cancel (`nlfit-origin`);
         Set Column Values layout and controls (T09); Column Properties formats and ASCII import
         options in Origin's layout (T19 items 1 and 3)
-  - [x] Export Graphs layout, preview, filename substitution, Apply and image settings (T05);
-        worksheet export dialog (T07)
+  - [x] Export Graphs layout, preview, filename substitution, Apply, image settings and saved
+        Dialog Themes/defaults (T05);
+        worksheet export dialog (T07); several graphs in one multi-page PDF (T32)
   - [x] Window/worksheet commands and shortcuts (T01/T02): multi-panel and Y-error plotting,
         Add Error Bars, legend update, Refresh/recalculation, Go to and Explorer rename/delete
   - [x] Edit > Find in Sheets (Ctrl+F), Replace (Ctrl+H), Worksheet > Clear Worksheet,
         View > Status Bar, File > Close (keeps data), Window > Duplicate (independent workbook
         columns or a graph sharing its data); interpolation menu presets (2026-11-13)
   - [ ] Peak Analyzer wizard (T04), Import Wizard pages 2-6 measured against Origin (T19 item 2),
-        remaining Plot Details/axis controls and separate Layer Contents/Plot Setup dialogs (T13)
+        remaining Plot Details/axis controls and separate Layer Contents/Plot Setup dialogs
+        (T13; Individual X/Y multipliers, Skip Points, White Out and label Frame/Margin now available)
   - [ ] Owner's click-through; remaining dialog options listed in each brief
 - [x] Write `.opj`: workbooks (names, long names, units, comments, designations, text and numbers),
       verified by opening the files in Origin and comparing every cell (`sheaf export ... -o
@@ -194,7 +225,7 @@ the default project format.
   - [x] The Integrate gadget on graphs (Gadgets > Integrate): drag a range, see the shaded area
         and its value live, write it to a sheet; same rows and rule as Analysis > Integrate
   - [x] Peak analysis chain: baseline, find peaks (four methods, filters), integrate each peak,
-        multi-peak Gauss or Lorentz fit (Analysis > Analyze Peaks, `sheaf analyze peaks`); the
+        multi-peak Gauss, Lorentz or Voigt fit (Analysis > Analyze Peaks, `sheaf analyze peaks`); the
         limit rules and the multi-peak fit are not yet compared with Origin's Peak Analyzer
   - [x] Curve mathematics (T22, `734a1ff`): Average Multiple Curves (X-grid/range and interpolation
         choices, optional SD/count), Intersect and Polygon Area; app dialogs, CLI and Manual/Auto
@@ -246,17 +277,25 @@ the default project format.
 - [x] Drawn graph objects (T24, `542fef7`): line, arrow, rectangle and ellipse tools; Shift
       constraints, selection/move/delete, properties and undo; SVG/PNG/PDF rendering and CLI.
       Geometry and UI tests exist; Origin behaviour has not been measured
-- [ ] Drawn-object `.opj` read/write, page/scale attachment, copy/paste, ordering and resize handles;
+- [x] Drawn shapes can move to front/back within one layer, with selection-safe undo/redo (T24).
+- [ ] Drawn-object `.opj` read/write, page/scale attachment, copy/paste, ordering across object kinds/layers and resize handles;
       pictures and inset graphs (T24/T18). The `.sheaf` companion preserves current objects
 - [x] Figure export breadth: SVG, PDF, EPS, EMF and PNG/TIFF/JPEG/BMP/GIF/TGA/PCX/PSD; size units,
       margins, colour depth and compression/quality controls; Copy Page bitmap and Windows EMF
       (T05). PSD is a flattened RGB, grayscale or indexed image with resolution metadata.
       TIFF also supports indexed 256 colors with None/PackBits/LZW compression.
       Graph/dialog themes, mono and 16-color modes remain
+- [x] Autosave recovery follows saved content checkpoints: undo/redo back to a normal save clears
+      the modified flag and recovery copy; recovered projects remain modified until saved (T28).
+- [ ] Printing (T27): Windows graph print dialog, Print Preview and saved Page Setup exist;
+      `sheaf print` writes paper-sized vector PDF and submits through `lp` on macOS/Linux.
+      Native macOS graph print panel uses PDFKit; workbook printing and Windows CLI submission remain
 - [x] MCP server (T25 phase 1, branch `mcp-server`): `sheaf-mcp` speaks the Model Context Protocol over
       stdio so Claude and other AI tools can import, plot, analyze, fit, export and save through the
       shared `sheaf-ops` crate; file access is limited to `--root` folders. Phase 2 (act on the open
-      desktop app) and the analysis tools not yet exposed are left (`docs/spec/mcp.md`)
+      desktop app) is left; `analyze` reaches every tool of `sheaf analyze`, `plot` and `fit` accept
+      CLI-derived options, analysis can write to a new sheet, and three prompts are offered
+      (`docs/spec/mcp.md`)
 - [ ] Matrices, contour plots and heatmaps (matrix branch is not merged)
 - [x] Statistics: t-tests, one- and two-way ANOVA, Mann-Whitney, Wilcoxon, Kruskal-Wallis,
       correlation and normality tests (`148e9b1`); expanded descriptive statistics and statistics

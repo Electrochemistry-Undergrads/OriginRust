@@ -109,6 +109,34 @@ bold [seen]. The horizontal divider can be dragged. Context menus [spec F].
   size of 22 for the default text [seen 2, `ax-title.png`, `opts-numfmt.png`]; the older note of 18
   pt in graphing.md is not what this installation shows. Tick label size was not read.
 
+### Existing command entry points (T63)
+
+Sheaf's Standard Duplicate button uses the active workbook or graph, even when a different
+Explorer row is selected, and is state-disabled without an active window. Explorer's window
+context Duplicate uses that clicked window, including a hidden one. Both call the existing
+Window > Duplicate operation, show and activate the copy, and create one undo step. Four UI
+regressions cover target identity, copies of empty/populated books and graphs, hidden windows,
+context cancellation and Undo/Redo; the existing Explorer and Window-menu tests also pass.
+
+The Plot > Statistics Probability Plot and Q-Q Plot entries remain unavailable, assigned to
+B8/T14 after the T63 C review. The published [plot_prob defaults](https://docs.originlab.com/x-function/ref/plot_prob/)
+include Blom scores and a 95% confidence band; Sheaf's existing descriptive-statistics tools
+use Filliben positions and lack that band control. Their dispatch cannot establish equivalent
+Plot-menu behavior. The existing tools remain documented in statistics section 16; no new
+Origin 2016 numeric measurement was made by this entry-point review.
+
+
+### Format bar: selected graph text (Sheaf, T58 slice 3)
+
+For a selected title, label or legend, the bar shows its installed font family and point size,
+pressed Bold/Italic state, size increase/decrease and a Font Color menu with all 24 Classic
+colours (eight basic choices plus More Classic colors) and Custom RGB... with validated
+0 to 255 fields and a preview (graphing 7.4). Without a text target,
+or while a dialog/cell editor owns editing, these controls are disabled; the size reads 0.
+Enter commits a size draft; Escape or loss of focus cancels it. Text and worksheet numbers are
+unchanged. Graphing 7.4 records the Origin 2016 size/font/colour controls and the unresolved
+native whole-object Bold/Italic difference. Other Format controls remain disabled in this slice.
+
 ## 2. Child windows
 
 Pictures: `gr-plain.png`, `grc-page.png`, `rc-titlebar.png`; second study `graph2-plain.png`,
@@ -264,6 +292,39 @@ Pictures: `gr-plain.png` area, `wb-*.png`, `rc-*.png`, `wb-m04-column.png`; seco
   second box "Before Formula Scripts" with its own grey hint. The dialog is small (about 425 x
   335 px), has minimise, a disabled maximise and a close X (no "?"); the formula box has the
   text cursor on opening [seen 2].
+- **Sheaf Set Multiple Columns Values (T53, 2026-11-15).** Column > Set Multiple Columns Values...
+  (Ctrl+Shift+Q; the Column menu and the column right-click menu) is enabled when two or more
+  columns of the sheet are selected and greyed with the hint "Select two or more columns first"
+  otherwise; Set Column Values (Ctrl+Q) stays one-column only. It opens the same Set Values
+  window with these differences, all Sheaf choices and not measured in Origin: the title reads
+  "Set Multiple Columns Values - [Book1]Sheet1!Col(B:D)" (`B:D` for three or more side-by-side
+  columns, otherwise the short names with commas, such as `Col(B, D)`); the `Col(B:D)=` label
+  has no first/previous/next/last buttons (the window edits the selection together); the
+  Formula menu starts with "Scale by column position" (`col(A)*j`) and "Double the column to the
+  left" (`wcol(j-1)*2`); the `wcol(1)` menu starts with `wcol(j-1)` and `wcol(j+1)`; the Variables
+  menu lists `j` (the column position in the sheet, counted from 1). The row range and Recalculate
+  apply to every column and OK or Apply is one undo step, "Set multiple columns values". The
+  fields start from what the columns share (formula, rows, recalculation); columns that differ
+  start empty and Manual. An error (an unknown column, a loop) keeps the window open with the
+  message and changes nothing. `--show set-values-multiple[:B,C,D]` opens it for a screenshot.
+  Windows measurements still to make with `tools/origin-ref`: the window title, whether the
+  navigation buttons are hidden or step through the selection, and the label text beside the
+  row range (see `docs/spec/expression-language.md` section 7 for the `j` measurements).
+- **Sheaf Set Values function search (T09, 2026-11-14).** Find beside the column navigation,
+  or Function > Search Functions, opens Search and Insert Functions. Keyword matches cover
+  the names, categories, arguments and descriptions in the existing Function-menu catalog;
+  multiple words must all match, without case sensitivity. A selected entry shows Sheaf's
+  own description and example. Add Function, a double click, or Enter from the search field
+  inserts through the same formula-cursor path as the Function menu. Cancel, Escape and the
+  search window's close button keep the staged formula and worksheet data. Choosing a
+  function stages an edit; only Set Values Apply/OK changes the worksheet, with undo.
+  The parent dialog is disabled while search is open. An empty result list disables insertion.
+  This follows Origin's published [Search and Insert Functions behavior](https://docs.originlab.com/origin-help/wks-setcolval-menuopt-dialog/).
+  The installed-2016 capture attempts (local `scratch/t09-function-search`: Ctrl+Q found no
+  dialog, and `csetvalue -d` returned false) did not produce a usable control capture. The
+  search-window layout and the multi-keyword matching rule are Sheaf choices; no new installed
+  Origin layout/default measurement is claimed. Formula-search UI tests live in
+  `dialogs/set_values.rs`, separately from other sessions' app UI regressions.
 - **Workbook File menu** [seen 2, `wb-file.png`, `wb-file-more.png`]. Short form: Open... (Ctrl+O),
   Open Sample Projects (submenu), Save Project As..., Save Template As..., Save Workbook As Analysis
   Template..., Add Word Bookmarks to Analysis Template..., Import (submenu), Recent Books,
@@ -311,6 +372,507 @@ Pictures: `gr-plain.png` area, `wb-*.png`, `rc-*.png`, `wb-m04-column.png`; seco
   Options on the Miscellaneous tab by clearing the box "Enable Collapsible ..." [seen 2,
   `wb-file-more.png`]. Menus that showed no chevron in these pictures: the Window menu and the
   right-click menu of the sheet tab.
+
+### Frozen panes (T34)
+
+Origin facts (from the help pages, not measured; no Origin was available) [W:origin-help/freeze-rows-columns,
+W:labtalk/ref/wks-obj, W:originlab.com/2023]:
+
+- Origin 2023 added View > Freeze/Unfreeze Panes (a toggle, Ctrl+Shift+F, also a Mini Toolbar button
+  "Freeze Panes"). It keeps the first n rows and/or columns in view while the rest scrolls.
+- Select a row, a column or one cell whose index is between 1 and 10 and choose it. To unfreeze, click
+  the upper-left cell and choose Unfreeze Panes, or use the View toggle again.
+- Frozen row and column headers are shaded darker.
+- LabTalk `wks.frozen$="C 3"` freezes columns A to C and rows 1 to 3, the same as selecting cell D4 and
+  clicking Freeze Panes; `wks.frozen$=""` unfreezes. So the frozen part is everything above and left of
+  the selected cell; a whole row freezes rows only and a whole column columns only (inferred).
+
+Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
+
+- **Counting.** Rows count in displayed rows (with a filter, the first n rows that pass) and columns in
+  visible columns (hidden ones are skipped), both in sheet order. The label rows are not counted: they
+  always stay on top, above the frozen rows. Spare entry rows are never frozen. A filter or hide change
+  therefore changes which data is frozen.
+- **Index.** n = index - 1, as in the LabTalk example (D4 freezes 3 and 3). An index above 10 (n above 9)
+  is refused with a status message, as is A1 (nothing above or left) and a selection of a label cell, the
+  whole sheet or nothing.
+- **Toggle.** The one command freezes from the selection when nothing is frozen and unfreezes whatever is
+  frozen otherwise, whatever the selection. It is one undo step, "Freeze panes" or "Unfreeze panes". The
+  shortcut does not work while a cell or label is being edited.
+- **State.** Per sheet, saved in `.sheaf` (`frozen`: rows, columns; absent when nothing is frozen). The
+  `.opj` writer cannot store it: saving to `.opj` warns and the companion keeps it.
+- **Clamping.** The setting is never changed by the window size; when drawing, the frozen rows leave at
+  least three body rows and the frozen block (row header and columns) takes at most half of the width.
+  What does not fit is shown as scrolling cells.
+- **Look.** The heads of frozen columns and the row numbers of frozen rows are a darker grey; a 2 px dark
+  line separates the frozen block from the scrolling cells (right of the frozen columns, under the frozen
+  rows). With frozen columns the row numbers stay with them; with frozen rows only they scroll sideways.
+- **Scrolling.** The wheel over the frozen columns scrolls the body; over the head and frozen rows it
+  scrolls the body up and down. Dragging a selection out of the body into the frozen block scrolls back
+  toward the start; a drag that began in a frozen column (row) never scrolls that axis.
+- **Navigation.** Keys, Go To and typing never scroll to a frozen target (it is always in view); a
+  target in the scrolling part is revealed below and right of the frozen block.
+- **Width.** A frozen column keeps the width it had; dragging the right edge of its head (a 6 px strip)
+  changes it, and the width survives unfreezing and freezing again. The drag is clamped so that the
+  frozen block never goes over the half-width cap above: the column stops growing there instead of
+  dropping out of the block.
+
+### Conditional formatting (T35)
+
+Origin facts (from the help pages and X-Function reference, not measured; no Origin was available)
+[W:originlab.com/2025b, W:origin-help/conditional-format, W:x-function/ref/wcolorbycr]:
+
+- Origin 2025b: "conditional formatting to highlight min/max column-wise or row-wise".
+- Worksheet > Conditional Formatting (also on the right-click menu of selected cells) holds Highlight
+  Min Max, Highlight Top Bottom, Conditional Highlight, Conditional Heatmap, Conditional Pareto,
+  Conditional Outliers, Remove Conditional Format and Conditional Format Manager.
+- A rule's Name defaults to the first and last cell of its range, `C<c1>R<r1>-C<c2>R<r2>`, R0 meaning
+  "to the end" (example `C1R1-C4R0`). Where rules overlap, the upper rule in the Manager wins.
+- Highlight Min Max is `wcolorbycr rng name dir max.fill max.font min.fill min.font`; `dir` 0 is
+  row-wise (the default), 1 column-wise, each row or column on its own. Defaults (0x01BBGGRR ints):
+  max fill 30067455 = RGB(255,202,202), max font 20132812 = RGB(204,51,51), min fill 33085116 =
+  RGB(188,214,248), min font 26692113 = RGB(17,74,151).
+- Highlight Top Bottom is `wcolortb`: Top N Items, Top N%, Bottom N Items, Bottom N%, on the selected
+  columns. Its default N and colours are not documented.
+
+Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
+
+- **Rules.** Per sheet (`cond_formats`, saved in `.sheaf`, absent when empty), a list: name, range
+  (columns by id plus first row and an optional last row, none meaning to the end of the data), rule
+  and colours. A selection of whole columns, rows or the sheet, or a block of cells, gives the range;
+  a block that reaches the last data row follows the data from then on. A label cell or nothing
+  selected gives a status message and no window (the menu items are greyed without a selection).
+- **Evaluation.** Live: the grid shows the rules on the current values, with no stored colours. Only
+  numbers count; text, empty and NaN cells are ignored, and so are masked cells (they take no part in
+  the ranking and keep the red mask look). Ties: every cell equal to the maximum (minimum, or to the
+  N-th value for Top Bottom) is highlighted. A row or column with one number counts as its maximum.
+  Max takes precedence over min where they coincide (all values equal).
+- **Min Max.** Window with Name, Row-wise / Column-wise radio buttons and a Fill and a Font colour (each
+  switchable off) for the maximum and the minimum, Origin's defaults above, row-wise.
+- **Top Bottom.** Window with Name, Mode (Top N Items, Top N%, Bottom N Items, Bottom N%), N (default
+  10, so "Top 10 Items") and one Fill/Font pair, defaulting to the Min Max maximum colours for Top and
+  the minimum colours for Bottom (Sheaf's own). Each column of the selection is ranked on its own. N %
+  is taken of the numbers in the column and rounds up (at least one item).
+- **Order.** A new rule goes to the top of the list; the earlier rule wins the whole cell, so a cell
+  coloured by a rule is not touched by a later one. Filtered (hidden) rows are ranked like the others.
+- **Remove.** Remove Conditional Format removes every rule whose range touches the selection, whole
+  rules and not just the selected part; with none it says so in the status bar. Each command is one
+  undo step ("Highlight min max", "Highlight top bottom", "Remove conditional format").
+- **Copies and edits.** Window > Duplicate, Worksheet > Duplicate sheet and File > Append keep the rules,
+  pointing at the copy's own columns. Deleting columns takes them out of every rule and drops a rule
+  left with no column (in the same undo step as the delete). Inserting rows at or above a rule's first
+  row moves it down, inside it makes it longer; deleting rows moves or shortens it, and a rule whose
+  whole row span is deleted is dropped; a rule that runs to the end stays open. Only operations on a
+  column of the rule count.
+- **Cost.** The styles are computed once per change of the document (not per frame or per cell) and
+  read per drawn cell; a 1,000,000-row column takes about 3 ms (Min Max) to 10 ms (Top N %) in a
+  release build.
+- Renaming and editing rules: the Manager (T122). Conditional Highlight: T123. The `.opj` writer cannot store the rules: saving to `.opj` warns and the
+  companion keeps them.
+
+#### Conditional Heatmap (T120)
+
+Origin facts (docs.originlab.com/origin-help/conditional-format, read 2026-11-17, not measured: Origin
+2016 has no Conditional Formatting). Level: **Auto Rescale** (checked by default, the range's minimum
+and maximum), else **From** and **To**, **Find Min/Max**, scale **Type**, levels **By Increment** or
+**By Count**, **First Level** ("larger than or equal to the default value of the first level").
+Colors: **Format Type** Fill Background or Color Text, **Contrast Color for Text**, **Color
+Generation** (Limited Mixing, 3-Color Limited Mixing with **Middle Position** By Percentile, By
+Percent or By Value, Introducing Other Colors in Mixing, Load Palette), **Flip**, **Below** and
+**Above** colours for values outside From..To. A new rule goes on top; the upper rule wins.
+
+Sheaf's choices, all **unmeasured**:
+
+- **Scope.** One set of levels over the whole range (all its columns and rows together); the same
+  numbers count as for the other rules (text, empty, NaN and masked cells are left out). Each level
+  is a palette class of the rule, at most 250 levels.
+- **Levels.** In scale units (log10 of the value for Log10, where numbers at or below zero get no
+  colour). By Count n cuts First Level..To into n equal levels; By Increment d gives
+  ceil((To - First Level) / d) levels (one decade is 1 on Log10). A level holds its lower bound;
+  To belongs to the last level. First Level defaults to From and is clamped into From..To; numbers
+  between From and First Level take the first level. Auto Rescale with one distinct number gives
+  that number the first level; set limits that are equal, reversed or not finite colour nothing.
+- **Colours.** Level k of n gets t = k / (n - 1) (0 for one level), mixed in RGB from From to To;
+  3-colour mixing goes From to Middle up to the middle's place and Middle to To after it. The
+  middle's place along the levels is the percent itself (By Percent), the value's place (By Value),
+  or the place of that percentile of the range's numbers (By Percentile, linear between order
+  statistics), clamped to 0..1. Flip swaps From and To (Middle keeps its place). Below and Above
+  apply only with Auto Rescale off; switched off, numbers outside From..To stay plain.
+- **Text.** Fill Background with Contrast Color for Text puts black or white text on each fill,
+  whichever has more contrast (BT.601 luma below 128 gives white); Color Text colours the text and
+  leaves the fill.
+- **Defaults** (Origin's are not documented): Auto Rescale, Linear, By Count 10, Fill Background
+  with contrast text, Limited Mixing from white RGB(255,255,255) to RGB(248,105,107); Middle
+  RGB(255,235,132) at 50 %. Introducing Other Colors in Mixing and Load Palette are shown disabled.
+- **Files.** `.sheaf` and the `.opj.sheaf` companion keep the rule; `.opj` warns as for the other
+  rules; XLSX writes the current colours as a snapshot, with the same warning.
+- One undo step, "Conditional heatmap"; Remove Conditional Format removes it like the other rules.
+
+
+#### Conditional Pareto and Conditional Outliers (T121)
+
+Origin facts (docs.originlab.com/origin-help/conditional-format, read 2026-11-17, not measured):
+Conditional Pareto "counts all items in the range" and ranks them from most to least frequent, with
+Most Frequent N Items, Most Frequent N% (items whose cumulative frequency is <= N %), Least Frequent N
+Items and Least Frequent N% (cumulative frequency >= 1 - N %). Conditional Outliers colours outliers
+"as in a box chart": **IQR** with **Coef** (default 1.5; fences Q1 - Coef x IQR and Q3 + Coef x IQR,
+3 for the outer fences) or **SD** (the box chart's Whisker Range = SD) with Coef.
+
+Sheaf's choices, all **unmeasured**:
+
+- **Pareto items.** Every non-empty, unmasked cell of the whole range is an item: a number (equal
+  numbers, 0 and -0 included, are one item) or a text (text cells of Text & Numeric and text
+  columns count). Items rank by count, equal counts in order of first appearance (column by column,
+  top to bottom). N Items takes floor(N) items from the top (or bottom) and every item with the same
+  count as the last one taken; N% follows Origin's wording with the cumulative frequency including
+  the item, so Least Frequent N% always takes the least frequent item for N > 0. N of 0 or less takes
+  nothing. Default Most Frequent 10 Items; Least modes switch to the Min Max minimum colours.
+- **Outliers.** Each column of the range on its own (one box per column). IQR quartiles follow the
+  box chart's Origin rule (`quantile_origin`, graphing box chart); SD is the sample standard deviation
+  (n - 1) around the mean, and needs two numbers. Values strictly outside the fences are coloured.
+  The Coef box offers 1, 1.5, 2 and 3 and takes any value >= 0; the default 1.5 applies to SD too.
+  Colours default to the Min Max maximum colours.
+- One undo step each ("Conditional pareto", "Conditional outliers"); saving, Remove and XLSX snapshot
+  as for the other rules.
+
+
+#### Conditional Format Manager (T122)
+
+Origin facts (docs.originlab.com/origin-help/conditional-format, read 2026-11-17, not measured): the
+Manager lists all conditional formats of the active worksheet; **Name** is renamed by a
+double-click, **Range** is reselected or typed, **Edit Rule** reopens the rule's dialog, **Move
+Up**/**Move Down** (or dragging a row) reorder and **Remove** deletes; a new format is added at the
+top and the upper format wins where ranges overlap.
+
+Sheaf's choices, all **unmeasured**:
+
+- The window lists Name, Range (the columns' short names and rows, for example `B, C; rows 1 to
+  end`) and Rule (a few words: `Top 10 Items`, `Highlight Min Max, column-wise`, `Heatmap, 10
+  levels`, `Most Frequent 10 Items`, `Outliers, IQR x 1.5`). It reads the sheet again every frame,
+  so undo shows at once; it opens without a cell selection.
+- Every change applies at once as one undo step ("Rename conditional format", "Move conditional
+  format up/down", "Remove conditional format", "Edit conditional format"); there is no OK/Cancel,
+  only Close. A rename to an empty or unchanged name, or Escape, changes nothing.
+- Edit Rule opens the rule's own window (Highlight Min Max, Top Bottom, Heatmap, Pareto, Outliers)
+  filled with its settings and name; OK replaces the rule in its place, keeping its range. OK with
+  nothing changed adds no undo step; if the list changed meanwhile (the rule at that place is no
+  longer the same), OK does nothing.
+- **Left out:** changing a range (reselecting or typing), dragging rows to reorder.
+
+
+#### Conditional Highlight (T123)
+
+Origin facts (X-Function `wcolor` and "Details of TreeNodes in Wcolor", docs.originlab.com, read
+2026-11-17, not measured): conditions `cond1`/`cond2` 0 equal to, 1 not equal to, 2 greater than,
+3 greater than or equal to, 4 less than, 5 less than or equal to, 6 between (`val11`, default 0, and
+`val12`, default 1), 7 text that contains (`text1`), 8 custom (`custom1`, a condition in `x`, for
+example `x == "Male"`); Date/Time columns name 2 to 5 after, on or after, before, on or before.
+`join` 0 None (default), 1 And, 2 Or. Background 30067455 = RGB(255,202,202) and Text Color
+20132812 = RGB(204,51,51) by default. `extend` colours whole rows; values may come from a fly-out
+of statistics functions.
+
+Sheaf's choices, all **unmeasured**:
+
+- The window: Condition (Origin's nine names, a value, two values for Between, a text box for Text
+  that contains and Custom), Join (None, And, Or) with a second condition, and the Fill/Font pair
+  (Origin's defaults). Defaults: Equal to 0, None.
+- Numeric conditions match numbers only: text, empty, NaN and masked cells never match, not even
+  "not equal to". Equality is exact. Between includes both values, in either order.
+- Text that contains matches the cell's text as the worksheet shows it (numbers too, for example
+  `5` in `2.5`), case-sensitive; an empty text matches nothing.
+- Custom is an expression of Sheaf's expression language in `x`, the cell's number, true when not
+  zero (`x > 2 && mod(x, 2) == 0`); it may use functions and constants but no other names and no
+  columns, and OK refuses one that does not parse or uses another name, saying why. Text values in
+  custom conditions (`x == "Male"`) are not supported: text cells never match Custom.
+- **Left out:** Date/Time names and date entry (dates compare as their stored numbers), statistics
+  functions as values, extending the colour to the whole row (`extend`).
+
+### Cell notes (T36)
+
+Origin facts (help pages, not measured; no Origin was available) [W:originlab.com/2022,
+W:origin-help/insnote-to-wkscell, W:x-function/ref/insertcmt]:
+
+- Origin 2022: "Add Notes to individual Worksheet Cells", similar to Excel and Google Sheets. Select the
+  cell and click the Mini Toolbar Add Note button; the note displays as a popup when hovering on the
+  tab in the upper-right corner of the cell; the system variable `@NCP = 0` stops the popups. Notes
+  are edited in a Notes window ("Open in Notes Window"); contents are Text or Origin Rich Text. The
+  X-Function `insertCmt` adds a note to a selected cell (search snippet, unconfirmed).
+- Not documented: how to delete a note, the tab's colour and size, behaviour under sort/insert/delete,
+  export.
+
+Sheaf's choices, all **unmeasured** (to check on Windows against Origin):
+
+- **Storage.** Per sheet (`Worksheet.notes`, core `notes.rs`, saved in `.sheaf`, absent when empty): a
+  list sorted by column id and data row, so the saved form is deterministic and a lookup is a binary
+  search (no per-cell scan). Plain text only; empty text is never stored. A note may sit on an empty
+  cell (beyond the data rows) and then follows its row position like any other.
+- **Indicator.** A small filled dark-red triangle (7 px) in the upper-right corner of the cell, also in
+  frozen (overlay) cells and over conditional-format fills. Origin's colour and size are unmeasured.
+- **Popup.** Hovering anywhere on the noted cell (not only the tab) shows the text in a tooltip, wrapped
+  at 300 px. There is no `@NCP` switch. A tooltip cannot scroll, so a long note is cut at 20 lines or
+  1,500 characters and ends with "…" (the full text stays in the editor).
+- **Editing.** The cell right-click menu replaces the greyed "Insert Notes" item: "Add Note..." on a cell
+  without a note, "Edit Note..." and "Delete Note" on one with a note, for a single selected cell
+  (otherwise a status message). Inside a multi-cell selection the note entries act on the right-clicked
+  cell (choosing one reselects that cell; the other cell-menu entries still act on the selection). The
+  editor is a small window with a multi-line text box (scrolls above 300 px, so OK/Cancel stay on screen) and OK/Cancel
+  (no Notes window, no Mini Toolbar button, no rich text). Each change is one undo step ("Add note",
+  "Edit note", "Delete note"; emptying the text of an existing note deletes it). Clear (Delete key)
+  clears values and leaves the note.
+- **Sort.** Notes move with their row: Sort Worksheet, Sort Range, nested/custom sort (also of selected
+  rows) and Filter Rows (in place, dropping the notes of removed rows) permute the notes of the sorted
+  columns exactly as the values; Sort Columns (each column on its own) and Reverse Order move only that
+  column's notes.
+- **Rows and columns.** Insert rows shifts the notes of the columns inserted into at or below the row;
+  delete rows drops the notes on the deleted cells and shifts those below. Columns have stable ids, so
+  Move Columns and column insert need nothing; deleting a column drops its notes (same undo step).
+  Duplicate (window or sheet) and File > Append keep the notes, on the copy's own columns.
+- **Not carried.** Operations that build a new sheet (Transpose, Stack/Unstack, Split Columns, Reduce
+  Rows, Filter Rows to a new sheet) do not copy notes; neither do the `.opj` writer (save to `.opj`
+  warns "N cell note(s) are not written"; the `.opj.sheaf` companion keeps them), CSV and Excel export.
+- **Left out.** Notes window, rich text, `@NCP`, Mini Toolbar button, hovering only on the tab, notes
+  on labels/headers.
+
+### Cell formatting (T59)
+
+Origin 2016 has Format Cells on the cell, column-header and row-number context menus,
+Format > Cell... and a separate Format > Worksheet... (F4). Ctrl+U underlines a selected column;
+the cell-format X-Function is `wcellformat`. The dialog/menu measurements below were taken on
+Windows, 2026-11-16, using only synthetic worksheet values. Effects of the worksheet-wide
+settings, manual versus conditional precedence, sort behaviour and `.opj` storage remain open.
+
+Origin 2016 worksheet-toolbar measurements (Windows, 2026-11-15, synthetic two-column
+worksheet): selecting A1 shows Default: Arial and 9 pt. Bold and Italic change only A1; choosing
+Times New Roman changes that cell's glyph family. Opening the font-colour palette and choosing
+its red swatch in the same UI interaction paints only A1 red. A range containing 20 pt A1 and
+9 pt B1 has a blank Size field. The mixed Bold button follows A1, and clicking it clears Bold
+for both selected cells. The font-size step buttons remain disabled. Increasing a cell or label
+row to 20 pt grows that row; reducing A1 to 9 pt leaves Origin's enlarged row height intact.
+Raw captures remain local in `re-workspace/scratch/t59-format-toolbar/`; palette captures that
+foregrounded the main window between opening and picking were excluded because that closes the
+popup. The toolbar and worksheet area used for measurements were unobscured.
+
+Sheaf's shared **Format toolbar** targets selected cells, whole rows/columns, or the selected
+label cell. Font, Size, Bold, Italic, Underline, the basic eight text colours and eight fill colours plus None apply in one "Format cells"
+undo step, leaving values and number formats untouched. Mixed family/size fields are blank;
+Bold/Italic/Underline use the first displayed selected cell's state (mixed Underline is Sheaf's
+existing toolbar policy; its mixed state was not separately measured). Selecting another cell, sheet or
+workbook, editing a cell, or changing the document makes an older toolbar request inert.
+Whole columns include future rows and keep compact format ranges. Size accepts 4..96 pt (0
+restores the default); these bounds remain Sheaf's existing policy, not a measured Origin limit.
+Worksheet size-step controls stay disabled as observed; graph controls keep their own behaviour.
+
+Further Origin 2016 measurements (Windows, 2026-11-16, synthetic cells): the U button and
+Ctrl+B/I/U toggle Bold/Italic/Underline on the selected cell. Fill Color red changes only A1's
+background; None clears it. Ctrl+U on a Long Name label toggles that label separately. Ctrl+U
+on a whole column underlines its data cells while its Long Name label stays
+unchanged. Sheaf implements these target distinctions through the existing format ranges.
+Keyboard formatting belongs to worksheet selections when the grid has the keyboard; text
+editors, dialogs, popups and Project Explorer retain their keys. Graph Ctrl+I stays Zoom In.
+Each key press is one Undo step; multiple presses in a frame retain their order. Fill palettes
+capture their opening selection/revision and cannot follow a changed target. Manual fills keep
+the existing conditional-colour precedence (still unmeasured). The palette is the basic eight
+colours plus None, with the custom RGB choice described below; native custom/system/recent
+system/recent palette storage is not implemented. Explicit reusable Custom wells
+use the separate profile policy below.
+
+**Custom worksheet colours (Origin 2016, measured 2026-11-16).** Both Font Color and Fill Color
+palettes have custom slots. Double-clicking an empty slot opens Colors on its Custom tab, with
+RGB and HSL fields, preview, OK and Cancel. An empty slot initially showed RGB 64/192/192.
+Entering RGB 17/34/51 for text and 32/128/224 for fill, then OK, changed only selected A1;
+neighbouring cells and values stayed intact. The Custom list dropdown instead offers Clear,
+Load and Open Increment Editor (not invoked). Captures/control dumps remain local in
+`re-workspace/scratch/t59-custom-colors/`; only the owned unobscured dialogs/results are evidence.
+
+Sheaf adds **Custom...** to the worksheet Font Color and Fill Color menus. Its one-off RGB
+chooser validates whole numbers 0..255, previews the opaque colour and applies on OK or Enter;
+Cancel, Escape and the close box discard the draft. Starting from the current manual colour
+(white when fill is None) is Sheaf policy, differing from the measured empty native slot. A
+choice changes only the captured range and property, preserving other styles and data, with
+one Undo for an effective change. Selection, project-generation or revision changes invalidate
+the request. Text and fill survive native project and `.opj` companion reopen through the
+existing fields. Named lists/project palettes, HSL and eyedropper controls remain open; graph Format controls and the
+separate T58 text editor retain their own behaviour.
+
+**Reusable worksheet Custom wells (T59, documented contract, 2026-11-17).**
+[FAQ130](https://docs.originlab.com/quick-help/define-custom-colors/) includes
+Format Cells and documents reusable chooser colours, with Add to Custom for2016+.
+No fresh Native measurement is claimed. Worksheet toolbar Custom... dialogs now
+offer the graph/editor pool from graphing7.12: Add stores a valid opaque numeric
+draft without formatting the sheet, and a saved choice seeds the numeric fields.
+The dialog remains open until its existing OK/valid numeric-field Enter or Cancel.
+Captured range/revision/generation, no-op and history rules are unchanged.
+
+Format Cells offers the same pool beside each optional text/fill colour. Choosing
+a well enables that colour in the dialog draft; only its existing Apply/OK commits
+changed properties. Add saves a present opaque draft colour, without changing the
+draft or document. None and nonopaque drafts cannot be added. The existing RGBA
+control and optional-colour checkbox retain their behavior. Cancel keeps added
+preferences and discards unapplied formatting. Context removal edits only the
+pool, preserving drafts and applied colours. Compact menu layout, shared profile,
+capacity/order, atomic storage and failure behavior are explicit Sheaf policies,
+not measured Native2016 layout or file formats. Category defaults/families, model,
+grid, print/export and IO engines are unchanged; existing fields preserve applied
+colours. Unused wells remain profile-only, with no project palette or new list format.
+
+**Classic worksheet presets (Origin 2016, measured 2026-11-16).** Both worksheet palettes
+show the original 24 Classic colours above the additional colour lists. All 24 swatch-centre
+RGB triples were measured from each palette and agree with the published [Classic list](https://docs.originlab.com/labtalk/ref/list-of-colors/).
+Selecting Dark Yellow text, Dark Cyan fill and Royal text affected only A1; Fill None cleared
+that fill while retaining Royal text, with neighbouring cells and source values unchanged.
+Captures and RGB measurements remain local in `re-workspace/scratch/t59-classic-colors/`.
+Dark Yellow is RGB 128/128/0, Olive is 0/128/0 and Royal is 0/0/160; Green remains 0/255/0.
+
+Sheaf keeps the eight existing named choices and adds **More Classic colors** with the other
+16 to worksheet Font Color and Fill Color. The compact text-submenu grouping is a Sheaf UI
+choice; Origin uses swatches. These choices use the existing captured range requests, effective
+no-op checks and one-step Undo, including independent labels and compact whole columns. Both
+menu levels close after a choice; the separate Custom... RGB chooser remains available. Graph
+Fill/Line palettes and the T58 text editor keep their own controls; graph Font Color now shares
+these 24 presets (graphing 7.4). Other native colour lists and palette
+storage remain open.
+
+Cells use installed regular/bold/italic faces with UI glyph fallbacks; missing styles use the
+existing synthetic fallback. The default is Arial 9 pt (12 logical pixels at 96 dpi). Explicit
+point sizes convert by 4/3 for the grid. Row heights derive from font metrics, with a 16 px
+minimum, including label rows, filtered views and frozen panes. Geometry stores formatting
+intervals and draws only visible rows. **Difference:** Sheaf recomputes and can shrink heights
+when the font shrinks; it has no saved row-height field, so Origin's sticky enlarged heights
+are left for later work. Printed sheets and worksheet images use the same resolved styles,
+font metrics and enlarged rows; their existing 8 pt default scales explicit sizes by 8/9.
+Printing retains its existing omission of label rows with no text, including empty styled labels;
+native printed-layout and range rules remain T27 work.
+
+**Origin's dialogs (measured 2026-11-16).** F4 opens Worksheet Properties, with View, Size,
+Format, Miscellaneous, Print/Export and Script tabs (the printing/script tabs were not inspected).
+The Format tab's Apply To list is Standard, Column Labels, Data, Column Header, Row Header,
+Long Name, Units, Comments and F(x)=. Data is initially selected; the dialog displays Data > Standard
+as its application priority. Data initially has Rich Text off, Allow Enter/Wrap Text/Float on,
+Disable Editing/Show Missing as Blank off, and separate unchecked Font and Color override switches.
+These controls address worksheet categories. Further Data-font measurements below establish
+family/size and future-column behavior; label-size measurements follow below.
+
+**Data category fonts (Origin 2016, 2026-11-16).** `wproperties execute:=get iotrgui:=tr`
+returns the Data font size through `tr.TextControl.FontControl.Size`; changing that child to
+18 and executing `set` changes existing cells and a newly added C column. The UI Font group
+has family and size controls. Selecting Times New Roman with an actual dropdown/keyboard
+commit, then applying 20 pt, gives serif glyphs in existing and newly added columns. A manually
+formatted A1 at 12 pt keeps that size after a worksheet Data change to 20; neighboring cells
+and new C use 20. All synthetic values (A=1..5, B=2*A, C=101..105) remain unchanged.
+Unchecking Font and pressing Apply leaves existing and new-column Data18 intact: this checkbox
+controls which settings the dialog applies, not an operation that removes an inherited font.
+The parent FontControl is a tree, not a supported numeric property; error-30.3 parent scalar
+results are excluded, as are uncommitted family selections and early paint frames. The Face
+getter's numeric rendering is not used as a font identifier. The successful actors, screenshots,
+control lists and PID/start-time cleanup proofs stay in ignored scratch
+`t59-worksheet-default-fonts/`; each owned Origin, helper and guard closed.
+
+Changing this worksheet category does **not** auto-fit Origin's existing fixed-height rows;
+large text clips. A later manual cell-font edit can grow its row based on neighboring text.
+Sheaf retains its existing derived-height policy: effective Data fonts grow/shrink rows in the
+grid, print and image paths. Persistent event-driven/sticky heights remain separate work.
+
+**Label category sizes (Origin 2016, 2026-11-16).** Five isolated synthetic cases use
+`wproperties execute:=get iotrgui:=tr`, set `tr.TextControl.ApplyTo$` to Long Name, Units,
+Comments or Column Labels, change `tr.TextControl.FontControl.Size`, then execute `set`.
+Long Name18 changes only Alpha/Beta; Units18 changes only V/mA; Comments18 changes only
+note A/B. New C inherits the corresponding Gamma/nA/note C size. Other label categories and
+data retain 9. Column Labels18 followed by Long Name24 gives specific24 over the other labels18;
+reversing those operations retains the specific24, including new C. Category changes keep
+fixed 16 px label heights and clip larger text. No family or manual-label precedence was established:
+`wcellfmt` get failed in 2016, one toolbar attempt had no glyph effect and another found no
+visible combo. Those attempts and an identity-snapshot race are excluded. Five accepted cases,
+screenshots, scripts and PID/start-time cleanup hashes remain in ignored
+`t59-label-default-fonts/native-proof.json`. Each new private COM instance and guard closed;
+preexisting process identities were preserved. No global input was used for these label probes.
+
+**Label families (documented contract, 2026-11-16).** The
+[official Format-tab manual](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
+describes font selection for worksheet categories, including Long Name, Units and Comments.
+Native2016 F4 probes observed the Long Name priority and Font family/size controls. String
+Face assignments, programmatic selection notifications and posted combo keys did not establish
+an applied family: the9pt label pixel regions were identical before/after. Those attempts are
+excluded, along with a fixed-control-ID failure after the category rebuilt its controls.
+A later attempt at the proven Data-family physical commit protocol failed at COM activation
+with REGDB_E_CLASSNOTREG before creating an instance or sending input. No registration or
+installation change was made. All owned instances/guards closed and foreign identities were
+preserved; ignored `t59-label-default-families/native-proof.json` records zero positive applied
+label-family measurements. Family selection follows the documented contract below; current/future
+inheritance, manual priority and Automatic remain explicit Sheaf policies, unverified in Native.
+
+Sheaf enables Format > Worksheet... (F4) with a separate Worksheet Properties window, a Format
+section and Data, Long Name, Units and Comments Apply To categories. Data family/size reach
+all current and future data cells;
+manual per-range properties take precedence. Drafts and Cancel/Escape are inert, each Apply/OK
+is one Undo step, and stale document/sheet requests close. Unchanged OK creates no history.
+The three supported label categories expose installed family and point size and reach existing/future columns
+independently. Switching categories retains drafts; Apply/OK writes all changed drafts together.
+The compact layout, draft policy and manual-label precedence are Sheaf choices; manual-label
+priority remains unverified against Native. Existing derived label heights remain in use.
+Family-only edits keep point-size overrides absent. Automatic clears only the category family,
+using the existing Arial fallback; manual names/sizes and other category drafts stay independent.
+The native Font apply-mask checkbox is omitted. Standard, headers, bulk Column
+Labels and F(x)= controls remain disabled; further mutation/precedence rules need measurement.
+Other worksheet tabs and color/
+text-control defaults remain unavailable. The [official Format tab reference](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
+and [wproperties reference](https://docs.originlab.com/x-function/ref/wproperties/) describe the
+current interface; the 2016 observations above come from the local synthetic probes.
+
+Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
+The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,
+Dynamic Merge, per-cell numeric display/precision selectors and a Font selector. In this new book,
+Rich Text/Float/Disable Editing are off, Allow Enter/Wrap Text are on, Ellipsis is ### and Dynamic
+Merge is None. Other controls and mutation/precedence rules were not measured.
+
+The stock **Set Data Style** submenu contains Rich Text, Wrap Text, Float and More...; there is
+no Default entry. More... opens that same selected-range Format Cells dialog. Sheaf enables More
+through its existing Format Cells command. Rich Text/Wrap Text/Float remain disabled, assigned to
+B5's worksheet text controls; they are not a Clear Formats operation. The earlier Default entry
+was a placeholder, not an Origin measurement. The [Origin 2016 training manual](https://blog.originlab.com/ftp/dist/Origin_2016_Intermediate_Training_Manual.pdf)
+also uses Set Data Style > Rich Text for report cells. Raw captures and control lists stay local in
+`re-workspace/scratch/t59-worksheet-dialog/`; delayed initial dialog captures and the misleadingly
+named default-action follow-up were excluded from behavioural claims.
+
+Sheaf's **Format Cells** window (cell/column/row menus, Format > Cell..., Set Data Style > More...)
+retains its existing manual-style subset: Font, Size (0 = Default), Bold/Italic/Underline,
+text/fill colour, horizontal alignment, Clear Formats, OK, Cancel and Apply. It starts from the
+first selected cell and applies only changed properties. The layout and choices of that subset
+remain Sheaf's policy; Origin's text-control and per-cell numeric-display features are not supplied
+by this window. Vertical alignment, named/project palettes and remaining dialog/precedence
+measurements remain open.
+**Vertical alignment probe (Origin 2016, 2026-11-16).** A numeric data cell A1 was
+selected before Format > Cell; the dialog reported `[Book1]Sheet1!A[1:1]`. Its Text
+controls include font/size and text/fill colour, with no top/middle/bottom text-alignment
+control found in the inspected list. Worksheet Properties > Format with Data selected
+and its Size tab likewise supplied no vertical text-alignment choice in these probes.
+The Size tab controls worksheet dimensions; Dynamic Merge's Vertical option describes
+merging. This is bounded negative evidence for these routes, not a claim about every
+cell type, category, version or possible command.
+
+The [official Format-tab reference](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
+lists font family/size and colour controls; that current reference is separate from the
+2016 measurements. A supported vertical-alignment route and its mutation rules still
+need to be established before adding a per-range model field or a live control.
+Sheaf retains its current placement. The successful selected-A1 and settled Format/Size
+captures, control lists, hashes and cleanup proof are local in
+`re-workspace/scratch/t59-cell-vertical-align/native-proof.json`. The unsuccessful script
+command, unselected-cell dialog, incorrect tab clicks and early paint snapshots are
+excluded. Every temporary Origin instance, helper and identity guard closed.
+
+**Documentation scope audit (2026-11-16).** The current
+[worksheet Format-tab](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
+and [wproperties tree](https://docs.originlab.com/x-function/ref/wproperties/)
+references establish no per-range vertical-alignment route. This adds no new
+negative Native measurement. The
+[2023b ORG-26070 release note](https://www.originlab.com/ReleaseNotes/detail.aspx?id=2023b3ORG-26070)
+concerns Data Info and point-tooltip layouts. Their
+[current column settings](https://docs.originlab.com/origin-help/data-info-tool/#columns-settings)
+apply vertical alignment to the whole report table. Those controls are a different
+target from worksheet cells and cannot establish worksheet-range mutation rules.
+Per-range vertical alignment remains deferred until a supported worksheet route
+and its behavior are established; no CellFormat field or live control is added.
+
+Model and persistence rules: workbook-model.md 13b.
 
 ## 4. Graph window
 
@@ -384,7 +946,7 @@ Pictures: `gr-plain.png`, `gr-graph.png`, `grc-*.png`, `gdlg-*.png`; second stud
   [seen 2, `gr-titlebar.png`].
 - **Right-click, legend** [seen 2, `legend.png`]: the legend is selected first (eight green
   diamond handles on its corners and edges), then the menu: Plot Details..., Legend (submenu),
-  Add Color Scale (grey), Add Bubble Scale (grey), | Cut (Ctrl+X), Copy (Ctrl+C), Delete
+  Add Color Scale, Add Bubble Scale (enabled with a colour or size mapped plot, T80), | Cut (Ctrl+X), Copy (Ctrl+C), Delete
   (Delete), | Bring to the front, Push to the back, Bring to front of data (grey), Push to
   back of data, | Programming Control..., Properties..., | Copy Format (submenu), Save Format
   as Theme.... No chevron.
@@ -398,6 +960,33 @@ Pictures: `gr-plain.png`, `gr-graph.png`, `grc-*.png`, `gdlg-*.png`; second stud
     editor [spec D1, D3]. On the layer icon: Plot Setup (see its menu above) [seen 2].
 - Colour list of the default palette ("By One"): black, red, green, blue... [spec graphing.md]; in
   the Group tab of Plot Details the strip behind "By One" shows a long list of colours.
+
+### 4.x Zoom and pan (T65, measured 2026-11-15)
+
+Origin 2016 (scripted clicks and pictures, scratch `re-workspace/scratch/t60/zoom`, `zoom2`):
+- View > Zoom In (Ctrl+I) is a mode: nothing changes until a click on the page, which doubles the
+  zoom (100, 200, 400, 800, 1600 % seen) and **re-centres the view on the clicked point**; the mode
+  ends after the click. Scroll bars appear above 100 %.
+- View > Zoom Out (Ctrl+M) acts at once and halves: 800, 400, 200, 100, 50, 25 %, then nothing.
+- View > Whole Page (Ctrl+W) returns to 100 %: the page fitted to the window, no scroll bars.
+- The Standard toolbar's zoom combo lists 25, 50, 75, 100 and 200 % and takes a typed value
+  (300 gave 300 %); it shows the zoom rounded to whole percent.
+- The Tools toolbar's magnifiers are **Scale In** and **Scale Out** (axis magnification: "double-click
+  to restore, ctrl-drag to create zoom graph"), not the page zoom. The hand is the **Zoom-Panning
+  Tool**: drag the page (or arrow keys) to pan, mouse wheel (or + and -) to zoom; "+" zooms by 1.25
+  and "-" by 0.85 about the middle of the view, an arrow key moves about 2 points; a click with it
+  changes nothing.
+- View > Zoom All: corrected in graphing 23.1 (a zoom of the active graph so that all objects, also those outside the page, fit; the "Hit ESC" reminder belongs to Full Screen).
+
+Sheaf (`crates/app/src/graph_zoom.rs`, `graph_view.rs`): the same Zoom In mode (one click, x2,
+re-centred, up to 3200 %), Zoom Out by halves to 25 %, Whole Page, the Zoom-Panning tool (drag, +/-
+x1.25/x0.85 about the middle, arrows 2 pt, wheel x1.25/x0.85 a notch about the pointer: the wheel's
+factor and anchor are Sheaf's choice) on the Tools bar, manual scroll bars, and, without the tool,
+the wheel scrolling a zoomed page (Shift+wheel sideways) and Ctrl+wheel zooming about the pointer
+(Sheaf's choices: Origin's wheel without the tool was not measured). Zoom is per window, screen-only
+and not saved; every click, drag and hit-test goes through the zoomed transform. The page raster is
+capped at 4096 px a side (the texture is stretched beyond that). Not built: the zoom combo and the margin Origin lets the view scroll past the page. Zoom All and the Tools-bar
+Scale In/Scale Out are T69 (graphing 23, built).
 
 ## 5. Dialogs, as seen
 
@@ -624,6 +1213,313 @@ disabled controls are grey; blue bold text marks a hint or a state message.
     buttons Delete and Details....
   The tab and the list are independent: choosing a different tab changes which targets the list
   offers (two for Scale and Breaks, four for the others).
+
+### Find and Replace (2026-11-15)
+
+Origin 2016's public `findreplace option:=0;` and `option:=1;` commands open the Find and Replace
+tabs of one window. The [command reference](https://docs.originlab.com/x-function/ref/findreplace/)
+documents this entry point. Clear pictures, control dumps and post-operation values are in
+`re-workspace/scratch/t02-find-replace/`. The initial Ctrl+F/Ctrl+H attempts found no dialog and
+are excluded as layout evidence; the direct-command captures succeeded.
+
+The initial captures show Numeric selected, condition `=`, Active Worksheet, and expanded Options.
+Find what is seeded from the selected cell's display: B2 containing 5 gives `5`, and a stored
+100.000001 displayed as 100 gives `100`. Selecting text Alpha seeds `Alpha` but leaves Numeric
+selected, with Find Next disabled until the query is valid or the user chooses String.
+Skip linked cells is checked. Absolute value, Search up, Keep sign and Set as missing are unchecked;
+tolerance is `1e-8`. Numeric conditions are `=`, `<`, `<=`, `>`, `>=`, `!=`.
+The Replace tab adds its replacement field and two numeric replacement flags. Its bottom buttons
+are Find Next, Replace, Replace All, Close; Find has Find Next and Close at the right.
+
+String mode hides the numeric condition/tolerance and shows Match case, Match whole cell contents,
+Use wildcards and Include label rows, initially unchecked, alongside Skip linked cells and Search
+up. Look in also offers workbook, folder, recursive folder, open books in folder and project scopes.
+Options can persist in Origin across temporary instances: the last probe explicitly
+restored the original numeric/string flags, condition, scope and tolerance; the restored image and
+action log are retained in `final/restore/` and `conditions/restore/`.
+
+The synthetic GUI probes establish these rules:
+
+| Probe | Observed result |
+|---|---|
+| Numeric 100, tolerance 1e-8, data 100.000001 and 100 | both found/replaced: relative tolerance, not an absolute 1e-8 difference |
+| Numeric 2, data 1.99999999, 2, 2.00000001, missing | `=`, `<=`, `>=` match the three finite cells; `<` matches the first; `>` the third; `!=` matches first, third and missing |
+| Absolute 2, replace 7, Keep sign, data -2, 2, -3, 0 | -7, 7, -3, 0 |
+| Greater than 2, replace 7, Set as missing, data -2, 2, 3, missing | missing, missing, 7, missing |
+| Find numeric `--` with one explicit missing value at A4 | A4; unused allocation beyond the data did not become the result |
+| Find 2 upward from B2, B = 2, 5, 2, 8 | B1 rather than B3 |
+| String `a*c`, wildcard on, replace Z; abXXc, xabc, abc | Z, xabc, Z: the pattern must match the entire cell |
+| Numeric 2, empty replacement | the matching cell becomes missing |
+
+Equality uses the relative difference `abs(a-b)/(abs(a)+abs(b))` with exact equality handling zero.
+The inclusive comparisons include that equality test; strict comparisons and `!=` do not use its
+tolerance. Thus `!=` is deliberately not the complement of tolerant `=`. Numeric searches use stored
+numbers, whereas String searches use displayed text and preserve ordinary substring replacement
+when wildcards are off. Wildcard replacement substitutes the entire matching cell with literal text.
+
+Sheaf follows these measured controls and rules in the existing dialog, with a shared Find/Replace
+window, preserved inputs across its tabs, selected-cell seeding and one undo step per replacement
+action. Formula columns retain their existing replacement protection. Search, invalid input, Close
+and Escape create no document edit. Case and whole-cell String behavior remains available; old
+substring UI regressions explicitly select String now that Numeric is the initial mode.
+Four new UI regressions and four parser/matching fixtures cover these behaviors. `--show find` and
+`--show replace` support native screenshots.
+
+The selected-range follow-up uses `re-workspace/scratch/t02-find-selection/verified/` and
+`bounds/`: all eleven corrected GUI cases have successful setup/command results. The initial
+six cases had no workbook and are excluded. A B2:B3 selection shows **Find/Replace in selected
+range**, initially checked, immediately below Skip linked cells. Finding 6 and then 5 stays
+inside B2:B3; replacing 5 with 9 changes B2 and leaves the equal cells in C alone. Unchecking
+the option lets Find Next reach C1. After that unrestricted hit collapses the range, Origin
+hides the option. Unchecking and rechecking before searching retains the original range.
+Unchecked Replace All covers the sheet without collapsing the selection, and the option stays
+visible. Whole-column and row-header selections offer it, including a column with one populated
+value and a single whole row; a single selected data cell does not. The final fresh-range probe
+explicitly restores the checked setting; its control dump and action log confirm it.
+
+Sheaf snapshots the opening columns and rows, offering that checked scope for blocks, columns,
+rows and Select All. Numeric and String searches (including backward search and wildcards),
+single replacement and Replace All respect it. Clearing numeric nonmatches also stays inside
+the range. Finding a cell moves Sheaf's worksheet selection to that hit; the saved search range
+survives until a successful unchecked search, which hides the option. Origin instead retains
+the visible selected rectangle while showing a restricted hit. Four additional UI regressions
+and one matching fixture cover range retention, option visibility, both replacement paths,
+unchanged search history, undo, noncontiguous columns and conditional missing values.
+
+Remaining: searches still cover active-sheet data only. The wider Look in scopes, label rows,
+individual cell links, saved dialog history/settings and the query's
+triangle menu are not implemented. Look in and Include label rows are disabled; Skip linked cells
+is fixed checked because individual links are not modeled. The worksheet's normal formula-column
+protection remains in force independently. These gaps keep the parity row partial.
+
+### Go To (2026-11-14)
+
+Origin 2016's `dlgRowColGoto -d;` opens **Go To: dlgRowColGoto**. The clear screenshot and control
+dump in `re-workspace/scratch/t02-go-to/explicit-dialog/` show size/current-selection information,
+a zero/end hint, **Go to Column**, **Go to Row**, **Extend Selection** (unchecked), then OK/Cancel.
+Both input fields start blank, with the caret in Column. The worksheet chooser is hidden. The
+column input has a picker button. Direct `dlgRowColGoto;` does not
+open a window, and the separate shortcut-capture attempt found no dialog; neither is UI evidence.
+The [published shortcut reference](https://docs.originlab.com/origin-help/hotkey-in-origin/)
+identifies this function as the workbook Ctrl+G command.
+
+Headless synthetic probes (`selection*.lines.txt` / `.out.txt` in the same scratch directory)
+read `wks.c1/c2/r1/r2/sel` after calling the function:
+
+| Initial selection | Input (1-based) | Result |
+|---|---|---|
+| C7 | row 10, column 2 | B10 |
+| C7 | row 10 only | C10 |
+| C7 | column 2 only | B7 |
+| B2:C4 | row 10 only | B10:C10 |
+| B2:C4 | column 4 only | D2:D4 |
+| B2:C4 | row 10, column 4, extend | B2:D10 |
+| B2:C4 | row 1, column 1, extend | A1:C4 |
+| B2:D10 | row 4, column 3, extend | B2:C4 |
+| B2:C4 | row 10 only, extend | B2:C10 |
+| B2:C4 | column 4 only, extend | B2:D4 |
+
+An omitted coordinate keeps that whole axis of the selection. For an entered coordinate with
+Extend enabled, the fixed edge is the previous far edge when the target is before the region;
+otherwise it is the first edge. Thus moving inside the region can shrink it. Row-header selections
+become cell ranges over all columns; column-only movement of whole columns retains whole-column
+selection. On a sheet allocated 100 rows with four populated rows, row 1000 clamps to 100 without
+growing the allocation. Row 0 and column 0 select the last **data** row and last column (D4 here),
+not row 100. An unequal-length control (B has two values, C six, D three) shows row 0 goes to B2
+when column 2 is entered or the current column is B, and to D3 when column 0 is entered. Omitting
+the column for a B:C cell range or whole-column selection also uses B's data end, keeping both
+columns selected. Thus the explicit destination column, or the first selected column, determines
+the end; the worksheet-wide maximum does not. Column 999 is refused, leaving C7 untouched. The headless column-name string goes
+through integer conversion, so no GUI name-resolution rule is inferred from that diagnostic.
+
+The follow-up UI captures in `re-workspace/scratch/t02-go-to-picker/` set the actual Column and
+Row edit controls, then click OK (each command returned true). On a four-column sheet with long
+names Time, Shared current, Potential, Shared current, column `b` and row 10 select B10;
+`Potential` and `potential` both select C10; `Shared current` selects the first duplicate, B10.
+The flyout capture lists A(X): Time, B(Y): Shared current, C(Y): Potential and D(Y): Shared current,
+followed by Reset and Select Columns. These captures, rather than numeric X-Function argument
+conversion, establish the tested short-name, ASCII case and duplicate-long-name behavior.
+The verified menu batch chooses D and row 0, reaching D3 despite B having the same long name;
+the native picker fills the Column field with `D"Shared current"`. Reset clears an entered B
+without clearing row 10, so OK reaches C10 from C7. Escape closes the flyout first and leaves
+the Go To dialog open. The earlier all-black choose/reset images are excluded as visual evidence;
+the clear `verified-menu/` captures and post-OK coordinates supersede them.
+Select Columns opens a separate Column Browser, defaulting to Current Sheet and offering project,
+folder, recursive folder and book scopes, a column table and Add/Remove controls. That general
+browser is now available from Sheaf's Go To flyout (follow-up below).
+
+The Column Browser follow-up (`re-workspace/scratch/t02-column-browser/verified/` and
+`followup/`) uses eight isolated Origin 2016 instances, each with explicit input-field resets.
+The initial exploratory batch targeted the hint fields rather than Column/Row; its destination
+coordinates are excluded. The browser's upper table lists sheet, book long/short names, index,
+column short/long names, comments, format, size and first value. Add puts a qualified column
+reference into the lower Range/Rows table, initially `[1:end]`; Remove deletes the selected
+lower range. OK transfers the reference to the parent field without navigating. The parent OK
+performs the navigation. Browser Cancel preserves the parent's typed column and row.
+
+| Browser probe, original columns A/B/C/D ending at rows 4/2/6/3 | Observed Go To result |
+|---|---|
+| Add D with duplicate long name, parent Row 0 | qualified D reference; D3 on parent OK |
+| Add B, parent Row 0 | B2 |
+| Add A then C, parent Row 10 | parenthesized qualified list; D10, the original sheet's last column |
+| Add A then C, remove A, parent Row 0 | qualified C reference; C6 |
+| Add another book's B (five populated rows), parent Row 0 | original book's B2, not the other book's row 5 |
+| Type B/10, add D, cancel browser, then parent OK | B10 |
+
+Thus Go To uses the chosen column's position in its original worksheet; choosing a column from
+another book does not activate that book. Several added columns behave as the last column in
+this Origin version. Sheaf copies both observed rules, including the qualified display string.
+Editing the column field, picking a normal flyout item or Reset discards the browser choice;
+Reset still preserves Row. The five scope labels are Current Project, Current Folder, Current
+Folder (recursive), Current Book and Current Sheet. Scope can persist in Origin across temporary
+instances: the final restore explicitly selects Current Sheet, with its control dump retained.
+Cancelled Go To commands return false even though the browser was successfully captured.
+
+Sheaf lists the current project's column metadata and filters these scopes without changing
+workbook data, folder contents or activation. Folder scopes use the original workbook's folder;
+unlisted windows belong to root. Added ranges survive scope changes. The browser starts at
+Current Sheet each time; preferences are not saved. The parent remains open on browser Cancel
+or Escape. Five UI regressions cover return/apply, cross-book position mapping, Cancel/Escape,
+multiple ranges/Remove and edited/reset references. A fixture covers sheet/book/folder/recursive
+scopes, including unlisted root books. Exclude is covered by the later follow-up below.
+
+The top-table selection follow-up (`re-workspace/scratch/t02-browser-selection/origin/` and
+`verified/`) has nine valid isolated Origin cases, including a final Current Sheet restore.
+Shift+Down extends B through D; ordinary Add appends B, C and D as three lower rows.
+Add as One Block instead appends one `[Book1]Sheet1!B"Shared current":D"Shared current"`
+range. Ctrl-selected adjacent B/C can form a block; noncontiguous A/C and a range crossing
+workbooks disable block add. Ctrl+A selects all four columns and can add one A:D block.
+Remove deletes the entire selected lower block; an empty list disables OK. A B:C block plus
+a separately added D remains two lower rows and transfers a parenthesized `(B:C,D)` reference;
+parent OK with Row 0 still selects original D3, including for B:C alone. Quoted long names
+remain on each endpoint. The initial noncontiguous case's programmatic click bypassed the
+disabled block button, so its activation/result are excluded; later probes check native
+enablement and skip disabled buttons. One composite capture failed to open the browser and
+is excluded; its fresh-instance retry supplies the valid block-plus-singleton observation.
+
+Sheaf now supports plain, Ctrl/Command and Shift row clicks, Shift+Up/Down and select-all
+while the top table has focus. Add preserves selected columns in table order; block add
+requires consecutive columns in one worksheet. Blocks remain single lower rows for Remove
+and reference transfer. Scope changes clear the top selection and preserve added ranges.
+Five additional UI regressions cover contiguous and noncontiguous selection, adjacent Ctrl
+selection, disabled block controls, select-all/group removal, mixed-workbook ranges, scope
+changes and block/list transfer. Navigation still waits for the parent, preserving data/history.
+
+The lower row-range follow-up (`re-workspace/scratch/t02-browser-rows/`) opens the ellipsis
+in a lower Rows cell. Origin 2016 shows a separate Range dialog, with Entire Column(s)
+checked and From/To disabled. In the synthetic sheet whose A/B/C/D columns end at 4/2/6/3,
+the defaults are 1 and 6, and the displayed bound is 1 through 6, including when B is selected.
+The upper bound follows the sheet's data end, rather than the selected column's end or its
+100 allocated view rows. The published [input-data guide](https://docs.originlab.com/origin-help/analydialog-specifyinput/)
+also describes row subsets; the installed-version captures establish the details here.
+
+| Native row-editor case | Observed result |
+|---|---|
+| C From 2, To 4 | lower rows `[2:4]`, qualified C reference with `[2:4]` suffix; parent Row 0 still C6 |
+| B From 3, To 6, although B has two values | accepted `[3:6]`; parent Row 0 still B2 |
+| C From 4, To 2 | accepted literal `[4:2]`, without sorting or an ordering error |
+| Enter 2/4, then Cancel | original entire-column range remains |
+| Save 2/4, reopen, select Entire Column(s), reopen | suffix removed, `[1:end]` restored, disabled From/To reset to 1/6 |
+| From or To 0, To 7, or nonnumeric `abc` | refused; Range remains open with the existing lower range unchanged |
+| Numeric edits `1.5`, `2.9`, `6.9`, `2+1`, `2abc`, `2e1` | leading integers 1, 2, 6, 2, 2, 2; bounds checked after conversion, no arithmetic/exponent evaluation |
+| B:D block, From 2, To 4 | endpoint reference `B"Shared current"[2]:D"Shared current"[4]`; parent Row 0 still D3 |
+| C From 2, To 2 | explicit `[2:2]` interval retained |
+| Empty four-column sheet | disabled From 1/To 0; Enter accepts Entire Column(s), with no row suffix |
+
+Row bounds belong to each added range. The child editor leaves the browser and Go To open,
+and accepting it changes only the browser's range; navigation still waits for the parent OK.
+Cancel and Escape discard the child's pending bounds, preserving the saved range. Selecting
+Entire Column(s) removes the suffix rather than storing an explicit full-length subset.
+The measurements comprise five isolated instances and two sweeps with a fresh synthetic project
+per case: 18 valid cases. The first empty-sheet attempt used two columns, which shortened the
+parent flyout and caused the fixed menu click to miss the browser; that case is excluded and
+replaced by the four-column capture. Scope is explicitly restored to Current Sheet.
+
+Sheaf uses the measured sheet bound and leading-integer conversion, retains reversed and
+single-row intervals, and refuses invalid bounds without closing the child. A block's row subset
+stays attached to its added range when another lower row is removed. Enter accepts the default
+without toggling Entire Column(s), and respects a focused Cancel button. Ten additional UI
+regressions cover row transfer/end mapping, sheet bounds, reversed and numeric inputs, refusal,
+Cancel/Escape/reopening, whole-column reset, empty columns, keyboard focus and block association.
+Saved preferences remain open; these row choices stay local
+to the open dialog and create no document edit or undo entry.
+
+The Exclude follow-up (`re-workspace/scratch/t02-browser-exclude/`, `verified/`) records ten
+valid isolated Origin 2016 cases on the same four-column fixture. Exclude starts disabled with
+no upper selection. It removes only selected entries from the upper list: excluding B retains
+the distinct D with the same long name and selects C, whose displayed index remains 3. Excluding
+the final D also selects C. For Ctrl-selected A and C, both click orders remove A/C and select B.
+Selection therefore follows the first removed list position, clamped to the final remaining row.
+Excluding every column leaves the table empty and Add/Exclude disabled. Changing scope restores
+all columns and clears the selection; cancelling and reopening the browser also restores them.
+
+An already-added B remains in the lower table after excluding upper B; browser OK transfers B,
+and parent Row 0 still reaches original B2. With B excluded, selecting visible A/C/D keeps Add as
+One Block disabled because the original worksheet columns are not consecutive. Ordinary Add
+still adds those three columns individually. All valid cases retain four worksheet columns and
+the original B/C values; Cancel preserves C7, while choosing the nearest C with parent Row 0
+reaches C6. The failed first follow-up batch left the browser open after an Escape sequence and
+ended at its own instance watchdog; it is excluded. The seven repeated cases use fresh instances
+and explicit Cancel buttons, and the final capture restores Current Sheet.
+
+Sheaf now implements these temporary exclusions, nearest-row selection, original column ordinals,
+scope/reopen reset and independent lower ranges. Seven UI regressions cover both single-row
+positions, duplicate names, both multi-selection orders, all-column removal, scope/reopen reset,
+already-added ranges and gapped block refusal, with unchanged project data and history.
+
+Sheaf's Go To now follows the measured input order/focus, right-aligned OK/Cancel and optional-coordinate, zero/end,
+extension and clamping behavior. Its capacity remains data length plus 30 spare view rows;
+there is no new stored worksheet row count. Short names and the first matching long name are
+accepted, ignoring ASCII case; numeric input keeps its index meaning. Rows use nonnegative 32-bit
+integer input; the exact native upper bound was not stress-tested. The size/current hint reports
+Sheaf's actual view and first selected coordinate. No project data or undo state is
+changed by navigation, empty OK, Cancel or Escape. A fresh reveal target clears stale cell
+geometry so the selected blank row can actually scroll into view. Explicit far-column jumps use
+the full horizontal distance rather than stopping after four viewport-sized steps; the column
+picker lists column names, designations and long names. Six navigation UI tests cover the
+measured axis/range cases, forward/backward/inside extension, capacity/end navigation, visibility,
+keyboard continuation, far-column jumps in both directions, invalid entries and cancel/history; parser fixtures include the 100-row,
+four-populated-row distinction and a new unequal-column end fixture. `--show go-to` supports native screenshots.
+
+### Window Switcher (T42)
+
+Origin facts (documentation, not measured here): 2025b adds Ctrl+Tab (forward) and Ctrl+Shift+Tab
+(backward) "to toggle child windows with preview" [W:originlab.com/2025b]. Pressing Ctrl and then
+Tab shows the Window Switcher; each Tab moves on until Ctrl is released; it shows thumbnails of
+all windows of the same folder, including floating and hidden windows; the selected window has a
+blue frame; arrow keys and a mouse click also select; clicking Ctrl alone closes it. LabTalk:
+`doc -nav` then Tab [W:origin-help/operate-childwindow-basic].
+
+Sheaf's choices (unmeasured, the documentation gives no order, Esc or sizes):
+
+- **Order:** most recently activated first (`Workspace::recent_order`; activation by click, menu,
+  Project Explorer, Go To, opening). So the first Ctrl+Tab selects the second card, the previous
+  window. A window that is closed or minimised drops to the end of the list (or behind the new
+  active window), so it is not "previous". Windows never activated follow in creation order.
+- **Keys:** Ctrl+Tab opens with the first card that is not the active window selected (the
+  second card when the active window is listed first, the first card when the Project Explorer's
+  folder does not hold the active window), Ctrl+Shift+Tab with the last. While
+  open: Tab / Shift+Tab and Left / Right move and wrap, Up / Down move by a row, Enter confirms,
+  Esc cancels, releasing Ctrl activates the selection (showing it if hidden), a click on a card
+  activates it, a click outside cancels. Ctrl+Tab is read before the grid, so it works while a
+  worksheet has the keyboard; plain Tab still moves the cell. Not opened while a dialog is open.
+  While it is open (also when opened from the menu) it is modal: every other key and text event
+  (Delete, letters, shortcuts, paste) is swallowed and never reaches the grid, the graph or the
+  shortcut table; only the Ctrl state is read to detect the release.
+- **macOS:** Ctrl is the physical Control key (Cmd+Tab belongs to the system); the Window menu
+  shows the shortcut as the Control symbol plus Tab. On Windows and Linux it is Ctrl+Tab.
+- **Windows listed:** all windows of the Project Explorer's selected folder (not subfolders),
+  hidden ones marked "(hidden)" and drawn paler. Sheaf has no floating windows. With 0 or 1
+  window Ctrl+Tab does nothing.
+- **Menu:** Window > Window Switcher opens it held open (no Ctrl to release): Tab / arrows move,
+  Enter or a click chooses, Esc closes.
+- **Look:** a dimmed backdrop and a centred panel of 168 x 134 pt cards (up to six per row),
+  each with a thumbnail, the window name and "Graph" or "Workbook"; the selected card has a 3 pt
+  blue frame. Graphs are rendered when the switcher opens at 148 x 98 pt (their own
+  `render_raster`, not the window cache, which is sized to the window and absent for closed
+  graphs) and the textures are dropped on close; at most 24 graphs per opening, the rest show the
+  type icon. Workbooks show a drawn miniature of the first four columns and five rows.
+  Nothing is redrawn per frame. `--show switcher` opens it for screenshots.
 
 ## 6. Mouse and keyboard summary
 

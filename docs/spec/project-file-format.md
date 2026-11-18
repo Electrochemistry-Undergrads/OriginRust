@@ -29,6 +29,13 @@ so the format version stays 1. The key tells Sheaf that it wrote the file itself
 is opened in place of the `.opj`, and only such a file is deleted when a later save to the `.opj`
 loses nothing. A project the user saved as `<name>.sheaf` never has the key and is never deleted.
 
+## Window files (optional manifest key)
+
+`manifest.json` may carry `"window": "workbook"` or `"graph"`. Sheaf sets it on the file that File > Save
+Window As writes (`.sheafbook`, `.sheafgraph`): the archive of a small project that holds one window (and,
+for a graph, the workbooks it reads). Such a file is never opened as a project (it is appended; see
+`window-files.md`). A reader that does not know the key ignores it, so the format version stays 1.
+
 ## Window places (optional key of `project.json`)
 
 `project.json` may carry `window_places`: a list, bottom of the stacking order first, of
@@ -56,6 +63,19 @@ companion gets the cascade.
 Write to a temporary file in the same folder, then rename it over the target, so a crash while
 saving never leaves a half-written project. JSON is pretty-printed (two-space indent) so that it is
 readable and diffs are small.
+
+## Projects without data (T77)
+
+File > Save Project without Data... and File > Duplicate Project without Data use `Project::without_data()`.
+Origin 2016 does not document the two items; the nearest documented feature is Clone Project
+(`clrAllData`, mode 0: clear all data, keep windows and operations). [W]
+(Origin help, X-Function `clrAllData`: https://www.originlab.com/doc/X-Function/ref/clrAllData) The rest is an UNMEASURED
+Sheaf choice. Kept: windows and places, names, column labels, units, designations, number formats,
+formulas, graphs. Removed: every value (a column keeps its storage kind), masks, cell notes, cell and
+conditional formats, row filters, analysis marks and links, report comparison sources.
+Save writes this copy to a file of the person's choice (`.opj` or `.sheaf`) and leaves the open
+project, its file name and its unsaved state alone. Duplicate asks about unsaved changes, then the
+copy replaces the open project as an unsaved UNTITLED project; the old file is not touched.
 
 ## Compatibility promise
 

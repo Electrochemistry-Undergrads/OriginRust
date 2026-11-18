@@ -87,7 +87,7 @@ How a Y column finds its X [W]:
 1. If the sheet has exactly one X column, that X is used for all Y columns on either side of it.
 2. If there are several X columns, each X covers the Y and Z columns to its right, up to the next X.
 3. In a non-adjacent selection, a selected X column is used; if none is selected, search to the left of the Y first, then to the right (Z only searches left).
-4. If there is no X column, the X values are the row index or the column's sampling interval (start value and step), P1.
+4. If there is no X column, the X values are the row index or the column's sampling interval (start value and step; section 13d). A column with an interval plots at it even when an X column stands to its left.
 5. X error columns associate with the nearest X on the left, else the right.
 
 The header shows the designation in parentheses after the short name, e.g. "A(X)", "B(Y)"; Disregard shows only the short name. Pattern shorthand for setting many columns: `XY` repeated, `3(XY)`; leftover columns become Y. [W] The default designation list in the import filters is "XY" (CSV) [F].
@@ -153,7 +153,13 @@ Runs went through `tools/origin-ref` (`run-labtalk-lines.ps1`) on inputs we made
   - The "Significant Digits=" mode of a plain Decimal:1000 column shows the same text without the letters (15 with 3 is `15.0`, 1100 with 3 is `1.10E+03`, 1000 with 3 is `1000`); Sheaf's `Significant` display (which drops trailing zeros and writes `1.23E3`) was not changed to this yet.
   Sheaf: `NumberFormat::EngineeringSi(d)` (and the older `Engineering(d)`, which now means the same), `EngineeringSig(n)` and `EngineeringAuto`; the Display list of Sheaf's dialog folds Origin's two lists into one. The scaling power of ten is parsed from its decimal representation, rather than computed with `powi`, so a value such as `1e-24` normalizes to exactly `1` and keeps the requested significant digits (`1e-24` with one digit, `1.0e-24` with two).
 - Switching Format between Numeric, Text and Text & Numeric converts the cells (`Column::convert_storage`): numbers become the text they show, text is read as numbers where it can be.
-- Column short name (measured in Origin 2026-11-13, Column Properties box and `wks.col1.name$` alike): at most 18 characters, a longer name is **cut to 18 without a message** (`abcdefghijklmnopqrstuvwxyz` becomes `abcdefghijklmnopqr`); letters, digits and dots stay and every other character (space, underscore, hyphen, slash, brackets, `%`, `#`, `$`, `@`, `*`, `,`, `:`) is dropped (`a b_c-d.e` becomes `abcd.e`); a first digit is allowed; a name that another column of the sheet has (any case) is refused and the column keeps its name. Sheaf: `column::clean_short_name`, used by the Column Properties dialog (it shows the cleaned name, and still says so when the name is empty or taken). The importer's rules for header cells are in import-ascii.md section 3. The 13-character limit of book short names is not enforced by any dialog yet.
+- Column short name (measured in Origin 2026-11-13, Column Properties box and `wks.col1.name$` alike): at most 18 characters, a longer name is **cut to 18 without a message** (`abcdefghijklmnopqrstuvwxyz` becomes `abcdefghijklmnopqr`); letters, digits and dots stay and every other character (space, underscore, hyphen, slash, brackets, `%`, `#`, `$`, `@`, `*`, `,`, `:`) is dropped (`a b_c-d.e` becomes `abcd.e`); a first digit is allowed; a name that another column of the sheet has (any case) is refused and the column keeps its name. Sheaf: `column::clean_short_name`, used by the Column Properties dialog (it shows the cleaned name, and still says so when the name is empty or taken). The importer's rules for header cells are in import-ascii.md section 3. Book short names (measured in Origin 2016 on 2026-11-15 with `win -r`, `re-workspace/scratch/bookname`): only ASCII
+letters and digits stay (space, `_`, `-`, `.`, `/`, `#`, brackets are dropped, so `a.b` becomes `ab`, unlike a column
+name), a name that is then empty or starts with a digit gets an `A` in front (`1abc` becomes `A1abc`, `___` becomes
+`A`), and the result is cut to 13 characters without a message (`12345678901234` becomes `A123456789012`). A name
+another window has brings up a message (not measured further). Sheaf: `project::clean_window_name` and
+`Project::rename_window` (refuses a name in use, any case, and changes `[Old]` in column formulas to the new name),
+used by the Short Name field of the window's Properties (rename) window; graphs follow the same rule (unmeasured).
 - `.opj` writer: display formats are not stored (it counts them in `formats_dropped`); the new formats are kept only in the `.opj.sheaf` companion / project file.
 - The calendar is the proleptic Gregorian one; no time zone, no leap seconds. Display rounds to the millisecond and then truncates to the unit shown, like Origin.
 - Typing a date or time into a date column sets the number; the formula engine sees plain numbers, so `col(A) - col(A)[1]` gives days (times 1440 for minutes). Origin's `date()` and `time()` functions are not in the expression language yet.
@@ -248,9 +254,9 @@ What Origin does, from its documentation and from black-box runs (a hidden Origi
 Sheaf's rules (the `RecalcMode` and `FormulaState` of a column; `Project::set_column_values_with`, `refresh_formulas`, `recalculate`, `recalculate_pending`, `recalculate_since`):
 
 1. A formula column stores its formula, its mode (None, Auto, Manual) and its row range (a column set on "all rows" has none and follows the length of its inputs). Projects without these keys load as mode None. The CH Instruments importer's `col*1000` formulas stay None: they are one-time values.
-2. Auto and Manual formulas read columns of the same sheet. The reads are found from the parsed formula (`Expr::columns`) and matched by short name, long name or position, exactly as evaluation matches them.
-3. Every change made through a `Document` edit (cell edit, import, analysis result, delete or rename of a column, set column values) is followed, inside the same undo step, by a pass over the sheets that hold Auto or Manual columns. The changed columns are found by comparing the project before and after (data, short name, long name). Undo and redo restore whole snapshots, so source and dependents come back together.
-4. The pass runs the formula columns in dependency order. An Auto column runs when one of its inputs changed or was itself just recalculated; a Manual column is marked Pending instead and keeps its values. The Recalculate command runs one column now, then the columns that read it.
+2. Auto and Manual formulas read local columns or explicit cross-sheet/book references such as `[Book1]Sheet2!col(A)` and `2!wcol(1)` (expression-language.md, Cross-sheet and cross-book columns). Reads are matched by short name, quoted long name or column position within the selected sheet. Workbook short names (preferred), unique display titles and sheet names ignore ASCII case; sheet positions are 1-based. Ambiguous book titles are refused. This qualified formula syntax is Sheaf's extension of Origin's documented range notation; installed Origin 2016 requires range variables.
+3. Every change made through a `Document` edit (cell edit, import, analysis result, delete or rename of a column, set column values) is followed, inside the same undo step, by a project-wide pass over Auto and Manual columns. Data, names, label metadata, display formats and parameter edits invalidate readers. Structural edits re-resolve references and invalidate changed bindings; unrelated new books do not mark Manual formulas pending. Undo and redo restore whole snapshots, so remote sources and their dependents come back together.
+4. The pass runs formula columns in dependency order across books and sheets. An Auto column runs when one of its inputs changed or was itself just recalculated; a Manual column is marked Pending instead and keeps its values. The Recalculate command runs one column now, then local and remote columns that read it.
 5. Only the rows of the stored range are written (default: as many rows as the longest input). Rows outside it keep their values.
 6. A formula that cannot run is marked Broken and keeps its old values: an input column was deleted or renamed, the formula text does not parse, the row limit is exceeded, or text sits outside the rows. It runs again on the next pass once the problem is gone (renaming the column back repairs it).
 7. Setting a formula that would close a loop through other recalculating columns is refused with a message naming the chain (`B -> C -> B`) and changes nothing. A formula that reads its own column runs once and the column becomes mode None, as in Origin. A loop that arrives some other way (a project file edited by hand) marks the columns in it Broken.
@@ -258,7 +264,9 @@ Sheaf's rules (the `RecalcMode` and `FormulaState` of a column; `Project::set_co
 9. The worksheet header shows a small word for these columns: `auto` or `manual` (green) when current, `pending` (yellow), `broken` (red). Origin draws a lock icon in those colours; the words are a stand-in until the Origin-style grid exists. The Set Column Values window has a Recalculate choice (None, Auto, Manual; it opens on Manual for a column without a recalculating formula, as Origin does) and the column menu has Recalculate.
 10. Speed: a cell edit with two chained Auto columns of 1,000,000 rows each took about 0.13 seconds in a debug build (including the undo bookkeeping), measured in `crates/core/tests/recalc.rs`.
 
-Not done: formulas that read other sheets or workbooks, recalculation of analysis and fit results from their source, `Before Formula` scripts, and a command-line option for the mode (the CLI has no Set Column Values command).
+Cross-sheet links and cycle checks, positional rebinding, removed sources, Undo/Redo and native/companion persistence have dedicated `cross_sheet_formulas` regressions. `.opj` recalculation records remain limited to same-sheet inputs; cross-sheet Auto/Manual mode survives in the companion, with the existing omission warning.
+
+Not done: recalculation of analysis and fit results from their source, `Before Formula` scripts, and a command-line option for the mode (the CLI has no Set Column Values command).
 
 ## 11. Built-in functions usable in column formulas
 
@@ -310,7 +318,33 @@ Sort Columns > Custom and the column-header context menu now open the existing n
 
 ### 13.1a Mask, measured with Origin (task T10)
 
-`wcellmask irng:=<range>` masks the cells of a range. `stats` on a column with one of five cells masked reports n = 4 (the masked value is left out). In a graph (line + symbol, five points, the third masked, exported to PNG) the masked point stays plotted: its symbol is drawn **red**, and so are the two line segments that meet at it. Sheaf: `Column::mask` (a set of rows), Column > Mask > Apply / Remove / Swap on the selected cells; analysis, statistics and fits read `Column::numeric_unmasked`; the mask moves with its rows in sorts, inserts and deletes; the plot draws masked points red (`draw_masked`). Not done: Change Color, Disable Masking, Mask Cells by Condition, masking from the graph, the `.opj` reader (it skips masks) and the writer (it names masked columns in the save warnings). The worksheet shows a masked cell with red text on a light red fill; Origin's own cell colour was not measured.
+`wcellmask irng:=<range>` masks the cells of a range. `stats` on a column with one of five cells masked reports n = 4 (the masked value is left out). In a graph (line + symbol, five points, the third masked, exported to PNG) the masked point stays plotted: its symbol is drawn **red**, and so are the two line segments that meet at it. Sheaf: `Column::mask` (a set of rows), Column > Mask > Apply / Remove / Swap on the selected cells; analysis, statistics and fits read `Column::numeric_unmasked`; the mask moves with its rows in sorts, inserts and deletes; the plot draws masked points red (`draw_masked`). Masking from the graph: Data > Mask Data Points (graphing.md 20, T48). The `.opj` reader and writer keep masks since 2026-11-15 (opj-format 3.2); the mask colour, Disable Masking and Hide Masked Points are not in the file (Origin keeps them as settings).
+
+**Change Color, Disable Masking, Mask Cells by Condition (measured 2026-11-15, Origin 2016, `re-workspace/scratch/t10m`):**
+- Column > Mask holds Apply, Remove, Swap, Change Color and Disable Masking; Mask Cells by Condition... is its own item
+  after the Mask submenu. Change Color has no dialog: each use moves the mask colour, a global setting (`@MC`, 1 at
+  first), to the next entry of the colour list and wraps after index 23 back to 1, so black (0) never comes up
+  (Origin's own menu script). Exported graphs with `@MC` = 1, 2, 3, 4, 5 drew the masked symbol and its two segments
+  red, green, blue, cyan and magenta: the indices of the colour list (graphing 1.5).
+- Disable Masking is a global switch (`@MM`); the menu then reads Enable Masking. With it on, `stats` counts the masked
+  cell (n 5 instead of 4) and the graph draws the masked point as an ordinary black point; the mask itself stays.
+- Mask Cells by Condition... is `colmask` (inputs `irng`, `cond`, `nSD`, `val`, `abs`, `keep`). Dialog: Input,
+  Condition (Outliers by Std. Deviation, >, >=, <, <=, =; the first by default), Multiple of SD (1 to 6, default 1),
+  for the other conditions Value and Use Absolute Values to Test, and Keep Existing Mask (off). 46 runs on our data:
+  the outlier test masks `|y - mean| > k s` with the sample standard deviation (divisor n - 1) of all the numbers
+  (one set separates n - 1 from n; `>=` fits as well); `cond` 1 to 5 are the five comparisons in the dialog's order;
+  with Use Absolute Values `|y|` is compared with `|value|` (`|y| > -1` leaves 0 and 1 unmasked); without Keep Existing
+  Mask the column's old mask is replaced, with it the new cells are added.
+Sheaf: `Project::mask_color` (saved with the project, Origin keeps it as a setting) and `cycle_mask_color`; Disable
+Masking is one project switch (`Project::set_masking_disabled`) copied into every column after each edit, so columns
+made later follow it (`Column::active_mask` is what analysis, plots, the categorical tools and conditional formatting
+read); `sheetops::MaskCondition` and `Worksheet::mask_by_condition`. The worksheet still shows
+masked cells in its mask colours while masking is disabled (Origin's sheet colours were not measured).
+- Hide masked points (Origin's Mask toolbar switch `@MP`, measured 2026-11-15 with the same graph): the masked point
+  and the two segments that meet at it disappear, leaving a gap as for a missing value; the axis range stayed as it
+  was (the axes were not rescaled in that run). Sheaf: `Project::hide_masked`, Column > Mask > Hide Masked Points
+  (Show Masked Points while on; Sheaf has no Mask toolbar, so the switch sits in this submenu); graphs treat hidden
+  masked rows as missing values, analysis is unchanged. The worksheet shows a masked cell with red text on a light red fill; Origin's own cell colour was not measured.
 
 ### 13.2 Worksheet operations in Sheaf (T10)
 
@@ -367,6 +401,17 @@ The cell editors retain Tab themselves so egui's widget-focus traversal cannot s
 focus after committing. Each new edit uses a fresh editor state with the cursor after the initial
 typed text, including Unicode; stale cursor positions must not turn typing `a`, then `b`, into
 `ba`. Navigation within an ongoing edit retains its normal cursor/selection state.
+Filtered-table keyboard follow-up (2026-11-14): arrows, Home/End, Page Up/Down,
+Enter/Tab and leaving an edit skip filter-hidden rows and hidden columns. Ctrl+Down/End
+search within the target column's data before falling back to the current visible cell;
+spare entry rows remain reachable. Enter/Tab and their Shift versions walk only visible
+cells within a selected block, retaining source row numbers and wrapping in the existing
+row/column order. Go to and leaving the last label row also land on visible cells. A filter
+that hides the active cell moves it to a visible cell within the selection or to the next
+visible entry row; an editor that becomes hidden is cancelled. New/imported-table UI
+regressions verify movement, edit commits, block traversal and unchanged hidden values.
+This is Sheaf keyboard consistency, not a new Origin shortcut/default measurement.
+
 This selection behavior follows the owner's report, not a new measurement of Origin.
 
 ### 13.4 Clipboard text preservation (T07, 2026-11-14)
@@ -379,11 +424,595 @@ remain plain table rows when pasted into data cells. Direct label-cell copy/past
 
 Paste accepts tab-separated or comma-separated external text, choosing tabs outside quoted fields
 first. Quoted single fields and multiline fields are supported; quotes within ordinary text or
-without a complete quoted field stay literal. Numeric precision, missing-value handling and type
-inference are unchanged. Core round-trip tests and UI tests on both new and imported tables cover
+without a complete quoted field stay literal. Core round-trip tests and UI tests on both new and imported tables cover
 field boundaries, Unicode, Copy/Cut, Paste, and Undo/Redo. These are Sheaf data-preservation rules;
-Origin's clipboard quoting and precision defaults have not been measured, and cross-application
-clipboard behavior remains unverified.
+The Origin 2016 measurements and remaining transport differences are recorded below.
+
+### 13.4a Origin 2016 clipboard defaults (T07 follow-up, 2026-11-14)
+
+Measured through COM under `Global\SheafOriginReference`, using synthetic columns and the real
+Copy menu commands (57634, full precision 38798, including labels 38799, labels only 38801,
+formula only 38800). Raw scripts, `.tsv` clipboard text and JSON are local-only in
+`re-workspace/scratch/t07-origin-copy-defaults/`; `probe3.log` includes a formula created by
+`csetvalue`, not merely assigned data. Only text owned by the temporary Origin process was
+recorded. Clipboard data was retained in memory for restoration, and no project was saved.
+
+- **Copy:** displayed digits. With default General and a Decimal column (`format=1`,
+  `subformat=1`, `digitMode=1`, `digits=2`), 1.2345678901234567 copied as `1.23457` and
+  2.345678901234567 as `2.35`. Numeric missing cells copied as `--`, while empty cells of a
+  Text column copied as empty fields. Cell-range and whole-column copies produced the same text.
+- **Full precision:** 15 significant digits, including `1.23456789012346`, `123456789.123457`,
+  `1.23456789012346E-8` and `0.3` for the stored input 0.30000000000000004. Missing numeric
+  values still copied as `--`. The existing export formatter matches these measured values.
+- **Including labels:** Long Name, Units, Comments, **F(x)**, user parameters, then data. The
+  F(x) row was present even when empty; with the real formula `i*2`, its fourth-row cell
+  contained that formula. Parameters Temperature then Sample followed creation order. Label-only
+  and formula-only menu commands independently confirmed those rows.
+- **Transport:** tabs separate columns; CRLF separates rows; there is no final line terminator.
+  A comma within a Text cell was unquoted. `@CWACC` and `@PLO` both started at 0 in this
+  instance; changing `@PLO` to 1 did not change the tested 2016 output. No rule for other
+  versions or configurations is inferred.
+
+**Sheaf fixes:** Copy/Cut now represent stored missing Numeric and Text & Numeric cells with
+`--` (empty text remains empty), and Copy including label rows retains the empty F(x) row.
+Core Origin regressions and UI tests on both new/imported worksheets cover these changes and
+numeric paste/Undo. Parameter rows retain Sheaf's displayed alphabetical order (the existing
+model decision); missing cells beyond the stored column length retain their existing empty-field
+behavior because that case was not measured independently.
+
+**Transport:** Windows now has separate external text and private lossless data (13.4b).
+Other platforms retain the existing lossless text fallback; parameter order and quoting remain
+explicit differences. The published
+[Origin precision reference](https://docs.originlab.com/quick-help/full-precision-copy/)
+describes full-precision worksheet-to-worksheet copying even when external text uses displayed
+digits. The current
+[copying reference](https://docs.originlab.com/origin-help/copypaste-wks-data/)
+describes a newer label-selection default, which is not substituted for the measured 2016 result.
+
+### 13.4b Windows worksheet clipboard formats (T07)
+
+On Windows, worksheet Copy/Cut publish Unicode text using the current displayed number format;
+Copy Full Precision publishes 15 significant digits. Both use tabs and CRLF without a final
+newline. Copy including label rows uses displayed data and the rows measured above. Ctrl+Alt+C
+and Ctrl+Shift+C keep their precision/label behavior when the native window bridge sends a Copy
+event instead of a key event. Origin's `@CWACC` preference is not imported.
+
+The same clipboard transaction publishes `OriginRust.Sheaf.Worksheet.v1`, a private lossless
+table. A receiving Sheaf instance reads both forms under one clipboard lock, verifies that the
+private external text exactly matches the actual Unicode clipboard contents, and uses the full
+data for worksheet paste. The incoming paste event may contain the raw text or the window
+bridge's one-pass CRLF-to-LF normalization. Literal CR-CR-LF sequences and final-newline differences
+are preserved/checked. A changed clipboard, absent/private-invalid data or an external text-only
+copy uses the incoming text. The format is independent of project/column identifiers and remains
+readable after the writing process exits. Label-cell and text-editor copies remain plain text.
+
+The private bytes are `SHEAFWK1`, two little-endian u64 UTF-8 byte lengths (external then full
+table), and those UTF-8 strings. Length arithmetic, version and UTF-8 are checked; padding after
+the declared data is ignored. The total private payload is capped at 128 MiB. If native writing
+or payload allocation fails, or on non-Windows systems, Copy keeps the existing lossless text
+fallback. Graph Copy Page continues using its bitmap/metafile adapter.
+
+An empty external text cell uses one LF so that the window bridge emits a paste event; its
+private data contains an explicitly quoted empty cell, so pasting clears a destination cell.
+Trailing empty single-column text rows are likewise quoted internally. Copy remains a read-only
+project action; paste and cut retain their existing Undo/Redo boundaries.
+
+Validation: Origin fixtures cover displayed and 15-digit text; core tests cover empty text rows;
+pure payload tests cover versions, lengths, Unicode and event normalization; UI tests cover both
+new/imported tables, exact numeric bits, modifiers, labels, empty cells, Cut/Paste and Undo.
+The manual example `cargo run -p sheaf-app --example worksheet_clipboard_probe` verifies the real
+Windows formats. A second `read` process recovered exact data after the writer exited, and an
+`external` process verified that replacing the clipboard with the same Unicode-only text removes
+the private data. The local scratch wrapper preserved/restored the prior clipboard data object.
+
+Remaining differences: other platforms use the fallback; quoting protects separators rather than
+matching Origin's unquoted commas; parameter rows follow the current alphabetical display order;
+number display details remain those of the column formatter. Formatted/OLE tables, links and
+automatic label detection on paste are separate features.
+
+### 13.4c Edit > Copy variants (T88, measured 2026-11-16, Origin 2016)
+
+The workbook's Edit > Copy submenu (Origin 2016: Copy Ctrl+C, Copy (full precision) Ctrl+Alt+C, Copy
+(including label rows) Ctrl+Shift+C, Copy (formula) Ctrl+J, Copy (label rows) Ctrl+Shift+J, Copy (formula
+and label rows) Ctrl+Alt+J, Copy All Ctrl+Shift+A). Measured by pressing the keys with whole columns
+selected and reading the clipboard (`tools/origin-ref/origin-dialog.ps1 -NoDialog` with `@KEY` and
+`@CLIP`, `re-workspace/scratch/t88`, local only; fixture in `crates/core/src/clipboard.rs`). Columns B
+(Long Name Bee, Units mA, Comments note, no formula; 10 20 30) and C (Long Name Double, F(x) `col(B)*2`;
+20 40 60); rows end in CRLF, no line break after the last:
+
+| Item | Text | Sheaf |
+|---|---|---|
+| Copy (formula) | a tab, then `col(B)*2` (the F(x)= row) | `CopyPart::Formula` |
+| Copy (label rows) | Long Name, Units, Comments, then F(x)= | `CopyPart::LabelRows` (then the user parameter rows) |
+| Copy (formula and label rows) | F(x)= first, then Long Name, Units, Comments | `CopyPart::FormulaAndLabels` |
+| Copy All | F(x)=, Long Name, Units, Comments, then the values | `CopyPart::All` (of the selected columns) |
+| Copy (including label rows) | Long Name, Units, Comments, F(x)=, then the values | unchanged (13.4) |
+
+- With a block of cells selected, Origin greys the four (and Copy (including label rows)); with whole
+  columns they are enabled. Sheaf refuses the four unless whole columns or the whole sheet are selected
+  ("Select whole columns first"); Copy including label rows stays enabled for a block, as before.
+- Keys: Ctrl+J is Copy formula in a workbook and Copy Page in a graph (the key goes to the command that can
+  run, as Ctrl+G); Ctrl+Alt+J and Ctrl+Shift+A as Origin. Ctrl+Shift+J stays View > Full Screen in Sheaf,
+  so Copy label rows has no key (which one Origin runs in a workbook was not checked).
+- Where the user parameter rows go in Origin's text was not measured (Sheaf puts them after the other
+  label rows, as Copy including label rows does).
+
+## 13b. Cell formats (T59)
+
+Manual formatting of data cells and label cells: bold, italic, underline, font, size, text colour,
+fill colour, horizontal alignment (`crates/core/src/cellformat.rs`, `Worksheet.cell_formats`).
+Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on Windows
+(2026-11-15, GUI 3 Cell formatting). The model rules, dialog scope, conditional precedence and
+`.opj` storage below remain Sheaf's choices unless explicitly stated otherwise.
+
+- **Storage.** An ordered list of ranges. A range is column ids plus either a data-row span
+  (first row, optional last row; no last row runs to the end of the data and beyond) or label rows
+  (long name, units, comments, F(x)=, a parameter), and a style whose unset properties change
+  nothing. Whole-column formatting has no row span: one record however many rows. Empty lists are
+  not saved; old files load without formats.
+- **Overlap.** Later ranges win property by property. A transparent colour means "no fill" or
+  "default text colour", an empty font name "default font", size 0 "default size" and alignment
+  Auto "left for text, right for numbers"; each lets a later range undo an earlier one.
+- **Applying.** Appends a range, merging into the last one when it has the same target, or the
+  same style on the same rows of other columns or on touching row spans of the same columns.
+  Earlier ranges wholly inside the new one lose the properties it sets.
+- **Clear Formats** cuts ranges over the selected cells (data cells and label cells are separate
+  targets). Selections: a block that runs to the last data row is open-ended; columns, rows and
+  the whole sheet are cells of those columns/rows; a row filter does not matter (hidden rows in
+  the span are formatted too).
+- **Toolbar/keys.** Underline and fill use the existing range fields. Origin 2016 measurements
+  (GUI 3, 2026-11-16) confirm per-cell U and Ctrl+B/I/U, Fill Color/None, and data-only whole-column
+  underline distinct from label underline. Sheaf uses one Undo per key or palette change, leaves
+  source columns/formulas alone and rejects stale requests and effective no-ops.
+- **Custom toolbar colours.** Worksheet text/fill Custom... accepts opaque RGB bytes, with a
+  preview and explicit OK/Enter or Cancel/Escape. GUI 3 records the native chooser and target
+  measurements. This one-off dialog starts at the current manual colour (white for no fill),
+  a Sheaf policy; drafts do not mutate the project. Existing range/request fields preserve
+  independent labels/data, compact whole columns, other styles and `.sheaf`/companion saves.
+  Stale selection/generation/revision and effective no-ops create no history entry.
+- **Reusable custom wells.** The toolbar's numeric text/fill chooser and Format Cells
+  share the graph/editor profile pool (graphing7.12; GUI3). Add saves only a present
+  opaque draft colour; a stored choice seeds the numeric toolbar draft or optional
+  dialog colour. Existing OK/Apply commits formats; Cancel discards uncommitted
+  changes while retaining preferences. Removing a well changes no draft or applied
+  format. Existing range/label/whole-column/history/stale and save/export paths
+  remain unchanged. This is a documented reusable-chooser contract with explicit
+  Sheaf menu/profile policies, not a new Native2016 measurement. No model fields
+  or project palette are added; unused wells stay profile-only.
+- **Classic presets.** The worksheet Font Color and Fill Color menus include all 24 native
+  Classic RGB colours (GUI 3, measurements 2026-11-16). The additional 16 names are grouped in a
+  submenu, a Sheaf UI choice. They reuse the same captured range changes and persistence as
+  basic/custom colours, including stale-target rejection and independent data/label styles.
+- **Dialog scope.** Set Data Style > More... reuses the selected-range Format Cells window.
+  Origin 2016 has no Default data-style command; Rich Text/Wrap Text/Float remain separate,
+  unsupported text controls (B5). Its Worksheet Properties Format tab instead has category
+  defaults (Data > Standard, plus headers and label categories). F4 now opens a separate
+  category-font dialog with Data family/size and Long Name/Units/Comments sizes (GUI 3,
+  measurements 2026-11-16). Other categories remain disabled.
+- **Data font defaults.** Optional `Worksheet.font_defaults.data` holds a family/point size;
+  old files omit the empty field. Resolution fills missing manual family/size from that default,
+  preserving every other manual/conditional property and keeping labels independent. One sparse
+  setting reaches future columns and arbitrarily remote rows without per-cell records. Clone,
+  duplicate and project/companion save carry it with the worksheet. The existing batch ReplaceSheet
+  path starts with default formatting, matching its existing range-format reset policy. The grid
+  cache includes defaults even when no manual ranges exist. Print/image and Excel reuse effective
+  style resolution. `.opj` warns and requires its full `.sheaf` companion for these fonts.
+  Excel writes current values and blank cells inside the used rectangle; it cannot retain Sheaf's
+  future-cell inheritance, and import still does not read cell styles. Category labels, Standard/
+  header defaults and persistent row-height changes remain outside this slice.
+- **Label size defaults.** Optional `font_defaults.long_name_size_pt`, `units_size_pt` and
+  `comments_size_pt` store independent sparse point sizes below manual label ranges. Old sheets
+  retain their serialized shape. Each setting covers existing and future columns without
+  per-column records, leaves data and unsupported formula/parameter categories independent,
+  and uses the existing 4..96 pt bounds. The F4 dialog keeps category drafts and commits all
+  changed categories in one Undo; Cancel/Escape discard unapplied drafts. These draft rules
+  and retained manual-label precedence are Sheaf policy, not measured Native parity. Native
+  category sizes/new columns and specific-over-bulk priority were measured (GUI3); family and
+  manual-label precedence remain open. Print/image/grid use existing effective label resolution
+  and derived geometry; empty printed labels remain under T27's existing omission policy.
+  Project and OPJ-companion saves preserve the fields; unsupported native OPJ formatting warns.
+  Excel writes effective sizes only for exported label rows, reports omitted category styles,
+  and leaves data blanks unstyled when only label defaults exist. Future Excel label inheritance
+  is not preserved. Bulk/Standard/header defaults remain disabled.
+- **Label family defaults (documented contract).** Optional `long_name_family`, `units_family`
+  and `comments_family` strings extend the existing `font_defaults` object without changing
+  its point-size fields. A missing family uses the existing automatic Arial face. Family-only
+  edits do not invent size overrides; clearing Automatic removes only the family field. Named
+  manual label faces and sizes retain independent precedence. Unknown installed faces use the
+  same renderer fallback as Data. Existing/future columns, cloning, native project and OPJ
+  companions retain these sparse category settings; `.opj` warns about unsupported formatting.
+  Excel writes effective families for requested label rows and warns when family-only labels
+  are omitted, leaving data cells/blanks independent. The F4 chooser reuses installed-font
+  search and retained category drafts. The official Format-tab manual supports the control
+  contract (GUI3); Native family mutation/future inheritance/manual/Automatic parity remains
+  unverified after excluded ineffective attempts and a later COM registration refusal. These
+  inheritance/reset rules are Sheaf policies. Data, unsupported categories and T27 extents stay
+  unchanged.
+- **Vertical alignment.** The 2016 selected-A1 Format Cells and Worksheet Properties Data
+  Format/Size probes (GUI 3, 2026-11-16) found no vertical text-alignment control in those
+  inspected routes. Other routes and mutation semantics remain unestablished; this probe
+  does not justify adding a new per-range field. Existing placement remains in use.
+  The documentation scope audit in GUI 3 distinguishes the later Data Info/tooltip
+  table controls from worksheet ranges; it does not supply the missing worksheet route.
+- **Conditional formats.** Conditional fill and text colour override manual ones; bold, italic,
+  underline, font, size and alignment stay manual.
+- **Maintenance.** Row insert/delete shift, grow, shrink or drop spans of the affected columns
+  (a range that covers other columns is split first). Sorts and other row permutations move
+  formats with their rows, like cell notes (whole-column formats are unchanged; rows an order
+  drops lose theirs, rows beyond the data stay). Column delete and analysis result retirement
+  drop ids; duplicate sheet/window and append rename ids. Undo and redo are ordinary document
+  steps. After a reorder, records with the same columns and style whose spans touch or overlap
+  are merged (a permutation of a fully formatted span is one record again; a partly formatted
+  column keeps one record per run of formatted rows). When ranges of different styles overlap,
+  only neighbouring records are merged so later-wins order holds. A row removal in place (filter)
+  puts an open-ended tail at the new row count, so rows appended later are covered as before.
+- **Lookup.** Drawing resolves cells through a per-revision index: per column a sorted list of
+  non-overlapping row stretches with their resolved style, found by binary search, so a lookup
+  costs O(log n) whatever the number of records.
+- **Size.** Font sizes are clamped to 4..96 pt (`clamp_cell_pt`) in the grid, print, PDF and
+  image export alike. Origin's measured default is Arial 9 pt. The grid converts points to
+  logical pixels by 4/3; print scales by its existing default font over 9 pt. Installed faces
+  and derived row geometry keep enlarged cells visible in grid/print/image output. Geometry
+  uses format intervals, not one record per data row. Derived heights can shrink with the font;
+  Origin retains enlarged row heights, which the current model cannot persist.
+- **Files.** `.sheaf` and the `.opj` companion keep everything. The `.opj` writer holds none and
+  warns ("N sheet(s) have cell formatting ..."). Excel export combines resolved manual styles
+  with each column's numeric/date/time code. Fonts use the worksheet default Arial 9 pt,
+  explicit sizes use the same 4..96 pt clamp, and bold/italic/underline, RGB text/fill and
+  horizontal alignment are retained. Number values stay numeric and mixed/text cells stay text;
+  pre-1900 dates retain the existing plain-number fallback and warning, with their cell style.
+  Long-name/units/comments styles follow the label rows actually requested by the export;
+  short names use the default style. Blank styled cells inside the existing data rectangle are
+  included. Open-ended ranges do not create extra rows; explicit formatting outside that rectangle
+  and omitted label-row formatting generate warnings. Future-cell styling is not exported.
+  Conditional colours use the existing effective precedence as a static snapshot, with a warning
+  that rules are not written. Transparent resets remain resets; partial alpha is written as
+  opaque RGB with a warning. These are Sheaf export choices, not new Origin measurements.
+  The Excel importer still reads data/column number formats rather than cell styles.
+
+## 13c. Fill Column With patterns (T74, measured 2026-11-15, Origin 2016)
+
+Column > Fill Column With (and the column header's Fill Column with) > A set of Numbers..., A set of
+Date/Time values..., Arbitrary set of Text&Numeric values... are Origin's X-Functions `patternN`,
+`patternD`, `patternT`. Measured by running them from LabTalk (`tools/origin-ref/run-labtalk-lines.ps1`,
+`re-workspace/scratch/t74/f1` and `f2`, local only) and copied in `sheaf_core::fill_pattern`
+(tests `crates/core/src/fill_pattern/tests.rs` hold the measured cases):
+
+- **Run**: from `from` toward `to` by `inc`, `to` included when a step lands on it (1 to 10 by 3 is 1, 4,
+  7, 10; 1 to 2 by 0.25 has five values). An increment that points away from `to` writes nothing (5 to 1
+  by 1), by -1 it counts down.
+- **Repeat mode**: each value `onerepeat` times in a row, the run `seqrepeat` times (1 to 3, 2 and 3 gives
+  1, 1, 2, 2, 3, 3 three times, 18 rows); the set size is not used.
+- **Random mode**: `size` values drawn from the run with replacement (1 to 4, size 7 gave 4 3 3 1 2 2 1).
+  Random dates have no size: they fill as many rows as the sheet has (9 there).
+- **Dates and times**: the unit is a fixed length: a week is 7 days, a **month 31 days** (Jan 31 by one
+  month: Jan 31, Mar 3, Apr 3, May 4, Jun 4) and a **year 365 days** (2024-01-01 plus a year is
+  2024-12-31); seconds, minutes and hours as fractions of a day. The column becomes a Date column (Origin
+  format 4) or, for times, a Time column (format 3); a text fill leaves Text & Numeric (format 7).
+- **Rows**: the fill writes from the first row; rows below it keep their values (1 to 3 into a column of 1
+  to 8 leaves 4 to 8). Sheaf also drops the column's formula, since the values no longer follow it.
+- **Text items**: separated by white space; double quotes keep an item with spaces together (the hint of
+  Origin's window, `Boston "New York" Chicago`; Origin's own quote handling could not be checked from a
+  script). A number item is stored as a number.
+- **Window** (Sheaf's layout, Origin's window not opened): From, To, Increment (with the unit list for dates;
+  Date or Time), Mode Repeat or Random, the repeat counts or the set size. Defaults as the X-Functions: 1 to
+  10 by 1, each once, the run once, a set of 10; dates from today for ten days by a day; times 00:00 to
+  12:00 by an hour. OK fills every selected column, one undo step ("Fill column"); a refused fill (no
+  value, no text item) keeps the window open with the reason.
+- Row Numbers, Uniform and Normal Random Numbers in the same submenu are T63 group H.
+
+## 13d. Sampling interval (T84, measured 2026-11-16, Origin 2016)
+
+Column > Set Sampling Interval... and Show X Column... (and the same two items of the column header's
+menu) are Origin's X-Functions `colint` (Initial X Value, default 1; X Increment, default 1; Units; Long
+Name) and `colshowx` (Clear Sampling Interval, default off). Measured from LabTalk
+(`tools/origin-ref/run-labtalk-lines.ps1`, `re-workspace/scratch/t84/s1`-`s3`, local only) and copied in
+`sheaf_core::sampling` (tests `crates/core/src/sampling/tests.rs`):
+
+- **The interval** gives row `i` (from 0) the X value `x0 + i * inc`, with an X long name and units
+  (`wks.col.xinit`, `xinc`, `xname$`, `xunits$`; `xof()` gave 0 to 2 for x0 = 0, inc = 0.5). An initial
+  value and increment of 1 clear it (Origin's own hint in the window). Several selected columns get the
+  same interval.
+- **Plots** of the column use the interval even when an X column stands to its left: a scatter of B with
+  x0 = 0, inc = 0.5 drew X from 0 to 2 (axis -0.5 to 2.5), not the X column's 1 to 5. Sheaf gives such a
+  plot no X column and draws it at the interval; the X axis title is the interval's long name and units
+  (Sheaf's choice; Origin's title not measured). A negative increment works (100, 98, 96).
+- **Show X Column** inserts a new column directly left of the column, named as a new column (the next
+  free letter: E, then F), with the interval's long name and units and as many rows as the column (3 for
+  a 3-row column in a 5-row sheet). Without Clear Sampling Interval it is a **Disregard** column (type 2)
+  and the interval stays, so plots still use the interval; with it, it is an **X** column (type 4) and the
+  interval is cleared, so the column now plots against it (axis 95 to 101 for 100, 98, 96). Showing it
+  again inserts another copy. A column without an interval shows nothing: Origin's `colshowx` fails; Sheaf
+  keeps the window open with "column B has no sampling interval to show" and changes nothing.
+- **Windows** (Sheaf's layout; Origin's windows not opened): Set Sampling Interval has the four fields
+  filled from the first selected column's interval (1, 1 and empty without one) and Origin's hint line; Show
+  X Column has the one check box. OK changes every selected column, one undo step each ("Set sampling
+  interval", "Show X column").
+- **Files**: the interval is saved with the column in `.sheaf` (`"sampling": {"x0", "inc", "long_name",
+  "units"}`). The `.opj` written here does not hold it: the save warning says "N column(s) have a sampling
+  interval ...", and the companion keeps it for Sheaf. Not read from Origin's `.opj` files yet. Sheaf's
+  analysis tools (fits, statistics) still take the X column or the row number, not the interval.
+
+## 13e. Swap Columns and Paste Transpose (T86, 2026-11-16)
+
+- **Swap Columns...** (the column header's menu) is Origin 2016's `colswap`, measured from LabTalk
+  (`re-workspace/scratch/t86/w1`, local only; `crates/core/tests/swap_transpose.rs`): with exactly two
+  columns selected they exchange places, each taking everything of its own along (B and D of A..E give A,
+  D, C, B, E; D keeps its long name, units, Y-error designation and width, B its width of 12). With one or
+  three columns selected `colswap` fails and nothing changes; Sheaf says "Select exactly two columns to
+  swap". One undo step ("Swap columns"). Origin opened no window from LabTalk; Sheaf opens none.
+- **Paste Transpose** (Edit menu and the data cell's menu) pastes the clipboard's block with its rows as
+  columns and its columns as rows, at the active cell, by the rules of an ordinary paste (section 13.3:
+  columns added at the right when needed, an empty column takes the type of what is pasted, a number
+  column with data keeps its type, columns a formula keeps up to date are left alone). Short rows of the
+  text give empty cells. One undo step ("Paste transpose"); the next ordinary paste is not transposed.
+  Sheaf's rule, not measured in Origin (a menu-only command that a script cannot reach with the
+  clipboard).
+
+## 13f. Column data range: Set As Begin, Set As End, Reset to Full Range (T87, measured 2026-11-16)
+
+Edit > Set As Begin, Set As End and Reset to Full Range (workbook), and the data cell's Set as Begin and
+Set as End. Measured in Origin 2016 with the LabTalk commands behind them (`set col(B) -b n`, `-e n`,
+`get col(B) -b`; `re-workspace/scratch/t87/r1` and a screenshot, local only) and copied in
+`sheaf_core::data_range`:
+
+- A column's **data range** is its rows from a begin to an end; the values outside stay stored (a dump of
+  the sheet still read them, and setting begin 1 and end 6 brought them back).
+- The **worksheet shows the cells outside blank** (B begun at row 3: rows 1 and 2 empty; C ended at row 4:
+  rows 5 and 6 empty).
+- **Plots and statistics use only the rows inside**: B (10 to 60) from row 2 to 4 gave `stats` n = 3, mean
+  30, and its scatter's X axis went from 1.5 to 4.5. Sheaf's plots leave the rows out;
+  Statistics on Columns and Rows now also use the saved ranges (T126/T127 below). Other analysis readers remain open.
+- **Sheaf's commands**: Set As Begin makes the top selected row the first row of every selected column's
+  range, Set As End the bottom selected row the last; a begin after the end drops the end (and the other
+  way round). Reset to Full Range clears the range of every column of the active sheet. One undo step each
+  ("Set as begin", "Set as end", "Reset to full range"). Which columns Origin's menu commands change was
+  not checked in its window.
+- **Files**: saved with the column in `.sheaf` (`"data_range": {"begin", "end"}`, rows from 0). The `.opj`
+  written here does not hold it: the save warning names it, and the companion keeps it. The graph's own
+  Data > Reset to Full Range (display range of a plot) is a different command and stays grey.
+
+### 13f.1 Descriptive Statistics on Columns (T126, 2026-11-17)
+
+The descriptive column reader intersects the existing resolved request rows with
+that Y column's saved Begin/End range, before calling the unchanged statistics
+calculator. The T87 accepted 2016 fixture above is the numeric reference: values
+10..60 with rows 2..4 yield N=3, mean30, SD10 and sum90. No new Native run or COM
+retry was made. The [current FAQ-1101](https://docs.originlab.com/quick-help/set-as-begin/)
+describes clearing/deleting and 2021/2022 menu changes; those are not substituted
+for the accepted non-destructive 2016 column-range fixture.
+
+Explicit row/XBetween requests intersect the saved Y range using original row
+indices. Each selected column has its own range; a different X column's saved
+range does not restrict univariate Y statistics. Outside rows are excluded and
+do not increase Missing. Existing mask/filter/missing handling within the
+intersection, units, report layout, all optional statistics and output history
+stay unchanged. Empty intersections use existing empty statistics (N=0,
+Missing=0, sum0, undefined values NaN), an explicit Sheaf edge policy. Bounds are
+clamped with a saturating inclusive-end conversion, including persisted ranges
+beyond the available data. Source data and range metadata remain untouched.
+
+This T126 slice changes only Statistics on Columns; the row reader follows in
+T127 below. Inferential tests, distribution/categorical tools, fitting and other
+analysis readers remain T87 leftovers. No shared input-loader, Core model, IO/schema, grid or menu changes.
+
+### 13f.2 Statistics on Rows (T127, 2026-11-17)
+
+The [official rowstats reference](https://docs.originlab.com/x-function/ref/rowstats/)
+describes seven row quantities within an input range. The [Statistics on Rows
+guide](https://docs.originlab.com/origin-help/statistics-on-rows/) excludes missing
+observations. With the existing T87 saved-range contract, Sheaf now admits a
+contributor at its original worksheet row only when both the resolved request span
+and that column's own Begin/End range contain the row. This per-column intersection
+is explicit Sheaf policy, not a fresh Native2016 rowstats measurement; no COM retry
+or repair was made. Each input's range is resolved once, not once per output cell.
+
+No rows are compressed or shifted. Existing mask/filter handling, numerical
+formulas, output length/order/units/comments, seven quantity switches and insertion
+behind the last selected column remain. An unselected X column's saved range does
+not remove another contributor. A row without eligible numbers retains the
+existing all-missing rowstats outputs, including Number of Points and Sum (unlike
+T126's empty column summary zeros); a single number has no SD or SEM. Stored source
+values and range metadata stay fixed. Only row_statistics and its call change;
+the shared input loader, T126 reader, other tools, model and IO/schema stay fixed.
+
+## 13g. Copy Columns to (T89, measured 2026-11-16, Origin 2016)
+
+The column header's Copy Columns to... is Origin's `colcopy` (Source Column(s); Destination Column(s),
+default `<new>!<new>`; Copy Data, Copy Format, Ignore Hidden Rows, Long Name, Units, Comments, Parameters,
+User-Defined Parameters, all on). Measured from LabTalk (`re-workspace/scratch/t89/c1`, `c2`, local only)
+and copied in `sheaf_core::copy_columns`:
+
+- **No destination**: a new book; the copies are named A, B, ... from its first column and keep their
+  designation (a Y-error column stays one), long name, units, comments and display format (3 decimals
+  stayed 3). The formula is not copied, the values are.
+- **Into a column** (`orng:=[Dst]Sheet1!col(B)`): two copies overwrote B and filled C (a new column after
+  the last, a Y-error column as its source); B kept its short name and took the copy's long name. The
+  sheet grows to the copies' rows.
+- **`<new>` column**: added after the last column with the next letter (D). **`<new>!<new>`** in a book:
+  a new sheet (Sheet2).
+- Sheaf's window (layout Sheaf's; Origin's not opened): New book / New sheet in a workbook / Columns of a
+  sheet (workbook, sheet, and the first column overwritten or `<new>` after the last), and the check boxes
+  Copy Data, Copy Format (display format and width), Long Name, Units, Comments, User-Defined Parameters.
+  An unticked part leaves the destination's own (Sheaf's choice, not measured). One undo step ("Copy
+  columns"). Not done: Ignore Hidden Rows and Parameters (Origin's system parameter rows).
+
+## 13h. Sheet tab names: Sheet Name to Show, Duplicate Without Data (T90, measured 2026-11-16, Origin 2016)
+
+Measured in Origin 2016 by right-clicking a sheet tab (`tools/origin-ref/origin-dialog.ps1 -NoDialog`,
+`@RCLICK`/`@CLICK`/`@SHOT`, `re-workspace/scratch/t90`, local only) and copied in `sheaf_core::sheet_tab`:
+
+- A sheet has a short name and a **long name** (`wks.longname$`). Sheaf keeps it in `Worksheet::long_name`
+  (saved in `.sheaf`; Name and Comments... has a Long Name field; sheet comments are not kept yet).
+- **Sheet Name to Show** has three items in Origin 2016: Long Name if available, Short Name (ticked for a
+  new sheet) and Long Name (the greyed inventory had listed "Both", which Origin 2016 does not have). The
+  choice is **per sheet**: Long Name on Sheet1 showed "Potential scan" on its tab and left Sheet2's tab
+  "Sheet2" although Sheet2 had a long name. Long Name if available falls back to the short name. Sheaf also
+  shows the short name for Long Name on a sheet without a long name (Origin's empty case not measured).
+  One undo step ("Sheet name to show").
+- **Duplicate Without Data** adds the copy after the last sheet, named as a new sheet (the first free
+  SheetN: Sheet3 next to Sheet1 and Sheet2), with the long name followed by " 1" ("Potential scan 1"; a
+  further copy takes " 2" in Sheaf), and makes it active. It keeps the columns with their short names,
+  designations, long names, units and formulas (`i*2` stayed, the cells were empty). Sheaf also keeps
+  formats, widths, user parameters, conditional and cell formats, and drops values, masks, notes and the
+  filter. One undo step ("Duplicate sheet without data").
+- The `.opj` written here does not hold the long name or the choice: the save warning names the sheets,
+  and the companion keeps them.
+- **Navigate...** (T93) opens "Navigate Worksheets - Book1" in Origin 2016: a table of the sheets (Index,
+  Creation Index, Name with the short name, Columns, Size(KB), Comments, Type "Flat Sheet", Source), the
+  active sheet selected, an Actions menu and Apply Reorder (greyed), OK and Close. Sheaf's window has Index,
+  Name, Long Name, Columns and Rows; clicking picks a sheet, OK or a double click goes to it, Close or
+  Escape closes. Not done: Actions, Apply Reorder.
+
+## 13i. Worksheet corner menu (T92, measured 2026-11-16, Origin 2016)
+
+Right-clicking the corner above the row numbers in Origin 2016 gives a short menu (Save Template As...,
+View, Add New Sheet, Add Graph..., and more behind the chevron). Its **View** submenu, expanded, lists
+the switches (screenshots `re-workspace/scratch/t92`, local only): Long Name, Units, Comments,
+Parameters, Sampling Interval, Sparklines, Filter, F(x)= (Ctrl+Shift+U), Categories | Row Labels for
+Column Label Rows | Column Header, Row Header | Column Grid, Row Grid, Page Break Preview Lines. On a new
+sheet Long Name, Units, Comments, F(x)=, Row Labels, both headers and both grids are ticked. (The greyed
+inventory had listed Row Labels for Column Label Rows as a submenu of the label rows; in Origin 2016 it is
+one switch, the titles left of the label rows.)
+
+Sheaf's corner menu is that list (`sheaf_core::sheet_view`, saved per sheet in `.sheaf`; Sheaf's choice,
+the per-book or per-sheet scope was not checked): Long Name, Units, Comments and F(x)= hide or show their
+label row; Row Labels hides the row titles; Column Grid and Row Grid the vertical and horizontal lines
+between data cells. One undo step each ("Worksheet view"). Grey: Parameters (Origin's system rows),
+Sampling Interval (the interval of T84 has no label row yet), Sparklines, Filter, Categories, Column Header,
+Row Header and Page Break Preview Lines. User parameter rows show whenever a column has one. The `.opj`
+written here does not hold the switches (the save warning names the sheets).
+
+**Sampling Interval row (measured 2026-11-16 for T94, not built):** after `colint` gave B x0 = 0, inc =
+0.5, units s, Origin 2016 showed a "Sampling Interval" label row on its own (the switch turned on), below
+F(x)=, with "0.5 (s)" in B (the increment and the units in parentheses) and empty cells in A and C; the
+corner switch hides it again. The column heads also changed: B became "B(Y#)" with a small icon, A "A(X1)"
+and C "C(Y1)" (designation numbers appear once a column has its own X). Building it needs a new label-row
+kind in the worksheet layout and cell formats (T59's area), so it waits for that work.
+
+## 13j. Find in Project (T95, measured 2026-11-16, Origin 2016)
+
+Edit > Find in Project... (F3; "Find in Project" on a graph's Edit menu) opens Origin's **Find** window
+(screenshots `re-workspace/scratch/t95`, local only): Current Path, Find What, Within (Entire Project), Case
+Sensitive, Match Whole Word, Allow Wildcards (* and ?), Types to be Included > Metadata: Folder, Graph,
+Book, Sheet, Column, Notes and Select..., then Data in Cells (1st Matched in Column), Text Objects on
+Graphs, Notes Content; a result list (No., Range, Element, Attribute, Folder) and "Found: N". Defaults
+(Select Metadata): Graph, Book, Sheet and Notes with Long Name, Short Name and Comments; Column with Long
+Name, Short Name, Comments, Parameters and User Parameters, **not** Units, F(x), Categories, Sampling
+Intervals, Filters, Info Variables; Data in Cells off, Text Objects on Graphs on. Origin keeps the settings
+between sessions.
+
+Measured hits (book with B "Current density", mA; a line graph of B): "density" gave
+`[Graph1]Layer1!YL` Graph / Axis Title, `[Graph1]Layer1!Legend` Graph / Legend and
+`[Book1]Sheet1!B"Current density"` Column / Long Name (text objects as drawn); "Graph" gave `[Graph1]`
+Graph / Short Name; "30" with Data in Cells gave column B once, attribute Data Cells.
+
+Sheaf (`crate::project_find` in the app, window `dialogs/find_project.rs`): the same fields except Within
+(always the whole project), Folder and Notes (Sheaf has no notes windows); Select... shows the column's
+Units and F(x) switches; axis titles are searched as drawn (`sheaf_plot::axis_title`), legends with `%(n)`
+replaced by the plots' names, and text labels by their text. Clicking a hit brings its window forward (and
+its sheet, with the column selected); the window stays open and keeps its settings for the session.
+Double-clicking a hit in Origin was not measured.
+
+## 13k. Export > Worksheet as Image (T97, measured 2026-11-16, Origin 2016)
+
+File > Export > Worksheet as Image... is Origin's `expWks` (Image Type AI, BMP, CGM, DXF, EMF, EPS, GIF,
+JPG, PCX, PDF, PNG, PSD, TGA, TIF, WMF; Select Sheet(s) Current Sheet / Sheets in Book / Sheets in Folder
+/ ... / Specified; File Name(s); Path; Overwrite Existing Auto Rename / Replace / Skip / Ask; Use Tools
+Options; Keep Original Size; Image Size and Image Settings). Measured from LabTalk
+(`re-workspace/scratch/t97`, local only): the picture of a sheet holds the **label rows filled light
+yellow** (long name and units centred) and the **cells** (numbers right-aligned), **without** the column
+heads, the row numbers or grid lines, and runs down all the sheet's rows (691 x 1863 px for three columns
+of the default 32-row sheet, about 300 dpi). With no file name the script wrote ".png"; a token such as
+`<short>` in the name was not replaced.
+
+Sheaf: one picture of the active sheet (its data rows, not empty spare rows), drawn from the printed table
+(`sheaf_core::sheet_print`) with the heads, row numbers and grid left out (`sheaf_plot::sheet_image_svg`).
+The save window offers PNG (300 dpi), PDF and SVG; the name defaults to `<book long name or name>_<sheet>.png`
+in the project's folder (Sheaf's choice). Not done: the other image types, several sheets at once, the size
+and overwrite options.
+
+## 13l. Re-Import (T98, measured 2026-11-16, Origin 2016)
+
+File > Import > Re-Import Directly (Ctrl+4) and Re-Import... (workbook File menu; a graph's has none) are
+Origin's `reimport` (`dialog` Re-Import Directly / Re-Import by Changing Options; ReImport Selected Range
+Only). Measured from LabTalk (`re-workspace/scratch/t98`, local only; `impasc` of x,y,z with three rows,
+a comment and units typed on B and B plotted, then the file replaced by x,y,z,w with four rows):
+
+- The values were replaced (four rows) and the graph followed (axes rescaled).
+- The book kept its three columns: the file's fourth column was **not** added.
+- B kept the comment and units the user typed (the file has none) and its long name from the header.
+
+Sheaf (`Project::replace_book_data`, app `reimport_book`): the book's source file (`Workbook::source`,
+importer ascii, chi or excel) is read again with that importer's default options (Origin reuses the
+import settings; Sheaf does not store them yet) and each column takes the new values and the labels the
+file gives, keeping its id, so graphs keep plotting it; extra columns of the file are reported and not
+added; a column the file no longer has is emptied (not measured). One undo step ("Re-import"). Re-Import...
+picks a file (starting at the source) and reads it the same way. A book made in Sheaf or opened from a
+project has no source and the items are refused. Not done: the stored import options, Selected Range Only.
+
+## 13m. Folders: View Windows, Window > Folders, folder Properties (T100, measured 2026-11-16, Origin 2016)
+
+Measured with screenshots (`re-workspace/scratch/t100`, local only; Book1 in the root folder, Book2 in a
+folder Sub made with `pe_mkdir`/`pe_cd`):
+
+- **View Windows** (the explorer folder's menu; Sheaf's View menu too) offered None and **Windows in
+  Active Folder** (ticked, Origin's default) on the root folder's menu. With it, selecting Sub showed only
+  Book2's window (Book1 was hidden), activated Book2 and added " - /Sub/" to the main title; the root
+  showed only Book1. The Window menu's window list then listed only the folder's windows.
+- **Window > Folders** lists every folder by path ("1 /UNTITLED/", "2 /UNTITLED/Sub/"), the active one
+  ticked; picking one makes it the active folder.
+- **Properties...** of a folder opens "Folder Properties - Sub": << Previous / Next >> / Window..., tabs
+  Properties and User Tree; Name, Comments; Page Info: Type Folder, Size, Contains 1 Windows, Created,
+  Modified, Location /UNTITLED/; OK, Cancel, Apply.
+- The root folder's menu: Find... F3, Append Project..., Save Project As..., Show All Windows, Hide All
+  Windows, New Window, New Folder, View Windows, Send Graphs to PowerPoint..., Slide Show of Graphs...,
+  Properties... (Alt+Enter); a subfolder's adds Delete Folder, Rename (F2), Restricted in Viewer.
+
+Sheaf: `Project::view_windows` (saved in `.sheaf`, one undo step to change) with None, Windows in Active
+Folder (default) and Active Folder and Subfolders (the third as the inventory names it; Origin's root
+menu showed two). The workspace draws only the shown windows and the Window menu lists only them; when
+the folder changes and the active window is not shown, the folder's most recent window comes forward.
+Window > Folders lists the folders as Origin. A folder's Properties... edits its Name (not the root's) and
+Comments (`Folder::comments`) and shows Type, Contains and Location, one undo step. Not done: the main
+title's folder path, Size/Created/Modified, Previous/Next, User Tree, Restricted in Viewer.
+
+## 13n. Pivot Table (T124, 2026-11-17, not measured)
+
+Origin facts (X-Function `wpivot`, docs.originlab.com/x-function/ref/wpivot, Origin 2015 SR0 and
+later; Origin COM was unavailable on the Windows machine on 2026-11-17, so nothing was measured):
+`row` (one or more columns), `col`, `data`; `method` 0 count (default), 1 sum, 2 mean, 3 min, 4 max;
+`total` adds a Row Total column (sum across each row), `sum` a Column Total row; `sort_total` 0 row
+labels ascending, 1 descending by row totals (default), 2 ascending by row totals, 3 row labels
+descending, 4 none; `sort_col` 0 column labels ascending (default), 1 descending, 2 ascending by
+column totals, 3 descending by column totals, 4 none; `normalize` 0 none, 1 fraction, 2 percent of
+each column's total; `zero` (default 1) shows missing combinations as zeros; `pos` (default 1)
+puts each column's value in 0 Long Name, 1 Comments, 2 appended to the Long Name, 3 a user
+parameter row; `dir`/`vmode`/`threshold`/`label` merge small values into "Others"; `exrow`/`excol`
+add extra values; the output defaults to a new sheet of the input book.
+
+Sheaf (`crates/core/src/pivot.rs`, `crates/app/src/dialogs/pivot.rs`), choices **unmeasured**:
+
+- Worksheet > Pivot Table... opens the window with the selected columns (or the sheet's first
+  columns) as row source, column source and data, then `wpivot`'s defaults. OK writes a new sheet
+  `Pivot1`, `Pivot2`, ... of the same workbook, shows it, and is one undo step ("Pivot table").
+- Keys: a cell's number or text; numbers sort before texts, numbers by value, texts by characters
+  (`0` and `-0` are one key). Several row sources give one row per combination, one label column
+  each, compared column by column.
+- Source rows: rows hidden by the filter are left out, and so are rows with an empty or masked cell
+  in any row source or the column source. A masked, text or empty data cell is missing: Count still
+  counts the row; the other methods skip it. A combination with no value is missing (0 with "Show
+  Missing as 0", else empty).
+- Totals sum the cells shown (after normalizing). Sorting by totals uses the totals before
+  normalizing; equal totals keep the labels' ascending order; "None" keeps the order of first
+  appearance. Normalize divides each column by its total (a zero total gives empty cells).
+- Output columns: the label columns (Long Name the source column's name; the first is X), then one
+  Y column per column key with its label in the chosen position (Long Name, Comments, or after the
+  data column's Long Name, or the method's name for Count), then Row Total (its name in the same
+  position). The Column Total row has "Column Total" in the first label column; its Row Total cell
+  is the grand total.
+- **Left out** (shown disabled): Combine Direction/Others, extra row and column values, the user
+  parameter position.
 
 ## 14. Suggested Rust data model (P0)
 

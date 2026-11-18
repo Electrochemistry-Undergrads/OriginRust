@@ -2,17 +2,40 @@
 
 use fontdb::{Database, Family, ID, Query, Stretch, Style, Weight};
 use sheaf_core::graph::Font;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex, OnceLock};
 
 /// Families tried after the one the model asks for, in this order.
 pub const FALLBACK_FAMILIES: [&str; 3] = ["Liberation Sans", "Helvetica", "DejaVu Sans"];
 
-/// Measures the width of text. Layout needs widths to right-align and
-/// centre text; the measurer is a parameter so tests can use fixed metrics.
+/// Position and thickness of a text decoration, relative to its font size.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TextLineMetrics {
+    /// Stroke centre relative to the baseline in em units, positive down the page.
+    pub center: f64,
+    /// Stroke thickness in em units.
+    pub thickness: f64,
+}
+
+/// Measures text and its decorations. Tests can provide fixed metrics independently of fonts.
 pub trait TextMeasurer {
     /// Width in points of `text` set in `font` (family, bold, italic) at `size_pt`.
     fn width(&self, text: &str, font: &Font, size_pt: f64) -> f64;
+
+    /// Expands a unique installed-family prefix in an inline font switch.
+    fn expand_inline_family(&self, _name: &str) -> Option<String> {
+        None
+    }
+
+    /// Underline geometry in em units. Defaults are used when no font metrics are available.
+    fn underline_metrics(&self, _font: &Font) -> TextLineMetrics {
+        TextLineMetrics { center: 0.14, thickness: 0.07 }
+    }
+
+    /// Strikethrough geometry in em units, with the same baseline as the glyphs.
+    fn strikeout_metrics(&self, _font: &Font) -> TextLineMetrics {
+        TextLineMetrics { center: -0.23, thickness: 0.05 }
+    }
 }
 
 /// Every character is `0.55 * size` wide. Deterministic and independent of
@@ -57,6 +80,7 @@ struct Cache {
     faces: HashMap<(String, bool, bool), Option<ID>>,
     upem: HashMap<ID, f64>,
     advances: HashMap<(ID, char), Option<f64>>,
+    decorations: HashMap<ID, (Option<TextLineMetrics>, Option<TextLineMetrics>)>,
 }
 
 /// The installed fonts, loaded once, plus a width measurer on top of them.
@@ -66,7 +90,19 @@ struct Cache {
 /// aware when such a face exists. Kerning is not applied.
 pub struct SystemFonts {
     db: Arc<Database>,
+    family_names: BTreeMap<String, String>,
     cache: Mutex<Cache>,
+}
+
+fn unique_family_prefix(names: &BTreeMap<String, String>, name: &str) -> Option<String> {
+    let prefix = name.to_lowercase();
+    // The one-letter special defaults and Default labels require separate configuration.
+    if name.chars().take(2).count() < 2 || prefix == "default" || prefix.starts_with("default:") {
+        return None;
+    }
+    let mut matches = names.range(prefix.clone()..).take_while(|(key, _)| key.starts_with(&prefix));
+    let (key, family) = matches.next()?;
+    (key != &prefix && matches.next().is_none()).then(|| family.clone())
 }
 
 impl SystemFonts {
@@ -92,7 +128,9 @@ impl SystemFonts {
                 break;
             }
         }
-        SystemFonts { db: Arc::new(db), cache: Mutex::new(Cache::default()) }
+        let family_names =
+            db.faces().flat_map(|face| &face.families).map(|(name, _)| (name.to_lowercase(), name.clone())).collect();
+        SystemFonts { db: Arc::new(db), family_names, cache: Mutex::new(Cache::default()) }
     }
 
     /// The font database, for the rasteriser.
@@ -146,9 +184,45 @@ impl SystemFonts {
         cache.advances.insert((id, c), adv);
         adv
     }
+
+    fn decoration(&self, font: &Font, strikeout: bool) -> Option<TextLineMetrics> {
+        let mut cache = self.cache.lock().ok()?;
+        let id = self.resolve(&mut cache, font)?;
+        let metrics = *cache.decorations.entry(id).or_insert_with(|| {
+            self.db
+                .with_face_data(id, |data, index| {
+                    let face = ttf_parser::Face::parse(data, index).ok()?;
+                    let em = f64::from(face.units_per_em());
+                    let line = |m: ttf_parser::LineMetrics| {
+                        (m.thickness > 0).then(|| TextLineMetrics {
+                            // OpenType post/OS2 positions specify the top of the stroke; scene
+                            // paths need its centre, in a frame whose positive Y points down.
+                            center: (-f64::from(m.position) + f64::from(m.thickness) / 2.0) / em,
+                            thickness: f64::from(m.thickness) / em,
+                        })
+                    };
+                    Some((face.underline_metrics().and_then(line), face.strikeout_metrics().and_then(line)))
+                })
+                .flatten()
+                .unwrap_or((None, None))
+        });
+        if strikeout { metrics.1 } else { metrics.0 }
+    }
 }
 
 impl TextMeasurer for SystemFonts {
+    fn expand_inline_family(&self, name: &str) -> Option<String> {
+        unique_family_prefix(&self.family_names, name)
+    }
+
+    fn underline_metrics(&self, font: &Font) -> TextLineMetrics {
+        self.decoration(font, false).unwrap_or_else(|| FixedMetrics.underline_metrics(font))
+    }
+
+    fn strikeout_metrics(&self, font: &Font) -> TextLineMetrics {
+        self.decoration(font, true).unwrap_or_else(|| FixedMetrics.strikeout_metrics(font))
+    }
+
     fn width(&self, text: &str, font: &Font, size_pt: f64) -> f64 {
         let Ok(mut cache) = self.cache.lock() else {
             return FixedMetrics.width(text, font, size_pt);
@@ -189,6 +263,22 @@ mod tests {
         let fonts = SystemFonts::from_database(Database::new());
         let f = Font::new("Arial", 10.0);
         assert!((fonts.width("ab", &f, 10.0) - 11.0).abs() < 1e-12);
+        assert_eq!(fonts.underline_metrics(&f), FixedMetrics.underline_metrics(&f));
+        assert_eq!(fonts.strikeout_metrics(&f), FixedMetrics.strikeout_metrics(&f));
+        assert_eq!(fonts.expand_inline_family("Cour New"), None);
+    }
+
+    #[test]
+    fn inline_names_expand_only_for_a_unique_installed_prefix() {
+        let families = ["Arial", "ARIAL", "Arial Narrow", "Courier New", "Courgette", "Symbol", "Default Sans"]
+            .into_iter()
+            .map(|name| (name.to_lowercase(), name.to_owned()))
+            .collect();
+        assert_eq!(unique_family_prefix(&families, "couRI"), Some("Courier New".to_owned()));
+        assert_eq!(unique_family_prefix(&families, "SYM"), Some("Symbol".to_owned()));
+        for name in ["Arial", "Ari", "Cour", "Missing", "S", "Default", "Default: Arial"] {
+            assert_eq!(unique_family_prefix(&families, name), None, "{name}");
+        }
     }
 
     #[test]
@@ -200,5 +290,22 @@ mod tests {
         let mut bold = f.clone();
         bold.bold = true;
         assert!(fonts.width("Potential", &bold, 10.0) >= w - 1e-9);
+    }
+
+    #[test]
+    fn system_decoration_metrics_are_finite_and_cached_without_style_collisions() {
+        let fonts = SystemFonts::shared();
+        for (bold, italic) in [(false, false), (true, false), (false, true), (true, true)] {
+            let mut font = Font::new("Arial", 20.0);
+            font.bold = bold;
+            font.italic = italic;
+            let underline = fonts.underline_metrics(&font);
+            let strike = fonts.strikeout_metrics(&font);
+            assert!(underline.center.is_finite() && strike.center.is_finite());
+            assert!((0.0..1.0).contains(&underline.thickness));
+            assert!((0.0..1.0).contains(&strike.thickness));
+            assert_eq!(fonts.underline_metrics(&font), underline);
+            assert_eq!(fonts.strikeout_metrics(&font), strike);
+        }
     }
 }

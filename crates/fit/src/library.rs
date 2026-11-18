@@ -81,7 +81,10 @@ pub fn list() -> Vec<FunctionInfo> {
 /// The built-in function with this name (case does not matter), ready to fit: bounds that are
 /// switched on by default are set, and the starting-value routine is attached where there is one.
 pub fn get(name: &str) -> Option<FitFunction> {
-    let e = entries().iter().find(|e| e.name.eq_ignore_ascii_case(name))?;
+    let Some(e) = entries().iter().find(|e| e.name.eq_ignore_ascii_case(name)) else {
+        // Surface functions z = f(x, y) are kept in their own table and not listed with these.
+        return crate::surface::get(name);
+    };
     let params: Vec<ParamSpec> = e
         .params
         .iter()
@@ -99,6 +102,8 @@ pub fn get(name: &str) -> Option<FitFunction> {
         params,
         model,
         init: init_for(&e.name),
+        x2_name: None,
+        init2: None,
     })
 }
 

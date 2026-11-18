@@ -16,6 +16,7 @@ Summary. One small expression language serves two jobs: worksheet column formula
   - A bare `col(A)` is the value in the row being calculated.
   - Only column references take a subscript; `(x+1)[2]` is an error.
 - Variables: any other name is a variable looked up in the host (fit parameters, `x`, and so on). The name `i` is the 1-based number of the row being calculated, unless the host defines a variable called `i` itself. **[choice: the host wins, so a fit function may use `i` as a parameter]**
+- The column index `j` (Set Multiple Columns Values, T53). A worksheet host may supply `j`, the 1-based position in the sheet of the column whose formula is being calculated, as a variable (`col(A)*j`) and inside a column reference: `wcol(j-1)` is the column to the left of the column being set, `wcol(j+2)` two to the right, `col(j)` the column itself. In the parser `col(j+k)` and `col(j-k)` (a whole number `k`, no spaces needed) are a relative reference (`ColumnRef::Relative(offset)`, printed `col(j-1)`); a host that has no `j`, such as a fit function or a sheet filter, finds no column for it and reports an unknown column or variable. A relative reference outside the sheet (`wcol(j-1)` on column A) is an unknown column error. The sheet host defines `j` for every column formula, so the single-column Set Column Values window may use it too. Name rules, all **[choice]** until measured: the variable `j` follows the same host-wins rule as `i`; a bare `col(j)` or `wcol(j)` is a name first, as `col(A)` is: a column whose short name is j in any case (the tenth column of a default sheet is called J) or whose long name is exactly `j` is read, so formulas written before T53 keep their meaning; only on a sheet with no such column does a bare `col(j)` mean the position, where before it was an unknown column. The explicit form `col(j+0)` or `col(j-0)` is always the position. A formula that reads its own column (`col(j-0)` on column j) runs once, as for any self read. A layout change (insert, delete or move of a column) that changes the position of a column whose formula reads `j` (the variable or a position `col(j)`) recalculates it, or marks it pending in Manual mode, as for any other changed read. A user parameter row called `j` still wins in `col(A)[j]`, as it does for any name.
 - The conditional `c ? a : b` evaluates only the branch it takes.
 - Text strings `"abc"` (no escape sequences; cannot contain a double quote) and `col(A)$` / `col(A)[i]$` (the text of a cell) are text values; see the text section below. `col("Long Name")` also takes a quoted name.
 - `col(A)[L]$` reads a column header rather than a data row; built-in header codes `G`, `L`, `U`, `C`, `O` are supported (see below).
@@ -92,7 +93,7 @@ Origin measured with `tools/origin-ref/run-labtalk-lines.ps1` (probes `re-worksp
 | `compare(s,t[,case])` | **1 when equal**, else 0 (not an ordering); case matters unless `case` is 0 | same |
 | `exact(s,t)` | 1 when equal with case | same |
 | `value(s)` | the number in a text, missing for `Hello` | same (missing when there is no number) |
-| `text(x)`, `text(x,fmt)` | in measured General columns, `fmt` `*` or none: general; `*n`: n significant digits; `.n`: n decimals; `E*n`: engineering with a unit prefix; a missing value is `--` | same for these four forms; an omitted format on a direct numeric column/cell uses its column format; other format codes give the general form (Origin returned the code itself or an odd number) |
+| `text(x)`, `text(x,fmt)` | in measured General columns, `fmt` `*` or none: general; empty: `@SD` significant digits (default 14); `*n`: n significant digits; `.n`: n decimals; `E*n`: engineering with a unit prefix; a missing value is `--` | same for these forms at default settings; an omitted format on a direct numeric column/cell uses its column format; other format codes give the general form (Origin returned the code itself or an odd number) |
 
 How general-format `text(x)` writes numbers (General source column, literal/arithmetic default, or explicit `*`): up to five decimals with trailing zeros dropped (`3.14159`, `1234.5678`, `0.00123`), `E` form from the exponent -4 downward and for seven or more integer digits that do not round-trip (`1.23456E-4`, `1.23457E6`, `1E15`; 1000000 stays `1000000`). `*3`: `3.14`, `1.23E+03`, `-42.0`, `1.00E+10`, `0.00`. `.2`: `1234.57`, `1.23E-04`, `-42.00`. `E*3`: `1.23k`, `12.3k`, `1.23m`, `-500m`, `10.0G`. Halves round away from zero. Where the exponent thresholds between the measured points are unknown they were chosen to reproduce every measured value (`crates/expr/src/text.rs`, test `text_of_numbers_matches_origin_formats`).
 
@@ -102,7 +103,88 @@ How a bare column read decides between number and text: the result of the whole 
 
 Sheaf uses literal, case-sensitive, non-overlapping matches, preserving Unicode text. An absent occurrence leaves the text unchanged. An empty search or an invalid occurrence (negative, fractional, missing or nonfinite) also leaves it unchanged; these are Sheaf's guard choices for cases the reference does not specify. The first three arguments accept text columns or numbers written as text; the occurrence is numeric, so formulas can read it from another column. Text-returning function calls accept an optional `$` suffix (`upper(substitute(col(A)$,"clean","raw")$)$`); numeric functions do not. Unsuffixed calls remain accepted. Set Column Values lists `substitute` under Function > Text, and Auto recalculation tracks every source column.
 
-Origin's `ifelse(c,"a","b")` and `c ? "a" : "b"` came out empty in the probe (a column formula set from a script); Sheaf accepts text branches. `%()` substitution and Origin global/`@SD` format settings are not done. For a number cell `col(A)$` is Origin's displayed text (a `-1e3` typed into a cell reads back as typed); Sheaf has no per-cell typed text, so it writes the number as `text(x)` does.
+Origin's `ifelse(c,"a","b")` and `c ? "a" : "b"` came out empty in the probe (a column formula set from a script); Sheaf accepts text branches. String-expression `%()` substitution is described below; user-configured global/`@SD` format settings remain unsupported (fresh defaults below). For a number cell `col(A)$` is Origin's displayed text (a `-1e3` typed into a cell reads back as typed); Sheaf has no per-cell typed text, so it writes the number as `text(x)` does.
+
+### Percent string-expression substitution
+
+T08 (2026-11-14, `codex/formula-string-substitution`) supports `%(expression)` inside a quoted
+formula string, for example `"name=%(col(A)[L]$), unit=%(col(A)[U]$)"` or
+`"run:%([Book1]Sheet1!col(A)[i]$)"`. Existing text expressions, including nested function
+calls with quoted arguments, can supply the text. Numeric results use ordinary string
+conversion. `%()` outside a quoted string converts the result to a number as `value(...)`
+does: `%(col(A)[Scale]$)*i`. It retains the existing empty-text and nonnumeric-text rules.
+The infix `%` remainder operator is unchanged.
+
+Within quoted strings, `%(TAB)` inserts a tab, `%(CRLF)` inserts carriage return and line feed,
+and `%%(` leaves a literal `%(`. Keyword matching ignores ASCII case and surrounding whitespace.
+These are based on Origin's [string substitution reference](https://docs.originlab.com/labtalk/guide/string-substitution/)
+and the installed Origin 2016 probe `scratch/formula-string-substitution/strings.lines.txt`.
+Measured scalar results: `value:12.5`, `name=Voltage, unit=mV`, `VOLTAGE`, and numeric 13.5
+from a substituted `12.5` plus 1. Control characters and the literal escape are also measured.
+The row-by-row worksheet behavior is Sheaf's extension: the scripted Origin column assignment
+did not populate its target, so no direct formula/recalculation parity is claimed.
+
+Substitution uses the existing parsed expression tree. Cell and header dependencies, user
+parameters, cross-sheet references, Auto/Manual/None, cycles, explicit recalculation and undo
+follow the existing formula rules. Native saves and `.opj` companions preserve the formula
+and its links. Original UTF-8 byte offsets remain in diagnostics. Empty or malformed `%()`
+and unsupported multi-argument forms are errors; nested substitutions are bounded along with
+the existing expression depth limits.
+
+Cell/metadata text is copied as data and never reparsed. In Origin the substituted string
+`2+3` can become executable expression text and produce 5; Sheaf's standalone conversion
+returns missing for that text. Dynamic reference-name construction, session string variables,
+range-variable names, graph/legend `@` forms, script macros
+and general LabTalk statement substitution remain unsupported. Regressions in the expression,
+core and I/O `string_substitution` tests cover the supported subset and this data boundary.
+
+### Worksheet cell substitution
+
+T08 (2026-11-15, `codex/formula-worksheet-substitution`) adds the static
+`%([Book]Sheet,column,row[,format])` cell form, based on the same
+[Origin reference](https://docs.originlab.com/labtalk/guide/string-substitution/) and fresh
+Origin 2016 scalar probes in `scratch/formula-worksheet-substitution/` (`probe`, `control`,
+`ties-names` and `row-boundaries`). For example,
+`"full:%([Src]Sheet1,A,i); shown:%([Src]Sheet1,A,i,W)"` reads a remote cell in each formula row.
+Outside quotes, the substituted text goes through the existing numeric-only conversion.
+
+Book, sheet and column selectors are fixed in the formula. They use the qualified-column
+lookup rules below: book short name or unambiguous long name, sheet name or one-based index,
+column short name (then long-name fallback), quoted long name, or one-based index. Quoted
+names follow ordinary expression quoting. Origin's short/long collision control returns
+10 for bare `A` and 99 for `"A"` when another column's long name is A. The numeric row can be
+an expression, including `i` or another column; it remains a data read even when a user
+parameter has the same name. Rows below 1 give `###` before rounding; valid fractional rows
+round half up (`1.499999` selects row 1, `1.5` selects row 2, `2.5` selects row 3).
+
+Measured numeric output (A1 = pi, column set to two decimal places):
+
+| Format | Substituted text |
+|---|---|
+| omitted or quoted empty | `3.14159265358979` |
+| `W` | `3.14` |
+| `.2` or `".2"` | `3.14` |
+| `*4` | `3.142` |
+| `E*3` | `3.14` |
+
+Omitted/empty cell formats use 15 significant digits, independently of Text/Format's empty
+format (`@SD=14`). Fractional trailing zeros are dropped. Further measured controls give
+`12.3456789012346`, `1.23456789012346E-10`, `1000000000000000` for 1e15, and `1E-3` for
+0.0009999999999999999. `W` uses the numeric column display format; other explicit codes
+use the existing formatter. Text cells are copied unchanged, including Unicode and `2+3`,
+even with `W` or `.2`. A stored numeric missing value gives `--`; a cell past the data gives
+empty text. Infinite/out-of-range row expressions also give `###` in Sheaf.
+
+Unknown columns/books/sheets retain Sheaf's normal diagnostic instead of Origin's `###` or
+unresolved literal. Names containing commas use Sheaf's ordinary quoted-name parser; Origin's
+corresponding script controls either failed execution or returned `###`, so that is an
+expression-language extension. No double-leading-quote syntax is added. Book-only active-sheet
+notation, dataset/range substitution, `@WL`, generated selectors/expressions, session variables
+and dynamic format expressions remain unsupported. Cell text is never executed: Origin can
+turn `2+3` into 5, whereas standalone Sheaf substitution returns missing. Formula evaluation,
+row-by-row filling, dependency/cycle rules, Auto/Manual/None, Undo/Redo and native/companion
+save behavior use Sheaf's existing machinery; scalar probes do not establish Origin parity
+for that machinery. The `worksheet_substitution` expression/core/I/O tests cover these rules.
 
 ### Format compatibility name
 
@@ -110,7 +192,29 @@ Origin's `ifelse(c,"a","b")` and `c ? "a" : "b"` came out empty in the probe (a 
 
 With no explicit format, `text(col(A))$` (or an indexed cell such as `text(col(A)[2])$`) uses the numeric source column's format. Decimal places, scientific/engineering, date/time, Month and Day of Week formats are available through `Host::formatted_numeric_cell`; General retains the existing expression formatter. Format-only edits invalidate Auto/Manual dependents in the same undo step as the edit. Text cells remain numeric missing values (`--`), and an explicit format still overrides the column.
 
-Compatibility limit: omitted `format` formats, omitted `text` formats on literals/arithmetic, and explicit empty formats use Sheaf's general formatter. Origin uses global Numeric Format for omitted Format format, and `@SD` for an empty format; those settings remain unsupported. Format is accepted when typed into Set Column Values; the picker keeps the recommended Text name rather than adding a duplicate alias.
+An explicit empty format in either function uses Origin's default `@SD=14`: up to 14 significant
+digits, with fractional trailing zeros dropped. This differs from omitted formats on
+`format` or literal/arithmetic `text`, and explicit `"*"`, which use the existing general
+formatter (matching the measured fresh Numeric Format settings). Thus
+`text(12.345678901234567,"")$` is `12.345678901235`, whereas omitting the format gives
+`12.34568`; empty formatting of `0.00012345678901234567` gives `1.2345678901235E-4`.
+An empty format also overrides a source column's display settings. Missing remains `--`.
+
+The [Text/Format reference](https://docs.originlab.com/labtalk/ref/text-format-func/) distinguishes
+these cases; the [numeric conversion guide](https://docs.originlab.com/labtalk/guide/numeric-string-conversion/)
+documents the default precision. Origin 2016 scalar probes confirmed fresh `@SD=14` and 16
+numeric cases through Text/Format with omitted, empty and `"*"` formats (80 strings); a temporary
+`@SD=6` control changed the empty-format result to `12.3457`. The probe restored its original
+value; no Numeric Format preference was changed or saved. Eight independent boundary inputs
+also match: `1e14` stays decimal, `1.2345678901234567e14` uses `E14`, and a value just below
+`0.001` retains scientific notation after rounding (`1E-3`). Local evidence:
+`scratch/formula-format-defaults/{probe,holdout}.lines.txt` and `.out.txt`.
+Regressions in the new expression/core `format_defaults` fixtures cover precision,
+row-dependent formats, column-format override, recalculation and Undo.
+
+Compatibility limit: Sheaf uses fixed fresh-session defaults, with no mutable `@SD` or global
+Numeric Format setting. Format is accepted when typed into Set Column Values; the picker keeps
+the recommended Text name rather than adding a duplicate alias.
 
 ### Character codes
 
@@ -175,6 +279,56 @@ writer still warns that user parameter rows themselves require the companion.
 Regressions: `crates/expr/tests/parameter_labels.rs`, `crates/core/tests/parameter_labels.rs`
 and `crates/io/tests/parameter_labels.rs`. These use only generated metadata and cell values.
 
+### Cross-sheet and cross-book columns
+
+T08 group 6 (2026-11-14, `codex/formula-cross-sheet`) accepts explicit references such as
+`[Book1]Sheet2!col(A)`, `Sheet2!col(A)` within the target workbook, and
+`[Book1]2!wcol(1)` using a 1-based worksheet position. A column still uses its short name,
+quoted long name, or 1-based position. Double quotes allow spaces in workbook and worksheet
+names: `["My Book"]"Raw Data"!col("Current µA")`. Workbook references prefer the actual short
+name, then accept a unique display title; ambiguous titles are refused. Workbook and worksheet
+names ignore ASCII case. Short-name precedence and ambiguity refusal are Sheaf's explicit rules.
+Ordinary unqualified columns still use the target worksheet. No active-window fallback or
+file access occurs. A missing book, sheet or column is an error.
+
+Qualified columns support the existing arithmetic, statistics, vector functions, row indices,
+text reads, display-format conversion, built-in headers and user parameter rows. `i` continues
+to refer to the output row. An initial fill without an explicit row range covers the longer of
+the target worksheet and its data sources, so a remote column can fill an empty target sheet.
+Later recalculation follows source lengths under the existing shrink/empty-source rule.
+Header-only formulas need target rows or an explicit range.
+
+The worksheet host resolves the complete `ColumnRef::Scoped`; `WorksheetRef` selects a sheet
+by name or position. Recalculation now orders data dependencies across the entire project.
+Manual columns retain their values and mark Pending until explicitly recalculated, then their
+remote dependents update. Header and parameter dependencies remain separate from data cycles;
+changing a source sheet's parameter-row order invalidates its `Dn` readers in other sheets.
+Names and positions are resolved anew after structural edits. A moved indexed sheet can change
+the source; adding an unrelated book leaves Manual formulas Current. Renaming/deleting a source
+marks its readers Broken and retains their values; restoring it repairs the link. Formula text
+is not rewritten when names change. Document edits, Undo and Redo include the entire chain.
+
+Reference basis: Origin's published [range notation](https://docs.originlab.com/labtalk/guide/range-notation/)
+and [Set Values reference rules](https://docs.originlab.com/origin-help/wks-setcolval-quickstart/).
+The latter dates direct cross-sheet formulas to Origin 2017; earlier versions require a range
+variable. Installed Origin 2016 probes in `scratch/formula-cross-sheet/ranges*.lines.txt`
+confirm `[Src]Sheet1!col(A)` via a range variable gives `6,12,24` when multiplied by 3,
+and `[src]other!col(A)` gives `11,21,31,41` after adding 1 to `10,20,30,40`.
+The follow-up confirms an unqualified `Sheet1!col(A)` within the same book, sheet position 2,
+its second value 20 and mean 25. It also records that `[Probe]` resolves a book whose actual
+short name is `Book1` and display title is `Probe`.
+The direct qualified-`col()` expression used here is Sheaf's extension of range notation;
+direct-formula syntax, recalculation, structural edits and quoted-name details are not claimed
+as measured Origin 2016 behavior. No range-variable declarations, spreadsheet `A1` shorthand,
+multi-sheet ranges are added. The supported subset of `%()` substitution is described above.
+
+Native saves retain these formulas. The `.opj` writer stores text and values but cannot write
+their cross-sheet recalculation records: its existing warning says the external file uses mode
+None, and the `.opj.sheaf` companion preserves the full mode and linkage for reopening in Sheaf.
+Expression, model and native/companion round-trip regressions are in the `cross_sheet` and
+`cross_sheet_formulas` test files. The sheet-only host used for filters and analysis conditions
+has no project scope and continues to reject qualified references.
+
 ## 4. Calling it from the program
 
 `Expr::parse(text)`, then `eval(&host)` for one value, `eval_rows(&host, n)` for rows `0..n`, or `compile(&host)` to get an object that can be run row by row. Variables and column slices are resolved once at compile time and constant sub-expressions are folded, so a million-row column evaluates without parsing and without per-row allocation. `variables()` and `columns()` list what the formula depends on, in order of first use, so the worksheet can decide when to recalculate.
@@ -190,10 +344,62 @@ and `crates/io/tests/parameter_labels.rs`. These use only generated metadata and
 
 ## 6. Differences from Origin's LabTalk
 
-- Only a single expression; no `before formula` scripts, assignments, string variables, `%()` substitution or user-defined functions. Those are separate features and are not part of this crate.
-- No cross-sheet references `[Book]Sheet!col(A)` (the cells of other sheets are not visible to the evaluator), `x`/`y` as built-in column shorthands (a host may supply `x` as a variable). The `[a:b]` range is accepted only inside statistics. Parameter-row ordering and the supported parameter-name syntax are described above.
+- Only a single expression; no `before formula` scripts, assignments, session string variables, graph/dataset `%()` substitution, generated expression text or user-defined functions. The supported string-expression and static worksheet-cell substitution subsets are described above.
+- No spreadsheet cell notation (`A1`, bare cross-sheet `Sheet!A`), range-variable declarations, or `x`/`y` as built-in column shorthands (a host may supply `x` as a variable). Explicit cross-sheet `col()` references are described above. The `[a:b]` range is accepted only inside statistics. Parameter-row ordering and the supported parameter-name syntax are described above.
 - A single `=` is not a comparison here; use `==`.
 - `e` is the constant 2.718...; a parameter literally named `e` in a fit function cannot be used (rename it).
 - `i` is read-only and always the 1-based row number of the output row.
+- `j` exists only where the host supplies the column position (a worksheet column formula); it is the position in the sheet, not the position within a multi-column selection **[choice, not measured]**. See section 7.
 - Names of variables are case-sensitive; function names are not.
 - Unknown names are errors at evaluation time, not silently zero.
+
+## 7. Set Multiple Columns Values (T53)
+
+Origin's Set Multiple Columns Values (Column menu, Ctrl+Shift+Q) opens the Set Values window for the selected columns at once: one formula, `i` the row and `j` the column. Measured on Windows on 2026-11-15 (7.1); what is still marked **[choice]** is Sheaf's and not Origin's, or not measured. Originally everything marked **[choice]** was Sheaf's guess from Origin's public documentation and must be checked on Windows.
+
+Core API (`sheaf-core`, `crates/core/src/formula.rs`):
+
+- `Project::set_columns_values_with(&[ColumnId], formula, rows, mode)` sets the same formula on each column as `set_column_values_with` would, from left to right in sheet order whatever the order of the slice; `Document::set_columns_values(...)` does it as one undo step ("Set multiple columns values"). The columns must be on one sheet. Any failure (unknown column, cycle, text outside the rows) undoes the whole call and names the column when the error comes from the formula.
+- Each column keeps the formula text exactly as typed, `j` included, and recalculates with its own `j`. **[choice]** Origin keeps the literal text too, but only on the first column of the range (7.1).
+- Recalculate (None, Manual, Auto) and the row range apply to every column. For Auto and Manual the dependencies are resolved per column, so `wcol(j-1)` over B to E is a chain B reads A, C reads B, and so on, calculated in dependency order, and a change in A reaches all of them. A loop (`wcol(j+1)+wcol(j-1)` over B and C) is refused with the chain named; a column that reads itself runs once. A reorder or insertion of columns changes `j`, so recalculating columns re-resolve their reads (the same trigger as a renamed column).
+- `j` is the position in the sheet, so selecting only column D gives `j = 4`, as in Origin (7.1).
+
+To measure on Windows with `tools/origin-ref`:
+
+1. The window title, and whether the column navigation buttons are shown or hidden.
+2. Whether `j` is the sheet position or the position in the selection (select C and E and set `j`).
+3. What each column's stored formula (the F(x) label row) shows afterwards: the literal text with `j`, or `j` substituted.
+4. How Auto recalculation treats a `wcol(j-1)` chain, and a selection that makes a loop.
+5. Whether a selection that includes a locked, text or non-numeric column is refused or silently skipped.
+6. `col(j)`, `wcol(j)` and `col(J)` on a sheet with a column named J and on one without, and whether `wcol(j+k)` outside the sheet is an error or missing values.
+7. Whether one undo step reverts every column (Sheaf: yes).
+
+### 7.1 Measured in Origin 2016 (2026-11-15)
+
+Run with `tools/origin-ref` (`re-workspace/scratch/t53`, local only): `csetvalue` from LabTalk for one
+column at a time, and the window itself opened with Ctrl+Shift+Q after dragging across the column heads
+(the watcher's `G:` drag), a formula typed and OK pressed. A selection made from a script
+(`wks.colSel`, `worksheet -s`) is not taken by the window: Origin answers "The current selection will be
+ignored. The column will be added to the end of the worksheet."
+
+- **Window**: titled "Set Values - Multiple Columns"; menus Formula, wcol(1), Col(A), Function,
+  Variables, Options; `Row ( i ): From <auto> To <auto>`; a second row `Col ( j ): From 3 To 5` (the
+  selected columns C to E as **sheet positions**, editable); the formula label `wcol(j) = `; the four
+  column buttons shown but greyed; Recalculate Manual by default; OK, Cancel, Apply (greyed) and the
+  Before Formula Scripts box. Sheaf copies the title, the `Col (j)` row (editing it sets the columns at
+  those positions; left as opened it sets exactly the selected columns), the label and the greyed
+  buttons.
+- **`j` is the sheet position**, also for a single column: `csetvalue` of `j` on column E gives 5, of
+  `j*100+i` on D gives 402 in row 2. As Sheaf.
+- **Order**: `wcol(j-1)*2+j` over C to E (B = 10 to 50) gives C = 23, D = 50, E = 105 in row 1: the
+  columns are computed left to right, each reading the new values of the one before. As Sheaf.
+- **Stored formula**: Origin keeps the formula **once, on the first column** of the range (C reads back
+  `wcol(j-1)*2+j`, D and E read back empty), and the F(x)= cell is drawn across C to E; C gets the
+  recalculation lock of the formula and D and E another one. **Not copied** [choice]: Sheaf keeps the
+  literal text on every column, so each column shows and recalculates its own copy (same values; a
+  column moved out of the range keeps its formula).
+- **Outside the sheet**: `wcol(j+1)+1` over E and F (no column G) writes no values in either column and
+  puts two messages in the Messages Log; the formula is kept on E. Sheaf refuses the call and changes
+  nothing.
+- Not measured: a selection that is not side by side (only a drag selection could be made), locked or
+  text columns in the range, a column named J, undo.

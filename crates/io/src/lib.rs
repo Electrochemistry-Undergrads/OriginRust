@@ -9,20 +9,28 @@ pub mod batch;
 pub mod chi;
 pub mod chi_bin;
 mod error;
+pub mod excel;
 pub mod export;
+pub mod graph_themes;
 pub mod opj;
 pub mod opju;
 pub mod project_file;
+pub mod recent;
+pub mod recovery;
 pub mod save;
 mod text;
+pub mod themes;
+pub mod user_templates;
+pub mod window_file;
 
 pub use error::IoError;
+pub use excel::{is_excel_file, is_excel_workbook};
 pub use text::{decode_text, read_text_file};
 
 use sheaf_core::Workbook;
 use sheaf_core::template::Template;
 use sheaf_core::worksheet::ImportSource;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// A project read by [`open_project`].
 #[derive(Clone, Debug)]
@@ -41,12 +49,15 @@ pub struct OpenedProject {
     pub warnings: Vec<String>,
 }
 
-/// True for file names that [`open_project`] reads: `.sheaf`, `.opj` and `.opju`.
+/// True for files that [`open_project`] reads: `.sheaf`, `.opj` and `.opju`.
+/// A `.sheaf` file that is a window file (File > Save Window As) or a user template is not a project: see
+/// [`window_file::is_window_file`] and [`user_templates::is_template_file`].
 pub fn is_project_file(path: &Path) -> bool {
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-    ext.eq_ignore_ascii_case(project_file::EXTENSION)
-        || ext.eq_ignore_ascii_case("opj")
-        || ext.eq_ignore_ascii_case("opju")
+    if ext.eq_ignore_ascii_case(project_file::EXTENSION) {
+        return !window_file::is_window_file(path) && !user_templates::is_template_file(path);
+    }
+    ext.eq_ignore_ascii_case("opj") || ext.eq_ignore_ascii_case("opju")
 }
 
 fn modified(path: &Path) -> Option<std::time::SystemTime> {
@@ -143,9 +154,10 @@ pub fn open_project(path: &Path) -> Result<OpenedProject, IoError> {
 }
 
 /// Which importer to use.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum ImportKind {
     /// CHI when the file looks like a CH Instruments export, delimited text otherwise.
+    #[default]
     Auto,
     Chi,
     Ascii,
@@ -154,9 +166,12 @@ pub enum ImportKind {
 /// A file read by [`import_file`].
 #[derive(Clone, Debug)]
 pub struct Imported {
+    /// The file that was read, as it was given (`workbook.source.path` is its text for display and
+    /// loses bytes that are not valid text).
+    pub path: PathBuf,
     /// The data; `workbook.source` records the file and importer.
     pub workbook: Workbook,
-    /// `"chi"` or `"ascii"`.
+    /// `"chi"`, `"ascii"` or `"excel"`.
     pub format: &'static str,
     /// The graph template that suits the data: cyclic voltammetry for a CHI
     /// CV file, a plain line plot otherwise.
@@ -167,20 +182,46 @@ pub struct Imported {
     pub warnings: Vec<String>,
 }
 
-/// Reads a file with the chosen importer and options.
+/// Reads a file with the chosen importer and options. An Excel workbook (`.xls`, `.xlsx`,
+/// `.xlsm`, recognised by its first bytes as well as its name) is read with the default
+/// [`excel::ExcelOptions`] when the kind is `Auto`; use [`import_file_with_excel`] to choose its
+/// sheets and header rows.
 pub fn import_file(
     path: &Path,
     kind: ImportKind,
     chi_opts: &chi::ChiOptions,
     ascii_opts: &ascii::AsciiOptions,
 ) -> Result<Imported, IoError> {
+    import_file_with_excel(path, kind, chi_opts, ascii_opts, &excel::ExcelOptions::default())
+}
+
+/// [`import_file`] with the options for Excel workbooks.
+pub fn import_file_with_excel(
+    path: &Path,
+    kind: ImportKind,
+    chi_opts: &chi::ChiOptions,
+    ascii_opts: &ascii::AsciiOptions,
+    excel_opts: &excel::ExcelOptions,
+) -> Result<Imported, IoError> {
+    if kind == ImportKind::Auto && excel::is_excel_workbook(path) {
+        let r = excel::read_workbook(path, excel_opts)?;
+        let names: Vec<&str> = r.workbook.sheets.iter().map(|s| s.name.as_str()).collect();
+        return Ok(Imported {
+            path: path.to_path_buf(),
+            meta: vec![("Sheets".to_string(), names.join(", "))],
+            workbook: r.workbook,
+            format: "excel",
+            suggested_template: Template::Line,
+            warnings: r.warnings,
+        });
+    }
     let bytes = std::fs::read(path).map_err(|e| IoError::io(path, e))?;
     let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let shown = path.display().to_string();
     // A CH Instruments binary file is recognised by its first bytes, whatever its extension.
     if kind != ImportKind::Ascii && chi_bin::looks_like_chi_bin(&bytes) {
         let r = chi_bin::parse_chi_bin(&bytes, &stem, chi_opts).map_err(|e| name_file(e, &shown))?;
-        return Ok(finish_chi(r, shown));
+        return Ok(finish_chi(r, shown, path));
     }
     let text = decode_text(&bytes, path)?;
     let use_chi = match kind {
@@ -190,26 +231,39 @@ pub fn import_file(
     };
     if use_chi {
         let r = chi::parse_chi(&text, &stem, chi_opts).map_err(|e| name_file(e, &shown))?;
-        return Ok(finish_chi(r, shown));
+        return Ok(finish_chi(r, shown, path));
     }
-    let r = ascii::parse_ascii(&text, &stem, ascii_opts).map_err(|e| name_file(e, &shown))?;
+    let file_name = path.file_name().map_or_else(|| stem.clone(), |s| s.to_string_lossy().into_owned());
+    let r = ascii::parse_ascii_named(&text, &file_name, ascii_opts).map_err(|e| name_file(e, &shown))?;
     let mut workbook = r.workbook;
     workbook.source = Some(ImportSource { path: shown, importer: "ascii".to_string() });
+    let mut warnings = r.warnings;
+    if excel::is_excel_file(path) {
+        warnings
+            .push("the file is named like an Excel workbook but holds text; it was read as a text file".to_string());
+    }
     Ok(Imported {
+        path: path.to_path_buf(),
         workbook,
         format: "ascii",
         suggested_template: Template::Line,
         meta: Vec::new(),
-        warnings: r.warnings,
+        warnings,
     })
 }
 
 /// Wraps the result of either CH Instruments reader (text or binary).
-fn finish_chi(r: chi::ChiImport, shown: String) -> Imported {
+fn finish_chi(r: chi::ChiImport, shown: String, path: &Path) -> Imported {
     let cv = r.scans > 0 || r.technique.to_ascii_lowercase().contains("cyclic voltammetry");
     let mut workbook = r.workbook;
+    // Origin reads these text files with its ASCII import, which keeps the extension in the book's
+    // long name (an imported run1.txt is titled run1.txt).
+    if let Some(name) = path.file_name() {
+        workbook.long_name = name.to_string_lossy().into_owned();
+    }
     workbook.source = Some(ImportSource { path: shown, importer: "chi".to_string() });
     Imported {
+        path: path.to_path_buf(),
         workbook,
         format: "chi",
         suggested_template: if cv { Template::CyclicVoltammetry } else { Template::Line },
@@ -254,7 +308,7 @@ mod tests {
         let a = import_file(&dir.join("run1.txt"), ImportKind::Auto, &chi, &ascii).unwrap();
         assert_eq!((a.format, a.suggested_template), ("chi", Template::CyclicVoltammetry));
         assert_eq!(a.workbook.source.as_ref().unwrap().importer, "chi");
-        assert_eq!(a.workbook.long_name, "run1");
+        assert_eq!(a.workbook.long_name, "run1.txt", "the title keeps the extension, as in Origin");
 
         let b = import_file(&dir.join("table.csv"), ImportKind::Auto, &chi, &ascii).unwrap();
         assert_eq!((b.format, b.suggested_template), ("ascii", Template::Line));
@@ -283,7 +337,7 @@ mod tests {
                 let a = import_file(&dir.join(name), kind, &chi, &ascii).unwrap();
                 assert_eq!((a.format, a.suggested_template), ("chi", Template::CyclicVoltammetry), "{name}");
                 assert_eq!(a.workbook.source.as_ref().unwrap().importer, "chi");
-                assert_eq!(a.workbook.long_name, Path::new(name).file_stem().unwrap().to_string_lossy());
+                assert_eq!(a.workbook.long_name, name, "the title is the whole file name");
                 assert!(a.meta.iter().any(|(k, v)| k == "Technique" && v == "Cyclic Voltammetry"));
             }
         }

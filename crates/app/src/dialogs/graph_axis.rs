@@ -1,6 +1,6 @@
 //! The body of the axis dialog: a list at the left to choose the horizontal or the vertical axis of
 //! the layer, and the tabs Scale, Tick Labels, Title, Grids, Line and Ticks, Special Ticks and
-//! Breaks. As in Origin the list names Horizontal and Vertical on the Scale and Breaks tabs and the
+//! Breaks, and Rug (T41). As in Origin the list names Horizontal and Vertical on the Scale and Breaks tabs and the
 //! four edges (Bottom, Top, Left, Right) on the others; the Top and Right pages only hold what Sheaf
 //! keeps for the far edge (its line and ticks). "Apply To..." copies the look of the shown axis.
 
@@ -22,11 +22,12 @@ pub enum AxisTab {
     LineAndTicks,
     SpecialTicks,
     Breaks,
+    Rug,
 }
 
 impl AxisTab {
     /// Origin's order.
-    const ALL: [(AxisTab, &'static str, bool); 7] = [
+    const ALL: [(AxisTab, &'static str, bool); 8] = [
         (AxisTab::Scale, "Scale", true),
         (AxisTab::TickLabels, "Tick Labels", true),
         (AxisTab::Title, "Title", true),
@@ -34,6 +35,7 @@ impl AxisTab {
         (AxisTab::LineAndTicks, "Line and Ticks", true),
         (AxisTab::SpecialTicks, "Special Ticks", true),
         (AxisTab::Breaks, "Breaks", true),
+        (AxisTab::Rug, "Rug", true),
     ];
 }
 
@@ -75,6 +77,24 @@ pub fn dialog_body(
             ui.separator();
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                 let layer = &mut graph.layers[li];
+                if *tab == AxisTab::Rug {
+                    // One entry per Y column (the rug refers to the first plot with that column).
+                    let mut names: Vec<(ColumnId, String)> = Vec::new();
+                    for (i, p) in layer.plots.iter().enumerate() {
+                        if names.iter().all(|n| n.0 != p.y) {
+                            let name = columns
+                                .iter()
+                                .find(|c| c.0 == p.y)
+                                .map_or_else(|| format!("Plot {}", i + 1), |c| c.1.clone());
+                            names.push((p.y, name));
+                        }
+                    }
+                    let cartesian = layer.coords.polar().is_none() && layer.coords.ternary().is_none();
+                    let axis = if *vertical { &mut layer.y_axis } else { &mut layer.x_axis };
+                    let id = if *vertical { "y" } else { "x" };
+                    rug_tab(ui, axis, far, cartesian, &names, id);
+                    return;
+                }
                 let (axis, id) = if *vertical { (&mut layer.y_axis, "y") } else { (&mut layer.x_axis, "x") };
                 if by_edge && far {
                     far_edge_page(ui, axis, *tab, *vertical, id);
@@ -88,11 +108,81 @@ pub fn dialog_body(
                     AxisTab::LineAndTicks => line_and_ticks_tab(ui, axis, *vertical, id),
                     AxisTab::SpecialTicks => special_ticks_tab(ui, axis, resolved, id),
                     AxisTab::Breaks => breaks_tab(ui, axis, resolved, id),
+                    AxisTab::Rug => {} // handled above: it picks its rug by edge
                 }
             });
         });
     });
     ui.data_mut(|d| d.insert_temp(side_id, far));
+}
+
+/// The rug of the edge the list has chosen: an axis on its own edge keeps its first rug there, an axis
+/// drawn on the far edge (Opposite side) the other way round.
+pub fn rug_mut(axis: &mut Axis, far: bool) -> &mut Rug {
+    if far != (axis.side == AxisSide::Opposite) { &mut axis.rug_opposite } else { &mut axis.rug }
+}
+
+/// The Rug tab (graphing spec 18.10): one short line per plotted point in a strip beside the chosen edge.
+fn rug_tab(ui: &mut egui::Ui, axis: &mut Axis, far: bool, cartesian: bool, plots: &[(ColumnId, String)], id: &str) {
+    if !cartesian {
+        ui.weak("Rugs are offered for 2D Cartesian layers only.");
+        return;
+    }
+    let id = format!("{id}_{}", if far { "far" } else { "near" });
+    let rug = rug_mut(axis, far);
+    ui.checkbox(&mut rug.show, "Show");
+    ui.add_enabled_ui(rug.show, |ui| {
+        grid(ui, &format!("{id}_rug_head"), |ui| {
+            ui.label("Data");
+            // A column no plot has any more draws as `<All>` too.
+            let shown = rug
+                .plot
+                .and_then(|c| plots.iter().find(|p| p.0 == c))
+                .map_or_else(|| "<All>".to_string(), |p| p.1.clone());
+            egui::ComboBox::from_id_salt(format!("{id}_rug_data")).selected_text(shown).show_ui(ui, |ui| {
+                ui.selectable_value(&mut rug.plot, None, "<All>");
+                for (col, name) in plots {
+                    ui.selectable_value(&mut rug.plot, Some(*col), name);
+                }
+            });
+            ui.end_row();
+            ui.label("Color");
+            ui.horizontal(|ui| {
+                let mut auto = rug.color.is_none();
+                if ui.checkbox(&mut auto, "Auto").changed() {
+                    rug.color = if auto { None } else { Some(Color::BLACK) };
+                }
+                if let Some(c) = &mut rug.color {
+                    color_button(ui, c);
+                }
+            });
+            ui.end_row();
+            ui.label("Thickness");
+            ui.add(DragValue::new(&mut rug.thickness_pt).range(0.0..=20.0).speed(0.05).suffix(" pt"));
+            ui.end_row();
+            ui.label("Transparency (%)");
+            ui.add(DragValue::new(&mut rug.transparency_pct).range(0.0..=100.0).speed(0.5));
+            ui.end_row();
+        });
+        group_box(ui, "Layout", |ui| {
+            grid(ui, &format!("{id}_rug_layout"), |ui| {
+                ui.label("Size (%)");
+                ui.add(DragValue::new(&mut rug.size_pct).range(0.0..=100.0).speed(0.1).max_decimals(2));
+                ui.end_row();
+                ui.label("Overlap");
+                ui.checkbox(&mut rug.overlap, "");
+                ui.end_row();
+                ui.label("Gap Between Rugs (%)");
+                ui.add_enabled(!rug.overlap, DragValue::new(&mut rug.gap_pct).range(0.0..=100.0).speed(0.5));
+                ui.end_row();
+                ui.label("Margin (%)");
+                ui.add(DragValue::new(&mut rug.margin_pct).range(0.0..=49.0).speed(0.5));
+                ui.end_row();
+            });
+            ui.checkbox(&mut rug.perpendicular_border, "Show Perpendicular Border");
+            ui.checkbox(&mut rug.parallel_border, "Show Parallel Border");
+        });
+    });
 }
 
 /// The far edge (top of X, right of Y): Sheaf keeps its line and its ticks with the near axis.
@@ -120,9 +210,12 @@ fn copy_axis_look(dst: &mut Axis, src: &Axis) {
         minor_ticks: dst.minor_ticks,
         title: dst.title.clone(),
         side: dst.side,
+        offset_pct: dst.offset_pct,
         reverse: dst.reverse,
         first_tick: dst.first_tick,
-        axis_break: dst.axis_break,
+        axis_breaks: dst.axis_breaks.clone(),
+        rug: dst.rug.clone(),
+        rug_opposite: dst.rug_opposite.clone(),
         special_ticks: dst.special_ticks.clone(),
         tick_label_source: dst.tick_label_source,
         ..src.clone()
@@ -186,45 +279,83 @@ fn special_ticks_tab(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&Resol
     }
 }
 
+/// Origin's Breaks tab (graphing spec 3.6): Enable, the gap shared by the breaks (Origin's Break Half
+/// Length; Sheaf states the whole gap in percent of the axis length), the Number of Breaks (None, 1 to 7)
+/// and a row per break with Break From, Break To, Auto Position and Position. A new row takes the middle
+/// half of what lies after the last break, as Origin filled the rows one at a time. Sheaf's "Step after"
+/// stands for the tick step of Origin's Details... page.
 fn breaks_tab(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis>, id: &str) {
-    let mut on = axis.axis_break.is_some();
-    if ui.checkbox(&mut on, "Show Break").changed() {
-        axis.axis_break = on.then(|| {
-            let (lo, hi) = resolved.map_or((0.0, 1.0), |r| (r.min, r.max));
-            AxisBreak::new(lo + (hi - lo) * 0.4, lo + (hi - lo) * 0.6)
-        });
-    }
-    let span = resolved.map(|r| (r.max - r.min).abs()).unwrap_or(1.0);
+    let (lo, hi) = resolved.map_or((0.0, 1.0), |r| (r.min, r.max));
+    let span = (hi - lo).abs();
     let speed = (span / 200.0).max(1e-12);
-    ui.add_enabled_ui(on, |ui| {
-        let mut fallback = AxisBreak::new(0.0, 1.0);
-        let b = axis.axis_break.as_mut().unwrap_or(&mut fallback);
-        group_box(ui, "Break Region", |ui| {
-            grid(ui, &format!("{id}_break"), |ui| {
-                ui.label("From");
-                ui.add(DragValue::new(&mut b.from).speed(speed).max_decimals(8));
-                ui.end_row();
-                ui.label("To");
-                ui.add(DragValue::new(&mut b.to).speed(speed).max_decimals(8));
-                ui.end_row();
-                ui.label("Position (% of axis)");
-                ui.add(DragValue::new(&mut b.position_pct).range(5.0..=95.0).speed(0.5));
-                ui.end_row();
-                ui.label("Gap (% of axis)");
-                ui.add(DragValue::new(&mut b.gap_pct).range(0.0..=30.0).speed(0.1));
-                ui.end_row();
-                ui.label("Step after break");
-                optional_number(ui, &mut b.step_after, resolved.map(|r| r.step), speed);
-                ui.end_row();
-            });
-        });
-    });
-    if on
-        && let Some(b) = axis.axis_break.as_mut()
-        && b.to < b.from
-    {
-        std::mem::swap(&mut b.from, &mut b.to);
+    let mut on = !axis.axis_breaks.is_empty();
+    if ui.checkbox(&mut on, "Enable").changed() {
+        if on {
+            axis.axis_breaks = vec![AxisBreak::next_after(&[], lo, hi)];
+        } else {
+            axis.axis_breaks.clear();
+        }
     }
+    ui.add_enabled_ui(on, |ui| {
+        grid(ui, &format!("{id}_breaks_head"), |ui| {
+            ui.label("Gap (% of axis)");
+            let mut gap = axis.axis_breaks.first().map_or(BREAK_GAP_PCT, |b| b.gap_pct);
+            if ui.add(DragValue::new(&mut gap).range(0.0..=30.0).speed(0.05).max_decimals(3)).changed() {
+                axis.axis_breaks.iter_mut().for_each(|b| b.gap_pct = gap);
+            }
+            ui.end_row();
+            ui.label("Number of Breaks");
+            let n = axis.axis_breaks.len();
+            let name = |k: usize| if k == 0 { "None".to_string() } else { k.to_string() };
+            let mut want = n;
+            egui::ComboBox::from_id_salt(format!("{id}_break_count")).selected_text(name(n)).show_ui(ui, |ui| {
+                for k in 0..=MAX_AXIS_BREAKS {
+                    ui.selectable_value(&mut want, k, name(k));
+                }
+            });
+            if want != n {
+                axis.axis_breaks.truncate(want);
+                while axis.axis_breaks.len() < want {
+                    let next = AxisBreak::next_after(&axis.axis_breaks, lo, hi);
+                    axis.axis_breaks.push(next);
+                }
+            }
+            ui.end_row();
+        });
+        let n = axis.axis_breaks.len();
+        let mut remove = None;
+        if n > 0 {
+            egui::Grid::new(format!("{id}_breaks_table")).striped(true).show(ui, |ui| {
+                for head in ["Break From", "Break To", "Auto Position", "Position (%)", "Step after", ""] {
+                    ui.strong(head);
+                }
+                ui.end_row();
+                for (k, b) in axis.axis_breaks.iter_mut().enumerate() {
+                    ui.add(DragValue::new(&mut b.from).speed(speed).max_decimals(8));
+                    ui.add(DragValue::new(&mut b.to).speed(speed).max_decimals(8));
+                    ui.checkbox(&mut b.auto_position, "");
+                    if b.auto_position {
+                        // The place the break gets, shown greyed as in Origin.
+                        let mut auto = 100.0 * (k + 1) as f64 / (n + 1) as f64;
+                        ui.add_enabled(false, DragValue::new(&mut auto).max_decimals(0));
+                    } else {
+                        ui.add(DragValue::new(&mut b.position_pct).range(2.0..=98.0).speed(0.5));
+                    }
+                    optional_number(ui, &mut b.step_after, resolved.map(|r| r.step), speed);
+                    if ui.small_button("Delete").clicked() {
+                        remove = Some(k);
+                    }
+                    ui.end_row();
+                    if b.to < b.from {
+                        std::mem::swap(&mut b.from, &mut b.to);
+                    }
+                }
+            });
+        }
+        if let Some(k) = remove {
+            axis.axis_breaks.remove(k);
+        }
+    });
 }
 
 fn scale_tab(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis>, id: &str) {
@@ -495,8 +626,21 @@ fn grids_tab(ui: &mut egui::Ui, axis: &mut Axis, id: &str) {
         0.3,
         Dash::Dash,
     );
+    // Origin 2016's Additional Lines: Opposite (the axis line on the far edge, the same setting as
+    // Line and Ticks) and a line at a value of the other axis ("Y =" on the X axis page).
     group_box(ui, "Additional Lines", |ui| {
-        ui.add_enabled(false, egui::Checkbox::new(&mut false, "Opposite"));
+        ui.checkbox(&mut axis.show_opposite, "Opposite");
+        ui.horizontal(|ui| {
+            let mut on = axis.additional_line.is_some();
+            let label = if id == "x" { "Y =" } else { "X =" };
+            if ui.checkbox(&mut on, label).changed() {
+                axis.additional_line = on.then_some(0.0);
+            }
+            let mut v = axis.additional_line.unwrap_or(0.0);
+            if ui.add_enabled(on, DragValue::new(&mut v).speed(0.1)).changed() && on {
+                axis.additional_line = Some(v);
+            }
+        });
     });
 }
 
@@ -513,10 +657,10 @@ fn grid_group(
     group_box(ui, title, |ui| {
         let mut on = line.is_some();
         if ui.checkbox(&mut on, "Show").changed() {
-            *line = on.then_some(LineStyle { color, width_pt: width, dash, connect: Connect::Straight });
+            *line = on.then_some(LineStyle { color, width_pt: width, dash, connect: Connect::Straight, sort_x: false });
         }
         ui.add_enabled_ui(line.is_some(), |ui| {
-            let mut fallback = LineStyle { color, width_pt: width, dash, connect: Connect::Straight };
+            let mut fallback = LineStyle { color, width_pt: width, dash, connect: Connect::Straight, sort_x: false };
             let l = line.as_mut().unwrap_or(&mut fallback);
             grid(ui, id, |ui| {
                 ui.label("Color");
@@ -561,6 +705,25 @@ fn line_and_ticks_tab(ui: &mut egui::Ui, axis: &mut Axis, vertical: bool, id: &s
                         ui.selectable_value(&mut axis.side, AxisSide::Opposite, opposite);
                     });
                 ui.end_row();
+                if vertical {
+                    // Origin's "% From Left" / "% From Right" axis position (graphing spec 21.3): the axis
+                    // line, ticks and labels stand outward from the frame by a share of its width.
+                    ui.label(if axis.side == AxisSide::Opposite { "% From Right" } else { "% From Left" });
+                    ui.add(DragValue::new(&mut axis.offset_pct).range(-100.0..=100.0).speed(0.5).suffix(" %"))
+                        .on_hover_text(
+                            "Outward from the frame, in percent of its width; negative moves the axis inside",
+                        );
+                    ui.end_row();
+                } else {
+                    // The same for a horizontal axis: "% From Bottom" / "% From Top", a share of the
+                    // frame's height (a Scatter Central X axis stands inside the frame, at -50).
+                    ui.label(if axis.side == AxisSide::Opposite { "% From Top" } else { "% From Bottom" });
+                    ui.add(DragValue::new(&mut axis.offset_pct).range(-100.0..=100.0).speed(0.5).suffix(" %"))
+                        .on_hover_text(
+                            "Outward from the frame, in percent of its height; negative moves the axis inside",
+                        );
+                    ui.end_row();
+                }
                 ui.label("Opposite side");
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut axis.show_opposite, "Line")

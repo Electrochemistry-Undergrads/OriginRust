@@ -12,8 +12,37 @@ recalculation, undo and project save/reopen. Scalar reads and conversions measur
 the existing alphabetical row order and remaining name-syntax limits are documented in the spec.
 Validation on Windows, Rust 1.99.1, after merging `0b9bd4e`: formatting, strict all-target
 workspace Clippy and the full workspace suite pass (1,929 passed, two ignored; 13 new regressions).
-**Left:** cross-sheet/book references (group 6), `%()` substitution,
-and Origin global/`@SD` formatting defaults. **Size:** M. **Branch:** `expr-funcs2`. **Model:** Sonnet.
+Cross-sheet/book `col()` references (group 6) added on branch `codex/formula-cross-sheet`:
+named/positional sheets, project-wide dependency order and cycles, remote metadata and parameter
+rows, Manual/Auto/None, source removal/rebinding, Undo/Redo and native/companion persistence.
+Origin 2016 range-variable vectors measured; direct qualified formula syntax and recalculation
+rules are documented Sheaf extensions, with published Origin range notation as their basis.
+Workbook-title lookup is measured in Origin; short-name precedence and ambiguous-title refusal
+are explicit Sheaf rules. Final validation on integrated `d04e909` plus this change: formatting,
+strict workspace/all-target Clippy and all workspace tests pass (2,047 passed, three existing
+ignored; 17 new regressions: core 12, expression 4, I/O 1).
+String-expression `%(...)` added on branch `codex/formula-string-substitution`: interpolation
+inside quoted strings, standalone numeric conversion, TAB/CRLF and literal `%%(`, with existing
+column/metadata dependencies, recalculation modes, undo and native/companion persistence.
+Scalar strings, numeric conversion and escaping measured in Origin 2016; per-row formulas
+and the narrower conversion-only data boundary are documented Sheaf choices.
+Validation on integrated `0666218` plus this change and the Windows XDG test-fixture repair:
+formatting, strict workspace/all-target Clippy and the full workspace suite pass
+(2,128 passed, three existing ignored; 12 new expression/core/I/O regressions).
+Default formatting follow-up (`codex/formula-format-defaults`): explicit empty Text/Format
+formats use the measured fresh `@SD=14` precision, distinct from omitted/`"*"` formats;
+source column formatting still governs omitted direct-column Text. Precision, dynamic format
+arguments, recalculation and Undo are covered; expression-language.md section 3 records the
+Origin probes and limits.
+Static worksheet-cell follow-up (`codex/formula-worksheet-substitution`):
+`%([Book]Sheet,column,row[,format])` supports fixed qualified selectors and numeric row
+expressions, with measured 15-digit defaults, column-display `W`, explicit formats and text
+preservation. Expression/core/I/O regressions cover selectors, dependencies, recalculation,
+cycles, Undo and native/companion reopen; expression-language.md section 3 records the
+Origin scalar probes and the existing no-generated-code boundary.
+**Left:** active-sheet/book-only and graph/dataset `%()` substitution, session/range-variable
+substitution and generated expression text; user-configurable global/`@SD` formatting settings.
+**Size:** M. **Branch:** `expr-funcs2`. **Model:** Sonnet.
 **Detail:** audit E "Missing" (formula functions). **Spec:** `docs/spec/expression-language.md`.
 
 ## Where

@@ -12,6 +12,8 @@ pub(crate) enum Tok {
     Star,
     Slash,
     Percent,
+    /// A substitution inside a quoted string retains its text result.
+    QuotedSubstitution,
     Caret,
     LParen,
     RParen,
@@ -45,6 +47,7 @@ impl Tok {
             Tok::Star => "'*'".into(),
             Tok::Slash => "'/'".into(),
             Tok::Percent => "'%'".into(),
+            Tok::QuotedSubstitution => "a string substitution".into(),
             Tok::Caret => "'^'".into(),
             Tok::LParen => "'('".into(),
             Tok::RParen => "')'".into(),
@@ -84,6 +87,12 @@ fn is_ident_part(c: char) -> bool {
 
 /// Splits `src` into tokens; the last token is always [`Tok::End`].
 pub(crate) fn lex(src: &str) -> Result<Vec<Token>, ExprError> {
+    lex_at(src, 0, 0)
+}
+
+const MAX_SUBSTITUTION_NESTING: usize = 64;
+
+fn lex_at(src: &str, base: usize, depth: usize) -> Result<Vec<Token>, ExprError> {
     let bytes = src.as_bytes();
     let mut out = Vec::new();
     let mut chars = src.char_indices().peekable();
@@ -118,14 +127,15 @@ pub(crate) fn lex(src: &str) -> Result<Vec<Token>, ExprError> {
                 }
             }
             let text = &src[pos..end];
-            let value: f64 = text.parse().map_err(|_| ExprError::at(pos, format!("malformed number '{text}'")))?;
+            let value: f64 =
+                text.parse().map_err(|_| ExprError::at(base + pos, format!("malformed number '{text}'")))?;
             if !value.is_finite() {
-                return Err(ExprError::at(pos, format!("number '{text}' is too large")));
+                return Err(ExprError::at(base + pos, format!("number '{text}' is too large")));
             }
             while chars.peek().is_some_and(|&(i, _)| i < end) {
                 chars.next();
             }
-            out.push(Token { tok: Tok::Num(value), pos });
+            out.push(Token { tok: Tok::Num(value), pos: base + pos });
             continue;
         }
         if is_ident_start(c) {
@@ -138,24 +148,15 @@ pub(crate) fn lex(src: &str) -> Result<Vec<Token>, ExprError> {
                     break;
                 }
             }
-            out.push(Token { tok: Tok::Ident(src[pos..end].to_string()), pos });
+            out.push(Token { tok: Tok::Ident(src[pos..end].to_string()), pos: base + pos });
             continue;
         }
         if c == '"' {
-            chars.next();
-            let mut text = String::new();
-            let mut closed = false;
-            for (_, ch) in chars.by_ref() {
-                if ch == '"' {
-                    closed = true;
-                    break;
-                }
-                text.push(ch);
+            let (tokens, end) = quoted_tokens(src, pos, base, depth)?;
+            out.extend(tokens);
+            while chars.peek().is_some_and(|&(i, _)| i < end) {
+                chars.next();
             }
-            if !closed {
-                return Err(ExprError::at(pos, "text string is missing its closing '\"'"));
-            }
-            out.push(Token { tok: Tok::Str(text), pos });
             continue;
         }
         chars.next();
@@ -167,15 +168,120 @@ pub(crate) fn lex(src: &str) -> Result<Vec<Token>, ExprError> {
             ('!', Some('=')) => Tok::Ne,
             ('&', Some('&')) => Tok::AndAnd,
             ('|', Some('|')) => Tok::OrOr,
-            _ => single(c, pos)?,
+            _ => single(c, base + pos)?,
         };
         if matches!(tok, Tok::Le | Tok::Ge | Tok::EqEq | Tok::Ne | Tok::AndAnd | Tok::OrOr) {
             chars.next();
         }
-        out.push(Token { tok, pos });
+        out.push(Token { tok, pos: base + pos });
     }
-    out.push(Token { tok: Tok::End, pos: src.len() });
+    out.push(Token { tok: Tok::End, pos: base + src.len() });
     Ok(out)
+}
+
+/// Finds a closing quote or substitution without building tokens. The mutual scans preserve
+/// quotes inside substitutions and substitutions inside quoted arguments, with bounded depth.
+fn quoted_end(src: &str, start: usize, base: usize, depth: usize) -> Result<usize, ExprError> {
+    if depth >= MAX_SUBSTITUTION_NESTING {
+        return Err(ExprError::at(base + start, "string substitution is nested too deeply"));
+    }
+    let mut at = start + 1;
+    while at < src.len() {
+        if src[at..].starts_with("%%") {
+            at += 2;
+        } else if src[at..].starts_with("%(") {
+            at = substitution_end(src, at, base, depth + 1)? + 1;
+        } else if src.as_bytes()[at] == b'"' {
+            return Ok(at + 1);
+        } else {
+            at += src[at..].chars().next().expect("inside the string").len_utf8();
+        }
+    }
+    Err(ExprError::at(base + start, "text string is missing its closing '\"'"))
+}
+
+fn substitution_end(src: &str, start: usize, base: usize, depth: usize) -> Result<usize, ExprError> {
+    if depth >= MAX_SUBSTITUTION_NESTING {
+        return Err(ExprError::at(base + start, "string substitution is nested too deeply"));
+    }
+    let mut at = start + 2;
+    let mut parens = 1usize;
+    while at < src.len() {
+        match src.as_bytes()[at] {
+            b'"' => {
+                at = quoted_end(src, at, base, depth + 1)?;
+                continue;
+            }
+            b'(' => parens += 1,
+            b')' => {
+                parens -= 1;
+                if parens == 0 {
+                    return Ok(at);
+                }
+            }
+            _ => {}
+        }
+        at += src[at..].chars().next().expect("inside the substitution").len_utf8();
+    }
+    Err(ExprError::at(base + start, "string substitution is missing its closing ')'"))
+}
+
+/// Lowers interpolation to grouped string concatenation. Only formula text is tokenized;
+/// text read from cells or metadata is never reparsed as an expression or command.
+fn quoted_tokens(src: &str, start: usize, base: usize, depth: usize) -> Result<(Vec<Token>, usize), ExprError> {
+    if depth >= MAX_SUBSTITUTION_NESTING {
+        return Err(ExprError::at(base + start, "string substitution is nested too deeply"));
+    }
+    let mut out = Vec::new();
+    let mut literal = String::new();
+    let mut at = start + 1;
+    let mut interpolated = false;
+    while at < src.len() {
+        if src.as_bytes()[at] == b'"' {
+            out.push(Token { tok: Tok::Str(literal), pos: base + start });
+            if interpolated {
+                out.push(Token { tok: Tok::RParen, pos: base + at });
+            }
+            return Ok((out, at + 1));
+        }
+        if src[at..].starts_with("%%") {
+            literal.push('%');
+            at += 2;
+            continue;
+        }
+        if src[at..].starts_with("%(") {
+            let close = substitution_end(src, at, base, depth + 1)?;
+            if !interpolated {
+                out.push(Token { tok: Tok::LParen, pos: base + start });
+                interpolated = true;
+            }
+            out.push(Token { tok: Tok::Str(std::mem::take(&mut literal)), pos: base + start });
+            out.push(Token { tok: Tok::Plus, pos: base + at });
+            out.push(Token { tok: Tok::QuotedSubstitution, pos: base + at });
+            out.push(Token { tok: Tok::LParen, pos: base + at });
+            let inner = &src[at + 2..close];
+            let keyword = match inner.trim().to_ascii_uppercase().as_str() {
+                "TAB" => Some("\t"),
+                "CRLF" => Some("\r\n"),
+                _ => None,
+            };
+            if let Some(keyword) = keyword {
+                out.push(Token { tok: Tok::Str(keyword.into()), pos: base + at });
+            } else {
+                let mut tokens = lex_at(inner, base + at + 2, depth + 1)?;
+                tokens.pop(); // The surrounding expression supplies its own end token.
+                out.extend(tokens);
+            }
+            out.push(Token { tok: Tok::RParen, pos: base + close });
+            out.push(Token { tok: Tok::Plus, pos: base + close });
+            at = close + 1;
+            continue;
+        }
+        let ch = src[at..].chars().next().expect("inside the string");
+        literal.push(ch);
+        at += ch.len_utf8();
+    }
+    Err(ExprError::at(base + start, "text string is missing its closing '\"'"))
 }
 
 fn single(c: char, pos: usize) -> Result<Tok, ExprError> {

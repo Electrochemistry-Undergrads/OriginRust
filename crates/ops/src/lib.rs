@@ -3,7 +3,13 @@
 //! what to show.
 
 pub mod analyze;
+pub mod args;
+pub mod cli_analyze;
+pub mod cli_fit;
+pub mod cli_plot;
+pub mod cli_simulate;
 pub mod fit;
+pub mod fit_datasets;
 pub mod import;
 pub mod info;
 pub mod pick;
@@ -11,7 +17,10 @@ pub mod plot;
 pub mod read;
 pub mod render;
 pub mod session;
+pub mod simulate;
+pub mod simulate_surface;
 pub mod tabular;
+pub mod themes;
 
-pub use read::{DataFormat, ReadSettings, ThousandsSetting};
+pub use read::{DataFormat, NoFlagOptions, ReadSettings, SharedOptions, ThousandsSetting};
 pub use session::{Loaded, SaveReport};

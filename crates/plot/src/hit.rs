@@ -104,7 +104,7 @@ pub(crate) fn item_bounds(item: &Item, m: &dyn TextMeasurer) -> Option<Rect> {
 
 /// The vertices of each subpath of SVG path data written by this crate (`M`, `L`, `C`, `A`,
 /// `Z`; absolute coordinates). Curves contribute their end points only.
-fn subpaths(d: &str) -> Vec<Vec<(f64, f64)>> {
+pub(crate) fn subpaths(d: &str) -> Vec<Vec<(f64, f64)>> {
     let mut out: Vec<Vec<(f64, f64)>> = Vec::new();
     let mut cmd = 'M';
     let mut nums: Vec<f64> = Vec::new();
@@ -247,8 +247,10 @@ pub fn hit_test(scene: &Scene, p: (f64, f64), tol: f64) -> Hit {
         })
     };
     let rank = |layer: &LayerScene, k: ObjectKind| match k {
-        ObjectKind::Label(_) | ObjectKind::Shape(_) => 0,
-        ObjectKind::Legend => 1,
+        ObjectKind::Label(_) | ObjectKind::Shape(_) | ObjectKind::Slope(_) => 0,
+        // A straight line runs across the whole frame: axes and plots under it are tried first.
+        ObjectKind::StraightLine(_) => 5,
+        ObjectKind::Legend | ObjectKind::Scale(_) => 1,
         ObjectKind::XTitle | ObjectKind::YTitle => {
             if layer.underlay_len > 0 {
                 3
@@ -271,7 +273,7 @@ pub fn hit_test(scene: &Scene, p: (f64, f64), tol: f64) -> Hit {
             }
         }
     };
-    for wanted in 0..=4 {
+    for wanted in 0..=5 {
         for (layer, o) in all(wanted == 0) {
             if rank(layer, o.kind) != wanted || !contains(o.bounds, p, tol) {
                 continue;
@@ -280,6 +282,10 @@ pub fn hit_test(scene: &Scene, p: (f64, f64), tol: f64) -> Hit {
                 // Lines can be far apart inside their box (ticks on both edges, a curve across the
                 // frame): only a click near a line, a symbol or a tick label counts.
                 ObjectKind::Shape(_) => near_shape(&list(layer, o.list)[o.items.clone()], p, tol),
+                ObjectKind::Slope(_) | ObjectKind::StraightLine(_) => {
+                    o.boxes.iter().any(|&b| contains(b, p, tol))
+                        || near_shape(&list(layer, o.list)[o.items.clone()], p, tol)
+                }
                 ObjectKind::Plot(_) | ObjectKind::XAxis | ObjectKind::YAxis => {
                     o.boxes.iter().any(|&b| contains(b, p, tol))
                         || near_items(&list(layer, o.list)[o.items.clone()], p, tol)
@@ -293,7 +299,7 @@ pub fn hit_test(scene: &Scene, p: (f64, f64), tol: f64) -> Hit {
     }
     // The topmost frame that holds the point.
     for (i, layer) in scene.layers.iter().enumerate().rev() {
-        if contains(layer.clip, p, 0.0) {
+        if layer.clip.w > 0.0 && layer.clip.h > 0.0 && contains(layer.clip, p, 0.0) {
             return Hit::Layer(i);
         }
     }

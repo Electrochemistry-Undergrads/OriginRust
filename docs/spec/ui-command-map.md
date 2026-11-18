@@ -64,7 +64,9 @@ The ids 507, 510, 511, 532 are assigned by guess from their contents (INFER).
 - Open... [Ctrl+O]; Open Excel... [Ctrl+E]; Open Sample OPJ; Append... (merge another project in);
   Close.
 - Save Project [Ctrl+S]; Save Project As...
-- Save Window As...; Save Template As...: write the active window alone or as a template.
+- New > Graph, Save Project without Data... and Duplicate Project without Data (work, T77).
+- Save Window As... (works, T54: a workbook or a graph with its books to a `.sheafbook` or `.sheafgraph`);
+  Save Template As...: writes the active window as a template (still greyed).
 - Save Workbook As Analysis Template...; Add Word Bookmarks to Analysis Template...;
   Batch Processing... (run a saved analysis template over many files).
 - Save Project without Data...; Duplicate Project without Data.
@@ -73,7 +75,10 @@ The ids 507, 510, 511, 532 are assigned by guess from their contents (INFER).
   Re-Import Directly [Ctrl+4]; Re-Import... (repeat the last import on the same sheet).
   Database Import: New / saved queries.
 - **Export** (dyn): see section B4. Recent Exports submenu.
-- Recent Books, Recent Graphs, Recent Projects; Exit.
+- Recent Books, Recent Graphs, Recent Projects; Exit. Recent Projects and Recent Imports work (T38,
+  `docs/spec/recent-files.md`; 15 entries per list (Origin measured, T38), the numbering and the path display are Sheaf's
+  choices, not measured in Origin). Recent Books and Recent Graphs work too (T54, `docs/spec/window-files.md`):
+  they list the window files saved with Save Window As or opened. Recent Exports lists the files exports wrote (T78, recent-lists.md).
 - Graph windows additionally have Export Page... in the Layout version and the graph File menu
   carries Batch Processing but no "Re-Import".
 
@@ -136,14 +141,14 @@ exist; deliberately not studied.)
 | | Vertical Drop Line | line from each point to the axis |
 | | Bubble, Color Mapped, Bubble + Color Mapped | third column controls size and/or colour |
 | Line + Symbol | Line + Symbol, Line Series, 2 Point Segment, 3 Point Segment | symbols with connecting lines; segment types join point pairs/triples |
-| Column/Bar/Pie | Column, Column + Label, Grouped Columns (indexed data), Bar, Stacked Column, Stacked Bar, 100% Stacked Column/Bar, Floating Column/Bar, 3D Color Pie, 2D B&W Pie | vertical/horizontal bars and pies |
+| Column/Bar/Pie | Column, Column + Label, Grouped Columns (indexed data; Sheaf plots from the selection, no dialog), Bar, Stacked Column, Stacked Bar, 100% Stacked Column/Bar, Floating Column/Bar, 3D Color Pie, 2D B&W Pie | vertical/horizontal bars and pies |
 | Multi-Y | Double-Y, 3Ys Y-YY, 3Ys Y-Y-Y, 4Ys Y-YYY, 4Ys YY-YY, Multiple Y Axes... | several Y axes in one layer |
 | Y-offset/Waterfall | Stacked Lines by Y Offsets, Waterfall, Waterfall Y:Color Mapping, Waterfall Z:Color Mapping, 3D Waterfall and its two colour-mapped variants | curves shifted against each other |
 | Multi-Panel | Vertical 2 Panel, Horizontal 2 Panel, 4 Panel, 9 Panel, Stack..., Multiple Panels by Label... | several layers on one page |
 | 3D XYY | XYY 3D Bars, 3D Ribbons, 3D Walls, 3D Waterfall (+2 colour variants) | |
 | 3D Surface | Color Fill Surface, X Constant with Base, Y Constant with Base, Color Map Surface, Colormap Surface with Projection, Wire Frame, Wire Surface, 3D Ternary Colormap Surface | |
 | 3D Symbol/Bar/Vector | 3D Bars, 3D Scatter, 3D Trajectory, 3D Scatter + Error Bar, 3D Vector XYZ XYZ, 3D Vector XYZ dXdYdZ | |
-| Statistics | Box Chart, Grouped Box Charts (indexed or raw), Interval Plot, Histogram, Histogram + Probabilities, Stacked Histograms, Marginal Histograms, Marginal Box Charts, 2D Kernel Density, QC (X bar R) Chart, Pareto (binned or raw), Scatter Matrix, Probability Plot, Q-Q Plot | |
+| Statistics | Box Chart, Grouped Box Charts (indexed or raw; Sheaf has indexed only, no dialog), Interval Plot (T83, no dialog), Violin Plot and its variants (Violin with Box, Point, Quartile, Stick, Split Violin, Half Violin; Sheaf has all but Split Violin), Ridgeline Chart, Histogram, Histogram + Probabilities, Stacked Histograms, Marginal Histograms, Marginal Box Charts, 2D Kernel Density, QC (X bar R) Chart, Pareto (binned or raw; Sheaf has raw only, no dialog, T83), Scatter Matrix, Probability Plot, Q-Q Plot | |
 | Area | Area, Stacked Area, Fill Area | |
 | Contour/Heat Map | Color Fill, B/W Lines + Labels, Gray Scale Map, Heat Map, Polar Contour theta(X)r(Y), Polar Contour r(X)theta(Y), Ternary Contour | |
 | Profile | Contour Profiles, Image Profiles | |
@@ -159,7 +164,8 @@ The plot toolbars (C-toolbars below) show the same commands with the one-word in
 Waterfall, OffsetYs, YError, XYError, VertDropLine, Spline, HorzStep, VertStep, Segment2,
 Segment3, BoxChart, Histogram, StackBar, StackCol, FloatBar, FloatColumn, IndexSize,
 IndexColor, ScatterCentral, ColumnScatter, 3Ys_Y-YY` etc. (OBSERVED in `ou9_64.dll` toolbar
-tooltips, with command text such as "@DoubleY").
+tooltips, with command text such as "@DoubleY"). Violin plots are newer than those 9.3 binaries (Origin 2019): the
+Origin help names a "Violin with Box" button on the 2D Graphs toolbar, but its internal name is UNKNOWN (not observed).
 
 **Column** (P0)
 - Set As: X, Y, Z, Label, Disregard, Y Error, X Error (plot designation of the selected columns).
@@ -189,7 +195,9 @@ tooltips, with command text such as "@DoubleY").
 - Layer Contents... [F12]: choose which datasets are plotted in the active layer (C-list "Layer
   Plot Contents": available data, layer contents, add/remove arrows, Edit Range, Plot Setup).
 - Plot Setup...: choose X/Y/error columns and the plot type per dataset.
-- Add Plot to Layer: Line..., Scatter..., Line + Symbol..., Column..., Area...
+- Add Plot to Layer: Line..., Scatter..., Line + Symbol..., Column..., Area... (each opens Layer Contents
+  for the active layer with that type chosen on the plot type button, measured in Origin 2016 on
+  2026-11-15; Sheaf does the same, T63 J)
 - Add Error Bars...; Add Function Graph....
 - Rescale to Show All [Ctrl+R].
 - Legend: Add Legend Title, Box Chart Components, Categorical Values, Point by Point, Data
@@ -254,7 +262,7 @@ Labels by folder (paraphrased lists of the English labels, P-tags in brackets):
   unmeasured); the others of this folder not named in their own task stay grey.
 - **Signal Processing**: Smooth [P0], FFT Filters, FFT (submenu FFT: FFT, IFFT, 2D FFT, 2D IFFT),
   Convolution, Deconvolution, Correlation, 2D Correlation, Coherence, Decimation, Envelope,
-  Hilbert Transform, IIR Filter, STFT, Wavelet submenu (Decompose, Reconstruction, Denoise,
+  Hilbert Transform, IIR Filter (live, T55; Sheaf adds FIR Filter after it, the FIR app's own menu place unknown), STFT, Wavelet submenu (Decompose, Reconstruction, Denoise,
   Smooth, Continuous Wavelet, Multi-Scale DWT, 2D Decompose/Reconstruction, Wavelet
   Functions). [Smooth P0, rest P1/P2]
 - **Fitting**: Linear Fit, Polynomial Fit, Multiple Linear Regression, Exponential Fit,

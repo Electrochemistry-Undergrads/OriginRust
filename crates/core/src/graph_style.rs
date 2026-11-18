@@ -9,6 +9,7 @@
 
 use crate::color::Color;
 use crate::graph::Dash;
+use crate::ids::ColumnId;
 use serde::{Deserialize, Serialize};
 
 fn is_default<T: Default + PartialEq>(v: &T) -> bool {
@@ -334,11 +335,30 @@ pub struct PageStyle {
     /// Free notes about the graph; the Object Manager shows them as the page's hover text.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub comments: String,
+    /// Origin's page Display tab "Connect line across Axis Break" (off by default, graphing spec 3.6): off
+    /// leaves a line out where it crosses the band of an axis break, on draws it through.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub connect_across_breaks: bool,
+    /// Origin's page Display tab "Connect line across Missing Data" (off by default, graphing spec 18.7b): on
+    /// joins the points before and after rows with a missing X or Y value instead of breaking the line.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub connect_across_missing: bool,
+}
+
+fn is_false(v: &bool) -> bool {
+    !*v
 }
 
 impl Default for PageStyle {
     fn default() -> Self {
-        PageStyle { border: None, layer_icons: true, title_display: TitleDisplay::Both, comments: String::new() }
+        PageStyle {
+            border: None,
+            layer_icons: true,
+            title_display: TitleDisplay::Both,
+            comments: String::new(),
+            connect_across_breaks: false,
+            connect_across_missing: false,
+        }
     }
 }
 
@@ -378,6 +398,8 @@ mod tests {
             layer_icons: false,
             title_display: TitleDisplay::LongName,
             comments: "notes".into(),
+            connect_across_breaks: true,
+            connect_across_missing: true,
         };
         let json = serde_json::to_string(&page).unwrap();
         assert_eq!(serde_json::from_str::<PageStyle>(&json).unwrap(), page);
@@ -386,5 +408,418 @@ mod tests {
         let json = serde_json::to_string(&fill).unwrap();
         assert_eq!(serde_json::from_str::<FillStyle>(&json).unwrap(), fill);
         assert!(FillStyle::default().is_plain() && !fill.is_plain());
+    }
+}
+
+/// What a ridgeline plot draws for its Y column (Origin's Plot Details Display tab, Type; graphing
+/// spec 14.23).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RidgeDisplay {
+    /// The kernel density curve, filled down to its baseline.
+    #[default]
+    DistributionCurve,
+    /// The curve with the observations as points on the baseline.
+    WithDataPoints,
+    /// The curve with a rug of short ticks below the baseline.
+    WithRug,
+    /// A histogram in place of the curve ("Single Block Bar").
+    SingleBlockBar,
+}
+
+/// The kernel bandwidth rule of a ridgeline plot (Origin's Distribution tab, Kernel Smooth).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RidgeBandwidth {
+    /// `0.9 A n^(-1/5)`, `A = min(SD, IQR / 1.349)`.
+    #[default]
+    Scott,
+    /// `1.059 A n^(-1/5)`.
+    Silverman,
+    /// `k` times the sample standard deviation ("k*SD").
+    KSd(f64),
+    /// A bandwidth typed in.
+    Custom(f64),
+}
+
+impl RidgeBandwidth {
+    /// The rule of the shared kernel density code.
+    pub fn to_calc(self) -> sheaf_calc::kde::Bandwidth {
+        use sheaf_calc::kde::Bandwidth;
+        match self {
+            RidgeBandwidth::Scott => Bandwidth::Scott,
+            RidgeBandwidth::Silverman => Bandwidth::Silverman,
+            RidgeBandwidth::KSd(k) => Bandwidth::Sd(k),
+            RidgeBandwidth::Custom(h) => Bandwidth::Fixed(h),
+        }
+    }
+}
+
+/// The rug of a ridgeline plot (Origin: Color, Thickness, Size(%), Gap Between Curve). Sizes are in
+/// percent of the spacing between baselines (Sheaf's reading of the percentages).
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RidgeRug {
+    /// Tick colour; `None` is the plot's colour.
+    pub color: Option<Color>,
+    pub thickness_pt: f64,
+    /// Tick length, percent of the baseline spacing.
+    pub size_pct: f64,
+    /// Space between the baseline and the ticks, percent of the baseline spacing.
+    pub gap_pct: f64,
+}
+
+impl Default for RidgeRug {
+    fn default() -> RidgeRug {
+        RidgeRug { color: None, thickness_pt: 0.5, size_pct: 10.0, gap_pct: 3.0 }
+    }
+}
+
+/// The settings of a ridgeline plot (graphing spec 14.23). Every field is skipped when written
+/// while it has its default, so older files load unchanged.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RidgelineStyle {
+    pub display: RidgeDisplay,
+    pub bandwidth: RidgeBandwidth,
+    /// Vertical lines from the baseline to the curve at the percentiles in `quantiles`.
+    pub quantile_lines: bool,
+    /// Percentiles, 0 to 100.
+    pub quantiles: Vec<f64>,
+    pub rug: RidgeRug,
+    /// Height of the tallest ridge's peak, in baseline spacings (Sheaf's choice: 1.5, so ridges overlap).
+    pub height: f64,
+    /// Transparency of the fill, 0 to 100 percent (Sheaf's choice: 30).
+    pub fill_transparency_pct: f64,
+}
+
+impl Default for RidgelineStyle {
+    fn default() -> RidgelineStyle {
+        RidgelineStyle {
+            display: RidgeDisplay::default(),
+            bandwidth: RidgeBandwidth::default(),
+            quantile_lines: false,
+            quantiles: vec![25.0, 50.0, 75.0],
+            rug: RidgeRug::default(),
+            height: 1.5,
+            fill_transparency_pct: 30.0,
+        }
+    }
+}
+
+impl RidgelineStyle {
+    pub fn is_default(&self) -> bool {
+        *self == RidgelineStyle::default()
+    }
+}
+
+/// How the centres of one axis of a hexbin plot are spaced (Origin's Bin Spacing or Number of Bins).
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HexbinBy {
+    /// This many centres from Min Center to Max Center.
+    Bins(u32),
+    /// The distance between neighbouring centres, in axis units.
+    Spacing(f64),
+}
+
+/// The bin settings of one axis of a hexbin plot (Origin's Min Center, Max Center, and Bin Spacing or
+/// Number of Bins); `None` is the minimum or maximum of the data.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HexbinAxis {
+    pub min_center: Option<f64>,
+    pub max_center: Option<f64>,
+    pub by: HexbinBy,
+}
+
+impl Default for HexbinAxis {
+    fn default() -> HexbinAxis {
+        HexbinAxis { min_center: None, max_center: None, by: HexbinBy::Bins(sheaf_calc::hexbin::DEFAULT_BINS as u32) }
+    }
+}
+
+impl HexbinAxis {
+    fn to_calc(self) -> sheaf_calc::hexbin::HexAxisSetup {
+        use sheaf_calc::hexbin::{HexAxisSetup, HexStep};
+        HexAxisSetup {
+            min_center: self.min_center,
+            max_center: self.max_center,
+            step: match self.by {
+                HexbinBy::Bins(n) => HexStep::Bins(n as usize),
+                HexbinBy::Spacing(s) => HexStep::Spacing(s),
+            },
+        }
+    }
+}
+
+/// The settings of a hexbin plot (graphing spec 14.24). Every field is skipped when written while it
+/// has its default, so older files load unchanged.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HexbinStyle {
+    pub x: HexbinAxis,
+    pub y: HexbinAxis,
+    /// Origin's "Prefer Regular Hexagons" (checked by default).
+    pub prefer_regular: bool,
+    /// Origin's "Derive Y from X" (the default); false is "Derive X from Y".
+    pub derive_y_from_x: bool,
+}
+
+impl Default for HexbinStyle {
+    fn default() -> HexbinStyle {
+        HexbinStyle { x: HexbinAxis::default(), y: HexbinAxis::default(), prefer_regular: true, derive_y_from_x: true }
+    }
+}
+
+impl HexbinStyle {
+    pub fn is_default(&self) -> bool {
+        *self == HexbinStyle::default()
+    }
+
+    /// The setting the binning takes, for a frame of `frame_aspect` (width / height on the page).
+    pub fn to_calc(&self, frame_aspect: f64) -> sheaf_calc::hexbin::HexSetup {
+        sheaf_calc::hexbin::HexSetup {
+            x: self.x.to_calc(),
+            y: self.y.to_calc(),
+            derive_y_from_x: self.derive_y_from_x,
+            prefer_regular: self.prefer_regular,
+            frame_aspect,
+        }
+    }
+}
+
+/// The settings shared by the plots (one per axis) of a Parallel Plot or Parallel Index (graphing spec
+/// 14.25). Every field is skipped when written while it has its default, so older files load unchanged.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ParallelStyle {
+    /// Origin's "Rescale Each Axis Independently": each axis has its own range (the default, Sheaf's choice);
+    /// cleared, every axis takes one range, the union of the ranges of all the columns.
+    pub rescale_each_axis: bool,
+    /// Width of the lines, in pt (Origin's Plot Details Parallel tab, Width; the default is Sheaf's choice).
+    pub width_pt: f64,
+    /// Transparency of the lines, 0 (opaque) to 100 percent (Origin's Transparency).
+    pub transparency_pct: f64,
+    /// A Parallel Plot: the numeric column that colours the lines through the colour ramp, with a colour
+    /// scale (`None` draws every line in the plot colour). A Parallel Index: the column whose text groups
+    /// the rows, one colour and one legend entry per group.
+    pub color: Option<ColumnId>,
+}
+
+impl Default for ParallelStyle {
+    fn default() -> ParallelStyle {
+        ParallelStyle { rescale_each_axis: true, width_pt: 0.5, transparency_pct: 0.0, color: None }
+    }
+}
+
+impl ParallelStyle {
+    pub fn is_default(&self) -> bool {
+        *self == ParallelStyle::default()
+    }
+}
+
+/// How the siblings of a treemap level are ordered (Plot Details Layout tab, Order; graphing spec 14.26).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TreemapOrder {
+    /// The order the categories first appear in the worksheet (Sheaf's default).
+    #[default]
+    Categorical,
+    Alphabetical,
+    /// Largest first.
+    BySize,
+    /// By the cells of a column, smallest first (the column is [`TreemapStyle::order_column`]).
+    ByColumn,
+}
+
+/// The layout and order of one treemap level below the first.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TreemapLevel {
+    pub layout: TreemapLayout,
+    pub order: TreemapOrder,
+}
+
+pub use sheaf_calc::treemap::Layout as TreemapLayout;
+
+/// The error bars of a grouped column plot (T76).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IndexedError {
+    /// No error bars (Sheaf's default; Origin's default is undocumented).
+    #[default]
+    None,
+    /// The sample standard deviation (n - 1) of the rows of a bar.
+    Sd,
+    /// The standard error of the mean of the rows of a bar.
+    Se,
+}
+
+/// Indexed data on a column or box plot (T76, Origin's plot_gindexed and plot_gboxindexed): the plot's Y column
+/// holds all the values, and the rows are split by the levels of `group` (the categories on the X axis) and, in
+/// one plot per level, by a second column.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Indexed {
+    /// The main group column: one bar or box per level, in sorted order at 1, 2, ...
+    pub group: ColumnId,
+    /// The second group column and the level this plot shows (the plot's legend text is the level).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subset: Option<(ColumnId, String)>,
+    /// Error bars of a grouped column plot.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub error: IndexedError,
+}
+
+/// The error bar of an interval plot point (T83).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IntervalError {
+    /// The sample standard deviation (n - 1).
+    Sd,
+    /// The standard error of the mean.
+    Se,
+    /// The Student-t confidence interval of the mean (Sheaf's default, as in the Graphical Summary).
+    #[default]
+    Ci,
+}
+
+/// A plot whose points are computed from its Y column's cells instead of read from them (T83).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StatPlot {
+    /// Interval Plot: the one point of this column is its mean at the next position 1, 2, ..., with an error bar
+    /// (`level` is the confidence level in percent, used by [`IntervalError::Ci`]).
+    Interval { error: IntervalError, level: f64 },
+    /// Pareto chart, the bars: the cells of the Y column (text or numbers) counted per distinct value, in
+    /// descending order of count.
+    Pareto,
+    /// Pareto chart, the curve on the right axis: the running percent of the counted cells.
+    ParetoCumulative,
+}
+
+/// The settings of a treemap plot (Origin 2025b Treemap plot, graphing spec 14.26). The plot's own Y column is
+/// the value column; the category columns are named here, the first the root level. Every field is skipped when
+/// written while it has its default, so older files load unchanged.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TreemapStyle {
+    /// The category columns, first = top level.
+    pub categories: Vec<ColumnId>,
+    pub layout: TreemapLayout,
+    pub order: TreemapOrder,
+    /// The column Order by column sorts by (a treemap without one falls back to the categorical order).
+    pub order_column: Option<ColumnId>,
+    /// The levels shown; `None` is Origin's Infinite (every level).
+    pub depth: Option<u32>,
+    /// The gap between rectangles, in pt (Sheaf's default 1.5).
+    pub gap_pt: f64,
+    /// Use `per_level` for the levels below the first (Origin's per-level check box).
+    pub per_level_on: bool,
+    /// Layout and order of level 2, 3, ...; a level without an entry takes the general layout and order.
+    pub per_level: Vec<TreemapLevel>,
+}
+
+impl Default for TreemapStyle {
+    fn default() -> TreemapStyle {
+        TreemapStyle {
+            categories: Vec::new(),
+            layout: TreemapLayout::Squarified,
+            order: TreemapOrder::Categorical,
+            order_column: None,
+            depth: None,
+            gap_pt: 1.5,
+            per_level_on: false,
+            per_level: Vec::new(),
+        }
+    }
+}
+
+impl TreemapStyle {
+    pub fn is_default(&self) -> bool {
+        *self == TreemapStyle::default()
+    }
+
+    /// The layout and order of level `level` (0 = top).
+    pub fn level_setting(&self, level: usize) -> TreemapLevel {
+        if level > 0
+            && self.per_level_on
+            && let Some(l) = self.per_level.get(level - 1)
+        {
+            return *l;
+        }
+        TreemapLevel { layout: self.layout, order: self.order }
+    }
+}
+
+/// How the wedges of a sunburst ring are ordered (Plot Details Order; graphing spec 14.27).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SunburstOrder {
+    /// The order the categories first appear in the worksheet (Sheaf's default).
+    #[default]
+    Worksheet,
+    /// Largest first.
+    BySize,
+}
+
+fn start_90() -> f64 {
+    90.0
+}
+
+fn hole_30() -> f64 {
+    0.3
+}
+
+fn border_half() -> f64 {
+    0.5
+}
+
+/// The settings of a sunburst plot (Origin 2022 Sunburst plot, graphing spec 14.27). The plot's own Y column is the
+/// value column; the category columns are named here, the first the innermost ring. Every field is skipped when
+/// written while it has its default, so older files load unchanged.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SunburstStyle {
+    /// The category columns, first = innermost ring.
+    pub categories: Vec<ColumnId>,
+    /// Where the first wedge starts, in degrees counter-clockwise from 3 o'clock like Origin's pie rotation (default
+    /// 90: 12 o'clock); the wedges follow clockwise.
+    #[serde(default = "start_90")]
+    pub start_angle_deg: f64,
+    /// The hole in the middle as a fraction of the outer radius (0 to 0.9; default 0.3).
+    #[serde(default = "hole_30")]
+    pub hole: f64,
+    /// The gap between rings, in pt (default 0).
+    pub ring_gap_pt: f64,
+    /// The width of the border round each wedge, in pt (white; default 0.5).
+    #[serde(default = "border_half")]
+    pub border_pt: f64,
+    /// Write the category names in the wedges that have room (default on).
+    #[serde(default = "yes")]
+    pub show_names: bool,
+    /// Write the values in the wedges that have room (default off).
+    pub show_values: bool,
+    pub order: SunburstOrder,
+}
+
+impl Default for SunburstStyle {
+    fn default() -> SunburstStyle {
+        SunburstStyle {
+            categories: Vec::new(),
+            start_angle_deg: 90.0,
+            hole: 0.3,
+            ring_gap_pt: 0.0,
+            border_pt: 0.5,
+            show_names: true,
+            show_values: false,
+            order: SunburstOrder::Worksheet,
+        }
+    }
+}
+
+impl SunburstStyle {
+    pub fn is_default(&self) -> bool {
+        *self == SunburstStyle::default()
     }
 }

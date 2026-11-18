@@ -91,7 +91,7 @@ LabTalk command that opens the dialog (`-Command 'impasc fname:="%WORK%file.txt"
 `name=actions`; actions are `@L:x,y` click, `@D:x,y` double click, `@S:x,y,n` mouse wheel, `@C:i,j` pick item j of the
 i-th combo box (and tell the dialog), `@T:i,text` set the i-th edit box, `@B:text` click a button, `@W:ms` wait, or
 SendKeys text; positions are pixels from the top-left corner of the dialog. `-After` runs LabTalk after the dialog closed
-(`'$wks.col1.name$'` prints a string). Pictures and lists go to the git-ignored scratch folder; nothing is saved in Origin. `-MenuClicks "x,y;x,y"` opens a dialog through a menu path instead (screen positions of the Origin window placed at 0,0; the Peak Analyzer: `258,43;311,175;492,205;735,257`), `-AfterFile` reads the after-lines from a file, and an after-line `#[Book]Sheet` prints that sheet's cells.
+(`'$wks.col1.name$'` prints a string). Pictures and lists go to the git-ignored scratch folder; nothing is saved in Origin. `-MenuClicks "x,y;x,y"` opens a dialog through a menu path instead (screen positions of the Origin window placed at 0,0; the Peak Analyzer: `258,43;311,175;492,205;735,257`), `-AfterFile` reads the after-lines from a file, and an after-line `#[Book]Sheet` prints that sheet's cells. `-NoDialog` skips the dialog (after-lines then drive the main window: `@KEY:^j` sends keys, `@SHOT:path.png` saves the screen) and `@CLIP:path.txt` saves the clipboard's text, read in a separate STA PowerShell because the background job is MTA and sees an empty clipboard.
 
 ## Column format reference runs
 
@@ -107,3 +107,54 @@ Week numbers (`colfmt-weekday-month`), Engineering digits and letters (`colfmt-e
 `import-replace-plots.lines.txt` replaces the data of a sheet by `impasc` while two graphs plot it (one of all rows, one
 with a row range) and prints each plot's begin and end row before and after (`get %C -b`, `get %C -e`); run it with
 `import-inputs` as the work folder. See `docs/spec/import-ascii.md`, section 10.
+
+## PCA graphs, report layouts and survival-curve limits (T29 leftovers)
+
+`pca-plots3.lines.txt` runs `pca` seven times with all four plots on, then lists the graph windows, their axis limits per
+layer and their datasets and exports each graph as a PNG (the folder is written into the `expGraph` lines: edit it).
+`kaplan-plots2.lines.txt` and `kaplan-plots3.lines.txt` run `kaplanmeier` with `sfci:=1` (needs `plotinone:=0`) and dump the
+survival-function sheet with its column labels and the graph windows. `kmeans-members.lines.txt` prints the labels of the
+membership sheet. `t29-report-setup.labtalk.txt` makes one report of each of the three X-Functions, and
+`origin-screenshot.ps1 -Setup t29-report-setup.labtalk.txt -StepsFile t29-report-steps.txt -OutDir DIR` takes the pictures
+of the report sheet windows (maximized with `win -z`, sections opened by clicking their boxes) from which the table
+layouts in `docs/spec/statistics.md`, sections 17 to 20, were read. Within a line script `$(x)` turns a number into text and
+`%(s$)` a string; a `for` loop with a nested `doc -e` did not run, so the scripts are unrolled.
+
+## Merge Graph Windows and Fit Page to Layers (T60)
+
+`merge-graph-*.lines.txt` make three stock Line graphs (GA, GB, GC) and run `merge_graph option:=project` with one
+setting changed at a time, printing the merged page size and every layer's position, `layer.factor`, links and axis
+label switches, then deleting the merged graph (`win -cd %H`): `merge-graph-options` (rows/columns, scale modes, links,
+Show Axes Frame, aspect ratio, portrait, a double-Y source, keep:=0), `merge-graph-factor1` and `-factor2` (the text
+factor for many grids, gaps and margins), `merge-graph-source-size` (sources resized to 50 x 50, 30 x 30 and 80 x 40
+percent) and `merge-graph-threshold` (where the factor stops being 1). `fit-page-to-layers.lines.txt` runs `pfit2l`
+with its options. Run them with `run-labtalk-lines.ps1`; the findings are in `docs/spec/graphing.md` 15.7c and 15.7d.
+
+## Add Straight Line (T67)
+
+`addline-objects.lines.txt` runs `addline` on a stock Line graph (vertical, horizontal, a named dashed red line,
+a second vertical one) and prints the objects it makes and their ends, attachment, colour, style, width and the
+label's text, place and size; `addline-labels.lines.txt` adds lines with each label location and a fixed format,
+then rescales Y to see whether the ends follow. Findings: `docs/tasks/T67-add-straight-line.md` and graphing.
+
+## Partial correlation, three-way and repeated measures ANOVA (T81)
+
+`stats6/gp.py` and `gp2.py` write the line scripts of the `pcorrcoef` runs (report sheet read cell by cell after
+`page.active = 2`, plain sheet after `page.active = 3`; `pp.py` and `cells.py` read the raw output). The three ANOVA
+tools (`ANOVAThreeWay`, `ANOVAOneWayRM`, `ANOVATwoWayRM`) have no script arguments, so they are run through their dialogs:
+`origin-dialog.ps1 -Setup DATA.labtalk.txt -MenuClicks "1011,192;391,43;392,109;<item>;<Open Dialog...>" -StepsFile
+dialog-steps/*.steps.txt -AfterFile CELLS.txt` (the first click closes a floating Results Log; menu positions move when
+Origin adds "Last used" entries, so take a picture first with `origin-screenshot.ps1`; typed range boxes sometimes lose an
+entry, hence the fill is repeated; the "Input Data" group remembers whether it was open). The result lands as a new sheet in
+the input book; `$wcol(c)[r]$` lines in the after file print its cells. `g3.py` has the data generators. The numbers and
+data of all runs are in `stats6/t81-origin.compact.json` (`t81-make-compact.py` rebuilds it from the raw output, which stays in
+the scratch folder). Findings: `docs/spec/statistics.md`, sections 24 to 26.
+
+## Simulate Surface, Compare Datasets, implicit fit, XYZ Surface Area (T91)
+
+`t91/` holds the line scripts and data: `xyzarea.lines.txt` (+ `xyzarea-cases.json`; `xyzarea` is scriptable and returns the
+area in a variable), `imp1.lines.txt` (+ `circle-data.json`; a circle fitted with `nlbegin ... func:=Circle`),
+`cmpd1.lines.txt` and `cmpd3.lines.txt` (`fitcmpdata` returns false from a script), `run.sh` and the `steps-*.txt` files (open
+`simsurface` and `fitcmpdata` through the menu with `origin-dialog.ps1 -MenuClicks`: eight or twelve separate `{DOWN}` keys
+after `K:%a;K:F`; edit boxes are numbered from 0). What they showed is in `docs/spec/fitting.md` 16-18 and
+`docs/spec/analysis-tools.md` 18.

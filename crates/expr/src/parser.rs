@@ -14,10 +14,11 @@
 //! primary  := number | "text" | name | name '(' args ')' | col-reference | '(' ternary ')'
 //! ```
 
-use crate::ast::{ColumnLabel, ColumnRef, Kind, Node, UnOp};
+use crate::ast::{ColumnLabel, ColumnRef, Kind, Node, UnOp, WorksheetRef};
 use crate::error::ExprError;
 use crate::funcs::{Agg, BinOp, Func, Resolved, resolve};
 use crate::lexer::{Tok, Token, lex};
+use crate::text::StrFn;
 
 /// How deeply parentheses, signs and `?:` may nest before the parser gives up.
 const MAX_NESTING: u32 = 64;
@@ -260,6 +261,21 @@ impl Parser {
     fn primary(&mut self) -> Result<Node, ExprError> {
         let t = self.advance();
         match t.tok {
+            Tok::Percent => self.substitution(t.pos, false),
+            Tok::QuotedSubstitution => self.substitution(t.pos, true),
+            Tok::LBracket => {
+                let book = self.reference_name("workbook")?;
+                self.expect(Tok::RBracket, "after the workbook name")?;
+                let sheet = self.worksheet_ref()?;
+                self.scoped_column(Some(book), sheet, t.pos)
+            }
+            Tok::Ident(name) | Tok::Str(name) if matches!(self.peek_tok(), Tok::Not) => {
+                self.scoped_column(None, WorksheetRef::Name(name), t.pos)
+            }
+            Tok::Num(index) if matches!(self.peek_tok(), Tok::Not) => {
+                let sheet = Self::worksheet_index(index, t.pos)?;
+                self.scoped_column(None, sheet, t.pos)
+            }
             Tok::Num(v) => Node::new(Kind::Num(v), t.pos),
             Tok::Ident(name) => {
                 if matches!(self.peek_tok(), Tok::LParen) {
@@ -282,6 +298,100 @@ impl Parser {
             Tok::End => Err(ExprError::at(t.pos, "unexpected end of expression; expected a value")),
             other => Err(ExprError::at(t.pos, format!("expected a value, found {}", other.describe()))),
         }
+    }
+
+    fn reference_name(&mut self, what: &str) -> Result<String, ExprError> {
+        let token = self.advance();
+        match token.tok {
+            Tok::Ident(name) | Tok::Str(name) if !name.is_empty() => Ok(name),
+            _ => Err(ExprError::at(token.pos, format!("expected a {what} name or a quoted name"))),
+        }
+    }
+
+    fn substitution(&mut self, pos: usize, quoted: bool) -> Result<Node, ExprError> {
+        self.expect(Tok::LParen, "after '%' string substitution")?;
+        // A static [book]sheet,column prefix distinguishes the legacy cell form from a
+        // single expression such as %([Book]Sheet!col(A)$). Names remain real dependencies.
+        let worksheet =
+            matches!(self.peek_tok(), Tok::LBracket) && self.toks.get(self.at + 4).is_some_and(|t| t.tok == Tok::Comma);
+        let value = if worksheet { self.worksheet_substitution(pos)? } else { self.ternary()? };
+        self.expect(Tok::RParen, "after the substituted expression")?;
+        if quoted { Ok(value) } else { Node::new(Kind::Call { func: Func::Str(StrFn::Value), args: vec![value] }, pos) }
+    }
+
+    fn worksheet_substitution(&mut self, pos: usize) -> Result<Node, ExprError> {
+        let column_pos = self.advance().pos; // '['
+        let book = self.reference_name("workbook")?;
+        self.expect(Tok::RBracket, "after the workbook name")?;
+        let sheet = self.worksheet_ref()?;
+        self.expect(Tok::Comma, "after the worksheet")?;
+        let column = self.advance();
+        let column = match column.tok {
+            Tok::Ident(name) => ColumnRef::Short(name),
+            Tok::Str(name) => ColumnRef::Long(name),
+            Tok::Num(n) if n >= 1.0 && n.fract() == 0.0 && n < 1e9 => ColumnRef::Index(n as usize),
+            _ => {
+                return Err(ExprError::at(
+                    column.pos,
+                    "expected a column name, quoted long name or positive column number",
+                ));
+            }
+        };
+        let r = ColumnRef::Scoped { book: Some(book), sheet, column: Box::new(column) };
+        let column = Node::new(Kind::Col { r, pos: column_pos }, column_pos)?;
+        self.expect(Tok::Comma, "before the worksheet cell row")?;
+        // Keep the row separate from Kind::Index: a variable matching a parameter-row name
+        // is still a numeric row expression here, never a metadata read.
+        let mut args = vec![column, self.ternary()?];
+        if self.eat(&Tok::Comma) {
+            let start = self.at;
+            let format = if let Tok::Str(s) = self.peek_tok() {
+                let s = s.clone();
+                self.advance();
+                s
+            } else {
+                while matches!(self.peek_tok(), Tok::Num(_) | Tok::Ident(_) | Tok::Star) {
+                    self.advance();
+                }
+                if self.at == start {
+                    return Err(ExprError::at(self.toks[start].pos, "expected a static worksheet cell format"));
+                }
+                self.source[self.toks[start].pos..self.toks[self.at].pos].trim().to_string()
+            };
+            args.push(Node::new(Kind::Str(format), self.toks[start].pos)?);
+        }
+        Node::new(Kind::Call { func: Func::Str(StrFn::WorksheetCell), args }, pos)
+    }
+
+    fn worksheet_index(value: f64, pos: usize) -> Result<WorksheetRef, ExprError> {
+        if value >= 1.0 && value.fract() == 0.0 && value < 1e9 {
+            Ok(WorksheetRef::Index(value as usize))
+        } else {
+            Err(ExprError::at(pos, "a worksheet number must be a whole number, 1 or more"))
+        }
+    }
+
+    fn worksheet_ref(&mut self) -> Result<WorksheetRef, ExprError> {
+        if let Tok::Num(value) = self.peek_tok() {
+            let value = *value;
+            let pos = self.advance().pos;
+            Self::worksheet_index(value, pos)
+        } else {
+            self.reference_name("worksheet").map(WorksheetRef::Name)
+        }
+    }
+
+    fn scoped_column(&mut self, book: Option<String>, sheet: WorksheetRef, pos: usize) -> Result<Node, ExprError> {
+        self.expect(Tok::Not, "between the worksheet and column")?;
+        let token = self.advance();
+        if !matches!(&token.tok, Tok::Ident(name) if name.eq_ignore_ascii_case("col") || name.eq_ignore_ascii_case("wcol"))
+        {
+            return Err(ExprError::at(token.pos, "expected col(...) or wcol(...) after the worksheet"));
+        }
+        self.expect(Tok::LParen, "after col or wcol")?;
+        let node = self.column_ref(pos)?;
+        let Kind::Col { r, .. } = node.kind else { unreachable!("column_ref creates a column") };
+        Node::new(Kind::Col { r: ColumnRef::Scoped { book, sheet, column: Box::new(r) }, pos }, pos)
     }
 
     /// Parses after `name (`.
@@ -348,10 +458,18 @@ impl Parser {
         }
     }
 
-    /// Parses after `col (`: a short name, a quoted long name or a 1-based number.
+    /// Parses after `col (`: a short name, a quoted long name, a 1-based number or `j` with an offset.
     fn column_ref(&mut self, pos: usize) -> Result<Node, ExprError> {
         let t = self.advance();
         let r = match t.tok {
+            Tok::Ident(s) if s == "j" && matches!(self.peek_tok(), Tok::Plus | Tok::Minus) => {
+                let sign = if self.advance().tok == Tok::Minus { -1 } else { 1 };
+                let offset = self.advance();
+                match offset.tok {
+                    Tok::Num(v) if v.fract() == 0.0 && (0.0..1e9).contains(&v) => ColumnRef::Relative(sign * v as i64),
+                    _ => return Err(ExprError::at(offset.pos, "expected a whole number after j+ or j- inside col()")),
+                }
+            }
             Tok::Ident(s) => ColumnRef::Short(s),
             Tok::Str(s) => ColumnRef::Long(s),
             Tok::Num(v) => {

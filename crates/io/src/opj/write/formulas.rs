@@ -19,7 +19,9 @@ pub(super) fn inputs_of(sheet: &Worksheet, formula: &str) -> Option<Vec<usize>> 
 }
 
 /// The column a reference means: a short name ignoring case, then a long name; a long name as
-/// written; a 1-based position.
+/// written; a 1-based position. A bare `col(j)` is read like any name, as in the sheet host of
+/// `sheaf-core`; when no column is called j it means the position of the formula column, which
+/// is not known here, so it finds nothing.
 fn find(sheet: &Worksheet, r: &ColumnRef) -> Option<usize> {
     let cols = &sheet.columns;
     match r {
@@ -29,6 +31,11 @@ fn find(sheet: &Worksheet, r: &ColumnRef) -> Option<usize> {
             .or_else(|| cols.iter().position(|c| c.long_name == *name)),
         ColumnRef::Long(name) => cols.iter().position(|c| c.long_name == *name),
         ColumnRef::Index(n) => n.checked_sub(1).filter(|&i| i < cols.len()),
+        // Cross-sheet recalculation records are not written; the existing warning/companion
+        // path keeps these formulas losslessly without attaching them to local columns.
+        ColumnRef::Scoped { .. } => None,
+        // `col(j-1)` depends on the column that owns the formula, which is not known here.
+        ColumnRef::Relative(_) => None,
     }
 }
 
@@ -41,5 +48,39 @@ pub(super) fn stored_text(formula: &str, rows: Option<&std::ops::Range<usize>>) 
     match rows.filter(|r| !r.is_empty()) {
         Some(r) => format!("{formula}{TAIL_MARK}$[{}:{}]", r.start + 1, r.end),
         None => formula.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sheaf_core::{ColumnData, Designation, Project};
+
+    fn sheet_of(count: usize) -> Project {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        for _ in 0..count {
+            p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();
+        }
+        p
+    }
+
+    fn first_sheet(p: &Project) -> &Worksheet {
+        &p.workbooks().next().unwrap().sheets[0]
+    }
+
+    #[test]
+    fn a_bare_lowercase_col_j_without_a_column_called_j_reads_no_column() {
+        let p = sheet_of(3);
+        assert_eq!(inputs_of(first_sheet(&p), "col(A)+wcol(j)"), None);
+        assert_eq!(inputs_of(first_sheet(&p), "col(A)*j"), Some(vec![0]), "the variable j is not a read");
+        assert_eq!(inputs_of(first_sheet(&p), "col(j-1)"), None);
+    }
+
+    #[test]
+    fn a_bare_col_j_reads_the_tenth_column_when_there_is_one_called_j() {
+        let p = sheet_of(11);
+        assert_eq!(first_sheet(&p).columns[9].short_name, "J");
+        assert_eq!(inputs_of(first_sheet(&p), "col(A)+wcol(j)*0"), Some(vec![0, 9]));
     }
 }

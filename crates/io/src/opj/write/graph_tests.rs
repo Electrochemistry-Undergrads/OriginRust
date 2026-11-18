@@ -50,6 +50,10 @@ fn ids(p: &Project) -> Vec<ColumnId> {
 fn graph_with(p: &mut Project, template: Template, plots: &[(usize, usize)], f: impl FnOnce(&mut Graph)) {
     let c = ids(p);
     let id = p.add_graph(template);
+    if p.graph(id).unwrap().layers[0].legend.position == LegendPosition::Automatic {
+        p.graph_mut(id).unwrap().layers[0].legend.position = LegendPosition::TopRight;
+        p.graph_mut(id).unwrap().layers[0].legend.background = None;
+    }
     for (x, y) in plots {
         p.add_plot_xy(id, 0, Some(c[*x]), c[*y], None).unwrap();
     }
@@ -211,6 +215,8 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
         Connect::StepVertical,
         Connect::BSpline,
         Connect::Bezier,
+        Connect::Segment2,
+        Connect::Segment3,
     ]
     .iter()
     .enumerate()
@@ -223,7 +229,7 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
     let (imp, warnings) = round_trip(&p);
     assert!(warnings.is_empty(), "{warnings:?}");
     assert!(imp.warnings.is_empty(), "{:?}", imp.warnings);
-    assert_eq!(imp.graphs.len(), 5 + 8 + 8 + 6);
+    assert_eq!(imp.graphs.len(), 5 + 8 + 8 + 8);
     let by_name = |n: &str| imp.graphs.iter().find(|g| g.name == n).unwrap().layers[0].plots[0].clone();
     for (k, kind) in kinds.iter().enumerate() {
         let got = by_name(&format!("K{k}"));
@@ -259,6 +265,8 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
         Connect::StepVertical,
         Connect::BSpline,
         Connect::Bezier,
+        Connect::Segment2,
+        Connect::Segment3,
     ]
     .iter()
     .enumerate()
@@ -310,6 +318,8 @@ fn error_bars_text_x_and_two_layers() {
     let mut p = source();
     let c = ids(&p);
     let id = p.add_graph(Template::Line);
+    p.graph_mut(id).unwrap().layers[0].legend.position = LegendPosition::TopRight;
+    p.graph_mut(id).unwrap().layers[0].legend.background = None;
     p.add_plot_xy(id, 0, Some(c[5]), c[1], Some(c[4])).unwrap();
     p.graph_mut(id).unwrap().layers[0].plots[0].kind = PlotKind::Column;
     let mut second = p.graph(id).unwrap().layers[0].clone();
@@ -374,7 +384,7 @@ fn what_the_file_cannot_hold_is_named() {
         "not a worksheet column",
         "no counterpart in Origin",
         "divisor",
-        "tick lengths",
+        "minor tick length",
         "grid lines",
         "font family",
         "legend background",
@@ -423,6 +433,8 @@ fn a_graph_before_its_workbook_still_finds_the_columns() {
     let mut p = source();
     let c = ids(&p);
     let id = p.add_graph(Template::Line);
+    p.graph_mut(id).unwrap().layers[0].legend.position = LegendPosition::TopRight;
+    p.graph_mut(id).unwrap().layers[0].legend.background = None;
     p.add_plot_xy(id, 0, Some(c[0]), c[2], None).unwrap();
     // move the graph in front of the workbook
     let g = p.windows.pop().unwrap();
@@ -499,6 +511,68 @@ fn drawn_objects_are_named_in_a_warning_and_not_written() {
 }
 
 #[test]
+fn significance_brackets_are_named_in_a_warning_and_not_written() {
+    use sheaf_core::compplot::SignificanceBracket;
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        let b = SignificanceBracket { group_a: 0, group_b: 1, p: 0.01, label: "**".into() };
+        g.layers[0].brackets = vec![b];
+    });
+    let (imp, warnings) = round_trip(&p);
+    let w = warnings.iter().find(|w| w.contains("significance bracket")).unwrap_or_else(|| panic!("{warnings:?}"));
+    assert!(w.contains("layer 1 has 1 significance bracket ") && w.contains(".opj.sheaf"), "{w}");
+    assert!(imp.graphs[0].layers[0].brackets.is_empty());
+    let (_, quiet) = round_trip(&source());
+    assert!(!quiet.iter().any(|w| w.contains("significance bracket")));
+}
+
+#[test]
+fn slope_annotations_are_named_in_a_warning_and_not_written() {
+    use sheaf_core::graph::SlopeAnnotation;
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        let y = g.layers[0].plots[0].y;
+        g.layers[0].slopes = vec![SlopeAnnotation::new(y, 0, 1), SlopeAnnotation::new(y, 1, 2)];
+    });
+    let (imp, warnings) = round_trip(&p);
+    let w = warnings.iter().find(|w| w.contains("slope annotation")).unwrap_or_else(|| panic!("{warnings:?}"));
+    assert!(w.contains("layer 1 has 2 slope annotations") && w.contains(".opj.sheaf"), "{w}");
+    assert!(imp.graphs[0].layers[0].slopes.is_empty());
+    let (_, quiet) = round_trip(&source());
+    assert!(!quiet.iter().any(|w| w.contains("slope annotation")));
+}
+
+#[test]
+fn straight_lines_are_named_in_a_warning_and_not_written() {
+    use sheaf_core::straight_line::StraightLine;
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        g.layers[0].straight_lines = vec![StraightLine::new(true, 1.0), StraightLine::new(false, 2.0)];
+    });
+    let (imp, warnings) = round_trip(&p);
+    let w = warnings.iter().find(|w| w.contains("straight line")).unwrap_or_else(|| panic!("{warnings:?}"));
+    assert!(w.contains("layer 1 has 2 straight lines") && w.contains(".opj.sheaf"), "{w}");
+    assert!(imp.graphs[0].layers[0].straight_lines.is_empty());
+    let (_, quiet) = round_trip(&source());
+    assert!(!quiet.iter().any(|w| w.contains("straight line")));
+}
+
+#[test]
+fn colour_and_bubble_scales_are_named_in_a_warning_and_not_written() {
+    use sheaf_core::layer_scale::{LayerScale, LayerScaleKind};
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        g.layers[0].scales = vec![LayerScale::new(LayerScaleKind::Color), LayerScale::new(LayerScaleKind::Bubble)];
+    });
+    let (imp, warnings) = round_trip(&p);
+    let w = warnings.iter().find(|w| w.contains("bubble scale")).unwrap_or_else(|| panic!("{warnings:?}"));
+    assert!(w.contains("layer 1 has 2 colour or bubble scales") && w.contains(".opj.sheaf"), "{w}");
+    assert!(imp.graphs[0].layers[0].scales.is_empty());
+    let (_, quiet) = round_trip(&source());
+    assert!(!quiet.iter().any(|w| w.contains("bubble scale")));
+}
+
+#[test]
 fn other_scale_types_survive_a_round_trip() {
     let mut p = source();
     graph_with(&mut p, Template::Scatter, &[(0, 3)], |g| {
@@ -510,4 +584,39 @@ fn other_scale_types_survive_a_round_trip() {
     assert_eq!(l.y_axis.scale, ScaleKind::Ln);
     assert_eq!(l.x_axis.scale, ScaleKind::OffsetReciprocal);
     assert!(l.y_axis.min.is_some_and(|m| m > 0.0));
+}
+
+#[test]
+fn the_major_tick_length_is_written_and_read_back() {
+    let mut p = source();
+    graph_with(&mut p, Template::LineSymbol, &[(0, 1)], |g| {
+        let l = &mut g.layers[0];
+        l.x_axis.major_tick_len_pt = 15.0;
+        l.x_axis.minor_tick_len_pt = 7.5;
+        l.y_axis.major_tick_len_pt = 3.0;
+        l.y_axis.minor_tick_len_pt = 1.5;
+    });
+    let (imp, warnings) = round_trip(&p);
+    assert!(warnings.iter().all(|w| !w.contains("tick length")), "{warnings:?}");
+    let l = &imp.graphs[0].layers[0];
+    assert_eq!((l.x_axis.major_tick_len_pt, l.x_axis.minor_tick_len_pt), (15.0, 7.5));
+    assert_eq!((l.y_axis.major_tick_len_pt, l.y_axis.minor_tick_len_pt), (3.0, 1.5));
+}
+
+/// Writes `sheaf-ticks.opj` (X major 15 pt, Y 3 pt) into `SHEAF_OPJ_TICK_DIR`, for Origin to open and
+/// save again (opj-format.md 10.3): `SHEAF_OPJ_TICK_DIR=<folder> cargo test -p sheaf-io -- --ignored
+/// write_tick_lengths_for_origin`.
+#[test]
+#[ignore]
+fn write_tick_lengths_for_origin() {
+    let Ok(dir) = std::env::var("SHEAF_OPJ_TICK_DIR") else { return };
+    let mut p = source();
+    graph_with(&mut p, Template::LineSymbol, &[(0, 1)], |g| {
+        let l = &mut g.layers[0];
+        l.x_axis.major_tick_len_pt = 15.0;
+        l.x_axis.minor_tick_len_pt = 7.5;
+        l.y_axis.major_tick_len_pt = 3.0;
+        l.y_axis.minor_tick_len_pt = 1.5;
+    });
+    std::fs::write(Path::new(&dir).join("sheaf-ticks.opj"), write_named(&p, "g", TIME).unwrap().bytes).unwrap();
 }

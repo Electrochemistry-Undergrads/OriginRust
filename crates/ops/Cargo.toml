@@ -9,11 +9,13 @@ license.workspace = true
 
 [dependencies]
 sheaf-core.workspace = true
+sheaf-fit.workspace = true
 sheaf-io.workspace = true
 sheaf-plot.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
+clap = { version = "4.6", features = ["derive"] }
 
 [lints]
 workspace = true

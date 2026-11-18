@@ -43,19 +43,53 @@ pub use sheaf_calc::{
     FftWindow, IfftOptions, PowerNorm, TraceMethod, WindowCorrection,
 };
 pub use sheaf_calc::{EnvelopeOptions, EnvelopeType};
+pub use sheaf_calc::{
+    FilterError, FilterResponse, FirMethod, FirSpec, FirWindow, FreqUnit, IIR_MAX_ORDER, IirMethod, IirSpec,
+    MAX_FIR_ORDER as FIR_MAX_ORDER, MagnitudeUnit,
+};
+pub use sheaf_calc::{RmTerm, ThreeWayEffect, ThreeWayTerms};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
+pub use multivariate::{KmeansSpec, PcaSpec};
+pub use roc::RocSpec;
 pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
+pub use sheaf_calc::{CwtWavelet, Wavelet, WaveletExtension};
+pub use sheaf_fit::simulate::Spacing as SimulateSpacing;
+pub use simsurface::SimulateSurfaceSpec;
+pub use simulate::{SimulateCurveSpec, SimulateX};
+pub use summary::{GraphArrangement, GraphSummarySpec};
+pub use survival::KaplanMeierSpec;
+pub use wavelet::{
+    CwtSpec, WaveletDecomposeSpec, WaveletDenoiseSpec, WaveletReconstructSpec, WaveletSmoothSpec, WaveletThresholdKind,
+};
+pub use xyzarea::default_columns as xyz_default_columns;
 
-/// The multi-peak fit of [`PeakChainSpec`]: a sum of `shape` peaks on `baseline`, one peak for
-/// every peak the search found, started at the found centre, width and height.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// The multi-peak fit of [`PeakChainSpec`]: a sum of peaks on `baseline`, one peak for every peak
+/// the search found, started at the found centre, width and height. Peak `k` (0-based) has the
+/// shape `shapes[k]`; peaks beyond the list have the shape `shape`.
+#[derive(Debug, Clone, PartialEq)]
 pub struct PeakFitSpec {
     pub shape: PeakShape,
     pub baseline: FitBaseline,
+    /// A function per peak, in the order found (empty: every peak is `shape`).
+    pub shapes: Vec<PeakShape>,
+    /// Also add a column per fitted peak: the peak on the fitted baseline (Multiple Peak Fit).
+    pub peak_curves: bool,
+}
+
+impl PeakFitSpec {
+    /// Every peak of one shape.
+    pub fn of(shape: PeakShape, baseline: FitBaseline) -> PeakFitSpec {
+        PeakFitSpec { shape, baseline, shapes: Vec::new(), peak_curves: false }
+    }
+
+    /// The shape of each of `n` peaks.
+    pub fn shapes_for(&self, n: usize) -> Vec<PeakShape> {
+        (0..n).map(|k| self.shapes.get(k).copied().unwrap_or(self.shape)).collect()
+    }
 }
 
 /// What [`Tool::PeakChain`] does: baseline, peak search, per-peak integration and (optionally)
@@ -67,6 +101,8 @@ pub struct PeakChainSpec {
     pub integrate: bool,
     /// Fit all found peaks together and add the fit columns.
     pub fit: Option<PeakFitSpec>,
+    /// Peak centres (X) given by the user instead of the search (Multiple Peak Fit); empty: search.
+    pub centers: Vec<f64>,
 }
 
 /// Which rows of the chosen columns a tool works on.
@@ -124,7 +160,7 @@ pub struct InterpSpec {
     /// X range of the result; `None` is the X range of the data.
     pub range: Option<(f64, f64)>,
     /// Smoothing factor of the B-spline method: the allowed sum of squared residuals (Origin's
-    /// `sf`). 0 gives the interpolating spline, which differs from Origin's automatic factor.
+    /// `sf`). 0 chooses the factor from the data as Origin does (`sheaf_calc::automatic_smoothing`).
     pub smoothing: f64,
     /// Interpolate onto the values of this column instead of an even grid (Mathematics >
     /// Interpolate/Extrapolate Y from X, Origin's `interp1` with `ix` given); `npts` and `range` are
@@ -342,6 +378,105 @@ impl Default for TTestSpec {
     }
 }
 
+/// Which test of variance [`VarTestSpec`] runs.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum VarTestKind {
+    /// Each chosen column is tested on its own against a hypothesized variance (chi-square test).
+    OneSample { variance: f64 },
+    /// Exactly two chosen columns; the ratio of their variances (first over second) against `ratio` (F test).
+    TwoSample { ratio: f64 },
+}
+
+/// What [`Tool::VarTest`] does (Origin's One-Sample and Two-Sample Test for Variance).
+#[derive(Debug, Clone, PartialEq)]
+pub struct VarTestSpec {
+    pub kind: VarTestKind,
+    pub tail: Tail,
+    /// Significance level, 0 to 1 (default 0.05).
+    pub alpha: f64,
+    /// Report the confidence intervals of `levels` (Origin's "Confidence Interval(s)", off by default).
+    pub intervals: bool,
+    /// Confidence levels in percent (Origin's default "90 95 99").
+    pub levels: Vec<f64>,
+}
+
+impl Default for VarTestSpec {
+    fn default() -> Self {
+        VarTestSpec {
+            kind: VarTestKind::OneSample { variance: 1.0 },
+            tail: Tail::Two,
+            alpha: 0.05,
+            intervals: false,
+            levels: vec![90.0, 95.0, 99.0],
+        }
+    }
+}
+
+/// Which test of proportions [`PropTestSpec`] runs. The counts are typed in (Origin's "Summarized" input).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PropTestKind {
+    /// `successes` of `size` against the proportion `proportion`.
+    OneSample { successes: u64, size: u64, proportion: f64 },
+    /// `(successes, size)` of each sample; the difference of the proportions (first minus second) against
+    /// `difference`.
+    TwoSample { first: (u64, u64), second: (u64, u64), difference: f64 },
+}
+
+/// What [`Tool::PropTest`] does (Origin's One-Sample and Two-Sample Proportion Test). It reads no data: the
+/// chosen column only says which workbook the result sheet goes to.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PropTestSpec {
+    pub kind: PropTestKind,
+    pub tail: Tail,
+    pub alpha: f64,
+    /// Report confidence intervals of `levels` percent.
+    pub intervals: bool,
+    pub levels: Vec<f64>,
+    /// Normal approximation (default on).
+    pub normal: bool,
+    /// Exact (binomial; Fisher for two samples) test (default off).
+    pub exact: bool,
+    /// Two samples: the standard error of the z statistic from the pooled proportion (when the hypothesized
+    /// difference is 0).
+    pub pooled: bool,
+    /// The "Power Analysis" group of Origin's dialogs.
+    pub power: PropPowerSpec,
+}
+
+/// The "Power Analysis" group of the proportion dialogs: the power of the test at the observed sample sizes
+/// ("Actual Power") and at typed sample sizes ("Hypothetical Power"), each at its own significance level.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PropPowerSpec {
+    pub actual: bool,
+    pub hypothetical: bool,
+    /// The significance level of the power analysis (Origin keeps it apart from the test's own level).
+    pub alpha: f64,
+    /// Hypothetical sample sizes (per sample for two samples).
+    pub sizes: Vec<u64>,
+}
+
+impl Default for PropPowerSpec {
+    fn default() -> Self {
+        PropPowerSpec { actual: false, hypothetical: false, alpha: 0.05, sizes: vec![50, 100, 200] }
+    }
+}
+
+impl Default for PropTestSpec {
+    fn default() -> Self {
+        PropTestSpec {
+            kind: PropTestKind::OneSample { successes: 0, size: 0, proportion: 0.5 },
+            tail: Tail::Two,
+            alpha: 0.05,
+            intervals: false,
+            levels: vec![90.0, 95.0, 99.0],
+            normal: true,
+            exact: false,
+            pooled: true,
+            power: PropPowerSpec::default(),
+        }
+    }
+}
+
 /// What [`Tool::Anova`] does: one-way ANOVA with each chosen column as a group.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AnovaSpec {
@@ -455,6 +590,98 @@ impl Default for TwoWayAnovaSpec {
             layout: TwoWayLayout::Indexed,
             interaction: true,
             comparison: Some(MeansComparison::Tukey),
+            alpha: 0.05,
+        }
+    }
+}
+
+/// What [`Tool::PartialCorrelation`] does (Origin's Partial Correlation Coefficient, `pcorrcoef`): the chosen
+/// columns are the variables; `controls` are the controlling variables, read from the same sheet. Pearson only.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PartialCorrSpec {
+    pub controls: Vec<ColumnId>,
+    /// Leave out every row where any variable or control has no number (default: pair by pair).
+    pub listwise: bool,
+    /// One-tailed instead of the default two-tailed test.
+    pub one_tailed: bool,
+    /// "Show Significance in Result Table": the p-value and df blocks (default off).
+    pub show_significance: bool,
+    /// "Flag Significant Correlations": a `*` after the coefficients whose p-value is below 0.05 (default off).
+    pub flag_significant: bool,
+}
+
+/// What [`Tool::ThreeWayAnova`] does (Origin's Three-Way ANOVA, `ANOVAThreeWay`) on indexed data: four chosen
+/// columns, the level of factor A, of factor B, of factor C and the data of each row. The Raw layout and the mean
+/// plot of Origin's dialog are not built.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ThreeWayAnovaSpec {
+    /// The interactions in the model (Origin's Model tab; all on by default).
+    pub terms: calc::ThreeWayTerms,
+    /// Levene's test of equal variances ("Homogeneity Tests").
+    pub levene: bool,
+    /// Descriptive statistics of the effects ticked here (`calc::ThreeWayEffect`), and of all data.
+    pub descriptive: Vec<calc::ThreeWayEffect>,
+    pub descriptive_overall: bool,
+    /// Means comparison methods (Origin lists the seven without Dunnett; several can be ticked).
+    pub comparisons: Vec<MeansComparison>,
+    pub comparison_alpha: f64,
+    /// Power of the F tests for the actual sample size.
+    pub power_actual: bool,
+    /// Power for these hypothetical sample sizes (Origin's default `50 100 200`; empty: not asked).
+    pub power_sizes: Vec<f64>,
+    pub power_alpha: f64,
+    /// Significance level of the F tests (Input tab).
+    pub alpha: f64,
+}
+
+impl Default for ThreeWayAnovaSpec {
+    /// Sheaf's own defaults (Origin's were not read from its dialog): all descriptive statistics, Tukey, no
+    /// Levene and no power.
+    fn default() -> Self {
+        ThreeWayAnovaSpec {
+            terms: calc::ThreeWayTerms::default(),
+            levene: false,
+            descriptive: calc::ThreeWayEffect::ALL.to_vec(),
+            descriptive_overall: true,
+            comparisons: vec![MeansComparison::Tukey],
+            comparison_alpha: 0.05,
+            power_actual: false,
+            power_sizes: Vec::new(),
+            power_alpha: 0.05,
+            alpha: 0.05,
+        }
+    }
+}
+
+/// What [`Tool::RmAnova`] does (Origin's One-Way and Two-Way Repeated Measures ANOVA) on indexed data: the chosen
+/// columns are the level column(s) (one for the one-way design, factor A and factor B for the two-way design), the
+/// data and the subject of each row, in this order. Every subject needs one number in every cell. The Raw layout,
+/// the plots and the Output tab of Origin's dialogs are not built.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RmAnovaSpec {
+    /// Two repeated factors (columns A, B, data, subject) instead of one (factor, data, subject).
+    pub two_way: bool,
+    /// The A*B interaction of the two-way design (Origin's "Interactions" box, off by default).
+    pub interaction: bool,
+    /// Descriptive statistics of the levels of A, of B (two-way) and of the A*B cells (two-way, with the interaction).
+    pub descriptive: Vec<RmTerm>,
+    /// Means comparison methods of the one-way design (the seven of Origin's dialog without Dunnett).
+    pub comparisons: Vec<MeansComparison>,
+    pub comparison_alpha: f64,
+    /// Significance level (Input tab): the confidence limits of the descriptive statistics and the verdicts.
+    pub alpha: f64,
+}
+
+impl RmAnovaSpec {
+    /// Origin's defaults as far as measured: the one-way run lists the descriptive statistics and Origin's
+    /// two-way dialog starts with Interactions off; the comparison methods start with Tukey (Sheaf's own).
+    pub fn new(two_way: bool) -> Self {
+        RmAnovaSpec {
+            two_way,
+            interaction: false,
+            descriptive: if two_way { vec![RmTerm::A, RmTerm::B] } else { vec![RmTerm::A] },
+            comparisons: if two_way { Vec::new() } else { vec![MeansComparison::Tukey] },
+            comparison_alpha: 0.05,
             alpha: 0.05,
         }
     }
@@ -700,9 +927,23 @@ pub enum Tool {
     Fft(FftSpec),
     Ifft(IfftSpec),
     FftFilter(FftFilterSpec),
+    /// Signal Processing > IIR Filter (Origin's `dfilter`, OriginPro; documented, not measured; analysis-tools.md 17).
+    IirFilter(IirSpec),
+    /// Signal Processing > FIR Filter (Origin 2027's FIR Filter app; documented, not measured; analysis-tools.md 17).
+    FirFilter(FirSpec),
     Envelope(EnvelopeSpec),
     Coherence(CoherenceSpec),
     Decimate(DecimateSpec),
+    /// Signal Processing > Wavelet > Decompose (Origin's `dwt`, measured; analysis-tools.md 19.2).
+    WaveletDecompose(WaveletDecomposeSpec),
+    /// Signal Processing > Wavelet > Reconstruction (Origin's `idwt`, measured; analysis-tools.md 19.3).
+    WaveletReconstruct(WaveletReconstructSpec),
+    /// Signal Processing > Wavelet > Denoise (Origin's `wtdenoise`, measured; analysis-tools.md 19.4).
+    WaveletDenoise(WaveletDenoiseSpec),
+    /// Signal Processing > Wavelet > Smooth (Origin's `wtsmooth`, measured; analysis-tools.md 19.5).
+    WaveletSmooth(WaveletSmoothSpec),
+    /// Signal Processing > Wavelet > Continuous Wavelet (Origin's `cwt`, measured; analysis-tools.md 19.6).
+    ContinuousWavelet(CwtSpec),
     /// Mathematics > Trace Interpolation (Origin's `interp1trace`, measured; analysis-tools.md 16).
     TraceInterp(TraceInterpSpec),
     /// Data Manipulation: subtract the straight line through two points.
@@ -724,6 +965,8 @@ pub enum Tool {
     PeakChain(PeakChainSpec),
     Statistics(StatisticsSpec),
     TTest(TTestSpec),
+    VarTest(VarTestSpec),
+    PropTest(PropTestSpec),
     Anova(AnovaSpec),
     Histogram(HistogramSpec),
     /// Statistics > Descriptive Statistics > 2D Frequency Counts/Binning (Origin's `twoDBinning`): the
@@ -735,6 +978,12 @@ pub enum Tool {
     Normality(NormalitySpec),
     Crosstab(CrosstabSpec),
     TwoWayAnova(TwoWayAnovaSpec),
+    /// Statistics > ANOVA > Three-Way ANOVA.
+    ThreeWayAnova(ThreeWayAnovaSpec),
+    /// Statistics > ANOVA > One-Way and Two-Way Repeated Measures ANOVA.
+    RmAnova(RmAnovaSpec),
+    /// Statistics > Descriptive Statistics > Partial Correlation Coefficient.
+    PartialCorrelation(PartialCorrSpec),
     MannWhitney(MannWhitneySpec),
     SignedRank(SignedRankSpec),
     KruskalWallis(KruskalWallisSpec),
@@ -750,9 +999,29 @@ pub enum Tool {
     DistFit(DistFitSpec),
     /// Probability plot and Q-Q plot against a distribution family; makes a graph.
     ProbPlot(ProbPlotSpec),
+    /// Statistics > Multivariate Analysis > Principal Component Analysis (T29, `docs/spec/statistics.md` section 17).
+    Pca(PcaSpec),
+    /// Statistics > Multivariate Analysis > K-Means Cluster Analysis (T29, `docs/spec/statistics.md` section 18).
+    Kmeans(KmeansSpec),
+    /// Statistics > ROC Curve (T29, `docs/spec/statistics.md` section 19): test variables, then the state column.
+    Roc(RocSpec),
+    /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
+    /// censor and, optionally, group columns.
+    KaplanMeier(KaplanMeierSpec),
+    /// Statistics > Descriptive Statistics > Graphical Summary (T40; `docs/spec/statistics.md` section 22).
+    GraphSummary(GraphSummarySpec),
     AverageCurves(AverageSpec),
     Intersect(IntersectSpec),
     PolygonArea,
+    /// Analysis > Fitting > Simulate Curve (T47, `docs/spec/fitting.md` section 13): a built-in fit function at typed
+    /// parameters, as an X and a Y column on a new sheet. Reads no data except an optional X column.
+    SimulateCurve(SimulateCurveSpec),
+    /// Analysis > Mathematics > XYZ Surface Area (T91, `docs/spec/analysis-tools.md` section 18): the columns are X, Y
+    /// and Z, in this order; one row of results (area, points, triangles).
+    XyzArea,
+    /// Analysis > Fitting > Simulate Surface (T91, `docs/spec/fitting.md` section 16): XYZ data of a surface fit function
+    /// on a grid, with noise, as X, Y and Z columns on a new sheet. Reads no data.
+    SimulateSurface(SimulateSurfaceSpec),
 }
 
 impl Tool {
@@ -773,9 +1042,16 @@ impl Tool {
             Tool::Fft(_) => "FFT",
             Tool::Ifft(_) => "IFFT",
             Tool::FftFilter(_) => "FFT filter",
+            Tool::IirFilter(_) => "IIR filter",
+            Tool::FirFilter(_) => "FIR filter",
             Tool::Envelope(_) => "Envelope",
             Tool::Coherence(_) => "Coherence",
             Tool::Decimate(_) => "Decimation",
+            Tool::WaveletDecompose(_) => "Wavelet decomposition",
+            Tool::WaveletReconstruct(_) => "Wavelet reconstruction",
+            Tool::WaveletDenoise(_) => "Wavelet denoising",
+            Tool::WaveletSmooth(_) => "Wavelet smoothing",
+            Tool::ContinuousWavelet(_) => "Continuous wavelet transform",
             Tool::TraceInterp(_) => "Trace interpolation",
             Tool::SubtractLine(_) => "Subtract straight line",
             Tool::ReduceDup(_) => "Reduce duplicate X data",
@@ -805,6 +1081,10 @@ impl Tool {
             Tool::Normality(_) => "Normality test",
             Tool::Crosstab(_) => "Cross tabulation",
             Tool::TwoWayAnova(_) => "Two-way ANOVA",
+            Tool::ThreeWayAnova(_) => "Three-way ANOVA",
+            Tool::RmAnova(spec) if spec.two_way => "Two-way repeated measures ANOVA",
+            Tool::RmAnova(_) => "One-way repeated measures ANOVA",
+            Tool::PartialCorrelation(_) => "Partial correlation",
             Tool::MannWhitney(_) => "Mann-Whitney test",
             Tool::SignedRank(spec) => match spec.kind {
                 SignedRankKind::OneSample { .. } => "One-sample Wilcoxon signed rank test",
@@ -819,14 +1099,30 @@ impl Tool {
             Tool::Friedman(_) => "Friedman ANOVA",
             Tool::Grubbs(_) => "Grubbs test",
             Tool::Dixon(_) => "Dixon's Q test",
+            Tool::VarTest(spec) => match spec.kind {
+                VarTestKind::OneSample { .. } => "One-sample test for variance",
+                VarTestKind::TwoSample { .. } => "Two-sample test for variance",
+            },
+            Tool::PropTest(spec) => match spec.kind {
+                PropTestKind::OneSample { .. } => "One-sample proportion test",
+                PropTestKind::TwoSample { .. } => "Two-sample proportion test",
+            },
             Tool::DistFit(_) => "Distribution fit",
             Tool::ProbPlot(spec) => match spec.kind {
                 ProbPlotKind::Probability => "Probability plot",
                 ProbPlotKind::QQ => "Q-Q plot",
             },
+            Tool::Pca(_) => "Principal component analysis",
+            Tool::Kmeans(_) => "K-means cluster analysis",
+            Tool::Roc(_) => "ROC curve",
+            Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
+            Tool::GraphSummary(_) => "Graphical summary",
             Tool::AverageCurves(_) => "Average multiple curves",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "Polygon area",
+            Tool::SimulateCurve(_) => "Simulate curve",
+            Tool::XyzArea => "XYZ surface area",
+            Tool::SimulateSurface(_) => "Simulate surface",
         }
     }
 
@@ -841,9 +1137,16 @@ impl Tool {
             Tool::Fft(_) => "FFT",
             Tool::Ifft(_) => "IFFT",
             Tool::FftFilter(_) => "FFTFilter",
+            Tool::IirFilter(_) => "IIRFilter",
+            Tool::FirFilter(_) => "FIRFilter",
             Tool::Envelope(_) => "Envelope",
             Tool::Coherence(_) => "Coherence",
             Tool::Decimate(_) => "Decimate",
+            Tool::WaveletDecompose(_) => "DWT",
+            Tool::WaveletReconstruct(_) => "IDWT",
+            Tool::WaveletDenoise(_) => "WTDenoise",
+            Tool::WaveletSmooth(_) => "WTSmooth",
+            Tool::ContinuousWavelet(_) => "CWTResults",
             Tool::TraceInterp(_) => "TraceInterp",
             Tool::ReduceX(_) => "Reduced",
             Tool::ReduceDup(_) => "ReduceDup",
@@ -853,6 +1156,8 @@ impl Tool {
             Tool::PeakChain(_) => "PeakAnalysis",
             Tool::Statistics(_) => "Statistics",
             Tool::TTest(_) => "TTest",
+            Tool::VarTest(_) => "VarTest",
+            Tool::PropTest(_) => "PropTest",
             Tool::Anova(_) => "ANOVA",
             Tool::Histogram(_) => "Histogram",
             Tool::Binning2D(_) => "Binning2D",
@@ -860,6 +1165,10 @@ impl Tool {
             Tool::Normality(_) => "Normality",
             Tool::Crosstab(_) => "Crosstab",
             Tool::TwoWayAnova(_) => "ANOVA2Way",
+            Tool::ThreeWayAnova(_) => "ANOVA3Way",
+            Tool::RmAnova(spec) if spec.two_way => "ANOVATwoWayRM",
+            Tool::RmAnova(_) => "ANOVAOneWayRM",
+            Tool::PartialCorrelation(_) => "PartialCorr",
             Tool::MannWhitney(_) => "MannWhitney",
             Tool::SignedRank(_) => "SignedRank",
             Tool::KruskalWallis(_) => "KruskalWallis",
@@ -875,9 +1184,17 @@ impl Tool {
                 ProbPlotKind::Probability => "ProbPlot",
                 ProbPlotKind::QQ => "QQPlot",
             },
+            Tool::Pca(_) => "PCA",
+            Tool::Kmeans(_) => "KMeans",
+            Tool::Roc(_) => "ROC",
+            Tool::KaplanMeier(_) => "KaplanMeier",
+            Tool::GraphSummary(_) => "GraphSummary",
             Tool::AverageCurves(_) => "AverageResult",
             Tool::Intersect(_) => "Intersect",
             Tool::PolygonArea => "PolygonArea",
+            Tool::SimulateCurve(_) => "Simulate",
+            Tool::XyzArea => "XYZArea",
+            Tool::SimulateSurface(_) => "SimulateSurface",
             _ => "Result",
         }
     }
@@ -954,6 +1271,71 @@ impl ResultTable {
     }
 }
 
+/// Applies the looks of a planned graph (fixed limits, lines through zero, colours, labels) to its first layer.
+fn apply_look(l: &mut crate::graph::Layer, look: &dist::Look, ids: &[ColumnId]) {
+    if let Some((a, b)) = look.x_range {
+        l.x_axis.min = Some(a);
+        l.x_axis.max = Some(b);
+    }
+    if let Some((a, b)) = look.y_range {
+        l.y_axis.min = Some(a);
+        l.y_axis.max = Some(b);
+    }
+    if let Some(a) = look.y_min {
+        l.y_axis.min = Some(a);
+    }
+    l.x_axis.major_step = look.x_step.or(l.x_axis.major_step);
+    l.y_axis.major_step = look.y_step.or(l.y_axis.major_step);
+    if look.no_legend {
+        l.legend.visible = false;
+    }
+    if look.cross_lines {
+        l.x_axis.additional_line = Some(0.0);
+        l.y_axis.additional_line = Some(0.0);
+    }
+    if look.box_frame {
+        for axis in [&mut l.x_axis, &mut l.y_axis] {
+            axis.show_opposite = true;
+            axis.opposite_ticks = false;
+        }
+    }
+    for &(i, color) in &look.colors {
+        if let Some(p) = l.plots.get_mut(i) {
+            p.line.color = color;
+            p.symbol.color = color;
+            p.auto_color = false;
+        }
+    }
+    for &(i, shape, size, color) in &look.symbols {
+        if let Some(p) = l.plots.get_mut(i) {
+            p.symbol.shape = shape;
+            p.symbol.size_pt = size;
+            if let Some(c) = color {
+                p.symbol.color = c;
+                p.auto_color = false;
+            }
+        }
+    }
+    for &i in &look.dotted {
+        if let Some(p) = l.plots.get_mut(i) {
+            p.line.dash = crate::graph::Dash::Dot;
+        }
+    }
+    for &(i, col, color) in &look.labels {
+        if let Some(p) = l.plots.get_mut(i) {
+            let mut font = crate::graph::Font::new("Arial", 18.0);
+            font.color = color;
+            p.decor.labels = crate::graph::DataLabels {
+                enable: true,
+                form: crate::graph::LabelForm::Column { column: ids[col] },
+                position: crate::graph::LabelPosition::Right,
+                font,
+                ..Default::default()
+            };
+        }
+    }
+}
+
 /// What a tool did.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Report {
@@ -966,6 +1348,8 @@ pub struct Report {
     pub new_sheet: Option<usize>,
     /// The graph that was added (a histogram's column plot), if any.
     pub new_graph: Option<WindowId>,
+    /// Further graphs that the tool added (principal component analysis draws up to three), in drawing order.
+    pub more_graphs: Vec<WindowId>,
     /// The numbers per input column (integration, statistics, peak counts).
     pub table: Option<ResultTable>,
     /// One sentence for a status line, for example "Integrate: 3 columns, results in sheet Integrate1".
@@ -1180,6 +1564,42 @@ pub(crate) fn resolve_rows(rows: RowRange, short: &str, x: &[f64], n: usize) -> 
     }
 }
 
+/// The groups behind the report of a one-way ANOVA with a means comparison and of a two-sample t-test, kept on the
+/// report sheet for the Multiple Comparisons Plot (T64).
+fn comparison_source(
+    tool: &Tool,
+    inputs: &[Input<'_>],
+    pairs: Vec<(usize, usize)>,
+) -> Option<crate::compplot::ComparisonSource> {
+    use crate::compplot::{ComparisonGroup, ComparisonKind, ComparisonSource, StepDown};
+    let (kind, alpha, step_down) = match tool {
+        Tool::Anova(spec) if spec.comparison.is_some() => {
+            let step_down = match spec.comparison {
+                Some(MeansComparison::HolmBonferroni) => Some(StepDown::Bonferroni),
+                Some(MeansComparison::HolmSidak) => Some(StepDown::Sidak),
+                _ => None,
+            };
+            (ComparisonKind::OneWayAnova, spec.alpha, step_down)
+        }
+        Tool::TTest(TTestSpec { kind: TTestKind::TwoSample { .. }, alpha, .. }) => {
+            (ComparisonKind::TwoSampleTTest, *alpha, None)
+        }
+        _ => return None,
+    };
+    let units = match inputs.first() {
+        Some(f) if inputs.iter().all(|i| i.units == f.units) => f.units.clone(),
+        _ => String::new(),
+    };
+    let groups = inputs
+        .iter()
+        .map(|i| ComparisonGroup {
+            name: i.name.clone(),
+            values: i.ys().iter().copied().filter(|v| v.is_finite()).collect(),
+        })
+        .collect();
+    Some(ComparisonSource { kind, groups, units, pairs, alpha, step_down })
+}
+
 /// A sheet name that the workbook does not use yet: `prefix` followed by the smallest free number.
 pub(crate) fn free_sheet_name(sheets: &[Worksheet], prefix: &str) -> String {
     (1..)
@@ -1189,7 +1609,11 @@ pub(crate) fn free_sheet_name(sheets: &[Worksheet], prefix: &str) -> String {
 }
 
 /// The table of Statistics on Columns: one row per input column, the columns chosen in `spec`.
-fn statistics_table(spec: &StatisticsSpec, inputs: &[Input<'_>]) -> Result<ResultTable, AnalysisError> {
+fn statistics_table(
+    spec: &StatisticsSpec,
+    inputs: &[Input<'_>],
+    sheet: &Worksheet,
+) -> Result<ResultTable, AnalysisError> {
     if spec.confidence_limits && !(spec.level > 0.0 && spec.level < 1.0) {
         return Err(AnalysisError::BadOption(format!(
             "the confidence level must be between 0 and 1, not {}",
@@ -1233,7 +1657,15 @@ fn statistics_table(spec: &StatisticsSpec, inputs: &[Input<'_>]) -> Result<Resul
         .collect();
     let mut t = ResultTable { headers, ..Default::default() };
     for inp in inputs {
-        let s = calc::stats(inp.ys());
+        let values = match sheet.column(inp.id).and_then(|c| c.data_range) {
+            Some(range) => {
+                let end = range.end.map_or(inp.last + 1, |r| r.saturating_add(1).min(inp.last + 1)).max(inp.first);
+                let start = inp.first.max(range.begin).min(end);
+                &inp.y[start..end]
+            }
+            None => inp.ys(),
+        };
+        let s = calc::stats(values);
         let mut values: Vec<f64> = picks.iter().map(|p| (p.2)(&s)).collect();
         // The unit goes with the numbers that carry the data's unit: not the counts, skewness, kurtosis
         // and the coefficient of variation, which have none, and not the variance (unit squared).
@@ -1253,6 +1685,7 @@ fn statistics_table(spec: &StatisticsSpec, inputs: &[Input<'_>]) -> Result<Resul
 fn row_statistics(
     spec: &RowStatsSpec,
     inputs: &[Input<'_>],
+    sheet: &Worksheet,
     beside: &mut Vec<NewColumn>,
     notes: &mut Vec<String>,
 ) -> Result<(), AnalysisError> {
@@ -1274,9 +1707,10 @@ fn row_statistics(
     }
     let rows = inputs.iter().map(|i| i.y.len()).max().unwrap_or(0);
     let mut cells = vec![Vec::with_capacity(inputs.len()); rows];
-    for (r, row) in cells.iter_mut().enumerate() {
-        for inp in inputs {
-            let inside = r >= inp.first && r <= inp.last;
+    for inp in inputs {
+        let range = sheet.column(inp.id).and_then(|c| c.data_range);
+        for (r, row) in cells.iter_mut().enumerate() {
+            let inside = r >= inp.first && r <= inp.last && range.is_none_or(|range| range.contains(r));
             row.push(if inside { inp.y.get(r).copied().unwrap_or(f64::NAN) } else { f64::NAN });
         }
     }
@@ -1318,7 +1752,12 @@ fn run_peak_chain(
     let mut t = ResultTable::new(&headers);
     for inp in inputs {
         let (xs, ys) = (inp.xs(), inp.ys());
-        let result = calc::analyze_peaks(xs, ys, &spec.chain).map_err(|e| match e {
+        let result = if spec.centers.is_empty() {
+            calc::analyze_peaks(xs, ys, &spec.chain)
+        } else {
+            calc::analyze_peaks_at(xs, ys, &spec.chain, &spec.centers)
+        }
+        .map_err(|e| match e {
             calc::ChainError::NoBaseline => AnalysisError::BadOption(format!(
                 "column {}: the baseline could not be made (anchor points need at least two different X values, and the data at least two points)",
                 inp.short
@@ -1345,7 +1784,7 @@ fn run_peak_chain(
         }
         // The multi-peak fit, started at the found peaks.
         let mut fitted_peaks: Vec<[f64; 5]> = Vec::new();
-        if let Some(fs) = spec.fit {
+        if let Some(fs) = &spec.fit {
             let n = xs.len();
             let (y0, m) = match (fs.baseline, &spec.chain.baseline) {
                 (_, ChainBaseline::None) => {
@@ -1375,8 +1814,9 @@ fn run_peak_chain(
                     height: ys[p.index] - (y0 + m * p.center),
                 })
                 .collect();
+            let shapes = fs.shapes_for(starts.len());
             let mut func =
-                sheaf_fit::multipeak::multi_peak_function(fs.shape, fs.baseline, &starts).with_initial("y0", y0);
+                sheaf_fit::multipeak::multi_peak_function_of(&shapes, fs.baseline, &starts).with_initial("y0", y0);
             if fs.baseline == FitBaseline::Linear {
                 func = func.with_initial("m", m);
             }
@@ -1385,10 +1825,11 @@ fn run_peak_chain(
             })?;
             let get = |name: String| report.param(&name).map_or(f64::NAN, |p| p.value);
             let mut total = 0.0;
-            for k in 1..=starts.len() {
-                let (xc, w, a) = (get(format!("xc{k}")), get(format!("w{k}")), get(format!("A{k}")));
-                total += a;
-                fitted_peaks.push([xc, fs.shape.height(w, a), fs.shape.fwhm(w), a, 0.0]);
+            for (k, shape) in shapes.iter().enumerate() {
+                let p: Vec<f64> = shape.param_names(k + 1).into_iter().map(get).collect();
+                let peak = shape.summary(&p);
+                total += peak.area;
+                fitted_peaks.push([peak.center, peak.height, peak.fwhm, peak.area, 0.0]);
             }
             for p in fitted_peaks.iter_mut() {
                 p[4] = if total != 0.0 { 100.0 * p[3] / total } else { f64::NAN };
@@ -1396,7 +1837,7 @@ fn run_peak_chain(
             notes.push(format!(
                 "{}: {} fit of {} peaks, R^2 = {:.6}, reduced chi-square = {:.6e}, {} iterations{}",
                 inp.label,
-                fs.shape.name(),
+                sheaf_fit::multipeak::shapes_name(&shapes, "+"),
                 starts.len(),
                 report.stats.r_squared,
                 report.stats.reduced_chi_sqr,
@@ -1407,9 +1848,38 @@ fn run_peak_chain(
                 after: inp.id,
                 long_name: format!("Peak fit of {}", inp.name),
                 units: inp.units.clone(),
-                comments: format!("{} multi-peak fit of {}{}", fs.shape.name(), inp.short, inp.range_note()),
+                comments: format!(
+                    "{} multi-peak fit of {}{}",
+                    sheaf_fit::multipeak::shapes_name(&shapes, "+"),
+                    inp.short,
+                    inp.range_note()
+                ),
                 data: inp.aligned(&report.fitted),
             });
+            if fs.peak_curves {
+                let (y0f, mf) =
+                    (get("y0".into()), if fs.baseline == FitBaseline::Linear { get("m".into()) } else { 0.0 });
+                for (k, shape) in shapes.iter().enumerate() {
+                    let p: Vec<f64> = shape.param_names(k + 1).into_iter().map(get).collect();
+                    let curve: Vec<f64> = xs
+                        .iter()
+                        .map(|&x| if x.is_finite() { y0f + mf * x + shape.eval(&p, x) } else { f64::NAN })
+                        .collect();
+                    beside.push(NewColumn {
+                        after: inp.id,
+                        long_name: format!("Peak {} of {}", k + 1, inp.name),
+                        units: inp.units.clone(),
+                        comments: format!(
+                            "{} peak {} of the multi-peak fit of {}{}",
+                            shape.name(),
+                            k + 1,
+                            inp.short,
+                            inp.range_note()
+                        ),
+                        data: inp.aligned(&curve),
+                    });
+                }
+            }
         }
         let xu = &inp.x_units;
         let area_unit = unit_product(&inp.units, xu);
@@ -1430,12 +1900,24 @@ fn run_peak_chain(
     Ok(t)
 }
 
+mod anova3;
 mod categorical;
 mod curves;
 mod dist;
+mod filters;
 mod manip;
+mod multivariate;
+mod partcorr;
 mod power;
+mod rmanova;
+mod roc;
+mod simsurface;
+mod simulate;
 mod statistics;
+mod summary;
+mod survival;
+mod wavelet;
+mod xyzarea;
 pub use manip::{
     MedianFilterSpec, ReduceDupSpec, Shift, SubtractLineSpec, TranslateAxis, TranslateSpec, dup_method_name,
 };
@@ -1447,7 +1929,7 @@ pub use sheaf_calc::{
 impl Project {
     /// A new graph with a column plot of each (bin centre, count) pair of columns.
     fn histogram_graph(&mut self, ids: &[ColumnId], plots: &[(usize, usize)]) -> WindowId {
-        let long_name = ids.first().and_then(|c| self.locate(*c)).map(|(b, _, _)| b.long_name.clone());
+        let long_name = ids.first().and_then(|c| self.locate(*c)).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(crate::template::Template::Scatter);
         for &(x, y) in plots {
             self.add_plot_xy(graph, 0, Some(ids[x]), ids[y], None).expect("the graph and the new columns exist");
@@ -1473,7 +1955,7 @@ impl Project {
     /// A new graph with the scatter and line plots of a probability plot; the plan names columns of the
     /// new result sheet by position.
     fn xy_graph(&mut self, ids: &[ColumnId], plan: &dist::XyGraph) -> WindowId {
-        let long_name = ids.first().and_then(|c| self.locate(*c)).map(|(b, _, _)| b.long_name.clone());
+        let long_name = ids.first().and_then(|c| self.locate(*c)).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(crate::template::Template::Scatter);
         for p in &plan.plots {
             self.add_plot_xy(graph, 0, Some(ids[p.x]), ids[p.y], None).expect("the graph and the new columns exist");
@@ -1498,12 +1980,75 @@ impl Project {
                 l.y_axis.scale = plan.y_scale;
                 l.x_axis.title = Some(plan.x_title.clone());
                 l.y_axis.title = Some(plan.y_title.clone());
+                apply_look(l, &plan.look, ids);
             }
             if let Some(name) = long_name {
                 g.long_name = name;
             }
+            if let Some(title) = &plan.look.title {
+                g.long_name = title.clone();
+            }
+        }
+        if let Some(ov) = &plan.look.overlay {
+            self.overlay_layer(graph, ids, ov);
         }
         graph
+    }
+
+    /// The second layer of a graph that has plots of its own against axes on the top and right edges (the
+    /// loading vectors of a biplot).
+    fn overlay_layer(&mut self, graph: WindowId, ids: &[ColumnId], ov: &dist::Overlay) {
+        use crate::graph::{AxisSide, LayerLink, ScaleLink};
+        let Some(parent) = self.graph(graph).and_then(|g| g.layers.first()).cloned() else { return };
+        let mut layer = crate::template::right_y_layer(&parent, 0);
+        layer.link = Some(LayerLink { parent: 0, x: ScaleLink::None, y: ScaleLink::None });
+        layer.x_axis.side = AxisSide::Opposite;
+        layer.x_axis.min = Some(ov.x_range.0);
+        layer.x_axis.max = Some(ov.x_range.1);
+        layer.y_axis.min = Some(ov.y_range.0);
+        layer.y_axis.max = Some(ov.y_range.1);
+        layer.x_axis.major_step = None;
+        layer.y_axis.major_step = None;
+        layer.x_axis.title = Some(String::new());
+        layer.y_axis.title = Some(String::new());
+        layer.x_axis.show_title = false;
+        layer.y_axis.show_title = false;
+        for axis in [&mut layer.x_axis, &mut layer.y_axis] {
+            axis.color = ov.color;
+            axis.tick_font.color = ov.color;
+            axis.additional_line = None;
+        }
+        if let Some(g) = self.graph_mut(graph) {
+            g.layers.push(layer);
+        }
+        for p in &ov.plots {
+            self.add_plot_xy(graph, 1, Some(ids[p.x]), ids[p.y], None).expect("the graph and the new columns exist");
+        }
+        if let Some(l) = self.graph_mut(graph).and_then(|g| g.layers.get_mut(1)) {
+            for (plot, spec) in l.plots.iter_mut().zip(&ov.plots) {
+                plot.kind = spec.kind;
+                plot.label = Some(spec.label.clone());
+                plot.line.color = ov.color;
+                plot.line.width_pt = 0.5;
+                plot.symbol.color = ov.color;
+                plot.auto_color = false;
+            }
+            for &(i, col) in &ov.labels {
+                if let Some(plot) = l.plots.get_mut(i) {
+                    plot.decor.labels = crate::graph::DataLabels {
+                        enable: true,
+                        form: crate::graph::LabelForm::Column { column: ids[col] },
+                        position: crate::graph::LabelPosition::Right,
+                        font: {
+                            let mut f = crate::graph::Font::new("Arial", 18.0);
+                            f.color = ov.color;
+                            f
+                        },
+                        ..Default::default()
+                    };
+                }
+            }
+        }
     }
 
     /// Runs an analysis tool on worksheet columns. See the module text for
@@ -1526,7 +2071,22 @@ impl Project {
 
         let mut inputs = Vec::with_capacity(request.columns.len());
         // The two-way ANOVA reads its columns itself: the factor columns may hold text.
-        let own_columns = matches!(request.tool, Tool::TwoWayAnova(_) | Tool::Crosstab(_) | Tool::DiscreteFrequency(_));
+        let own_columns = matches!(
+            request.tool,
+            Tool::TwoWayAnova(_)
+                | Tool::ThreeWayAnova(_)
+                | Tool::RmAnova(_)
+                | Tool::PartialCorrelation(_)
+                | Tool::Crosstab(_)
+                | Tool::DiscreteFrequency(_)
+                | Tool::PropTest(_)
+                | Tool::Roc(_)
+                | Tool::KaplanMeier(_)
+                | Tool::GraphSummary(_)
+                | Tool::SimulateCurve(_)
+                | Tool::XyzArea
+                | Tool::SimulateSurface(_)
+        );
         for id in request.columns.iter().filter(|_| !own_columns) {
             let index = sheet.column_index(*id).ok_or_else(|| {
                 if self.column(*id).is_some() {
@@ -1568,12 +2128,35 @@ impl Project {
         let mut notes: Vec<String> = Vec::new();
         // Plots of a new graph: indices into `on_sheet` of the X and the Y column.
         let mut graph_plots: Vec<(usize, usize)> = Vec::new();
+        let mut comparison_pairs: Vec<(usize, usize)> = Vec::new();
         // A graph of scatter and line plots (probability plots).
         let mut xy_graph: Option<dist::XyGraph> = None;
+        // Further graphs of the same tool (loading plot, biplot).
+        let mut more_xy_graphs: Vec<dist::XyGraph> = Vec::new();
+        // The graphs of a graphical summary (three layers each).
+        let mut summary_graphs: Vec<summary::SummaryGraph> = Vec::new();
 
         match &request.tool {
             Tool::TwoWayAnova(spec) => {
                 let out = statistics::two_way_anova(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
+            Tool::ThreeWayAnova(spec) => {
+                let out = anova3::three_way_anova(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
+            Tool::RmAnova(spec) => {
+                let out = rmanova::rm_anova(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
+            Tool::PartialCorrelation(spec) => {
+                let out = partcorr::partial_correlation(spec, sheet, &request.columns, request.rows)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;
@@ -1589,7 +2172,30 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
             }
+            Tool::PropTest(spec) => {
+                let out = statistics::prop_test(spec)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
+            Tool::SimulateCurve(spec) => {
+                let out = simulate::run(spec, self)?;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::SimulateSurface(spec) => {
+                let out = simsurface::run(spec)?;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
+            Tool::XyzArea => {
+                let out = xyzarea::xyz_area(sheet, &request.columns, request.rows)?;
+                table = out.table;
+                notes = out.notes;
+            }
             Tool::TTest(_)
+            | Tool::VarTest(_)
             | Tool::Anova(_)
             | Tool::Histogram(_)
             | Tool::Binning2D(_)
@@ -1609,6 +2215,7 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 graph_plots = out.plots;
+                comparison_pairs = out.comparison_pairs;
             }
             Tool::DistFit(_) | Tool::ProbPlot(_) => {
                 let out = dist::run(&request.tool, &inputs)?;
@@ -1616,6 +2223,35 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 xy_graph = out.graph;
+            }
+            Tool::Roc(spec) => {
+                let out = roc::run(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::KaplanMeier(spec) => {
+                let out = survival::run(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::GraphSummary(spec) => {
+                let out = summary::run(spec, sheet, &request.columns, request.rows)?;
+                table = Some(out.table);
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                summary_graphs = out.graphs;
+            }
+            Tool::Pca(_) | Tool::Kmeans(_) => {
+                let out = multivariate::run(&request.tool, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+                more_xy_graphs = out.more_graphs;
             }
             Tool::AverageCurves(_) | Tool::Intersect(_) | Tool::PolygonArea => {
                 let out = curves::run(&request.tool, &inputs)?;
@@ -1940,6 +2576,8 @@ impl Project {
                     });
                 }
             }
+            Tool::IirFilter(spec) => filters::run_iir(spec, &inputs, &mut beside)?,
+            Tool::FirFilter(spec) => filters::run_fir(spec, &inputs, &mut beside)?,
             Tool::Envelope(spec) => {
                 for inp in &inputs {
                     // Rows without an X or a Y value drop out before the extremes are searched.
@@ -2044,6 +2682,21 @@ impl Project {
                         data: ColumnData::numeric(dy),
                     });
                 }
+            }
+            Tool::WaveletDecompose(spec) => wavelet::run_decompose(spec, &inputs, &mut on_sheet)?,
+            Tool::WaveletReconstruct(spec) => {
+                let (_, _, dcol) = self.locate(spec.detail).ok_or(AnalysisError::NoSuchColumn(spec.detail))?;
+                let dshort = dcol.short_name.clone();
+                let detail = dcol.numeric().ok_or_else(|| AnalysisError::NotNumeric(dshort.clone()))?;
+                wavelet::run_reconstruct(spec, &inputs, detail, &dshort, &mut on_sheet)?
+            }
+            Tool::WaveletDenoise(spec) => wavelet::run_denoise(spec, &inputs, &mut on_sheet)?,
+            Tool::WaveletSmooth(spec) => wavelet::run_smooth(spec, &inputs, &mut on_sheet)?,
+            Tool::ContinuousWavelet(spec) => {
+                let (_, _, scol) = self.locate(spec.scales).ok_or(AnalysisError::NoSuchColumn(spec.scales))?;
+                let sshort = scol.short_name.clone();
+                let scales = scol.numeric().ok_or_else(|| AnalysisError::NotNumeric(sshort.clone()))?;
+                wavelet::run_cwt(spec, &inputs, scales, &sshort, &mut on_sheet)?
             }
             Tool::TraceInterp(spec) => {
                 if spec.points < 2 {
@@ -2483,10 +3136,10 @@ impl Project {
                 table = Some(t);
             }
             Tool::Statistics(spec) => {
-                table = Some(statistics_table(spec, &inputs)?);
+                table = Some(statistics_table(spec, &inputs, sheet)?);
             }
             Tool::RowStatistics(spec) => {
-                row_statistics(spec, &inputs, &mut beside, &mut notes)?;
+                row_statistics(spec, &inputs, sheet, &mut beside, &mut notes)?;
             }
         }
 
@@ -2579,6 +3232,7 @@ impl Project {
 
         // Everything was computed; now change the project.
         let count = request.columns.len();
+        let comparison_source = comparison_source(&request.tool, &inputs, comparison_pairs);
         drop(inputs);
         let mut new_columns = Vec::with_capacity(beside.len());
         let mut added_names: Vec<String> = Vec::new();
@@ -2639,6 +3293,7 @@ impl Project {
                 sheet_column_ids.push(id);
             }
             sheet_name = ws.name.clone();
+            ws.comparison_source = comparison_source;
             let b = self.workbook_mut(book_id).expect("workbook exists");
             b.sheets.push(ws);
             new_sheet = Some(b.sheets.len() - 1);
@@ -2648,6 +3303,18 @@ impl Project {
         }
         if let Some(plan) = &xy_graph {
             new_graph = Some(self.xy_graph(&sheet_column_ids, plan));
+        }
+        let mut more_graphs = Vec::new();
+        for plan in &more_xy_graphs {
+            more_graphs.push(self.xy_graph(&sheet_column_ids, plan));
+        }
+        for plan in &summary_graphs {
+            let id = self.summary_graph(&sheet_column_ids, plan);
+            if new_graph.is_none() {
+                new_graph = Some(id);
+            } else {
+                more_graphs.push(id);
+            }
         }
         let columns = if count == 1 { "1 column".to_string() } else { format!("{count} columns") };
         // Name the added columns, so that the result can be found without opening the sheet.
@@ -2667,10 +3334,25 @@ impl Project {
             (None, _) => format!("{}: {columns}, results in new columns {added}", request.tool.name()),
         };
         let message = match new_graph.and_then(|g| self.graph(g)) {
-            Some(g) => format!("{message}; graph {}", g.name),
+            Some(g) => {
+                let names: Vec<String> = std::iter::once(g.name.clone())
+                    .chain(more_graphs.iter().filter_map(|id| self.graph(*id).map(|g| g.name.clone())))
+                    .collect();
+                format!("{message}; graph{} {}", if names.len() == 1 { "" } else { "s" }, names.join(", "))
+            }
             None => message,
         };
-        Ok(Report { book: book_id, sheet: sheet_index, new_columns, new_sheet, new_graph, table, message, notes })
+        Ok(Report {
+            book: book_id,
+            sheet: sheet_index,
+            new_columns,
+            new_sheet,
+            new_graph,
+            more_graphs,
+            table,
+            message,
+            notes,
+        })
     }
 
     /// Sorts all rows of a sheet by the values of one column. Rows keep
@@ -2725,6 +3407,8 @@ impl Project {
                 c.reorder_rows(&order, n);
             }
         }
+        ws.notes_reorder_rows(&|c| columns.is_empty() || columns.contains(&c), &order, n);
+        ws.formats_reorder_rows(&|c| columns.is_empty() || columns.contains(&c), &order, n);
         // The rows moved, so a filter is applied again to the new order.
         let _ = self.reapply_row_filter(book, sheet);
         Ok(())
@@ -2757,11 +3441,17 @@ impl Project {
         }
         let n = ws.row_count();
         let ws = &mut self.workbook_mut(book).expect("checked above").sheets[sheet];
+        let mut orders = Vec::new();
         for c in &mut ws.columns {
             if columns.contains(&c.id) {
                 let order = sort_order_in_rows(&c.data, n, descending, rows.clone());
                 c.reorder_rows(&order, n);
+                orders.push((c.id, order));
             }
+        }
+        for (id, order) in orders {
+            ws.notes_reorder_rows(&|c| c == id, &order, n);
+            ws.formats_reorder_rows(&|c| c == id, &order, n);
         }
         // The rows moved, so a filter is applied again to the new order.
         let _ = self.reapply_row_filter(book, sheet);
@@ -2818,6 +3508,8 @@ impl Project {
             for c in &mut ws.columns {
                 c.reorder_rows(&keep, n);
             }
+            ws.notes_reorder_rows(&|_| true, &keep, n);
+            ws.formats_reorder_rows(&|_| true, &keep, n);
             Ok((kept, sheet))
         }
     }
@@ -3628,6 +4320,77 @@ mod tests {
     }
 
     #[test]
+    fn an_iir_filter_goes_beside_its_column() {
+        let (mut p, book, flat, ramp) = sample();
+        // X runs 0 to 10 in steps of 1: Fs = 1 Hz, Nyquist 0.5 Hz. A forward-backward low pass keeps a constant.
+        let spec = IirSpec { order: Some(2), cutoff: Some(0.2), forward_backward: true, ..IirSpec::default() };
+        let r = p.analyze(&request(&[flat, ramp], Tool::IirFilter(spec))).unwrap();
+        assert_eq!(r.new_columns.len(), 2);
+        let out = p.numeric(r.new_columns[0]).unwrap();
+        assert!(out.iter().all(|v| (v - 2.0).abs() < 1e-9), "{out:?}");
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!(
+            ws.columns[2].comments,
+            "Butterworth low pass IIR filter of B (order 2, Fc 0.2 Hz, forward-backward)"
+        );
+        assert_eq!(ws.columns[2].units, "A");
+        assert!(ws.columns[2].long_name.ends_with("IIR filtered"), "{}", ws.columns[2].long_name);
+        assert!(r.message.starts_with("IIR filter"), "{}", r.message);
+        // a ramp is a straight line for a zero-phase low pass with odd extension
+        let ramp_out = p.numeric(r.new_columns[1]).unwrap();
+        let ramp_in = p.numeric(ramp).unwrap();
+        for (a, b) in ramp_out.iter().zip(ramp_in.iter()) {
+            assert!((a - b).abs() < 1e-3, "{a} vs {b}");
+        }
+    }
+
+    #[test]
+    fn iir_and_fir_filters_refuse_what_cannot_be_designed_or_applied() {
+        let (mut p, _, flat, _) = sample();
+        // 0.7 Hz is above the Nyquist frequency of 0.5 Hz
+        let bad = IirSpec { cutoff: Some(0.7), ..IirSpec::default() };
+        let e = p.analyze(&request(&[flat], Tool::IirFilter(bad))).unwrap_err();
+        assert!(e.to_string().contains("Nyquist"), "{e}");
+        // 11 points are too few for forward-backward filtering at order 10
+        let short = IirSpec { forward_backward: true, cutoff: Some(0.1), ..IirSpec::default() };
+        let e = p.analyze(&request(&[flat], Tool::IirFilter(short))).unwrap_err();
+        assert!(e.to_string().contains("more than"), "{e}");
+        let odd =
+            FirSpec { response: FilterResponse::HighPass, order: Some(5), cutoff: Some(0.2), ..FirSpec::default() };
+        let e = p.analyze(&request(&[flat], Tool::FirFilter(odd))).unwrap_err();
+        assert!(e.to_string().contains("even order"), "{e}");
+    }
+
+    #[test]
+    fn a_fir_filter_goes_beside_its_column_and_keeps_a_constant() {
+        let (mut p, book, flat, _) = sample();
+        let spec = FirSpec { order: Some(4), cutoff: Some(0.2), ..FirSpec::default() };
+        let r = p.analyze(&request(&[flat], Tool::FirFilter(spec))).unwrap();
+        let out = p.numeric(r.new_columns[0]).unwrap();
+        assert!(out.iter().all(|v| (v - 2.0).abs() < 1e-9), "{out:?}");
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!(ws.columns[2].comments, "Hamming window low pass FIR filter of B (order 4, Fc 0.2 Hz)");
+        let ls = FirSpec {
+            method: FirMethod::LeastSquares,
+            order: Some(4),
+            pass: Some(0.1),
+            stop: Some(0.3),
+            ..FirSpec::default()
+        };
+        let r = p.analyze(&request(&[flat], Tool::FirFilter(ls))).unwrap();
+        let out = p.numeric(r.new_columns[0]).unwrap();
+        assert!(out.iter().all(|v| (v - 2.0).abs() < 1e-9), "{out:?}");
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert!(
+            ws.columns[2]
+                .comments
+                .starts_with("least squares low pass FIR filter of B (order 4, pass 0.1 Hz, stop 0.3 Hz"),
+            "{}",
+            ws.columns[2].comments
+        );
+    }
+
+    #[test]
     fn an_envelope_goes_to_a_new_sheet_with_its_own_x() {
         let (mut p, book, _, _) = sample();
         let y = [0.0, 2.0, 1.0, 3.0, 0.5, 4.0, 0.2, 2.0, 1.0, 5.0, 4.0, 3.0];
@@ -3850,6 +4613,7 @@ mod tests {
 
     fn chain(integrate: bool, fit: Option<PeakFitSpec>) -> Tool {
         Tool::PeakChain(PeakChainSpec {
+            centers: Vec::new(),
             chain: ChainOptions {
                 baseline: ChainBaseline::AutoMinima(4),
                 find: FindOptions { filter: PeakFilter::Height(0.3), ..FindOptions::default() },
@@ -3883,7 +4647,7 @@ mod tests {
     #[test]
     fn peak_chain_fit_reports_each_peak() {
         let (mut p, _, y) = two_peaks();
-        let fit = PeakFitSpec { shape: PeakShape::Gauss, baseline: FitBaseline::Linear };
+        let fit = PeakFitSpec::of(PeakShape::Gauss, FitBaseline::Linear);
         let r = p.analyze(&request(&[y], chain(true, Some(fit)))).unwrap();
         let t = r.table.unwrap();
         let h = |n: &str| t.headers.iter().position(|h| h == n).unwrap();
@@ -3898,10 +4662,105 @@ mod tests {
     }
 
     #[test]
+    fn multiple_peak_fit_starts_at_the_given_centres() {
+        // Multiple Peak Fit: no baseline, Gauss peaks with a constant y0, the centres picked a
+        // little off the true ones. The sloped background is taken up by y0 only, so the fitted
+        // centres are close, not exact.
+        let (mut p, book, y) = two_peaks();
+        let tool = Tool::PeakChain(PeakChainSpec {
+            chain: ChainOptions { baseline: ChainBaseline::None, ..ChainOptions::default() },
+            integrate: false,
+            fit: Some(PeakFitSpec::of(PeakShape::Gauss, FitBaseline::Constant)),
+            centers: vec![12.8, 6.1],
+        });
+        let r = p.analyze(&request(&[y], tool)).unwrap();
+        let t = r.table.unwrap();
+        assert_eq!(t.rows.len(), 2, "one row per picked centre, in X order");
+        let h = |n: &str| t.headers.iter().position(|h| h == n).unwrap();
+        assert!((t.rows[0].1[h("Fit center")] - 6.0).abs() < 0.05, "{}", t.rows[0].1[h("Fit center")]);
+        assert!((t.rows[1].1[h("Fit center")] - 13.0).abs() < 0.05);
+        // The found centre is the picked point, and only the fit column goes beside the data.
+        assert!((t.rows[0].1[1] - 6.1).abs() < 1e-9);
+        let ws = &p.workbook(book).unwrap().sheets;
+        assert_eq!(ws[0].columns.len(), 3, "the fit curve beside the source, no baseline column");
+        assert!(ws[0].columns[2].long_name.starts_with("Peak fit of"));
+    }
+
+    #[test]
+    fn peak_curves_add_a_column_per_fitted_peak_on_the_baseline() {
+        let (mut p, book, y) = two_peaks();
+        let fit = PeakFitSpec { peak_curves: true, ..PeakFitSpec::of(PeakShape::Gauss, FitBaseline::Linear) };
+        let tool = Tool::PeakChain(PeakChainSpec {
+            chain: ChainOptions { baseline: ChainBaseline::None, ..ChainOptions::default() },
+            integrate: false,
+            fit: Some(fit),
+            centers: vec![6.0, 13.0],
+        });
+        p.analyze(&request(&[y], tool)).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        let names: Vec<&str> = ws.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names[2..], ["Peak fit of B", "Peak 1 of B", "Peak 2 of B"][..], "{names:?}");
+        // Peak 1 tops out near x = 6 at its baseline (0.1 + 0.06) plus its height 1.
+        let col = |i: usize| ws.columns[i].numeric().unwrap().to_vec();
+        let (fit, p1, p2) = (col(2), col(3), col(4));
+        let x: Vec<f64> = ws.columns[0].numeric().unwrap().to_vec();
+        // Each peak column carries the baseline once, so the two peaks less the fit is the
+        // baseline y0 + m x: a straight line.
+        let base: Vec<f64> = (0..x.len()).map(|i| p1[i] + p2[i] - fit[i]).collect();
+        let slope = (base[300] - base[0]) / (x[300] - x[0]);
+        for i in (0..x.len()).step_by(37) {
+            assert!((base[i] - (base[0] + slope * (x[i] - x[0]))).abs() < 1e-9);
+        }
+        let i6 = x.iter().position(|v| (*v - 6.0).abs() < 1e-9).unwrap();
+        assert!((p1[i6] - 1.16).abs() < 1e-3, "{}", p1[i6]);
+    }
+
+    #[test]
+    fn peak_chain_voigt_fit_of_gauss_peaks_gives_their_center_width_and_area() {
+        // Gaussian peaks: the Voigt's Lorentzian width goes to its bound 0 and the Voigt FWHM
+        // (0.5346 wL + sqrt(0.2166 wL^2 + wG^2)) is the Gaussian one.
+        let (mut p, _, y) = two_peaks();
+        let fit = PeakFitSpec::of(PeakShape::Voigt, FitBaseline::Linear);
+        let r = p.analyze(&request(&[y], chain(true, Some(fit)))).unwrap();
+        let t = r.table.unwrap();
+        let h = |n: &str| t.headers.iter().position(|h| h == n).unwrap();
+        assert!((t.rows[0].1[h("Fit center")] - 6.0).abs() < 1e-4);
+        assert!((t.rows[1].1[h("Fit center")] - 13.0).abs() < 1e-4);
+        assert!((t.rows[0].1[h("Fit FWHM")] - 0.4 * 2.354_820).abs() < 1e-3, "{}", t.rows[0].1[h("Fit FWHM")]);
+        let exact = 0.4 * (2.0 * std::f64::consts::PI).sqrt();
+        assert!((t.rows[0].1[h("Fit area")] - exact).abs() < 1e-3);
+        assert!((t.rows[0].1[h("Fit height")] - 1.0).abs() < 1e-3, "{}", t.rows[0].1[h("Fit height")]);
+        assert!(r.notes[0].contains("Voigt fit of 2 peaks"), "{}", r.notes[0]);
+    }
+
+    #[test]
+    fn peak_chain_fit_takes_a_function_per_peak() {
+        // Peak 1 Gauss, peak 2 (beyond the list) the spec's Voigt: the note and the parameters
+        // follow each peak's function, and both Gaussian peaks keep their centre and area.
+        let (mut p, _, y) = two_peaks();
+        let fit = PeakFitSpec {
+            peak_curves: false,
+            shape: PeakShape::Voigt,
+            baseline: FitBaseline::Linear,
+            shapes: vec![PeakShape::Gauss],
+        };
+        assert_eq!(fit.shapes_for(3), [PeakShape::Gauss, PeakShape::Voigt, PeakShape::Voigt]);
+        let r = p.analyze(&request(&[y], chain(true, Some(fit)))).unwrap();
+        let t = r.table.unwrap();
+        let h = |n: &str| t.headers.iter().position(|h| h == n).unwrap();
+        assert!(r.notes[0].contains("Gauss+Voigt fit of 2 peaks"), "{}", r.notes[0]);
+        assert!((t.rows[0].1[h("Fit center")] - 6.0).abs() < 1e-4);
+        assert!((t.rows[1].1[h("Fit center")] - 13.0).abs() < 1e-4);
+        let exact = 0.6 * 0.5 * (2.0 * std::f64::consts::PI).sqrt();
+        assert!((t.rows[1].1[h("Fit area")] - exact).abs() < 1e-3, "{}", t.rows[1].1[h("Fit area")]);
+    }
+
+    #[test]
     fn peak_chain_errors_change_nothing() {
         let (mut p, _, y) = two_peaks();
         let before = p.clone();
         let none = Tool::PeakChain(PeakChainSpec {
+            centers: Vec::new(),
             chain: ChainOptions {
                 find: FindOptions { filter: PeakFilter::Height(50.0), ..FindOptions::default() },
                 ..ChainOptions::default()
@@ -3911,6 +4770,7 @@ mod tests {
         });
         assert!(matches!(p.analyze(&request(&[y], none)), Err(AnalysisError::BadOption(m)) if m.contains("no peaks")));
         let bad = Tool::PeakChain(PeakChainSpec {
+            centers: Vec::new(),
             chain: ChainOptions {
                 baseline: ChainBaseline::Anchors(vec![(1.0, 0.0)], InterpMethod::Linear),
                 ..ChainOptions::default()
@@ -3930,13 +4790,14 @@ mod tests {
         y0[0] = f64::NAN;
         y0[120] = f64::NAN; // inside the first peak
         let end = Tool::PeakChain(PeakChainSpec {
+            centers: Vec::new(),
             chain: ChainOptions {
                 baseline: ChainBaseline::EndPoints,
                 find: FindOptions { filter: PeakFilter::Height(0.3), ..FindOptions::default() },
                 ..ChainOptions::default()
             },
             integrate: true,
-            fit: Some(PeakFitSpec { shape: PeakShape::Gauss, baseline: FitBaseline::Linear }),
+            fit: Some(PeakFitSpec::of(PeakShape::Gauss, FitBaseline::Linear)),
         });
         let t = p.analyze(&request(&[y], end.clone())).unwrap().table.unwrap();
         assert_eq!(t.rows.len(), 2);

@@ -59,6 +59,18 @@ pub enum Job {
         other: String,
         options: analysis::CoherenceOptions,
     },
+    /// Wavelet reconstruction; the detail column is looked up once the project is loaded.
+    WaveletReconstruct {
+        detail: String,
+        wavelet: sheaf_core::analysis::Wavelet,
+        extension: sheaf_core::analysis::WaveletExtension,
+    },
+    /// Continuous wavelet; the scale column is looked up once the project is loaded.
+    ContinuousWavelet {
+        scales: String,
+        wavelet: sheaf_core::analysis::CwtWavelet,
+        param: f64,
+    },
     /// Curve math; the reference column is looked up once the project is loaded.
     Math {
         op: analysis::CurveOp,
@@ -79,6 +91,17 @@ pub enum Job {
         imaginary: Option<String>,
         options: analysis::IfftOptions,
         auto_interval: bool,
+    },
+    /// Graphical summary; the group columns are looked up once the project is loaded.
+    GraphSummary {
+        groups: Vec<String>,
+        level: f64,
+        arrangement: analysis::GraphArrangement,
+    },
+    /// Partial correlation; the controlling columns are looked up once the project is loaded.
+    PartialCorr {
+        controls: Vec<String>,
+        spec: analysis::PartialCorrSpec,
     },
     Sort {
         by: String,
@@ -118,6 +141,23 @@ pub enum Outcome {
         before: usize,
         sheet_name: String,
     },
+}
+
+/// A multiple comparisons plot to draw after a one-way ANOVA or two-sample t-test (`--comparison-plot`).
+#[derive(Clone, Debug)]
+pub struct ComparisonPlotRequest {
+    pub path: PathBuf,
+    pub options: sheaf_core::compplot::ComparisonPlotOptions,
+}
+
+/// Makes the multiple comparisons plot of the report `run` wrote and writes it to the request's file (the
+/// format follows the extension). The graph stays in the project; its window id is returned.
+pub fn write_comparison_plot(project: &mut Project, run: &Run, request: &ComparisonPlotRequest) -> Result<WindowId> {
+    let Outcome::Report(report) = &run.outcome else { bail!("the tool gave no report to draw") };
+    let sheet = report.new_sheet.ok_or_else(|| anyhow!("the report has no sheet to draw"))?;
+    let graph = project.comparison_plot(run.book, sheet, &request.options).map_err(|e| anyhow!("{e}"))?;
+    crate::render::write_graph(project, graph, &request.path, &crate::render::ExportSettings::default())?;
+    Ok(graph)
 }
 
 /// The result of [`run_job`].
@@ -198,6 +238,15 @@ fn math_tool(
 
 /// Runs a job on the project.
 pub fn run_job(project: &mut Project, target: &Target, job: Job) -> Result<Run> {
+    run_job_to(project, target, job, &analysis::OutputTarget::NextToInput)
+}
+
+/// Runs a job with a choice of destination for per-row results. Table-producing tools retain
+/// their intrinsic destinations. Sorting and filtering have their own sheet-level semantics.
+pub fn run_job_to(project: &mut Project, target: &Target, job: Job, output: &analysis::OutputTarget) -> Result<Run> {
+    if !matches!(output, analysis::OutputTarget::NextToInput) && matches!(&job, Job::Sort { .. } | Job::Filter { .. }) {
+        bail!("sort and filter require next_to_input output");
+    }
     let book = pick_book(project, target.book.as_deref())?;
     let sheet = pick_sheet(project, book, target.sheet.as_deref())?;
     let mut run = Run {
@@ -217,6 +266,14 @@ pub fn run_job(project: &mut Project, target: &Target, job: Job) -> Result<Run> 
             let other = named_columns(project, book, sheet, std::slice::from_ref(&other))?[0];
             Tool::Coherence(analysis::CoherenceSpec { other, options })
         }
+        Job::WaveletReconstruct { detail, wavelet, extension } => {
+            let detail = named_columns(project, book, sheet, std::slice::from_ref(&detail))?[0];
+            Tool::WaveletReconstruct(analysis::WaveletReconstructSpec { detail, wavelet, extension })
+        }
+        Job::ContinuousWavelet { scales, wavelet, param } => {
+            let scales = named_columns(project, book, sheet, std::slice::from_ref(&scales))?[0];
+            Tool::ContinuousWavelet(analysis::CwtSpec { scales, wavelet, param })
+        }
         Job::Ifft { imaginary, options, auto_interval } => {
             let imaginary = match imaginary {
                 Some(name) => Some(named_columns(project, book, sheet, std::slice::from_ref(&name))?[0]),
@@ -233,6 +290,14 @@ pub fn run_job(project: &mut Project, target: &Target, job: Job) -> Result<Run> 
                 Tool::SignalCorrelation(analysis::SignalCorrelationSpec { other, circular, normalize, interval })
             }
         }
+        Job::GraphSummary { groups, level, arrangement } => {
+            let groups = if groups.is_empty() { Vec::new() } else { named_columns(project, book, sheet, &groups)? };
+            Tool::GraphSummary(analysis::GraphSummarySpec { groups, level, arrangement })
+        }
+        Job::PartialCorr { controls, mut spec } => {
+            spec.controls = named_columns(project, book, sheet, &controls)?;
+            Tool::PartialCorrelation(spec)
+        }
         Job::Sort { by, descending } => {
             let key = named_columns(project, book, sheet, std::slice::from_ref(&by))?[0];
             project.sort_sheet(book, sheet, key, descending)?;
@@ -248,7 +313,13 @@ pub fn run_job(project: &mut Project, target: &Target, job: Job) -> Result<Run> 
             return Ok(run);
         }
     };
-    let columns = if target.y.is_empty() {
+    let columns = if target.y.is_empty() && matches!(tool, Tool::XyzArea) {
+        // XYZ Surface Area works on the Z column with its Y and X, not on the plotted Y columns.
+        let found = project.workbook(book).and_then(|b| b.sheets.get(sheet)).and_then(analysis::xyz_default_columns);
+        found
+            .map(|c| c.to_vec())
+            .ok_or_else(|| anyhow!("the sheet has no X, Y and Z columns; name them with --y X,Y,Z"))?
+    } else if target.y.is_empty() {
         project.default_plot_columns(book, sheet, Template::Line)
     } else {
         named_columns(project, book, sheet, &target.y)?
@@ -257,7 +328,7 @@ pub fn run_job(project: &mut Project, target: &Target, job: Job) -> Result<Run> 
         bail!("there are no numeric Y columns to work on; name them with --y");
     }
     let rows = row_range(target.rows.as_deref(), target.x_range.as_deref())?;
-    let report = project.analyze(&analysis::Request { columns, rows, tool })?;
+    let report = project.analyze_to(&analysis::Request { columns, rows, tool }, output)?;
     run.result_sheet = report.new_sheet.unwrap_or(sheet);
     run.outcome = Outcome::Report(report);
     Ok(run)

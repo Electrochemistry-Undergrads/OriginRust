@@ -11,24 +11,46 @@
 //! sheaf fit --list
 //! sheaf import run1.txt run2.txt -o lab.opj
 //! sheaf export lab.sheaf --graph Graph1 -o fig.svg
+//! sheaf merge-graphs lab.sheaf --graph Graph1 --graph Graph2 --graph Graph3 --rows 3 --cols 1 --share-x -o stack.png
 //! ```
 
 mod analyze;
-mod args;
 mod commands;
 mod fit;
+mod fit_datasets;
+mod merge;
+mod simulate;
+mod simulate_surface;
 
-use clap::Parser;
+use clap::{ArgMatches, CommandFactory, FromArgMatches, parser::ValueSource};
+use sheaf_ops::args;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    let cli = args::Cli::parse();
+    let matches = args::Cli::command().get_matches();
+    let cli = args::Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
+    let mut given = std::collections::HashSet::new();
+    given_options(&matches, &mut given);
+    commands::set_explicit(given);
     match commands::run(cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("error: {}", error_text(&e));
             ExitCode::FAILURE
         }
+    }
+}
+
+/// The ids of the options typed on the command line, at every level of subcommands. An option that
+/// only has its default does not count (a saved theme gives way to typed options only).
+fn given_options(matches: &ArgMatches, out: &mut std::collections::HashSet<String>) {
+    for id in matches.ids() {
+        if matches.value_source(id.as_str()) == Some(ValueSource::CommandLine) {
+            out.insert(id.to_string());
+        }
+    }
+    if let Some((_, sub)) = matches.subcommand() {
+        given_options(sub, out);
     }
 }
 

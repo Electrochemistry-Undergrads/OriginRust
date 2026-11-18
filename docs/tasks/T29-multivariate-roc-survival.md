@@ -1,6 +1,15 @@
 # T29: PCA, k-means, ROC curve, Kaplan-Meier
 
-**Status:** open (brief written 2026-11-14 from T18's "Multivariate" row, T14's leftovers and parity
+**Status:** done on branch `stats-multi` (2026-11-15, not yet merged into main). PCA (spec section 17) and k-means
+(section 18) and Kaplan-Meier (section 20) are measured against Origin 2016 with `tools/origin-ref`; ROC (section 19)
+is scipy-checked, not Origin (its X-Function is menu-only). Each has a dialog, an enabled menu item, `sheaf analyze`
+and a graph (scree, cluster scatter, survival curves with censor marks; ROC curve). Leftovers done on branch
+`pca-plots` (2026-11-15): loading plot, score plot and biplot as Origin draws them (spec section 17.1, axes of the
+biplot measured in seven runs), Origin's report tables as the layout of the result sheets of PCA, k-means and
+Kaplan-Meier (title of each table in the comment row, Origin's labels and order; sections 17.2, 18.2, 20.2), the
+confidence limits of the survival curve (Origin's `sfci`: linear, not cut off; section 20.1). Left: the numbers of
+Origin's ROC (menu-only X-Function), PCA observation labels, Origin's own k-means graph, the Notes and Input Data
+tables. Brief written 2026-11-14 from T18's "Multivariate" row, T14's leftovers and parity
 rows "Multivariate analysis" and "Survival, power, ROC", both P2).
 **Size:** L (four tools; each can merge on its own, in the order below). **Branch:** `stats-multi`.
 **Model:** Sonnet.
@@ -37,7 +46,7 @@ subcommands, recalculation links.
 - `crates/calc/src/` (look at how `distfit.rs` and `crosstab.rs` are laid out): `pca.rs`
   (symmetric eigen-decomposition; `nalgebra` is already a dependency of `crates/fit`, reuse it rather
   than adding a crate), `kmeans.rs` (deterministic initial centres so results are reproducible),
-  `roc.rs` (AUC by the trapezoid rule; DeLong or Hanley-McNeil standard error, whichever Origin uses),
+  `roc.rs` (AUC by the trapezoid rule; the standard error as Origin's, measured 2026-11-15, statistics.md 19.5),
   `survival.rs` (product-limit estimate, Greenwood variance, log-rank).
 - `crates/core/src/analysis/statistics.rs`: the `Tool` variants and their specs.
 - `crates/app/src/menus.rs` (Statistics menu items now grey) and `crates/app/src/dialogs/` (options).

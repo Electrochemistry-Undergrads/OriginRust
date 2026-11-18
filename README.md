@@ -34,7 +34,7 @@
   <tr>
     <td width="50%" valign="top">
       <h3>Bring your data</h3>
-      Import CH Instruments text and binary files, CSV, and other delimited text into workbooks.
+      Import CH Instruments text and binary files, CSV, other delimited text and Excel workbooks (.xls, .xlsx, .xlsm) into workbooks.
     </td>
     <td width="50%" valign="top">
       <h3>Make your figures</h3>
@@ -67,9 +67,15 @@ cargo run --release -p sheaf-cli -- import run1.txt -o experiment.sheaf --plot
 # Export a figure
 cargo run --release -p sheaf-cli -- plot run1.txt -o figure.png --dpi 300
 
+# Export every graph of a project as one multi-page PDF (or repeat --graph NAME)
+cargo run --release -p sheaf-cli -- export experiment.sheaf --all-graphs -o figures.pdf
+
 # Analyze and fit
 cargo run --release -p sheaf-cli -- analyze integrate run1.txt
 cargo run --release -p sheaf-cli -- fit run1.txt --model linear
+
+# Make a paper-sized PDF using the project's Page Setup
+cargo run --release -p sheaf-cli -- print experiment.sheaf --output print.pdf
 
 # Explore the available commands
 cargo run --release -p sheaf-cli -- --help
@@ -81,7 +87,8 @@ Projects save as `.sheaf` or Origin `.opj`; see the
 ## Use Sheaf from Claude or other AI tools
 
 `sheaf-mcp` is a Model Context Protocol server. An assistant can import data, read columns, plot,
-analyze, fit, export figures and save projects. It works on a project held by the server and sees
+analyze (every tool of `sheaf analyze`), fit, export figures and save projects, and offers three
+prompts (plot CV files, integrate a peak, fit a curve). It works on a project held by the server and sees
 only the folders you give with `--root`; with no `--root` every file path is refused.
 
 ```sh
@@ -104,6 +111,26 @@ For Claude Desktop, add this to `claude_desktop_config.json` and restart the app
 }
 ```
 
+### Work on the project that is open in Sheaf
+
+By default the assistant gets a project of its own, which it saves to a file. To let it work on the
+project you have open instead, so you see every change as it happens, start the app with `--mcp` or tick
+Tools > AI Assistants (MCP), and give the assistant the attach form of the server:
+
+```sh
+claude mcp add sheaf -- /path/to/target/release/sheaf-mcp --attach --root /path/to/my/data
+```
+
+For Claude Desktop use `"args": ["--attach", "--root", "/path/to/my/data"]`. The status bar shows
+`AI: connected (1)`; hover it to see which assistant is connected and which folders it named. Each change
+is one undo step named `AI: ...` (Edit > Undo, within the 100-step undo limit). Files an assistant writes
+are not undone. In this mode it cannot open, create or save projects (you do that), and it never overwrites
+a file or touches the files of your open project. Untick the item to disconnect. The folders in `--root`
+are chosen by the assistant's own configuration, not by Sheaf, and only a well-behaved client keeps to
+them: turn the link on only while you want an assistant to work, and see
+[docs/adr/0013-mcp-attach-live-link.md](docs/adr/0013-mcp-attach-live-link.md) for what it does and does
+not protect against.
+
 The tools and their limits are listed in [docs/spec/mcp.md](docs/spec/mcp.md).
 
 ## Under the hood
@@ -118,6 +145,14 @@ The tools and their limits are listed in [docs/spec/mcp.md](docs/spec/mcp.md).
 ## Get started
 
 Requires Git and [Rust](https://www.rust-lang.org/tools/install) 1.90 or newer.
+
+### Windows executable icon
+
+Windows builds embed Sheaf's existing multi-size icon in `sheaf-app.exe`, so Explorer and
+shortcuts can display it. Install the Windows C++ build tools and Windows SDK (including `rc.exe`).
+Build with `cargo build --release -p sheaf-app`; verify the actual executable with
+`python tools/check-windows-icon.py target/release/sheaf-app.exe`. Details are in
+[Windows packaging](docs/spec/windows-packaging.md).
 
 ### First time: download, build, and run
 

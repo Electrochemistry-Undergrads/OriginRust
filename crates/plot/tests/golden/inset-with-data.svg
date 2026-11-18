@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="771.84pt" height="590.76pt" viewBox="0 0 771.84 590.76">
+<rect x="0" y="0" width="771.84" height="590.76" fill="#FFFFFF"/>
+<g id="layer0">
+<clipPath id="clip0"><rect x="138.237" y="68.41" width="526.086" height="424.343"/></clipPath>
+<g class="plots" clip-path="url(#clip0)">
+<path d="M228.423 280.581L237.441 241.277L246.46 208.019L255.479 180.49L264.497 158.371L273.516 141.344L282.534 129.091L291.553 121.294L300.572 117.634L309.59 117.793L318.609 121.453L327.628 128.295L336.646 138.002L345.665 150.255L354.683 164.736L363.702 181.126L372.721 199.108L381.739 218.362L390.758 238.572L399.777 259.417L408.795 280.581L417.814 301.746L426.832 322.591L435.851 342.801L444.87 362.055L453.888 380.037L462.907 396.427L471.925 410.908L480.944 423.161L489.963 432.868L498.981 439.71L508 443.37L517.019 443.529L526.037 439.869L535.056 432.072L544.074 419.819L553.093 402.792L562.112 380.673L571.13 353.144L580.149 319.886L589.168 280.581" fill="none" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="overlay">
+<path d="M138.237 492.753L664.323 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M138.237 68.41L138.237 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M138.237 492.753L138.237 501.753M288.547 492.753L288.547 501.753M438.857 492.753L438.857 501.753M589.168 492.753L589.168 501.753M213.392 492.753L213.392 497.253M363.702 492.753L363.702 497.253M514.012 492.753L514.012 497.253M664.323 492.753L664.323 497.253" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M138.237 422.029L129.237 422.029M138.237 280.581L129.237 280.581M138.237 139.134L129.237 139.134M138.237 492.753L133.737 492.753M138.237 351.305L133.737 351.305M138.237 209.858L133.737 209.858M138.237 68.41L133.737 68.41" fill="none" stroke="#000000" stroke-width="1.5"/>
+<text x="138.237" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">−0.5</text>
+<text x="288.547" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">0.0</text>
+<text x="438.857" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">0.5</text>
+<text x="589.168" y="521.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">1.0</text>
+<text x="122.937" y="426.619" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">−50</text>
+<text x="122.937" y="285.171" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">0</text>
+<text x="122.937" y="143.724" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">50</text>
+<text x="401.28" y="553.833" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle">Potential (V)</text>
+<text x="75.417" y="280.581" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle" transform="rotate(-90 75.417 280.581)">Current 1 (mA)</text>
+<rect x="570.837" y="24.109" width="149.6" height="46.2" fill="#FFFFFF" stroke="#000000" stroke-width="0.75"/>
+<path d="M579.637 47.209L628.037 47.209" fill="none" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="639.037" y="52.819" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Scan 1</text>
+</g>
+</g>
+<g id="layer1">
+<clipPath id="clip1"><rect x="532.801" y="68.41" width="131.522" height="106.086"/></clipPath>
+<g class="plots" clip-path="url(#clip1)">
+<path d="M555.348 121.453L557.602 111.627L559.857 103.312L562.112 96.43L564.366 90.9L566.621 86.643L568.876 83.58L571.13 81.631L573.385 80.716L575.64 80.756L577.894 81.671L580.149 83.381L582.404 85.808L584.658 88.871L586.913 92.491L589.168 96.589L591.422 101.084L593.677 105.898L595.931 110.95L598.186 116.162L600.441 121.453L602.695 126.744L604.95 131.955L607.205 137.008L609.459 141.821L611.714 146.317L613.969 150.414L616.223 154.034L618.478 157.098L620.733 159.524L622.987 161.235L625.242 162.15L627.497 162.19L629.751 161.275L632.006 159.325L634.261 156.262L636.515 152.006L638.77 146.476L641.025 139.594L643.279 131.279L645.534 121.453" fill="none" stroke="#000000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g class="overlay">
+<path d="M532.801 174.496L664.323 174.496" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M532.801 68.41L532.801 174.496" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
+<path d="M532.801 174.496L532.801 183.496M570.379 174.496L570.379 183.496M607.956 174.496L607.956 183.496M645.534 174.496L645.534 183.496M551.59 174.496L551.59 178.996M589.168 174.496L589.168 178.996M626.745 174.496L626.745 178.996M664.323 174.496L664.323 178.996" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M532.801 156.815L523.801 156.815M532.801 121.453L523.801 121.453M532.801 86.091L523.801 86.091M532.801 174.496L528.301 174.496M532.801 139.134L528.301 139.134M532.801 103.772L528.301 103.772M532.801 68.41L528.301 68.41" fill="none" stroke="#000000" stroke-width="1.5"/>
+<text x="532.801" y="188.311" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="4.5" fill="#000000" text-anchor="middle">−0.5</text>
+<text x="570.379" y="188.311" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="4.5" fill="#000000" text-anchor="middle">0.0</text>
+<text x="607.956" y="188.311" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="4.5" fill="#000000" text-anchor="middle">0.5</text>
+<text x="645.534" y="188.311" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="4.5" fill="#000000" text-anchor="middle">1.0</text>
+<text x="522.226" y="157.962" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="4.5" fill="#000000" text-anchor="end">−50</text>
+<text x="522.226" y="122.6" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="4.5" fill="#000000" text-anchor="end">0</text>
+<text x="522.226" y="87.238" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="4.5" fill="#000000" text-anchor="end">50</text>
+<text x="598.562" y="196.516" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="5.5" fill="#000000" text-anchor="middle">Potential (V)</text>
+<text x="510.346" y="121.453" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="5.5" fill="#000000" text-anchor="middle" transform="rotate(-90 510.346 121.453)">Current 1 (mA)</text>
+</g>
+</g>
+</svg>

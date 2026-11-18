@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220pt" height="140pt" viewBox="0 0 220 140">
+<rect x="0" y="0" width="220" height="140" fill="#FFFFFF"/>
+<g id="layer0">
+<clipPath id="clip0"><rect x="0" y="0" width="220" height="140"/></clipPath>
+<g class="plots" clip-path="url(#clip0)">
+</g>
+<g class="overlay">
+<text x="1" y="60" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="20" fill="#000000" xml:space="preserve">plain </text>
+<text x="67" y="60" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="20" fill="#000000">under</text>
+<path d="M67 62.8L122 62.8" fill="none" stroke="#000000" stroke-width="1.4"/>
+<text x="122" y="60" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="20" fill="#000000" xml:space="preserve"> </text>
+<text x="133" y="60" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="20" fill="#000000">strike</text>
+<path d="M133 55.4L199 55.4" fill="none" stroke="#000000" stroke-width="1"/>
+<text x="40" y="110" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="16" fill="#000000">both</text>
+<path d="M40 112.24L75.2 112.24" fill="none" stroke="#000000" stroke-width="1.12"/>
+<path d="M40 106.32L75.2 106.32" fill="none" stroke="#000000" stroke-width="0.8"/>
+<text x="185" y="110" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="16" fill="#000000" transform="rotate(-90 185 110)">x</text>
+<path d="M187.24 110L187.24 101.2" fill="none" stroke="#000000" stroke-width="1.12"/>
+<text x="179.4" y="101.2" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="10.4" fill="#000000" transform="rotate(-90 179.4 101.2)">2</text>
+<path d="M180.856 101.2L180.856 95.48" fill="none" stroke="#000000" stroke-width="0.728"/>
+</g>
+</g>
+</svg>

@@ -19,7 +19,7 @@ const DATA_RUN: usize = 3;
 /// Longest worksheet name.
 const SHEET_NAME_MAX: usize = 31;
 /// How the fields of a line are separated.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Delimiter {
     /// Guess from the file.
     Auto,
@@ -33,7 +33,9 @@ pub enum Delimiter {
     /// Each character is a delimiter (Origin's Other Delimiters). Optionally collapse a run
     /// of these characters to one separator. Quoted empty fields are still real fields.
     AnyOf {
+        #[serde(default)]
         chars: String,
+        #[serde(default)]
         combine: bool,
     },
     /// A string of two or more characters that separates the fields as a whole (`||`, `::`,
@@ -70,7 +72,7 @@ pub fn parse_widths(text: &str) -> Option<Vec<usize>> {
 }
 
 /// What to do with columns of dates and times of day.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum DateImport {
     /// Import them as numbers (Origin's date numbers) with a date or time display format.
     #[default]
@@ -81,7 +83,7 @@ pub enum DateImport {
 
 /// Which character groups the digits of a number (`1,234.5`, `1.234,5`, `1 234,5`, `1'234.5`).
 /// These are Origin's four number-separator choices plus "none" and "detect".
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum Thousands {
     /// Use a separator when the file shows one unambiguously (a number such as `1,234,567`,
     /// `1,234.5`, `1.234,5` or `1 234`), none otherwise.
@@ -101,7 +103,7 @@ pub enum Thousands {
 
 /// What to do with a file that holds several blocks of data separated by blank lines
 /// (each block may repeat its header lines).
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum Blocks {
     /// One block: blank lines are skipped and everything is read as one table.
     #[default]
@@ -112,7 +114,8 @@ pub enum Blocks {
 
 /// A 1-based input range, optionally taking `read` entries and skipping `skip`, repeatedly.
 /// A last position of zero means through the end. The pattern starts at `first`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct ImportSelection {
     pub first: usize,
     pub last: usize,
@@ -135,13 +138,14 @@ impl ImportSelection {
             && offset % self.read.saturating_add(self.skip) < self.read
     }
 
-    fn valid(&self) -> bool {
+    pub(crate) fn valid(&self) -> bool {
         self.first > 0 && self.read > 0 && (self.last == 0 || self.last >= self.first)
     }
 }
 
 /// Import settings. `None` means "detect"; for the line numbers, `Some(0)` means "there is none".
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct AsciiOptions {
     pub delimiter: Delimiter,
     /// Number of lines before the first data row.
@@ -162,8 +166,15 @@ pub struct AsciiOptions {
     pub short_name_line: usize,
     /// Name the sheet after the file (without its extension). When false it is `Sheet1`.
     pub rename_sheet: bool,
-    /// Give the book the file name as long name. When false the long name is empty.
+    /// Give the book the file name (with its extension, as Origin) as long name. When false the long
+    /// name is empty.
     pub rename_book: bool,
+    /// The part of the file name (without extension) the sheet is named after: 1-based character
+    /// positions `(from, to)`, both included, negative counting from the end, `to` 0 meaning the end
+    /// (Origin's Trim Filename From/To, [`trim_file_name`]). `(1, 0)` keeps the whole name.
+    pub sheet_name_range: (i32, i32),
+    /// The same for the book long name, taken from the file name with its extension.
+    pub book_name_range: (i32, i32),
     /// Numbers use `,` as decimal separator; `,` then cannot be the delimiter.
     pub decimal_comma: bool,
     /// The digit-grouping character. It is removed from numbers (`1,234.5` is 1234.5); dot and
@@ -207,6 +218,8 @@ impl Default for AsciiOptions {
             short_name_line: 0,
             rename_sheet: true,
             rename_book: true,
+            sheet_name_range: (1, 0),
+            book_name_range: (1, 0),
             decimal_comma: false,
             thousands: Thousands::Auto,
             param_lines: Vec::new(),
@@ -386,13 +399,13 @@ fn parse_number(field: &str, ns: NumStyle) -> Option<f64> {
 
 /// How numbers are written in one file.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-struct NumStyle {
+pub(crate) struct NumStyle {
     decimal: char,
     thousands: Option<char>,
 }
 
 impl NumStyle {
-    fn new(decimal_comma: bool, thousands: Thousands) -> NumStyle {
+    pub(crate) fn new(decimal_comma: bool, thousands: Thousands) -> NumStyle {
         let thousands_char = match thousands {
             Thousands::Auto | Thousands::Off => None,
             Thousands::Comma => Some(','),
@@ -658,13 +671,16 @@ fn split_records<'a>(text: &'a str, delimiter: &Delimiter) -> Vec<&'a str> {
 
 // ----- analysis ----------------------------------------------------------------
 
-struct Analysis<'a> {
-    lines: Vec<&'a str>,
-    detected: Detected,
+pub(crate) struct Analysis {
+    /// Every record that is not blank: its 0-based line number and its fields.
+    pub(crate) records: Vec<(usize, Vec<String>)>,
+    pub(crate) detected: Detected,
     /// The data rows after `skip_rows` / `max_rows`, as raw fields.
-    rows: Vec<Vec<String>>,
+    pub(crate) rows: Vec<Vec<String>>,
+    /// The 0-based line number of every entry of `rows`.
+    pub(crate) row_lines: Vec<usize>,
     /// The original file-column positions of the imported columns (zero based).
-    source_columns: Vec<usize>,
+    pub(crate) source_columns: Vec<usize>,
     /// The digit-grouping character was found by looking at the numbers, not chosen.
     thousands_found: bool,
     ns: NumStyle,
@@ -807,7 +823,85 @@ fn detect_labels(rows: &[(usize, Vec<String>)], header_lines: usize, ncols: usiz
     (line(0), line(1), line(2))
 }
 
-fn analyze<'a>(text: &'a str, opts: &AsciiOptions) -> Analysis<'a> {
+impl Analysis {
+    /// The analysis of a table that did not come from text (an Excel sheet): `records` are its
+    /// non-blank rows with their 0-based line numbers, `row_lines` the lines of the rows to import
+    /// and `source_columns` the columns to import. The cells themselves stay with the caller.
+    pub(crate) fn for_grid(
+        records: Vec<(usize, Vec<String>)>,
+        layout: &Layout,
+        row_lines: Vec<usize>,
+        source_columns: Vec<usize>,
+        ns: NumStyle,
+    ) -> Analysis {
+        Analysis {
+            records,
+            detected: Detected {
+                delimiter: Delimiter::Tab,
+                header_lines: layout.header_lines,
+                long_name_line: layout.long_name_line,
+                units_line: layout.units_line,
+                comments_line: layout.comments_line,
+                columns: source_columns.len(),
+                decimal_comma: false,
+                thousands: Thousands::Off,
+            },
+            rows: Vec::new(),
+            row_lines,
+            source_columns,
+            thousands_found: false,
+            ns,
+        }
+    }
+}
+
+/// Where the data starts and which header lines hold the labels.
+pub(crate) struct Layout {
+    pub(crate) header_lines: usize,
+    /// Index into the records of the first data row, `None` when there is none.
+    pub(crate) start: Option<usize>,
+    pub(crate) long_name_line: usize,
+    pub(crate) units_line: usize,
+    pub(crate) comments_line: usize,
+}
+
+/// Finds the data start (unless `opts.header_lines` says) and the label lines (unless the options
+/// name them). `all` are the non-blank records. The stage that both the text and the Excel import use.
+pub(crate) fn find_layout(all: &[(usize, Vec<String>)], ns: NumStyle, opts: &AsciiOptions) -> Layout {
+    let (header_lines, start) = match opts.header_lines {
+        Some(h) => (h, all.iter().position(|(i, _)| *i >= h)),
+        None => match find_data_start(all, ns) {
+            Some(s) => (all[s].0, Some(s)),
+            None => (0, if all.is_empty() { None } else { Some(0) }),
+        },
+    };
+    let columns = start.map_or(0, |s| all[s].1.len());
+    let (dl, du, dc) = detect_labels(all, header_lines, columns);
+    Layout {
+        header_lines,
+        start,
+        long_name_line: opts.long_name_line.unwrap_or(dl),
+        units_line: opts.units_line.unwrap_or(du),
+        comments_line: opts.comments_line.unwrap_or(dc),
+    }
+}
+
+/// Applies `skip_rows` and `max_rows` to the non-empty data rows.
+pub(crate) fn window_rows<T>(rows: impl Iterator<Item = T>, opts: &AsciiOptions) -> impl Iterator<Item = T> {
+    rows.skip(opts.skip_rows).take(opts.max_rows.unwrap_or(usize::MAX))
+}
+
+/// Applies the row selection (`opts.rows`) to the rows left by [`window_rows`].
+pub(crate) fn pick_rows<T>(rows: Vec<T>, opts: &AsciiOptions) -> Vec<T> {
+    rows.into_iter().enumerate().filter(|(i, _)| opts.rows.contains(*i)).map(|(_, r)| r).collect()
+}
+
+/// The source columns the column selection keeps, out of `source_count`.
+pub(crate) fn pick_columns(source_count: usize, opts: &AsciiOptions) -> Vec<usize> {
+    (0..source_count).filter(|&i| opts.columns.contains(i)).collect()
+}
+
+fn analyze(text: &str, opts: &AsciiOptions) -> Analysis {
     let lines: Vec<&str> = split_records(text, &opts.delimiter);
     let delimiter = match opts.delimiter.clone() {
         Delimiter::Auto => {
@@ -824,54 +918,42 @@ fn analyze<'a>(text: &'a str, opts: &AsciiOptions) -> Analysis<'a> {
     let (decimal_comma, thousands, thousands_found) = resolve_style(opts, &all, &delimiter);
     let ns = NumStyle::new(decimal_comma, thousands);
 
-    let (header_lines, start) = match opts.header_lines {
-        Some(h) => (h, all.iter().position(|(i, _)| *i >= h)),
-        None => match find_data_start(&all, ns) {
-            Some(s) => (all[s].0, Some(s)),
-            None => (0, if all.is_empty() { None } else { Some(0) }),
-        },
-    };
-    let (ncols_start, data) = match start {
-        Some(s) => (all[s].1.len(), &all[s..]),
-        None => (0, &all[all.len()..]),
+    let layout = find_layout(&all, ns, opts);
+    let data = match layout.start {
+        Some(s) => &all[s..],
+        None => &all[all.len()..],
     };
 
-    let (dl, du, dc) = detect_labels(&all, header_lines, ncols_start);
-    let long_name_line = opts.long_name_line.unwrap_or(dl);
-    let units_line = opts.units_line.unwrap_or(du);
-    let comments_line = opts.comments_line.unwrap_or(dc);
-
-    let mut rows: Vec<Vec<String>> = data
-        .iter()
-        .map(|(_, f)| f.clone())
-        .filter(|f| f.iter().any(|c| !c.trim().is_empty()))
-        .skip(opts.skip_rows)
-        .take(opts.max_rows.unwrap_or(usize::MAX))
-        .collect();
+    let kept: Vec<(usize, Vec<String>)> = window_rows(
+        data.iter().filter(|(_, f)| f.iter().any(|c| !c.trim().is_empty())).map(|(i, f)| (*i, f.clone())),
+        opts,
+    )
+    .collect();
     // Trailing empty columns (a delimiter at the end of every line) are not columns.
     let source_count =
-        rows.iter().map(|r| r.iter().rposition(|c| !c.trim().is_empty()).map_or(0, |p| p + 1)).max().unwrap_or(0);
+        kept.iter().map(|(_, r)| r.iter().rposition(|c| !c.trim().is_empty()).map_or(0, |p| p + 1)).max().unwrap_or(0);
     // Discover the source shape before selecting rows: a real column must not disappear
     // merely because the selected rows happen to have missing values in it.
-    rows = rows.into_iter().enumerate().filter(|(i, _)| opts.rows.contains(*i)).map(|(_, row)| row).collect();
-    let source_columns: Vec<usize> = (0..source_count).filter(|&i| opts.columns.contains(i)).collect();
+    let (row_lines, mut rows): (Vec<usize>, Vec<Vec<String>>) = pick_rows(kept, opts).into_iter().unzip();
+    let source_columns = pick_columns(source_count, opts);
     let columns = source_columns.len();
     for r in &mut rows {
         *r = source_columns.iter().map(|&i| r.get(i).cloned().unwrap_or_default()).collect();
     }
     Analysis {
-        lines,
+        records: all,
         detected: Detected {
             delimiter,
-            header_lines,
-            long_name_line,
-            units_line,
-            comments_line,
+            header_lines: layout.header_lines,
+            long_name_line: layout.long_name_line,
+            units_line: layout.units_line,
+            comments_line: layout.comments_line,
             columns,
             decimal_comma,
             thousands,
         },
         rows,
+        row_lines,
         source_columns,
         thousands_found,
         ns,
@@ -892,10 +974,44 @@ pub fn preview(text: &str, opts: &AsciiOptions, max_rows: usize) -> Vec<Vec<Stri
 
 // ----- parsing -------------------------------------------------------------------
 
+/// The part `range = (from, to)` of a file name, by Origin's Trim Filename rule (measured in Origin
+/// 2016, import-ascii.md "File name trimming"): 1-based character positions, both included; a negative
+/// number counts from the end (`len + n`); a `from` of 0 or before the start is the first character;
+/// a `to` of 0, past the end or before `from` is the last character. Empty for a `from` past the end.
+pub fn trim_file_name(name: &str, range: (i32, i32)) -> String {
+    let chars: Vec<char> = name.chars().collect();
+    let len = chars.len() as i64;
+    let pos = |n: i32| -> i64 { if n < 0 { len + i64::from(n) } else { i64::from(n) } };
+    let from = pos(range.0).max(1);
+    let mut to = if range.1 == 0 { len } else { pos(range.1) };
+    if to > len || to < from {
+        to = len;
+    }
+    if from > len {
+        return String::new();
+    }
+    chars[(from - 1) as usize..to as usize].iter().collect()
+}
+
+/// [`parse_ascii`] for a file named `file_name` (with its extension): the sheet is named after the
+/// name without extension and the book long name is the name with it, as Origin names them, each cut
+/// by its range of the options.
+pub fn parse_ascii_named(text: &str, file_name: &str, opts: &AsciiOptions) -> Result<AsciiImport, IoError> {
+    let stem = std::path::Path::new(file_name)
+        .file_stem()
+        .map_or_else(|| file_name.to_string(), |s| s.to_string_lossy().into_owned());
+    let mut r = parse_ascii(text, &stem, opts)?;
+    if opts.rename_book {
+        r.workbook.long_name = trim_file_name(file_name, opts.book_name_range);
+    }
+    Ok(r)
+}
+
 /// Reads delimited text into a workbook with one sheet.
 ///
 /// Rows that consist only of empty fields are skipped. Quoted fields may span
 /// lines; line numbers in the options then count records, not physical lines.
+/// `file_stem` is the name without extension; [`parse_ascii_named`] takes the whole file name.
 pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<AsciiImport, IoError> {
     for (name, selection) in [("row", &opts.rows), ("column", &opts.columns)] {
         if !selection.valid() {
@@ -980,10 +1096,12 @@ fn parse_blocks(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Asci
     let mut warnings = Vec::new();
     for (i, chunk) in chunks.iter().enumerate() {
         let mut part = parse_block(chunk, file_stem, &fixed)?;
+        let base = trim_file_name(file_stem, opts.sheet_name_range);
         let name = match (opts.rename_sheet, i) {
             (false, _) => format!("Sheet{}", i + 1),
-            (true, 0) => sheet_name(file_stem),
-            (true, _) => sheet_name(&format!("{file_stem}_{}", i + 1)),
+            (true, 0) => sheet_name(&base),
+            (true, _) if base.is_empty() => format!("Sheet{}", i + 1),
+            (true, _) => sheet_name(&format!("{base}_{}", i + 1)),
         };
         for w in part.warnings.drain(..) {
             warnings.push(format!("block {}: {w}", i + 1));
@@ -1008,19 +1126,86 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
         let detail = if text.trim().is_empty() { "the file is empty" } else { "no data rows were found" };
         return Err(IoError::NoData { source_name: file_stem.to_string(), detail: detail.to_string() });
     }
-    let d = a.detected.clone();
-    let ncols = d.columns;
-    if ncols == 0 {
+    if a.detected.columns == 0 {
         return Err(IoError::NoData {
             source_name: file_stem.to_string(),
             detail: "no source columns match the import selection".into(),
         });
     }
+    let sheet_name = if opts.rename_sheet {
+        sheet_name(&trim_file_name(file_stem, opts.sheet_name_range))
+    } else {
+        "Sheet1".to_string()
+    };
+    let (sheet, warnings) = assemble(&a, opts, sheet_name, |j, short, a, warnings| {
+        let cells: Vec<&str> = a.rows.iter().map(|r| r.get(j).map_or("", String::as_str)).collect();
+        if opts.dates == DateImport::Detect
+            && let Some(dc) = detect_date_column(&cells, opts.date_order)
+        {
+            if dc.ambiguous {
+                warnings.push(format!(
+                    "column {short}: the dates can be read day first or month first; read {}",
+                    if dc.order == DateOrder::Mdy { "month first (M/d/yyyy)" } else { "day first (dd/MM/yyyy)" }
+                ));
+            }
+            return BuiltColumn { data: ColumnData::numeric(dc.values), format: dc.format, text: false };
+        }
+        let numbers: Vec<Option<f64>> = cells.iter().map(|c| parse_number(c, a.ns)).collect();
+        let parsed = numbers.iter().filter(|n| n.is_some()).count();
+        let non_empty = cells.iter().filter(|c| !c.trim().is_empty()).count();
+        // Origin keeps every imported column in its Text & Numeric format: a cell that is not a
+        // number (a word, `<LOD`, `n.d.`) stays a text cell and the numbers see it as missing. There
+        // is no ratio of numbers to text. A column with no number at all is a text column.
+        let numeric = parsed > 0 || non_empty == 0;
+        if numeric {
+            let mut texts = std::collections::BTreeMap::new();
+            for (row, (c, n)) in cells.iter().zip(&numbers).enumerate() {
+                if n.is_none() && !c.trim().is_empty() {
+                    texts.insert(row, c.trim().to_string());
+                }
+            }
+            let numbers = numbers.into_iter().map(|n| n.unwrap_or(f64::NAN)).collect();
+            BuiltColumn { data: ColumnData::mixed(numbers, texts), format: NumberFormat::General, text: false }
+        } else {
+            let text = cells.iter().map(|c| c.to_string()).collect();
+            BuiltColumn { data: ColumnData::text(text), format: NumberFormat::General, text: true }
+        }
+    });
+    let mut workbook = Workbook::new(WindowId(0), "Book1");
+    if opts.rename_book {
+        // without an extension here; parse_ascii_named puts the whole file name in
+        workbook.long_name = trim_file_name(file_stem, opts.book_name_range);
+    }
+    workbook.sheets = vec![sheet];
+    Ok(AsciiImport { workbook, detected: a.detected, warnings })
+}
+
+/// A data column as a reader made it, before the labels are put on.
+pub(crate) struct BuiltColumn {
+    pub(crate) data: ColumnData,
+    pub(crate) format: NumberFormat,
+    /// A column of text: it is a label column, unless it is the X column by position.
+    pub(crate) text: bool,
+}
+
+/// The stage that both the text and the Excel import share: from an analysed table to a sheet
+/// with labels. It reads the label lines (long names, units, comments, short names, parameter
+/// rows) from `a.records`, names the columns, and asks `build(column, short name, analysis,
+/// warnings)` for the data of each imported column. Returns the sheet and the warnings.
+pub(crate) fn assemble(
+    a: &Analysis,
+    opts: &AsciiOptions,
+    sheet_name: String,
+    mut build: impl FnMut(usize, &str, &Analysis, &mut Vec<String>) -> BuiltColumn,
+) -> (Worksheet, Vec<String>) {
+    let d = &a.detected;
+    let ncols = d.columns;
     let mut warnings = Vec::new();
 
     // Labels.
     let raw_label_row = |n: usize| -> Vec<String> {
-        n.checked_sub(1).and_then(|i| a.lines.get(i)).map_or_else(Vec::new, |l| split_fields(l, &d.delimiter))
+        let Some(line) = n.checked_sub(1) else { return Vec::new() };
+        a.records.binary_search_by_key(&line, |(i, _)| *i).map_or_else(|_| Vec::new(), |k| a.records[k].1.clone())
     };
     let label_row = |n: usize| -> Vec<String> {
         let cells = raw_label_row(n);
@@ -1072,70 +1257,26 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
         .chain([opts.short_name_line])
         .filter(|n| *n > 0)
         .collect();
-    let dropped = a
-        .lines
-        .iter()
-        .enumerate()
-        .filter(|(i, l)| *i < d.header_lines && !l.trim().is_empty() && !used.contains(&(i + 1)))
-        .count();
+    let dropped = a.records.iter().filter(|(i, _)| *i < d.header_lines && !used.contains(&(i + 1))).count();
     if dropped > 0 {
         let plural = if dropped == 1 { "line was" } else { "lines were" };
         warnings.push(format!("{dropped} header {plural} not imported"));
     }
 
     // Columns.
-    let mut sheet = Worksheet::new(if opts.rename_sheet { sheet_name(file_stem) } else { "Sheet1".to_string() });
+    let mut sheet = Worksheet::new(sheet_name);
     for j in 0..ncols {
-        let cells: Vec<&str> = a.rows.iter().map(|r| r.get(j).map_or("", String::as_str)).collect();
-        if opts.dates == DateImport::Detect
-            && let Some(dc) = detect_date_column(&cells, opts.date_order)
-        {
-            if dc.ambiguous {
-                warnings.push(format!(
-                    "column {}: the dates can be read day first or month first; read {}",
-                    short_names[j],
-                    if dc.order == DateOrder::Mdy { "month first (M/d/yyyy)" } else { "day first (dd/MM/yyyy)" }
-                ));
-            }
-            let designation = if j == 0 && opts.first_column_x { Designation::X } else { Designation::Y };
-            let mut col = Column::new(
-                ColumnId(j as u64 + 1),
-                short_names[j].clone(),
-                designation,
-                ColumnData::numeric(dc.values),
-            );
-            col.format = dc.format;
-            col.long_name = long_names[j].clone();
-            col.units = units[j].clone();
-            col.comments = comments[j].clone();
-            sheet.columns.push(col);
-            continue;
-        }
-        let numbers: Vec<Option<f64>> = cells.iter().map(|c| parse_number(c, a.ns)).collect();
-        let parsed = numbers.iter().filter(|n| n.is_some()).count();
-        let non_empty = cells.iter().filter(|c| !c.trim().is_empty()).count();
-        let short = short_names[j].clone();
-        // Origin keeps every imported column in its Text & Numeric format: a cell that is not a
-        // number (a word, `<LOD`, `n.d.`) stays a text cell and the numbers see it as missing. There
-        // is no ratio of numbers to text. A column with no number at all is a text column.
-        let numeric = parsed > 0 || non_empty == 0;
-        let (designation, data) = if numeric {
-            let mut texts = std::collections::BTreeMap::new();
-            for (row, (c, n)) in cells.iter().zip(&numbers).enumerate() {
-                if n.is_none() && !c.trim().is_empty() {
-                    texts.insert(row, c.trim().to_string());
-                }
-            }
-            let designation = if j == 0 && opts.first_column_x { Designation::X } else { Designation::Y };
-            (designation, ColumnData::mixed(numbers.into_iter().map(|n| n.unwrap_or(f64::NAN)).collect(), texts))
+        let built = build(j, &short_names[j], a, &mut warnings);
+        let first_x = j == 0 && opts.first_column_x;
+        let designation = if first_x {
+            Designation::X
+        } else if built.text {
+            Designation::Label
         } else {
-            let text = cells.iter().map(|c| c.to_string()).collect();
-            // Origin designates the columns of a text file by position, so a first column of sample
-            // names is the X column: the Y columns are drawn against the names (graphing spec 14.6).
-            let designation = if j == 0 && opts.first_column_x { Designation::X } else { Designation::Label };
-            (designation, ColumnData::text(text))
+            Designation::Y
         };
-        let mut col = Column::new(ColumnId(j as u64 + 1), short, designation, data);
+        let mut col = Column::new(ColumnId(j as u64 + 1), short_names[j].clone(), designation, built.data);
+        col.format = built.format;
         col.long_name = long_names[j].clone();
         col.units = units[j].clone();
         col.comments = comments[j].clone();
@@ -1151,13 +1292,7 @@ fn parse_block(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<Ascii
             }
         }
     }
-
-    let mut workbook = Workbook::new(WindowId(0), "Book1");
-    if opts.rename_book {
-        workbook.long_name = file_stem.to_string();
-    }
-    workbook.sheets = vec![sheet];
-    Ok(AsciiImport { workbook, detected: d, warnings })
+    (sheet, warnings)
 }
 
 /// A column whose cells are all dates, or all times of day, or all both.
@@ -1279,6 +1414,36 @@ mod tests {
 
     fn col(imp: &AsciiImport, j: usize) -> &Column {
         &imp.workbook.sheets[0].columns[j]
+    }
+
+    #[test]
+    fn file_names_are_trimmed_by_origins_rule() {
+        // Origin 2016 on abcdefgh.csv: the sheet from "abcdefgh", the book long name from "abcdefgh.csv"
+        let (stem, full) = ("abcdefgh", "abcdefgh.csv");
+        let t = trim_file_name;
+        assert_eq!((t(stem, (1, 0)), t(full, (1, 0))), ("abcdefgh".into(), "abcdefgh.csv".into()));
+        assert_eq!((t(stem, (2, 5)), t(full, (2, 5))), ("bcde".into(), "bcde".into()));
+        assert_eq!((t(stem, (1, -4)), t(full, (1, -4))), ("abcd".into(), "abcdefgh".into()));
+        assert_eq!((t(stem, (-6, 0)), t(full, (-6, 0))), ("bcdefgh".into(), "fgh.csv".into()));
+        assert_eq!((t(stem, (-6, -4)), t(full, (-6, -4))), ("bcd".into(), "fgh".into()));
+        assert_eq!((t(stem, (3, 3)), t(full, (3, 3))), ("c".into(), "c".into()));
+        assert_eq!((t(stem, (5, 2)), t(full, (5, 2))), ("efgh".into(), "efgh.csv".into()));
+        assert_eq!((t(stem, (0, 0)), t(stem, (1, 20)), t(stem, (-20, 0))), (stem.into(), stem.into(), stem.into()));
+        assert_eq!((t(stem, (9, 0)), t(full, (9, 0))), (String::new(), ".csv".into()));
+    }
+
+    #[test]
+    fn a_named_import_keeps_the_extension_in_the_book_title_and_trims_by_the_ranges() {
+        let text = "x,y\n1,2\n3,4\n";
+        let plain = parse_ascii_named(text, "abcdefgh.csv", &AsciiOptions::default()).unwrap();
+        assert_eq!(plain.workbook.long_name, "abcdefgh.csv", "the extension stays, as in Origin");
+        assert_eq!(plain.workbook.sheets[0].name, "abcdefgh");
+        let opts = AsciiOptions { sheet_name_range: (2, 5), book_name_range: (1, -4), ..AsciiOptions::default() };
+        let cut = parse_ascii_named(text, "abcdefgh.csv", &opts).unwrap();
+        assert_eq!((cut.workbook.sheets[0].name.as_str(), cut.workbook.long_name.as_str()), ("bcde", "abcdefgh"));
+        // nothing left: the default sheet name
+        let empty = AsciiOptions { sheet_name_range: (9, 0), ..AsciiOptions::default() };
+        assert_eq!(parse_ascii_named(text, "abcdefgh.csv", &empty).unwrap().workbook.sheets[0].name, "Sheet1");
     }
 
     #[test]

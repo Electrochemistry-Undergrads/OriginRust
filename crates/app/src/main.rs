@@ -5,30 +5,60 @@
 //! sheaf-app lab.sheaf            open a project (Save writes .opj by default)
 //! sheaf-app old.opj              import the workbooks of an Origin project
 //! sheaf-app run1.txt run2.txt    import data files with default settings and plot them
+//! sheaf-app results.xlsx         import every sheet of an Excel workbook (also .xls, .xlsm)
 //! ```
+//!
+//! The project is autosaved to a recovery folder of Sheaf's own while it has unsaved changes, and the
+//! next start offers it back after a crash (`docs/spec/autosave.md`). `--recovery-dir DIR` uses another
+//! folder and `--no-recovery` turns recovery off for the run (no folder is read or written).
+//!
+//! `--mcp` turns on the AI link at start, as Tools > AI Assistants (MCP) does: an assistant started
+//! with `sheaf-mcp --attach` can then work on the open project (`docs/spec/mcp.md` section 11). The
+//! switch is never saved, so a run without the flag starts with the link off.
 //!
 //! Two more options exist so the interface can be checked without a person
 //! at the screen: `--screenshot FILE.png` saves a picture of the window after
 //! a moment and quits, and `--show ITEM` opens a dialog first (`graph-settings:x`,
 //! `graph-settings:plots`, `panel:explorer` (also `-docked`, `-hidden`; `objects`, `messages`,
-//! `results`), `hide-plot:2`, `text:1` (the Text window of the first label), `shape:1` (the window of the first drawn object), `column`, `export`, `import:FILE`, `import-wizard:FILE` (with `import-wizard-page:header|names|file|data|save`), `analysis:smooth`, `analysis-preview:smooth`, `focus:Book1`, `menu:Plot` to
-//! hold a top-level menu open, `select-column:B` and `column-menu:B` for the first workbook).
+//! `results`), `hide-plot:2`, `text:1` (the Text window of the first label), `shape:1` (the window of the first drawn object), `column`, `set-values-multiple` (or `set-values-multiple:B,C,D`; the columns of the first workbook, default all but the first), `export`, `import:FILE`, `import-excel:FILE` (with `import-excel-page:mode|header|columns|partial|misc`), `export-excel` (the first workbook), `import-wizard:FILE` (with `import-wizard-page:header|names|file|data|save`), `analysis:smooth`, `analysis-preview:smooth`, `focus:Book1`, `menu:Plot` to
+//! hold a top-level menu open (`menu:File>Recent Projects` also opens a submenu), `select-column:B` and `column-menu:B` for the first workbook, `autosave` for Tools > Autosave, `merge-graphs`, `layer-management` and `fit-page` for those windows (the first graph), `zoom:2` (the first graph's window zoomed), `simulate` or `simulate:FUNCTION` for Analysis > Fitting > Simulate Curve).
 
 // In release builds on Windows, do not open a console window next to the app.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod actions;
 mod app;
+mod autosave;
+mod custom_colors;
+mod data_tools;
 mod dialogs;
+mod format_clip_ui;
 mod gadget;
+mod graph_scale;
 mod graph_view;
+mod graph_zoom;
 mod grid;
+mod live;
+#[cfg(target_os = "macos")]
+mod macprint;
 mod menus;
+mod mru;
+mod object_format;
 mod panels;
+mod project_find;
 mod reader;
+mod recent;
+mod switcher;
+mod text_format;
 mod theme;
 mod toolbar;
+mod view_modes;
 mod winclip;
+mod winprint;
+mod wks_clipboard;
+mod worksheet_fonts;
+mod worksheet_format;
+mod worksheet_layout;
 mod workspace;
 
 use std::path::PathBuf;
@@ -42,12 +72,31 @@ fn app_icon() -> eframe::egui::IconData {
 }
 
 fn main() -> eframe::Result {
-    let mut startup = app::Startup::default();
+    let mut startup = app::Startup {
+        recovery_dir: sheaf_io::recovery::default_dir(),
+        settings_path: sheaf_io::recovery::default_settings_path(),
+        recent_path: sheaf_io::recent::default_path(),
+        format_clipboard_path: format_clip_ui::default_path(),
+        custom_colors_path: custom_colors::default_path(),
+        themes_dir: sheaf_io::themes::default_dir(),
+        templates_dir: sheaf_io::user_templates::default_dir(),
+        graph_themes_dir: sheaf_io::graph_themes::default_dir(),
+        mcp_dirs: Some(sheaf_io::recovery::run_dir_candidates()),
+        ..Default::default()
+    };
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "--recovery-dir" => startup.recovery_dir = args.next().map(PathBuf::from),
+            "--no-recovery" => startup.recovery_dir = None,
             "--screenshot" => startup.screenshot = args.next().map(PathBuf::from),
             "--show" => startup.show.extend(args.next()),
+            "--themes-dir" => startup.themes_dir = args.next().map(PathBuf::from),
+            "--no-themes" => startup.themes_dir = None,
+            "--templates-dir" => startup.templates_dir = args.next().map(PathBuf::from),
+            "--no-templates" => startup.templates_dir = None,
+            "--graph-themes-dir" => startup.graph_themes_dir = args.next().map(PathBuf::from),
+            "--mcp" => startup.mcp = true,
             _ => startup.paths.push(PathBuf::from(arg)),
         }
     }

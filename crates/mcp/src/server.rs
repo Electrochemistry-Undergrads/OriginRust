@@ -1,12 +1,10 @@
 //! JSON-RPC 2.0 framing, the MCP methods and the state of the one project.
 
+use crate::exec::{self, Policy, Session};
 use crate::roots::Roots;
-use crate::{resources, tools};
+use crate::{prompts, resources, tools};
 use serde_json::{Map, Value, json};
-use sheaf_core::Project;
-use sheaf_core::template::Template;
-use std::collections::HashMap;
-use std::path::PathBuf;
+use sheaf_core::Document;
 
 pub const NEWEST_PROTOCOL: &str = "2025-06-18";
 pub const PROTOCOLS: [&str; 3] = ["2025-06-18", "2025-03-26", "2024-11-05"];
@@ -31,15 +29,12 @@ impl RpcError {
     }
 }
 
+/// The headless server: one project, held in a `Document` that keeps no undo steps, so formula
+/// columns and analysis links follow every change as they do in the app.
 pub struct Server {
-    pub(crate) project: Project,
-    pub(crate) roots: Roots,
-    /// The file the project was opened from or last saved to.
-    pub(crate) path: Option<PathBuf>,
-    /// Origin projects this session read: saving over one keeps a `.bak` copy first.
-    pub(crate) foreign: Vec<PathBuf>,
-    /// The template each imported book suggested, by lower-case book name.
-    pub(crate) suggested: HashMap<String, Template>,
+    doc: Document,
+    session: Session,
+    policy: Policy,
     protocol: String,
 }
 
@@ -47,16 +42,111 @@ fn error_reply(id: Value, code: i64, message: &str) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}})
 }
 
+/// One request or notification, checked for its envelope.
+pub(crate) struct Request {
+    /// `None` for a notification.
+    pub id: Option<Value>,
+    pub method: String,
+    pub params: Value,
+}
+
+/// Checks the JSON-RPC envelope of `message`. `Err` holds the reply to send, or `None` when the message
+/// gets no reply (a notification, or a reply from the client).
+pub(crate) fn parse_message(message: Value) -> Result<Request, Option<Value>> {
+    let Some(obj) = message.as_object() else {
+        return Err(Some(error_reply(Value::Null, INVALID_REQUEST, "invalid request: not an object")));
+    };
+    let id = obj.get("id").cloned();
+    if let Some(id) = &id
+        && !(id.is_string() || id.is_number() || id.is_null())
+    {
+        return Err(Some(error_reply(
+            Value::Null,
+            INVALID_REQUEST,
+            "invalid request: the id must be a string or number",
+        )));
+    }
+    let Some(method) = obj.get("method").and_then(Value::as_str) else {
+        if obj.contains_key("result") || obj.contains_key("error") {
+            return Err(None);
+        }
+        // An object with no id is a notification: it gets no reply, valid or not.
+        return Err(id.map(|id| error_reply(id, INVALID_REQUEST, "invalid request: no method")));
+    };
+    if obj.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
+        // A notification (no id) never gets a reply, valid or not.
+        return Err(id.map(|id| error_reply(id, INVALID_REQUEST, "invalid request: jsonrpc must be \"2.0\"")));
+    }
+    let params = match obj.get("params") {
+        None | Some(Value::Null) => Value::Object(Map::new()),
+        Some(p) if p.is_object() || p.is_array() => p.clone(),
+        Some(_) => {
+            return Err(id.map(|id| error_reply(id, INVALID_PARAMS, "invalid params: must be an object")));
+        }
+    };
+    Ok(Request { id, method: method.to_string(), params })
+}
+
+/// The reply to request `id` for `result`.
+pub(crate) fn reply_value(id: Value, result: Result<Value, RpcError>) -> Value {
+    match result {
+        Ok(v) => json!({"jsonrpc": "2.0", "id": id, "result": v}),
+        Err(e) => error_reply(id, e.code, &e.message),
+    }
+}
+
+/// The result of `prompts/get`.
+pub(crate) fn prompts_get(params: &Value) -> Result<Value, RpcError> {
+    let name = params
+        .get("name")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError::new(INVALID_PARAMS, "invalid params: missing the prompt \"name\""))?;
+    let args = match params.get("arguments") {
+        None | Some(Value::Null) => Map::new(),
+        Some(Value::Object(a)) => a.clone(),
+        Some(_) => return Err(RpcError::new(INVALID_PARAMS, "invalid params: \"arguments\" must be an object")),
+    };
+    prompts::get(name, &args).map_err(|e| RpcError::new(INVALID_PARAMS, format!("invalid params: {e}")))
+}
+
+/// The protocol version to speak for an `initialize` request.
+pub(crate) fn negotiate(params: &Value) -> Result<String, RpcError> {
+    let asked = params
+        .get("protocolVersion")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RpcError::new(INVALID_PARAMS, "invalid params: missing \"protocolVersion\""))?;
+    Ok(if PROTOCOLS.contains(&asked) { asked.to_string() } else { NEWEST_PROTOCOL.to_string() })
+}
+
+/// The result of `initialize`.
+pub(crate) fn initialize_result(protocol: &str, instructions: String) -> Value {
+    json!({
+        "protocolVersion": protocol,
+        "capabilities": {
+            "tools": {"listChanged": false},
+            "resources": {"subscribe": false, "listChanged": false},
+            "prompts": {"listChanged": false}
+        },
+        "serverInfo": {"name": "sheaf-mcp", "version": env!("CARGO_PKG_VERSION")},
+        "instructions": instructions
+    })
+}
+
 impl Server {
     pub fn new(roots: Roots) -> Server {
+        let mut doc = Document::default();
+        doc.set_limit(0);
         Server {
-            project: Project::new(),
-            roots,
-            path: None,
-            foreign: Vec::new(),
-            suggested: HashMap::new(),
+            doc,
+            session: Session::default(),
+            policy: Policy::headless(roots),
             protocol: NEWEST_PROTOCOL.to_string(),
         }
+    }
+
+    /// The project the server holds.
+    pub fn project(&self) -> &sheaf_core::Project {
+        self.doc.project()
     }
 
     /// Handles one line of input and returns the line to send back, if any.
@@ -78,45 +168,13 @@ impl Server {
 
     /// Handles one JSON-RPC message. Notifications and replies from the client get no answer.
     pub fn handle_message(&mut self, message: Value) -> Option<Value> {
-        let Some(obj) = message.as_object() else {
-            return Some(error_reply(Value::Null, INVALID_REQUEST, "invalid request: not an object"));
+        let request = match parse_message(message) {
+            Ok(r) => r,
+            Err(reply) => return reply,
         };
-        let id = obj.get("id").cloned();
-        if let Some(id) = &id
-            && !(id.is_string() || id.is_number() || id.is_null())
-        {
-            return Some(error_reply(
-                Value::Null,
-                INVALID_REQUEST,
-                "invalid request: the id must be a string or number",
-            ));
-        }
-        let Some(method) = obj.get("method").and_then(Value::as_str) else {
-            if obj.contains_key("result") || obj.contains_key("error") {
-                return None;
-            }
-            return Some(error_reply(id.unwrap_or(Value::Null), INVALID_REQUEST, "invalid request: no method"));
-        };
-        if obj.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
-            return Some(error_reply(
-                id.unwrap_or(Value::Null),
-                INVALID_REQUEST,
-                "invalid request: jsonrpc must be \"2.0\"",
-            ));
-        }
-        let params = match obj.get("params") {
-            None | Some(Value::Null) => Value::Object(Map::new()),
-            Some(p) if p.is_object() || p.is_array() => p.clone(),
-            Some(_) => {
-                return id.map(|id| error_reply(id, INVALID_PARAMS, "invalid params: must be an object"));
-            }
-        };
-        let result = self.dispatch(method, &params);
-        let id = id?;
-        Some(match result {
-            Ok(v) => json!({"jsonrpc": "2.0", "id": id, "result": v}),
-            Err(e) => error_reply(id, e.code, &e.message),
-        })
+        let result = self.dispatch(&request.method, &request.params);
+        let id = request.id?;
+        Some(reply_value(id, result))
     }
 
     fn dispatch(&mut self, method: &str, params: &Value) -> Result<Value, RpcError> {
@@ -125,47 +183,39 @@ impl Server {
             "ping" => Ok(json!({})),
             "tools/list" => Ok(json!({"tools": tools::list()})),
             "tools/call" => self.call_tool(params),
-            "resources/list" => Ok(json!({"resources": resources::list(self)})),
+            "resources/list" => Ok(json!({"resources": resources::list(self.doc.project())})),
             "resources/templates/list" => Ok(json!({"resourceTemplates": resources::templates()})),
             "resources/read" => {
                 let uri = params
                     .get("uri")
                     .and_then(Value::as_str)
                     .ok_or_else(|| RpcError::new(INVALID_PARAMS, "invalid params: missing \"uri\""))?;
-                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| resources::read(self, uri))) {
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    resources::read(self.doc.project(), uri)
+                })) {
                     Ok(r) => r,
                     Err(_) => Err(RpcError::new(INTERNAL_ERROR, "internal error while reading the resource")),
                 }
             }
+            "prompts/list" => Ok(prompts::list()),
+            "prompts/get" => prompts_get(params),
             m if m.starts_with("notifications/") => Ok(json!({})),
             m => Err(RpcError::new(METHOD_NOT_FOUND, format!("method not found: {m}"))),
         }
     }
 
     fn initialize(&mut self, params: &Value) -> Result<Value, RpcError> {
-        let asked = params
-            .get("protocolVersion")
-            .and_then(Value::as_str)
-            .ok_or_else(|| RpcError::new(INVALID_PARAMS, "invalid params: missing \"protocolVersion\""))?;
-        self.protocol = if PROTOCOLS.contains(&asked) { asked.to_string() } else { NEWEST_PROTOCOL.to_string() };
-        Ok(json!({
-            "protocolVersion": self.protocol,
-            "capabilities": {
-                "tools": {"listChanged": false},
-                "resources": {"subscribe": false, "listChanged": false}
-            },
-            "serverInfo": {"name": "sheaf-mcp", "version": env!("CARGO_PKG_VERSION")},
-            "instructions": self.instructions()
-        }))
+        self.protocol = negotiate(params)?;
+        Ok(initialize_result(&self.protocol, self.instructions()))
     }
 
     fn instructions(&self) -> String {
-        let roots = if self.roots.is_empty() {
+        let roots = if self.policy.roots.is_empty() {
             "No folder is allowed (the server was started without --root), so tools that read or write files refuse."
                 .to_string()
         } else {
             let list: Vec<String> =
-                self.roots.dirs().iter().map(|d| crate::roots::plain(d.clone()).display().to_string()).collect();
+                self.policy.roots.dirs().iter().map(|d| crate::roots::plain(d.clone()).display().to_string()).collect();
             format!(
                 "Files can be read and written only under: {}. Relative paths start at the first folder.",
                 list.join(", ")
@@ -193,7 +243,10 @@ impl Server {
             return Err(RpcError::new(INVALID_PARAMS, format!("unknown tool: {name}")));
         }
         let structured = self.protocol == NEWEST_PROTOCOL;
-        let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| tools::call(self, name, &args)));
+        // The executor catches a panic of the tool itself; this guards the rest of the call.
+        let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            exec::run_on_document(&mut self.doc, &mut self.session, &self.policy, name, &args)
+        }));
         Ok(match done {
             Ok(Ok(out)) => out.into_result(structured),
             Ok(Err(e)) => e.into_result(structured),
@@ -273,6 +326,13 @@ mod tests {
         // Even a request-shaped call without an id is a notification.
         assert!(s.handle_line(r#"{"jsonrpc":"2.0","method":"ping"}"#).is_none());
         assert!(s.handle_line(r#"{"jsonrpc":"2.0","method":"no/such"}"#).is_none());
+        // A notification with a bad envelope gets no reply either.
+        assert!(s.handle_line(r#"{"jsonrpc":"1.0","method":"ping"}"#).is_none());
+        assert!(s.handle_line(r#"{"method":"notifications/initialized"}"#).is_none());
+        assert!(s.handle_line(r#"{"jsonrpc":2,"method":"ping","params":"x"}"#).is_none());
+        assert!(s.handle_line(r#"{"jsonrpc":"2.0","method":5}"#).is_none());
+        assert!(s.handle_line(r#"{"jsonrpc":"2.0","params":{}}"#).is_none());
+        assert!(s.handle_line("{}").is_none());
         // A reply from the client is not answered.
         assert!(s.handle_line(r#"{"jsonrpc":"2.0","id":3,"result":{}}"#).is_none());
     }
@@ -320,6 +380,32 @@ mod tests {
             assert!(t["name"].is_string() && t["description"].is_string(), "{t}");
             assert_eq!(t["inputSchema"]["type"], "object", "{t}");
             assert!(t["annotations"]["readOnlyHint"].is_boolean(), "{t}");
+        }
+    }
+
+    #[test]
+    fn prompts_are_listed_and_fetched() {
+        let mut s = server();
+        let init = reply(
+            &mut s,
+            r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#,
+        );
+        assert_eq!(init["result"]["capabilities"]["prompts"]["listChanged"], false);
+        let l = reply(&mut s, r#"{"jsonrpc":"2.0","id":2,"method":"prompts/list"}"#);
+        assert_eq!(l["result"]["prompts"].as_array().unwrap().len(), 3);
+        let g = reply(
+            &mut s,
+            r#"{"jsonrpc":"2.0","id":3,"method":"prompts/get","params":{"name":"fit_curve","arguments":{"column":"B","model":"Gauss"}}}"#,
+        );
+        let text = g["result"]["messages"][0]["content"]["text"].as_str().unwrap();
+        assert!(text.contains("Gauss") && text.contains("fit"), "{g}");
+        for bad in [
+            r#"{"jsonrpc":"2.0","id":4,"method":"prompts/get","params":{"name":"nope"}}"#,
+            r#"{"jsonrpc":"2.0","id":4,"method":"prompts/get","params":{"name":"fit_curve","arguments":{"column":"B"}}}"#,
+            r#"{"jsonrpc":"2.0","id":4,"method":"prompts/get","params":{}}"#,
+            r#"{"jsonrpc":"2.0","id":4,"method":"prompts/get","params":{"name":"fit_curve","arguments":[1]}}"#,
+        ] {
+            assert_eq!(code(&reply(&mut s, bad)), INVALID_PARAMS, "{bad}");
         }
     }
 

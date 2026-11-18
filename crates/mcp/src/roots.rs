@@ -21,7 +21,7 @@ pub fn plain(path: PathBuf) -> PathBuf {
 /// The canonical form of a path that need not exist: its nearest existing parent made canonical,
 /// plus the names below it. `None` when the path cannot be resolved safely: a `..` below the
 /// existing part, or a link that points nowhere (a write through it could land anywhere).
-fn canonical(path: &Path) -> Option<PathBuf> {
+pub(crate) fn canonical(path: &Path) -> Option<PathBuf> {
     let mut candidate = path.to_path_buf();
     let mut tail: Vec<std::ffi::OsString> = Vec::new();
     loop {
@@ -61,6 +61,15 @@ impl Roots {
             out.push(c);
         }
         Ok(Roots { dirs: out })
+    }
+
+    /// Like [`Roots::new`], for roots a client sent over the link: each one must already be an
+    /// absolute path, because the app's own folder is no base for a client's relative path.
+    pub fn from_absolute(dirs: &[PathBuf]) -> Result<Roots, String> {
+        if let Some(d) = dirs.iter().find(|d| !d.is_absolute()) {
+            return Err(format!("root '{}' is not an absolute path", d.display()));
+        }
+        Roots::new(dirs)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -114,7 +123,13 @@ impl Roots {
         let path = self.check(text)?;
         let target = sheaf_io::save::default_extension(&path);
         for extra in [with_suffix(&target, ".sheaf"), with_suffix(&target, ".bak")] {
-            self.check_path(&extra, &extra.display().to_string())?;
+            self.check_path(&extra, &extra.display().to_string()).map_err(|e| {
+                if extra.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink()) {
+                    format!("the path is a symbolic link; remove it first: {}", extra.display())
+                } else {
+                    e
+                }
+            })?;
         }
         Ok(path)
     }
@@ -246,6 +261,17 @@ mod tests {
         for good in ["console.csv", "com10.csv", "com0.csv", "nul2.txt", "data.csv"] {
             assert!(roots.check(good).is_ok(), "{good}");
         }
+    }
+
+    #[test]
+    fn roots_from_a_client_must_be_absolute() {
+        let (dir, _) = setup("absolute");
+        let data = dir.0.join("data");
+        assert_eq!(Roots::from_absolute(std::slice::from_ref(&data)).unwrap().dirs().len(), 1);
+        let e = Roots::from_absolute(&[PathBuf::from("data")]).unwrap_err();
+        assert!(e.contains("not an absolute path"), "{e}");
+        assert!(Roots::from_absolute(&[]).unwrap().is_empty());
+        assert!(Roots::from_absolute(&[dir.0.join("missing")]).is_err());
     }
 
     #[test]

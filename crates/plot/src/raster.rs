@@ -84,11 +84,17 @@ pub(crate) fn to_pdf(svg: &str, fonts: &SystemFonts) -> Result<Vec<u8>, PlotErro
         .map_err(|e| PlotError::Pdf(e.to_string()))
 }
 
-/// Colour depth of a raster export (Origin's "Color Depth" list; the 1- and 4-bit modes are not offered).
+/// Colour depth of a raster export (Origin's "Color Depth" list).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub enum ColorDepth {
+    /// Black and white, one bit per pixel where the format allows it.
+    Mono,
+    /// An optimised palette of 16 colours, four bits per pixel where the format allows it.
+    Colors16,
     /// An optimised palette of at most 256 colours.
     Colors256,
+    /// 16-bit colour, five bits per channel (BMP and TGA; other formats write 24-bit).
+    Bit16,
     /// 24-bit colour (PNG keeps its alpha channel).
     #[default]
     Bit24,
@@ -157,8 +163,36 @@ struct Indexed {
 }
 
 fn quantise(rgb: &[u8]) -> Indexed {
+    quantise_to(rgb, 256)
+}
+
+/// An optimised palette of at most `colours` colours and the nearest entry per pixel. A picture
+/// with no more distinct colours than that keeps them exactly (Origin's 256-colour export held just
+/// the picture's own colours, graphing.md 9.4); otherwise NeuQuant chooses the palette.
+fn quantise_to(rgb: &[u8], colours: usize) -> Indexed {
+    let mut exact: Vec<[u8; 3]> = Vec::new();
+    let mut lookup = std::collections::HashMap::new();
+    let mut indices = Vec::with_capacity(rgb.len() / 3);
+    for p in rgb.as_chunks::<3>().0 {
+        let i = match lookup.get(p) {
+            Some(&i) => i,
+            None => {
+                if exact.len() == colours {
+                    exact.clear();
+                    break;
+                }
+                exact.push(*p);
+                lookup.insert(*p, (exact.len() - 1) as u8);
+                (exact.len() - 1) as u8
+            }
+        };
+        indices.push(i);
+    }
+    if !exact.is_empty() {
+        return Indexed { palette: exact, indices };
+    }
     let rgba: Vec<u8> = rgb.as_chunks::<3>().0.iter().flat_map(|p| [p[0], p[1], p[2], 255]).collect();
-    let nq = color_quant::NeuQuant::new(10, 256, &rgba);
+    let nq = color_quant::NeuQuant::new(10, colours, &rgba);
     let palette = nq.color_map_rgb().as_chunks::<3>().0.to_vec();
     let indices = rgba.as_chunks::<4>().0.iter().map(|p| nq.index_of(p) as u8).collect();
     Indexed { palette, indices }
@@ -168,13 +202,84 @@ fn grey_indexed(rgb: &[u8]) -> Indexed {
     Indexed { palette: (0..=255u8).map(|g| [g, g, g]).collect(), indices: luma(rgb) }
 }
 
+/// The 8 x 8 ordered-dither (Bayer) matrix, thresholds 0 to 63.
+pub(crate) const BAYER8: [[u8; 8]; 8] = [
+    [0, 32, 8, 40, 2, 34, 10, 42],
+    [48, 16, 56, 24, 50, 18, 58, 26],
+    [12, 44, 4, 36, 14, 46, 6, 38],
+    [60, 28, 52, 20, 62, 30, 54, 22],
+    [3, 35, 11, 43, 1, 33, 9, 41],
+    [51, 19, 59, 27, 49, 17, 57, 25],
+    [15, 47, 7, 39, 13, 45, 5, 37],
+    [63, 31, 55, 23, 61, 29, 53, 21],
+];
+
+/// Black and white by ordered dithering of the grey level, as Origin's Monochrome export does
+/// (observed: the standard 8 x 8 Bayer matrix anchored at the top-left pixel; a pixel is white
+/// where `4 t + 2` is below its grey level, `t` the matrix entry; graphing.md 9.4).
+fn mono_indexed(rgb: &[u8], width: usize) -> Indexed {
+    let w = width.max(1);
+    let indices = luma(rgb)
+        .iter()
+        .enumerate()
+        .map(|(i, &g)| u8::from(4 * u16::from(BAYER8[(i / w) % 8][(i % w) % 8]) + 2 < u16::from(g)))
+        .collect();
+    Indexed { palette: vec![[0, 0, 0], [255, 255, 255]], indices }
+}
+
+/// Mono indices of an RGB buffer of the given width (for tests).
+#[cfg(test)]
+pub(crate) fn mono_dither_for_test(rgb: &[u8], width: usize) -> Vec<u8> {
+    mono_indexed(rgb, width).indices
+}
+
+/// The palette image of an indexed depth (None for 24-bit).
+fn indexed_for(depth: ColorDepth, rgb: &[u8], width: u32) -> Option<Indexed> {
+    match depth {
+        ColorDepth::Mono => Some(mono_indexed(rgb, width as usize)),
+        // Origin builds 16 colours from the picture too (observed: an adaptive palette on a 5-bit
+        // grid, no dithering of solid colours); its exact quantiser is not reproduced.
+        ColorDepth::Colors16 => Some(quantise_to(rgb, 16)),
+        ColorDepth::Colors256 => Some(quantise(rgb)),
+        ColorDepth::Grey8 => Some(grey_indexed(rgb)),
+        ColorDepth::Bit16 | ColorDepth::Bit24 => None,
+    }
+}
+
+/// A pixel as 16 bits: five bits each of red, green and blue (`0RRRRRGGGGGBBBBB`), the top bit
+/// clear. Origin's 16-bit BMP and TGA store exactly this layout (graphing.md 9.4).
+fn rgb555(p: &[u8; 3]) -> u16 {
+    (u16::from(p[0] >> 3) << 10) | (u16::from(p[1] >> 3) << 5) | u16::from(p[2] >> 3)
+}
+
+/// Bits per pixel of a packed palette image: 1 for mono, 4 for 16 colours, 8 otherwise.
+fn packed_bits(depth: ColorDepth) -> usize {
+    match depth {
+        ColorDepth::Mono => 1,
+        ColorDepth::Colors16 => 4,
+        _ => 8,
+    }
+}
+
+/// Packs one row of palette indices into `bits` per pixel, high bits first, padded to a byte.
+pub(crate) fn pack_row(indices: &[u8], bits: usize) -> Vec<u8> {
+    if bits == 8 {
+        return indices.to_vec();
+    }
+    let per = 8 / bits;
+    indices
+        .chunks(per)
+        .map(|c| c.iter().enumerate().fold(0u8, |acc, (k, &v)| acc | (v << (8 - bits * (k + 1)))))
+        .collect()
+}
+
 fn dpm(dpi: f64) -> u32 {
     (dpi / 0.0254).round().clamp(1.0, f64::from(u32::MAX)) as u32
 }
 
 /// Encodes the picture as PNG with the resolution recorded; `Bit24` keeps the alpha channel.
 pub(crate) fn encode_png_with(r: &Raster, dpi: f64, o: &RasterOptions) -> Result<Vec<u8>, PlotError> {
-    if o.depth == ColorDepth::Bit24 {
+    if matches!(o.depth, ColorDepth::Bit24 | ColorDepth::Bit16) {
         return encode_png(r, dpi);
     }
     let rgb = flatten_rgb(r);
@@ -188,10 +293,17 @@ pub(crate) fn encode_png_with(r: &Raster, dpi: f64, o: &RasterOptions) -> Result
             enc.set_color(png::ColorType::Grayscale);
             luma(&rgb)
         } else {
-            let ix = quantise(&rgb);
+            let ix = indexed_for(o.depth, &rgb, r.width).unwrap_or_else(|| quantise(&rgb));
+            let bits = packed_bits(o.depth);
+            enc.set_depth(match bits {
+                1 => png::BitDepth::One,
+                4 => png::BitDepth::Four,
+                _ => png::BitDepth::Eight,
+            });
             enc.set_color(png::ColorType::Indexed);
             enc.set_palette(ix.palette.concat());
-            ix.indices
+            let w = r.width as usize;
+            ix.indices.chunks(w.max(1)).flat_map(|row| pack_row(row, bits)).collect()
         };
         let mut writer = enc.write_header().map_err(|e| PlotError::Png(e.to_string()))?;
         writer.write_image_data(&data).map_err(|e| PlotError::Png(e.to_string()))?;
@@ -218,8 +330,9 @@ pub(crate) fn encode_tiff_with(r: &Raster, dpi: f64, o: &RasterOptions) -> Resul
             let mut image = enc.new_image::<colortype::Gray8>(r.width, r.height).map_err(err)?;
             image.resolution(tiff::tags::ResolutionUnit::Inch, res);
             image.write_data(&luma(&rgb)).map_err(err)?;
-        } else if o.depth == ColorDepth::Colors256 {
-            let ix = quantise(&rgb);
+        } else if let Some(ix) = indexed_for(o.depth, &rgb, r.width) {
+            // Mono and 16 colours are stored as 8-bit indices into a 2- or 16-colour table padded
+            // to the 256 entries an 8-bit TIFF palette needs.
             // Palette images store one 8-bit index per pixel, like Gray8's sample layout.
             // Override its interpretation and attach TIFF's planar 16-bit RGB color table.
             let mut image = enc.new_image::<colortype::Gray8>(r.width, r.height).map_err(err)?;
@@ -231,8 +344,12 @@ pub(crate) fn encode_tiff_with(r: &Raster, dpi: f64, o: &RasterOptions) -> Resul
                     tiff::tags::PhotometricInterpretation::RGBPalette.to_u16(),
                 )
                 .map_err(err)?;
-            let map: Vec<u16> =
-                (0..3).flat_map(|channel| ix.palette.iter().map(move |rgb| u16::from(rgb[channel]) * 257)).collect();
+            let palette = &ix.palette;
+            let map: Vec<u16> = (0..3)
+                .flat_map(|channel| {
+                    (0..256).map(move |i| palette.get(i).map_or(0, |rgb| u16::from(rgb[channel]) * 257))
+                })
+                .collect();
             image.encoder().write_tag(tiff::tags::Tag::ColorMap, map.as_slice()).map_err(err)?;
             image.write_data(&ix.indices).map_err(err)?;
         } else {
@@ -265,13 +382,15 @@ pub(crate) fn encode_jpeg(r: &Raster, dpi: f64, o: &RasterOptions) -> Result<Vec
 /// grey) or 24-bit, with the resolution recorded.
 pub(crate) fn encode_bmp(r: &Raster, dpi: f64, o: &RasterOptions) -> Result<Vec<u8>, PlotError> {
     let rgb = flatten_rgb(r);
-    let indexed = match o.depth {
-        ColorDepth::Colors256 => Some(quantise(&rgb)),
-        ColorDepth::Grey8 => Some(grey_indexed(&rgb)),
-        ColorDepth::Bit24 => None,
-    };
+    let indexed = indexed_for(o.depth, &rgb, r.width);
     let (w, h) = (r.width as usize, r.height as usize);
-    let (bpp, pal_bytes) = if indexed.is_some() { (8usize, 1024usize) } else { (24, 0) };
+    let bits = packed_bits(o.depth);
+    let colours = 1usize << bits;
+    let (bpp, pal_bytes) = match (&indexed, o.depth) {
+        (Some(_), _) => (bits, 4 * colours),
+        (None, ColorDepth::Bit16) => (16, 0),
+        (None, _) => (24, 0),
+    };
     let stride = (w * bpp).div_ceil(32) * 4;
     let data_len = stride * h;
     let offset = 14 + 40 + pal_bytes;
@@ -291,10 +410,10 @@ pub(crate) fn encode_bmp(r: &Raster, dpi: f64, o: &RasterOptions) -> Result<Vec<
     out.extend_from_slice(&(data_len as u32).to_le_bytes());
     out.extend_from_slice(&dpm(dpi).to_le_bytes());
     out.extend_from_slice(&dpm(dpi).to_le_bytes());
-    out.extend_from_slice(&(if indexed.is_some() { 256u32 } else { 0 }).to_le_bytes());
+    out.extend_from_slice(&(if indexed.is_some() { colours as u32 } else { 0 }).to_le_bytes());
     out.extend_from_slice(&0u32.to_le_bytes());
     if let Some(ix) = &indexed {
-        for i in 0..256 {
+        for i in 0..colours {
             let c = ix.palette.get(i).copied().unwrap_or([0, 0, 0]);
             out.extend_from_slice(&[c[2], c[1], c[0], 0]);
         }
@@ -303,7 +422,12 @@ pub(crate) fn encode_bmp(r: &Raster, dpi: f64, o: &RasterOptions) -> Result<Vec<
     for y in (0..h).rev() {
         let start = out.len();
         match &indexed {
-            Some(ix) => out.extend_from_slice(&ix.indices[y * w..(y + 1) * w]),
+            Some(ix) => out.extend_from_slice(&pack_row(&ix.indices[y * w..(y + 1) * w], bits)),
+            None if bpp == 16 => {
+                for p in rgb[y * w * 3..(y + 1) * w * 3].as_chunks::<3>().0 {
+                    out.extend_from_slice(&rgb555(p).to_le_bytes());
+                }
+            }
             None => {
                 for p in rgb[y * w * 3..(y + 1) * w * 3].as_chunks::<3>().0 {
                     out.extend_from_slice(&[p[2], p[1], p[0]]);
@@ -322,14 +446,24 @@ pub(crate) fn encode_tga(r: &Raster, o: &RasterOptions) -> Result<Vec<u8>, PlotE
     let w = u16::try_from(r.width).map_err(|_| too_big())?;
     let h = u16::try_from(r.height).map_err(|_| too_big())?;
     let rgb = flatten_rgb(r);
+    let w_px = usize::from(w);
+    let mut descriptor = 0x20; // rows run top to bottom
     let (image_type, has_map, bpp, body, map): (u8, bool, u8, Vec<u8>, Vec<u8>) = match o.depth {
+        // Origin's 16-bit TGA: true colour, no attribute bits, rows bottom to top (descriptor 0).
+        ColorDepth::Bit16 => {
+            descriptor = 0;
+            let rows: Vec<&[[u8; 3]]> = rgb.as_chunks::<3>().0.chunks(w_px.max(1)).collect();
+            let body = rows.iter().rev().flat_map(|row| row.iter().flat_map(|p| rgb555(p).to_le_bytes())).collect();
+            (2, false, 16, body, Vec::new())
+        }
         ColorDepth::Bit24 => {
             let body = rgb.as_chunks::<3>().0.iter().flat_map(|p| [p[2], p[1], p[0]]).collect();
             (2, false, 24, body, Vec::new())
         }
         ColorDepth::Grey8 => (3, false, 8, luma(&rgb), Vec::new()),
-        ColorDepth::Colors256 => {
-            let ix = quantise(&rgb);
+        // TGA has no 1- or 4-bit colour-mapped form: mono and 16 colours use an 8-bit map.
+        ColorDepth::Colors256 | ColorDepth::Mono | ColorDepth::Colors16 => {
+            let ix = indexed_for(o.depth, &rgb, r.width).unwrap_or_else(|| quantise(&rgb));
             let map = (0..256).flat_map(|i| ix.palette.get(i).map_or([0, 0, 0], |c| [c[2], c[1], c[0]])).collect();
             (1, true, 8, ix.indices, map)
         }
@@ -346,7 +480,7 @@ pub(crate) fn encode_tga(r: &Raster, o: &RasterOptions) -> Result<Vec<u8>, PlotE
     out.extend_from_slice(&w.to_le_bytes());
     out.extend_from_slice(&h.to_le_bytes());
     out.push(bpp);
-    out.push(0x20); // rows run top to bottom
+    out.push(descriptor);
     out.extend_from_slice(&map);
     out.extend_from_slice(&body);
     Ok(out)
@@ -362,11 +496,8 @@ pub(crate) fn encode_pcx(r: &Raster, dpi: f64, o: &RasterOptions) -> Result<Vec<
     let line = w + w % 2; // bytes per plane line, even
     let line16 = u16::try_from(line).map_err(|_| too_big())?;
     let rgb = flatten_rgb(r);
-    let indexed = match o.depth {
-        ColorDepth::Colors256 => Some(quantise(&rgb)),
-        ColorDepth::Grey8 => Some(grey_indexed(&rgb)),
-        ColorDepth::Bit24 => None,
-    };
+    // Mono and 16 colours are written as 8-bit indices with the palette at the end.
+    let indexed = indexed_for(o.depth, &rgb, r.width);
     let planes: u8 = if indexed.is_some() { 1 } else { 3 };
     let dpi16 = dpi.round().clamp(1.0, f64::from(u16::MAX)) as u16;
     let mut out = Vec::with_capacity(128 + w * h * usize::from(planes) + 769);
@@ -421,8 +552,28 @@ fn pcx_rle(line: &[u8], out: &mut Vec<u8>) {
     }
 }
 
-/// Encodes the picture as a GIF (256 colours, no transparency).
-pub(crate) fn encode_gif(r: &Raster) -> Result<Vec<u8>, PlotError> {
+/// Encodes the picture as a GIF (no transparency): an optimised 256-colour palette, or the exact
+/// palette of the mono, 16-colour and grey depths.
+pub(crate) fn encode_gif(r: &Raster, o: &RasterOptions) -> Result<Vec<u8>, PlotError> {
+    if matches!(o.depth, ColorDepth::Mono | ColorDepth::Colors16 | ColorDepth::Grey8) {
+        let ix = indexed_for(o.depth, &flatten_rgb(r), r.width).unwrap_or_else(|| quantise(&flatten_rgb(r)));
+        let err = |e: gif::EncodingError| PlotError::Image(e.to_string());
+        let too_big = || PlotError::Image("the picture is too large for a GIF file".to_string());
+        let (w, h) = (u16::try_from(r.width).map_err(|_| too_big())?, u16::try_from(r.height).map_err(|_| too_big())?);
+        let palette = ix.palette.concat();
+        let mut out = Vec::new();
+        {
+            let mut enc = gif::Encoder::new(&mut out, w, h, &palette).map_err(err)?;
+            let frame = gif::Frame {
+                width: w,
+                height: h,
+                buffer: std::borrow::Cow::Borrowed(&ix.indices),
+                ..gif::Frame::default()
+            };
+            enc.write_frame(&frame).map_err(err)?;
+        }
+        return Ok(out);
+    }
     use image::codecs::gif::GifEncoder;
     use image::{Delay, Frame, RgbaImage};
     let rgb = flatten_rgb(r);
@@ -445,7 +596,7 @@ pub(crate) fn encode_raster(r: &Raster, ext: &str, dpi: f64, o: &RasterOptions) 
         "tif" | "tiff" => encode_tiff_with(r, dpi, o),
         "jpg" | "jpeg" => encode_jpeg(r, dpi, o),
         "bmp" => encode_bmp(r, dpi, o),
-        "gif" => encode_gif(r),
+        "gif" => encode_gif(r, o),
         "tga" => encode_tga(r, o),
         "pcx" => encode_pcx(r, dpi, o),
         "psd" => encode_psd(r, dpi, o),
@@ -457,13 +608,15 @@ pub(crate) fn encode_raster(r: &Raster, ext: &str, dpi: f64, o: &RasterOptions) 
 fn encode_psd(r: &Raster, dpi: f64, o: &RasterOptions) -> Result<Vec<u8>, PlotError> {
     let rgb = flatten_rgb(r);
     match o.depth {
-        ColorDepth::Bit24 => crate::psd::encode(r.width, r.height, dpi, crate::psd::Pixels::Rgb(&rgb)),
+        ColorDepth::Bit24 | ColorDepth::Bit16 => {
+            crate::psd::encode(r.width, r.height, dpi, crate::psd::Pixels::Rgb(&rgb))
+        }
         ColorDepth::Grey8 => {
             let grey = luma(&rgb);
             crate::psd::encode(r.width, r.height, dpi, crate::psd::Pixels::Grey(&grey))
         }
-        ColorDepth::Colors256 => {
-            let ix = quantise(&rgb);
+        ColorDepth::Colors256 | ColorDepth::Mono | ColorDepth::Colors16 => {
+            let ix = indexed_for(o.depth, &rgb, r.width).unwrap_or_else(|| quantise(&rgb));
             crate::psd::encode(
                 r.width,
                 r.height,

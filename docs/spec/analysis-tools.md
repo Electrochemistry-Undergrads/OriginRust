@@ -15,9 +15,8 @@ regenerates the same data.
 Status by tool: integrate, differentiate, normalize, interpolate (linear, cubic spline, Akima),
 baseline, peak finding (local maximum) and statistics are done and checked. Smooth: adjacent
 averaging, Savitzky-Golay, percentile filter and the FFT filter are done and checked. Cubic
-B-spline interpolation: the smoothing spline for a smoothing factor above 0 is done and matches
-Origin; the default factor 0 is implemented as the interpolating spline and does NOT match Origin
-inside the data (Origin's automatic factor was not found, see section 5).
+B-spline interpolation: done and checked, both for a smoothing factor above 0 and for Origin's default
+factor 0 (an automatic factor from the data, found 2026-11-14, see section 5).
 
 ## 1. Integrate (`integ1`)
 
@@ -106,7 +105,9 @@ acts like the next odd number (observed for 6 with averaging and Savitzky-Golay)
   `m p / 100` is a whole number (unknown which one Origin uses).
 * Boundary `none`: averaging and percentile shrink the window symmetrically (the first and last point
   stay as they are); Savitzky-Golay fits the first (or last) full window and evaluates it at the edge
-  point. `reflect`: mirror including the end point (`y[-1] = y[0]`). `repeat`: the end value.
+  point. `reflect`: mirror including the end point (`y[-1] = y[0]`), except for the percentile
+  filter, which mirrors without the first point at the start (`y[-1] = y[1]`) and with the last point
+  at the end (`y[n] = y[n-1]`; measured at 50 %, 12.3). `repeat`: the end value.
   `periodic`: wrap around. `extrapolate`: the straight line through the two end points. For the
   padded modes the window is full everywhere. All observed.
 * FFT filter (`method:=fft`; `npts` is not a window length but sets the cutoff). All rules were
@@ -204,30 +205,46 @@ x = 0..10, impulses, polynomials, random numbers; scripts `interp-bspline.labtal
   it also agrees with SciPy's `splrep` on 300 random cases (checked once, not kept as a test). A very
   small `sf` ends with one knot per data point (the interpolating spline); a large one with a single
   cubic polynomial.
-* (observed) `sf = 0` (the default) is not an interpolating spline: Origin then uses an automatic
-  factor that depends on the data in a way we did not find. Measured values of this factor for
-  unit impulses on x = 0..10: 1/12, 0.1245, 19/120, 0.1799, 0.1843, 1/6, 1/12, 0.0422, 1/120, 9/680,
-  3/170 for the impulse at x = 0, 1, ..., 10; it is proportional to the square of the data scale and
-  for other data (sin x, random numbers) it is 4 % to 14 % of the sum of squares of y. It is not a
-  quadratic form in y, not the residual of a polynomial fit, and it does not come from limiting the
-  number of knots. Consequently Origin's default B-spline moves up to 0.27 away from the data points
-  of a unit impulse and about 0.2 from sin x on 11 points. Data that already lie on a cubic
-  polynomial (for example y = x^2) are reproduced exactly.
+* (observed) `sf = 0` (the default) is not an interpolating spline: Origin chooses the factor from
+  the data and then runs the same Dierckx fit. The rule (found 2026-11-14 by matching the Dierckx fit
+  to Origin's curve, which pins the factor to about 1e-9, then decoding it from unit impulses and all
+  pairs `e_i + e_j`, `e_i - e_j` on 5, 8 and 11 points; scripts `re-workspace/scratch/t16/gen1.py` to
+  `gen4.py`, raw outputs `probe1-4.out.txt` there):
+  1. Drop rows with a missing X or Y. Keep the rows in worksheet order (do not sort, do not merge
+     repeated X yet).
+  2. With `m` rows, take `L = min(5, m - 1)` lags and the starts `i = 0 .. m - L - 1` (the SAME
+     `m - L` starts for every lag, so the last rows enter fewer pairs: this is why the factor is not
+     symmetric when the data are reversed).
+  3. For each lag `d = 1 .. L`: `h_d` = mean over the starts of `(x[i+d] - x[i])^2`, `g_d` = mean over
+     the starts of `(y[i+d] - y[i])^2 / 2` (a semivariogram against squared distance).
+  4. Fit `g = a + b h` to the `L` points by ordinary least squares; the factor is `|a|`, the nugget,
+     an estimate of the noise variance. The absolute value matters: the intercept is negative for
+     some data (an impulse near the end), and Origin then uses its magnitude.
+  On equally spaced X this is `|sum_i sum_d (89 - 5 d^2) (y[i+d] - y[i])^2| / (340 (m - 5))` for
+  `m >= 6`: a unit impulse inside long data gets `1/(m - 5)`, one at the first row half of that.
+  The factor scales with the square of Y, ignores a constant added to Y and the scale of X, and
+  changes when the rows are reordered (checked: reversed data, unsorted X). With the factor, the
+  Dierckx fit on the sorted points (repeated X merged to their mean, as for `sf > 0`) reproduced
+  Origin's curve on all 236 data sets measured (impulses, pairs, random numbers, noisy sine, uneven
+  and unsorted X, repeated X, missing values, 5 to 200 points) to 6e-15. A factor of 0 (constant
+  Y) gives the interpolating spline. With 4 points any factor gives the interpolating cubic, so
+  nothing there is measurable. Not measured: equal `h_d` at every lag (impossible for distinct X
+  seen so far; Sheaf then uses `a` = mean of `g`), an Origin fit whose knot search stops early.
 * (observed) Outside the data range with the default option Origin continues with the straight
   line through the two nearest data points (not the end slope of the curve), whatever `sf` is.
   `miss` and `repeat` work as for the other methods.
 * (observed) Repeated X values: Origin replaces them by one point with the mean Y (checked for
   `sf` = 0.2 on x = 0 1 2 2 3 4 4; the output equals the fit of the merged points to 1e-9). We do the
-  same for the B-spline method. For the default factor the curve at a repeated X then differs from
-  the mean, which is the same automatic smoothing that is not understood. Fewer than four different
+  same for the B-spline method. With the default factor the merge happens after the factor is
+  computed on the unmerged rows (measured, data set `dupx` of probe 3). Fewer than four different
   X values give no result.
 * Our implementation (`InterpMethod::BSpline`): `smoothing` above 0 is the Dierckx smoothing spline
-  inside the data; 0 is the interpolating (not-a-knot) cubic spline, which agrees with Origin's
-  default only for data that lie on a cubic polynomial; both continue outside the data with Origin's
-  straight line. At least four different X values. A negative or missing factor is refused. The
-  dialog and the command line say that factor 0 is not Origin's automatic smoothing.
+  inside the data; 0 computes Origin's factor (`sheaf_calc::automatic_smoothing`, the rule above) and
+  fits with it; both continue outside the data with Origin's straight line. At least four different
+  X values. A negative or missing factor is refused. Tests: `crates/calc/tests/origin_bspline.rs`
+  and `origin_bspline_auto.rs` (16 Origin data sets at 15 positions each, 1e-10).
 
-Unsorted X: we sort and drop pairs with a missing value (not compared with Origin).
+Unsorted X and missing values: pairs with a missing value are dropped and the points sorted, as in Origin (measured for the B-spline, where the automatic factor is computed before sorting; section 5).
 
 ## 6. Baseline subtraction
 
@@ -282,6 +299,20 @@ oright` and the `_x`, `_y` outputs of each). Runs of 2026-11-13 (scripts `pkfind
   `second` 40 and `residue` exactly the four gaussians; on the clean curve `first` finds 15 including shoulders, `win`
   7); their rules were not worked out, Sheaf's Peak Analyzer methods (section 11) are not calibrated against them.
   An explicit `option:=r height:=10 width:=5` call returned an error for both curves.
+* (observed 2026-11-14, `re-workspace/scratch/pkm`, probes 1 and 2: 15 data sets, 360 calls; rules still not found,
+  these facts narrow them down) `npts` changes nothing for `first`, `second`, `residue` and `win` (1, 2, 3 and 5 give
+  the same rows), and neither does the X spacing (0.5 and 1.0 give the same rows). On a single unit impulse in the
+  middle of N points, `first` reports the impulse and the points `floor(N/10)` rows on either side (N = 21, 41, 81,
+  101: offsets 2, 4, 8, 10), so its derivative window grows with the length of the data; `second` reports offsets
+  2, 4, 6 on both sides for N = 41 (and an uneven set for N = 81, 101); `residue` reports every second row within
+  4 rows for N = 41; `win` reports only the impulse. The rows reported by `first` and `second` include points whose
+  value is 0 or tiny (gaussian tails), so no sign or height test applies, and on a gaussian the side points lie 10
+  rows away for N = 41, not `floor(N/10)`. `win` behaves like the local maximum with a fixed window of about two
+  points, but finds nothing on a gaussian raised by 5 (it measures height from a baseline). `residue` on a cubic
+  returned row 1 repeated for every row (a degenerate result). Tried and failed against all 15 sets: zero crossings
+  of a Savitzky-Golay derivative (windows 3 to 41, orders 1 to 5, five edge modes, three picking rules) and of a
+  slope or span derivative with half window `floor(N/10)` (three edge rules, five picking rules). Origin's own
+  `smooth` (FFT, adjacent averaging, Savitzky-Golay defaults) does not give these rows either.
 Sheaf: `PeakOptions { smooth_points, foot_height, max_half_width }`, `PeakResult { left, right }`; the Find Peaks
 window has Smoothing points, Foot height and a limit for the distance of the feet; the result sheet has Left foot and
 Right foot columns (X values). `sheaf analyze peaks` keeps its own smoothing of the peak chain.
@@ -466,10 +497,11 @@ Steps, in order:
    not sorted" and changes nothing. The area of a positive peak is positive whichever way X runs
    (Origin's `integ1` gives a negative area for falling X, section 1; the table here follows the
    fit columns instead, so the two sets of columns have one sign).
-5. Multi-peak fit (own model, Origin's functions): a sum of Gauss or Lorentz peaks plus a constant or
-   sloped baseline, parameters `y0`, `m`, then `xc`, `w`, `A` per peak, in Origin's parameterisation
-   (Gauss `A/(w sqrt(pi/2)) exp(-2((x-xc)/w)^2)`, FWHM `w sqrt(ln 4)`; Lorentz
-   `2A/pi * w/(4(x-xc)^2+w^2)`, FWHM `w`). Starting values come from the found peaks (centre, FWHM,
+5. Multi-peak fit (own model, Origin's functions): a sum of Gauss, Lorentz or Voigt peaks plus a
+   constant or sloped baseline, parameters `y0`, `m`, then `xc`, `w`, `A` per peak (Voigt: `xc`, `A`,
+   `wG`, `wL`, Origin's order), in Origin's parameterisation (Gauss `A/(w sqrt(pi/2))
+   exp(-2((x-xc)/w)^2)`, FWHM `w sqrt(ln 4)`; Lorentz `2A/pi * w/(4(x-xc)^2+w^2)`, FWHM `w`; Voigt
+   section 11.2). Starting values come from the found peaks (centre, FWHM,
    height above the baseline), with widths bounded to stay positive. The fit uses the nonlinear engine
    of `crates/fit`. The report has centre, height, FWHM, area and area percent per peak, plus a line of
    R squared, reduced chi-square and iterations. The fit uses the data, not the corrected curve, so
@@ -499,7 +531,8 @@ other than the request's range.
 
 Command line: `sheaf analyze peaks FILE [--method local-max|window|first-derivative|second-derivative]
 [--smooth N] [--min-width W] [--baseline none|end-points|minima|anchors] [--baseline-points N]
-[--anchors X1:Y1,X2:Y2] [--limits baseline|half-height] [--integrate] [--fit gauss|lorentz]
+[--anchors X1:Y1,X2:Y2] [--limits baseline|half-height] [--integrate] [--fit gauss|lorentz|voigt]
+[--fit-shapes F1,F2,...]
 [--fit-baseline constant|linear]`, together with the existing `--points`, `--min-height`, `--count`,
 `--direction`. Without any chain option the plain peak finder of section 7 runs. Window: Analysis >
 Analyze Peaks... (command line `--show analysis:peak-chain`).
@@ -565,7 +598,79 @@ Center, Row, Height and FWHM match Origin to 1e-9 on the data above, Area % foll
 and the limit between two peaks (the valley, 6.8) matches; the outer limits do not (Sheaf integrates to
 where the corrected curve meets the baseline or the end of the data: 0 and 20 here, Origin 0.3 and 14.15).
 
-## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1)
+### 11.2 Voigt peaks (measured 2026-11-15)
+
+The Fit Peaks page (`sheaf analyze peaks --fit voigt`) offers Origin's `Voigt` besides Gauss and
+Lorentz: a Gauss of FWHM `wG` convolved with a Lorentz of FWHM `wL`, area `A`. Sheaf evaluates it
+exactly through the Faddeeva function (`sheaf_fit::library::voigt`; scipy's `wofz` gives the same
+digits). Origin's function record (`VOIGT5.FDF`, `docs/spec/data/fit-functions.json`) gives the
+parameter order `y0 xc A wG wL` and the derived FWHM `0.5346 wL + sqrt(0.2166 wL^2 + wG^2)`, which
+Sheaf reports as the peak's FWHM; the height is the value at the centre. A peak starts at the found
+centre with `wG = wL` (as Origin's initialisation, which gave `wG = wL = 1.421` on the probe below)
+chosen so that the start has the found FWHM and height; `wL` is bounded below by 0 (a Gauss) and `wG`
+by 1e-4 of its start.
+
+Measured in Origin 2016 (`re-workspace/scratch/t04v/v1` and `v2`, `tools/origin-ref/run-labtalk-lines.ps1`):
+
+- `nlf_Voigt` is a numerical approximation: at six points (0.2 + Voigt(xc 5, A 4, wG 1.2, wL 0.8) at x
+  = 0, 2, 4.5, 5; a nearly Lorentzian and a nearly Gaussian peak) it differs from the exact value by at
+  most 1.7e-6 of the peak height (2.042942100 against 2.042945314 at the centre).
+- `nlbegin func:=Voigt; nlfit` on 201 points made by `nlf_Voigt` plus a fixed ripple (x = 0 to 10,
+  kept as `crates/fit/tests/data/origin_voigt_probe.tsv`) gave y0 0.199772863732606, xc
+  4.99999967995525, A 4.00225088185448, wG 1.19892425718239, wL 0.801615491802901, reduced
+  chi-square 7.8673486183435684e-05 in 8 iterations. Sheaf's multi-peak fit of the same points with
+  one Voigt peak agrees to 6e-6 relative (xc to 2.3e-9) and the reduced chi-square to 2e-7, the size of
+  the difference between Origin's approximate and Sheaf's exact function. The standard errors of xc
+  and A are 3.4e-4 and 5.3e-3 relative apart (Origin's derivatives of its approximate function would
+  explain it; not measured further). Test: `crates/fit/tests/multipeak_voigt.rs`.
+
+**A function per peak** (Sheaf's own layout; Origin's Fit Control window, where the Pro version sets a
+function per peak, was not opened): the Fit Peaks page's "Function per peak" list (Add Peak Function,
+one entry per peak in the order found, "Same as above" or Gauss, Lorentz, Voigt) and
+`sheaf analyze peaks --fit F --fit-shapes F1,F2,...` give peak *k* its own function; peaks beyond the
+list take the Function (`--fit`). Each peak keeps its own parameters (`xc1 w1 A1 xc2 A2 wG2 wL2` for a
+Gauss and a Voigt), the note names them in order ("Gauss+Voigt fit of 2 peaks") and the fitted
+column's comment says the same. `--fit-shapes` needs `--fit`.
+
+Not done: constraints between peaks, and Origin's own Peak Analyzer Fit Peaks (Pro) page, which was
+not opened (11.1).
+
+### 11.3 Multiple Peak Fit (T128, 2026-11-17, not measured)
+
+Origin facts (docs.originlab.com/origin-help/fit-multipeakfit-tool and x-function/ref/nlfitpeaks;
+Origin COM was unavailable, so nothing was measured): Analysis: Peak and Baseline: Multiple Peak Fit
+opens the `nlfitpeaks` dialog (input: the active data plot; the peak function); OK activates the
+graph (from a worksheet a graph is made first) and opens Get Points: the cursor moves with the mouse
+or arrow keys, a double-click or Enter picks a peak centre, the dialog shows X, Y and the number
+picked. **Fit** fits with the picked centres as starting points and adds a results table to the
+graph; **Open NLFit** opens the NLFit dialog initialised from them. No baseline treatment; Use Peak
+Marker fits existing peak markers.
+
+Sheaf (`crates/app/src/dialogs/multipeak.rs`, the chain of 11 with given centres), choices
+**unmeasured**:
+
+- From a graph the active data plot is the input; from a worksheet with one Y column selected, a
+  line graph of it is made first (its own undo step "Plot"). Peak Function: Gauss (default, as
+  Origin's tutorial picks), Lorentz or Voigt.
+- Get Points uses the graph's Data Reader (turned on while picking): a click pins a point; a
+  double-click outside the Get Points window, or Enter, picks the pinned point of the input plot.
+  The window lists the centres (X, Y); Remove Last undoes a pick; a point already picked is not
+  picked again. Cancel or closing turns the Data Reader off and changes nothing.
+- Fit runs the Peak Analyzer chain with no baseline and the picked X as the peaks
+  (`analyze_peaks_at`: each centre snaps to the nearest data point, two centres on one point give one
+  peak, heights and FWHM are measured above the lowest point of the data), then the multi-peak fit
+  of 11 with a constant `y0` (start: the lowest Y) and per-peak starts from those heights and widths.
+  Results go where the Peak Analyzer's go (the result sheet, one row per peak in X order, the fit
+  curve column beside the data, then a column "Peak k of ..." per peak: that peak on the fitted
+  baseline `y0`), and the curves are drawn on the graph as lines: each peak in blue, green, orange
+  (repeating), then the fitted sum on top in the fit tools' red (220, 30, 30), width at least 1.5.
+  One undo step ("Multiple peak fit"). The Peak Analyzer does not add the per-peak columns
+  (`PeakFitSpec.peak_curves`, off there).
+- **Left out:** Open NLFit and Use Peak Marker (shown disabled), the results table on the graph,
+  arrow-key stepping specific to Get Points (the Data Reader's Left/Right
+  keys step the pinned point).
+
+## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1 to 12.3)
 
 Analysis > Data Manipulation has Subtract Straight Line, Reduce Duplicate X Data (12.1), Reduce to Evenly Spaced X and Curve
 Translate X; Analysis > Mathematics has Median Filter. Nothing in this section was run in Origin:
@@ -604,10 +709,10 @@ link mechanism):
   (Sheaf's own item, next to X): adds a constant to Y, or shifts so that the curve's value at X = `at`
   (between data points by straight lines) becomes `to`; the result is a new Y column behind each
   input named "<name> shifted". A point outside the X range is refused.
-- Median Filter: the window has an odd number of points (at least 1; the default is 5), centred on
-  each point. Edge choices: shrink (default), repeat the end value, reflect including the end point.
-  Even windows are refused. The result is a new Y column behind each input named "Median filtered
-  <name>".
+- Median Filter: Origin's percentile filter at 50 % (12.3). The window has `2 (npts / 2) + 1`
+  points (an even `npts` acts like the next odd one; at least 1; the default is 5), centred on each
+  point. Edge choices: shrink (default), repeat the end value, reflect as Origin's percentile filter.
+  The result is a new Y column behind each input named "Median filtered <name>".
 
 Not measured (to be measured in Origin; nothing here may be quoted as Origin's behaviour):
 
@@ -625,9 +730,8 @@ Not measured (to be measured in Origin; nothing here may be quoted as Origin's b
 4. Curve Translate: whether Origin moves data in place or writes a copy, how its "move a point to
    a value" mode reads a Y at an X between data points, and whether it works on the graph
    interactively. Curve Translate Y is not an Origin item as far as we know; its numbers are Sheaf's.
-5. Median Filter: whether Origin's window must be odd, what an even window does, its boundary
-   rule at the ends (we assume the percentile filter's), the handling of missing values (we assume
-   the smoothing rule), and the default window size.
+5. Median Filter: measured, see 12.3 (missing values follow the smoothing rule measured in
+   section 3; the default window of 5 is Sheaf's, Origin has no median item for curves).
 6. The Recalculate behaviour of these items in Origin (which of None, Manual, Auto they offer),
    the long names, units and comments of the output columns, and the row-range handling.
 
@@ -695,6 +799,28 @@ Command line: `sheaf analyze subtract-line FILE --y B --x1 X --x2 X [--y1 V] [--
 `sheaf analyze reduce-x` (12.2), `sheaf analyze translate FILE --y B [--axis x|y] (--by D | --at X --to V)`
 and `sheaf analyze median-filter FILE --y B [--points N] [--edge shrink|repeat|reflect]`. Windows:
 `--show analysis:subtract-line`, `reduce-x`, `translate-x`, `translate-y`, `median-filter`.
+
+### 12.3 Median Filter (measured in Origin)
+
+Origin 2016 has no median filter for curves; its median of a curve is Smooth's percentile filter at
+50 % (`smooth method:=pf percent:=50`). Measured on 2026-11-15 with
+`tools/origin-ref/run-labtalk-lines.ps1` (`re-workspace/scratch/t23m/m1`): 40 points with ties and
+outliers, windows 1, 4, 5, 7 and 8, boundaries none, reflect and repeat; the sheet is
+`crates/calc/tests/fixtures/origin_median.tsv`.
+
+- An even `npts` acts like the next odd one: 4 gives the result of 5, 8 that of 9 (as section 3 found
+  for averaging). `npts:=1` returns the data.
+- `none`: the window shrinks symmetrically at the ends, so the first and last point keep their value.
+- `repeat`: the end value fills the window.
+- `reflect` is not symmetric: before the start the data are mirrored without the first point
+  (`y[-1] = y[1]`, `y[-2] = y[2]`), past the end with the last point repeated (`y[n] = y[n-1]`). The
+  second row of the probe tells the two rules apart at the start (the mirror with `y[-1] = y[0]` gives
+  7.8108 where Origin gives 7.0353) and the next-to-last row at the end. Sheaf's Smooth followed the
+  symmetric rule for the percentile filter too, and was corrected; its averaging and Savitzky-Golay
+  reflection, measured in section 3, is unchanged.
+
+Sheaf's Median Filter (`calc::median_filter`) and Smooth's percentile filter reproduce all eight
+Origin columns exactly (a median is one of the values): `crates/calc/tests/origin_median.rs`.
 
 ## 13. Convolution and Correlation (`conv`, `corr1`)
 
@@ -1071,7 +1197,373 @@ Sheaf: `sheaf_calc::trace_interp`, `Tool::TraceInterp(TraceInterpSpec)`: the X a
 in a new sheet (`TraceInterp`), the Y labelled "linear trace interpolation of B". Command line:
 `sheaf analyze trace-interp FILE --y B [--method linear|spline|bspline] [--points N]`.
 
+## 17. IIR Filter and FIR Filter (`dfilter`, the FIR Filter app; T55)
+
+Nothing in this section was measured in Origin: no Origin was available, and neither tool has a
+reference script in `tools/origin-ref/` yet. The facts below are from Origin's help pages and the File
+Exchange page of the FIR app, quoted as paraphrase [W:x-function/ref/dfilterpro,
+W:x-function/ref/dfilterapply, W:origin-help/iir-filter-dialog, W:origin-help/iir-filter-algorithm,
+W:tutorials/iir-filter, fileExchange fid=1077]. Everything Origin does not say is Sheaf's choice, labelled
+"Sheaf's choice, unmeasured". The numbers of the designs and the outputs are checked against
+`scipy.signal` (`crates/calc/tests/scipy_filters.rs`, from `tools/iir-fir-ref.py`, scipy 1.18.1), not
+against Origin.
+
+### 17.1 IIR Filter (OriginPro, Analysis > Signal Processing > IIR Filter)
+
+Origin facts (docs, not measured):
+
+- The X-Function is `dfilter` (Pro), brief "Create and apply an IIR filter"; the command line example
+  is `dfilter method:=cheby1 order:=5 sample:=1000 wn:=50 filtfilt:=1 coef:=[<input>]<new>;`. (The
+  name `iirfilter` of the T55 brief is not an Origin X-Function.) `dfilterapply` applies a designed
+  filter given as an SOS matrix or as numerator and denominator coefficients.
+- Variables and defaults: `iy` input signal; `type` response type `low`, `high`, `bandpass`, `bandstop`
+  (default low); `method` `butter`, `cheby1`, `cheby2`, `elliptic` (default Butterworth); `order`
+  10; `unit` `hz` or `normalize` (default Hz); `sample` Fs, `<auto>`; `wn` cutoff (low and high pass),
+  `wn1` and `wn2` (band pass and band stop), all `<auto>`; for the minimum order `wp`, `ws` (or `wp1`,
+  `wp2`, `ws1`, `ws2`); `rp` passband ripple 1 dB; `rs` stopband attenuation 80 dB; `filtfilt`
+  forward-backward filtering, off; outputs `sos`, `zpk`, `abcd` (state space), `coef` (numerator and
+  denominator) and the filtered signal `oy`. Normalized frequency is `f / (Fs / 2)`, so 1 is the Nyquist
+  frequency. Fs is "auto-detected from the associated X column if one exists".
+- The dialog: Response Type, Method (Butterworth, Chebyshev Type I, Chebyshev Type II, Elliptic; Bessel is
+  not offered), Filter Order with a Minimum checkbox (unchecked, an integer; the tutorial unchecks it to
+  set 4, which suggests Minimum is on by default), Frequency Specification (Unit, Sample Frequency,
+  Pass, Stop and Cutoff frequencies depending on response, method and unit), Magnitude Specification
+  (dB), Forward-Backward Filtering, Output Results (SOS matrix, zeros/poles/gain, state space,
+  transfer function coefficients, output signal), and preview panels (filter specification, magnitude
+  and phase response, impulse response, the filter applied to the data with cutoffs that can be dragged).
+  The tutorial's output is a new filtered column and an "SOS Matrix" worksheet.
+- The algorithm: a normalized analog low pass prototype (Butterworth, Chebyshev I or II, elliptic),
+  the frequency transform to the response type (low pass `s/w0`, high pass `w0/s`, band pass and band stop
+  with `w0 = sqrt(w1 w2)` and `B = w2 - w1`), then the bilinear transform. SOS is a gain times `L`
+  biquads (`L x 6`, three numerator and three denominator coefficients). Forward-backward filtering
+  "results in zero phase distortion".
+- Not documented: pre-warping, the order estimation formulas, how `rp` and `rs` enter each prototype,
+  initial conditions, padding and edge handling (one way or forward-backward), whether one-way
+  filtering is a direct form or an SOS cascade, how Fs is computed from the X column, unevenly spaced
+  X, missing values.
+
+Sheaf (`sheaf_calc::iir`: `IirSpec`, `IirFilter`, `iir_filter`, `iir_order`, `sosfilt`, `sosfiltfilt`):
+
+- Methods, responses and options as above with Origin's defaults (Butterworth, low pass, order 10, ripple
+  1 dB, attenuation 80 dB, Hz, no forward-backward filtering). Bessel is not built, as Origin lists no
+  Bessel filter. The order is limited to 200.
+- Sheaf's choice, unmeasured: the frequency pre-warping `tan(pi f / Fs)` (scipy's design chain: analog
+  prototype, `lp2lp`/`lp2hp`/`lp2bp`/`lp2bs`, bilinear transform; zeros, poles and gain, numerator and
+  denominator, agree with scipy to 1e-11 for all four methods and responses).
+- Sheaf's choice, unmeasured: what the cutoff frequency (Fc, `wn`) is depends on the method, as in scipy.
+  Butterworth: the frequency where the gain is down by 3 dB. Chebyshev I and elliptic: the passband edge,
+  where the gain is down by the passband ripple `rp` (the gain at the edge is `10^(-rp/20)`). Chebyshev II:
+  the stopband edge, where the gain is down by the stopband attenuation `rs` (so with `rs` 80 dB the gain at
+  Fc is already -80 dB, and the passband is narrower than a Butterworth filter with the same Fc). The dialog
+  says so under the frequencies; the column comment prints "Fc" whatever the method. Origin does not say.
+- Sheaf's choice, unmeasured: the passband gain follows scipy. Butterworth, Chebyshev II, and odd order
+  Chebyshev I and elliptic low pass filters have gain 1 at DC; an even order Chebyshev I or elliptic low
+  pass filter has gain `10^(-rp/20)` at DC (0.891 for `rp` = 1 dB), not 1. The passband gain of Chebyshev I and
+  elliptic filters ripples between `10^(-rp/20)` and 1. Nothing rescales the output to unit gain. Origin's
+  convention is not documented and not measured.
+- Sheaf's choice, unmeasured: designs of any order up to 200 keep a finite, non-zero gain: the gain is the
+  real part of a ratio of products of the zeros and poles, taken with a scaled running product so that it
+  does not overflow where the products pass 1e308 (order 100 band pass at 0.3 to 0.6 of Nyquist; checked
+  against scipy up to orders 190). A design whose gain would be 0, infinite or NaN is an error ("the filter
+  design gave values that are not finite"; a low pass at 0.95 of Nyquist of order 181 or more
+  is one, where scipy raises an OverflowError). The checks are in `high_order_iir_designs_match_scipy`.
+- Sheaf's choice, unmeasured: the minimum order and the natural frequencies follow scipy's `buttord`,
+  `cheb1ord`, `cheb2ord` and `ellipord` (order equal to scipy's on the test cases; the cutoffs of a band
+  stop filter agree to 1e-4 only, because scipy moves the pass edges with `fminbound` and Sheaf with a
+  golden section search). The passband ripple and stopband attenuation are the specification of the
+  minimum order; for a fixed order only Chebyshev I (`rp`), Chebyshev II (`rs`) and elliptic (both) use
+  them. Sheaf's default Minimum is off (the X-Function default is the fixed order 10).
+- Sheaf's choice, unmeasured: automatic frequencies are a quarter of the Nyquist frequency (low and
+  high pass cutoff, band pass and band stop Fc1) and three quarters (Fc2); for the minimum order low
+  pass `0.2`/`0.3`, high pass `0.3`/`0.2`, band pass `0.3`, `0.5` against `0.2`, `0.6` and band stop
+  `0.2`, `0.6` against `0.3`, `0.5` (pass/stop, fractions of the Nyquist frequency).
+- Sheaf's choice, unmeasured: Fs is `1 / (mean X step)` (the same step as the FFT filters, 1 without
+  an X column); unevenly spaced X is not checked. Frequencies at or above Nyquist, band edges out of
+  order, a stopband attenuation not above the ripple, and an order outside 1 to 200 are errors.
+- Sheaf's choice, unmeasured: one-way filtering is `sosfilt` with zero initial state (a signal that
+  starts away from zero shows the start-up transient of the filter); forward-backward filtering is
+  `sosfiltfilt` (odd extension of `3 * ntaps` points at both ends, the step response as initial
+  state), which needs more than `3 * ntaps` points (`ntaps = 2 * sections + 1`, an error otherwise).
+  The two agree with scipy's `sosfilt` and `sosfiltfilt` on the cases of the test (1e-9 of the range).
+- Sheaf's choice, unmeasured: the second-order sections are paired by the pole closest to the unit
+  circle last, each with the nearest zeros, the gain in the first section. This is not scipy's `zpk2sos`
+  pairing, so the sections are compared through their response and their output.
+- Not built: the state space output, the SOS / ZPK / coefficient worksheets, `dfilterapply`, `dfilterfcf`,
+  the preview panels. Calc has the zeros, poles, gain, coefficients and sections (`IirFilter`).
+- Missing values: as the other signal tools, trailing blanks are dropped and a blank inside the signal is
+  an error.
+
+Sheaf: `Tool::IirFilter(IirSpec)`; a new column beside each input (or a new sheet or the existing
+columns, the Output node) named "<name> IIR filtered", the unit of the input, the comment "Butterworth
+low pass IIR filter of B (order 4, Fc 50 Hz, forward-backward)". The tool can follow its input
+(Recalculate Auto and Manual, `LinkTool::IirFilter`) and a project saved as `.opj` names such a result in
+the save warnings, as for Smooth. Window: Analysis > Signal Processing > IIR Filter... (X-Function name
+`dfilter`). Command line: `sheaf analyze iir-filter FILE --y B [--type low-pass|high-pass|band-pass|band-stop]
+[--method butterworth|chebyshev1|chebyshev2|elliptic] [--order N | --minimum] [--unit hz|normalized] [--fs HZ]
+[--cutoff F] [--cutoff2 F] [--pass F --pass2 F --stop F --stop2 F] [--ripple DB] [--attenuation DB]
+[--forward-backward]` (alias `iir`; MCP `iir_filter`).
+
+### 17.2 FIR Filter (the FIR Filter app of Origin 2027, Analysis > Signal Processing)
+
+Origin facts (File Exchange page of "FIR_Filter.opx" v1.00, OriginPro, Origin 2027; docs, not measured; no
+page on docs.originlab.com was found):
+
+- "Create and apply an FIR (Finite Impulse Response) digital filter." Response Type: lowpass, highpass,
+  bandpass, bandstop. Method: Least Squares (linear phase) or Window (window-based; no Parks-McClellan).
+  Filter Order: an integer; for the Window method a Minimum checkbox computes it "using the Kaiser
+  window". Window (Window method): Bartlett, Bartlett-Hanning, Blackman, Blackman-Harris, Bohman,
+  Chebyshev, Flat Top, Gaussian, Hamming, Hanning, Kaiser, Nuttall, Parzen, Rectangle, Taylor,
+  Triangular, Tukey, or a window given as data. Scale Passband: normalizes the coefficients so that the
+  passband centre has magnitude 1 (0 dB). Frequency Specification: Hz or normalized (0, 1) with
+  `f / (Fs / 2)`, Fs detected from the X column (Auto) or given; pass, stop and cutoff frequencies by
+  response, method and unit. Magnitude Specification: passband and stopband weights (Least Squares);
+  dB or linear, passband ripple and stopband attenuation (Window with the minimum order).
+  Forward-Backward Filtering: filtering "in both forward and backward directions". Outputs: the
+  coefficients (transfer function) and the output signal; previews as for the IIR dialog.
+- Not documented: defaults (order, window, response, Fs, ripple, attenuation), the Kaiser beta and width
+  parameters, the Least Squares algorithm in detail (band edges, transition band), alignment or
+  delay compensation of the one-way output, edge handling, whether Hamming or Hanning is the default.
+  The option names mirror MATLAB's `firls`, `fir1` and `kaiserord`; nothing documents the formulas.
+
+Sheaf (`sheaf_calc::fir`: `FirSpec`, `FirFilter`, `firwin`, `firls`, `kaiserord`, `window`):
+
+- Sheaf's choice, unmeasured: the filter has `order + 1` coefficients (as `fir1`); high pass and band stop
+  need an even order (an error otherwise); the order is limited to 1000.
+- Sheaf's choice, unmeasured: the Window method is `scipy.signal.firwin` (ideal response times the
+  symmetric window); the Least Squares method is `scipy.signal.firls` with a constant desired gain in
+  each band (1 in the passbands, 0 in the stopbands), the pass weight in the passbands and the stop weight
+  in the stopbands, the transition bands left out, generalized to an even number of coefficients
+  (which scipy does not offer; the checks against the weighted least squares optimum, solved in numpy by
+  quadrature, are `even_tap_least_squares_matches_the_weighted_optimum`). Window values, `firwin` and `firls`
+  agree with scipy to 1e-10 (`firls` 1e-8), also for non-default window parameters and for the band and
+  weight mapping of every response type (`least_squares_designs_of_every_response_match_scipy_firls`) and
+  the minimum-order assembly with Kaiser (`minimum_order_window_designs_match_scipy`, dB and linear).
+- A window whose parameter overflows (Kaiser beta of a few hundred, Chebyshev attenuation of thousands of dB,
+  a Tukey fraction that is not a number) is an error ("the filter design gave values that are not finite")
+  with Scale Passband on or off; before, the unscaled design wrote an empty column.
+- Sheaf's choice, unmeasured: the minimum order is `kaiserord` with the ripple `A = -20 log10(min(dp, ds))`
+  of the smaller of the passband deviation `dp = (10^(rp/20) - 1) / (10^(rp/20) + 1)` and the stopband
+  deviation `ds = 10^(-rs/20)` (the linear unit takes both as deviations), the transition width the
+  smaller gap between a pass and a stop frequency, the cutoffs half way between them; below 8 dB the
+  formula is refused. The window of that design is the selected one, with Kaiser's beta from the
+  attenuation when Kaiser is selected.
+- Sheaf's choice, unmeasured: window parameters default as MATLAB's (Chebyshev 100 dB, Gaussian alpha 2.5,
+  Tukey 0.5, Taylor 30 dB with 4 bands), Kaiser beta 5; the default method is Window with Hamming and order
+  20, Scale Passband on (low pass and band stop at 0 Hz, high pass at Nyquist, band pass at the centre),
+  ripple 1 dB, attenuation 60 dB, Fs from the X column as for the IIR filter, automatic cutoffs a quarter
+  (three quarters) of the Nyquist frequency, automatic pass and stop frequencies as for the IIR minimum order.
+- Sheaf's choice, unmeasured: one-way output is aligned with the input (the delay of `order / 2` points,
+  rounded down, removed; the ends extended by an odd reflection of `order` points; an error if the signal
+  has `order` points or fewer); forward-backward output is `scipy.signal.filtfilt` of the coefficients (odd
+  extension of `3 * (order + 1)` points, so more points than that). Both agree with numpy and scipy to 1e-10.
+- Not built: a window given as data, the coefficient output, the previews. Missing values as for the IIR filter.
+
+Sheaf: `Tool::FirFilter(FirSpec)`, a new column beside each input named "<name> FIR filtered" with the
+comment "Hamming window low pass FIR filter of B (order 100, Fc 50 Hz)" (Least Squares: "least squares ...
+(order 80, pass 50 Hz, stop 100 Hz)"); Recalculate and `.opj` warnings as the IIR filter. Window:
+Analysis > Signal Processing > FIR Filter..., placed under IIR Filter (Sheaf's choice: Origin ships the
+filter as an app, so its menu place is not known). Command line: `sheaf analyze fir-filter FILE --y B
+[--type ...] [--method least-squares|window] [--order N | --minimum] [--window NAME] [--window-param P]
+[--no-scale] [--unit hz|normalized] [--fs HZ] [--cutoff F] [--cutoff2 F] [--pass F --pass2 F --stop F
+--stop2 F] [--pass-weight W] [--stop-weight W] [--magnitude-unit db|linear] [--ripple R] [--attenuation A]
+[--forward-backward]` (alias `fir`; MCP `fir_filter`).
+
+## 18. XYZ Surface Area (`xyzarea`; T91)
+
+Analysis > Mathematics > XYZ Surface Area... gives the area of the surface through scattered (X, Y, Z) points. Measured in Origin 2016 on 2026-11-16 (`tools/origin-ref/t91/xyzarea.lines.txt`, cases in `xyzarea-cases.json`, raw output in `re-workspace/scratch/t91/xyzarea.out.txt`); `xyzarea` runs from a script.
+
+- The X-Function: `xyzarea iz:=(1,2,3) area:=aa` (input XYZ range of three columns; output `area`, a number). It writes **no sheet and no report**: only the number, returned in the variable (the Messages Log was not read). The window was not opened.
+- **Method (checked with scipy, not Origin's code): the Delaunay triangulation of the points projected on the XY plane, the surface area is the sum of the areas of the 3D triangles** `0.5 |(p2 - p1) x (p3 - p1)|`. Origin equals `scipy.spatial.Delaunay` + that sum to 1e-15 relative in every case that has a unique triangulation:
+
+  | Case (z) | Points | Origin | Delaunay sum |
+  |---|---|---|---|
+  | plane `2x + 3y`, 5 by 5 grid on 0 to 1 | 25 | 3.7416573867739404 (exact sqrt(14)) | same |
+  | paraboloid `x^2 + y^2`, 6 by 6 grid | 36 | 1.8561937972253828 | 1.8561937972253826 |
+  | the same, 11 by 11 grid | 121 | 1.8602226321628541 | 1.8602226321628539 |
+  | one triangle (0,0,0), (1,0,0), (0,1,2) | 3 | 1.1180339887498949 | sqrt(5)/2 |
+  | flat unit square | 4 | 1 | 1 |
+  | `sin(3x) y + x` on 25 random points of the unit square (seed 7) | 25 | 1.1947142916930125 | 1.1947142916930125 |
+
+  (The grid cases are cocircular: both diagonals of every cell give the same area for these symmetric surfaces, so they do not show which diagonal Origin takes.)
+- **Duplicate (x, y) points are merged by averaging their Z**: the points (0,0,0), (1,0,1), (0,1,2), (1,1,3) and (1,1,5) gave 3.09557356477856, which is the area of the square surface with z(1,1) = 4 (1.2247449 + 1.8708287); a triangulation that kept z = 3 gives 2.4494897 (what scipy returns) and z = 5 gives 3.774 or 3.992.
+- Too few or degenerate points (two points; four collinear points in XY): no result, the output variable is left unset (the `area` argument keeps its previous value) and the call returns false; the message was not read.
+- Not measured: the window (title, controls: the input range selector, the Output field), whether the result also goes to the Results Log or a sheet when run from the menu, the number of decimals shown, the diagonal choice on cocircular points, tolerance for nearly duplicate points, missing values in the input, the maximum point count, and a Z column not designated Z.
+
+**Built (T91).** `sheaf_calc::xyzarea` (Delaunay by Bowyer-Watson, checked against the convex hull area; `tests/origin_xyzarea.rs` reproduces the seven measured areas to 1e-12), tool `Tool::XyzArea`, window and `sheaf analyze xyz-area`.
+
+**Sheaf's choice** until the window is measured: Analysis > Mathematics > XYZ Surface Area... uses the XYZ columns of the active sheet (X, Y, Z designations as the surface fits do, fitting.md 14), runs the Delaunay triangulation (`sheaf-calc`, new module, one triangulation also usable by the gridding work that other packages plan) and writes a small results sheet or log line with the area, the number of points used and of triangles, and the number of merged duplicates; `sheaf analyze xyz-area` prints the number; rows with a missing X, Y or Z are skipped and counted.
+
+## 19. Wavelets (`dwt`, `idwt`, `wtdenoise`, `wtsmooth`, `cwt`; T96)
+
+Analysis > Signal Processing > Wavelet holds five items, each one an X-Function of OriginPro 2016 (names from the
+X-Function files in `Program Files/OriginLab/Origin2016/X-Functions/Signal Processing/Wavelet`, the labels from
+their descriptions): **Decompose...** = `dwt` (one level of the 1D discrete wavelet transform), **Reconstruction...** =
+`idwt`, **Denoise...** = `wtdenoise`, **Smooth...** = `wtsmooth`, **Continuous Wavelet...** = `cwt`. The folder also has
+`mdwt` (Multi-Scale DWT, several levels into a report sheet), `dwt2`, `idwt2` (2D) and `cw_evaluate`; none of these is
+in the menu list of the inventory, so T96 does not build them. All five scripted fine (`run-labtalk-safe.ps1`, each
+called with named arguments); the windows were opened with `origin-dialog.ps1 -Command "<name> -d;"`. Measured on
+2026-11-16 in Origin 2016; generators and a fixture file (`t96-origin.json`, inputs and Origin outputs) are in
+`tools/origin-ref/t96/`, raw output in `re-workspace/scratch/t96/` (local only). PyWavelets 1.8 was used only to
+identify filters ("pywt-checked"), never as the source of a number.
+
+### 19.1 Wavelets and extension modes (all five items)
+
+- **21 wavelets, in this order** (the combo box and the integer `type` 0 to 20): Haar, DB2 to DB10, Bior1.1, Bior1.3,
+  Bior1.5, Bior2.2, Bior2.4, Bior2.6, Bior2.8, Bior3.1, Bior3.3, Bior3.5, Bior3.7. No Symlets, Coiflets or other
+  families. Default Haar. In the other four items the option strings are `haar, db2..db10, b11, b13, b15, b22, b24,
+  b26, b28, b31, b33, b35, b37` (`type:=db2` and `type:=b13` work as well as the number).
+- **The filters are the usual ones**, with PyWavelets' names `haar`, `db2`..`db10`, `bior1.1`..`bior3.7` (Origin's DBn has
+  2n taps, so DB2 has 4; filter lengths L: Haar 2, DBn 2n, Bior1.1 2, 1.3 6, 1.5 10, 2.2 6, 2.4 10, 2.6 14, 2.8 18, 3.1 4,
+  3.3 8, 3.5 12, 3.7 16). All 21 decompositions below equal `dec_lo`/`dec_hi` of the wavelet to 1e-15.
+- **Extension mode** ("Extension Mode", in Reconstruction "Boundary"): `Periodic` (default) or `Zero-padded`.
+
+### 19.2 Decompose (`dwt`)
+
+`dwt ix:=<Y column> type:=<0..20> ext:=<0 periodic, 1 zero-padded> ca:=<new> cd:=<new>`. The X column of the book is
+ignored. One level only. Two new columns are appended at the right end of the sheet: the approximation (long name `DWT_CA1`,
+comment `Approx Coeff of DB2 dwt on B`) and the detail (`DWT_CD1`, `Detail Coeff of DB2 dwt on B`); a second call counts up
+(`DWT_CA2`, ...). The comment names the wavelet in the combo's spelling and the input column's short name.
+
+- With `x[m]` the signal and `lo`, `hi` the decomposition filters (pywt `dec_lo`, `dec_hi`, taps `0..L-1`):
+  **`ca[k] = sum_j lo[j] x[2k+1-j]`, `cd[k] = sum_j hi[j] x[2k+1-j]`.**
+- **Periodic**: indices modulo `n`, `k = 0..n/2-1`, so `n/2` coefficients each. An odd `n` is refused (the call returns
+  false, nothing is written; `n = 21` refused, `n = 16` works).
+- **Zero-padded**: `x = 0` outside `0..n-1`, `k = 0..floor((n+L-1)/2)-1`, so `floor((n+L-1)/2)` coefficients each (n = 16:
+  Haar 8, DB2 9, DB3 10, DB4 11, ..., DB10 17; n = 21 works: Bior1.3 gives 13). This is `pywt.dwt(x, w, mode='zero')`
+  exactly (all 21 wavelets, 1e-15).
+- Periodic is **not** pywt's `periodization` (that is a circular shift of it); the formula above matches all 21 wavelets to
+  1e-15 (`tools/origin-ref/t96/a3.py`).
+
+### 19.3 Reconstruction (`idwt`)
+
+`idwt ca:=<column> cd:=<column> type:=<n> ext:=<n> ox:=<new>`. Output: one new column (long name `IDWT_Result1`, comment
+`DB2 idwt of C, D`). With `rl`, `rh` the reconstruction filters (pywt `rec_lo`, `rec_hi`), `N = len(ca)` and
+`m = 2k + j - (L-2)`: **`y[m] += ca[k] rl[j] + cd[k] rh[j]`** for `k = 0..N-1`, `j = 0..L-1`.
+
+- **Periodic**: `m` wraps modulo `2N`; output length `2N`. **Zero-padded**: terms with `m` outside `0..2N-L+1` are dropped; output
+  length `2N - L + 2` (`N = 9`, DB2: 16 values, the length `dwt` took in). Checked against Origin for DB2 on unit coefficients
+  (`ca` or `cd` one at a time, every position, both modes, 1e-16, `idwt1.out`); other wavelets are not checked on their own,
+  only through decompose-then-reconstruct in the model.
+- Unequal lengths (DB2): the output length follows `ca`; a shorter `cd` counts as zeros (periodic, 5 and 3 values give 10), a
+  longer `cd` is cut to `ca` (zero-padded, 5 and 6 values give 8, the same as 5 and 5).
+- Coefficients not made by `dwt` are accepted (random `ca` and `cd` of 5 values worked).
+
+### 19.4 Denoise (`wtdenoise`)
+
+`wtdenoise iy:=(Xcol,Ycol) type:=<name> ext:=periodic|pad0 thrt:=custom|sqtwolog level:=<1..7> thrd:=<percent>`. Defaults Haar,
+periodic, custom, level 1, 50. Output: two new columns, `Denoised X1` (a copy of the input X) and `Denoised Y1` (comment
+`1 level(s) 50% threshold DB2 denoise of B`), counting up on the next call. The result has the input's length.
+
+- **Levels allowed** (a larger value returns false and writes nothing): periodic `floor(log2 n) - 1` (n = 16: 3, 17: 3, 32: 4,
+  64: 5, 100: 5, 128: 6), zero-padded `floor(log2 n)` (16: 4, 17: 4, 32: 5, 64: 6, 100: 6, 128: 7), the same for Haar, DB2 and
+  DB4. **Haar with zero-padded is refused at every level when `n` is a power of two** (16, 32, 64, 128) and works for n = 17
+  and 100; not explained.
+- **`custom` is hard thresholding of the detail coefficients of levels 1 to `level` with one common threshold
+  `T = thrd/100 * max |d|`, the maximum taken over all those levels; coefficients with `|d| >= T` stay unchanged, the others
+  become 0; the approximation is never touched.** Equal to 1e-15 to the model (decompose `level` times as in 19.2, threshold, rebuild as in 19.3) in the cases of the fixture
+(128 noisy points, levels 1 to 4, `thrd` 0, 25, 50, 100, five wavelets, periodic); `thrd = 0` returns the input. At exactly 100%
+only the maximum coefficient stays (`>=`): three of the four levels kept it, level 3 did not (rounding of `100/100 * max`); Sheaf
+keeps `>=` and accepts that difference.
+- **`sqtwolog` ignores `thrd`.** It is the same hard rule on levels 1 to `level` with one common threshold `T` that does **not**
+  scale with the data (the same signal times 0.1, 1 and 10 gives the same `T`) and depends only on `n`. Measured by
+  dropped-below and kept-above brackets on designed signals (db2, periodic, level 1; `sqtwolog_threshold_brackets` in the
+  fixture): n = 128: 1.861 to 1.908; 256: 2.0526 to 2.0600; 512: 2.1847 to 2.1959; 1024: 2.3269 to 2.3302; 2048: 2.4377 to
+  2.4593; the brackets for n = 24, 32, 48, 64, 96 are wider (1.6 to 2.2) and all contain 1.88. For n >= 256, `T = 0.6592 sqrt(2 ln(n/2))` fits all four brackets (the factor must lie in 0.6590 to 0.6594); for n <= 128
+  `T` is about 1.88 and flat. **The rule behind `T` is not found** (it is not the universal threshold `sigma sqrt(2 ln n)`: no
+  `sigma` from the data enters). Sheaf's choice until it is found: the brackets as a table for the lengths measured, the fit
+  above beyond 2048, and a note in the dialog's description line.
+- **Zero-padded denoise** (db4, level 2, `custom` 50, 128 points) equals the model built on the zero-padded `dwt` of 19.2 with each level's reconstruction cut back to the length it came from (67 samples at level 1: the 68 that `idwt` gives lose the last one), to 4e-16.
+- **Boundary samples.** The first and last `L - 2` samples of the output differ from the model in some cases: six designed
+  signals (db2, periodic, level 1, `thrd` 50: one coefficient `d[0] = 10` kept; `d[0] = 3` dropped next to a kept 10; with
+  approximation `a[0] = 5`) differ at samples 0, 1, 14, 15 of 16 by up to 0.9 (`denoise_boundary` in the fixture), while the same
+  signals with `thrd` 1 (everything kept) come back exactly. The 24 noisy-signal cases do not show it. Not resolved; the model is
+  right for samples `L-2 .. n-L+1`, the fixture decides the rest.
+
+### 19.5 Smooth (`wtsmooth`)
+
+`wtsmooth iy:=(Xcol,Ycol) type:=<name> ext:=periodic|pad0 cutoff:=<percent>`; defaults Haar, periodic, 20. Output: `WT Smoothed X1`
+(the input X) and `WT Smooth Y1`, comment `20% cutoff DB2 smooth of B`. There is no level input: **the signal is decomposed to the
+deepest allowed level** (19.4; n = 128 periodic: 6 levels, 126 detail coefficients). The detail coefficients are laid out as
+`[cD_J, ..., cD_2, cD_1]` (coarsest first) and **the last `K` of them are set to 0, `K = floor(cutoff/100 * N)`**, `N` the number
+of detail coefficients: the finest level goes first and, inside a level, the last coefficients go first (n = 128, cutoff 20:
+`K = 25`, the last 25 of level 1; cutoff 50: `K = 63`, all of level 1 but its first; cutoff 70: all of level 1 and the last 24 of
+level 2; cutoff 90: levels 1 to 3 and the last of level 4). The approximation stays; the signal is rebuilt (19.3). Cutoff 100 leaves
+the approximation only. It is a position rule, not a size rule: large coefficients at the end go and small ones at the start stay
+(db2, periodic, n = 128, noisy signal, cutoff 0, 5, 10, 20, 30, 50, 70, 90, 100, equal to 1e-15, except as listed next).
+
+- n = 128 with cutoff 0 and 1 gave `K = 2`, not 0 or 1 (Haar, DB2, DB4, Bior1.3); n = 64 and n = 100 with cutoff 0 return the input.
+- Zero-padded DB2, n = 128, cutoff 0: `K = 3` (found from the fixture by trying `K`; the periodic corner is 2). Sheaf reproduces both for n = 128 and cutoff 0 and 1.
+- Zero-padded: depth `floor(log2 n)`, `N` the sum of the coefficient counts (n = 128, DB2: depth 7, N = 140; cutoff 50 gave
+  `K = 70`, cutoff 100 gave 140), but n = 100 zero-padded at 50 zeroed exactly the 51 finest coefficients, not
+  `floor(0.5 * 112)`, and periodic n = 100 (odd length 25 at level 2) has no exact fit yet. Open.
+
+### 19.6 Continuous Wavelet (`cwt`)
+
+`cwt ix1:=<signal column> ix2:=<scale column> type:=<0 Morlet, 1 DGauss, 2 MexHat> param:=<wave number> upf:=<0|1> pf:=<new>
+rcoef:=<range> mcoef:=<matrix> plot:=<0|1>`. Defaults: Morlet, wave number 5 (the combo offers 5, 6, 7, 8, 9, 10, 15, 20 and is
+editable; 3 was refused, 5 and 8 work), `upf` 0, `plot` 1. Output `rcoef` defaults to a **new sheet `CWTResults1` in the input's
+book: one row per signal sample, one column per scale in the order of the scale column, real numbers, no X column**; the first column
+is named `Coefficient`, the next ones `A`, `B`, ... (long names empty), the comment of every column is `cwt of A, B` (the signal's
+and the scale column's names). A script call made no graph and no matrix (`plot:=1` and `mcoef:=<new>` did nothing), and
+`pf:=<new>` with `upf:=1` wrote no column; with `upf:=1` the coefficients are the same.
+
+**What the numbers are** (formula found and verified against 43 Origin runs (fixture keys `cwt` and `cwt_more` of `t96-origin.json`, test
+`crates/calc/tests/origin_cwt.rs`, agreement 1e-14). The runs: unit impulses at several rows and amplitudes, a generic signal of 65 and 64
+samples, signals of 1, 2, 3, 17, 30, 31 samples, Morlet wave numbers 5 to 20, DGauss orders 1 to 8, MexHat, scales 1 to 12.3.
+
+- Origin's coefficients are computed the way the classic discrete CWT on a sampled, integrated wavelet is: the mother wavelet `psi`
+  is sampled at `N = 1024` points `x_i = -R + i step`, `step = 2R / (N - 1)`, with `R = 8` for Morlet and MexHat and `R = 5` for DGauss,
+  and `ip[i] = step * sum_{k <= i} psi(x_k)` (running sum times the step).
+- A scale `a` is **cut to its integer part** (scale 1.5 gives exactly the column of scale 1, with `sqrt(1)`; 2.9 gives 2, 12.3 gives 12).
+  Any scale below 1 refuses the whole run (0.5, 0.9 and 0.99999 each did; the output sheet is not made).
+- The filter has `floor(2R a) + 1` taps `f[i] = ip[floor(i / (a step))]`, `i = 0 .. 2R a`, applied reversed. The coefficients are
+  `-sqrt(a)` times the first difference of `conv(signal, f)`, keeping the middle `n` values (the first `floor((taps - 2) / 2)` of the
+  difference skipped). The first difference of an integrated wavelet is why every impulse response is centred half a sample after the
+  impulse (the earlier measurement). Shift invariance, linearity, zero padding at the ends and signals shorter than the filter all follow.
+- Morlet: `psi = exp(-x^2/2) cos(w x)` with `w` the wave number cut to an integer. Origin allows 5 to 20 (1 to 4 and 21, 25, 50, 100 refused;
+  non-integer values such as 5.5, 6.5, 19.9 are accepted and give the column of 5, 6, 19).
+- MexHat: `psi = 2 / (sqrt(3) pi^(1/4)) (1 - x^2) exp(-x^2/2)`; the parameter is not used.
+- DGauss of order `m` (the `param`, cut to an integer, 1 to 8; 0 and 9 to 12 refused, 8.5 gives 8, 1.5 gives 1):
+  `psi = sigma_m H_m(x) exp(-x^2) / sqrt(sqrt(pi/2) (2m-1)!!)`, `H_m` the physicists' Hermite polynomial, `sigma_m = -1` for `m` = 1, 2 (mod 4)
+  and `+1` for `m` = 3, 0 (mod 4), i.e. the `m`-th derivative of `exp(-x^2)` scaled to unit L2 norm with a sign that follows that pattern
+  (all eight orders checked).
+- `upf:=1` gives exactly the same coefficients (CM against CMP, difference 0); it only adds the pseudo-frequency output, which a script
+  call does not write, so it is not measured. The earlier note that the coefficients differ was wrong.
+- Columns come in the order of the scale column; the sheet has `n` rows and one column per scale, no X column.
+
+Sheaf: `sheaf_calc::cwt::cwt`, `Tool::ContinuousWavelet`, `sheaf analyze cwt --with <scale column> --wavelet morlet|dgauss|mexhat --param N`.
+Differences kept: the short names are A, B, ... (Origin's first column is named `Coefficient`), the coefficient matrix, the image
+plot and the pseudo-frequency are not made, and the scale column must be a Y column of the project.
+
+### 19.7 The windows
+
+Titles `Decompose: dwt`, `Reconstruction: idwt`, `Denoise: wtdenoise`, `Smooth: wtsmooth`, `Continuous Wavelet: cwt`: plain
+X-Function windows (a Dialog Theme row on Denoise and Smooth, a one-line Description, the fields, OK and Cancel, a status line
+under the fields: `Please select a data range for input.` on Decompose and Reconstruction, `Please select an XYRange of input
+data` on Denoise and Smooth, `You must have numeric data to run this analysis` on Continuous Wavelet). Fields, in order:
+
+| Window | Fields (default) |
+|---|---|
+| Decompose | Recalculate (Manual); Input (range); Wavelet Type && Order (Haar, 21 entries); Extension Mode (Periodic, Zero-padded); Approx Coefficient (`<new>`); Detail Coefficient (`<new>`) |
+| Reconstruction | Recalculate; Approximation Coefficients; Detail Coefficients; Wavelet Type (Haar); Boundary (Periodic, Zero-padded); Output (`<new>`) |
+| Denoise | Recalculate; Input; Wavelet Type (Haar); Extension Mode (Periodic); Output (`(<new>,<new>)`); Threshold Type (custom, sqtwolog); Thresholding Level (1 to 7, 1); Threshold of every Level (%) (50, slider 0 to 100); a preview pane on the right with Auto Preview and Preview buttons |
+| Smooth | Recalculate; Input; Wavelet Type; Extension Mode; Output (`(<new>,<new>)`); Cutoff (%) (20, slider 0 to 100); the same preview pane |
+| Continuous Wavelet | Recalculate; Discrete Signal; Scale; Wavelet Type (Morlet, DGauss, MexHat); Wave Number (5, editable list); Use Pseudo-Frequency (unchecked); Coefficient (checked, `[<input>]<new>!1`); Coefficient Matrix (unchecked) |
+
+The Decompose label reads `Wavelet Type && Order` (two ampersands, as in the file). The menu itself was not opened; the item order
+is the inventory's (greyed-items.md).
+
+### 19.8 Not measured
+
+The comment spelling for Haar in Decompose, what `Recalculate` does for these five, the preview pane's drawing, the Results Log
+lines, missing values in the input (a blank cell in Denoise: the call succeeded, the output was not read), the menu itself, the
+image plot and the coefficient matrix of `cwt` (no script route; the window's "Coefficient Matrix" check and the plot made after
+OK), the pseudo-frequency output, `mdwt`, `dwt2`, `idwt2`, missing values in the `cwt` signal, several signal columns in one `cwt` call, and the open
+rules of 19.4 (boundary samples, `sqtwolog` threshold) and 19.5 (non-power-of-two lengths, `K` at cutoff 0 and 1).
+
 ## Files
+
+`tools/iir-fir-ref.py` makes the scipy numbers of section 17 (not Origin).
 
 Reference scripts (all in `tools/origin-ref/`): `curvemath-suite1..3` (run with
 `run-labtalk-lines.ps1`, they print the result sheet), `integ-suite1..6`, `diff-suite1`, `smooth-suite1`,

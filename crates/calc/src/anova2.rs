@@ -87,7 +87,7 @@ fn dot(a: &[f64], b: &[f64]) -> f64 {
 
 /// Residual sum of squares and rank of the least-squares fit of `y` on the columns `cols`
 /// (Gram-Schmidt with a second pass; columns that depend on earlier ones add nothing to the rank).
-fn fit(cols: &[Vec<f64>], y: &[f64]) -> (f64, usize) {
+pub(crate) fn fit(cols: &[Vec<f64>], y: &[f64]) -> (f64, usize) {
     let mut basis: Vec<Vec<f64>> = Vec::new();
     for c in cols {
         let mut v = c.clone();
@@ -117,7 +117,7 @@ fn fit(cols: &[Vec<f64>], y: &[f64]) -> (f64, usize) {
 
 /// Sum-to-zero columns of a factor with `levels` levels: level `l` of the first `levels - 1` gets 1, the last
 /// level gets -1, the others 0.
-fn effect_columns(factor: &[usize], levels: usize) -> Vec<Vec<f64>> {
+pub(crate) fn effect_columns(factor: &[usize], levels: usize) -> Vec<Vec<f64>> {
     (0..levels - 1)
         .map(|l| {
             factor
@@ -136,7 +136,7 @@ fn effect_columns(factor: &[usize], levels: usize) -> Vec<Vec<f64>> {
         .collect()
 }
 
-fn f_test(ss: f64, df: f64, mse: f64, dfe: f64) -> (f64, f64) {
+pub(crate) fn f_test(ss: f64, df: f64, mse: f64, dfe: f64) -> (f64, f64) {
     if df <= 0.0 || dfe <= 0.0 || mse.is_nan() {
         return (f64::NAN, f64::NAN);
     }

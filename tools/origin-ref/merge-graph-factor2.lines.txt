@@ -1,0 +1,224 @@
+newbook;
+string bk$ = %H;
+col(1) = data(1,10);
+col(2) = col(1)^2;
+wks.addcol(); col(3) = col(1)*3;
+wks.addcol(); col(4) = 100-col(1)^2;
+?wks.ncols
+?col(2)[3]
+plotxy iy:=[Book1]1!(1,2) plot:=200 ogl:=[<new name:=GA>];
+$page.name$
+?layer.nplots
+win -a Book1;
+plotxy iy:=[Book1]1!(1,3) plot:=200 ogl:=[<new name:=GB>];
+$page.name$
+win -a Book1;
+plotxy iy:=[Book1]1!(1,4) plot:=200 ogl:=[<new name:=GC>];
+$page.name$
+type -a "CASE 3x1m30";
+merge_graph option:=project row:=3 col:=1 leftmg:=30 rightmg:=30;
+$page.name$
+?page.nlayers
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+layer -s 4;
+?layer.left
+?layer.top
+?layer.nplots
+layer -s 1;
+string gl$ = "";
+doc -e G { gl$ = gl$ + "%B:" + $(%B.text$) + "|"; }
+$gl$
+win -cd %H;
+type -a "CASE 1x2m40";
+merge_graph option:=project row:=1 col:=2 topmg:=40 bottommg:=40;
+$page.name$
+?page.nlayers
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+layer -s 4;
+?layer.left
+?layer.top
+?layer.nplots
+layer -s 1;
+string gl$ = "";
+doc -e G { gl$ = gl$ + "%B:" + $(%B.text$) + "|"; }
+$gl$
+win -cd %H;
+type -a "CASE 2x2w50h35";
+merge_graph option:=project row:=2 col:=2 xgap:=0 leftmg:=0 rightmg:=0;
+$page.name$
+?page.nlayers
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+layer -s 4;
+?layer.left
+?layer.top
+?layer.nplots
+layer -s 1;
+string gl$ = "";
+doc -e G { gl$ = gl$ + "%B:" + $(%B.text$) + "|"; }
+$gl$
+win -cd %H;
+type -a "CASE 2x2g0";
+merge_graph option:=project row:=2 col:=2 xgap:=0 ygap:=0;
+$page.name$
+?page.nlayers
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+layer -s 4;
+?layer.left
+?layer.top
+?layer.nplots
+layer -s 1;
+string gl$ = "";
+doc -e G { gl$ = gl$ + "%B:" + $(%B.text$) + "|"; }
+$gl$
+win -cd %H;
+type -a "CASE 3x1aspect";
+merge_graph option:=project row:=3 col:=1 aspectratio:=1 ygap:=0 topmg:=0 bottommg:=0;
+$page.name$
+?page.nlayers
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+layer -s 4;
+?layer.left
+?layer.top
+?layer.nplots
+layer -s 1;
+string gl$ = "";
+doc -e G { gl$ = gl$ + "%B:" + $(%B.text$) + "|"; }
+$gl$
+win -cd %H;
+type -a "CASE 3x1fixed2";
+merge_graph option:=project row:=3 col:=1 scalemode:=fixed fixfactor:=2;
+$page.name$
+?page.nlayers
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+layer -s 4;
+?layer.left
+?layer.top
+?layer.nplots
+layer -s 1;
+string gl$ = "";
+doc -e G { gl$ = gl$ + "%B:" + $(%B.text$) + "|"; }
+$gl$
+win -cd %H;
+type -a "CASE nogroup";
+merge_graph option:=project row:=2 col:=2 groupgraph:=0;
+$page.name$
+?page.nlayers
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+layer -s 4;
+?layer.left
+?layer.top
+?layer.nplots
+layer -s 1;
+string gl$ = "";
+doc -e G { gl$ = gl$ + "%B:" + $(%B.text$) + "|"; }
+$gl$
+win -cd %H;
+type -a "CASE newlayer";
+merge_graph option:=project row:=2 col:=2 newlayer:=1;
+$page.name$
+?page.nlayers
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+layer -s 4;
+?layer.left
+?layer.top
+?layer.nplots
+layer -s 1;
+string gl$ = "";
+doc -e G { gl$ = gl$ + "%B:" + $(%B.text$) + "|"; }
+$gl$
+win -cd %H;
+type -a "CASE label";
+merge_graph option:=project row:=2 col:=2 labeltext:=capitalA;
+$page.name$
+?page.nlayers
+layer -s 1;
+?layer.left
+?layer.top
+?layer.width
+?layer.height
+?layer.factor
+layer -s 2;
+?layer.left
+?layer.top
+?layer.factor
+layer -s 4;
+?layer.left
+?layer.top
+?layer.nplots
+layer -s 1;
+string gl$ = "";
+doc -e G { gl$ = gl$ + "%B:" + $(%B.text$) + "|"; }
+$gl$
+win -cd %H;

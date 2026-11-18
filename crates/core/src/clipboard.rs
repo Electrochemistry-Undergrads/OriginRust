@@ -4,9 +4,10 @@
 //! comma-separated text into a sheet at a cell, adding rows and columns as needed. All of them
 //! are plain functions on the model; the application wraps each call in one undo step.
 //!
-//! What a copied number looks like follows Origin's two commands: Copy writes what the cells
-//! show (the column's number format), Copy full precision writes the shortest text that reads
-//! back as exactly the same number. A missing value is an empty field in both. Date and time
+//! Copy can write the column's display format or lossless text that reads back as exactly the
+//! same number. The latter is Sheaf's internal transport; Origin's external full-precision text
+//! uses 15 significant digits (workbook-model spec 13.4a). Missing numeric cells use `--`, while
+//! empty text stays empty, as measured in Origin 2016. Date and time
 //! columns always write the text they show, because their raw numbers mean nothing outside the
 //! program.
 
@@ -26,6 +27,26 @@ pub struct CopyOptions {
     pub full_precision: bool,
     /// Add the label rows (Long Name, Units, Comments, F(x)=, user parameters) above the values.
     pub label_rows: bool,
+    /// Which rows are written: the values (with the label rows when `label_rows`), or one of the
+    /// Edit > Copy variants of whole columns (T88).
+    pub part: CopyPart,
+}
+
+/// What Edit > Copy writes of the selected columns, as Origin 2016 puts it on the clipboard
+/// (measured 2026-11-16; workbook-model.md 13.4c).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+pub enum CopyPart {
+    /// The values (Copy, Copy full precision, Copy including label rows).
+    #[default]
+    Values,
+    /// Copy (formula): the F(x)= row alone.
+    Formula,
+    /// Copy (label rows): Long Name, Units, Comments, F(x)= and the user parameter rows.
+    LabelRows,
+    /// Copy (formula and label rows): F(x)= first, then Long Name, Units, Comments and parameters.
+    FormulaAndLabels,
+    /// Copy All: F(x)=, the label rows and the values.
+    All,
 }
 
 /// What a paste did, for the status line.
@@ -49,19 +70,22 @@ fn full_text(x: f64) -> String {
 }
 
 /// The text of one cell as Copy writes it.
-fn copy_cell(column: &Column, row: usize, full_precision: bool) -> String {
+fn copy_cell(column: &Column, row: usize, full_precision: bool, external: bool) -> String {
+    let precise = |x| {
+        if external { crate::format::format_full_precision(x) } else { full_text(x) }
+    };
     match &column.data {
         ColumnData::Numeric(v) => match v.get(row) {
-            Some(x) if x.is_nan() => String::new(),
-            Some(x) if full_precision && !column.format.is_date_time() && x.is_finite() => full_text(*x),
+            Some(x) if x.is_nan() => "--".into(),
+            Some(x) if full_precision && !column.format.is_date_time() && x.is_finite() => precise(*x),
             Some(_) => column.shown_text(row),
             None => String::new(),
         },
         ColumnData::Text(v) => v.get(row).cloned().unwrap_or_default(),
         ColumnData::Mixed { numbers, .. } => match (column.data.text_cell(row), numbers.get(row)) {
             (Some(t), _) => t.to_string(),
-            (None, Some(x)) if x.is_nan() => String::new(),
-            (None, Some(x)) if full_precision && !column.format.is_date_time() && x.is_finite() => full_text(*x),
+            (None, Some(x)) if x.is_nan() => "--".into(),
+            (None, Some(x)) if full_precision && !column.format.is_date_time() && x.is_finite() => precise(*x),
             (None, Some(_)) => column.shown_text(row),
             (None, None) => String::new(),
         },
@@ -78,27 +102,87 @@ impl Worksheet {
     /// The cells of the columns at these positions (in this order), rows `rows`, as text with a
     /// tab between the cells of a row and a line break after every row.
     pub fn copy_text(&self, columns: &[usize], rows: Range<usize>, options: CopyOptions) -> String {
+        self.copy_text_transport(columns, rows, options, false)
+    }
+
+    /// Text for external applications: displayed digits or Origin's 15 significant digits,
+    /// with CRLF separators and no terminal newline. The private internal copy stays lossless.
+    pub fn copy_external_text(&self, columns: &[usize], rows: Range<usize>, options: CopyOptions) -> String {
+        self.copy_text_transport(columns, rows, options, true)
+    }
+
+    fn copy_text_transport(
+        &self,
+        columns: &[usize],
+        rows: Range<usize>,
+        options: CopyOptions,
+        external: bool,
+    ) -> String {
         let cols: Vec<&Column> = columns.iter().filter_map(|i| self.columns.get(*i)).collect();
         let mut out = String::new();
-        let mut line = |cells: Vec<String>| {
-            out.push_str(&cells.into_iter().map(quote_field).collect::<Vec<_>>().join("\t"));
-            out.push('\n');
-        };
-        if options.label_rows {
-            line(cols.iter().map(|c| c.long_name.clone()).collect());
-            line(cols.iter().map(|c| c.units.clone()).collect());
-            line(cols.iter().map(|c| c.comments.clone()).collect());
-            if cols.iter().any(|c| c.formula.is_some()) {
-                line(cols.iter().map(|c| c.formula.clone().unwrap_or_default()).collect());
+        let mut first = true;
+        let mut line = |cells: Vec<String>, data: bool| {
+            if external && !first {
+                out.push_str("\r\n");
             }
-            for name in self.parameter_names() {
-                if cols.iter().any(|c| c.params.contains_key(&name)) {
-                    line(cols.iter().map(|c| c.params.get(&name).cloned().unwrap_or_default()).collect());
+            first = false;
+            let empty_row = data && !external && options.full_precision && cells.len() == 1 && cells[0].is_empty();
+            out.push_str(
+                &cells
+                    .into_iter()
+                    .map(|text| if empty_row { "\"\"".into() } else { quote_field(text) })
+                    .collect::<Vec<_>>()
+                    .join("\t"),
+            );
+            if !external {
+                out.push('\n');
+            }
+        };
+        let formula = || cols.iter().map(|c| c.formula.clone().unwrap_or_default()).collect::<Vec<_>>();
+        let names = self.parameter_names();
+        let params = |line: &mut dyn FnMut(Vec<String>, bool)| {
+            for name in &names {
+                if cols.iter().any(|c| c.params.contains_key(name)) {
+                    line(cols.iter().map(|c| c.params.get(name).cloned().unwrap_or_default()).collect(), false);
                 }
             }
-        }
-        for row in rows {
-            line(cols.iter().map(|c| copy_cell(c, row, options.full_precision)).collect());
+        };
+        let lnc = |line: &mut dyn FnMut(Vec<String>, bool)| {
+            line(cols.iter().map(|c| c.long_name.clone()).collect(), false);
+            line(cols.iter().map(|c| c.units.clone()).collect(), false);
+            line(cols.iter().map(|c| c.comments.clone()).collect(), false);
+        };
+        // Origin 2016 keeps the F(x) row even when every formula is empty.
+        let values = match options.part {
+            CopyPart::Values => {
+                if options.label_rows {
+                    lnc(&mut line);
+                    line(formula(), false);
+                    params(&mut line);
+                }
+                true
+            }
+            CopyPart::Formula => {
+                line(formula(), false);
+                false
+            }
+            CopyPart::LabelRows => {
+                lnc(&mut line);
+                line(formula(), false);
+                params(&mut line);
+                false
+            }
+            CopyPart::FormulaAndLabels | CopyPart::All => {
+                line(formula(), false);
+                lnc(&mut line);
+                params(&mut line);
+                options.part == CopyPart::All
+            }
+        };
+        if values {
+            for row in rows {
+                line(cols.iter().map(|c| copy_cell(c, row, options.full_precision, external)).collect(), true);
+            }
         }
         out
     }
@@ -188,6 +272,12 @@ fn parse_number(text: &str) -> Option<f64> {
 fn is_missing(text: &str) -> bool {
     let t = text.trim();
     t.is_empty() || t == "--"
+}
+
+/// Rows become columns and columns rows; short rows give empty cells.
+pub fn transpose_table(table: Vec<Vec<String>>) -> Vec<Vec<String>> {
+    let width = table.iter().map(Vec::len).max().unwrap_or(0);
+    (0..width).map(|j| table.iter().map(|r| r.get(j).cloned().unwrap_or_default()).collect()).collect()
 }
 
 /// Splits pasted text into rows and fields. Tabs outside quoted fields take precedence over
@@ -311,7 +401,30 @@ impl Project {
         row: usize,
         text: &str,
     ) -> Result<PasteReport, ProjectError> {
-        let table = parse_table(text);
+        self.paste_table(book, sheet, col, row, parse_table(text))
+    }
+
+    /// Edit > Paste Transpose (T86): pastes as [`Project::paste_text`] does, with the rows of the
+    /// text as columns and its columns as rows. Short rows of the text give empty cells.
+    pub fn paste_text_transposed(
+        &mut self,
+        book: WindowId,
+        sheet: usize,
+        col: usize,
+        row: usize,
+        text: &str,
+    ) -> Result<PasteReport, ProjectError> {
+        self.paste_table(book, sheet, col, row, transpose_table(parse_table(text)))
+    }
+
+    fn paste_table(
+        &mut self,
+        book: WindowId,
+        sheet: usize,
+        col: usize,
+        row: usize,
+        table: Vec<Vec<String>>,
+    ) -> Result<PasteReport, ProjectError> {
         let mut report =
             PasteReport { rows: table.len(), columns: table.first().map_or(0, Vec::len), ..Default::default() };
         if table.is_empty() {
@@ -412,7 +525,7 @@ mod tests {
     }
 
     #[test]
-    fn copy_writes_displayed_text_or_every_digit_and_leaves_missing_cells_empty() {
+    fn copy_writes_displayed_text_or_every_digit_and_marks_missing_numbers() {
         let (mut p, b) = book_with(vec![
             ColumnData::numeric(vec![0.1 + 0.2, f64::NAN, 2.0]),
             ColumnData::text(vec!["a b".into(), "x\ty".into()]),
@@ -420,9 +533,34 @@ mod tests {
         p.workbook_mut(b).unwrap().sheets[0].columns[0].format = crate::format::NumberFormat::Decimal(2);
         let ws = &p.workbook(b).unwrap().sheets[0];
         let shown = ws.copy_text(&[0, 1], 0..3, CopyOptions::default());
-        assert_eq!(shown, "0.30\ta b\n\t\"x\ty\"\n2.00\t\n");
+        assert_eq!(shown, "0.30\ta b\n--\t\"x\ty\"\n2.00\t\n");
         let full = ws.copy_text(&[0], 0..3, CopyOptions { full_precision: true, ..Default::default() });
-        assert_eq!(full, "0.30000000000000004\n\n2\n", "a whole number has no useless .0");
+        assert_eq!(full, "0.30000000000000004\n--\n2\n", "a whole number has no useless .0");
+    }
+
+    #[test]
+    fn the_copy_variants_write_what_origin_puts_on_the_clipboard() {
+        // Origin 2016, columns B (Bee, mA, note; 10 20 30) and C (Double, F(x) col(B)*2; 20 40 60)
+        // selected (re-workspace/scratch/t88, local only).
+        let (mut p, b) =
+            book_with(vec![ColumnData::numeric(vec![10.0, 20.0, 30.0]), ColumnData::numeric(vec![20.0, 40.0, 60.0])]);
+        {
+            let ws = &mut p.workbook_mut(b).unwrap().sheets[0];
+            ws.columns[0].long_name = "Bee".into();
+            ws.columns[0].units = "mA".into();
+            ws.columns[0].comments = "note".into();
+            ws.columns[1].long_name = "Double".into();
+            ws.columns[1].formula = Some("col(B)*2".into());
+        }
+        let ws = &p.workbook(b).unwrap().sheets[0];
+        let copy = |part| ws.copy_external_text(&[0, 1], 0..3, CopyOptions { part, ..Default::default() });
+        assert_eq!(copy(CopyPart::Formula), "\tcol(B)*2");
+        assert_eq!(copy(CopyPart::LabelRows), "Bee\tDouble\r\nmA\t\r\nnote\t\r\n\tcol(B)*2");
+        assert_eq!(copy(CopyPart::FormulaAndLabels), "\tcol(B)*2\r\nBee\tDouble\r\nmA\t\r\nnote\t");
+        assert_eq!(copy(CopyPart::All), "\tcol(B)*2\r\nBee\tDouble\r\nmA\t\r\nnote\t\r\n10\t20\r\n20\t40\r\n30\t60");
+        // Copy including label rows (Ctrl+Shift+C), unchanged: the label rows, F(x)= and the values.
+        let with = ws.copy_external_text(&[0, 1], 0..3, CopyOptions { label_rows: true, ..Default::default() });
+        assert_eq!(with, "Bee\tDouble\r\nmA\t\r\nnote\t\r\n\tcol(B)*2\r\n10\t20\r\n20\t40\r\n30\t60");
     }
 
     #[test]
@@ -436,7 +574,7 @@ mod tests {
         }
         let ws = &p.workbook(b).unwrap().sheets[0];
         let text = ws.copy_text(&[0, 1], 0..1, CopyOptions { label_rows: true, ..Default::default() });
-        assert_eq!(text, "Potential\t\nV\t\n\t\n\t0.1\n1\t2\n");
+        assert_eq!(text, "Potential\t\nV\t\n\t\n\t\n\t0.1\n1\t2\n");
     }
 
     #[test]
@@ -516,7 +654,14 @@ mod tests {
         );
         assert_eq!(
             parse_table(&text),
-            vec![vec!["Current, corrected"], vec!["mA\tcm-2"], vec!["run 1\nrun 2"], vec!["\"A\""], vec!["1"]]
+            vec![
+                vec!["Current, corrected"],
+                vec!["mA\tcm-2"],
+                vec!["run 1\nrun 2"],
+                vec![""],
+                vec!["\"A\""],
+                vec!["1"]
+            ]
         );
     }
 

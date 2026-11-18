@@ -341,6 +341,14 @@ impl Writer {
         if !layer.display.is_default() {
             notes.push("the Display tab of a layer (data hidden, not clipped, grid on top) was not written".into());
         }
+        if layer.display.hidden {
+            notes.push("hidden layer visibility was not written; Origin shows the layer (the .opj.sheaf companion keeps it hidden)".into());
+        }
+        if layer.xy_ratio.is_some() {
+            notes.push(
+                "a layer's axis lengths linked to the scale with an X:Y ratio (Size/Speed) were not written".into(),
+            );
+        }
         let mut plots: Vec<Resolved> = Vec::new();
         for (plot_index, p) in layer.plots.iter().enumerate() {
             if !p.visible {
@@ -373,14 +381,31 @@ impl Writer {
             if p.rows.is_some() {
                 notes.push("a plot's row range was not written; all rows of its columns are plotted".into());
             }
-            if p.symbol.every != 1 && p.kind.has_symbols() {
-                notes.push("symbols on every n-th point only were not written; every point has a symbol".into());
+            if p.symbol.every > 1 && p.kind.supports_skip_points() {
+                notes.push("Skip Points (symbols, drop lines, error bars and labels on every n-th point only) was not written; the companion file keeps it".into());
             }
-            if !p.decor.is_default() {
+            if p.line.sort_x
+                && matches!(p.kind, sheaf_core::graph::PlotKind::Line | sheaf_core::graph::PlotKind::LineSymbol)
+            {
+                notes.push("Sort X for line connection (the line joins the points in increasing X order) was not written; the companion file keeps it".into());
+            }
+            if !p.decor.trendlines.is_empty() {
+                notes.push("trendlines (fitted curves and moving averages with their equation and R-squared labels) were not written; the companion file keeps them".into());
+            }
+            let mut other_decor = p.decor.clone();
+            other_decor.trendlines.clear();
+            if !other_decor.is_default() {
                 notes.push(
-                    "drop lines, fills under curves (with their pattern, transparency and gradient) and data labels were not written (the companion file keeps them)"
+                    "drop lines, symbol/line gaps and draw order, fills under curves (with their pattern, transparency and gradient) and data labels were not written (the companion file keeps them)"
                         .into(),
                 );
+            }
+            let drops = &p.decor.drop;
+            if [&drops.horizontal, &drops.vertical].iter().any(|d| {
+                d.on && (d.target != sheaf_core::graph::DropTarget::Axis
+                    || d.color_mode != sheaf_core::graph::DropColorMode::Auto)
+            }) {
+                notes.push("drop lines to the next data plot and the Y Value: Plus-Minus colour (lollipop plots) were not written; the companion file keeps them".into());
             }
             let place = places[plot_index];
             plots.push(Resolved { plot: p, y, x, err, place });
@@ -582,6 +607,13 @@ impl Writer {
             let h = LINE_HEIGHT * size * lines.len().max(1) as f64;
             let margin = 0.4 * size;
             let (cx, cy) = match layer.legend.position {
+                LegendPosition::Automatic => {
+                    // The rectangle is positioned for Origin; the companion retains the dynamic
+                    // anchor for later Sheaf text/column changes rather than importing a centre.
+                    notes.push("the automatic legend anchor was written as a fixed position".into());
+                    let (x, y) = Legend::AUTOMATIC_ANCHOR;
+                    (frame_pt.left + x * frame_pt.width + w / 2.0, frame_pt.top + y * frame_pt.height + h / 2.0)
+                }
                 LegendPosition::TopRight => {
                     (frame_pt.left + frame_pt.width - w / 2.0 - margin, frame_pt.top + h / 2.0 + margin)
                 }
@@ -592,6 +624,10 @@ impl Writer {
                 ),
                 LegendPosition::BottomLeft => {
                     (frame_pt.left + w / 2.0 + margin, frame_pt.top + frame_pt.height - h / 2.0 - margin)
+                }
+                LegendPosition::ManualTopLeft { x, y } => {
+                    notes.push("the top-left legend anchor was written as a fixed position".into());
+                    (frame_pt.left + x * frame_pt.width + w / 2.0, frame_pt.top + y * frame_pt.height + h / 2.0)
                 }
                 LegendPosition::Manual { x, y } => {
                     (frame_pt.left + x * frame_pt.width, frame_pt.top + y * frame_pt.height)
@@ -688,6 +724,51 @@ impl Writer {
         if has(&|k| k == PlotKind::Histogram || k == PlotKind::Box || is_pie(k)) {
             notes.push("histogram, box and pie plots were written as plain columns of their data".into());
         }
+        if has(&|k| k.is_violin()) {
+            notes.push("violin plots were written as plain columns of their data".into());
+        }
+        if has(&|k| k == PlotKind::ColumnScatter) {
+            notes.push(
+                "column scatter plots were written as scatter plots of their data; the column positions and the jitter were not written"
+                    .into(),
+            );
+        }
+        if has(&|k| k.is_hexbin()) {
+            notes.push("hexbin plots were written as scatter plots of their data".into());
+        }
+        if has(&|k| k.is_parallel()) {
+            notes.push(
+                "parallel plots and parallel indexes were written as line plots of their columns; their axes, colours and groups were not written"
+                    .into(),
+            );
+        }
+        if has(&|k| k == PlotKind::Treemap) {
+            notes.push(
+                "treemaps were written as column plots of their value column; their categories and nested rectangles were not written"
+                    .into(),
+            );
+        }
+        if has(&|k| k == PlotKind::Sunburst) {
+            notes.push(
+                "sunburst plots were written as column plots of their value column; their categories and rings were not written"
+                    .into(),
+            );
+        }
+        if plots.iter().any(|r| r.plot.indexed.is_some()) {
+            notes.push(
+                "grouped columns and grouped box charts of indexed data were written as plain plots of their data column; the group columns and the grouping were not written"
+                    .into(),
+            );
+        }
+        if plots.iter().any(|r| r.plot.stat.is_some()) {
+            notes.push(
+                "interval plots and Pareto charts were written as plain plots of their data column; the means, error bars, counts and cumulative percent were not written"
+                    .into(),
+            );
+        }
+        if has(&|k| k.is_ridgeline()) {
+            notes.push("ridgeline charts were written as plain columns of their data".into());
+        }
         if plots
             .iter()
             .any(|r| (r.plot.size_from.is_some() && layer.coords.ternary().is_none()) || r.plot.color_from.is_some())
@@ -706,6 +787,18 @@ impl Writer {
         if has(&|k| k.is_horizontal()) {
             notes.push("horizontal bars were written as vertical columns".into());
         }
+        if has(&|k| k == PlotKind::WindRose) {
+            notes.push("wind roses were written as scatter plots of their columns".into());
+        }
+        if has(&|k| k.is_marginal()) {
+            notes.push("marginal histograms and box charts were written as scatter plots of their values".into());
+        }
+        if has(&|k| k.is_stock()) {
+            notes.push("stock plots were written as scatter plots of their first price column".into());
+        }
+        if has(&|k| k.is_vector()) {
+            notes.push("vector plots were written as scatter plots of their start points".into());
+        }
         if has(&|k| matches!(k, PlotKind::FloatingColumn | PlotKind::FloatingBar)) {
             notes.push("floating columns were written as columns from zero".into());
         }
@@ -715,8 +808,17 @@ impl Writer {
         for (r, place) in plots.iter().zip(places.iter().copied()) {
             let p = r.plot;
             let kind = match p.kind {
-                PlotKind::Line => CurveKind::Line,
-                PlotKind::Scatter => CurveKind::Scatter,
+                PlotKind::Line | PlotKind::Parallel | PlotKind::ParallelIndex => CurveKind::Line,
+                PlotKind::Scatter | PlotKind::Hexbin | PlotKind::ColumnScatter => CurveKind::Scatter,
+                // The arrows are not written; the start points keep the data (named in the save warning).
+                PlotKind::VectorXyam | PlotKind::VectorXyxy => CurveKind::Scatter,
+                PlotKind::HighLowClose | PlotKind::Candlestick | PlotKind::OhlcBar => CurveKind::Scatter,
+                PlotKind::MarginalHistogram | PlotKind::MarginalBox => CurveKind::Scatter,
+                PlotKind::QcMeans => CurveKind::Scatter,
+                PlotKind::QcRanges => CurveKind::Column,
+                PlotKind::WindRose => CurveKind::Scatter,
+                PlotKind::Kde2d => CurveKind::Scatter,
+                PlotKind::Piper => CurveKind::Scatter,
                 PlotKind::LineSymbol => CurveKind::LineSymbol,
                 PlotKind::Column
                 | PlotKind::StackedColumn
@@ -728,6 +830,15 @@ impl Writer {
                 | PlotKind::FloatingBar
                 | PlotKind::Histogram
                 | PlotKind::Box
+                | PlotKind::Violin
+                | PlotKind::ViolinBox
+                | PlotKind::ViolinPoint
+                | PlotKind::ViolinQuartile
+                | PlotKind::ViolinStick
+                | PlotKind::HalfViolin
+                | PlotKind::Ridgeline
+                | PlotKind::Treemap
+                | PlotKind::Sunburst
                 | PlotKind::Pie
                 | PlotKind::Pie3D
                 | PlotKind::PieBw => CurveKind::Column,
@@ -740,6 +851,12 @@ impl Writer {
                 Connect::Bezier => 15,
                 Connect::StepHorizontal => 11,
                 Connect::StepVertical => 12,
+                Connect::Segment2 => 2,
+                Connect::Segment3 => 3,
+                Connect::Segments(_) => {
+                    notes.push("a k-point segment line connection (k > 3) was written as a straight line".into());
+                    1
+                }
             };
             let line_color = if kind == CurveKind::Scatter { p.symbol.color } else { p.line.color };
             let spec = CurveSpec {
@@ -1026,6 +1143,46 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
             names.join(", ")
         ));
     }
+    if !layer.slopes.is_empty() {
+        notes.push(format!(
+            "layer {} has {} slope annotation{} that an Origin project file written here cannot hold; {} not written (the .opj.sheaf companion keeps {})",
+            index + 1,
+            layer.slopes.len(),
+            if layer.slopes.len() == 1 { "" } else { "s" },
+            if layer.slopes.len() == 1 { "it was" } else { "they were" },
+            if layer.slopes.len() == 1 { "it" } else { "them" },
+        ));
+    }
+    if !layer.straight_lines.is_empty() {
+        let n = layer.straight_lines.len();
+        notes.push(format!(
+            "layer {} has {n} straight line{} that an Origin project file written here cannot hold; {} not written (the .opj.sheaf companion keeps {})",
+            index + 1,
+            if n == 1 { "" } else { "s" },
+            if n == 1 { "it was" } else { "they were" },
+            if n == 1 { "it" } else { "them" },
+        ));
+    }
+    if !layer.scales.is_empty() {
+        let n = layer.scales.len();
+        notes.push(format!(
+            "layer {} has {n} colour or bubble scale{} that an Origin project file written here cannot hold; {} not written (the .opj.sheaf companion keeps {})",
+            index + 1,
+            if n == 1 { "" } else { "s" },
+            if n == 1 { "it was" } else { "they were" },
+            if n == 1 { "it" } else { "them" },
+        ));
+    }
+    if !layer.brackets.is_empty() {
+        let n = layer.brackets.len();
+        notes.push(format!(
+            "layer {} has {n} significance bracket{} that an Origin project file written here cannot hold; {} not written (the .opj.sheaf companion keeps {})",
+            index + 1,
+            if n == 1 { "" } else { "s" },
+            if n == 1 { "it was" } else { "they were" },
+            if n == 1 { "it" } else { "them" },
+        ));
+    }
     if matches!(roles[index], Role::RightY { x_straight: false, .. }) {
         notes.push(
             "the X scale of a right Y layer that is not linked to its parent's was written with the link only".into(),
@@ -1036,6 +1193,21 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
             "a waterfall was written as curves moved by X and Y offsets on axes that cover them (Origin's own waterfall plot, with its Z axis, was not written)"
                 .into(),
         );
+    }
+    if layer.waterfall_color != sheaf_core::graph::WaterfallColor::None {
+        notes.push(
+            "the waterfall colour mapping (Y or Z) was not written: the curves went out in their plot colours without a colour scale (the .opj.sheaf companion keeps the mapping)"
+                .into(),
+        );
+    }
+    if layer.stack == Stack::Cumulative {
+        notes.push(
+            "a cumulative stack was written as plain curves (the cumulative offset mode is not written; the .opj.sheaf companion keeps it)"
+                .into(),
+        );
+    }
+    if layer.plot_offsets.iter().any(|o| o.x_multiplier != 1.0 || o.y_multiplier != 1.0) {
+        notes.push("plot X/Y multipliers were not written; Origin shows the source values with offsets only (the .opj.sheaf companion keeps the multipliers)".into());
     }
     if layer.coords.polar().is_some_and(|p| p.radar) {
         notes.push(
@@ -1059,6 +1231,18 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
     if layer.bars.width_pct.is_some() {
         notes.push("the width of column bars (in percent) was not written; the bars reopen with the layer's gap setting instead".into());
     }
+    if layer.y_axis.offset_pct != 0.0 {
+        notes.push(
+            "the position of a Y axis away from the frame (3Ys/4Ys, Multiple Y Axes) was not written; the axis              reopens at the frame (the .opj.sheaf companion keeps the offset)"
+                .into(),
+        );
+    }
+    if layer.x_axis.offset_pct != 0.0 {
+        notes.push(
+            "the position of an X axis away from the frame (Scatter Central) was not written; the axis reopens at the frame (the .opj.sheaf companion keeps the offset)"
+                .into(),
+        );
+    }
     if layer.legend.visible && layer.legend.columns > 1 {
         notes.push("the number of columns of the legend was not written; its entries stand in one column".into());
     }
@@ -1075,8 +1259,14 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         if axis.reverse {
             notes.push("a reversed axis was written in the normal direction".into());
         }
-        if axis.axis_break.is_some() {
+        if !axis.axis_breaks.is_empty() {
             notes.push("an axis break was not written".into());
+        }
+        if !axis.rug.is_default() || !axis.rug_opposite.is_default() {
+            notes.push("an axis rug (Rug tab, Scatter + Rug) was not written; the companion file keeps it".into());
+        }
+        if axis.additional_line.is_some() {
+            notes.push("an additional line at a value of the other axis (Grids tab) was not written".into());
         }
         if !axis.special_ticks.is_empty() || !axis.tick_label_formula.is_empty() || axis.minor_tick_labels {
             notes.push("special ticks, tick label formulas and minor tick labels were not written".into());
@@ -1233,13 +1423,12 @@ fn axis_spec(axis: &Axis, notes: &mut Vec<String>) -> AxisBlocks {
     if (axis.tick_label_divisor - 1.0).abs() > f64::EPSILON {
         notes.push("a tick label divisor was not written".into());
     }
-    // Origin's own lengths are 9 and 4.5 pt (graphing spec 2.2). The owner's figure style keeps 5 and
-    // 2.5 pt, which was never written either and stays unnamed so that saving it needs no companion.
-    let lengths = |major: f64, minor: f64| {
-        (axis.major_tick_len_pt - major).abs() <= 1e-9 && (axis.minor_tick_len_pt - minor).abs() <= 1e-9
-    };
-    if !lengths(9.0, 4.5) && !lengths(5.0, 2.5) {
-        notes.push("tick lengths were not written; Origin's default lengths are used".into());
+    // The major tick length is written (opj-format.md 10.3); the minor one only as Origin's Auto,
+    // half the major, since where Origin keeps a chosen minor length was not found.
+    if (axis.minor_tick_len_pt - axis.major_tick_len_pt / 2.0).abs() > 1e-9 {
+        notes.push(
+            "the minor tick length was not written; Origin draws minor ticks half as long as the major ones".into(),
+        );
     }
     if axis.opposite_ticks && !axis.show_opposite {
         notes.push("ticks on the opposite side without its axis line were not written".into());
@@ -1260,6 +1449,8 @@ fn axis_spec(axis: &Axis, notes: &mut Vec<String>) -> AxisBlocks {
         second_edge: axis.side == AxisSide::Opposite,
         line_width: (axis.line_width_pt * 500.0).round().clamp(1.0, f64::from(u16::MAX)) as u16,
         major_ticks: tick_code(axis.major_tick),
+        // tenths of a point; Origin's dialog offers 3 to 15 pt, the block holds a u16
+        major_len: (axis.major_tick_len_pt * 10.0).round().clamp(1.0, 1000.0) as u16,
         minor_ticks: tick_code(axis.minor_tick),
         far_line: axis.show_opposite && axis.side == AxisSide::Normal,
         grid_major: axis.major_grid.is_some(),

@@ -9,7 +9,7 @@ use sheaf_core::template::Template;
 use sheaf_core::{Color, ColumnData, Designation};
 
 /// A project with one workbook: X "Potential (V)" and the given Y columns.
-fn project(template: Template, x: Vec<f64>, ys: Vec<Vec<f64>>) -> (Project, WindowId) {
+pub(crate) fn project(template: Template, x: Vec<f64>, ys: Vec<Vec<f64>>) -> (Project, WindowId) {
     let mut p = Project::new();
     let book = p.add_workbook("data");
     let xc = p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
@@ -30,19 +30,19 @@ fn project(template: Template, x: Vec<f64>, ys: Vec<Vec<f64>>) -> (Project, Wind
     (p, g)
 }
 
-fn svg_of(p: &Project, g: WindowId) -> String {
+pub(crate) fn svg_of(p: &Project, g: WindowId) -> String {
     render_svg_with(p, g, &FixedMetrics).unwrap()
 }
 
-fn doc(svg: &str) -> roxmltree::Document<'_> {
+pub(crate) fn doc(svg: &str) -> roxmltree::Document<'_> {
     roxmltree::Document::parse(svg).expect("well-formed XML")
 }
 
-fn with_class<'a, 'b>(d: &'b roxmltree::Document<'a>, class: &str) -> Vec<roxmltree::Node<'a, 'b>> {
+pub(crate) fn with_class<'a, 'b>(d: &'b roxmltree::Document<'a>, class: &str) -> Vec<roxmltree::Node<'a, 'b>> {
     d.descendants().filter(|n| n.attribute("class") == Some(class)).collect()
 }
 
-fn texts(d: &roxmltree::Document) -> Vec<String> {
+pub(crate) fn texts(d: &roxmltree::Document) -> Vec<String> {
     d.descendants().filter(|n| n.has_tag_name("text")).map(|n| n.text().unwrap_or("").to_string()).collect()
 }
 
@@ -322,7 +322,7 @@ fn symbols_every_nth_and_error_bars() {
     // Error bars first, then symbols (no line for a scatter plot).
     assert_eq!(plots.len(), 2);
     let bars = plots[0].attribute("d").unwrap();
-    assert_eq!(bars.matches('M').count(), 3 * 10);
+    assert_eq!(bars.matches('M').count(), 3 * 4, "errors follow the same selected points as symbols");
     assert_eq!(plots[0].attribute("stroke-width"), Some("0.5")); // half the line width, at least 0.5 pt
     let symbols = plots[1].attribute("d").unwrap();
     assert_eq!(symbols.matches('Z').count(), 4, "points 0, 3, 6, 9");
@@ -521,6 +521,21 @@ fn raster_has_a_red_line_on_white() {
 }
 
 #[test]
+fn draft_raster_has_the_same_size_and_no_smoothed_edges() {
+    let (p, g) = red_line_project();
+    let scene = graph_scene(&p, g).unwrap();
+    let normal = render_scene_raster(&scene, 1.0).unwrap();
+    let draft = render_scene_raster_draft(&scene, 1.0).unwrap();
+    assert_eq!((normal.width, normal.height), (draft.width, draft.height));
+    let grey = |r: &Raster| {
+        r.rgba.chunks(4).filter(|px| px[0] == px[1] && px[1] == px[2] && px[0] > 20 && px[0] < 235).count()
+    };
+    // Only the text loses its smoothing (the lines and symbols stay as they were), so the grey edge pixels drop a lot but not to none.
+    assert!(grey(&normal) > 100, "normal has {} grey pixels", grey(&normal));
+    assert!(grey(&draft) < grey(&normal) * 7 / 10, "normal {} draft {}", grey(&normal), grey(&draft));
+}
+
+#[test]
 fn data_on_top_changes_overlap_pixels_and_picking_without_changing_clipping() {
     let (mut p, g) = red_line_project();
     let layer = &mut p.graph_mut(g).unwrap().layers[0];
@@ -695,7 +710,7 @@ fn thinning_leaves_sparse_and_reversing_curves_alone() {
 // ----- golden images -------------------------------------------------------
 
 /// The X values and the curve shape used by the golden images.
-fn golden_data() -> (Vec<f64>, impl Fn(f64) -> Vec<f64>) {
+pub(crate) fn golden_data() -> (Vec<f64>, impl Fn(f64) -> Vec<f64>) {
     let n = 41;
     let x: Vec<f64> = (0..n).map(|i| -0.2 + 0.03 * i as f64).collect();
     let xs = x.clone();
@@ -722,7 +737,7 @@ fn check_golden(name: &str, template: Template) {
     compare_golden(name, &svg_of(&p, g));
 }
 
-fn compare_golden(name: &str, svg: &str) {
+pub(crate) fn compare_golden(name: &str, svg: &str) {
     let path =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("golden").join(format!("{name}.svg"));
     if std::env::var_os("SHEAF_UPDATE_GOLDEN").is_some() {
@@ -3878,8 +3893,13 @@ fn drop_lines_run_to_the_left_and_bottom_edges_in_the_plot_colour_by_default() {
     let plot = &mut p.graph_mut(g).unwrap().layers[0].plots[0];
     plot.decor.drop.vertical.on = true;
     let blue = Color { r: 0, g: 0, b: 255, a: 255 };
-    plot.decor.drop.horizontal =
-        DropLine { on: true, dash: sheaf_core::graph::Dash::Dash, width_pt: 2.0, color: Some(blue) };
+    plot.decor.drop.horizontal = DropLine {
+        on: true,
+        dash: sheaf_core::graph::Dash::Dash,
+        width_pt: 2.0,
+        color: Some(blue),
+        ..DropLine::default()
+    };
     let line_color = plot.line.color;
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
     let f = scene.layers[0].clip;
@@ -3956,4 +3976,737 @@ fn the_display_tab_hides_data_unclips_it_and_puts_the_grid_on_top() {
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
     assert!(scene.layers[0].plots.is_empty());
     assert!(!scene.layers[0].overlay.is_empty());
+}
+
+#[test]
+fn print_svg_uses_saved_asymmetric_margins_and_rejects_invalid_setup() {
+    use sheaf_core::page_setup::{Margins, Orientation, Paper};
+    let (mut p, g) = project(Template::Line, vec![0., 1.], vec![vec![0., 1.]]);
+    let page = &mut p.graph_mut(g).unwrap().page;
+    page.width_pt = 400.;
+    page.height_pt = 200.;
+    p.page_setup.paper = Paper::Letter;
+    p.page_setup.orientation = Orientation::Auto;
+    p.page_setup.margins = Margins { left: 36., right: 72., top: 100., bottom: 80. };
+    // 792x612 landscape; available 684x432; the 2:1 graph is 684x342 at (36,145).
+    let svg = print_svg(&p, g).unwrap();
+    let d = doc(&svg);
+    let root = d.root_element();
+    assert_eq!(root.attribute("viewBox"), Some("0 0 792 612"));
+    let placement = root.descendants().find(|n| n.has_tag_name("g") && n.attribute("transform").is_some()).unwrap();
+    assert_eq!(placement.attribute("transform"), Some("translate(36 145) scale(1.71)"));
+    assert!(render_print_pdf(&p, g).unwrap().starts_with(b"%PDF-"));
+    for m in [Margins::all(-1.), Margins::all(f64::NAN), Margins::all(f64::INFINITY), Margins::all(1000.)] {
+        p.page_setup.margins = m;
+        assert!(render_print_pdf(&p, g).is_err(), "{m:?}");
+    }
+    p.page_setup.margins = Margins::all(72.);
+    for width in [0., -1., f64::NAN, f64::INFINITY] {
+        p.graph_mut(g).unwrap().page.width_pt = width;
+        assert!(render_print_pdf(&p, g).is_err(), "{width}");
+    }
+}
+
+#[test]
+fn additional_lines_cross_the_layer_at_a_value_of_the_other_axis() {
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    let y: Vec<f64> = x.iter().map(|v| (v - 5.0) / 5.0).collect();
+    let (mut p, g) = project(Template::Line, x, vec![y]);
+    let lines = |p: &Project| -> Vec<String> {
+        let scene = layout::build_scene(p, g, &FixedMetrics).unwrap();
+        scene.layers[0]
+            .overlay
+            .iter()
+            .filter_map(|it| match it {
+                scene::Item::Path { d, stroke: Some(_), fill: None } => Some(d.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    let before = lines(&p);
+    {
+        let layer = &mut p.graph_mut(g).unwrap().layers[0];
+        layer.x_axis.additional_line = Some(0.0); // Origin's "Y = 0" on the X axis page
+        layer.y_axis.additional_line = Some(5.0); // "X = 5" on the Y axis page
+    }
+    let geom = fixed_geometry(&p, g)[0].clone();
+    let f = geom.frame;
+    let after = lines(&p);
+    assert_eq!(after.len(), before.len() + 2, "two more lines");
+    // "M x0 y0 L x1 y1" as four numbers
+    let nums = |d: &str| -> Vec<f64> {
+        d.split(['M', 'L', ' ']).filter(|t| !t.is_empty()).filter_map(|t| t.parse().ok()).collect()
+    };
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-2;
+    let y0 = f.y + (1.0 - geom.y.to_unit(0.0)) * f.h;
+    let x5 = f.x + geom.x.to_unit(5.0) * f.w;
+    let is = |d: &String, want: [f64; 4]| {
+        let n = nums(d);
+        n.len() == 4 && n.iter().zip(want).all(|(&a, b)| near(a, b))
+    };
+    let horizontal = after.iter().any(|d| is(d, [f.x, y0, f.x + f.w, y0]));
+    let vertical = after.iter().any(|d| is(d, [x5, f.y, x5, f.y + f.h]));
+    assert!(horizontal && vertical, "{after:?}\ny0 {y0} x5 {x5} frame {f:?}");
+    // a value outside the axis range draws nothing
+    p.graph_mut(g).unwrap().layers[0].x_axis.additional_line = Some(99.0);
+    assert_eq!(lines(&p).len(), before.len() + 1);
+}
+
+#[test]
+fn hidden_masked_points_leave_a_gap_and_nothing_red() {
+    let x: Vec<f64> = (1..=5).map(f64::from).collect();
+    let (mut p, g) = project(Template::LineSymbol, x, vec![vec![2.0, 4.0, 9.0, 3.0, 5.0]]);
+    let y = p.graph(g).unwrap().layers[0].plots[0].y;
+    p.column_mut(y).unwrap().mask.insert(2);
+    let red = |p: &Project| -> usize {
+        let scene = layout::build_scene(p, g, &FixedMetrics).unwrap();
+        scene.layers[0]
+            .plots
+            .iter()
+            .filter(|it| matches!(it, scene::Item::Path { stroke: Some(s), .. } if s.color == Color::RED))
+            .count()
+    };
+    assert!(red(&p) > 0, "the masked point is drawn red");
+    p.hide_masked = true;
+    assert_eq!(red(&p), 0, "hidden: nothing red");
+    // the curve breaks at the hidden point: 2 line segments instead of 4
+    let segments = |p: &Project| -> usize {
+        let scene = layout::build_scene(p, g, &FixedMetrics).unwrap();
+        scene.layers[0]
+            .plots
+            .iter()
+            .filter_map(|it| match it {
+                scene::Item::Path { d, stroke: Some(_), fill: None } => Some(d.matches('L').count()),
+                _ => None,
+            })
+            .sum()
+    };
+    assert_eq!(segments(&p), 2);
+    p.column_mut(y).unwrap().mask.clear();
+    assert_eq!(segments(&p), 4);
+}
+
+/// Origin 2016 kept the width of a linked layer and let its height follow the axis ranges (graphing 18.7a):
+/// doubling the X span halved the height, doubling the Y span as well restored it, and a short X span made
+/// the layer taller than the page. Breaks switch the link off.
+#[test]
+fn a_linked_x_y_ratio_keeps_the_width_and_lets_the_height_follow_the_ranges() {
+    use sheaf_core::graph::AxisBreak;
+    let (mut p, g) = line_project_for_ratio();
+    let set = |p: &mut Project, x: (f64, f64), y: (f64, f64)| {
+        let l = &mut p.graph_mut(g).unwrap().layers[0];
+        (l.x_axis.min, l.x_axis.max, l.y_axis.min, l.y_axis.max) = (Some(x.0), Some(x.1), Some(y.0), Some(y.1));
+    };
+    let frame = |p: &Project| crate::layout_geometry(p, g).unwrap()[0].frame;
+    let unlinked = frame(&p);
+    p.graph_mut(g).unwrap().layers[0].xy_ratio = Some(1.0);
+    set(&mut p, (-2.5, 12.5), (-2.0, 22.0));
+    let f = frame(&p);
+    assert!((f.w - unlinked.w).abs() < 1e-9 && (f.x - unlinked.x).abs() < 1e-9 && (f.y - unlinked.y).abs() < 1e-9);
+    assert!((f.h / f.w - 24.0 / 15.0).abs() < 1e-9, "one unit of X as long as one of Y: {f:?}");
+    set(&mut p, (-2.5, 27.5), (-2.0, 22.0));
+    assert!((frame(&p).h - f.h / 2.0).abs() < 1e-9, "twice the X span, half the height");
+    set(&mut p, (-2.5, 27.5), (-2.0, 46.0));
+    assert!((frame(&p).h - f.h).abs() < 1e-9);
+    set(&mut p, (-2.5, 7.5), (-2.0, 46.0));
+    let tall = frame(&p);
+    assert!(tall.y + tall.h > p.graph(g).unwrap().page.height_pt, "past the page, as in Origin: {tall:?}");
+    // Ratio 2: one unit of X twice as long as one of Y.
+    p.graph_mut(g).unwrap().layers[0].xy_ratio = Some(2.0);
+    set(&mut p, (-2.5, 12.5), (-2.0, 22.0));
+    assert!((frame(&p).h - f.h / 2.0).abs() < 1e-9);
+    // An axis break turns the link off.
+    p.graph_mut(g).unwrap().layers[0].y_axis.axis_breaks = vec![AxisBreak::new(5.0, 10.0)];
+    let broken = frame(&p);
+    assert!((broken.h / broken.w - 24.0 / 15.0).abs() > 1e-3, "{broken:?}");
+}
+
+fn line_project_for_ratio() -> (Project, sheaf_core::WindowId) {
+    use sheaf_core::{ColumnData, Designation};
+    let mut p = Project::new();
+    let book = p.add_workbook("R");
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    let y: Vec<f64> = x.iter().map(|v| 2.0 * v).collect();
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+    let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y)).unwrap();
+    let g = p.plot_columns(sheaf_core::template::Template::Line, &[yc]).unwrap();
+    (p, g)
+}
+
+/// Origin 2016 draws the segment from a point below a Y break to one above it but leaves it out over the
+/// band of the break's gap (graphing spec 3.6); the page's "Connect line across Axis Break" draws it through.
+#[test]
+fn a_line_across_an_axis_break_is_cut_over_the_gap_unless_the_page_connects_it() {
+    use sheaf_core::graph::AxisBreak;
+    use sheaf_core::{ColumnData, Designation};
+    let mut p = Project::new();
+    let book = p.add_workbook("B");
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    let y = vec![0.0, 0.5, 1.0, 1.5, 2.0, 18.0, 18.5, 19.0, 19.5, 20.0, 20.5];
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+    let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y)).unwrap();
+    let g = p.plot_columns(Template::Line, &[yc]).unwrap();
+    {
+        let l = &mut p.graph_mut(g).unwrap().layers[0];
+        (l.y_axis.min, l.y_axis.max) = (Some(-2.0), Some(23.0));
+        l.y_axis.axis_breaks = vec![AxisBreak::new(4.25, 16.75)];
+    }
+    let geom = &crate::layout_geometry(&p, g).unwrap()[0];
+    let (lo, hi) = geom.y.gaps[0].span(false);
+    let band = (geom.frame.y + (1.0 - hi) * geom.frame.h, geom.frame.y + (1.0 - lo) * geom.frame.h);
+    let line_paths = |p: &Project| -> Vec<Vec<Vec<(f64, f64)>>> {
+        let scene = crate::graph_scene(p, g).unwrap();
+        scene.layers[0]
+            .plots
+            .iter()
+            .filter_map(|it| match it {
+                crate::scene::Item::Path { d, fill: None, stroke: Some(_) } if d.matches('L').count() >= 9 => {
+                    Some(crate::hit::subpaths(d))
+                }
+                _ => None,
+            })
+            .collect()
+    };
+    let cut = line_paths(&p);
+    assert_eq!(cut.len(), 1, "one line path");
+    assert_eq!(cut[0].len(), 2, "the line is in two pieces: {:?}", cut[0]);
+    let all: Vec<(f64, f64)> = cut[0].iter().flatten().copied().collect();
+    assert!(all.iter().all(|q| q.1 <= band.0 + 2e-3 || q.1 >= band.1 - 2e-3), "nothing inside the band");
+    // The pieces end exactly on the edges of the band.
+    assert!(all.iter().any(|q| (q.1 - band.0).abs() < 2e-3) && all.iter().any(|q| (q.1 - band.1).abs() < 2e-3));
+    p.graph_mut(g).unwrap().page.style.connect_across_breaks = true;
+    let whole = line_paths(&p);
+    assert_eq!(whole[0].len(), 1, "drawn through");
+}
+
+/// Origin 2016 breaks a line at rows with a missing value; the page's "Connect line across Missing Data"
+/// joins the points on either side instead (graphing spec 18.7b: rows 4, 5 and 8 of 0..10 missing gave three
+/// pieces, and one line with the switch). A value that cannot be placed (here -1 on a log axis) still breaks it.
+#[test]
+fn connect_line_across_missing_data_joins_the_points_around_missing_rows() {
+    use sheaf_core::{ColumnData, Designation};
+    let mut p = Project::new();
+    let book = p.add_workbook("M");
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    let mut y: Vec<f64> = x.iter().map(|v| 2.0 * v + 1.0).collect();
+    for r in [4, 5, 8] {
+        y[r] = f64::NAN;
+    }
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+    let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y)).unwrap();
+    let g = p.plot_columns(Template::Line, &[yc]).unwrap();
+    let pieces = |p: &Project| -> usize {
+        let scene = crate::graph_scene(p, g).unwrap();
+        scene.layers[0]
+            .plots
+            .iter()
+            .filter_map(|it| match it {
+                crate::scene::Item::Path { d, fill: None, stroke: Some(_) } => Some(crate::hit::subpaths(d).len()),
+                _ => None,
+            })
+            .sum()
+    };
+    assert_eq!(pieces(&p), 3, "broken at the missing rows by default");
+    p.graph_mut(g).unwrap().page.style.connect_across_missing = true;
+    assert_eq!(pieces(&p), 1, "joined across them");
+    // A value that a log axis cannot place still breaks the line.
+    {
+        let pr = &mut p;
+        let col = pr.column_mut(yc).unwrap();
+        if let ColumnData::Numeric(v) = &mut col.data {
+            std::sync::Arc::make_mut(v)[2] = -1.0;
+        }
+        pr.graph_mut(g).unwrap().layers[0].y_axis.scale = sheaf_core::graph::ScaleKind::Log10;
+    }
+    assert_eq!(pieces(&p), 2);
+}
+
+/// Fit Page to Layers counts the layer frames and the legend, not the tick labels or titles (Origin
+/// 2016, graphing spec 15.7d).
+#[test]
+fn the_fit_page_content_box_is_the_frames_and_the_objects_not_the_tick_labels() {
+    let (mut p, g) = line_project_for_ratio();
+    let graph = p.graph(g).unwrap().clone();
+    let f = graph.layers[0].frame;
+    let (pw, ph) = (graph.page.width_pt, graph.page.height_pt);
+    let (x, y, w, h) = crate::fit_content_bounds(&p, g).unwrap().unwrap();
+    // the Y tick labels and title stand left of the frame and the X ones below it: not counted
+    assert!((x - f.left * pw).abs() < 1e-6, "{x} vs {}", f.left * pw);
+    assert!((y + h - (f.top + f.height) * ph).abs() < 1e-6);
+    assert!(w >= f.width * pw - 1e-6);
+    // without the legend the box is the frame exactly
+    p.graph_mut(g).unwrap().layers[0].legend.visible = false;
+    let (x2, y2, w2, h2) = crate::fit_content_bounds(&p, g).unwrap().unwrap();
+    let frame = (f.left * pw, f.top * ph, f.width * pw, f.height * ph);
+    for (a, b) in [(x2, frame.0), (y2, frame.1), (w2, frame.2), (h2, frame.3)] {
+        assert!((a - b).abs() < 1e-6, "{:?} vs {frame:?}", (x2, y2, w2, h2));
+    }
+}
+
+// ----- cumulative stacking (graphing spec 13.15) -----------------------------
+
+/// The drawn Y values of the visible plots of the first layer, one vector per plot.
+fn drawn_ys(p: &Project, g: WindowId) -> Vec<Vec<f64>> {
+    let layer = &p.graph(g).unwrap().layers[0];
+    data::collect(p, layer).plots.iter().map(|pd| (0..pd.y.len()).map(|i| pd.y_at(i)).collect()).collect()
+}
+
+const THREE: [Of; 3] = [&|x| x, &|x| 2.0 * x, &|x| 3.0 * x];
+
+#[test]
+fn cumulative_lines_add_the_plots_before_them_row_by_row() {
+    let (p, g) = stacked(Stack::Cumulative, &THREE);
+    let ys = drawn_ys(&p, g);
+    for (i, x) in x0_20().iter().enumerate() {
+        assert!(near(ys[0][i], *x) && near(ys[1][i], 3.0 * x) && near(ys[2][i], 6.0 * x), "row {i}: {ys:?}");
+    }
+    // Only the drawing changes: no place has an offset and the data are as they were.
+    assert_offsets(&p, g, &[0.0, 0.0, 0.0]);
+    let c = plot_column(&p, g, 2);
+    assert_eq!(p.numeric(c).unwrap()[20], 60.0);
+    // The automatic range covers the top curve: 0 to 120.
+    assert_eq!(y_range(&p, g), Some((0.0, 120.0)));
+}
+
+#[test]
+fn cumulative_hidden_plots_still_count_and_none_removes_the_sum() {
+    let (mut p, g) = stacked(Stack::Cumulative, &THREE);
+    p.graph_mut(g).unwrap().layers[0].plots[1].visible = false;
+    let ys = drawn_ys(&p, g);
+    assert_eq!(ys.len(), 2);
+    assert!(near(ys[1][20], 120.0), "the hidden curve keeps its share: {ys:?}");
+    p.graph_mut(g).unwrap().layers[0].stack = Stack::None;
+    assert!(near(drawn_ys(&p, g)[1][20], 60.0));
+}
+
+#[test]
+fn cumulative_rows_missing_in_a_previous_plot_add_nothing() {
+    let (mut p, g) = stacked(Stack::Cumulative, &THREE);
+    let (b, c) = (plot_column(&p, g, 1), plot_column(&p, g, 2));
+    let mut values = p.numeric(b).unwrap().to_vec();
+    values[5] = f64::NAN;
+    values.truncate(10);
+    set_values(&mut p, b, values);
+    let ys = drawn_ys(&p, g);
+    assert!(ys[1][5].is_nan(), "the missing value stays a gap");
+    assert!(near(ys[2][5], 3.0 * 5.0 + 5.0), "row 5 of the top curve: 15 + 5 (the missing 10 counts 0)");
+    assert!(near(ys[2][4], 12.0 + 8.0 + 4.0), "{:?}", ys[2]);
+    // Beyond the short plot's rows it adds nothing either: row 15 is 45 + 15.
+    assert!(near(ys[2][15], 45.0 + 15.0), "{:?}", ys[2]);
+    assert_eq!(p.numeric(c).unwrap().len(), 21);
+}
+
+#[test]
+fn cumulative_sums_by_row_index_even_when_the_x_values_differ() {
+    let (mut p, g) = stacked(Stack::Cumulative, &THREE);
+    let book = p.workbooks().next().unwrap().id;
+    let x2 =
+        p.add_column(book, 0, Designation::X, ColumnData::numeric((0..=20).map(|v| 100.0 + f64::from(v)).collect()));
+    let x2 = x2.unwrap();
+    p.graph_mut(g).unwrap().layers[0].plots[1].x = Some(x2);
+    let layer = &p.graph(g).unwrap().layers[0];
+    let d = data::collect(&p, layer);
+    // Row 3 of the second plot is drawn at its own X (103) and at Y 6 + 3.
+    assert!(near(d.plots[1].x_at(3), 103.0) && near(d.plots[1].y_at(3), 9.0));
+}
+
+#[test]
+fn cumulative_skips_filtered_rows_and_the_range_follows_what_is_shown() {
+    let (mut p, g) = stacked(Stack::Cumulative, &THREE);
+    let book = p.workbooks().next().unwrap().id;
+    let keep: Vec<bool> = (0..21).map(|r| r >= 10).collect();
+    p.workbook_mut(book).unwrap().sheets[0].filter =
+        Some(sheaf_core::rowfilter::RowFilter { condition: "x>=10".into(), enabled: true, keep });
+    let layer = &p.graph(g).unwrap().layers[0];
+    let add = sheaf_core::stack::cumulative_add(&p, layer);
+    assert_eq!(add[2].as_ref().unwrap()[3], 0.0, "filtered rows add nothing");
+    assert_eq!(add[2].as_ref().unwrap()[12], 12.0 + 24.0);
+    // Shown rows 10..=20: the lowest drawn Y is the bottom curve at X = 10 and the highest 120.
+    assert_eq!(y_range(&p, g), Some((10.0, 120.0)));
+}
+
+#[test]
+fn a_fitted_curve_of_a_cumulative_member_rides_on_the_sum_below_it() {
+    // Curves: A, B, the fit of B (a line through B), C.
+    let fs: [Of; 4] = [&|x| x, &|x| 2.0 * x, &|x| 2.0 * x, &|x| 3.0 * x];
+    let (mut p, g) = stacked(Stack::Cumulative, &fs);
+    let (b, fit) = (plot_column(&p, g, 1), plot_column(&p, g, 2));
+    p.graph_mut(g).unwrap().layers[0].plot_offset_mut(fit).follows = Some(b);
+    let ys = drawn_ys(&p, g);
+    // A is below B by A, so the fit is moved by A(x) = x too, and C stacks on A and B only.
+    assert!(near(ys[2][7], 14.0 + 7.0) && near(ys[1][7], 14.0 + 7.0), "{:?}", ys[2]);
+    assert!(near(ys[3][7], 21.0 + 7.0 + 14.0), "{:?}", ys[3]);
+}
+
+// ----- stacked histograms (graphing spec 13.16) -------------------------------
+
+/// Three numeric columns with different ranges in one sheet.
+fn stacked_hist_project() -> (Project, Vec<sheaf_core::ColumnId>) {
+    let mut p = Project::new();
+    let book = p.add_workbook("data");
+    let cols = [
+        (0..30).map(|i| 10.0 + f64::from(i % 10) * 1.5).collect::<Vec<f64>>(),
+        (0..24).map(|i| 20.0 + f64::from(i % 7) * 2.0).collect(),
+        (0..18).map(|i| 5.0 + f64::from(i * i % 13)).collect(),
+    ];
+    let ids = cols
+        .into_iter()
+        .map(|v| p.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap())
+        .collect::<Vec<_>>();
+    (p, ids)
+}
+
+#[test]
+fn stacked_histograms_make_one_panel_per_column_from_the_top_with_shared_bins_and_x() {
+    let (mut p, ys) = stacked_hist_project();
+    let g = p.plot_columns(Template::StackedHistograms, &ys).unwrap();
+    let graph = p.graph(g).unwrap();
+    assert_eq!(graph.layers.len(), 3);
+    // Top to bottom in selection order.
+    let tops: Vec<f64> = graph
+        .layers
+        .iter()
+        .map(|l| graph.page_frame(graph.layers.iter().position(|m| std::ptr::eq(m, l)).unwrap()).top)
+        .collect();
+    assert!(tops[0] < tops[1] && tops[1] < tops[2], "{tops:?}");
+    for (k, l) in graph.layers.iter().enumerate() {
+        assert_eq!(l.plots.len(), 1);
+        assert_eq!(l.plots[0].y, ys[k]);
+        assert_eq!(l.plots[0].kind, sheaf_core::graph::PlotKind::Histogram);
+        assert_eq!(l.plots[0].hist, graph.layers[0].plots[0].hist, "the same bins in every panel");
+    }
+    let hist = graph.layers[0].plots[0].hist;
+    assert!(hist.begin.is_some() && hist.end.is_some() && hist.bin_size.is_some());
+    // One shared X scale: the panels after the first are linked to it.
+    assert!(graph.layers[1..].iter().all(|l| l.link.is_some_and(|k| k.parent == 0)));
+    // The bins cover all three columns (5 to 28), and the counts of a panel add up to its rows.
+    assert!(hist.begin.unwrap() <= 5.0 && hist.end.unwrap() >= 29.0, "{hist:?}");
+    let data: Vec<_> = graph.layers.iter().map(|l| data::collect(&p, l).plots).collect();
+    let centres: Vec<Vec<f64>> = data.iter().map(|d| d[0].x.as_ref().unwrap().to_vec()).collect();
+    assert_eq!(centres[0], centres[1]);
+    assert_eq!(centres[1], centres[2]);
+    for (d, n) in data.iter().zip([30.0, 24.0, 18.0]) {
+        assert_eq!(d[0].y.iter().sum::<f64>(), n);
+    }
+    let geoms = fixed_geometry(&p, g);
+    assert!(geoms.iter().all(|m| (m.x.min, m.x.max) == (geoms[0].x.min, geoms[0].x.max)));
+    assert!(svg_of(&p, g).contains("<svg"));
+}
+
+#[test]
+fn stacked_histograms_leave_out_text_columns_and_refuse_data_without_numbers() {
+    let (mut p, ys) = stacked_hist_project();
+    let book = p.workbooks().next().unwrap().id;
+    let text = p.add_column(book, 0, Designation::Y, ColumnData::text(vec!["a".into(); 5])).unwrap();
+    let g = p.plot_columns(Template::StackedHistograms, &[ys[0], text, ys[2]]).unwrap();
+    assert_eq!(p.graph(g).unwrap().layers.len(), 2);
+    assert!(p.plot_columns(Template::StackedHistograms, &[text]).is_err());
+    let empty = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![f64::NAN; 4])).unwrap();
+    let err = p.plot_columns(Template::StackedHistograms, &[empty]).unwrap_err();
+    assert!(err.to_string().contains("numbers"), "{err}");
+    assert!(p.plot_columns(Template::StackedHistograms, &[]).is_err());
+}
+
+#[test]
+fn golden_stacked_histograms() {
+    let (x, curve) = golden_data();
+    let mut p = Project::new();
+    let book = p.add_workbook("data");
+    let _ = x;
+    let ids: Vec<_> = [30.0, 21.5, 12.25]
+        .iter()
+        .map(|a| p.add_column(book, 0, Designation::Y, ColumnData::numeric(curve(*a))).unwrap())
+        .collect();
+    let g = p.plot_columns(Template::StackedHistograms, &ids).unwrap();
+    compare_golden("stacked-histograms", &svg_of(&p, g));
+}
+
+#[test]
+fn golden_cumulative_lines() {
+    let (x, curve) = golden_data();
+    let (mut p, g) = project(Template::Line, x, vec![curve(30.0), curve(21.5), curve(12.25)]);
+    p.graph_mut(g).unwrap().layers[0].stack = Stack::Cumulative;
+    compare_golden("cumulative-lines", &svg_of(&p, g));
+}
+
+// ----- waterfall colour mapping (graphing spec 13.17) ---------------------------
+
+fn mapped_waterfall(mode: sheaf_core::graph::WaterfallColor) -> (Project, WindowId) {
+    let fs: [Of; 3] = [&|x| x, &|x| 2.0 * x, &|x| 4.0 * x];
+    let (mut p, g) = stacked(Stack::Waterfall { dx_percent: 5.0, dy_percent: 10.0 }, &fs);
+    p.graph_mut(g).unwrap().layers[0].waterfall_color = mode;
+    (p, g)
+}
+
+/// The stroke colours of the paths of the first layer's plots.
+fn plot_stroke_colors(p: &Project, g: WindowId) -> Vec<sheaf_core::Color> {
+    let scene = layout::build_scene(p, g, &FixedMetrics).unwrap();
+    let mut out = Vec::new();
+    for l in &scene.layers {
+        for item in &l.plots {
+            if let scene::Item::Path { stroke: Some(s), .. } = item {
+                out.push(s.color);
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn z_mapping_colours_each_curve_as_a_whole_by_its_z_and_draws_a_colour_scale() {
+    use sheaf_core::graph::WaterfallColor;
+    let (mut p, g) = mapped_waterfall(WaterfallColor::Z);
+    // Z from a numeric long name; the other curves use their place in the stack (1 and 3).
+    let c = plot_column(&p, g, 1);
+    p.column_mut(c).unwrap().long_name = "10".into();
+    let layer = &p.graph(g).unwrap().layers[0];
+    let d = data::collect(&p, layer);
+    let zs: Vec<f64> = d.plots.iter().map(|pd| pd.wf.unwrap().z).collect();
+    assert_eq!(zs, vec![1.0, 10.0, 3.0]);
+    assert_eq!((d.plots[0].wf.unwrap().lo, d.plots[0].wf.unwrap().hi), (1.0, 10.0));
+    let colors = plot_stroke_colors(&p, g);
+    let lowest = plots::map_color(0.0);
+    let top = plots::map_color(1.0);
+    assert!(colors.contains(&lowest) && colors.contains(&top), "{colors:?}");
+    let svg = svg_of(&p, g);
+    assert!(texts(&doc(&svg)).iter().any(|t| t == "Z"), "the scale is titled Z");
+    // Without mapping, no scale and the plot colours.
+    let (q, h) = mapped_waterfall(WaterfallColor::None);
+    assert!(!texts(&doc(&svg_of(&q, h))).iter().any(|t| t == "Z"));
+}
+
+#[test]
+fn y_mapping_colours_segments_by_the_mean_y_of_their_ends_over_one_scale() {
+    use sheaf_core::graph::WaterfallColor;
+    let (p, g) = mapped_waterfall(WaterfallColor::Y);
+    let layer = &p.graph(g).unwrap().layers[0];
+    let d = data::collect(&p, layer);
+    let wf = d.plots[0].wf.unwrap();
+    // Y runs from 0 to 80 over every curve.
+    assert_eq!((wf.lo, wf.hi), (0.0, 80.0));
+    assert!(near(wf.fraction(40.0), 0.5));
+    let colors = plot_stroke_colors(&p, g);
+    let distinct: std::collections::BTreeSet<_> = colors.iter().map(|c| (c.r, c.g, c.b)).collect();
+    assert!(distinct.len() > 10, "a gradient of many colours, got {}", distinct.len());
+    assert!(texts(&doc(&svg_of(&p, g))).iter().any(|t| t == "Y"));
+}
+
+// ----- waterfall Y mapping follows the plain line's geometry (graphing spec 13.17) -----------
+
+/// The stroked line pieces of the first layer, with pieces that continue each other (as the colour runs of a
+/// mapped line do) merged into one.
+fn merged_line_pieces(p: &Project, g: WindowId) -> Vec<Vec<(f64, f64)>> {
+    let scene = layout::build_scene(p, g, &FixedMetrics).unwrap();
+    let mut out: Vec<Vec<(f64, f64)>> = Vec::new();
+    for item in &scene.layers[0].plots {
+        let scene::Item::Path { d, fill: None, stroke: Some(_) } = item else { continue };
+        for sub in hit::subpaths(d) {
+            match out.last_mut() {
+                Some(last) if last.last() == sub.first() => last.extend(sub.into_iter().skip(1)),
+                _ => out.push(sub),
+            }
+        }
+    }
+    out
+}
+
+fn same_pieces(a: &[Vec<(f64, f64)>], b: &[Vec<(f64, f64)>]) {
+    assert_eq!(a.len(), b.len(), "piece count");
+    for (x, y) in a.iter().zip(b) {
+        assert_eq!(x.len(), y.len());
+        assert!(x.iter().zip(y).all(|(p, q)| (p.0 - q.0).abs() < 1e-6 && (p.1 - q.1).abs() < 1e-6), "{x:?} vs {y:?}");
+    }
+}
+
+/// The geometry of the Y mapped waterfall equals that of the uncoloured one after `setup`.
+fn y_mapped_geometry_matches_plain(setup: impl Fn(&mut Project, WindowId)) -> Vec<Vec<(f64, f64)>> {
+    use sheaf_core::graph::WaterfallColor;
+    let (mut p, g) = mapped_waterfall(WaterfallColor::None);
+    setup(&mut p, g);
+    let plain = merged_line_pieces(&p, g);
+    p.graph_mut(g).unwrap().layers[0].waterfall_color = WaterfallColor::Y;
+    let mapped = merged_line_pieces(&p, g);
+    same_pieces(&plain, &mapped);
+    let colors = plot_stroke_colors(&p, g);
+    assert!(
+        colors.iter().map(|c| (c.r, c.g, c.b)).collect::<std::collections::BTreeSet<_>>().len() > 3,
+        "still coloured"
+    );
+    mapped
+}
+
+#[test]
+fn y_mapping_keeps_the_step_connect_geometry() {
+    let pieces = y_mapped_geometry_matches_plain(|p, g| {
+        p.graph_mut(g).unwrap().layers[0].plots.iter_mut().for_each(|pl| pl.line.connect = Connect::StepHorizontal);
+    });
+    // Steps have twice the corners of a straight line.
+    assert!(pieces[0].len() > 30, "{}", pieces[0].len());
+}
+
+#[test]
+fn y_mapping_keeps_the_spline_connect_geometry() {
+    let straight = y_mapped_geometry_matches_plain(|_, _| {});
+    let spline = y_mapped_geometry_matches_plain(|p, g| {
+        p.graph_mut(g).unwrap().layers[0].plots.iter_mut().for_each(|pl| pl.line.connect = Connect::Spline);
+    });
+    assert!(spline[0].len() > straight[0].len(), "the spline is sampled finer");
+}
+
+#[test]
+fn y_mapping_honours_missing_data_and_connect_across_missing() {
+    use sheaf_core::graph::WaterfallColor;
+    let setup = |p: &mut Project, g: WindowId| {
+        let c = plot_column(p, g, 0);
+        let mut v = p.numeric(c).unwrap().to_vec();
+        v[5] = f64::NAN;
+        v[6] = f64::NAN;
+        set_values(p, c, v);
+    };
+    let broken = y_mapped_geometry_matches_plain(setup);
+    let pieces_of_first = |p: &Project, g| merged_line_pieces(p, g).len();
+    let (mut p, g) = mapped_waterfall(WaterfallColor::Y);
+    setup(&mut p, g);
+    let before = pieces_of_first(&p, g);
+    p.graph_mut(g).unwrap().page.style.connect_across_missing = true;
+    assert_eq!(before, broken.len());
+    assert_eq!(pieces_of_first(&p, g), before - 1, "the first curve is joined across the gap");
+    // And equal to the uncoloured line with the option on.
+    let mapped = merged_line_pieces(&p, g);
+    p.graph_mut(g).unwrap().layers[0].waterfall_color = WaterfallColor::None;
+    same_pieces(&merged_line_pieces(&p, g), &mapped);
+}
+
+#[test]
+fn y_mapping_cuts_lines_at_axis_breaks() {
+    use sheaf_core::graph::AxisBreak;
+    let without = y_mapped_geometry_matches_plain(|_, _| {}).len();
+    let cut = y_mapped_geometry_matches_plain(|p, g| {
+        let l = &mut p.graph_mut(g).unwrap().layers[0];
+        l.y_axis.axis_breaks = vec![AxisBreak::new(30.0, 60.0)];
+    });
+    assert!(cut.len() > without, "{} pieces after the break, {without} before", cut.len());
+}
+
+#[test]
+fn cumulative_skips_masked_rows_while_hide_masked_points_is_on() {
+    let (mut p, g) = stacked(Stack::Cumulative, &THREE);
+    let c = plot_column(&p, g, 0);
+    p.column_mut(c).unwrap().mask.insert(4);
+    // Masked points are drawn (red) by default and still add up.
+    assert!(near(drawn_ys(&p, g)[1][4], 12.0), "{:?}", drawn_ys(&p, g)[1]);
+    p.hide_masked = true;
+    let ys = drawn_ys(&p, g);
+    assert!(ys[0][4].is_nan(), "the masked point is not drawn");
+    assert!(near(ys[1][4], 8.0), "the plot above gets nothing from it: {}", ys[1][4]);
+    assert!(near(ys[2][4], 20.0) && near(ys[1][5], 15.0), "other rows are unchanged");
+}
+
+#[test]
+fn stacked_histogram_bins_ignore_masked_and_filtered_outliers() {
+    let (mut p, ys) = stacked_hist_project();
+    let book = p.workbooks().next().unwrap().id;
+    let set_last = |p: &mut Project, c, v: f64| {
+        let mut values = p.numeric(c).unwrap().to_vec();
+        *values.last_mut().unwrap() = v;
+        set_values(p, c, values);
+    };
+    let end_of = |p: &mut Project| {
+        let g = p.plot_columns(Template::StackedHistograms, &ys).unwrap();
+        p.graph(g).unwrap().layers[0].plots[0].hist.end.unwrap()
+    };
+    let normal = end_of(&mut p);
+    set_last(&mut p, ys[0], 1000.0);
+    set_last(&mut p, ys[1], 900.0);
+    assert!(end_of(&mut p) > 500.0, "shown outliers widen the bins");
+    // A filtered row (the sheet's rows pass `col(A) < 500`) and a masked one (with Hide Masked Points).
+    p.set_row_filter(book, 0, "col(A) < 500").unwrap();
+    p.column_mut(ys[1]).unwrap().mask.insert(23);
+    assert!(end_of(&mut p) > 500.0, "a masked point is shown by default");
+    p.hide_masked = true;
+    assert_eq!(end_of(&mut p), normal);
+}
+
+/// Origin's Column + Label writes each value centred above its own column, also when two columns share a
+/// category (graphing 18.12).
+#[test]
+fn column_labels_are_centred_on_their_own_bar_in_a_group() {
+    use sheaf_core::{ColumnData, Designation};
+    let mut p = Project::new();
+    let book = p.add_workbook("C");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+    let y1 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0, 5.0, 2.0])).unwrap();
+    let y2 = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0, 1.0, 4.0])).unwrap();
+    let g = p.plot_columns(Template::ColumnLabel, &[y1, y2]).unwrap();
+    let bars = bars_of(&p, g);
+    assert_eq!(bars.len(), 6);
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let labels: Vec<&scene::TextItem> = scene.layers[0]
+        .plots
+        .iter()
+        .filter_map(|it| match it {
+            scene::Item::Text(t) => Some(t),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(labels.len(), 6, "a value over every column");
+    for (rect, _, _) in &bars {
+        let centre = rect.x + rect.w / 2.0;
+        let over = labels.iter().filter(|t| (t.x - centre).abs() < 1e-6 && t.y < rect.y).count();
+        assert_eq!(over, 1, "one label centred over the bar at {centre}");
+    }
+}
+
+/// Origin's 2 and 3 Point Segment (line connection 2 and 3, measured 2026-11-15): the points are
+/// joined in pairs (threes) counted from the first point; a last lone point draws no line.
+#[test]
+fn segment_connections_join_points_in_pairs_and_threes() {
+    let (mut p, g) =
+        project(Template::Line, (0..9).map(f64::from).collect(), vec![(0..9).map(|i| f64::from(i * i)).collect()]);
+    let set = |p: &mut Project, c| p.graph_mut(g).unwrap().layers[0].plots[0].line.connect = c;
+    let path_of = |p: &Project| {
+        let d = svg_of(p, g);
+        paths_in(with_class(&doc(&d), "plots")[0])[0].attribute("d").unwrap().to_string()
+    };
+    set(&mut p, Connect::Segment2);
+    let two = path_of(&p);
+    // 9 points: pairs 1-2, 3-4, 5-6, 7-8 and the lone 9th: 4 moves, 4 lines (the 9th starts a move only)
+    assert_eq!((two.matches('M').count(), two.matches('L').count()), (5, 4), "{two}");
+    set(&mut p, Connect::Segment3);
+    let three = path_of(&p);
+    assert_eq!((three.matches('M').count(), three.matches('L').count()), (3, 6), "{three}");
+    set(&mut p, Connect::Segments(4));
+    let four = path_of(&p);
+    // 9 points: groups of 4, 4 and 1: 3 moves, 3 + 3 lines
+    assert_eq!((four.matches('M').count(), four.matches('L').count()), (3, 6), "{four}");
+    let g2 = p.plot_columns(Template::Segment2, &[p.graph(g).unwrap().layers[0].plots[0].y]).unwrap();
+    assert_eq!(p.graph(g2).unwrap().layers[0].plots[0].line.connect, Connect::Segment2);
+    assert_eq!(Template::from_name("segment3"), Some(Template::Segment3));
+}
+
+#[test]
+fn a_new_graph_without_any_plot_lays_out_and_renders() {
+    let mut p = Project::new();
+    let g = p.add_graph(Template::default());
+    layout_geometry(&p, g).unwrap();
+    layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    svg_of(&p, g);
+    assert!(!crate::render_png(&p, g, 96.0).unwrap().is_empty());
+}
+
+/// A missing value inside a group of a segment connection breaks only that group: the next group
+/// still starts at its own first row (a Line Series row never joins the next row).
+#[test]
+fn a_missing_value_does_not_shift_the_segment_groups() {
+    // rows: (1,1) (2,NaN) (3,100) | (1,2) (2,200) (3,300)
+    let (mut p, g) = project(
+        Template::Line,
+        vec![1.0, 2.0, 3.0, 1.0, 2.0, 3.0],
+        vec![vec![1.0, f64::NAN, 100.0, 2.0, 200.0, 300.0]],
+    );
+    p.graph_mut(g).unwrap().layers[0].plots[0].line.connect = Connect::Segment3;
+    let d = svg_of(&p, g);
+    let path = paths_in(with_class(&doc(&d), "plots")[0])[0].attribute("d").unwrap().to_string();
+    // group 1: lone (1,1), then (3,100) alone after the gap: two moves, no line; group 2: one move, two lines
+    assert_eq!((path.matches('M').count(), path.matches('L').count()), (3, 2), "{path}");
 }

@@ -10,46 +10,168 @@
 //! [`render_pdf`], [`export_file`] and, for an interactive view,
 //! [`render_raster`] together with [`layout_geometry`].
 
+mod axis_offset;
+mod brackets;
+mod break_cut;
+mod dash;
 mod data;
 mod emf;
 mod eps;
 mod fill;
 mod fonts;
+mod hexbin;
 pub mod hit;
+mod layer_scale;
 mod layout;
 mod legend;
+mod legend_anchor;
 mod margin;
 pub mod markup;
+mod multipage;
+mod parallel;
 mod pie;
 mod plots;
 mod polar;
 mod psd;
 mod raster;
+mod ridgeline;
+mod rug;
 pub mod scene;
 mod shapes;
+mod sheet;
+mod worksheet_font;
+pub use worksheet_font::{WorksheetFont, worksheet_font};
+mod slope;
+mod straight_line;
+pub use slope::{NOT_USABLE as SLOPE_NOT_USABLE, check_point as slope_check_point};
+mod kde2d;
+mod marginal_plot;
+mod piper_plot;
+mod qc_plot;
+pub mod smith;
 mod stack;
+mod stock_plot;
+mod sunburst;
 mod svg;
+mod symbol_gaps;
 mod ternary;
 mod text;
 pub mod ticks;
 mod ticks_scales;
+mod treemap;
+pub(crate) mod trend;
 mod vector;
+mod vector_plot;
+mod violin;
+mod wind_rose;
 
+#[cfg(test)]
+mod column_scatter_tests;
+#[cfg(test)]
+mod dash_tests;
+#[cfg(test)]
+mod data_range_tests;
 #[cfg(test)]
 mod detail_tests;
 #[cfg(test)]
 mod export_tests;
 #[cfg(test)]
+mod fill_inclusive_tests;
+#[cfg(test)]
+mod fill_sideline_tests;
+#[cfg(test)]
+mod grouped_tests;
+#[cfg(test)]
+mod hexbin_tests;
+#[cfg(test)]
+mod label_frame_tests;
+#[cfg(test)]
+mod label_whiteout_tests;
+#[cfg(test)]
+mod layer_scale_tests;
+#[cfg(test)]
+mod layer_visibility_tests;
+#[cfg(test)]
+mod layers_tests;
+#[cfg(test)]
 mod legend_tests;
+#[cfg(test)]
+mod lollipop_tests;
 #[cfg(test)]
 mod margin_tests;
 #[cfg(test)]
+mod marginal_plot_tests;
+#[cfg(test)]
+mod multi_y_legend_tests;
+#[cfg(test)]
+mod multi_y_tests;
+#[cfg(test)]
+mod multipage_tests;
+#[cfg(test)]
+mod offset_axis_tests;
+#[cfg(test)]
+mod offset_multiplier_tests;
+#[cfg(test)]
+mod parallel_tests;
+#[cfg(test)]
+mod ridgeline_tests;
+#[cfg(test)]
+mod rug_tests;
+#[cfg(test)]
+mod sampling_tests;
+#[cfg(test)]
+mod skip_tests;
+#[cfg(test)]
+mod slope_tests;
+#[cfg(test)]
+mod sort_x_tests;
+#[cfg(test)]
+mod stock_plot_tests;
+#[cfg(test)]
+mod straight_line_tests;
+#[cfg(test)]
+mod sunburst_tests;
+#[cfg(test)]
+mod symbol_gap_tests;
+#[cfg(test)]
+mod symbol_line_order_tests;
+#[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod text_color_tests;
+#[cfg(test)]
+mod text_decoration_tests;
+#[cfg(test)]
+mod text_font_tests;
+#[cfg(test)]
+mod text_prime_tests;
+#[cfg(test)]
+mod text_rgb_tests;
+#[cfg(test)]
+mod text_script_pair_tests;
+#[cfg(test)]
+mod treemap_tests;
+#[cfg(test)]
+mod trend_tests;
+#[cfg(test)]
+mod user_template_tests;
+#[cfg(test)]
+mod vector_plot_tests;
+#[cfg(test)]
+mod violin_tests;
+#[cfg(test)]
+mod wind_rose_tests;
+#[cfg(test)]
+mod zoom_tests;
 
 pub use eps::EpsOutput;
-pub use fonts::{FALLBACK_FAMILIES, FixedMetrics, SystemFonts, TextMeasurer};
+pub use fonts::{FALLBACK_FAMILIES, FixedMetrics, SystemFonts, TextLineMetrics, TextMeasurer};
 pub use margin::{DEFAULT_BORDER_PT, ExportLayout, Margin, drawn_bounds};
 pub use raster::{ColorDepth, RasterOptions, TiffCompression};
+pub use sheet::{
+    SheetPages, render_sheet_emf_pages, render_sheet_pdf, render_sheet_raster, sheet_image_pdf, sheet_image_png,
+    sheet_image_svg, sheet_pages,
+};
 
 use sheaf_core::graph::ScaleKind;
 use sheaf_core::{Project, WindowId};
@@ -233,6 +355,12 @@ pub struct LayerGeometry {
     /// The triangle of a ternary layer. Then the data are the normalised X and Y fractions of the
     /// rows (graphing spec section 14.20).
     pub ternary: Option<ternary::TernaryMap>,
+    /// The page's "Connect line across Axis Break": lines are drawn through the bands of axis breaks
+    /// instead of being cut there (graphing spec 3.6).
+    pub connect_across_breaks: bool,
+    /// The page's "Connect line across Missing Data": rows with a missing X or Y value do not break a
+    /// connecting line (graphing spec 18.7b).
+    pub connect_across_missing: bool,
 }
 
 impl LayerGeometry {
@@ -316,9 +444,41 @@ pub struct Raster {
 /// to another one has its frame placed relative to its parent's (the same frame for the right Y
 /// axis of a double-Y graph, its own place for a panel of a stack) and, when its X scale is
 /// linked, its parent's X axis.
+/// Centres the region rectangle of each zoom layer (T112, `Layer::zoom`) of `graph` on the first point of the
+/// root layer's first plot, on the root's resolved axes, as Origin places it when it makes the graph. Graphs
+/// without zoom layers are left as they are.
+pub fn place_zoom_regions(project: &mut Project, graph: WindowId) {
+    let Some(g) = project.graph(graph) else { return };
+    let regions: Vec<usize> = g.layers.iter().filter_map(|l| l.zoom).collect();
+    if regions.is_empty() {
+        return;
+    }
+    let Ok(geoms) = layout_geometry(project, graph) else { return };
+    let pds = data::collect_graph(project, g);
+    let first = pds
+        .first()
+        .and_then(|l| l.plots.first())
+        .and_then(|pd| pd.rows().map(|r| (pd.x_at(r), pd.y_at(r))).find(|(x, y)| x.is_finite() && y.is_finite()));
+    let (Some((x, y)), Some(geom)) = (first, geoms.first()) else { return };
+    let (fx, fy) = (geom.x.to_unit(x), 1.0 - geom.y.to_unit(y));
+    if !(fx.is_finite() && fy.is_finite()) {
+        return;
+    }
+    let Some(g) = project.graph_mut(graph) else { return };
+    for k in regions {
+        if let Some(r) = g.layers[0].shapes.get_mut(k) {
+            let (w, h) = ((r.x2 - r.x1).abs(), (r.y2 - r.y1).abs());
+            r.x1 = fx - w / 2.0;
+            r.x2 = fx + w / 2.0;
+            r.y1 = fy - h / 2.0;
+            r.y2 = fy + h / 2.0;
+        }
+    }
+}
+
 pub fn layout_geometry(project: &Project, graph: WindowId) -> Result<Vec<LayerGeometry>, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
-    let pds: Vec<data::LayerData> = g.layers.iter().map(|layer| data::collect(project, layer)).collect();
+    let pds = data::collect_graph(project, g);
     Ok(layout::graph_geometry(project, g, &pds, SystemFonts::shared()))
 }
 
@@ -327,9 +487,35 @@ pub fn layout_geometry(project: &Project, graph: WindowId) -> Result<Vec<LayerGe
 /// in automatic mode they are computed from the current data. The desktop app copies them into
 /// the layer when the user switches to individual offsets, so that the picture does not jump.
 pub fn stack_offsets(project: &Project, graph: WindowId, layer: usize) -> Result<Vec<(f64, f64)>, PlotError> {
+    Ok(stack_places(project, graph, layer)?.into_iter().map(|p| (p.ox, p.oy)).collect())
+}
+
+/// Display multipliers, offsets and stack membership, in plot order. Reader tools and overlays
+/// use these placements to follow the drawing while retaining the original worksheet values.
+pub fn stack_places(
+    project: &Project,
+    graph: WindowId,
+    layer: usize,
+) -> Result<Vec<sheaf_core::stack::Place>, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
     let layer = g.layers.get(layer).ok_or(PlotError::NoSuchLayer(layer))?;
-    Ok(stack::places(project, layer).0.into_iter().map(|p| (p.ox, p.oy)).collect())
+    Ok(stack::places(project, layer).0)
+}
+
+/// How far a plot of a waterfall layer is moved on the page from the front frame, `(dx, dy)` in
+/// page points, for the plot placed by `place` in layer `layer` with geometry `geometry`. Member `k`
+/// is drawn `k` shifts right of and above the front frame (spec 13.6); `(0, 0)` for every plot of a
+/// layer that is not drawn as a waterfall. Add it to `LayerGeometry::data_to_page`.
+pub fn waterfall_shift(
+    project: &Project,
+    graph: WindowId,
+    layer: usize,
+    place: &sheaf_core::stack::Place,
+    geometry: &LayerGeometry,
+) -> (f64, f64) {
+    let Some((sx, sy)) = project.graph(graph).and_then(|g| stack::waterfall(g, layer)) else { return (0.0, 0.0) };
+    let k = place.member.unwrap_or(0) as f64;
+    (k * sx * geometry.frame.w, -k * sy * geometry.frame.h)
 }
 
 /// Renders a graph as SVG text, measuring text with the installed fonts.
@@ -342,6 +528,18 @@ pub fn render_svg(project: &Project, graph: WindowId) -> Result<String, PlotErro
 pub fn render_svg_with(project: &Project, graph: WindowId, measurer: &dyn TextMeasurer) -> Result<String, PlotError> {
     let scene = layout::build_scene(project, graph, measurer)?;
     Ok(svg::write_svg(&scene))
+}
+
+/// The raw title of an axis, including markup from column metadata when it is automatic.
+/// Uses the same plot-kind and category rules as the graph renderer.
+pub fn axis_title(project: &Project, graph: WindowId, layer: usize, vertical: bool) -> Result<String, PlotError> {
+    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
+    let l = g.layers.get(layer).ok_or(PlotError::NoSuchLayer(layer))?;
+    let axis = if vertical { &l.y_axis } else { &l.x_axis };
+    Ok(axis.title.clone().unwrap_or_else(|| {
+        let plots = data::collect(project, l);
+        layout::first_title(project, axis, &plots.plots, vertical)
+    }))
 }
 
 /// The text of the legend of layer `layer`: its own text when it has one, otherwise the automatic
@@ -368,10 +566,71 @@ pub fn graph_scene(project: &Project, graph: WindowId) -> Result<scene::Scene, P
     layout::build_scene(project, graph, SystemFonts::shared())
 }
 
+/// The box Origin's Fit Page to Layers fits the page to (graphing spec 15.7d), as `(x, y, width,
+/// height)` in page points: the frames of the layers and the boxes of the page's objects (legends,
+/// text labels, drawn shapes and slope annotations), but not the tick labels or axis titles, as
+/// measured in Origin 2016. `None` when the graph has no layer.
+pub fn fit_content_bounds(project: &Project, graph: WindowId) -> Result<Option<(f64, f64, f64, f64)>, PlotError> {
+    use scene::ObjectKind;
+    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
+    let scene = graph_scene(project, graph)?;
+    let (pw, ph) = (g.page.width_pt, g.page.height_pt);
+    let mut boxes: Vec<(f64, f64, f64, f64)> = (0..g.layers.len())
+        .map(|i| {
+            let f = g.page_frame(i);
+            (f.left * pw, f.top * ph, (f.left + f.width) * pw, (f.top + f.height) * ph)
+        })
+        .collect();
+    for layer in &scene.layers {
+        for o in &layer.objects {
+            if matches!(
+                o.kind,
+                ObjectKind::Legend
+                    | ObjectKind::Label(_)
+                    | ObjectKind::Shape(_)
+                    | ObjectKind::Slope(_)
+                    | ObjectKind::StraightLine(_)
+                    | ObjectKind::Scale(_)
+            ) && o.bounds.w.is_finite()
+                && o.bounds.h.is_finite()
+            {
+                boxes.push((o.bounds.x, o.bounds.y, o.bounds.x + o.bounds.w, o.bounds.y + o.bounds.h));
+            }
+        }
+    }
+    let Some(first) = boxes.first().copied() else { return Ok(None) };
+    let (x0, y0, x1, y1) = boxes.iter().fold(first, |a, b| (a.0.min(b.0), a.1.min(b.1), a.2.max(b.2), a.3.max(b.3)));
+    Ok(Some((x0, y0, x1 - x0, y1 - y0)))
+}
+
 /// Renders a scene from [`graph_scene`] to pixels at `pixels_per_point` (1 = 72 dpi). The
 /// picture is the same as [`render_raster`] of the graph the scene was made from.
 pub fn render_scene_raster(scene: &scene::Scene, pixels_per_point: f64) -> Result<Raster, PlotError> {
     raster::rasterise(&svg::write_svg(scene), pixels_per_point, SystemFonts::shared())
+}
+
+/// Renders a region of a scene, including objects outside the graph page.
+/// The region uses page points; drawing and fonts follow the normal scene renderer.
+pub fn render_scene_raster_region(
+    scene: &scene::Scene,
+    region: Rect,
+    pixels_per_point: f64,
+) -> Result<Raster, PlotError> {
+    if ![region.x, region.y, region.w, region.h, pixels_per_point].iter().all(|v| v.is_finite())
+        || region.w <= 0.0
+        || region.h <= 0.0
+        || pixels_per_point <= 0.0
+    {
+        return Err(PlotError::Size("the scene region must be finite with positive size and pixel scale".into()));
+    }
+    raster::rasterise(&svg::write_svg_view(scene, region, 1.0), pixels_per_point, SystemFonts::shared())
+}
+
+/// [`render_scene_raster`] for Draft View: the same drawing with unsmoothed (crisp, not
+/// anti-aliased) edges and text, as Origin's Draft View shows plain text (graphing spec 22.2).
+pub fn render_scene_raster_draft(scene: &scene::Scene, pixels_per_point: f64) -> Result<Raster, PlotError> {
+    let svg = svg::write_svg(scene).replacen("<svg ", "<svg text-rendering=\"optimizeSpeed\" ", 1);
+    raster::rasterise(&svg, pixels_per_point, SystemFonts::shared())
 }
 
 /// Renders a graph to pixels at `pixels_per_point` (1 = 72 dpi), for showing on screen.
@@ -392,6 +651,79 @@ pub fn render_png(project: &Project, graph: WindowId, dpi: f64) -> Result<Vec<u8
 pub fn render_pdf(project: &Project, graph: WindowId) -> Result<Vec<u8>, PlotError> {
     let svg = render_svg(project, graph)?;
     raster::to_pdf(&svg, SystemFonts::shared())
+}
+
+/// Renders the graph on the project's paper using the saved Page Setup, as a vector PDF.
+/// The paper is treated as fully printable, as in Print Preview.
+pub fn render_print_pdf(project: &Project, graph: WindowId) -> Result<Vec<u8>, PlotError> {
+    let svg = print_svg(project, graph)?;
+    raster::to_pdf(&svg, SystemFonts::shared())
+}
+
+/// Renders several graphs into one PDF, one page per graph in the order given (Origin's
+/// Export Graphs `multipage`, graphing.md 9.7). Each page is what [`export_bytes_with`] writes
+/// as a one-page PDF of that graph with the same size and margin settings: the page is the
+/// exported area of the graph, vector, with text kept as text. A graph may appear twice.
+pub fn render_multipage_pdf(
+    project: &Project,
+    graphs: &[WindowId],
+    size: ExportSize,
+    layout: ExportLayout,
+) -> Result<Vec<u8>, PlotError> {
+    multipage::svgs_to_pdf(graphs.iter().map(|&g| export_svg(project, g, size, layout)), SystemFonts::shared())
+}
+
+/// [`render_multipage_pdf`] written to `path`.
+pub fn export_multipage_pdf_file(
+    project: &Project,
+    graphs: &[WindowId],
+    path: &Path,
+    size: ExportSize,
+    layout: ExportLayout,
+) -> Result<(), PlotError> {
+    let bytes = render_multipage_pdf(project, graphs, size, layout)?;
+    std::fs::write(path, bytes).map_err(|source| PlotError::Io { path: path.to_path_buf(), source })
+}
+
+/// Several graphs on the project's paper, one sheet per graph, each placed by the saved Page
+/// Setup as [`render_print_pdf`] places one graph.
+pub fn render_print_multipage_pdf(project: &Project, graphs: &[WindowId]) -> Result<Vec<u8>, PlotError> {
+    multipage::svgs_to_pdf(graphs.iter().map(|&g| print_svg(project, g)), SystemFonts::shared())
+}
+
+fn print_svg(project: &Project, graph: WindowId) -> Result<String, PlotError> {
+    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
+    let (w, h) = (g.page.width_pt, g.page.height_pt);
+    let setup = project.page_setup;
+    let margins = setup.margins;
+    if ![w, h].iter().all(|x| x.is_finite() && *x > 0.0)
+        || ![margins.left, margins.right, margins.top, margins.bottom].iter().all(|x| x.is_finite() && *x >= 0.0)
+    {
+        return Err(PlotError::Size("invalid print page size or margins".into()));
+    }
+    let place = setup.place(w, h).ok_or_else(|| PlotError::Size("print margins leave no space on the paper".into()))?;
+    let (paper_w, paper_h) = setup.paper_pt(w, h);
+    if ![paper_w, paper_h, place.x, place.y, place.w, place.h].iter().all(|x| x.is_finite())
+        || place.w <= 0.0
+        || place.h <= 0.0
+    {
+        return Err(PlotError::Size("invalid print placement".into()));
+    }
+    let svg = render_svg(project, graph)?;
+    // write_svg always emits one root element; its contents use graph-page point coordinates.
+    let start = svg.find('>').ok_or_else(|| PlotError::Svg("missing SVG root".into()))? + 1;
+    let end = svg.rfind("</svg>").ok_or_else(|| PlotError::Svg("missing SVG closing tag".into()))?;
+    let scale = place.w / w;
+    if !scale.is_finite() || scale <= 0.0 {
+        return Err(PlotError::Size("invalid print scale".into()));
+    }
+    let paper_svg = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{paper_w}pt" height="{paper_h}pt" viewBox="0 0 {paper_w} {paper_h}"><defs><clipPath id="print-page-clip"><rect x="0" y="0" width="{w}" height="{h}"/></clipPath></defs><g transform="translate({} {}) scale({scale})"><g clip-path="url(#print-page-clip)">{}</g></g></svg>"#,
+        place.x,
+        place.y,
+        &svg[start..end]
+    );
+    Ok(paper_svg)
 }
 
 /// Renders a graph as Encapsulated PostScript (level 2): vector paths, text in the standard
@@ -555,4 +887,13 @@ pub fn export_bytes_opts(
         "pdf" => raster::to_pdf(&svg, fonts),
         _ => Err(PlotError::UnknownFormat(ext.to_string())),
     }
+}
+
+/// The SVG a vector export of `graph` draws (what `.svg` and `.pdf` export write).
+fn export_svg(project: &Project, graph: WindowId, size: ExportSize, layout: ExportLayout) -> Result<String, PlotError> {
+    let fonts = SystemFonts::shared();
+    let scene = layout::build_scene(project, graph, fonts)?;
+    let view = layout.view(&scene, fonts, None);
+    let scale = size.scale(view.w, view.h)?;
+    Ok(svg::write_svg_view(&scene, view, scale))
 }

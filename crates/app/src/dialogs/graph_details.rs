@@ -37,6 +37,17 @@ pub enum DetailTab {
     DropLines,
     Label,
     Offset,
+    /// A ridgeline plot's Display and Distribution tabs (Origin's names; graphing spec 14.23).
+    RidgeDisplay,
+    RidgeDistribution,
+    /// A hexbin plot's Bins tab (graphing spec 14.24).
+    HexBins,
+    /// A Parallel Plot or Parallel Index's Parallel tab (graphing spec 14.25).
+    Parallel,
+    /// A treemap's Layout tab (graphing spec 14.26).
+    TreemapLayout,
+    /// A sunburst's Pie Geometry tab: start angle, hole, ring gap, labels (graphing spec 14.27).
+    SunburstGeometry,
     Display,
     PageDisplay,
     LegendsTitles,
@@ -86,6 +97,22 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
             if plot.kind.has_symbols() {
                 tabs.push((DetailTab::Symbol, "Symbol", true));
             }
+            if plot.kind.is_ridgeline() {
+                tabs.push((DetailTab::RidgeDisplay, "Display", true));
+                tabs.push((DetailTab::RidgeDistribution, "Distribution", true));
+            }
+            if plot.kind.is_hexbin() {
+                tabs.push((DetailTab::HexBins, "Bins", true));
+            }
+            if plot.kind.is_parallel() {
+                tabs.push((DetailTab::Parallel, "Parallel", true));
+            }
+            if plot.kind == PlotKind::Treemap {
+                tabs.push((DetailTab::TreemapLayout, "Layout", true));
+            }
+            if plot.kind == PlotKind::Sunburst {
+                tabs.push((DetailTab::SunburstGeometry, "Pie Geometry", true));
+            }
             let curve = plot.kind.has_line() || plot.kind.has_symbols();
             if curve && !plot.kind.is_bar() && !plot.kind.is_area() {
                 tabs.push((DetailTab::DropLines, "Drop Lines", true));
@@ -99,7 +126,8 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
             if plot.kind.is_bar() {
                 tabs.push((DetailTab::Spacing, "Spacing", true));
             }
-            if plot.y_error.is_some() || plot.x_error.is_some() {
+            let grouped_columns = plot.kind == PlotKind::Column && plot.indexed.is_some();
+            if plot.y_error.is_some() || plot.x_error.is_some() || grouped_columns {
                 tabs.push((DetailTab::ErrorBar, "Error Bar", true));
             }
             // Origin shows Offset for the members of a group (here: a layer of several plots).
@@ -113,7 +141,16 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
 
 /// The tab to show when the one that was shown does not exist for the new node.
 fn first_tab(tabs: &[(DetailTab, &str, bool)]) -> DetailTab {
-    let preferred = [DetailTab::Line, DetailTab::Pattern, DetailTab::Symbol];
+    let preferred = [
+        DetailTab::RidgeDisplay,
+        DetailTab::HexBins,
+        DetailTab::Parallel,
+        DetailTab::TreemapLayout,
+        DetailTab::SunburstGeometry,
+        DetailTab::Line,
+        DetailTab::Pattern,
+        DetailTab::Symbol,
+    ];
     preferred.into_iter().find(|t| tabs.iter().any(|(x, _, on)| x == t && *on)).unwrap_or(tabs[0].0)
 }
 
@@ -135,6 +172,31 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::Stacked100Area => "100% Stacked Area",
         PlotKind::Histogram => "Histogram",
         PlotKind::Box => "Box Chart",
+        PlotKind::ColumnScatter => "Column Scatter",
+        PlotKind::Violin => "Violin Plot",
+        PlotKind::ViolinBox => "Violin with Box",
+        PlotKind::ViolinPoint => "Violin with Point",
+        PlotKind::ViolinQuartile => "Violin with Quartile",
+        PlotKind::ViolinStick => "Violin with Stick",
+        PlotKind::HalfViolin => "Half Violin",
+        PlotKind::Ridgeline => "Ridgeline Chart",
+        PlotKind::Hexbin => "Hexbin",
+        PlotKind::VectorXyam => "XYAM Vector",
+        PlotKind::VectorXyxy => "XYXY Vector",
+        PlotKind::HighLowClose => "High-Low-Close",
+        PlotKind::Candlestick => "Japanese Candlestick",
+        PlotKind::OhlcBar => "OHLC Bar",
+        PlotKind::MarginalHistogram => "Marginal Histogram",
+        PlotKind::MarginalBox => "Marginal Box",
+        PlotKind::QcMeans => "X bar",
+        PlotKind::QcRanges => "Range",
+        PlotKind::WindRose => "Wind Rose",
+        PlotKind::Kde2d => "2D Kernel Density",
+        PlotKind::Piper => "Piper",
+        PlotKind::Parallel => "Parallel Plot",
+        PlotKind::ParallelIndex => "Parallel Index",
+        PlotKind::Treemap => "Treemap",
+        PlotKind::Sunburst => "Sunburst",
         PlotKind::Pie => "Pie",
         PlotKind::Pie3D => "3D Color Pie",
         PlotKind::PieBw => "2D B&W Pie",
@@ -156,7 +218,9 @@ pub fn dialog_body(
     names: &[Vec<String>],
     sources: &[Source],
     columns: &[(ColumnId, String)],
+    numeric: &[ColumnId],
     add_from: &mut usize,
+    spans: &[(f64, f64)],
 ) {
     // The node may have gone (a plot was removed).
     *node = match *node {
@@ -214,6 +278,19 @@ pub fn dialog_body(
                                 PlotKind::Stacked100Area,
                                 PlotKind::Histogram,
                                 PlotKind::Box,
+                                PlotKind::ColumnScatter,
+                                PlotKind::Violin,
+                                PlotKind::ViolinBox,
+                                PlotKind::ViolinPoint,
+                                PlotKind::ViolinQuartile,
+                                PlotKind::ViolinStick,
+                                PlotKind::HalfViolin,
+                                PlotKind::Ridgeline,
+                                PlotKind::Hexbin,
+                                PlotKind::Parallel,
+                                PlotKind::ParallelIndex,
+                                PlotKind::Treemap,
+                                PlotKind::Sunburst,
                                 PlotKind::Pie,
                                 PlotKind::Pie3D,
                                 PlotKind::PieBw,
@@ -249,6 +326,12 @@ pub fn dialog_body(
                             group_box(ui, "Page border", |ui| {
                                 look::border_ui(ui, "page_border", &mut graph.page.style.border)
                             });
+                            // Origin's page Display tab (graphing spec 3.6); off by default.
+                            ui.checkbox(&mut graph.page.style.connect_across_breaks, "Connect line across Axis Break");
+                            ui.checkbox(
+                                &mut graph.page.style.connect_across_missing,
+                                "Connect line across Missing Data",
+                            );
                         }
                         DetailTab::Misc => look::misc_tab(ui, graph),
                         DetailTab::LegendsTitles => {
@@ -272,8 +355,8 @@ pub fn dialog_body(
                         }
                         _ => page_tab(ui, graph),
                     },
-                    Node::Layer(l) => layer_tab(ui, *tab, graph, l, sources, add_from),
-                    Node::Plot(l, p) => plot_tab(ui, *tab, graph, l, p, labels, columns, node),
+                    Node::Layer(l) => layer_tab(ui, *tab, graph, l, sources, add_from, spans),
+                    Node::Plot(l, p) => plot_tab(ui, *tab, graph, l, p, labels, columns, numeric, node),
                 },
             );
         });
@@ -320,11 +403,32 @@ fn plot_tab(
     p: usize,
     labels: &[Vec<String>],
     columns: &[(ColumnId, String)],
+    numeric: &[ColumnId],
     node: &mut Node,
 ) {
     // In Origin's Dependent edit mode a change to one plot's look is made to the whole group.
     let before = graph.layers[l].plots[p].clone();
-    plot_tab_body(ui, tab, graph, l, p, labels, columns, node);
+    plot_tab_body(ui, tab, graph, l, p, labels, columns, numeric, node);
+    // The ridgeline settings are shared by the ridgeline plots of the layer: one chart, one look
+    // (each plot keeps its own colour).
+    if matches!(tab, DetailTab::RidgeDisplay | DetailTab::RidgeDistribution)
+        && let Some(now) = graph.layers[l].plots.get(p).map(|pl| (pl.ridge.clone(), pl.line.width_pt))
+        && now != (before.ridge.clone(), before.line.width_pt)
+    {
+        for q in graph.layers[l].plots.iter_mut().filter(|q| q.kind.is_ridgeline()) {
+            q.ridge = now.0.clone();
+            q.line.width_pt = now.1;
+        }
+    }
+    // The parallel settings belong to the layer's one chart: every parallel plot shares them.
+    if tab == DetailTab::Parallel
+        && let Some(now) = graph.layers[l].plots.get(p).map(|pl| pl.parallel)
+        && now != before.parallel
+    {
+        for q in graph.layers[l].plots.iter_mut().filter(|q| q.kind.is_parallel()) {
+            q.parallel = now;
+        }
+    }
     let follows = matches!(tab, DetailTab::Line | DetailTab::Symbol | DetailTab::DropLines | DetailTab::Label);
     if let Node::Plot(l2, p2) = *node
         && (l2, p2) == (l, p)
@@ -345,6 +449,7 @@ fn plot_tab_body(
     p: usize,
     labels: &[Vec<String>],
     columns: &[(ColumnId, String)],
+    numeric: &[ColumnId],
     node: &mut Node,
 ) {
     match tab {
@@ -362,12 +467,20 @@ fn plot_tab_body(
                             Connect::Bezier,
                             Connect::StepHorizontal,
                             Connect::StepVertical,
+                            Connect::Segment2,
+                            Connect::Segment3,
                         ] {
                             ui.selectable_value(&mut plot.line.connect, c, connect_name(c));
                         }
                     },
                 );
                 ui.end_row();
+                if matches!(plot.kind, PlotKind::Line | PlotKind::LineSymbol) {
+                    // Sheaf's own place and label; Origin 2023 has only LabTalk line.sortx.
+                    ui.label("");
+                    ui.checkbox(&mut plot.line.sort_x, "Sort X for line connection");
+                    ui.end_row();
+                }
                 ui.label("Style");
                 dash_ui(ui, "plot_dash", &mut plot.line.dash);
                 ui.end_row();
@@ -391,18 +504,42 @@ fn plot_tab_body(
                 }
                 ui.end_row();
             });
+            if plot.kind == PlotKind::LineSymbol {
+                group_box(ui, "Symbol/Line interface", |ui| {
+                    ui.checkbox(&mut plot.decor.symbol_line.gap_to_symbol, "Gap to Symbol");
+                    ui.add_enabled_ui(!plot.decor.symbol_line.gap_to_symbol, |ui| {
+                        ui.radio_value(&mut plot.decor.symbol_line.draw_in_front, true, "Draw Line in Front");
+                        ui.radio_value(&mut plot.decor.symbol_line.draw_in_front, false, "Draw Line Behind");
+                    });
+                });
+            }
             if !plot.kind.is_area() {
                 let mut fill = plot.decor.fill_under.is_some();
                 if ui.checkbox(&mut fill, "Fill Area Under Curve").changed() {
                     // Origin starts the fill in the line's colour.
                     plot.decor.fill_under = fill.then_some(plot.line.color);
                 }
-                if let Some(color) = plot.decor.fill_under.as_mut() {
+                ui.add_enabled_ui(fill, |ui| {
+                    ui.horizontal(|ui| {
+                        let label = ui.label("Fill mode");
+                        egui::ComboBox::from_id_salt(("fill_under_mode", plot.y))
+                            .selected_text(plot.decor.fill_under_mode.name())
+                            .show_ui(ui, |ui| {
+                                for mode in FillUnderMode::ALL {
+                                    ui.selectable_value(&mut plot.decor.fill_under_mode, mode, mode.name());
+                                }
+                            })
+                            .response
+                            .labelled_by(label.id);
+                    });
+                });
+                if !plot.decor.fill_under_mode.is_sidelines()
+                    && let Some(color) = plot.decor.fill_under.as_mut()
+                {
                     ui.horizontal(|ui| {
                         ui.label("Fill color");
                         color_button(ui, color);
                     });
-                    ui.weak("Normal: the area between the curve and the bottom of the layer.");
                     look::fill_controls(ui, "line_fill", &mut plot.decor.fill);
                 }
             }
@@ -412,31 +549,36 @@ fn plot_tab_body(
             let individual = layer.stack == Stack::Individual;
             let column = layer.plots[p].y;
             // Read without adding an entry, so that looking at the tab changes nothing.
-            let (mut x, mut y) = layer.plot_offset(column).map_or((0.0, 0.0), |o| (o.x, o.y));
-            let before = (x, y);
+            let o = layer.plot_offset(column).copied().unwrap_or_else(|| PlotOffset::new(column));
+            let (mut x, mut y, mut mx, mut my) = (o.x, o.y, o.x_multiplier, o.y_multiplier);
+            let before = (x, y, mx, my);
             ui.add_enabled_ui(individual, |ui| {
                 grid(ui, "plot_offset", |ui| {
                     ui.label("");
+                    ui.strong("Multiplier");
                     ui.strong("Offset");
                     ui.end_row();
-                    ui.label("X");
+                    let label = ui.label("X");
+                    ui.add(DragValue::new(&mut mx).speed(0.01)).labelled_by(label.id);
                     ui.add(DragValue::new(&mut x).speed(0.01));
                     ui.end_row();
-                    ui.label("Y");
+                    let label = ui.label("Y");
+                    ui.add(DragValue::new(&mut my).speed(0.01)).labelled_by(label.id);
                     ui.add(DragValue::new(&mut y).speed(0.01));
                     ui.end_row();
                 });
             });
-            if (x, y) != before {
+            if (x, y, mx, my) != before {
                 let o = layer.plot_offset_mut(column);
-                (o.x, o.y) = (x, y);
+                (o.x, o.y, o.x_multiplier, o.y_multiplier) = (x, y, mx, my);
             }
             if !individual {
                 ui.weak("Offsets of single plots are used when the layer's Stack tab is set to Individual.");
             }
         }
         DetailTab::DropLines => {
-            let drop = &mut graph.layers[l].plots[p].decor.drop;
+            let plot = &mut graph.layers[l].plots[p];
+            let drop = &mut plot.decor.drop;
             grid(ui, "plot_drop", |ui| {
                 ui.label("");
                 ui.checkbox(&mut drop.horizontal.on, "Horizontal");
@@ -452,11 +594,70 @@ fn plot_tab_body(
                     ui.add_enabled(d.on, DragValue::new(&mut d.width_pt).range(0.1..=20.0).speed(0.05).suffix(" pt"));
                 }
                 ui.end_row();
-                ui.label("Color");
-                for d in [&mut drop.horizontal, &mut drop.vertical] {
-                    ui.add_enabled_ui(d.on, |ui| auto_color_ui(ui, &mut d.color));
+                ui.label("Drop To");
+                for (id, d) in [("drop_h_target", &mut drop.horizontal), ("drop_v_target", &mut drop.vertical)] {
+                    ui.add_enabled_ui(d.on, |ui| {
+                        egui::ComboBox::from_id_salt(id).selected_text(d.target.label()).show_ui(ui, |ui| {
+                            for t in DropTarget::ALL {
+                                ui.selectable_value(&mut d.target, t, t.label());
+                            }
+                        });
+                    });
                 }
                 ui.end_row();
+                ui.label("Color");
+                for (id, d) in [("drop_h_mode", &mut drop.horizontal), ("drop_v_mode", &mut drop.vertical)] {
+                    ui.add_enabled_ui(d.on, |ui| {
+                        auto_color_ui(ui, &mut d.color);
+                        // "Y Value: Plus-Minus" is only for lollipop plots: offered when the drop
+                        // line goes to the next data plot.
+                        if d.color.is_none()
+                            && (d.target == DropTarget::NextDataPlot || d.color_mode == DropColorMode::PlusMinus)
+                        {
+                            egui::ComboBox::from_id_salt(id)
+                                .selected_text(match d.color_mode {
+                                    DropColorMode::Auto => "Auto",
+                                    DropColorMode::PlusMinus => "Y Value: Plus-Minus",
+                                })
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(&mut d.color_mode, DropColorMode::Auto, "Auto");
+                                    ui.selectable_value(
+                                        &mut d.color_mode,
+                                        DropColorMode::PlusMinus,
+                                        "Y Value: Plus-Minus",
+                                    );
+                                });
+                        }
+                    });
+                }
+                ui.end_row();
+            });
+            ui.group(|ui| {
+                ui.label("Data Points Display Control");
+                ui.horizontal(|ui| {
+                    let mut skipping = plot.symbol.every > 1;
+                    if ui.checkbox(&mut skipping, "Skip Points").changed() {
+                        plot.symbol.every = if skipping { 2 } else { 1 };
+                    }
+                    let label = ui.label("Frequency");
+                    let mut frequency = plot.symbol.every.max(2);
+                    if ui
+                        .add_enabled(skipping, DragValue::new(&mut frequency).range(2..=u32::MAX))
+                        .labelled_by(label.id)
+                        .changed()
+                    {
+                        plot.symbol.every = frequency;
+                    }
+                });
+                if plot.kind == PlotKind::LineSymbol {
+                    ui.add_enabled(
+                        plot.decor.symbol_line.gap_to_symbol && plot.symbol.every > 1,
+                        egui::Checkbox::new(
+                            &mut plot.decor.symbol_line.no_break_skipped,
+                            "No Line Break for Skipped Point(s)",
+                        ),
+                    );
+                }
             });
         }
         DetailTab::Label => {
@@ -469,6 +670,40 @@ fn plot_tab_body(
                     ui.end_row();
                     ui.label("Size, style, color");
                     font_ui(ui, &mut labels.font);
+                    ui.end_row();
+                    ui.label("Background");
+                    ui.checkbox(&mut labels.white_out, "White Out");
+                    ui.end_row();
+                    let label = ui.label("Frame");
+                    ui.horizontal(|ui| {
+                        egui::ComboBox::from_id_salt("data_label_frame")
+                            .selected_text(match labels.frame {
+                                LabelFrame::None => "None",
+                                LabelFrame::Box => "Box",
+                                LabelFrame::Shadow => "Shadow",
+                            })
+                            .show_ui(ui, |ui| {
+                                for (frame, name) in [
+                                    (LabelFrame::None, "None"),
+                                    (LabelFrame::Box, "Box"),
+                                    (LabelFrame::Shadow, "Shadow"),
+                                ] {
+                                    ui.selectable_value(&mut labels.frame, frame, name);
+                                }
+                            })
+                            .response
+                            .labelled_by(label.id);
+                        ui.add_enabled_ui(!labels.frame.is_none(), |ui| {
+                            ui.label("Border");
+                            color_button(ui, &mut labels.frame_border);
+                            ui.label("Fill");
+                            color_button(ui, &mut labels.frame_fill);
+                        });
+                    });
+                    ui.end_row();
+                    let label = ui.label("Margin (% Font Height)");
+                    ui.add(DragValue::new(&mut labels.margin_percent).range(0.0..=500.0).speed(0.5))
+                        .labelled_by(label.id);
                     ui.end_row();
                     ui.label("Rotate (deg)");
                     ui.add(DragValue::new(&mut labels.rotate_deg).range(-360.0..=360.0).speed(1.0));
@@ -525,9 +760,6 @@ fn plot_tab_body(
                     plot.auto_color = false;
                 }
                 ui.end_row();
-                ui.label("Show every");
-                ui.add(DragValue::new(&mut plot.symbol.every).range(1..=100000).suffix(" th point"));
-                ui.end_row();
             });
         }
         DetailTab::Pattern => {
@@ -562,6 +794,15 @@ fn plot_tab_body(
                 look::fill_controls(ui, "plot_fill_style", &mut plot.decor.fill);
             });
         }
+        DetailTab::RidgeDisplay => ridge_display_tab(ui, &mut graph.layers[l].plots[p]),
+        DetailTab::RidgeDistribution => ridge_distribution_tab(ui, &mut graph.layers[l].plots[p].ridge),
+        DetailTab::HexBins => hexbin_tab(ui, &mut graph.layers[l].plots[p].hexbin),
+        DetailTab::Parallel => {
+            let kind = graph.layers[l].plots[p].kind;
+            parallel_tab(ui, &mut graph.layers[l].plots[p].parallel, kind, columns, numeric)
+        }
+        DetailTab::TreemapLayout => treemap_tab(ui, &mut graph.layers[l].plots[p].treemap, columns),
+        DetailTab::SunburstGeometry => sunburst_tab(ui, &mut graph.layers[l].plots[p].sunburst),
         DetailTab::Spacing => {
             let bars = &mut graph.layers[l].bars;
             grid(ui, "plot_spacing", |ui| {
@@ -585,6 +826,67 @@ fn plot_tab_body(
                 ui.end_row();
             });
             ui.weak("Gap, overlap and width are shared by all column plots of the layer; a width replaces the gap.");
+        }
+        DetailTab::ErrorBar if graph.layers[l].plots[p].indexed.is_some() => {
+            // Grouped columns of indexed data: the error bar is computed from the rows of each group. It is one
+            // choice for every plot of the layer (the subgroups).
+            let mut error = graph.layers[l].plots[p].indexed.as_ref().map(|i| i.error).unwrap_or_default();
+            let before = error;
+            grid(ui, "plot_indexed_error", |ui| {
+                ui.label("Error Bar");
+                egui::ComboBox::from_id_salt("indexed_error")
+                    .selected_text(match error {
+                        IndexedError::None => "None",
+                        IndexedError::Sd => "Standard Deviation",
+                        IndexedError::Se => "Standard Error",
+                    })
+                    .width(170.0)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut error, IndexedError::None, "None");
+                        ui.selectable_value(&mut error, IndexedError::Sd, "Standard Deviation");
+                        ui.selectable_value(&mut error, IndexedError::Se, "Standard Error");
+                    });
+                ui.end_row();
+            });
+            if error != before {
+                for plot in &mut graph.layers[l].plots {
+                    if let Some(i) = plot.indexed.as_mut() {
+                        i.error = error;
+                    }
+                }
+            }
+            ui.weak("Computed from the rows of each group: the bar is their mean.");
+        }
+        DetailTab::ErrorBar
+            if matches!(graph.layers[l].plots[p].stat, Some(sheaf_core::graph::StatPlot::Interval { .. })) =>
+        {
+            // Interval plot (T83): the error bar of the mean, the same for every interval point of the layer.
+            use sheaf_core::graph::{IntervalError, StatPlot};
+            let (mut error, mut level) = match graph.layers[l].plots[p].stat {
+                Some(StatPlot::Interval { error, level }) => (error, level),
+                _ => (IntervalError::Ci, 95.0),
+            };
+            let before = (error, level);
+            grid(ui, "plot_interval_error", |ui| {
+                ui.label("Error Bar");
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut error, IntervalError::Ci, "Confidence Interval");
+                    ui.selectable_value(&mut error, IntervalError::Sd, "Standard Deviation");
+                    ui.selectable_value(&mut error, IntervalError::Se, "Standard Error");
+                });
+                ui.end_row();
+                ui.label("Confidence level (%)");
+                ui.add_enabled(error == IntervalError::Ci, DragValue::new(&mut level).range(0.1..=99.9).speed(0.1));
+                ui.end_row();
+            });
+            if (error, level) != before {
+                for plot in &mut graph.layers[l].plots {
+                    if matches!(plot.stat, Some(StatPlot::Interval { .. })) {
+                        plot.stat = Some(StatPlot::Interval { error, level });
+                    }
+                }
+            }
+            ui.weak("Computed from the numbers of each column: the symbol is their mean.");
         }
         DetailTab::ErrorBar => {
             let plot = &mut graph.layers[l].plots[p];
@@ -808,7 +1110,53 @@ fn group_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, labels: &
 
 // ----- layer --------------------------------------------------------------------------------
 
-fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, sources: &[Source], add_from: &mut usize) {
+/// Origin's "Link Axis Length to Scale with X:Y Ratio" (graphing 18.7a): ticking it or changing the ratio
+/// shrinks the frame to fit, as Origin did; afterwards the drawing keeps the width and lets the height follow
+/// the axis ranges. Not for a layer that follows another, a polar or ternary layer or an axis with breaks.
+fn xy_ratio_ui(ui: &mut egui::Ui, layer: &mut Layer, follows: bool, page: (f64, f64), span: Option<(f64, f64)>) {
+    let breaks = !layer.x_axis.axis_breaks.is_empty() || !layer.y_axis.axis_breaks.is_empty();
+    let cartesian = layer.coords.polar().is_none() && layer.coords.ternary().is_none();
+    let usable = !follows && cartesian && !breaks;
+    let mut on = layer.xy_ratio.is_some();
+    let mut ratio = layer.xy_ratio.unwrap_or(1.0);
+    let fit = |layer: &mut Layer, ratio: f64| match span {
+        Some((sx, sy)) => layer.fit_xy_ratio(ratio, page, sx, sy),
+        None => layer.xy_ratio = Some(ratio),
+    };
+    ui.add_enabled_ui(usable, |ui| {
+        ui.horizontal(|ui| {
+            let tick = ui.checkbox(&mut on, "Link Axis Length to Scale with X:Y Ratio");
+            if breaks {
+                tick.on_disabled_hover_text("Not available while an axis has breaks");
+            } else if tick.changed() {
+                if on {
+                    fit(layer, ratio);
+                } else {
+                    layer.xy_ratio = None;
+                }
+            }
+            let value =
+                ui.add_enabled(on, DragValue::new(&mut ratio).range(0.001..=1000.0).speed(0.01).max_decimals(4));
+            if on && value.changed() {
+                // While dragging only the ratio changes; the frame is fitted once the value is set.
+                layer.xy_ratio = Some(ratio);
+            }
+            if on && (value.drag_stopped() || (value.changed() && !value.dragged())) {
+                fit(layer, ratio);
+            }
+        });
+    });
+}
+
+fn layer_tab(
+    ui: &mut egui::Ui,
+    tab: DetailTab,
+    graph: &mut Graph,
+    l: usize,
+    sources: &[Source],
+    add_from: &mut usize,
+    spans: &[(f64, f64)],
+) {
     if tab == DetailTab::Link {
         link_tab(ui, graph, l);
         return;
@@ -869,6 +1217,7 @@ fn layer_tab(ui: &mut egui::Ui, tab: DetailTab, graph: &mut Graph, l: usize, sou
                 edit(ui, "Height", &mut layer.frame.height, page.1);
             });
             ui.data_mut(|d| d.insert_temp(unit_id, unit));
+            xy_ratio_ui(ui, layer, link.is_some(), page, spans.get(l).copied());
         }
         DetailTab::Stack => stack_tab(ui, layer),
         DetailTab::Display => {
@@ -965,6 +1314,7 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
     }
     if !add.is_empty() {
         for a in add {
+            let ridge = layer.inherited_ridge();
             layer.plots.push(Plot {
                 x: a.x,
                 y: a.y,
@@ -981,6 +1331,13 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
                 y_base: None,
                 error: ErrorStyle::default(),
                 hist: Default::default(),
+                ridge,
+                hexbin: layer.inherited_hexbin(),
+                parallel: layer.inherited_parallel(),
+                treemap: layer.inherited_treemap(),
+                indexed: None,
+                stat: None,
+                sunburst: layer.inherited_sunburst(),
                 size_from: None,
                 color_from: None,
                 decor: Default::default(),
@@ -1076,7 +1433,14 @@ fn stack_tab(ui: &mut egui::Ui, layer: &mut Layer) {
             r
         };
         radio(ui, &mut mode, Stack::None, "None");
-        ui.add_enabled(false, egui::RadioButton::new(false, "Cumulative")).on_disabled_hover_text(later);
+        if sheaf_core::stack::layer_cumulates(layer) || layer.stack == Stack::Cumulative {
+            radio(ui, &mut mode, Stack::Cumulative, "Cumulative").on_hover_text(
+                "Sheaf: lines, scatter and line + symbol plots are drawn at their Y plus the Y of the plots before them, row by row",
+            );
+        } else {
+            ui.add_enabled(false, egui::RadioButton::new(false, "Cumulative"))
+                .on_disabled_hover_text(crate::menus::NO_CUMULATIVE);
+        }
         ui.add_enabled(false, egui::RadioButton::new(false, "Incremental")).on_disabled_hover_text(later);
         ui.horizontal(|ui| {
             radio(ui, &mut mode, Stack::Constant { step: 1.0 }, "Constant");
@@ -1148,7 +1512,7 @@ fn stack_tab(ui: &mut egui::Ui, layer: &mut Layer) {
                             layer.plot_offsets[k].x = x;
                             layer.plot_offsets[k].y = y;
                         }
-                        None => layer.plot_offsets.push(PlotOffset { column, x, y, follows: None }),
+                        None => layer.plot_offsets.push(PlotOffset { x, y, ..PlotOffset::new(column) }),
                     }
                 }
             }
@@ -1164,14 +1528,16 @@ fn legend_ui(ui: &mut egui::Ui, legend: &mut Legend, ids: &[String]) {
         ui.label("Position");
         ui.horizontal(|ui| {
             let name = |p: &LegendPosition| match p {
+                LegendPosition::Automatic => "Automatic",
                 LegendPosition::TopRight => "Top right",
                 LegendPosition::TopLeft => "Top left",
                 LegendPosition::BottomRight => "Bottom right",
                 LegendPosition::BottomLeft => "Bottom left",
-                LegendPosition::Manual { .. } => "Custom",
+                LegendPosition::Manual { .. } | LegendPosition::ManualTopLeft { .. } => "Custom",
             };
             egui::ComboBox::from_id_salt("legend_pos").selected_text(name(&legend.position)).show_ui(ui, |ui| {
                 for p in [
+                    LegendPosition::Automatic,
                     LegendPosition::TopRight,
                     LegendPosition::TopLeft,
                     LegendPosition::BottomRight,
@@ -1179,18 +1545,22 @@ fn legend_ui(ui: &mut egui::Ui, legend: &mut Legend, ids: &[String]) {
                 ] {
                     ui.selectable_value(&mut legend.position, p, name(&p));
                 }
-                let is_manual = matches!(legend.position, LegendPosition::Manual { .. });
+                let is_manual =
+                    matches!(legend.position, LegendPosition::Manual { .. } | LegendPosition::ManualTopLeft { .. });
                 if ui.selectable_label(is_manual, "Custom").clicked() && !is_manual {
                     legend.position = LegendPosition::Manual { x: 0.8, y: 0.5 };
                 }
             });
         });
         ui.end_row();
-        if let LegendPosition::Manual { x, y } = &mut legend.position {
-            ui.label("Centre (fraction of plot area)");
+        let top_left = matches!(legend.position, LegendPosition::ManualTopLeft { .. });
+        if let LegendPosition::Manual { x, y } | LegendPosition::ManualTopLeft { x, y } = &mut legend.position {
+            ui.label(if top_left { "Top left (fraction of plot area)" } else { "Centre (fraction of plot area)" });
             ui.horizontal(|ui| {
-                ui.add(DragValue::new(x).range(0.0..=1.0).speed(0.005).prefix("x "));
-                ui.add(DragValue::new(y).range(0.0..=1.0).speed(0.005).prefix("y "));
+                let x = DragValue::new(x).speed(0.005).prefix("x ");
+                let y = DragValue::new(y).speed(0.005).prefix("y ");
+                ui.add(if top_left { x } else { x.range(0.0..=1.0) });
+                ui.add(if top_left { y } else { y.range(0.0..=1.0) });
             });
             ui.end_row();
         }
@@ -1321,4 +1691,411 @@ fn text_tab(ui: &mut egui::Ui, graph: &mut Graph) {
             }
         }
     });
+}
+
+/// Origin's Plot Details Display tab of a ridgeline plot: Type, quantile lines, rug; with Sheaf's colour,
+/// line width, ridge height and fill transparency (graphing spec 14.23). The ridgeline plots of the layer
+/// share these settings.
+fn ridge_display_tab(ui: &mut egui::Ui, plot: &mut Plot) {
+    let r = &mut plot.ridge;
+    grid(ui, "ridge_display", |ui| {
+        ui.label("Type");
+        egui::ComboBox::from_id_salt("ridge_type").selected_text(ridge_display_name(r.display)).show_ui(ui, |ui| {
+            for d in RIDGE_DISPLAYS {
+                ui.selectable_value(&mut r.display, d, ridge_display_name(d));
+            }
+        });
+        ui.end_row();
+        ui.label("Color");
+        let before = plot.symbol.color;
+        color_button(ui, &mut plot.symbol.color);
+        if plot.symbol.color != before {
+            plot.auto_color = false;
+            plot.line.color = plot.symbol.color;
+        }
+        ui.end_row();
+        ui.label("Line Width");
+        ui.add(DragValue::new(&mut plot.line.width_pt).range(0.0..=20.0).speed(0.05).suffix(" pt"));
+        ui.end_row();
+        ui.label("Ridge Height");
+        ui.add(DragValue::new(&mut r.height).range(0.1..=20.0).speed(0.05).suffix(" x spacing"));
+        ui.end_row();
+        ui.label("Fill Transparency (%)");
+        ui.add(DragValue::new(&mut r.fill_transparency_pct).range(0.0..=100.0).speed(0.5));
+        ui.end_row();
+    });
+    ui.checkbox(&mut r.quantile_lines, "Quantile Lines");
+    ui.add_enabled_ui(r.quantile_lines, |ui| {
+        let mut text = r.quantiles.iter().map(|q| format!("{q}")).collect::<Vec<_>>().join(", ");
+        grid(ui, "ridge_quantiles", |ui| {
+            ui.label("Percentiles (0-100)");
+            if ui.text_edit_singleline(&mut text).changed() {
+                r.quantiles = text
+                    .split([',', ';', ' '])
+                    .filter_map(|t| t.trim().parse::<f64>().ok())
+                    .filter(|q| (0.0..=100.0).contains(q))
+                    .collect();
+            }
+            ui.end_row();
+        });
+    });
+    ui.add_enabled_ui(r.display == RidgeDisplay::WithRug, |ui| {
+        group_box(ui, "Rug", |ui| {
+            grid(ui, "ridge_rug", |ui| {
+                ui.label("Color");
+                ui.horizontal(|ui| {
+                    let mut auto = r.rug.color.is_none();
+                    if ui.checkbox(&mut auto, "Auto").changed() {
+                        r.rug.color = if auto { None } else { Some(Color::BLACK) };
+                    }
+                    if let Some(c) = &mut r.rug.color {
+                        color_button(ui, c);
+                    }
+                });
+                ui.end_row();
+                ui.label("Thickness");
+                ui.add(DragValue::new(&mut r.rug.thickness_pt).range(0.0..=20.0).speed(0.05).suffix(" pt"));
+                ui.end_row();
+                ui.label("Size(%)");
+                ui.add(DragValue::new(&mut r.rug.size_pct).range(0.0..=100.0).speed(0.5));
+                ui.end_row();
+                ui.label("Gap Between Curve(%)");
+                ui.add(DragValue::new(&mut r.rug.gap_pct).range(0.0..=100.0).speed(0.5));
+                ui.end_row();
+            });
+        });
+    });
+}
+
+pub(crate) const RIDGE_DISPLAYS: [RidgeDisplay; 4] = [
+    RidgeDisplay::DistributionCurve,
+    RidgeDisplay::WithDataPoints,
+    RidgeDisplay::WithRug,
+    RidgeDisplay::SingleBlockBar,
+];
+
+pub(crate) fn ridge_display_name(d: RidgeDisplay) -> &'static str {
+    match d {
+        RidgeDisplay::DistributionCurve => "Distribution Curve",
+        RidgeDisplay::WithDataPoints => "Distribution Curve with Data Points",
+        RidgeDisplay::WithRug => "Distribution Curve with Rug",
+        RidgeDisplay::SingleBlockBar => "Single Block Bar",
+    }
+}
+
+fn ridge_bandwidth_name(b: RidgeBandwidth) -> &'static str {
+    match b {
+        RidgeBandwidth::Scott => "Scott",
+        RidgeBandwidth::Silverman => "Silverman",
+        RidgeBandwidth::KSd(_) => "k*SD",
+        RidgeBandwidth::Custom(_) => "Custom",
+    }
+}
+
+/// Origin's Distribution tab of a ridgeline plot: the kernel bandwidth (Kernel Smooth is the only curve).
+fn ridge_distribution_tab(ui: &mut egui::Ui, r: &mut RidgelineStyle) {
+    grid(ui, "ridge_distribution", |ui| {
+        ui.label("Bandwidth");
+        egui::ComboBox::from_id_salt("ridge_bandwidth").selected_text(ridge_bandwidth_name(r.bandwidth)).show_ui(
+            ui,
+            |ui| {
+                for b in [
+                    RidgeBandwidth::Scott,
+                    RidgeBandwidth::Silverman,
+                    RidgeBandwidth::KSd(1.0),
+                    RidgeBandwidth::Custom(1.0),
+                ] {
+                    let same = std::mem::discriminant(&b) == std::mem::discriminant(&r.bandwidth);
+                    if ui.selectable_label(same, ridge_bandwidth_name(b)).clicked() && !same {
+                        r.bandwidth = b;
+                    }
+                }
+            },
+        );
+        ui.end_row();
+        match &mut r.bandwidth {
+            RidgeBandwidth::KSd(k) => {
+                ui.label("k");
+                ui.add(DragValue::new(k).range(1e-6..=1e6).speed(0.01));
+                ui.end_row();
+            }
+            RidgeBandwidth::Custom(h) => {
+                ui.label("Bandwidth");
+                ui.add(DragValue::new(h).range(1e-12..=1e12).speed(0.01));
+                ui.end_row();
+            }
+            _ => {}
+        }
+    });
+    ui.weak("Scott 0.9*A*n^(-1/5), Silverman 1.059*A*n^(-1/5), A = min(SD, IQR/1.349).");
+}
+
+/// One value that may be left to the data: a check box "Auto" and, when off, the number.
+fn auto_value(ui: &mut egui::Ui, v: &mut Option<f64>, fallback: f64) {
+    ui.horizontal(|ui| {
+        let mut auto = v.is_none();
+        if ui.checkbox(&mut auto, "Auto").changed() {
+            *v = if auto { None } else { Some(fallback) };
+        }
+        if let Some(x) = v {
+            ui.add(DragValue::new(x).speed(0.01));
+        }
+    });
+}
+
+/// One axis of the Bins tab: Min Center, Max Center and Bin Spacing or Number of Bins. The spacing controls
+/// of the derived axis are disabled (its spacing follows the other axis); its Min and Max Center still apply.
+fn hexbin_axis(ui: &mut egui::Ui, name: &str, a: &mut HexbinAxis, derived: bool) {
+    ui.strong(name);
+    grid(ui, name, |ui| {
+        ui.label("Min Center");
+        auto_value(ui, &mut a.min_center, 0.0);
+        ui.end_row();
+        ui.label("Max Center");
+        auto_value(ui, &mut a.max_center, 1.0);
+        ui.end_row();
+        ui.label("Binning");
+        let bins = matches!(a.by, HexbinBy::Bins(_));
+        ui.add_enabled_ui(!derived, |ui| {
+            egui::ComboBox::from_id_salt((name, "by"))
+                .selected_text(if bins { "Number of Bins" } else { "Bin Spacing" })
+                .show_ui(ui, |ui| {
+                    if ui.selectable_label(bins, "Number of Bins").clicked() && !bins {
+                        a.by = HexbinBy::Bins(sheaf_calc::hexbin::DEFAULT_BINS as u32);
+                    }
+                    if ui.selectable_label(!bins, "Bin Spacing").clicked() && bins {
+                        a.by = HexbinBy::Spacing(1.0);
+                    }
+                });
+        });
+        ui.end_row();
+        ui.label(if bins { "Number of Bins" } else { "Bin Spacing" });
+        ui.add_enabled_ui(!derived, |ui| match &mut a.by {
+            HexbinBy::Bins(n) => ui.add(DragValue::new(n).range(2..=10_000)),
+            HexbinBy::Spacing(s) => ui.add(DragValue::new(s).range(1e-12..=1e12).speed(0.01)),
+        });
+        ui.end_row();
+    });
+}
+
+/// Origin's Hexbin bin controls: per axis Min Center, Max Center and Bin Spacing or Number of Bins, "Prefer
+/// Regular Hexagons" and Derive Y from X / Derive X from Y (the derived axis' spacing follows the other's).
+fn hexbin_tab(ui: &mut egui::Ui, h: &mut HexbinStyle) {
+    ui.checkbox(&mut h.prefer_regular, "Prefer Regular Hexagons");
+    ui.horizontal(|ui| {
+        ui.radio_value(&mut h.derive_y_from_x, true, "Derive Y from X");
+        ui.radio_value(&mut h.derive_y_from_x, false, "Derive X from Y");
+    });
+    let y_from_x = h.derive_y_from_x;
+    hexbin_axis(ui, "X", &mut h.x, !y_from_x);
+    hexbin_axis(ui, "Y", &mut h.y, y_from_x);
+    ui.weak("The other axis' spacing makes the hexagons regular on the page; its Min and Max Center still apply (only its spacing is disabled).");
+}
+
+fn order_name(o: TreemapOrder) -> &'static str {
+    match o {
+        TreemapOrder::Categorical => "Categorical Order",
+        TreemapOrder::Alphabetical => "Alphabetical",
+        TreemapOrder::BySize => "By Size",
+        TreemapOrder::ByColumn => "By Column",
+    }
+}
+
+/// One Layout and one Order list: the Order is greyed out for the Squarified layouts, which sort by size themselves.
+fn layout_order_row(ui: &mut egui::Ui, salt: &str, layout: &mut TreemapLayout, order: &mut TreemapOrder) {
+    egui::ComboBox::from_id_salt(format!("{salt}_layout")).selected_text(layout.label()).width(150.0).show_ui(
+        ui,
+        |ui| {
+            for l in TreemapLayout::ALL {
+                ui.selectable_value(layout, l, l.label());
+            }
+        },
+    );
+    ui.add_enabled_ui(!layout.sorts_by_size(), |ui| {
+        egui::ComboBox::from_id_salt(format!("{salt}_order")).selected_text(order_name(*order)).width(150.0).show_ui(
+            ui,
+            |ui| {
+                for o in [
+                    TreemapOrder::Categorical,
+                    TreemapOrder::Alphabetical,
+                    TreemapOrder::BySize,
+                    TreemapOrder::ByColumn,
+                ] {
+                    ui.selectable_value(order, o, order_name(o));
+                }
+            },
+        );
+    });
+}
+
+/// Origin's Plot Details Layout tab of a treemap (Layout, Order, Depth, Gap, a layout and order per level; graphing
+/// spec 14.26). The Order column and the gap unit are Sheaf's.
+fn treemap_tab(ui: &mut egui::Ui, s: &mut TreemapStyle, columns: &[(ColumnId, String)]) {
+    let levels = s.categories.len().max(1);
+    grid(ui, "treemap_tab", |ui| {
+        ui.label("Layout");
+        ui.label("Order");
+        ui.end_row();
+        let (mut layout, mut order) = (s.layout, s.order);
+        layout_order_row(ui, "treemap", &mut layout, &mut order);
+        (s.layout, s.order) = (layout, order);
+        ui.end_row();
+        ui.label("Depth");
+        let depth_name = |d: Option<u32>| d.map_or("Infinite".to_string(), |d| d.to_string());
+        egui::ComboBox::from_id_salt("treemap_depth").selected_text(depth_name(s.depth)).width(150.0).show_ui(
+            ui,
+            |ui| {
+                ui.selectable_value(&mut s.depth, None, "Infinite");
+                for d in 1..=levels as u32 {
+                    ui.selectable_value(&mut s.depth, Some(d), d.to_string());
+                }
+            },
+        );
+        ui.end_row();
+        ui.label("Gap");
+        ui.add(DragValue::new(&mut s.gap_pt).range(0.0..=20.0).speed(0.05).suffix(" pt"));
+        ui.end_row();
+    });
+    let uses_column = s.order == TreemapOrder::ByColumn
+        || (s.per_level_on && s.per_level.iter().any(|l| l.order == TreemapOrder::ByColumn));
+    if uses_column {
+        let name = |id: Option<ColumnId>| {
+            id.and_then(|c| columns.iter().find(|(x, _)| *x == c))
+                .map(|(_, n)| n.clone())
+                .unwrap_or_else(|| "None (categorical order)".into())
+        };
+        ui.horizontal(|ui| {
+            ui.label("Order Column");
+            egui::ComboBox::from_id_salt("treemap_order_column")
+                .selected_text(name(s.order_column))
+                .width(260.0)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut s.order_column, None, "None (categorical order)");
+                    for (c, n) in columns {
+                        ui.selectable_value(&mut s.order_column, Some(*c), n);
+                    }
+                });
+        });
+    }
+    ui.checkbox(&mut s.per_level_on, "Different Layout and Order for Each Level Below the First");
+    if s.per_level_on {
+        while s.per_level.len() < levels.saturating_sub(1) {
+            let general = TreemapLevel { layout: s.layout, order: s.order };
+            s.per_level.push(general);
+        }
+        if levels < 2 {
+            ui.weak("A treemap of one category column has no level below the first.");
+        }
+        grid(ui, "treemap_levels", |ui| {
+            for (i, l) in s.per_level.iter_mut().enumerate().take(levels.saturating_sub(1)) {
+                ui.label(format!("Level {}", i + 2));
+                layout_order_row(ui, &format!("treemap_level{i}"), &mut l.layout, &mut l.order);
+                ui.end_row();
+            }
+        });
+    }
+    ui.weak("Squarified layouts sort the rectangles by size and ignore the Order.");
+}
+
+/// Origin's Plot Details Pie Geometry and Labels tabs of a sunburst plot (Rotation, Doughnut hole, label contents;
+/// graphing spec 14.27), in one tab. The ring gap, the border and the order are Sheaf's.
+fn sunburst_tab(ui: &mut egui::Ui, s: &mut SunburstStyle) {
+    grid(ui, "sunburst_tab", |ui| {
+        ui.label("Start Angle");
+        ui.add(DragValue::new(&mut s.start_angle_deg).range(-360.0..=360.0).speed(1.0).suffix(" \u{b0}"));
+        ui.end_row();
+        ui.label("Hole");
+        let mut pct = s.hole * 100.0;
+        if ui.add(DragValue::new(&mut pct).range(0.0..=90.0).speed(0.5).suffix(" %")).changed() {
+            s.hole = pct / 100.0;
+        }
+        ui.end_row();
+        ui.label("Ring Gap");
+        ui.add(DragValue::new(&mut s.ring_gap_pt).range(0.0..=20.0).speed(0.05).suffix(" pt"));
+        ui.end_row();
+        ui.label("Border Width");
+        ui.add(DragValue::new(&mut s.border_pt).range(0.0..=10.0).speed(0.05).suffix(" pt"));
+        ui.end_row();
+        ui.label("Order");
+        egui::ComboBox::from_id_salt("sunburst_order")
+            .selected_text(match s.order {
+                SunburstOrder::Worksheet => "Worksheet Order",
+                SunburstOrder::BySize => "By Size",
+            })
+            .width(150.0)
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut s.order, SunburstOrder::Worksheet, "Worksheet Order");
+                ui.selectable_value(&mut s.order, SunburstOrder::BySize, "By Size");
+            });
+        ui.end_row();
+    });
+    ui.separator();
+    ui.label("Labels");
+    ui.checkbox(&mut s.show_names, "Names");
+    ui.checkbox(&mut s.show_values, "Values");
+    ui.weak("A label is left out when it does not fit its wedge.");
+}
+
+/// The columns the Parallel tab offers: any column to group a Parallel Index by, only numeric ones to colour a
+/// Parallel Plot (a text column would be ignored by the colour ramp).
+fn color_choices(kind: PlotKind, columns: &[(ColumnId, String)], numeric: &[ColumnId]) -> Vec<(ColumnId, String)> {
+    columns.iter().filter(|(c, _)| kind == PlotKind::ParallelIndex || numeric.contains(c)).cloned().collect()
+}
+
+/// Origin's Plot Details Parallel tab (Width, Transparency) with the Axes dialog's "Rescale Each Axis Independently"
+/// and Sheaf's choice of the column that colours the lines (graphing spec 14.25). The parallel plots of the layer
+/// share these settings.
+fn parallel_tab(
+    ui: &mut egui::Ui,
+    s: &mut ParallelStyle,
+    kind: PlotKind,
+    columns: &[(ColumnId, String)],
+    numeric: &[ColumnId],
+) {
+    ui.checkbox(&mut s.rescale_each_axis, "Rescale Each Axis Independently");
+    grid(ui, "parallel_tab", |ui| {
+        ui.label("Width");
+        ui.add(DragValue::new(&mut s.width_pt).range(0.0..=20.0).speed(0.05).suffix(" pt"));
+        ui.end_row();
+        ui.label("Transparency (%)");
+        ui.add(DragValue::new(&mut s.transparency_pct).range(0.0..=100.0).speed(0.5));
+        ui.end_row();
+        let (label, none) = if kind == PlotKind::ParallelIndex {
+            ("Group Column", "None (one colour)")
+        } else {
+            ("Color Column", "None (plot colour)")
+        };
+        ui.label(label);
+        let name = |id: Option<ColumnId>| {
+            id.and_then(|c| columns.iter().find(|(x, _)| *x == c))
+                .map(|(_, n)| n.clone())
+                .unwrap_or_else(|| none.into())
+        };
+        egui::ComboBox::from_id_salt("parallel_color").selected_text(name(s.color)).width(260.0).show_ui(ui, |ui| {
+            ui.selectable_value(&mut s.color, None, none);
+            for (c, n) in color_choices(kind, columns, numeric) {
+                ui.selectable_value(&mut s.color, Some(c), n);
+            }
+        });
+        ui.end_row();
+    });
+    if kind == PlotKind::ParallelIndex {
+        ui.weak("Rows with the same text in the group column share a colour and a legend entry.");
+    } else {
+        ui.weak("A numeric column colours the lines through the colour ramp, with a colour scale beside the graph.");
+    }
+}
+
+#[cfg(test)]
+mod parallel_choice_tests {
+    use super::*;
+
+    #[test]
+    fn a_parallel_plot_offers_only_numeric_colour_columns_and_a_parallel_index_any() {
+        let cols: Vec<(ColumnId, String)> = (0..3u64).map(|i| (ColumnId(i), format!("c{i}"))).collect();
+        let numeric = [ColumnId(1), ColumnId(2)];
+        let ids = |k| color_choices(k, &cols, &numeric).into_iter().map(|(c, _)| c).collect::<Vec<_>>();
+        assert_eq!(ids(PlotKind::Parallel), vec![ColumnId(1), ColumnId(2)]);
+        assert_eq!(ids(PlotKind::ParallelIndex), vec![ColumnId(0), ColumnId(1), ColumnId(2)]);
+    }
 }

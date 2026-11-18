@@ -1,54 +1,13 @@
 //! `sheaf fit`: fit a model to worksheet columns without a window and print Origin-style tables.
 
 use crate::analyze::short_number;
-use crate::args::{BandKind, FitArgs, WeightKind};
+use crate::args::FitArgs;
 use crate::commands::{is_project, load_project, read_data_file, read_settings, save_project, write_sheet};
 use anyhow::{Context, Result};
 use sheaf_core::Project;
 use sheaf_core::fitting::FitOutcome;
-use sheaf_ops::fit::{FitRun, FitSpec};
-
-/// The fit options of the command line as the library takes them.
-fn fit_spec(a: &FitArgs) -> FitSpec {
-    FitSpec {
-        model: a.model.clone(),
-        formula: a.formula.clone(),
-        params: a.params.clone(),
-        fdf: a.fdf.clone(),
-        init: a.init.clone(),
-        fix: a.fix.clone(),
-        bounds: a.bounds.clone(),
-        weight: match a.weight {
-            WeightKind::None => sheaf_ops::fit::WeightKind::None,
-            WeightKind::Instrumental => sheaf_ops::fit::WeightKind::Instrumental,
-            WeightKind::Statistical => sheaf_ops::fit::WeightKind::Statistical,
-            WeightKind::Direct => sheaf_ops::fit::WeightKind::Direct,
-        },
-        yerr: a.yerr.clone(),
-        xerr: a.xerr.clone(),
-        regress: a.regress.clone(),
-        compare: a.compare.clone(),
-        rank: a.rank.clone(),
-        no_scale_errors: a.no_scale_errors,
-        global: a.global,
-        share: a.share.clone(),
-        confidence: a.confidence,
-        bands: match a.bands {
-            BandKind::None => sheaf_ops::fit::BandKind::None,
-            BandKind::Confidence => sheaf_ops::fit::BandKind::Confidence,
-            BandKind::Prediction => sheaf_ops::fit::BandKind::Prediction,
-            BandKind::Both => sheaf_ops::fit::BandKind::Both,
-        },
-        level: a.level,
-        max_iterations: a.max_iterations,
-        tolerance: a.tolerance,
-        y: a.y.clone(),
-        book: a.book.clone(),
-        sheet: a.sheet.clone(),
-        rows: a.rows.clone(),
-        x_range: a.x_range.clone(),
-    }
-}
+use sheaf_ops::cli_fit::fit_spec;
+use sheaf_ops::fit::FitRun;
 
 fn list_functions() {
     let functions = sheaf_ops::fit::list_models();
@@ -185,7 +144,7 @@ pub fn fit(a: FitArgs) -> Result<()> {
         load_project(input)?
     } else {
         let mut p = Project::new();
-        p.adopt_workbook(read_data_file(input, &read_settings(&a.read))?.workbook);
+        p.adopt_workbook(read_data_file(input, &read_settings(&a.read)?)?.workbook);
         p
     };
     let result = sheaf_ops::fit::run(&mut project, &spec, &prepared)?;

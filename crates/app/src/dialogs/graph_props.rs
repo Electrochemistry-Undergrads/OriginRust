@@ -37,6 +37,8 @@ pub enum PropsTab {
     Legend,
     /// Plot Details on the page of the graph.
     Page,
+    /// Layer Properties: Plot Details with the layer's node and its Background tab.
+    Layer,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -136,6 +138,7 @@ impl GraphPropsDialog {
             PropsTab::Plots => View::Details { node: Node::Layer(layer), tab: DetailTab::LayerContents },
             PropsTab::Legend => View::Details { node: Node::Layer(layer), tab: DetailTab::Legend },
             PropsTab::Page => View::Details { node: Node::Graph, tab: DetailTab::Page },
+            PropsTab::Layer => View::Details { node: Node::Layer(layer), tab: DetailTab::Background },
         };
         GraphPropsDialog {
             graph,
@@ -158,6 +161,7 @@ impl GraphPropsDialog {
             View::Axis { vertical: true, .. } => PropsTab::YAxis,
             View::Details { node: Node::Graph, .. } => PropsTab::Page,
             View::Details { node: Node::Layer(_), tab: DetailTab::Legend } => PropsTab::Legend,
+            View::Details { node: Node::Layer(_), tab: DetailTab::Background } => PropsTab::Layer,
             View::Details { .. } => PropsTab::Plots,
         }
     }
@@ -234,6 +238,19 @@ impl GraphPropsDialog {
             graph.layers.iter().map(|l| l.plots.iter().map(|p| doc.project().plot_data_name(p)).collect()).collect();
         let sources = sources(doc.project());
         let columns = all_columns(doc.project());
+        let numeric: Vec<ColumnId> = doc
+            .project()
+            .workbooks()
+            .flat_map(|b| b.sheets.iter())
+            .flat_map(|sh| sh.columns.iter())
+            .filter(|c| c.data.is_numeric())
+            .map(|c| c.id)
+            .collect();
+        // The span of each layer's axes in their own scale, for the X:Y ratio of Size/Speed.
+        let spans: Vec<(f64, f64)> = geometry
+            .as_ref()
+            .map(|g| g.iter().map(|lg| (lg.x.scale_span(), lg.y.scale_span())).collect())
+            .unwrap_or_default();
 
         let (title, window_id, size) = match self.view {
             View::Axis { vertical, .. } => (
@@ -287,7 +304,9 @@ impl GraphPropsDialog {
                             &names,
                             &sources,
                             &columns,
+                            &numeric,
                             &mut this.add_from,
+                            &spans,
                         );
                     }
                 });
@@ -478,7 +497,10 @@ pub(super) fn dash_ui(ui: &mut egui::Ui, id: &str, dash: &mut Dash) {
     });
 }
 
-pub(super) fn connect_name(c: Connect) -> &'static str {
+pub(super) fn connect_name(c: Connect) -> String {
+    if let Connect::Segments(k) = c {
+        return format!("{k} Point Segment");
+    }
     match c {
         Connect::Straight => "Straight",
         Connect::Spline => "Spline",
@@ -486,7 +508,11 @@ pub(super) fn connect_name(c: Connect) -> &'static str {
         Connect::Bezier => "Bezier",
         Connect::StepHorizontal => "Step, horizontal first",
         Connect::StepVertical => "Step, vertical first",
+        Connect::Segment2 => "2 Point Segment",
+        Connect::Segment3 => "3 Point Segment",
+        Connect::Segments(_) => unreachable!("handled above"),
     }
+    .to_string()
 }
 
 pub(super) fn symbol_name(s: SymbolShape) -> &'static str {

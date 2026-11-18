@@ -1,6 +1,7 @@
 //! The analysis tools `analyze` accepts: their names, options and how the options become a
 //! `sheaf_ops::analyze::Job`. The numbers come from the same code as `sheaf analyze`.
 
+use crate::bridge::{self, Filter};
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Map, Value, json};
 use sheaf_core::analysis::{self, BaselineSpec, InterpSpec, Tool};
@@ -52,6 +53,21 @@ fn maybe(name: &'static str, ty: &'static str, description: &'static str) -> Opt
 
 fn needed(name: &'static str, ty: &'static str, description: &'static str) -> OptionDesc {
     OptionDesc { name, ty, default: Value::Null, description, required: true, choices: &[] }
+}
+
+/// Option names of the 21 wavelets.
+const WAVELETS: &[&str] = &[
+    "haar", "db2", "db3", "db4", "db5", "db6", "db7", "db8", "db9", "db10", "b11", "b13", "b15", "b22", "b24", "b26",
+    "b28", "b31", "b33", "b35", "b37",
+];
+
+fn wavelet_options(o: &Opts) -> Result<(analysis::Wavelet, analysis::WaveletExtension)> {
+    let wavelet = analysis::Wavelet::parse(&o.pick("wavelet", "haar", WAVELETS)?).expect("a listed wavelet");
+    let extension = match o.pick("ext", "periodic", &["periodic", "pad0"])?.as_str() {
+        "periodic" => analysis::WaveletExtension::Periodic,
+        _ => analysis::WaveletExtension::ZeroPadded,
+    };
+    Ok((wavelet, extension))
 }
 
 /// The largest value of an integer option such as a window, an order or a polynomial degree.
@@ -255,7 +271,7 @@ pub fn registry() -> Vec<ToolDesc> {
         "median_filter",
         "Running median of each curve into a new column.",
         vec![
-            int("points", 5, "Points of the window (odd)."),
+            int("points", 5, "Points of the window (an even number acts like the next odd one)."),
             choice("edge", "shrink", &["shrink", "repeat", "reflect"], "The window at the ends."),
         ],
         None,
@@ -267,6 +283,37 @@ pub fn registry() -> Vec<ToolDesc> {
             int("factor", 2, "Keep every factor-th point."),
             choice("filter", "none", &["none", "ave", "fir"], "Filter applied first."),
             int("order", 30, "FIR filter order (8 to 60)."),
+        ],
+        None,
+    );
+    add(
+        "wavelet_decompose",
+        "One level of the discrete wavelet transform of each curve: approximation and detail coefficients in a new sheet.",
+        vec![
+            choice("wavelet", "haar", WAVELETS, "Wavelet (Origin's 21: Haar, DB2..DB10, Bior1.1..3.7)."),
+            choice("ext", "periodic", &["periodic", "pad0"], "Extension mode; periodic needs an even length."),
+        ],
+        None,
+    );
+    add(
+        "wavelet_denoise",
+        "Wavelet denoising of each curve: hard threshold of the detail coefficients of levels 1 to level.",
+        vec![
+            choice("wavelet", "haar", WAVELETS, "Wavelet."),
+            choice("ext", "periodic", &["periodic", "pad0"], "Extension mode."),
+            choice("threshold", "custom", &["custom", "sqtwolog"], "custom: percent of the largest coefficient."),
+            int("level", 1, "Levels to threshold (1 to 7; the length limits it)."),
+            num("percent", 50.0, "Threshold of every level in percent of the largest coefficient (custom)."),
+        ],
+        None,
+    );
+    add(
+        "wavelet_smooth",
+        "Wavelet smoothing of each curve: the last cutoff percent of the detail coefficients are dropped.",
+        vec![
+            choice("wavelet", "haar", WAVELETS, "Wavelet."),
+            choice("ext", "periodic", &["periodic", "pad0"], "Extension mode."),
+            num("cutoff", 20.0, "Cutoff in percent."),
         ],
         None,
     );
@@ -294,6 +341,12 @@ pub fn registry() -> Vec<ToolDesc> {
     );
     add("polygon_area", "Area of the polygon each curve encloses.", Vec::new(), None);
     add(
+        "xyz_area",
+        "Area of the surface through scattered X, Y, Z points: the Delaunay triangulation of X and Y lifted to Z (rows with the same X and Y are merged with the mean Z). Name the three columns X, Y, Z in this order; default: the sheet's first Z column with its Y and X.",
+        Vec::new(),
+        None,
+    );
+    add(
         "intersect",
         "Where two curves cross (name two columns).",
         vec![flag("touching", false, "Count points where the curves only touch.")],
@@ -302,9 +355,115 @@ pub fn registry() -> Vec<ToolDesc> {
     v
 }
 
-/// The registry as `list_analysis_tools` returns it.
+/// The command-line names of tools whose hand-mapped version has another name.
+const ALIASES: [(&str, &str); 2] = [("peaks", "find_peaks"), ("stats", "statistics")];
+
+/// The options of a bridged tool the server does not take from the tool's `options`: the input,
+/// the selection (`columns`, `book`, `sheet`, `rows`, `x_range` of the call), the files the command
+/// line writes (`export`, `save`: use `export_data` and `save_project`) and the read options.
+pub fn bridge_filter() -> Filter {
+    Filter::excluding(["input", "y", "book", "sheet", "rows", "x_range", "export", "save"])
+        .and_excluding(bridge::ids_of::<sheaf_ops::args::ReadOptions>())
+}
+
+/// A tool of `sheaf analyze` that has no hand-mapped version: its options come from clap.
+pub struct Bridged {
+    /// The name `analyze` takes: the command-line name with `_` for `-`.
+    pub name: String,
+    /// The subcommand of `sheaf analyze`.
+    pub command: String,
+    pub summary: String,
+    pub schema: Value,
+    pub second_column: Option<&'static str>,
+}
+
+fn hand_name_of(registry: &[ToolDesc], snake: &str) -> Option<&'static str> {
+    let snake = ALIASES.iter().find(|(c, _)| *c == snake).map_or(snake, |(_, h)| h);
+    registry.iter().find(|t| t.name == snake).map(|t| t.name)
+}
+
+/// Every subcommand of `sheaf analyze` that is not hand-mapped, in the command line's order.
+pub fn bridged() -> Vec<Bridged> {
+    let reg = registry();
+    let analyze = bridge::subcommand(&["analyze"]).expect("the analyze command exists");
+    let filter = bridge_filter();
+    analyze
+        .get_subcommands()
+        .filter(|c| c.get_name() != "help")
+        .filter(|c| hand_name_of(&reg, &c.get_name().replace('-', "_")).is_none())
+        .map(|c| {
+            let cmd = bridge::subcommand(&["analyze", c.get_name()]).expect("listed above");
+            let schema = bridge::schema(&cmd, &filter);
+            let about = c.get_about().map(|a| bridge::tool_text(&a.to_string())).unwrap_or_default();
+            let summary = about.split_once(". ").map_or(about.as_str(), |(a, _)| a).trim_end_matches('.').to_string();
+            let second_column =
+                ["other", "response", "imaginary", "ref"].into_iter().find(|k| schema["properties"].get(*k).is_some());
+            Bridged {
+                name: c.get_name().replace('-', "_"),
+                command: c.get_name().to_string(),
+                summary,
+                schema,
+                second_column,
+            }
+        })
+        .collect()
+}
+
+/// How `analyze` runs a tool name.
+pub enum Which {
+    /// A hand-mapped tool (the name as the registry has it).
+    Hand(&'static str),
+    /// A tool built from the command line's options.
+    Bridged(Bridged),
+}
+
+/// Finds a tool by name: `_` or `-`, any case, the command-line names `peaks` and `stats` included.
+pub fn resolve(name: &str) -> Result<Which> {
+    let snake = name.trim().to_ascii_lowercase().replace('-', "_");
+    let reg = registry();
+    if let Some(h) = hand_name_of(&reg, &snake) {
+        return Ok(Which::Hand(h));
+    }
+    let mut all = bridged();
+    if let Some(i) = all.iter().position(|b| b.name == snake) {
+        return Ok(Which::Bridged(all.swap_remove(i)));
+    }
+    let mut names: Vec<String> = reg.iter().map(|t| t.name.to_string()).collect();
+    names.extend(all.iter().map(|b| b.name.clone()));
+    bail!("unknown analysis tool \"{name}\" (tools: {})", names.join(", "))
+}
+
+/// The options of a bridged tool as `list_analysis_tools` shows them.
+fn bridged_options(schema: &Value) -> Vec<Value> {
+    let required: Vec<&str> =
+        schema["required"].as_array().map(|r| r.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+    let Some(props) = schema["properties"].as_object() else { return Vec::new() };
+    props
+        .iter()
+        .map(|(name, p)| {
+            let ty = match p["type"].as_str() {
+                Some("array") => format!("[{}]", p["items"]["type"].as_str().unwrap_or("string")),
+                Some(t) => t.to_string(),
+                None => "string".to_string(),
+            };
+            let mut d = json!({
+                "name": name, "type": ty, "default": p.get("default").cloned().unwrap_or(Value::Null),
+                "description": p["description"], "required": required.contains(&name.as_str()),
+            });
+            let choices = if p["type"] == "array" { &p["items"]["enum"] } else { &p["enum"] };
+            if choices.is_array() {
+                d["choices"] = choices.clone();
+            }
+            d
+        })
+        .collect()
+}
+
+/// The registry as `list_analysis_tools` returns it: the hand-mapped tools, then every other tool
+/// of `sheaf analyze` with the options of its command-line definition. A bridged tool also carries
+/// `bridged: true` and its JSON Schema.
 pub fn describe() -> Value {
-    let tools: Vec<Value> = registry()
+    let mut tools: Vec<Value> = registry()
         .into_iter()
         .map(|t| {
             let options: Vec<Value> = t
@@ -324,6 +483,12 @@ pub fn describe() -> Value {
             json!({"name": t.name, "summary": t.summary, "options": options, "second_column": t.second_column})
         })
         .collect();
+    tools.extend(bridged().into_iter().map(|b| {
+        json!({
+            "name": b.name, "summary": b.summary, "options": bridged_options(&b.schema),
+            "second_column": b.second_column, "bridged": true, "input_schema": b.schema,
+        })
+    }));
     json!({ "tools": tools })
 }
 
@@ -744,6 +909,32 @@ pub fn build(name: &str, options: &Map<String, Value>) -> Result<Job> {
             };
             Job::Tool(Tool::Decimate(analysis::DecimateSpec { options }))
         }
+        "wavelet_decompose" => {
+            let (wavelet, extension) = wavelet_options(&o)?;
+            Job::Tool(Tool::WaveletDecompose(analysis::WaveletDecomposeSpec { wavelet, extension }))
+        }
+        "wavelet_denoise" => {
+            let (wavelet, extension) = wavelet_options(&o)?;
+            let threshold = match o.pick("threshold", "custom", &["custom", "sqtwolog"])?.as_str() {
+                "custom" => analysis::WaveletThresholdKind::Custom,
+                _ => analysis::WaveletThresholdKind::SqtwoLog,
+            };
+            Job::Tool(Tool::WaveletDenoise(analysis::WaveletDenoiseSpec {
+                wavelet,
+                extension,
+                threshold,
+                level: o.usize_up_to("level", 1, 64)?,
+                percent: o.num("percent", 50.0)?,
+            }))
+        }
+        "wavelet_smooth" => {
+            let (wavelet, extension) = wavelet_options(&o)?;
+            Job::Tool(Tool::WaveletSmooth(analysis::WaveletSmoothSpec {
+                wavelet,
+                extension,
+                cutoff: o.num("cutoff", 20.0)?,
+            }))
+        }
         "translate" => {
             let shift = match (o.opt_num("by")?, o.opt_num("at")?, o.opt_num("to")?) {
                 (Some(d), _, _) => analysis::Shift::By(d),
@@ -762,6 +953,7 @@ pub fn build(name: &str, options: &Map<String, Value>) -> Result<Job> {
             p2: analysis::LinePoint { x: o.required_num("x2")?, y: o.opt_num("y2")? },
         })),
         "polygon_area" => Job::Tool(Tool::PolygonArea),
+        "xyz_area" => Job::Tool(Tool::XyzArea),
         "intersect" => {
             Job::Tool(Tool::Intersect(analysis::IntersectSpec { include_touching: o.flag("touching", false)? }))
         }

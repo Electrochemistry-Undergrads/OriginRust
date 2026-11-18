@@ -730,6 +730,30 @@ fn peaks_chain_integrates_and_fits_every_peak() {
     let exported = std::fs::read_to_string(&export).unwrap();
     assert!(exported.lines().next().unwrap().contains("Area"), "{exported}");
 
+    // Origin's Voigt as the peak shape.
+    let (ok, stdout, stderr) =
+        sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--min-height", "0.3", "--fit", "voigt"]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Voigt fit of 2 peaks") && stdout.contains("Fit FWHM"), "{stdout}");
+
+    // A function per peak: the first Lorentz, the rest the --fit function.
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "peaks",
+        data.to_str().unwrap(),
+        "--min-height",
+        "0.3",
+        "--fit",
+        "gauss",
+        "--fit-shapes",
+        "lorentz",
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Lorentz+Gauss fit of 2 peaks"), "{stdout}");
+    let (ok, _, stderr) =
+        sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--min-height", "0.3", "--fit-shapes", "voigt"]);
+    assert!(!ok && stderr.contains("--fit"), "the per-peak list needs --fit: {stderr}");
+
     // Without any chain option the plain peak finder runs, as before.
     let (ok, stdout, _) = sheaf(&["analyze", "peaks", data.to_str().unwrap()]);
     assert!(ok && stdout.contains("Peaks1") && !stdout.contains("Area"), "{stdout}");
@@ -747,6 +771,37 @@ fn groups_file(dir: &Path) -> PathBuf {
     )
     .unwrap();
     path
+}
+
+#[test]
+fn variance_and_proportion_tests_run_from_the_command_line() {
+    let dir = scratch("vartest");
+    let data = groups_file(&dir);
+    let file = data.to_str().unwrap();
+    let (ok, out, err) =
+        sheaf(&["analyze", "vartest", file, "--y", "untreated", "--variance", "0.1", "--levels", "95"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("One-sample test for variance") && out.contains("NOT significantly different"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "vartest", file, "--y", "untreated,treated", "--tail", "upper"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("Two-sample test for variance") && out.contains("Alternative Hypothesis: Variance1/Variance2 > 1"),
+        "{out}"
+    );
+    let (ok, _, err) = sheaf(&["analyze", "vartest", file, "--y", "untreated", "--ratio", "1"]);
+    assert!(!ok && err.contains("exactly two columns"), "{err}");
+
+    let (ok, out, err) = sheaf(&["analyze", "proptest", file, "--successes", "7", "--size", "10", "--exact"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("One-sample proportion test") && out.contains("Null Hypothesis: Proportion = 0.5"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "proptest", file, "--successes", "15,9", "--size", "40,35", "--levels", "90,95"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Two-sample proportion test") && out.contains("Proportion1 - Proportion2"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "proptest", file, "--successes", "11", "--size", "10"]);
+    assert!(!ok && err.contains("no more successes"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "proptest", file, "--successes", "1,2,3", "--size", "10,10,10"]);
+    assert!(!ok && err.contains("one --successes"), "{err}");
 }
 
 #[test]
@@ -1212,4 +1267,650 @@ fn discfreq_counts_the_distinct_values() {
     assert!(out.contains("DiscretFreq1") && out.contains("5 cells, 3 distinct values"), "{out}");
     let (ok, _, err) = sheaf(&["analyze", "discfreq", file, "--y", "kind", "--no-count"]);
     assert!(!ok && err.contains("at least one"), "{err}");
+}
+
+/// Principal component analysis (spec `statistics.md` section 17). The numbers are checked against Origin in
+/// `crates/calc/tests/origin_pca.rs`; here the wiring.
+#[test]
+fn principal_component_analysis_runs_from_the_command_line() {
+    let dir = scratch("pca");
+    let path = dir.join("table.csv");
+    std::fs::write(&path, "a,b,c\n1,2.3,3\n2,3.9,1\n3,6.4,4\n4,7.8,1\n5,10.4,5\n6,11.9,9\n7,14.2,2\n8,15.8,6\n")
+        .unwrap();
+    let file = path.to_str().unwrap();
+    let project = dir.join("pca.sheaf");
+    let (ok, out, err) = sheaf(&["analyze", "pca", file, "--y", "a,b,c", "--save", project.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    for name in ["Eigenvalue", "Percent of variance", "PC1", "PC3", "PCA1", "Loadings of PC1"] {
+        assert!(out.contains(name), "{name}: {out}");
+    }
+    assert!(!out.contains("Chi-square"), "{out}");
+    let (ok, info, err) = sheaf(&["info", project.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(info.contains("Principal Component 1") && info.contains("Coefficients of PC2"), "{info}");
+    // Origin's pca draws a scree plot, a loading plot and a biplot; a score plot is a switch.
+    for graph in ["Scree Plot", "Loading Plot", "Biplot"] {
+        assert!(info.contains(graph), "{graph}: {info}");
+    }
+    assert!(!info.contains("Scores Plot"), "{info}");
+    let more = dir.join("pca-more.sheaf");
+    let (ok, _, err) = sheaf(&[
+        "analyze",
+        "pca",
+        file,
+        "--y",
+        "a,b,c",
+        "--components",
+        "3",
+        "--score-plot",
+        "--x-component",
+        "2",
+        "--y-component",
+        "3",
+        "--no-biplot",
+        "--save",
+        more.to_str().unwrap(),
+    ]);
+    assert!(ok, "{err}");
+    let (ok, info, err) = sheaf(&["info", more.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(info.contains("Scores Plot") && info.contains("Loading Plot") && !info.contains("Biplot"), "{info}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "pca", file, "--y", "a,b,c", "--covariance", "--components", "3", "--no-graph"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Chi-square") && out.contains("covariance"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "pca", file, "--y", "a"]);
+    assert!(!ok && err.contains("at least two columns"), "{err}");
+}
+
+/// ROC curve (spec `statistics.md` section 19): the --y columns are the test variables, the state column last.
+#[test]
+fn roc_curve_runs_from_the_command_line() {
+    let dir = scratch("roc");
+    let path = dir.join("marker.csv");
+    std::fs::write(&path, "score,state\n3,yes\n4,yes\n5,yes\n1,no\n2,no\n4,no\n").unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "roc", file, "--y", "score,state", "--positive", "yes"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("Area") && out.contains("0.8333") && out.contains("ROC1") && out.contains("as Origin's"),
+        "{out}"
+    );
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "roc",
+        file,
+        "--y",
+        "score,state",
+        "--positive",
+        "yes",
+        "--lower-is-positive",
+        "--no-graph",
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("lower test values") && out.contains("0.1667"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "roc", file, "--y", "score,state", "--positive", "maybe"]);
+    assert!(!ok && err.contains("one state"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "roc", file, "--y", "score"]);
+    assert!(!ok && err.contains("at least two columns"), "{err}");
+}
+
+/// Kaplan-Meier estimator (spec `statistics.md` section 20): time, censor and group columns.
+#[test]
+fn kaplan_meier_runs_from_the_command_line() {
+    let dir = scratch("kaplan");
+    let path = dir.join("surv.csv");
+    // Origin's measured example, `tools/origin-ref/kaplan-suite1.lines.txt`: 14 cases, 4 censored (1), two groups.
+    std::fs::write(
+        &path,
+        "time,censor,group\n3,0,1\n5,0,2\n5,1,1\n6,0,2\n8,0,1\n8,0,2\n9,1,2\n12,0,1\n12,0,2\n15,1,1\n17,0,2\n20,0,1\n22,1,2\n25,0,1\n",
+    )
+    .unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "kaplan-meier", file, "--y", "time,censor"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("KaplanMeier1") && out.contains("14.10"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "kaplan-meier", file, "--y", "time,censor,group", "--log-rank", "--breslow", "--no-graph"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Log-rank test: chi-square 0.2542") && out.contains("Breslow test"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "kaplan-meier", file, "--y", "time"]);
+    assert!(!ok && err.contains("two or three columns"), "{err}");
+}
+
+/// Graphical summary (spec `statistics.md` section 22): grouped input gives a table block and a graph per group.
+#[test]
+fn graphsummary_runs_from_the_command_line() {
+    let dir = scratch("gsum");
+    let path = dir.join("gs.csv");
+    let mut text = String::from("value,other,grp\n");
+    for i in 0..30 {
+        let v = 10.0 + (f64::from(i) * 1.3).sin() * 3.0 + f64::from(i) * 0.1;
+        text.push_str(&format!("{v:.4},{},{}\n", v * 2.0, if i % 3 == 0 { "ctl" } else { "trt" }));
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let tsv = dir.join("out.tsv");
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "graphsummary",
+        file,
+        "--y",
+        "value",
+        "--groups",
+        "grp",
+        "--level",
+        "90",
+        "--export",
+        tsv.to_str().unwrap(),
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("GraphSummary1") && out.contains("graphs"), "{out}");
+    let exported = std::fs::read_to_string(&tsv).unwrap();
+    for needle in ["Description Statistics", "90% Confidence Intervals", "Normality Test", "ctl", "trt", "A-Squared"] {
+        assert!(exported.contains(needle), "{needle} missing in {exported}");
+    }
+    let (ok, _, err) = sheaf(&["analyze", "graphsummary", file, "--y", "value", "--arrangement", "per-group"]);
+    assert!(!ok && err.contains("not available yet"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "graphsummary", file, "--y", "value", "--arrangement", "nonsense"]);
+    assert!(!ok && err.contains("--arrangement"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "graphsummary", file, "--y", "value", "--level", "120"]);
+    assert!(!ok && err.contains("between 0 and 100"), "{err}");
+}
+
+/// K-means cluster analysis (spec `statistics.md` section 18): Origin's measured 12-case example in two variables.
+#[test]
+fn kmeans_runs_from_the_command_line() {
+    let dir = scratch("kmeans");
+    let path = dir.join("points.csv");
+    std::fs::write(&path, "a,b\n1,1\n1.5,2\n3,4\n5,7\n3.5,5\n4.5,5\n3.5,4.5\n6,8\n7.5,7\n8,9\n7,6.5\n9,8.5\n").unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "kmeans", file, "--y", "a,b", "--clusters", "2"]);
+    assert!(ok, "{err}");
+    // Origin: two clusters of six, sums of squares 23.0417 and 15.0417.
+    assert!(out.contains("KMeans1") && out.contains("23.04") && out.contains("15.04"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "kmeans", file, "--y", "a,b", "--clusters", "3", "--no-graph", "--no-anova"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Cluster 3: 4 cases"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "kmeans", file, "--y", "a,b", "--clusters", "20"]);
+    assert!(!ok && err.contains("cannot be made"), "{err}");
+}
+
+/// Four groups in columns, the third and fourth clearly apart from the first two.
+fn four_groups_file(dir: &Path) -> PathBuf {
+    let path = dir.join("groups.csv");
+    std::fs::write(
+        &path,
+        "A,B,C,D\n9.1,10.0,13.2,17.9\n10.2,11.1,14.1,18.8\n9.7,10.4,13.8,19.4\n10.9,11.6,15.0,18.1\n9.4,10.3,14.4,17.2\n",
+    )
+    .unwrap();
+    path
+}
+
+#[test]
+fn anova_comparison_plot_writes_an_svg_with_brackets_and_labels() {
+    let dir = scratch("comparison-plot");
+    let data = four_groups_file(&dir);
+    let out = dir.join("plot.svg");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "anova",
+        data.to_str().unwrap(),
+        "--y",
+        "A,B,C,D",
+        "--comparison-plot",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("multiple comparisons plot"), "{stdout}");
+    let svg = std::fs::read_to_string(&out).unwrap();
+    // Four category labels and asterisk labels of the significant pairs (Tukey: 5 of 6 are below 0.05).
+    for name in ["A", "B", "C", "D"] {
+        assert!(svg.contains(&format!(">{name}<")), "{name}");
+    }
+    assert!(svg.matches(">****<").count() >= 3, "{svg}");
+    // P-value labels and all pairs, as a box plot.
+    let all = dir.join("all.svg");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "anova",
+        data.to_str().unwrap(),
+        "--y",
+        "A,B,C,D",
+        "--comparison-plot",
+        all.to_str().unwrap(),
+        "--plot-type",
+        "box",
+        "--labels",
+        "p-values",
+        "--all-pairs",
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    let svg = std::fs::read_to_string(&all).unwrap();
+    assert!(svg.matches(">p ").count() + svg.matches("p = ").count() + svg.matches("p &lt; ").count() >= 6, "{svg}");
+}
+
+#[test]
+fn ttest_comparison_plot_and_the_refusals() {
+    let dir = scratch("comparison-ttest");
+    let data = four_groups_file(&dir);
+    let out = dir.join("t.svg");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "ttest",
+        data.to_str().unwrap(),
+        "--y",
+        "A,D",
+        "--comparison-plot",
+        out.to_str().unwrap(),
+        "--error-bar",
+        "ci95",
+        "--plot-type",
+        "scatter",
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(std::fs::read_to_string(&out).unwrap().contains(">****<"));
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "ttest",
+        data.to_str().unwrap(),
+        "--y",
+        "A",
+        "--test",
+        "one-sample",
+        "--comparison-plot",
+        out.to_str().unwrap(),
+    ]);
+    assert!(!ok && stderr.contains("two-sample"), "{stderr}");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "anova",
+        data.to_str().unwrap(),
+        "--y",
+        "A,B",
+        "--comparison",
+        "none",
+        "--comparison-plot",
+        out.to_str().unwrap(),
+    ]);
+    assert!(!ok && stderr.contains("means comparison"), "{stderr}");
+}
+
+#[test]
+fn partial_corr_reproduces_an_origin_run_and_explains_its_refusals() {
+    let dir = scratch("partial-corr");
+    let file = dir.join("pc.csv");
+    // The 20 rows of the Origin run with two controlling variables: r = 0.3195, p = 0.19622, df = 16.
+    std::fs::write(
+        &file,
+        "a,b,c,d
+0.632,4.903,-1.224,0.095
+2.929,7.068,0.378,0.145
+2.723,8.643,0.995,-0.345
+1.709,5.173,-0.513,-0.062
+0.907,4.698,-1.329,0.273
+1.646,5.831,-0.066,0.692
+3.531,6.826,0.478,1.097
+2.656,7.268,1.098,0.21
+1.02,5.578,-1.216,-1.79
+0.775,3.524,-1.293,0.702
+2.334,6.63,0.706,-1.42
+2.373,6.334,0.474,-0.171
+3.316,9.095,1.534,-1.474
+2.562,8.275,0.982,0.002
+2.13,7.155,-0.102,-0.779
+1.767,6.4,-0.274,0.214
+7.435,9.746,2.571,3.3
+2.119,6.412,-0.289,-0.049
+1.819,5.007,-0.785,0.842
+-0.479,5.129,-1.138,-1.323
+",
+    )
+    .unwrap();
+    let file = file.to_str().unwrap();
+    let (ok, out, err) =
+        sheaf(&["analyze", "partial-corr", file, "--y", "a,b", "--control", "c,d", "--show-significance"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("0.319499") && out.contains("0.196219") && out.contains("Controlling variables: c, d"),
+        "{out}"
+    );
+    assert!(out.contains("Two-tailed test of significance is used.") && out.contains("PartialCorr1"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "partial-corr", file, "--y", "a,b", "--control", "c", "--one-tailed", "--flag-significant"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("One-tailed test of significance is used."), "{out}");
+
+    // A control is required, a variable cannot control itself, an X range has nothing to limit.
+    let (ok, _, err) = sheaf(&["analyze", "partial-corr", file, "--y", "a,b"]);
+    assert!(!ok && err.contains("--control"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "partial-corr", file, "--y", "a,b", "--control", "b"]);
+    assert!(!ok && err.contains("both a variable and a controlling variable"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "partial-corr", file, "--y", "a,b", "--control", "c", "--x-range", "1:3"]);
+    assert!(!ok, "{err}");
+}
+
+#[test]
+fn anova3_reports_origins_type_three_table_and_options() {
+    let dir = scratch("anova3");
+    let file = dir.join("a3.csv");
+    // The balanced 2 x 3 x 2 design of the Origin run (24 numbers): A has F = 43.28302, p = 2.61651E-5.
+    std::fs::write(
+        &file,
+        "a,b,c,y
+lo,b1,c1,15.814
+lo,b2,c2,15.4569
+hi,b1,c2,17.6589
+hi,b3,c1,16.2762
+lo,b2,c1,14.8436
+lo,b3,c2,15.9664
+hi,b2,c2,20.2379
+lo,b1,c1,16.4812
+lo,b3,c1,14.5347
+hi,b1,c2,17.82
+hi,b3,c2,15.9952
+lo,b2,c1,13.867
+hi,b1,c1,17.812
+hi,b2,c2,20.4605
+lo,b1,c2,17.4733
+lo,b3,c1,15.7478
+hi,b2,c1,16.2572
+hi,b3,c2,15.4057
+lo,b2,c2,14.5925
+hi,b1,c1,16.4532
+hi,b3,c1,17.6181
+lo,b1,c2,16.3418
+lo,b3,c2,16.499
+hi,b2,c1,17.66
+",
+    )
+    .unwrap();
+    let file = file.to_str().unwrap();
+    let export = dir.join("a3-out.csv");
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "anova3",
+        file,
+        "--y",
+        "a,b,c,y",
+        "--levene",
+        "--power",
+        "--power-sizes",
+        "50,100",
+        "--comparison",
+        "tukey,bonferroni",
+        "--export",
+        export.to_str().unwrap(),
+    ]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("20.234") && out.contains("43.283") && out.contains("a*b*c") && out.contains("Model"),
+        "{out}"
+    );
+    assert!(out.contains("type III") && out.contains("ANOVA3Way1"), "{out}");
+    assert!(out.contains("Tukey means comparison") && out.contains("Bonferroni means comparison"), "{out}");
+    assert!(out.contains("Levene's test"), "{out}");
+    let exported = std::fs::read_to_string(&export).unwrap();
+    assert!(exported.contains("Sum of Squares") && exported.contains("a: lo"), "{exported}");
+
+    // Interactions can be left out; the F tests then use the pooled error.
+    let (ok, out, err) =
+        sheaf(&["analyze", "anova3", file, "--y", "a,b,c,y", "--no-abc", "--no-ac", "--comparison", "none"]);
+    assert!(ok, "{err}");
+    assert!(!out.contains("a*b*c") && !out.contains("a*c") && out.contains("a*b"), "{out}");
+
+    // Three columns are too few, Dunnett is not offered, an X range has nothing to limit.
+    let (ok, _, err) = sheaf(&["analyze", "anova3", file, "--y", "a,b,y"]);
+    assert!(!ok && err.contains("FACTOR_A,FACTOR_B,FACTOR_C,DATA"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "anova3", file, "--y", "a,b,c,y", "--comparison", "dunnett"]);
+    assert!(!ok && err.contains("Dunnett"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "anova3", file, "--y", "a,b,c,y", "--x-range", "1:3"]);
+    assert!(!ok, "{err}");
+}
+
+/// The one-way repeated measures run of Origin (8 subjects, 4 levels) as indexed rows `level,y,subject`.
+fn rm_one_way_csv() -> String {
+    let table = [
+        [22.5244, 23.5244, 24.5244, 25.5244],
+        [18.138, 19.677, 22.5219, 24.6265],
+        [17.0564, 21.0059, 19.8137, 22.3672],
+        [23.5919, 22.9043, 26.4075, 24.4996],
+        [19.4001, 19.1614, 18.8032, 21.3784],
+        [20.3396, 22.2064, 23.9391, 25.4933],
+        [21.2722, 21.8676, 23.4055, 25.5475],
+        [15.6833, 19.3813, 19.8708, 19.163],
+    ];
+    let mut text = String::from("level,y,subject\n");
+    for (s, row) in table.iter().enumerate() {
+        for (l, v) in row.iter().enumerate() {
+            text.push_str(&format!("L{},{v},S{}\n", l + 1, s + 1));
+        }
+    }
+    text
+}
+
+#[test]
+fn rmanova_reports_origins_one_way_tables_and_refuses_what_it_cannot_do() {
+    let dir = scratch("rmanova1");
+    let file = dir.join("rm1.csv");
+    std::fs::write(&file, rm_one_way_csv()).unwrap();
+    let file = file.to_str().unwrap();
+    let export = dir.join("rm1-out.csv");
+    let (ok, out, err) =
+        sheaf(&["analyze", "rmanova", file, "--y", "level,y,subject", "--export", export.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(out.contains("One-way repeated measures ANOVA") && out.contains("ANOVAOneWayRM1"), "{out}");
+    assert!(out.contains("15.672") && out.contains("Intercept") && out.contains("804.75"), "{out}");
+    assert!(out.contains("Tukey means comparison"), "{out}");
+    let exported = std::fs::read_to_string(&export).unwrap();
+    for text in ["Greenhouse-Geisser", "Huynh-Feldt", "Lower-bound", "0.94848", "0.963657", "9.86391", "3.54149"] {
+        assert!(exported.contains(text), "{text} is missing from {exported}");
+    }
+    let (ok, out, err) = sheaf(&["analyze", "rmanova", file, "--y", "level,y,subject", "--comparison", "none"]);
+    assert!(ok && !out.contains("means comparison"), "{out}{err}");
+
+    // Two columns are too few, Dunnett and the interaction of a one-way design are refused.
+    let (ok, _, err) = sheaf(&["analyze", "rmanova", file, "--y", "level,y"]);
+    assert!(!ok && err.contains("FACTOR,DATA,SUBJECT"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "rmanova", file, "--y", "level,y,subject", "--comparison", "dunnett"]);
+    assert!(!ok && err.contains("Dunnett"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "rmanova", file, "--y", "level,y,subject", "--interaction"]);
+    assert!(!ok && err.contains("two-way"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "rmanova", file, "--y", "level,y,subject", "--x-range", "1:3"]);
+    assert!(!ok, "{err}");
+}
+
+#[test]
+fn rmanova_two_way_has_an_error_term_per_effect() {
+    let dir = scratch("rmanova2");
+    let file = dir.join("rm2.csv");
+    // The 6 subjects of the Origin run, A (2 levels) by B (3 levels), one number per cell.
+    let cells = [
+        [32.6833, 33.3234, 31.7134, 35.1833, 34.4234, 33.5134],
+        [34.0195, 34.1319, 33.1258, 34.1635, 36.0622, 36.4435],
+        [30.368, 30.1007, 29.7489, 32.7849, 30.9238, 31.9115],
+        [30.0507, 29.5896, 29.8773, 30.6486, 32.8153, 31.4332],
+        [33.6047, 33.1549, 34.0038, 35.4702, 34.2338, 36.4597],
+        [32.5875, 32.353, 33.6288, 34.7314, 35.5193, 33.6986],
+    ];
+    let mut text = String::from("a,b,y,s\n");
+    for (s, row) in cells.iter().enumerate() {
+        for (c, v) in row.iter().enumerate() {
+            text.push_str(&format!("A{},B{},{v},S{}\n", c / 3 + 1, c % 3 + 1, s + 1));
+        }
+    }
+    std::fs::write(&file, text).unwrap();
+    let file = file.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "rmanova", file, "--y", "a,b,y,s", "--two-way", "--interaction"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Two-way repeated measures ANOVA") && out.contains("ANOVATwoWayRM1"), "{out}");
+    assert!(out.contains("Error(a*b)") && out.contains("2181.6") && out.contains("0.9115"), "{out}");
+    // Without the interaction (Origin's default) there is no A*B row.
+    let (ok, out, err) = sheaf(&["analyze", "rmanova", file, "--y", "a,b,y,s", "--two-way"]);
+    assert!(ok && !out.contains("Error(a*b)"), "{out}{err}");
+    let (ok, _, err) = sheaf(&["analyze", "rmanova", file, "--y", "a,b,y,s", "--two-way", "--comparison", "tukey"]);
+    assert!(!ok && err.contains("no means comparisons"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "rmanova", file, "--y", "a,y,s", "--two-way"]);
+    assert!(!ok && err.contains("FACTOR_A,FACTOR_B,DATA,SUBJECT"), "{err}");
+}
+
+/// The rows of an exported sheet that are numbers (the header rows are not).
+fn numeric_rows(text: &str) -> Vec<Vec<f64>> {
+    text.lines().filter_map(|l| l.split(',').map(|v| v.parse::<f64>().ok()).collect::<Option<Vec<f64>>>()).collect()
+}
+
+/// 16 samples of a ramp (column "ramp", 0..15) and a short pair of Haar coefficient columns.
+fn wavelet_file(dir: &Path) -> PathBuf {
+    let s = std::f64::consts::SQRT_2;
+    // x = 4 2 5 5 1 7 0 0: ca = (6 10 8 0) / sqrt2, cd = (2 0 -6 0) / sqrt2 (Haar, Origin's alignment).
+    let (ca, cd) = ([6.0 / s, 10.0 / s, 8.0 / s, 0.0], [2.0 / s, 0.0, -6.0 / s, 0.0]);
+    let mut text = String::from("t,ramp,ca,cd\n");
+    for i in 0..16 {
+        let (a, d) = if i < 4 { (ca[i].to_string(), cd[i].to_string()) } else { (String::new(), String::new()) };
+        text.push_str(&format!("{i},{i},{a},{d}\n"));
+    }
+    let path = dir.join("wavelet.csv");
+    std::fs::write(&path, text).unwrap();
+    path
+}
+
+#[test]
+fn wavelet_decompose_writes_the_coefficients_and_reconstruct_gives_them_back() {
+    let dir = scratch("wavelet");
+    let data = wavelet_file(&dir);
+    let out = dir.join("dwt.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "wavelet-decompose",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--wavelet",
+        "haar",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Wavelet decomposition"), "{stdout}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    let rows: Vec<Vec<f64>> = numeric_rows(&text);
+    assert_eq!(rows.len(), 8);
+    // Ramp 0, 1, 2, ..: ca[k] = (x[2k] + x[2k+1]) / sqrt2, cd[k] = (x[2k] - x[2k+1]) / sqrt2 = -1 / sqrt2.
+    assert!((rows[0][0] - 1.0 / 2f64.sqrt()).abs() < 1e-12 && (rows[0][1] + 1.0 / 2f64.sqrt()).abs() < 1e-12);
+    assert!(text.lines().nth(1).unwrap().contains("Approx Coeff of Haar dwt on"), "{text}");
+
+    let out = dir.join("idwt.csv");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "wavelet-reconstruct",
+        data.to_str().unwrap(),
+        "--y",
+        "ca",
+        "--with",
+        "cd",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    let got: Vec<f64> = numeric_rows(&std::fs::read_to_string(&out).unwrap()).into_iter().map(|r| r[0]).collect();
+    let want = [4.0, 2.0, 5.0, 5.0, 1.0, 7.0, 0.0, 0.0];
+    assert_eq!(got.len(), 8);
+    for (g, w) in got.iter().zip(want) {
+        assert!((g - w).abs() < 1e-12, "{got:?}");
+    }
+}
+
+#[test]
+fn wavelet_denoise_and_smooth_run_and_refuse_what_origin_refuses() {
+    let dir = scratch("wavelet-denoise");
+    let data = wavelet_file(&dir);
+    let out = dir.join("den.csv");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "wavelet-denoise",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--wavelet",
+        "db2",
+        "--level",
+        "2",
+        "--percent",
+        "0",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    // A threshold of 0 % keeps every coefficient: the ramp comes back.
+    let rows = numeric_rows(&std::fs::read_to_string(&out).unwrap());
+    assert_eq!(rows.len(), 16);
+    for (i, r) in rows.iter().enumerate() {
+        assert!((r[1] - i as f64).abs() < 1e-9, "row {i}: {r:?}");
+    }
+    // Four levels do not fit 16 periodic points (limit 3), as in Origin.
+    let (ok, _, stderr) = sheaf(&["analyze", "wavelet-denoise", data.to_str().unwrap(), "--y", "ramp", "--level", "4"]);
+    assert!(!ok && stderr.contains("level 4"), "{stderr}");
+    let (ok, _, stderr) =
+        sheaf(&["analyze", "wavelet-smooth", data.to_str().unwrap(), "--y", "ramp", "--wavelet", "x"]);
+    assert!(!ok && stderr.contains("not a wavelet"), "{stderr}");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "wavelet-smooth",
+        data.to_str().unwrap(),
+        "--y",
+        "ramp",
+        "--wavelet",
+        "db2",
+        "--cutoff",
+        "50",
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Wavelet smoothing"), "{stdout}");
+}
+
+#[test]
+fn cwt_writes_one_column_per_scale_and_refuses_what_origin_refuses() {
+    let dir = scratch("cwt");
+    // A unit impulse at row 8 of 16, and the scales 1, 2.9, 4.
+    let mut text = String::from(
+        "t,sig,scale
+",
+    );
+    for i in 0..16 {
+        let s = ["1", "2.9", "4"].get(i).copied().unwrap_or("");
+        text.push_str(&format!(
+            "{i},{},{s}
+",
+            if i == 8 { 1 } else { 0 }
+        ));
+    }
+    let data = dir.join("cwt.csv");
+    std::fs::write(&data, text).unwrap();
+    let out = dir.join("cwt-out.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "cwt",
+        data.to_str().unwrap(),
+        "--y",
+        "sig",
+        "--with",
+        "scale",
+        "--wavelet",
+        "mexhat",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Continuous wavelet") && stdout.contains("CWTResults1"), "{stdout}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    let rows = numeric_rows(&text);
+    assert_eq!(rows.len(), 16);
+    assert_eq!(rows[0].len(), 3);
+    // Scale 2.9 is cut to 2, so its column differs from scale 4 and both are centred half a sample after the impulse.
+    assert!((rows[8][1] - rows[9][1]).abs() < 1e-12 && (rows[7][1] - rows[10][1]).abs() < 1e-12, "{rows:?}");
+    assert!(text.contains("cwt of B, C"), "{text}");
+    let (ok, _, stderr) =
+        sheaf(&["analyze", "cwt", data.to_str().unwrap(), "--y", "sig", "--with", "scale", "--param", "3"]);
+    assert!(!ok && stderr.contains("wave number"), "{stderr}");
 }

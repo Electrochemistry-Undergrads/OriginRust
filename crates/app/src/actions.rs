@@ -24,6 +24,9 @@ pub enum CopyKind {
     FullPrecision,
     /// The label rows above the values, which are written as shown.
     WithLabels,
+    /// Copy (formula), Copy (label rows), Copy (formula and label rows), Copy All (T88): whole
+    /// columns only, as Origin's.
+    Part(sheaf_core::clipboard::CopyPart),
 }
 
 /// What to do with the selected cells of a worksheet.
@@ -33,7 +36,12 @@ pub enum CellOp {
     Cut,
     /// Paste what is on the clipboard: asks the system for the text, which comes back as `PasteText`.
     Paste,
+    /// Edit > Paste Transpose: as `Paste`, and the text that comes back is pasted transposed.
+    PasteTranspose,
     PasteText(String),
+    /// Edit > Set As Begin / Set As End: the top (or bottom) selected row becomes the first (or
+    /// last) row of each selected column's data range.
+    SetRangeEnd(sheaf_core::data_range::RangeEnd),
     /// Empty the cells (the Delete key).
     Clear,
     /// Store the same text in every selected cell (Ctrl+Enter in the cell editor).
@@ -69,20 +77,37 @@ pub enum SheetOp {
     Insert,
     Delete,
     Duplicate,
+    /// Duplicate Without Data: the columns and labels of the sheet in a new last sheet (T90).
+    DuplicateWithoutData,
+    /// Sheet Name to Show: what the sheet's tab shows (T90).
+    ShowName(sheaf_core::sheet_tab::SheetLabel),
+    /// The corner menu's View switches: show or hide a label row, the row labels or grid lines (T92).
+    ToggleView(sheaf_core::sheet_view::ViewSwitch),
+    /// Navigate...: the window that lists the sheets and goes to one (T93).
+    Navigate,
     /// Open the window that asks for a new name.
     RenameDialog,
 }
 
 /// An edit of one object of a graph, from the graph window (Origin's right-click menus).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GraphOp {
     /// Change Plot to: line, scatter, line + symbol, column.
     SetPlotKind { layer: usize, plot: usize, kind: PlotKind },
     /// Move to Right Y Axis / Move to Left Y Axis: the plot goes to the right Y layer of its
     /// panel (made when there is none) or back to the panel's own layer.
     MovePlotToAxis { layer: usize, plot: usize, right: bool },
+    /// Move to Layer N: the plot goes to another layer of the graph, with that layer's axes (T61).
+    MovePlotToLayer { layer: usize, plot: usize, to: usize },
     /// Hide Data Plot.
     HidePlot { layer: usize, plot: usize },
+    /// Change X / Change Y: the plot reads another column of its sheet (`y` false for X). The axis
+    /// limits are not touched.
+    SetPlotColumn { layer: usize, plot: usize, y: bool, column: sheaf_core::ColumnId },
+    /// Ungroup: the plots of the plot's group become single plots, keeping their look.
+    Ungroup { layer: usize, plot: usize },
+    /// Remove Trendline: the plot's last trendline goes.
+    RemoveTrendline { layer: usize, plot: usize },
     /// Hide Axis (`y` false for the X axis).
     HideAxis { layer: usize, y: bool },
     /// Hide Grids, or show the major grid lines again.
@@ -92,8 +117,14 @@ pub enum GraphOp {
     /// Exchange X-Y Axes: the settings of the two axes and the X and Y columns of every plot trade places.
     /// A layer with a plot against the row number (no X column) is left as it is.
     ExchangeAxes { layer: usize },
+    /// Graph > Offset Grouped Data in Layer: the layer's stack mode. Choosing the mode the layer
+    /// already has changes nothing and makes no undo step.
+    SetStack { layer: usize, stack: sheaf_core::graph::Stack },
     /// Axis Zoom In and Axis Zoom Out: the axis range shrinks or grows about its middle.
     AxisZoom { layer: usize, y: bool, zoom_in: bool },
+    /// Axis Center: the axis keeps its span and moves so that the value at `page` (the right-clicked
+    /// page point, in points) becomes the middle of its range. The range becomes fixed.
+    AxisCenter { layer: usize, y: bool, page: (f64, f64) },
     /// Delete on the legend: it is hidden.
     HideLegend { layer: usize },
     /// Reconstruct Legend: the legend text is made again from the plots (the automatic text).
@@ -107,10 +138,26 @@ pub enum GraphOp {
     DeleteLabel { layer: usize, label: usize },
     /// Delete on a drawn line, arrow, rectangle or ellipse.
     DeleteShape { layer: usize, shape: usize },
+    /// Delete on a slope annotation.
+    DeleteSlope { layer: usize, slope: usize },
+    /// Delete on a straight line.
+    DeleteStraightLine { layer: usize, line: usize },
+    /// Add Color Scale / Add Bubble Scale (T80): a scale of the layer's mapped plot beside the frame.
+    AddScale { layer: usize, kind: sheaf_core::layer_scale::LayerScaleKind },
+    /// Delete on a colour scale or bubble scale.
+    DeleteScale { layer: usize, scale: usize },
+    /// Move a drawn object to the top or bottom of its own layer's shape stack.
+    OrderShape { layer: usize, shape: usize, front: bool },
     /// Hide Layer (every plot of the layer is hidden).
     HideLayer { layer: usize },
     /// Hide Other Layers.
     HideOtherLayers { layer: usize },
+    /// The Data menu's data markers and display range (T118); `layer` is the active layer.
+    DataMarkers { layer: usize, op: MarkerOp },
+    /// Graph > New Layer(Axes) and the Graph toolbar: a layer of `kind` next to the active layer `layer`.
+    AddLayer { layer: usize, kind: sheaf_core::layers::NewLayerKind },
+    /// Delete Layer of the layer icon: the layer goes, its children become independent.
+    DeleteLayer { layer: usize },
 }
 
 /// The tool of a graph window (the Tools toolbar).
@@ -124,6 +171,69 @@ pub enum GraphTool {
     Text,
     /// A drawing tool (Line, Arrow, Rectangle, Circle): a drag on the graph draws one object.
     Draw(sheaf_core::shape::ShapeKind),
+    /// The Slope tool: two clicks on data points of one plot mark the slope between them.
+    Slope,
+    /// One of the Data menu's tools (Mask, Move, Remove Bad Data Points).
+    Data(DataTool),
+    /// Zoom In (a mode): the next click on the page zooms in at that point.
+    ZoomIn,
+    /// The Pan tool: a drag on the page moves the view.
+    Pan,
+    /// The Tools-bar Scale In: a rectangle drag rescales the active layer's axes (T69).
+    ScaleIn,
+    /// The Tools-bar Scale Out: a click or drag steps back to the previous scale (T69).
+    ScaleOut,
+}
+
+/// A change of a graph window's view (screen-only; the graph is not changed).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewOp {
+    /// Zoom Out: half the zoom, never below the whole page.
+    ZoomOut,
+    /// Whole Page: the page fits the window.
+    WholePage,
+    /// Zoom All: the page and all objects fit the window (T69).
+    ZoomAll,
+}
+
+/// The tools of a graph's Data menu that act on the points of a plot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DataTool {
+    /// Data > Mask Data Points: a drag masks the points in a rectangle, a click on a masked point
+    /// unmasks it.
+    Mask,
+    /// Data > Move Data Points: a drag moves a point, changing its X and Y cells.
+    Move,
+    /// Data > Remove Bad Data Points: a click sets the Y cell of a point missing.
+    RemoveBad,
+    /// Data > Mark Data Range: a click on a point moves the nearer data marker of its plot there (T118).
+    MarkRange,
+}
+
+/// A change of the data markers or the display range of a graph (T118).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarkerOp {
+    /// Mark Data Range: markers at the ends of plot `plot` of the layer.
+    Mark { plot: usize },
+    /// A marker moved: the plot's markers are now on rows `a` and `b`.
+    Move { plot: usize, a: usize, b: usize },
+    /// Clear Data Markers.
+    Clear,
+    /// Set Display Range.
+    SetRange,
+    /// Reset to Full Range.
+    ResetRange,
+}
+
+/// A change of worksheet cells made from a graph's Data menu tools (one undo step each).
+#[derive(Debug, Clone, PartialEq)]
+pub enum DataEdit {
+    /// Masks or unmasks the Y cells of points.
+    Mask { cells: Vec<sheaf_core::DataCell>, masked: bool },
+    /// Sets the Y cells of points missing.
+    RemoveBad { cells: Vec<sheaf_core::DataCell> },
+    /// Moves a point: its Y cell and, when the plot has an X column, its X cell.
+    Move { y: (sheaf_core::DataCell, f64), x: Option<(sheaf_core::DataCell, f64)> },
 }
 
 /// Which File > Import item opened the file chooser.
@@ -135,14 +245,48 @@ pub enum ImportPick {
     Multiple,
     /// Several files, with the comma preset as the delimiter.
     Csv,
+    /// Excel workbooks (File > Import > Excel).
+    Excel,
 }
 
 #[derive(Debug, Clone)]
 pub enum Action {
     NewProject,
+    /// File > New > Graph and the Standard toolbar button: an empty graph.
+    NewGraph,
+    /// File > Save Project without Data...: a copy without values to a file of its own.
+    SaveProjectWithoutData,
+    /// File > Duplicate Project without Data: an unsaved copy without values replaces the project.
+    DuplicateProjectWithoutData,
     OpenProject,
     SaveProject,
     SaveProjectAs,
+    /// File > Save Window As...: ask for a name and write this window (a workbook, or a graph with
+    /// the workbooks it reads) to a window file.
+    SaveWindowAs(WindowId),
+    /// File > Save Template As...: ask for a name and save the graph's look as a user template.
+    SaveTemplateAs(WindowId),
+    /// Plot > User Templates > Manage...: rename and delete the saved templates.
+    ManageTemplates,
+    /// Column > Fill Column With > a pattern: open its window for these columns.
+    FillPattern {
+        kind: crate::dialogs::fill_pattern::FillKind,
+        columns: Vec<ColumnId>,
+    },
+    /// Column > Set Sampling Interval...: open its window for these columns.
+    SetSamplingInterval {
+        columns: Vec<ColumnId>,
+    },
+    /// Column > Show X Column...: open its window for these columns.
+    ShowXColumn {
+        columns: Vec<ColumnId>,
+    },
+    /// Plot > User Templates > a saved one: plot the columns in its look.
+    PlotUserTemplate {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+        name: String,
+    },
     /// Ask for files and open the import dialog; with a path, skip the file chooser.
     Import(Option<PathBuf>),
     /// File > Import > Single ASCII, Multiple ASCII or Comma Delimited: the file chooser for that item.
@@ -159,6 +303,12 @@ pub enum Action {
     ReplaceInSheets(WindowId),
     Undo,
     Redo,
+    /// Owner-only: undo consecutive completed AI calls, stopping at a manual history entry.
+    UndoAiChanges,
+    /// A change captured by the shared Format toolbar.
+    FormatText(crate::text_format::Request),
+    WorksheetColorDialog(Box<crate::dialogs::worksheet_color::WorksheetColorDialog>),
+    FormatObject(crate::object_format::Request),
     NewWorkbook,
     AddColumn(WindowId),
     DeleteColumns(Vec<ColumnId>),
@@ -167,6 +317,52 @@ pub enum Action {
         columns: Vec<ColumnId>,
         to: sheaf_core::sheetops::MoveTo,
     },
+    /// The column header's Swap Columns...: the two columns exchange places.
+    SwapColumns(ColumnId, ColumnId),
+    /// Edit > Find in Project (F3): open the Find window.
+    FindInProject,
+    /// File > Export > Worksheet as Image...: save the active sheet as a picture.
+    ExportWorksheetImage(WindowId),
+    /// View > View Windows (T100).
+    ViewWindows(sheaf_core::project::ViewWindows),
+    /// An axis's Save Format as Theme...: ask for a name and save the axis's format as a graph theme.
+    SaveAxisTheme {
+        graph: WindowId,
+        layer: usize,
+        y: bool,
+    },
+    /// Tools > Theme Organizer...: list the graph themes and apply one to the active graph.
+    ThemeOrganizer,
+    /// Tools > Fitting Function Organizer...: browse the built-in fit functions.
+    FitOrganizer,
+    /// Tools > Import Filters Manager...: the import file types and the saved import settings.
+    FilterManager,
+    /// Plot > System Templates...: the window of the built-in templates, for these columns.
+    SystemTemplates {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
+    /// File > New > From Template: an empty graph from the saved template of this name, or (None,
+    /// More...) from a template file picked with the system dialog.
+    NewFromTemplate(Option<String>),
+    /// Window > Folders: make this folder the Project Explorer's active one.
+    GoToFolder(Vec<usize>),
+    /// The explorer folder's Properties...: its name, comments and information.
+    FolderProperties(Vec<usize>),
+    /// Window > Duplicate (Batch Plotting): open the window that picks sheets or columns.
+    BatchPlot {
+        graph: WindowId,
+        columns: bool,
+    },
+    /// File > Import > Re-Import Directly / Re-Import...: read the book's source file again.
+    Reimport {
+        book: WindowId,
+        choose: bool,
+    },
+    /// The column header's Copy Columns to...: open its window for these columns.
+    CopyColumnsTo(Vec<ColumnId>),
+    /// Edit > Reset to Full Range: every column of the workbook's active sheet uses all its rows.
+    ResetFullRange(WindowId),
     /// Column > Hide/Unhide Columns > Hide Selected.
     HideColumns(Vec<ColumnId>),
     /// Column > Hide/Unhide Columns > Unhide All, on the active sheet of the workbook.
@@ -205,6 +401,8 @@ pub enum Action {
     },
     ColumnProperties(ColumnId),
     SetColumnValues(ColumnId),
+    /// The Set Values window for several columns of one sheet at once (Ctrl+Shift+Q).
+    SetMultipleColumnsValues(Vec<ColumnId>),
     /// Recalculate these columns now. Columns without a recalculating formula are skipped.
     Recalculate(Vec<ColumnId>),
     /// Open the window of an analysis tool for these columns of a workbook; without columns,
@@ -239,6 +437,14 @@ pub enum Action {
         column: Option<ColumnId>,
         kind: FitMoreKind,
     },
+    /// Analysis > Fitting > Simulate Curve: the window, with the active workbook if there is one.
+    SimulateCurve {
+        book: Option<WindowId>,
+    },
+    /// Analysis > Fitting > Simulate Surface: the window, with the active workbook if there is one.
+    SimulateSurface {
+        book: Option<WindowId>,
+    },
     /// Sort the rows of the sheet that holds this column by the column's values.
     SortSheet {
         column: ColumnId,
@@ -270,6 +476,18 @@ pub enum Action {
         columns: Vec<ColumnId>,
         kind: crate::dialogs::reshape::ReshapeKind,
     },
+    /// Analysis > Peaks and Baseline > Multiple Peak Fit on the active data plot of `graph`, or on
+    /// the Y column `y` of a workbook (a graph of it is made first, as Origin does).
+    MultiPeakFit {
+        graph: Option<WindowId>,
+        y: ColumnId,
+        layer: usize,
+    },
+    /// Worksheet > Pivot Table: open the window; the table goes to a new sheet.
+    PivotTable {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
     /// Column > Reverse Order: turn the values of each selected column round.
     ReverseColumns(Vec<ColumnId>),
     /// Empty every column of the active sheet of this workbook (one undo step).
@@ -282,6 +500,41 @@ pub enum Action {
     },
     /// Column > Filter > Enable/Disable Filter.
     ToggleRowFilter(WindowId),
+    /// Column > Mask > Change Color: the next colour of the project's mask colour.
+    MaskColor,
+    /// Column > Mask > Disable Masking / Enable Masking, for the whole project.
+    ToggleMasking,
+    /// Column > Mask > Hide/Show Masked Points for the whole project.
+    ToggleHideMasked,
+    /// Column > Mask Cells by Condition...: the window for these columns.
+    MaskByConditionDialog {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
+    /// View > Freeze/Unfreeze Panes (a toggle): freezes the rows above and the columns left of the
+    /// selection, or unfreezes what is frozen.
+    FreezePanes(WindowId),
+    /// Worksheet > Conditional Formatting > Highlight Min Max / Highlight Top Bottom: the window
+    /// for a rule on the selected cells.
+    CondFormatDialog {
+        book: WindowId,
+        kind: crate::dialogs::cond_format::CondKind,
+    },
+    /// Worksheet > Conditional Formatting > Conditional Format Manager: the list of the active
+    /// sheet's rules.
+    CondFormatManager(WindowId),
+    /// Worksheet > Conditional Formatting > Remove Conditional Format: removes the rules that
+    /// touch the selection.
+    RemoveCondFormat(WindowId),
+    /// Format Cells... (cell, column and row menus; Format > Cell...): the window for the
+    /// formats of the selection.
+    FormatCellsDialog(WindowId),
+    /// Format > Worksheet (F4): worksheet-wide Data font defaults.
+    WorksheetFontsDialog(WindowId),
+    /// Cell menu > Add Note... / Edit Note...: the note editor for the single selected cell.
+    NoteDialog(WindowId),
+    /// Cell menu > Delete Note: removes the note of the single selected cell.
+    DeleteNote(WindowId),
     /// Column > Filter > Reapply Filter.
     ReapplyRowFilter(WindowId),
     /// Open the window that keeps only the rows matching a condition.
@@ -290,6 +543,11 @@ pub enum Action {
         book: WindowId,
         columns: Vec<ColumnId>,
         template: Template,
+    },
+    /// Plot > Line + Symbol > Line Series: one plot of the rows of the selected Y columns, k-point segments.
+    PlotLineSeries {
+        book: WindowId,
+        columns: Vec<ColumnId>,
     },
     /// Plot > Symbol > Y Error: a scatter plot of the Y columns that shows the error bars of
     /// their Y error columns; with `x` (XY Error) also those of their X error columns.
@@ -305,8 +563,35 @@ pub enum Action {
         rows: usize,
         cols: usize,
     },
-    /// Graph > Add Error Bars: the plots of the layer that have none take the Y error column
-    /// of their sheet.
+    /// Plot > Multi-Panel > Stack: choose grouping and layout before making the graph.
+    StackPanels {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
+    /// Graph > Merge Graph Windows...
+    MergeGraphs,
+    LabelPanels {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
+    /// Plot > Multi-Y > Multiple Y Axes... (T61) for the selected columns (none: the sheet's Y columns).
+    MultiYAxes {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
+    /// Multiple Comparisons Plot... (T64) of a report sheet (`None`: the workbook's active sheet).
+    ComparisonPlot {
+        book: WindowId,
+        sheet: Option<usize>,
+    },
+    /// A plot's menu: Add Trendline... or Edit Trendline... (the plot's last one).
+    Trendline {
+        graph: WindowId,
+        layer: usize,
+        plot: usize,
+        edit: bool,
+    },
+    /// Graph > Add Error Bars: choose an existing Y-error column for one plot of the layer.
     AddErrorBars {
         graph: WindowId,
         layer: usize,
@@ -319,10 +604,29 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
     },
+    /// Opens Layer Contents for one layer with this plot type chosen (Graph > Add Plot to Layer).
+    AddPlotToLayer {
+        graph: WindowId,
+        layer: usize,
+        kind: sheaf_core::graph::PlotKind,
+    },
     /// Opens Layer Contents (Origin's add, remove, group and order window) for one layer.
     LayerContents {
         graph: WindowId,
         layer: usize,
+    },
+    /// Fit Page to Layers...: opens its window.
+    FitPageToLayers {
+        graph: WindowId,
+    },
+    /// Format > Fit Page To Printer: the page takes the default printer's printable size at once.
+    FitPageToPrinter {
+        graph: WindowId,
+    },
+    /// Opens Layer Management (arrange, size/position and link the layers) for a graph, with a layer selected when given.
+    LayerManagement {
+        graph: WindowId,
+        layer: Option<usize>,
     },
     /// Opens the graph settings on a tab, for one layer, with a plot chosen in the Plots tab.
     GraphProperties {
@@ -341,6 +645,37 @@ pub enum Action {
         graph: WindowId,
         tool: GraphTool,
     },
+    /// View > Print View, Page View, Window View, Draft View: the graph window's mode (view state, no undo step).
+    SetViewMode {
+        graph: WindowId,
+        mode: sheaf_core::project::ViewMode,
+    },
+    /// View > Show > Layer Icons.
+    SetLayerIcons {
+        graph: WindowId,
+        on: bool,
+    },
+    /// View > Full Screen: the graph's page over the whole screen until Esc.
+    FullScreen(WindowId),
+    /// Zoom Out or Whole Page of a graph window.
+    GraphView {
+        graph: WindowId,
+        op: ViewOp,
+    },
+    /// Scale In finished: the new ends of the active layer's axes.
+    ScaleIn {
+        graph: WindowId,
+        layer: usize,
+        x: (f64, f64),
+        y: (f64, f64),
+    },
+    /// Scale Out: back to the previous scale of the active layer.
+    ScaleOut {
+        graph: WindowId,
+        layer: usize,
+    },
+    /// A change that a Data menu tool made to the cells of a plot's worksheet.
+    DataEdit(DataEdit),
     /// Add Text: opens the text window for a new label in a layer (the active one when `layer`
     /// is `None`) at a point given as fractions of the layer frame (the middle when `None`).
     AddText {
@@ -353,6 +688,17 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
         label: usize,
+    },
+    /// Edits the existing axis title with text-selection formatting.
+    EditTitle {
+        graph: WindowId,
+        layer: usize,
+        vertical: bool,
+    },
+    /// Edits the existing legend content, retaining plot substitutions.
+    EditLegendText {
+        graph: WindowId,
+        layer: usize,
     },
     /// Moves a label to a new anchor (fractions of the layer frame): one undo step.
     MoveLabel {
@@ -376,6 +722,31 @@ pub enum Action {
         dx: f64,
         dy: f64,
     },
+    /// Adds a slope annotation to a layer: one undo step.
+    AddSlope {
+        graph: WindowId,
+        layer: usize,
+        slope: sheaf_core::graph::SlopeAnnotation,
+    },
+    /// Opens the properties window of a slope annotation (double click, Properties).
+    EditSlope {
+        graph: WindowId,
+        layer: usize,
+        slope: usize,
+    },
+    /// Graph > Add Straight Line...: opens the window for a new line in `layer`.
+    AddStraightLine {
+        graph: WindowId,
+        layer: usize,
+    },
+    /// Opens the window of a straight line (double click, Properties).
+    EditStraightLine {
+        graph: WindowId,
+        layer: usize,
+        line: usize,
+    },
+    /// Writes a hint on the status bar.
+    Hint(String),
     /// Opens the properties window of a drawn object (double click, Properties).
     EditShape {
         graph: WindowId,
@@ -392,6 +763,40 @@ pub enum Action {
     },
     /// Copy Page: the graph as a picture on the clipboard.
     CopyPage(WindowId),
+    /// Copy Format of a whole graph (T72).
+    CopyGraphFormat {
+        graph: WindowId,
+        part: sheaf_core::format_clip::GraphPart,
+    },
+    /// Edit > Copy Format: the format of the selected axis when an axis is selected (Origin does
+    /// the same), else of the whole graph.
+    EditCopyFormat {
+        graph: WindowId,
+        part: sheaf_core::format_clip::GraphPart,
+    },
+    /// Copy Format of one axis.
+    CopyAxisFormat {
+        graph: WindowId,
+        layer: usize,
+        y: bool,
+        part: sheaf_core::format_clip::AxisPart,
+    },
+    /// Paste Format of a graph format onto the graph, every group it holds.
+    PasteGraphFormat {
+        graph: WindowId,
+    },
+    /// Paste Format To: an axis format onto one axis.
+    PasteAxisFormat {
+        graph: WindowId,
+        layer: usize,
+        y: bool,
+        part: sheaf_core::format_clip::AxisPart,
+    },
+    /// Edit > Paste Format...: the Apply Formats window.
+    PasteFormatDialog {
+        graph: WindowId,
+        layer: usize,
+    },
     /// Gadgets > Integrate on a graph.
     StartIntegrate {
         graph: WindowId,
@@ -408,8 +813,16 @@ pub enum Action {
     },
     ExportGraph(WindowId),
     ExportData(WindowId),
+    /// File > Export > Worksheet as Excel...: the sheets of this book as an `.xlsx` file.
+    ExportExcel(WindowId),
+    /// File > Print...: the graph page through the system print dialog.
+    Print(WindowId),
+    PrintPreview(WindowId),
+    PageSetup,
     /// Bring a window's tab to the front, reopening it if it was closed.
     Focus(WindowId),
+    /// Window > Window Switcher: the switcher stays open until a window is chosen.
+    OpenSwitcher,
     /// Close a window: it leaves the workspace, its data stays (Hide in the project explorer).
     HideWindow(WindowId),
     /// Window > Duplicate: copy this workbook or graph into a new window.
@@ -417,6 +830,24 @@ pub enum Action {
     /// File > Append: bring the windows of another project file into this one (the file, or `None`
     /// to ask for it).
     AppendProject(Option<std::path::PathBuf>),
+    /// The File menu was opened: read the recent files again.
+    ReloadRecent,
+    /// File > Recent Projects, Recent Books or Recent Graphs: open this entry the way Open does.
+    OpenRecent(std::path::PathBuf, crate::recent::RecentKind),
+    /// File > Import > Recent Imports: import this entry again with the default settings.
+    ImportRecent(std::path::PathBuf),
+    /// Clear Recent Projects / Imports / Books / Graphs.
+    ClearRecent(crate::recent::RecentKind),
+    /// A command ran from the Plot, Worksheet, Analysis or Statistics menu (or its Most Recently
+    /// Used list): it goes to the top of that menu's list.
+    UsedCommand {
+        menu: crate::mru::MruMenu,
+        cmd: crate::menus::Cmd,
+    },
+    /// File > Export > Recent Exports: open the export of that file again on its window.
+    OpenRecentExport(sheaf_io::recent::ExportEntry),
+    /// Clear Recent Exports.
+    ClearRecentExports,
     /// Remove a window from the project.
     DeleteWindow(WindowId),
     /// Put a window into a folder of the project explorer (the path of indices; empty is the root).
@@ -461,7 +892,11 @@ pub enum Action {
     About,
     /// Open the window of View > Toolbars.
     Toolbars,
+    /// Open the window of Tools > Autosave.
+    Autosave,
     /// View > Status Bar: show or hide the status bar.
     ToggleStatusBar,
+    /// Tools > AI Assistants (MCP): turn the endpoint of `sheaf-mcp --attach` on or off.
+    ToggleAiLink,
     Quit,
 }

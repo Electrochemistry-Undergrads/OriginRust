@@ -2,11 +2,15 @@
 //! `<long name>` style substitution), the folder and what to do about an existing file, then the
 //! groups Export Settings (margin), Image Size and Image Settings (resolution, colour depth, TIFF
 //! compression, JPEG quality), a preview pane and the buttons Preview, OK, Cancel and Apply.
+//! With PDF and more than one graph chosen, a check box writes them all into one multi-page PDF
+//! (Origin 2018b, expGraph `multipage`; graphing.md 9.6).
 
 use eframe::egui::{self, DragValue};
 use sheaf_core::{Document, WindowId};
 use sheaf_plot::{ColorDepth, ExportLayout, ExportSize, Margin, RasterOptions, SizeUnit, TiffCompression};
 use std::path::{Path, PathBuf};
+
+mod themes;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ExportFormat {
@@ -92,14 +96,22 @@ impl ExportFormat {
     /// The colour depths the format can store.
     fn depths(self) -> &'static [ColorDepth] {
         match self {
-            ExportFormat::Png
-            | ExportFormat::Bmp
-            | ExportFormat::Tga
-            | ExportFormat::Pcx
-            | ExportFormat::Psd
-            | ExportFormat::Tiff => &[ColorDepth::Colors256, ColorDepth::Bit24, ColorDepth::Grey8],
+            // Origin 2016's Color Depth lists, in its order (graphing.md 9.4).
+            ExportFormat::Bmp => &[
+                ColorDepth::Mono,
+                ColorDepth::Colors16,
+                ColorDepth::Colors256,
+                ColorDepth::Bit16,
+                ColorDepth::Bit24,
+                ColorDepth::Grey8,
+            ],
+            ExportFormat::Png | ExportFormat::Pcx | ExportFormat::Tiff => {
+                &[ColorDepth::Mono, ColorDepth::Colors16, ColorDepth::Colors256, ColorDepth::Bit24, ColorDepth::Grey8]
+            }
+            ExportFormat::Psd => &[ColorDepth::Mono, ColorDepth::Colors256, ColorDepth::Bit24, ColorDepth::Grey8],
+            ExportFormat::Tga => &[ColorDepth::Colors256, ColorDepth::Bit16, ColorDepth::Bit24, ColorDepth::Grey8],
             ExportFormat::Jpeg => &[ColorDepth::Bit24, ColorDepth::Grey8],
-            ExportFormat::Gif => &[ColorDepth::Colors256],
+            ExportFormat::Gif => &[ColorDepth::Mono, ColorDepth::Colors16, ColorDepth::Colors256, ColorDepth::Grey8],
             _ => &[],
         }
     }
@@ -107,9 +119,12 @@ impl ExportFormat {
 
 fn depth_label(d: ColorDepth) -> &'static str {
     match d {
+        ColorDepth::Mono => "Monochrome",
+        ColorDepth::Colors16 => "16 Colors",
         ColorDepth::Colors256 => "256 Colors",
+        ColorDepth::Bit16 => "16-bit Color",
         ColorDepth::Bit24 => "24-bit Color",
-        ColorDepth::Grey8 => "8-bit Grayscale",
+        ColorDepth::Grey8 => "8-bit Gray Scale",
     }
 }
 
@@ -189,6 +204,7 @@ pub fn substitute(template: &str, short: &str, long: &str, index: usize, enabled
 }
 
 pub struct ExportDialog {
+    themes: themes::Themes,
     pub graph: WindowId,
     format: ExportFormat,
     which: Which,
@@ -198,6 +214,9 @@ pub struct ExportDialog {
     /// The folder the files go in.
     path: String,
     overwrite: Overwrite,
+    /// Origin's expGraph `multipage` (default 0): with PDF and more than one graph, all of them go
+    /// into one file, one graph per page. Only effective as [`ExportDialog::multipage_on`] says.
+    multipage: bool,
     dpi: f64,
     depth: ColorDepth,
     tiff_compression: TiffCompression,
@@ -215,6 +234,8 @@ pub struct ExportDialog {
     preview: Option<(egui::TextureHandle, String)>,
     /// Set when existing files need a yes: the files, and whether the window closes after writing.
     pending: Option<bool>,
+    /// The files the last successful export wrote, with the graph of each, until taken (Recent Exports).
+    written: Vec<(WindowId, PathBuf)>,
 }
 
 /// What happened in one frame of the dialog.
@@ -223,6 +244,8 @@ pub enum ExportOutcome {
     Closed,
     /// A file was written and the window closes.
     Saved(PathBuf),
+    /// A file was written, with notes about what the format could not hold; the window closes.
+    SavedWithNotes(PathBuf, Vec<String>),
     /// Apply: files were written (or skipped) and the window stays; the text is for the status bar.
     Applied(String),
     Failed(String),
@@ -232,6 +255,7 @@ impl ExportDialog {
     pub fn new(graph: WindowId, folder: Option<PathBuf>) -> Self {
         let folder = folder.or_else(|| std::env::current_dir().ok()).unwrap_or_default();
         ExportDialog {
+            themes: themes::Themes::default(),
             graph,
             format: ExportFormat::Png,
             which: Which::ActivePage,
@@ -239,6 +263,7 @@ impl ExportDialog {
             substitution: true,
             path: folder.display().to_string(),
             overwrite: Overwrite::Ask,
+            multipage: false,
             dpi: 300.0,
             depth: ColorDepth::Bit24,
             tiff_compression: TiffCompression::Lzw,
@@ -251,7 +276,13 @@ impl ExportDialog {
             show_preview: true,
             preview: None,
             pending: None,
+            written: Vec::new(),
         }
+    }
+
+    /// The files written since the last call, each with the graph it shows (for Recent Exports).
+    pub fn take_written(&mut self) -> Vec<(WindowId, PathBuf)> {
+        std::mem::take(&mut self.written)
     }
 
     fn layout(&self) -> ExportLayout {
@@ -286,6 +317,17 @@ impl ExportDialog {
         self.path = path.display().to_string();
     }
 
+    /// Whether the multi-page check box can be ticked: the chosen graphs are more than one.
+    fn multipage_possible(&self, doc: &Document) -> bool {
+        self.graph_ids(doc).len() > 1
+    }
+
+    /// Whether one multi-page PDF is written instead of a file per graph: the box is ticked, the
+    /// type is PDF and more than one graph is chosen. Otherwise the export is as without it.
+    fn multipage_on(&self, doc: &Document) -> bool {
+        self.multipage && self.format == ExportFormat::Pdf && self.multipage_possible(doc)
+    }
+
     /// Whether Apply and OK can write: there is a file name and a folder.
     pub fn can_apply(&self) -> bool {
         !self.file_name.trim().is_empty() && !self.path.trim().is_empty()
@@ -299,11 +341,18 @@ impl ExportDialog {
     }
 
     /// The files to write: the overwrite rule applied. The flag says an existing file needs a yes.
+    /// For a multi-page PDF it is one file, named from the first graph in the list (project order,
+    /// as Origin indexes file names in Graph Page list order); the job carries that first graph.
+    /// The combined file's name is Sheaf's choice; Origin's is not measured.
     fn plan(&self, doc: &Document) -> (Vec<(WindowId, PathBuf)>, bool) {
         let ext = self.format.extension();
         let mut jobs: Vec<(WindowId, PathBuf)> = Vec::new();
         let mut asks = false;
-        for id in self.graph_ids(doc) {
+        let mut ids = self.graph_ids(doc);
+        if self.multipage_on(doc) {
+            ids.truncate(1);
+        }
+        for id in ids {
             let name = self.name_for(doc, id);
             let mut file = Path::new(self.path.trim()).join(format!("{name}.{ext}"));
             let taken = |f: &Path, jobs: &[(WindowId, PathBuf)]| jobs.iter().any(|(_, j)| j == f);
@@ -342,6 +391,21 @@ impl ExportDialog {
         if let Err(e) = std::fs::create_dir_all(self.path.trim()) {
             return ExportOutcome::Failed(format!("cannot use the folder '{}': {e}", self.path.trim()));
         }
+        if self.multipage_on(doc) {
+            let ids = self.graph_ids(doc);
+            let file = &jobs[0].1;
+            if let Err(e) = sheaf_plot::export_multipage_pdf_file(doc.project(), &ids, file, self.size(), self.layout())
+            {
+                return ExportOutcome::Failed(e.to_string());
+            }
+            self.written = vec![(jobs[0].0, file.clone())];
+            let outcome = if close {
+                ExportOutcome::Saved(file.clone())
+            } else {
+                ExportOutcome::Applied(format!("Wrote {} graphs to {}", ids.len(), file.display()))
+            };
+            return self.remember_export(outcome);
+        }
         for (id, file) in &jobs {
             let r = sheaf_plot::export_file_opts(
                 doc.project(),
@@ -356,13 +420,15 @@ impl ExportDialog {
                 return ExportOutcome::Failed(e.to_string());
             }
         }
-        if close {
+        self.written = jobs.clone();
+        let outcome = if close {
             ExportOutcome::Saved(jobs[jobs.len() - 1].1.clone())
         } else if jobs.len() == 1 {
             ExportOutcome::Applied(format!("Wrote {}", jobs[0].1.display()))
         } else {
             ExportOutcome::Applied(format!("Wrote {} files to {}", jobs.len(), self.path.trim()))
-        }
+        };
+        self.remember_export(outcome)
     }
 
     fn settings_key(&self) -> String {
@@ -396,7 +462,8 @@ impl ExportDialog {
         // The depth must be one the format can store.
         if self.format.is_raster() && !self.format.depths().contains(&self.depth) {
             let d = self.format.depths();
-            self.depth = if d.contains(&ColorDepth::Bit24) { ColorDepth::Bit24 } else { d[0] };
+            // Not offered by this format: 24-bit, else 256 colours (GIF), else the first depth.
+            self.depth = [ColorDepth::Bit24, ColorDepth::Colors256].into_iter().find(|c| d.contains(c)).unwrap_or(d[0]);
         }
         if !self.format.is_raster() && self.width_unit == SizeUnit::Pixel {
             self.width_unit = SizeUnit::Inch;
@@ -410,7 +477,12 @@ impl ExportDialog {
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
+            .enabled(!self.themes.modal_open())
             .show(ctx, |ui| {
+                let modified = self.theme_modified();
+                if let Some(command) = self.themes.ui(ui, modified) {
+                    self.theme_command(command);
+                }
                 let raster_dpi = self.format.is_raster().then_some(self.dpi);
                 let area = sheaf_plot::export_area(doc.project(), self.graph, self.layout(), raster_dpi).ok();
                 let (page_w, page_h) = (graph.page.width_pt / 72.0, graph.page.height_pt / 72.0);
@@ -448,12 +520,36 @@ impl ExportDialog {
                                  an empty long name gives the short name",
                             );
                             ui.end_row();
+                            if self.format == ExportFormat::Pdf {
+                                ui.label("");
+                                let possible = self.multipage_possible(doc);
+                                // The label is Sheaf's; Origin's (expGraph `multipage`) is not measured.
+                                ui.add_enabled(
+                                    possible,
+                                    egui::Checkbox::new(&mut self.multipage, "Export as multi-page PDF file"),
+                                )
+                                .on_hover_text("Write all the chosen graphs into one PDF file, one graph per page")
+                                .on_disabled_hover_text(
+                                    "Choose more than one graph (All Graphs in Project, with two or more \
+                                     graphs) to write them into one PDF file",
+                                );
+                                ui.end_row();
+                            }
                             ui.label("");
-                            ui.label(format!(
-                                "File will be saved as {}.{}",
-                                self.name_for(doc, self.graph),
-                                self.format.extension()
-                            ));
+                            if self.multipage_on(doc) {
+                                let ids = self.graph_ids(doc);
+                                ui.label(format!(
+                                    "File will be saved as {}.pdf ({} pages)",
+                                    self.name_for(doc, ids[0]),
+                                    ids.len()
+                                ));
+                            } else {
+                                ui.label(format!(
+                                    "File will be saved as {}.{}",
+                                    self.name_for(doc, self.graph),
+                                    self.format.extension()
+                                ));
+                            }
                             ui.end_row();
                             ui.label("Path");
                             ui.horizontal(|ui| {
@@ -718,6 +814,9 @@ impl ExportDialog {
                     });
                 });
             });
+        if let Some(command) = self.themes.prompt_ui(ctx) {
+            self.theme_command(command);
+        }
         if self.show_preview {
             let stale = self.preview.as_ref().is_none_or(|(_, k)| *k != self.settings_key());
             if want_preview || (self.auto_preview && stale) {
@@ -745,6 +844,82 @@ mod tests {
         assert_eq!(substitute("<long name>", "Graph1", "CV", 1, false), "_long name_");
         assert_eq!(substitute("a/b:c", "G", "", 1, true), "a_b_c");
         assert_eq!(substitute("  ", "G", "", 1, true), "G");
+    }
+
+    /// A document with two graphs, long names "CV scan" and "EIS", and a dialog on the second
+    /// one exporting all graphs as one PDF into a fresh folder.
+    fn two_graphs(tag: &str) -> (Document, ExportDialog, PathBuf) {
+        let mut project = sheaf_core::Project::new();
+        let a = project.add_graph(sheaf_core::template::Template::Line);
+        let b = project.add_graph(sheaf_core::template::Template::Line);
+        project.graph_mut(a).unwrap().long_name = "CV scan".into();
+        project.graph_mut(b).unwrap().long_name = "EIS".into();
+        let dir = std::env::temp_dir().join(format!("sheaf-export-multipage-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut d = ExportDialog::new(b, Some(dir.clone()));
+        d.format = ExportFormat::Pdf;
+        d.which = Which::AllGraphs;
+        d.multipage = true;
+        (Document::new(project), d, dir)
+    }
+
+    #[test]
+    fn multipage_plan_is_one_file_named_from_the_first_graph() {
+        let (doc, mut d, dir) = two_graphs("plan");
+        assert!(d.multipage_on(&doc));
+        let (jobs, asks) = d.plan(&doc);
+        let first = doc.project().graphs().next().unwrap().id;
+        assert_eq!(jobs, vec![(first, dir.join("CV scan.pdf"))]);
+        assert!(!asks);
+        // An existing file asks, as for one file.
+        std::fs::write(dir.join("CV scan.pdf"), b"old").unwrap();
+        assert!(d.plan(&doc).1);
+        // Unticked, another type or one graph: a file per graph, as without the option.
+        d.multipage = false;
+        assert_eq!(d.plan(&doc).0.len(), 2);
+        d.multipage = true;
+        d.format = ExportFormat::Svg;
+        assert!(!d.multipage_on(&doc));
+        assert_eq!(d.plan(&doc).0.len(), 2);
+        d.format = ExportFormat::Pdf;
+        d.which = Which::ActivePage;
+        assert!(!d.multipage_on(&doc));
+        assert_eq!(d.plan(&doc).0, vec![(d.graph, dir.join("EIS.pdf"))]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn multipage_plan_renames_or_skips_an_existing_file() {
+        let (doc, mut d, dir) = two_graphs("overwrite");
+        std::fs::write(dir.join("CV scan.pdf"), b"old").unwrap();
+        std::fs::write(dir.join("CV scan_1.pdf"), b"old").unwrap();
+        d.overwrite = Overwrite::Rename;
+        let (jobs, asks) = d.plan(&doc);
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].1, dir.join("CV scan_2.pdf"));
+        assert!(!asks);
+        d.overwrite = Overwrite::Skip;
+        assert_eq!(d.plan(&doc), (vec![], false));
+        d.overwrite = Overwrite::Replace;
+        assert_eq!(d.plan(&doc), (vec![(jobs[0].0, dir.join("CV scan.pdf"))], false));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn multipage_run_writes_one_pdf_with_a_page_per_graph() {
+        let (doc, mut d, dir) = two_graphs("run");
+        let ExportOutcome::Applied(text) = d.run(&doc, false, false) else { panic!("Apply reports") };
+        let file = dir.join("CV scan.pdf");
+        assert_eq!(text, format!("Wrote 2 graphs to {}", file.display()));
+        let pdfs = std::fs::read_dir(&dir).unwrap().count();
+        assert_eq!(pdfs, 1, "one file");
+        let bytes = std::fs::read(&file).unwrap();
+        assert!(String::from_utf8_lossy(&bytes).contains("/Count 2"));
+        std::fs::remove_file(&file).unwrap();
+        let ExportOutcome::Saved(path) = d.run(&doc, true, false) else { panic!("OK saves") };
+        assert_eq!(path, file);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

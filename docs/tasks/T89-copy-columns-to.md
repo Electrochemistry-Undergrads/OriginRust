@@ -1,6 +1,8 @@
 # T89: Copy Columns to...
 
-**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13g): `colcopy` measured (new book renamed from A with labels, format and designation but no formula; into a column overwrites rightward; `<new>` appends; `<new>!<new>` adds a sheet), window with destination and check boxes, one undo step. Left: Ignore Hidden Rows, system Parameters rows, Origin's window layout.
+**Status:** Copy Columns to landed 2026-11-16 (workbook-model 13g). Ignore Hidden Rows now
+defaults to on and compacts the visible source rows. Clearing it copies all stored rows.
+System parameter rows and the Origin window layout remain open. Workspace verification pending.
 **Size:** S. **Source:** greyed inventory package B5 (the column header's Copy Columns to...).
 **Spec:** `docs/spec/workbook-model.md` (a new section).
 

@@ -5387,7 +5387,11 @@ fn the_analysis_menu_on_a_graph_works_on_its_data_plot() {
 /// Types into the n-th text box of the window that is open (in the order they are drawn), replacing
 /// what it holds.
 fn type_into_box(h: &mut Harness<'static, SheafApp>, n: usize, text: &str) {
-    h.query_all_by_role(egui::accesskit::Role::TextInput).nth(n).expect("the text box exists").focus();
+    h.query_all_by_role(egui::accesskit::Role::TextInput)
+        .filter(|node| !node.accesskit_node().label().is_some_and(|label| label.contains(" toolbar: ")))
+        .nth(n)
+        .expect("the dialog text box exists")
+        .focus();
     settle(h);
     h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
     h.event(egui::Event::Text(text.to_string()));

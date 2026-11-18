@@ -190,8 +190,10 @@ pub enum GraphTool {
 /// A change of a graph window's view (screen-only; the graph is not changed).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewOp {
-    /// Zoom Out: half the zoom, never below the whole page.
+    /// Zoom Out: half the zoom, down to 25 percent.
     ZoomOut,
+    /// The Standard toolbar's zoom combo, as a whole percentage of the fitted page.
+    SetZoom(u32),
     /// Whole Page: the page fits the window.
     WholePage,
     /// Zoom All: the page and all objects fit the window (T69).

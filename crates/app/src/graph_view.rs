@@ -215,6 +215,14 @@ impl GraphUi {
         }
     }
 
+    /// The toolbar zoom keeps the view centre's page point centred where possible.
+    pub fn set_zoom_percent(&mut self, percent: u32) {
+        let factor = (percent as f32 / 100.0).clamp(graph_zoom::MIN_ZOOM, graph_zoom::MAX_ZOOM);
+        self.zoom = self.frame.map_or(Zoom { factor, ..Zoom::default() }, |(window, page)| {
+            graph_zoom::zoom_about(window, page, self.zoom, factor, window.center())
+        });
+    }
+
     /// Zoom All: the page and all objects fit the window (T69).
     pub fn zoom_all(&mut self) {
         if let Some((window, page)) = self.frame {

@@ -132,6 +132,9 @@ pub struct Project {
     /// added. A window stays in its own folder; deleting it removes its shortcut.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub favorites: Vec<WindowId>,
+    /// Tools > Protection > Audit Log (T131): the log of changes, `None` while it is off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audit: Option<crate::audit::AuditLog>,
     /// The next unused identifier (shared by windows and columns).
     next_id: u64,
 }
@@ -442,6 +445,7 @@ impl Project {
             hide_masked: false,
             view_modes: Vec::new(),
             favorites: Vec::new(),
+            audit: None,
             next_id: 1,
         }
     }

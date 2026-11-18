@@ -9,6 +9,7 @@
 
 pub mod analysis;
 pub mod analysis_link;
+pub mod audit;
 pub mod autorange;
 pub mod batch_plot;
 pub mod cellformat;

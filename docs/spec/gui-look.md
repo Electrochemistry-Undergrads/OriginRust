@@ -1611,3 +1611,20 @@ documented behaviour.
   instead of Add Shortcut to Favorites.
 - **The windows stay put:** a window stays in its own folder. Deleting it removes its shortcut.
 
+### Audit Log (T131, 2026-11-18, not measured)
+
+Origin 2016's Tools > Protection submenu has Protect Project... and Audit Log. They could not be probed
+(Origin's COM class was unregistered), so Audit Log follows Origin's documented behaviour; Protect
+Project... stays grey.
+
+- **The window:** Audit Log opens the "Audit Log" window. Its check box "Record the changes made to this
+  project" turns the project's log on or off. The log is off in a new project.
+  - Turning it on starts the log with "Audit log started".
+  - Turning it off drops the entries.
+  - Neither is an undo step, but the project counts as changed.
+- **What is recorded:** while the log is on, every change that makes an undo step is listed with its time
+  (UTC, `YYYY-MM-DD HH:MM:SS`) and the name the Edit menu's Undo shows. So are Undo <name> and
+  Redo <name>. A live dialog's merged changes count once.
+- **Saving and undo:** the log is saved with the project (`Project::audit`). Undo and redo never take it
+  back: the document carries the current log forward.
+

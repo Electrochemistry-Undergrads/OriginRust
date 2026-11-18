@@ -340,6 +340,8 @@ pub enum Cmd {
     SlideShow,
     /// Graph page > Add Shortcut to Favorites (T130).
     AddFavorite,
+    /// Tools > Protection > Audit Log (T131).
+    AuditLog,
     /// The Data menu's display range and data markers (T118).
     DataMarkers(MarkerOp),
     /// The Text tool of the Tools toolbar.
@@ -1722,7 +1724,7 @@ fn tools_menu() -> Vec<Entry> {
         item("AI Assistants (&MCP)", Cmd::ToggleAiLink),
         grey("System Variables..."),
         grey("3D OpenGL Settings..."),
-        grey_sub("Protection", &["Protect Project...", "Audit Log"]),
+        sub("Protection", vec![grey("Protect Project..."), item("Audit Log", Cmd::AuditLog)]),
         grey("Apps on File Exchange..."),
         sep(),
         grey_keyed("Fitting Function Builder...", plain_key(Key::F8)),
@@ -2968,6 +2970,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::DataTool(tool) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Data(*tool) },
         Cmd::SlideShow => Action::SlideShow(some()?),
         Cmd::AddFavorite => Action::AddFavorite(c.graph.ok_or(NEED_GRAPH)?),
+        Cmd::AuditLog => Action::AuditLog,
         Cmd::DataMarkers(op) => Action::GraphEdit {
             graph: c.graph.ok_or(NEED_GRAPH)?,
             op: GraphOp::DataMarkers { layer: c.layer, op: *op },

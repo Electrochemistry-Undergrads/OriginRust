@@ -77,6 +77,44 @@ fn plain() -> ExcelExportOptions {
 }
 
 #[test]
+fn worksheet_label_default_families_preserve_sizes_manual_faces_and_data_types() {
+    let mut a = column(1, vec![1.23456789012345, f64::NAN, 3.0]);
+    a.long_name = "Potential".into();
+    a.units = "V".into();
+    a.comments = "note".into();
+    let mut s = Worksheet { columns: vec![a, column(2, vec![101.0])], ..Worksheet::new("Families") };
+    s.set_label_font_family(&LabelKind::LongName, "Times New Roman");
+    s.set_label_font_family(&LabelKind::Units, "Courier New");
+    s.set_label_font_family(&LabelKind::Comments, "Arial");
+    s.set_label_font_size(&LabelKind::LongName, 18.0);
+    s.apply_cell_format(
+        FormatTarget::label_rows(vec![ColumnId(1)], vec![LabelKind::LongName]),
+        CellFormat { font: Some("Courier New".into()), size_pt: Some(12.0), bold: Some(true), ..Default::default() },
+    );
+    let before = s.clone();
+    let (xml, styles, warnings) = Output::new("label-families").export(&s, &ExcelExportOptions::default());
+    assert_eq!(s, before);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    for (address, name, size) in [
+        ("A1", "Courier New", 12),
+        ("B1", "Times New Roman", 18),
+        ("A2", "Courier New", 9),
+        ("B2", "Courier New", 9),
+        ("A3", "Arial", 9),
+    ] {
+        let f = font(style(&xml, &styles, address), &styles);
+        assert!(f.contains(&format!("val=\"{name}\"")) && f.contains(&format!("val=\"{size}\"")), "{address}: {f}");
+        assert_eq!(f.contains("<b/>"), address == "A1");
+    }
+    assert!(xml.contains("<v>1.23456789012345</v>"));
+    let data = font(style(&xml, &styles, "B4"), &styles);
+    assert!(data.contains("val=\"Arial\"") && data.contains("val=\"9\""));
+    assert!(!xml.contains("r=\"A5\""));
+    let (_, _, warnings) = Output::new("label-family-omitted").export(&s, &plain());
+    assert!(warnings.iter().any(|w| w.contains("label rows omitted")));
+}
+
+#[test]
 fn worksheet_label_default_sizes_export_independently_without_styling_data_blanks() {
     let mut a = column(1, vec![1.23456789012345, f64::NAN, 3.0]);
     a.long_name = "Potential".into();

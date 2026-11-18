@@ -786,16 +786,32 @@ screenshots, scripts and PID/start-time cleanup hashes remain in ignored
 `t59-label-default-fonts/native-proof.json`. Each new private COM instance and guard closed;
 preexisting process identities were preserved. No global input was used for these label probes.
 
+**Label families (documented contract, 2026-11-16).** The
+[official Format-tab manual](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
+describes font selection for worksheet categories, including Long Name, Units and Comments.
+Native2016 F4 probes observed the Long Name priority and Font family/size controls. String
+Face assignments, programmatic selection notifications and posted combo keys did not establish
+an applied family: the9pt label pixel regions were identical before/after. Those attempts are
+excluded, along with a fixed-control-ID failure after the category rebuilt its controls.
+A later attempt at the proven Data-family physical commit protocol failed at COM activation
+with REGDB_E_CLASSNOTREG before creating an instance or sending input. No registration or
+installation change was made. All owned instances/guards closed and foreign identities were
+preserved; ignored `t59-label-default-families/native-proof.json` records zero positive applied
+label-family measurements. Family selection follows the documented contract below; current/future
+inheritance, manual priority and Automatic remain explicit Sheaf policies, unverified in Native.
+
 Sheaf enables Format > Worksheet... (F4) with a separate Worksheet Properties window, a Format
 section and Data, Long Name, Units and Comments Apply To categories. Data family/size reach
 all current and future data cells;
 manual per-range properties take precedence. Drafts and Cancel/Escape are inert, each Apply/OK
 is one Undo step, and stale document/sheet requests close. Unchanged OK creates no history.
-The three supported label categories expose point size only and reach existing/future columns
+The three supported label categories expose installed family and point size and reach existing/future columns
 independently. Switching categories retains drafts; Apply/OK writes all changed drafts together.
 The compact layout, draft policy and manual-label precedence are Sheaf choices; manual-label
 priority remains unverified against Native. Existing derived label heights remain in use.
-The native Font apply-mask checkbox is omitted. Label family, Standard, headers, bulk Column
+Family-only edits keep point-size overrides absent. Automatic clears only the category family,
+using the existing Arial fallback; manual names/sizes and other category drafts stay independent.
+The native Font apply-mask checkbox is omitted. Standard, headers, bulk Column
 Labels and F(x)= controls remain disabled; further mutation/precedence rules need measurement.
 Other worksheet tabs and color/
 text-control defaults remain unavailable. The [official Format tab reference](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)

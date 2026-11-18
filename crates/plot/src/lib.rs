@@ -54,6 +54,7 @@ mod stock_plot;
 mod sunburst;
 mod svg;
 mod symbol_gaps;
+mod table;
 mod ternary;
 mod text;
 pub mod ticks;

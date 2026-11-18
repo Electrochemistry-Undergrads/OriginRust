@@ -3,7 +3,8 @@
 **Status:** both vector plot kinds landed 2026-11-16 (graphing.md 30). The archived Origin
 2016 captures show right-pointing legend arrows for both kinds. Sheaf now draws those
 samples using the plot's arrow style. Plot Details Vector tab, Head/Midpoint positions and
-Origin's exact multiplier rule remain open. Workspace verification pending.
+Origin's exact multiplier rule remain open. Formatting, strict workspace Clippy, Nextest (4,505 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
 **Size:** M. **Source:** greyed inventory package B4 (Plot > Specialized > Vector XYAM, Vector XYXY).
 **Spec:** `docs/spec/graphing.md` (a new section).
 

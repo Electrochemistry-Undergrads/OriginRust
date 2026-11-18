@@ -1,6 +1,6 @@
 # T119: Graph > Add Function Graph...
 
-**Status:** claimed 2026-11-16 (Claude Windows "t30-origin", branch `function-graph`).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 41), **not measured** (Origin COM unregistered): the Add Function Graph window (y(x), From, To, Points), the points in a new FuncN workbook, a line plot in the active layer. Left: measure Origin's window and defaults and match them; a curve that follows the X axis range.
 **Size:** S. **Source:** greyed inventory package B3 (Graph > Add Function Graph...).
 **Spec:** `docs/spec/graphing.md` (a new section).
 

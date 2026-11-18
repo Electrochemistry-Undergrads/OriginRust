@@ -1580,3 +1580,34 @@ a maximised and a minimised child window; the File, Edit, View, Window and Help 
 workbook and the File and Window menus of the graph; NLFit, Import Wizard, Peak Analyzer first
 page; Plot Details of a line and of a column plot; every tab of the axis dialog; Tools > Options
 with Numeric Format and Text Fonts; Set Column Values.
+
+### Slide Show of Dependent Graphs (T129, 2026-11-18, not measured)
+
+The worksheet column header's right-click menu has Slide Show of Dependent Graphs (Origin 2016). It could not
+be probed (Origin's COM class was unregistered), so this follows Origin's documented behaviour.
+
+- **Which graphs:** the graphs that plot any of the selected columns (as X, Y, error or any other
+  referenced column), in window order. With none, the status bar warns and nothing happens.
+- **The show:** each graph's page over the whole screen, as View > Full Screen draws it (T66), starting at
+  the first, without Full Screen's reminder message.
+- **Keys:**
+  - Space, Page Down, Right or a click: the next graph.
+  - Page Up or Left: the previous one.
+  - Home and End: the ends. The last graph stays on a further step.
+  - Esc ends the show.
+- **Sheaf internals:** `view_modes::dependent_graphs`, `FullScreen::slide_show`, `next_slide`.
+
+### Favorites (T130, 2026-11-18, not measured)
+
+Origin 2016's graph page right-click menu has Add Shortcut to Favorites, and its Project Explorer has a
+Favorites folder. Neither could be probed (Origin's COM class was unregistered), so this follows Origin's
+documented behaviour.
+
+- **Adding a shortcut:** Add Shortcut to Favorites (graph page menu, and the Project Explorer's window
+  menu) adds a shortcut to the window. Each window has at most one. It is one undo step, saved with the
+  project (`Project::favorites`).
+- **The Favorites folder:** it sits under the project's folders in the explorer tree. Selecting it lists
+  the shortcut windows with the usual columns and window menu. That menu says Remove from Favorites
+  instead of Add Shortcut to Favorites.
+- **The windows stay put:** a window stays in its own folder. Deleting it removes its shortcut.
+

@@ -349,6 +349,11 @@ pub enum Action {
     GoToFolder(Vec<usize>),
     /// The explorer folder's Properties...: its name, comments and information.
     FolderProperties(Vec<usize>),
+    /// Graph > Add Function Graph...: open its window for the active layer (T119).
+    AddFunctionGraph {
+        graph: WindowId,
+        layer: usize,
+    },
     /// Window > Duplicate (Batch Plotting): open the window that picks sheets or columns.
     BatchPlot {
         graph: WindowId,
@@ -657,6 +662,13 @@ pub enum Action {
     },
     /// View > Full Screen: the graph's page over the whole screen until Esc.
     FullScreen(WindowId),
+    /// Add Shortcut to Favorites (T130): the window gets a shortcut in the Project Explorer's Favorites.
+    AddFavorite(WindowId),
+    /// Remove from Favorites (T130).
+    RemoveFavorite(WindowId),
+    /// Column header > Slide Show of Dependent Graphs (T129): the graphs that plot any of the columns, one
+    /// after another over the whole screen.
+    SlideShow(Vec<sheaf_core::ColumnId>),
     /// Zoom Out or Whole Page of a graph window.
     GraphView {
         graph: WindowId,

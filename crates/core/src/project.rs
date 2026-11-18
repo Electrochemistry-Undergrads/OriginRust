@@ -128,6 +128,10 @@ pub struct Project {
     /// project but setting it is never an undo step (see [`Project::set_view_mode`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub view_modes: Vec<(WindowId, ViewMode)>,
+    /// The Project Explorer's Favorites folder (T130): shortcuts to windows, in the order they were
+    /// added. A window stays in its own folder; deleting it removes its shortcut.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub favorites: Vec<WindowId>,
     /// The next unused identifier (shared by windows and columns).
     next_id: u64,
 }
@@ -322,6 +326,8 @@ pub enum ProjectError {
     WindRoseColumns(&'static str),
     #[error("a 2D kernel density needs one Y column with an X column")]
     Kde2dColumns,
+    #[error("the function graph cannot be made: {0}")]
+    FunctionGraph(String),
     #[error("a Piper diagram needs six Y columns: Ca, Mg, Na+K, Cl, SO4, HCO3+CO3 (got {0})")]
     PiperColumns(usize),
     #[error("a lollipop plot needs two or more Y columns (got {0}); select at least two Y columns")]
@@ -435,8 +441,25 @@ impl Project {
             masking_off: false,
             hide_masked: false,
             view_modes: Vec::new(),
+            favorites: Vec::new(),
             next_id: 1,
         }
+    }
+
+    /// Add Shortcut to Favorites (T130): true when the window was added (it exists and was not there yet).
+    pub fn add_favorite(&mut self, id: WindowId) -> bool {
+        if self.window(id).is_none() || self.favorites.contains(&id) {
+            return false;
+        }
+        self.favorites.push(id);
+        true
+    }
+
+    /// Removes a window's shortcut from Favorites; true when it was there.
+    pub fn remove_favorite(&mut self, id: WindowId) -> bool {
+        let before = self.favorites.len();
+        self.favorites.retain(|w| *w != id);
+        self.favorites.len() != before
     }
 
     /// The view mode of a graph window (Page View unless set).
@@ -535,6 +558,7 @@ impl Project {
         }
         forget(&mut self.root, id);
         self.window_places.retain(|p| p.window != id);
+        self.favorites.retain(|w| *w != id);
         Some(self.windows.remove(i))
     }
 
@@ -1814,6 +1838,20 @@ impl Graph {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn favorites_hold_shortcuts_once_and_lose_deleted_windows() {
+        let mut p = Project::new();
+        let a = p.add_workbook("");
+        let b = p.add_workbook("");
+        assert!(p.add_favorite(b) && p.add_favorite(a));
+        assert!(!p.add_favorite(a), "once");
+        assert!(!p.add_favorite(WindowId(999)), "no such window");
+        assert_eq!(p.favorites, [b, a]);
+        p.remove_window(b);
+        assert_eq!(p.favorites, [a]);
+        assert!(p.remove_favorite(a) && !p.remove_favorite(a));
+    }
 
     fn sample() -> (Project, WindowId, ColumnId, ColumnId) {
         let mut p = Project::new();

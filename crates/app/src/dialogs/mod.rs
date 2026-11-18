@@ -29,6 +29,7 @@ pub mod fit_organizer;
 pub mod fit_page;
 pub mod folder_props;
 pub mod frame;
+pub mod function_graph;
 pub mod go_to;
 pub mod graph_axis;
 pub mod graph_details;

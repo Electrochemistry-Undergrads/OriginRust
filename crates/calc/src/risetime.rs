@@ -47,7 +47,7 @@ pub fn rise_time(x: &[f64], y: &[f64], (first, last): (usize, usize), lo_pct: f6
     }
     let finite: Vec<f64> = y[first..=last].iter().copied().filter(|v| v.is_finite()).collect();
     let (low, high) = finite.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| (a.min(*v), b.max(*v)));
-    if !(high > low) {
+    if high <= low {
         return None;
     }
     let rising = finite.last()? >= finite.first()?;

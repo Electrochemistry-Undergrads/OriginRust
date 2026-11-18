@@ -1,8 +1,8 @@
 //! Edit > Find in Project (F3, T95): Origin 2016's "Find" window with Sheaf's search
 //! (`crate::project_find`). Fields as Origin's: Find What, Case Sensitive, Match Whole Word, Allow
-//! Wildcards, the types to include (Graph, Book, Sheet, Column, with the column's Units and F(x) behind
-//! Select...), Data in Cells (1st Matched in Column) and Text Objects on Graphs; the hits as No., Range,
-//! Element, Attribute, and "Found: N". Clicking a hit goes to it.
+//! Wildcards, the types to include (Graph, Book, Sheet, Column, with Sheet Comments and the column's
+//! Units and F(x) behind Select...), Data in Cells (1st Matched in Column) and Text Objects on Graphs.
+//! Each hit shows its number, range, element and attribute. Clicking a hit goes to it.
 
 use crate::project_find::{FindHit, FindSpec, FindTarget, find_in_project};
 use eframe::egui::{self, RichText};
@@ -67,6 +67,10 @@ impl FindProjectDialog {
                         }
                     });
                     if self.select {
+                        ui.horizontal(|ui| {
+                            ui.label("Sheet also:");
+                            ui.checkbox(&mut self.spec.sheet_comments, "Comments");
+                        });
                         ui.horizontal(|ui| {
                             ui.label("Column also:");
                             ui.checkbox(&mut self.spec.column_units, "Units");

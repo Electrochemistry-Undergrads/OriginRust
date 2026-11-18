@@ -30,3 +30,42 @@ fn f3_opens_find_and_a_hit_selects_the_column() {
     assert_eq!(h.state().books.get(&book).unwrap().selected, [c], "the hit's column is selected");
     assert!(h.state().find_project.is_some(), "Find stays open");
 }
+
+#[test]
+fn comment_hits_open_the_sheet_and_follow_the_comments_checkbox() {
+    let mut h = start(vec![data_file("find-project-comments")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Comment on sheet", |p| {
+        let mut control = sheaf_core::Worksheet::new("Control");
+        control.comments = "Check the signal\nBaseline after calibration".into();
+        p.workbook_mut(book).unwrap().sheets.push(control);
+    });
+    settle(&mut h);
+    assert_eq!(project(&h).workbook(book).unwrap().active_sheet, 0);
+
+    h.key_press(egui::Key::F3);
+    settle(&mut h);
+    h.state_mut().find_project.as_mut().unwrap().spec.text = "calibration".into();
+    settle(&mut h);
+    let find = By::new().role(egui::accesskit::Role::Button).label("Find");
+    h.get(find.clone()).click();
+    settle(&mut h);
+    assert!(has_label(&h, "Found: 1"));
+    let result = &h.state().find_project.as_ref().unwrap().hits.as_ref().unwrap()[0];
+    assert_eq!((result.element, result.attribute), ("Sheet", "Comments"));
+    let range = result.range.clone();
+    click(&mut h, &range);
+    assert_eq!(project(&h).workbook(book).unwrap().active_sheet, 1);
+
+    click(&mut h, "Select...");
+    h.get(By::new().role(egui::accesskit::Role::CheckBox).label("Comments")).click();
+    settle(&mut h);
+    h.get(find).click();
+    settle(&mut h);
+    assert!(has_label(&h, "Found: 0"));
+    click(&mut h, "Cancel");
+    h.key_press(egui::Key::F3);
+    settle(&mut h);
+    assert!(!h.state().find_project.as_ref().unwrap().spec.sheet_comments);
+}

@@ -941,11 +941,19 @@ Measured hits (book with B "Current density", mA; a line graph of B): "density" 
 Graph / Short Name; "30" with Data in Cells gave column B once, attribute Data Cells.
 
 Sheaf (`crate::project_find` in the app, window `dialogs/find_project.rs`): the same fields except Within
-(always the whole project), Folder and Notes (Sheaf has no notes windows); Select... shows the column's
-Units and F(x) switches; axis titles are searched as drawn (`sheaf_plot::axis_title`), legends with `%(n)`
+(always the whole project), Folder and Notes (Sheaf has no notes windows); Select... shows the sheet's
+Comments switch and the column's Units and F(x) switches; axis titles are searched as drawn
+(`sheaf_plot::axis_title`), legends with `%(n)`
 replaced by the plots' names, and text labels by their text. Clicking a hit brings its window forward (and
 its sheet, with the column selected); the window stays open and keeps its settings for the session.
 Double-clicking a hit in Origin was not measured.
+
+The archived Origin 2016 Select Metadata capture has Sheet > Comments checked by default, as also
+documented under Sheet metadata in [Finding in Origin Project](https://docs.originlab.com/origin-help/finding-project/).
+Sheaf searches the full saved worksheet comment by default. Select... can turn Comments off while
+retaining sheet name matches. Each matching comment gives one `[Book]Sheet` row with Element **Sheet**
+and Attribute **Comments**, using the existing sheet navigation. This result row and click behavior
+follow Sheaf's existing sheet hits. They were not measured separately in Origin 2016.
 
 ## 13k. Export > Worksheet as Image (T97, measured 2026-11-16, Origin 2016)
 

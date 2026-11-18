@@ -342,6 +342,8 @@ pub enum Cmd {
     AddFavorite,
     /// Tools > Protection > Audit Log (T131).
     AuditLog,
+    /// Tools > Fitting Function Builder... (T132).
+    FitBuilder,
     /// The Data menu's display range and data markers (T118).
     DataMarkers(MarkerOp),
     /// The Text tool of the Tools toolbar.
@@ -1727,7 +1729,7 @@ fn tools_menu() -> Vec<Entry> {
         sub("Protection", vec![grey("Protect Project..."), item("Audit Log", Cmd::AuditLog)]),
         grey("Apps on File Exchange..."),
         sep(),
-        grey_keyed("Fitting Function Builder...", plain_key(Key::F8)),
+        keyed("Fitting Function Builder...", plain_key(Key::F8), Cmd::FitBuilder),
         keyed("Fitting Function Organizer...", plain_key(Key::F9), Cmd::FitOrganizer),
         keyed("Theme Organizer...", plain_key(Key::F7), Cmd::ThemeOrganizer),
         item("Import Filters Manager...", Cmd::FilterManager),
@@ -2981,6 +2983,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SlideShow => Action::SlideShow(some()?),
         Cmd::AddFavorite => Action::AddFavorite(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::AuditLog => Action::AuditLog,
+        Cmd::FitBuilder => Action::FitBuilder,
         Cmd::DataMarkers(op) => Action::GraphEdit {
             graph: c.graph.ok_or(NEED_GRAPH)?,
             op: GraphOp::DataMarkers { layer: c.layer, op: *op },

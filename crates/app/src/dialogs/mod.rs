@@ -24,6 +24,7 @@ pub mod filter_options;
 pub mod find;
 pub mod find_project;
 pub mod fit;
+pub mod fit_builder;
 pub mod fit_more;
 pub mod fit_organizer;
 pub mod fit_page;

@@ -2438,13 +2438,42 @@ pub struct TextLabel {
     /// Counter-clockwise rotation in degrees.
     #[serde(default)]
     pub rotation_deg: f64,
+    /// Graph > New Table (T136): the label is a table; its text lines are the rows and tabs part the
+    /// cells, and it is drawn as a grid whose top-left corner is the anchor.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub table: bool,
 }
 
 impl TextLabel {
     /// A label with no rotation.
     pub fn new(text: impl Into<String>, x: f64, y: f64, font: Font) -> Self {
-        TextLabel { text: text.into(), x, y, font, rotation_deg: 0.0 }
+        TextLabel { text: text.into(), x, y, font, rotation_deg: 0.0, table: false }
     }
+
+    /// A table of these cells (rows of cells), with its top-left corner at (x, y) of the layer frame.
+    pub fn table(cells: &[Vec<String>], x: f64, y: f64, font: Font) -> Self {
+        TextLabel { table: true, ..TextLabel::new(table_text(cells), x, y, font) }
+    }
+
+    /// A table's cells: a row per text line, a cell per tab-separated part.
+    pub fn cells(&self) -> Vec<Vec<String>> {
+        self.text.split('\n').map(|row| row.split('\t').map(str::to_string).collect()).collect()
+    }
+}
+
+/// The text of a table label: rows on lines, cells parted by tabs, every row as wide as the widest.
+pub fn table_text(cells: &[Vec<String>]) -> String {
+    let cols = cells.iter().map(Vec::len).max().unwrap_or(1).max(1);
+    cells
+        .iter()
+        .map(|row| {
+            (0..cols)
+                .map(|c| row.get(c).map_or("", |s| s.as_str()).replace(['\t', '\n'], " "))
+                .collect::<Vec<_>>()
+                .join("\t")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 impl Layer {

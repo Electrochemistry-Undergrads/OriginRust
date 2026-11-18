@@ -83,3 +83,25 @@ fn analysis_markers_hide_partial_and_size() {
     let beam = beam.unwrap();
     assert!(((beam[3] - beam[1]) - 36.0).abs() < 1e-9, "Large is 36 pt: {beam:?}");
 }
+
+/// Graph > New Table (T136): a table label is a grid whose rectangle is the clickable object.
+#[test]
+fn a_table_label_is_drawn_as_a_grid_and_picked_inside() {
+    let mut p = Project::new();
+    let g = p.add_graph(Template::Line);
+    let font = p.graph(g).unwrap().layers[0].new_label_font();
+    let cells = vec![vec!["a".to_string(), "bb".to_string()], vec!["1".to_string(), String::new()]];
+    p.graph_mut(g).unwrap().layers[0].labels.push(sheaf_core::graph::TextLabel::table(&cells, 0.2, 0.2, font));
+    let s = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let texts: Vec<String> = s.layers[0]
+        .overlay
+        .iter()
+        .filter_map(|it| match it {
+            scene::Item::Text(t) => Some(t.text.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(texts.contains(&"a".to_string()) && texts.contains(&"bb".to_string()) && texts.contains(&"1".to_string()));
+    let obj = s.layers[0].objects.iter().find(|o| o.kind == scene::ObjectKind::Label(0)).unwrap();
+    assert!(obj.boxes.iter().any(|b| b.w > 0.0 && b.h > 0.0), "the whole grid counts as the table");
+}

@@ -6077,3 +6077,22 @@ Origin's documented behaviour. The markers they act on are the data markers of D
   section 40), Large 36 pt.
 - Lock Position stays grey.
 
+## Tables: Graph > New Table (T136, 2026-11-18, **not measured**)
+
+Origin 2016's Graph menu has New Table, which puts a table object on the graph. It could not be probed
+(Origin's COM class was unregistered), so this follows Origin's documented behaviour.
+
+- **Making a table:** Graph > New Table opens the "New Table" window with a grid of 3 x 3 empty cells. Add
+  Row, Remove Row, Add Column and Remove Column change the size. OK puts the table into the active layer,
+  its top-left corner at 10 % of the frame from the left and top, in the layer's new-label font. It is one
+  undo step.
+- **Editing:** a double-click on a table opens the same grid, titled "Table". OK changes the cells in one
+  undo step.
+- **Drawing:**
+  - Each column is as wide as its widest cell (at least 2.5 font sizes) plus 0.4 font size on each side.
+  - Each row is 1.6 font sizes high.
+  - Grid lines are black 0.5 pt; cell text is left aligned and centred in the row.
+- **The object:** the whole grid is the object. It selects, moves and deletes like a free text label.
+- **Model:** a table is a free text label with `table: true`. Its lines are the rows and tabs part the
+  cells, so it saves with the project. The .opj writer writes it as a text label.
+

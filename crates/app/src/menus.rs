@@ -346,6 +346,8 @@ pub enum Cmd {
     FitBuilder,
     /// Tools > Options... (T134).
     Options,
+    /// Graph > New Table (T136).
+    NewTable,
     /// File > Open Sample Projects, Help > Open Sample Projects > Sample Projects (T133).
     SampleProjects,
     /// The Data menu's display range and data markers (T118).
@@ -1657,7 +1659,7 @@ fn graph_menu() -> Vec<Entry> {
                 grey("Add Legend Title"),
             ],
         ),
-        grey("New Table"),
+        item("New Table", Cmd::NewTable),
         item("New Color Scale", Cmd::NewColorScale),
         sep(),
         grey("Fit Layer to Graph"),
@@ -3007,6 +3009,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::AuditLog => Action::AuditLog,
         Cmd::FitBuilder => Action::FitBuilder,
         Cmd::Options => Action::Options,
+        Cmd::NewTable => Action::NewTable { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::SampleProjects => Action::SampleProjects,
         Cmd::DataMarkers(op) => Action::GraphEdit {
             graph: c.graph.ok_or(NEED_GRAPH)?,

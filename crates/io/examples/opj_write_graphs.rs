@@ -140,6 +140,7 @@ fn basic() -> Project {
             y: 0.2,
             font: Font::new("Arial", 18.0),
             rotation_deg: 0.0,
+            table: false,
         });
         l.legend.visible = true;
         l.legend.frame = true;
@@ -376,6 +377,7 @@ fn columns() -> Project {
             y: 0.1 + 0.05 * (i % 3) as f64,
             font: Font::new("Arial", 20.0),
             rotation_deg: 0.0,
+            table: false,
         });
     }
     p

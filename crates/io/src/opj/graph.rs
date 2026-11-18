@@ -624,6 +624,7 @@ fn push_text_label(
             y: (y - frame_pt.1) / frame_size.1,
             font,
             rotation_deg: angle,
+            table: false,
         });
     }
 }

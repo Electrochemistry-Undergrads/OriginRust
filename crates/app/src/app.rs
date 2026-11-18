@@ -308,6 +308,7 @@ pub struct SheafApp {
     autosave: Autosave,
     autosave_dialog: Option<AutosaveDialog>,
     options: Option<crate::dialogs::options::OptionsDialog>,
+    table_editor: Option<crate::dialogs::table_editor::TableEditor>,
     /// Work that an earlier run left behind, offered at start-up.
     recovery_offer: Option<RecoveryOffer>,
     /// The file the recovered project belonged to: suggested by Save, since the project has no name.
@@ -441,6 +442,7 @@ impl SheafApp {
             autosave: Autosave::new(None, AutosaveSettings::default(), None),
             autosave_dialog: None,
             options: None,
+            table_editor: None,
             recovery_offer: None,
             recovered_from: None,
             live: Live::new(cc.egui_ctx.clone(), startup_dirs),
@@ -2508,7 +2510,25 @@ impl SheafApp {
                 self.text_dialog = TextDialog::new_label(&self.doc, graph, layer, at.unwrap_or((0.5, 0.5)));
             }
             Action::EditText { graph, layer, label } => {
-                self.text_dialog = TextDialog::edit(&self.doc, graph, layer, label);
+                // A table (T136) is edited cell by cell.
+                let table = self
+                    .doc
+                    .project()
+                    .graph(graph)
+                    .and_then(|g| g.layers.get(layer))
+                    .and_then(|l| l.labels.get(label))
+                    .filter(|l| l.table)
+                    .map(|l| l.cells());
+                match table {
+                    Some(cells) => {
+                        self.table_editor =
+                            Some(crate::dialogs::table_editor::TableEditor::edit(graph, layer, label, cells));
+                    }
+                    None => self.text_dialog = TextDialog::edit(&self.doc, graph, layer, label),
+                }
+            }
+            Action::NewTable { graph, layer } => {
+                self.table_editor = Some(crate::dialogs::table_editor::TableEditor::new_table(graph, layer));
             }
             Action::EditTitle { graph, layer, vertical } => {
                 self.text_dialog = TextDialog::axis_title(&self.doc, graph, layer, vertical);
@@ -5661,6 +5681,31 @@ impl SheafApp {
             });
             if close {
                 self.message = None;
+            }
+        }
+        if let Some(d) = &mut self.table_editor {
+            use crate::dialogs::table_editor::TableOutcome;
+            match d.show(ctx) {
+                TableOutcome::Open => {}
+                TableOutcome::Closed => self.table_editor = None,
+                TableOutcome::Apply { graph, layer, label, cells } => {
+                    self.table_editor = None;
+                    let what = if label.is_some() { "Edit table" } else { "New table" };
+                    let done = self.doc.edit(what, |p| {
+                        let l = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)).ok_or("the layer is gone")?;
+                        match label.and_then(|k| l.labels.get_mut(k)) {
+                            Some(t) => t.text = sheaf_core::graph::table_text(&cells),
+                            None => {
+                                let font = l.new_label_font();
+                                l.labels.push(sheaf_core::graph::TextLabel::table(&cells, 0.1, 0.1, font));
+                            }
+                        }
+                        Ok::<_, &str>(())
+                    });
+                    if let Err(e) = done {
+                        self.warn(e.to_string());
+                    }
+                }
             }
         }
         if let Some(d) = &mut self.options {

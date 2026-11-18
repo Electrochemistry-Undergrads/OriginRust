@@ -2,7 +2,8 @@
 //! `\+(..)` superscript, `\-(..)` subscript, `\g(..)` Greek, `\pN(..)` size in percent,
 //! `\f:Name(..)` font switch, `\x(hhhh)` a character by its code, `\v(..)` literal text; the
 //! `\u(..)` underline, `\s(..)` strikethrough and `\cN(..)` indexed or RGB text color.
-//! `\=(sub,sup)` places paired scripts in one shared column. `\ab(..)` draws an overbar.
+//! `\=(sub,sup)` places paired scripts in one shared column. `\ab(..)`, `\ad(..)`, and
+//! `\at(..)` draw a bar, dot, or tilde above a span.
 //! Escapes nest. A backslash
 //! that does not start one of these escapes is literal. The two prime escapes insert
 //! Unicode prime characters through the same styled glyph path.
@@ -62,7 +63,14 @@ const MAX_DEPTH: usize = 24;
 pub(crate) enum Segment {
     Text(Run),
     Pair { sub: Vec<Segment>, sup: Vec<Segment> },
-    Overbar { content: Vec<Segment>, scale: f64, color: Option<Color> },
+    Accent { kind: Accent, content: Vec<Segment>, scale: f64, color: Option<Color> },
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Accent {
+    Bar,
+    Dot,
+    Tilde,
 }
 
 /// Splits label text into styled runs, with paired scripts in logical sub/sup order.
@@ -76,7 +84,7 @@ pub fn parse(text: &str) -> Vec<Run> {
                     flatten(sub, out);
                     flatten(sup, out);
                 }
-                Segment::Overbar { content, .. } => flatten(content, out),
+                Segment::Accent { content, .. } => flatten(content, out),
             }
         }
     }
@@ -143,8 +151,8 @@ enum Escape {
     Styled(Style),
     /// A shared column containing subscript, then superscript, separated by the first outer comma.
     Pair,
-    /// A decorated span with a shared bar over its contents.
-    Overbar,
+    /// A decorated span with one accent over its contents.
+    Accent(Accent),
     /// `\v(..)`: the text is taken as it is, without escapes.
     Literal,
     /// `\x(hhhh)`: one character given by its hexadecimal code.
@@ -168,8 +176,14 @@ fn escape_at(
 ) -> Option<(Escape, usize)> {
     let mut inner = st.clone();
     let code = *chars.get(pos + 1)?;
-    if chars.get(pos + 1..pos + 4) == Some(&['a', 'b', '(']) {
-        return Some((Escape::Overbar, pos + 4));
+    let accent = match chars.get(pos + 1..pos + 4) {
+        Some(['a', 'b', '(']) => Some(Accent::Bar),
+        Some(['a', 'd', '(']) => Some(Accent::Dot),
+        Some(['a', 't', '(']) => Some(Accent::Tilde),
+        _ => None,
+    };
+    if let Some(kind) = accent {
+        return Some((Escape::Accent(kind), pos + 4));
     }
     if code == '(' {
         return Some((Escape::Decimal, pos + 2));
@@ -344,11 +358,11 @@ fn parse_seq(
             *pos = start;
             match esc {
                 Escape::Styled(inner) => parse_seq(chars, pos, inner, true, depth + 1, out, expand_family),
-                Escape::Overbar => {
+                Escape::Accent(kind) => {
                     let mut content = Vec::new();
                     parse_seq(chars, pos, st.clone(), true, depth + 1, &mut content, expand_family);
                     if !content.is_empty() {
-                        out.push(Segment::Overbar { content, scale: st.scale, color: st.color });
+                        out.push(Segment::Accent { kind, content, scale: st.scale, color: st.color });
                     }
                 }
                 Escape::Pair => {

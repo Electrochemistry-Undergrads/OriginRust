@@ -2275,8 +2275,8 @@ pub fn graph_label_menu(layer: usize, label: usize) -> Vec<Entry> {
         grey_keyed("Copy", ctrl(Key::C)),
         keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteLabel { layer, label })),
         sep(),
-        grey("Bring to the front"),
-        grey("Push to the back"),
+        item("Bring to the front", Cmd::GraphEdit(GraphOp::OrderLabel { layer, label, front: true })),
+        item("Push to the back", Cmd::GraphEdit(GraphOp::OrderLabel { layer, label, front: false })),
         sep(),
         item("Properties...", Cmd::EditText { layer, label }),
     ]

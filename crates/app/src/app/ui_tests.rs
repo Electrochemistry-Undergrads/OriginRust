@@ -9022,6 +9022,7 @@ mod fit_organizer;
 mod function_graph;
 mod graph_themes;
 mod new_from_template;
+mod options;
 mod qc_chart;
 mod reimport;
 mod sample_projects;

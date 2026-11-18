@@ -672,6 +672,8 @@ pub enum Action {
     AuditLog,
     /// Tools > Fitting Function Builder... (F8, T132).
     FitBuilder,
+    /// Tools > Options... (T134).
+    Options,
     /// File > Open Sample Projects (T133): the list of samples.
     SampleProjects,
     /// Open a sample project by name (it replaces the project, after asking about unsaved changes).

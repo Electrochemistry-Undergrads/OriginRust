@@ -306,6 +306,7 @@ pub struct SheafApp {
     /// The timer and worker that write the recovery file.
     autosave: Autosave,
     autosave_dialog: Option<AutosaveDialog>,
+    options: Option<crate::dialogs::options::OptionsDialog>,
     /// Work that an earlier run left behind, offered at start-up.
     recovery_offer: Option<RecoveryOffer>,
     /// The file the recovered project belonged to: suggested by Save, since the project has no name.
@@ -438,6 +439,7 @@ impl SheafApp {
             frame: 0,
             autosave: Autosave::new(None, AutosaveSettings::default(), None),
             autosave_dialog: None,
+            options: None,
             recovery_offer: None,
             recovered_from: None,
             live: Live::new(cc.egui_ctx.clone(), startup_dirs),
@@ -2824,6 +2826,23 @@ impl SheafApp {
             Action::TileVertically => self.workspace.tile_vertically(),
             Action::About => self.about = true,
             Action::Toolbars => self.toolbars.dialog = true,
+            Action::Options => {
+                let s = &self.startup;
+                let settings_dir = s.settings_path.as_ref().and_then(|p| p.parent().map(std::path::Path::to_path_buf));
+                let locations = vec![
+                    ("Settings", settings_dir),
+                    ("Recovery files", s.recovery_dir.clone()),
+                    ("User templates", s.templates_dir.clone()),
+                    ("Graph themes", s.graph_themes_dir.clone()),
+                    ("Dialog themes", s.themes_dir.clone()),
+                    ("Fitting functions", s.fit_functions_dir.clone()),
+                ];
+                self.options = Some(crate::dialogs::options::OptionsDialog::new(
+                    self.autosave.settings,
+                    self.autosave.has_session(),
+                    locations,
+                ));
+            }
             Action::Autosave => {
                 self.autosave_dialog = Some(AutosaveDialog::new(self.autosave.settings, self.autosave.has_session()));
             }
@@ -5616,6 +5635,17 @@ impl SheafApp {
             });
             if close {
                 self.message = None;
+            }
+        }
+        if let Some(d) = &mut self.options {
+            use crate::dialogs::options::OptionsOutcome;
+            match d.show(ctx) {
+                OptionsOutcome::Open => {}
+                OptionsOutcome::Cancelled => self.options = None,
+                OptionsOutcome::Done(settings) => {
+                    self.options = None;
+                    self.apply_autosave_settings(settings);
+                }
             }
         }
         if let Some(d) = &mut self.autosave_dialog {

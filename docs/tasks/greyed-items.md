@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **261 greyed items: 175 in the menu bar, 18 on the toolbars, 68 in context menus.**
+original inventory baseline. This is not a new runtime audit. **260 greyed items: 174 in the menu bar, 18 on the toolbars, 68 in context menus.**
 
 ## How to read and keep this file
 
@@ -79,14 +79,14 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B9` | 13 |
 | `B11` | 3 |
 | `B12` | 1 |
-| `B13` | 3 |
+| `B13` | 2 |
 | `B14` | 44 |
 | `B15` | 21 |
 | `B16` | 15 |
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 60 items, backlog packages (`B`) 181, not planned (`N`) 20.
+Briefs (`T`) hold 60 items, backlog packages (`B`) 180, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -166,7 +166,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B9` Statistics... · Quick Fit... · Quick Sigmoidal Fit... · Quick Peaks... · Differentiate... · Interpolate... · Intersect... · Rise Time... · Cluster... · FFT... · 2D Integrate... · Vertical Cursor... · Go To...
 
 ### Tools
-- `B13` Options...
 - `B13` System Variables...
 - `B15` 3D OpenGL Settings...
 - `N` Apps on File Exchange...

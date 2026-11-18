@@ -1654,3 +1654,20 @@ formulas and a fixed pseudo-random sequence (`sheaf_core::samples`), so every op
   - Wind: 300 directions and speeds, wind rose.
   - Process Control: 30 measurements with a shift after 20, X bar R chart in subgroups of 5.
 
+### Options (T134, 2026-11-18, not measured)
+
+Origin 2016's Tools > Options... is a window with ten tabs. It could not be probed (Origin's COM class was
+unregistered). Sheaf's Options window is the home of its own application settings and starts with two
+tabs.
+
+- **Open/Close:** "Autosave the project" and the interval in minutes (1 to 120). These are the same settings
+  as Tools > Autosave...; OK applies them and keeps them in the settings file. A run without a recovery
+  folder says that nothing is written.
+- **File Locations:** the folders Sheaf keeps its files in, read only: Settings, Recovery files, User
+  templates, Graph themes, Dialog themes and Fitting functions. "(none in this run)" means the run has no
+  such folder.
+- **Buttons:** OK; Cancel, Esc or the close box change nothing.
+- **Shortcut:** Origin's menu shows Ctrl+U beside Options. Sheaf does not bind it, because Ctrl+U is
+  Underline in worksheets and text editors (Origin itself did not open Options with Ctrl+U in a
+  worksheet, see above).
+

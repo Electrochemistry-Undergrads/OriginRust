@@ -193,6 +193,123 @@ fn category(h: &mut Harness<'static, SheafApp>, current: &str, next: &str) {
     settle(h);
 }
 
+fn label_family_fixture() -> String {
+    let names: Vec<_> = sheaf_plot::SystemFonts::shared()
+        .database()
+        .faces()
+        .filter_map(|face| face.families.first().map(|(name, _)| name.clone()))
+        .collect();
+    names
+        .iter()
+        .find(|name| ["Times New Roman", "DejaVu Serif", "Liberation Serif"].contains(&name.as_str()))
+        .or_else(|| names.first())
+        .expect("installed font fixture")
+        .clone()
+}
+
+fn family(h: &mut Harness<'static, SheafApp>, current: &str, next: &str) {
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value(current)).click();
+    settle(h);
+    if next != "Automatic" {
+        click(h, "Worksheet font search");
+        ctrl(h, egui::Key::A);
+        h.event(egui::Event::Text(next.into()));
+        settle(h);
+    }
+    h.get_by_role_and_label(egui::accesskit::Role::Button, next).click();
+    settle(h);
+}
+
+#[test]
+fn label_family_drafts_keep_sizes_sparse_and_apply_undo_cancel_and_automatic() {
+    let mut h = start_sheet("worksheet-label-family-drafts");
+    let chosen = label_family_fixture();
+    let id = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Seed label", |p| {
+        p.workbook_mut(id).unwrap().sheet_mut().columns[0].long_name = "Alpha".into();
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    open(&mut h);
+    category(&mut h, "Data", "Long Name");
+    family(&mut h, "Automatic", &chosen);
+    category(&mut h, "Long Name", "Units");
+    family(&mut h, "Automatic", &chosen);
+    category(&mut h, "Units", "Comments");
+    family(&mut h, "Automatic", &chosen);
+    click(&mut h, "Apply");
+    let s = sheet(&h);
+    for kind in [LabelKind::LongName, LabelKind::Units, LabelKind::Comments] {
+        assert_eq!(s.font_defaults.label_family(&kind), Some(chosen.as_str()));
+        assert!(s.font_defaults.label_size(&kind).is_none(), "family edits must not create point-size overrides");
+    }
+    assert!(s.cell_formats.is_empty());
+    assert!(s.font_defaults.data.is_none());
+    assert_eq!(painted_size(&h, "4.5"), [12.0]);
+    let svg = sheaf_plot::sheet_image_svg(s).unwrap();
+    assert!(svg.contains(&chosen) && svg.contains("Alpha"));
+    let applied = project(&h).clone();
+    let rev = h.state().doc.revision();
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.revision(), rev);
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+    menu(&mut h, "Edit", "Redo");
+    assert_eq!(project(&h), &applied);
+    open(&mut h);
+    category(&mut h, "Data", "Long Name");
+    family(&mut h, &chosen, "Automatic");
+    click(&mut h, "Cancel");
+    assert_eq!(project(&h), &applied);
+    open(&mut h);
+    category(&mut h, "Data", "Long Name");
+    family(&mut h, &chosen, "Automatic");
+    click(&mut h, "OK");
+    assert!(sheet(&h).font_defaults.long_name_family.is_none());
+    assert_eq!(sheet(&h).font_defaults.units_family.as_deref(), Some(chosen.as_str()));
+    assert!(sheet(&h).font_defaults.long_name_size_pt.is_none());
+}
+
+#[test]
+fn label_family_only_defaults_save_reopen_and_reach_new_columns_without_data_fonts() {
+    let mut h = start_sheet("worksheet-label-family-save");
+    let chosen = label_family_fixture();
+    let id = project(&h).workbooks().next().unwrap().id;
+    open(&mut h);
+    category(&mut h, "Data", "Long Name");
+    family(&mut h, "Automatic", &chosen);
+    size(&mut h, "18");
+    category(&mut h, "Long Name", "Units");
+    family(&mut h, "Automatic", &chosen);
+    click(&mut h, "OK");
+    h.state_mut().doc.apply("Future label", |p| {
+        let col =
+            p.add_column(id, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::numeric(vec![101.0])).unwrap();
+        let c = p.workbook_mut(id).unwrap().sheet_mut().column_mut(col).unwrap();
+        c.long_name = "Gamma".into();
+        c.width = Some(20);
+    });
+    settle(&mut h);
+    assert_eq!(painted_size(&h, "Gamma"), [24.0]);
+    assert_eq!(painted_size(&h, "101"), [12.0]);
+    let c = sheet(&h).columns.last().unwrap().id;
+    assert_eq!(sheet(&h).format_index().resolve_label(sheet(&h), c, &LabelKind::LongName).font, Some(chosen.as_str()));
+    assert!(sheaf_io::opj::write(project(&h)).unwrap().warnings.iter().any(|w| w.contains("cell formatting")));
+    for extension in ["sheaf", "opj"] {
+        let path = data_file("worksheet-label-family-output").with_extension(extension);
+        h.state_mut().save_to(path.clone());
+        if extension == "opj" {
+            assert!(sheaf_io::save::companion_path(&path).exists());
+        }
+        let back = start(vec![path]);
+        assert_eq!(sheet(&back).font_defaults, sheet(&h).font_defaults);
+        assert!(sheet(&back).cell_formats.is_empty());
+        assert!(sheet(&back).font_defaults.data.is_none());
+        assert!(sheet(&back).font_defaults.units_size_pt.is_none());
+        assert_eq!(column(&back, "B"), [2.5, 4.5, 6.5, 8.5]);
+    }
+}
+
 #[test]
 fn label_category_drafts_apply_together_with_manual_priority_and_one_undo() {
     let mut h = start_sheet("worksheet-label-font-drafts");

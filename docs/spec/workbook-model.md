@@ -604,7 +604,21 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   Project and OPJ-companion saves preserve the fields; unsupported native OPJ formatting warns.
   Excel writes effective sizes only for exported label rows, reports omitted category styles,
   and leaves data blanks unstyled when only label defaults exist. Future Excel label inheritance
-  is not preserved. Bulk/Standard/header defaults and label family controls remain disabled.
+  is not preserved. Bulk/Standard/header defaults remain disabled.
+- **Label family defaults (documented contract).** Optional `long_name_family`, `units_family`
+  and `comments_family` strings extend the existing `font_defaults` object without changing
+  its point-size fields. A missing family uses the existing automatic Arial face. Family-only
+  edits do not invent size overrides; clearing Automatic removes only the family field. Named
+  manual label faces and sizes retain independent precedence. Unknown installed faces use the
+  same renderer fallback as Data. Existing/future columns, cloning, native project and OPJ
+  companions retain these sparse category settings; `.opj` warns about unsupported formatting.
+  Excel writes effective families for requested label rows and warns when family-only labels
+  are omitted, leaving data cells/blanks independent. The F4 chooser reuses installed-font
+  search and retained category drafts. The official Format-tab manual supports the control
+  contract (GUI3); Native family mutation/future inheritance/manual/Automatic parity remains
+  unverified after excluded ineffective attempts and a later COM registration refusal. These
+  inheritance/reset rules are Sheaf policies. Data, unsupported categories and T27 extents stay
+  unchanged.
 - **Vertical alignment.** The 2016 selected-A1 Format Cells and Worksheet Properties Data
   Format/Size probes (GUI 3, 2026-11-16) found no vertical text-alignment control in those
   inspected routes. Other routes and mutation semantics remain unestablished; this probe

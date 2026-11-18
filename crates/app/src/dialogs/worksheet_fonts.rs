@@ -24,9 +24,18 @@ impl WorksheetFontsDialog {
         let defaults = &b.sheets[sheet].font_defaults;
         let base = [
             defaults.data.clone().unwrap_or_default(),
-            WorksheetFont { size_pt: defaults.long_name_size_pt.unwrap_or(9.0), ..Default::default() },
-            WorksheetFont { size_pt: defaults.units_size_pt.unwrap_or(9.0), ..Default::default() },
-            WorksheetFont { size_pt: defaults.comments_size_pt.unwrap_or(9.0), ..Default::default() },
+            WorksheetFont {
+                family: defaults.long_name_family.clone().unwrap_or_default(),
+                size_pt: defaults.long_name_size_pt.unwrap_or(9.0),
+            },
+            WorksheetFont {
+                family: defaults.units_family.clone().unwrap_or_default(),
+                size_pt: defaults.units_size_pt.unwrap_or(9.0),
+            },
+            WorksheetFont {
+                family: defaults.comments_family.clone().unwrap_or_default(),
+                size_pt: defaults.comments_size_pt.unwrap_or(9.0),
+            },
         ];
         let mut fonts: Vec<_> = sheaf_plot::SystemFonts::shared()
             .database()
@@ -67,8 +76,11 @@ impl WorksheetFontsDialog {
                 sheet.set_data_font(self.shown[0].clone());
             }
             for (i, kind) in [LabelKind::LongName, LabelKind::Units, LabelKind::Comments].iter().enumerate() {
-                if self.shown[i + 1] != self.base[i + 1] {
+                if self.shown[i + 1].size_pt != self.base[i + 1].size_pt {
                     sheet.set_label_font_size(kind, self.shown[i + 1].size_pt);
+                }
+                if self.shown[i + 1].family != self.base[i + 1].family {
+                    sheet.set_label_font_family(kind, &self.shown[i + 1].family);
                 }
             }
         });
@@ -111,7 +123,7 @@ impl WorksheetFontsDialog {
                     ui.label("Font");
                     let shown = &mut self.shown[self.category];
                     let family = if shown.family.is_empty() { "Automatic".to_owned() } else { shown.family.clone() };
-                    ui.add_enabled_ui(self.category == 0, |ui| {
+                    ui.scope(|ui| {
                         egui::ComboBox::from_id_salt("worksheet_default_family")
                             .selected_text(family)
                             .width(180.0)
@@ -135,9 +147,7 @@ impl WorksheetFontsDialog {
                                     }
                                 }
                             });
-                    })
-                    .response
-                    .on_disabled_hover_text("Label category font families are not available yet");
+                    });
                     ui.end_row();
                     ui.label("Size (pt)");
                     ui.add(egui::DragValue::new(&mut shown.size_pt).range(4.0..=96.0).speed(0.25)).widget_info(|| {

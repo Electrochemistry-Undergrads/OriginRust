@@ -49,6 +49,16 @@ and six new label-size regressions. Inventory, eight Python tooling tests and fr
 goldens pass. Independent openpyxl output review and fresh desktop captures were inspected;
 all owned builders, Native/App instances, helpers and guards are terminal.
 
+Label-family slice (`codex/t59-label-default-families`, 2026-11-16): the official Format-tab
+manual supplies the family-control contract for Long Name, Units and Comments (GUI3).
+Native2016 category controls were observed, but ineffective family assignments/posted commits
+are excluded; later COM activation refused before instance creation. No new family mutation
+parity is claimed. Optional independent family strings, installed chooser/search, existing
+manual/future-column policy and Automatic clearing preserve the shipped point-size schema and
+Data behavior. Family-only edits keep sizes absent; Undo/drafts, project/OPJ companions and
+Excel label styles share existing paths. Native family/Auto/manual parity and broader
+categories remain open. Combined validation and current desktop/output review pending.
+
 **Size:** L. **Branch:** `cell-format` (model/dialog), `codex/t59-format-toolbar` (toolbar/font geometry), `codex/t59-worksheet-controls` (underline/fill/keys), `codex/t59-worksheet-dialog` (dialog measurements/More entry), `codex/t59-custom-colors` (one-off RGB chooser), `codex/t59-classic-colors` (24 Classic worksheet presets), `codex/t59-xlsx-formats` (Excel cell styles). **Priority:** P0, wave 1.
 **Spec:** [workbook model](../spec/workbook-model.md), new Cell formats section;
 [GUI](../spec/gui-look.md) 3. **Inventory:** the worksheet-wide `T59` menu location now opens the bounded Data-font dialog; the three unsupported text-control choices are B5.

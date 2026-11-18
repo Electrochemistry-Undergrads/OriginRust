@@ -664,6 +664,8 @@ pub enum Action {
     FullScreen(WindowId),
     /// Add Shortcut to Favorites (T130): the window gets a shortcut in the Project Explorer's Favorites.
     AddFavorite(WindowId),
+    /// Tools > Protection > Audit Log (T131): open the project's audit log window.
+    AuditLog,
     /// Remove from Favorites (T130).
     RemoveFavorite(WindowId),
     /// Column header > Slide Show of Dependent Graphs (T129): the graphs that plot any of the columns, one

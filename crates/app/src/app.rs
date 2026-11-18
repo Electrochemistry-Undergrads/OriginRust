@@ -231,6 +231,8 @@ pub struct SheafApp {
     batch_plot: Option<crate::dialogs::batch_plot::BatchPlotDialog>,
     qc_chart: Option<crate::dialogs::qc_chart::QcDialog>,
     function_graph: Option<crate::dialogs::function_graph::FunctionGraphDialog>,
+    /// The Audit Log window is open (T131).
+    audit_log: bool,
     /// Plot > Statistics > Scatter Matrix's options (T114).
     scatter_matrix: Option<crate::dialogs::scatter_matrix::ScatterMatrixDialog>,
     /// The explorer folder's Properties....
@@ -383,6 +385,7 @@ impl SheafApp {
             batch_plot: None,
             qc_chart: None,
             function_graph: None,
+            audit_log: false,
             scatter_matrix: None,
             folder_props: None,
             save_theme: None,
@@ -2463,6 +2466,7 @@ impl SheafApp {
                     let _ = self.doc.edit("Add shortcut to Favorites", |p| Ok::<_, String>(p.add_favorite(id)));
                 }
             }
+            Action::AuditLog => self.audit_log = true,
             Action::RemoveFavorite(id) => {
                 let _ = self.doc.edit("Remove from Favorites", |p| Ok::<_, String>(p.remove_favorite(id)));
             }
@@ -3487,6 +3491,48 @@ impl SheafApp {
     }
 
     /// Duplicate (Batch Plotting): OK makes the copies, one undo step, and brings the last forward.
+    /// Tools > Protection > Audit Log (T131): the switch and the list of logged changes.
+    fn show_audit_log(&mut self, ctx: &egui::Context) {
+        if !self.audit_log {
+            return;
+        }
+        let mut open = true;
+        let mut on = self.doc.project().audit.is_some();
+        let was = on;
+        egui::Window::new("Audit Log").id(egui::Id::new("audit_log")).collapsible(false).open(&mut open).show(
+            ctx,
+            |ui| {
+                ui.checkbox(&mut on, "Record the changes made to this project");
+                ui.separator();
+                match &self.doc.project().audit {
+                    None => {
+                        ui.weak("The audit log is off.");
+                    }
+                    Some(log) => {
+                        egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+                            egui::Grid::new("audit_log_grid").striped(true).num_columns(2).show(ui, |ui| {
+                                ui.strong("Time (UTC)");
+                                ui.strong("Change");
+                                ui.end_row();
+                                for e in &log.entries {
+                                    ui.label(sheaf_core::audit::format_time(e.time));
+                                    ui.label(&e.change);
+                                    ui.end_row();
+                                }
+                            });
+                        });
+                    }
+                }
+            },
+        );
+        if on != was {
+            self.doc.set_audit(on);
+        }
+        if !open {
+            self.audit_log = false;
+        }
+    }
+
     /// Graph > Add Function Graph... (T119): OK adds the curve; an expression error keeps the window open.
     fn show_function_graph(&mut self, ctx: &egui::Context) {
         use crate::dialogs::function_graph::FunctionOutcome;
@@ -5230,6 +5276,7 @@ impl SheafApp {
         self.show_batch_plot(ctx);
         self.show_qc_chart(ctx);
         self.show_function_graph(ctx);
+        self.show_audit_log(ctx);
         self.show_scatter_matrix(ctx);
         self.show_folder_props(ctx);
         self.show_graph_themes(ctx);

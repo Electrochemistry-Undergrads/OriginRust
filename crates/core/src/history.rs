@@ -148,6 +148,7 @@ impl Document {
                 if self.project != before {
                     let merge = token != 0 && self.undo.last().is_some_and(|s| s.merge_token == token);
                     if !merge {
+                        self.log(label.to_string());
                         self.undo.push(Step {
                             label: label.to_string(),
                             project: before,
@@ -203,11 +204,39 @@ impl Document {
         let step = self.undo.pop()?;
         let mut current = std::mem::replace(&mut self.project, step.project);
         self.keep_view_modes(&mut current);
+        self.keep_audit(&mut current, format!("Undo {}", step.label));
         let current_state = std::mem::replace(&mut self.state, step.state);
         self.redo.push(Step { label: step.label.clone(), project: current, state: current_state, merge_token: 0 });
         self.dirty = self.saved_state != Some(self.state);
         self.revision += 1;
         Some(step.label)
+    }
+
+    /// The audit log (T131) is not taken back by undo and redo: the log now in effect stays, with the
+    /// undo or redo added to it.
+    fn keep_audit(&mut self, swapped_out: &mut Project, change: String) {
+        self.project.audit = swapped_out.audit.take();
+        self.log(change);
+    }
+
+    /// Adds a change to the audit log when the project has one on.
+    fn log(&mut self, change: String) {
+        if let Some(log) = &mut self.project.audit {
+            log.entries.push(crate::audit::AuditEntry { time: crate::audit::now(), change });
+        }
+    }
+
+    /// Turns the project's audit log on (it starts with "Audit log started") or off (its entries go).
+    /// Not an undo step, but the project counts as changed.
+    pub fn set_audit(&mut self, on: bool) {
+        if on == self.project.audit.is_some() {
+            return;
+        }
+        self.project.audit = on.then(crate::audit::AuditLog::default);
+        self.log("Audit log started".into());
+        self.dirty = true;
+        self.saved_state = None;
+        self.revision += 1;
     }
 
     /// View modes are view state, not an undo step: undo and redo keep the modes now in
@@ -221,6 +250,7 @@ impl Document {
         let step = self.redo.pop()?;
         let mut current = std::mem::replace(&mut self.project, step.project);
         self.keep_view_modes(&mut current);
+        self.keep_audit(&mut current, format!("Redo {}", step.label));
         let current_state = std::mem::replace(&mut self.state, step.state);
         self.undo.push(Step { label: step.label.clone(), project: current, state: current_state, merge_token: 0 });
         self.dirty = self.saved_state != Some(self.state);
@@ -247,6 +277,29 @@ impl Document {
 mod tests {
     use super::*;
     use crate::column::{ColumnData, Designation};
+
+    #[test]
+    fn the_audit_log_records_changes_and_is_not_undone() {
+        let mut doc = Document::new(Project::new());
+        doc.apply("New workbook", |p| p.add_workbook(""));
+        assert!(doc.project().audit.is_none(), "off by default: nothing is logged");
+        doc.set_audit(true);
+        assert!(doc.dirty);
+        doc.apply("Rename", |p| {
+            p.add_workbook("x");
+        });
+        doc.undo();
+        doc.redo();
+        let changes: Vec<String> =
+            doc.project().audit.as_ref().unwrap().entries.iter().map(|e| e.change.clone()).collect();
+        assert_eq!(changes, ["Audit log started", "Rename", "Undo Rename", "Redo Rename"]);
+        // Undo past the point where the log was turned on keeps it.
+        doc.undo();
+        doc.undo();
+        assert_eq!(doc.project().audit.as_ref().unwrap().entries.len(), 6);
+        doc.set_audit(false);
+        assert!(doc.project().audit.is_none());
+    }
 
     #[test]
     fn undo_and_redo_keep_the_view_mode() {

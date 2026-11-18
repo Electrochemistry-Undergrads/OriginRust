@@ -113,6 +113,8 @@ pub struct Startup {
     pub templates_dir: Option<PathBuf>,
     /// Where graph themes are kept (Save Format as Theme, Theme Organizer); `None` greys them out.
     pub graph_themes_dir: Option<PathBuf>,
+    /// Where the Fitting Function Builder saves its `.FDF` files (T132); `None` saves nothing.
+    pub fit_functions_dir: Option<PathBuf>,
     /// Turn the AI link on at start (`--mcp`). It is never saved: a run starts with it off.
     pub mcp: bool,
     /// The run folders the AI link may listen in, best first. `None` has no folder, so the link
@@ -233,6 +235,7 @@ pub struct SheafApp {
     function_graph: Option<crate::dialogs::function_graph::FunctionGraphDialog>,
     /// The Audit Log window is open (T131).
     audit_log: bool,
+    fit_builder: Option<crate::dialogs::fit_builder::FitBuilder>,
     /// Plot > Statistics > Scatter Matrix's options (T114).
     scatter_matrix: Option<crate::dialogs::scatter_matrix::ScatterMatrixDialog>,
     /// The explorer folder's Properties....
@@ -386,6 +389,7 @@ impl SheafApp {
             qc_chart: None,
             function_graph: None,
             audit_log: false,
+            fit_builder: None,
             scatter_matrix: None,
             folder_props: None,
             save_theme: None,
@@ -2468,6 +2472,9 @@ impl SheafApp {
                 }
             }
             Action::AuditLog => self.audit_log = true,
+            Action::FitBuilder => {
+                self.fit_builder.get_or_insert_with(Default::default);
+            }
             Action::RemoveFavorite(id) => {
                 let _ = self.doc.edit("Remove from Favorites", |p| Ok::<_, String>(p.remove_favorite(id)));
             }
@@ -3496,6 +3503,31 @@ impl SheafApp {
     }
 
     /// Duplicate (Batch Plotting): OK makes the copies, one undo step, and brings the last forward.
+    /// Tools > Fitting Function Builder (T132): Save writes `<name>.FDF` into the fitting-function folder.
+    fn show_fit_builder(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::fit_builder::BuilderOutcome;
+        let Some(b) = &mut self.fit_builder else { return };
+        match b.show(ctx) {
+            BuilderOutcome::Open => {}
+            BuilderOutcome::Closed => self.fit_builder = None,
+            BuilderOutcome::Save { name, text } => {
+                let Some(dir) = self.startup.fit_functions_dir.clone() else {
+                    self.warn("Sheaf has no folder for fitting functions".to_string());
+                    return;
+                };
+                let path = dir.join(format!("{name}.FDF"));
+                let written = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&path, text));
+                match written {
+                    Ok(()) => self.say(format!(
+                        "Saved {}; Analysis > Fitting > Nonlinear Curve Fit loads it with the .FDF category",
+                        path.display()
+                    )),
+                    Err(e) => self.warn(format!("Could not save {}: {e}", path.display())),
+                }
+            }
+        }
+    }
+
     /// Tools > Protection > Audit Log (T131): the switch and the list of logged changes.
     fn show_audit_log(&mut self, ctx: &egui::Context) {
         if !self.audit_log {
@@ -5282,6 +5314,7 @@ impl SheafApp {
         self.show_qc_chart(ctx);
         self.show_function_graph(ctx);
         self.show_audit_log(ctx);
+        self.show_fit_builder(ctx);
         self.show_scatter_matrix(ctx);
         self.show_folder_props(ctx);
         self.show_graph_themes(ctx);

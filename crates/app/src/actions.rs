@@ -670,6 +670,8 @@ pub enum Action {
     AddFavorite(WindowId),
     /// Tools > Protection > Audit Log (T131): open the project's audit log window.
     AuditLog,
+    /// Tools > Fitting Function Builder... (F8, T132).
+    FitBuilder,
     /// Remove from Favorites (T130).
     RemoveFavorite(WindowId),
     /// Column header > Slide Show of Dependent Graphs (T129): the graphs that plot any of the columns, one

@@ -81,6 +81,8 @@ fn main() -> eframe::Result {
         themes_dir: sheaf_io::themes::default_dir(),
         templates_dir: sheaf_io::user_templates::default_dir(),
         graph_themes_dir: sheaf_io::graph_themes::default_dir(),
+        fit_functions_dir: sheaf_io::recovery::default_settings_path()
+            .and_then(|p| p.parent().map(|d| d.join("fitfunc"))),
         mcp_dirs: Some(sheaf_io::recovery::run_dir_candidates()),
         ..Default::default()
     };

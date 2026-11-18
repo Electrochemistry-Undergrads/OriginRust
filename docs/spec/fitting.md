@@ -523,3 +523,29 @@ Variables, Parameter Names, Function Form Expression, Function (the formula, or 
 two the library computes in code), Peak Function (its category is Peak Functions) and Derived Parameters.
 Not done: File Name, Brief Description, References, the typeset Equation, Sample Curve, Hints, Parameter
 Settings, and Origin's New / Save of user functions (the Fitting Function Builder stays grey).
+
+## Fitting Function Builder (T132, 2026-11-18, not measured)
+
+Origin 2016's Tools > Fitting Function Builder... (F8) is a wizard that writes a function definition file.
+It could not be probed (Origin's COM class was unregistered), so Sheaf's builder is one window built from
+Origin's documented behaviour and the `.FDF` format (`docs/spec/fdf-format.md`).
+
+- **The window "Fitting Function Builder":**
+  - Function Name: letters, digits and _ only.
+  - Brief Description.
+  - Parameters: `name=initial value` separated by commas. A missing value is 1. A name may not be `x` or
+    `y`, or be repeated.
+  - y = the formula in Sheaf's expression language, with the independent variable `x`.
+- **Save:**
+  - The function is first checked by writing the file and reading it back as a fit function; a problem is
+    shown in the window and nothing is written.
+  - The file `<name>.FDF` goes to the user's fitting-function folder: `fitfunc` beside Sheaf's settings
+    file.
+  - Analysis > Fitting > Nonlinear Curve Fit loads it through its .FDF category.
+- **The written file** (`sheaf_fit::fdf::write_fdf`) has the sections General Information (Function Type
+  User-Defined, Function Form Expression), Fitting Parameters (Names, Meanings `?`, Initial Values
+  `value(V)`, bounds `--(I, Off)`), Independent Variables `x`, Dependent Variables `y`, Formula
+  `y=...;`, Controls, Constraints, Initializations and After Fitting. Lines end in CRLF.
+  - Function names are translated to Origin C, so the file reads back to the same function: Sheaf's `ln`
+    is written `log` (Origin C's natural log) and Sheaf's `log` (base 10) is written `log10`.
+

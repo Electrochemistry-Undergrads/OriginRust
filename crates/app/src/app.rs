@@ -132,6 +132,8 @@ enum Pending {
     Recover,
     /// Duplicate Project without Data (it replaces the open project).
     DuplicateNoData,
+    /// Open the sample project in `pending_sample` (T133).
+    Sample,
     Quit,
 }
 
@@ -236,6 +238,9 @@ pub struct SheafApp {
     /// The Audit Log window is open (T131).
     audit_log: bool,
     fit_builder: Option<crate::dialogs::fit_builder::FitBuilder>,
+    sample_projects: Option<crate::dialogs::sample_projects::SampleProjects>,
+    /// The sample project to open once the question about unsaved changes is answered (T133).
+    pending_sample: Option<String>,
     /// Plot > Statistics > Scatter Matrix's options (T114).
     scatter_matrix: Option<crate::dialogs::scatter_matrix::ScatterMatrixDialog>,
     /// The explorer folder's Properties....
@@ -390,6 +395,8 @@ impl SheafApp {
             function_graph: None,
             audit_log: false,
             fit_builder: None,
+            sample_projects: None,
+            pending_sample: None,
             scatter_matrix: None,
             folder_props: None,
             save_theme: None,
@@ -2471,6 +2478,17 @@ impl SheafApp {
                 }
             }
             Action::AuditLog => self.audit_log = true,
+            Action::SampleProjects => {
+                self.sample_projects.get_or_insert_with(Default::default);
+            }
+            Action::OpenSample(name) => {
+                self.pending_sample = Some(name);
+                if self.doc.dirty {
+                    self.pending = Some(Pending::Sample);
+                } else {
+                    self.do_pending(Pending::Sample, ctx);
+                }
+            }
             Action::FitBuilder => {
                 self.fit_builder.get_or_insert_with(Default::default);
             }
@@ -2838,6 +2856,19 @@ impl SheafApp {
                 }
             }
             Pending::DuplicateNoData => self.duplicate_project_without_data(),
+            Pending::Sample => {
+                let name = self.pending_sample.take().unwrap_or_default();
+                match sheaf_core::samples::sample_project(&name) {
+                    Some(project) => {
+                        self.doc.replace(project);
+                        self.path = None;
+                        self.recovered_from = None;
+                        self.reset_views();
+                        self.say(format!("Opened the sample project {name}"));
+                    }
+                    None => self.warn(format!("There is no sample project {name}")),
+                }
+            }
             Pending::Recover => self.recover_newest(),
             Pending::Quit => {
                 self.quit_confirmed = true;
@@ -3502,6 +3533,20 @@ impl SheafApp {
     }
 
     /// Duplicate (Batch Plotting): OK makes the copies, one undo step, and brings the last forward.
+    /// File > Open Sample Projects (T133): Open closes the window and opens the chosen sample.
+    fn show_sample_projects(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::sample_projects::SampleOutcome;
+        let Some(d) = &mut self.sample_projects else { return };
+        match d.show(ctx) {
+            SampleOutcome::Open => {}
+            SampleOutcome::Closed => self.sample_projects = None,
+            SampleOutcome::Load(name) => {
+                self.sample_projects = None;
+                self.apply(Action::OpenSample(name), ctx);
+            }
+        }
+    }
+
     /// Tools > Fitting Function Builder (T132): Save writes `<name>.FDF` into the fitting-function folder.
     fn show_fit_builder(&mut self, ctx: &egui::Context) {
         use crate::dialogs::fit_builder::BuilderOutcome;
@@ -5314,6 +5359,7 @@ impl SheafApp {
         self.show_function_graph(ctx);
         self.show_audit_log(ctx);
         self.show_fit_builder(ctx);
+        self.show_sample_projects(ctx);
         self.show_scatter_matrix(ctx);
         self.show_folder_props(ctx);
         self.show_graph_themes(ctx);

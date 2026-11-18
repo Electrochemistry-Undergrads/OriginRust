@@ -1628,3 +1628,21 @@ Project... stays grey.
 - **Saving and undo:** the log is saved with the project (`Project::audit`). Undo and redo never take it
   back: the document carries the current log forward.
 
+### Sample Projects (T133, 2026-11-18)
+
+Origin 2016 has File > Open Sample Projects and Help > Open Sample Projects > Sample Projects, which open
+the sample `.opju` files it installs. Sheaf has no such files: it builds its samples on the spot from
+formulas and a fixed pseudo-random sequence (`sheaf_core::samples`), so every opening is the same.
+
+- **The window "Sample Projects":** both menu items open it. It lists the samples with a one-line
+  description. Open, or a double-click, opens the selected one; Cancel or Esc closes the window.
+- **Opening:** the sample replaces the project, after the same question about unsaved changes as
+  File > New. It has no file name and nothing to save until it is changed.
+- **The samples:**
+  - Line and Symbol: two damped oscillations, line + symbol.
+  - Peaks: a noisy spectrum with three Gaussian peaks, line.
+  - Groups: three groups of 25 measurements, box chart.
+  - Stock Prices: 40 days of open/high/low/close/volume, OHLC-Volume.
+  - Wind: 300 directions and speeds, wind rose.
+  - Process Control: 30 measurements with a shift after 20, X bar R chart in subgroups of 5.
+

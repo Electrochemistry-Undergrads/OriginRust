@@ -670,6 +670,10 @@ pub enum Action {
     AuditLog,
     /// Tools > Fitting Function Builder... (F8, T132).
     FitBuilder,
+    /// File > Open Sample Projects (T133): the list of samples.
+    SampleProjects,
+    /// Open a sample project by name (it replaces the project, after asking about unsaved changes).
+    OpenSample(String),
     /// Remove from Favorites (T130).
     RemoveFavorite(WindowId),
     /// Column header > Slide Show of Dependent Graphs (T129): the graphs that plot any of the columns, one

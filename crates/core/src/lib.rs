@@ -55,6 +55,7 @@ pub mod qc;
 pub mod reimport;
 pub mod reshape;
 pub mod rowfilter;
+pub mod samples;
 pub mod sampling;
 pub mod scales;
 pub mod scatter_matrix;

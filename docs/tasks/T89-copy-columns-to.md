@@ -2,7 +2,8 @@
 
 **Status:** Copy Columns to landed 2026-11-16 (workbook-model 13g). Ignore Hidden Rows now
 defaults to on and compacts the visible source rows. Clearing it copies all stored rows.
-System parameter rows and the Origin window layout remain open. Workspace verification pending.
+System parameter rows and the Origin window layout remain open. Formatting, strict workspace Clippy, Nextest (4,509 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
 **Size:** S. **Source:** greyed inventory package B5 (the column header's Copy Columns to...).
 **Spec:** `docs/spec/workbook-model.md` (a new section).
 

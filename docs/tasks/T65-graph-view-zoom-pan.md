@@ -3,7 +3,8 @@
 **Status:** the View and Graph toolbar commands and the Zoom-Panning tool landed 2026-11-15
 (gui-look 4.x). T69 added the Tools-bar Scale In/Out and Zoom All. The Standard toolbar zoom
 combo now shows the active graph's zoom, offers the five measured presets and accepts typed
-whole percentages. Workspace verification pending.
+whole percentages. Formatting, strict workspace Clippy, Nextest (4,500 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
 **Size:** M. **Priority:** wave 4 (B1), the first backlog package after waves 1-3 were claimed.
 **Spec:** [gui-look](../spec/gui-look.md) section 4 (graph window mouse actions); add a "Zoom and
 pan" subsection there. **Inventory:** 9 locations tagged `T65` (View > Zoom In, Zoom Out, Whole

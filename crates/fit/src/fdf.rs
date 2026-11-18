@@ -755,3 +755,118 @@ Lower Bounds=--(X,Off),--(X,Off),0.0(X,ON)\r\nUpper Bounds=--,--,--\r\nInitial V
         assert!(files == 0 || parsed == files);
     }
 }
+
+/// Turns a formula of Sheaf's expression language into the C-like dialect of an `.FDF` file: `ln(` is
+/// written `log(` (Origin C's natural log) and `log(` (base 10 in Sheaf) is written `log10(`, so that
+/// [`parse_fdf`] reads the same function back.
+fn to_fdf_formula(formula: &str) -> String {
+    let chars: Vec<char> = formula.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if c.is_alphabetic() || c == '_' {
+            let start = i;
+            while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_') {
+                i += 1;
+            }
+            let id: String = chars[start..i].iter().collect();
+            let is_call = chars[i..].iter().find(|c| !c.is_whitespace()) == Some(&'(');
+            match (is_call, id.as_str()) {
+                (true, "ln") => out.push_str("log"),
+                (true, "log") => out.push_str("log10"),
+                _ => out.push_str(&id),
+            }
+        } else {
+            out.push(c);
+            i += 1;
+        }
+    }
+    out
+}
+
+/// The text of an `.FDF` file for a user-defined function `y = formula` of `x` (Tools > Fitting Function
+/// Builder, T132): its name, a one-line description and its parameters with their initial values.
+pub fn write_fdf(name: &str, description: &str, params: &[(String, f64)], formula: &str) -> String {
+    let names: Vec<&str> = params.iter().map(|(n, _)| n.as_str()).collect();
+    let initial: Vec<String> = params.iter().map(|(_, v)| format!("{v}(V)")).collect();
+    let none: Vec<&str> = params.iter().map(|_| "--(I, Off)").collect();
+    let meanings: Vec<&str> = params.iter().map(|_| "?").collect();
+    let lines = [
+        "[General Information]".to_string(),
+        format!("Function Name={name}"),
+        format!("Brief Description={}", description.replace(['\r', '\n'], " ")),
+        "Function Source=N/A".into(),
+        "Function Type=User-Defined".into(),
+        "Function Form=Expression".into(),
+        format!("Number Of Parameters={}", params.len()),
+        "Number Of Independent Variables=1".into(),
+        "Number Of Dependent Variables=1".into(),
+        String::new(),
+        "[Fitting Parameters]".into(),
+        "Naming Method=User-Defined".into(),
+        format!("Names={}", names.join(",")),
+        format!("Meanings={}", meanings.join(",")),
+        format!("Initial Values={}", initial.join(",")),
+        format!("Lower Bounds={}", none.join(",")),
+        format!("Upper Bounds={}", none.join(",")),
+        String::new(),
+        "[Independent Variables]".into(),
+        "x=".into(),
+        String::new(),
+        "[Dependent Variables]".into(),
+        "y=".into(),
+        String::new(),
+        "[Formula]".into(),
+        format!("y={};", to_fdf_formula(formula)),
+        String::new(),
+        "[Controls]".into(),
+        "General Linear Constraints=Off".into(),
+        "Initialization Scripts=Off".into(),
+        "Scripts After Fitting=Off".into(),
+        "Number Of Duplicates=N/A".into(),
+        "Duplicate Offset=N/A".into(),
+        "Duplicate Unit=N/A".into(),
+        "Generate Curves after Fitting=On".into(),
+        "Curve Point Spacing=Uniform on X-Axis Scale".into(),
+        "Generate Peaks after Fitting=On".into(),
+        "Generate Peaks during Fitting=On".into(),
+        "Generate Peaks with Baseline=On".into(),
+        "Paste Parameters to Plot after Fitting=On".into(),
+        "Paste Parameters to Notes Window after Fitting=On".into(),
+        "Generate Residuals after Fitting=Off".into(),
+        "Keep Parameters=Off".into(),
+        "Compile On Param Change Script=On".into(),
+        "Enable Parameters Initialization=Off".into(),
+        "Treat All Numbers As Double=On".into(),
+        String::new(),
+        "[Constraints]".into(),
+        String::new(),
+        "[Initializations]".into(),
+        String::new(),
+        "[After Fitting]".into(),
+        String::new(),
+    ];
+    lines.join("\r\n")
+}
+
+#[cfg(test)]
+mod write_tests {
+    use super::*;
+
+    #[test]
+    fn a_written_file_reads_back_as_the_same_function() {
+        let params = vec![("A".to_string(), 2.5), ("t".to_string(), 1.0), ("y0".to_string(), 0.0)];
+        let text = write_fdf("MyDecay", "A decay\nwith offset", &params, "y0 + A*exp(-x/t) + ln(x) - log(x)");
+        let f = parse_fdf(&text).unwrap();
+        assert_eq!(f.name, "MyDecay");
+        assert_eq!((f.independent.clone(), f.dependent.clone()), (vec!["x".to_string()], vec!["y".to_string()]));
+        let names: Vec<&str> = f.params.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["A", "t", "y0"]);
+        assert_eq!(f.params[0].initial, Some(2.5));
+        assert!(f.params.iter().all(|p| !p.fixed && p.lower.is_none() && p.upper.is_none()));
+        // ln and log keep their meaning through Origin C's log and log10.
+        assert_eq!(f.formula.as_deref(), Some("y0 + A*exp(-x/t) + ln(x) - log10(x)"));
+        assert!(f.to_fit_function().is_ok());
+    }
+}

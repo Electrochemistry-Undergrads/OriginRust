@@ -1807,7 +1807,14 @@ fn draw_legend(
             match cell {
                 Cell::Sample(k) => {
                     let (sx0, sx1) = (x, x + sample);
-                    let plot = entries[*k].plot;
+                    let entry = entries[*k];
+                    let plot = entry.plot;
+                    x = sx1;
+                    after_symbol = true;
+                    if let Some(vector) = &entry.vector {
+                        crate::vector_plot::draw_legend_sample(out, (sx0, cy), sample, fs, &plot.line, &vector.spec);
+                        continue;
+                    }
                     // A line plot filled under its curve shows a filled box, as Origin's legend does.
                     let filled = plot.decor.fill_under.filter(|_| {
                         plot.kind.has_line() && !plot.kind.is_area() && !plot.decor.fill_under_mode.is_sidelines()
@@ -1879,8 +1886,6 @@ fn draw_legend(
                             (plot.line.width_pt > 0.0).then(|| Stroke::solid(plot.line.color, plot.line.width_pt)),
                         );
                     }
-                    x = sx1;
-                    after_symbol = true;
                 }
                 Cell::Text(t, w) => {
                     if after_symbol {

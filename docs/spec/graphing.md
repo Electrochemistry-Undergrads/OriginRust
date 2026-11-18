@@ -5707,6 +5707,8 @@ Measured with screenshots and LabTalk (`re-workspace/scratch/t107`, local only):
   columns designated as 'XYXY'"); it draws an arrow from (X1, Y1) to (X2, Y2), and the axes take in both
   ends (X 0.8 to 2.7 and Y 0.75 to 3.25 for ends up to 2.5 and 3). Plot Details > Vector: Color Black,
   Width 0.5, Arrowheads Length 65, Angle 30, Closed; End Point X End, Y End.
+- The archived `xyam.png` and `xyxy.png` captures both show a horizontal, right-pointing
+  arrow before the series text in the legend.
 
 Sheaf (`sheaf_core::vector`, `sheaf-plot` `vector_plot.rs`): plot kinds `vector_xyam` and `vector_xyxy`
 with the extra columns and the arrow settings in `PlotDecor::vector` (saved in `.sheaf`). XYAM takes the
@@ -5716,9 +5718,13 @@ multiplier points from the start; the multiplier is 16 points over the largest m
 Y columns two at a time with the X column of each and refuses a selection without a second X column. Both
 draw a black 0.5 pt shaft and a closed 30-degree head, 4.5 pt (XYAM) or 6.5 pt (XYXY) long (Origin's 45 and
 65 read as tenths of a point, matching the size on screen). `sheaf plot -t vector-xyam` / `vector-xyxy`. The
-`.opj` writer saves them as scatter plots of their start points and says so. Not done: the Vector tab in
-Plot Details, Head and Midpoint positions, degree and meteorological angles from the user interface, legend
-arrows.
+`.opj` writer saves them as scatter plots of their start points and says so. The Vector tab,
+Head and Midpoint positions, and degree and meteorological angle controls remain open.
+
+Standard legend samples use the same shaft stroke and solid head geometry as the plotted
+arrows. The sample points right and occupies the regular legend sample width. Sheaf limits
+the head to half that width and one font height so long or wide heads stay within the row.
+The shared scene carries the sample to the exports.
 
 ## 31. Stock plots: Plot > Stock > High-Low-Close, Japanese Candlestick, OHLC Bar Chart (T108, measured 2026-11-16, Origin 2016)
 

@@ -4,9 +4,10 @@
 //! (X, Y) to the row's end point, whose X and Y count for the axis ranges.
 
 use crate::data::PlotData;
-use crate::scene::{self, Item};
+use crate::scene::{self, Item, Stroke};
 use crate::{LayerGeometry, plots::line_stroke};
 use sheaf_core::Project;
+use sheaf_core::graph::LineStyle;
 use sheaf_core::vector::VectorSpec;
 
 /// The per-row data of a vector plot.
@@ -57,7 +58,7 @@ impl VectorData {
 pub(crate) fn draw_vectors(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let Some(v) = &pd.vector else { return };
     let stroke = line_stroke(&pd.plot.line);
-    let color = pd.plot.line.color;
+    let spread = (v.spec.head_angle_deg / 2.0).to_radians().tan();
     for i in pd.start..pd.end {
         let (x0, y0) = geom.data_to_page(pd.x_at(i), pd.y_at(i));
         let (x1, y1) = match &v.rows {
@@ -70,29 +71,53 @@ pub(crate) fn draw_vectors(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeome
                 geom.data_to_page(ex, ey)
             }
         };
-        if ![x0, y0, x1, y1].iter().all(|c| c.is_finite()) {
-            continue;
-        }
-        let (dx, dy) = (x1 - x0, y1 - y0);
-        let len = dx.hypot(dy);
-        if len <= 0.0 {
-            continue;
-        }
-        let (ux, uy) = (dx / len, dy / len);
-        let head = v.spec.head_pt.min(len);
-        let half = (v.spec.head_angle_deg / 2.0).to_radians();
-        let w = head * half.tan();
-        // The shaft stops at the head's base so the line does not poke through the point.
-        let (bx, by) = (x1 - ux * head, y1 - uy * head);
-        let mut d = String::new();
-        scene::move_to(&mut d, x0, y0);
-        scene::line_to(&mut d, bx, by);
-        out.push(Item::Path { d, fill: None, stroke: Some(stroke.clone()) });
-        let mut h = String::new();
-        scene::move_to(&mut h, x1, y1);
-        scene::line_to(&mut h, bx - uy * w, by + ux * w);
-        scene::line_to(&mut h, bx + uy * w, by - ux * w);
-        h.push('Z');
-        out.push(Item::Path { d: h, fill: Some(color), stroke: None });
+        draw_arrow(out, (x0, y0), (x1, y1), &stroke, v.spec.head_pt, spread);
     }
+}
+
+/// Legend arrows point right and keep their head inside the sample's available space.
+pub(crate) fn draw_legend_sample(
+    out: &mut Vec<Item>,
+    (x, y): (f64, f64),
+    width: f64,
+    height: f64,
+    style: &LineStyle,
+    spec: &VectorSpec,
+) {
+    let spread = (spec.head_angle_deg / 2.0).to_radians().tan();
+    let head = spec.head_pt.max(0.0).min(width / 2.0).min(height / 2.0 / spread.abs());
+    draw_arrow(out, (x, y), (x + width, y), &line_stroke(style), head, spread);
+}
+
+fn draw_arrow(
+    out: &mut Vec<Item>,
+    (x0, y0): (f64, f64),
+    (x1, y1): (f64, f64),
+    stroke: &Stroke,
+    head: f64,
+    spread: f64,
+) {
+    if ![x0, y0, x1, y1].iter().all(|c| c.is_finite()) {
+        return;
+    }
+    let (dx, dy) = (x1 - x0, y1 - y0);
+    let len = dx.hypot(dy);
+    if len <= 0.0 {
+        return;
+    }
+    let (ux, uy) = (dx / len, dy / len);
+    let head = head.min(len);
+    let w = head * spread;
+    // The shaft stops at the head's base so the line does not poke through the point.
+    let (bx, by) = (x1 - ux * head, y1 - uy * head);
+    let mut d = String::new();
+    scene::move_to(&mut d, x0, y0);
+    scene::line_to(&mut d, bx, by);
+    out.push(Item::Path { d, fill: None, stroke: Some(stroke.clone()) });
+    let mut h = String::new();
+    scene::move_to(&mut h, x1, y1);
+    scene::line_to(&mut h, bx - uy * w, by + ux * w);
+    scene::line_to(&mut h, bx + uy * w, by - ux * w);
+    h.push('Z');
+    out.push(Item::Path { d: h, fill: Some(stroke.color), stroke: None });
 }

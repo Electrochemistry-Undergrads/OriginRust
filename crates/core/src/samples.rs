@@ -57,7 +57,7 @@ pub fn sample_project(name: &str) -> Option<Project> {
 fn build(name: &str) -> Result<Option<Project>, ProjectError> {
     use Designation::{X, Y};
     let mut p = Project::new();
-    let mut rng = Rng(0x5eed_0f_5a3f);
+    let mut rng = Rng(0x005e_ed0f_5a3f);
     match name {
         "Line and Symbol" => {
             let t: Vec<f64> = (0..60).map(|i| f64::from(i) * 0.25).collect();

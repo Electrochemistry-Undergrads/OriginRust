@@ -2,8 +2,9 @@
 //! item per run.
 
 use crate::fonts::TextMeasurer;
-use crate::markup::{self, Run, Segment};
-use crate::scene::{Anchor, Item, Stroke, TextItem, push_num};
+use crate::markup::{self, Accent, Run, Segment};
+use crate::scene::{Anchor, Item, Stroke, TextItem, line_to, move_to, push_num};
+use sheaf_core::Color;
 use sheaf_core::graph::Font;
 
 /// Ascent used for vertical placement, as a fraction of the font size.
@@ -11,9 +12,65 @@ pub const ASCENT: f64 = 0.72;
 /// Descent used for vertical placement, as a fraction of the font size.
 pub const DESCENT: f64 = 0.21;
 
-/// Clearance and stroke thickness relative to the size at the start of an overbar span.
-const OVERBAR_GAP: f64 = 0.1;
-const OVERBAR_THICKNESS: f64 = 0.04;
+/// Accent dimensions relative to the font size at the start of the span.
+const ACCENT_GAP: f64 = 0.1;
+const ACCENT_THICKNESS: f64 = 0.04;
+const DOT_RADIUS: f64 = 0.06;
+const TILDE_AMPLITUDE: f64 = 0.065;
+
+fn accent_height(kind: Accent) -> f64 {
+    match kind {
+        Accent::Bar => ACCENT_THICKNESS,
+        Accent::Dot => 2.0 * DOT_RADIUS,
+        Accent::Tilde => 2.0 * TILDE_AMPLITUDE + ACCENT_THICKNESS,
+    }
+}
+
+fn accent_item(kind: Accent, width: f64, em: f64, color: Color, at: impl Fn(f64, f64) -> (f64, f64)) -> Item {
+    let mut d = String::new();
+    let (fill, stroke) = match kind {
+        Accent::Bar => {
+            let y = -ACCENT_THICKNESS * em / 2.0;
+            let (x, y0) = at(0.0, y);
+            move_to(&mut d, x, y0);
+            let (x, y1) = at(width, y);
+            line_to(&mut d, x, y1);
+            (None, Some(Stroke::solid(color, ACCENT_THICKNESS * em)))
+        }
+        Accent::Dot => {
+            let radius = DOT_RADIUS * em;
+            // A small closed polygon uses the same path commands in every exporter.
+            for i in 0..16 {
+                let (sin, cos) = (std::f64::consts::TAU * f64::from(i) / 16.0).sin_cos();
+                let (x, y) = at(width / 2.0 + radius * cos, radius * (sin - 1.0));
+                if i == 0 {
+                    move_to(&mut d, x, y);
+                } else {
+                    line_to(&mut d, x, y);
+                }
+            }
+            d.push('Z');
+            (Some(color), None)
+        }
+        Accent::Tilde => {
+            let wave_width = width.min(0.55 * em);
+            let start = (width - wave_width) / 2.0;
+            for i in 0..=16 {
+                let fraction = f64::from(i) / 16.0;
+                let wave = (std::f64::consts::TAU * fraction).sin();
+                let y = -(TILDE_AMPLITUDE * (1.0 + wave) + ACCENT_THICKNESS / 2.0) * em;
+                let (x, y) = at(start + wave_width * fraction, y);
+                if i == 0 {
+                    move_to(&mut d, x, y);
+                } else {
+                    line_to(&mut d, x, y);
+                }
+            }
+            (None, Some(Stroke::solid(color, ACCENT_THICKNESS * em)))
+        }
+    };
+    Item::Path { d, fill, stroke }
+}
 
 fn run_font(font: &Font, run: &Run) -> Font {
     let mut f = font.clone();
@@ -32,7 +89,7 @@ fn segments_width(m: &dyn TextMeasurer, segments: &[Segment], font: &Font, size:
         .map(|segment| match segment {
             Segment::Text(r) => m.width(&r.text, &run_font(font, r), size * r.scale),
             Segment::Pair { sub, sup } => segments_width(m, sub, font, size).max(segments_width(m, sup, font, size)),
-            Segment::Overbar { content, .. } => segments_width(m, content, font, size),
+            Segment::Accent { content, .. } => segments_width(m, content, font, size),
         })
         .sum()
 }
@@ -43,17 +100,19 @@ fn ink_top(segments: &[Segment]) -> f64 {
         .map(|segment| match segment {
             Segment::Text(run) => run.rise + ASCENT * run.scale,
             Segment::Pair { sub, sup } => ink_top(sub).max(ink_top(sup)),
-            Segment::Overbar { content, scale, .. } => ink_top(content) + scale * (OVERBAR_GAP + OVERBAR_THICKNESS),
+            Segment::Accent { kind, content, scale, .. } => {
+                ink_top(content) + scale * (ACCENT_GAP + accent_height(*kind))
+            }
         })
         .fold(f64::NEG_INFINITY, f64::max)
 }
 
 enum Ink<'a> {
     Glyphs(&'a Run),
-    Overbar { rise: f64, width: f64, stroke: Stroke },
+    Accent { kind: Accent, rise: f64, width: f64, em: f64, color: Color },
 }
 
-/// Visits glyph runs and overbars at local horizontal offsets. Both script branches begin at the same column;
+/// Visits glyph runs and accents at local horizontal offsets. Both script branches begin at the same column;
 /// painting the upper branch first matches Origin's vector output.
 fn visit_ink(
     segments: &[Segment],
@@ -75,13 +134,15 @@ fn visit_ink(
                 visit_ink(sub, m, font, size, cursor, visit);
                 cursor += segments_width(m, sub, font, size).max(segments_width(m, sup, font, size));
             }
-            Segment::Overbar { content, scale, color } => {
+            Segment::Accent { kind, content, scale, color } => {
                 visit_ink(content, m, font, size, cursor, visit);
                 let width = segments_width(m, content, font, size);
                 if width > 0.0 {
-                    let rise = (ink_top(content) + scale * (OVERBAR_GAP + OVERBAR_THICKNESS / 2.0)) * size;
-                    let stroke = Stroke::solid(color.unwrap_or(font.color), scale * size * OVERBAR_THICKNESS);
-                    visit(Ink::Overbar { rise, width, stroke }, cursor);
+                    let rise = (ink_top(content) + scale * ACCENT_GAP) * size;
+                    visit(
+                        Ink::Accent { kind: *kind, rise, width, em: scale * size, color: color.unwrap_or(font.color) },
+                        cursor,
+                    );
                 }
                 cursor += width;
             }
@@ -127,7 +188,7 @@ pub fn place(
         })
     };
     let mut glyphs = runs.as_slice();
-    while let [Segment::Overbar { content, .. }] = glyphs {
+    while let [Segment::Accent { content, .. }] = glyphs {
         glyphs = content;
     }
     let single_run = match glyphs {
@@ -163,8 +224,12 @@ pub fn place(
     visit_ink(&runs, m, font, size, cursor, &mut |mark, cursor| {
         let run = match mark {
             Ink::Glyphs(run) => run,
-            Ink::Overbar { rise, width, stroke } => {
-                items.push(line(x + cursor * cos - rise * sin, y - cursor * sin - rise * cos, width, stroke));
+            Ink::Accent { kind, rise, width, em, color } => {
+                items.push(accent_item(kind, width, em, color, |along, vertical| {
+                    let dx = cursor + along;
+                    let dy = vertical - rise;
+                    (x + dx * cos + dy * sin, y - dx * sin + dy * cos)
+                }));
                 return;
             }
         };

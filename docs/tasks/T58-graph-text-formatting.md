@@ -242,6 +242,11 @@ documented contract and Sheaf's placement choices. Native geometry, dot and tild
 open. Formatting, strict workspace Clippy, Nextest (4,485 passed and
 8 skipped), doc tests, inventory and eight Python tooling tests passed.
 
+Dot and tilde accents (`codex/t58-text-accents`, 2026-11-18): `\ad(text)` and `\at(text)`
+use the shared accent-span renderer. The marks center over the text, stack with overbars,
+and retain placement through paired scripts, rotation and SVG output. Graphing 7.11 records
+the documented syntax and Sheaf's nominal geometry. Workspace verification pending.
+
 Prime notation follow-up (codex/t58-escape-alias-audit, 2026-11-16): exact closed
 prime/double-prime escapes now use Unicode U+2032/U+2033 with existing run styles,
 script columns and rendering. Graphing 7.11 records the official documented

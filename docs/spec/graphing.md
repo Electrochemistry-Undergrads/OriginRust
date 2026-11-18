@@ -1142,7 +1142,13 @@ nested bar in the span. The gap and thickness are proportional to the span's fon
 The bar follows the text's rotation and anchor and adds no horizontal advance. Empty spans
 produce no mark. The shared scene carries the same stroke to vector and raster output.
 These placement choices follow Sheaf's layout metrics. Native bar geometry is unmeasured.
-The dot and tilde escapes remain open.
+
+The same span layout handles the documented `\ad(text)` dot and `\at(text)` tilde.
+The dot is filled, and the tilde uses a short wave that fits the enclosed span. Both are
+centered over the measured text and inherit the color and font size at the opening escape.
+They stack with other accents, add no advance and rotate with the text. The wave dimensions
+and dot size are Sheaf choices based on the surrounding font size. Native geometry remains
+unmeasured.
 
 ### 7.12 Reusable Custom RGB wells (T58/T59, documented contract)
 

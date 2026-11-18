@@ -125,6 +125,44 @@ fn overbars_keep_the_single_run_anchor_rotate_and_stack() {
 }
 
 #[test]
+fn dot_and_tilde_are_centered_over_text_and_keep_glyph_placement() {
+    let dot = placed(r"\ad(abc)", Anchor::Middle, 90.0);
+    assert_eq!(dot[0], placed("abc", Anchor::Middle, 90.0)[0]);
+    assert!(matches!(&dot[1], Item::Path { d, fill: Some(Color::BLACK), stroke: None }
+        if d.starts_with("M82.4 58.8") && d.ends_with('Z')));
+
+    let tilde = placed(r"\at(abc)", Anchor::Start, 0.0);
+    assert_eq!(tilde[0], placed("abc", Anchor::Start, 0.0)[0]);
+    let lines = paths(&tilde);
+    assert_eq!(lines.len(), 1);
+    assert!(lines[0].0.starts_with("M111 41.9") && lines[0].0.ends_with("L122 41.9"));
+    assert!((lines[0].1.width - 0.8).abs() < 1e-12);
+}
+
+#[test]
+fn mixed_accents_stack_and_export_without_changing_text_or_script_advance() {
+    let source = r"\c2(\ab(\ad(x)))\at(P\=(i,xy))";
+    let plain = r"\c2(x)P\=(i,xy)";
+    let font = Font::new("Arial", 20.0);
+    assert_eq!(crate::markup::parse(source), crate::markup::parse(plain));
+    assert_eq!(
+        crate::text::width(&FixedMetrics, source, &font, 20.0),
+        crate::text::width(&FixedMetrics, plain, &font, 20.0),
+    );
+    let items = placed(source, Anchor::Start, 0.0);
+    let bars = paths(&items);
+    assert_eq!(bars.len(), 2);
+    assert_eq!(bars[0].0, "M100 38.8L111 38.8");
+    assert_eq!(bars[0].1.color, Color::RED);
+    assert!(bars[1].0.starts_with("M117.6 37.86"));
+    let svg = crate::svg::write_svg(&scene(items));
+    assert!(svg.contains("M100 38.8L111 38.8"));
+    assert!(svg.contains("M117.6 37.86"));
+    assert_eq!(crate::markup::plain(r"\v(\ad(x)\at(y))"), r"\ad(x)\at(y)");
+    assert!(placed(r"\ad()\at()", Anchor::Start, 0.0).is_empty());
+}
+
+#[test]
 fn decorated_scripts_move_and_shrink_their_lines_with_the_glyphs() {
     let items = placed(r"\u(a\+(2)b)", Anchor::Start, 0.0);
     let lines = paths(&items);

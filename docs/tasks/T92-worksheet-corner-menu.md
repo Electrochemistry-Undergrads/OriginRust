@@ -1,6 +1,10 @@
 # T92: Worksheet corner menu (label rows, headers, grid lines)
 
-**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13i): Origin's corner View list measured (Row Labels is one switch, not a submenu), Long Name / Units / Comments / F(x)= / Row Labels / Column Grid / Row Grid work per sheet, saved in `.sheaf`, named in the `.opj` warning. Left: Column Header and Row Header (the grid layout), Parameters, Sampling Interval, Filter, Categories rows.
+**Status:** the Origin 2016 corner View list was measured in workbook-model 13i on 2026-11-16.
+Long Name, Units, Comments, F(x)=, Row Labels, Column Grid and Row Grid landed that day.
+T94 added the Sampling Interval row. Column Header and Row Header now collapse the
+corresponding screen bands and save their choices per sheet. Parameters, Filter and
+Categories remain open. Workspace verification pending.
 **Size:** M. **Source:** greyed inventory package B6 (the worksheet corner menu: Row Labels for Column
 Label Rows > Long Name, Units, Comments, F(x)=, Parameters; Column Header, Row Header, Column Grid, Row
 Grid). Sparklines and Page Break Preview Lines stay in B6.
@@ -13,9 +17,9 @@ lines of the sheet, as Origin 2016's switches, ticked when shown.
 
 ## Origin facts
 
-Measure in Origin 2016 (screenshots after each switch): the default state of each item, whether a switch
-belongs to the sheet or the book, what hiding a label row does to its cells and to the labels used by
-plots, and what the header and grid switches draw.
+The 2016 corner menu shows both header switches checked by default. The documented View tab
+identifies their screen bands. Workbook-model 13i records the reference and Sheaf's layout,
+per-sheet switches and recovery menu.
 
 ## Done when
 

@@ -117,3 +117,92 @@ fn the_sampling_interval_label_can_be_copied_but_not_edited() {
     h.state_mut().apply(Action::Cells { book, op: CellOp::Copy(CopyKind::Plain) }, &ctx);
     assert_eq!(h.state().copied, label);
 }
+
+#[test]
+fn worksheet_header_switches_collapse_the_frozen_bands_and_reopen_from_the_sheet_tab() {
+    let mut h = start(vec![data_file("corner-headers")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let a = column_id(&h, "A");
+    let book = project(&h).locate(a).unwrap().0.id;
+    h.state_mut().doc.apply("Freeze", |p| {
+        p.workbook_mut(book).unwrap().sheets[0].frozen = sheaf_core::Frozen { rows: 1, columns: 1 };
+        assert!(p.column_mut(a).unwrap().set_cell_text(0, "1.25"));
+    });
+    settle(&mut h);
+    let before = sheet(&h).clone();
+    let a_before = text_pos(&h, "1.25");
+    let b_before = text_pos(&h, "2.5");
+    let corner = egui::pos2(text_pos(&h, "Long Name").x, text_pos(&h, "A(X1)").y);
+    right_click_at(&mut h, corner);
+    menu_entry(&h, "\u{2713} Column Header").click();
+    settle(&mut h);
+    assert!(h.query_by_label("A(X1)").is_none());
+    assert!(h.query_by_label("Long Name").is_some());
+    assert!((a_before.y - text_pos(&h, "1.25").y - grid::ROW_HEIGHT).abs() < 0.6);
+
+    let tab = sheet(&h).name.clone();
+    let open_tab_view = |h: &mut Harness<'static, SheafApp>| {
+        // The active sheet is also named in the Explorer. The tab is below the grid.
+        let at =
+            h.query_all_by_label(&tab).map(|node| node.rect().center()).max_by(|a, b| a.y.total_cmp(&b.y)).unwrap();
+        right_click_at(h, at);
+        menu_entry(h, "View").click();
+        settle(h);
+    };
+    open_tab_view(&mut h);
+    menu_entry(&h, "\u{2713} Row Header").click();
+    settle(&mut h);
+    assert!(h.query_by_label("Long Name").is_none());
+    for (position, value) in [(a_before, "1.25"), (b_before, "2.5")] {
+        let at = text_pos(&h, value);
+        assert!((position.x - at.x - 84.0).abs() < 0.6);
+        assert!((position.y - at.y - grid::ROW_HEIGHT).abs() < 0.6);
+    }
+    assert_eq!(sheet(&h).columns, before.columns);
+    assert_eq!(sheet(&h).frozen, before.frozen);
+    assert!(sheet(&h).view.row_labels && sheet(&h).view.long_name);
+    assert_eq!(h.state().doc.undo_label(), Some("Worksheet view"));
+
+    let path = data_file("corner-headers-roundtrip").with_extension("sheaf");
+    assert!(h.state_mut().save_to(path.clone()));
+    let mut reopened = start(vec![path]);
+    show_window(&mut reopened, "Book1 - sample.csv");
+    assert!(!sheet(&reopened).view.column_header && !sheet(&reopened).view.row_header);
+    assert!(reopened.query_by_label("A(X1)").is_none());
+    assert!(reopened.query_by_label("Long Name").is_none());
+    assert!(reopened.query_by_label("1.25").is_some());
+
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert!(!sheet(&h).view.column_header && sheet(&h).view.row_header);
+    h.state_mut().apply(Action::Redo, &ctx);
+    settle(&mut h);
+    assert!(!sheet(&h).view.row_header);
+    for name in ["Column Header", "Row Header"] {
+        open_tab_view(&mut h);
+        menu_entry(&h, name).click();
+        settle(&mut h);
+    }
+    assert_eq!(text_pos(&h, "1.25"), a_before);
+    assert_eq!(text_pos(&h, "2.5"), b_before);
+    assert_eq!(sheet(&h), &before);
+}
+
+#[test]
+fn worksheet_cells_remain_selectable_when_every_header_band_is_hidden() {
+    let mut h = start(vec![data_file("corner-all-headers-hidden")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Hide headers", |p| {
+        let sheet = &mut p.workbook_mut(book).unwrap().sheets[0];
+        for switch in ViewSwitch::LABEL_ROWS.into_iter().chain([ViewSwitch::ColumnHeader, ViewSwitch::RowHeader]) {
+            sheet.toggle_view_switch(switch);
+        }
+    });
+    settle(&mut h);
+    assert!(h.query_by_label("A(X1)").is_none());
+    assert!(h.query_by_label("Long Name").is_none());
+    click_text(&mut h, "2.5");
+    assert_eq!(cells(&h), Sel::Cells { anchor: (1, 0), end: (1, 0) });
+}

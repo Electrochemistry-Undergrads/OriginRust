@@ -216,7 +216,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B5` Worksheet data cell > Set Data Style: Rich Text · Wrap Text · Float
 - `B6` Worksheet row number: Insert Graph...
 - `B6` Worksheet sheet tab: Add Graph as Sheet... · Add Notes as Sheet
-- `B6` Worksheet corner: Parameters · Sparklines · Filter · Categories · Column Header · Row Header · Page Break Preview Lines
+- `B6` Worksheet corner: Parameters · Sparklines · Filter · Categories · Page Break Preview Lines
 - `T72` Graph axis > Copy Format: Dimensions
 - `T72` Graph axis > Paste Format To: Tick Direction · Ticks · Line · Tick Labels · Title Styles · Colors · Thickness · Title Dimensions · Title Text
 - `B2` Graph axis title: Cut · Copy · Bring to the front · Push to the back

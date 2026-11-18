@@ -9,6 +9,7 @@ use sheaf_core::sheet_print::RowHeights;
 pub struct Layout {
     pub rows: RowHeights,
     pub labels: Vec<f32>,
+    column_header_height: f32,
 }
 
 fn height(ctx: &egui::Context, f: ResolvedStyle<'_>) -> f64 {
@@ -49,11 +50,12 @@ impl Layout {
                     .fold(16.0, f64::max) as f32
             })
             .collect();
-        Self { rows, labels }
+        let column_header_height = if sheet.view.column_header { crate::grid::ROW_HEIGHT } else { 0.0 };
+        Self { rows, labels, column_header_height }
     }
 
     pub fn label_top(&self, row: usize) -> f32 {
-        16.0 + self.labels[..row].iter().sum::<f32>()
+        self.column_header_height + self.labels[..row].iter().sum::<f32>()
     }
     pub fn head_height(&self) -> f32 {
         self.label_top(self.labels.len())

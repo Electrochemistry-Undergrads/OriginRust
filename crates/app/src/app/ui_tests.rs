@@ -3718,16 +3718,17 @@ fn the_corner_menu_lists_origins_view_switches() {
             "✓ Units",
             "✓ F(x)=",
             "✓ Row Labels for Column Label Rows",
-            "Column Header",
-            "Row Header",
+            "✓ Column Header",
+            "✓ Row Header",
             "✓ Column Grid",
             "✓ Row Grid",
             "Page Break Preview Lines",
         ],
     );
-    // T92: the switches Sheaf has work; the headers and Page Break Preview Lines stay grey.
+    // T92: both headers can be switched off. Page Break Preview Lines stays grey.
     assert!(entry_enabled(&h, "✓ Column Grid"));
-    assert!(!entry_enabled(&h, "Column Header"));
+    assert!(entry_enabled(&h, "✓ Column Header"));
+    assert!(entry_enabled(&h, "✓ Row Header"));
 }
 
 #[test]

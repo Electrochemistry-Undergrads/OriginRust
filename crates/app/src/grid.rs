@@ -457,7 +457,7 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
 // ----- measures and colours -------------------------------------------------------------
 
 /// Origin's default row height and column width (about 16 px and 67 px in the pictures).
-const ROW_HEIGHT: f32 = 16.0;
+pub(crate) const ROW_HEIGHT: f32 = 16.0;
 const COLUMN_WIDTH: f32 = 67.0;
 
 /// The width in pixels of a column that is `chars` characters wide (8 characters are 67 px).
@@ -468,7 +468,9 @@ fn column_pixels(chars: u16) -> f32 {
 const ROW_HEADER_WIDTH: f32 = 84.0;
 
 fn row_header_width(sheet: &Worksheet) -> f32 {
-    if sheet.view.row_labels && sheet.shows_view_switch(ViewSwitch::SamplingInterval) {
+    if !sheet.view.row_header {
+        0.0
+    } else if sheet.view.row_labels && sheet.shows_view_switch(ViewSwitch::SamplingInterval) {
         112.0
     } else {
         ROW_HEADER_WIDTH
@@ -928,7 +930,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                         .header(header_total, |mut header| {
                             header.col(|ui| {
                                 // With frozen columns the row header is drawn by the overlay.
-                                if frozen_w > 0.0 {
+                                if frozen_w > 0.0 || !sheet.view.row_header {
                                     return;
                                 }
                                 corner_and_titles(ui, sheet, &label_rows, book_id, state, actions);
@@ -974,6 +976,9 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                                 });
                             }
                             header.col(|ui| {
+                                if !sheet.view.column_header {
+                                    return;
+                                }
                                 let rect = ui.max_rect();
                                 let top = Rect::from_min_size(rect.min, vec2(rect.width(), ROW_HEIGHT));
                                 ui.painter().rect_filled(top, 0.0, HEADER_GREY);
@@ -1001,7 +1006,11 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                                     row.col(|ui| top = ui.max_rect().top());
                                     drawn_rows.push((r, top, row_heights.height(i) as f32));
                                 } else {
-                                    row.col(|ui| row_header_cell(ui, r, false, book_id, state, actions));
+                                    row.col(|ui| {
+                                        if sheet.view.row_header {
+                                            row_header_cell(ui, r, false, book_id, state, actions);
+                                        }
+                                    });
                                 }
                                 for (position, column) in sheet.columns.iter().enumerate().filter(|(_, c)| !c.hidden) {
                                     row.col(|ui| {
@@ -1195,14 +1204,20 @@ fn frozen_overlay(
         let (left, top) = (inner.left(), inner.top());
         let band_top = top + fv.header_height;
         // The corner with the titles of the label rows, and the numbers of the frozen rows.
-        let corner = Rect::from_min_size(Pos2::new(left, top), vec2(fv.row_header_width, fv.header_total));
-        cell_scope(ui, corner, "frozen_corner", |ui| corner_and_titles(ui, sheet, label_rows, book_id, state, actions));
-        for (i, r) in fv.rows.iter().enumerate() {
-            let cell = Rect::from_min_size(
-                Pos2::new(left, band_top + fv.heights.offset(i) as f32),
-                vec2(fv.row_header_width, fv.heights.height(i) as f32),
-            );
-            cell_scope(ui, cell, ("frozen_rowhead", *r), |ui| row_header_cell(ui, *r, true, book_id, state, actions));
+        if sheet.view.row_header {
+            let corner = Rect::from_min_size(Pos2::new(left, top), vec2(fv.row_header_width, fv.header_total));
+            cell_scope(ui, corner, "frozen_corner", |ui| {
+                corner_and_titles(ui, sheet, label_rows, book_id, state, actions)
+            });
+            for (i, r) in fv.rows.iter().enumerate() {
+                let cell = Rect::from_min_size(
+                    Pos2::new(left, band_top + fv.heights.offset(i) as f32),
+                    vec2(fv.row_header_width, fv.heights.height(i) as f32),
+                );
+                cell_scope(ui, cell, ("frozen_rowhead", *r), |ui| {
+                    row_header_cell(ui, *r, true, book_id, state, actions)
+                });
+            }
         }
         // The heads and the frozen rows of each frozen column.
         let mut x = left + fv.row_header_width;
@@ -1231,8 +1246,12 @@ fn frozen_overlay(
                 if y + height < below.top() || y > below.bottom() {
                     continue;
                 }
-                let cell = Rect::from_min_size(Pos2::new(left, y), vec2(fv.row_header_width, height));
-                cell_scope(ui, cell, ("frozen_rowhead", r), |ui| row_header_cell(ui, r, true, book_id, state, actions));
+                if sheet.view.row_header {
+                    let cell = Rect::from_min_size(Pos2::new(left, y), vec2(fv.row_header_width, height));
+                    cell_scope(ui, cell, ("frozen_rowhead", r), |ui| {
+                        row_header_cell(ui, r, true, book_id, state, actions)
+                    });
+                }
                 let mut x = left + fv.row_header_width;
                 for (&position, &w) in fv.positions.iter().zip(fv.widths) {
                     let column = &sheet.columns[position];
@@ -1420,7 +1439,7 @@ fn sheet_tabs(
                 actions.push(Action::SelectSheet { book: book_id, sheet: i });
             }
             response.context_menu(|ui| {
-                menus::show_context(ui, &menus::sheet_tab_menu(sheet.tab_label), &book_ctx(book_id, state), actions)
+                menus::show_context(ui, &menus::sheet_tab_menu(sheet), &book_ctx(book_id, state), actions)
             });
         }
         ui.add_space(6.0);
@@ -1470,13 +1489,16 @@ fn corner_and_titles(
     let rect = ui.max_rect();
     ui.painter().rect_filled(rect, 0.0, HEADER_GREY);
     let line = Stroke::new(1.0_f32, LINE_HEADER);
-    let corner = Rect::from_min_size(rect.min, vec2(rect.width(), ROW_HEIGHT));
-    let response = ui.interact(corner, ui.id().with("corner"), Sense::CLICK);
-    if response.clicked() {
-        state.select_all(sheet);
-        state.focus(ui.ctx());
+    if sheet.view.column_header {
+        let corner = Rect::from_min_size(rect.min, vec2(rect.width(), ROW_HEIGHT));
+        let response = ui.interact(corner, ui.id().with("corner"), Sense::CLICK);
+        if response.clicked() {
+            state.select_all(sheet);
+            state.focus(ui.ctx());
+        }
+        response
+            .context_menu(|ui| menus::show_context(ui, &menus::corner_menu(sheet), &book_ctx(book_id, state), actions));
     }
-    response.context_menu(|ui| menus::show_context(ui, &menus::corner_menu(sheet), &book_ctx(book_id, state), actions));
     for (i, row) in label_rows.iter().enumerate() {
         let cell = Rect::from_min_size(
             Pos2::new(
@@ -1528,49 +1550,51 @@ fn column_head(
     let line = Stroke::new(1.0_f32, LINE_HEADER);
     let text_color = if selected { Color32::WHITE } else { TEXT };
 
-    // The grey row with the name.
-    let head = Rect::from_min_size(rect.min, vec2(rect.width(), ROW_HEIGHT));
-    let head_fill = if selected {
-        HEADER_DARK
-    } else if frozen {
-        FROZEN_GREY
-    } else {
-        HEADER_GREY
-    };
-    ui.painter().rect_filled(head, 0.0, head_fill);
-    let head_response = ui.interact(head, ui.id().with(("col_header", column.id.0)), Sense::CLICK | Sense::DRAG);
-    ui.scope_builder(
-        UiBuilder::new().max_rect(head).layout(Layout::centered_and_justified(egui::Direction::LeftToRight)),
-        |ui| {
-            ui.label(RichText::new(head_name(sheet, position)).color(text_color));
-        },
-    );
-    if head_response.clicked() {
-        let modifiers = click_modifiers(ui);
-        select_column(state, sheet, column.id, modifiers);
-        state.focus(ui.ctx());
-    }
-    head_drag(ui, state, sheet, position, &head_response, head, overlay);
-    if overlay && column.width.is_none() {
-        frozen_resize(ui, state, column, head);
-    }
-    if head_response.double_clicked() {
-        actions.push(Action::ColumnProperties(column.id));
-    }
-    if head_response.secondary_clicked() && !state.selected.contains(&column.id) {
-        select_column(state, sheet, column.id, egui::Modifiers::NONE);
-    }
-    // The menu is built from the selection as it is after the right click.
-    if state.open_header_menu.as_deref() == Some(column.short_name.as_str()) {
-        // Held open under the head for a picture.
-        egui::Popup::menu(&head_response)
-            .open(true)
-            .at_position(egui::pos2(head.left(), 24.0))
-            .show(|ui| menus::show_context(ui, &menus::column_header_menu(), &book_ctx(book_id, state), actions));
-    } else {
-        head_response.context_menu(|ui| {
-            menus::show_context(ui, &menus::column_header_menu(), &book_ctx(book_id, state), actions)
-        });
+    if sheet.view.column_header {
+        // The grey row with the name.
+        let head = Rect::from_min_size(rect.min, vec2(rect.width(), ROW_HEIGHT));
+        let head_fill = if selected {
+            HEADER_DARK
+        } else if frozen {
+            FROZEN_GREY
+        } else {
+            HEADER_GREY
+        };
+        ui.painter().rect_filled(head, 0.0, head_fill);
+        let head_response = ui.interact(head, ui.id().with(("col_header", column.id.0)), Sense::CLICK | Sense::DRAG);
+        ui.scope_builder(
+            UiBuilder::new().max_rect(head).layout(Layout::centered_and_justified(egui::Direction::LeftToRight)),
+            |ui| {
+                ui.label(RichText::new(head_name(sheet, position)).color(text_color));
+            },
+        );
+        if head_response.clicked() {
+            let modifiers = click_modifiers(ui);
+            select_column(state, sheet, column.id, modifiers);
+            state.focus(ui.ctx());
+        }
+        head_drag(ui, state, sheet, position, &head_response, head, overlay);
+        if overlay && column.width.is_none() {
+            frozen_resize(ui, state, column, head);
+        }
+        if head_response.double_clicked() {
+            actions.push(Action::ColumnProperties(column.id));
+        }
+        if head_response.secondary_clicked() && !state.selected.contains(&column.id) {
+            select_column(state, sheet, column.id, egui::Modifiers::NONE);
+        }
+        // The menu is built from the selection as it is after the right click.
+        if state.open_header_menu.as_deref() == Some(column.short_name.as_str()) {
+            // Held open under the head for a picture.
+            egui::Popup::menu(&head_response)
+                .open(true)
+                .at_position(egui::pos2(head.left(), 24.0))
+                .show(|ui| menus::show_context(ui, &menus::column_header_menu(), &book_ctx(book_id, state), actions));
+        } else {
+            head_response.context_menu(|ui| {
+                menus::show_context(ui, &menus::column_header_menu(), &book_ctx(book_id, state), actions)
+            });
+        }
     }
 
     // The label rows.

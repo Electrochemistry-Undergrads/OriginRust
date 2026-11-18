@@ -51,7 +51,9 @@ pub(crate) fn draw_plot(
     m: &dyn TextMeasurer,
 ) {
     let plot = pd.plot;
-    if let Some(markers) = plot.decor.markers {
+    if let Some(markers) = plot.decor.markers
+        && pd.marker_display.shows(markers, pd.start, pd.end)
+    {
         draw_data_markers(out, pd, geom, markers);
     }
     if plot.kind == PlotKind::Piper {
@@ -1518,9 +1520,11 @@ pub(crate) fn smooth_for_test(connect: Connect, pts: &[(f64, f64)]) -> Vec<(f64,
     }
 }
 
-/// Data > Mark Data Range (T118): an I-beam, 24 pt high, at each of the two marked points.
+/// Data > Mark Data Range (T118): an I-beam at each of the two marked points, 24 pt high at the Medium
+/// size of Data > Analysis Markers (T135).
 fn draw_data_markers(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, (a, b): (usize, usize)) {
     let stroke = Stroke::solid(sheaf_core::Color::BLACK, 1.0);
+    let half = pd.marker_display.size.half_height_pt();
     for row in [a, b] {
         if !(pd.start..pd.end).contains(&row) {
             continue;
@@ -1530,12 +1534,12 @@ fn draw_data_markers(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, (
             continue;
         }
         let mut d = String::new();
-        move_to(&mut d, x, y - 12.0);
-        line_to(&mut d, x, y + 12.0);
-        move_to(&mut d, x - 4.0, y - 12.0);
-        line_to(&mut d, x + 4.0, y - 12.0);
-        move_to(&mut d, x - 4.0, y + 12.0);
-        line_to(&mut d, x + 4.0, y + 12.0);
+        move_to(&mut d, x, y - half);
+        line_to(&mut d, x, y + half);
+        move_to(&mut d, x - 4.0, y - half);
+        line_to(&mut d, x + 4.0, y - half);
+        move_to(&mut d, x - 4.0, y + half);
+        line_to(&mut d, x + 4.0, y + half);
         out.push(Item::Path { d, fill: None, stroke: Some(stroke.clone()) });
     }
 }

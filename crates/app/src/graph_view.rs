@@ -1431,6 +1431,16 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             MarkerOp::ResetRange => {
                 project.graph_mut(graph).map(|g| g.reset_full_range());
             }
+            MarkerOp::Show(show) => {
+                if let Some(g) = project.graph_mut(graph) {
+                    g.set_marker_display(Some(show), None);
+                }
+            }
+            MarkerOp::Size(size) => {
+                if let Some(g) = project.graph_mut(graph) {
+                    g.set_marker_display(None, Some(size));
+                }
+            }
         }
         return;
     }

@@ -227,6 +227,10 @@ pub enum MarkerOp {
     SetRange,
     /// Reset to Full Range.
     ResetRange,
+    /// Data > Analysis Markers > Hide, Show Partial Ranges, Show All (T135), for every layer of the graph.
+    Show(sheaf_core::data_markers::MarkerShow),
+    /// Data > Analysis Markers > Tiny, Small, Medium, Large (T135).
+    Size(sheaf_core::data_markers::MarkerSize),
 }
 
 /// A change of worksheet cells made from a graph's Data menu tools (one undo step each).

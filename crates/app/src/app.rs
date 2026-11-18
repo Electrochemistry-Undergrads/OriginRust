@@ -1465,6 +1465,7 @@ impl SheafApp {
                 crate::actions::MarkerOp::Clear => "Clear data markers",
                 crate::actions::MarkerOp::SetRange => "Set display range",
                 crate::actions::MarkerOp::ResetRange => "Reset to full range",
+                crate::actions::MarkerOp::Show(_) | crate::actions::MarkerOp::Size(_) => "Analysis markers",
             },
             GraphOp::AddLayer { .. } => sheaf_core::layers::ADD_LAYER_UNDO,
             GraphOp::DeleteLayer { .. } => sheaf_core::layers::DELETE_LAYER_UNDO,

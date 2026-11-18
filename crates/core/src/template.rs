@@ -862,6 +862,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             default_kind: kind,
             link: None,
             zoom: None,
+            markers: Default::default(),
             stack: Stack::None,
             waterfall_color: WaterfallColor::None,
             plot_offsets: Vec::new(),

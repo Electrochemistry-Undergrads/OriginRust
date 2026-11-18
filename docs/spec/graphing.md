@@ -6060,3 +6060,20 @@ unregistered, see 36), so this follows Origin's documented behaviour.
 - **To measure:** Origin's window and its defaults, whether the curve follows the X axis range, and its
   line style.
 
+## Analysis markers: graph Data > Analysis Markers (T135, 2026-11-18, **not measured**)
+
+Origin 2016's graph Data menu has Analysis Markers with Hide, Show Partial Ranges, Show All, then Tiny,
+Small, Medium and Large. They could not be probed (Origin's COM class was unregistered), so this follows
+Origin's documented behaviour. The markers they act on are the data markers of Data > Mark Data Range
+(section 40).
+
+- **Scope:** each item applies to every layer of the graph, as one undo step ("Analysis markers"). The
+  setting is kept per layer (`Layer::markers`, saved with the project).
+- **Which markers are drawn:**
+  - Show All (the default): every plot's markers.
+  - Show Partial Ranges: only markers that leave out some of the rows the plot draws.
+  - Hide: none.
+- **Size:** the height of the markers' I-beams: Tiny 8 pt, Small 16 pt, Medium 24 pt (the default, as in
+  section 40), Large 36 pt.
+- Lock Position stays grey.
+

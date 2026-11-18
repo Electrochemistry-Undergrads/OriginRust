@@ -1,6 +1,10 @@
 # T65: Graph view zoom and pan (B1, slice 1)
 
-**Status:** done 2026-11-15 (branch `graph-zoom`, Claude Windows, session fe4b37eb): View Zoom In/Zoom Out/Whole Page, Graph toolbar buttons and the Tools-bar Zoom-Panning tool, as measured (gui-look 4.x). The Tools-bar magnifiers turned out to be Origin's axis Scale In/Scale Out and went back to `B1`. Left: the zoom combo, Scale In/Out, Zoom All.
+**Status:** the View and Graph toolbar commands and the Zoom-Panning tool landed 2026-11-15
+(gui-look 4.x). T69 added the Tools-bar Scale In/Out and Zoom All. The Standard toolbar zoom
+combo now shows the active graph's zoom, offers the five measured presets and accepts typed
+whole percentages. Formatting, strict workspace Clippy, Nextest (4,500 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
 **Size:** M. **Priority:** wave 4 (B1), the first backlog package after waves 1-3 were claimed.
 **Spec:** [gui-look](../spec/gui-look.md) section 4 (graph window mouse actions); add a "Zoom and
 pan" subsection there. **Inventory:** 9 locations tagged `T65` (View > Zoom In, Zoom Out, Whole
@@ -28,9 +32,9 @@ and hit-test keeps working at any zoom.
 - **Zoom All** (corrected by T69, graphing 23.1: it is a zoom of the active graph to all objects; the reminder below is Full Screen's) was first noted as a different thing: a presentation of all graphs with a reminder ("Hit ESC to exit,
   arrow keys to shift to different graphs, Home and End to the first and last graph"); not in this
   slice.
-- Not measured yet (measure in step 1, `tools/origin-ref/origin-screenshot.ps1` style steps): the
-  zoom combo's list, Zoom In twice (400 %?), Zoom Out below 100 %, Whole Page after zooming, the
-  Tools toolbar Zoom In/Out/Pan tools (Pan drag), the mouse wheel and Ctrl+wheel in a graph window.
+- The Standard toolbar combo lists 25, 50, 75, 100 and 200 percent, accepts 300 when typed,
+  and displays the current zoom rounded to a whole percent. Gui-look 4.x records the measured
+  pan and zoom commands and Sheaf's validation and centre anchoring policy.
 
 ## Where
 

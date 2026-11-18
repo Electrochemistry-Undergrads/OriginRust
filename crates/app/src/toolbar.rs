@@ -20,16 +20,16 @@
 
 mod format;
 
-use crate::actions::{Action, GraphTool};
+use crate::actions::{Action, GraphTool, ViewOp};
 use crate::dialogs::analysis::AnalysisKind;
 use crate::menus::{self, Cmd, MenuContext, NOT_YET};
 use crate::panels::PanelId;
 use crate::theme;
 use eframe::egui::{self, Align2, Color32, FontId, Painter, Pos2, Rect, Sense, Shape, Stroke, Ui, vec2};
-use sheaf_core::Designation;
 use sheaf_core::layers::NewLayerKind;
 use sheaf_core::shape::ShapeKind;
 use sheaf_core::template::Template;
+use sheaf_core::{Designation, WindowId};
 use std::collections::HashSet;
 use std::sync::OnceLock;
 
@@ -227,6 +227,8 @@ pub enum Item {
     FontBox,
     /// The font size box.
     SizeBox,
+    /// The current graph page zoom and its presets.
+    ZoomBox,
 }
 
 fn b(icon: Icon, tip: &'static str, cmd: Cmd, menu: &'static str) -> Item {
@@ -311,6 +313,7 @@ fn build(bar: Bar) -> Vec<Item> {
             gap(),
             b(Print, "Print the active window", Cmd::Print, "Print"),
             b(Duplicate, "Duplicate", Cmd::DuplicateWindow, "Duplicate"),
+            Item::ZoomBox,
             gap(),
             b(PanelLeft, "Project Explorer", Cmd::Panel(PanelId::Explorer), "Project Explorer"),
             b(PanelRight, "Object Manager", Cmd::Panel(PanelId::Objects), "Object Manager"),
@@ -465,15 +468,76 @@ pub fn show_row_with_format(
 /// One bar in the layout the caller has set up: a row, or a column for the Tools and Object Edit
 /// bars.
 pub fn show_bar(ui: &mut Ui, bar: Bar, c: &MenuContext, actions: &mut Vec<Action>) {
+    show_items(ui, bar, c, None, actions);
+}
+
+pub fn show_standard(ui: &mut Ui, c: &MenuContext, zoom: Option<f32>, actions: &mut Vec<Action>) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+        show_items(ui, Bar::Standard, c, c.graph.zip(zoom), actions);
+    });
+}
+
+fn show_items(ui: &mut Ui, bar: Bar, c: &MenuContext, zoom: Option<(WindowId, f32)>, actions: &mut Vec<Action>) {
     grip(ui);
     for item in items(bar) {
         match item {
             Item::Gap => gap(ui),
             Item::FontBox => text_box(ui, "Default: Arial", 118.0, "Font"),
             Item::SizeBox => text_box(ui, "", 44.0, "Font Size"),
+            Item::ZoomBox => zoom_box(ui, zoom, actions),
             Item::Button(button) => draw_button(ui, bar, button, c, actions),
         }
     }
+}
+
+fn zoom_box(ui: &mut Ui, target: Option<(WindowId, f32)>, actions: &mut Vec<Action>) {
+    let Some((graph, zoom)) = target else {
+        disabled_text_box(ui, "", 72.0, "Standard toolbar: Zoom", "Activate a graph to zoom");
+        return;
+    };
+    let current = (zoom * 100.0).round() as u32;
+    let source = format!("{current}%");
+    let id = ui.id().with(("graph_zoom_percentage", graph));
+    let had_focus = ui.memory(|m| m.has_focus(id));
+    let mut text =
+        if had_focus { ui.data(|d| d.get_temp::<String>(id)) } else { None }.unwrap_or_else(|| source.clone());
+    let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+    let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
+    let response = ui.add_sized(
+        [50.0, 20.0],
+        egui::TextEdit::singleline(&mut text).id(id).font(FontId::proportional(11.0)).char_limit(12),
+    );
+    response.widget_info(|| {
+        let mut info = egui::WidgetInfo::text_edit(true, &source, &text, "");
+        info.label = Some("Standard toolbar: Zoom percentage".to_string());
+        info
+    });
+    if (had_focus || response.has_focus()) && (enter || escape) {
+        let text = text.trim();
+        let number = text.strip_suffix('%').unwrap_or(text).trim_end();
+        if enter && let Ok(percent) = number.parse() {
+            actions.push(Action::GraphView { graph, op: ViewOp::SetZoom(percent) });
+        }
+        response.surrender_focus();
+    }
+    if response.has_focus() {
+        ui.data_mut(|d| d.insert_temp(id, text));
+    } else {
+        ui.data_mut(|d| d.remove::<String>(id));
+    }
+    response.on_hover_text("Graph zoom percentage");
+    let presets = egui::ComboBox::from_id_salt(("graph_zoom_presets", graph)).width(22.0).show_ui(ui, |ui| {
+        for percent in [25, 50, 75, 100, 200] {
+            if ui.selectable_label(current == percent, format!("{percent}%")).clicked() {
+                actions.push(Action::GraphView { graph, op: ViewOp::SetZoom(percent) });
+                ui.close();
+            }
+        }
+    });
+    presets
+        .response
+        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, true, "Standard toolbar: Zoom presets"));
 }
 
 fn horizontal(ui: &Ui) -> bool {

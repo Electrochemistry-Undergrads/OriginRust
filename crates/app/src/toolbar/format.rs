@@ -18,6 +18,7 @@ pub(super) fn show(
     grip(ui);
     for item in items(Bar::Format) {
         match item {
+            Item::ZoomBox => {} // Standard toolbar only.
             Item::Gap => gap(ui),
             Item::FontBox => family(ui, state, actions),
             Item::SizeBox => size(ui, state, actions),

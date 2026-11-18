@@ -915,6 +915,18 @@ introduces the special-default-font controls and mixed-font `\f:e` / `\f:a` exam
 links those names to configurable categories. These references do not establish their
 behaviour in Origin 2016. This correction adds no short-name aliases or global font settings.
 
+**Installed-family abbreviations (T58).** The current Origin escape reference documents
+abbreviating a name when it identifies a single font family. Sheaf compares inline names with
+installed family names without regard to case. An exact family name takes priority. A prefix of
+at least two characters expands only when it has one match. Ambiguous and missing names go
+through the existing font fallback. One-letter special defaults and names beginning `Default:`
+remain outside this rule. Matching uses the font database available at render time, so a prefix
+can be ambiguous on another machine. The full name reaches widths, glyphs, decorations and
+vector output through the existing text layout. A prefix that resolves to Symbol follows the
+same Greek mapping as the full name. Saved markup keeps the original spelling. This follows
+the documented abbreviation rule with Sheaf's matching policy. Origin 2016 abbreviation
+parity and the configurable 2022b defaults remain unverified.
+
 Eight font regressions cover native family/style restoration, same-family coalescing,
 family-sensitive widths and decoration geometry, rotation, Greek/literal/Unicode behaviour,
 name bounds, an empty font database and EPS/EMF/PDF/SVG output. New SVG and stroke-only PNG

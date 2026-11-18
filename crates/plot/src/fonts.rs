@@ -2,7 +2,7 @@
 
 use fontdb::{Database, Family, ID, Query, Stretch, Style, Weight};
 use sheaf_core::graph::Font;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex, OnceLock};
 
 /// Families tried after the one the model asks for, in this order.
@@ -21,6 +21,11 @@ pub struct TextLineMetrics {
 pub trait TextMeasurer {
     /// Width in points of `text` set in `font` (family, bold, italic) at `size_pt`.
     fn width(&self, text: &str, font: &Font, size_pt: f64) -> f64;
+
+    /// Expands a unique installed-family prefix in an inline font switch.
+    fn expand_inline_family(&self, _name: &str) -> Option<String> {
+        None
+    }
 
     /// Underline geometry in em units. Defaults are used when no font metrics are available.
     fn underline_metrics(&self, _font: &Font) -> TextLineMetrics {
@@ -85,7 +90,19 @@ struct Cache {
 /// aware when such a face exists. Kerning is not applied.
 pub struct SystemFonts {
     db: Arc<Database>,
+    family_names: BTreeMap<String, String>,
     cache: Mutex<Cache>,
+}
+
+fn unique_family_prefix(names: &BTreeMap<String, String>, name: &str) -> Option<String> {
+    let prefix = name.to_lowercase();
+    // The one-letter special defaults and Default labels require separate configuration.
+    if name.chars().take(2).count() < 2 || prefix == "default" || prefix.starts_with("default:") {
+        return None;
+    }
+    let mut matches = names.range(prefix.clone()..).take_while(|(key, _)| key.starts_with(&prefix));
+    let (key, family) = matches.next()?;
+    (key != &prefix && matches.next().is_none()).then(|| family.clone())
 }
 
 impl SystemFonts {
@@ -111,7 +128,9 @@ impl SystemFonts {
                 break;
             }
         }
-        SystemFonts { db: Arc::new(db), cache: Mutex::new(Cache::default()) }
+        let family_names =
+            db.faces().flat_map(|face| &face.families).map(|(name, _)| (name.to_lowercase(), name.clone())).collect();
+        SystemFonts { db: Arc::new(db), family_names, cache: Mutex::new(Cache::default()) }
     }
 
     /// The font database, for the rasteriser.
@@ -192,6 +211,10 @@ impl SystemFonts {
 }
 
 impl TextMeasurer for SystemFonts {
+    fn expand_inline_family(&self, name: &str) -> Option<String> {
+        unique_family_prefix(&self.family_names, name)
+    }
+
     fn underline_metrics(&self, font: &Font) -> TextLineMetrics {
         self.decoration(font, false).unwrap_or_else(|| FixedMetrics.underline_metrics(font))
     }
@@ -242,6 +265,20 @@ mod tests {
         assert!((fonts.width("ab", &f, 10.0) - 11.0).abs() < 1e-12);
         assert_eq!(fonts.underline_metrics(&f), FixedMetrics.underline_metrics(&f));
         assert_eq!(fonts.strikeout_metrics(&f), FixedMetrics.strikeout_metrics(&f));
+        assert_eq!(fonts.expand_inline_family("Cour New"), None);
+    }
+
+    #[test]
+    fn inline_names_expand_only_for_a_unique_installed_prefix() {
+        let families = ["Arial", "ARIAL", "Arial Narrow", "Courier New", "Courgette", "Symbol", "Default Sans"]
+            .into_iter()
+            .map(|name| (name.to_lowercase(), name.to_owned()))
+            .collect();
+        assert_eq!(unique_family_prefix(&families, "couRI"), Some("Courier New".to_owned()));
+        assert_eq!(unique_family_prefix(&families, "SYM"), Some("Symbol".to_owned()));
+        for name in ["Arial", "Ari", "Cour", "Missing", "S", "Default", "Default: Arial"] {
+            assert_eq!(unique_family_prefix(&families, name), None, "{name}");
+        }
     }
 
     #[test]

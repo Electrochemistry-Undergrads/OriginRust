@@ -44,6 +44,16 @@ fn named_families_and_nested_restoration_match_origin_vector_controls() {
 // without depending on fonts installed on Windows or Linux. These are test values.
 struct FamilyMetrics;
 impl TextMeasurer for FamilyMetrics {
+    fn expand_inline_family(&self, name: &str) -> Option<String> {
+        let family = match name {
+            "TimEs New R" => "Times New Roman",
+            "Courie" => "Courier New",
+            "Symb" => "Symbol",
+            _ => return None,
+        };
+        Some(family.to_owned())
+    }
+
     fn width(&self, text: &str, font: &Font, size: f64) -> f64 {
         text.chars().count() as f64
             * size
@@ -60,6 +70,36 @@ impl TextMeasurer for FamilyMetrics {
             _ => FixedMetrics.underline_metrics(font),
         }
     }
+}
+
+#[test]
+fn inline_abbreviations_share_full_name_measurement_placement_and_svg() {
+    let font = Font::new("Arial", 20.0);
+    let abbreviated = r"\u(A\f:TimEs New R(b\f:Courie(c)d)\=(\f:Symb(m),2))Z";
+    let expanded = r"\u(A\f:Times New Roman(b\f:Courier New(c)d)\=(\f:Symbol(m),2))Z";
+    assert_eq!(
+        crate::text::width(&FamilyMetrics, abbreviated, &font, 20.0),
+        crate::text::width(&FamilyMetrics, expanded, &font, 20.0),
+    );
+    let scene = |source| Scene {
+        width: 155.0,
+        height: 100.0,
+        background: Color::WHITE,
+        layers: vec![LayerScene {
+            clip: crate::Rect { x: 0.0, y: 0.0, w: 155.0, h: 100.0 },
+            grid: vec![],
+            plots: vec![],
+            overlay: placed(source, &font, Anchor::Middle, 37.0),
+            underlay_len: 0,
+            objects: vec![],
+        }],
+    };
+    let actual = scene(abbreviated);
+    let names = texts(&actual.layers[0].overlay);
+    assert!(names.iter().any(|item| item.text == "c" && item.family == "Courier New"));
+    assert!(names.iter().any(|item| item.text == "\u{03bc}" && item.family == "Symbol"));
+    assert_eq!((names.last().unwrap().text.as_str(), names.last().unwrap().family.as_str()), ("Z", "Arial"));
+    assert_eq!(crate::svg::write_svg(&actual), crate::svg::write_svg(&scene(expanded)));
 }
 
 #[test]

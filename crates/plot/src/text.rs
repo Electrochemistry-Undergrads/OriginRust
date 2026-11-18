@@ -60,7 +60,8 @@ fn visit_runs(
 
 /// Width in points of marked-up `text` at `size` (the font's own size is not used).
 pub fn width(m: &dyn TextMeasurer, text: &str, font: &Font, size: f64) -> f64 {
-    segments_width(m, &markup::segments(text), font, size)
+    let segments = markup::segments(text, &|name| m.expand_inline_family(name));
+    segments_width(m, &segments, font, size)
 }
 
 /// Adds the runs of `text` to `items`. `(x, y)` is the anchor: the baseline
@@ -76,7 +77,7 @@ pub fn place(
     anchor: Anchor,
     rotate_ccw: f64,
 ) {
-    let runs = markup::segments(text);
+    let runs = markup::segments(text, &|name| m.expand_inline_family(name));
     if runs.is_empty() {
         return;
     }

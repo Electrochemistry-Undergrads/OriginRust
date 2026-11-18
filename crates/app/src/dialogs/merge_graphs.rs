@@ -198,7 +198,10 @@ impl MergeGraphsDialog {
             .collapsible(false)
             .default_width(460.0)
             .show(ctx, |ui| {
-                egui::ScrollArea::vertical().max_height(560.0).show(ui, |ui| self.body(ui, doc.project()));
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, true])
+                    .max_height(560.0)
+                    .show(ui, |ui| self.body(ui, doc.project()));
                 if let Some(e) = &self.problem {
                     ui.colored_label(ui.visuals().error_fg_color, e);
                 }

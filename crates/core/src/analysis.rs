@@ -76,12 +76,14 @@ pub struct PeakFitSpec {
     pub baseline: FitBaseline,
     /// A function per peak, in the order found (empty: every peak is `shape`).
     pub shapes: Vec<PeakShape>,
+    /// Also add a column per fitted peak: the peak on the fitted baseline (Multiple Peak Fit).
+    pub peak_curves: bool,
 }
 
 impl PeakFitSpec {
     /// Every peak of one shape.
     pub fn of(shape: PeakShape, baseline: FitBaseline) -> PeakFitSpec {
-        PeakFitSpec { shape, baseline, shapes: Vec::new() }
+        PeakFitSpec { shape, baseline, shapes: Vec::new(), peak_curves: false }
     }
 
     /// The shape of each of `n` peaks.
@@ -99,6 +101,8 @@ pub struct PeakChainSpec {
     pub integrate: bool,
     /// Fit all found peaks together and add the fit columns.
     pub fit: Option<PeakFitSpec>,
+    /// Peak centres (X) given by the user instead of the search (Multiple Peak Fit); empty: search.
+    pub centers: Vec<f64>,
 }
 
 /// Which rows of the chosen columns a tool works on.
@@ -1605,7 +1609,11 @@ pub(crate) fn free_sheet_name(sheets: &[Worksheet], prefix: &str) -> String {
 }
 
 /// The table of Statistics on Columns: one row per input column, the columns chosen in `spec`.
-fn statistics_table(spec: &StatisticsSpec, inputs: &[Input<'_>]) -> Result<ResultTable, AnalysisError> {
+fn statistics_table(
+    spec: &StatisticsSpec,
+    inputs: &[Input<'_>],
+    sheet: &Worksheet,
+) -> Result<ResultTable, AnalysisError> {
     if spec.confidence_limits && !(spec.level > 0.0 && spec.level < 1.0) {
         return Err(AnalysisError::BadOption(format!(
             "the confidence level must be between 0 and 1, not {}",
@@ -1649,7 +1657,15 @@ fn statistics_table(spec: &StatisticsSpec, inputs: &[Input<'_>]) -> Result<Resul
         .collect();
     let mut t = ResultTable { headers, ..Default::default() };
     for inp in inputs {
-        let s = calc::stats(inp.ys());
+        let values = match sheet.column(inp.id).and_then(|c| c.data_range) {
+            Some(range) => {
+                let end = range.end.map_or(inp.last + 1, |r| r.saturating_add(1).min(inp.last + 1)).max(inp.first);
+                let start = inp.first.max(range.begin).min(end);
+                &inp.y[start..end]
+            }
+            None => inp.ys(),
+        };
+        let s = calc::stats(values);
         let mut values: Vec<f64> = picks.iter().map(|p| (p.2)(&s)).collect();
         // The unit goes with the numbers that carry the data's unit: not the counts, skewness, kurtosis
         // and the coefficient of variation, which have none, and not the variance (unit squared).
@@ -1669,6 +1685,7 @@ fn statistics_table(spec: &StatisticsSpec, inputs: &[Input<'_>]) -> Result<Resul
 fn row_statistics(
     spec: &RowStatsSpec,
     inputs: &[Input<'_>],
+    sheet: &Worksheet,
     beside: &mut Vec<NewColumn>,
     notes: &mut Vec<String>,
 ) -> Result<(), AnalysisError> {
@@ -1690,9 +1707,10 @@ fn row_statistics(
     }
     let rows = inputs.iter().map(|i| i.y.len()).max().unwrap_or(0);
     let mut cells = vec![Vec::with_capacity(inputs.len()); rows];
-    for (r, row) in cells.iter_mut().enumerate() {
-        for inp in inputs {
-            let inside = r >= inp.first && r <= inp.last;
+    for inp in inputs {
+        let range = sheet.column(inp.id).and_then(|c| c.data_range);
+        for (r, row) in cells.iter_mut().enumerate() {
+            let inside = r >= inp.first && r <= inp.last && range.is_none_or(|range| range.contains(r));
             row.push(if inside { inp.y.get(r).copied().unwrap_or(f64::NAN) } else { f64::NAN });
         }
     }
@@ -1734,7 +1752,12 @@ fn run_peak_chain(
     let mut t = ResultTable::new(&headers);
     for inp in inputs {
         let (xs, ys) = (inp.xs(), inp.ys());
-        let result = calc::analyze_peaks(xs, ys, &spec.chain).map_err(|e| match e {
+        let result = if spec.centers.is_empty() {
+            calc::analyze_peaks(xs, ys, &spec.chain)
+        } else {
+            calc::analyze_peaks_at(xs, ys, &spec.chain, &spec.centers)
+        }
+        .map_err(|e| match e {
             calc::ChainError::NoBaseline => AnalysisError::BadOption(format!(
                 "column {}: the baseline could not be made (anchor points need at least two different X values, and the data at least two points)",
                 inp.short
@@ -1833,6 +1856,30 @@ fn run_peak_chain(
                 ),
                 data: inp.aligned(&report.fitted),
             });
+            if fs.peak_curves {
+                let (y0f, mf) =
+                    (get("y0".into()), if fs.baseline == FitBaseline::Linear { get("m".into()) } else { 0.0 });
+                for (k, shape) in shapes.iter().enumerate() {
+                    let p: Vec<f64> = shape.param_names(k + 1).into_iter().map(get).collect();
+                    let curve: Vec<f64> = xs
+                        .iter()
+                        .map(|&x| if x.is_finite() { y0f + mf * x + shape.eval(&p, x) } else { f64::NAN })
+                        .collect();
+                    beside.push(NewColumn {
+                        after: inp.id,
+                        long_name: format!("Peak {} of {}", k + 1, inp.name),
+                        units: inp.units.clone(),
+                        comments: format!(
+                            "{} peak {} of the multi-peak fit of {}{}",
+                            shape.name(),
+                            k + 1,
+                            inp.short,
+                            inp.range_note()
+                        ),
+                        data: inp.aligned(&curve),
+                    });
+                }
+            }
         }
         let xu = &inp.x_units;
         let area_unit = unit_product(&inp.units, xu);
@@ -3089,10 +3136,10 @@ impl Project {
                 table = Some(t);
             }
             Tool::Statistics(spec) => {
-                table = Some(statistics_table(spec, &inputs)?);
+                table = Some(statistics_table(spec, &inputs, sheet)?);
             }
             Tool::RowStatistics(spec) => {
-                row_statistics(spec, &inputs, &mut beside, &mut notes)?;
+                row_statistics(spec, &inputs, sheet, &mut beside, &mut notes)?;
             }
         }
 
@@ -4566,6 +4613,7 @@ mod tests {
 
     fn chain(integrate: bool, fit: Option<PeakFitSpec>) -> Tool {
         Tool::PeakChain(PeakChainSpec {
+            centers: Vec::new(),
             chain: ChainOptions {
                 baseline: ChainBaseline::AutoMinima(4),
                 find: FindOptions { filter: PeakFilter::Height(0.3), ..FindOptions::default() },
@@ -4614,6 +4662,60 @@ mod tests {
     }
 
     #[test]
+    fn multiple_peak_fit_starts_at_the_given_centres() {
+        // Multiple Peak Fit: no baseline, Gauss peaks with a constant y0, the centres picked a
+        // little off the true ones. The sloped background is taken up by y0 only, so the fitted
+        // centres are close, not exact.
+        let (mut p, book, y) = two_peaks();
+        let tool = Tool::PeakChain(PeakChainSpec {
+            chain: ChainOptions { baseline: ChainBaseline::None, ..ChainOptions::default() },
+            integrate: false,
+            fit: Some(PeakFitSpec::of(PeakShape::Gauss, FitBaseline::Constant)),
+            centers: vec![12.8, 6.1],
+        });
+        let r = p.analyze(&request(&[y], tool)).unwrap();
+        let t = r.table.unwrap();
+        assert_eq!(t.rows.len(), 2, "one row per picked centre, in X order");
+        let h = |n: &str| t.headers.iter().position(|h| h == n).unwrap();
+        assert!((t.rows[0].1[h("Fit center")] - 6.0).abs() < 0.05, "{}", t.rows[0].1[h("Fit center")]);
+        assert!((t.rows[1].1[h("Fit center")] - 13.0).abs() < 0.05);
+        // The found centre is the picked point, and only the fit column goes beside the data.
+        assert!((t.rows[0].1[1] - 6.1).abs() < 1e-9);
+        let ws = &p.workbook(book).unwrap().sheets;
+        assert_eq!(ws[0].columns.len(), 3, "the fit curve beside the source, no baseline column");
+        assert!(ws[0].columns[2].long_name.starts_with("Peak fit of"));
+    }
+
+    #[test]
+    fn peak_curves_add_a_column_per_fitted_peak_on_the_baseline() {
+        let (mut p, book, y) = two_peaks();
+        let fit = PeakFitSpec { peak_curves: true, ..PeakFitSpec::of(PeakShape::Gauss, FitBaseline::Linear) };
+        let tool = Tool::PeakChain(PeakChainSpec {
+            chain: ChainOptions { baseline: ChainBaseline::None, ..ChainOptions::default() },
+            integrate: false,
+            fit: Some(fit),
+            centers: vec![6.0, 13.0],
+        });
+        p.analyze(&request(&[y], tool)).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        let names: Vec<&str> = ws.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names[2..], ["Peak fit of B", "Peak 1 of B", "Peak 2 of B"][..], "{names:?}");
+        // Peak 1 tops out near x = 6 at its baseline (0.1 + 0.06) plus its height 1.
+        let col = |i: usize| ws.columns[i].numeric().unwrap().to_vec();
+        let (fit, p1, p2) = (col(2), col(3), col(4));
+        let x: Vec<f64> = ws.columns[0].numeric().unwrap().to_vec();
+        // Each peak column carries the baseline once, so the two peaks less the fit is the
+        // baseline y0 + m x: a straight line.
+        let base: Vec<f64> = (0..x.len()).map(|i| p1[i] + p2[i] - fit[i]).collect();
+        let slope = (base[300] - base[0]) / (x[300] - x[0]);
+        for i in (0..x.len()).step_by(37) {
+            assert!((base[i] - (base[0] + slope * (x[i] - x[0]))).abs() < 1e-9);
+        }
+        let i6 = x.iter().position(|v| (*v - 6.0).abs() < 1e-9).unwrap();
+        assert!((p1[i6] - 1.16).abs() < 1e-3, "{}", p1[i6]);
+    }
+
+    #[test]
     fn peak_chain_voigt_fit_of_gauss_peaks_gives_their_center_width_and_area() {
         // Gaussian peaks: the Voigt's Lorentzian width goes to its bound 0 and the Voigt FWHM
         // (0.5346 wL + sqrt(0.2166 wL^2 + wG^2)) is the Gaussian one.
@@ -4636,8 +4738,12 @@ mod tests {
         // Peak 1 Gauss, peak 2 (beyond the list) the spec's Voigt: the note and the parameters
         // follow each peak's function, and both Gaussian peaks keep their centre and area.
         let (mut p, _, y) = two_peaks();
-        let fit =
-            PeakFitSpec { shape: PeakShape::Voigt, baseline: FitBaseline::Linear, shapes: vec![PeakShape::Gauss] };
+        let fit = PeakFitSpec {
+            peak_curves: false,
+            shape: PeakShape::Voigt,
+            baseline: FitBaseline::Linear,
+            shapes: vec![PeakShape::Gauss],
+        };
         assert_eq!(fit.shapes_for(3), [PeakShape::Gauss, PeakShape::Voigt, PeakShape::Voigt]);
         let r = p.analyze(&request(&[y], chain(true, Some(fit)))).unwrap();
         let t = r.table.unwrap();
@@ -4654,6 +4760,7 @@ mod tests {
         let (mut p, _, y) = two_peaks();
         let before = p.clone();
         let none = Tool::PeakChain(PeakChainSpec {
+            centers: Vec::new(),
             chain: ChainOptions {
                 find: FindOptions { filter: PeakFilter::Height(50.0), ..FindOptions::default() },
                 ..ChainOptions::default()
@@ -4663,6 +4770,7 @@ mod tests {
         });
         assert!(matches!(p.analyze(&request(&[y], none)), Err(AnalysisError::BadOption(m)) if m.contains("no peaks")));
         let bad = Tool::PeakChain(PeakChainSpec {
+            centers: Vec::new(),
             chain: ChainOptions {
                 baseline: ChainBaseline::Anchors(vec![(1.0, 0.0)], InterpMethod::Linear),
                 ..ChainOptions::default()
@@ -4682,6 +4790,7 @@ mod tests {
         y0[0] = f64::NAN;
         y0[120] = f64::NAN; // inside the first peak
         let end = Tool::PeakChain(PeakChainSpec {
+            centers: Vec::new(),
             chain: ChainOptions {
                 baseline: ChainBaseline::EndPoints,
                 find: FindOptions { filter: PeakFilter::Height(0.3), ..FindOptions::default() },

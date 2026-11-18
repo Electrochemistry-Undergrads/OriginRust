@@ -3,18 +3,56 @@
 //! to a graph or an axis as one undo step named "Apply Theme" (Origin's own word).
 //!
 //! The clipboard is inside the program: Origin does not use the system clipboard for formats.
-//! Origin keeps it across a restart; this one does not (left open).
+//! A private profile file remembers it across a restart (26.10); live copies stay in memory.
 
 use eframe::egui;
 use sheaf_core::format_clip::{self, AxisPart, FormatClip, GraphPart, Group};
 use sheaf_core::{Document, WindowId};
 use std::cell::RefCell;
+use std::path::PathBuf;
+
+mod storage;
+
+struct Clipboard {
+    value: Option<FormatClip>,
+    file: Option<PathBuf>,
+    reported: bool,
+}
 
 /// The undo step of every paste of a format (Origin's text, graphing spec 24).
 pub const APPLY_UNDO: &str = "Apply Theme";
 
 thread_local! {
-    static CLIP: RefCell<Option<FormatClip>> = const { RefCell::new(None) };
+    static CLIP: RefCell<Clipboard> =
+        const { RefCell::new(Clipboard { value: None, file: None, reported: false }) };
+}
+
+/// The format clipboard in the existing profile folder, independent of recovery files.
+pub fn default_path() -> Option<PathBuf> {
+    sheaf_io::recovery::default_settings_path().map(|p| p.with_file_name(storage::FILE_NAME))
+}
+
+/// Loads once at application startup. None keeps a fresh in-memory clipboard and does no I/O.
+pub fn initialize(file: Option<PathBuf>) {
+    let value = file.as_deref().and_then(storage::load);
+    CLIP.with(|c| *c.borrow_mut() = Clipboard { value, file, reported: false });
+}
+
+fn remember(value: FormatClip) {
+    CLIP.with(|c| {
+        let mut c = c.borrow_mut();
+        if let Some(result) = c.file.as_deref().map(|p| storage::save(p, &value)) {
+            match result {
+                Ok(()) => c.reported = false,
+                Err(error) if !c.reported => {
+                    eprintln!("Could not remember copied format: {error}");
+                    c.reported = true;
+                }
+                Err(_) => {}
+            }
+        }
+        c.value = Some(value);
+    });
 }
 
 /// What the clipboard holds, which decides which paste items the menus offer.
@@ -26,7 +64,7 @@ pub enum ClipKind {
 
 pub fn kind() -> Option<ClipKind> {
     CLIP.with(|c| {
-        c.borrow().as_ref().map(|c| match c {
+        c.borrow().value.as_ref().map(|c| match c {
             FormatClip::Graph(_) => ClipKind::Graph,
             FormatClip::Axis(_) => ClipKind::Axis,
         })
@@ -34,14 +72,14 @@ pub fn kind() -> Option<ClipKind> {
 }
 
 fn held() -> Option<FormatClip> {
-    CLIP.with(|c| c.borrow().clone())
+    CLIP.with(|c| c.borrow().value.clone())
 }
 
 /// Copy Format of a whole graph.
 pub fn copy_graph(doc: &Document, graph: WindowId, part: GraphPart) -> bool {
     let Some(g) = doc.project().graph(graph) else { return false };
     let clip = format_clip::copy_graph(g, part);
-    CLIP.with(|c| *c.borrow_mut() = Some(clip));
+    remember(clip);
     true
 }
 
@@ -50,7 +88,7 @@ pub fn copy_axis(doc: &Document, graph: WindowId, layer: usize, y: bool, part: A
     let Some(clip) = doc.project().graph(graph).and_then(|g| format_clip::copy_axis(g, layer, y, part)) else {
         return false;
     };
-    CLIP.with(|c| *c.borrow_mut() = Some(clip));
+    remember(clip);
     true
 }
 

@@ -332,6 +332,28 @@ fn xlsx_formats_keep_conditional_colour_precedence_as_a_reported_snapshot() {
 }
 
 #[test]
+fn xlsx_formats_write_conditional_heatmap_levels_as_snapshot_fills() {
+    use sheaf_core::condformat::heatmap::{Heatmap, LevelStep, Mixing};
+    use sheaf_core::condformat::{CondFormat, CondRange, Rule};
+    let mut sheet = Worksheet { columns: vec![column(1, vec![0.0, 5.0, 10.0])], ..Worksheet::new("S") };
+    let heat = Heatmap {
+        step: LevelStep::Count(3),
+        mixing: Mixing::Limited { from: Color::rgb(0, 0, 255), to: Color::rgb(255, 0, 0) },
+        ..Heatmap::default()
+    };
+    sheet.cond_formats.push(CondFormat::new(&sheet, CondRange::whole_columns(vec![ColumnId(1)]), Rule::Heatmap(heat)));
+    let (xml, styles, warnings) = Output::new("heatmap").export(&sheet, &plain());
+    assert!(warnings.iter().any(|w| w.contains("snapshot")), "{warnings:?}");
+    assert!(!xml.contains("conditionalFormatting"));
+    // Three levels: blue, the half-way mix, red; contrast text white on blue and red.
+    assert!(fill(style(&xml, &styles, "A1"), &styles).contains("FF0000FF"));
+    assert!(fill(style(&xml, &styles, "A2"), &styles).contains("FF800080"));
+    assert!(fill(style(&xml, &styles, "A3"), &styles).contains("FFFF0000"));
+    assert!(font(style(&xml, &styles, "A1"), &styles).contains("FFFFFFFF"));
+    assert!(!warnings.iter().any(|w| w.contains("transparent")), "{warnings:?}");
+}
+
+#[test]
 fn xlsx_formats_report_omitted_labels_alpha_and_restore_default_font_and_alignment() {
     let mut sheet = Worksheet { columns: vec![column(1, vec![1.0, 2.0])], ..Worksheet::new("S") };
     sheet.apply_cell_format(

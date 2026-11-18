@@ -449,6 +449,7 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         selected_shape: None,
         view_mode: Default::default(),
         layer_icons: true,
+        active_layer_only: None,
     }
 }
 

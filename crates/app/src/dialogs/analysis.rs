@@ -1740,6 +1740,7 @@ impl AnalysisDialog {
                 ..self.peaks
             }),
             AnalysisKind::PeakChain => Tool::PeakChain(PeakChainSpec {
+                centers: Vec::new(),
                 chain: ChainOptions {
                     baseline: match self.chain_baseline {
                         ChainBaselineKind::Constant => match self.chain_const {
@@ -1769,6 +1770,7 @@ impl AnalysisDialog {
                     shape: self.chain_fit,
                     baseline: if self.chain_fit_linear { FitBaseline::Linear } else { FitBaseline::Constant },
                     shapes: self.chain_fit_shapes.iter().map(|s| s.unwrap_or(self.chain_fit)).collect(),
+                    peak_curves: false,
                 }),
             }),
             AnalysisKind::Statistics => Tool::Statistics(self.stats.desc),

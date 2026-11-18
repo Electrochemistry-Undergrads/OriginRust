@@ -182,6 +182,10 @@ pub enum Cmd {
     SetCategorical,
     /// Worksheet > Transpose, Stack, Unstack, Split Columns, Reduce Rows.
     Reshape(ReshapeKind),
+    /// Worksheet > Pivot Table.
+    PivotTable,
+    /// Analysis > Peaks and Baseline > Multiple Peak Fit.
+    MultiPeakFit,
     /// Column > Filter > Add or Remove Filter, Enable/Disable Filter, Reapply Filter.
     RowFilterDialog,
     ToggleRowFilter,
@@ -192,6 +196,8 @@ pub enum Cmd {
     CondFormat(crate::dialogs::cond_format::CondKind),
     /// Worksheet > Conditional Formatting > Remove Conditional Format.
     RemoveCondFormat,
+    /// Worksheet > Conditional Formatting > Conditional Format Manager.
+    CondFormatManager,
     /// Format Cells... for the selected cells, rows, columns or label cell.
     FormatCells,
     /// Format > Worksheet (F4): worksheet-wide Data font defaults.
@@ -361,6 +367,8 @@ pub enum Cmd {
     SetViewMode(sheaf_core::project::ViewMode),
     /// View > Show > Layer Icons.
     ToggleLayerIcons,
+    /// View > Show > Active Layer Only uses the existing Hide Other Layers toggle.
+    ToggleActiveLayerOnly,
     /// View > Full Screen (Ctrl+Shift+J) and the page's "View Full Screen".
     FullScreen,
     /// The Pan tool of the Tools toolbar.
@@ -576,6 +584,8 @@ pub struct MenuContext<'a> {
     pub view_mode: sheaf_core::project::ViewMode,
     /// The active graph shows its layer icons (the tick of View > Show > Layer Icons).
     pub layer_icons: bool,
+    /// None without a valid multi-layer target; otherwise the derived isolation check.
+    pub active_layer_only: Option<bool>,
 }
 
 impl<'a> MenuContext<'a> {
@@ -985,10 +995,10 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
                 "Frame",
                 "Labels",
                 "Data",
-                "Active Layer Only",
-                "-",
-                "Master Items on Screen",
             ]));
+            show.push(keyed("Active Layer Only", ctrl_alt(Key::D), Cmd::ToggleActiveLayerOnly));
+            show.push(sep());
+            show.push(grey("Master Items on Screen"));
             v.push(sub("Show", show));
             v.push(grey("Show Data Info"));
             v.push(keyed("Full Screen", ctrl_shift(Key::J), Cmd::FullScreen));
@@ -1301,23 +1311,20 @@ fn mask_menu() -> Entry {
     sub("Mask", entries)
 }
 
-/// Worksheet > Conditional Formatting (also in the right-click menu of selected cells). The other
-/// items of Origin's submenu are greyed.
+/// Worksheet > Conditional Formatting (also in the right-click menu of selected cells).
 fn cond_format_menu() -> Entry {
     use crate::dialogs::cond_format::CondKind;
     let mut entries = vec![
         item("Highlight Min Max...", Cmd::CondFormat(CondKind::MinMax)),
         item("Highlight Top Bottom...", Cmd::CondFormat(CondKind::TopBottom)),
+        item("Conditional Highlight...", Cmd::CondFormat(CondKind::Highlight)),
+        item("Conditional Heatmap...", Cmd::CondFormat(CondKind::Heatmap)),
+        item("Conditional Pareto...", Cmd::CondFormat(CondKind::Pareto)),
+        item("Conditional Outliers...", Cmd::CondFormat(CondKind::Outliers)),
     ];
-    entries.extend(greys(&[
-        "Conditional Highlight...",
-        "Conditional Heatmap...",
-        "Conditional Pareto...",
-        "Conditional Outliers...",
-        "-",
-    ]));
+    entries.extend(greys(&["-"]));
     entries.push(item("Remove Conditional Format", Cmd::RemoveCondFormat));
-    entries.push(grey("Conditional Format Manager..."));
+    entries.push(item("Conditional Format Manager...", Cmd::CondFormatManager));
     sub("Conditional Formatting", entries)
 }
 
@@ -1369,7 +1376,7 @@ fn worksheet_menu() -> Vec<Entry> {
         cond_format_menu(),
         item("Clear Worksheet...", Cmd::ClearWorksheet),
         item("Split Columns...", Cmd::Reshape(ReshapeKind::Split)),
-        grey("Pivot Table..."),
+        item("Pivot Table...", Cmd::PivotTable),
         item("Reduce Rows...", Cmd::Reshape(ReshapeKind::Reduce)),
         item("Transpose...", Cmd::Reshape(ReshapeKind::Transpose)),
         item("Stack Columns...", Cmd::Reshape(ReshapeKind::Stack)),
@@ -1493,7 +1500,7 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Peak Analyzer...", Cmd::Analyze(AnalysisKind::PeakChain)),
                 item("Find Peaks...", Cmd::Analyze(AnalysisKind::Peaks)),
                 item("Subtract Baseline...", Cmd::Analyze(AnalysisKind::Baseline)),
-                grey("Multiple Peak Fit"),
+                item("Multiple Peak Fit", Cmd::MultiPeakFit),
                 grey("Batch Peak Analysis Using Theme..."),
             ],
         ),
@@ -2178,14 +2185,14 @@ pub fn graph_axis_menu(layer: usize, y: bool, grids: bool, page: (f64, f64)) -> 
     menu
 }
 
-/// Copy Format of an axis: Styles, Scales and Dimensions have not been measured for what they take
-/// and stay greyed; All takes styles and scale (measured).
+/// Copy Format of an axis: Scales reuses the existing scale-only group (spec 26.9).
+/// Styles and Dimensions stay greyed; All takes styles and scale (measured).
 fn axis_copy_format_menu(layer: usize, y: bool) -> Entry {
     sub(
         "Copy Format",
         vec![
-            grey("Styles"),
-            grey("Scales"),
+            item("Styles", Cmd::CopyAxisFormat { layer, y, part: AxisPart::Styles }),
+            item("Scales", Cmd::CopyAxisFormat { layer, y, part: AxisPart::Scales }),
             grey("Dimensions"),
             sep(),
             item("All", Cmd::CopyAxisFormat { layer, y, part: AxisPart::All }),
@@ -2193,24 +2200,13 @@ fn axis_copy_format_menu(layer: usize, y: bool) -> Entry {
     )
 }
 
-/// Paste Format To of an axis, Origin's twelve choices; All is measured, the others are greyed.
+/// Paste Format To of an axis: existing All, Scales and Styles groups (spec 26.9/26.11).
 fn axis_paste_format_menu(layer: usize, y: bool) -> Entry {
-    let mut v = greys(&[
-        "Tick Direction",
-        "Ticks",
-        "Line",
-        "Tick Labels",
-        "Title Styles",
-        "Colors",
-        "Thickness",
-        "Styles",
-        "-",
-        "Scales",
-        "-",
-        "Title Dimensions",
-        "Title Text",
-        "-",
-    ]);
+    let mut v = greys(&["Tick Direction", "Ticks", "Line", "Tick Labels", "Title Styles", "Colors", "Thickness"]);
+    v.push(item("Styles", Cmd::PasteAxisFormat { layer, y, part: AxisPart::Styles }));
+    v.push(sep());
+    v.push(item("Scales", Cmd::PasteAxisFormat { layer, y, part: AxisPart::Scales }));
+    v.extend(greys(&["-", "Title Dimensions", "Title Text", "-"]));
     v.push(item("All", Cmd::PasteAxisFormat { layer, y, part: AxisPart::All }));
     sub("Paste Format To", v)
 }
@@ -2809,6 +2805,18 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::SetCategorical(some()?)
         }
         Cmd::Reshape(kind) => Action::Reshape { book: book?, columns: c.selected.to_vec(), kind: *kind },
+        Cmd::PivotTable => Action::PivotTable { book: book?, columns: c.selected.to_vec() },
+        Cmd::MultiPeakFit => match (c.book, c.curve) {
+            (Some(_), _) => match c.selected {
+                [y] => Action::MultiPeakFit { graph: None, y: *y, layer: 0 },
+                _ => return Err("Select one Y column"),
+            },
+            (None, Some((_, y))) if c.kind == WindowKind::Graph => {
+                Action::MultiPeakFit { graph: c.graph, y, layer: c.layer }
+            }
+            (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
+            (None, _) => return Err(NEED_BOOK),
+        },
         Cmd::ReverseOrder => {
             book?;
             Action::ReverseColumns(some()?)
@@ -2858,6 +2866,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             c.cells.then_some(()).ok_or(NEED_CELLS)?;
             Action::RemoveCondFormat(book?)
         }
+        Cmd::CondFormatManager => Action::CondFormatManager(book?),
         // On a graph the tools take the active data plot, as Origin's Analysis menu does; the
         // results go to its workbook (ADR 0005), and a fit draws its curve on the graph (ADR 0006).
         Cmd::Analyze(kind) => match (c.book, c.curve) {
@@ -2987,6 +2996,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::SetViewMode(mode) => Action::SetViewMode { graph: c.graph.ok_or(NEED_GRAPH)?, mode: *mode },
         Cmd::ToggleLayerIcons => Action::SetLayerIcons { graph: c.graph.ok_or(NEED_GRAPH)?, on: !c.layer_icons },
+        Cmd::ToggleActiveLayerOnly => {
+            let graph = c.graph.ok_or(NEED_GRAPH)?;
+            c.active_layer_only.ok_or("Needs a valid active layer in a graph with at least two layers")?;
+            Action::GraphEdit { graph, op: GraphOp::HideOtherLayers { layer: c.layer } }
+        }
         Cmd::FullScreen => Action::FullScreen(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::EditSlope { layer, slope } => {
             Action::EditSlope { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, slope: *slope }
@@ -3249,6 +3263,9 @@ fn show_entries(
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleLayerIcons)) && c.layer_icons {
+                    tick(ui, &response);
+                }
+                if matches!(it.cmd, Some(Cmd::ToggleActiveLayerOnly)) && c.active_layer_only == Some(true) {
                     tick(ui, &response);
                 }
                 if let Some(Cmd::SetViewMode(mode)) = &it.cmd
@@ -3632,6 +3649,7 @@ mod tests {
             selected_shape: None,
             view_mode: Default::default(),
             layer_icons: true,
+            active_layer_only: None,
         };
         assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_BOOK);
         assert_eq!(resolve(&Cmd::Analyze(AnalysisKind::Smooth), &c).unwrap_err(), ANALYSIS_ON_BOOK);

@@ -68,6 +68,9 @@ impl WorksheetColorDialog {
             .auto_sized()
             .min_width(220.0)
             .show(ctx, |ui| {
+                if let Some(color) = crate::custom_colors::menu(ui, "Worksheet color") {
+                    self.channels = [color.r, color.g, color.b].map(|c| c.to_string());
+                }
                 egui::Grid::new("worksheet_rgb_fields").num_columns(2).show(ui, |ui| {
                     for (index, label) in ["Red", "Green", "Blue"].into_iter().enumerate() {
                         ui.label(label);
@@ -97,6 +100,7 @@ impl WorksheetColorDialog {
                 } else {
                     ui.label("Enter whole numbers from 0 to 255.");
                 }
+                crate::custom_colors::add_button(ui, chosen, "Worksheet color");
                 ui.horizontal(|ui| {
                     accept = ui.add_enabled(chosen.is_some(), egui::Button::new("OK")).clicked();
                     cancel |= ui.button("Cancel").clicked();

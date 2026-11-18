@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 282 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 270 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -95,10 +95,11 @@ Backlog packages: write the brief first (step 3 above).
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
 | [x] | [T65](T65-graph-view-zoom-pan.md) | Graph view zoom and pan (B1 slice 1): Zoom In mode, Zoom Out, Whole Page, Pan | M | 0 |
-| [ ] | [T66](T66-graph-view-modes.md) | Graph view modes (Print, Page, Window, Draft), Show > Layer Icons and Full Screen done; the nine other Show items and Show Data Info wait for measurement (B1 slice 2) | M | 10 |
+| [ ] | [T66](T66-graph-view-modes.md) | Graph view modes (Print, Page, Window, Draft), Show > Layer Icons, Active Layer Only and Full Screen done; eight other Show items and Show Data Info wait for measurement (B1 slice 2) | M | 9 |
 | [x] | [T69](T69-zoom-all-scale-tools.md) | Graph view, the rest of B1: View > Zoom All and the Tools-bar Scale In / Scale Out (measured in graphing 23) | S | 0 |
-| [ ] | [T72](T72-copy-paste-format.md) | Copy Format and Paste Format on graph, axis and legend (B2 slice 1) | M | 25 |
-| [ ] | B2 | Graph objects: cut/copy/paste, align, same size, group, order across object kinds, snap to grid (Copy/Paste Format is T72) | L | 33 |
+| [ ] | [T72](T72-copy-paste-format.md) | Copy Format and Paste Format on graph, axis and legend (B2 slice 1) | M | 21 |
+| [ ] | [T125](T125-drawn-shape-clipboard.md) | Drawn-shape Cut/Copy/Paste (B2 slice; reference audit done, destination/size/stacking contract and graph-view coordination remain open) | M | 2 |
+| [ ] | B2 | Graph objects: cut/copy/paste, align, same size, group, order across object kinds, snap to grid (Copy/Paste Format is T72) | L | 31 |
 | [x] | [T67](T67-add-straight-line.md) | Add Straight Line (B3 slice 1) | M | 0 |
 | [x] | [T70](T70-axis-center-fit-page-to-printer.md) | Axis Center and Fit Page To Printer (B3 slice 2) | S | 0 |
 | [x] | [T73](T73-change-xy-ungroup.md) | Change X, Change Y, Ungroup on a plot (B3 slice 3) | S | 0 |
@@ -121,7 +122,7 @@ Backlog packages: write the brief first (step 3 above).
   flight). Needs one ordering for all objects of a page (labels, legend, shapes, axis titles), an
   object clipboard, and the Object Edit toolbar on
   a multi-selection (the view has single selection today: `selected: Option<(usize, ObjectKind)>`).
-  Split it: (a) multi-selection and align/same size, (b) cut/copy/paste, (c) copy/paste format (done as T72, measured in graphing 24),
+  Split it: (a) multi-selection and align/same size, (b) cut/copy/paste (single drawn-shape brief T125; documentation audit only, graph-view destination hook must coordinate with resize ownership), (c) copy/paste format (done as T72, measured in graphing 24),
   (d) grouping and ordering across kinds.
 - **B3.** Small independent tools; split freely. Add Straight Line and Add Function Graph reuse
   drawn shapes and the fit library's functions (`sheaf simulate`, T47). Display range and markers
@@ -137,9 +138,16 @@ Backlog packages: write the brief first (step 3 above).
 
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
+| [x] | [T126](T126-descriptive-statistics-data-range.md) | Statistics on Columns respects existing Begin/End ranges (T87 reader follow-up) | S | 0 |
+| [x] | [T127](T127-row-statistics-data-range.md) | Statistics on Rows respects existing Begin/End ranges (T87 reader follow-up) | S | 0 |
 | [ ] | B5 | Worksheet editing: copy variants, Paste Transpose/Link/Special, cell links, Set As Begin/End, fill with a set of numbers/dates/text, sampling interval, Copy Columns to, Swap Columns | L | 13 |
 | [ ] | B6 | Worksheet view and sheets: header and grid toggles, row label rows, sheet-tab items, Split, objects in cells (graphs, images, sparklines, variables), Merge cells | L | 23 |
-| [ ] | B7 | Worksheet tools: rest of Conditional Formatting (T35 leftovers), Pivot Table, Find in Project | M | 6 |
+| [x] | B7 | Worksheet tools: done (Find in Project as T95, Conditional Formatting as T120-T123, Pivot Table as T124) | M | 0 |
+| [x] | [T120](T120-conditional-heatmap.md) | Conditional Heatmap (B7 slice; done 2026-11-17) | M | 0 |
+| [x] | [T121](T121-conditional-outliers-pareto.md) | Conditional Outliers and Conditional Pareto (B7 slice; done 2026-11-17) | S | 0 |
+| [x] | [T122](T122-conditional-format-manager.md) | Conditional Format Manager (B7 slice; done 2026-11-17) | M | 0 |
+| [x] | [T123](T123-conditional-highlight.md) | Conditional Highlight (B7 slice; done 2026-11-17) | M | 0 |
+| [x] | [T124](T124-pivot-table.md) | Pivot Table (B7 slice; done 2026-11-17) | M | 0 |
 
 - **B5 worksheet text controls.** Origin 2016 Set Data Style has Rich Text, Wrap Text, Float
   and More... (GUI 3, measured 2026-11-16), with no Default item. More reuses Format Cells (T59);
@@ -153,14 +161,15 @@ Backlog packages: write the brief first (step 3 above).
 - **B6.** The toggles and sheet-tab items are small. Sparklines and graphs in cells need a cell
   that holds an object; do them together and last. Merge cells changes the grid's layout
   (`crates/app/src/grid.rs` draws one table with frozen overlays): measure Origin's rules first.
-- **B7.** Conditional Heatmap and Highlight reuse `crates/core/src/condformat.rs`.
+- **B7.** Done: Find in Project (T95), Conditional Formatting (T120-T123), Pivot Table (T124).
 
 ## Wave 6: analysis and statistics breadth
 
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
 | [ ] | [T57](T57-deconvolution-stft.md) | Deconvolution and STFT (claimed 2026-11-15) | M | 2 |
-| [ ] | B8 | Analysis and statistics: Multiple Peak Fit, batch peak analysis (wavelets moved to T96; implicit fit, Simulate Surface, Compare Datasets and XYZ Surface Area moved to T91; partial correlation, three-way and repeated-measures ANOVA moved to T81) | L | 4 |
+| [ ] | B8 | Analysis and statistics: batch peak analysis (Multiple Peak Fit done as T128) (wavelets moved to T96; implicit fit, Simulate Surface, Compare Datasets and XYZ Surface Area moved to T91; partial correlation, three-way and repeated-measures ANOVA moved to T81) | L | 3 |
+| [x] | [T128](T128-multiple-peak-fit.md) | Multiple Peak Fit (B8 slice; done 2026-11-17) | M | 0 |
 | [x] | [T96](T96-wavelets.md) | Wavelets: Decompose, Reconstruction, Denoise, Smooth, Continuous Wavelet (B8 slice; done 2026-11-16; open corners in the brief) | L | 0 |
 | [x] | [T91](T91-simulate-surface-compare-implicit-area.md) | Simulate Surface, Compare Datasets, Nonlinear Implicit Curve Fit, XYZ Surface Area (B8 slice; done 2026-11-16) | L | 0 |
 | [x] | [T81](T81-partial-correlation-anova3-rmanova.md) | Partial Correlation Coefficient, Three-Way ANOVA, One-Way and Two-Way Repeated Measures ANOVA (B8 slice; claimed 2026-11-16) | L | 0 |

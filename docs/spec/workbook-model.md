@@ -570,6 +570,15 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   a Sheaf policy; drafts do not mutate the project. Existing range/request fields preserve
   independent labels/data, compact whole columns, other styles and `.sheaf`/companion saves.
   Stale selection/generation/revision and effective no-ops create no history entry.
+- **Reusable custom wells.** The toolbar's numeric text/fill chooser and Format Cells
+  share the graph/editor profile pool (graphing7.12; GUI3). Add saves only a present
+  opaque draft colour; a stored choice seeds the numeric toolbar draft or optional
+  dialog colour. Existing OK/Apply commits formats; Cancel discards uncommitted
+  changes while retaining preferences. Removing a well changes no draft or applied
+  format. Existing range/label/whole-column/history/stale and save/export paths
+  remain unchanged. This is a documented reusable-chooser contract with explicit
+  Sheaf menu/profile policies, not a new Native2016 measurement. No model fields
+  or project palette are added; unused wells stay profile-only.
 - **Classic presets.** The worksheet Font Color and Fill Color menus include all 24 native
   Classic RGB colours (GUI 3, measurements 2026-11-16). The additional 16 names are grouped in a
   submenu, a Sheaf UI choice. They reuse the same captured range changes and persistence as
@@ -609,6 +618,8 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   Format/Size probes (GUI 3, 2026-11-16) found no vertical text-alignment control in those
   inspected routes. Other routes and mutation semantics remain unestablished; this probe
   does not justify adding a new per-range field. Existing placement remains in use.
+  The documentation scope audit in GUI 3 distinguishes the later Data Info/tooltip
+  table controls from worksheet ranges; it does not supply the missing worksheet route.
 - **Conditional formats.** Conditional fill and text colour override manual ones; bold, italic,
   underline, font, size and alignment stay manual.
 - **Maintenance.** Row insert/delete shift, grow, shrink or drop spans of the affected columns
@@ -736,8 +747,8 @@ Set as End. Measured in Origin 2016 with the LabTalk commands behind them (`set 
 - The **worksheet shows the cells outside blank** (B begun at row 3: rows 1 and 2 empty; C ended at row 4:
   rows 5 and 6 empty).
 - **Plots and statistics use only the rows inside**: B (10 to 60) from row 2 to 4 gave `stats` n = 3, mean
-  30, and its scatter's X axis went from 1.5 to 4.5. Sheaf's plots leave the rows out; Sheaf's analysis
-  tools still read all rows (left for later).
+  30, and its scatter's X axis went from 1.5 to 4.5. Sheaf's plots leave the rows out;
+  Statistics on Columns and Rows now also use the saved ranges (T126/T127 below). Other analysis readers remain open.
 - **Sheaf's commands**: Set As Begin makes the top selected row the first row of every selected column's
   range, Set As End the bottom selected row the last; a begin after the end drops the end (and the other
   way round). Reset to Full Range clears the range of every column of the active sheet. One undo step each
@@ -746,6 +757,50 @@ Set as End. Measured in Origin 2016 with the LabTalk commands behind them (`set 
 - **Files**: saved with the column in `.sheaf` (`"data_range": {"begin", "end"}`, rows from 0). The `.opj`
   written here does not hold it: the save warning names it, and the companion keeps it. The graph's own
   Data > Reset to Full Range (display range of a plot) is a different command and stays grey.
+
+### 13f.1 Descriptive Statistics on Columns (T126, 2026-11-17)
+
+The descriptive column reader intersects the existing resolved request rows with
+that Y column's saved Begin/End range, before calling the unchanged statistics
+calculator. The T87 accepted 2016 fixture above is the numeric reference: values
+10..60 with rows 2..4 yield N=3, mean30, SD10 and sum90. No new Native run or COM
+retry was made. The [current FAQ-1101](https://docs.originlab.com/quick-help/set-as-begin/)
+describes clearing/deleting and 2021/2022 menu changes; those are not substituted
+for the accepted non-destructive 2016 column-range fixture.
+
+Explicit row/XBetween requests intersect the saved Y range using original row
+indices. Each selected column has its own range; a different X column's saved
+range does not restrict univariate Y statistics. Outside rows are excluded and
+do not increase Missing. Existing mask/filter/missing handling within the
+intersection, units, report layout, all optional statistics and output history
+stay unchanged. Empty intersections use existing empty statistics (N=0,
+Missing=0, sum0, undefined values NaN), an explicit Sheaf edge policy. Bounds are
+clamped with a saturating inclusive-end conversion, including persisted ranges
+beyond the available data. Source data and range metadata remain untouched.
+
+This T126 slice changes only Statistics on Columns; the row reader follows in
+T127 below. Inferential tests, distribution/categorical tools, fitting and other
+analysis readers remain T87 leftovers. No shared input-loader, Core model, IO/schema, grid or menu changes.
+
+### 13f.2 Statistics on Rows (T127, 2026-11-17)
+
+The [official rowstats reference](https://docs.originlab.com/x-function/ref/rowstats/)
+describes seven row quantities within an input range. The [Statistics on Rows
+guide](https://docs.originlab.com/origin-help/statistics-on-rows/) excludes missing
+observations. With the existing T87 saved-range contract, Sheaf now admits a
+contributor at its original worksheet row only when both the resolved request span
+and that column's own Begin/End range contain the row. This per-column intersection
+is explicit Sheaf policy, not a fresh Native2016 rowstats measurement; no COM retry
+or repair was made. Each input's range is resolved once, not once per output cell.
+
+No rows are compressed or shifted. Existing mask/filter handling, numerical
+formulas, output length/order/units/comments, seven quantity switches and insertion
+behind the last selected column remain. An unselected X column's saved range does
+not remove another contributor. A row without eligible numbers retains the
+existing all-missing rowstats outputs, including Number of Points and Sum (unlike
+T126's empty column summary zeros); a single number has no SD or SEM. Stored source
+values and range metadata stay fixed. Only row_statistics and its call change;
+the shared input loader, T126 reader, other tools, model and IO/schema stay fixed.
 
 ## 13g. Copy Columns to (T89, measured 2026-11-16, Origin 2016)
 
@@ -907,6 +962,43 @@ the folder changes and the active window is not shown, the folder's most recent 
 Window > Folders lists the folders as Origin. A folder's Properties... edits its Name (not the root's) and
 Comments (`Folder::comments`) and shows Type, Contains and Location, one undo step. Not done: the main
 title's folder path, Size/Created/Modified, Previous/Next, User Tree, Restricted in Viewer.
+
+## 13n. Pivot Table (T124, 2026-11-17, not measured)
+
+Origin facts (X-Function `wpivot`, docs.originlab.com/x-function/ref/wpivot, Origin 2015 SR0 and
+later; Origin COM was unavailable on the Windows machine on 2026-11-17, so nothing was measured):
+`row` (one or more columns), `col`, `data`; `method` 0 count (default), 1 sum, 2 mean, 3 min, 4 max;
+`total` adds a Row Total column (sum across each row), `sum` a Column Total row; `sort_total` 0 row
+labels ascending, 1 descending by row totals (default), 2 ascending by row totals, 3 row labels
+descending, 4 none; `sort_col` 0 column labels ascending (default), 1 descending, 2 ascending by
+column totals, 3 descending by column totals, 4 none; `normalize` 0 none, 1 fraction, 2 percent of
+each column's total; `zero` (default 1) shows missing combinations as zeros; `pos` (default 1)
+puts each column's value in 0 Long Name, 1 Comments, 2 appended to the Long Name, 3 a user
+parameter row; `dir`/`vmode`/`threshold`/`label` merge small values into "Others"; `exrow`/`excol`
+add extra values; the output defaults to a new sheet of the input book.
+
+Sheaf (`crates/core/src/pivot.rs`, `crates/app/src/dialogs/pivot.rs`), choices **unmeasured**:
+
+- Worksheet > Pivot Table... opens the window with the selected columns (or the sheet's first
+  columns) as row source, column source and data, then `wpivot`'s defaults. OK writes a new sheet
+  `Pivot1`, `Pivot2`, ... of the same workbook, shows it, and is one undo step ("Pivot table").
+- Keys: a cell's number or text; numbers sort before texts, numbers by value, texts by characters
+  (`0` and `-0` are one key). Several row sources give one row per combination, one label column
+  each, compared column by column.
+- Source rows: rows hidden by the filter are left out, and so are rows with an empty or masked cell
+  in any row source or the column source. A masked, text or empty data cell is missing: Count still
+  counts the row; the other methods skip it. A combination with no value is missing (0 with "Show
+  Missing as 0", else empty).
+- Totals sum the cells shown (after normalizing). Sorting by totals uses the totals before
+  normalizing; equal totals keep the labels' ascending order; "None" keeps the order of first
+  appearance. Normalize divides each column by its total (a zero total gives empty cells).
+- Output columns: the label columns (Long Name the source column's name; the first is X), then one
+  Y column per column key with its label in the chosen position (Long Name, Comments, or after the
+  data column's Long Name, or the method's name for Count), then Row Total (its name in the same
+  position). The Column Total row has "Column Total" in the first label column; its Row Total cell
+  is the grand total.
+- **Left out** (shown disabled): Combine Direction/Others, extra row and column values, the user
+  parameter position.
 
 ## 14. Suggested Rust data model (P0)
 

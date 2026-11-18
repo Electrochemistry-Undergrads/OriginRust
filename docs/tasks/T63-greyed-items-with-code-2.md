@@ -4,7 +4,7 @@
 **Size:** M overall; each group S. **Branch:** `greyed-2-<group>`.
 **Priority:** wave 3, parallel lane when files do not overlap wave 1/2 claims.
 **Spec:** [command map](../spec/ui-command-map.md), [GUI](../spec/gui-look.md); T01's method.
-**Inventory:** 31 initial candidate locations; 27 remain tagged `T63` after C/F review. Remaining leads require code/runtime verification.
+**Inventory:** 31 initial candidate locations; 20 remain tagged `T63` after C/F review and G/J wiring. All remaining locations are in the claimed A/B/D/E/H/I/K groups; C is deferred to B8/T14 and F/G/J are already wired. Do not rebuild those completed groups.
 **Ownership:** only the claimed group's dispatch/state/tests; no broad menus/toolbar refactor.
 
 ## Goal
@@ -77,6 +77,13 @@ Four focused UI regressions cover empty projects/books, active versus Explorer-s
 workbooks and graphs, hidden context targets, cancellation and Undo/Redo. The existing Explorer
 context and Window > Duplicate UI tests also pass. Only the two dispatch hooks changed; no new
 duplication engine or Origin numeric claim was introduced.
+
+Current audit (2026-11-16, codex/t63-group-f): both live dispatch hooks and all four
+existing duplicate-entry regressions remain present. Those regressions pass in the
+latest 4,369-test suite (eight ignored), with fmt/strict all-target Clippy and all
+912 source/fixture/asset hashes unchanged. No duplicate implementation or new
+Native claim is added. The inventory reports T63=20; the earlier count of 27
+predated G/J wiring. All remaining T63 groups stay with their existing owners.
 
 ## Don't
 

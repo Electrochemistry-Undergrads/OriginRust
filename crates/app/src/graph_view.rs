@@ -1118,6 +1118,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         selected_shape: None,
         view_mode: Default::default(),
         layer_icons: true,
+        active_layer_only: None,
     }
 }
 
@@ -1135,6 +1136,13 @@ pub(crate) fn plot_source_line(project: &Project, plot: &sheaf_core::Plot) -> St
         None => format!("1*:{}*", y.len()),
     };
     format!("g1 [{}]{}! {x}\"{}\"(Y) [{range}]", book.name, sheet.name, y.display_name())
+}
+
+/// Whether the requested layer is the only shown layer.
+fn other_layers_hidden(graph: &sheaf_core::graph::Graph, layer: usize) -> bool {
+    graph.layers.len() > 1
+        && graph.layers.get(layer).is_some_and(|l| !l.display.hidden)
+        && graph.layers.iter().enumerate().all(|(i, l)| i == layer || l.display.hidden)
 }
 
 /// The entries of the right-click menu for what was clicked.
@@ -1164,6 +1172,11 @@ fn menu_for(
                 && let Some(menus::Entry::Item(item)) = entries.first_mut()
             {
                 item.label = "\u{2713} Hide Layer".into();
+            }
+            if other_layers_hidden(graph, layer)
+                && let Some(menus::Entry::Item(item)) = entries.get_mut(1)
+            {
+                item.label = "\u{2713} Hide Other Layers".into();
             }
             entries
         }
@@ -1414,10 +1427,12 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         return;
     }
     if let GraphOp::HideOtherLayers { layer } = op {
+        if layers < 2 {
+            return;
+        }
+        let hide = !other_layers_hidden(g, layer);
         for (i, l) in g.layers.iter_mut().enumerate() {
-            if i != layer {
-                l.plots.iter_mut().for_each(|p| p.visible = false);
-            }
+            l.display.hidden = hide && i != layer;
         }
         return;
     }

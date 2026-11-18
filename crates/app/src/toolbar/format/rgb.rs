@@ -51,6 +51,7 @@ impl Picker {
         } else {
             ui.label("Enter whole numbers from 0 to 255.");
         }
+        crate::custom_colors::add_button(ui, color, "Graph font color");
         let accept = ui.add_enabled(color.is_some(), egui::Button::new("Apply font color")).clicked();
         if ui.button("Cancel font color").clicked() {
             return Some(Choice::Cancel);

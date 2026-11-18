@@ -213,6 +213,68 @@ five new object regressions and all 23 related palette/object tests; inventory29
 Python tests pass. Source/goldens stayed frozen; current submenu and colour-effect desktop
 captures were inspected and all own app/reference/helper actors closed.
 
+Custom object RGB follow-up (`codex/t58-object-rgb`): the existing supported Fill/Line targets
+offer Custom RGB... with validated channels, preview, Apply/Cancel and Enter. Fresh Origin 2016
+rectangle fill/outline and straight-line controls establish five RGB values including black,
+white and mixed channel boundaries (graphing 7.4). Numeric menu layout, white draft seed for None
+and the existing legend mapping remain Sheaf choices. Captured request, selection, history,
+stale/no-op and native/companion rules are reused; all 24 Classic presets and None remain.
+No model/backend/font/worksheet picker changes. Auto, other lists and palette storage remain open.
+Fmt, strict workspace/all-target Clippy and all 4,360 workspace tests pass (eight ignored),
+including all seven new and 37 related regressions. Inventory283 and eight Python tests pass;
+source/goldens stayed frozen. Current seeded/invalid/applied desktop captures and rendered RGB
+pixels were inspected, with every own app/reference/helper actor closed. Earlier setter-only
+automation pilots are excluded from appearance evidence.
+
+Prime notation follow-up (codex/t58-escape-alias-audit, 2026-11-16): exact closed
+prime/double-prime escapes now use Unicode U+2032/U+2033 with existing run styles,
+script columns and rendering. Graphing 7.11 records the official documented
+contract (FAQ159 minimum Origin2015SR0), strict syntax and explicit unmeasured
+Native glyph geometry/combining offsets. The alias audit retains 7.6's deferral
+of post-2016 special defaults; no lookup or font configuration is invented.
+Six regressions compare parser, style restoration, literal/malformed/depth rules,
+placement/rotation, exports and real graph contexts with Unicode controls.
+Fmt, strict workspace/all-target Clippy and all 4,369 tests pass (eight ignored), including all six new regressions. Inventory283 and eight Python tests pass with all 912 source/fixture/asset hashes frozen. Fresh actual/Unicode/verbatim desktop captures were inspected; actual and Unicode PNG exports match all pixels, while verbatim differs. Raw notation and graphs survive .sheaf and OPJ companion saves. All own build/app/helper actors are terminal; remaining T58 controls and other claims stay open.
+
+Reusable Custom RGB wells (codex/t58-color-list-storage, 2026-11-17): graph font,
+fill and line pickers share a profile pool. Add to Custom saves a valid draft
+without editing the graph; Cancel leaves the preference available. Choosing a
+well reuses captured requests and existing history; context removal changes only
+the pool. Graphing7.12 separates FAQ130's documented 2016+ custom wells from later
+Color Manager/system-list features and records all storage/UI policies as Sheaf
+choices. Applied colours keep existing saves/exports; unused wells are not a
+project palette. Worksheet/editor reuse, named lists, OTH/PAL, Auto and broader
+native measurements remain open. No fresh Native measurement is claimed.
+Fmt, strict workspace/all-target Clippy, all 4,391 tests (eight ignored),
+inventory281 and eight Python tests pass with all917 source/fixture/asset files
+frozen. Eleven new regressions cover pool/storage and actual picker wiring.
+Fresh private-profile desktop controls exercise Add without Apply, Cancel,
+restart, shared font/fill/line reuse and Undo. Saved complete graphs match
+independent expectations, restored export pixels match exactly and choosing/Undo
+do not rewrite preferences. All three owned apps and guards close successfully;
+initial removal-menu pilots are excluded and the passed source remains fixed.
+
+Shared text-editor Custom wells (codex/t58-editor-custom-wells, 2026-11-17):
+the existing private inline-colour picker reuses the published profile pool.
+Add to Custom leaves the text draft/document unchanged; a saved choice uses the
+existing selection/caret RGB command and numeric-field seed. Existing Apply/OK,
+Cancel, automatic-text, legend-reference, base-font and generation rules remain.
+Only Picker::show and new UI regressions change; pool storage, rewrite/apply
+engines, toolbar and worksheet controls are unchanged. Graphing7.12 identifies
+the compact inline integration as Sheaf policy under the documentation contract,
+without a new Native2016 measurement. Worksheet reuse, named/project palettes,
+OTH/PAL, Auto and other remaining measurements stay open.
+Fmt, strict workspace/all-target Clippy, all4,440 tests (eight ignored),
+inventory275 and eight Python tests pass on the integratedT120-T124 tree, with
+all924 source/fixture/asset hashes frozen. Five new UI regressions exercise
+preferences/drafts/history, selection/caret/focus, titles/legend rendering,
+automatic-text removal, generation rejection and native/companion round trips.
+Fresh owned accessibility controls Add in the editor, restart and select actual
+text, choose the saved well, Apply and Undo. Saved whole graphs match independent
+expectations, restored export pixels match exactly, and preferences are not
+rewritten by choose/Apply/Undo. Both apps and guards close0. Initial test setup
+and menu-name pilots are excluded; six production lines stay fixed through validation.
+
 ## Origin facts
 
 Recorded in gui-look 1/4 and the command map: the font box says "Default: Arial", the selected

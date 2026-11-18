@@ -635,6 +635,41 @@ column's comment says the same. `--fit-shapes` needs `--fit`.
 Not done: constraints between peaks, and Origin's own Peak Analyzer Fit Peaks (Pro) page, which was
 not opened (11.1).
 
+### 11.3 Multiple Peak Fit (T128, 2026-11-17, not measured)
+
+Origin facts (docs.originlab.com/origin-help/fit-multipeakfit-tool and x-function/ref/nlfitpeaks;
+Origin COM was unavailable, so nothing was measured): Analysis: Peak and Baseline: Multiple Peak Fit
+opens the `nlfitpeaks` dialog (input: the active data plot; the peak function); OK activates the
+graph (from a worksheet a graph is made first) and opens Get Points: the cursor moves with the mouse
+or arrow keys, a double-click or Enter picks a peak centre, the dialog shows X, Y and the number
+picked. **Fit** fits with the picked centres as starting points and adds a results table to the
+graph; **Open NLFit** opens the NLFit dialog initialised from them. No baseline treatment; Use Peak
+Marker fits existing peak markers.
+
+Sheaf (`crates/app/src/dialogs/multipeak.rs`, the chain of 11 with given centres), choices
+**unmeasured**:
+
+- From a graph the active data plot is the input; from a worksheet with one Y column selected, a
+  line graph of it is made first (its own undo step "Plot"). Peak Function: Gauss (default, as
+  Origin's tutorial picks), Lorentz or Voigt.
+- Get Points uses the graph's Data Reader (turned on while picking): a click pins a point; a
+  double-click outside the Get Points window, or Enter, picks the pinned point of the input plot.
+  The window lists the centres (X, Y); Remove Last undoes a pick; a point already picked is not
+  picked again. Cancel or closing turns the Data Reader off and changes nothing.
+- Fit runs the Peak Analyzer chain with no baseline and the picked X as the peaks
+  (`analyze_peaks_at`: each centre snaps to the nearest data point, two centres on one point give one
+  peak, heights and FWHM are measured above the lowest point of the data), then the multi-peak fit
+  of 11 with a constant `y0` (start: the lowest Y) and per-peak starts from those heights and widths.
+  Results go where the Peak Analyzer's go (the result sheet, one row per peak in X order, the fit
+  curve column beside the data, then a column "Peak k of ..." per peak: that peak on the fitted
+  baseline `y0`), and the curves are drawn on the graph as lines: each peak in blue, green, orange
+  (repeating), then the fitted sum on top in the fit tools' red (220, 30, 30), width at least 1.5.
+  One undo step ("Multiple peak fit"). The Peak Analyzer does not add the per-peak columns
+  (`PeakFitSpec.peak_curves`, off there).
+- **Left out:** Open NLFit and Use Peak Marker (shown disabled), the results table on the graph,
+  arrow-key stepping specific to Get Points (the Data Reader's Left/Right
+  keys step the pinned point).
+
 ## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1 to 12.3)
 
 Analysis > Data Manipulation has Subtract Straight Line, Reduce Duplicate X Data (12.1), Reduce to Evenly Spaced X and Curve

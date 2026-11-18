@@ -785,7 +785,28 @@ target restrictions remain Sheaf UI choices; no native toolbar geometry or legen
 measurement is claimed. Extra choices use the original captured target/revision/generation,
 close both menus, preserve the selection, and have the same one-step Undo and unchanged/stale
 no-op rules. The public eight-colour palette constant and font/worksheet controls are unchanged.
-Custom object RGB, Auto, other lists and palette storage remain open.
+Auto, other lists and palette storage remain open.
+
+Custom object RGB follow-up (2026-11-16): five fresh private Origin 2016 controls set a named
+rectangle's fill/outline and a named straight line's colour with `color(r,g,b)`: 17/131/213,
+0/0/0, 255/255/255, 0/255/128 and 1/2/3. All commands and exports succeeded; all three getters
+retained the assigned internal RGB code. Every EMF has at least two exact matching pens and
+solid brushes. The asymmetric RGB export was inspected. The private `Origin.Application`
+instance and watchdog closed, with pre-existing process identities unchanged. Evidence:
+ignored `scratch/t58-object-rgb` (checked script/log, five EMFs, native-proof.json, native-rgb.png).
+These are property/value/rendering measurements, not a native picker-layout or legend-background
+measurement. The [Color function](https://docs.originlab.com/labtalk/ref/color-func/) documents
+RGB assignment; the existing target mapping above remains Sheaf policy.
+
+Fill Color and Line Color > Custom RGB... provide three integer fields (0 to 255), a preview
+and Apply/Cancel; valid unmodified Enter accepts from a channel field. Invalid, dismissed,
+unchanged and stale choices add no history. Reopening seeds the captured object's current
+property, independently for fill/line and each new target. An absent fill seeds white as a
+draft; opening or cancelling preserves None, while accepting white explicitly adds a fill.
+That seed and the compact numeric submenu are Sheaf choices. Presets retain all 24 Classic
+colours and Fill retains None; presets replace an unapplied RGB draft. Accepted colours use
+the same selection, history and native/companion save paths. Font/worksheet pickers, models,
+renderer/backends and the public basic-palette contract are unchanged.
 
 
 ---
@@ -989,7 +1010,8 @@ Text color > Custom RGB... in the shared label/title/legend editor has Red, Gree
 fields, a swatch and Apply color. Each field accepts a whole number from 0 through 255;
 invalid or empty values disable the choice and show the permitted range. The fields start
 from the object's base font colour. A named palette choice also seeds them; subsequent typed
-values stay in the current editor's picker. No alpha or persistent picker preference is added.
+values stay in the current editor's picker. Alpha is unsupported; the numeric draft
+is transient. Explicit reusable Custom wells use the separate preference pool in7.12.
 
 Editing the fields or dismissing the menus does not change the text draft, automatic-text
 state or project. Apply color closes both menus, formats the original selection (or inserts
@@ -1075,6 +1097,79 @@ unapplied changes. Preview and screen/export share the same placement. Six UI an
 helper regressions cover shared-column glyph positions, Unicode/focus, commas/literal blocks,
 styles/fonts/nesting, unsafe fragments, automatic text, cancellation, stale generation and
 label saves and title/legend project/companion roundtrips.
+
+### 7.11 Prime escape characters (T58, documented contract)
+
+Origin's [escape reference](https://docs.originlab.com/origin-help/escape-sequences/)
+documents the prime and double-prime forms; [FAQ159](https://docs.originlab.com/quick-help/add-prime-symbol/)
+lists Origin 2015 SR0 as its minimum version. This is a documentation check on
+2026-11-16, not a fresh Native2016 measurement: local COM activation is unavailable.
+
+Sheaf recognizes only the exact closed forms \y(') and \y("), producing Unicode
+U+2032 and U+2033 through the existing glyph path. Surrounding family, weight,
+italic, colour, underline and strikeout apply and restore normally; Greek spans
+do not remap these characters. The escape itself adds no scale or baseline shift.
+Existing superscript and paired-script wrappers still use their published layout
+rules. This Unicode mapping is Sheaf policy; Native full-height glyph geometry,
+combining-prime placement and the configurable @TAPP extra offset are unmeasured,
+and that offset is not implemented.
+
+Literal blocks retain the original notation. Other bodies, whitespace, missing
+closing parentheses, uppercase codes and the 24-level bound retain existing
+unknown/malformed handling. No font aliases, lookup, project fields, editor
+controls or backend implementations change. Modern special-default fonts remain
+deferred under 7.6; accents, conditional spaces, wrapping and line separation
+remain separate work. Regressions compare styles, placement, rotation, vector/
+raster output and actual legend/title/tick scenes with explicit Unicode controls.
+
+### 7.12 Reusable Custom RGB wells (T58/T59, documented contract)
+
+Origin's [FAQ130](https://docs.originlab.com/quick-help/define-custom-colors/)
+documents custom wells in the font-colour chooser and, for 2016 onward, adding
+multiple RGB choices without applying them until accepted. It describes local
+reuse and preservation of applied colours in a saved project/window. This is a
+documentation contract, not a fresh Native2016 measurement. Color Manager starts
+in 2021; [FAQ1076](https://docs.originlab.com/quick-help/5-rows-of-colors/) labels
+automatic System Color List storage as 2017 onward. Neither establishes a 2016
+named-list manager, file format or automatic system-list workflow.
+
+The graph Format toolbar's font/fill/line Custom RGB pickers offer Add to Custom.
+A valid opaque RGB draft is added to one shared pool without applying it to the
+graph. Cancel discards the document draft but retains an added well. Custom colors
+offers the pool in all three graph pickers; choosing a well uses their existing
+captured target/revision/generation checks, no-op handling and one-step Undo.
+An entry's context menu removes it from the pool without changing any applied
+object colour. The 24 Classic presets, None and numeric Apply/Cancel remain.
+Worksheet controls use this same pool through their existing draft dialogs (GUI3,
+workbook13b). The shared graph text editor
+also offers Add to Custom in its numeric picker and the same Custom colors pool.
+Adding stores only the preference and leaves the selected raw-text draft, caret,
+automatic-text state and document unchanged. Choosing a well maps its channels to
+the existing opaque inline RGB colour command: it colours the selection or inserts
+a group at the caret, restores typing focus and seeds the numeric RGB fields.
+The text remains a draft until the Text window's existing Apply/OK. Cancel discards
+unapplied text changes while retaining added wells; removing a well does not rewrite
+the draft. Legend samples/name references, base fonts, script groups, no-op history,
+project-generation guards and native/companion saves keep the existing7.8/7.9 rules.
+This compact inline integration is Sheaf policy under the documented reusable
+chooser and [Text-tab](https://docs.originlab.com/origin-help/textob-prop-text-tab/)
+selection/caret contract, not a newly measured Native2016 editor workflow.
+
+The following are explicit Sheaf policies: up to 64 unique opaque RGB entries in
+insertion order; no names; preference-only removal; a private version1 JSON file
+named custom-colors.json beside profile settings; a 64KiB read bound and complete
+same-directory atomic replacement. Missing, corrupt, unsupported-version,
+over-capacity or nonopaque records load an empty pool without rewriting the file;
+duplicate entries retain their first position. Startup loads once. Add/remove
+writes the pool, and failure keeps the session's values with a visible message.
+Other running instances do not refresh; the last successful writer supplies the
+next startup. An explicit absent startup path keeps tests memory-only.
+
+Applied colours use existing project fields and export paths; unused wells are
+profile-only and are not embedded as a project palette. Named lists, OTH/PAL
+import/export, incremental plot lists and Color Manager remain deferred.
+No Core, renderer, font resolution or project/IO schema changes
+are part of this slice.
 
 ## 8. 2D plot types as Origin groups them [F:User:Template.ini; F:*.otp names]
 
@@ -3273,6 +3368,11 @@ multilayer grouping, layout, Undo and native/companion saves reuse the existing 
 New-graph destination placement and visibility/open-only handling retain their existing scope;
 these filters add no folder mutations, model fields, IO format or CLI/MCP options.
 
+The Merge dialog's vertical scroll viewport fills the available dialog width. Short source
+choices no longer shrink its clipping rectangle around the narrow top controls, so longer
+option labels remain readable. The existing height limit, source choices and footer remain.
+This is a Sheaf layout correction, checked against desktop captures, not a new Origin measurement.
+
 **Command line:** `sheaf merge-graphs PROJECT (--graph NAME ... | --all-graphs) [--rows N]
 [--cols N] [--gap H,V] [--margins L,R,T,B] [--portrait] [--page-size W,H] [--keep-aspect]
 [--link] [--share-x] [--hide-inner] [--text-scale auto|keep|FACTOR] [--remove-sources] [-o FIGURE]
@@ -3599,6 +3699,28 @@ Properties edits it ("Straight Line"). A line that is not Selectable lets clicks
 stored but dragging a line is not built (shown disabled). `sheaf plot --vline X[,top|bottom|left|right]`
 and `--hline Y` add lines to the first layer. `.sheaf` keeps them; `.opj` leaves them out with a
 warning and the companion keeps them.
+
+### 17.8 Drawn-shape clipboard audit (T125, documentation only)
+
+The [official drawing-object guide](https://docs.originlab.com/origin-help/create-draw-objects/)
+was read on 2026-11-17. It documents single-object Copy through context/Edit menus
+or Ctrl+C, and ordinary Paste at a clicked graph destination. Same-location
+Ctrl+Shift+V is explicitly a 2025 addition. The default placement behind the last
+pasted object changed to placement in front in 2018b. This version split prevents
+claiming a same-coordinate append as ordinary Origin2016 Paste. These are [DOC]
+facts; no fresh Native measurement, COM retry or installation change was made.
+
+The first implementation is scoped in [T125](../tasks/T125-drawn-shape-clipboard.md)
+to one existing line/arrow/rectangle/ellipse. It remains open. A clicked anchor,
+physical dimensions across unequal layer frames, source/target attachment, exact
+2016 insertion order, Cut/history, focus precedence and clipboard lifetime still
+need an explicit tested contract. Current Shape coordinates are frame fractions;
+test-only graph-view coordinate helpers do not supply a production paste-point
+route. That route borders the active resize/drag/geometry ownership and must be
+coordinated before implementation. No Rust, model, renderer, IO or menu behavior
+changes in this audit; Cut/Copy remain grey and no new Paste shortcut is enabled.
+Multiple selection, Ctrl-drag, worksheet XY extraction, OLE/Copy Page and format
+copying are distinct routes outside this slice.
 
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 
@@ -4971,7 +5093,7 @@ Implemented in `crates/core/src/layers.rs` (`Graph::add_layer`, `Graph::delete_l
 - Delete follows 21.4: children are unlinked and keep their place on the page (the parent's rectangle for a layer that covers it; for an inset the inset's own place, **unmeasured**), later links are renumbered, no confirmation, undo text "Undelete frame". Deleting the **only** layer is refused (Origin's behaviour unmeasured). After a delete the active layer is the one before the deleted layer (or the first), a selection in a later layer moves up, a selection in the deleted layer is cleared, and Plot Details, Layer Contents, Plot Setup and the drawn-object window of that graph close.
 - Add makes the new layer active and clears the selection; one undo step each ("Create", "Undelete frame").
 - Layer Properties... (Format menu and layer icon) opens Plot Details on the layer's node with the Background tab. Sheaf's layer node keeps its Layer Contents and Legend tabs as well.
-- Still grey: Open Dialog... of New Layer(Axes), Show Active Layer Only and Set Active Layer By Layer Icon Only (effects unmeasured). Hide Layer is a reversible whole-layer toggle (21.13); Hide Other Layers still only hides plots and awaits a separate behavior check.
+- Still grey: Open Dialog... of New Layer(Axes), Show Active Layer Only and Set Active Layer By Layer Icon Only (effects unmeasured). Hide Layer is a reversible whole-layer toggle (21.13); Hide Other Layers toggles whole-layer isolation/show-all from the published contract in 21.14; its live 2016 behavior remains unmeasured.
 
 ### 21.10 How Sheaf draws a displaced Y axis (slice 2)
 
@@ -5089,7 +5211,31 @@ Each toggle uses one existing "Hide layer" Undo step (Sheaf policy; Origin's
 Undo behavior remains weakly established in 21.3). `.sheaf` and `.opj.sheaf`
 companions retain visibility; the native `.opj` hidden bit remains unmeasured,
 so saves explicitly warn that bare Origin files show the layer. Hide Other
-Layers and the two disabled icon-mode commands are separate follow-ups.
+Layers follows the published contract in 21.14; the disabled icon-mode commands remain separate follow-ups.
+
+### 21.14 Hide Other Layers (T61 follow-up, documented contract)
+
+The published [Origin guide](https://docs.originlab.com/origin-help/labels-data-layer-hide/)
+describes isolating the active layer through Hide Other Layers and displaying all layers
+by choosing the entry again. Layer visibility affects graph output as well as its window.
+This is a published-document check on 2026-11-16, not a new Origin2016 measurement:
+local COM activation is currently refused before creating a server instance.
+
+Sheaf's existing icon-menu command now uses `LayerDisplay.hidden`, preserving each
+plot's own visibility and all axis/display settings. One invocation shows the requested
+layer and hides every other whole layer; when it is already the only shown layer, the
+same entry shows all layers. Previously hidden siblings are shown by this second action,
+consistent with the documented show-all contract. Linked geometry stays fixed and the
+existing renderer, readers and native/companion save paths apply the same visibility.
+Each effective invocation is one existing "Hide other layers" Undo step.
+
+The check mark is derived from a visible target and all siblings being hidden. This
+avoids introducing a second mode state. Isolating a hidden target first shows that target;
+an all-hidden graph therefore isolates the requested layer on the first click. These
+edge choices are explicit Sheaf policies, unmeasured in Origin2016. A single-layer or
+stale/invalid request changes no document, history or revision. Selecting another icon
+does not automatically transfer isolation; the separate Show Active Layer Only and
+Set Active Layer By Layer Icon Only modes remain disabled pending verification.
 
 ## 22. Graph view modes, Show toggles and Full Screen (T66, measured 2026-11-15, Origin 2016)
 
@@ -5121,12 +5267,54 @@ Ctrl+Shift+J (View > Full Screen; the page right-click item "View Full Screen" h
 
 - The mode is per graph window and kept in `Project::view_modes` (Page View, the default, is not stored); it is saved in the `.sheaf` file, is not an undo step (undo and redo keep the mode now in effect), and is not written to `.opj` (the `page.viewmode` block of the OPJ format was not located: unmeasured).
 - Print View and Page View draw the same picture (as measured). Window View and Draft View give the page the window's aspect with its own width (layers grow with the window, text keeps its size, no grey border; the zoom layout works over the window grown by its 12 px margin). Draft View rasterises without anti-aliasing of the text (the lines and symbols stay as they were), as measured. **Not reproduced:** Origin's Window View smooths text differently from Page View (coarser, 22.2); Sheaf's Window View uses the normal rasteriser, so its text looks like Page View's. `page.width`/`layer.width` per mode is unmeasured, so Sheaf does not change the stored page size.
-- Show > Layer Icons toggles the existing page setting (`Plot Details > Miscellaneous > Show the layer icons`; one undo step). The other Show items and Show Data Info are grey.
+- Show > Layer Icons toggles the existing page setting (`Plot Details > Miscellaneous > Show the layer icons`; one undo step). Active Layer Only later shares the existing Hide Other Layers engine under22.7; the remaining Show items and Show Data Info are grey.
 - Full Screen: Sheaf's window goes to the whole screen and shows the page only (white ground, page fitted into the screen, no menu, toolbars, panels or status bar), the Reminder Message first (Enter or OK ends it; the tick is kept for the run only, Sheaf has no settings file yet), Esc ends it; Left/Right/Home/End switch between the graphs in window order as the reminder says (not measured beyond the reminder text; Right on the last graph does nothing).
 
 ### 22.6 What Sheaf took from this (T66, plan)
 
 Page View as Sheaf's current picture and the default; Window View (page stretched to the window, aspect not kept) and Draft View (the same with plain text) as in 22.2; modes saved in the `.sheaf` file; the Layer Icons tick; Full Screen with Esc and the reminder; leave the unmeasured Show items and Show Data Info grey until they are measured.
+
+### 22.7 Remaining Show contract audit and Active Layer Only wire-up (2026-11-17)
+
+The current official [hiding guide](https://docs.originlab.com/origin-help/labels-data-layer-hide/)
+explicitly gives View > Show > Active Layer Only and layer-icon Hide Other Layers
+as equivalent isolation/show-all routes. Hidden elements are excluded from output.
+The [hotkey reference](https://docs.originlab.com/origin-help/hotkey-in-origin/)
+assigns Ctrl+Alt+D with a multi-layer graph active. This supports wiring the menu
+and shortcut to the already-published21.14 engine without a second visibility model.
+The2016 menu label/default check observations in22.3 remain separate from this
+documentation contract; no new live2016 effect, shortcut or edge measurement is claimed.
+
+Sheaf resolves the current graph and active layer at command activation and calls
+the existing HideOtherLayers action. The check is derived from exactly that layer
+being visible and every other layer hidden. Toggling off shows all layers. A hidden
+target is shown when isolated; all-hidden is unchecked; fewer than two layers or
+an invalid active index disables the menu/shortcut. These are existing Sheaf21.14
+policies, including one history step, no-op guards and companion-only native layer
+visibility. Individual plot/axis flags, data, geometry and zoom/view mode are kept.
+Changing which layer is active does not introduce a persistent follow-active mode;
+that Native edge remains unmeasured. Only menu dispatch/check and read-only context
+data change. Two context-menu constructors supply an inert absent value; their
+graph/grid behavior and the visibility/render/IO engines are unchanged.
+
+The other nine entries remain disabled. The audit records these distinctions for
+their future implementation rather than treating them as equivalent toggles:
+
+- The [layer reference](https://docs.originlab.com/labtalk/ref/layer-obj/) defines
+  showData separately from showLabel. Hiding text/graphic labels through showLabel
+  retains their selectability, unlike deleting objects or hiding a whole layer.
+  Exact2016 menu scope, hit behavior, history and persistence remain unmeasured.
+- [Data Info](https://docs.originlab.com/origin-help/data-info-tool/) is a window
+  associated with reader/cursor data and worksheet metadata. The guide distinguishes
+  it from configurable hover tooltips introduced in2019. A generic hover tooltip
+  does not establish the2016 Show Data Info window/lifecycle contract.
+- The [system-variable reference](https://docs.originlab.com/labtalk/ref/sys-var-list/)
+  notes that Object Grid became Layer Grid in2020. Modern naming does not establish
+  which of the two distinct2016 menu entries controls the same overlay or settings.
+- [Master Page Layout](https://docs.originlab.com/origin-help/master-page-layout/)
+  describes a saved workspace-display toggle whose hidden master items still appear
+  in copy/print/export. The option depends on Use Master Items. This differs from
+  ordinary layer hiding; master-page state/rendering is not supplied in this slice.
 
 ## 23. View > Zoom All and the Tools-bar Scale In / Scale Out (T69, measured 2026-11-15, Origin 2016)
 
@@ -5282,11 +5470,98 @@ Pasted into an untouched graph of the same data and read back (changed propertie
 ### 26.8 As built (T72 step 2)
 
 - Core `crates/core/src/format_clip.rs`: a copy holds the formatted values of every layer (or of one axis) and the groups the choice copies; a paste applies the groups it asks for that the copy holds. Groups: Dimensions (layer left, top, width; page width, not heights), Scales (scale type, limits, steps, reverse, first tick, minor ticks, rescale margin, both axes), Colors, Fonts (family, size, bold, italic; colours stay), Background (layer colour, gradient, border), Thickness (axis line and tick width), Symbol/Line/Fill (the plots' whole line and symbol style), Text (the words of the text labels). All = all eight; All Style Formats = Colors, Fonts, Background, Thickness, Symbol/Line/Fill (no Dimensions, Scales, Text); Colors also takes the layer background colour and the plots' line and symbol colours; Fonts takes tick-label, title, legend and text fonts.
-- Sheaf's own choices where Origin was not measured: layers and plots are paired by position, surplus target layers and plots are left as they are, surplus source ones are dropped; text labels are paired by position and are never created; a paste that changes nothing makes no undo step; the y axis follows Scales; the fill under a curve is not part of Symbol/Line/Fill. The clipboard is inside the program (a second Sheaf window does not see it, and it does not survive a restart, which Origin's does).
+- Sheaf's own choices where Origin was not measured: layers and plots are paired by position, surplus target layers and plots are left as they are, surplus source ones are dropped; text labels are paired by position and are never created; a paste that changes nothing makes no undo step; the y axis follows Scales; the fill under a curve is not part of Symbol/Line/Fill. The clipboard stays internal; the private profile snapshot now survives a restart (26.10). Another running instance does not automatically refresh its in-memory copy.
 - Enabled (measured behaviour): Edit > Copy Format ▸ All, All Style Formats, Colors, Fonts, Background, Dimensions, Scales; Edit > Paste Format... (the Apply Formats window: Apply From Clipboard, one check box per group the clipboard holds or Scales and Styles for an axis format, Apply To for an axis, Undo Apply, Apply, Close; the grid Origin shows for a graph format is unmeasured, so this window is Sheaf's reading of it); page menu Copy Format (same items) and Paste Format; axis menu Copy Format ▸ All and Paste Format To ▸ All. One undo step "Apply Theme" each.
-- Left greyed (not measured): Symbol/Line/Fill and Text (Edit), Page Background and Legend Translation Mode (page), axis Styles, Scales, Dimensions and the eleven other Paste Format To choices, the page menu's Paste Format To submenus, all of the legend's Copy Format (Styles, Dimensions, All).
+- Left greyed (not measured): Symbol/Line/Fill and Text (Edit), Page Background and Legend Translation Mode (page), axis Dimensions and other Paste Format To choices (Scales/Styles follow-ups are26.9/26.11), the page menu's Paste Format To submenus, all of the legend's Copy Format (Styles, Dimensions, All).
 
 - Added after review: Edit > Copy Format with an axis selected copies an axis format (All, All Style Formats and Scales map to the axis parts; Colors, Fonts, Background and Dimensions copy nothing, since an axis format for them is unmeasured); the context menus and Paste Format To follow the clipboard kind. Colors and axis styles also carry the "follows plot colour" flags (Sheaf's reading; unmeasured in Origin). Dimensions pastes a layer frame only between layers of the same kind (root to root, linked to linked) because a linked frame is relative to its parent; mixed pairs are left alone (unmeasured in Origin).
+
+### 26.9 Axis scale-only context entries (T72 follow-up)
+
+The axis Copy Format and Paste Format To submenus now enable Scales through the
+existing AxisPart::Scales capture/apply path. Origin2016 menu presence and the
+All operation are measured in 26.2/26.4. The
+[official selective-copy guide](https://docs.originlab.com/origin-help/copypaste-format/)
+describes choosing object properties; it does not establish the exact Scales
+per-choice whitelist. The following property mapping is existing Sheaf policy,
+not a new Native measurement. Live COM is unavailable; no retry or repair is made.
+
+Copy holds scale values only. Paste applies scale type, min/max, automatic-range
+policy, rescale margin, major step, minor-tick count, reversal and first tick to
+the selected axis only, and only if an axis clipboard contains scales. It leaves
+fonts, colours, thickness, title/text, data, other axes/layers and page geometry
+unchanged. A scale-only clipboard pasted with All still cannot supply styles;
+Scales pasted from All ignores its styles. Existing typed-clipboard and no-op
+guards retain one Apply Theme Undo step per effective paste and none for repeats
+or invalid targets. No core, persistent schema or clipboard lifecycle changes.
+
+Axis Styles later gains its context entries in26.11. Other still-grey choices
+remain deferred, including Dimensions, other property groups, legend and page crossing. Existing All and
+Apply Formats behavior remains. UI regressions check root/inset X/Y targets,
+partial capture/paste, full-graph preservation, Undo/Redo, repeated and stale
+requests; Native per-choice parity remains unmeasured.
+
+### 26.10 Format clipboard across restart (T72)
+
+The accepted Origin2016 observation in 26.1 establishes that a copied format can
+be pasted after restarting the reference application. Sheaf now retains that
+behavior through a private profile snapshot. The file name, JSON encoding,
+resource bounds, error handling and instance policy below are Sheaf choices,
+not measurements of Origin storage. No system clipboard format is used.
+
+Normal startup loads format-clipboard.json beside the existing profile settings.
+Startup.format_clipboard_path can instead select an isolated path; None keeps
+memory only and reads/writes nothing. Disabling recovery does not disable this
+separate clipboard. Only successful Copy Format requests save a version-1 JSON
+envelope containing the existing Core FormatClip. Graph groups and axis
+styles/scales flags survive exactly; unavailable groups cannot be pasted merely
+because a stored axis contains other captured fields. Stale/invalid copy requests
+leave the held snapshot alone. Copy still changes no document revision/history.
+
+The reader accepts at most 16 MiB. Missing/unreadable/corrupt/unknown-version or
+oversized records start empty and are not rewritten by loading. A new valid copy
+can replace a damaged record. Writes create a unique same-directory temporary
+file, synchronize it and rename it over the destination, with cleanup limited to
+the owned temporary file on failure. Oversized snapshots or I/O failures retain
+the current in-memory copy and report once until a save succeeds; the last
+successfully saved snapshot remains available at the next startup.
+
+There is no live file watcher: each app loads once, and the last successful writer
+controls the next startup. Paste, Undo/Redo, closing a project and Apply Formats
+do not save or clear the clipboard. Existing typed paste, scope, no-op and history
+rules remain; no Core/project/IO schema, menu, action or dialog behavior changes.
+Isolated tests exercise graph/partial-axis restarts after explicitly clearing
+memory, corrupt/unknown/oversized files, concurrent atomic replacement, failed
+writes with memory fallback and document/storage independence.
+
+### 26.11 Axis Styles context entries (T72 selective-format audit, 2026-11-17)
+
+The axis Copy Format > Styles and Paste Format To > Styles entries now call the
+existing AxisPart::Styles capture/apply path, already used by the Apply Formats
+window. Origin2016 menu names and All effects are measured in26.2/26.4; the
+[official selective-copy guide](https://docs.originlab.com/origin-help/copypaste-format/)
+documents object-specific groups but does not specify this exact Styles whitelist.
+The field group below remains existing Sheaf policy, not new Native2016 parity.
+No Core, clipboard lifecycle/profile, schema or Apply Formats-body change is made.
+
+Copy stores only the styles-available flag. Paste can apply axis colour and the
+axis/title follows-plot-colour flags; tick colour; axis/tick thickness; tick/title
+fonts including their colours; major/minor tick directions and lengths. It does
+not apply scale type, limits, range policy, steps/minor-tick count, reversal/first
+tick, raw title text, grids/display/labels, data, other axes/layers or geometry.
+Styles copied then pasted with All cannot supply scales. Styles pasted from All
+ignores its scales; a scales-only clipboard supplies no styles. Existing typed
+scope, stale-target and effective no-op checks preserve one Apply Theme Undo per
+real paste and no history for repeats or unavailable groups.
+
+The audit leaves Dimensions and legend formats deferred. The axis has no typed
+Dimensions group, so the graph Dimensions group is not substituted. The current
+[legend reference](https://docs.originlab.com/origin-help/pd-dialog-legendtitles-tab/)
+includes translation mode/custom-format settings in legend Copy Format > All;
+existing graph font groups alone do not establish that legend contract. The
+selective-copy guide also distinguishes raw inline escape formatting in text
+objects from copied object properties. No graph/axis/legend crossing, raw-text
+rewriting or invented property whitelist is introduced.
 
 ## 27. Colour scales and bubble scales: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (T80)
 

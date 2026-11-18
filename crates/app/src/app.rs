@@ -13,6 +13,7 @@ use crate::dialogs::cell_note::CellNoteDialog;
 use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::comparison_plot::{ComparisonPlotDialog, Outcome as ComparisonPlotOutcome};
 use crate::dialogs::cond_format::CondFormatDialog;
+use crate::dialogs::cond_manager::{CondManagerDialog, ManagerOutcome};
 use crate::dialogs::error_bars::{ErrorBarsDialog, Outcome as ErrorBarsOutcome};
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
 use crate::dialogs::export_excel::ExcelExportDialog;
@@ -30,6 +31,8 @@ use crate::dialogs::label_panels::{LabelPanelsDialog, Outcome as LabelPanelsOutc
 use crate::dialogs::mask_condition::MaskConditionDialog;
 use crate::dialogs::merge_graphs::{MergeGraphsDialog, Outcome as MergeGraphsOutcome};
 use crate::dialogs::multi_y::{MultiYDialog, Outcome as MultiYOutcome};
+use crate::dialogs::multipeak::{MultiPeakDialog, MultiPeakOutcome};
+use crate::dialogs::pivot::PivotDialog;
 use crate::dialogs::power::{PowerDialog, PowerOutcome};
 use crate::dialogs::printing::{PageSetupDialog, PageSetupOutcome, PreviewOutcome, PrintPreview};
 use crate::dialogs::recovery::{RecoveryChoice, RecoveryOffer};
@@ -98,6 +101,10 @@ pub struct Startup {
     /// The file of the recent projects and imports (`recent.json`); `None` keeps no lists and writes
     /// nothing (the tests pass a temporary file).
     pub recent_path: Option<PathBuf>,
+    /// Private format clipboard snapshot; None keeps it in memory only (including tests).
+    pub format_clipboard_path: Option<PathBuf>,
+    /// Reusable graph custom-color wells; None keeps only an in-memory collection.
+    pub custom_colors_path: Option<PathBuf>,
     /// The folder of saved dialog settings (`import-themes`: importer files and separate graph-export
     /// files); `None` hides the theme rows and writes nothing (tests pass a temporary folder).
     pub themes_dir: Option<PathBuf>,
@@ -190,11 +197,14 @@ pub struct SheafApp {
     row_filter: Option<RowFilterDialog>,
     mask_condition: Option<MaskConditionDialog>,
     cond_format: Option<CondFormatDialog>,
+    cond_manager: Option<CondManagerDialog>,
     pub(crate) cell_note: Option<CellNoteDialog>,
     pub(crate) cell_format: Option<CellFormatDialog>,
     pub(crate) worksheet_fonts: Option<WorksheetFontsDialog>,
     pub(crate) worksheet_color: Option<WorksheetColorDialog>,
     reshape: Option<ReshapeDialog>,
+    pivot: Option<PivotDialog>,
+    multi_peak: Option<MultiPeakDialog>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
     export_excel: Option<ExcelExportDialog>,
@@ -302,6 +312,8 @@ type ShapeLayerSnapshot = (WindowId, usize, Option<Vec<sheaf_core::shape::Shape>
 
 impl SheafApp {
     pub fn new(cc: &eframe::CreationContext<'_>, startup: Startup) -> Self {
+        crate::format_clip_ui::initialize(startup.format_clipboard_path.clone());
+        crate::custom_colors::initialize(startup.custom_colors_path.clone());
         theme::apply(&cc.egui_ctx);
         let startup_dirs = startup.mcp_dirs.clone().unwrap_or_default();
         let recent_path = startup.recent_path.clone();
@@ -345,11 +357,14 @@ impl SheafApp {
             row_filter: None,
             mask_condition: None,
             cond_format: None,
+            cond_manager: None,
             cell_note: None,
             cell_format: None,
             worksheet_fonts: None,
             worksheet_color: None,
             reshape: None,
+            pivot: None,
+            multi_peak: None,
             export: None,
             export_sheet: None,
             export_excel: None,
@@ -892,11 +907,14 @@ impl SheafApp {
         self.row_filter = None;
         self.mask_condition = None;
         self.cond_format = None;
+        self.cond_manager = None;
         self.cell_note = None;
         self.cell_format = None;
         self.worksheet_fonts = None;
         self.worksheet_color = None;
         self.reshape = None;
+        self.pivot = None;
+        self.multi_peak = None;
         self.sort = None;
         self.sheet_name = None;
         self.import = None;
@@ -2139,6 +2157,24 @@ impl SheafApp {
                 let rows = if columns.is_empty() { None } else { self.selected_sort_rows(book) };
                 self.sort = SortDialog::nested_in_rows(self.doc.project(), book, columns, rows);
             }
+            Action::PivotTable { book, columns } => self.pivot = PivotDialog::new(&self.doc, book, columns),
+            Action::MultiPeakFit { graph, y, layer } => {
+                let graph = match graph {
+                    Some(g) => Some(g),
+                    // From a worksheet: a line graph of the column first, as Origin makes one.
+                    None => self
+                        .doc
+                        .edit("Plot", |p| p.plot_columns(sheaf_core::template::Template::Line, &[y]))
+                        .map_err(|e| self.warn(e.to_string()))
+                        .ok(),
+                };
+                if let Some(graph) = graph {
+                    self.multi_peak = MultiPeakDialog::new(self.doc.project(), graph, y, layer);
+                    if self.multi_peak.is_none() {
+                        self.warn("The graph has no plot of that column");
+                    }
+                }
+            }
             Action::Reshape { book, columns, kind } => {
                 self.reshape = ReshapeDialog::new(&self.doc, book, kind, columns);
             }
@@ -2226,6 +2262,7 @@ impl SheafApp {
                 }
                 Err(why) => self.warn(why),
             },
+            Action::CondFormatManager(book) => self.cond_manager = CondManagerDialog::new(&self.doc, book),
             Action::RemoveCondFormat(book) => match self.cond_range(book) {
                 Ok(range) => {
                     let has = self
@@ -3957,6 +3994,55 @@ impl SheafApp {
         grid::note_cell(state, sheet)
     }
 
+    /// Multiple Peak Fit: while picking, the graph's Data Reader is on and its pinned point becomes a
+    /// peak centre on a double-click (outside the Get Points window) or Enter.
+    fn multi_peak_frame(&mut self, ctx: &egui::Context) {
+        let Some(d) = &mut self.multi_peak else { return };
+        if d.picking {
+            let (enter, double) = ctx.input(|i| {
+                let double = i.pointer.button_double_clicked(egui::PointerButton::Primary)
+                    && i.pointer.interact_pos().is_some_and(|p| !d.window_rect.is_some_and(|r| r.contains(p)));
+                (i.key_pressed(egui::Key::Enter), double)
+            });
+            let state = self.graphs.entry(d.graph).or_default();
+            state.reader = true;
+            if (enter || double)
+                && let Some(point) = state.reader_point
+            {
+                d.pick(self.doc.project(), point);
+            }
+        }
+        let graph = d.graph;
+        match d.show(ctx, &mut self.doc) {
+            MultiPeakOutcome::Open => {}
+            MultiPeakOutcome::StartPicking => {
+                self.graphs.entry(graph).or_default().reader = true;
+                self.focus(graph);
+            }
+            MultiPeakOutcome::Closed => {
+                self.multi_peak = None;
+                if let Some(s) = self.graphs.get_mut(&graph) {
+                    s.reader = false;
+                    s.reader_point = None;
+                }
+            }
+            MultiPeakOutcome::Done(report) => {
+                self.multi_peak = None;
+                if let Some(s) = self.graphs.get_mut(&graph) {
+                    s.reader = false;
+                    s.reader_point = None;
+                }
+                if let Some(sheet) = report.new_sheet {
+                    self.show_sheet(report.book, sheet);
+                }
+                self.focus(graph);
+                self.logs.result(report.message.clone(), report.notes.clone());
+                self.panels.reveal(PanelId::Results);
+                self.say(report.message);
+            }
+        }
+    }
+
     fn show_sheet(&mut self, book: WindowId, sheet: usize) {
         self.doc.adjust_view(|p| {
             if let Some(b) = p.workbook_mut(book) {
@@ -4150,6 +4236,14 @@ impl SheafApp {
             }),
             view_mode: graph.map(|g| project.view_mode(g)).unwrap_or_default(),
             layer_icons: graph.and_then(|g| project.graph(g)).is_none_or(|g| g.page.style.layer_icons),
+            active_layer_only: graph.and_then(|id| {
+                let g = project.graph(id)?;
+                let layer = self.graphs.get(&id).map_or(0, |s| s.active_layer);
+                if g.layers.len() < 2 || layer >= g.layers.len() {
+                    return None;
+                }
+                Some(g.layers.iter().enumerate().all(|(i, l)| l.display.hidden == (i != layer)))
+            }),
             can_color_scale: graph.is_some_and(|g| {
                 let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
                 project.graph(g).and_then(|gr| gr.layers.get(layer)).is_some_and(|l| {
@@ -4367,11 +4461,14 @@ impl SheafApp {
             || self.row_filter.is_some()
             || self.mask_condition.is_some()
             || self.cond_format.is_some()
+            || self.cond_manager.is_some()
             || self.cell_note.is_some()
             || self.cell_format.is_some()
             || self.worksheet_fonts.is_some()
             || self.worksheet_color.is_some()
             || self.reshape.is_some()
+            || self.pivot.is_some()
+            || self.multi_peak.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
             || self.export_excel.is_some()
@@ -4902,6 +4999,18 @@ impl SheafApp {
                 }
             }
         }
+        self.multi_peak_frame(ctx);
+        if let Some(d) = &mut self.pivot {
+            let book = d.book;
+            match d.show(ctx, &mut self.doc) {
+                ReshapeOutcome::Open => {}
+                ReshapeOutcome::Closed => self.pivot = None,
+                ReshapeOutcome::Done(sheet) => {
+                    self.pivot = None;
+                    self.show_sheet(book, sheet);
+                }
+            }
+        }
         if let Some(d) = &mut self.reshape {
             let book = d.book;
             match d.show(ctx, &mut self.doc) {
@@ -4910,6 +5019,16 @@ impl SheafApp {
                 ReshapeOutcome::Done(sheet) => {
                     self.reshape = None;
                     self.show_sheet(book, sheet);
+                }
+            }
+        }
+        if let Some(d) = &mut self.cond_manager {
+            match d.show(ctx, &mut self.doc) {
+                ManagerOutcome::Open => {}
+                ManagerOutcome::Closed => self.cond_manager = None,
+                ManagerOutcome::EditRule { sheet, index } => {
+                    let book = d.book;
+                    self.cond_format = CondFormatDialog::edit(&self.doc, book, sheet, index);
                 }
             }
         }

@@ -29,6 +29,7 @@
 mod actions;
 mod app;
 mod autosave;
+mod custom_colors;
 mod data_tools;
 mod dialogs;
 mod format_clip_ui;
@@ -75,6 +76,8 @@ fn main() -> eframe::Result {
         recovery_dir: sheaf_io::recovery::default_dir(),
         settings_path: sheaf_io::recovery::default_settings_path(),
         recent_path: sheaf_io::recent::default_path(),
+        format_clipboard_path: format_clip_ui::default_path(),
+        custom_colors_path: custom_colors::default_path(),
         themes_dir: sheaf_io::themes::default_dir(),
         templates_dir: sheaf_io::user_templates::default_dir(),
         graph_themes_dir: sheaf_io::graph_themes::default_dir(),

@@ -1,12 +1,53 @@
 # T72: Copy Format and Paste Format on graphs (B2, slice 1)
 
-**Status:** partly done (step 1 2026-11-16: Origin measured, spec graphing 26; step 2: core `format_clip.rs`, `format_clip_ui.rs`, menus and Apply Formats window built with the measured items enabled, see graphing 26.8). Open: the unmeasured choices (still greyed, listed in greyed-items.md as T72), the legend, graph/axis crossing, persistence of the clipboard.
+**Status:** partly done (step 1 2026-11-16: Origin measured, spec graphing 26; step 2: core `format_clip.rs`, `format_clip_ui.rs`, menus and Apply Formats window built with the measured items enabled, see graphing 26.8). Open: the unmeasured choices (still greyed, listed in greyed-items.md as T72), the legend, graph/axis crossing and live cross-instance sharing.
 **Size:** M. **Priority:** wave 4 (B2). **Spec:** graphing 26. **Inventory:** the Edit menu's Copy
 Format (nine choices) and Paste Format... [Graph]; Graph axis, legend and page > Copy Format.
 Not in this slice (stay `B2`): object cut/copy/paste, align, same size, group, order across kinds,
 snap to grid, Object Properties. Not in this slice (stay `B11`): Save Format as Theme... and
 Theme files. A Codex session edits drawn-shape selection and resize handles in `graph_view.rs`: put
 new code in new modules and keep the hooks there minimal.
+
+Axis scale-only follow-up (codex/t72-format-remainders, 2026-11-16): axis
+Copy Format > Scales and Paste Format To > Scales reuse the existing typed engine
+and its scale-property group. The 2016 measurements establish menu presence and
+the All operation; the exact per-choice field list remains explicit Sheaf policy,
+not new Native parity (graphing26.9). Styles, Dimensions and all other unmeasured
+choices remain disabled. No core/schema/clipboard/dialog or geometry changes.
+Fmt, strict workspace/all-target Clippy and all 4,372 tests pass (eight ignored), including all three new root/inset X/Y UI regressions and all 13 existing format-clipboard regressions. Inventory281 (T72=23), eight Python tests and frozen 913 source/fixture/asset files pass. Current baseline/scaled/restored desktop and PNG/SVG exports were inspected; scale-only changes retain the blue target style, and restored pixels match exactly. Complete graphs survive .sheaf and OPJ companion saves. All own builders/apps/helpers are terminal; only this slice is complete and remaining choices stay deferred.
+
+Clipboard restart follow-up (codex/t72-clipboard-persistence, 2026-11-16): a
+private profile snapshot restores the existing typed graph/axis clipboard at app
+startup, following the accepted restart observation in 26.1. Graph groups and
+partial-axis flags, read-only copy and existing paste/history remain. Explicit
+Startup paths isolate tests; None stays memory-only. Versioned bounded JSON,
+atomic replacement, corrupt-file handling, last successful writer and write-error
+memory fallback are explicit Sheaf policies (26.10), with no system clipboard or
+live watcher. No Core/IO/schema/engine/menu/action/Apply Formats changes. Eight
+new storage/UI regressions and all 13 prior clipboard regressions pass focused;
+fmt, strict workspace/all-target Clippy, all 4,380 tests (eight ignored), inventory281 and eight Python tests pass with all 915 source/fixture/asset files frozen. Fresh private-profile Source Copy and restarted Graph Paste were driven through owned accessibility controls; partial-axis startup also exposes only available groups. Three apps/guards exit0; actual saved graph and Undo models match complete expected snapshots, and both restored exports match every pixel. Clipboard hashes/write timestamps remain unchanged by load/paste/Undo. Two helper menu-name pilots are excluded; product source was unchanged. Only this slice is complete; live instance refresh and other unmeasured choices stay open.
+
+Axis Styles follow-up (codex/t72-selective-format-audit, 2026-11-17): the two
+axis context Styles entries call the existing AxisPart::Styles engine. Only
+their menu functions change; graphing26.11 documents the existing field group
+as Sheaf policy under the official selective-copy contract, without new
+Native2016 per-choice parity. Scales/raw title/data/geometry/other axes/layers
+remain outside a Styles paste. Typed availability, no-op, stale and history
+rules are reused. Axis Dimensions has no typed group, and legend copying also
+needs translation/custom-format properties; both remain deferred rather than
+being mapped to a graph font/dimension group. Clipboard storage/lifecycle,
+Core/IO/schema and Apply Formats behavior remain unchanged.
+Fmt, strict workspace/all-target Clippy, all4,451 tests (eight ignored),
+inventory272 and eight Python tests pass with all927 source/fixture/asset hashes
+frozen. Three new root/inset X/Y regressions cover partial availability, exact
+existing style fields with preserved scales/title/whole graph, Undo/Redo,
+idempotence, unavailable groups and stale targets. The partial-group negative
+control deliberately changes target styles before paste. Existing clipboard
+regressions remain intact apart from Styles availability. Fresh private-profile
+desktop context Copy Styles and restarted context Paste Styles/Undo match saved
+whole graphs, with unchanged clipboard hash/timestamp and exact restored exports.
+Owned client-only mouse messages and accessibility actions target verified app
+identities; both apps and guards close0. Initial test-constant pilots are excluded.
 
 ## Goal
 

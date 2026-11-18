@@ -3,7 +3,8 @@
 //! `\f:Name(..)` font switch, `\x(hhhh)` a character by its code, `\v(..)` literal text; the
 //! `\u(..)` underline, `\s(..)` strikethrough and `\cN(..)` indexed or RGB text color.
 //! `\=(sub,sup)` places paired scripts in one shared column. Escapes nest. A backslash
-//! that does not start one of these escapes is literal.
+//! that does not start one of these escapes is literal. The two prime escapes insert
+//! Unicode prime characters through the same styled glyph path.
 
 use sheaf_core::Color;
 
@@ -144,6 +145,8 @@ enum Escape {
     Unicode,
     /// `\(nnn)`: one character given by its decimal code, for example `\(40)` for `(`.
     Decimal,
+    /// One of the two exact prime escapes, emitted without Greek remapping.
+    Prime(char),
 }
 
 /// Longest font name accepted in `\f:Name(..)`; longer text is not an escape.
@@ -192,6 +195,11 @@ fn escape_at(chars: &[char], pos: usize, st: &Style) -> Option<(Escape, usize)> 
             '=' => Escape::Pair,
             'v' => Escape::Literal,
             'x' => Escape::Unicode,
+            'y' if chars.get(pos + 4) == Some(&')') => match chars.get(pos + 3) {
+                Some('\'') => Escape::Prime('\u{2032}'),
+                Some('"') => Escape::Prime('\u{2033}'),
+                _ => return None,
+            },
             _ => return None,
         };
         return Some((esc, pos + 3));
@@ -355,6 +363,10 @@ fn parse_seq(chars: &[char], pos: &mut usize, st: Style, in_escape: bool, depth:
                         Some(ch) => push(out, ch, &Style { greek: false, ..st.clone() }),
                         None => format!("\\x({code})").chars().for_each(|c| push(out, c, &st)),
                     }
+                }
+                Escape::Prime(ch) => {
+                    take_enclosed(chars, pos);
+                    push(out, ch, &Style { greek: false, ..st.clone() });
                 }
                 Escape::Decimal => {
                     let code = take_enclosed(chars, pos);

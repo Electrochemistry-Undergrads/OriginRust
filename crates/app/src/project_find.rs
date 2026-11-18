@@ -23,6 +23,7 @@ pub struct FindSpec {
     pub graphs: bool,
     pub books: bool,
     pub sheets: bool,
+    pub sheet_comments: bool,
     pub columns: bool,
     /// Column attributes off by default in Origin: Units and F(x).
     pub column_units: bool,
@@ -41,6 +42,7 @@ impl Default for FindSpec {
             graphs: true,
             books: true,
             sheets: true,
+            sheet_comments: true,
             columns: true,
             column_units: false,
             column_formula: false,
@@ -184,8 +186,12 @@ pub fn find_in_project(project: &Project, spec: &FindSpec) -> Vec<FindHit> {
         }
         for (si, s) in b.sheets.iter().enumerate() {
             if spec.sheets {
-                for (attr, text) in [("Short Name", s.name.as_str()), ("Long Name", s.long_name.as_str())] {
-                    if spec.matches(text) {
+                for (attr, text, enabled) in [
+                    ("Short Name", s.name.as_str(), true),
+                    ("Long Name", s.long_name.as_str(), true),
+                    ("Comments", s.comments.as_str(), spec.sheet_comments),
+                ] {
+                    if enabled && spec.matches(text) {
                         hits.push(FindHit {
                             range: format!("[{}]{}", b.name, s.name),
                             element: "Sheet",
@@ -299,6 +305,28 @@ mod tests {
         assert!(find(&p, text("30")).is_empty(), "off by default");
         let cells = FindSpec { data_cells: true, ..text("0") };
         assert_eq!(find(&p, cells).iter().filter(|h| h.2 == "Data Cells").count(), 1);
+    }
+
+    #[test]
+    fn worksheet_comments_search_the_full_text_and_respect_metadata_switches() {
+        let mut p = project();
+        let book = p.workbooks().next().unwrap().id;
+        let mut control = sheaf_core::Worksheet::new("Control");
+        control.long_name = "Baseline reference".into();
+        control.comments = "Second sweep\nBaseline and baseline drift".into();
+        p.workbook_mut(book).unwrap().sheets.push(control);
+
+        let spec = FindSpec { whole_word: true, ..text("BASELINE") };
+        let hits = find_in_project(&p, &spec);
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].attribute, "Long Name");
+        assert_eq!(hits[1].attribute, "Comments");
+        assert_eq!(hits[1].element, "Sheet");
+        assert_eq!(hits[1].target, FindTarget::Sheet { book, sheet: 1 });
+        let names = FindSpec { sheet_comments: false, ..spec.clone() };
+        assert_eq!(find_in_project(&p, &names), hits[..1]);
+        let no_sheets = FindSpec { sheets: false, ..spec };
+        assert!(find_in_project(&p, &no_sheets).is_empty());
     }
 
     #[test]

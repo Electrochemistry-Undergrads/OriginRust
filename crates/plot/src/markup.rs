@@ -2,7 +2,8 @@
 //! `\+(..)` superscript, `\-(..)` subscript, `\g(..)` Greek, `\pN(..)` size in percent,
 //! `\f:Name(..)` font switch, `\x(hhhh)` a character by its code, `\v(..)` literal text; the
 //! `\u(..)` underline, `\s(..)` strikethrough and `\cN(..)` indexed or RGB text color.
-//! `\=(sub,sup)` places paired scripts in one shared column. Escapes nest. A backslash
+//! `\=(sub,sup)` places paired scripts in one shared column. `\ab(..)` draws an overbar.
+//! Escapes nest. A backslash
 //! that does not start one of these escapes is literal. The two prime escapes insert
 //! Unicode prime characters through the same styled glyph path.
 
@@ -61,6 +62,7 @@ const MAX_DEPTH: usize = 24;
 pub(crate) enum Segment {
     Text(Run),
     Pair { sub: Vec<Segment>, sup: Vec<Segment> },
+    Overbar { content: Vec<Segment>, scale: f64, color: Option<Color> },
 }
 
 /// Splits label text into styled runs, with paired scripts in logical sub/sup order.
@@ -74,6 +76,7 @@ pub fn parse(text: &str) -> Vec<Run> {
                     flatten(sub, out);
                     flatten(sup, out);
                 }
+                Segment::Overbar { content, .. } => flatten(content, out),
             }
         }
     }
@@ -140,6 +143,8 @@ enum Escape {
     Styled(Style),
     /// A shared column containing subscript, then superscript, separated by the first outer comma.
     Pair,
+    /// A decorated span with a shared bar over its contents.
+    Overbar,
     /// `\v(..)`: the text is taken as it is, without escapes.
     Literal,
     /// `\x(hhhh)`: one character given by its hexadecimal code.
@@ -163,6 +168,9 @@ fn escape_at(
 ) -> Option<(Escape, usize)> {
     let mut inner = st.clone();
     let code = *chars.get(pos + 1)?;
+    if chars.get(pos + 1..pos + 4) == Some(&['a', 'b', '(']) {
+        return Some((Escape::Overbar, pos + 4));
+    }
     if code == '(' {
         return Some((Escape::Decimal, pos + 2));
     }
@@ -336,6 +344,13 @@ fn parse_seq(
             *pos = start;
             match esc {
                 Escape::Styled(inner) => parse_seq(chars, pos, inner, true, depth + 1, out, expand_family),
+                Escape::Overbar => {
+                    let mut content = Vec::new();
+                    parse_seq(chars, pos, st.clone(), true, depth + 1, &mut content, expand_family);
+                    if !content.is_empty() {
+                        out.push(Segment::Overbar { content, scale: st.scale, color: st.color });
+                    }
+                }
                 Escape::Pair => {
                     let body: Vec<char> = take_enclosed(chars, pos).chars().collect();
                     let mut nesting = 0usize;

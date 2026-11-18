@@ -64,6 +64,15 @@ pub(crate) fn lines(text: &str) -> Vec<String> {
     out
 }
 
+/// A standalone `\sep:nn` adds this percentage of font height before the next entry.
+pub(crate) fn separation_percent(line: &str) -> Option<u32> {
+    let number = line.trim().strip_prefix("\\sep:")?;
+    if !number.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    number.parse().ok()
+}
+
 /// The ids of the plots the legend of layer `index` lists, given the number of drawable plots of
 /// each layer (see [`Graph::legend_ids`]).
 pub(crate) fn ids(g: &Graph, index: usize, plots_in: &dyn Fn(usize) -> usize) -> Vec<String> {

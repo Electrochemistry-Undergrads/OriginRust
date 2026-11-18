@@ -1648,7 +1648,13 @@ enum Cell {
     Text(String, f64),
 }
 
-/// Draws legend `lg` inside frame `f`: one row per line of its text (the automatic text has one
+struct LegendRow {
+    cells: Vec<Cell>,
+    width: f64,
+    separation_before: f64,
+}
+
+/// Draws legend `lg` inside frame `f`: one row per entry line (the automatic text has one
 /// line per plot), in `lg.columns` columns filled top to bottom. `ids` name the entries as
 /// `\l(n)` and `%(n)` refer to them.
 #[allow(clippy::too_many_arguments)]
@@ -1693,8 +1699,13 @@ fn draw_legend(
             Legend::automatic_text(ids)
         }
     });
-    let mut rows: Vec<(Vec<Cell>, f64)> = Vec::new();
+    let mut rows = Vec::new();
+    let mut separation_before = 0.0;
     for line in legend::lines(&text) {
+        if let Some(percent) = legend::separation_percent(&line) {
+            separation_before += f64::from(percent) / 100.0 * fs;
+            continue;
+        }
         let mut cells: Vec<Cell> = Vec::new();
         let mut pending = String::new();
         let mut after_symbol = false;
@@ -1740,18 +1751,29 @@ fn draw_legend(
                 Cell::Text(_, w) => *w + if i > 0 && matches!(cells[i - 1], Cell::Sample(_)) { gap } else { 0.0 },
             };
         }
-        rows.push((cells, width));
+        rows.push(LegendRow { cells, width, separation_before: std::mem::take(&mut separation_before) });
     }
     if rows.is_empty() {
         return;
     }
     let per_col = rows.len().div_ceil((lg.columns.max(1) as usize).min(rows.len()));
     let n_cols = rows.len().div_ceil(per_col);
-    let col_w: Vec<f64> = (0..n_cols)
-        .map(|c| rows[c * per_col..((c + 1) * per_col).min(rows.len())].iter().map(|r| r.1).fold(0.0, f64::max))
-        .collect();
+    let mut col_w = Vec::with_capacity(n_cols);
+    let mut row_centers = Vec::with_capacity(rows.len());
+    let mut content_height: f64 = 0.0;
+    for column in rows.chunks(per_col) {
+        let mut extra = 0.0;
+        for (i, row) in column.iter().enumerate() {
+            if i > 0 {
+                extra += row.separation_before;
+            }
+            row_centers.push(row_h * (i as f64 + 0.5) + extra);
+        }
+        col_w.push(column.iter().map(|row| row.width).fold(0.0, f64::max));
+        content_height = content_height.max(row_h * column.len() as f64 + extra);
+    }
     let w = 2.0 * pad + col_w.iter().sum::<f64>() + col_gap * (n_cols - 1) as f64;
-    let h = 2.0 * pad + row_h * per_col as f64;
+    let h = 2.0 * pad + content_height;
 
     // Margin from the nearest frame edges; ticks pointing in push the legend further.
     let m_left = 0.8 * fs + ticks.left.unwrap_or(0.0);
@@ -1774,14 +1796,14 @@ fn draw_legend(
         let stroke = lg.frame.then(|| Stroke::solid(lg.font.color, 0.75));
         out.push(Item::Rect { rect: Rect { x: x0, y: y0, w, h }, fill: lg.background, stroke });
     }
-    for (r, (cells, _)) in rows.iter().enumerate() {
-        let (col, row) = (r / per_col, r % per_col);
+    for (r, row) in rows.iter().enumerate() {
+        let col = r / per_col;
         let col_x = x0 + pad + col_w[..col].iter().sum::<f64>() + col_gap * col as f64;
-        let cy = y0 + pad + row_h * (row as f64 + 0.5);
+        let cy = y0 + pad + row_centers[r];
         let baseline = cy + (ASCENT - DESCENT) / 2.0 * fs;
         let mut x = col_x;
         let mut after_symbol = false;
-        for cell in cells {
+        for cell in &row.cells {
             match cell {
                 Cell::Sample(k) => {
                     let (sx0, sx1) = (x, x + sample);

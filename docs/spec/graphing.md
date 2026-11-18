@@ -6096,3 +6096,17 @@ Origin 2016's Graph menu has New Table, which puts a table object on the graph. 
 - **Model:** a table is a free text label with `table: true`. Its lines are the rows and tabs part the
   cells, so it saves with the project. The .opj writer writes it as a text label.
 
+## Text label order: Bring to the front / Push to the back (T137, 2026-11-18, **not measured**)
+
+A graph text label's right-click menu (Origin 2016) has Bring to the front and Push to the back. The
+labels of a layer are drawn in list order, so the last one is drawn on top.
+
+- **Bring to the front** moves the label to the end of its layer's labels; **Push to the back** moves it to
+  the start. Each is one undo step ("Bring text to front", "Push text to back").
+- **Selection:** the label stays selected at its new place, and another selected label of the layer keeps
+  pointing at the same label.
+- **Tables:** tables (T136) are labels and order the same way.
+- **Scope:** the order is among the layer's text labels only. Drawn shapes have their own order (T24), and
+  across kinds the drawing order stays legend, labels, then shapes. Origin's order across object kinds is
+  not measured.
+

@@ -150,6 +150,9 @@ pub enum GraphOp {
     DeleteScale { layer: usize, scale: usize },
     /// Move a drawn object to the top or bottom of its own layer's shape stack.
     OrderShape { layer: usize, shape: usize, front: bool },
+    /// A text label's Bring to the front / Push to the back (T137): the top or bottom of its layer's labels,
+    /// which are drawn in order.
+    OrderLabel { layer: usize, label: usize, front: bool },
     /// Hide Layer (every plot of the layer is hidden).
     HideLayer { layer: usize },
     /// Hide Other Layers.

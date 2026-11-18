@@ -9074,6 +9074,7 @@ mod fit_organizer;
 mod function_graph;
 mod graph_table;
 mod graph_themes;
+mod label_order;
 mod new_from_template;
 mod options;
 mod qc_chart;

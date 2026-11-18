@@ -852,7 +852,12 @@ Measured in Origin 2016 by right-clicking a sheet tab (`tools/origin-ref/origin-
 `@RCLICK`/`@CLICK`/`@SHOT`, `re-workspace/scratch/t90`, local only) and copied in `sheaf_core::sheet_tab`:
 
 - A sheet has a short name and a **long name** (`wks.longname$`). Sheaf keeps it in `Worksheet::long_name`
-  (saved in `.sheaf`; Name and Comments... has a Long Name field; sheet comments are not kept yet).
+  (saved in `.sheaf`; Name and Comments... has a Long Name field).
+- Name and Comments also edits plain-text, multiline worksheet comments. OK saves the draft
+  with the sheet's names in one undo step. Cancel discards it. The tab tooltip shows the
+  names and the nonempty comments. Sheaf preserves comments when duplicating a sheet or
+  replacing its imported data. The editor and tab hover are documented for Origin 2019b
+  and earlier. [Origin worksheet Name and Comments](https://docs.originlab.com/quick-help/add-worksheet-comment-name/)
 - **Sheet Name to Show** has three items in Origin 2016: Long Name if available, Short Name (ticked for a
   new sheet) and Long Name (the greyed inventory had listed "Both", which Origin 2016 does not have). The
   choice is **per sheet**: Long Name on Sheet1 showed "Potential scan" on its tab and left Sheet2's tab
@@ -865,8 +870,9 @@ Measured in Origin 2016 by right-clicking a sheet tab (`tools/origin-ref/origin-
   designations, long names, units and formulas (`i*2` stayed, the cells were empty). Sheaf also keeps
   formats, widths, user parameters, conditional and cell formats, and drops values, masks, notes and the
   filter. One undo step ("Duplicate sheet without data").
-- The `.opj` written here does not hold the long name or the choice: the save warning names the sheets,
-  and the companion keeps them.
+- The `.opj` writer reports sheet names, tab display choices and comments it cannot represent.
+  The `.opj.sheaf` companion preserves them. Native `.sheaf` files store the comments directly.
+  Older files without this field load with empty comments.
 - **Navigate...** (T93) opens "Navigate Worksheets - Book1" in Origin 2016: a table of the sheets (Index,
   Creation Index, Name with the short name, Columns, Size(KB), Comments, Type "Flat Sheet", Source), the
   active sheet selected, an Actions menu and Apply Reorder (greyed), OK and Close. Sheaf's window has Index,

@@ -29,6 +29,9 @@ pub struct Worksheet {
     /// asks for it (T90).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub long_name: String,
+    /// Plain-text comments about the whole sheet, edited from its tab (T90).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub comments: String,
     /// The sheet tab's Sheet Name to Show, per sheet as in Origin 2016.
     #[serde(default, skip_serializing_if = "crate::sheet_tab::SheetLabel::is_default")]
     pub tab_label: crate::sheet_tab::SheetLabel,
@@ -65,6 +68,7 @@ impl Worksheet {
         Worksheet {
             name: name.into(),
             long_name: String::new(),
+            comments: String::new(),
             tab_label: Default::default(),
             view: Default::default(),
             columns: Vec::new(),
@@ -220,6 +224,17 @@ impl Workbook {
 mod tests {
     use super::*;
     use crate::column::ColumnData;
+
+    #[test]
+    fn worksheet_comments_default_to_empty_and_preserve_multiline_text() {
+        let mut sheet: Worksheet = serde_json::from_str(r#"{"name":"Sheet1","columns":[]}"#).unwrap();
+        assert!(sheet.comments.is_empty());
+        assert!(serde_json::to_value(&sheet).unwrap().get("comments").is_none());
+        sheet.comments = "  Run at 25 °C\nSecond sweep.\n".into();
+        let saved = serde_json::to_string(&sheet).unwrap();
+        let opened: Worksheet = serde_json::from_str(&saved).unwrap();
+        assert_eq!(opened, sheet);
+    }
 
     fn col(id: u64, name: &str, d: Designation) -> Column {
         Column::new(ColumnId(id), name, d, ColumnData::numeric(vec![0.0; id as usize]))

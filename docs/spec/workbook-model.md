@@ -876,8 +876,9 @@ Measured in Origin 2016 by right-clicking a sheet tab (`tools/origin-ref/origin-
 - **Navigate...** (T93) opens "Navigate Worksheets - Book1" in Origin 2016: a table of the sheets (Index,
   Creation Index, Name with the short name, Columns, Size(KB), Comments, Type "Flat Sheet", Source), the
   active sheet selected, an Actions menu and Apply Reorder (greyed), OK and Close. Sheaf's window has Index,
-  Name, Long Name, Columns and Rows; clicking picks a sheet, OK or a double click goes to it, Close or
-  Escape closes. Not done: Actions, Apply Reorder.
+  Name, Long Name, Columns, Rows and Comments. The Comments cell previews the first line and shows the
+  full saved text on hover. Clicking an index or name picks a sheet, OK or a double click goes to it,
+  and Close or Escape closes. Name and Comments is the editing route. Actions and Apply Reorder remain open.
 
 ## 13i. Worksheet corner menu (T92, measured 2026-11-16, Origin 2016)
 

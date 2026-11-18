@@ -226,6 +226,14 @@ source/goldens stayed frozen. Current seeded/invalid/applied desktop captures an
 pixels were inspected, with every own app/reference/helper actor closed. Earlier setter-only
 automation pilots are excluded from appearance evidence.
 
+Installed font abbreviations (`codex/t58-inline-font-aliases`, 2026-11-18): graph text
+expands a case-insensitive family prefix when it identifies one installed family. Exact
+family names take priority and ambiguous prefixes use the existing fallback. Layout and
+SVG use the same resolved family, including for nested Symbol and paired-script runs.
+All 666 plot-crate tests passed. Graphing 7.6 records Sheaf's matching policy and the
+remaining Native 2016 and configurable-default gaps. Workspace verification follows local
+main integration.
+
 Prime notation follow-up (codex/t58-escape-alias-audit, 2026-11-16): exact closed
 prime/double-prime escapes now use Unicode U+2032/U+2033 with existing run styles,
 script columns and rendering. Graphing 7.11 records the official documented

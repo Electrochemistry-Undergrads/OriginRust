@@ -6,6 +6,7 @@
 //! that does not start one of these escapes is literal. The two prime escapes insert
 //! Unicode prime characters through the same styled glyph path.
 
+use crate::fonts::{SystemFonts, TextMeasurer};
 use sheaf_core::Color;
 
 /// Scale of superscript and subscript text relative to its surroundings.
@@ -77,11 +78,11 @@ pub fn parse(text: &str) -> Vec<Run> {
         }
     }
     let mut out = Vec::new();
-    flatten(segments(text), &mut out);
+    flatten(segments(text, &|name| SystemFonts::shared().expand_inline_family(name)), &mut out);
     out
 }
 
-pub(crate) fn segments(text: &str) -> Vec<Segment> {
+pub(crate) fn segments(text: &str, expand_family: &impl Fn(&str) -> Option<String>) -> Vec<Segment> {
     let chars: Vec<char> = text.chars().collect();
     let mut pos = 0;
     let mut out = Vec::new();
@@ -96,7 +97,7 @@ pub(crate) fn segments(text: &str) -> Vec<Segment> {
         scale: 1.0,
         rise: 0.0,
     };
-    parse_seq(&chars, &mut pos, base, false, 0, &mut out);
+    parse_seq(&chars, &mut pos, base, false, 0, &mut out, expand_family);
     out
 }
 
@@ -154,7 +155,12 @@ const MAX_FONT_NAME: usize = 64;
 
 /// Recognises an escape starting at the backslash at `pos`. Returns what it does and the index of
 /// the first character inside its parentheses.
-fn escape_at(chars: &[char], pos: usize, st: &Style) -> Option<(Escape, usize)> {
+fn escape_at(
+    chars: &[char],
+    pos: usize,
+    st: &Style,
+    expand_family: &impl Fn(&str) -> Option<String>,
+) -> Option<(Escape, usize)> {
     let mut inner = st.clone();
     let code = *chars.get(pos + 1)?;
     if code == '(' {
@@ -217,6 +223,8 @@ fn escape_at(chars: &[char], pos: usize, st: &Style) -> Option<(Escape, usize)> 
             }
             inner.greek = name.trim().eq_ignore_ascii_case("symbol");
             if name.trim() == name {
+                let name = expand_family(&name).unwrap_or(name);
+                inner.greek = name.eq_ignore_ascii_case("symbol");
                 inner.family = Some(name);
             }
             Some((Escape::Styled(inner), open + 1))
@@ -309,17 +317,25 @@ fn take_enclosed(chars: &[char], pos: &mut usize) -> String {
     text
 }
 
-fn parse_seq(chars: &[char], pos: &mut usize, st: Style, in_escape: bool, depth: usize, out: &mut Vec<Segment>) {
+fn parse_seq(
+    chars: &[char],
+    pos: &mut usize,
+    st: Style,
+    in_escape: bool,
+    depth: usize,
+    out: &mut Vec<Segment>,
+    expand_family: &impl Fn(&str) -> Option<String>,
+) {
     let mut parens = 0usize;
     while *pos < chars.len() {
         let c = chars[*pos];
         if c == '\\'
             && depth < MAX_DEPTH
-            && let Some((esc, start)) = escape_at(chars, *pos, &st)
+            && let Some((esc, start)) = escape_at(chars, *pos, &st, expand_family)
         {
             *pos = start;
             match esc {
-                Escape::Styled(inner) => parse_seq(chars, pos, inner, true, depth + 1, out),
+                Escape::Styled(inner) => parse_seq(chars, pos, inner, true, depth + 1, out, expand_family),
                 Escape::Pair => {
                     let body: Vec<char> = take_enclosed(chars, pos).chars().collect();
                     let mut nesting = 0usize;
@@ -342,7 +358,7 @@ fn parse_seq(chars: &[char], pos: &mut usize, st: Style, in_escape: bool, depth:
                     let branch = |chars: &[char], rise: f64| {
                         let inner = Style { scale: st.scale * 0.6, rise: st.rise + rise * st.scale, ..st.clone() };
                         let mut out = Vec::new();
-                        parse_seq(chars, &mut 0, inner, false, depth + 1, &mut out);
+                        parse_seq(chars, &mut 0, inner, false, depth + 1, &mut out, expand_family);
                         out
                     };
                     let sub = branch(lower, -0.35);

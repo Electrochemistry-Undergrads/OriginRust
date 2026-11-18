@@ -89,6 +89,42 @@ fn decorations_rotate_and_center_with_the_text() {
 }
 
 #[test]
+fn overbar_spans_nested_text_and_paired_scripts_without_adding_advance() {
+    let body = r"P\=(i,xy)";
+    let decorated = r"\ab(P\=(i,xy))";
+    let font = Font::new("Arial", 20.0);
+    let width = crate::text::width(&FixedMetrics, decorated, &font, 20.0);
+    assert_eq!(width, crate::text::width(&FixedMetrics, body, &font, 20.0));
+    assert!((width - 24.2).abs() < 1e-12);
+    assert_eq!(crate::markup::parse(decorated), crate::markup::parse(body));
+    let items = placed(decorated, Anchor::Start, 0.0);
+    assert_eq!(&items[..3], &placed(body, Anchor::Start, 0.0));
+    assert_eq!(paths(&items)[0].0, "M100 39.16L124.2 39.16");
+
+    let items = placed(r"\c2(\ab(a\b(b)\c4(c)))d", Anchor::Start, 0.0);
+    let bars = paths(&items);
+    assert_eq!(bars.len(), 1);
+    assert_eq!(bars[0].0, "M100 43.2L133 43.2");
+    assert_eq!(bars[0].1.color, Color::RED);
+    assert!(matches!(items.last(), Some(Item::Text(item)) if item.text == "d" && item.color == Color::BLACK));
+}
+
+#[test]
+fn overbars_keep_the_single_run_anchor_rotate_and_stack() {
+    let items = placed(r"\ab(abc)", Anchor::Middle, 90.0);
+    assert_eq!(items[0], placed("abc", Anchor::Middle, 90.0)[0]);
+    assert_eq!(paths(&items)[0].0, "M83.2 76.5L83.2 43.5");
+    let nested = placed(r"\ab(a\ab(b)c)", Anchor::Start, 0.0);
+    assert_eq!(paths(&nested).iter().map(|p| p.0).collect::<Vec<_>>(), ["M111 43.2L122 43.2", "M100 40.4L133 40.4"]);
+    let svg = crate::svg::write_svg(&scene(nested));
+    assert!(svg.contains("M100 40.4L133 40.4"));
+
+    assert!(placed(r"\ab()", Anchor::Start, 0.0).is_empty());
+    assert_eq!(crate::markup::plain(r"\v(\ab(x))"), r"\ab(x)");
+    assert_eq!(crate::markup::plain(r"\abc(x)"), r"\abc(x)");
+}
+
+#[test]
 fn decorated_scripts_move_and_shrink_their_lines_with_the_glyphs() {
     let items = placed(r"\u(a\+(2)b)", Anchor::Start, 0.0);
     let lines = paths(&items);

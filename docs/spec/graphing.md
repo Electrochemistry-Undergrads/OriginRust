@@ -1134,6 +1134,16 @@ deferred under 7.6; accents, conditional spaces, wrapping and line separation
 remain separate work. Regressions compare styles, placement, rotation, vector/
 raster output and actual legend/title/tick scenes with explicit Unicode controls.
 
+**Overbar escape (T58).** The [Origin escape reference](https://docs.originlab.com/origin-help/escape-sequences/)
+defines `\ab(text)` as a bar above the enclosed text. Sheaf renders one continuous stroke
+over the full span, including changes of font or style and shared script columns. The stroke
+uses the color at the opening escape. Its position clears the highest nominal glyph top or
+nested bar in the span. The gap and thickness are proportional to the span's font size.
+The bar follows the text's rotation and anchor and adds no horizontal advance. Empty spans
+produce no mark. The shared scene carries the same stroke to vector and raster output.
+These placement choices follow Sheaf's layout metrics. Native bar geometry is unmeasured.
+The dot and tilde escapes remain open.
+
 ### 7.12 Reusable Custom RGB wells (T58/T59, documented contract)
 
 Origin's [FAQ130](https://docs.originlab.com/quick-help/define-custom-colors/)

@@ -234,6 +234,13 @@ All 666 plot-crate tests passed. Graphing 7.6 records Sheaf's matching policy an
 remaining Native 2016 and configurable-default gaps. Formatting, strict workspace Clippy, Nextest (4,474 passed and
 8 skipped), doc tests, inventory and eight Python tooling tests passed.
 
+Overbar (`codex/t58-text-overbar`, 2026-11-18): graph labels, titles and legends can use
+`\ab(text)` to draw a bar over the enclosed text. The renderer keeps one continuous stroke
+through nested styles and paired scripts, with the same glyph placement and advance. SVG
+and other backends receive that stroke from the shared scene. Graphing 7.11 records the
+documented contract and Sheaf's placement choices. Native geometry, dot and tilde remain
+open. Workspace verification pending.
+
 Prime notation follow-up (codex/t58-escape-alias-audit, 2026-11-16): exact closed
 prime/double-prime escapes now use Unicode U+2032/U+2033 with existing run styles,
 script columns and rendering. Graphing 7.11 records the official documented

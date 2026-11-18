@@ -2055,7 +2055,7 @@ impl SheafApp {
                             LabelRow::LongName => c.long_name = text,
                             LabelRow::Units => c.units = text,
                             LabelRow::Comments => c.comments = text,
-                            LabelRow::Formula => {}
+                            LabelRow::Formula | LabelRow::SamplingInterval => {}
                             LabelRow::Param(name) => {
                                 c.params.insert(name, text);
                             }
@@ -2843,6 +2843,10 @@ impl SheafApp {
     /// are one undo step each.
     fn cell_op(&mut self, book: WindowId, op: CellOp, ctx: &egui::Context) {
         if let Some(Sel::Label { column, row }) = self.books.get(&book).map(|s| s.sel.clone()) {
+            if row == LabelRow::SamplingInterval && !matches!(op, CellOp::Copy(_)) {
+                self.warn("Change the interval in Set Sampling Interval");
+                return;
+            }
             let Some(c) = self.doc.project().column(column) else { return };
             let original = grid::label_text_full(c, &row);
             let replacement = match op {
@@ -3169,7 +3173,7 @@ impl SheafApp {
             SheetOp::ToggleView(switch) => {
                 self.doc.apply("Worksheet view", |p| {
                     if let Some(s) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(active)) {
-                        s.view.toggle(switch);
+                        s.toggle_view_switch(switch);
                     }
                 });
             }

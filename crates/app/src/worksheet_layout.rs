@@ -38,6 +38,7 @@ impl Layout {
                     LabelRow::Units => LabelKind::Units,
                     LabelRow::Comments => LabelKind::Comments,
                     LabelRow::Formula => LabelKind::Formula,
+                    LabelRow::SamplingInterval => LabelKind::SamplingInterval,
                     LabelRow::Param(n) => LabelKind::Param(n.clone()),
                 };
                 sheet

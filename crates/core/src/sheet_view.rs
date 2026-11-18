@@ -5,6 +5,7 @@
 //! corner menu"): a new sheet has Long Name, Units, Comments, F(x)=, Row Labels, both headers and both
 //! grids ticked. The switches belong to the sheet.
 
+use crate::Worksheet;
 use serde::{Deserialize, Serialize};
 
 /// One switch of the corner menu that Sheaf has.
@@ -14,6 +15,7 @@ pub enum ViewSwitch {
     Units,
     Comments,
     Formula,
+    SamplingInterval,
     /// The titles ("Long Name", "Units", ...) to the left of the label rows.
     RowLabels,
     /// The vertical lines between the cells.
@@ -33,6 +35,7 @@ impl ViewSwitch {
             ViewSwitch::Units => "Units",
             ViewSwitch::Comments => "Comments",
             ViewSwitch::Formula => "F(x)=",
+            ViewSwitch::SamplingInterval => "Sampling Interval",
             ViewSwitch::RowLabels => "Row Labels for Column Label Rows",
             ViewSwitch::ColumnGrid => "Column Grid",
             ViewSwitch::RowGrid => "Row Grid",
@@ -44,7 +47,7 @@ fn yes() -> bool {
     true
 }
 
-/// What the sheet shows; everything on for a new sheet.
+/// The sheet's display choices. Sampling Interval is automatic until toggled.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SheetView {
     #[serde(default = "yes")]
@@ -55,6 +58,9 @@ pub struct SheetView {
     pub comments: bool,
     #[serde(default = "yes")]
     pub formula: bool,
+    /// `None` shows the row whenever a column has an interval.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sampling_interval: Option<bool>,
     #[serde(default = "yes")]
     pub row_labels: bool,
     #[serde(default = "yes")]
@@ -70,6 +76,7 @@ impl Default for SheetView {
             units: true,
             comments: true,
             formula: true,
+            sampling_interval: None,
             row_labels: true,
             column_grid: true,
             row_grid: true,
@@ -82,27 +89,36 @@ impl SheetView {
         *self == SheetView::default()
     }
 
-    fn slot(&mut self, s: ViewSwitch) -> &mut bool {
-        match s {
+    fn slot(&mut self, s: ViewSwitch) -> Option<&mut bool> {
+        Some(match s {
             ViewSwitch::LongName => &mut self.long_name,
             ViewSwitch::Units => &mut self.units,
             ViewSwitch::Comments => &mut self.comments,
             ViewSwitch::Formula => &mut self.formula,
+            ViewSwitch::SamplingInterval => return None,
             ViewSwitch::RowLabels => &mut self.row_labels,
             ViewSwitch::ColumnGrid => &mut self.column_grid,
             ViewSwitch::RowGrid => &mut self.row_grid,
-        }
+        })
     }
+}
 
-    pub fn shows(&self, s: ViewSwitch) -> bool {
-        let mut copy = *self;
-        *copy.slot(s)
+impl Worksheet {
+    pub fn shows_view_switch(&self, s: ViewSwitch) -> bool {
+        let mut view = self.view;
+        view.slot(s).map(|shown| *shown).unwrap_or_else(|| {
+            self.view.sampling_interval.unwrap_or_else(|| self.columns.iter().any(|c| c.sampling.is_some()))
+        })
     }
 
     /// Turns a switch over, as clicking its menu item does.
-    pub fn toggle(&mut self, s: ViewSwitch) {
-        let v = self.slot(s);
-        *v = !*v;
+    pub fn toggle_view_switch(&mut self, s: ViewSwitch) {
+        let shown = !self.shows_view_switch(s);
+        if let Some(slot) = self.view.slot(s) {
+            *slot = shown;
+        } else {
+            self.view.sampling_interval = Some(shown);
+        }
     }
 }
 
@@ -112,22 +128,49 @@ mod tests {
 
     #[test]
     fn everything_shows_on_a_new_sheet_and_toggles() {
-        let mut v = SheetView::default();
+        let mut sheet = Worksheet::new("Sheet1");
         for s in [ViewSwitch::RowLabels, ViewSwitch::ColumnGrid, ViewSwitch::RowGrid]
             .into_iter()
             .chain(ViewSwitch::LABEL_ROWS)
         {
-            assert!(v.shows(s), "{s:?}");
+            assert!(sheet.shows_view_switch(s), "{s:?}");
         }
-        v.toggle(ViewSwitch::Units);
-        assert!(!v.shows(ViewSwitch::Units) && !v.is_default());
-        let json = serde_json::to_string(&v).unwrap();
+        sheet.toggle_view_switch(ViewSwitch::Units);
+        assert!(!sheet.shows_view_switch(ViewSwitch::Units) && !sheet.view.is_default());
+        let json = serde_json::to_string(&sheet.view).unwrap();
         let back: SheetView = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, v);
+        assert_eq!(back, sheet.view);
         // A file written before a switch existed reads it as on.
         let old: SheetView = serde_json::from_str("{}").unwrap();
         assert!(old.is_default());
-        v.toggle(ViewSwitch::Units);
-        assert!(v.is_default());
+        sheet.toggle_view_switch(ViewSwitch::Units);
+        assert!(sheet.view.is_default());
+    }
+
+    #[test]
+    fn sampling_interval_visibility_defaults_to_automatic_and_persists_an_override() {
+        use crate::{ColumnData, Designation, Project};
+        let mut project = Project::new();
+        let book = project.add_workbook("Book1");
+        let column = project.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![3.0])).unwrap();
+        let switch = ViewSwitch::SamplingInterval;
+        assert!(!project.locate(column).unwrap().1.shows_view_switch(switch));
+        project.set_sampling_interval(&[column], 0.0, 0.5, "Time", "s").unwrap();
+        let sheet = &mut project.workbook_mut(book).unwrap().sheets[0];
+        assert!(sheet.shows_view_switch(switch) && sheet.view.is_default());
+
+        sheet.toggle_view_switch(switch);
+        let saved = serde_json::to_string(sheet).unwrap();
+        let mut back: Worksheet = serde_json::from_str(&saved).unwrap();
+        assert_eq!(back.view.sampling_interval, Some(false));
+        assert!(!back.shows_view_switch(switch));
+        assert!(!back.view.is_default());
+        back.toggle_view_switch(switch);
+        back.columns[0].sampling = None;
+        assert!(back.shows_view_switch(switch), "an explicitly displayed empty row stays visible");
+        back.view = serde_json::from_str("{}").unwrap();
+        assert!(!back.shows_view_switch(switch));
+        back.columns[0].sampling = sheet.columns[0].sampling.clone();
+        assert!(back.shows_view_switch(switch), "legacy view settings use automatic visibility");
     }
 }

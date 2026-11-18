@@ -9072,6 +9072,7 @@ mod find_project;
 mod fit_builder;
 mod fit_organizer;
 mod function_graph;
+mod graph_table;
 mod graph_themes;
 mod new_from_template;
 mod options;

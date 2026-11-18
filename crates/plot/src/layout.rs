@@ -1019,6 +1019,12 @@ fn draw_legend_and_labels(
     }
     for (k, label) in layer.labels.iter().enumerate() {
         let start = out.len();
+        if label.table {
+            // Graph > New Table (T136): the whole grid is the object, not only its lines and text.
+            let r = crate::table::draw_table(out, m, label, f);
+            rec(objects, out, start, ObjectKind::Label(k), &[r]);
+            continue;
+        }
         let size = label.font.size_pt;
         let anchor = (f.x + label.x * f.w, f.y + label.y * f.h);
         // The anchor is the vertical middle of the text's first character.

@@ -678,6 +678,11 @@ pub enum Action {
     FitBuilder,
     /// Tools > Options... (T134).
     Options,
+    /// Graph > New Table (T136): the cell editor for a new table in the active layer.
+    NewTable {
+        graph: WindowId,
+        layer: usize,
+    },
     /// File > Open Sample Projects (T133): the list of samples.
     SampleProjects,
     /// Open a sample project by name (it replaces the project, after asking about unsaved changes).

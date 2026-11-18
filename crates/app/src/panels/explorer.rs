@@ -33,6 +33,8 @@ pub struct ExplorerState {
     pub focus: bool,
     /// Every window of the folder is highlighted (Ctrl+A).
     pub all: bool,
+    /// The Favorites folder is selected (T130): the list shows the shortcuts of `Project::favorites`.
+    pub favorites: bool,
     /// The windows drawn in bold during the last frame (the active one), for the tests.
     #[cfg_attr(not(test), allow(dead_code))]
     pub bold: Vec<WindowId>,
@@ -46,6 +48,7 @@ impl Default for ExplorerState {
             sort: (0, true),
             focus: false,
             all: false,
+            favorites: false,
             bold: Vec::new(),
         }
     }
@@ -265,6 +268,7 @@ pub fn show(ui: &mut egui::Ui, st: &mut ExplorerState, data: &PanelData, actions
             egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
                 let mut path = Vec::new();
                 tree(ui, st, data, &data.project.root, &mut path, actions);
+                favorites_row(ui, st);
             });
         });
     egui::CentralPanel::default().frame(egui::Frame::new().fill(Color32::WHITE)).show_inside(ui, |ui| {
@@ -282,7 +286,7 @@ fn tree(
 ) {
     let name = if path.is_empty() { root_label(data.project, &data.project_name) } else { folder.name.clone() };
     let mut row = |ui: &mut egui::Ui, st: &mut ExplorerState| {
-        let selected = st.folder == *path;
+        let selected = !st.favorites && st.folder == *path;
         let galley = ui.painter().layout_no_wrap(name.clone(), FontId::proportional(12.0), Color32::BLACK);
         let size = Vec2::new(galley.size().x + 26.0, ROW_H);
         let (rect, response) = ui.allocate_exact_size(size, Sense::click());
@@ -303,6 +307,7 @@ fn tree(
         );
         if response.clicked() {
             st.folder = path.clone();
+            st.favorites = false;
             st.selected = None;
             st.all = false;
         }
@@ -346,6 +351,33 @@ fn tree(
             }
         });
     }
+}
+
+/// The Favorites folder under the project's folders (T130): a click selects it and the list shows the
+/// shortcuts.
+fn favorites_row(ui: &mut egui::Ui, st: &mut ExplorerState) {
+    ui.horizontal(|ui| {
+        ui.add_space(ui.spacing().icon_width + ui.spacing().item_spacing.x);
+        let name = "Favorites";
+        let galley = ui.painter().layout_no_wrap(name.into(), FontId::proportional(12.0), Color32::BLACK);
+        let (rect, response) = ui.allocate_exact_size(Vec2::new(galley.size().x + 26.0, ROW_H), Sense::click());
+        response
+            .widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, st.favorites, name));
+        if st.favorites || response.hovered() {
+            ui.painter().rect_filled(rect, 0.0, Color32::from_rgb(229, 241, 251));
+        }
+        if st.favorites {
+            ui.painter().rect_stroke(rect, 0.0, Stroke::new(1.0_f32, theme::ACCENT), egui::StrokeKind::Inside);
+        }
+        paint_folder(ui.painter(), Rect::from_min_size(rect.min + Vec2::new(3.0, 3.0), Vec2::splat(12.0)));
+        let at = Pos2::new(rect.min.x + 20.0, rect.center().y - galley.size().y / 2.0);
+        ui.painter().galley(at, galley, Color32::BLACK);
+        if response.clicked() {
+            st.favorites = true;
+            st.selected = None;
+            st.all = false;
+        }
+    });
 }
 
 fn paint_folder(painter: &egui::Painter, r: Rect) {
@@ -397,7 +429,11 @@ fn list(ui: &mut egui::Ui, st: &mut ExplorerState, data: &PanelData, actions: &m
     }
     ui.painter().hline(head.x_range(), head.bottom(), Stroke::new(1.0_f32, GRID));
 
-    let ids = sorted(data.project, windows_in(data.project, &st.folder), st.sort);
+    let ids = if st.favorites {
+        sorted(data.project, data.project.favorites.clone(), st.sort)
+    } else {
+        sorted(data.project, windows_in(data.project, &st.folder), st.sort)
+    };
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         for id in ids {
             let Some(w) = data.project.window(id) else { continue };
@@ -494,6 +530,11 @@ fn row(
         item(ui, "Rename...", Some(Action::RenameWindow(id)));
         item(ui, "Delete", Some(Action::DeleteWindow(id)));
         item(ui, "Duplicate", Some(Action::DuplicateWindow(id)));
+        if st.favorites {
+            item(ui, "Remove from Favorites", Some(Action::RemoveFavorite(id)));
+        } else {
+            item(ui, "Add Shortcut to Favorites", Some(Action::AddFavorite(id)));
+        }
         ui.separator();
         item(ui, "Export...", Some(if graph { Action::ExportGraph(id) } else { Action::ExportData(id) }));
         ui.separator();

@@ -116,6 +116,8 @@ pub enum Cmd {
     Reimport(bool),
     /// Window > Duplicate (Batch Plotting) > with New Sheets/Books (false) or New Columns (true) (T99).
     BatchPlot(bool),
+    /// Graph > Add Function Graph... (T119).
+    AddFunctionGraph,
     /// View > View Windows (T100).
     ViewWindows(sheaf_core::project::ViewWindows),
     /// An axis's Save Format as Theme... (T102).
@@ -334,6 +336,10 @@ pub enum Cmd {
     DataReader,
     /// A tool of the Data menu (Mask, Move or Remove Bad Data Points).
     DataTool(DataTool),
+    /// Column header > Slide Show of Dependent Graphs (T129).
+    SlideShow,
+    /// Graph page > Add Shortcut to Favorites (T130).
+    AddFavorite,
     /// The Data menu's display range and data markers (T118).
     DataMarkers(MarkerOp),
     /// The Text tool of the Tools toolbar.
@@ -1625,7 +1631,7 @@ fn graph_menu() -> Vec<Entry> {
         sep(),
         item("Layer Management...", Cmd::LayerManagement(None)),
         item("Add Error Bars...", Cmd::AddErrorBars),
-        grey("Add Function Graph..."),
+        item("Add Function Graph...", Cmd::AddFunctionGraph),
         item("Add Straight Line...", Cmd::AddStraightLine),
         item("Add Text...", Cmd::AddText),
         new_layer_menu(),
@@ -1943,7 +1949,8 @@ pub fn column_header_menu() -> Vec<Entry> {
     ));
     v.push(item("Swap Columns...", Cmd::SwapColumns));
     v.push(item("Column Width...", Cmd::ColumnProperties));
-    v.extend(greys(&["-", "Slide Show of Dependent Graphs"]));
+    v.push(sep());
+    v.push(item("Slide Show of Dependent Graphs", Cmd::SlideShow));
     v.extend(greys(&["Add or Update Sparklines...", "-"]));
     v.push(item("Format Cells...", Cmd::FormatCells));
     v.push(item("Properties...", Cmd::ColumnProperties));
@@ -2331,7 +2338,7 @@ pub fn graph_page_menu(layer: usize) -> Vec<Entry> {
         item("Add Text...", Cmd::AddText),
         item("Layer Management...", Cmd::LayerManagement(None)),
         new_layer_menu(),
-        grey("Add Shortcut to Favorites"),
+        item("Add Shortcut to Favorites", Cmd::AddFavorite),
         keyed("Copy Page", ctrl(Key::J), Cmd::CopyPage),
         item("Export Graphs...", Cmd::ExportGraph),
         keyed("View Full Screen", ctrl_shift(Key::J), Cmd::FullScreen),
@@ -2666,6 +2673,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::FilterManager => Action::FilterManager,
         Cmd::SystemTemplates => Action::SystemTemplates { book: book?, columns: c.selected.to_vec() },
         Cmd::BatchPlot(columns) => Action::BatchPlot { graph: c.graph.ok_or(NEED_GRAPH)?, columns: *columns },
+        Cmd::AddFunctionGraph => Action::AddFunctionGraph { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::Reimport(choose) => {
             let book = book?;
             c.imported.then_some(()).ok_or(NOT_IMPORTED)?;
@@ -2958,6 +2966,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Pointer => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pointer },
         Cmd::DataReader => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Reader },
         Cmd::DataTool(tool) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Data(*tool) },
+        Cmd::SlideShow => Action::SlideShow(some()?),
+        Cmd::AddFavorite => Action::AddFavorite(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::DataMarkers(op) => Action::GraphEdit {
             graph: c.graph.ok_or(NEED_GRAPH)?,
             op: GraphOp::DataMarkers { layer: c.layer, op: *op },

@@ -6007,3 +6007,23 @@ this follows Origin's documented behaviour.
 - **To measure:** Origin's marker look, whether markers are per plot or per layer, and how markers are
   moved (drag or click).
 
+## 41. Add Function Graph: Graph > Add Function Graph... (T119, 2026-11-16, **not measured**)
+
+Origin 2016's Graph menu has Add Function Graph.... It could not be probed (Origin's COM class
+unregistered, see 36), so this follows Origin's documented behaviour.
+
+- **The window "Add Function Graph":**
+  - y(x) = an expression in Sheaf's expression language (`docs/spec/expression-language.md`), with the
+    variable `x` (default `sin(x)`).
+  - From and To: the X range (default 0 to 10).
+  - Points: the number of evenly spaced points (default 100, at least 2).
+- **OK:** samples the function and adds its curve as a line plot to the active layer, one undo step.
+  - An expression error is reported, and the window stays open.
+  - A point where the function has no value is missing in the curve.
+- **Where the points go:** Origin keeps such a curve as a function dataset. Sheaf writes the points to a
+  new workbook, `FuncN` (long name "y = <expression>"), with an X column `x` and a Y column whose long name
+  is the expression. The curve is therefore an ordinary plot that saves, exports and edits like any other.
+- **Sheaf internals:** `sheaf_core::function_graph::sample`, `Project::add_function_graph`.
+- **To measure:** Origin's window and its defaults, whether the curve follows the X axis range, and its
+  line style.
+

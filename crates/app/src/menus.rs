@@ -344,6 +344,8 @@ pub enum Cmd {
     AuditLog,
     /// Tools > Fitting Function Builder... (T132).
     FitBuilder,
+    /// Tools > Options... (T134).
+    Options,
     /// File > Open Sample Projects, Help > Open Sample Projects > Sample Projects (T133).
     SampleProjects,
     /// The Data menu's display range and data markers (T118).
@@ -1723,7 +1725,8 @@ pub fn integrate_gadget_menu(end_point_baseline: bool) -> Vec<Entry> {
 
 fn tools_menu() -> Vec<Entry> {
     vec![
-        grey_keyed("&Options...", ctrl(Key::U)),
+        // Origin shows Ctrl+U here; Sheaf leaves it to Underline in worksheets and text (gui-look "Options").
+        item("&Options...", Cmd::Options),
         item("&Autosave...", Cmd::Autosave),
         item("AI Assistants (&MCP)", Cmd::ToggleAiLink),
         grey("System Variables..."),
@@ -2986,6 +2989,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::AddFavorite => Action::AddFavorite(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::AuditLog => Action::AuditLog,
         Cmd::FitBuilder => Action::FitBuilder,
+        Cmd::Options => Action::Options,
         Cmd::SampleProjects => Action::SampleProjects,
         Cmd::DataMarkers(op) => Action::GraphEdit {
             graph: c.graph.ok_or(NEED_GRAPH)?,

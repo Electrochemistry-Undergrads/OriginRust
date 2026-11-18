@@ -481,12 +481,13 @@ fn cancel_in_the_autosave_window_changes_nothing() {
 }
 
 #[test]
-fn the_autosave_menu_entry_is_enabled_and_options_stays_grey() {
+fn the_autosave_and_options_menu_entries_are_enabled() {
     let mut h = start(Vec::new());
     h.get_by_label("Tools").click();
     settle(&mut h);
     assert!(!menu_entry(&h, "Autosave...").accesskit_node().is_disabled());
-    assert!(menu_entry(&h, "Options...").accesskit_node().is_disabled());
+    // Options holds the same autosave settings since T134.
+    assert!(!menu_entry(&h, "Options...").accesskit_node().is_disabled());
 }
 
 #[test]

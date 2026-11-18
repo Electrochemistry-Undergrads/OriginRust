@@ -370,6 +370,9 @@ pub struct Layer {
     /// extent, in the root's data, is this layer's X and Y range. Moving the rectangle moves the zoom.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub zoom: Option<usize>,
+    /// Data > Analysis Markers (T135): when and how large the data markers are drawn.
+    #[serde(default, skip_serializing_if = "crate::data_markers::MarkerDisplay::is_default")]
+    pub markers: crate::data_markers::MarkerDisplay,
     /// How the plots are moved against each other so that they do not overlap (stacked lines,
     /// waterfall). Only the drawing moves; the data stay as they are.
     #[serde(default, skip_serializing_if = "Stack::is_none")]

@@ -1685,7 +1685,24 @@ fn data_menu() -> Vec<Entry> {
         keyed("Mark Data Range", ctrl_alt(Key::M), Cmd::DataTool(DataTool::MarkRange)),
         keyed("Clear Data Markers", ctrl_alt(Key::N), Cmd::DataMarkers(MarkerOp::Clear)),
         sep(),
-        grey_sub("Analysis Markers", &["Hide", "Show Partial Ranges", "Show All", "Tiny", "Small", "Medium", "Large"]),
+        {
+            use sheaf_core::data_markers::{MarkerShow, MarkerSize};
+            let show = |label, s| item(label, Cmd::DataMarkers(MarkerOp::Show(s)));
+            let size = |label, s| item(label, Cmd::DataMarkers(MarkerOp::Size(s)));
+            sub(
+                "Analysis Markers",
+                vec![
+                    show("Hide", MarkerShow::Hide),
+                    show("Show Partial Ranges", MarkerShow::PartialRanges),
+                    show("Show All", MarkerShow::All),
+                    sep(),
+                    size("Tiny", MarkerSize::Tiny),
+                    size("Small", MarkerSize::Small),
+                    size("Medium", MarkerSize::Medium),
+                    size("Large", MarkerSize::Large),
+                ],
+            )
+        },
         grey_sub("Lock Position", &["Layer Icon", "First Point", "Last Point"]),
         sep(),
         item("Mask Data Points", Cmd::DataTool(DataTool::Mask)),

@@ -109,6 +109,8 @@ pub(crate) struct PlotData<'a> {
     pub kde2d: Option<crate::kde2d::Kde2dData>,
     /// The samples of a Piper diagram (T117); `None` for other kinds.
     pub piper: Option<crate::piper_plot::PiperData>,
+    /// The layer's Data > Analysis Markers settings (T135).
+    pub marker_display: sheaf_core::data_markers::MarkerDisplay,
     /// The lines and axes of a layer's parallel plots, held by the first of them; `None` for other plots.
     pub parallel: Option<Box<crate::parallel::ParallelData>>,
     /// What a treemap plot draws; `None` for other kinds.
@@ -689,6 +691,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             wind_rose: None,
             kde2d: None,
             piper: None,
+            marker_display: Default::default(),
             parallel: None,
             treemap: None,
             sunburst: None,
@@ -898,6 +901,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         if layer.coords.ternary().is_some() {
             crate::ternary::columns(&mut pd, plot.size_from.and_then(|id| project.numeric(id)));
         }
+        pd.marker_display = layer.markers;
         plots.push(pd);
     }
     if layer.coords.polar().is_some_and(|p| p.radar) {

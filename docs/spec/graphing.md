@@ -1150,6 +1150,17 @@ They stack with other accents, add no advance and rotate with the text. The wave
 and dot size are Sheaf choices based on the surrounding font size. Native geometry remains
 unmeasured.
 
+**Legend line separators (T58).** The [Origin 2022b release note](https://www.originlab.com/releasenotes/detail.aspx?id=2022b3ORG-24940)
+introduces `\sep:nn` for irregular line spacing. The [escape reference](https://docs.originlab.com/origin-help/escape-sequences/)
+shows it on its own line between legend entries and defines the added gap as a percentage
+of font height. Standard Sheaf graph legends accept a standalone `\sep:nn` line with an
+unsigned 32-bit decimal integer. It adds that percentage of the legend's base font size
+before the next row. The separator does not occupy a row or draw ink. Consecutive separators
+add together within one column. Separators at the start or end of a column have no effect.
+The legend frame covers the tallest column including its added gaps. These rules use Sheaf
+layout metrics. Native multi-column geometry is unmeasured. Free labels and titles still
+need multiline layout for this escape.
+
 ### 7.12 Reusable Custom RGB wells (T58/T59, documented contract)
 
 Origin's [FAQ130](https://docs.originlab.com/quick-help/define-custom-colors/)

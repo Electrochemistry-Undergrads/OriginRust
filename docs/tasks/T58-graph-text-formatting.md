@@ -248,6 +248,12 @@ and retain placement through paired scripts, rotation and SVG output. Graphing 7
 the documented syntax and Sheaf's nominal geometry. Formatting, strict workspace Clippy, Nextest (4,487 passed and
 8 skipped), doc tests, inventory and eight Python tooling tests passed.
 
+Legend line separators (`codex/t58-text-line-spacing`, 2026-11-18): a standalone `\sep:nn`
+adds a percentage of the base font size between standard legend entries. Separators leave
+column membership intact, and the frame height accounts for the gaps. Graphing 7.11 records
+the Origin 2022b syntax and Sheaf's column and placement rules. Formatting, strict workspace Clippy, Nextest (4,489 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
+
 Prime notation follow-up (codex/t58-escape-alias-audit, 2026-11-16): exact closed
 prime/double-prime escapes now use Unicode U+2032/U+2033 with existing run styles,
 script columns and rendering. Graphing 7.11 records the official documented

@@ -71,6 +71,50 @@ fn custom_text_reorders_substitutes_and_adds_literal_text() {
 }
 
 #[test]
+fn separators_add_only_the_requested_gap_between_legend_entries() {
+    let (mut p, g) = project(3);
+    let plain = scene(&p, g);
+    let plain_box = automatic_legend_box(&p, g);
+    let raw = "\\sep:99\r\\l(1) %(1)\r\n \\sep:50 \n\\sep:25\n\\l(2) %(2)\n\\l(3) %(3)\n\\sep:99";
+    p.graph_mut(g).unwrap().layers[0].legend.text = Some(raw.into());
+    assert_eq!(legend_text(&p, g, 0).unwrap(), raw);
+
+    let separated = scene(&p, g);
+    let (texts, samples) = legend_items(&separated);
+    let (plain_texts, plain_samples) = legend_items(&plain);
+    assert_eq!((texts.len(), samples), (3, plain_samples));
+    for (i, (text, control)) in texts.iter().zip(&plain_texts).enumerate() {
+        assert_eq!((text.0, &text.2), (control.0, &control.2));
+        let delta = if i == 0 { 0.0 } else { 0.75 * 22.0 };
+        assert!((text.1 - control.1 - delta).abs() < 1e-9);
+    }
+    let separated_box = automatic_legend_box(&p, g);
+    assert_eq!((separated_box.x, separated_box.y, separated_box.w), (plain_box.x, plain_box.y, plain_box.w));
+    assert!((separated_box.h - plain_box.h - 0.75 * 22.0).abs() < 1e-9);
+    assert!(!crate::svg::write_svg(&separated).contains("sep:"));
+}
+
+#[test]
+fn legend_separators_do_not_take_column_slots_or_offset_the_next_column() {
+    let (mut p, g) = project(5);
+    let legend = &mut p.graph_mut(g).unwrap().layers[0].legend;
+    legend.columns = 2;
+    legend.text = Some("one\n\\sep:50\ntwo\nthree\n\\sep:75\nfour\n\\sep:200\n\\sep:bad".into());
+
+    let (texts, _) = legend_items(&scene(&p, g));
+    let names: Vec<_> = texts.iter().map(|row| row.2.as_str()).collect();
+    assert_eq!(names, ["one", "two", "three", "four", r"\sep:bad"]);
+    assert_eq!(texts[0].1, texts[3].1);
+    assert_eq!(texts[0].0, texts[2].0);
+    assert!(texts[3].0 > texts[2].0);
+    let fs = 22.0;
+    assert!((texts[1].1 - texts[0].1 - 1.8 * fs).abs() < 1e-9);
+    assert!((texts[2].1 - texts[1].1 - 1.3 * fs).abs() < 1e-9);
+    assert!((texts[4].1 - texts[3].1 - 3.3 * fs).abs() < 1e-9);
+    assert!((automatic_legend_box(&p, g).h - (0.8 + 2.0 * 1.3 + 2.0) * fs).abs() < 1e-9);
+}
+
+#[test]
 fn an_unknown_plot_number_draws_nothing() {
     let (mut p, g) = project(1);
     p.graph_mut(g).unwrap().layers[0].legend.text = Some("\\l(7) %(7) x".into());

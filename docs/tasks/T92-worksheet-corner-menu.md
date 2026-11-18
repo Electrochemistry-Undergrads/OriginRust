@@ -4,7 +4,8 @@
 Long Name, Units, Comments, F(x)=, Row Labels, Column Grid and Row Grid landed that day.
 T94 added the Sampling Interval row. Column Header and Row Header now collapse the
 corresponding screen bands and save their choices per sheet. Parameters, Filter and
-Categories remain open. Workspace verification pending.
+Categories remain open. Formatting, strict workspace Clippy, Nextest (4,495 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
 **Size:** M. **Source:** greyed inventory package B6 (the worksheet corner menu: Row Labels for Column
 Label Rows > Long Name, Units, Comments, F(x)=, Parameters; Column Header, Row Header, Column Grid, Row
 Grid). Sparklines and Page Break Preview Lines stay in B6.

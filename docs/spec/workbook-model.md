@@ -833,9 +833,18 @@ and copied in `sheaf_core::copy_columns`:
   a new sheet (Sheet2).
 - Sheaf's window (layout Sheaf's; Origin's not opened): New book / New sheet in a workbook / Columns of a
   sheet (workbook, sheet, and the first column overwritten or `<new>` after the last), and the check boxes
-  Copy Data, Copy Format (display format and width), Long Name, Units, Comments, User-Defined Parameters.
+  Copy Data, Ignore Hidden Rows, Copy Format (display format and width), Long Name, Units, Comments and
+  User-Defined Parameters.
   An unticked part leaves the destination's own (Sheaf's choice, not measured). One undo step ("Copy
-  columns"). Not done: Ignore Hidden Rows and Parameters (Origin's system parameter rows).
+  columns"). System parameter rows remain open.
+
+Ignore Hidden Rows starts checked. It copies only rows shown by each source sheet's active
+filter and compacts them in their original order. Clearing the option copies all stored rows.
+The option applies when Copy Data is on. Sheaf preserves source data and filters, keeps missing
+cells and storage types, and stops a short column after its last stored row when compacting.
+The existing row order is captured before any destination column is overwritten. These
+details use Sheaf's row model. The filter-copy contract and default come from the
+[Origin `colcopy` reference](https://docs.originlab.com/x-function/ref/colcopy/).
 
 ## 13h. Sheet tab names: Sheet Name to Show, Duplicate Without Data (T90, measured 2026-11-16, Origin 2016)
 

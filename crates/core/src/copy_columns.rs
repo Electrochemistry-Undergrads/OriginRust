@@ -10,11 +10,12 @@
 //!   next free letter. The sheet grows to the rows of the copies.
 //! - To `<new>` the copies are added after the last column; to `<new>!<new>` they fill a new sheet.
 
-use crate::analysis::free_sheet_name;
+use crate::analysis::{free_sheet_name, take_rows};
 use crate::column::{Column, ColumnData};
 use crate::ids::{ColumnId, WindowId};
 use crate::project::{Project, ProjectError};
 use crate::worksheet::Worksheet;
+use std::collections::HashMap;
 
 /// Where Copy Columns to puts the copies.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,6 +33,8 @@ pub enum CopyDestination {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CopyParts {
     pub data: bool,
+    /// Copy only source rows shown by the worksheet filter.
+    pub ignore_hidden_rows: bool,
     pub format: bool,
     pub long_name: bool,
     pub units: bool,
@@ -41,7 +44,15 @@ pub struct CopyParts {
 
 impl Default for CopyParts {
     fn default() -> Self {
-        CopyParts { data: true, format: true, long_name: true, units: true, comments: true, params: true }
+        CopyParts {
+            data: true,
+            ignore_hidden_rows: true,
+            format: true,
+            long_name: true,
+            units: true,
+            comments: true,
+            params: true,
+        }
     }
 }
 
@@ -54,9 +65,29 @@ impl Project {
         dest: CopyDestination,
         parts: CopyParts,
     ) -> Result<(WindowId, Vec<ColumnId>), ProjectError> {
+        // Snapshot all sources before touching the destination, which can overlap them.
+        let mut shown_by_sheet = HashMap::new();
         let copies: Vec<Column> = sources
             .iter()
-            .map(|&c| self.column(c).cloned().ok_or(ProjectError::NoSuchColumn(c)))
+            .map(|&c| -> Result<Column, ProjectError> {
+                let (_, sheet, source) = self.locate(c).ok_or(ProjectError::NoSuchColumn(c))?;
+                let mut copy = source.clone();
+                if parts.data
+                    && parts.ignore_hidden_rows
+                    && let Some(shown) = shown_by_sheet
+                        .entry(std::ptr::from_ref(sheet))
+                        .or_insert_with(|| sheet.shown_rows(sheet.row_count()))
+                {
+                    let len = source.data.len();
+                    // The visible row order is shared by all columns of this sheet. A short
+                    // column stops after its last stored row.
+                    let end = shown.partition_point(|&r| r < len);
+                    if end < len {
+                        copy.data = take_rows(&source.data, &shown[..end], len);
+                    }
+                }
+                Ok(copy)
+            })
             .collect::<Result<_, _>>()?;
         let (book, sheet, at) = match dest {
             CopyDestination::NewBook => {
@@ -194,5 +225,48 @@ mod tests {
         let col = p.column(keep).unwrap();
         assert_eq!((col.long_name.as_str(), col.units.as_str()), ("Mine", "mA"));
         assert_eq!(col.numeric().unwrap(), [10.0, 20.0, 30.0, 40.0]);
+    }
+
+    #[test]
+    fn visible_column_copy_keeps_numeric_text_and_mixed_rows_aligned() {
+        use std::collections::BTreeMap;
+
+        let (mut p, book, c) = src();
+        p.column_mut(c[2]).unwrap().data = ColumnData::text(vec!["first".into(), "hidden".into(), "third".into()]);
+        p.column_mut(c[3]).unwrap().data =
+            ColumnData::mixed(vec![7.0, 8.0, f64::NAN, 9.0], BTreeMap::from([(2, "label".into())]));
+        p.set_row_filter(book, 0, "col(A) != 2").unwrap();
+        let source = p.workbook(book).unwrap().clone();
+
+        let (_, copied) = p.copy_columns_to(&c[1..], CopyDestination::NewBook, CopyParts::default()).unwrap();
+        assert_eq!(p.numeric(copied[0]).unwrap(), [10.0, 30.0, 40.0]);
+        assert_eq!(p.column(copied[1]).unwrap().text().unwrap(), ["first", "third"]);
+        let mixed = &p.column(copied[2]).unwrap().data;
+        assert_eq!(mixed.len(), 3);
+        assert_eq!(mixed.text_cell(1), Some("label"));
+        assert_eq!(p.numeric(copied[2]).unwrap()[2], 9.0);
+        assert_eq!(p.workbook(book), Some(&source));
+
+        let all = CopyParts { ignore_hidden_rows: false, ..CopyParts::default() };
+        let (_, copied) = p.copy_columns_to(&[c[1]], CopyDestination::NewBook, all).unwrap();
+        assert_eq!(p.numeric(copied[0]).unwrap(), [10.0, 20.0, 30.0, 40.0]);
+        p.workbook_mut(book).unwrap().sheets[0].filter.as_mut().unwrap().enabled = false;
+        let (_, copied) = p.copy_columns_to(&[c[1]], CopyDestination::NewBook, CopyParts::default()).unwrap();
+        assert_eq!(p.numeric(copied[0]).unwrap(), [10.0, 20.0, 30.0, 40.0]);
+    }
+
+    #[test]
+    fn column_copy_uses_each_source_filter_before_overwriting_any_column() {
+        let (mut p, book, c) = src();
+        let other = p.add_workbook("Other");
+        let y = p.add_column(other, 0, Designation::Y, ColumnData::numeric(vec![100.0, 200.0])).unwrap();
+        p.set_row_filter(book, 0, "col(A) > 1").unwrap();
+        p.set_row_filter(other, 0, "col(A) > 200").unwrap();
+        let to_a = CopyDestination::Sheet { book, sheet: 0, at: Some(0) };
+        p.copy_columns_to(&[c[1], c[0], y], to_a, CopyParts::default()).unwrap();
+        assert_eq!(p.numeric(c[0]).unwrap(), [20.0, 30.0, 40.0]);
+        assert_eq!(p.numeric(c[1]).unwrap(), [2.0, 3.0, 4.0]);
+        assert!(p.numeric(c[2]).unwrap().is_empty());
+        assert_eq!(p.numeric(y).unwrap(), [100.0, 200.0]);
     }
 }

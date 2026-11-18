@@ -131,6 +131,10 @@ impl CopyColumnsDialog {
                 }
                 ui.separator();
                 ui.checkbox(&mut self.parts.data, "Copy Data");
+                ui.add_enabled(
+                    self.parts.data,
+                    egui::Checkbox::new(&mut self.parts.ignore_hidden_rows, "Ignore Hidden Rows"),
+                );
                 ui.checkbox(&mut self.parts.format, "Copy Format");
                 ui.checkbox(&mut self.parts.long_name, "Long Name");
                 ui.checkbox(&mut self.parts.units, "Units");

@@ -9020,6 +9020,7 @@ mod sampling;
 mod scatter_matrix;
 mod sheet_navigate;
 mod sheet_tab;
+mod slide_show;
 mod stats3;
 mod stock_plots;
 mod swap_transpose;

@@ -77,7 +77,25 @@ pub struct FullScreen {
     pub reminder: bool,
     /// The "Do not show this message in the future" tick as it is now.
     pub never_remind: bool,
+    /// Slide Show of Dependent Graphs (T129): the graphs shown, in order; `None` for View > Full Screen,
+    /// which steps through every graph of the project.
+    pub slides: Option<Vec<WindowId>>,
     texture: Option<(u64, WindowId, u32, TextureHandle)>,
+}
+
+/// The slide that a key or click moves to in a slide show: Right, Page Down, Space and a click go on, Left
+/// and Page Up go back, Home and End go to the ends.
+pub fn next_slide(slides: &[WindowId], current: WindowId, key: Key) -> WindowId {
+    let at = slides.iter().position(|g| *g == current).unwrap_or(0);
+    let last = slides.len().saturating_sub(1);
+    let to = match key {
+        Key::ArrowLeft | Key::PageUp => at.saturating_sub(1),
+        Key::ArrowRight | Key::PageDown | Key::Space => (at + 1).min(last),
+        Key::Home => 0,
+        Key::End => last,
+        _ => at,
+    };
+    slides.get(to).copied().unwrap_or(current)
 }
 
 /// The graph that Left, Right, Home and End move to: the graphs of the project in window order.
@@ -96,9 +114,19 @@ pub fn neighbour(project: &Project, current: WindowId, key: Key) -> WindowId {
     graphs.get(to).copied().unwrap_or(current)
 }
 
+/// The graphs that plot any of `columns`, in window order (Slide Show of Dependent Graphs, T129).
+pub fn dependent_graphs(project: &Project, columns: &[sheaf_core::ColumnId]) -> Vec<WindowId> {
+    project.graphs().filter(|g| g.referenced_columns().iter().any(|c| columns.contains(c))).map(|g| g.id).collect()
+}
+
 impl FullScreen {
     pub fn new(graph: WindowId, show_reminder: bool) -> Self {
-        FullScreen { graph, reminder: show_reminder, never_remind: false, texture: None }
+        FullScreen { graph, reminder: show_reminder, never_remind: false, slides: None, texture: None }
+    }
+
+    /// A slide show of `graphs` (not empty), from the first, without the reminder.
+    pub fn slide_show(graphs: Vec<WindowId>) -> Self {
+        FullScreen { graph: graphs[0], reminder: false, never_remind: false, slides: Some(graphs), texture: None }
     }
 
     /// The page rectangle: the page fitted into the screen, centred.
@@ -163,7 +191,17 @@ impl FullScreen {
         if pressed(Key::Escape) {
             return Event::End;
         }
-        if !self.reminder {
+        if let Some(slides) = &self.slides {
+            let keys = [Key::ArrowLeft, Key::ArrowRight, Key::PageUp, Key::PageDown, Key::Space, Key::Home, Key::End];
+            for key in keys {
+                if pressed(key) {
+                    self.graph = next_slide(slides, self.graph, key);
+                }
+            }
+            if ctx.input(|i| i.pointer.primary_clicked()) {
+                self.graph = next_slide(slides, self.graph, Key::Space);
+            }
+        } else if !self.reminder {
             for key in [Key::ArrowLeft, Key::ArrowRight, Key::Home, Key::End] {
                 if pressed(key) {
                     self.graph = neighbour(project, self.graph, key);
@@ -203,6 +241,17 @@ mod tests {
             assert_eq!(shown.y, (720.0_f32 * 424.0 / 824.0).round());
             assert_eq!(crate::graph_zoom::content(rect), window());
         }
+    }
+
+    #[test]
+    fn a_slide_show_steps_through_its_graphs_and_stops_at_the_ends() {
+        let g = [WindowId(3), WindowId(7), WindowId(9)];
+        assert_eq!(next_slide(&g, WindowId(3), Key::Space), WindowId(7));
+        assert_eq!(next_slide(&g, WindowId(7), Key::PageDown), WindowId(9));
+        assert_eq!(next_slide(&g, WindowId(9), Key::ArrowRight), WindowId(9), "the last slide stays");
+        assert_eq!(next_slide(&g, WindowId(9), Key::PageUp), WindowId(7));
+        assert_eq!(next_slide(&g, WindowId(7), Key::Home), WindowId(3));
+        assert_eq!(next_slide(&g, WindowId(3), Key::End), WindowId(9));
     }
 
     #[test]

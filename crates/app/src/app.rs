@@ -2446,6 +2446,16 @@ impl SheafApp {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
             }
             Action::FullScreen(_) => {}
+            Action::SlideShow(columns) if self.full_screen.is_none() => {
+                let graphs = crate::view_modes::dependent_graphs(self.doc.project(), &columns);
+                if graphs.is_empty() {
+                    self.warn("No graph plots the selected column");
+                } else {
+                    self.full_screen = Some(crate::view_modes::FullScreen::slide_show(graphs));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+                }
+            }
+            Action::SlideShow(_) => {}
             Action::DataEdit(edit) => self.data_edit(edit),
             Action::AddText { graph, layer, at } => {
                 let state = self.graphs.entry(graph).or_default();

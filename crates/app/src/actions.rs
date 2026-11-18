@@ -662,6 +662,9 @@ pub enum Action {
     },
     /// View > Full Screen: the graph's page over the whole screen until Esc.
     FullScreen(WindowId),
+    /// Column header > Slide Show of Dependent Graphs (T129): the graphs that plot any of the columns, one
+    /// after another over the whole screen.
+    SlideShow(Vec<sheaf_core::ColumnId>),
     /// Zoom Out or Whole Page of a graph window.
     GraphView {
         graph: WindowId,

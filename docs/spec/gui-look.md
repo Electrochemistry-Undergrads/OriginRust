@@ -1564,3 +1564,20 @@ a maximised and a minimised child window; the File, Edit, View, Window and Help 
 workbook and the File and Window menus of the graph; NLFit, Import Wizard, Peak Analyzer first
 page; Plot Details of a line and of a column plot; every tab of the axis dialog; Tools > Options
 with Numeric Format and Text Fonts; Set Column Values.
+
+### Slide Show of Dependent Graphs (T129, 2026-11-18, not measured)
+
+The worksheet column header's right-click menu has Slide Show of Dependent Graphs (Origin 2016). It could not
+be probed (Origin's COM class was unregistered), so this follows Origin's documented behaviour.
+
+- **Which graphs:** the graphs that plot any of the selected columns (as X, Y, error or any other
+  referenced column), in window order. With none, the status bar warns and nothing happens.
+- **The show:** each graph's page over the whole screen, as View > Full Screen draws it (T66), starting at
+  the first, without Full Screen's reminder message.
+- **Keys:**
+  - Space, Page Down, Right or a click: the next graph.
+  - Page Up or Left: the previous one.
+  - Home and End: the ends. The last graph stays on a further step.
+  - Esc ends the show.
+- **Sheaf internals:** `view_modes::dependent_graphs`, `FullScreen::slide_show`, `next_slide`.
+

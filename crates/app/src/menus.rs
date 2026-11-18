@@ -336,6 +336,8 @@ pub enum Cmd {
     DataReader,
     /// A tool of the Data menu (Mask, Move or Remove Bad Data Points).
     DataTool(DataTool),
+    /// Column header > Slide Show of Dependent Graphs (T129).
+    SlideShow,
     /// The Data menu's display range and data markers (T118).
     DataMarkers(MarkerOp),
     /// The Text tool of the Tools toolbar.
@@ -1945,7 +1947,8 @@ pub fn column_header_menu() -> Vec<Entry> {
     ));
     v.push(item("Swap Columns...", Cmd::SwapColumns));
     v.push(item("Column Width...", Cmd::ColumnProperties));
-    v.extend(greys(&["-", "Slide Show of Dependent Graphs"]));
+    v.push(sep());
+    v.push(item("Slide Show of Dependent Graphs", Cmd::SlideShow));
     v.extend(greys(&["Add or Update Sparklines...", "-"]));
     v.push(item("Format Cells...", Cmd::FormatCells));
     v.push(item("Properties...", Cmd::ColumnProperties));
@@ -2961,6 +2964,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Pointer => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pointer },
         Cmd::DataReader => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Reader },
         Cmd::DataTool(tool) => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Data(*tool) },
+        Cmd::SlideShow => Action::SlideShow(some()?),
         Cmd::DataMarkers(op) => Action::GraphEdit {
             graph: c.graph.ok_or(NEED_GRAPH)?,
             op: GraphOp::DataMarkers { layer: c.layer, op: *op },

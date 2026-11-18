@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **252 greyed items: 166 in the menu bar, 18 on the toolbars, 68 in context menus.**
+original inventory baseline. This is not a new runtime audit. **250 greyed items: 166 in the menu bar, 18 on the toolbars, 66 in context menus.**
 
 ## How to read and keep this file
 
@@ -69,7 +69,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T126` | 0 |
 | `T127` | 0 |
 | `T128` | 0 |
-| `B2` | 31 |
+| `B2` | 29 |
 | `B3` | 6 |
 | `B4` | 1 |
 | `B5` | 12 |
@@ -86,7 +86,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 60 items, backlog packages (`B`) 172, not planned (`N`) 20.
+Briefs (`T`) hold 60 items, backlog packages (`B`) 170, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -215,7 +215,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T72` Graph axis > Copy Format: Dimensions
 - `T72` Graph axis > Paste Format To: Tick Direction · Ticks · Line · Tick Labels · Title Styles · Colors · Thickness · Title Dimensions · Title Text
 - `B2` Graph axis title: Cut · Copy · Bring to the front · Push to the back
-- `B2` Graph text label: Cut · Copy · Bring to the front · Push to the back
+- `B2` Graph text label: Cut · Copy
 - `T125` Graph drawn shape: Cut · Copy
 - `B2` Graph legend: Cut · Copy · Bring to the front · Push to the back · Bring to front of data · Push to back of data
 - `B16` Graph legend: Programming Control...

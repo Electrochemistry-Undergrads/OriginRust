@@ -1361,6 +1361,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::AddScale { layer, .. }
         | GraphOp::DeleteScale { layer, .. }
         | GraphOp::OrderShape { layer, .. }
+        | GraphOp::OrderLabel { layer, .. }
         | GraphOp::HideLayer { layer }
         | GraphOp::HideOtherLayers { layer }
         | GraphOp::DataMarkers { layer, .. }
@@ -1577,6 +1578,17 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
                     l.shapes.push(value);
                 } else {
                     l.shapes.insert(0, value);
+                }
+            }
+        }
+        GraphOp::OrderLabel { label, front, .. } => {
+            let len = l.labels.len();
+            if label < len && ((front && label + 1 < len) || (!front && label > 0)) {
+                let value = l.labels.remove(label);
+                if front {
+                    l.labels.push(value);
+                } else {
+                    l.labels.insert(0, value);
                 }
             }
         }

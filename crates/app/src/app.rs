@@ -1460,6 +1460,8 @@ impl SheafApp {
             GraphOp::DeleteScale { .. } => "Delete scale",
             GraphOp::OrderShape { front: true, .. } => "Bring drawn object to front",
             GraphOp::OrderShape { front: false, .. } => "Push drawn object to back",
+            GraphOp::OrderLabel { front: true, .. } => "Bring text to front",
+            GraphOp::OrderLabel { front: false, .. } => "Push text to back",
             GraphOp::HideLayer { .. } => "Hide layer",
             GraphOp::HideOtherLayers { .. } => "Hide other layers",
             GraphOp::DataMarkers { op, .. } => match op {
@@ -1508,6 +1510,22 @@ impl SheafApp {
             state.selected =
                 Some((layer, sheaf_plot::scene::ObjectKind::Shape(if front { after.len() - 1 } else { 0 })));
             preserved = Some((graph, layer));
+        }
+        // A label moved in its layer's list: a selected label of that layer keeps pointing at the same label.
+        if let GraphOp::OrderLabel { layer, label, front } = op
+            && let Some(state) = self.graphs.get_mut(&graph)
+            && let Some((l, sheaf_plot::scene::ObjectKind::Label(k))) = state.selected
+            && l == layer
+        {
+            let len = self.doc.project().graph(graph).and_then(|g| g.layers.get(layer)).map_or(0, |l| l.labels.len());
+            let moved = |k: usize| match (k == label, front) {
+                (true, true) => len.saturating_sub(1),
+                (true, false) => 0,
+                (false, true) if k > label => k - 1,
+                (false, false) if k < label => k + 1,
+                _ => k,
+            };
+            state.selected = Some((layer, sheaf_plot::scene::ObjectKind::Label(moved(k))));
         }
         self.clear_changed_shape_selections(selected, preserved);
         self.close_shape_dialog_if_changed(shapes);

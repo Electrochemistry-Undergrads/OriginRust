@@ -3695,6 +3695,58 @@ fn the_sheet_tab_menu_adds_duplicates_renames_and_deletes_sheets() {
 }
 
 #[test]
+fn worksheet_comments_apply_and_undo_from_the_sheet_tab_dialog() {
+    let mut h = start(vec![data_file("sheet-tab-comments")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Add second sheet", |p| {
+        p.workbook_mut(book).unwrap().sheets.push(sheaf_core::Worksheet::new("Other"));
+    });
+    settle(&mut h);
+    let before = project(&h).workbook(book).unwrap().clone();
+    let tab = before.sheets[0].name.clone();
+    let open_info = |h: &mut Harness<'static, SheafApp>| {
+        let at =
+            h.query_all_by_label(&tab).map(|node| node.rect().center()).max_by(|a, b| a.y.total_cmp(&b.y)).unwrap();
+        right_click_at(h, at);
+        menu_entry(h, "Name and Comments...").click();
+        settle(h);
+        assert!(h.state().sheet_name.is_some());
+    };
+    let write_comments = |h: &mut Harness<'static, SheafApp>, text: &str| {
+        h.get_by_role(egui::accesskit::Role::MultilineTextInput).focus();
+        settle(h);
+        h.event(egui::Event::Text(text.to_string()));
+        settle(h);
+    };
+    open_info(&mut h);
+    write_comments(&mut h, "Discard this note");
+    click(&mut h, "Cancel");
+    assert_eq!(project(&h).workbook(book), Some(&before));
+
+    open_info(&mut h);
+    let comments = "Scan at 25 °C\nSecond sweep.";
+    write_comments(&mut h, comments);
+    click(&mut h, "OK");
+    assert!(h.state().sheet_name.is_none());
+    let mut expected = before.clone();
+    expected.sheets[0].comments = comments.into();
+    assert_eq!(project(&h).workbook(book), Some(&expected));
+    assert_eq!(h.state().doc.undo_label(), Some("Edit sheet comments"));
+
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).workbook(book), Some(&before));
+    h.state_mut().apply(Action::Redo, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).workbook(book), Some(&expected));
+    open_info(&mut h);
+    assert_eq!(h.state().sheet_name.as_ref().unwrap().comments, comments);
+    click(&mut h, "Cancel");
+}
+
+#[test]
 fn the_corner_menu_lists_origins_view_switches() {
     let mut h = start(vec![data_file("corner")]);
     show_window(&mut h, "Book1 - sample.csv");

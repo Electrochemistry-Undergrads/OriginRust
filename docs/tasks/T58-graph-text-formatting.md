@@ -239,7 +239,8 @@ Overbar (`codex/t58-text-overbar`, 2026-11-18): graph labels, titles and legends
 through nested styles and paired scripts, with the same glyph placement and advance. SVG
 and other backends receive that stroke from the shared scene. Graphing 7.11 records the
 documented contract and Sheaf's placement choices. Native geometry, dot and tilde remain
-open. Workspace verification pending.
+open. Formatting, strict workspace Clippy, Nextest (4,485 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
 
 Prime notation follow-up (codex/t58-escape-alias-audit, 2026-11-16): exact closed
 prime/double-prime escapes now use Unicode U+2032/U+2033 with existing run styles,

@@ -4,7 +4,10 @@
 
 Worksheet Comments added 2026-11-18. The archived Origin 2016 Select Metadata window shows Comments
 checked under Sheet. Sheaf searches the full multiline comment and opens its sheet from the result.
-The result follows Sheaf's existing sheet hit behavior. Workspace verification pending.
+The result follows Sheaf's existing sheet hit behavior. Formatting, strict workspace Clippy, Nextest (4,520 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
+Desktop captures verified the default Comments checkbox, toggling it off and keeping that setting
+when Find is reopened. The automated UI test verified search results and navigation.
 **Size:** M. **Source:** greyed inventory package B7 (Edit > Find in Project... on a workbook, Find in
 Project on a graph; F3).
 **Spec:** `docs/spec/gui-look.md` section 5 (Find) or `workbook-model.md`.

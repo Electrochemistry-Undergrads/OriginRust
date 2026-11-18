@@ -2,7 +2,8 @@
 
 **Status:** sheet listing and activation landed 2026-11-16 (workbook-model 13h). The Comments
 column now shows the worksheet's saved T90 comments with full text on hover. Actions and
-Apply Reorder remain open. Workspace verification pending.
+Apply Reorder remain open. Formatting, strict workspace Clippy, Nextest (4,517 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
 **Size:** S. **Source:** greyed inventory package B6 (the sheet tab's Navigate...).
 **Spec:** `docs/spec/workbook-model.md` (with the sheet tab section 13h).
 

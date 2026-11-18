@@ -104,6 +104,7 @@ pub enum LabelKind {
     Comments,
     Formula,
     Param(String),
+    SamplingInterval,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

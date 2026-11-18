@@ -1960,7 +1960,10 @@ pub fn column_header_menu() -> Vec<Entry> {
 }
 
 /// Metadata cells have clipboard commands, without structural operations on worksheet data.
-pub fn label_cell_menu() -> Vec<Entry> {
+pub fn label_cell_menu(read_only: bool) -> Vec<Entry> {
+    if read_only {
+        return vec![sub("Copy", copy_entries())];
+    }
     vec![
         keyed("Cut", ctrl(Key::X), Cmd::Cut),
         sub("Copy", copy_entries()),
@@ -2426,10 +2429,10 @@ pub fn layer_icon_menu(layer: usize, layers: usize, plots: &[String], active: Op
 
 /// The menu of the corner above the row numbers: the switches of Origin 2016's corner View submenu
 /// (T92), ticked when on.
-pub fn corner_menu(view: &sheaf_core::sheet_view::SheetView) -> Vec<Entry> {
+pub fn corner_menu(sheet: &sheaf_core::Worksheet) -> Vec<Entry> {
     use sheaf_core::sheet_view::ViewSwitch as V;
     let switch = |s: V| {
-        let tick = if view.shows(s) { "\u{2713} " } else { "" };
+        let tick = if sheet.shows_view_switch(s) { "\u{2713} " } else { "" };
         item(&format!("{tick}{}", s.name()), Cmd::Sheet(SheetOp::ToggleView(s)))
     };
     vec![
@@ -2437,7 +2440,7 @@ pub fn corner_menu(view: &sheaf_core::sheet_view::SheetView) -> Vec<Entry> {
         switch(V::Units),
         switch(V::Comments),
         grey("Parameters"),
-        grey("Sampling Interval"),
+        switch(V::SamplingInterval),
         grey("Sparklines"),
         grey("Filter"),
         switch(V::Formula),

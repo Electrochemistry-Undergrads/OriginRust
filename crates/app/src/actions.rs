@@ -64,6 +64,8 @@ pub enum LabelRow {
     Comments,
     /// The F(x)= row: editing it opens Set Column Values.
     Formula,
+    /// The read-only summary of a column's own X values.
+    SamplingInterval,
     /// A user parameter row, by name.
     Param(String),
 }

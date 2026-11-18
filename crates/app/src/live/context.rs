@@ -172,6 +172,7 @@ fn worksheet_selection(sheet: &Worksheet, state: &BookUi) -> Value {
                 LabelRow::Units => json!({"kind": "units"}),
                 LabelRow::Comments => json!({"kind": "comments"}),
                 LabelRow::Formula => json!({"kind": "formula"}),
+                LabelRow::SamplingInterval => json!({"kind": "sampling_interval"}),
                 LabelRow::Param(name) => json!({"kind": "parameter", "name": name}),
             };
             out

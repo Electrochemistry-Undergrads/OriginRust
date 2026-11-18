@@ -879,16 +879,25 @@ Sheaf's corner menu is that list (`sheaf_core::sheet_view`, saved per sheet in `
 the per-book or per-sheet scope was not checked): Long Name, Units, Comments and F(x)= hide or show their
 label row; Row Labels hides the row titles; Column Grid and Row Grid the vertical and horizontal lines
 between data cells. One undo step each ("Worksheet view"). Grey: Parameters (Origin's system rows),
-Sampling Interval (the interval of T84 has no label row yet), Sparklines, Filter, Categories, Column Header,
+Sparklines, Filter, Categories, Column Header,
 Row Header and Page Break Preview Lines. User parameter rows show whenever a column has one. The `.opj`
 written here does not hold the switches (the save warning names the sheets).
 
-**Sampling Interval row (measured 2026-11-16 for T94, not built):** after `colint` gave B x0 = 0, inc =
+**Sampling Interval row (T94, measured 2026-11-16):** after `colint` gave B x0 = 0, inc =
 0.5, units s, Origin 2016 showed a "Sampling Interval" label row on its own (the switch turned on), below
 F(x)=, with "0.5 (s)" in B (the increment and the units in parentheses) and empty cells in A and C; the
 corner switch hides it again. The column heads also changed: B became "B(Y#)" with a small icon, A "A(X1)"
-and C "C(Y1)" (designation numbers appear once a column has its own X). Building it needs a new label-row
-kind in the worksheet layout and cell formats (T59's area), so it waits for that work.
+and C "C(Y1)" (designation numbers appear once a column has its own X).
+
+Sheaf shows the row after F(x)= when the sheet has a sampling interval. The corner switch
+saves an explicit show or hide choice per sheet and supports Undo and Redo. Legacy sheets use
+automatic visibility. A row explicitly shown on a sheet without intervals has empty cells.
+Zero-start intervals display the increment with optional units as in the measured case.
+[Origin's metadata guide](https://docs.originlab.com/labtalk/guide/accessing-metadata/)
+describes the read-only row and its offset and increment. Sheaf displays nonzero starts in
+the single-line form `x0 = 2, dx = 0.5 (s)` and uses round-trippable numeric text. Cells without
+an interval are empty. The displayed value can be copied. Edit the underlying metadata via
+Set Sampling Interval. Column heading icons and print/export support are follow-up work.
 
 ## 13j. Find in Project (T95, measured 2026-11-16, Origin 2016)
 

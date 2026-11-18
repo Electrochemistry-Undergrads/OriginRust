@@ -1,6 +1,9 @@
 # T94: Sampling Interval label row
 
-**Status:** open; measured 2026-11-16 (workbook-model.md 13i, "Sampling Interval row"), not built: the row needs a new label-row kind in `worksheet_layout.rs` and `cellformat::LabelKind`, which the T59 sessions are changing; claim it after T59's worksheet slices land. Claim withdrawn by Claude Windows "t30-origin".
+**Status:** implemented 2026-11-18 in `codex/t94-sampling-interval-row` after T59's label-row layout landed.
+The corner switch and read-only worksheet row follow the recorded Origin 2016 fixture in workbook-model 13i.
+Formatting, strict workspace Clippy, Nextest (4,492 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
 **Size:** S. **Source:** greyed inventory package B6 (the worksheet corner menu's Sampling Interval), with
 T84's sampling interval.
 **Spec:** `docs/spec/workbook-model.md` 13d and 13i.
@@ -12,8 +15,10 @@ Origin 2016's.
 
 ## Origin facts
 
-Measure in Origin 2016: whether the row is shown by default or appears with an interval, its title, what
-it shows for a column with and without an interval, and whether it can be edited there.
+The 2016 fixture shows the row below F(x)= after setting B's step to 0.5 s. B shows `0.5 (s)`,
+and A and C are empty. The corner switch hides the row. Origin documents the row as read-only.
+Workbook-model 13i records Sheaf's saved visibility override, nonzero offset display and remaining
+column heading and export work.
 
 ## Done when
 

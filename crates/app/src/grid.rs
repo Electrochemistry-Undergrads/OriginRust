@@ -10,6 +10,7 @@ use crate::menus::{self, MenuContext, WindowKind};
 use eframe::egui::{self, Align, Color32, Layout, Pos2, Rect, RichText, Sense, Shape, Stroke, UiBuilder, vec2};
 use egui_extras::{Column as TableColumn, TableBuilder};
 use sheaf_core::cellformat::{HAlign, ResolvedStyle};
+use sheaf_core::sheet_view::ViewSwitch;
 use sheaf_core::{Column, ColumnId, Document, FormulaState, RecalcMode, WindowId, Worksheet};
 use std::collections::HashMap;
 use std::ops::Range;
@@ -465,6 +466,14 @@ fn column_pixels(chars: u16) -> f32 {
 }
 /// Width of the row header together with the titles of the label rows.
 const ROW_HEADER_WIDTH: f32 = 84.0;
+
+fn row_header_width(sheet: &Worksheet) -> f32 {
+    if sheet.view.row_labels && sheet.shows_view_switch(ViewSwitch::SamplingInterval) {
+        112.0
+    } else {
+        ROW_HEADER_WIDTH
+    }
+}
 /// Empty rows shown below the data so that new values can be typed in.
 const SPARE_ROWS: usize = 30;
 const TAB_BAR_HEIGHT: f32 = 20.0;
@@ -521,7 +530,7 @@ pub fn frozen_split(
 ) -> (usize, Vec<usize>) {
     let room = ((body_size.y - header_height) / ROW_HEIGHT).floor() as i64 - 3;
     let rows = usize::from(sheet.frozen.rows).min(data_rows).min(room.max(0) as usize);
-    let mut used = ROW_HEADER_WIDTH;
+    let mut used = row_header_width(sheet);
     let mut columns = Vec::new();
     for (position, column) in
         sheet.columns.iter().enumerate().filter(|(_, c)| !c.hidden).take(usize::from(sheet.frozen.columns))
@@ -642,7 +651,7 @@ fn cell_scope(ui: &mut egui::Ui, rect: Rect, salt: impl std::hash::Hash, add: im
     );
 }
 
-/// The label rows of a sheet in order: the four fixed ones, then one per user parameter.
+/// The label rows in display order, followed by one per user parameter.
 fn label_rows(sheet: &Worksheet) -> Vec<LabelRow> {
     // The corner menu's View switches hide label rows (T92).
     let v = &sheet.view;
@@ -651,6 +660,7 @@ fn label_rows(sheet: &Worksheet) -> Vec<LabelRow> {
         (v.units, LabelRow::Units),
         (v.comments, LabelRow::Comments),
         (v.formula, LabelRow::Formula),
+        (sheet.shows_view_switch(ViewSwitch::SamplingInterval), LabelRow::SamplingInterval),
     ]
     .into_iter()
     .filter_map(|(shown, row)| shown.then_some(row))
@@ -667,6 +677,7 @@ pub fn label_kind(row: &LabelRow) -> sheaf_core::cellformat::LabelKind {
         LabelRow::Units => LabelKind::Units,
         LabelRow::Comments => LabelKind::Comments,
         LabelRow::Formula => LabelKind::Formula,
+        LabelRow::SamplingInterval => LabelKind::SamplingInterval,
         LabelRow::Param(name) => LabelKind::Param(name.clone()),
     }
 }
@@ -677,6 +688,7 @@ fn row_title(row: &LabelRow) -> String {
         LabelRow::Units => "Units".to_string(),
         LabelRow::Comments => "Comments".to_string(),
         LabelRow::Formula => "F(x)=".to_string(),
+        LabelRow::SamplingInterval => ViewSwitch::SamplingInterval.name().into(),
         LabelRow::Param(name) => name.clone(),
     }
 }
@@ -687,6 +699,19 @@ fn label_text(column: &Column, row: &LabelRow) -> String {
         LabelRow::Units => column.units.clone(),
         LabelRow::Comments => column.comments.lines().next().unwrap_or_default().to_string(),
         LabelRow::Formula => column.formula.clone().unwrap_or_default(),
+        LabelRow::SamplingInterval => column.sampling.as_ref().map_or_else(String::new, |interval| {
+            let mut text = if interval.x0 == 0.0 {
+                interval.inc.to_string()
+            } else {
+                format!("x0 = {}, dx = {}", interval.x0, interval.inc)
+            };
+            if !interval.units.is_empty() {
+                text.push_str(" (");
+                text.push_str(&interval.units);
+                text.push(')');
+            }
+            text
+        }),
         LabelRow::Param(name) => column.params.get(name).cloned().unwrap_or_default(),
     }
 }
@@ -797,7 +822,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         nf_rows -= 1;
     }
     let frozen_px: Vec<f32> = frozen_positions.iter().map(|p| column_px(state, &sheet.columns[*p])).collect();
-    let frozen_w = if frozen_positions.is_empty() { 0.0 } else { ROW_HEADER_WIDTH + frozen_px.iter().sum::<f32>() };
+    let row_header_width = row_header_width(sheet);
+    let frozen_w = if frozen_positions.is_empty() { 0.0 } else { row_header_width + frozen_px.iter().sum::<f32>() };
     let header_total = header_height + row_heights.offset(nf_rows) as f32;
     let frozen_rows: Vec<usize> = (0..nf_rows).map(|i| shown.as_ref().map_or(i, |s| s[i])).collect();
     state.frozen_cols = frozen_positions.iter().map(|p| sheet.columns[*p].id).collect();
@@ -860,7 +886,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                         .striped(false)
                         .resizable(true)
                         .cell_layout(Layout::left_to_right(Align::Center))
-                        .column(TableColumn::exact(ROW_HEADER_WIDTH))
+                        .column(TableColumn::exact(row_header_width))
                         .min_scrolled_height(0.0);
                     for (position, column) in sheet.columns.iter().enumerate().filter(|(_, c)| !c.hidden) {
                         table = match column.width {
@@ -1000,6 +1026,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
             heights: row_heights,
             header_height,
             header_total,
+            row_header_width,
             width: frozen_w,
         };
         frozen_overlay(ui, output.inner_rect, &layout, &drawn_rows, sheet, &label_rows, book_id, state, actions);
@@ -1139,6 +1166,7 @@ struct FrozenView<'a> {
     heights: &'a sheaf_core::sheet_print::RowHeights,
     header_height: f32,
     header_total: f32,
+    row_header_width: f32,
     /// Width of the row header and the frozen columns together.
     width: f32,
 }
@@ -1167,17 +1195,17 @@ fn frozen_overlay(
         let (left, top) = (inner.left(), inner.top());
         let band_top = top + fv.header_height;
         // The corner with the titles of the label rows, and the numbers of the frozen rows.
-        let corner = Rect::from_min_size(Pos2::new(left, top), vec2(ROW_HEADER_WIDTH, fv.header_total));
+        let corner = Rect::from_min_size(Pos2::new(left, top), vec2(fv.row_header_width, fv.header_total));
         cell_scope(ui, corner, "frozen_corner", |ui| corner_and_titles(ui, sheet, label_rows, book_id, state, actions));
         for (i, r) in fv.rows.iter().enumerate() {
             let cell = Rect::from_min_size(
                 Pos2::new(left, band_top + fv.heights.offset(i) as f32),
-                vec2(ROW_HEADER_WIDTH, fv.heights.height(i) as f32),
+                vec2(fv.row_header_width, fv.heights.height(i) as f32),
             );
             cell_scope(ui, cell, ("frozen_rowhead", *r), |ui| row_header_cell(ui, *r, true, book_id, state, actions));
         }
         // The heads and the frozen rows of each frozen column.
-        let mut x = left + ROW_HEADER_WIDTH;
+        let mut x = left + fv.row_header_width;
         for (&position, &w) in fv.positions.iter().zip(fv.widths) {
             let column = &sheet.columns[position];
             let head = Rect::from_min_size(Pos2::new(x, top), vec2(w, fv.header_total));
@@ -1203,9 +1231,9 @@ fn frozen_overlay(
                 if y + height < below.top() || y > below.bottom() {
                     continue;
                 }
-                let cell = Rect::from_min_size(Pos2::new(left, y), vec2(ROW_HEADER_WIDTH, height));
+                let cell = Rect::from_min_size(Pos2::new(left, y), vec2(fv.row_header_width, height));
                 cell_scope(ui, cell, ("frozen_rowhead", r), |ui| row_header_cell(ui, r, true, book_id, state, actions));
-                let mut x = left + ROW_HEADER_WIDTH;
+                let mut x = left + fv.row_header_width;
                 for (&position, &w) in fv.positions.iter().zip(fv.widths) {
                     let column = &sheet.columns[position];
                     let cell = Rect::from_min_size(Pos2::new(x, y), vec2(w, height));
@@ -1448,9 +1476,7 @@ fn corner_and_titles(
         state.select_all(sheet);
         state.focus(ui.ctx());
     }
-    response.context_menu(|ui| {
-        menus::show_context(ui, &menus::corner_menu(&sheet.view), &book_ctx(book_id, state), actions)
-    });
+    response.context_menu(|ui| menus::show_context(ui, &menus::corner_menu(sheet), &book_ctx(book_id, state), actions));
     for (i, row) in label_rows.iter().enumerate() {
         let cell = Rect::from_min_size(
             Pos2::new(
@@ -1689,7 +1715,11 @@ fn label_cell(
             }
         }
     }
-    response.context_menu(|ui| menus::show_context(ui, &menus::label_cell_menu(), &book_ctx(book_id, state), actions));
+    let read_only = *row == LabelRow::SamplingInterval;
+    let response = if read_only && !text.is_empty() { response.on_hover_text(text) } else { response };
+    response.context_menu(|ui| {
+        menus::show_context(ui, &menus::label_cell_menu(read_only), &book_ctx(book_id, state), actions)
+    });
 }
 
 /// The text a label cell is edited with (the whole comment, not just its first line).
@@ -1701,6 +1731,9 @@ pub fn label_text_full(column: &Column, row: &LabelRow) -> String {
 }
 
 fn start_editing_label(state: &mut BookUi, column: &Column, row: &LabelRow, replacement: Option<String>) {
+    if *row == LabelRow::SamplingInterval {
+        return;
+    }
     let original = label_text_full(column, row);
     state.editing_label_original = original.clone();
     state.editing_label = Some((column.id, row.clone(), replacement.unwrap_or(original)));

@@ -1,6 +1,9 @@
 # T93: Sheet tab Navigate...
 
-**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13h): Origin's Navigate Worksheets window measured; Sheaf's lists the sheets and goes to the picked one. Left: Actions menu, Apply Reorder.
+**Status:** sheet listing and activation landed 2026-11-16 (workbook-model 13h). The Comments
+column now shows the worksheet's saved T90 comments with full text on hover. Actions and
+Apply Reorder remain open. Formatting, strict workspace Clippy, Nextest (4,517 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
 **Size:** S. **Source:** greyed inventory package B6 (the sheet tab's Navigate...).
 **Spec:** `docs/spec/workbook-model.md` (with the sheet tab section 13h).
 

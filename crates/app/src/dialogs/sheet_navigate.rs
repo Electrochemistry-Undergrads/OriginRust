@@ -1,7 +1,7 @@
 //! The sheet tab's Navigate... (T93): Origin 2016's "Navigate Worksheets - Book1" window lists the
 //! workbook's sheets in a table (Index, Creation Index, Name, Columns, Size(KB), Comments, Type, Source),
 //! the active one selected; OK goes to the selected sheet, Close closes. Sheaf shows the columns it can
-//! fill: Index, Name, Long Name, Columns and Rows. Rules in `docs/spec/workbook-model.md` 13h.
+//! fill: Index, Name, Long Name, Columns, Rows and Comments. Rules in `docs/spec/workbook-model.md` 13h.
 
 use eframe::egui::{self, RichText};
 use sheaf_core::{Project, WindowId};
@@ -32,8 +32,8 @@ impl SheetNavigateDialog {
             .resizable(false)
             .open(&mut open)
             .show(ctx, |ui| {
-                egui::Grid::new("sheet_navigate_grid").striped(true).num_columns(5).show(ui, |ui| {
-                    for head in ["Index", "Name", "Long Name", "Columns", "Rows"] {
+                egui::Grid::new("sheet_navigate_grid").striped(true).num_columns(6).show(ui, |ui| {
+                    for head in ["Index", "Name", "Long Name", "Columns", "Rows", "Comments"] {
                         ui.label(RichText::new(head).strong());
                     }
                     ui.end_row();
@@ -44,6 +44,12 @@ impl SheetNavigateDialog {
                         ui.label(&sheet.long_name);
                         ui.label(sheet.columns.len().to_string());
                         ui.label(sheet.row_count().to_string());
+                        let first_line = sheet.comments.lines().next().unwrap_or_default();
+                        let comment = ui
+                            .add_sized([180.0, ui.spacing().interact_size.y], egui::Label::new(first_line).truncate());
+                        if !sheet.comments.is_empty() {
+                            comment.on_hover_text(&sheet.comments);
+                        }
                         ui.end_row();
                         if index.clicked() || name.clicked() {
                             self.selected = i;

@@ -839,6 +839,10 @@ pub enum Action {
     StartIntegrate {
         graph: WindowId,
     },
+    /// Gadgets > Rise Time on a graph (T138).
+    StartRiseTime {
+        graph: WindowId,
+    },
     /// A command of a graph's open gadget.
     Gadget {
         graph: WindowId,

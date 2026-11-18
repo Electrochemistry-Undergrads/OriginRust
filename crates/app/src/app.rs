@@ -1302,7 +1302,7 @@ impl SheafApp {
 
     /// Gadgets > Integrate: the gadget goes on the selected plot of the active layer, or its first
     /// visible plot with numbers, over the middle half of the X axis.
-    fn start_integrate(&mut self, graph: WindowId) {
+    fn start_gadget(&mut self, graph: WindowId, kind: crate::gadget::GadgetKind) {
         let project = self.doc.project();
         let Some(g) = project.graph(graph) else { return };
         let state = self.graphs.entry(graph).or_default();
@@ -1319,7 +1319,7 @@ impl SheafApp {
         };
         let count = g.layers.get(layer).map_or(0, |l| l.plots.len());
         let Some(plot) = selected.or_else(|| (0..count).find(numeric)) else {
-            self.warn("Nothing to integrate: the active layer has no plot of numbers".to_string());
+            self.warn("Nothing to measure: the active layer has no plot of numbers".to_string());
             return;
         };
         let Some(geom) = sheaf_plot::layout_geometry(project, graph).ok().and_then(|v| v.into_iter().nth(layer)) else {
@@ -1328,7 +1328,7 @@ impl SheafApp {
         let placement =
             sheaf_plot::stack_places(project, graph, layer).ok().and_then(|p| p.get(plot).copied()).unwrap_or_default();
         let (x0, x1) = (placement.source_x(geom.x.from_unit(0.25)), placement.source_x(geom.x.from_unit(0.75)));
-        state.gadget = Some(crate::gadget::Integrator { layer, plot, x0, x1, end_point_baseline: false });
+        state.gadget = Some(crate::gadget::Integrator { kind, layer, plot, x0, x1, end_point_baseline: false });
         self.focus(graph);
     }
 
@@ -2652,7 +2652,8 @@ impl SheafApp {
             Action::PasteFormatDialog { graph, layer } => {
                 self.apply_formats = Some(crate::format_clip_ui::ApplyFormats::new(graph, layer));
             }
-            Action::StartIntegrate { graph } => self.start_integrate(graph),
+            Action::StartIntegrate { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Integrate),
+            Action::StartRiseTime { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::RiseTime),
             Action::Gadget { graph, op } => self.gadget(graph, op),
             Action::ExportGraph(graph) => {
                 self.export =
@@ -5967,7 +5968,7 @@ impl SheafApp {
                 }
                 "integrate" => {
                     if let Some(id) = first_graph {
-                        self.start_integrate(id);
+                        self.start_gadget(id, crate::gadget::GadgetKind::Integrate);
                     }
                 }
                 "plot-setup" => {

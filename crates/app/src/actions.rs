@@ -875,6 +875,10 @@ pub enum Action {
     StartQuickFit {
         graph: WindowId,
     },
+    /// Gadgets > Vertical Cursor on a graph (T144).
+    StartVerticalCursor {
+        graph: WindowId,
+    },
     /// A command of a graph's open gadget.
     Gadget {
         graph: WindowId,

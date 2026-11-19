@@ -6478,6 +6478,13 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
   point. It is drawn as a flat bar facing the page, red with a black edge, not as a prism.
   - The bars are drawn from the back to the front, so nearer bars cover farther ones. The rows are
     reordered for that, so masks and row filters do not apply to 3D bars.
+- **3D Vector XYZ XYZ and XYZ dXdYdZ (T157, `3d-vector-xyz-xyz`, `3d-vector-xyz-dxdydz`):**
+  `Project::plot_vectors_3d` takes the Y column's X, then the next four numeric columns after it:
+  Z, then the end X, Y and Z (or the changes of X, Y and Z).
+  - The arrow runs from each row's point to its end, as the 2D Vector XYXY arrow draws it. The head
+    is 6.5 pt at 30 degrees, black, 0.5 pt.
+  - The box takes the ends into its ranges. The end columns are in `VectorSpec::a`, `b` and `c`, and
+    `delta` marks dXdYdZ.
 - **Not done:**
   - rotating the view, and the Z axis dialog (Format > Axes > Z Axis stays grey);
   - hiding points behind each other (points are drawn in row order);

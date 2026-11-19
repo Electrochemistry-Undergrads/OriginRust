@@ -1228,7 +1228,10 @@ fn plot_menu() -> Vec<Entry> {
                     item("3D Trajectory", Cmd::Plot(Template::Trajectory3d)),
                     item("3D Scatter + Error Bar", Cmd::Plot(Template::Scatter3dError)),
                 ],
-                greys(&["3D Vector XYZ XYZ", "3D Vector XYZ dXdYdZ"]),
+                vec![
+                    item("3D Vector XYZ XYZ", Cmd::Plot(Template::Vector3dXyz)),
+                    item("3D Vector XYZ dXdYdZ", Cmd::Plot(Template::Vector3dDelta)),
+                ],
             ]
             .concat(),
         ),

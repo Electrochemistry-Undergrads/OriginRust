@@ -82,6 +82,12 @@ pub struct VectorSpec {
     pub head_angle_deg: f64,
     #[serde(default)]
     pub open_head: bool,
+    /// 3D vectors (T157): the Z of the arrow's end (or, with `delta`, the change of Z).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub c: Option<ColumnId>,
+    /// 3D Vector XYZ dXdYdZ (T157): `a`, `b` and `c` are the changes of X, Y and Z, not the end.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub delta: bool,
 }
 
 impl VectorSpec {
@@ -104,6 +110,47 @@ pub fn auto_multiplier(magnitudes: &[f64]) -> f64 {
 }
 
 impl Project {
+    /// Plots 3D vectors (T157) of the Y column `y`: the columns after it in the sheet are Z, then the
+    /// end X, Y and Z (or, for [`Template::Vector3dDelta`], the changes of X, Y and Z). X is the Y
+    /// column's X column. Missing columns are refused.
+    pub fn plot_vectors_3d(&mut self, template: Template, y: ColumnId) -> Result<WindowId, ProjectError> {
+        let need = "a 3D vector plot needs X, Y, Z and three more columns (the end X, Y and Z, or dX, dY and dZ); select the Y column";
+        let (_, sheet, _) = self.locate(y).ok_or(ProjectError::NoSuchColumn(y))?;
+        let i = sheet.column_index(y).ok_or(ProjectError::NoSuchColumn(y))?;
+        let x = sheet.x_for(i).map(|c| c.id);
+        let after: Vec<ColumnId> =
+            sheet.columns[i + 1..].iter().filter(|c| c.data.is_numeric()).map(|c| c.id).take(4).collect();
+        let [z, a, b, c] = after[..] else { return Err(ProjectError::VectorColumns(need)) };
+        let id = self.add_graph(template);
+        self.add_plot_xy(id, 0, x, y, None)?;
+        let plot = self.graph_mut(id).and_then(|g| g.layers[0].plots.last_mut()).expect("a plot was just added");
+        plot.kind = PlotKind::VectorXyxy;
+        plot.size_from = Some(z);
+        plot.line.color = crate::Color::BLACK;
+        plot.line.width_pt = 0.5;
+        plot.auto_color = false;
+        plot.decor.vector = Some(VectorSpec {
+            a,
+            b,
+            multiplier: 1.0,
+            degrees: false,
+            convention: VectorAngleConvention::Polar,
+            real_world_space: false,
+            position: VectorPosition::Tail,
+            head_pt: 6.5,
+            head_angle_deg: 30.0,
+            open_head: false,
+            c: Some(c),
+            delta: template == Template::Vector3dDelta,
+        });
+        if let Some(name) = self.locate(y).map(|(b, _, _)| b.title_for_graph())
+            && let Some(g) = self.graph_mut(id)
+        {
+            g.long_name = name;
+        }
+        Ok(id)
+    }
+
     /// Plots vector arrows: XYAM from the Y columns `ys` taken three at a time (Y, angle, magnitude), XYXY
     /// from `ys` taken two at a time (Y1, Y2) with the X column of each. One graph, one plot per group.
     pub fn plot_vectors(&mut self, template: Template, ys: &[ColumnId]) -> Result<WindowId, ProjectError> {
@@ -134,6 +181,8 @@ impl Project {
                     head_pt: 4.5,
                     head_angle_deg: 30.0,
                     open_head: false,
+                    c: None,
+                    delta: false,
                 }
             } else {
                 let (_, s2, _) = self.locate(chunk[1]).ok_or(ProjectError::NoSuchColumn(chunk[1]))?;
@@ -160,6 +209,8 @@ impl Project {
                     head_pt: 6.5,
                     head_angle_deg: 30.0,
                     open_head: false,
+                    c: None,
+                    delta: false,
                 }
             };
             self.add_plot_xy(id, 0, x, y, None)?;

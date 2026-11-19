@@ -1097,6 +1097,12 @@ impl Project {
         if matches!(template, Template::VectorXyam | Template::VectorXyxy) {
             return self.plot_vectors(template, ys);
         }
+        if matches!(template, Template::Vector3dXyz | Template::Vector3dDelta) {
+            let Some(&y) = ys.first() else {
+                return Err(ProjectError::VectorColumns("a 3D vector plot needs a Y column"));
+            };
+            return self.plot_vectors_3d(template, y);
+        }
         if matches!(template, Template::HighLowClose | Template::Candlestick | Template::OhlcBar | Template::OhlcVolume)
         {
             return self.plot_stock(template, ys);

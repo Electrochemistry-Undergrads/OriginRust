@@ -879,6 +879,14 @@ pub enum Action {
     StartVerticalCursor {
         graph: WindowId,
     },
+    /// Gadgets > Differentiate on a graph (T145).
+    StartDifferentiate {
+        graph: WindowId,
+    },
+    /// Gadgets > Interpolate on a graph (T145).
+    StartInterpolate {
+        graph: WindowId,
+    },
     /// A command of a graph's open gadget.
     Gadget {
         graph: WindowId,

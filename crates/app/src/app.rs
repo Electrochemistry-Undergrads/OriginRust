@@ -2670,6 +2670,8 @@ impl SheafApp {
             Action::StartFft { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Fft),
             Action::StartStatisticsGadget { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Statistics),
             Action::StartQuickFit { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::QuickFit),
+            Action::StartDifferentiate { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Differentiate),
+            Action::StartInterpolate { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Interpolate),
             Action::StartVerticalCursor { graph } => {
                 self.start_gadget(graph, crate::gadget::GadgetKind::VerticalCursor)
             }

@@ -1024,7 +1024,7 @@ impl Project {
         if template == Template::DoubleY || template == Template::ScatterMatrix || template.multi_y().is_some() {
             return ys.iter().map(|c| c.id).collect();
         }
-        if template == Template::Ternary {
+        if matches!(template, Template::Ternary | Template::Scatter3d | Template::Trajectory3d) {
             // The plots that have a third column; without a Z column the first Y column and the
             // column after it.
             let with_z: Vec<ColumnId> = ys.iter().map(|c| c.id).filter(|&y| self.z_column_for(y).is_some()).collect();
@@ -1204,7 +1204,8 @@ impl Project {
                 self.add_plot(graph, 0, *y)?;
                 // Bubble and colour mapped plots take their third variable from the Z column.
                 let z = self.z_column_for(*y);
-                let ternary_z = if template == Template::Ternary { self.ternary_z_for(*y) } else { None };
+                let xyz = matches!(template, Template::Ternary | Template::Scatter3d | Template::Trajectory3d);
+                let ternary_z = if xyz { self.ternary_z_for(*y) } else { None };
                 let z_name = ternary_z.and_then(|z| self.column(z)).map(|c| c.display_name().to_string());
                 let (size, color) = match template {
                     Template::Bubble => (true, false),
@@ -1220,6 +1221,9 @@ impl Project {
                         // legend names the plot after it (measured).
                         p.size_from = ternary_z;
                         p.label = z_name;
+                    } else if xyz {
+                        // The Z column of a 3D plot (T155).
+                        p.size_from = ternary_z;
                     }
                 }
             }

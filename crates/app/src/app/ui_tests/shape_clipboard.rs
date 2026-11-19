@@ -197,3 +197,30 @@ fn the_plot_menus_probability_and_qq_plot_open_their_windows() {
     settle(&mut h);
     assert_eq!(h.state().analysis.as_ref().map(|a| a.kind()), Some(AnalysisKind::QQPlot));
 }
+
+#[test]
+fn the_3d_scatter_and_trajectory_items_make_xyz_graphs() {
+    // T155: Plot > 3D Symbol/Bar/Vector > 3D Scatter and 3D Trajectory.
+    use sheaf_core::template::Template;
+    let plot = menus::bar(menus::WindowKind::Workbook).iter().find(|m| m.name() == "Plot").unwrap();
+    let mut found = Vec::new();
+    menus::walk(&plot.entries, &mut |i| {
+        if let Some(menus::Cmd::Plot(t @ (Template::Scatter3d | Template::Trajectory3d))) = &i.cmd {
+            found.push(*t);
+        }
+    });
+    assert_eq!(found, [Template::Scatter3d, Template::Trajectory3d]);
+    // The sample's "up" column with "down" after it as Z.
+    let mut h = start(vec![data_file("plot-3d")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    click_text(&mut h, "B(Y1)");
+    let before = project(&h).graphs().count();
+    let action = menus::resolve(&menus::Cmd::Plot(Template::Scatter3d), &h.state().menu_context()).unwrap();
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(action, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).graphs().count(), before + 1);
+    let g = project(&h).graphs().last().unwrap();
+    assert!(g.layers[0].coords.space3d().is_some());
+    assert!(g.layers[0].plots[0].size_from.is_some(), "the Z column");
+}

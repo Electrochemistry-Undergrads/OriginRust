@@ -27,6 +27,28 @@ impl DataBox {
     }
 }
 
+/// The end points of a 3D vector plot's arrows in data units (T157); `None` for other plots.
+fn vector_ends(
+    project: &Project,
+    plot: &sheaf_core::graph::Plot,
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
+) -> Option<Vec<[f64; 3]>> {
+    let spec = plot.decor.vector.as_ref().filter(|_| plot.kind == sheaf_core::graph::PlotKind::VectorXyxy)?;
+    let col = |id| project.numeric(id).unwrap_or_default();
+    let (a, b, c) = (col(spec.a), col(spec.b), col(spec.c?));
+    let at = |v: &[f64], i: usize| v.get(i).copied().unwrap_or(f64::NAN);
+    Some(
+        (0..x.len().min(y.len()).min(z.len()))
+            .map(|r| {
+                let d = [at(a, r), at(b, r), at(c, r)];
+                if spec.delta { [x[r] + d[0], y[r] + d[1], z[r] + d[2]] } else { d }
+            })
+            .collect(),
+    )
+}
+
 /// Row `r`'s X and Y in the cube (NaN when missing).
 fn xyz_unit(project: &Project, plot: &sheaf_core::graph::Plot, b: &DataBox, r: usize) -> (f64, f64) {
     match xyz(project, plot) {
@@ -58,11 +80,14 @@ pub(crate) fn data_box(project: &Project, layer: &Layer) -> Option<DataBox> {
     let mut ext = [(f64::INFINITY, f64::NEG_INFINITY); 3];
     for plot in layer.plots.iter().filter(|p| p.visible) {
         let Some((x, y, z)) = xyz(project, plot) else { continue };
+        let ends = vector_ends(project, plot, &x, y, z);
         for r in 0..x.len().min(y.len()).min(z.len()) {
-            let v = [x[r], y[r], z[r]];
-            if v.iter().all(|v| v.is_finite()) {
-                for (e, v) in ext.iter_mut().zip(v) {
-                    *e = (e.0.min(v), e.1.max(v));
+            let start = [x[r], y[r], z[r]];
+            for v in std::iter::once(start).chain(ends.as_ref().and_then(|e| e.get(r).copied())) {
+                if v.iter().all(|v| v.is_finite()) {
+                    for (e, v) in ext.iter_mut().zip(v) {
+                        *e = (e.0.min(v), e.1.max(v));
+                    }
                 }
             }
         }
@@ -136,6 +161,18 @@ pub(crate) fn columns(pd: &mut PlotData, project: &Project, c: &Space3dCoords, b
         pd.filters.clear();
     } else {
         pd.stack = None;
+    }
+    // 3D vectors (T157): the arrows end at their end points in the view.
+    if let (Some((x, y, z)), Some(v)) = (xyz(project, pd.plot), pd.vector.as_mut())
+        && let Some(ends) = vector_ends(project, pd.plot, &x, y, z)
+    {
+        let rows = (0..n)
+            .map(|r| match ends.get(r) {
+                Some(e) => view(c, [b.unit(0, e[0]), b.unit(1, e[1]), b.unit(2, e[2])]),
+                None => (f64::NAN, f64::NAN),
+            })
+            .collect();
+        v.rows = crate::vector_plot::VectorRows::Xy(rows);
     }
     pd.x = Some(Cow::Owned(us));
     pd.y = Cow::Owned(ws);
@@ -349,5 +386,43 @@ mod tests {
             .map(|w| (w + c.elevation_deg.to_radians().cos()) / c.elevation_deg.to_radians().sin())
             .collect();
         assert!(depth.windows(2).all(|w| w[0] >= w[1] - 1e-12), "{depth:?}");
+    }
+
+    #[test]
+    fn vectors_3d_end_at_their_end_points_or_deltas() {
+        use sheaf_core::column::{ColumnData, Designation};
+        use sheaf_core::template::Template;
+        let mut p = Project::new();
+        let b = p.add_workbook("Book1");
+        let col = |p: &mut Project, d, v: Vec<f64>| p.add_column(b, 0, d, ColumnData::numeric(v)).unwrap();
+        col(&mut p, Designation::X, vec![0.0, 1.0]);
+        let y = col(&mut p, Designation::Y, vec![0.0, 1.0]);
+        col(&mut p, Designation::Z, vec![0.0, 1.0]);
+        col(&mut p, Designation::Y, vec![0.5, 0.5]);
+        col(&mut p, Designation::Y, vec![0.5, 0.5]);
+        col(&mut p, Designation::Y, vec![2.0, 2.0]);
+        for (template, end) in [(Template::Vector3dXyz, [0.5, 0.5, 2.0]), (Template::Vector3dDelta, [0.5, 0.5, 2.0])] {
+            let g = p.plot_columns(template, &[y]).unwrap();
+            let graph = p.graph(g).unwrap();
+            let layer = &graph.layers[0];
+            let c = *layer.coords.space3d().unwrap();
+            let bx = data_box(&p, layer).unwrap();
+            assert!(bx.axes[2].max >= 2.0, "the box holds the arrow ends");
+            let layers = crate::data::collect_graph(&p, graph);
+            let v = layers[0].plots[0].vector.as_ref().expect("vector data");
+            let crate::vector_plot::VectorRows::Xy(rows) = &v.rows else { panic!("end points") };
+            // Row 0 starts at (0, 0, 0): its end is the end columns, or the start plus the deltas.
+            let want = view(&c, [bx.unit(0, end[0]), bx.unit(1, end[1]), bx.unit(2, end[2])]);
+            assert!((rows[0].0 - want.0).abs() < 1e-9 && (rows[0].1 - want.1).abs() < 1e-9, "{template:?}");
+            if template == Template::Vector3dDelta {
+                let w1 = view(&c, [bx.unit(0, 1.5), bx.unit(1, 1.5), bx.unit(2, 3.0)]);
+                assert!((rows[1].0 - w1.0).abs() < 1e-9 && (rows[1].1 - w1.1).abs() < 1e-9, "deltas add to row 1");
+            }
+        }
+        // Too few columns after Y.
+        let short = p.add_workbook("Short");
+        p.add_column(short, 0, Designation::X, ColumnData::numeric(vec![1.0])).unwrap();
+        let y2 = p.add_column(short, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();
+        assert!(p.plot_columns(Template::Vector3dXyz, &[y2]).is_err());
     }
 }

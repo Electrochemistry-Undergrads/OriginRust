@@ -27,6 +27,9 @@ pub enum Template {
     /// error bars; the bars stand from the floor of the box to Z.
     Scatter3dError,
     Bars3d,
+    /// 3D Vector XYZ XYZ and 3D Vector XYZ dXdYdZ (T157): an arrow per row from (X, Y, Z).
+    Vector3dXyz,
+    Vector3dDelta,
     /// Scatter plot with the same axes as [`Template::Line`].
     Scatter,
     /// Scatter plot whose axes cross in the middle of the layer (Origin's "Scatter Central", 2016): both
@@ -214,12 +217,14 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 87] = [
+    pub const ALL: [Template; 89] = [
         Template::Line,
         Template::Scatter3d,
         Template::Trajectory3d,
         Template::Scatter3dError,
         Template::Bars3d,
+        Template::Vector3dXyz,
+        Template::Vector3dDelta,
         Template::StepHorizontal,
         Template::StepVertical,
         Template::SplineConnected,
@@ -312,6 +317,8 @@ impl Template {
             Template::Trajectory3d => "3d-trajectory",
             Template::Scatter3dError => "3d-scatter-error",
             Template::Bars3d => "3d-bars",
+            Template::Vector3dXyz => "3d-vector-xyz-xyz",
+            Template::Vector3dDelta => "3d-vector-xyz-dxdydz",
             Template::StepHorizontal => "step-horizontal",
             Template::StepVertical => "step-vertical",
             Template::SplineConnected => "spline-connected",
@@ -404,6 +411,8 @@ impl Template {
             Template::Trajectory3d => "3D Trajectory",
             Template::Scatter3dError => "3D Scatter + Error Bar",
             Template::Bars3d => "3D Bars",
+            Template::Vector3dXyz => "3D Vector XYZ XYZ",
+            Template::Vector3dDelta => "3D Vector XYZ dXdYdZ",
             Template::StepHorizontal => "Horizontal Step",
             Template::StepVertical => "Vertical Step",
             Template::SplineConnected => "Spline Connected",
@@ -531,6 +540,7 @@ impl Template {
             Template::Scatter3d => space3d(id, name, PlotKind::Scatter),
             Template::Trajectory3d => space3d(id, name, PlotKind::LineSymbol),
             Template::Scatter3dError => space3d(id, name, PlotKind::Scatter),
+            Template::Vector3dXyz | Template::Vector3dDelta => space3d(id, name, PlotKind::VectorXyxy),
             Template::Bars3d => {
                 // Filled bars with a black edge, so that nearer bars stand out from farther ones.
                 let mut g = from_red(space3d(id, name, PlotKind::Column));
@@ -1527,7 +1537,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 87);
+        assert_eq!(Template::ALL.len(), 89);
         assert_eq!(Template::from_name("piper"), Some(Template::Piper));
         assert_eq!(Template::from_name("kde-2d"), Some(Template::Kde2d));
         assert_eq!(Template::from_name("smith-chart"), Some(Template::SmithChart));

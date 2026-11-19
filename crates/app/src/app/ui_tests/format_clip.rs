@@ -225,13 +225,53 @@ fn the_clipboard_kind_chooses_the_paste_menu() {
 }
 
 #[test]
-fn legend_menu_lists_origins_copy_format_choices_greyed() {
+fn legend_menu_copies_and_pastes_styles_as_one_undo_step() {
+    use sheaf_core::graph::{Font, LegendPosition};
+
     let mut h = start(vec![data_file("fmt-legend")]);
+    edit_layer(&mut h, |l| {
+        l.legend.font = Font { color: Color::RED, bold: true, ..Font::new("Arial", 16.0) };
+        l.legend.frame = true;
+        l.legend.background = Some(Color::rgb(246, 225, 200));
+    });
+    let source = graph(&h).clone();
     right_click_on(&mut h, ObjectKind::Legend);
+    assert!(not_toolbar(&h, "Paste Format To").is_empty());
     pick(&mut h, "Copy Format");
-    for label in ["Styles", "Dimensions", "All"] {
+    assert!(!disabled(&h, "Styles"));
+    for label in ["Dimensions", "All"] {
         assert!(disabled(&h, label), "{label} is greyed until measured");
     }
+    let revision = h.state().doc.revision();
+    pick(&mut h, "Styles");
+    assert_eq!(h.state().doc.revision(), revision);
+    assert_eq!(graph(&h), &source);
+    assert_eq!(crate::format_clip_ui::kind(), Some(crate::format_clip_ui::ClipKind::Legend));
+
+    edit_layer(&mut h, |l| {
+        l.legend.font = Font { color: Color::BLUE, ..Font::new("Arial", 9.0) };
+        l.legend.frame = false;
+        l.legend.background = None;
+        l.legend.position = LegendPosition::ManualTopLeft { x: 0.55, y: 0.2 };
+        l.legend.text = Some(r"Target \l(1) %(1)".into());
+        l.legend.columns = 2;
+    });
+    let before = graph(&h).clone();
+    let mut expected = before.clone();
+    let (from, to) = (&source.layers[0].legend, &mut expected.layers[0].legend);
+    to.font.clone_from(&from.font);
+    to.frame = from.frame;
+    to.background = from.background;
+    for _ in 0..2 {
+        right_click_on(&mut h, ObjectKind::Legend);
+        pick(&mut h, "Paste Format To");
+        pick(&mut h, "Styles");
+        assert_eq!(graph(&h), &expected);
+    }
+    menu(&mut h, "Edit", "Undo Apply Theme");
+    assert_eq!(graph(&h), &before);
+    menu(&mut h, "Edit", "Redo Apply Theme");
+    assert_eq!(graph(&h), &expected);
 }
 
 #[test]

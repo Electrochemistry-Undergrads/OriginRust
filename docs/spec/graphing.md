@@ -5520,7 +5520,7 @@ Pasted into an untouched graph of the same data and read back (changed propertie
 - Core `crates/core/src/format_clip.rs`: a copy holds the formatted values of every layer (or of one axis) and the groups the choice copies; a paste applies the groups it asks for that the copy holds. Groups: Dimensions (layer left, top, width; page width, not heights), Scales (scale type, limits, steps, reverse, first tick, minor ticks, rescale margin, both axes), Colors, Fonts (family, size, bold, italic; colours stay), Background (layer colour, gradient, border), Thickness (axis line and tick width), Symbol/Line/Fill (the plots' whole line and symbol style), Text (the words of the text labels). All = all eight; All Style Formats = Colors, Fonts, Background, Thickness, Symbol/Line/Fill (no Dimensions, Scales, Text); Colors also takes the layer background colour and the plots' line and symbol colours; Fonts takes tick-label, title, legend and text fonts.
 - Sheaf's own choices where Origin was not measured: layers and plots are paired by position, surplus target layers and plots are left as they are, surplus source ones are dropped; text labels are paired by position and are never created; a paste that changes nothing makes no undo step; the y axis follows Scales; the fill under a curve is not part of Symbol/Line/Fill. The clipboard stays internal; the private profile snapshot now survives a restart (26.10). Another running instance does not automatically refresh its in-memory copy.
 - Enabled (measured behaviour): Edit > Copy Format ▸ All, All Style Formats, Colors, Fonts, Background, Dimensions, Scales; Edit > Paste Format... (the Apply Formats window: Apply From Clipboard, one check box per group the clipboard holds or Scales and Styles for an axis format, Apply To for an axis, Undo Apply, Apply, Close; the grid Origin shows for a graph format is unmeasured, so this window is Sheaf's reading of it); page menu Copy Format (same items) and Paste Format; axis menu Copy Format ▸ All and Paste Format To ▸ All. One undo step "Apply Theme" each.
-- Left greyed (not measured): Symbol/Line/Fill and Text (Edit), Page Background and Legend Translation Mode (page), axis Dimensions and other Paste Format To choices (Scales/Styles follow-ups are26.9/26.11), the page menu's Paste Format To submenus, all of the legend's Copy Format (Styles, Dimensions, All).
+- Left greyed (not measured): Symbol/Line/Fill and Text (Edit), Page Background and Legend Translation Mode (page), axis Dimensions and other Paste Format To choices (Scales/Styles follow-ups are 26.9/26.11), the page menu's Paste Format To submenus, and legend Dimensions and All (Styles is 26.12).
 
 - Added after review: Edit > Copy Format with an axis selected copies an axis format (All, All Style Formats and Scales map to the axis parts; Colors, Fonts, Background and Dimensions copy nothing, since an axis format for them is unmeasured); the context menus and Paste Format To follow the clipboard kind. Colors and axis styles also carry the "follows plot colour" flags (Sheaf's reading; unmeasured in Origin). Dimensions pastes a layer frame only between layers of the same kind (root to root, linked to linked) because a linked frame is relative to its parent; mixed pairs are left alone (unmeasured in Origin).
 
@@ -5610,6 +5610,20 @@ existing graph font groups alone do not establish that legend contract. The
 selective-copy guide also distinguishes raw inline escape formatting in text
 objects from copied object properties. No graph/axis/legend crossing, raw-text
 rewriting or invented property whitelist is introduced.
+
+### 26.12 Legend Styles context entries (T72)
+
+Origin 2016 shows Styles under the legend's Copy Format menu (26.2). Origin's documentation
+describes applying customizations between legends through their context menus and places
+translation mode and custom format strings under Copy Format > All.
+[Origin legend guide](https://docs.originlab.com/origin-help/legend-colorscale/),
+[Legends/Titles reference](https://docs.originlab.com/origin-help/pd-dialog-legendtitles-tab/)
+
+Sheaf's legend Copy Format > Styles captures the complete legend font, frame switch, and
+background color. Open the target legend's Paste Format To > Styles to apply those fields.
+The field mapping is Sheaf policy. Origin 2016's exact per-field Styles behavior remains
+unmeasured. Copy is read-only and uses the private clipboard snapshot. A changed paste
+is one Apply Theme step. Repeated pastes of the same style add no history.
 
 ## 27. Colour scales and bubble scales: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (T80)
 

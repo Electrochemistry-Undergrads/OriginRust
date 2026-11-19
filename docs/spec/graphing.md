@@ -6513,6 +6513,17 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
     is 6.5 pt at 30 degrees, black, 0.5 pt.
   - The box takes the ends into its ranges. The end columns are in `VectorSpec::a`, `b` and `c`, and
     `delta` marks dXdYdZ.
+- **3D XYY (T158):** XYY 3D Bars (`xyy-3d-bars`), 3D Walls (`3d-walls`) and 3D Waterfall
+  (`3d-waterfall`, also under Plot > Y-offset/Waterfall) set `Space3dCoords::xyy`.
+  - Each selected Y column is one plot. Its values are Z, and it stands at its own depth along Y:
+    the first column farthest back, so later columns are drawn over it. No Z column is read.
+  - The depth axis has one tick per plot, labelled with the plot's name, and no title. The Z title
+    is the first plot's column.
+  - XYY 3D Bars are 3D Bars per column. Bars of different columns are drawn column by column, so a
+    bar can be misordered against another column's bar.
+  - 3D Walls fill each curve down to the floor of the box (Area plots with the floor as their base).
+  - 3D Waterfall draws the curves as lines.
+  - 3D Ribbons stays grey.
 - **Not done:**
   - rotating the view, and the Z axis dialog (Format > Axes > Z Axis stays grey);
   - hiding points behind each other (points are drawn in row order);

@@ -1193,8 +1193,9 @@ fn plot_menu() -> Vec<Entry> {
                     item("&Waterfall", Cmd::Plot(Template::Waterfall)),
                     item("Waterfall Y:Color Mapping", Cmd::Plot(Template::WaterfallY)),
                     item("Waterfall Z:Color Mapping", Cmd::Plot(Template::WaterfallZ)),
+                    item("3D Waterfall", Cmd::Plot(Template::Waterfall3d)),
                 ],
-                &["3D Waterfall"],
+                &[],
             ),
         ),
         sub(
@@ -1211,7 +1212,18 @@ fn plot_menu() -> Vec<Entry> {
             .concat(),
         ),
         sep(),
-        grey_sub("3D &XYY", &["XYY 3D Bars", "3D Ribbons", "3D Walls", "3D Waterfall"]),
+        sub(
+            "3D &XYY",
+            [
+                vec![item("XYY 3D Bars", Cmd::Plot(Template::Xyy3dBars))],
+                greys(&["3D Ribbons"]),
+                vec![
+                    item("3D Walls", Cmd::Plot(Template::Walls3d)),
+                    item("3D Waterfall", Cmd::Plot(Template::Waterfall3d)),
+                ],
+            ]
+            .concat(),
+        ),
         grey_sub(
             "3D Su&rface",
             &[

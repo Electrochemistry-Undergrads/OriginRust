@@ -50,8 +50,8 @@ fn vector_ends(
 }
 
 /// Row `r`'s X and Y in the cube (NaN when missing).
-fn xyz_unit(project: &Project, plot: &sheaf_core::graph::Plot, b: &DataBox, r: usize) -> (f64, f64) {
-    match xyz(project, plot) {
+fn xyz_unit(project: &Project, layer: &Layer, plot: &sheaf_core::graph::Plot, b: &DataBox, r: usize) -> (f64, f64) {
+    match xyz(project, layer, plot) {
         Some((x, y, _)) => (x.get(r).map_or(f64::NAN, |v| b.unit(0, *v)), y.get(r).map_or(f64::NAN, |v| b.unit(1, *v))),
         None => (f64::NAN, f64::NAN),
     }
@@ -64,23 +64,32 @@ pub(crate) fn view(c: &Space3dCoords, [x, y, z]: [f64; 3]) -> (f64, f64) {
     (x * ca - y * sa, z * ce + (x * sa + y * ca) * se)
 }
 
-/// The X, Y and Z values of a plot: X from its X column or the row numbers.
-fn xyz<'a>(project: &'a Project, plot: &sheaf_core::graph::Plot) -> Option<(Cow<'a, [f64]>, &'a [f64], &'a [f64])> {
-    let y = project.numeric(plot.y)?;
-    let z = project.numeric(plot.size_from?)?;
+type Columns<'a> = (Cow<'a, [f64]>, Cow<'a, [f64]>, Cow<'a, [f64]>);
+
+/// The X, Y and Z values of a plot: X from its X column or the row numbers. In an XYY layer (T158)
+/// the plot's own values are Z and its Y is its depth: the first plot farthest back (`n`), the last
+/// in front (1).
+fn xyz<'a>(project: &'a Project, layer: &Layer, plot: &sheaf_core::graph::Plot) -> Option<Columns<'a>> {
+    let data = project.numeric(plot.y)?;
     let x = match plot.x.and_then(|id| project.numeric(id)) {
         Some(x) => Cow::Borrowed(x),
-        None => Cow::Owned((1..=y.len()).map(|r| r as f64).collect()),
+        None => Cow::Owned((1..=data.len()).map(|r| r as f64).collect()),
     };
-    Some((x, y, z))
+    if layer.coords.space3d().is_some_and(|c| c.xyy) {
+        let k = layer.plots.iter().position(|p| std::ptr::eq(p, plot))?;
+        let depth = (layer.plots.len() - k) as f64;
+        return Some((x, Cow::Owned(vec![depth; data.len()]), Cow::Borrowed(data)));
+    }
+    let z = project.numeric(plot.size_from?)?;
+    Some((x, Cow::Borrowed(data), Cow::Borrowed(z)))
 }
 
 /// The data box of a 3D layer: the nice ranges of the visible plots' X, Y and Z; `None` without data.
 pub(crate) fn data_box(project: &Project, layer: &Layer) -> Option<DataBox> {
     let mut ext = [(f64::INFINITY, f64::NEG_INFINITY); 3];
     for plot in layer.plots.iter().filter(|p| p.visible) {
-        let Some((x, y, z)) = xyz(project, plot) else { continue };
-        let ends = vector_ends(project, plot, &x, y, z);
+        let Some((x, y, z)) = xyz(project, layer, plot) else { continue };
+        let ends = vector_ends(project, plot, &x, &y, &z);
         for r in 0..x.len().min(y.len()).min(z.len()) {
             let start = [x[r], y[r], z[r]];
             for v in std::iter::once(start).chain(ends.as_ref().and_then(|e| e.get(r).copied())) {
@@ -110,15 +119,23 @@ pub(crate) fn data_box(project: &Project, layer: &Layer) -> Option<DataBox> {
         let labels = ticks::linear_labels(&a, &major, step);
         ResolvedAxis { min, max, step, major, minor: Vec::new(), labels, ..r }
     };
-    let axes = [resolve(&layer.x_axis, ext[0]), resolve(&layer.y_axis, ext[1]), resolve(&layer.y_axis, ext[2])];
+    let mut axes = [resolve(&layer.x_axis, ext[0]), resolve(&layer.y_axis, ext[1]), resolve(&layer.y_axis, ext[2])];
+    // XYY (T158): the depth axis has one tick per plot, labelled with the plot's name.
+    if layer.coords.space3d().is_some_and(|c| c.xyy) && !layer.plots.is_empty() {
+        let n = layer.plots.len();
+        let major: Vec<f64> = (1..=n).map(|d| d as f64).collect();
+        let labels = (1..=n).map(|d| project.plot_label(&layer.plots[n - d])).collect();
+        let r = axes[1].clone();
+        axes[1] = ResolvedAxis { min: 0.5, max: n as f64 + 0.5, step: 1.0, major, minor: Vec::new(), labels, ..r };
+    }
     Some(DataBox { axes })
 }
 
 /// Turns a plot's X, Y and Z rows into their place in the view. Rows without a Z are left out.
-pub(crate) fn columns(pd: &mut PlotData, project: &Project, c: &Space3dCoords, b: &DataBox) {
+pub(crate) fn columns(pd: &mut PlotData, project: &Project, layer: &Layer, c: &Space3dCoords, b: &DataBox) {
     let n = pd.y.len();
     let (mut us, mut ws) = (vec![f64::NAN; n], vec![f64::NAN; n]);
-    if let Some((x, y, z)) = xyz(project, pd.plot) {
+    if let Some((x, y, z)) = xyz(project, layer, pd.plot) {
         for r in 0..n.min(x.len()).min(y.len()).min(z.len()) {
             let p = [b.unit(0, x[r]), b.unit(1, y[r]), b.unit(2, z[r])];
             if p.iter().all(|v| v.is_finite()) {
@@ -141,7 +158,7 @@ pub(crate) fn columns(pd: &mut PlotData, project: &Project, c: &Space3dCoords, b
     // and row filters do not apply to 3D bars.
     if pd.plot.kind == sheaf_core::graph::PlotKind::Column {
         let (sa, ca) = c.azimuth_deg.to_radians().sin_cos();
-        let cube: Vec<(f64, f64)> = (0..n).map(|r| xyz_unit(project, pd.plot, b, r)).collect();
+        let cube: Vec<(f64, f64)> = (0..n).map(|r| xyz_unit(project, layer, pd.plot, b, r)).collect();
         let depth = |r: usize| cube[r].0 * sa + cube[r].1 * ca;
         let mut order: Vec<usize> = (0..n).collect();
         order.sort_by(|&p, &q| depth(q).total_cmp(&depth(p)));
@@ -159,12 +176,21 @@ pub(crate) fn columns(pd: &mut PlotData, project: &Project, c: &Space3dCoords, b
         pd.stack = Some((floor, ws.clone()));
         pd.mask = None;
         pd.filters.clear();
+    } else if pd.plot.kind == sheaf_core::graph::PlotKind::Area {
+        // 3D Walls (T158): the area of a curve down to the floor of the box, at the curve's depth.
+        let floor = (0..n)
+            .map(|r| {
+                let (x, y) = xyz_unit(project, layer, pd.plot, b, r);
+                if x.is_finite() && y.is_finite() { view(c, [x, y, -1.0]).1 } else { f64::NAN }
+            })
+            .collect();
+        pd.stack = Some((floor, ws.clone()));
     } else {
         pd.stack = None;
     }
     // 3D vectors (T157): the arrows end at their end points in the view.
-    if let (Some((x, y, z)), Some(v)) = (xyz(project, pd.plot), pd.vector.as_mut())
-        && let Some(ends) = vector_ends(project, pd.plot, &x, y, z)
+    if let (Some((x, y, z)), Some(v)) = (xyz(project, layer, pd.plot), pd.vector.as_mut())
+        && let Some(ends) = vector_ends(project, pd.plot, &x, &y, &z)
     {
         let rows = (0..n)
             .map(|r| match ends.get(r) {
@@ -199,7 +225,10 @@ fn titles(project: &Project, layer: &Layer) -> [String; 3] {
     let name = |id: Option<sheaf_core::ColumnId>| {
         id.and_then(|id| project.column(id)).map(|c| c.axis_title()).unwrap_or_default()
     };
+    let xyy = layer.coords.space3d().is_some_and(|c| c.xyy);
     match layer.plots.iter().find(|p| p.visible) {
+        // XYY (T158): the depth axis names its plots at the ticks; Z is the first plot's column.
+        Some(p) if xyy => [name(p.x), String::new(), name(Some(p.y))],
         Some(p) => [name(p.x), name(Some(p.y)), name(p.size_from)],
         None => Default::default(),
     }
@@ -297,7 +326,7 @@ mod tests {
 
     #[test]
     fn the_view_turns_and_tilts_the_cube() {
-        let front = Space3dCoords { azimuth_deg: 0.0, elevation_deg: 0.0 };
+        let front = Space3dCoords { azimuth_deg: 0.0, elevation_deg: 0.0, ..Default::default() };
         assert_eq!(view(&front, [1.0, 1.0, 1.0]), (1.0, 1.0), "seen from the front, depth vanishes");
         let c = Space3dCoords::default();
         let corners = [-1.0, 1.0];
@@ -424,5 +453,41 @@ mod tests {
         p.add_column(short, 0, Designation::X, ColumnData::numeric(vec![1.0])).unwrap();
         let y2 = p.add_column(short, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();
         assert!(p.plot_columns(Template::Vector3dXyz, &[y2]).is_err());
+    }
+
+    #[test]
+    fn xyy_puts_each_column_at_its_own_depth_and_walls_stand_on_the_floor() {
+        use sheaf_core::column::{ColumnData, Designation};
+        use sheaf_core::template::Template;
+        let mut p = Project::new();
+        let b = p.add_workbook("Book1");
+        p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0, 2.0])).unwrap();
+        let ys: Vec<_> = (0..3)
+            .map(|k| p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0 + k as f64; 3])).unwrap())
+            .collect();
+        for (k, y) in ys.iter().enumerate() {
+            p.column_mut(*y).unwrap().long_name = format!("S{k}");
+        }
+        let g = p.plot_columns(Template::Walls3d, &ys).unwrap();
+        let graph = p.graph(g).unwrap();
+        let layer = &graph.layers[0];
+        assert!(layer.coords.space3d().is_some_and(|c| c.xyy));
+        assert_eq!(layer.plots.len(), 3);
+        let bx = data_box(&p, layer).unwrap();
+        // The depth axis: one tick per plot, the first plot farthest back (depth 3).
+        assert_eq!(bx.axes[1].major, [1.0, 2.0, 3.0]);
+        assert_eq!(bx.axes[1].labels, ["S2", "S1", "S0"]);
+        let c = *layer.coords.space3d().unwrap();
+        let layers = crate::data::collect_graph(&p, graph);
+        for (k, pd) in layers[0].plots.iter().enumerate() {
+            let depth = (3 - k) as f64;
+            let want = view(&c, [bx.unit(0, 0.0), bx.unit(1, depth), bx.unit(2, 1.0 + k as f64)]);
+            let px = pd.x.as_deref().unwrap();
+            assert!((px[0] - want.0).abs() < 1e-9 && (pd.y[0] - want.1).abs() < 1e-9, "plot {k}");
+            let (floor, top) = pd.stack.as_ref().expect("a wall stands on the floor");
+            assert!(floor.iter().zip(top).all(|(f, t)| f < t));
+        }
+        let titles = titles(&p, layer);
+        assert_eq!((titles[1].as_str(), titles[2].as_str()), ("", "S0"));
     }
 }

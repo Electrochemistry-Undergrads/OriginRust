@@ -518,11 +518,15 @@ pub struct Space3dCoords {
     pub azimuth_deg: f64,
     /// Tilt towards the viewer, in degrees (0: seen from the side, 90: from above).
     pub elevation_deg: f64,
+    /// 3D XYY (T158): each plot's values are Z and the plot stands at its own depth along Y, the first
+    /// farthest back; no Z column is read.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub xyy: bool,
 }
 
 impl Default for Space3dCoords {
     fn default() -> Self {
-        Space3dCoords { azimuth_deg: 40.0, elevation_deg: 25.0 }
+        Space3dCoords { azimuth_deg: 40.0, elevation_deg: 25.0, xyy: false }
     }
 }
 

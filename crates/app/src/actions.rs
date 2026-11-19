@@ -299,6 +299,12 @@ pub enum Action {
         y: bool,
         cut: bool,
     },
+    /// The graph Edit menu's Cut, Copy, Paste and Clear (and Ctrl+X, C, V) on the selected object;
+    /// Paste goes to the last clicked point of the active layer (T149).
+    GraphClipboard {
+        graph: WindowId,
+        op: crate::menus::GraphClip,
+    },
     /// A text label's right-click Copy (and Cut, which also deletes it, one undo step; T147).
     CopyLabel {
         graph: WindowId,

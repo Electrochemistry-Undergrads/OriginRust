@@ -73,6 +73,20 @@ pub enum WindowKind {
     Graph,
 }
 
+/// What the graph Edit menu's clipboard items do (T149).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GraphClip {
+    Cut,
+    Copy,
+    Paste,
+    Clear,
+}
+
+/// Why the graph Edit menu's Cut, Copy or Clear cannot run.
+pub const NEED_GRAPH_OBJECT: &str = "select a drawn object, a text label or an axis title first";
+/// Why the graph Edit menu's Paste cannot run.
+pub const NOTHING_COPIED: &str = "copy a drawn object, a text label or an axis title first";
+
 /// A command of Sheaf that a menu item runs. It is turned into an [`Action`] with the state of
 /// the program by [`resolve`].
 #[derive(Clone, Debug, PartialEq)]
@@ -93,6 +107,8 @@ pub enum Cmd {
     ManageTemplates,
     /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values (T74).
     FillPattern(FillKind),
+    /// The graph Edit menu's Cut, Copy, Paste and Clear on the selected object (T149).
+    GraphClipboard(GraphClip),
     /// A drawn object's right-click Cut and Copy, and the page's Paste at a page point (T125).
     CutShape {
         layer: usize,
@@ -640,6 +656,10 @@ pub struct MenuContext<'a> {
     /// plot: the workbook and Y column of the selected plot, or else of the active layer's first
     /// visible plot of numbers. `None` when the graph has no such plot.
     pub curve: Option<(WindowId, ColumnId)>,
+    /// On a graph: the kind of the selected object (the Edit menu's Cut, Copy and Clear act on it).
+    pub graph_pick: Option<sheaf_plot::scene::ObjectKind>,
+    /// A drawn object or a text label is on the graph clipboard (the Edit menu's Paste, T149).
+    pub graph_paste: bool,
     /// On a graph: the Y columns of the active layer's visible plots of numbers that sit in the same
     /// worksheet as `curve`, the active plot first, then the others in plot order. The tools that
     /// compare curves (Average Multiple Curves, Intersect) start from these.
@@ -981,20 +1001,15 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         v.push(keyed("Go to...", ctrl(Key::G), Cmd::GoToCell));
         v.extend(greys(&["-", "Button Edit Mode"]));
     } else {
-        v.push(grey("Cu&t"));
-        v.push(grey("Copy"));
+        v.push(item("Cu&t", Cmd::GraphClipboard(GraphClip::Cut)));
+        // Ctrl+X, C and V reach a graph as clipboard events (app.rs `shortcuts`), so these carry no
+        // key of their own: the workbook's Cut, Copy and Paste have them.
+        v.push(item("Copy", Cmd::GraphClipboard(GraphClip::Copy)));
         v.push(keyed("Copy Page", ctrl(Key::J), Cmd::CopyPage));
-        v.extend(greys(&[
-            "Paste",
-            "Paste Link",
-            "Paste Special",
-            "Clear",
-            "-",
-            "Insert New Object",
-            "Links",
-            "Button Edit Mode",
-            "Update Client",
-        ]));
+        v.push(item("Paste", Cmd::GraphClipboard(GraphClip::Paste)));
+        v.extend(greys(&["Paste Link", "Paste Special"]));
+        v.push(item("Clear", Cmd::GraphClipboard(GraphClip::Clear)));
+        v.extend(greys(&["-", "Insert New Object", "Links", "Button Edit Mode", "Update Client"]));
         v.push(graph_copy_format_menu(
             true,
             &[
@@ -2766,6 +2781,36 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::CopyShape { layer, shape } => {
             Action::CopyShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape, cut: false }
         }
+        Cmd::GraphClipboard(op) => {
+            use sheaf_plot::scene::ObjectKind as K;
+            let graph = c.graph.ok_or(NEED_GRAPH)?;
+            let ok = match op {
+                GraphClip::Cut | GraphClip::Copy => {
+                    matches!(c.graph_pick, Some(K::Shape(_) | K::Label(_) | K::XTitle | K::YTitle))
+                }
+                GraphClip::Clear => matches!(
+                    c.graph_pick,
+                    Some(
+                        K::Shape(_)
+                            | K::Label(_)
+                            | K::XTitle
+                            | K::YTitle
+                            | K::Legend
+                            | K::Slope(_)
+                            | K::StraightLine(_)
+                            | K::Scale(_)
+                    )
+                ),
+                GraphClip::Paste => c.graph_paste,
+            };
+            if !ok {
+                return Err(match op {
+                    GraphClip::Paste => NOTHING_COPIED,
+                    _ => NEED_GRAPH_OBJECT,
+                });
+            }
+            Action::GraphClipboard { graph, op: *op }
+        }
         Cmd::CopyTitle { layer, y, cut } => {
             Action::CopyTitle { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, y: *y, cut: *cut }
         }
@@ -3814,6 +3859,8 @@ mod tests {
             layer: 0,
             tool: Default::default(),
             curve: None,
+            graph_pick: None,
+            graph_paste: false,
             layer_curves: Vec::new(),
             stack: None,
             can_cumulate: false,

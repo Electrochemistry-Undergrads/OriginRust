@@ -2739,6 +2739,49 @@ impl SheafApp {
                     self.edit_graph(graph, crate::actions::GraphOp::DeleteShape { layer, shape });
                 }
             }
+            Action::GraphClipboard { graph, op } => {
+                use crate::menus::GraphClip;
+                use sheaf_plot::scene::ObjectKind as K;
+                let Some(state) = self.graphs.get_mut(&graph) else { return };
+                match op {
+                    GraphClip::Cut | GraphClip::Copy => {
+                        let cut = op == GraphClip::Cut;
+                        let next = match state.selected {
+                            Some((layer, K::Shape(shape))) => Some(Action::CopyShape { graph, layer, shape, cut }),
+                            Some((layer, K::Label(label))) => Some(Action::CopyLabel { graph, layer, label, cut }),
+                            Some((layer, K::XTitle)) => Some(Action::CopyTitle { graph, layer, y: false, cut }),
+                            Some((layer, K::YTitle)) => Some(Action::CopyTitle { graph, layer, y: true, cut }),
+                            _ => None,
+                        };
+                        if cut && next.is_some() {
+                            state.selected = None;
+                        }
+                        if let Some(next) = next {
+                            self.apply(next, ctx);
+                        }
+                    }
+                    GraphClip::Clear => {
+                        if let Some(op) = state.delete_selected() {
+                            self.edit_graph(graph, op);
+                        }
+                    }
+                    GraphClip::Paste => {
+                        let layer = state.active_layer;
+                        let clicked = state.last_click;
+                        let page = clicked.or_else(|| {
+                            let g = self.doc.project().graph(graph)?;
+                            let f = g.absolute_frame(layer)?;
+                            Some((
+                                (f.left + f.width / 2.0) * g.page.width_pt,
+                                (f.top + f.height / 2.0) * g.page.height_pt,
+                            ))
+                        });
+                        if let Some(page) = page {
+                            self.apply(Action::PasteShape { graph, layer, page }, ctx);
+                        }
+                    }
+                }
+            }
             Action::CopyTitle { graph, layer, y, cut } => {
                 let project = self.doc.project();
                 let copied = sheaf_plot::axis_title(project, graph, layer, y).ok().is_some_and(|text| {
@@ -4534,6 +4577,8 @@ impl SheafApp {
             layer: graph.and_then(|g| self.graphs.get(&g)).map_or(0, |s| s.active_layer),
             tool: graph.and_then(|g| self.graphs.get(&g)).map_or(GraphTool::Pointer, |s| s.tool()),
             curve: graph.and_then(|g| self.graph_curve(g)),
+            graph_pick: graph.and_then(|g| self.graphs.get(&g)).and_then(|s| s.selected).map(|(_, k)| k),
+            graph_paste: crate::shape_clip::has(),
             layer_curves: graph.map(|g| self.graph_layer_curves(g)).unwrap_or_default(),
             stack: graph.and_then(|g| {
                 let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
@@ -4665,6 +4710,21 @@ impl SheafApp {
                 actions.push(Action::GraphEdit { graph, op });
             }
             ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete));
+        }
+        // Ctrl+X, Ctrl+C and Ctrl+V on a graph cut, copy and paste its selected object (T149); they
+        // reach the program as events of their own.
+        if !typing && !self.dialog_open() && self.active.is_some_and(|id| self.doc.project().graph(id).is_some()) {
+            for event in ctx.input(|i| i.events.clone()) {
+                let op = match event {
+                    egui::Event::Cut => menus::GraphClip::Cut,
+                    egui::Event::Copy => menus::GraphClip::Copy,
+                    egui::Event::Paste(_) => menus::GraphClip::Paste,
+                    _ => continue,
+                };
+                if let Ok(action) = menus::resolve(&menus::Cmd::GraphClipboard(op), &self.menu_context()) {
+                    actions.push(action);
+                }
+            }
         }
         // F2, Delete and Ctrl+A belong to the Project Explorer while it has the keyboard.
         if !typing && !self.dialog_open() {

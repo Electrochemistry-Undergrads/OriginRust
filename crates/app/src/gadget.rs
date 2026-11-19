@@ -66,6 +66,16 @@ pub enum GadgetKind {
     Differentiate,
     /// Gadgets > Interpolate (T145).
     Interpolate,
+    /// Gadgets > Cluster (T146): the range is a rectangle (`y0`..`y1` as well).
+    Cluster,
+}
+
+/// The Cluster gadget's numbers: how many points are inside and their mean X and Y.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ClusterStats {
+    pub n: usize,
+    pub mean_x: f64,
+    pub mean_y: f64,
 }
 
 /// A small line chart of `(u, v)` in the top third of `range`, both scaled to their own extent.
@@ -164,6 +174,9 @@ pub struct Integrator {
     /// The ends of the range, in X data units (in either order).
     pub x0: f64,
     pub x1: f64,
+    /// Cluster gadget only: the bottom and top of the rectangle, in Y data units (in either order).
+    pub y0: f64,
+    pub y1: f64,
     /// Subtract the straight line through the first and last point of the range.
     pub end_point_baseline: bool,
 }
@@ -271,6 +284,29 @@ impl Integrator {
         };
         let v = sheaf_calc::interp::interp1(&xs, &ys, &at, &opts);
         at.into_iter().zip(v).collect()
+    }
+
+    /// Cluster gadget: the points (with numbers) inside the rectangle, as (row, x, y).
+    pub fn cluster_points(&self, x: &[f64], y: &[f64]) -> Vec<(usize, f64, f64)> {
+        let (xl, xh) = (self.x0.min(self.x1), self.x0.max(self.x1));
+        let (yl, yh) = (self.y0.min(self.y1), self.y0.max(self.y1));
+        x.iter()
+            .zip(y)
+            .enumerate()
+            .filter(|(_, (u, v))| u.is_finite() && v.is_finite() && **u >= xl && **u <= xh && **v >= yl && **v <= yh)
+            .map(|(i, (u, v))| (i, *u, *v))
+            .collect()
+    }
+
+    /// Cluster gadget: count and means of the points inside the rectangle; `None` when it holds none.
+    pub fn cluster(&self, x: &[f64], y: &[f64]) -> Option<ClusterStats> {
+        let pts = self.cluster_points(x, y);
+        let n = pts.len();
+        (n > 0).then(|| ClusterStats {
+            n,
+            mean_x: pts.iter().map(|p| p.1).sum::<f64>() / n as f64,
+            mean_y: pts.iter().map(|p| p.2).sum::<f64>() / n as f64,
+        })
     }
 
     /// Vertical Cursor gadget: the cursor's X (the middle of the band).
@@ -387,8 +423,18 @@ impl Integrator {
         let f = geom.frame;
         let page_x = |v: f64| geom.data_to_page(placement.x(v), 0.0).0;
         let (sx0, sx1) = (to_screen((page_x(self.x0), f.y)).x, to_screen((page_x(self.x1), f.y)).x);
-        let top = to_screen((f.x, f.y)).y;
-        let bottom = to_screen((f.x, f.y + f.h)).y;
+        let frame_top = to_screen((f.x, f.y)).y;
+        let frame_bottom = to_screen((f.x, f.y + f.h)).y;
+        let cluster = self.kind == GadgetKind::Cluster;
+        let x_at = placement.x(self.x0);
+        let screen_y = |v: f64| to_screen(geom.data_to_page(x_at, placement.y(v))).y;
+        let (top, bottom) = if cluster {
+            let (a, b) = (screen_y(self.y0), screen_y(self.y1));
+            let t = a.min(b).clamp(frame_top, frame_bottom);
+            (t, a.max(b).clamp(t, frame_bottom))
+        } else {
+            (frame_top, frame_bottom)
+        };
         let range = Rect::from_x_y_ranges(sx0.min(sx1)..=sx0.max(sx1), top..=bottom);
         let painter = ui.painter().clone();
 
@@ -574,6 +620,19 @@ impl Integrator {
                 sheaf_core::format::format_general(r.time, 6)
             ),
             (GadgetKind::RiseTime, _, None) => "Rise Time: no step in the range".to_string(),
+            (GadgetKind::Cluster, _, _) => {
+                for (_, u, v) in self.cluster_points(&x, &y) {
+                    let at = to_screen(geom.data_to_page(placement.x(u), placement.y(v)));
+                    painter.circle_stroke(at, 4.0, Stroke::new(1.5_f32, Color32::from_rgb(200, 30, 30)));
+                }
+                match self.cluster(&x, &y) {
+                    Some(c) => {
+                        let g = |v: f64| sheaf_core::format::format_general(v, 5);
+                        format!("N = {}, Mean X = {}, Mean Y = {}", c.n, g(c.mean_x), g(c.mean_y))
+                    }
+                    None => "No points in the region".to_string(),
+                }
+            }
             (GadgetKind::Differentiate, _, _) => {
                 let d = self.derivative(&x, &y);
                 let xc = (self.x0 + self.x1) / 2.0;
@@ -694,6 +753,44 @@ impl Integrator {
             let v = to_x(clamp(p.x));
             if left_is_x0 { self.x1 = v } else { self.x0 = v }
         }
+        // Cluster: the top and bottom edges move the rectangle's Y ends, and the body moves it up and down too.
+        if cluster {
+            let to_y = |sy: f32| {
+                let page = f64::from((sy - to_screen((0.0, 0.0)).y) / fit);
+                placement.source_y(geom.page_to_data(f.x, page).1)
+            };
+            let clamp_y = |sy: f32| sy.clamp(frame_top, frame_bottom);
+            let edge = |y: f32, name: &str| {
+                ui.interact(
+                    Rect::from_x_y_ranges(range.left()..=range.right(), y - grip..=y + grip),
+                    id.with(name),
+                    Sense::drag(),
+                )
+            };
+            let (t, b) = (edge(range.top(), "top"), edge(range.bottom(), "bottom"));
+            for r in [&t, &b] {
+                if r.hovered() || r.dragged() {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
+                }
+            }
+            let top_is_y1 = screen_y(self.y1) <= screen_y(self.y0);
+            if let Some(p) = moved(&t) {
+                let v = to_y(clamp_y(p.y));
+                if top_is_y1 { self.y1 = v } else { self.y0 = v }
+            }
+            if let Some(p) = moved(&b) {
+                let v = to_y(clamp_y(p.y));
+                if top_is_y1 { self.y0 = v } else { self.y1 = v }
+            }
+            if body.dragged() {
+                let dy = body.drag_delta().y;
+                let (tt, bb) = (range.top() + dy, range.bottom() + dy);
+                if tt >= frame_top && bb <= frame_bottom {
+                    let (a, b) = (to_y(bb), to_y(tt));
+                    if top_is_y1 { (self.y0, self.y1) = (a, b) } else { (self.y1, self.y0) = (a, b) }
+                }
+            }
+        }
         if body.dragged() {
             let d = body.drag_delta().x;
             let (l, r) = (range.left() + d, range.right() + d);
@@ -714,7 +811,8 @@ impl Integrator {
                 | GadgetKind::QuickFit
                 | GadgetKind::VerticalCursor
                 | GadgetKind::Differentiate
-                | GadgetKind::Interpolate => menus::rise_time_gadget_menu(),
+                | GadgetKind::Interpolate
+                | GadgetKind::Cluster => menus::rise_time_gadget_menu(),
             };
             menus::show_context(ui, &menu, c, actions)
         });
@@ -738,8 +836,16 @@ mod tests {
     fn the_area_matches_the_trapezoid_rule_with_and_without_baseline() {
         let x: Vec<f64> = (0..=10).map(f64::from).collect();
         let y: Vec<f64> = x.iter().map(|v| v + 1.0).collect();
-        let mut g =
-            Integrator { kind: GadgetKind::Integrate, layer: 0, plot: 0, x0: 2.0, x1: 4.0, end_point_baseline: false };
+        let mut g = Integrator {
+            kind: GadgetKind::Integrate,
+            layer: 0,
+            plot: 0,
+            x0: 2.0,
+            x1: 4.0,
+            y0: 0.0,
+            y1: 0.0,
+            end_point_baseline: false,
+        };
         assert!((g.result(&x, &y).unwrap().area - 8.0).abs() < 1e-12, "from 2 to 4 under x + 1");
         g.end_point_baseline = true;
         assert!(g.result(&x, &y).unwrap().area.abs() < 1e-12, "a straight line has no area above its chord");

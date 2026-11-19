@@ -1330,7 +1330,9 @@ impl SheafApp {
         // A Vertical Cursor (T144) is a thin band in the middle: its centre is the cursor.
         let (u0, u1) = if kind == crate::gadget::GadgetKind::VerticalCursor { (0.49, 0.51) } else { (0.25, 0.75) };
         let (x0, x1) = (placement.source_x(geom.x.from_unit(u0)), placement.source_x(geom.x.from_unit(u1)));
-        state.gadget = Some(crate::gadget::Integrator { kind, layer, plot, x0, x1, end_point_baseline: false });
+        // A Cluster (T146) is a rectangle over the middle half of both axes.
+        let (y0, y1) = (placement.source_y(geom.y.from_unit(0.25)), placement.source_y(geom.y.from_unit(0.75)));
+        state.gadget = Some(crate::gadget::Integrator { kind, layer, plot, x0, x1, y0, y1, end_point_baseline: false });
         self.focus(graph);
     }
 
@@ -2672,6 +2674,7 @@ impl SheafApp {
             Action::StartQuickFit { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::QuickFit),
             Action::StartDifferentiate { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Differentiate),
             Action::StartInterpolate { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Interpolate),
+            Action::StartCluster { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Cluster),
             Action::StartVerticalCursor { graph } => {
                 self.start_gadget(graph, crate::gadget::GadgetKind::VerticalCursor)
             }

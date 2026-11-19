@@ -66,3 +66,18 @@ fn the_legend_menu_orders_the_legend_and_puts_it_behind_the_data() {
     h.state_mut().doc.undo();
     assert!(!legend(&h).on_top && !legend(&h).behind_data, "one undo step each");
 }
+
+#[test]
+fn an_axis_title_menu_brings_it_to_the_front() {
+    // T153.
+    let menu = menus::graph_title_menu(0, true);
+    let op = GraphOp::OrderTitle { layer: 0, y: true, front: true };
+    assert!(menu.iter().any(|e| matches!(e, menus::Entry::Item(i) if i.cmd == Some(menus::Cmd::GraphEdit(op)))));
+    let mut h = start(vec![data_file("title-order")]);
+    let ctx = h.ctx.clone();
+    let graph = project(&h).graphs().next().unwrap().id;
+    h.state_mut().apply(Action::GraphEdit { graph, op }, &ctx);
+    settle(&mut h);
+    assert!(project(&h).graph(graph).unwrap().layers[0].y_axis.title_on_top);
+    assert_eq!(h.state().doc.undo_label(), Some("Bring axis title to front"));
+}

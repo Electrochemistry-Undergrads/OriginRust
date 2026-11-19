@@ -132,6 +132,8 @@ pub enum GraphOp {
     /// The legend's Bring to the front (`front`) / Push to the back, over or under the labels and drawn
     /// objects (T152).
     OrderLegend { layer: usize, front: bool },
+    /// An axis title's Bring to the front (`front`) / Push to the back (T153).
+    OrderTitle { layer: usize, y: bool, front: bool },
     /// The legend's Push to back of data (`behind`) / Bring to front of data (T152).
     LegendBehindData { layer: usize, behind: bool },
     /// Reconstruct Legend: the legend text is made again from the plots (the automatic text).

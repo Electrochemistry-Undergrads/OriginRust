@@ -2359,8 +2359,8 @@ pub fn graph_title_menu(layer: usize, y: bool) -> Vec<Entry> {
         keyed("Copy", ctrl(Key::C), Cmd::CopyTitle { layer, y, cut: false }),
         keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::HideTitle { layer, y })),
         sep(),
-        grey("Bring to the front"),
-        grey("Push to the back"),
+        item("Bring to the front", Cmd::GraphEdit(GraphOp::OrderTitle { layer, y, front: true })),
+        item("Push to the back", Cmd::GraphEdit(GraphOp::OrderTitle { layer, y, front: false })),
         sep(),
         item("Properties...", Cmd::GraphPropsAt { layer, tab, plot: None }),
     ]

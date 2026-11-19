@@ -6444,5 +6444,10 @@ unregistered, so Origin's own templates for them were not checked.
   - With Data on Top of Axes, the legend goes under the data together with the axes.
   - Hit-testing now reads `LayerScene::data_on_top` for that mode, not "the underlay is not empty".
 - Both flags are saved only when set, so older files load unchanged. The legend's Cut and Copy stay
-  grey.
+  grey: a free text label does not draw the legend's `\l(n)` symbols, so a pasted copy would show them
+  as text.
+- **Axis titles (T153):** an axis title's right-click Bring to the front (`Axis::title_on_top`) draws
+  it last in its layer, over the labels, drawn objects and legend. Push to the back returns it to its
+  place among the axes (the default). One undo step each ("Bring axis title to front", "Push axis
+  title to back"). Picking still tries labels before titles.
 

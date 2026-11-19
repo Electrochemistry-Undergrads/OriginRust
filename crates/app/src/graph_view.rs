@@ -1366,6 +1366,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::AxisCenter { layer, .. }
         | GraphOp::HideLegend { layer }
         | GraphOp::OrderLegend { layer, .. }
+        | GraphOp::OrderTitle { layer, .. }
         | GraphOp::LegendBehindData { layer, .. }
         | GraphOp::ReconstructLegend { layer }
         | GraphOp::UpdateLegend { layer }
@@ -1551,6 +1552,13 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         }
         GraphOp::HideLegend { .. } => l.legend.visible = false,
         GraphOp::OrderLegend { front, .. } => l.legend.on_top = front,
+        GraphOp::OrderTitle { y, front, .. } => {
+            if y {
+                l.y_axis.title_on_top = front;
+            } else {
+                l.x_axis.title_on_top = front;
+            }
+        }
         GraphOp::LegendBehindData { behind, .. } => l.legend.behind_data = behind,
         GraphOp::ReconstructLegend { .. } => l.legend.text = None,
         GraphOp::HideTitle { y, .. } => {

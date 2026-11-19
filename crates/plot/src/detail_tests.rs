@@ -450,3 +450,34 @@ fn a_legend_goes_behind_the_data_or_over_the_labels() {
     assert!(lab3.items.end <= l3.items.start, "over the labels after Bring to the front");
     assert_eq!(s.layers[0].overlay[l3.items.clone()], drawn[..]);
 }
+
+#[test]
+fn an_axis_title_brought_to_the_front_is_drawn_last() {
+    // T153: an axis title's Bring to the front.
+    let (mut p, g) = project(Template::LineSymbol);
+    let font = layer_mut(&mut p, g).new_label_font();
+    layer_mut(&mut p, g).labels.push(sheaf_core::graph::TextLabel::new("note", 0.5, 0.5, font));
+    let of = |s: &scene::Scene, k: scene::ObjectKind| {
+        s.layers[0].objects.iter().find(|o| o.kind == k).cloned().expect("the object")
+    };
+    let before = scene(&p, g);
+    let title = of(&before, scene::ObjectKind::YTitle);
+    let label = of(&before, scene::ObjectKind::Label(0));
+    assert!(title.items.end <= label.items.start, "under the labels by default");
+    let drawn = before.layers[0].overlay[title.items.clone()].to_vec();
+    layer_mut(&mut p, g).y_axis.title_on_top = true;
+    let s = scene(&p, g);
+    let (t2, l2) = (of(&s, scene::ObjectKind::YTitle), of(&s, scene::ObjectKind::Label(0)));
+    assert_eq!(t2.items.end, s.layers[0].overlay.len(), "drawn last");
+    assert_eq!(s.layers[0].overlay[t2.items.clone()], drawn[..]);
+    assert_eq!(
+        s.layers[0].overlay[l2.items.clone()],
+        before.layers[0].overlay[label.items.clone()],
+        "ranges stay right"
+    );
+    let x = of(&s, scene::ObjectKind::XTitle);
+    assert_eq!(
+        s.layers[0].overlay[x.items.clone()],
+        before.layers[0].overlay[of(&before, scene::ObjectKind::XTitle).items][..]
+    );
+}

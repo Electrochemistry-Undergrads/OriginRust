@@ -84,6 +84,18 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
             hit::record(&mut last.objects, &last.overlay, start, ObjectKind::Legend, i, ItemList::Overlay, &[], m);
         }
     }
+    // An axis title brought to the front is drawn last in its layer (T153).
+    for (i, layer) in g.layers.iter().enumerate() {
+        for (on_top, kind) in
+            [(layer.x_axis.title_on_top, ObjectKind::XTitle), (layer.y_axis.title_on_top, ObjectKind::YTitle)]
+        {
+            if on_top {
+                for ls in layers.iter_mut() {
+                    move_to_top(ls, kind, i);
+                }
+            }
+        }
+    }
     // A legend pushed to the back of the data is drawn before the plots of the layer it is in.
     for (i, layer) in g.layers.iter().enumerate() {
         if layer.legend.behind_data {
@@ -1063,6 +1075,36 @@ fn draw_legend_and_labels(
     crate::shapes::draw_shapes(out, objects, layer, index, f, m);
     if layer.legend.on_top {
         legend(objects, out);
+    }
+}
+
+/// Moves object `kind` of model layer `model` to the end of `scene`'s overlay, over everything else of
+/// the layer, keeping every object's item range right (T153).
+fn move_to_top(scene: &mut LayerScene, kind: ObjectKind, model: usize) {
+    let Some(at) = scene.objects.iter().position(|o| o.kind == kind && o.layer == model && o.list == ItemList::Overlay)
+    else {
+        return;
+    };
+    let range = scene.objects[at].items.clone();
+    if range.is_empty() {
+        return;
+    }
+    let n = range.len();
+    let items: Vec<Item> = scene.overlay.drain(range.clone()).collect();
+    if range.end <= scene.underlay_len {
+        scene.underlay_len -= n;
+    }
+    let to = scene.overlay.len();
+    scene.overlay.extend(items);
+    for (i, o) in scene.objects.iter_mut().enumerate() {
+        if o.list != ItemList::Overlay {
+            continue;
+        }
+        if i == at {
+            o.items = to..to + n;
+        } else if o.items.start >= range.end {
+            o.items = o.items.start - n..o.items.end - n;
+        }
     }
 }
 

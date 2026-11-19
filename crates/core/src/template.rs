@@ -812,6 +812,7 @@ fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
         offset_pct: 0.0,
         color_follows_plot: false,
         title_color_follows_plot: false,
+        title_on_top: false,
         tick_label_source: TickLabelSource::Auto,
         tick_label_angle_deg: 0.0,
         hide_end_label: false,

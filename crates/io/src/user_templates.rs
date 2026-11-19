@@ -236,8 +236,14 @@ pub struct SavedTemplate {
 }
 
 /// Writes `window` as the only window of a template file of `kind` named `name` (cleaned), replacing
-/// a template of the same kind and name.
-fn save_window(dir: &Path, name: &str, kind: TemplateKind, mut window: Window) -> Result<SavedTemplate, TemplateError> {
+/// a template of the same kind and name; `links` are the analysis runs of an analysis template.
+fn save_window(
+    dir: &Path,
+    name: &str,
+    kind: TemplateKind,
+    mut window: Window,
+    links: Vec<sheaf_core::analysis_link::AnalysisLink>,
+) -> Result<SavedTemplate, TemplateError> {
     let name = clean_name(name)?;
     std::fs::create_dir_all(dir).map_err(|e| IoError::io(dir, e))?;
     let path = file_path_of(dir, &name, kind)?;
@@ -254,6 +260,7 @@ fn save_window(dir: &Path, name: &str, kind: TemplateKind, mut window: Window) -
     }
     let mut project = Project::new();
     project.windows.push(window);
+    project.analysis_links = links;
     project_file::save_template_file(&project, &path, kind.marker())?;
     Ok(SavedTemplate { name, path, replaced: old.is_some() })
 }
@@ -263,13 +270,15 @@ fn save_window(dir: &Path, name: &str, kind: TemplateKind, mut window: Window) -
 /// spelling. The file is written to a temporary file and renamed over, so a crash never leaves half
 /// a file. The file holds the look only: no workbook, no column.
 pub fn save(dir: &Path, template: &UserTemplate) -> Result<SavedTemplate, TemplateError> {
-    save_window(dir, &template.name, TemplateKind::Graph, Window::Graph(template.graph.clone()))
+    save_window(dir, &template.name, TemplateKind::Graph, Window::Graph(template.graph.clone()), Vec::new())
 }
 
 /// Saves a workbook template as [`save`] saves a graph template: `<name>.sheafbooktemplate`, a
-/// workbook template of the same name replaced. Graph templates are never touched.
+/// workbook template of the same name replaced. Graph templates are never touched. The analysis
+/// runs of an analysis template (T163) are saved with it.
 pub fn save_book(dir: &Path, template: &BookTemplate) -> Result<SavedTemplate, TemplateError> {
-    save_window(dir, &template.name, TemplateKind::Workbook, Window::Workbook(template.book.clone()))
+    let window = Window::Workbook(template.book.clone());
+    save_window(dir, &template.name, TemplateKind::Workbook, window, template.links.clone())
 }
 
 /// Reads a template file of `kind`: its project and its name (the file name without the extension).
@@ -311,8 +320,8 @@ pub fn load_file(path: &Path) -> Result<UserTemplate, IoError> {
 /// Reads a workbook template file, as [`load_file`] reads a graph template.
 pub fn load_book_file(path: &Path) -> Result<BookTemplate, IoError> {
     let (project, name) = read_kind(path, TemplateKind::Workbook)?;
-    let book = project
-        .windows
+    let mut project = project;
+    let book = std::mem::take(&mut project.windows)
         .into_iter()
         .find_map(|w| match w {
             Window::Workbook(b) => Some(b),
@@ -324,7 +333,7 @@ pub fn load_book_file(path: &Path) -> Result<BookTemplate, IoError> {
             detail: "says the file holds a workbook template, but it holds no workbook".into(),
         })?;
     let name = if name.is_empty() { book.name.clone() } else { name };
-    Ok(BookTemplate { name, book })
+    Ok(BookTemplate { name, book, links: project.analysis_links })
 }
 
 fn unknown(dir: &Path, name: &str, kind: TemplateKind) -> TemplateError {

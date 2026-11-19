@@ -3796,6 +3796,27 @@ changes in this audit; Cut/Copy remain grey and no new Paste shortcut is enabled
 Multiple selection, Ctrl-drag, worksheet XY extraction, OLE/Copy Page and format
 copying are distinct routes outside this slice.
 
+**Implemented 2026-11-19 (T125, Claude Windows "t30-origin"; not measured).** The contract
+(`crates/app/src/shape_clip.rs`):
+
+- **Copy and Cut:** a drawn object's right-click Copy keeps a snapshot of it, with its two points
+  in page points from the top-left corner of its bounding box. Cut does the same and then deletes the
+  object, one undo step ("Delete drawn object"). Copy changes nothing in the project.
+- **Lifetime:** the snapshot is taken when copied. Later edits to the source or deleting it do not
+  change it, and it stays across projects until the program closes. It is Sheaf's own clipboard, not
+  the system one, and it holds one object.
+- **Paste:** while an object is copied, the right-click menu of the page or of a layer's empty area
+  starts with Paste.
+  - Paste puts the top-left corner of the bounding box at the clicked point: in the clicked layer, or
+    in layer 1 on the bare page.
+  - The copy keeps its size in points in a frame of another size, its endpoint order (an arrow keeps
+    its direction) and its style.
+  - The copy goes in front of the layer's other drawn objects (Origin's 2018b order; 2016 put it
+    behind the last pasted object, which Sheaf does not track). One undo step ("Paste drawn object").
+- **Not done:** Edit menu and keyboard Cut/Copy/Paste for drawn objects (Ctrl+X/C/V are shown in
+  the right-click menu, not bound), attachment to data or page, several objects at once, and
+  Ctrl+drag copies.
+
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 
 Measured on 2026-11-13 by opening Origin's Plot Details on a line plot (`tools/origin-ref/origin-dialog.ps1`,

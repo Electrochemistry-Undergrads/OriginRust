@@ -93,6 +93,19 @@ pub enum Cmd {
     ManageTemplates,
     /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values (T74).
     FillPattern(FillKind),
+    /// A drawn object's right-click Cut and Copy, and the page's Paste at a page point (T125).
+    CutShape {
+        layer: usize,
+        shape: usize,
+    },
+    CopyShape {
+        layer: usize,
+        shape: usize,
+    },
+    PasteShape {
+        layer: usize,
+        page: (f64, f64),
+    },
     /// Column > Fill Column With > Row Numbers / Uniform / Normal Random Numbers (T63 group H).
     QuickFill(QuickFill),
     /// Column > Set Sampling Interval... and Show X Column... (T84).
@@ -2331,8 +2344,8 @@ pub fn graph_label_menu(layer: usize, label: usize) -> Vec<Entry> {
 /// The menu of a drawn line, arrow, rectangle or ellipse.
 pub fn graph_shape_menu(layer: usize, shape: usize) -> Vec<Entry> {
     vec![
-        grey_keyed("Cut", ctrl(Key::X)),
-        grey_keyed("Copy", ctrl(Key::C)),
+        keyed("Cut", ctrl(Key::X), Cmd::CutShape { layer, shape }),
+        keyed("Copy", ctrl(Key::C), Cmd::CopyShape { layer, shape }),
         keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteShape { layer, shape })),
         sep(),
         item("Bring to the front", Cmd::GraphEdit(GraphOp::OrderShape { layer, shape, front: true })),
@@ -2422,8 +2435,12 @@ fn new_layer_menu() -> Entry {
 }
 
 /// The menu of the page outside the plots and axes, or of the inside of a layer.
-pub fn graph_page_menu(layer: usize) -> Vec<Entry> {
-    vec![
+/// The menu of the page or of a layer's empty area; `page` is the clicked page point (Paste puts a
+/// copied drawn object there, T125).
+pub fn graph_page_menu(layer: usize, page: (f64, f64)) -> Vec<Entry> {
+    let paste = crate::shape_clip::has().then(|| item("Paste", Cmd::PasteShape { layer, page }));
+    let mut v: Vec<Entry> = paste.into_iter().collect();
+    v.extend([
         item("Add Text...", Cmd::AddText),
         item("Layer Management...", Cmd::LayerManagement(None)),
         new_layer_menu(),
@@ -2459,7 +2476,8 @@ pub fn graph_page_menu(layer: usize) -> Vec<Entry> {
                 item("Duplicate with New Columns...", Cmd::BatchPlot(true)),
             ],
         ),
-    ]
+    ]);
+    v
 }
 
 /// Paste Format of the page menu: it acts at once for a graph format; for an axis format Origin
@@ -2727,6 +2745,15 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SaveWindowAs => Action::SaveWindowAs(c.active.ok_or(NEED_WINDOW)?),
         Cmd::FillPattern(kind) => Action::FillPattern { kind: *kind, columns: some()? },
         Cmd::QuickFill(kind) => Action::QuickFill { kind: *kind, columns: some()? },
+        Cmd::CutShape { layer, shape } => {
+            Action::CopyShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape, cut: true }
+        }
+        Cmd::CopyShape { layer, shape } => {
+            Action::CopyShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape, cut: false }
+        }
+        Cmd::PasteShape { layer, page } => {
+            Action::PasteShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, page: *page }
+        }
         Cmd::SetSamplingInterval => Action::SetSamplingInterval { columns: some()? },
         Cmd::ShowXColumn => Action::ShowXColumn { columns: some()? },
         Cmd::SaveTemplateAs => {

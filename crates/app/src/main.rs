@@ -48,6 +48,7 @@ mod panels;
 mod project_find;
 mod reader;
 mod recent;
+mod shape_clip;
 mod switcher;
 mod text_format;
 mod theme;

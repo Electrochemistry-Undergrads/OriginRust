@@ -2733,6 +2733,22 @@ impl SheafApp {
             Action::FillPattern { kind, columns } => {
                 self.fill_pattern = Some(crate::dialogs::fill_pattern::FillPatternDialog::new(kind, columns));
             }
+            Action::CopyShape { graph, layer, shape, cut } => {
+                let copied = self.doc.project().graph(graph).is_some_and(|g| crate::shape_clip::copy(g, layer, shape));
+                if copied && cut {
+                    self.edit_graph(graph, crate::actions::GraphOp::DeleteShape { layer, shape });
+                }
+            }
+            Action::PasteShape { graph, layer, page } => {
+                if let Some(s) = self.doc.project().graph(graph).and_then(|g| crate::shape_clip::placed(g, layer, page))
+                {
+                    self.doc.apply("Paste drawn object", |p| {
+                        if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {
+                            l.shapes.push(s);
+                        }
+                    });
+                }
+            }
             Action::QuickFill { kind, columns } => {
                 let seed = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)

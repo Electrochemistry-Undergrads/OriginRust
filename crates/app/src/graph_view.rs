@@ -1255,6 +1255,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         stack: None,
         can_cumulate: false,
         can_color_scale: false,
+        space3d: false,
         selected_shape: None,
         multi_selected: 0,
         view_mode: Default::default(),

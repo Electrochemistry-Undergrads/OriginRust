@@ -6533,9 +6533,20 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
     with its line. A missing value breaks the ribbon.
   - The quadrilaterals of a ribbon are drawn from the farthest to the nearest; the ribbons in plot
     order, the first farthest back.
+- **3D Axis window (T164, Sheaf's window; Origin's 3D axis dialog was not probed):** Format > Axes >
+  Z Axis... opens it on Z, and X Axis... or Y Axis... (also Axes...) open it on X or Y when the active
+  layer is 3D, in place of the 2D axis dialog (the layer's own axes are the hidden frame of the view).
+  Z Axis... is greyed on other layers.
+  - X Axis, Y Axis and Z Axis buttons choose the axis; From, To and Increment are each Auto until
+    set (`Space3dCoords::scales`). OK and Apply set all three axes as one undo step ("3D Axis").
+  - From must be less than To and the Increment more than 0, or the window says so and changes
+    nothing. Auto shows what the box shows now.
+  - A set From or To fixes that end of the box; with Auto Increment the box keeps its about five
+    steps. Points outside the box (and ribbon rows) are not drawn.
+  - The Y axis of a 3D XYY layer keeps one tick per plot and is not set here.
 - **Not done:**
-  - rotating the view, and the Z axis dialog (Format > Axes > Z Axis stays grey);
+  - rotating the view; axis titles, tick label and scale type settings of the 3D axes;
   - hiding points behind each other (points are drawn in row order);
-  - 3D Bars, error bars and vectors, surfaces, and 3D OpenGL settings.
+  - surfaces and 3D OpenGL settings.
   - The Data Reader shows the view's coordinates, not X, Y and Z.
 

@@ -50,6 +50,7 @@ mod piper_plot;
 mod qc_plot;
 pub mod smith;
 mod space3d;
+pub use space3d::space3d_scales;
 mod stack;
 mod stock_plot;
 mod sunburst;

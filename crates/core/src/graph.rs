@@ -526,12 +526,33 @@ pub struct Space3dCoords {
     /// wide, instead of a wall down to the floor.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub ribbons: bool,
+    /// The scales of the X, Y and Z data axes (T164, the 3D Axis window); automatic when unset.
+    #[serde(default, skip_serializing_if = "Space3dCoords::auto_scales")]
+    pub scales: [Space3dScale; 3],
+}
+
+impl Space3dCoords {
+    fn auto_scales(scales: &[Space3dScale; 3]) -> bool {
+        scales.iter().all(|s| *s == Space3dScale::default())
+    }
 }
 
 impl Default for Space3dCoords {
     fn default() -> Self {
-        Space3dCoords { azimuth_deg: 40.0, elevation_deg: 25.0, xyy: false, ribbons: false }
+        Space3dCoords { azimuth_deg: 40.0, elevation_deg: 25.0, xyy: false, ribbons: false, scales: Default::default() }
     }
+}
+
+/// The scale of one data axis of a 3D layer (T164): `None` takes the automatic value.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Space3dScale {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<f64>,
+    /// The step between major ticks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step: Option<f64>,
 }
 
 /// The settings of a Smith chart layer.

@@ -447,6 +447,8 @@ pub enum Cmd {
     RiseTimeGadget,
     /// Gadgets > Intersect... (T139).
     IntersectGadget,
+    /// Gadgets > Quick Peaks... (T140).
+    QuickPeaksGadget,
     /// A command of the open gadget's right-click menu.
     Gadget(GadgetOp),
     /// View > Toolbars: the window that shows and hides the bars.
@@ -1718,7 +1720,8 @@ fn data_menu() -> Vec<Entry> {
 }
 
 fn gadgets_menu() -> Vec<Entry> {
-    let mut v = greys(&["Statistics...", "Quick Fit...", "Quick Sigmoidal Fit...", "Quick Peaks..."]);
+    let mut v = greys(&["Statistics...", "Quick Fit...", "Quick Sigmoidal Fit..."]);
+    v.push(item("Quick Peaks...", Cmd::QuickPeaksGadget));
     v.push(item("Integrate...", Cmd::IntegrateGadget));
     v.extend(greys(&["Differentiate...", "Interpolate..."]));
     v.push(item("Intersect...", Cmd::IntersectGadget));
@@ -3085,6 +3088,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::IntegrateGadget => Action::StartIntegrate { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::RiseTimeGadget => Action::StartRiseTime { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::IntersectGadget => Action::StartIntersect { graph: c.graph.ok_or(NEED_GRAPH)? },
+        Cmd::QuickPeaksGadget => Action::StartQuickPeaks { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Toolbars => Action::Toolbars,
         Cmd::Autosave => Action::Autosave,

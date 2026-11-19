@@ -847,6 +847,10 @@ pub enum Action {
     StartIntersect {
         graph: WindowId,
     },
+    /// Gadgets > Quick Peaks on a graph (T140).
+    StartQuickPeaks {
+        graph: WindowId,
+    },
     /// A command of a graph's open gadget.
     Gadget {
         graph: WindowId,

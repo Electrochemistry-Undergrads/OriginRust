@@ -9079,6 +9079,7 @@ mod label_order;
 mod new_from_template;
 mod options;
 mod qc_chart;
+mod quick_peaks;
 mod reimport;
 mod rise_time;
 mod sample_projects;

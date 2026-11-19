@@ -193,7 +193,8 @@ Formatting, strict workspace Clippy, Nextest (4,566 passed and
 Ordinary legends now resolve `\cpN(text)` in their owning layer, including shared-frame
 legends that display other layers' plot names. Width, drawing, scene preview and exports
 use the same resolved text styles. Regressions cover substituted names, alignment, literal
-text, missing slots and live style changes (graphing 7.11). Workspace verification pending.
+text, missing slots and live style changes (graphing 7.11). Formatting, strict workspace Clippy, Nextest (4,570 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
 
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.

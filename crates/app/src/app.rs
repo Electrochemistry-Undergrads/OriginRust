@@ -2739,6 +2739,15 @@ impl SheafApp {
                     self.edit_graph(graph, crate::actions::GraphOp::DeleteShape { layer, shape });
                 }
             }
+            Action::CopyTitle { graph, layer, y, cut } => {
+                let project = self.doc.project();
+                let copied = sheaf_plot::axis_title(project, graph, layer, y).ok().is_some_and(|text| {
+                    project.graph(graph).is_some_and(|g| crate::shape_clip::copy_title(g, layer, y, text))
+                });
+                if copied && cut {
+                    self.edit_graph(graph, crate::actions::GraphOp::HideTitle { layer, y });
+                }
+            }
             Action::CopyLabel { graph, layer, label, cut } => {
                 let copied =
                     self.doc.project().graph(graph).is_some_and(|g| crate::shape_clip::copy_label(g, layer, label));

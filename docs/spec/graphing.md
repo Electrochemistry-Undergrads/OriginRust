@@ -3817,6 +3817,11 @@ copying are distinct routes outside this slice.
   clipboard. A label holds the clipboard instead of a drawn object, and the other way round. Paste
   puts the label's anchor (a table's top-left corner) at the clicked point, with its text, font and
   rotation unchanged ("Paste text"). Cut deletes it in one undo step ("Delete text").
+- **Axis titles (T148, 2026-11-19):** an axis title's right-click Copy puts a text label on the
+  clipboard. It has the title as shown (the automatic one built from the column too), the axis's
+  title font, and a 90-degree turn for a vertical axis. Paste makes it a free text label. Cut also
+  deletes the title in one undo step ("Delete axis title"). The title's Bring to the front and Push
+  to the back stay grey.
 - **Not done:** Edit menu and keyboard Cut/Copy/Paste for drawn objects and labels (Ctrl+X/C/V are
   shown in the right-click menu, not bound), attachment to data or page, several objects at once,
   and Ctrl+drag copies.

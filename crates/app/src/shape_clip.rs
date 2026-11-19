@@ -68,6 +68,19 @@ pub fn copy(graph: &Graph, layer: usize, shape: usize) -> bool {
     true
 }
 
+/// Copies an axis title as a text label (T148): `text` is the title as shown, with the axis's
+/// title font, turned 90 degrees for a vertical axis.
+pub fn copy_title(graph: &Graph, layer: usize, vertical: bool, text: String) -> bool {
+    let Some(l) = graph.layers.get(layer) else { return false };
+    let axis = if vertical { &l.y_axis } else { &l.x_axis };
+    let mut label = TextLabel::new(text, 0.0, 0.0, axis.title_font.clone());
+    if vertical {
+        label.rotation_deg = 90.0;
+    }
+    CLIP.with(|c| *c.borrow_mut() = Some(Clip::Label(label)));
+    true
+}
+
 /// Copies text label `label` of `layer`; false when there is no such label.
 pub fn copy_label(graph: &Graph, layer: usize, label: usize) -> bool {
     let Some(l) = graph.layers.get(layer).and_then(|l| l.labels.get(label)) else { return false };

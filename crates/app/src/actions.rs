@@ -874,6 +874,14 @@ pub enum Action {
     },
     /// Writes a hint on the status bar.
     Hint(String),
+    /// Resize a drawn object, if its original geometry still exists.
+    ResizeShape {
+        graph: WindowId,
+        layer: usize,
+        shape: usize,
+        before: sheaf_core::shape::Shape,
+        after: sheaf_core::shape::Shape,
+    },
     /// Opens the properties window of a drawn object (double click, Properties).
     EditShape {
         graph: WindowId,

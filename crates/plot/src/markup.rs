@@ -1,7 +1,8 @@
 //! Text markup of labels (spec section 5): `\b(..)` bold, `\i(..)` italic,
 //! `\+(..)` superscript, `\-(..)` subscript, `\g(..)` Greek, `\pN(..)` size in percent,
-//! `\f:Name(..)` font switch, `\x(hhhh)` a character by its code, `\v(..)` literal text; the
-//! `\u(..)` underline, `\s(..)` strikethrough and `\cN(..)` indexed or RGB text color.
+//! `\f:Name(..)` font switch, `\x(hhhh)` a character by its code, `\v(..)` literal text,
+//! `\h(..)` protected substitution text, `\u(..)` underline, `\s(..)` strikethrough
+//! and `\cN(..)` indexed or RGB text color.
 //! `\=(sub,sup)` places paired scripts in one shared column. `\ab(..)`, `\ad(..)`, and
 //! `\at(..)` draw a bar, dot, or tilde above a span.
 //! Escapes nest. A backslash
@@ -169,7 +170,7 @@ enum Escape {
     Pair,
     /// A decorated span with one accent over its contents.
     Accent(Accent),
-    /// `\v(..)`: the text is taken as it is, without escapes.
+    /// `\v(..)` or `\h(..)`: the enclosed text is taken literally.
     Literal,
     /// `\x(hhhh)`: one character given by its hexadecimal code.
     Unicode,
@@ -237,7 +238,7 @@ fn escape_at(
                 Escape::Styled(inner)
             }
             '=' => Escape::Pair,
-            'v' => Escape::Literal,
+            'v' | 'h' => Escape::Literal,
             'x' => Escape::Unicode,
             'y' if chars.get(pos + 4) == Some(&')') => match chars.get(pos + 3) {
                 Some('\'') => Escape::Prime('\u{2032}'),
@@ -577,6 +578,17 @@ mod tests {
         assert_eq!(plain("\\\\"), "\\\\");
         assert_eq!(plain("\\x(1)"), "\\x(1)");
         assert_eq!(plain("trailing\\"), "trailing\\");
+    }
+
+    #[test]
+    fn protected_substitution_text_is_literal_with_the_surrounding_style() {
+        let text = r"\b(\g(\h(\l(1) %(1) \i(raw))a))Z";
+        let runs = parse(text);
+        assert_eq!(runs[0].text, r"\l(1) %(1) \i(raw)α");
+        assert!(runs[0].bold && !runs[0].italic);
+        assert_eq!(runs[1].text, "Z");
+        assert!(!runs[1].bold);
+        assert_eq!(plain(r"\v(\h(%(1)))"), r"\h(%(1))");
     }
 
     #[test]

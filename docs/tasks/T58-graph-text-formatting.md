@@ -187,7 +187,8 @@ example and Sheaf's literal-body rules. Formatting, strict workspace Clippy, Nex
 `\cpN(text)` resolves the indexed plot's representative color in free graph labels and
 their exports (graphing 7.11). Scene regressions cover two layers, a hidden earlier plot,
 line and symbol colors, underlining, nested colors and fallback to the enclosing color.
-Workspace verification pending.
+Formatting, strict workspace Clippy, Nextest (4,566 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
 
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.

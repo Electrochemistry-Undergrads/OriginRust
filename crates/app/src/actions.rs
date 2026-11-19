@@ -855,6 +855,10 @@ pub enum Action {
     StartSigmoid {
         graph: WindowId,
     },
+    /// Gadgets > FFT on a graph (T142).
+    StartFft {
+        graph: WindowId,
+    },
     /// A command of a graph's open gadget.
     Gadget {
         graph: WindowId,

@@ -23,6 +23,11 @@
 //! The Quick Sigmoidal Fit gadget (T141, Gadgets > Quick Sigmoidal Fit, not measured) fits the built-in
 //! Boltzmann function `A2 + (A1 - A2) / (1 + exp((x - x0) / dx))` to the rows inside the range, draws the
 //! fitted curve over the range and shows x0 and dx.
+//!
+//! The FFT gadget (T142, Gadgets > FFT, not measured) takes the rows inside the range at their mean X step,
+//! computes the one-sided amplitude spectrum (`sheaf_calc::fft::fft_spectrum`, Origin's FFT defaults with
+//! that sampling interval), draws it as a small chart at the top of the range and names the strongest
+//! frequency above zero.
 
 use crate::actions::Action;
 use crate::menus::{self, MenuContext};
@@ -44,6 +49,8 @@ pub enum GadgetKind {
     QuickPeaks,
     /// Gadgets > Quick Sigmoidal Fit (T141).
     Sigmoid,
+    /// Gadgets > FFT (T142).
+    Fft,
 }
 
 /// The Quick Sigmoidal Fit result: the fitted parameters A1, A2, x0, dx and the function to draw.
@@ -144,6 +151,22 @@ impl Integrator {
         params.iter().all(|v| v.is_finite()).then_some(SigmoidFit { params, func })
     }
 
+    /// FFT gadget: the frequencies and amplitudes of the rows inside the range (at least four, with a
+    /// positive mean X step).
+    pub fn spectrum(&self, x: &[f64], y: &[f64]) -> Option<(Vec<f64>, Vec<f64>)> {
+        let (a, b) = rows_in(x, self.x0, self.x1)?;
+        let (xs, ys) = (&x[a - 1..b], &y[a - 1..b]);
+        if xs.len() < 4 || ys.iter().any(|v| !v.is_finite()) {
+            return None;
+        }
+        let interval = (xs[xs.len() - 1] - xs[0]).abs() / (xs.len() - 1) as f64;
+        if !(interval > 0.0 && interval.is_finite()) {
+            return None;
+        }
+        let r = sheaf_calc::fft::fft_spectrum(ys, &sheaf_calc::fft::FftOptions { interval, ..Default::default() });
+        Some((r.frequency, r.amplitude))
+    }
+
     /// Quick Peaks gadget: the positive peaks of the curve among the rows inside the range, as (x, y).
     pub fn peaks(&self, x: &[f64], y: &[f64]) -> Vec<(f64, f64)> {
         let Some((a, b)) = rows_in(x, self.x0, self.x1) else { return Vec::new() };
@@ -204,6 +227,42 @@ impl Integrator {
         let crossings = if self.kind == GadgetKind::Intersect { self.crossings(project, graph) } else { Vec::new() };
         let peaks = if self.kind == GadgetKind::QuickPeaks { self.peaks(&x, &y) } else { Vec::new() };
         let sigmoid = if self.kind == GadgetKind::Sigmoid { self.sigmoid(&x, &y) } else { None };
+        let spectrum = if self.kind == GadgetKind::Fft { self.spectrum(&x, &y) } else { None };
+        // The strongest frequency above zero.
+        let strongest = spectrum.as_ref().and_then(|(f, a)| {
+            f.iter()
+                .zip(a)
+                .filter(|(fv, av)| **fv > 0.0 && av.is_finite())
+                .max_by(|p, q| p.1.total_cmp(q.1))
+                .map(|(fv, _)| *fv)
+        });
+        if let Some((f, a)) = &spectrum {
+            // A small chart in the top third of the range: frequency across, amplitude up.
+            let chart = Rect::from_min_max(
+                range.left_top() + egui::vec2(4.0, 20.0),
+                Pos2::new(range.right() - 4.0, range.top() + 20.0 + range.height() / 3.0),
+            );
+            if chart.width() > 20.0 && chart.height() > 20.0 {
+                painter.rect_filled(chart, 0.0, Color32::from_rgba_unmultiplied(255, 255, 255, 220));
+                painter.rect_stroke(chart, 0.0, Stroke::new(1.0_f32, Color32::GRAY), egui::StrokeKind::Inside);
+                let fmax = f.iter().copied().fold(0.0, f64::max);
+                let amax = a.iter().copied().filter(|v| v.is_finite()).fold(0.0, f64::max);
+                if fmax > 0.0 && amax > 0.0 {
+                    let pts: Vec<Pos2> = f
+                        .iter()
+                        .zip(a)
+                        .filter(|(_, av)| av.is_finite())
+                        .map(|(fv, av)| {
+                            Pos2::new(
+                                chart.left() + (fv / fmax) as f32 * chart.width(),
+                                chart.bottom() - (av / amax) as f32 * chart.height(),
+                            )
+                        })
+                        .collect();
+                    painter.add(egui::Shape::line(pts, Stroke::new(1.0_f32, Color32::from_rgb(200, 30, 30))));
+                }
+            }
+        }
         if let Some(s) = &sigmoid {
             // The fitted curve across the range, 200 steps.
             let (lo, hi) = (self.x0.min(self.x1), self.x0.max(self.x1));
@@ -312,6 +371,10 @@ impl Integrator {
                 sheaf_core::format::format_general(r.time, 6)
             ),
             (GadgetKind::RiseTime, _, None) => "Rise Time: no step in the range".to_string(),
+            (GadgetKind::Fft, _, _) => match strongest {
+                Some(fv) => format!("Strongest frequency = {}", sheaf_core::format::format_general(fv, 6)),
+                None => "FFT: too few points in the range".to_string(),
+            },
             (GadgetKind::Sigmoid, _, _) => match &sigmoid {
                 Some(s) => format!(
                     "x0 = {}, dx = {}",
@@ -385,9 +448,11 @@ impl Integrator {
         body.context_menu(|ui| {
             let menu = match self.kind {
                 GadgetKind::Integrate => menus::integrate_gadget_menu(self.end_point_baseline),
-                GadgetKind::RiseTime | GadgetKind::Intersect | GadgetKind::QuickPeaks | GadgetKind::Sigmoid => {
-                    menus::rise_time_gadget_menu()
-                }
+                GadgetKind::RiseTime
+                | GadgetKind::Intersect
+                | GadgetKind::QuickPeaks
+                | GadgetKind::Sigmoid
+                | GadgetKind::Fft => menus::rise_time_gadget_menu(),
             };
             menus::show_context(ui, &menu, c, actions)
         });

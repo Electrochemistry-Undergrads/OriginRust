@@ -329,7 +329,7 @@ fn histogram_probabilities_steps_through_the_cumulative_percent_of_the_bins() {
         let gr = p.graph_mut(g).unwrap();
         assert_eq!(gr.layers.len(), 2, "the histogram and the linked right-Y layer");
         for l in &mut gr.layers {
-            l.plots[0].hist = style.clone();
+            l.plots[0].hist = style;
         }
         let right = &gr.layers[1];
         assert_eq!(right.plots[0].stat, Some(sheaf_core::graph::StatPlot::HistogramCumulative));

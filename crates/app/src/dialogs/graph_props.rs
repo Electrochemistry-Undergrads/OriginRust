@@ -300,6 +300,7 @@ impl GraphPropsDialog {
                             node,
                             tab,
                             &mut graph,
+                            doc.project(),
                             &labels,
                             &names,
                             &sources,

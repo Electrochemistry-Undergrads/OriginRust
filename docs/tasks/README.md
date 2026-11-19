@@ -108,7 +108,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T104](T104-system-templates.md) | Plot > System Templates... | S | done 2026-11-16 (graphing 24); left: Plot Setup... |
 | [T105](T105-fitting-function-organizer.md) | Tools > Fitting Function Organizer (browse the built-in fit functions) | S | done 2026-11-16 (fitting.md); left: user functions, sample curve |
 | [T106](T106-import-filters-manager.md) | Tools > Import Filters Manager (saved import themes) | S | done 2026-11-16 (import-ascii.md); left: filter switches, Customize Menu |
-| [T107](T107-vector-plots.md) | Plot > Specialized > Vector XYAM, Vector XYXY | M | plots landed 2026-11-16; legend arrows and Vector tab controls added 2026-11-18 (graphing 30) |
+| [T107](T107-vector-plots.md) | Plot > Specialized > Vector XYAM, Vector XYXY | M | plots landed 2026-11-16; legend arrows, Vector tab styling and data selectors added 2026-11-18 (graphing 30) |
 | [T108](T108-stock-plots.md) | Plot > Stock: High-Low-Close, Japanese Candlestick, OHLC Bar Chart | M | done 2026-11-16 (graphing 31); left: Plot Details price tabs, date X axis |
 | [T109](T109-stock-volume-line.md) | Plot > Stock: OHLC-Volume, Line | M | done 2026-11-16 (graphing 31); left: exact X range, volume label format |
 | [T110](T110-marginal-plots.md) | Plot > Statistics: Marginal Histograms, Marginal Box Charts | M | done 2026-11-16 (graphing 32); left: Min-Max whiskers, count-axis rounding |

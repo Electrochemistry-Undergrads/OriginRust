@@ -1,6 +1,6 @@
 # T63: Existing-feature menu and toolbar wire-ups, round two
 
-**Status:** open; F wired (2026-11-15), J wired (2026-11-15, Claude Windows, branch `t63-add-plot`), C reviewed and deferred to B8/T14; claim remaining groups separately. Group G wired 2026-11-15 (Object Edit Bring to Front/Send to Back reorder the selected drawn shape; branch `t63-g`; Origin's button state unmeasured). Groups A, B, D, E, H, I, K claimed 2026-11-15 (session "mac-multipdf", macOS, branch `greyed-2-abdehik`); that claim went stale, and group H was taken over and wired 2026-11-19 (Claude Windows "t30-origin", branch `t63-fill`; workbook-model 13c, not measured). Recovered and refined 2026-11-15.
+**Status:** open; F wired (2026-11-15), J wired (2026-11-15, Claude Windows, branch `t63-add-plot`), C reviewed and deferred to B8/T14; claim remaining groups separately. Group G wired 2026-11-15 (Object Edit Bring to Front/Send to Back reorder the selected drawn shape; branch `t63-g`; Origin's button state unmeasured). Groups A, B, D, E, H, I, K claimed 2026-11-15 (session "mac-multipdf", macOS, branch `greyed-2-abdehik`); that claim went stale, and groups H, A and B were taken over and wired 2026-11-19 (Claude Windows "t30-origin", branch `t63-fill`; workbook-model 13c, not measured). Recovered and refined 2026-11-15.
 **Size:** M overall; each group S. **Branch:** `greyed-2-<group>`.
 **Priority:** wave 3, parallel lane when files do not overlap wave 1/2 claims.
 **Spec:** [command map](../spec/ui-command-map.md), [GUI](../spec/gui-look.md); T01's method.
@@ -24,8 +24,8 @@ before calling them Origin-compatible; otherwise preserve disabled state or docu
 
 | Group | Candidate locations | Lead to verify |
 |---|---|---|
-| A | Bar, Stacked Area, Box Chart, Histogram, Bubble toolbar (5) | `Template` variants already in Plot menu; mirror live `Cmd::Plot` buttons in `toolbar.rs` |
-| B | Horizontal Step, Vertical Step, Spline Connected (3) | `Connect::StepHorizontal`, `StepVertical`, `Spline` render; expose templates/shared args |
+| A | Bar, Stacked Area, Box Chart, Histogram, Bubble toolbar (5) | Done 2026-11-19: the buttons run the Plot menu's `Cmd::Plot` templates (graphing "Step and spline line plots") |
+| B | Horizontal Step, Vertical Step, Spline Connected (3) | Done 2026-11-19: `Template::StepHorizontal`, `StepVertical`, `SplineConnected` (the Line template with that connection); UI test in `ui_tests.rs` |
 | C | Probability Plot, Q-Q Plot (2) | Reviewed: deferred to B8/T14; documented score/confidence defaults need feature work before these entries can be wired (see review below) |
 | D | Open Excel (1) | T30 imports Excel into worksheets; Origin's item opens an Excel window. Reassign to B14 unless equivalent behaviour is established; do not relabel import as parity |
 | E | Graph as Image, Multi-Page PDF without graph active (2) | T05/T32; either state-disable as Origin does or choose project graphs through Export Graphs |

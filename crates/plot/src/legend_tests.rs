@@ -3,7 +3,7 @@
 use super::*;
 use crate::scene::{Item, ObjectKind, Scene};
 use sheaf_core::template::Template;
-use sheaf_core::{ColumnData, Designation};
+use sheaf_core::{Color, ColumnData, Designation};
 
 fn project(n: usize) -> (Project, WindowId) {
     project_with_template(n, Template::Line)
@@ -68,6 +68,55 @@ fn custom_text_reorders_substitutes_and_adds_literal_text() {
     assert!((texts[0].0 - texts[1].0 - (2.2 * fs + 0.5 * fs)).abs() < 1e-9, "{texts:?}");
     // Rows are one after the other.
     assert!((texts[1].1 - texts[0].1 - 1.3 * fs).abs() < 1e-9);
+}
+
+#[test]
+fn legend_plot_color_styles_substituted_text_at_its_measured_size() {
+    use sheaf_core::graph::LegendPosition;
+
+    let (mut p, g) = project(2);
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    layer.plots[1].line.color = Color::RED;
+    layer.legend.position = LegendPosition::ManualTopLeft { x: 0.4, y: 0.3 };
+    layer.legend.text = Some(r"\l(1) \cp2(\u(\b(%(2))))   ".into());
+    let initial = scene(&p, g);
+    let reference_box = automatic_legend_box(&p, g);
+    let legend = &mut p.graph_mut(g).unwrap().layers[0].legend;
+    legend.text = Some(r"\l(1) \c2(\u(\b(%(2))))   ".into());
+    assert_eq!(crate::svg::write_svg(&initial), crate::svg::write_svg(&scene(&p, g)));
+    assert_eq!(reference_box, automatic_legend_box(&p, g));
+}
+
+#[test]
+fn shared_frame_legend_plot_color_uses_the_owner_layer_and_follows_style_changes() {
+    use sheaf_core::graph::LegendScope;
+
+    let (mut p, original) = project(2);
+    let original = p.graph(original).unwrap();
+    let a = original.layers[0].plots[0].y;
+    let b = original.layers[0].plots[1].y;
+    let g = p.plot_columns_double_y(Template::DoubleY, &[a], &[b]).unwrap();
+    let layers = &mut p.graph_mut(g).unwrap().layers;
+    layers[0].plots[0].line.color = Color::RED;
+    layers[1].plots[0].line.color = Color::BLUE;
+    let legend = &mut layers[1].legend;
+    legend.scope = LegendScope::Graph;
+    legend.visible = true;
+    legend.text = Some(r"\l(1.1) \cp1(%(1.1)) \cp2(missing) \v(\cp1(literal))".into());
+    let assert_color = |p: &Project, expected: Color| {
+        let s = scene(p, g);
+        let layer = s.layers.last().unwrap();
+        let o = layer.objects.iter().find(|o| o.kind == ObjectKind::Legend && o.layer == 1).unwrap();
+        let texts: Vec<_> = layer.overlay[o.items.clone()]
+            .iter()
+            .filter_map(|i| if let Item::Text(t) = i { Some((t.text.as_str(), t.color)) } else { None })
+            .collect();
+        assert_eq!(texts, [("Series 1", expected), (r" missing \cp1(literal)", Color::BLACK)]);
+    };
+    assert_color(&p, Color::BLUE);
+    let color = Color::rgb(71, 163, 87);
+    p.graph_mut(g).unwrap().layers[1].plots[0].line.color = color;
+    assert_color(&p, color);
 }
 
 #[test]

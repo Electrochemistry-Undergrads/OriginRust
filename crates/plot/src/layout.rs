@@ -26,8 +26,8 @@ use crate::ticks::{ResolvedAxis, resolve_axis_edges};
 use crate::{LayerGeometry, PlotError, Rect};
 use sheaf_core::Color;
 use sheaf_core::graph::{
-    Axis, AxisSide, Font, Graph, Layer, Legend, LegendPosition, LegendScope, LineStyle, Page, PlotKind, ScaleLink,
-    StatPlot, TickDirection,
+    Axis, AxisSide, Font, Graph, Layer, Legend, LegendPosition, LegendScope, LineStyle, Page, Plot, PlotKind,
+    ScaleLink, StatPlot, TickDirection,
 };
 use sheaf_core::{Project, WindowId};
 
@@ -79,6 +79,7 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
                 &ids,
                 &edge_ticks(g, i),
                 m,
+                &layer.plots,
             );
             hit::record(&mut last.objects, &last.overlay, start, ObjectKind::Legend, i, ItemList::Overlay, &[], m);
         }
@@ -1015,7 +1016,7 @@ fn draw_legend_and_labels(
         let entries: Vec<&PlotData> = pds.iter().collect();
         let start = out.len();
         let ids: Vec<String> = (1..=entries.len()).map(|k| k.to_string()).collect();
-        draw_legend(out, project, &layer.legend, f, &entries, &ids, &edge_ticks(g, index), m);
+        draw_legend(out, project, &layer.legend, f, &entries, &ids, &edge_ticks(g, index), m, &layer.plots);
         rec(objects, out, start, ObjectKind::Legend, &[]);
     }
     for (k, label) in layer.labels.iter().enumerate() {
@@ -1663,7 +1664,7 @@ struct LegendRow {
 
 /// Draws legend `lg` inside frame `f`: one row per entry line (the automatic text has one
 /// line per plot), in `lg.columns` columns filled top to bottom. `ids` name the entries as
-/// `\l(n)` and `%(n)` refer to them.
+/// `\l(n)` and `%(n)` refer to them. `owner_plots` supplies the layer-local colors for `\cpN`.
 #[allow(clippy::too_many_arguments)]
 fn draw_legend(
     out: &mut Vec<Item>,
@@ -1674,6 +1675,7 @@ fn draw_legend(
     ids: &[String],
     ticks: &EdgeTicks,
     m: &dyn TextMeasurer,
+    owner_plots: &[Plot],
 ) {
     // A parallel plot's legend lists its groups, not its axes (`parallel::draw_legend`).
     if !lg.visible || entries.is_empty() || entries.iter().any(|pd| pd.plot.kind.is_parallel()) {
@@ -1683,7 +1685,7 @@ fn draw_legend(
         crate::legend_anchor::place(out, m, f, (x, y), |out, position| {
             let mut legend = lg.clone();
             legend.position = position;
-            draw_legend(out, project, &legend, f, entries, ids, ticks, m);
+            draw_legend(out, project, &legend, f, entries, ids, ticks, m, owner_plots);
         });
         return;
     }
@@ -1693,6 +1695,9 @@ fn draw_legend(
     let pad = 0.4 * fs;
     let row_h = 1.3 * fs;
     let col_gap = fs;
+    let plot_color = |slot| owner_plots.get(slot).map(crate::rug::plot_color);
+    let segments = |t: &str| crate::markup::legend_segments(t, &|name| m.expand_inline_family(name), &plot_color);
+    let text_width = |t: &str| text::segments_width(m, &segments(t), &lg.font, fs);
 
     // Piled, floating and lying bars list the last plot first (measured, spec 14.12).
     let reversed = entries.first().is_some_and(|pd| {
@@ -1719,8 +1724,7 @@ fn draw_legend(
         let flush = |pending: &mut String, cells: &mut Vec<Cell>, after_symbol: &mut bool| {
             let t = if *after_symbol { pending.trim_start() } else { pending.as_str() };
             if !t.is_empty() {
-                let w = text::width(m, t, &lg.font, fs);
-                cells.push(Cell::Text(t.to_string(), w));
+                cells.push(Cell::Text(t.to_string(), text_width(t)));
             }
             pending.clear();
             *after_symbol = false;
@@ -1748,7 +1752,7 @@ fn draw_legend(
             let trimmed = t.trim_end();
             if trimmed.len() != t.len() {
                 *t = trimmed.to_string();
-                *w = text::width(m, t, &lg.font, fs);
+                *w = text_width(t);
             }
         }
         let mut width = 0.0;
@@ -1898,7 +1902,7 @@ fn draw_legend(
                     if after_symbol {
                         x += gap;
                     }
-                    text::place(out, m, t, &lg.font, fs, (x, baseline), Anchor::Start, 0.0);
+                    text::place_segments(out, m, &segments(t), &lg.font, fs, (x, baseline), Anchor::Start, 0.0);
                     x += w;
                     after_symbol = false;
                 }

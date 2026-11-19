@@ -8,7 +8,11 @@ remains open. Formatting, strict workspace Clippy, Nextest (4,517 passed and
 Apply Reorder previews header sorting before committing the displayed worksheet order.
 It records one undo step and keeps the active worksheet. Workbook model 13h records
 the archived control, documented behavior and Sheaf's sorting rules.
-Workspace verification pending.
+Formatting, strict workspace Clippy, Nextest (4,552 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
+The desktop launch showed the fixture tabs. The native input harness could not open
+the tab context menu. The App UI test exercised that menu, the preview, applying,
+reloading the saved order and undo.
 
 **Size:** S. **Source:** greyed inventory package B6 (the sheet tab's Navigate...).
 **Spec:** `docs/spec/workbook-model.md` (with the sheet tab section 13h).

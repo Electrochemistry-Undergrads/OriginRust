@@ -128,3 +128,40 @@ fn within_uses_the_explorer_folder_and_preserves_the_selected_scope() {
     settle(&mut h);
     assert_eq!(h.state().find_project.as_ref().unwrap().spec.within, FindScope::ActiveFolderAndSubfolders);
 }
+
+#[test]
+fn folder_comments_are_searchable_and_the_hit_activates_its_folder() {
+    use sheaf_core::project::Folder;
+
+    let mut h = start(vec![data_file("find-folder-comments")]);
+    h.state_mut().doc.apply("Add trial folder", |p| {
+        p.root.folders.push(Folder {
+            name: "Trials".into(),
+            comments: "Retest the signal\nVerify sample preparation".into(),
+            ..Folder::default()
+        });
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    h.key_press(egui::Key::F3);
+    settle(&mut h);
+    h.state_mut().find_project.as_mut().unwrap().spec.text = "preparation".into();
+    settle(&mut h);
+    let find = By::new().role(egui::accesskit::Role::Button).label("Find");
+    h.get(find.clone()).click();
+    settle(&mut h);
+    assert!(has_label(&h, "Found: 1"));
+    let hit = &h.state().find_project.as_ref().unwrap().hits.as_ref().unwrap()[0];
+    assert_eq!((hit.element, hit.attribute), ("Folder", "Comments"));
+    let path = hit.range.clone();
+    click(&mut h, &path);
+    assert_eq!(h.state().panels.explorer.folder, [0]);
+    assert!(has_label(&h, &path));
+
+    click(&mut h, "Select...");
+    click(&mut h, "Folder Comments");
+    h.get(find).click();
+    settle(&mut h);
+    assert!(has_label(&h, "Found: 0"));
+    assert_eq!(project(&h), &before);
+}

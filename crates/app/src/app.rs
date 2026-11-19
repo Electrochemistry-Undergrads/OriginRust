@@ -3776,8 +3776,7 @@ impl SheafApp {
         }
     }
 
-    /// Find in Project: a hit brings its window forward (its sheet, and its column selected). The
-    /// window stays open, as Origin's.
+    /// Find in Project stays open when a hit activates its folder, window, sheet or column.
     fn show_find_project(&mut self, ctx: &egui::Context) {
         use crate::dialogs::find_project::FindProjectOutcome;
         use crate::project_find::FindTarget;
@@ -3788,22 +3787,21 @@ impl SheafApp {
             FindProjectOutcome::Open => {}
             FindProjectOutcome::Closed => self.find_project = None,
             FindProjectOutcome::Go(target) => {
-                let window = match target {
-                    FindTarget::Window(id) => id,
-                    FindTarget::Sheet { book, .. } | FindTarget::Column { book, .. } => book,
-                };
-                let project = self.doc.project();
-                if project.window(window).is_none() {
-                    return;
+                if let Some(window) = target.window_id() {
+                    let project = self.doc.project();
+                    if project.window(window).is_none() {
+                        return;
+                    }
+                    if explorer::shown_windows(project, &self.panels.explorer.folder)
+                        .is_some_and(|shown| !shown.contains(&window))
+                    {
+                        let folder = explorer::home(&project.root, window);
+                        self.apply(Action::GoToFolder(folder), ctx);
+                    }
+                    self.apply(Action::Focus(window), ctx);
                 }
-                if explorer::shown_windows(project, &self.panels.explorer.folder)
-                    .is_some_and(|shown| !shown.contains(&window))
-                {
-                    let folder = explorer::home(&project.root, window);
-                    self.apply(Action::GoToFolder(folder), ctx);
-                }
-                self.apply(Action::Focus(window), ctx);
                 match target {
+                    FindTarget::Folder(path) => self.apply(Action::GoToFolder(path), ctx),
                     FindTarget::Window(_) => {}
                     FindTarget::Sheet { book, sheet } => self.apply(Action::SelectSheet { book, sheet }, ctx),
                     FindTarget::Column { book, sheet, column } => {

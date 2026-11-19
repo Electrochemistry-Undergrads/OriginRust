@@ -1,6 +1,6 @@
 //! Edit > Find in Project (F3, T95): Origin 2016's "Find" window with Sheaf's search
 //! (`crate::project_find`). Fields as Origin's: Find What, Case Sensitive, Match Whole Word, Allow
-//! Wildcards, the types to include (Graph, Book, Sheet, Column, with Sheet Comments and the column's
+//! Wildcards, the types to include (Folder, Graph, Book, Sheet, Column, with Folder and Sheet Comments and the column's
 //! Units and F(x) behind Select...), Data in Cells (1st Matched in Column) and Text Objects on Graphs.
 //! Each hit shows its number, range, element and attribute. Clicking a hit goes to it.
 
@@ -81,6 +81,7 @@ impl FindProjectDialog {
                 ui.group(|ui| {
                     ui.label("Types to be Included");
                     ui.horizontal(|ui| {
+                        ui.checkbox(&mut self.spec.folders, "Folder");
                         ui.checkbox(&mut self.spec.graphs, "Graph");
                         ui.checkbox(&mut self.spec.books, "Book");
                         ui.checkbox(&mut self.spec.sheets, "Sheet");
@@ -90,6 +91,7 @@ impl FindProjectDialog {
                         }
                     });
                     if self.select {
+                        ui.checkbox(&mut self.spec.folder_comments, "Folder Comments");
                         ui.horizontal(|ui| {
                             ui.label("Sheet also:");
                             ui.checkbox(&mut self.spec.sheet_comments, "Comments");
@@ -118,7 +120,7 @@ impl FindProjectDialog {
                             for (i, h) in hits.iter().enumerate() {
                                 ui.label((i + 1).to_string());
                                 if ui.selectable_label(false, &h.range).clicked() {
-                                    outcome = FindProjectOutcome::Go(h.target);
+                                    outcome = FindProjectOutcome::Go(h.target.clone());
                                 }
                                 ui.label(h.element);
                                 ui.label(h.attribute);

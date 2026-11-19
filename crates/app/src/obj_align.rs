@@ -12,7 +12,9 @@
 //! (or top) edge when it is resized; a text label keeps its size (its size follows its font), and
 //! a line with no extent in that direction is left as it is.
 
-/// One button of the group.
+use sheaf_plot::scene::ObjectKind;
+
+/// One button of the Align group.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Arrange {
     Left,
@@ -43,6 +45,17 @@ impl Arrange {
 pub enum Target {
     Shape(usize),
     Label(usize),
+}
+
+impl Target {
+    /// The target of a picked drawn object or text label.
+    pub fn of(kind: ObjectKind) -> Option<Target> {
+        match kind {
+            ObjectKind::Shape(i) => Some(Target::Shape(i)),
+            ObjectKind::Label(i) => Some(Target::Label(i)),
+            _ => None,
+        }
+    }
 }
 
 /// A selected object as drawn: everything in page points.
@@ -159,6 +172,94 @@ pub fn apply(p: &mut sheaf_core::Project, graph: sheaf_core::WindowId, changes: 
     }
 }
 
+/// The Object Edit group of a drawn object or text label (T162).
+pub fn group_of(graph: &sheaf_core::graph::Graph, layer: usize, kind: ObjectKind) -> Option<u32> {
+    let l = graph.layers.get(layer)?;
+    match kind {
+        ObjectKind::Shape(i) => l.shapes.get(i)?.group,
+        ObjectKind::Label(i) => l.labels.get(i)?.group,
+        _ => None,
+    }
+}
+
+/// The object a click picked, with the other members of its group before it (T162): a click on
+/// a grouped object selects the whole group, the clicked one the reference.
+pub fn with_group(graph: &sheaf_core::graph::Graph, layer: usize, kind: ObjectKind) -> Vec<(usize, ObjectKind)> {
+    let Some(group) = group_of(graph, layer, kind) else { return vec![(layer, kind)] };
+    let l = &graph.layers[layer];
+    let shapes = l.shapes.iter().enumerate().filter(|(_, s)| s.group == Some(group)).map(|(i, _)| ObjectKind::Shape(i));
+    let labels = l.labels.iter().enumerate().filter(|(_, t)| t.group == Some(group)).map(|(i, _)| ObjectKind::Label(i));
+    let mut all: Vec<_> = shapes.chain(labels).filter(|k| *k != kind).map(|k| (layer, k)).collect();
+    all.push((layer, kind));
+    all
+}
+
+/// Whether Group can join these selected objects: two or more, all in one layer, and not already
+/// exactly one group.
+pub fn can_group(graph: &sheaf_core::graph::Graph, selection: &[(usize, ObjectKind)]) -> bool {
+    let Some(&(layer, _)) = selection.first() else { return false };
+    if selection.len() < 2 || selection.iter().any(|(l, _)| *l != layer) {
+        return false;
+    }
+    let groups: Vec<_> = selection.iter().map(|(l, k)| group_of(graph, *l, *k)).collect();
+    let one = groups[0].is_some() && groups.iter().all(|g| *g == groups[0]);
+    !(one && with_group(graph, selection[0].0, selection[0].1).len() == selection.len())
+}
+
+/// Whether Ungroup has something to do: a selected object is in a group.
+pub fn can_ungroup(graph: &sheaf_core::graph::Graph, selection: &[(usize, ObjectKind)]) -> bool {
+    selection.iter().any(|(l, k)| group_of(graph, *l, *k).is_some())
+}
+
+/// Group: the selected objects (one layer) get a new group number of their layer. One call, one
+/// undo step. Objects that were in other groups leave them; the rest of those groups stay together.
+pub fn group(p: &mut sheaf_core::Project, graph: sheaf_core::WindowId, selection: &[(usize, ObjectKind)]) {
+    let Some(&(layer, _)) = selection.first() else { return };
+    let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) else { return };
+    let next = l
+        .shapes
+        .iter()
+        .filter_map(|s| s.group)
+        .chain(l.labels.iter().filter_map(|t| t.group))
+        .max()
+        .map_or(1, |g| g + 1);
+    for (_, kind) in selection {
+        match *kind {
+            ObjectKind::Shape(i) => {
+                if let Some(s) = l.shapes.get_mut(i) {
+                    s.group = Some(next);
+                }
+            }
+            ObjectKind::Label(i) => {
+                if let Some(t) = l.labels.get_mut(i) {
+                    t.group = Some(next);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Ungroup: every group a selected object is in is dissolved. One call, one undo step.
+pub fn ungroup(p: &mut sheaf_core::Project, graph: sheaf_core::WindowId, selection: &[(usize, ObjectKind)]) {
+    let Some(g) = p.graph_mut(graph) else { return };
+    let mut gone: Vec<(usize, u32)> = Vec::new();
+    for (layer, kind) in selection {
+        if let Some(id) = group_of(g, *layer, *kind) {
+            gone.push((*layer, id));
+        }
+    }
+    for (layer, id) in gone {
+        let Some(l) = g.layers.get_mut(layer) else { continue };
+        for s in l.shapes.iter_mut().filter(|s| s.group == Some(id)) {
+            s.group = None;
+        }
+        for t in l.labels.iter_mut().filter(|t| t.group == Some(id)) {
+            t.group = None;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -228,5 +329,37 @@ mod tests {
         set_height(&mut s, 0.2);
         assert!((s.x2 - 0.2).abs() < 1e-12 && (s.x1 - 0.3).abs() < 1e-12, "{s:?}");
         assert!((s.y2 - 0.3).abs() < 1e-12 && (s.y1 - 0.5).abs() < 1e-12, "{s:?}");
+    }
+
+    #[test]
+    fn group_ungroup_and_a_click_on_a_member_select_the_whole_group() {
+        use sheaf_core::graph::TextLabel;
+        use sheaf_core::shape::{Shape, ShapeKind};
+        let mut p = sheaf_core::Project::default();
+        let id = p.add_graph(sheaf_core::template::Template::Line);
+        let l = &mut p.graph_mut(id).unwrap().layers[0];
+        let font = l.legend.font.clone();
+        l.shapes = (0..3).map(|i| Shape::new(ShapeKind::Line, (0.1 * i as f64, 0.1), (0.2, 0.2))).collect();
+        l.labels = vec![TextLabel::new("a", 0.5, 0.5, font)];
+        let sel = [(0, ObjectKind::Shape(0)), (0, ObjectKind::Label(0))];
+        let graph = |p: &sheaf_core::Project| p.graph(id).unwrap().clone();
+        assert!(can_group(&graph(&p), &sel) && !can_ungroup(&graph(&p), &sel));
+        assert!(!can_group(&graph(&p), &sel[..1]), "one object");
+        assert!(!can_group(&graph(&p), &[(0, ObjectKind::Shape(0)), (1, ObjectKind::Shape(0))]), "two layers");
+        group(&mut p, id, &sel);
+        let g = graph(&p);
+        assert_eq!((g.layers[0].shapes[0].group, g.layers[0].labels[0].group), (Some(1), Some(1)));
+        assert_eq!(with_group(&g, 0, ObjectKind::Label(0)), vec![(0, ObjectKind::Shape(0)), (0, ObjectKind::Label(0))]);
+        assert_eq!(with_group(&g, 0, ObjectKind::Shape(2)), vec![(0, ObjectKind::Shape(2))]);
+        assert!(!can_group(&g, &sel), "already exactly this group");
+        // Grouping a member with another object makes group 2 of the two.
+        group(&mut p, id, &[(0, ObjectKind::Shape(0)), (0, ObjectKind::Shape(1))]);
+        let g = graph(&p);
+        assert_eq!(g.layers[0].shapes.iter().map(|s| s.group).collect::<Vec<_>>(), [Some(2), Some(2), None]);
+        assert_eq!(g.layers[0].labels[0].group, Some(1));
+        ungroup(&mut p, id, &[(0, ObjectKind::Shape(1))]);
+        let g = graph(&p);
+        assert_eq!(g.layers[0].shapes.iter().map(|s| s.group).collect::<Vec<_>>(), [None, None, None]);
+        assert_eq!(g.layers[0].labels[0].group, Some(1), "other groups stay");
     }
 }

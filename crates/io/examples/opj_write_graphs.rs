@@ -141,6 +141,7 @@ fn basic() -> Project {
             font: Font::new("Arial", 18.0),
             rotation_deg: 0.0,
             table: false,
+            group: None,
         });
         l.legend.visible = true;
         l.legend.frame = true;
@@ -378,6 +379,7 @@ fn columns() -> Project {
             font: Font::new("Arial", 20.0),
             rotation_deg: 0.0,
             table: false,
+            group: None,
         });
     }
     p

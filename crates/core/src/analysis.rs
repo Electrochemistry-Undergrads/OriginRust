@@ -48,6 +48,7 @@ pub use sheaf_calc::{
     MAX_FIR_ORDER as FIR_MAX_ORDER, MagnitudeUnit,
 };
 pub use sheaf_calc::{RmTerm, ThreeWayEffect, ThreeWayTerms};
+pub use sheaf_calc::{StftOptions, StftOutput};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use curves::{AverageSpec, IntersectSpec};
@@ -238,6 +239,34 @@ pub struct ConvolutionSpec {
     pub normalize: bool,
     /// Sampling interval of the result's X; `None` is Origin's `<auto>`, the X step of the input.
     pub interval: Option<f64>,
+}
+
+/// What [`Tool::Deconvolution`] does (Origin's Signal Processing > Deconvolution, `deconv`,
+/// documented, not measured; analysis-tools.md 20.1): each input column deconvolved by the
+/// response column with the FFT, as many values as the input.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DeconvolutionSpec {
+    pub response: ColumnId,
+    /// Divide the response by its Euclidean norm first, as Convolution's `norm`.
+    pub normalize: bool,
+    /// Sampling interval of the result's X; `None` is the X step of the input.
+    pub interval: Option<f64>,
+}
+
+/// What [`Tool::Stft`] does (Origin's Signal Processing > STFT, `stft`, documented, not measured;
+/// analysis-tools.md 20.2): a frequency column and one spectrum column per segment.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StftSpec {
+    pub options: StftOptions,
+    /// Take the sampling interval from the input's X column (its mean step; 1 without X) instead of
+    /// `options.interval`.
+    pub auto_interval: bool,
+}
+
+impl Default for StftSpec {
+    fn default() -> Self {
+        StftSpec { options: StftOptions::default(), auto_interval: true }
+    }
 }
 
 /// What [`Tool::SignalCorrelation`] does (Origin's Signal Processing > Correlation, `corr1`,
@@ -920,11 +949,15 @@ pub enum Tool {
     CurveMath(CurveMathSpec),
     ColumnMath(ColumnMathSpec),
     Convolution(ConvolutionSpec),
+    /// Signal Processing > Deconvolution (T57).
+    Deconvolution(DeconvolutionSpec),
     SignalCorrelation(SignalCorrelationSpec),
     LevelCrossing(LevelCrossingSpec),
     /// Signal Processing > Hilbert Transform (Origin's `hilbert`, measured; analysis-tools.md 13).
     Hilbert,
     Fft(FftSpec),
+    /// Signal Processing > STFT (T57).
+    Stft(StftSpec),
     Ifft(IfftSpec),
     FftFilter(FftFilterSpec),
     /// Signal Processing > IIR Filter (Origin's `dfilter`, OriginPro; documented, not measured; analysis-tools.md 17).
@@ -1036,6 +1069,8 @@ impl Tool {
             },
             Tool::ColumnMath(_) => "Column math",
             Tool::Convolution(_) => "Convolution",
+            Tool::Deconvolution(_) => "Deconvolution",
+            Tool::Stft(_) => "STFT",
             Tool::SignalCorrelation(_) => "Signal correlation",
             Tool::LevelCrossing(_) => "Level crossing",
             Tool::Hilbert => "Hilbert transform",
@@ -1131,6 +1166,8 @@ impl Tool {
             Tool::Integrate(_) | Tool::IntegrateRanges(_) => "Integrate",
             Tool::CurveMath(_) | Tool::ColumnMath(_) => "Math",
             Tool::Convolution(_) => "Convolution",
+            Tool::Deconvolution(_) => "Deconvolution",
+            Tool::Stft(_) => "STFT",
             Tool::SignalCorrelation(_) => "Correlation",
             Tool::LevelCrossing(_) => "LevelCrossing",
             Tool::Hilbert => "Hilbert",
@@ -1422,6 +1459,13 @@ fn signal_values(v: &[f64], name: &str) -> Result<Vec<f64>, AnalysisError> {
         return Err(AnalysisError::BadOption(format!("column {name} has missing values")));
     }
     Ok(v.to_vec())
+}
+
+/// A segment time for an STFT column name, without float noise (`0.30000000000000004` is `0.3`).
+fn calc_time(t: f64) -> String {
+    let s = format!("{:.12}", t);
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s == "-0" { "0".into() } else { s.to_string() }
 }
 
 /// "2nd", "3rd", "12th" for the comment of a decimated column.
@@ -2519,6 +2563,81 @@ impl Project {
                         ),
                         data: ColumnData::numeric(v),
                     });
+                }
+            }
+            Tool::Deconvolution(spec) => {
+                let (_, _, rcol) = self.locate(spec.response).ok_or(AnalysisError::NoSuchColumn(spec.response))?;
+                let rshort = rcol.short_name.clone();
+                let response =
+                    signal_values(rcol.numeric().ok_or_else(|| AnalysisError::NotNumeric(rshort.clone()))?, &rshort)?;
+                for inp in &inputs {
+                    let y = signal_values(inp.ys(), &inp.short)?;
+                    let step = match spec.interval {
+                        Some(d) if d.is_finite() && d > 0.0 => d,
+                        Some(d) => return Err(AnalysisError::BadOption(format!("{d} is not a usable interval"))),
+                        None => auto_interval(inp.xs()),
+                    };
+                    let v = calc::deconvolve(&y, &response, spec.normalize)
+                        .map_err(|e| AnalysisError::BadOption(format!("{}: {e}", inp.short)))?;
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::X,
+                        long_name: inp.x_name.clone(),
+                        units: inp.x_units.clone(),
+                        comments: String::new(),
+                        data: ColumnData::numeric((0..v.len()).map(|k| k as f64 * step).collect()),
+                    });
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::Y,
+                        long_name: format!("{} deconvolved by {}", inp.name, rcol.display_name()),
+                        units: String::new(),
+                        comments: format!(
+                            "{} deconvolved by {rshort}{}",
+                            inp.short,
+                            if spec.normalize { ", normalized" } else { "" }
+                        ),
+                        data: ColumnData::numeric(v),
+                    });
+                }
+            }
+            Tool::Stft(spec) => {
+                for inp in &inputs {
+                    let y = signal_values(inp.ys(), &inp.short)?;
+                    let mut o = spec.options;
+                    if spec.auto_interval {
+                        o.interval = auto_interval(inp.xs());
+                    }
+                    let r = calc::stft(&y, &o).map_err(|e| AnalysisError::BadOption(format!("{}: {e}", inp.short)))?;
+                    if r.spectra.len() > 2000 {
+                        return Err(AnalysisError::BadOption(format!(
+                            "{}: {} segments are too many columns; use a longer window or less overlap",
+                            inp.short,
+                            r.spectra.len()
+                        )));
+                    }
+                    let what = match o.output {
+                        StftOutput::Amplitude => "amplitude",
+                        StftOutput::Db => "dB",
+                    };
+                    let note = format!("STFT {what} of {}{}", inp.short, inp.range_note());
+                    on_sheet.push(SheetColumn {
+                        designation: Designation::X,
+                        long_name: "Frequency".into(),
+                        units: String::new(),
+                        comments: note.clone(),
+                        data: ColumnData::numeric(r.frequency),
+                    });
+                    let x0 =
+                        inp.xs().iter().copied().find(|v| v.is_finite()).filter(|_| spec.auto_interval).unwrap_or(0.0);
+                    for (t, s) in r.time.iter().zip(r.spectra) {
+                        let t = calc_time(x0 + t);
+                        on_sheet.push(SheetColumn {
+                            designation: Designation::Y,
+                            long_name: format!("{} at {} = {t}", inp.name, inp.x_name),
+                            units: if o.output == StftOutput::Db { "dB".into() } else { inp.units.clone() },
+                            comments: note.clone(),
+                            data: ColumnData::numeric(s),
+                        });
+                    }
                 }
             }
             Tool::Fft(spec) => {
@@ -4451,6 +4570,37 @@ mod tests {
         assert!(matches!(p.analyze(&request(&[yc], Tool::TraceInterp(huge))), Err(AnalysisError::BadOption(_))));
         let flat = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0; 6])).unwrap();
         assert!(matches!(p.analyze(&request(&[flat], Tool::TraceInterp(spec))), Err(AnalysisError::BadOption(_))));
+    }
+
+    #[test]
+    fn deconvolution_and_stft_write_new_sheets() {
+        let (mut p, book, _, ramp) = sample();
+        let response = add_reference(&mut p);
+        let conv = Tool::Convolution(ConvolutionSpec { response, circular: true, normalize: false, interval: None });
+        let r = p.analyze(&request(&[ramp], conv)).unwrap();
+        let convolved = p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()].columns[1].id;
+        let spec = DeconvolutionSpec { response, normalize: false, interval: None };
+        let r = p.analyze(&request(&[convolved], Tool::Deconvolution(spec))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(rs.name.starts_with("Deconvolution"), "{}", rs.name);
+        let back = rs.columns[1].numeric().unwrap();
+        assert_eq!(back.len(), 11);
+        assert!(back.iter().zip(0..=10).all(|(g, w)| (g - f64::from(w)).abs() < 1e-9), "the ramp again: {back:?}");
+        assert!(rs.columns[1].comments.contains("deconvolved by"), "{}", rs.columns[1].comments);
+        assert!(r.message.starts_with("Deconvolution"), "{}", r.message);
+
+        let options = StftOptions { window_len: 4, fft_len: 8, overlap: 2, ..Default::default() };
+        let r = p.analyze(&request(&[ramp], Tool::Stft(StftSpec { options, auto_interval: true }))).unwrap();
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(rs.name.starts_with("STFT"), "{}", rs.name);
+        // Segments start at rows 0, 2, 4, 6 (11 points, 4 per window, 2 shared): centres 1.5, 3.5, ...
+        assert_eq!(rs.columns.len(), 1 + 4);
+        assert_eq!(rs.columns[0].numeric().unwrap().len(), 5);
+        assert!(rs.columns[1].long_name.ends_with("= 1.5"), "{}", rs.columns[1].long_name);
+        assert_eq!(rs.columns[1].comments, "STFT amplitude of C");
+        let bad = StftOptions { window_len: 40, fft_len: 64, ..Default::default() };
+        let bad = Tool::Stft(StftSpec { options: bad, auto_interval: true });
+        assert!(matches!(p.analyze(&request(&[ramp], bad)), Err(AnalysisError::BadOption(_))));
     }
 
     #[test]

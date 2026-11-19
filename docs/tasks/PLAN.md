@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 238 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 236 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -167,7 +167,7 @@ Backlog packages: write the brief first (step 3 above).
 
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
-| [ ] | [T57](T57-deconvolution-stft.md) | Deconvolution and STFT (claimed 2026-11-15) | M | 2 |
+| [x] | [T57](T57-deconvolution-stft.md) | Deconvolution and STFT (done 2026-11-19, not measured) | M | 0 |
 | [ ] | B8 | Analysis and statistics: batch peak analysis (Multiple Peak Fit done as T128) (wavelets moved to T96; implicit fit, Simulate Surface, Compare Datasets and XYZ Surface Area moved to T91; partial correlation, three-way and repeated-measures ANOVA moved to T81) | L | 3 |
 | [x] | [T128](T128-multiple-peak-fit.md) | Multiple Peak Fit (B8 slice; done 2026-11-17) | M | 0 |
 | [x] | [T96](T96-wavelets.md) | Wavelets: Decompose, Reconstruction, Denoise, Smooth, Continuous Wavelet (B8 slice; done 2026-11-16; open corners in the brief) | L | 0 |

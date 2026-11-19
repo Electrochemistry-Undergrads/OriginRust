@@ -1,7 +1,7 @@
 use crate::Rect;
 use crate::fonts::{FixedMetrics, TextLineMetrics, TextMeasurer};
 use crate::scene::{Anchor, Item, LayerScene, ObjectKind, Scene, Stroke};
-use sheaf_core::graph::{Font, TextLabel};
+use sheaf_core::graph::{Font, PlotKind, TextLabel};
 use sheaf_core::{Color, ColumnData, Designation, Project};
 
 #[test]
@@ -37,6 +37,7 @@ fn free_label_rows_keep_inline_styles_and_add_separator_height() {
         &Font::new("Arial", 20.0),
         (100.0, 60.0),
         0.0,
+        &|_| None,
     );
     let rows: Vec<_> = items
         .iter()
@@ -60,6 +61,7 @@ fn free_label_separators_rotate_with_rows_and_leave_literal_text_visible() {
         &font,
         (100.0, 60.0),
         90.0,
+        &|_| None,
     );
     let [Item::Text(a), Item::Text(b)] = items.as_slice() else { panic!("expected just two label rows") };
     assert_eq!((a.text.as_str(), a.x, a.y, b.text.as_str()), ("A", 100.0, 60.0, "B"));
@@ -67,7 +69,15 @@ fn free_label_separators_rotate_with_rows_and_leave_literal_text_visible() {
     assert_eq!(b.rotate_ccw, 90.0);
 
     items.clear();
-    crate::text::place_label(&mut items, &FixedMetrics, "\\v(A\n\\sep:50\nB)\n\\sep:-1\nC", &font, (100.0, 60.0), 0.0);
+    crate::text::place_label(
+        &mut items,
+        &FixedMetrics,
+        "\\v(A\n\\sep:50\nB)\n\\sep:-1\nC",
+        &font,
+        (100.0, 60.0),
+        0.0,
+        &|_| None,
+    );
     let rows: Vec<_> = items
         .iter()
         .filter_map(|item| match item {
@@ -102,6 +112,78 @@ fn free_label_separator_rows_share_one_pickable_scene_object_and_export() {
     let svg = crate::svg::write_svg(&s);
     assert!(svg.contains(">Upper</text>") && svg.contains(">Lower</text>"));
     assert!(!svg.contains("\\sep:50"));
+}
+
+#[test]
+fn plot_color_escape_follows_the_label_layer_and_saved_plot_slot() {
+    let mut project = Project::new();
+    let book = project.add_workbook("");
+    project.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0])).unwrap();
+    let first = project.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+    let second = project.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0, 3.0])).unwrap();
+    let graph = project.add_graph(sheaf_core::template::Template::Line);
+    project.add_plot(graph, 0, first).unwrap();
+    project.add_plot(graph, 0, second).unwrap();
+    let graph_model = project.graph_mut(graph).unwrap();
+    let layer = &mut graph_model.layers[0];
+    layer.plots[0].visible = false;
+    layer.plots[1].line.color = Color::rgb(21, 44, 109);
+    layer.labels.push(TextLabel::new(r"\cp2(\u(First layer))", 0.5, 0.3, Font::new("Arial", 20.0)));
+    let mut other = layer.clone();
+    other.plots[1].kind = PlotKind::Scatter;
+    other.plots[1].symbol.color = Color::rgb(107, 83, 41);
+    other.labels[0].text = r"\cp2(\u(Second layer))".into();
+    graph_model.layers.push(other);
+
+    let scene = crate::layout::build_scene(&project, graph, &FixedMetrics).unwrap();
+    let svg = crate::svg::write_svg(&scene);
+    for (layer, text, color) in [
+        (&scene.layers[0], "First layer", Color::rgb(21, 44, 109)),
+        (&scene.layers[1], "Second layer", Color::rgb(107, 83, 41)),
+    ] {
+        let label = layer.objects.iter().find(|object| object.kind == ObjectKind::Label(0)).unwrap();
+        let items = &layer.overlay[label.items.clone()];
+        assert!(items.iter().any(|item| matches!(item, Item::Text(t) if t.text == text && t.color == color)));
+        assert_eq!(paths(items).iter().map(|(_, stroke)| stroke.color).collect::<Vec<_>>(), [color]);
+        let svg_text = svg.lines().find(|line| line.ends_with(&format!(">{text}</text>"))).unwrap();
+        assert!(svg_text.contains(&format!("fill=\"{}\"", color.hex_rgb())));
+    }
+}
+
+#[test]
+fn plot_color_escape_nests_and_keeps_the_surrounding_color_for_missing_indices() {
+    let mut items = Vec::new();
+    let mut font = Font::new("Arial", 20.0);
+    font.color = Color::rgb(78, 34, 12);
+    let plot_color = Color::rgb(10, 63, 99);
+    crate::text::place_label(
+        &mut items,
+        &FixedMetrics,
+        "\\b(\\cp1(Alpha\nBeta \\cp3(missing) \\c2(red) return) outside) \\v(\\cp1(literal)) \\cp0(zero)",
+        &font,
+        (100.0, 60.0),
+        0.0,
+        &|index| (index == 0).then_some(plot_color),
+    );
+    let runs: Vec<_> = items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Text(t) => Some((t.text.as_str(), t.color, t.bold)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        runs,
+        [
+            ("Alpha", plot_color, true),
+            ("Beta missing ", plot_color, true),
+            ("red", Color::RED, true),
+            (" return", plot_color, true),
+            (" outside", font.color, true),
+            (r" \cp1(literal) zero", font.color, false),
+        ]
+    );
+    assert_eq!(crate::markup::plain(r"\cp1(context-free)"), r"\cp1(context-free)");
 }
 
 fn paths(items: &[Item]) -> Vec<(&str, &Stroke)> {

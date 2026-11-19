@@ -184,14 +184,22 @@ pub(crate) fn place_label(
     font: &Font,
     (x, y): (f64, f64),
     rotate_ccw: f64,
+    plot_color: &impl Fn(usize) -> Option<Color>,
 ) {
     let size = font.size_pt;
-    if !raw.contains(['\r', '\n']) {
-        place(items, m, raw, font, size, (x, y), Anchor::Start, rotate_ccw);
+    let normalized;
+    let text = if raw.contains('\r') {
+        normalized = raw.replace("\r\n", "\n").replace('\r', "\n");
+        &normalized
+    } else {
+        raw
+    };
+    let segments = markup::label_segments(text, &|name| m.expand_inline_family(name), plot_color);
+    if !text.contains('\n') {
+        place_segments(items, m, &segments, font, size, (x, y), Anchor::Start, rotate_ccw);
         return;
     }
-    let normal = raw.replace("\r\n", "\n").replace('\r', "\n");
-    let rows = text_rows(markup::label_segments(&normal, &|name| m.expand_inline_family(name)));
+    let rows = text_rows(segments);
     let (sin, cos) = rotate_ccw.to_radians().sin_cos();
     let mut offset = 0.0;
     let mut next_advance = 0.0;

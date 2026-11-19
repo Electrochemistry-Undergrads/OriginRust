@@ -7,7 +7,7 @@ use crate::scene::{Item, Stroke, line_to, move_to};
 use crate::ticks::ResolvedAxis;
 use crate::{LayerGeometry, Rect};
 use sheaf_core::Color;
-use sheaf_core::graph::{Axis, AxisSide, Layer, PlotKind, Rug};
+use sheaf_core::graph::{Axis, AxisSide, Layer, Plot, PlotKind, Rug};
 
 /// Size of the panel across the axis, in points: a percentage of the average of the frame's width and height.
 pub(crate) fn extent(rug: &Rug, f: Rect) -> f64 {
@@ -30,12 +30,12 @@ pub(crate) fn opposite_reach(axis: &Axis, f: Rect, ticks_across: bool) -> f64 {
 }
 
 /// The colour of a plot: its line colour for line and area kinds, else its symbol colour.
-pub(crate) fn plot_color(pd: &PlotData) -> Color {
-    match pd.plot.kind {
+pub(crate) fn plot_color(plot: &Plot) -> Color {
+    match plot.kind {
         PlotKind::Line | PlotKind::LineSymbol | PlotKind::Area | PlotKind::StackedArea | PlotKind::Stacked100Area => {
-            pd.plot.line.color
+            plot.line.color
         }
-        _ => pd.plot.symbol.color,
+        _ => plot.symbol.color,
     }
 }
 
@@ -131,7 +131,7 @@ fn draw_edge(
         let near = reach + k as f64 * (if stacked { sub + gap } else { 0.0 });
         let far = near + sub;
         let page = |dist: f64| edge + outward * dist;
-        let mut color = rug.color.unwrap_or_else(|| plot_color(pd));
+        let mut color = rug.color.unwrap_or_else(|| plot_color(pd.plot));
         color.a = (f64::from(color.a) * alpha).round() as u8;
         let mut d = String::new();
         for u in unit_positions(pd, axis, horizontal) {

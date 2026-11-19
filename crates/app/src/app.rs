@@ -223,6 +223,8 @@ pub struct SheafApp {
     template_prompt: Option<crate::dialogs::user_templates::SaveTemplatePrompt>,
     /// Plot > User Templates > Manage.
     template_manager: Option<crate::dialogs::user_templates::TemplateManager>,
+    /// File > Batch Processing... (T165).
+    batch: Option<crate::dialogs::batch_process::BatchDialog>,
     /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values.
     fill_pattern: Option<crate::dialogs::fill_pattern::FillPatternDialog>,
     /// Column > Set Sampling Interval... and Show X Column....
@@ -392,6 +394,7 @@ impl SheafApp {
             go_to: None,
             template_prompt: None,
             template_manager: None,
+            batch: None,
             fill_pattern: None,
             sampling: None,
             copy_columns: None,
@@ -2804,6 +2807,9 @@ impl SheafApp {
                     self.user_book_templates.clone(),
                 ));
             }
+            Action::BatchProcessing => {
+                self.batch = Some(crate::dialogs::batch_process::BatchDialog::new(self.user_book_templates.clone()));
+            }
             Action::ManageTemplates => {
                 self.template_manager = Some(crate::dialogs::user_templates::TemplateManager::new(
                     self.user_templates.clone(),
@@ -4171,6 +4177,73 @@ impl SheafApp {
     }
 
     /// The Save Template As prompt and the Manage window.
+    /// File > Batch Processing... (T165): the window, its file picker and the run.
+    fn show_batch(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::batch_process::BatchOutcome;
+        let Some(d) = &mut self.batch else { return };
+        match d.show(ctx) {
+            BatchOutcome::Open => {}
+            BatchOutcome::Closed => self.batch = None,
+            BatchOutcome::AddFiles => {
+                if let Some(files) = rfd::FileDialog::new().set_title("Batch Processing: data files").pick_files() {
+                    d.add_files(files);
+                }
+            }
+            BatchOutcome::Run { template, files } => match self.run_batch(&template, &files) {
+                Ok(()) => self.batch = None,
+                Err(e) => {
+                    if let Some(d) = &mut self.batch {
+                        d.set_error(e);
+                    }
+                }
+            },
+        }
+    }
+
+    /// Reads every file and makes one book per file from the workbook template `name`, all in one
+    /// undo step ("Batch processing"). Files that cannot be read are skipped and named in the status
+    /// line; an error only when no book could be made.
+    pub(crate) fn run_batch(&mut self, name: &str, files: &[PathBuf]) -> Result<(), String> {
+        let dir = self.startup.templates_dir.clone().ok_or("there is no template folder")?;
+        let template = sheaf_io::user_templates::load_book(&dir, name).map_err(|e| e.to_string())?;
+        let mut read = Vec::new();
+        let mut failed = Vec::new();
+        for path in files {
+            match sheaf_io::import_file(path, sheaf_io::ImportKind::Auto, &Default::default(), &Default::default()) {
+                Ok(imported) => {
+                    let title = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                    read.push((title, imported.workbook));
+                }
+                Err(e) => failed.push(format!("{}: {e}", path.display())),
+            }
+        }
+        if read.is_empty() {
+            return Err(format!("No file could be read. {}", failed.join("; ")));
+        }
+        let made = self.doc.apply("Batch processing", |p| {
+            read.iter()
+                .map(|(title, book)| p.new_workbook_from_template_with_data(&template, book, title))
+                .collect::<Vec<_>>()
+        });
+        if let Some(last) = made.last() {
+            self.focus(last.book);
+        }
+        let problems: Vec<String> = made.iter().flat_map(|m| m.problems.iter().cloned()).collect();
+        let mut text = format!("Batch processing: {} workbook(s) from the template {}", made.len(), template.name);
+        if !failed.is_empty() {
+            text.push_str(&format!("; not read: {}", failed.join("; ")));
+        }
+        if !problems.is_empty() {
+            text.push_str(&format!("; analysis problems: {}", problems.join("; ")));
+        }
+        if failed.is_empty() && problems.is_empty() {
+            self.say(text);
+        } else {
+            self.warn(text);
+        }
+        Ok(())
+    }
+
     fn show_template_windows(&mut self, ctx: &egui::Context) {
         use crate::dialogs::user_templates::{ManagerOutcome, PromptOutcome};
         let dir = self.startup.templates_dir.clone();
@@ -5715,6 +5788,7 @@ impl SheafApp {
             }
         }
         self.show_template_windows(ctx);
+        self.show_batch(ctx);
         self.show_fill_pattern(ctx);
         self.show_sampling(ctx);
         self.show_copy_columns(ctx);

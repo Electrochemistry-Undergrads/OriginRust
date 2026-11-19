@@ -4,6 +4,7 @@
 pub mod analysis;
 pub mod autosave;
 pub mod batch_plot;
+pub mod batch_process;
 pub mod bin2d_options;
 pub mod cell_format;
 pub mod cell_note;

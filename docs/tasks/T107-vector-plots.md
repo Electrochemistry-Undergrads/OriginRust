@@ -5,7 +5,10 @@
 samples using the plot's arrow style. Plot Details > Vector now edits shaft color and width and
 head length, angle and Closed/Open style for both kinds. XYAM also has the position, multiplier
 and angle units. Data selectors, real-world magnitudes, angle conventions and Origin's exact
-multiplier rule remain open. Workspace verification pending.
+multiplier rule remain open. Formatting, strict workspace Clippy, Nextest (4,526 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
+Desktop captures verified the default Vector tab and the Head and Open settings.
+The saved graph matched the expected edits and the worksheet data matched byte for byte.
 **Size:** M. **Source:** greyed inventory package B4 (Plot > Specialized > Vector XYAM, Vector XYXY).
 **Spec:** `docs/spec/graphing.md` (a new section).
 

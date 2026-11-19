@@ -6144,3 +6144,19 @@ so this follows Origin's documented behaviour. It reuses the Integrate gadget's 
   "Rise Time: no step in the range".
 - **Right-click menu:** Delete (Esc) closes the gadget.
 
+## Intersect gadget: Gadgets > Intersect... (T139, 2026-11-18, **not measured**)
+
+Origin 2016's Gadgets menu has Intersect.... It could not be probed (Origin's COM class was unregistered),
+so this follows Origin's documented behaviour. It reuses the Integrate gadget's range.
+
+- **Opening:** the gadget opens on the selected plot of the active layer, or its first visible plot of
+  numbers, over the middle half of the X axis. The range drags as the Integrate gadget's does.
+- **What it finds:** where the gadget's plot crosses each other visible plot of numbers of the same layer,
+  with X inside the range. Crossings are computed by `sheaf_calc::curves::intersections`, with both curves
+  taken as polylines in row order; points where the curves only touch are left out.
+- **What it draws:** a red circle at each crossing with "(x, y)" beside it (four significant digits). The
+  label at the top reads "N intersections", "1 intersection" or "No intersection in the range".
+- **Right-click menu:** Delete (Esc) closes the gadget.
+- **Limits:** the points are found in the plots' own values. On stacked (offset) plots they are drawn with
+  the gadget plot's offset.
+

@@ -107,6 +107,8 @@ pub enum Cmd {
     SaveWindowAs,
     /// File > Save Template As... on a graph (T56).
     SaveTemplateAs,
+    /// File > Save Workbook As Analysis Template... on a workbook (T163).
+    SaveAnalysisTemplateAs,
     /// Plot > User Templates > Manage... (T56).
     ManageTemplates,
     /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values (T74).
@@ -897,7 +899,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
             v.push(grey("Save Template As..."));
         }
         if kind == WindowKind::Workbook {
-            v.push(grey("Save Workbook As Analysis Template..."));
+            v.push(item("Save Workbook As Analysis Template...", Cmd::SaveAnalysisTemplateAs));
             v.push(grey("Add Word Bookmarks to Analysis Template..."));
         }
         v.push(grey("Batch Processing..."));
@@ -2880,6 +2882,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
                 _ => c.graph,
             };
             Action::SaveTemplateAs(window.ok_or(NEED_GRAPH_OR_BOOK)?)
+        }
+        Cmd::SaveAnalysisTemplateAs => {
+            if !c.templates {
+                return Err(NO_TEMPLATE_FOLDER);
+            }
+            Action::SaveAnalysisTemplateAs(c.book.ok_or(NEED_BOOK)?)
         }
         Cmd::ManageTemplates => {
             if !c.templates {

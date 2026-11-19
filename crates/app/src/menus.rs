@@ -48,7 +48,9 @@ const NEED_BOOK: &str = "Activate a workbook window first";
 pub const NO_COLOR_SCALE: &str = "New Color Scale needs a plot whose symbols take their colour from a Z column";
 pub const NO_CUMULATIVE: &str = "Cumulative needs a line, scatter or line + symbol plot in the layer";
 const NEED_GRAPH: &str = "Activate a graph window first";
+const NEED_GRAPH_OR_BOOK: &str = "Activate a graph or a workbook first";
 const NEED_SHAPE: &str = "Select a drawn object first";
+const NEED_TWO_OBJECTS: &str = "Select two or more drawn objects or text labels first (Shift+click adds one)";
 const NEED_PRINTABLE: &str = "Activate a graph or workbook window first";
 const NEED_COLUMNS: &str = "Select one or more columns first";
 const NEED_CELLS: &str = "Select cells, columns or rows first";
@@ -444,6 +446,9 @@ pub enum Cmd {
     OrderSelectedShape {
         front: bool,
     },
+    /// Object Edit toolbar Align Left ... Make Same Height on the selected drawn objects and text
+    /// labels, the last-selected one the reference (T159).
+    ArrangeSelected(crate::obj_align::Arrange),
     /// Properties of a slope annotation.
     EditSlope {
         layer: usize,
@@ -565,7 +570,8 @@ pub enum Entry {
     Windows,
     /// Window > Folders: the project's folders, the active one ticked (T100).
     Folders,
-    /// File > New > From Template: the saved user templates, each making an empty graph (T103).
+    /// File > New > From Template: the saved user templates, each making an empty graph (T103), then
+    /// the saved workbook templates, each making an empty workbook (T160).
     NewFromTemplates,
     /// The entries of File > Recent Projects, Recent Books, Recent Graphs or File > Import > Recent
     /// Imports, from the context.
@@ -649,6 +655,8 @@ pub struct MenuContext<'a> {
     /// The saved user graph templates (Plot > User Templates), and whether there is a template
     /// folder at all (File > Save Template As and Manage are greyed without one).
     pub user_templates: &'a [String],
+    /// The saved user workbook templates (File > New > From Template, T160).
+    pub user_book_templates: &'a [String],
     pub templates: bool,
     /// Which side panels are shown, in the order of `PanelId::ALL` (the ticks of the View menu).
     pub panels: [bool; 4],
@@ -679,6 +687,8 @@ pub struct MenuContext<'a> {
     pub can_color_scale: bool,
     /// The selected drawn shape of the active graph as (layer, shape index, shapes in that layer).
     pub selected_shape: Option<(usize, usize, usize)>,
+    /// How many drawn objects and text labels are selected on the active graph (Shift+click, T159).
+    pub multi_selected: usize,
     /// The view mode of the active graph (the tick of View > Print View, Page View, Window View, Draft View).
     pub view_mode: sheaf_core::project::ViewMode,
     /// The active graph shows its layer icons (the tick of View > Show > Layer Icons).
@@ -881,7 +891,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
     if kind != WindowKind::None {
         v.push(sep());
         v.push(item("Save &Window As...", Cmd::SaveWindowAs));
-        if kind == WindowKind::Graph {
+        if matches!(kind, WindowKind::Graph | WindowKind::Workbook) {
             v.push(item("Save Temp&late As...", Cmd::SaveTemplateAs));
         } else {
             v.push(grey("Save Template As..."));
@@ -2862,7 +2872,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             if !c.templates {
                 return Err(NO_TEMPLATE_FOLDER);
             }
-            Action::SaveTemplateAs(c.graph.ok_or(NEED_GRAPH)?)
+            let window = match c.kind {
+                WindowKind::Workbook => c.book,
+                _ => c.graph,
+            };
+            Action::SaveTemplateAs(window.ok_or(NEED_GRAPH_OR_BOOK)?)
         }
         Cmd::ManageTemplates => {
             if !c.templates {
@@ -3210,6 +3224,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
                 op: GraphOp::OrderShape { layer, shape, front: *front },
             }
         }
+        Cmd::ArrangeSelected(_) if c.multi_selected < 2 => return Err(NEED_TWO_OBJECTS),
+        Cmd::ArrangeSelected(op) => Action::ArrangeObjects { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::SlopeTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Slope },
         Cmd::ZoomIn => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ZoomIn },
         Cmd::PanTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pan },
@@ -3444,12 +3460,22 @@ fn show_entries(
             Entry::Recent(kind) => show_recent(ui, *kind, c, actions),
             Entry::UserTemplates => show_user_templates(ui, c, actions),
             Entry::NewFromTemplates => {
-                if c.user_templates.is_empty() {
+                if c.user_templates.is_empty() && c.user_book_templates.is_empty() {
                     ui.add_enabled(false, egui::Button::new(label_job(ui, "(no saved templates)", true)));
                 }
                 for name in c.user_templates {
                     if ui.add(egui::Button::new(label_job(ui, name, true))).clicked() {
                         actions.push(Action::NewFromTemplate(Some(name.clone())));
+                        ui.close();
+                    }
+                }
+                // Workbook templates (T160) follow the graph templates, after a line.
+                if !c.user_templates.is_empty() && !c.user_book_templates.is_empty() {
+                    ui.separator();
+                }
+                for name in c.user_book_templates {
+                    if ui.add(egui::Button::new(label_job(ui, name, true))).clicked() {
+                        actions.push(Action::NewBookFromTemplate(name.clone()));
                         ui.close();
                     }
                 }
@@ -3886,6 +3912,7 @@ mod tests {
             recent_commands: &crate::menus::NO_COMMANDS,
             recent_exports: &[],
             user_templates: &[],
+            user_book_templates: &[],
             templates: false,
             panels: [true; 4],
             ai_link: false,
@@ -3899,6 +3926,7 @@ mod tests {
             can_cumulate: false,
             can_color_scale: false,
             selected_shape: None,
+            multi_selected: 0,
             view_mode: Default::default(),
             layer_icons: true,
             active_layer_only: None,

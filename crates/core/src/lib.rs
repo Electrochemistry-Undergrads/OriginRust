@@ -12,6 +12,7 @@ pub mod analysis_link;
 pub mod audit;
 pub mod autorange;
 pub mod batch_plot;
+pub mod book_template;
 pub mod cellformat;
 pub mod clipboard;
 pub mod color;
@@ -77,6 +78,7 @@ pub mod without_data;
 pub mod worksheet;
 pub mod zoom;
 
+pub use book_template::BookTemplate;
 pub use clipboard::{CopyOptions, PasteReport};
 pub use color::Color;
 pub use column::{Column, ColumnData, Designation, FormulaState, RecalcMode};

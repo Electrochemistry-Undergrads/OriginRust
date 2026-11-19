@@ -3901,12 +3901,12 @@ fn greyed_toolbar_buttons_do_nothing_and_enabled_ones_follow_the_selection() {
     let mut h = start(vec![data_file("tb-grey")]);
     show_window(&mut h, "Book1 - sample.csv");
     let windows = project(&h).windows.len();
-    // Stacked Area is a 2D type Sheaf lacks: greyed, a click changes nothing.
-    assert!(bar_button!(h, "2D Graphs", "Stacked Area").accesskit_node().is_disabled());
-    bar_button!(h, "2D Graphs", "Stacked Area").click();
+    // New Matrix is a window Sheaf lacks: greyed, a click changes nothing.
+    assert!(bar_button!(h, "Standard", "New Matrix").accesskit_node().is_disabled());
+    bar_button!(h, "Standard", "New Matrix").click();
     settle(&mut h);
     assert_eq!(project(&h).windows.len(), windows);
-    assert!(h.state().doc.undo_label().is_some_and(|l| !l.contains("Stacked Area")));
+    assert!(h.state().doc.undo_label().is_some_and(|l| !l.contains("Matrix")));
     // Line needs a selected column.
     click_text(&mut h, "C(Y1)");
     assert!(!bar_button!(h, "2D Graphs", "Line").accesskit_node().is_disabled());
@@ -9154,3 +9154,33 @@ mod view_windows;
 mod wks_image;
 
 mod multi_y_legend_position;
+
+#[test]
+fn the_step_and_spline_line_items_and_the_2d_toolbar_types_make_graphs() {
+    // T63 groups A and B: Plot > Line > Horizontal Step, Vertical Step, Spline Connected, and the
+    // 2D Graphs toolbar's Bar, Stacked Area, Box Chart, Histogram and Bubble buttons.
+    use sheaf_core::graph::Connect;
+    let mut h = start(vec![data_file("t63-ab")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    for (item, connect) in [
+        ("Horizontal Step", Connect::StepHorizontal),
+        ("Vertical Step", Connect::StepVertical),
+        ("Spline Connected", Connect::Spline),
+    ] {
+        click_text(&mut h, "C(Y1)");
+        let before = project(&h).graphs().count();
+        menu_path(&mut h, &["Plot", "Line", item]);
+        assert_eq!(project(&h).graphs().count(), before + 1, "{item} makes a graph");
+        let g = project(&h).graphs().last().unwrap();
+        assert_eq!(g.layers[0].plots[0].line.connect, connect, "{item}");
+        show_window(&mut h, "Book1 - sample.csv");
+    }
+    for button in ["Bar", "Stacked Area", "Box Chart", "Histogram", "Bubble"] {
+        click_text(&mut h, "C(Y1)");
+        assert!(!bar_button!(h, "2D Graphs", button).accesskit_node().is_disabled(), "{button} is live");
+    }
+    let before = project(&h).graphs().count();
+    bar_button!(h, "2D Graphs", "Box Chart").click();
+    settle(&mut h);
+    assert_eq!(project(&h).graphs().count(), before + 1, "Box Chart makes a graph");
+}

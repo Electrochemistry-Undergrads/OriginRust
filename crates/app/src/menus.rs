@@ -1059,8 +1059,13 @@ fn plot_menu() -> Vec<Entry> {
         sub(
             "&Line",
             with(
-                vec![item("&Line", Cmd::Plot(Template::Line))],
-                &["Horizontal Step", "Vertical Step", "Spline Connected"],
+                vec![
+                    item("&Line", Cmd::Plot(Template::Line)),
+                    item("Horizontal Step", Cmd::Plot(Template::StepHorizontal)),
+                    item("Vertical Step", Cmd::Plot(Template::StepVertical)),
+                    item("Spline Connected", Cmd::Plot(Template::SplineConnected)),
+                ],
+                &[],
             ),
         ),
         sub(

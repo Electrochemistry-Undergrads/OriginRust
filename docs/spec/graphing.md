@@ -6329,3 +6329,15 @@ so this follows Origin's documented behaviour.
   reads "N = n, Mean X = x, Mean Y = y", or "No points in the region".
 - **Right-click menu:** Delete (Esc) closes the gadget.
 
+## Step and spline line plots: Plot > Line > Horizontal Step, Vertical Step, Spline Connected (T63 groups A and B, 2026-11-19, **not measured**)
+
+Origin 2016's Plot > Line submenu has these three items under Line. Origin's COM class was
+unregistered, so Origin's own templates for them were not checked.
+
+- **Templates:** each is the Line template with another connection between the points: Step,
+  horizontal first (`step-horizontal`), Step, vertical first (`step-vertical`) and Spline
+  (`spline-connected`). These are the same connections as Plot Details > Line > Connect. The names
+  also work with `sheaf plot --template`.
+- **2D Graphs toolbar:** Bar, Stacked Area, Box Chart, Histogram and Bubble are live. Each runs the
+  Plot menu item of the same name on the selected columns, as Line, Scatter and Column already did.
+

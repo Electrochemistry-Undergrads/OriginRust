@@ -3,6 +3,7 @@
 
 pub mod analysis;
 pub mod autosave;
+pub mod axis3d;
 pub mod batch_plot;
 pub mod bin2d_options;
 pub mod cell_format;

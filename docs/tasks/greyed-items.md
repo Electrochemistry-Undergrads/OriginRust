@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **175 greyed items: 124 in the menu bar, 2 on the toolbars, 49 in context menus.**
+original inventory baseline. This is not a new runtime audit. **174 greyed items: 123 in the menu bar, 2 on the toolbars, 49 in context menus.**
 
 ## How to read and keep this file
 
@@ -81,12 +81,12 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B12` | 1 |
 | `B13` | 2 |
 | `B14` | 42 |
-| `B15` | 10 |
+| `B15` | 9 |
 | `B16` | 15 |
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 37 items, backlog packages (`B`) 118, not planned (`N`) 20.
+Briefs (`T`) hold 37 items, backlog packages (`B`) 117, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -167,7 +167,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B16` Programming Control...
 - `B2` Object Properties... [Workbook]
 - `B2` Snap Layers to Grid · Snap Objects to Grid [Graph]
-- `B15` Axes: Z Axis... [Graph]
 - `B6` Snap to Grid · Merge cells [Workbook]
 
 ### Window

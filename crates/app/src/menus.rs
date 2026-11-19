@@ -33,6 +33,7 @@ use eframe::egui::{
 };
 use sheaf_core::clipboard::CopyPart;
 use sheaf_core::data_range::RangeEnd;
+use sheaf_core::fill_pattern::QuickFill;
 use sheaf_core::format_clip::{AxisPart, GraphPart};
 use sheaf_core::graph::{PlotKind, Stack};
 use sheaf_core::sheetops::{MaskOp, MoveTo};
@@ -92,6 +93,8 @@ pub enum Cmd {
     ManageTemplates,
     /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values (T74).
     FillPattern(FillKind),
+    /// Column > Fill Column With > Row Numbers / Uniform / Normal Random Numbers (T63 group H).
+    QuickFill(QuickFill),
     /// Column > Set Sampling Interval... and Show X Column... (T84).
     SetSamplingInterval,
     ShowXColumn,
@@ -1317,10 +1320,9 @@ fn column_menu() -> Vec<Entry> {
         sub(
             "Fill Column With",
             vec![
-                // Row Numbers and the random fills are T63 group H; still grey here.
-                grey("Row Numbers"),
-                grey("Uniform Random Numbers"),
-                grey("Normal Random Numbers"),
+                item("Row Numbers", Cmd::QuickFill(QuickFill::RowNumbers)),
+                item("Uniform Random Numbers", Cmd::QuickFill(QuickFill::Uniform)),
+                item("Normal Random Numbers", Cmd::QuickFill(QuickFill::Normal)),
                 item("A set of Numbers...", Cmd::FillPattern(FillKind::Numbers)),
                 item("A set of Date/Time values...", Cmd::FillPattern(FillKind::Dates)),
                 item("Arbitrary set of Text&&Numeric values...", Cmd::FillPattern(FillKind::Text)),
@@ -1958,10 +1960,9 @@ pub fn column_header_menu() -> Vec<Entry> {
     v.push(sub(
         "Fill Column with",
         vec![
-            // Row Numbers and the random fills are T63 group H; still grey here.
-            grey("Row Numbers"),
-            grey("Uniform Random Numbers"),
-            grey("Normal Random Numbers"),
+            item("Row Numbers", Cmd::QuickFill(QuickFill::RowNumbers)),
+            item("Uniform Random Numbers", Cmd::QuickFill(QuickFill::Uniform)),
+            item("Normal Random Numbers", Cmd::QuickFill(QuickFill::Normal)),
             item("A set of Numbers...", Cmd::FillPattern(FillKind::Numbers)),
             item("A set of Date/Time values...", Cmd::FillPattern(FillKind::Dates)),
             item("Arbitrary set of Text&&Numeric values...", Cmd::FillPattern(FillKind::Text)),
@@ -2712,6 +2713,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SaveProjectAs => Action::SaveProjectAs,
         Cmd::SaveWindowAs => Action::SaveWindowAs(c.active.ok_or(NEED_WINDOW)?),
         Cmd::FillPattern(kind) => Action::FillPattern { kind: *kind, columns: some()? },
+        Cmd::QuickFill(kind) => Action::QuickFill { kind: *kind, columns: some()? },
         Cmd::SetSamplingInterval => Action::SetSamplingInterval { columns: some()? },
         Cmd::ShowXColumn => Action::ShowXColumn { columns: some()? },
         Cmd::SaveTemplateAs => {

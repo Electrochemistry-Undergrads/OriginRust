@@ -699,7 +699,14 @@ Date/Time values..., Arbitrary set of Text&Numeric values... are Origin's X-Func
   10 by 1, each once, the run once, a set of 10; dates from today for ten days by a day; times 00:00 to
   12:00 by an hour. OK fills every selected column, one undo step ("Fill column"); a refused fill (no
   value, no text item) keeps the window open with the reason.
-- Row Numbers, Uniform and Normal Random Numbers in the same submenu are T63 group H.
+- **Row Numbers, Uniform Random Numbers, Normal Random Numbers** (T63 group H, 2026-11-19, documented, **not
+  measured**: Origin's COM class was unregistered). They have no window: they fill every selected column at once,
+  one undo step ("Fill column"), from the Column menu or the column header's Fill Column with submenu.
+  - Row Numbers writes 1, 2, 3, ... and the random items write uniform numbers on [0, 1) (as `rnd()`) or normal
+    numbers with mean 0 and SD 1 (as `grnd()`). Each column gets its own random numbers.
+  - They write every row of the sheet (its longest column), and 32 rows into a sheet without rows (Origin's new
+    sheet has 32). Text cells and the column's formula go; the number format stays.
+  - Not measured: Origin's row count for a partly filled sheet and for a selected cell range, and its generator.
 
 ## 13d. Sampling interval (T84, measured 2026-11-16, Origin 2016)
 

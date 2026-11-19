@@ -5468,7 +5468,8 @@ Sheaf's own file kind and rules; Origin's `.otp`/`.otpu` templates are never rea
 here is measured in Origin (to measure on Windows: what an Origin template keeps, how extra or fewer
 datasets are styled, the default folder and name).
 
-- **Saving** (File > Save Template As..., graphs only; greyed without a template folder): a name prompt
+- **Saving** (File > Save Template As... on a graph; on a workbook it saves a workbook template,
+  `workbook-model.md` 13o (T160); greyed without a template folder): a name prompt
   filled with the graph's short name; OK saves the graph's look as `<name>.sheaftemplate` in the folder
   `templates` of the settings folder (`sheaf_io::user_templates::default_dir`; `--templates-dir DIR` and
   `--no-templates` at start). A template of the same name (letter case ignored) is replaced, and the prompt
@@ -5496,9 +5497,11 @@ datasets are styled, the default folder and name).
   (the folder is outside its allowed roots).
 - **File > New > From Template** (T103, measured 2026-11-16 in Origin 2016, `re-workspace/scratch/t103`):
   Origin's item is a submenu listing templates by file name (workbook templates such as `Assays.ogw`), a
-  separator and More... (a file picker). Sheaf lists the saved user templates, then More... (a file picker
-  for `.sheaftemplate` files starting in the templates folder); either makes a new graph in the template's
-  look without data (no plots; axes, text and page as saved), one undo step ("New graph from template").
+  separator and More... (a file picker). Sheaf lists the saved user templates, then (after a separator) the
+  workbook templates of T160, then More... (a file picker for `.sheaftemplate` and `.sheafbooktemplate`
+  files starting in the templates folder); a graph template makes a new graph in the template's look
+  without data (no plots; axes, text and page as saved), one undo step ("New graph from template"); a
+  workbook template makes an empty workbook (`workbook-model.md` 13o).
 - **Plot > System Templates...** (T104, measured 2026-11-16 in Origin 2016, `re-workspace/scratch/t104`):
   Origin's "System Templates" window has a Category tree under "Graph Template (*.otp)" (Line, Symbol, Line &
   Symbol, Columns & Bars, Multi-Curve, 3D XYY, Statistics, Area, Contour, Specialized, Stock, 3D Surface, 3D
@@ -6539,7 +6542,13 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
     bar can be misordered against another column's bar.
   - 3D Walls fill each curve down to the floor of the box (Area plots with the floor as their base).
   - 3D Waterfall draws the curves as lines.
-  - 3D Ribbons stays grey.
+- **3D Ribbons (T161, `3d-ribbons`):** a 3D Walls layer with `Space3dCoords::ribbons` set. Each Area
+  plot is a ribbon instead of a wall: the curve at its depth widened to half a depth step, from a
+  quarter step in front of it to a quarter step behind (Sheaf's width, not measured).
+  - Each pair of consecutive rows is one quadrilateral, filled with the plot's fill colour and edged
+    with its line. A missing value breaks the ribbon.
+  - The quadrilaterals of a ribbon are drawn from the farthest to the nearest; the ribbons in plot
+    order, the first farthest back.
 - **Not done:**
   - rotating the view, and the Z axis dialog (Format > Axes > Z Axis stays grey);
   - hiding points behind each other (points are drawn in row order);

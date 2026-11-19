@@ -282,7 +282,8 @@ pub enum Action {
     /// File > Save Window As...: ask for a name and write this window (a workbook, or a graph with
     /// the workbooks it reads) to a window file.
     SaveWindowAs(WindowId),
-    /// File > Save Template As...: ask for a name and save the graph's look as a user template.
+    /// File > Save Template As...: ask for a name and save the graph's look, or the workbook's
+    /// structure (T160), as a user template.
     SaveTemplateAs(WindowId),
     /// Plot > User Templates > Manage...: rename and delete the saved templates.
     ManageTemplates,
@@ -415,6 +416,8 @@ pub enum Action {
     /// File > New > From Template: an empty graph from the saved template of this name, or (None,
     /// More...) from a template file picked with the system dialog.
     NewFromTemplate(Option<String>),
+    /// File > New > From Template: an empty workbook from the saved workbook template of this name (T160).
+    NewBookFromTemplate(String),
     /// Window > Folders: make this folder the Project Explorer's active one.
     GoToFolder(Vec<usize>),
     /// The explorer folder's Properties...: its name, comments and information.

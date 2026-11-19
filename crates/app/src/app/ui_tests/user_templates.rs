@@ -108,3 +108,49 @@ fn without_a_template_folder_save_template_as_is_greyed_and_nothing_is_written()
     assert!(!entry_enabled(&h, "Save Template As..."), "no folder: the item is greyed");
     assert!(h.state().user_templates.is_empty());
 }
+
+#[test]
+fn a_workbook_saved_as_a_template_makes_an_empty_workbook_from_file_new_from_template() {
+    let file = data_file("book-template");
+    let dir = file.parent().unwrap().join("templates");
+    let mut h = start_with(file, Some(dir.clone()));
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Label", |p| {
+        let b = p.workbook_mut(book).unwrap();
+        let c = &mut b.sheets[0].columns[1];
+        c.long_name = "Current".into();
+        c.units = "uA".into();
+    });
+    settle(&mut h);
+    show_window(&mut h, "Book1 - sample.csv");
+    menu_path(&mut h, &["File", "Save Template As..."]);
+    let prompt = h.state().template_prompt.as_ref().expect("the name prompt is open");
+    assert_eq!(prompt.kind, sheaf_io::user_templates::TemplateKind::Workbook);
+    type_name(&mut h, "Run log");
+    h.get_by_label("Save Template As").get_by_label("OK").click();
+    settle(&mut h);
+    assert!(h.state().template_prompt.is_none(), "OK saves and closes");
+    assert_eq!(h.state().user_book_templates, ["Run log"]);
+    assert!(h.state().user_templates.is_empty(), "not a graph template");
+    assert!(dir.join("Run log.sheafbooktemplate").is_file());
+
+    let books = project(&h).workbooks().count();
+    menu_path(&mut h, &["File", "New", "From Template", "Run log"]);
+    assert_eq!(project(&h).workbooks().count(), books + 1);
+    let made = project(&h).workbooks().last().unwrap();
+    assert_ne!(made.id, book);
+    let cols = &made.sheets[0].columns;
+    assert_eq!(cols.len(), 3);
+    assert!(cols.iter().all(|c| c.is_empty()), "no data");
+    assert_eq!((cols[1].long_name.as_str(), cols[1].units.as_str()), ("Current", "uA"));
+    assert_eq!(h.state().doc.undo_label(), Some("New workbook from template"));
+
+    // Manage lists it under the workbook templates and deletes it.
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::ManageTemplates, &ctx);
+    settle(&mut h);
+    click(&mut h, "Run log");
+    click(&mut h, "Delete");
+    assert!(h.state().user_book_templates.is_empty());
+    assert!(!dir.join("Run log.sheafbooktemplate").exists());
+}

@@ -522,11 +522,15 @@ pub struct Space3dCoords {
     /// farthest back; no Z column is read.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub xyy: bool,
+    /// 3D Ribbons (T161): in an XYY layer, each Area plot is a ribbon, a strip half a depth step
+    /// wide, instead of a wall down to the floor.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ribbons: bool,
 }
 
 impl Default for Space3dCoords {
     fn default() -> Self {
-        Space3dCoords { azimuth_deg: 40.0, elevation_deg: 25.0, xyy: false }
+        Space3dCoords { azimuth_deg: 40.0, elevation_deg: 25.0, xyy: false, ribbons: false }
     }
 }
 

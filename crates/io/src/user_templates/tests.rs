@@ -307,3 +307,65 @@ fn the_default_folder_is_templates_beside_the_autosave_settings() {
     let dir = default_dir();
     assert_eq!(dir, settings.and_then(|p| p.parent().map(|d| d.join("templates"))));
 }
+
+fn book_template(name: &str) -> BookTemplate {
+    let mut p = Project::new();
+    let b = p.add_workbook("Run log");
+    p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0, 2.0])).unwrap();
+    let y = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![3.0, 4.0, 5.0])).unwrap();
+    let c = p.column_mut(y).unwrap();
+    c.long_name = "Current".into();
+    c.units = "uA".into();
+    c.formula = Some("col(A)^2".into());
+    p.workbook_mut(b).unwrap().sheets.push(sheaf_core::Worksheet::new("Notes"));
+    BookTemplate::from_workbook(name, p.workbook(b).unwrap())
+}
+
+#[test]
+fn a_workbook_template_round_trips_beside_graph_templates_with_its_own_names() {
+    let scratch = Scratch::new("books");
+    let dir = scratch.folder();
+    save(&dir, &sample("Log")).unwrap();
+    let saved = save_book(&dir, &book_template("Log")).unwrap();
+    assert_eq!(saved.path.extension().unwrap(), BOOK_EXTENSION);
+    assert!(!saved.replaced, "a graph template of the same name is another template");
+    assert_eq!(names(&dir), ["Log"]);
+    assert_eq!(names_of(&dir, TemplateKind::Workbook), ["Log"]);
+    assert_eq!(kind_of_file(&saved.path), Some(TemplateKind::Workbook));
+    assert!(!is_template_file(&saved.path), "not a graph template");
+
+    let back = load_book(&dir, "log").unwrap();
+    assert_eq!(back.name, "Log");
+    assert_eq!(back.book.sheets.len(), 2);
+    let y = &back.book.sheets[0].columns[1];
+    assert_eq!((y.long_name.as_str(), y.units.as_str()), ("Current", "uA"));
+    assert_eq!(y.formula.as_deref(), Some("col(A)^2"));
+    assert!(back.book.sheets[0].columns.iter().all(|c| c.is_empty()), "no values in the file");
+
+    // The graph template of that name is still there and still a graph.
+    assert!(load(&dir, "Log").is_ok());
+    // A workbook file is not read as a graph template, and the reverse.
+    let wrong = load_file(&saved.path).unwrap_err().to_string();
+    assert!(wrong.contains("workbook template"), "{wrong}");
+    assert!(load_book_file(&find(&dir, "Log").unwrap().path).is_err());
+}
+
+#[test]
+fn workbook_templates_are_replaced_renamed_and_deleted_by_kind() {
+    let scratch = Scratch::new("books-manage");
+    let dir = scratch.folder();
+    save(&dir, &sample("Graph look")).unwrap();
+    save_book(&dir, &book_template("first")).unwrap();
+    assert!(save_book(&dir, &book_template("FIRST")).unwrap().replaced);
+    assert_eq!(names_of(&dir, TemplateKind::Workbook), ["FIRST"]);
+    save_book(&dir, &book_template("Other")).unwrap();
+    assert!(matches!(rename_of(&dir, "first", "other", TemplateKind::Workbook), Err(TemplateError::Exists { .. })));
+    // A graph template's name does not clash with a workbook template.
+    assert_eq!(rename_of(&dir, "first", "Graph look", TemplateKind::Workbook).unwrap(), "Graph look");
+    assert_eq!(names_of(&dir, TemplateKind::Workbook), ["Graph look", "Other"]);
+    assert!(delete_of(&dir, "graph LOOK", TemplateKind::Workbook).unwrap());
+    assert_eq!(names(&dir), ["Graph look"], "the graph template stays");
+    assert_eq!(names_of(&dir, TemplateKind::Workbook), ["Other"]);
+    let err = load_book(&dir, "missing").unwrap_err().to_string();
+    assert!(err.contains("Other"), "{err}");
+}

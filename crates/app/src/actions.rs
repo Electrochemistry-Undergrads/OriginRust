@@ -843,6 +843,10 @@ pub enum Action {
     StartRiseTime {
         graph: WindowId,
     },
+    /// Gadgets > Intersect on a graph (T139).
+    StartIntersect {
+        graph: WindowId,
+    },
     /// A command of a graph's open gadget.
     Gadget {
         graph: WindowId,

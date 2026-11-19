@@ -11,6 +11,10 @@
 //! The Rise Time gadget (T138, Gadgets > Rise Time, not measured) uses the same range: it draws the 10 %
 //! and 90 % levels of the curve's amplitude inside the range, marks where the curve crosses them and shows
 //! the rise time (or fall time) between the crossings (`sheaf_calc::risetime`).
+//!
+//! The Intersect gadget (T139, Gadgets > Intersect, not measured) marks where its plot crosses the
+//! layer's other plots inside the range and writes each point's X and Y beside it
+//! (`sheaf_calc::curves::intersections`).
 
 use crate::actions::Action;
 use crate::menus::{self, MenuContext};
@@ -26,6 +30,8 @@ pub enum GadgetKind {
     Integrate,
     /// Gadgets > Rise Time (T138).
     RiseTime,
+    /// Gadgets > Intersect (T139).
+    Intersect,
 }
 
 /// The levels of the Rise Time gadget, in percent of the amplitude.
@@ -76,6 +82,29 @@ pub fn rows_in(x: &[f64], x0: f64, x1: f64) -> Option<(usize, usize)> {
 }
 
 impl Integrator {
+    /// Intersect gadget: where the gadget's plot crosses each other visible plot of numbers of its layer,
+    /// with X inside the range, sorted by X.
+    pub fn crossings(&self, project: &Project, graph: WindowId) -> Vec<sheaf_calc::curves::Intersection> {
+        let Some((ax, ay)) = plot_xy(project, graph, self.layer, self.plot) else { return Vec::new() };
+        let count = project.graph(graph).and_then(|g| g.layers.get(self.layer)).map_or(0, |l| l.plots.len());
+        let visible = |i: usize| {
+            project
+                .graph(graph)
+                .and_then(|g| g.layers.get(self.layer))
+                .and_then(|l| l.plots.get(i))
+                .is_some_and(|p| p.visible)
+        };
+        let (lo, hi) = (self.x0.min(self.x1), self.x0.max(self.x1));
+        let mut out: Vec<sheaf_calc::curves::Intersection> = (0..count)
+            .filter(|&i| i != self.plot && visible(i))
+            .filter_map(|i| plot_xy(project, graph, self.layer, i))
+            .flat_map(|(bx, by)| sheaf_calc::curves::intersections(&ax, &ay, &bx, &by, false))
+            .filter(|p| p.x >= lo && p.x <= hi)
+            .collect();
+        out.sort_by(|a, b| a.x.total_cmp(&b.x));
+        out
+    }
+
     /// The rise or fall time over the range (Rise Time gadget).
     pub fn rise(&self, x: &[f64], y: &[f64]) -> Option<sheaf_calc::risetime::RiseTime> {
         let (a, b) = rows_in(x, self.x0, self.x1)?;
@@ -121,7 +150,20 @@ impl Integrator {
         // The shaded area, strip by strip (each strip is convex), at most about 2000 strips.
         let integrating = self.kind == GadgetKind::Integrate;
         let result = if integrating { self.result(&x, &y) } else { None };
-        let rise = if integrating { None } else { self.rise(&x, &y) };
+        let rise = if self.kind == GadgetKind::RiseTime { self.rise(&x, &y) } else { None };
+        let crossings = if self.kind == GadgetKind::Intersect { self.crossings(project, graph) } else { Vec::new() };
+        for p in &crossings {
+            let at = to_screen(geom.data_to_page(placement.x(p.x), placement.y(p.y)));
+            painter.circle_stroke(at, 4.0, Stroke::new(1.5_f32, Color32::from_rgb(200, 30, 30)));
+            let g = |v: f64| sheaf_core::format::format_general(v, 4);
+            painter.text(
+                at + egui::vec2(6.0, -6.0),
+                egui::Align2::LEFT_BOTTOM,
+                format!("({}, {})", g(p.x), g(p.y)),
+                egui::FontId::proportional(11.0),
+                Color32::from_rgb(120, 20, 20),
+            );
+        }
         if let Some(r) = &rise {
             // The two levels across the range and the two crossings.
             let level = |v: f64| to_screen(geom.data_to_page(placement.x(self.x0), placement.y(v))).y;
@@ -190,6 +232,11 @@ impl Integrator {
                 sheaf_core::format::format_general(r.time, 6)
             ),
             (GadgetKind::RiseTime, _, None) => "Rise Time: no step in the range".to_string(),
+            (GadgetKind::Intersect, _, _) => match crossings.len() {
+                0 => "No intersection in the range".to_string(),
+                1 => "1 intersection".to_string(),
+                n => format!("{n} intersections"),
+            },
         };
         painter.text(
             range.center_top() + egui::vec2(0.0, 3.0),
@@ -245,7 +292,7 @@ impl Integrator {
         body.context_menu(|ui| {
             let menu = match self.kind {
                 GadgetKind::Integrate => menus::integrate_gadget_menu(self.end_point_baseline),
-                GadgetKind::RiseTime => menus::rise_time_gadget_menu(),
+                GadgetKind::RiseTime | GadgetKind::Intersect => menus::rise_time_gadget_menu(),
             };
             menus::show_context(ui, &menu, c, actions)
         });

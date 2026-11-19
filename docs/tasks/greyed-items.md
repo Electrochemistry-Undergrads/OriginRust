@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **236 greyed items: 153 in the menu bar, 18 on the toolbars, 65 in context menus.**
+original inventory baseline. This is not a new runtime audit. **230 greyed items: 150 in the menu bar, 18 on the toolbars, 62 in context menus.**
 
 ## How to read and keep this file
 
@@ -40,7 +40,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T60` | 0 |
 | `T61` | 5 |
 | `T62` | 0 |
-| `T63` | 20 |
+| `T63` | 14 |
 | `T65` | 0 |
 | `T66` | 9 |
 | `T67` | 0 |
@@ -86,7 +86,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 57 items, backlog packages (`B`) 159, not planned (`N`) 20.
+Briefs (`T`) hold 51 items, backlog packages (`B`) 159, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -133,7 +133,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B14` Profile: Contour Profiles · Image Profiles
 
 ### Column
-- `T63` Fill Column With: Row Numbers · Uniform Random Numbers · Normal Random Numbers
 
 ### Worksheet
 - `B14` Convert to Matrix: Direct · XYZ Gridding · Extract
@@ -203,7 +202,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B5` Worksheet column header: Remove Links
 - `T63` Worksheet column header: Frequency Count...
 - `B6` Worksheet column header: Add or Update Sparklines...
-- `T63` Worksheet column header > Fill Column with: Row Numbers · Uniform Random Numbers · Normal Random Numbers
 - `B5` Worksheet data cell: Paste Link · Paste Link Transpose · Remove Links
 - `B6` Worksheet data cell: Insert Graph... · Insert Images from Files... · Insert Sparklines... · Insert Variables...
 - `B6` Worksheet data cell > Insert Arrow: Arrow · Double Arrow

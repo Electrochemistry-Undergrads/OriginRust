@@ -2733,6 +2733,22 @@ impl SheafApp {
             Action::FillPattern { kind, columns } => {
                 self.fill_pattern = Some(crate::dialogs::fill_pattern::FillPatternDialog::new(kind, columns));
             }
+            Action::QuickFill { kind, columns } => {
+                let seed = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(1, |t| t.as_nanos() as u64);
+                let filled = self.doc.edit("Fill column", |p| {
+                    let mut rows = 0;
+                    for (k, c) in columns.iter().enumerate() {
+                        rows = p.fill_quick(*c, kind, seed.wrapping_add(k as u64))?;
+                    }
+                    Ok::<usize, sheaf_core::fill_pattern::FillError>(rows)
+                });
+                match filled {
+                    Ok(rows) => self.say(format!("{}: {} column(s), {rows} rows each", kind.label(), columns.len())),
+                    Err(e) => self.logs.warn(e.to_string()),
+                }
+            }
             Action::SetSamplingInterval { columns } => {
                 let current =
                     columns.first().and_then(|c| self.doc.project().column(*c)).and_then(|c| c.sampling.as_ref());

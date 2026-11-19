@@ -284,6 +284,12 @@ pub enum Action {
         kind: crate::dialogs::fill_pattern::FillKind,
         columns: Vec<ColumnId>,
     },
+    /// Column > Fill Column With > Row Numbers / Uniform / Normal Random Numbers: fill these columns
+    /// at once, one undo step.
+    QuickFill {
+        kind: sheaf_core::fill_pattern::QuickFill,
+        columns: Vec<ColumnId>,
+    },
     /// Column > Set Sampling Interval...: open its window for these columns.
     SetSamplingInterval {
         columns: Vec<ColumnId>,

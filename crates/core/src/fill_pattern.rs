@@ -16,6 +16,9 @@
 //! - The fill writes from the first row; rows below what it writes keep their values.
 //! - Text items are separated by white space; double quotes keep an item with spaces together
 //!   (the hint of Origin's window: `Boston "New York" Chicago`; the quoting is not measured).
+//!
+//! The same submenu's Row Numbers, Uniform Random Numbers and Normal Random Numbers have no window
+//! ([`QuickFill`], T63 group H, documented, not measured): they fill every row of the sheet.
 
 use crate::column::ColumnData;
 use crate::datetime::{DatePattern, TimePattern};
@@ -26,6 +29,47 @@ use std::collections::BTreeMap;
 
 /// The most values one fill writes.
 pub const MAX_FILL_ROWS: usize = 10_000_000;
+
+/// The rows a quick fill writes into a sheet that has none yet (Origin's new sheet has 32).
+pub const QUICK_FILL_EMPTY_ROWS: usize = 32;
+
+/// Column > Fill Column With > Row Numbers, Uniform Random Numbers and Normal Random Numbers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuickFill {
+    /// 1, 2, 3, ... down the sheet.
+    RowNumbers,
+    /// Uniform on [0, 1), as `rnd()`.
+    Uniform,
+    /// Normal with mean 0 and standard deviation 1, as `grnd()`.
+    Normal,
+}
+
+impl QuickFill {
+    /// The menu text.
+    pub fn label(self) -> &'static str {
+        match self {
+            QuickFill::RowNumbers => "Row Numbers",
+            QuickFill::Uniform => "Uniform Random Numbers",
+            QuickFill::Normal => "Normal Random Numbers",
+        }
+    }
+
+    /// `rows` values; `seed` drives the random ones.
+    pub fn values(self, rows: usize, seed: u64) -> Vec<f64> {
+        let mut rng = Rng(seed);
+        match self {
+            QuickFill::RowNumbers => (1..=rows).map(|r| r as f64).collect(),
+            QuickFill::Uniform => (0..rows).map(|_| rng.unit()).collect(),
+            QuickFill::Normal => (0..rows)
+                .map(|_| {
+                    // Box-Muller; 1 - u keeps the logarithm finite.
+                    let (u, v) = (1.0 - rng.unit(), rng.unit());
+                    (-2.0 * u.ln()).sqrt() * (std::f64::consts::TAU * v).cos()
+                })
+                .collect(),
+        }
+    }
+}
 
 /// Repeat the run in order, or draw values at random.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -165,6 +209,16 @@ pub fn text_items(text: &str) -> Vec<String> {
 struct Rng(u64);
 
 impl Rng {
+    /// A number in [0, 1).
+    fn unit(&mut self) -> f64 {
+        self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^= z >> 31;
+        (z >> 11) as f64 / (1u64 << 53) as f64
+    }
+
     fn below(&mut self, n: usize) -> usize {
         self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
         let mut z = self.0;
@@ -237,6 +291,22 @@ pub fn generate(pattern: &FillPattern, rows: usize, seed: u64) -> Result<FillVal
 }
 
 impl Project {
+    /// Fills every row of `column`'s sheet (32 rows when the sheet has none) with row numbers or
+    /// random numbers; the column's text cells and formula go. Returns how many rows were written.
+    pub fn fill_quick(&mut self, column: ColumnId, kind: QuickFill, seed: u64) -> Result<usize, FillError> {
+        let rows = {
+            let (_, sheet, _) = self.locate(column).ok_or(ProjectError::NoSuchColumn(column))?;
+            match sheet.row_count() {
+                0 => QUICK_FILL_EMPTY_ROWS,
+                n => n,
+            }
+        };
+        let col = self.column_mut(column).ok_or(ProjectError::NoSuchColumn(column))?;
+        col.data = ColumnData::numeric(kind.values(rows, seed));
+        col.formula = None;
+        Ok(rows)
+    }
+
     /// Fills `column` with `pattern` from its first row; rows below what the fill writes keep their
     /// values. A date fill makes the column a Date (or Time) column; a text fill keeps the numbers
     /// below it in a Text & Numeric column. Returns how many rows were written.

@@ -696,6 +696,10 @@ pub enum StatPlot {
     Pareto,
     /// Pareto chart, the curve on the right axis: the running percent of the counted cells.
     ParetoCumulative,
+    /// Histogram + Probabilities, the curve on the right axis (T85): the cumulative percent of the
+    /// histogram bins of the Y column (the bins of this plot's `hist`), flat across each bin at the
+    /// percent reached at its right edge and rising at the bin edges.
+    HistogramCumulative,
 }
 
 /// The settings of a treemap plot (Origin 2025b Treemap plot, graphing spec 14.26). The plot's own Y column is

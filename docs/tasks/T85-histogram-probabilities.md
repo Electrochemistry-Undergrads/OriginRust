@@ -1,6 +1,6 @@
 # T85: Histogram + Probabilities (B4 slice)
 
-**Status:** in progress 2026-11-16 (branch `hist-prob`, Claude Windows, session fe4b37eb).
+**Status:** done 2026-11-19 (Claude Windows "t30-origin", branch `hist-prob-2`, taking over the stale `hist-prob` claim of session fe4b37eb, which held only this brief); graphing "Histogram + Probabilities". Left: the Results Log summary (Mean, SD, Maximum, Minimum, Size), the right axis title and the exact start of the step line (not measured).
 **Size:** S-M. **Inventory:** Plot > Statistics > Histogram + Probabilities (1).
 
 ## Origin facts (measured 2026-11-16, Origin 2016, scratch `re-workspace/scratch/t85`)

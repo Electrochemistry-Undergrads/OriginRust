@@ -316,3 +316,32 @@ fn pareto_counts_sorts_and_accumulates() {
     }
     compare_golden("pareto", &svg);
 }
+
+#[test]
+fn histogram_probabilities_steps_through_the_cumulative_percent_of_the_bins() {
+    // T85: Plot > Statistics > Histogram + Probabilities.
+    let mut p = Project::new();
+    let b = p.add_workbook("Book1");
+    let y = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 1.2, 2.1, 2.2, 2.8, 3.5])).unwrap();
+    let g = p.plot_columns(Template::HistogramProbabilities, &[y]).unwrap();
+    let style = sheaf_core::graph::HistogramStyle { bin_size: Some(1.0), begin: Some(1.0), end: Some(4.0) };
+    {
+        let gr = p.graph_mut(g).unwrap();
+        assert_eq!(gr.layers.len(), 2, "the histogram and the linked right-Y layer");
+        for l in &mut gr.layers {
+            l.plots[0].hist = style.clone();
+        }
+        let right = &gr.layers[1];
+        assert_eq!(right.plots[0].stat, Some(sheaf_core::graph::StatPlot::HistogramCumulative));
+        assert_eq!((right.y_axis.min, right.y_axis.max), (Some(0.0), Some(100.0)));
+        assert_eq!(gr.layers[0].y_axis.title.as_deref(), Some("Counts"));
+    }
+    let layers = data::collect_graph(&p, p.graph(g).unwrap());
+    assert_vec(&layers[0].plots[0].y, &[2.0, 3.0, 1.0]);
+    let line = &layers[1].plots[0];
+    assert_vec(line.x.as_deref().unwrap(), &[1.0, 2.0, 3.0, 4.0]);
+    assert_vec(&line.y, &[100.0 / 3.0, 250.0 / 3.0, 100.0, 100.0]);
+    // A text column cannot make one.
+    let t = p.add_column(b, 0, Designation::Y, ColumnData::text(vec!["a".into()])).unwrap();
+    assert!(p.plot_columns(Template::HistogramProbabilities, &[t]).is_err());
+}

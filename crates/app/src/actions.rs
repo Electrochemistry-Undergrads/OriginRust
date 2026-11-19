@@ -291,7 +291,15 @@ pub enum Action {
         shape: usize,
         cut: bool,
     },
-    /// The page's right-click Paste: the copied drawn object at page point `page`, one undo step.
+    /// A text label's right-click Copy (and Cut, which also deletes it, one undo step; T147).
+    CopyLabel {
+        graph: WindowId,
+        layer: usize,
+        label: usize,
+        cut: bool,
+    },
+    /// The page's right-click Paste: the copied drawn object or label at page point `page`, one
+    /// undo step.
     PasteShape {
         graph: WindowId,
         layer: usize,

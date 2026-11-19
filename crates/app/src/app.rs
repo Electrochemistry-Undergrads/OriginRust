@@ -1450,6 +1450,8 @@ impl SheafApp {
             GraphOp::AxisZoom { .. } => "Axis zoom out",
             GraphOp::AxisCenter { .. } => "Axis center",
             GraphOp::HideLegend { .. } => "Delete legend",
+            GraphOp::OrderTitle { front: true, .. } => "Bring axis title to front",
+            GraphOp::OrderTitle { front: false, .. } => "Push axis title to back",
             GraphOp::OrderLegend { front: true, .. } => "Bring legend to front",
             GraphOp::OrderLegend { front: false, .. } => "Push legend to back",
             GraphOp::LegendBehindData { behind: true, .. } => "Push legend to back of data",

@@ -1159,6 +1159,10 @@ pub struct Axis {
     /// Draw the title in that color too.
     #[serde(default, skip_serializing_if = "is_false")]
     pub title_color_follows_plot: bool,
+    /// The title is drawn over the layer's labels, drawn objects and legend (its right-click Bring to the
+    /// front; Push to the back puts it under them again, the default; T153).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub title_on_top: bool,
     /// Where the tick labels come from: numbers, or the cells of a text column such as sample names.
     #[serde(default, skip_serializing_if = "TickLabelSource::is_auto")]
     pub tick_label_source: TickLabelSource,

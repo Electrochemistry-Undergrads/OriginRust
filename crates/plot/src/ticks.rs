@@ -856,6 +856,7 @@ mod tests {
             offset_pct: 0.0,
             color_follows_plot: false,
             title_color_follows_plot: false,
+            title_on_top: false,
             tick_label_source: Default::default(),
             tick_label_angle_deg: 0.0,
             hide_end_label: false,

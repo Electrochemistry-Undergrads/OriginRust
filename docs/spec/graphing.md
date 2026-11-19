@@ -6218,3 +6218,19 @@ this follows Origin's documented behaviour. It reuses the Integrate gadget's ran
 - **Not done:** Origin shows its spectrum in a preview graph window and can output it to a sheet; Sheaf has
   neither yet.
 
+## Statistics and Quick Fit gadgets: Gadgets > Statistics..., Quick Fit... (T143, 2026-11-18, **not measured**)
+
+Origin 2016's Gadgets menu starts with Statistics... and Quick Fit.... They could not be probed (Origin's
+COM class was unregistered), so this follows Origin's documented behaviour. Both reuse the Integrate
+gadget's range, which opens on the active plot over the middle half of the X axis and drags as before.
+They work on the points with numbers among the rows inside the range.
+
+- **Statistics:** the label reads "N = n, Mean = m, SD = s" and, on a second line, "Min = a, Max = b" (five
+  significant digits; SD is the sample standard deviation), or "No points in the range".
+- **Quick Fit:** a straight line fitted by least squares, drawn across the range in red, 2 pt. The label
+  reads "y = a + b x" and "R² = r", or "Quick Fit: too few points in the range" (fewer than two points or no
+  spread in X).
+- **Right-click menu:** Delete (Esc) closes either gadget.
+- **Not done:** Origin's Quick Fit offers other functions and both gadgets can write their results to a
+  sheet; Sheaf's do not yet.
+

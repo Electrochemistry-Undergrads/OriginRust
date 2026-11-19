@@ -194,7 +194,7 @@ pub(crate) fn draw(
         if !inside(pa) || !inside(pb) {
             continue;
         }
-        let color: Color = s.color.unwrap_or_else(|| crate::rug::plot_color(pd));
+        let color: Color = s.color.unwrap_or_else(|| crate::rug::plot_color(pd.plot));
         let start = out.len();
         let width = s.width_pt.max(0.0);
         if s.show_legs {

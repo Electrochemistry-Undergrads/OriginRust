@@ -1007,6 +1007,7 @@ fn draw_legend_and_labels(
     m: &dyn TextMeasurer,
 ) {
     let layer = &g.layers[index];
+    let label_plot_color = |slot| layer.plots.get(slot).map(crate::rug::plot_color);
     let rec = |objects: &mut Vec<SceneObject>, out: &Vec<Item>, start: usize, kind: ObjectKind, extra: &[Rect]| {
         hit::record(objects, out, start, kind, index, ItemList::Overlay, extra, m)
     };
@@ -1031,7 +1032,7 @@ fn draw_legend_and_labels(
         let (sin, cos) = label.rotation_deg.to_radians().sin_cos();
         let dy = (ASCENT - DESCENT) / 2.0 * size;
         let pos = (anchor.0 + dy * sin, anchor.1 + dy * cos);
-        text::place_label(out, m, &label.text, &label.font, pos, label.rotation_deg);
+        text::place_label(out, m, &label.text, &label.font, pos, label.rotation_deg, &label_plot_color);
         rec(objects, out, start, ObjectKind::Label(k), &[]);
     }
     crate::shapes::draw_shapes(out, objects, layer, index, f, m);
@@ -1042,7 +1043,7 @@ fn draw_legend_and_labels(
 /// The color of the first drawable plot of a layer: its line color, or the symbol (fill) color
 /// for scatter and column plots, which have no line of their own to show.
 fn plot_color(pds: &[PlotData]) -> Option<Color> {
-    pds.first().map(crate::rug::plot_color)
+    pds.first().map(|pd| crate::rug::plot_color(pd.plot))
 }
 
 /// The colors an axis is drawn in: its own, or that of the layer's first plot when the axis

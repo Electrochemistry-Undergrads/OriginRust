@@ -129,7 +129,7 @@ pub(crate) fn draw(
         let (xs, ys) = points(pd);
         for t in &pd.plot.decor.trendlines {
             let Some((pts, text)) = curve(t, &xs, &ys, geom) else { continue };
-            let color: Color = t.color.unwrap_or_else(|| crate::rug::plot_color(pd));
+            let color: Color = t.color.unwrap_or_else(|| crate::rug::plot_color(pd.plot));
             let mut d = String::new();
             let mut pen_down = false;
             for (x, y) in pts {

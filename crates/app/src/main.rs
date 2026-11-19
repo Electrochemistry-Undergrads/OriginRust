@@ -43,6 +43,7 @@ mod live;
 mod macprint;
 mod menus;
 mod mru;
+mod notes_view;
 mod object_format;
 mod panels;
 mod project_find;

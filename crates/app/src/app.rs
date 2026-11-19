@@ -171,6 +171,8 @@ pub struct SheafApp {
     active: Option<WindowId>,
     books: HashMap<WindowId, BookUi>,
     graphs: HashMap<WindowId, GraphUi>,
+    /// Notes windows (T154).
+    notes: HashMap<WindowId, crate::notes_view::NotesUi>,
     import: Option<ImportDialog>,
     import_excel: Option<ExcelImportDialog>,
     import_wizard: Option<ImportWizard>,
@@ -339,6 +341,7 @@ impl SheafApp {
             active: None,
             books: HashMap::new(),
             graphs: HashMap::new(),
+            notes: HashMap::new(),
             import: None,
             import_excel: None,
             import_wizard: None,
@@ -765,7 +768,10 @@ impl SheafApp {
     /// name to start with) and writes the window.
     fn save_window_as(&mut self, id: WindowId) {
         let Some(window) = self.doc.project().window(id) else { return };
-        let kind = WindowFileKind::of_window(window);
+        let Some(kind) = WindowFileKind::of_window(window) else {
+            self.say("A Notes window cannot be saved as a window file yet; save the project instead");
+            return;
+        };
         let (title, filter) = match kind {
             WindowFileKind::Book => ("Save workbook as", "Sheaf workbook (*.sheafbook)"),
             WindowFileKind::Graph => ("Save graph as", "Sheaf graph (*.sheafgraph)"),
@@ -786,7 +792,7 @@ impl SheafApp {
     /// `true` when the file was written; then it is at the top of Recent Books or Recent Graphs.
     fn save_window_to(&mut self, id: WindowId, path: PathBuf) -> bool {
         let Some(window) = self.doc.project().window(id) else { return false };
-        let kind = WindowFileKind::of_window(window);
+        let Some(kind) = WindowFileKind::of_window(window) else { return false };
         let path = window_file::default_extension(&path, kind);
         match window_file::save_window(self.doc.project(), id, &path) {
             Ok(saved) => {
@@ -1856,6 +1862,18 @@ impl SheafApp {
                 if self.object_format().is_some_and(|state| state.target == request.target) {
                     crate::object_format::apply(&mut self.doc, request);
                 }
+            }
+            Action::NewNotes => {
+                self.doc.apply("New notes", |p| {
+                    p.add_notes();
+                });
+            }
+            Action::SetNotesText { id, text } => {
+                self.doc.apply("Edit notes", |p| {
+                    if let Some(n) = p.notes_mut(id) {
+                        n.text = text;
+                    }
+                });
             }
             Action::NewWorkbook => {
                 self.doc.apply("New workbook", |p| {
@@ -2989,6 +3007,7 @@ impl SheafApp {
                     let long_name = match w {
                         Window::Workbook(b) => b.long_name.clone(),
                         Window::Graph(g) => g.long_name.clone(),
+                        Window::Notes(n) => n.long_name.clone(),
                     };
                     let short_name = w.name().to_string();
                     self.rename = Some(RenameDialog { window: id, long_name, short_name, error: None, folder: None });
@@ -4922,6 +4941,7 @@ impl SheafApp {
                 format!("1: [{}]{sheet}!{part}", b.name)
             }
             Some(Window::Graph(g)) => format!("1: [{}]1!", g.name),
+            Some(Window::Notes(n)) => n.name.clone(),
             None => String::new(),
         }
     }
@@ -5760,6 +5780,8 @@ impl SheafApp {
                                     b.long_name = name;
                                 } else if let Some(g) = p.graph_mut(id) {
                                     g.long_name = name;
+                                } else if let Some(n) = p.notes_mut(id) {
+                                    n.long_name = name;
                                 }
                                 Ok::<(), String>(())
                             });
@@ -6421,6 +6443,7 @@ fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
                     s.remap_format_columns(&|c| (!columns.contains(&c)).then_some(c));
                 }
             }
+            Window::Notes(_) => {}
             Window::Graph(g) => {
                 for l in &mut g.layers {
                     l.plots.retain(|p| !columns.contains(&p.y));
@@ -6558,6 +6581,7 @@ impl eframe::App for SheafApp {
                     let doc = &self.doc;
                     let books = &mut self.books;
                     let graphs = &mut self.graphs;
+                    let notes = &mut self.notes;
                     let actions = &mut actions;
                     // View > View Windows: windows outside the active folder are not drawn (T100).
                     let shown = explorer::shown_windows(doc.project(), &self.panels.explorer.folder);
@@ -6575,6 +6599,9 @@ impl eframe::App for SheafApp {
                         }
                         Some(Window::Graph(_)) => {
                             graph_view::show(ui, doc, id, graphs.entry(id).or_default(), actions);
+                        }
+                        Some(Window::Notes(_)) => {
+                            crate::notes_view::show(ui, doc, id, notes.entry(id).or_default(), actions);
                         }
                         None => {}
                     };

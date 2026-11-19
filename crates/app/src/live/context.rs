@@ -48,6 +48,7 @@ impl<'a> Context<'a> {
         let kind = match window {
             Window::Workbook(_) => "workbook",
             Window::Graph(_) => "graph",
+            Window::Notes(_) => "notes",
         };
         out["active_window"] = json!({"id": window.id(), "name": window.name(), "kind": kind});
         match window {
@@ -63,6 +64,9 @@ impl<'a> Context<'a> {
                         out["selection"] = worksheet_selection(sheet, state);
                     }
                 }
+            }
+            Window::Notes(notes) => {
+                out["notes"] = json!({"text": notes.text});
             }
             Window::Graph(graph) => {
                 if let Some(state) = self.graphs.get(&graph.id) {

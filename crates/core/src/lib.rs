@@ -46,6 +46,7 @@ pub mod marginal;
 pub mod merge;
 pub mod multi_y;
 pub mod notes;
+pub mod notes_window;
 pub mod page_setup;
 pub mod panels;
 pub mod piper;

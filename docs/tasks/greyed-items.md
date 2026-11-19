@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **200 greyed items: 138 in the menu bar, 13 on the toolbars, 49 in context menus.**
+original inventory baseline. This is not a new runtime audit. **198 greyed items: 137 in the menu bar, 12 on the toolbars, 49 in context menus.**
 
 ## How to read and keep this file
 
@@ -80,13 +80,13 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B11` | 3 |
 | `B12` | 1 |
 | `B13` | 2 |
-| `B14` | 44 |
+| `B14` | 42 |
 | `B15` | 21 |
 | `B16` | 15 |
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 38 items, backlog packages (`B`) 142, not planned (`N`) 20.
+Briefs (`T`) hold 38 items, backlog packages (`B`) 140, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -95,7 +95,7 @@ changes. The baseline labels remain open until implementation or a documented re
 ## Menu bar
 
 ### File
-- `B14` New: Matrix... · Image · Excel · Layout · Notes · Function Plot
+- `B14` New: Matrix... · Image · Excel · Layout · Function Plot
 - `T63` Open Excel...
 - `T56` Save Template As... [Workbook, Graph]
 - `B11` Save Workbook As Analysis Template... [Workbook]
@@ -188,7 +188,7 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ## Toolbars
 
-- `B14` Standard: New Matrix · New Layout · New Notes
+- `B14` Standard: New Matrix · New Layout
 - `B2` Object Edit: Align Left · Align Right · Align Top · Align Bottom · Align Horizontal Center · Align Vertical Center · Make Same Width · Make Same Height · Group · Ungroup
 
 ## Context menus

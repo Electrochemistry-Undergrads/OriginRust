@@ -60,11 +60,12 @@ impl WindowFileKind {
         [WindowFileKind::Book, WindowFileKind::Graph].into_iter().find(|k| ext.eq_ignore_ascii_case(k.extension()))
     }
 
-    /// The kind of a window.
-    pub fn of_window(window: &Window) -> Self {
+    /// The kind of a window; `None` for a Notes window, which has no window file yet (T154).
+    pub fn of_window(window: &Window) -> Option<Self> {
         match window {
-            Window::Workbook(_) => WindowFileKind::Book,
-            Window::Graph(_) => WindowFileKind::Graph,
+            Window::Workbook(_) => Some(WindowFileKind::Book),
+            Window::Graph(_) => Some(WindowFileKind::Graph),
+            Window::Notes(_) => None,
         }
     }
 }
@@ -116,7 +117,8 @@ pub struct SavedWindow {
 /// it, so a crash never leaves half a file. `path` is used as given; see [`default_extension`].
 pub fn save_window(project: &Project, window: WindowId, path: &Path) -> Result<SavedWindow, IoError> {
     let extract = project.extract_window(window).map_err(|_| IoError::NoSuchWindow { id: window.0 })?;
-    let kind = WindowFileKind::of_window(&extract.project.windows[extract.primary]);
+    let kind = WindowFileKind::of_window(&extract.project.windows[extract.primary])
+        .ok_or(IoError::NoSuchWindow { id: window.0 })?;
     project_file::save_window_file(&extract.project, path, kind.marker())?;
     Ok(SavedWindow { kind, windows: extract.project.windows.len(), notes: extract.notes })
 }
@@ -145,7 +147,7 @@ pub fn load_window(path: &Path) -> Result<WindowFile, IoError> {
     let primary = project
         .windows
         .iter()
-        .position(|w| WindowFileKind::of_window(w) == kind)
+        .position(|w| WindowFileKind::of_window(w) == Some(kind))
         .ok_or_else(|| corrupt(format!("says the file holds a {marker}, but it holds none")))?;
     Ok(WindowFile { kind, project, primary })
 }

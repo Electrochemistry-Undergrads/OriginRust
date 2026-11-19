@@ -1,6 +1,6 @@
 # T125: Drawn-shape Cut, Copy and Paste (B2 slice)
 
-**Status:** open; documentation audit completed 2026-11-17, no clipboard implementation.
+**Status:** done 2026-11-19 (Claude Windows "t30-origin"): right-click Cut and Copy of one drawn object and the page's right-click Paste at the clicked point, with the contract in graphing 17.8 (not measured). Left: Edit menu and keyboard routes, several objects, Ctrl+drag. The documentation audit was completed 2026-11-17.
 **Size:** M. **Priority:** wave 4 (B2). **Spec:** graphing 17.8.
 **Inventory:** drawn-shape context Cut and Copy (two locations). The shared graph Edit
 Cut/Copy/Paste/Clear entries remain B2 until their other object targets are implemented.

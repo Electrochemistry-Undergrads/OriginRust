@@ -284,6 +284,19 @@ pub enum Action {
         kind: crate::dialogs::fill_pattern::FillKind,
         columns: Vec<ColumnId>,
     },
+    /// A drawn object's right-click Copy (and Cut, which also deletes it, one undo step; T125).
+    CopyShape {
+        graph: WindowId,
+        layer: usize,
+        shape: usize,
+        cut: bool,
+    },
+    /// The page's right-click Paste: the copied drawn object at page point `page`, one undo step.
+    PasteShape {
+        graph: WindowId,
+        layer: usize,
+        page: (f64, f64),
+    },
     /// Column > Fill Column With > Row Numbers / Uniform / Normal Random Numbers: fill these columns
     /// at once, one undo step.
     QuickFill {

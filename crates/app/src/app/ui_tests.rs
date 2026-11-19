@@ -58,6 +58,7 @@ mod recent_lists;
 mod rug;
 mod save_window;
 mod set_multiple;
+mod shape_clipboard;
 mod shape_ordering;
 mod simulate;
 mod skip_points;

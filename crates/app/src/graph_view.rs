@@ -1232,8 +1232,8 @@ fn menu_for(
             ObjectKind::StraightLine(k) => menus::graph_straight_line_menu(layer, k),
             ObjectKind::Scale(k) => menus::graph_scale_menu(layer, k),
         },
-        MenuTarget::Hit(Hit::Layer(layer)) => menus::graph_page_menu(layer),
-        MenuTarget::Hit(Hit::Page) => menus::graph_page_menu(0),
+        MenuTarget::Hit(Hit::Layer(layer)) => menus::graph_page_menu(layer, page),
+        MenuTarget::Hit(Hit::Page) => menus::graph_page_menu(0, page),
     }
 }
 

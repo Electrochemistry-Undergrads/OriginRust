@@ -3781,7 +3781,7 @@ impl SheafApp {
         use crate::dialogs::find_project::FindProjectOutcome;
         use crate::project_find::FindTarget;
         let Some(d) = &mut self.find_project else { return };
-        let outcome = d.show(ctx, self.doc.project());
+        let outcome = d.show(ctx, self.doc.project(), &self.panels.explorer.folder);
         self.find_spec = d.spec.clone();
         match outcome {
             FindProjectOutcome::Open => {}

@@ -4,7 +4,7 @@
 //! Units and F(x) behind Select...), Data in Cells (1st Matched in Column) and Text Objects on Graphs.
 //! Each hit shows its number, range, element and attribute. Clicking a hit goes to it.
 
-use crate::project_find::{FindHit, FindSpec, FindTarget, find_in_project};
+use crate::project_find::{FindHit, FindScope, FindSpec, FindTarget, find_in_project};
 use eframe::egui::{self, RichText};
 use sheaf_core::Project;
 
@@ -26,11 +26,19 @@ impl FindProjectDialog {
         FindProjectDialog { spec, hits: None, select: false }
     }
 
-    pub fn search(&mut self, project: &Project) {
-        self.hits = Some(find_in_project(project, &self.spec));
+    pub fn search(&mut self, project: &Project, active_folder: &[usize]) {
+        self.hits = Some(find_in_project(project, &self.spec, active_folder));
     }
 
-    pub fn show(&mut self, ctx: &egui::Context, project: &Project) -> FindProjectOutcome {
+    pub fn show(&mut self, ctx: &egui::Context, project: &Project, active_folder: &[usize]) -> FindProjectOutcome {
+        let mut folder = &project.root;
+        let mut names = vec![folder.name.as_str()];
+        for &index in active_folder {
+            let Some(child) = folder.folders.get(index) else { break };
+            folder = child;
+            names.push(folder.name.as_str());
+        }
+        let active_folder = &active_folder[..names.len() - 1];
         let mut outcome = FindProjectOutcome::Open;
         let mut open = true;
         egui::Window::new("Find")
@@ -41,6 +49,10 @@ impl FindProjectDialog {
             .show(ctx, |ui| {
                 let mut go = false;
                 ui.horizontal(|ui| {
+                    ui.label("Current Path");
+                    ui.label(format!("/{}/", names.join("/")));
+                });
+                ui.horizontal(|ui| {
                     ui.label("Find What");
                     let r = ui.add(egui::TextEdit::singleline(&mut self.spec.text).desired_width(260.0));
                     go |= r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -49,7 +61,18 @@ impl FindProjectDialog {
                         outcome = FindProjectOutcome::Closed;
                     }
                 });
-                ui.label("Within: Entire Project");
+                ui.horizontal(|ui| {
+                    let label = ui.label("Within");
+                    egui::ComboBox::from_id_salt("find_scope")
+                        .selected_text(self.spec.within.name())
+                        .show_ui(ui, |ui| {
+                            for scope in FindScope::ALL {
+                                ui.selectable_value(&mut self.spec.within, scope, scope.name());
+                            }
+                        })
+                        .response
+                        .labelled_by(label.id);
+                });
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut self.spec.case_sensitive, "Case Sensitive");
                     ui.checkbox(&mut self.spec.whole_word, "Match Whole Word");
@@ -83,7 +106,7 @@ impl FindProjectDialog {
                     });
                 });
                 if go && !self.spec.text.is_empty() {
-                    self.search(project);
+                    self.search(project, active_folder);
                 }
                 if let Some(hits) = &self.hits {
                     egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {

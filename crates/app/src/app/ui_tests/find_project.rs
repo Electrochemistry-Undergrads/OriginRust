@@ -17,7 +17,7 @@ fn f3_opens_find_and_a_hit_selects_the_column() {
     h.state_mut().find_project.as_mut().unwrap().spec.text = "density".into();
     // The Find button (its label is also the window's title): run the same search.
     let project = h.state().doc.project().clone();
-    h.state_mut().find_project.as_mut().unwrap().search(&project);
+    h.state_mut().find_project.as_mut().unwrap().search(&project, &[]);
     settle(&mut h);
     let hits = h.state().find_project.as_ref().unwrap().hits.clone().unwrap();
     // The column's long name, and the legend of the graph that opening the file made.
@@ -68,4 +68,56 @@ fn comment_hits_open_the_sheet_and_follow_the_comments_checkbox() {
     h.key_press(egui::Key::F3);
     settle(&mut h);
     assert!(!h.state().find_project.as_ref().unwrap().spec.sheet_comments);
+}
+
+#[test]
+fn within_uses_the_explorer_folder_and_preserves_the_selected_scope() {
+    use crate::project_find::FindScope;
+    use sheaf_core::project::Folder;
+
+    let mut h = start(vec![data_file("find-within")]);
+    let ctx = h.ctx.clone();
+    h.state_mut().doc.apply("Arrange folders", |p| {
+        let root_book = p.workbooks().next().unwrap().id;
+        let books = [root_book, p.add_workbook(""), p.add_workbook("")];
+        for id in books {
+            p.workbook_mut(id).unwrap().long_name = "scope check".into();
+        }
+        p.root.folders = vec![Folder {
+            name: "Trials".into(),
+            windows: vec![books[1]],
+            folders: vec![Folder { name: "Repeat".into(), windows: vec![books[2]], ..Folder::default() }],
+            ..Folder::default()
+        }];
+    });
+    h.state_mut().apply(Action::GoToFolder(vec![0]), &ctx);
+    settle(&mut h);
+    h.key_press(egui::Key::F3);
+    settle(&mut h);
+    let path = format!("/{}/Trials/", project(&h).root.name);
+    assert!(has_label(&h, &path));
+    h.state_mut().find_project.as_mut().unwrap().spec.text = "scope check".into();
+    settle(&mut h);
+    let find = By::new().role(egui::accesskit::Role::Button).label("Find");
+    h.get(find.clone()).click();
+    settle(&mut h);
+    assert!(has_label(&h, "Found: 3"));
+
+    h.get_by_value("Entire Project").click();
+    settle(&mut h);
+    click(&mut h, "Active Folder");
+    h.get(find.clone()).click();
+    settle(&mut h);
+    assert!(has_label(&h, "Found: 1"));
+
+    h.get_by_value("Active Folder").click();
+    settle(&mut h);
+    click(&mut h, "Active Folder and Subfolders");
+    h.get(find).click();
+    settle(&mut h);
+    assert!(has_label(&h, "Found: 2"));
+    click(&mut h, "Cancel");
+    h.key_press(egui::Key::F3);
+    settle(&mut h);
+    assert_eq!(h.state().find_project.as_ref().unwrap().spec.within, FindScope::ActiveFolderAndSubfolders);
 }

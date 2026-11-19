@@ -179,6 +179,11 @@ Graphing 7.6 records the native evidence and limits. Fmt, strict workspace/all-t
 and all 4,296 workspace tests pass (eight ignored), including all 11 font regressions.
 Inventory 293 and eight Python tooling tests pass with frozen source/goldens and four test threads.
 
+Protected substitution text renders `\h(...)` literally and prevents symbol and name
+expansion inside legend `\h(...)` and `\v(...)` spans. Graphing 7.11 records the documented
+example and Sheaf's literal-body rules. Formatting, strict workspace Clippy, Nextest (4,562 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
+
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;

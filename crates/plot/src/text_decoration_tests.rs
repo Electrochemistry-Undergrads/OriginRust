@@ -388,3 +388,35 @@ fn titles_legend_labels_and_tick_prefixes_all_use_decorated_runs() {
         assert!(count >= minimum, "{kind:?}: {count}");
     }
 }
+
+#[test]
+fn legend_protected_text_exports_literal_references_and_expands_the_remaining_rows() {
+    let mut p = Project::new();
+    let book = p.add_workbook("");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0])).unwrap();
+    let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+    p.column_mut(y).unwrap().long_name = "Series".into();
+    let graph = p.add_graph(sheaf_core::template::Template::Line);
+    p.add_plot(graph, 0, y).unwrap();
+    let legend = &mut p.graph_mut(graph).unwrap().layers[0].legend;
+    legend.text = Some(
+        r"\b(\h(\l(1) %(1))) \v(\L(1) %(1))
+\l(1) %(1)"
+            .into(),
+    );
+    let s = crate::layout::build_scene(&p, graph, &FixedMetrics).unwrap();
+    let layer = &s.layers[0];
+    let legend = layer.objects.iter().find(|o| o.kind == ObjectKind::Legend).unwrap();
+    let labels: Vec<_> = layer.overlay[legend.items.clone()]
+        .iter()
+        .filter_map(|item| match item {
+            Item::Text(t) => Some((t.text.as_str(), t.bold)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(labels, [(r"\l(1) %(1)", true), (r" \L(1) %(1)", false), ("Series", false)]);
+    let svg = crate::svg::write_svg(&s);
+    assert!(svg.contains(r">\l(1) %(1)</text>"));
+    assert!(svg.contains(r"> \L(1) %(1)</text>"));
+    assert!(svg.contains(">Series</text>"));
+}

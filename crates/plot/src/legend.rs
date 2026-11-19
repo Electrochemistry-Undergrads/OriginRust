@@ -23,6 +23,10 @@ pub(crate) fn parse_line(line: &str) -> Vec<Part<'_>> {
     let bytes = line.as_bytes();
     while i < bytes.len() {
         let rest = &line[i..];
+        if let Some(skip) = literal_block_len(rest) {
+            i += skip;
+            continue;
+        }
         let (kind, skip) = if rest.starts_with("\\l(") || rest.starts_with("\\L(") {
             (0, 3)
         } else if rest.starts_with("%(") {
@@ -52,6 +56,23 @@ pub(crate) fn parse_line(line: &str) -> Vec<Part<'_>> {
         out.push(Part::Text(&line[text_from..]));
     }
     out
+}
+
+/// Leaves a protected block whole so the markup renderer can draw its literal contents.
+fn literal_block_len(rest: &str) -> Option<usize> {
+    let body = rest.strip_prefix("\\h(").or_else(|| rest.strip_prefix("\\v("))?;
+    let mut depth = 1;
+    for (i, byte) in body.bytes().enumerate() {
+        if byte == b'(' {
+            depth += 1;
+        } else if byte == b')' {
+            depth -= 1;
+            if depth == 0 {
+                return Some(i + 4);
+            }
+        }
+    }
+    Some(rest.len())
 }
 
 /// The lines of a legend text (CR LF, LF or CR end a line); a final empty line is dropped.
@@ -119,5 +140,14 @@ mod tests {
         assert_eq!(resolve(&ids, "2"), Some(1));
         assert_eq!(resolve(&ids, "3"), None);
         assert_eq!(resolve(&ids, "0"), None);
+    }
+
+    #[test]
+    fn literal_blocks_keep_legend_references_together() {
+        let protected = r"\b(\h(μ \l(1) %(1))) \v(\L(2) %(2)) ";
+        let line = format!("{protected}\\l(1) %(2)");
+        assert_eq!(parse_line(&line), [Part::Text(protected), Part::Symbol("1"), Part::Text(" "), Part::Name("2")],);
+        let open = r"\h(Text %(1)";
+        assert_eq!(parse_line(open), [Part::Text(open)]);
     }
 }

@@ -1170,6 +1170,14 @@ span line breaks, and each row rotates with the label. Literal spans and malform
 render as text. Picking and exports use the same scene rows. The line advance and exact placement
 are Sheaf's layout choices. Axis titles, table cells and inline separator placement are outside this slice.
 
+**Protected substitution text (T58).** The Origin escape table shows `\h(...)` displaying
+legend notation literally. Sheaf draws the contents of `\h(...)` as literal text with the
+surrounding font, color and decorations. In a legend, both `\h(...)` and `\v(...)` protect
+plot symbol and name references within the block. Parentheses balance within a row,
+and an unclosed block protects the remainder of that row. References outside a block
+expand through the ordinary legend rules. Literal handling for the entire body is Sheaf's
+reading of the documented example. [Origin escape sequences](https://docs.originlab.com/origin-help/escape-sequences/)
+
 ### 7.12 Reusable Custom RGB wells (T58/T59, documented contract)
 
 Origin's [FAQ130](https://docs.originlab.com/quick-help/define-custom-colors/)

@@ -4,7 +4,7 @@
 2016 captures show right-pointing legend arrows for both kinds. Sheaf now draws those
 samples using the plot's arrow style. Plot Details > Vector now edits shaft color and width and
 head length, angle and Closed/Open style for both kinds. XYAM also has the position, multiplier
-and angle units. Real-world magnitudes, angle conventions and Origin's exact
+and angle units. Real-world magnitudes and Origin's exact
 multiplier rule remain open. Formatting, strict workspace Clippy, Nextest (4,526 passed and
 8 skipped), doc tests, inventory and eight Python tooling tests passed.
 Desktop captures verified the default Vector tab and the Head and Open settings.
@@ -16,6 +16,13 @@ worksheet scope. Formatting, strict workspace Clippy, Nextest (4,544 passed and
 8 skipped), doc tests, inventory and eight Python tooling tests passed.
 Desktop checks selected and saved both vector column pairs. The saved graph records
 matched the expected bindings and worksheet data matched byte for byte.
+
+The XYAM Convention controls show Polar and Meteorological presets and edit the Custom
+offset and direction. Graphing 30 documents the archived controls and angle mapping.
+Formatting, strict workspace Clippy, Nextest (4,547 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
+The desktop Vector tab showed the preset readbacks and editable Custom controls.
+The saved custom convention matched the expected graph, and worksheet data matched byte for byte.
 
 **Size:** M. **Source:** greyed inventory package B4 (Plot > Specialized > Vector XYAM, Vector XYXY).
 **Spec:** `docs/spec/graphing.md` (a new section).

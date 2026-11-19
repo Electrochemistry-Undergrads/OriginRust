@@ -3,7 +3,7 @@
 use super::*;
 use sheaf_core::graph::PlotKind;
 use sheaf_core::template::Template;
-use sheaf_core::vector::VectorPosition;
+use sheaf_core::vector::{VectorAngleConvention, VectorPosition};
 
 #[test]
 fn vector_xyam_plots_the_selected_y_angle_and_magnitude_columns() {
@@ -71,6 +71,46 @@ fn vector_details_edits_position_and_arrow_style_with_live_preview_and_undo() {
     assert_eq!((edited.line.width_pt, spec.head_pt, spec.head_angle_deg, spec.multiplier), (1.5, 8.0, 45.0, 0.5));
     menu(&mut h, "Edit", "Undo Change graph settings");
     assert_eq!(plot(&h), before);
+}
+
+#[test]
+fn xyam_vector_convention_shows_presets_and_edits_the_custom_offset() {
+    use VectorAngleConvention::{Custom, Meteorological, Polar};
+
+    let mut h = start(vec![data_file("vector-conventions")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let mut id = WindowId(0);
+    h.state_mut().doc.apply("Make vector plot", |p| {
+        let columns = &p.workbook(book).unwrap().sheet().columns;
+        let (y, angle) = (columns[1].id, columns[2].id);
+        let magnitude = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![10.0; 4])).unwrap();
+        id = p.plot_columns(Template::VectorXyam, &[y, angle, magnitude]).unwrap();
+    });
+    settle(&mut h);
+    let ctx = h.ctx.clone();
+    let before = project(&h).graph(id).unwrap().clone();
+    h.state_mut().apply(Action::GraphProperties { graph: id, layer: 0, tab: PropsTab::Plots, plot: Some(0) }, &ctx);
+    settle(&mut h);
+    click(&mut h, "Vector");
+    let convention = |h: &Harness<'static, SheafApp>| {
+        project(h).graph(id).unwrap().layers[0].plots[0].decor.vector.unwrap().convention
+    };
+    assert_eq!(convention(&h), Polar);
+    assert!(is_disabled(&h, "CW") && is_disabled(&h, "CCW"));
+    click(&mut h, "Meteorological");
+    assert_eq!(convention(&h), Meteorological);
+    assert!(is_disabled(&h, "CW") && is_disabled(&h, "CCW"));
+    click(&mut h, "Custom");
+    assert_eq!(convention(&h), Custom { offset_deg: 90.0, clockwise: true });
+    type_into_number(&mut h, 4, "45");
+    click(&mut h, "CCW");
+    click(&mut h, "OK");
+    let mut expected = before.clone();
+    expected.layers[0].plots[0].decor.vector.as_mut().unwrap().convention =
+        Custom { offset_deg: 45.0, clockwise: false };
+    assert_eq!(project(&h).graph(id), Some(&expected));
+    menu(&mut h, "Edit", "Undo Change graph settings");
+    assert_eq!(project(&h).graph(id), Some(&before));
 }
 
 #[test]

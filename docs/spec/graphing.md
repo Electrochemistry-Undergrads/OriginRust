@@ -6413,3 +6413,19 @@ unregistered, so Origin's own templates for them were not checked.
 - With nothing selected it is greyed. On a workbook it stays greyed (Sheaf has no worksheet objects
   yet).
 
+## Histogram + Probabilities: Plot > Statistics (T85, 2026-11-19; Origin 2016 measured in the T85 brief)
+
+- **Graph:** `Template::HistogramProbabilities` (`histogram-probabilities`) needs one column of numbers
+  (`Project::plot_histogram_probabilities`). It makes two layers:
+  - Layer 1 is the histogram of the column, in the Histogram template's look, with the Y axis titled
+    "Counts" as Origin.
+  - Layer 2 is a right-Y layer linked to layer 1 (X follows it, as Double-Y), fixed to 0 - 100. It has
+    the cumulative percent of the same bins as a blue step line (`StatPlot::HistogramCumulative`, a
+    Line plot with the horizontal-first step connection). The line is flat across each bin at the
+    percent reached at its right edge and rises at the bin edges, from the first bin edge to the last.
+- **Bins:** the curve takes the bins of its own plot's histogram settings. These are the same automatic
+  bins as the histogram's until one of the two is changed (Sheaf does not tie them together).
+- **Not done:** the Results Log line "Histogram and Probabilities for ..." with Mean, SD, Maximum,
+  Minimum and Size. The right axis title ("Cumulative %" in Sheaf) and the exact start of Origin's step
+  line were not measured.
+

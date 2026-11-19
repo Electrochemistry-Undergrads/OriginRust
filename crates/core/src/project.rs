@@ -387,6 +387,8 @@ pub enum ProjectError {
     IntervalNoRightAxis,
     #[error("a Pareto chart needs exactly one column with cells to count; select one")]
     ParetoNeedsColumn,
+    #[error("Histogram + Probabilities needs exactly one column of numbers; select one")]
+    HistogramProbabilitiesNeedsColumn,
     #[error("a Pareto chart has its own right Y axis (the cumulative percent); use one column and no right axis")]
     ParetoNoRightAxis,
     #[error("a stacked histograms graph cannot have a right Y axis; use one Y axis or another template")]
@@ -1099,6 +1101,10 @@ impl Project {
             let [y] = ys else { return Err(ProjectError::ParetoNeedsColumn) };
             return self.plot_pareto(*y);
         }
+        if template == Template::HistogramProbabilities {
+            let [y] = ys else { return Err(ProjectError::HistogramProbabilitiesNeedsColumn) };
+            return self.plot_histogram_probabilities(*y);
+        }
         if matches!(template, Template::GroupedColumns | Template::GroupedBox) {
             // The data is the one numeric column designated Y; every other given column is a group column.
             let is_data = |p: &Self, c: ColumnId| {
@@ -1276,6 +1282,47 @@ impl Project {
         }
         if let Some(g) = self.graph_mut(graph) {
             g.layers[0].apply_palette();
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        Ok(graph)
+    }
+
+    /// Creates Plot > Statistics > Histogram + Probabilities ([`Template::HistogramProbabilities`], T85) of
+    /// column `y`: its histogram in layer 1 (Y titled "Counts", as Origin), and in a right-Y layer linked to
+    /// it, fixed to 0 - 100, the cumulative percent of the same bins as a blue step line.
+    pub fn plot_histogram_probabilities(&mut self, y: ColumnId) -> Result<WindowId, ProjectError> {
+        if self.numeric(y).is_none() {
+            return Err(ProjectError::HistogramProbabilitiesNeedsColumn);
+        }
+        let long_name = self.locate(y).map(|(b, _, _)| b.title_for_graph());
+        let graph = self.add_graph(Template::HistogramProbabilities);
+        let right = self.add_right_y_layer(graph, 0)?;
+        for layer in [0, right] {
+            if let Err(e) = self.add_plot(graph, layer, y) {
+                let _ = self.remove_window(graph);
+                return Err(e);
+            }
+        }
+        if let Some(g) = self.graph_mut(graph) {
+            g.layers[0].apply_palette();
+            g.layers[0].y_axis.title = Some("Counts".to_string());
+            let l = &mut g.layers[right];
+            if let Some(p) = l.plots.last_mut() {
+                p.x = None;
+                p.y_error = None;
+                p.x_error = None;
+                p.kind = crate::graph::PlotKind::Line;
+                p.stat = Some(StatPlot::HistogramCumulative);
+                p.label = Some("Cumulative %".to_string());
+                p.auto_color = false;
+                p.line.color = crate::color::Color::rgb(0, 0, 255);
+                p.line.connect = crate::graph::Connect::StepHorizontal;
+            }
+            l.y_axis.title = Some("Cumulative %".to_string());
+            l.y_axis.min = Some(0.0);
+            l.y_axis.max = Some(100.0);
             if let Some(name) = long_name {
                 g.long_name = name;
             }

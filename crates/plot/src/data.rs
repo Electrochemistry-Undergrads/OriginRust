@@ -306,6 +306,32 @@ fn stat_data(project: &Project, pd: &mut PlotData, slot: usize) -> bool {
             pd.slot_label = Some(project.plot_label(pd.plot));
             pd.end = 1;
         }
+        StatPlot::HistogramCumulative => {
+            // The bin edges and the percent reached at the right edge of each bin; the last value
+            // is repeated so that the step line runs across the last bin.
+            let values = pd.visible_values();
+            let Some(f) = histogram_freq(&values, &pd.plot.hist) else { return false };
+            let rows: Vec<_> = f.rows.iter().filter(|r| r.end.is_finite()).collect();
+            let total: usize = rows.iter().map(|r| r.count).sum();
+            if rows.is_empty() || total == 0 {
+                return false;
+            }
+            let mut xs = vec![f.bin_start];
+            xs.extend(rows.iter().map(|r| r.end));
+            let mut sum = 0usize;
+            let mut ys: Vec<f64> = rows
+                .iter()
+                .map(|r| {
+                    sum += r.count;
+                    100.0 * sum as f64 / total as f64
+                })
+                .collect();
+            ys.push(*ys.last().unwrap_or(&100.0));
+            pd.end = xs.len();
+            pd.x = Some(Cow::Owned(xs));
+            pd.y = Cow::Owned(ys);
+            pd.err = None;
+        }
         StatPlot::Pareto | StatPlot::ParetoCumulative => {
             let Some(col) = project.column(pd.plot.y) else { return false };
             let counts = sheaf_core::indexed::counts_descending(col);

@@ -108,6 +108,9 @@ pub enum Template {
     FillArea,
     /// Histogram (Origin's "Histogram"): the bin counts of each Y column as touching bars.
     Histogram,
+    /// Plot > Statistics > Histogram + Probabilities (T85, measured in Origin 2016): the histogram in
+    /// layer 1 and the cumulative percent of its bins as a step line in a linked right-Y layer of 0 - 100.
+    HistogramProbabilities,
     /// Stacked Histograms (Origin's Plot > Statistics > Stacked Histograms): one histogram panel per Y column,
     /// stacked vertically from the top in selection order, all on one X scale and one set of bins (graphing 13.16).
     /// An empty graph of this template is one histogram layer; [`crate::Project::plot_columns`] builds the panels.
@@ -203,7 +206,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 82] = [
+    pub const ALL: [Template; 83] = [
         Template::Line,
         Template::StepHorizontal,
         Template::StepVertical,
@@ -223,6 +226,7 @@ impl Template {
         Template::Stacked100Area,
         Template::FillArea,
         Template::Histogram,
+        Template::HistogramProbabilities,
         Template::StackedHistograms,
         Template::WaterfallY,
         Template::WaterfallZ,
@@ -337,6 +341,7 @@ impl Template {
             Template::Stacked100Area => "stacked-area-100",
             Template::FillArea => "fill-area",
             Template::Histogram => "histogram",
+            Template::HistogramProbabilities => "histogram-probabilities",
             Template::StackedHistograms => "stacked-histograms",
             Template::WaterfallY => "waterfall-y",
             Template::WaterfallZ => "waterfall-z",
@@ -424,6 +429,7 @@ impl Template {
             Template::Stacked100Area => "100% Stacked Area",
             Template::FillArea => "Fill Area",
             Template::Histogram => "Histogram",
+            Template::HistogramProbabilities => "Histogram + Probabilities",
             Template::StackedHistograms => "Stacked Histograms",
             Template::WaterfallY => "Waterfall Y:Color Mapping",
             Template::WaterfallZ => "Waterfall Z:Color Mapping",
@@ -570,7 +576,9 @@ impl Template {
             Template::StackedArea => themed(general(id, name, PlotKind::StackedArea)),
             Template::Stacked100Area => themed(general(id, name, PlotKind::Stacked100Area)),
             Template::FillArea => themed(general(id, name, PlotKind::Area)),
-            Template::Histogram | Template::StackedHistograms => from_red(general(id, name, PlotKind::Histogram)),
+            Template::Histogram | Template::StackedHistograms | Template::HistogramProbabilities => {
+                from_red(general(id, name, PlotKind::Histogram))
+            }
             Template::BoxChart | Template::GroupedBox => from_red(general(id, name, PlotKind::Box)),
             Template::Bubble => bubble(id, name, false, true),
             Template::ColorMapped => bubble(id, name, true, false),
@@ -1460,7 +1468,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 82);
+        assert_eq!(Template::ALL.len(), 83);
         assert_eq!(Template::from_name("piper"), Some(Template::Piper));
         assert_eq!(Template::from_name("kde-2d"), Some(Template::Kde2d));
         assert_eq!(Template::from_name("smith-chart"), Some(Template::SmithChart));

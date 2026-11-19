@@ -1246,7 +1246,7 @@ fn plot_menu() -> Vec<Entry> {
                 vec![item("Ridgeline Chart", Cmd::Plot(Template::Ridgeline))],
                 vec![item("Histogram", Cmd::Plot(Template::Histogram))],
                 vec![
-                    grey("Histogram + Probabilities"),
+                    item("Histogram + Probabilities", Cmd::Plot(Template::HistogramProbabilities)),
                     item("Stacked Histograms", Cmd::Plot(Template::StackedHistograms)),
                 ],
                 vec![item("Pareto", Cmd::Plot(Template::Pareto))],

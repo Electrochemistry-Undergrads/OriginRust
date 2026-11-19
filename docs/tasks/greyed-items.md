@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **238 greyed items: 155 in the menu bar, 18 on the toolbars, 65 in context menus.**
+original inventory baseline. This is not a new runtime audit. **236 greyed items: 153 in the menu bar, 18 on the toolbars, 65 in context menus.**
 
 ## How to read and keep this file
 
@@ -34,7 +34,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | Package | Items |
 |---|---|
 | `T56` | 1 |
-| `T57` | 2 |
+| `T57` | 0 |
 | `T58` | 0 |
 | `T59` | 0 |
 | `T60` | 0 |
@@ -86,7 +86,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 59 items, backlog packages (`B`) 159, not planned (`N`) 20.
+Briefs (`T`) hold 57 items, backlog packages (`B`) 159, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -142,7 +142,6 @@ changes. The baseline labels remain open until implementation or a documented re
 ### Analysis
 - `B14` Mathematics: Special Filter... · Inverse...
 - `B14` Signal Processing > FFT: 2D FFT... · 2D IFFT...
-- `T57` Signal Processing: Deconvolution... · STFT...
 - `B8` Peaks and Baseline: Batch Peak Analysis Using Theme...
 
 ### Image

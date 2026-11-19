@@ -621,6 +621,49 @@ V,A
 }
 
 #[test]
+fn deconvolution_and_stft_write_a_new_sheet() {
+    let dir = scratch("deconv-stft");
+    let data = data_file(&dir);
+    let d = data.to_str().unwrap();
+    let out = dir.join("deconv.csv");
+    let o = out.to_str().unwrap();
+    let (ok, stdout, stderr) =
+        sheaf(&["analyze", "deconvolution", d, "--y", "flat", "--response", "ramp", "--export", o]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Deconvolution"), "{stdout}");
+    let rows = std::fs::read_to_string(&out).unwrap().lines().skip(3).count();
+    assert_eq!(rows, 11, "as many values as the signal");
+    // Eleven 2s have zeros in their spectrum: nothing can be divided by it.
+    let (ok, _, stderr) = sheaf(&["analyze", "deconvolution", d, "--y", "ramp", "--response", "flat"]);
+    assert!(!ok && stderr.contains("zero"), "{stderr}");
+    let out = dir.join("stft.csv");
+    let o = out.to_str().unwrap();
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "stft",
+        d,
+        "--y",
+        "ramp",
+        "--window-len",
+        "4",
+        "--fft-len",
+        "8",
+        "--overlap",
+        "2",
+        "--export",
+        o,
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("STFT"), "{stdout}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    let rows: Vec<&str> = text.lines().skip(3).collect();
+    assert_eq!(rows.len(), 5, "0 to the Nyquist frequency of 8 points");
+    assert_eq!(rows[0].split(',').count(), 5, "frequency and four segments");
+    let (ok, _, stderr) = sheaf(&["analyze", "stft", d, "--y", "ramp"]);
+    assert!(!ok && stderr.contains("window length"), "11 points, a 64-point window: {stderr}");
+}
+
+#[test]
 fn hilbert_adds_a_column() {
     let dir = scratch("hilbert");
     let data = data_file(&dir);

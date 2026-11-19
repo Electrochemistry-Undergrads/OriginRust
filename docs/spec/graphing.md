@@ -6356,3 +6356,12 @@ unregistered, so Origin's own templates for them were not checked.
 - **2D Graphs toolbar:** Bar, Stacked Area, Box Chart, Histogram and Bubble are live. Each runs the
   Plot menu item of the same name on the selected columns, as Line, Scatter and Column already did.
 
+## Axis Tick Labels menu: Format > Axis Tick Labels (T63 group I, 2026-11-19, **not measured**)
+
+- Format > Axis Tick Labels > X Axis Tick Labels... and Y Axis Tick Labels... open the axis window on
+  that axis's Tick Labels tab. Origin's item names say what they open; the window was not compared.
+- An axis's right-click Tick Labels... opens the same tab; Scale... and Properties... open the Scale tab.
+- The worksheet column header's Frequency Count... (T63 group K) runs the same Frequency Counts
+  window as Statistics > Descriptive Statistics > Frequency Counts..., since Origin uses `freqcounts`
+  for both.
+

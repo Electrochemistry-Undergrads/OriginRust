@@ -17,7 +17,10 @@ Desktop captures verified the active path, Within choices and selected subtree s
 Automated tests verified result counts, navigation to a hidden descendant and the session setting.
 
 Folder Name and Comments added 2026-11-18 using the archived Select Metadata defaults. Folder
-matches respect Within and clicking a hit activates its folder. Workspace verification pending.
+matches respect Within and clicking a hit activates its folder. Formatting, strict workspace Clippy, Nextest (4,531 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
+Desktop captures verified Folder Comments was checked by default and retained its changed setting
+when Find was reopened. The automated UI test verified matches and folder activation.
 
 **Size:** M. **Source:** greyed inventory package B7 (Edit > Find in Project... on a workbook, Find in
 Project on a graph; F3).

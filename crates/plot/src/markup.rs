@@ -97,17 +97,25 @@ pub fn parse(text: &str) -> Vec<Run> {
 }
 
 pub(crate) fn segments(text: &str, expand_family: &impl Fn(&str) -> Option<String>) -> Vec<Segment> {
-    parse_segments(text, &ParseOptions { expand_family, label_separators: false })
+    parse_segments(text, &ParseOptions { expand_family, label_separators: false, plot_color: None })
 }
 
-/// Parses a free label with normalized line endings, including its standalone gap lines.
-pub(crate) fn label_segments(text: &str, expand_family: &impl Fn(&str) -> Option<String>) -> Vec<Segment> {
-    parse_segments(text, &ParseOptions { expand_family, label_separators: true })
+/// Parses a free label with normalized line endings and access to its layer's plot colors.
+pub(crate) fn label_segments(
+    text: &str,
+    expand_family: &impl Fn(&str) -> Option<String>,
+    plot_color: &impl Fn(usize) -> Option<Color>,
+) -> Vec<Segment> {
+    parse_segments(
+        text,
+        &ParseOptions { expand_family, label_separators: text.contains('\n'), plot_color: Some(plot_color) },
+    )
 }
 
 struct ParseOptions<'a> {
     expand_family: &'a dyn Fn(&str) -> Option<String>,
     label_separators: bool,
+    plot_color: Option<&'a dyn Fn(usize) -> Option<Color>>,
 }
 
 fn parse_segments(text: &str, options: &ParseOptions<'_>) -> Vec<Segment> {
@@ -185,12 +193,7 @@ const MAX_FONT_NAME: usize = 64;
 
 /// Recognises an escape starting at the backslash at `pos`. Returns what it does and the index of
 /// the first character inside its parentheses.
-fn escape_at(
-    chars: &[char],
-    pos: usize,
-    st: &Style,
-    expand_family: &impl Fn(&str) -> Option<String>,
-) -> Option<(Escape, usize)> {
+fn escape_at(chars: &[char], pos: usize, st: &Style, options: &ParseOptions<'_>) -> Option<(Escape, usize)> {
     let mut inner = st.clone();
     let code = *chars.get(pos + 1)?;
     let accent = match chars.get(pos + 1..pos + 4) {
@@ -262,10 +265,23 @@ fn escape_at(
             }
             inner.greek = name.trim().eq_ignore_ascii_case("symbol");
             if name.trim() == name {
-                let name = expand_family(&name).unwrap_or(name);
+                let name = (options.expand_family)(&name).unwrap_or(name);
                 inner.greek = name.eq_ignore_ascii_case("symbol");
                 inner.family = Some(name);
             }
+            Some((Escape::Styled(inner), open + 1))
+        }
+        // Plot references are one-based. Missing slots keep the enclosing style.
+        'c' if chars.get(pos + 2) == Some(&'p') => {
+            let plot_color = options.plot_color?;
+            let start = pos + 3;
+            let digits = chars[start..].iter().take_while(|c| c.is_ascii_digit()).count();
+            let open = start + digits;
+            if digits == 0 || digits > 10 || chars.get(open) != Some(&'(') {
+                return None;
+            }
+            let index = chars[start..open].iter().collect::<String>().parse::<u32>().ok()? as usize;
+            inner.color = index.checked_sub(1).and_then(plot_color).or(st.color);
             Some((Escape::Styled(inner), open + 1))
         }
         // Size percentages retain their four-digit limit; colour codes use a bounded u32.
@@ -380,7 +396,7 @@ fn parse_seq(
         }
         if c == '\\'
             && depth < MAX_DEPTH
-            && let Some((esc, start)) = escape_at(chars, *pos, &st, &options.expand_family)
+            && let Some((esc, start)) = escape_at(chars, *pos, &st, options)
         {
             *pos = start;
             match esc {

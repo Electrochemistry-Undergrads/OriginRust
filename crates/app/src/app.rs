@@ -2739,6 +2739,11 @@ impl SheafApp {
                     self.edit_graph(graph, crate::actions::GraphOp::DeleteShape { layer, shape });
                 }
             }
+            Action::ObjectProperties { graph } => {
+                if let Some((layer, kind)) = self.graphs.get(&graph).and_then(|s| s.selected) {
+                    self.apply(graph_view::properties_of(graph, layer, kind), ctx);
+                }
+            }
             Action::GraphClipboard { graph, op } => {
                 use crate::menus::GraphClip;
                 use sheaf_plot::scene::ObjectKind as K;

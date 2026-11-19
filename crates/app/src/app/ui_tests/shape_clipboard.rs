@@ -148,3 +148,27 @@ fn the_graph_edit_menu_and_ctrl_c_v_copy_and_paste_the_selected_object() {
     assert_eq!(shapes(&h).len(), 2);
     assert_eq!(h.state().doc.undo_label(), Some("Delete drawn object"));
 }
+
+#[test]
+fn format_object_properties_opens_the_selected_objects_window() {
+    // T150: Format > Object Properties... on a graph.
+    use sheaf_plot::scene::ObjectKind;
+    let mut h = start(vec![data_file("object-props")]);
+    let id = graph(&h).id;
+    let rect = Shape::new(ShapeKind::Rectangle, (0.2, 0.3), (0.4, 0.5));
+    h.state_mut().doc.apply("Shapes", |p| p.graph_mut(id).unwrap().layers[0].shapes = vec![rect]);
+    show_window(&mut h, "Graph1 - sample");
+    h.state_mut().graphs.get_mut(&id).unwrap().selected = None;
+    settle(&mut h);
+    let r = menus::resolve(&menus::Cmd::ObjectProperties, &h.state().menu_context());
+    assert!(r.is_err(), "greyed without a selection");
+    h.state_mut().graphs.get_mut(&id).unwrap().selected = Some((0, ObjectKind::Shape(0)));
+    settle(&mut h);
+    menu_path(&mut h, &["Format", "Object Properties..."]);
+    assert!(h.state().shape_dialog.is_some(), "the drawn object's window");
+    h.state_mut().shape_dialog = None;
+    h.state_mut().graphs.get_mut(&id).unwrap().selected = Some((0, ObjectKind::YAxis));
+    settle(&mut h);
+    menu_path(&mut h, &["Format", "Object Properties..."]);
+    assert_eq!(h.state().graph_props.as_ref().map(|d| d.tab()), Some(PropsTab::YAxis));
+}

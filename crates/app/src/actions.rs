@@ -299,6 +299,10 @@ pub enum Action {
         y: bool,
         cut: bool,
     },
+    /// Format > Object Properties...: the selected object's properties, as a double-click (T150).
+    ObjectProperties {
+        graph: WindowId,
+    },
     /// The graph Edit menu's Cut, Copy, Paste and Clear (and Ctrl+X, C, V) on the selected object;
     /// Paste goes to the last clicked point of the active layer (T149).
     GraphClipboard {

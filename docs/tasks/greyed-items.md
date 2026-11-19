@@ -172,7 +172,7 @@ changes. The baseline labels remain open until implementation or a documented re
 ### Format
 - `N` Menu
 - `B16` Programming Control...
-- `B2` Object Properties...
+- `B2` Object Properties... [Workbook]
 - `B2` Snap Layers to Grid · Snap Objects to Grid [Graph]
 - `B15` Axes: Z Axis... [Graph]
 - `B6` Snap to Grid · Merge cells [Workbook]

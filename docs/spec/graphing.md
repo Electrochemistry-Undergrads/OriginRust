@@ -6403,3 +6403,13 @@ unregistered, so Origin's own templates for them were not checked.
   window as Statistics > Descriptive Statistics > Frequency Counts..., since Origin uses `freqcounts`
   for both.
 
+## Format > Object Properties... on a graph (T150, 2026-11-19, **not measured**)
+
+- With an object of the graph selected, Format > Object Properties... opens what a double-click on
+  that object opens:
+  - the axis window for an axis or its title (on that axis), Plot Details for a plot or a scale,
+    and the legend settings for the legend;
+  - the text window for a text label, and the drawn object, slope or straight line window for those.
+- With nothing selected it is greyed. On a workbook it stays greyed (Sheaf has no worksheet objects
+  yet).
+

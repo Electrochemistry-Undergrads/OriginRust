@@ -26,7 +26,10 @@ The saved custom convention matched the expected graph, and worksheet data match
 
 The XYAM real-world magnitude switch computes endpoints in data space with the chosen
 anchor. Graphing 30 records the archived control, data-space calculation and auto ranges.
-Workspace verification pending.
+Formatting, strict workspace Clippy, Nextest (4,550 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
+The desktop Vector tab verified the checkbox default and the enabled data-space mode.
+The saved mode matched the expected graph, and worksheet data matched byte for byte.
 
 **Size:** M. **Source:** greyed inventory package B4 (Plot > Specialized > Vector XYAM, Vector XYXY).
 **Spec:** `docs/spec/graphing.md` (a new section).

@@ -1269,6 +1269,13 @@ pub(crate) fn axis_range<'p, 'a: 'p>(
                 continue;
             }
             add(if dim == Dim::X { x } else { y });
+            if let Some(ends) = pd.vector.as_ref().and_then(|v| v.world_endpoints(pd, i))
+                && ends.iter().all(|(x, y)| x.is_finite() && y.is_finite())
+            {
+                for (x, y) in ends {
+                    add(if dim == Dim::X { x } else { y });
+                }
+            }
             if dim == value_dim {
                 let v = if transposed { x } else { y };
                 if let Some((below, above)) = pd.reach(pd.err_at(i), dir) {

@@ -133,6 +133,52 @@ fn xyam_conventions_rotate_the_arrow_tips_about_the_data_points() {
 }
 
 #[test]
+fn real_world_xyam_keeps_both_endpoints_in_data_coordinates() {
+    let (mut p, graph) = sample_graph(Template::VectorXyam);
+    let mut spec = p.graph(graph).unwrap().layers[0].plots[0].decor.vector.unwrap();
+    p.column_mut(spec.a).unwrap().data = ColumnData::numeric(vec![3.0_f64.atan2(4.0), 0.0]);
+    p.column_mut(spec.b).unwrap().data = ColumnData::numeric(vec![5.0, f64::NAN]);
+    spec.multiplier = 2.0;
+    spec.real_world_space = true;
+
+    for (position, (tail_x, tail_y), (tip_x, tip_y)) in [
+        (VectorPosition::Tail, (1.0, 1.0), (9.0, 7.0)),
+        (VectorPosition::Midpoint, (-3.0, -2.0), (5.0, 4.0)),
+        (VectorPosition::Head, (-7.0, -5.0), (1.0, 1.0)),
+    ] {
+        spec.position = position;
+        let layer = &mut p.graph_mut(graph).unwrap().layers[0];
+        layer.plots[0].decor.vector = Some(spec);
+        layer.x_axis.min = None;
+        layer.x_axis.max = None;
+        layer.y_axis.min = None;
+        layer.y_axis.max = None;
+        let auto = geometry(&p, graph);
+        assert!(auto.x.min <= tail_x && auto.x.max >= tip_x);
+        assert!(auto.y.min <= tail_y && auto.y.max >= tip_y);
+
+        for (x_max, y_max) in [(16.0, 10.0), (32.0, 30.0)] {
+            let layer = &mut p.graph_mut(graph).unwrap().layers[0];
+            layer.x_axis.min = Some(-16.0);
+            layer.x_axis.max = Some(x_max);
+            layer.y_axis.min = Some(-10.0);
+            layer.y_axis.max = Some(y_max);
+            let geom = geometry(&p, graph);
+            let scene = layout::build_scene(&p, graph, &FixedMetrics).unwrap();
+            let [Item::Path { d: shaft, .. }, Item::Path { d: head, .. }] = scene.layers[0].plots.as_slice() else {
+                panic!("expected one shaft and head, with the missing magnitude skipped");
+            };
+            let tail = crate::hit::path_points(shaft)[0];
+            let tip = crate::hit::path_points(head)[0];
+            let expected_tail = geom.data_to_page(tail_x, tail_y);
+            let expected_tip = geom.data_to_page(tip_x, tip_y);
+            assert!((tail.0 - expected_tail.0).abs() < 0.01 && (tail.1 - expected_tail.1).abs() < 0.01, "{tail:?}");
+            assert!((tip.0 - expected_tip.0).abs() < 0.01 && (tip.1 - expected_tip.1).abs() < 0.01, "{tip:?}");
+        }
+    }
+}
+
+#[test]
 fn open_vector_heads_join_the_shaft_at_the_tip_in_the_plot_and_legend() {
     let (mut p, graph) = sample_graph(Template::VectorXyxy);
     let plot = &mut p.graph_mut(graph).unwrap().layers[0].plots[0];

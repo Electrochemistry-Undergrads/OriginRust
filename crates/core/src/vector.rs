@@ -64,7 +64,7 @@ pub struct VectorSpec {
     pub a: ColumnId,
     /// XYAM: the magnitude column; XYXY: the Y of the arrow's end.
     pub b: ColumnId,
-    /// XYAM: points of length per unit of magnitude.
+    /// XYAM: length per unit of magnitude, in page points or data units.
     #[serde(default = "one")]
     pub multiplier: f64,
     /// XYAM: the angles are in degrees (Origin's "System" unit is radians).
@@ -72,6 +72,9 @@ pub struct VectorSpec {
     pub degrees: bool,
     #[serde(default, skip_serializing_if = "VectorAngleConvention::is_polar")]
     pub convention: VectorAngleConvention,
+    /// XYAM: interpret the scaled magnitude in X and Y data units.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub real_world_space: bool,
     #[serde(default)]
     pub position: VectorPosition,
     /// The arrowhead's length in points and its opening angle in degrees.
@@ -126,6 +129,7 @@ impl Project {
                     multiplier: auto_multiplier(&mags),
                     degrees: false,
                     convention: VectorAngleConvention::Polar,
+                    real_world_space: false,
                     position: VectorPosition::Tail,
                     head_pt: 4.5,
                     head_angle_deg: 30.0,
@@ -151,6 +155,7 @@ impl Project {
                     multiplier: 1.0,
                     degrees: false,
                     convention: VectorAngleConvention::Polar,
+                    real_world_space: false,
                     position: VectorPosition::Tail,
                     head_pt: 6.5,
                     head_angle_deg: 30.0,
@@ -185,9 +190,13 @@ mod tests {
         let mut spec: VectorSpec = serde_json::from_value(legacy).unwrap();
         assert_eq!((spec.position, spec.open_head), (VectorPosition::Tail, false));
         assert_eq!(spec.convention, VectorAngleConvention::Polar);
-        assert!(serde_json::to_value(spec).unwrap().get("convention").is_none());
+        assert!(!spec.real_world_space);
+        let serialized = serde_json::to_value(spec).unwrap();
+        assert!(serialized.get("convention").is_none());
+        assert!(serialized.get("real_world_space").is_none());
         spec.position = VectorPosition::Midpoint;
         spec.open_head = true;
+        spec.real_world_space = true;
         assert_eq!(serde_json::from_value::<VectorSpec>(serde_json::to_value(spec).unwrap()).unwrap(), spec);
     }
 

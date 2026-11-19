@@ -19,7 +19,10 @@ matched the expected bindings and worksheet data matched byte for byte.
 
 The XYAM Convention controls show Polar and Meteorological presets and edit the Custom
 offset and direction. Graphing 30 documents the archived controls and angle mapping.
-Workspace verification pending.
+Formatting, strict workspace Clippy, Nextest (4,547 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
+The desktop Vector tab showed the preset readbacks and editable Custom controls.
+The saved custom convention matched the expected graph, and worksheet data matched byte for byte.
 
 **Size:** M. **Source:** greyed inventory package B4 (Plot > Specialized > Vector XYAM, Vector XYXY).
 **Spec:** `docs/spec/graphing.md` (a new section).

@@ -27,6 +27,83 @@ fn placed(text: &str, anchor: Anchor, angle: f64) -> Vec<Item> {
     items
 }
 
+#[test]
+fn free_label_rows_keep_inline_styles_and_add_separator_height() {
+    let mut items = Vec::new();
+    crate::text::place_label(
+        &mut items,
+        &FixedMetrics,
+        "\\b(First\nSecond)\r\n \t\\sep:50 \r\\u(Third)",
+        &Font::new("Arial", 20.0),
+        (100.0, 60.0),
+        0.0,
+    );
+    let rows: Vec<_> = items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Text(t) => Some((t.text.as_str(), t.x, t.y, t.bold)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(rows, [("First", 100.0, 60.0, true), ("Second", 100.0, 86.0, true), ("Third", 100.0, 122.0, false)]);
+    assert_eq!(paths(&items).len(), 1);
+}
+
+#[test]
+fn free_label_separators_rotate_with_rows_and_leave_literal_text_visible() {
+    let mut items = Vec::new();
+    let font = Font::new("Arial", 20.0);
+    crate::text::place_label(
+        &mut items,
+        &FixedMetrics,
+        "\\sep:900\nA\n\\sep:50\n\\sep:25\nB\n\\sep:1000\n",
+        &font,
+        (100.0, 60.0),
+        90.0,
+    );
+    let [Item::Text(a), Item::Text(b)] = items.as_slice() else { panic!("expected just two label rows") };
+    assert_eq!((a.text.as_str(), a.x, a.y, b.text.as_str()), ("A", 100.0, 60.0, "B"));
+    assert!((b.x - 141.0).abs() < 1e-12 && (b.y - 60.0).abs() < 1e-12);
+    assert_eq!(b.rotate_ccw, 90.0);
+
+    items.clear();
+    crate::text::place_label(&mut items, &FixedMetrics, "\\v(A\n\\sep:50\nB)\n\\sep:-1\nC", &font, (100.0, 60.0), 0.0);
+    let rows: Vec<_> = items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Text(t) => Some((t.text.as_str(), t.y)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(rows, [("A", 60.0), ("\\sep:50", 86.0), ("B", 112.0), ("\\sep:-1", 138.0), ("C", 164.0)]);
+}
+
+#[test]
+fn free_label_separator_rows_share_one_pickable_scene_object_and_export() {
+    use crate::hit::{Hit, hit_test};
+
+    let mut p = Project::new();
+    let graph = p.add_graph(sheaf_core::template::Template::Line);
+    let label = TextLabel::new("Upper\n\\sep:50\nLower", 0.4, 0.3, Font::new("Arial", 20.0));
+    p.graph_mut(graph).unwrap().layers[0].labels.push(label);
+    let s = crate::layout::build_scene(&p, graph, &FixedMetrics).unwrap();
+    let layer = &s.layers[0];
+    let label = layer.objects.iter().find(|o| o.kind == ObjectKind::Label(0)).unwrap();
+    let [Item::Text(upper), Item::Text(lower)] = &layer.overlay[label.items.clone()] else {
+        panic!("expected the two rendered rows");
+    };
+    assert_eq!((upper.text.as_str(), lower.text.as_str()), ("Upper", "Lower"));
+    assert_eq!(lower.y - upper.y, 36.0);
+    assert_eq!(label.boxes.len(), 2);
+    for b in &label.boxes {
+        let picked = hit_test(&s, (b.x + b.w / 2.0, b.y + b.h / 2.0), 0.0);
+        assert_eq!(picked, Hit::Object { layer: 0, kind: ObjectKind::Label(0) });
+    }
+    let svg = crate::svg::write_svg(&s);
+    assert!(svg.contains(">Upper</text>") && svg.contains(">Lower</text>"));
+    assert!(!svg.contains("\\sep:50"));
+}
+
 fn paths(items: &[Item]) -> Vec<(&str, &Stroke)> {
     items
         .iter()

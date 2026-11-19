@@ -94,6 +94,8 @@ pub struct GraphUi {
     /// The other selected drawn objects and text labels, in the order they were selected (T159).
     /// Only meaningful while `selected` is a drawn object or text label itself.
     pub also: Vec<(usize, ObjectKind)>,
+    /// How far (page points) a drag of several selected objects has moved them so far (T162).
+    multi_drag: Option<(f64, f64)>,
     /// What the open right-click menu is about.
     menu_on: Option<MenuTarget>,
     /// The page point (in points) that opened the right-click menu: Axis Center needs it.
@@ -246,6 +248,7 @@ impl GraphUi {
     /// Drops the open menu and the drags, which name layers by index, after layers were renumbered.
     pub fn reset_layer_interactions(&mut self) {
         self.also.clear();
+        self.multi_drag = None;
         self.menu_on = None;
         self.shape_drag = None;
         self.label_drag = None;
@@ -280,6 +283,7 @@ impl GraphUi {
     pub fn invalidate_shape_interaction(&mut self, layer: usize, keep_selection: bool) {
         // The other selected objects name shapes by index too; a changed list ends the multi-selection.
         self.also.retain(|(l, kind)| *l != layer || !matches!(kind, ObjectKind::Shape(_)));
+        self.multi_drag = None;
         if !keep_selection && matches!(self.selected, Some((l, ObjectKind::Shape(_))) if l == layer) {
             self.selected = None;
         }
@@ -326,13 +330,15 @@ impl GraphUi {
     }
 
     /// Shift+click on a drawn object or text label (T159): adds it to the selection as the new
-    /// reference, or takes it out when it is already selected. Other objects select alone. (Takes
-    /// the two fields so the caller can hold the picture borrowed.)
+    /// reference, or takes it out when it is already selected. `members` is the clicked object with
+    /// the rest of its group before it (T162): the whole group goes in or out. Other objects select
+    /// alone. (Takes the two fields so the caller can hold the picture borrowed.)
     fn toggle_in_selection(
         selected: &mut Option<(usize, ObjectKind)>,
         also: &mut Vec<(usize, ObjectKind)>,
-        hit: (usize, ObjectKind),
+        members: Vec<(usize, ObjectKind)>,
     ) {
+        let Some(&hit) = members.last() else { return };
         if !matches!(hit.1, ObjectKind::Shape(_) | ObjectKind::Label(_)) {
             also.clear();
             *selected = Some(hit);
@@ -346,13 +352,23 @@ impl GraphUi {
             }
             _ => Vec::new(),
         };
-        if let Some(i) = all.iter().position(|o| *o == hit) {
-            all.remove(i);
-        } else {
-            all.push(hit);
+        let was_in = all.contains(&hit);
+        all.retain(|o| !members.contains(o));
+        if !was_in {
+            all.extend(members);
         }
         *selected = all.pop();
         *also = all;
+    }
+
+    /// Selects `members` (the reference last), or nothing when it is empty.
+    fn select_all(
+        selected: &mut Option<(usize, ObjectKind)>,
+        also: &mut Vec<(usize, ObjectKind)>,
+        mut members: Vec<(usize, ObjectKind)>,
+    ) {
+        *selected = members.pop();
+        *also = members;
     }
 
     /// The selected objects as drawn in the last frame, for the Object Edit Align and Make Same
@@ -570,12 +586,14 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             .map(|d| d.delta)
             .or(moved_legend.map(|d| d.delta))
             .or(moved_shape.map(|d| d.delta))
+            .or(state.multi_drag)
             .unwrap_or((0.0, 0.0));
         draw_selection(&painter, &t.scene, layer, kind, &|(x, y)| to_screen((x + shift.0, y + shift.1)));
     }
-    // The other objects of a Shift+click selection (T159).
+    // The other objects of a Shift+click selection (T159) or a group (T162), moved with a drag of them all.
+    let shift = state.multi_drag.unwrap_or((0.0, 0.0));
     for (layer, kind) in state.multi_selection().iter().rev().skip(1) {
-        draw_selection(&painter, &t.scene, *layer, *kind, &to_screen);
+        draw_selection(&painter, &t.scene, *layer, *kind, &|(x, y)| to_screen((x + shift.0, y + shift.1)));
     }
 
     // Data read-out under the pointer, in the layer under it.
@@ -735,8 +753,58 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         }
     }
 
+    // Dragging one of several selected objects, or a grouped one, moves them all (T162); the
+    // change is made, as one undo step, when the button is let go.
+    if response.drag_started()
+        && !state.reader
+        && !state.text_tool
+        && state.shape_tool.is_none()
+        && !state.slope_tool
+        && state.data_tool.is_none()
+        && !state.pan_tool
+        && !zoom_took_input
+        && let Some(pos) = ui.input(|i| i.pointer.press_origin())
+        && let Hit::Object { layer, kind: kind @ (ObjectKind::Shape(_) | ObjectKind::Label(_)) } = pick(pos)
+    {
+        if !state.multi_selection().contains(&(layer, kind)) {
+            let members = crate::obj_align::with_group(graph, layer, kind);
+            if members.len() > 1 {
+                GraphUi::select_all(&mut state.selected, &mut state.also, members);
+            }
+        }
+        if state.multi_selection().len() > 1 {
+            state.multi_drag = Some((0.0, 0.0));
+            actions.push(Action::ActivateLayer { graph: graph_id, layer });
+        }
+    }
+    if let Some(mut d) = state.multi_drag {
+        let page = response.drag_delta() / fit;
+        d = (d.0 + f64::from(page.x), d.1 + f64::from(page.y));
+        state.multi_drag = Some(d);
+        if response.drag_stopped() {
+            state.multi_drag = None;
+            let changes: Vec<_> = state
+                .multi_selection()
+                .into_iter()
+                .filter_map(|(layer, kind)| {
+                    let f = t.geometry.get(layer).map(|g| g.frame).filter(|f| f.w > 0.0 && f.h > 0.0)?;
+                    Some(crate::obj_align::Change::Move {
+                        layer,
+                        target: crate::obj_align::Target::of(kind)?,
+                        dx: d.0 / f.w,
+                        dy: d.1 / f.h,
+                    })
+                })
+                .collect();
+            if (d.0 != 0.0 || d.1 != 0.0) && !changes.is_empty() {
+                actions.push(Action::MoveObjects { graph: graph_id, changes });
+            }
+        }
+    }
+
     // Dragging a label moves it; the change is made when the button is let go.
     if response.drag_started()
+        && state.multi_drag.is_none()
         && !state.reader
         && !state.text_tool
         && state.shape_tool.is_none()
@@ -826,6 +894,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         && !state.pan_tool
         && !zoom_took_input
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
+        && state.multi_drag.is_none()
         && let Hit::Object { layer, kind: ObjectKind::Shape(shape) } = pick(pos)
     {
         state.also.clear();
@@ -926,13 +995,17 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         state.last_click = Some(to_page(pos));
         match hit {
             // Shift+click adds a drawn object or text label to the selection, or takes it out (T159).
-            Hit::Object { layer, kind } if ui.input(|i| i.modifiers.shift) => {
-                GraphUi::toggle_in_selection(&mut state.selected, &mut state.also, (layer, kind))
-            }
-            Hit::Object { layer, kind } => {
-                state.also.clear();
-                state.selected = Some((layer, kind));
-            }
+            Hit::Object { layer, kind } if ui.input(|i| i.modifiers.shift) => GraphUi::toggle_in_selection(
+                &mut state.selected,
+                &mut state.also,
+                crate::obj_align::with_group(graph, layer, kind),
+            ),
+            // A click on a grouped object selects its whole group (T162).
+            Hit::Object { layer, kind } => GraphUi::select_all(
+                &mut state.selected,
+                &mut state.also,
+                crate::obj_align::with_group(graph, layer, kind),
+            ),
             _ => {
                 state.also.clear();
                 state.selected = None;
@@ -1258,6 +1331,8 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         space3d: false,
         selected_shape: None,
         multi_selected: 0,
+        can_group: false,
+        can_ungroup: false,
         view_mode: Default::default(),
         layer_icons: true,
         active_layer_only: None,

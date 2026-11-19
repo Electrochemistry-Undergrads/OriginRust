@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **177 greyed items: 124 in the menu bar, 4 on the toolbars, 49 in context menus.**
+original inventory baseline. This is not a new runtime audit. **174 greyed items: 123 in the menu bar, 2 on the toolbars, 49 in context menus.**
 
 ## How to read and keep this file
 
@@ -69,7 +69,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T126` | 0 |
 | `T127` | 0 |
 | `T128` | 0 |
-| `B2` | 7 |
+| `B2` | 5 |
 | `B3` | 6 |
 | `B4` | 0 |
 | `B5` | 12 |
@@ -77,7 +77,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B7` | 0 |
 | `B8` | 1 |
 | `B9` | 2 |
-| `B11` | 3 |
+| `B11` | 2 |
 | `B12` | 1 |
 | `B13` | 2 |
 | `B14` | 42 |
@@ -86,7 +86,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 37 items, backlog packages (`B`) 120, not planned (`N`) 20.
+Briefs (`T`) hold 37 items, backlog packages (`B`) 117, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -97,7 +97,6 @@ changes. The baseline labels remain open until implementation or a documented re
 ### File
 - `B14` New: Matrix... · Image · Excel · Layout · Function Plot
 - `T63` Open Excel...
-- `B11` Save Workbook As Analysis Template... [Workbook]
 - `N` Add Word Bookmarks to Analysis Template... [Workbook]
 - `B11` Batch Processing... [Workbook, Graph]
 - `B14` Import: Image... · Binary 2D Array... [no window, Workbook]
@@ -184,7 +183,6 @@ changes. The baseline labels remain open until implementation or a documented re
 ## Toolbars
 
 - `B14` Standard: New Matrix · New Layout
-- `B2` Object Edit: Group · Ungroup
 
 ## Context menus
 

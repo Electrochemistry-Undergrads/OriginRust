@@ -21,6 +21,8 @@ pub struct SaveTemplatePrompt {
     pub window: WindowId,
     /// A graph template or a workbook template.
     pub kind: TemplateKind,
+    /// A workbook template that keeps the book's recalculating analysis runs (T163).
+    pub analysis: bool,
     name: String,
     /// The saved names, to say that OK replaces one.
     existing: Vec<String>,
@@ -32,7 +34,20 @@ impl SaveTemplatePrompt {
     /// A prompt filled with `default_name` (the window's short name); `existing` are the saved
     /// templates of the same kind.
     pub fn new(window: WindowId, kind: TemplateKind, default_name: &str, existing: Vec<String>) -> Self {
-        SaveTemplatePrompt { window, kind, name: default_name.to_string(), existing, error: None, focus: true }
+        SaveTemplatePrompt {
+            window,
+            kind,
+            analysis: false,
+            name: default_name.to_string(),
+            existing,
+            error: None,
+            focus: true,
+        }
+    }
+
+    /// The prompt of File > Save Workbook As Analysis Template... (T163) for workbook `book`.
+    pub fn analysis(book: WindowId, default_name: &str, existing: Vec<String>) -> Self {
+        SaveTemplatePrompt { analysis: true, ..Self::new(book, TemplateKind::Workbook, default_name, existing) }
     }
 
     /// Shows a problem of the last OK under the name; the window stays open.
@@ -43,7 +58,8 @@ impl SaveTemplatePrompt {
     pub fn show(&mut self, ctx: &egui::Context) -> PromptOutcome {
         let mut outcome = PromptOutcome::Open;
         let mut open = true;
-        egui::Window::new("Save Template As")
+        let title = if self.analysis { "Save As Analysis Template" } else { "Save Template As" };
+        egui::Window::new(title)
             .id(egui::Id::new("save_template_as"))
             .collapsible(false)
             .resizable(false)
@@ -62,6 +78,9 @@ impl SaveTemplatePrompt {
                     ui.label("A template of this name is saved; OK replaces it.");
                 }
                 ui.weak(match self.kind {
+                    _ if self.analysis => {
+                        "The template keeps the workbook without its data and its analysis results that                          recalculate (Auto or Manual): new data in a book made from it runs them again                          (File > New > From Template)."
+                    }
                     TemplateKind::Graph => {
                         "The template keeps the look of the graph, not its data (Plot > User Templates)."
                     }

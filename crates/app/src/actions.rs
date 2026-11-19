@@ -285,6 +285,9 @@ pub enum Action {
     /// File > Save Template As...: ask for a name and save the graph's look, or the workbook's
     /// structure (T160), as a user template.
     SaveTemplateAs(WindowId),
+    /// File > Save Workbook As Analysis Template...: ask for a name and save the workbook's structure
+    /// with its recalculating analysis runs (T163).
+    SaveAnalysisTemplateAs(WindowId),
     /// Plot > User Templates > Manage...: rename and delete the saved templates.
     ManageTemplates,
     /// File > New > Notes and the Standard toolbar's New Notes (T154).
@@ -825,6 +828,18 @@ pub enum Action {
     ArrangeObjects {
         graph: WindowId,
         op: crate::obj_align::Arrange,
+    },
+    /// Object Edit Group / Ungroup on the graph's selected drawn objects and text labels (T162):
+    /// one undo step.
+    GroupObjects {
+        graph: WindowId,
+        ungroup: bool,
+    },
+    /// Moves several drawn objects and text labels together (a drag of a selection or a group,
+    /// T162): one undo step.
+    MoveObjects {
+        graph: WindowId,
+        changes: Vec<crate::obj_align::Change>,
     },
     /// Moves a drawn object by `(dx, dy)` fractions of the layer frame: one undo step.
     MoveShape {

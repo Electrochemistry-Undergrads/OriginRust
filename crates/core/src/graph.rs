@@ -2509,12 +2509,16 @@ pub struct TextLabel {
     /// cells, and it is drawn as a grid whose top-left corner is the anchor.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub table: bool,
+    /// The Object Edit group the label belongs to (T162): labels and drawn objects of one layer
+    /// with the same number are selected and moved together. Saved only when set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<u32>,
 }
 
 impl TextLabel {
     /// A label with no rotation.
     pub fn new(text: impl Into<String>, x: f64, y: f64, font: Font) -> Self {
-        TextLabel { text: text.into(), x, y, font, rotation_deg: 0.0, table: false }
+        TextLabel { text: text.into(), x, y, font, rotation_deg: 0.0, table: false, group: None }
     }
 
     /// A table of these cells (rows of cells), with its top-left corner at (x, y) of the layer frame.

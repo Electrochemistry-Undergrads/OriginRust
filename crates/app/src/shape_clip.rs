@@ -98,11 +98,12 @@ pub fn placed(graph: &Graph, layer: usize, page: (f64, f64)) -> Option<Pasted> {
     Some(match clip {
         Clip::Shape { shape, ends } => {
             let ((x1, y1), (x2, y2)) = (at(ends[0]), at(ends[1]));
-            Pasted::Shape(Shape { x1, y1, x2, y2, ..shape })
+            // A pasted copy is not in the source's group (T162).
+            Pasted::Shape(Shape { x1, y1, x2, y2, group: None, ..shape })
         }
         Clip::Label(label) => {
             let (x, y) = at((0.0, 0.0));
-            Pasted::Label(TextLabel { x, y, ..label })
+            Pasted::Label(TextLabel { x, y, group: None, ..label })
         }
     })
 }

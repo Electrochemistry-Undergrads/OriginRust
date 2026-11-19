@@ -134,6 +134,7 @@ fn a_full_graph_reads_back_with_everything_the_file_holds() {
             font: Font::new("Arial", 20.0),
             rotation_deg: 0.0,
             table: false,
+            group: None,
         });
     });
     let (imp, warnings) = round_trip(&p);
@@ -373,6 +374,7 @@ fn what_the_file_cannot_hold_is_named() {
             },
             rotation_deg: 0.0,
             table: false,
+            group: None,
         });
     });
     let (imp, warnings) = round_trip(&p);
@@ -468,6 +470,7 @@ fn damaged_graph_files_never_panic_the_reader() {
             font: Font::new("Arial", 12.0),
             rotation_deg: 90.0,
             table: false,
+            group: None,
         })
     });
     let bytes = write_named(&p, "g", TIME).unwrap().bytes;

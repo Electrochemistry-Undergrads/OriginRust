@@ -154,3 +154,49 @@ fn a_workbook_saved_as_a_template_makes_an_empty_workbook_from_file_new_from_tem
     assert!(h.state().user_book_templates.is_empty());
     assert!(!dir.join("Run log.sheafbooktemplate").exists());
 }
+
+#[test]
+fn an_analysis_template_brings_its_recalculating_run_to_a_new_book() {
+    use sheaf_core::analysis::{Boundary, OutputTarget, Request, RowRange, SmoothMethod, SmoothOptions, Tool};
+    let file = data_file("analysis-template");
+    let dir = file.parent().unwrap().join("templates");
+    let mut h = start_with(file, Some(dir.clone()));
+    let (book, up) = {
+        let b = project(&h).workbooks().next().unwrap();
+        (b.id, b.sheets[0].columns[1].id)
+    };
+    h.state_mut().doc.apply("Smooth", |p| {
+        let o = SmoothOptions {
+            method: SmoothMethod::AdjacentAveraging { weighted: false },
+            npts: 3,
+            boundary: Boundary::None,
+        };
+        let request = Request { columns: vec![up], rows: RowRange::All, tool: Tool::Smooth(o) };
+        p.analyze_linked(&request, &OutputTarget::NextToInput, sheaf_core::RecalcMode::Auto).unwrap();
+    });
+    settle(&mut h);
+    show_window(&mut h, "Book1 - sample.csv");
+    menu_path(&mut h, &["File", "Save Workbook As Analysis Template..."]);
+    assert!(h.state().template_prompt.as_ref().is_some_and(|p| p.analysis), "the analysis prompt is open");
+    type_name(&mut h, "Assay");
+    h.get_by_label("Save As Analysis Template").get_by_label("OK").click();
+    settle(&mut h);
+    assert!(h.state().template_prompt.is_none());
+    assert_eq!(h.state().user_book_templates, ["Assay"]);
+
+    menu_path(&mut h, &["File", "New", "From Template", "Assay"]);
+    let made = project(&h).workbooks().last().unwrap();
+    assert_ne!(made.id, book);
+    let (made, input, result) = (made.id, made.sheets[0].columns[1].id, made.sheets[0].columns[2].id);
+    assert_eq!(project(&h).analysis_links.len(), 2);
+    assert!(project(&h).column(result).unwrap().is_empty());
+
+    // Data typed into the new book's input runs the smoothing again, in place.
+    h.state_mut().doc.apply("Enter data", |p| {
+        let b = p.workbook_mut(made).unwrap();
+        b.sheets[0].columns[0].data = sheaf_core::ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0]);
+        p.column_mut(input).unwrap().data = sheaf_core::ColumnData::numeric(vec![0.0, 3.0, 0.0, 3.0]);
+    });
+    settle(&mut h);
+    assert_eq!(project(&h).column(result).unwrap().len(), 4, "the result follows the new data");
+}

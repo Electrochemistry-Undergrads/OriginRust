@@ -2643,6 +2643,18 @@ impl SheafApp {
                     Some(c) => self.doc.apply(op.undo_label(), |p| crate::obj_align::apply(p, graph, &c)),
                 }
             }
+            Action::GroupObjects { graph, ungroup } => {
+                let selection = self.graphs.get(&graph).map(|s| s.multi_selection()).unwrap_or_default();
+                let Some(g) = self.doc.project().graph(graph) else { return };
+                if ungroup && crate::obj_align::can_ungroup(g, &selection) {
+                    self.doc.apply("Ungroup objects", |p| crate::obj_align::ungroup(p, graph, &selection));
+                } else if !ungroup && crate::obj_align::can_group(g, &selection) {
+                    self.doc.apply("Group objects", |p| crate::obj_align::group(p, graph, &selection));
+                }
+            }
+            Action::MoveObjects { graph, changes } => {
+                self.doc.apply("Move objects", |p| crate::obj_align::apply(p, graph, &changes));
+            }
             Action::MoveShape { graph, layer, shape, dx, dy } => {
                 self.doc.apply("Move drawn object", |p| {
                     if let Some(s) =
@@ -2810,6 +2822,14 @@ impl SheafApp {
                     kind,
                     &name,
                     existing.clone(),
+                ));
+            }
+            Action::SaveAnalysisTemplateAs(book) => {
+                let Some(name) = self.doc.project().workbook(book).map(|b| b.name.clone()) else { return };
+                self.template_prompt = Some(crate::dialogs::user_templates::SaveTemplatePrompt::analysis(
+                    book,
+                    &name,
+                    self.user_book_templates.clone(),
                 ));
             }
             Action::ManageTemplates => {
@@ -4189,12 +4209,20 @@ impl SheafApp {
                 PromptOutcome::Save(name) => {
                     let window = prompt.window;
                     let book = prompt.kind == sheaf_io::user_templates::TemplateKind::Workbook;
+                    let analysis = prompt.analysis;
+                    let mut runs = 0;
                     let project = self.doc.project();
                     let made =
                         dir.as_deref().ok_or_else(|| "there is no template folder".to_string()).and_then(|dir| {
                             if book {
                                 let b = project.workbook(window).ok_or("the workbook was closed")?;
-                                let t = sheaf_core::BookTemplate::from_workbook(&name, b);
+                                let t = if analysis {
+                                    sheaf_core::BookTemplate::analysis_from_workbook(&name, project, window)
+                                        .ok_or("the workbook was closed")?
+                                } else {
+                                    sheaf_core::BookTemplate::from_workbook(&name, b)
+                                };
+                                runs = t.links.len();
                                 sheaf_io::user_templates::save_book(dir, &t).map_err(|e| e.to_string())
                             } else {
                                 let g = project.graph(window).ok_or("the graph was closed")?;
@@ -4208,7 +4236,14 @@ impl SheafApp {
                             self.refresh_user_templates();
                             let verb = if saved.replaced { "Replaced" } else { "Saved" };
                             let place = if book { "File > New > From Template" } else { "Plot > User Templates" };
-                            self.say(format!("{verb} the template {} ({place})", saved.name));
+                            if analysis {
+                                self.say(format!(
+                                    "{verb} the analysis template {} with {runs} recalculating analysis run(s) ({place})",
+                                    saved.name
+                                ));
+                            } else {
+                                self.say(format!("{verb} the template {} ({place})", saved.name));
+                            }
                         }
                         Err(e) => prompt.set_error(e),
                     }
@@ -4716,6 +4751,14 @@ impl SheafApp {
                 Some((layer, shape, project.graph(g)?.layers.get(layer)?.shapes.len()))
             }),
             multi_selected: graph.and_then(|g| self.graphs.get(&g)).map_or(0, |s| s.multi_selection().len()),
+            can_group: graph.is_some_and(|g| {
+                let selection = self.graphs.get(&g).map(|s| s.multi_selection()).unwrap_or_default();
+                project.graph(g).is_some_and(|gr| crate::obj_align::can_group(gr, &selection))
+            }),
+            can_ungroup: graph.is_some_and(|g| {
+                let selection = self.graphs.get(&g).map(|s| s.multi_selection()).unwrap_or_default();
+                project.graph(g).is_some_and(|gr| crate::obj_align::can_ungroup(gr, &selection))
+            }),
             view_mode: graph.map(|g| project.view_mode(g)).unwrap_or_default(),
             layer_icons: graph.and_then(|g| project.graph(g)).is_none_or(|g| g.page.style.layer_icons),
             active_layer_only: graph.and_then(|id| {

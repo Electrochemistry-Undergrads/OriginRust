@@ -649,10 +649,19 @@ impl Project {
     /// Adds a workbook that an importer built. The importer does not know
     /// which identifiers and names are free, so the workbook and all its
     /// columns get fresh ones here. Returns the new window id.
-    pub fn adopt_workbook(&mut self, mut book: Workbook) -> WindowId {
+    pub fn adopt_workbook(&mut self, book: Workbook) -> WindowId {
+        self.adopt_workbook_mapped(book).0
+    }
+
+    /// Like [`Project::adopt_workbook`], and also returns which new column id each old one got.
+    pub(crate) fn adopt_workbook_mapped(
+        &mut self,
+        mut book: Workbook,
+    ) -> (WindowId, std::collections::HashMap<ColumnId, ColumnId>) {
         let id = WindowId(self.fresh_id());
         book.id = id;
         book.name = self.unique_name("Book");
+        let mut all = std::collections::HashMap::new();
         for sheet in &mut book.sheets {
             let mut renamed = std::collections::HashMap::new();
             for col in &mut sheet.columns {
@@ -663,9 +672,10 @@ impl Project {
             sheet.remap_cond_format_columns(&|c| renamed.get(&c).copied());
             sheet.remap_note_columns(&|c| renamed.get(&c).copied());
             sheet.remap_format_columns(&|c| renamed.get(&c).copied());
+            all.extend(renamed);
         }
         self.windows.push(Window::Workbook(book));
-        id
+        (id, all)
     }
 
     /// Like [`Project::adopt_workbook`], but keeps the workbook's own short

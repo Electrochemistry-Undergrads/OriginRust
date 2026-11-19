@@ -84,6 +84,8 @@ pub enum GraphClip {
 
 /// Why the graph Edit menu's Cut, Copy or Clear cannot run.
 pub const NEED_GRAPH_OBJECT: &str = "select a drawn object, a text label or an axis title first";
+/// Why Format > Object Properties... cannot run.
+pub const NEED_SELECTED_OBJECT: &str = "select an object of the graph first";
 /// Why the graph Edit menu's Paste cannot run.
 pub const NOTHING_COPIED: &str = "copy a drawn object, a text label or an axis title first";
 
@@ -107,6 +109,8 @@ pub enum Cmd {
     ManageTemplates,
     /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values (T74).
     FillPattern(FillKind),
+    /// Format > Object Properties... on a graph: the selected object's properties (T150).
+    ObjectProperties,
     /// The graph Edit menu's Cut, Copy, Paste and Clear on the selected object (T149).
     GraphClipboard(GraphClip),
     /// A drawn object's right-click Cut and Copy, and the page's Paste at a page point (T125).
@@ -1889,7 +1893,7 @@ fn format_menu(kind: WindowKind) -> Vec<Entry> {
             ),
             sep(),
             grey("Programming Control..."),
-            grey("Object Properties..."),
+            item("Object Properties...", Cmd::ObjectProperties),
         ],
         _ => vec![
             grey("Menu"),
@@ -2780,6 +2784,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::CopyShape { layer, shape } => {
             Action::CopyShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape, cut: false }
+        }
+        Cmd::ObjectProperties => {
+            let graph = c.graph.ok_or(NEED_GRAPH)?;
+            c.graph_pick.ok_or(NEED_SELECTED_OBJECT)?;
+            Action::ObjectProperties { graph }
         }
         Cmd::GraphClipboard(op) => {
             use sheaf_plot::scene::ObjectKind as K;

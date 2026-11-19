@@ -822,17 +822,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         let hit = pick(pos);
         let open = |layer, tab, plot| Action::GraphProperties { graph: graph_id, layer, tab, plot };
         let action = match hit {
-            Hit::Object { layer, kind } => match kind {
-                ObjectKind::XAxis | ObjectKind::XTitle => Some(open(layer, PropsTab::XAxis, None)),
-                ObjectKind::YAxis | ObjectKind::YTitle => Some(open(layer, PropsTab::YAxis, None)),
-                ObjectKind::Legend => Some(open(layer, PropsTab::Legend, None)),
-                ObjectKind::Plot(p) => Some(open(layer, PropsTab::Plots, Some(p))),
-                ObjectKind::Label(label) => Some(Action::EditText { graph: graph_id, layer, label }),
-                ObjectKind::Shape(shape) => Some(Action::EditShape { graph: graph_id, layer, shape }),
-                ObjectKind::Slope(slope) => Some(Action::EditSlope { graph: graph_id, layer, slope }),
-                ObjectKind::StraightLine(line) => Some(Action::EditStraightLine { graph: graph_id, layer, line }),
-                ObjectKind::Scale(_) => Some(open(layer, PropsTab::Plots, None)),
-            },
+            Hit::Object { layer, kind } => Some(properties_of(graph_id, layer, kind)),
             Hit::Layer(layer) => Some(open(layer, PropsTab::Plots, None)),
             Hit::Page => Some(open(state.active_layer, PropsTab::Page, None)),
         };
@@ -1158,6 +1148,23 @@ fn other_layers_hidden(graph: &sheaf_core::graph::Graph, layer: usize) -> bool {
     graph.layers.len() > 1
         && graph.layers.get(layer).is_some_and(|l| !l.display.hidden)
         && graph.layers.iter().enumerate().all(|(i, l)| i == layer || l.display.hidden)
+}
+
+/// What opens an object's properties: a double-click on it, or Format > Object Properties... while
+/// it is selected (T150).
+pub fn properties_of(graph_id: WindowId, layer: usize, kind: ObjectKind) -> Action {
+    let open = |tab, plot| Action::GraphProperties { graph: graph_id, layer, tab, plot };
+    match kind {
+        ObjectKind::XAxis | ObjectKind::XTitle => open(PropsTab::XAxis, None),
+        ObjectKind::YAxis | ObjectKind::YTitle => open(PropsTab::YAxis, None),
+        ObjectKind::Legend => open(PropsTab::Legend, None),
+        ObjectKind::Plot(p) => open(PropsTab::Plots, Some(p)),
+        ObjectKind::Label(label) => Action::EditText { graph: graph_id, layer, label },
+        ObjectKind::Shape(shape) => Action::EditShape { graph: graph_id, layer, shape },
+        ObjectKind::Slope(slope) => Action::EditSlope { graph: graph_id, layer, slope },
+        ObjectKind::StraightLine(line) => Action::EditStraightLine { graph: graph_id, layer, line },
+        ObjectKind::Scale(_) => open(PropsTab::Plots, None),
+    }
 }
 
 /// The entries of the right-click menu for what was clicked.

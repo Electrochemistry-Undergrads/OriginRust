@@ -369,3 +369,31 @@ fn workbook_templates_are_replaced_renamed_and_deleted_by_kind() {
     let err = load_book(&dir, "missing").unwrap_err().to_string();
     assert!(err.contains("Other"), "{err}");
 }
+
+#[test]
+fn an_analysis_template_keeps_its_runs_in_the_file() {
+    use sheaf_core::analysis::{Boundary, OutputTarget, Request, RowRange, SmoothMethod, SmoothOptions, Tool};
+    let scratch = Scratch::new("analysis");
+    let dir = scratch.folder();
+    let mut p = Project::new();
+    let b = p.add_workbook("Assay");
+    p.add_column(b, 0, Designation::X, ColumnData::numeric((0..8).map(f64::from).collect())).unwrap();
+    let y =
+        p.add_column(b, 0, Designation::Y, ColumnData::numeric((0..8).map(|i| f64::from(i % 2)).collect())).unwrap();
+    let o = SmoothOptions {
+        method: SmoothMethod::AdjacentAveraging { weighted: false },
+        npts: 3,
+        boundary: Boundary::None,
+    };
+    let request = Request { columns: vec![y], rows: RowRange::All, tool: Tool::Smooth(o) };
+    p.analyze_linked(&request, &OutputTarget::NextToInput, sheaf_core::RecalcMode::Manual).unwrap();
+    let t = BookTemplate::analysis_from_workbook("Assay", &p, b).unwrap();
+    save_book(&dir, &t).unwrap();
+    let back = load_book(&dir, "assay").unwrap();
+    assert!(back.is_analysis());
+    assert_eq!(back.links, t.links);
+    assert!(back.book.sheets[0].columns.iter().all(|c| c.is_empty()));
+    // A plain workbook template has none.
+    save_book(&dir, &BookTemplate::from_workbook("Plain", p.workbook(b).unwrap())).unwrap();
+    assert!(!load_book(&dir, "Plain").unwrap().is_analysis());
+}

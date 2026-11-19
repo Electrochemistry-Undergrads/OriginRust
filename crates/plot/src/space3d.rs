@@ -11,7 +11,7 @@ use crate::data::PlotData;
 use crate::fonts::TextMeasurer;
 use crate::scene::{self, Item, Stroke};
 use crate::ticks::{self, ResolvedAxis};
-use sheaf_core::graph::{Axis, Layer, ScaleKind, Space3dCoords};
+use sheaf_core::graph::{Axis, Layer, ScaleKind, Space3dCoords, Space3dScale};
 use sheaf_core::{Color, Project};
 use std::borrow::Cow;
 
@@ -60,6 +60,11 @@ fn xyz_unit(project: &Project, layer: &Layer, plot: &sheaf_core::graph::Plot, b:
 /// Half the width of a 3D ribbon (T161) along the depth axis, in depth steps.
 const RIBBON_HALF: f64 = 0.25;
 
+/// True for a point of the cube -1..1: points outside a set axis range (T164) are not drawn.
+fn inside(p: [f64; 3]) -> bool {
+    p.iter().all(|v| v.is_finite() && v.abs() <= 1.0 + 1e-9)
+}
+
 /// The page position (in data units of the hidden axes) of a point of the cube -1..1.
 pub(crate) fn view(c: &Space3dCoords, [x, y, z]: [f64; 3]) -> (f64, f64) {
     let (sa, ca) = c.azimuth_deg.to_radians().sin_cos();
@@ -107,22 +112,28 @@ pub(crate) fn data_box(project: &Project, layer: &Layer) -> Option<DataBox> {
     if ext.iter().any(|e| e.0 > e.1) {
         return None;
     }
-    let free = |a: &Axis| Axis { min: None, max: None, major_step: None, scale: ScaleKind::Linear, ..a.clone() };
-    // About five steps along each edge of the box: its edges are short, so the 2D axes' tick
-    // density would crowd the labels.
-    let resolve = |a: &Axis, e: (f64, f64)| {
-        let a = free(a);
+    let scales = layer.coords.space3d().map(|c| c.scales).unwrap_or_default();
+    // The 3D Axis window's From, To and Increment (T164), else automatic.
+    let resolve = |a: &Axis, e: (f64, f64), s: &Space3dScale| {
+        let a = Axis { min: s.from, max: s.to, major_step: s.step, scale: ScaleKind::Linear, ..a.clone() };
         let r = ticks::resolve_axis(&a, Some(e));
-        if r.major.len() <= 7 || r.max <= r.min {
+        // About five steps along each edge of the box: its edges are short, so the 2D axes' tick
+        // density would crowd the labels.
+        if s.step.is_some() || r.major.len() <= 7 || r.max <= r.min {
             return r;
         }
         let step = ticks::nice_step((r.max - r.min) / 5.0);
-        let (min, max) = ((r.min / step).floor() * step, (r.max / step).ceil() * step);
+        let min = s.from.unwrap_or((r.min / step).floor() * step);
+        let max = s.to.unwrap_or((r.max / step).ceil() * step);
         let (major, step) = ticks::linear_major(min, max, step, false);
         let labels = ticks::linear_labels(&a, &major, step);
         ResolvedAxis { min, max, step, major, minor: Vec::new(), labels, ..r }
     };
-    let mut axes = [resolve(&layer.x_axis, ext[0]), resolve(&layer.y_axis, ext[1]), resolve(&layer.y_axis, ext[2])];
+    let mut axes = [
+        resolve(&layer.x_axis, ext[0], &scales[0]),
+        resolve(&layer.y_axis, ext[1], &scales[1]),
+        resolve(&layer.y_axis, ext[2], &scales[2]),
+    ];
     // XYY (T158): the depth axis has one tick per plot, labelled with the plot's name.
     if layer.coords.space3d().is_some_and(|c| c.xyy) && !layer.plots.is_empty() {
         let n = layer.plots.len();
@@ -134,6 +145,14 @@ pub(crate) fn data_box(project: &Project, layer: &Layer) -> Option<DataBox> {
     Some(DataBox { axes })
 }
 
+/// The From, To and Increment the box of a 3D layer shows on its X, Y and Z axes (T164, for the 3D
+/// Axis window); `None` for a layer that is not 3D or has no data.
+pub fn space3d_scales(project: &Project, layer: &Layer) -> Option<[(f64, f64, f64); 3]> {
+    layer.coords.space3d()?;
+    let b = data_box(project, layer)?;
+    Some(b.axes.map(|a| (a.min, a.max, a.step)))
+}
+
 /// Turns a plot's X, Y and Z rows into their place in the view. Rows without a Z are left out.
 pub(crate) fn columns(pd: &mut PlotData, project: &Project, layer: &Layer, c: &Space3dCoords, b: &DataBox) {
     let n = pd.y.len();
@@ -141,7 +160,7 @@ pub(crate) fn columns(pd: &mut PlotData, project: &Project, layer: &Layer, c: &S
     if let Some((x, y, z)) = xyz(project, layer, pd.plot) {
         for r in 0..n.min(x.len()).min(y.len()).min(z.len()) {
             let p = [b.unit(0, x[r]), b.unit(1, y[r]), b.unit(2, z[r])];
-            if p.iter().all(|v| v.is_finite()) {
+            if inside(p) {
                 (us[r], ws[r]) = view(c, p);
             }
         }
@@ -192,7 +211,7 @@ pub(crate) fn columns(pd: &mut PlotData, project: &Project, layer: &Layer, c: &S
                     };
                     let at = |dy: f64| {
                         let p = [cube[0], b.unit(1, y.get(r).copied().unwrap_or(f64::NAN) + dy), cube[2]];
-                        if p.iter().all(|v| v.is_finite()) { view(c, p) } else { (f64::NAN, f64::NAN) }
+                        if inside(p) { view(c, p) } else { (f64::NAN, f64::NAN) }
                     };
                     RibbonRow { edges: [at(-RIBBON_HALF), at(RIBBON_HALF)], depth: cube[0] * sa + cube[1] * ca }
                 })
@@ -593,5 +612,33 @@ mod tests {
             let xs: Vec<f64> = out.iter().map(first_x).collect();
             assert!(xs[0] > xs[1] && xs[1] > xs[2], "back to front: {xs:?}");
         }
+    }
+
+    #[test]
+    fn set_scales_fix_the_box_and_points_outside_are_not_drawn() {
+        use sheaf_core::column::{ColumnData, Designation};
+        use sheaf_core::graph::Coords;
+        use sheaf_core::template::Template;
+        let mut p = Project::new();
+        let b = p.add_workbook("Book1");
+        p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0, 2.0])).unwrap();
+        let y = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![0.0, 1.0, 2.0])).unwrap();
+        p.add_column(b, 0, Designation::Z, ColumnData::numeric(vec![1.0, 5.0, 9.0])).unwrap();
+        let g = p.plot_columns(Template::Scatter3d, &[y]).unwrap();
+        let auto = space3d_scales(&p, &p.graph(g).unwrap().layers[0]).unwrap();
+        assert!(auto[2].0 <= 1.0 && auto[2].1 >= 9.0, "automatic Z: {auto:?}");
+        if let Coords::Space3d(c) = &mut p.graph_mut(g).unwrap().layers[0].coords {
+            c.scales[2] = Space3dScale { from: Some(0.0), to: Some(6.0), step: Some(2.0) };
+        }
+        let graph = p.graph(g).unwrap();
+        let layer = &graph.layers[0];
+        let bx = data_box(&p, layer).unwrap();
+        assert_eq!((bx.axes[2].min, bx.axes[2].max), (0.0, 6.0));
+        assert_eq!(bx.axes[2].major, [0.0, 2.0, 4.0, 6.0]);
+        assert_eq!(space3d_scales(&p, layer).unwrap()[2], (0.0, 6.0, 2.0));
+        let layers = crate::data::collect_graph(&p, graph);
+        let pd = &layers[0].plots[0];
+        // Z = 9 is above To = 6: that point is left out.
+        assert!(pd.y[0].is_finite() && pd.y[1].is_finite() && pd.y[2].is_nan());
     }
 }

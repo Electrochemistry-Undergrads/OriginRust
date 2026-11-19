@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 176 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 174 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -189,7 +189,7 @@ Backlog packages: write the brief first (step 3 above).
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
 | [x] | [T56](T56-user-graph-templates.md) | Save Template As and user graph templates (done 2026-11-15; workbook templates in [T160](T160-workbook-templates.md), 2026-11-19) | M | 0 |
-| [ ] | B11 | Templates and themes: template library, From Template, analysis templates, Batch Processing, batch-plotting Duplicate, Theme Organizer, Save Format as Theme | L | 3 |
+| [ ] | B11 | Templates and themes: template library, From Template, analysis templates, Batch Processing, batch-plotting Duplicate, Theme Organizer, Save Format as Theme | L | 2 |
 | [ ] | B12 | Project and window management: Re-Import, worksheet as image, View Windows, Folders List, folder Properties, sample projects (New Graph and save/duplicate project without data done as T77) | M | 1 |
 | [ ] | B13 | Tools: Options window, System Variables, Fitting Function Builder and Organizer, Import Filters Manager, project protection, audit log | L | 2 |
 
@@ -216,7 +216,7 @@ Backlog packages: write the brief first (step 3 above).
 
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
-| [ ] | B15 | 3D graphs: XYY, surfaces, symbol/bar/vector, 3D waterfall, Z axis, OpenGL settings | L | 10 |
+| [ ] | B15 | 3D graphs: XYY, surfaces, symbol/bar/vector, 3D waterfall, Z axis, OpenGL settings | L | 9 |
 | [ ] | B16 | Scripting: Command Window, Script Window, Code Builder, Worksheet Script, Programming Control, consoles, X-Function Builder, Button Edit Mode | L | 15 |
 
 - **B15** is deferred behind the current formatting and stacked-figure priorities (T18 backlog).

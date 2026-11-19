@@ -15,6 +15,10 @@
 //! The Intersect gadget (T139, Gadgets > Intersect, not measured) marks where its plot crosses the
 //! layer's other plots inside the range and writes each point's X and Y beside it
 //! (`sheaf_calc::curves::intersections`).
+//!
+//! The Quick Peaks gadget (T140, Gadgets > Quick Peaks, not measured) marks the positive peaks of the
+//! curve inside the range (`sheaf_calc::peaks::find_peaks` with Peak Analyzer's defaults: 2 neighbours on
+//! each side, peaks of at least 20 % of the largest magnitude) and writes each one's X above it.
 
 use crate::actions::Action;
 use crate::menus::{self, MenuContext};
@@ -32,6 +36,8 @@ pub enum GadgetKind {
     RiseTime,
     /// Gadgets > Intersect (T139).
     Intersect,
+    /// Gadgets > Quick Peaks (T140).
+    QuickPeaks,
 }
 
 /// The levels of the Rise Time gadget, in percent of the amplitude.
@@ -105,6 +111,17 @@ impl Integrator {
         out
     }
 
+    /// Quick Peaks gadget: the positive peaks of the curve among the rows inside the range, as (x, y).
+    pub fn peaks(&self, x: &[f64], y: &[f64]) -> Vec<(f64, f64)> {
+        let Some((a, b)) = rows_in(x, self.x0, self.x1) else { return Vec::new() };
+        let opts = sheaf_calc::peaks::PeakOptions {
+            direction: sheaf_calc::peaks::PeakDirection::Positive,
+            ..Default::default()
+        };
+        let found = sheaf_calc::peaks::find_peaks(&x[a - 1..b], &y[a - 1..b], &opts);
+        found.x.into_iter().zip(found.y).collect()
+    }
+
     /// The rise or fall time over the range (Rise Time gadget).
     pub fn rise(&self, x: &[f64], y: &[f64]) -> Option<sheaf_calc::risetime::RiseTime> {
         let (a, b) = rows_in(x, self.x0, self.x1)?;
@@ -152,6 +169,24 @@ impl Integrator {
         let result = if integrating { self.result(&x, &y) } else { None };
         let rise = if self.kind == GadgetKind::RiseTime { self.rise(&x, &y) } else { None };
         let crossings = if self.kind == GadgetKind::Intersect { self.crossings(project, graph) } else { Vec::new() };
+        let peaks = if self.kind == GadgetKind::QuickPeaks { self.peaks(&x, &y) } else { Vec::new() };
+        for &(px, py) in &peaks {
+            let at = to_screen(geom.data_to_page(placement.x(px), placement.y(py)));
+            let tip = at + egui::vec2(0.0, -4.0);
+            let red = Color32::from_rgb(200, 30, 30);
+            painter.add(egui::Shape::convex_polygon(
+                vec![tip, tip + egui::vec2(-5.0, -8.0), tip + egui::vec2(5.0, -8.0)],
+                red,
+                Stroke::NONE,
+            ));
+            painter.text(
+                tip + egui::vec2(0.0, -10.0),
+                egui::Align2::CENTER_BOTTOM,
+                sheaf_core::format::format_general(px, 4),
+                egui::FontId::proportional(11.0),
+                Color32::from_rgb(120, 20, 20),
+            );
+        }
         for p in &crossings {
             let at = to_screen(geom.data_to_page(placement.x(p.x), placement.y(p.y)));
             painter.circle_stroke(at, 4.0, Stroke::new(1.5_f32, Color32::from_rgb(200, 30, 30)));
@@ -232,6 +267,11 @@ impl Integrator {
                 sheaf_core::format::format_general(r.time, 6)
             ),
             (GadgetKind::RiseTime, _, None) => "Rise Time: no step in the range".to_string(),
+            (GadgetKind::QuickPeaks, _, _) => match peaks.len() {
+                0 => "No peak in the range".to_string(),
+                1 => "1 peak".to_string(),
+                n => format!("{n} peaks"),
+            },
             (GadgetKind::Intersect, _, _) => match crossings.len() {
                 0 => "No intersection in the range".to_string(),
                 1 => "1 intersection".to_string(),
@@ -292,7 +332,7 @@ impl Integrator {
         body.context_menu(|ui| {
             let menu = match self.kind {
                 GadgetKind::Integrate => menus::integrate_gadget_menu(self.end_point_baseline),
-                GadgetKind::RiseTime | GadgetKind::Intersect => menus::rise_time_gadget_menu(),
+                GadgetKind::RiseTime | GadgetKind::Intersect | GadgetKind::QuickPeaks => menus::rise_time_gadget_menu(),
             };
             menus::show_context(ui, &menu, c, actions)
         });

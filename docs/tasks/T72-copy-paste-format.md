@@ -52,7 +52,11 @@ identities; both apps and guards close0. Initial test-constant pilots are exclud
 Legend Styles follow-up (2026-11-18) adds typed Copy Format > Styles and Paste Format To >
 Styles for a visible legend. The existing clipboard snapshot carries the font, frame and
 background. The chosen legend keeps its target text and placement. Graphing 26.12 records
-the measured menu entry and the Sheaf field whitelist. Workspace verification pending.
+the measured menu entry and the Sheaf field whitelist. Formatting, strict workspace Clippy, Nextest (4,540 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
+A desktop launch rendered the styled legend. The native input harness did not open
+the legend or axis control menu. The App UI tests exercised context copy and paste,
+restart, and undo.
 
 ## Goal
 

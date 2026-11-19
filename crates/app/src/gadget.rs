@@ -15,6 +15,14 @@
 //! The Intersect gadget (T139, Gadgets > Intersect, not measured) marks where its plot crosses the
 //! layer's other plots inside the range and writes each point's X and Y beside it
 //! (`sheaf_calc::curves::intersections`).
+//!
+//! The Quick Peaks gadget (T140, Gadgets > Quick Peaks, not measured) marks the positive peaks of the
+//! curve inside the range (`sheaf_calc::peaks::find_peaks` with Peak Analyzer's defaults: 2 neighbours on
+//! each side, peaks of at least 20 % of the largest magnitude) and writes each one's X above it.
+//!
+//! The Quick Sigmoidal Fit gadget (T141, Gadgets > Quick Sigmoidal Fit, not measured) fits the built-in
+//! Boltzmann function `A2 + (A1 - A2) / (1 + exp((x - x0) / dx))` to the rows inside the range, draws the
+//! fitted curve over the range and shows x0 and dx.
 
 use crate::actions::Action;
 use crate::menus::{self, MenuContext};
@@ -32,6 +40,23 @@ pub enum GadgetKind {
     RiseTime,
     /// Gadgets > Intersect (T139).
     Intersect,
+    /// Gadgets > Quick Peaks (T140).
+    QuickPeaks,
+    /// Gadgets > Quick Sigmoidal Fit (T141).
+    Sigmoid,
+}
+
+/// The Quick Sigmoidal Fit result: the fitted parameters A1, A2, x0, dx and the function to draw.
+pub struct SigmoidFit {
+    pub params: Vec<f64>,
+    pub func: sheaf_fit::nlsf::FitFunction,
+}
+
+impl SigmoidFit {
+    pub fn value(&self, name: &str) -> f64 {
+        let i = ["A1", "A2", "x0", "dx"].iter().position(|n| *n == name).unwrap_or(0);
+        self.params.get(i).copied().unwrap_or(f64::NAN)
+    }
 }
 
 /// The levels of the Rise Time gadget, in percent of the amplitude.
@@ -105,6 +130,31 @@ impl Integrator {
         out
     }
 
+    /// Quick Sigmoidal Fit gadget: the Boltzmann fit of the rows inside the range; `None` with fewer than five
+    /// points or when the fit fails.
+    pub fn sigmoid(&self, x: &[f64], y: &[f64]) -> Option<SigmoidFit> {
+        let (a, b) = rows_in(x, self.x0, self.x1)?;
+        let (xs, ys) = (&x[a - 1..b], &y[a - 1..b]);
+        if xs.iter().zip(ys).filter(|(u, v)| u.is_finite() && v.is_finite()).count() < 5 {
+            return None;
+        }
+        let func = sheaf_fit::library::get("Boltzmann")?;
+        let report = sheaf_fit::nlsf::fit(&func, xs, ys, &Default::default()).ok()?;
+        let params: Vec<f64> = report.params.iter().map(|p| p.value).collect();
+        params.iter().all(|v| v.is_finite()).then_some(SigmoidFit { params, func })
+    }
+
+    /// Quick Peaks gadget: the positive peaks of the curve among the rows inside the range, as (x, y).
+    pub fn peaks(&self, x: &[f64], y: &[f64]) -> Vec<(f64, f64)> {
+        let Some((a, b)) = rows_in(x, self.x0, self.x1) else { return Vec::new() };
+        let opts = sheaf_calc::peaks::PeakOptions {
+            direction: sheaf_calc::peaks::PeakDirection::Positive,
+            ..Default::default()
+        };
+        let found = sheaf_calc::peaks::find_peaks(&x[a - 1..b], &y[a - 1..b], &opts);
+        found.x.into_iter().zip(found.y).collect()
+    }
+
     /// The rise or fall time over the range (Rise Time gadget).
     pub fn rise(&self, x: &[f64], y: &[f64]) -> Option<sheaf_calc::risetime::RiseTime> {
         let (a, b) = rows_in(x, self.x0, self.x1)?;
@@ -152,6 +202,36 @@ impl Integrator {
         let result = if integrating { self.result(&x, &y) } else { None };
         let rise = if self.kind == GadgetKind::RiseTime { self.rise(&x, &y) } else { None };
         let crossings = if self.kind == GadgetKind::Intersect { self.crossings(project, graph) } else { Vec::new() };
+        let peaks = if self.kind == GadgetKind::QuickPeaks { self.peaks(&x, &y) } else { Vec::new() };
+        let sigmoid = if self.kind == GadgetKind::Sigmoid { self.sigmoid(&x, &y) } else { None };
+        if let Some(s) = &sigmoid {
+            // The fitted curve across the range, 200 steps.
+            let (lo, hi) = (self.x0.min(self.x1), self.x0.max(self.x1));
+            let pts: Vec<Pos2> = (0..=200)
+                .map(|k| lo + (hi - lo) * f64::from(k) / 200.0)
+                .map(|xv| (xv, s.func.eval(&s.params, xv)))
+                .filter(|(_, yv)| yv.is_finite())
+                .map(|(xv, yv)| to_screen(geom.data_to_page(placement.x(xv), placement.y(yv))))
+                .collect();
+            painter.add(egui::Shape::line(pts, Stroke::new(2.0_f32, Color32::from_rgb(200, 30, 30))));
+        }
+        for &(px, py) in &peaks {
+            let at = to_screen(geom.data_to_page(placement.x(px), placement.y(py)));
+            let tip = at + egui::vec2(0.0, -4.0);
+            let red = Color32::from_rgb(200, 30, 30);
+            painter.add(egui::Shape::convex_polygon(
+                vec![tip, tip + egui::vec2(-5.0, -8.0), tip + egui::vec2(5.0, -8.0)],
+                red,
+                Stroke::NONE,
+            ));
+            painter.text(
+                tip + egui::vec2(0.0, -10.0),
+                egui::Align2::CENTER_BOTTOM,
+                sheaf_core::format::format_general(px, 4),
+                egui::FontId::proportional(11.0),
+                Color32::from_rgb(120, 20, 20),
+            );
+        }
         for p in &crossings {
             let at = to_screen(geom.data_to_page(placement.x(p.x), placement.y(p.y)));
             painter.circle_stroke(at, 4.0, Stroke::new(1.5_f32, Color32::from_rgb(200, 30, 30)));
@@ -232,6 +312,19 @@ impl Integrator {
                 sheaf_core::format::format_general(r.time, 6)
             ),
             (GadgetKind::RiseTime, _, None) => "Rise Time: no step in the range".to_string(),
+            (GadgetKind::Sigmoid, _, _) => match &sigmoid {
+                Some(s) => format!(
+                    "x0 = {}, dx = {}",
+                    sheaf_core::format::format_general(s.value("x0"), 6),
+                    sheaf_core::format::format_general(s.value("dx"), 4)
+                ),
+                None => "Sigmoidal fit failed in the range".to_string(),
+            },
+            (GadgetKind::QuickPeaks, _, _) => match peaks.len() {
+                0 => "No peak in the range".to_string(),
+                1 => "1 peak".to_string(),
+                n => format!("{n} peaks"),
+            },
             (GadgetKind::Intersect, _, _) => match crossings.len() {
                 0 => "No intersection in the range".to_string(),
                 1 => "1 intersection".to_string(),
@@ -292,7 +385,9 @@ impl Integrator {
         body.context_menu(|ui| {
             let menu = match self.kind {
                 GadgetKind::Integrate => menus::integrate_gadget_menu(self.end_point_baseline),
-                GadgetKind::RiseTime | GadgetKind::Intersect => menus::rise_time_gadget_menu(),
+                GadgetKind::RiseTime | GadgetKind::Intersect | GadgetKind::QuickPeaks | GadgetKind::Sigmoid => {
+                    menus::rise_time_gadget_menu()
+                }
             };
             menus::show_context(ui, &menu, c, actions)
         });

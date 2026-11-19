@@ -6169,3 +6169,31 @@ so this follows Origin's documented behaviour. It reuses the Integrate gadget's 
 - **Limits:** the points are found in the plots' own values. On stacked (offset) plots they are drawn with
   the gadget plot's offset.
 
+## Quick Peaks gadget: Gadgets > Quick Peaks... (T140, 2026-11-18, **not measured**)
+
+Origin 2016's Gadgets menu has Quick Peaks.... It could not be probed (Origin's COM class was
+unregistered), so this follows Origin's documented behaviour. It reuses the Integrate gadget's range.
+
+- **Opening:** the gadget opens on the selected plot of the active layer, or its first visible plot of
+  numbers, over the middle half of the X axis. The range drags as the Integrate gadget's does.
+- **What it finds:** the positive peaks among the rows inside the range (the first unbroken run of rows
+  whose X lies in it). It uses `sheaf_calc::peaks::find_peaks` with Peak Analyzer's defaults: a peak is
+  higher than its 2 neighbours on each side, and it keeps peaks of at least 20 % of the largest magnitude.
+- **What it draws:** a red triangle above each peak with its X value (four significant digits). The label
+  at the top reads "N peaks", "1 peak" or "No peak in the range".
+- **Right-click menu:** Delete (Esc) closes the gadget.
+
+## Quick Sigmoidal Fit gadget: Gadgets > Quick Sigmoidal Fit... (T141, 2026-11-18, **not measured**)
+
+Origin 2016's Gadgets menu has Quick Sigmoidal Fit.... It could not be probed (Origin's COM class was
+unregistered), so this follows Origin's documented behaviour. It reuses the Integrate gadget's range.
+
+- **Opening:** the gadget opens on the selected plot of the active layer, or its first visible plot of
+  numbers, over the middle half of the X axis. The range drags as the Integrate gadget's does.
+- **What it fits:** the built-in Boltzmann function `A2 + (A1 - A2) / (1 + exp((x - x0) / dx))`, fitted to
+  the rows inside the range (the first unbroken run of rows whose X lies in it). It uses Nonlinear Curve
+  Fit with its default options and guessed starting values. At least five points are needed.
+- **What it draws:** the fitted curve across the range in red, 2 pt. The label at the top reads
+  "x0 = …, dx = …", or "Sigmoidal fit failed in the range".
+- **Right-click menu:** Delete (Esc) closes the gadget.
+

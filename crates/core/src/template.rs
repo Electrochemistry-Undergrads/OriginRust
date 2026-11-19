@@ -23,6 +23,10 @@ pub enum Template {
     /// ([`Coords::Space3d`]) of symbols, or of a line with symbols.
     Scatter3d,
     Trajectory3d,
+    /// 3D Scatter + Error Bar and 3D Bars (T156): the Z error column after the Z column draws vertical
+    /// error bars; the bars stand from the floor of the box to Z.
+    Scatter3dError,
+    Bars3d,
     /// Scatter plot with the same axes as [`Template::Line`].
     Scatter,
     /// Scatter plot whose axes cross in the middle of the layer (Origin's "Scatter Central", 2016): both
@@ -210,10 +214,12 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 85] = [
+    pub const ALL: [Template; 87] = [
         Template::Line,
         Template::Scatter3d,
         Template::Trajectory3d,
+        Template::Scatter3dError,
+        Template::Bars3d,
         Template::StepHorizontal,
         Template::StepVertical,
         Template::SplineConnected,
@@ -304,6 +310,8 @@ impl Template {
             Template::Line => "line",
             Template::Scatter3d => "3d-scatter",
             Template::Trajectory3d => "3d-trajectory",
+            Template::Scatter3dError => "3d-scatter-error",
+            Template::Bars3d => "3d-bars",
             Template::StepHorizontal => "step-horizontal",
             Template::StepVertical => "step-vertical",
             Template::SplineConnected => "spline-connected",
@@ -394,6 +402,8 @@ impl Template {
             Template::Line => "Line",
             Template::Scatter3d => "3D Scatter",
             Template::Trajectory3d => "3D Trajectory",
+            Template::Scatter3dError => "3D Scatter + Error Bar",
+            Template::Bars3d => "3D Bars",
             Template::StepHorizontal => "Horizontal Step",
             Template::StepVertical => "Vertical Step",
             Template::SplineConnected => "Spline Connected",
@@ -520,6 +530,14 @@ impl Template {
             Template::Line => general(id, name, PlotKind::Line),
             Template::Scatter3d => space3d(id, name, PlotKind::Scatter),
             Template::Trajectory3d => space3d(id, name, PlotKind::LineSymbol),
+            Template::Scatter3dError => space3d(id, name, PlotKind::Scatter),
+            Template::Bars3d => {
+                // Filled bars with a black edge, so that nearer bars stand out from farther ones.
+                let mut g = from_red(space3d(id, name, PlotKind::Column));
+                g.layers[0].default_line = LineStyle::solid(Color::BLACK, 0.5);
+                g.layers[0].default_symbol.filled = true;
+                g
+            }
             Template::StepHorizontal => connected(id, name, Connect::StepHorizontal),
             Template::StepVertical => connected(id, name, Connect::StepVertical),
             Template::SplineConnected => connected(id, name, Connect::Spline),
@@ -1509,7 +1527,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 85);
+        assert_eq!(Template::ALL.len(), 87);
         assert_eq!(Template::from_name("piper"), Some(Template::Piper));
         assert_eq!(Template::from_name("kde-2d"), Some(Template::Kde2d));
         assert_eq!(Template::from_name("smith-chart"), Some(Template::SmithChart));

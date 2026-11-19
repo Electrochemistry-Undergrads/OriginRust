@@ -6471,6 +6471,13 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
     near-left edge.
   - Where two labelled edges meet, X leaves out its end label and Z its bottom one.
 - **Templates:** `3d-scatter` (symbols) and `3d-trajectory` (line and symbols).
+- **3D Scatter + Error Bar (T156, `3d-scatter-error`):** the numeric column after the Z column holds
+  the Z errors (`Plot::y_error`). A change of Z moves a point straight up the page, so the ordinary
+  error bars draw them, scaled by `2 cos e / (Z range)`.
+- **3D Bars (T156, `3d-bars`):** each bar stands from the floor of the box under its point up to the
+  point. It is drawn as a flat bar facing the page, red with a black edge, not as a prism.
+  - The bars are drawn from the back to the front, so nearer bars cover farther ones. The rows are
+    reordered for that, so masks and row filters do not apply to 3D bars.
 - **Not done:**
   - rotating the view, and the Z axis dialog (Format > Axes > Z Axis stays grey);
   - hiding points behind each other (points are drawn in row order);

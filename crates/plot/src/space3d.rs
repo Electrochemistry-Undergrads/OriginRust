@@ -27,6 +27,14 @@ impl DataBox {
     }
 }
 
+/// Row `r`'s X and Y in the cube (NaN when missing).
+fn xyz_unit(project: &Project, plot: &sheaf_core::graph::Plot, b: &DataBox, r: usize) -> (f64, f64) {
+    match xyz(project, plot) {
+        Some((x, y, _)) => (x.get(r).map_or(f64::NAN, |v| b.unit(0, *v)), y.get(r).map_or(f64::NAN, |v| b.unit(1, *v))),
+        None => (f64::NAN, f64::NAN),
+    }
+}
+
 /// The page position (in data units of the hidden axes) of a point of the cube -1..1.
 pub(crate) fn view(c: &Space3dCoords, [x, y, z]: [f64; 3]) -> (f64, f64) {
     let (sa, ca) = c.azimuth_deg.to_radians().sin_cos();
@@ -93,10 +101,45 @@ pub(crate) fn columns(pd: &mut PlotData, project: &Project, c: &Space3dCoords, b
             }
         }
     }
+    // Z error bars (T156): a change of Z moves a point straight up the page, by `2 cos e / (Z range)`
+    // per unit, so the 2D error bars draw them.
+    let (_, ce) = c.elevation_deg.to_radians().sin_cos();
+    let z_axis = &b.axes[2];
+    let per_z = if z_axis.max > z_axis.min { 2.0 * ce / (z_axis.max - z_axis.min) } else { 0.0 };
+    pd.err = pd
+        .plot
+        .y_error
+        .and_then(|id| project.numeric(id))
+        .map(|e| Cow::Owned((0..n).map(|r| e.get(r).map_or(f64::NAN, |v| v * per_z)).collect()));
+    // 3D bars (T156): from the floor of the box under the point to the point, drawn from the back
+    // to the front so that nearer bars cover farther ones. The rows are reordered for that, so masks
+    // and row filters do not apply to 3D bars.
+    if pd.plot.kind == sheaf_core::graph::PlotKind::Column {
+        let (sa, ca) = c.azimuth_deg.to_radians().sin_cos();
+        let cube: Vec<(f64, f64)> = (0..n).map(|r| xyz_unit(project, pd.plot, b, r)).collect();
+        let depth = |r: usize| cube[r].0 * sa + cube[r].1 * ca;
+        let mut order: Vec<usize> = (0..n).collect();
+        order.sort_by(|&p, &q| depth(q).total_cmp(&depth(p)));
+        let floor: Vec<f64> = order
+            .iter()
+            .map(|&r| {
+                let (x, y) = cube[r];
+                if x.is_finite() && y.is_finite() { view(c, [x, y, -1.0]).1 } else { f64::NAN }
+            })
+            .collect();
+        us = order.iter().map(|&r| us[r]).collect();
+        ws = order.iter().map(|&r| ws[r]).collect();
+        pd.err =
+            pd.err.take().map(|e| Cow::Owned(order.iter().map(|&r| e.get(r).copied().unwrap_or(f64::NAN)).collect()));
+        pd.stack = Some((floor, ws.clone()));
+        pd.mask = None;
+        pd.filters.clear();
+    } else {
+        pd.stack = None;
+    }
     pd.x = Some(Cow::Owned(us));
     pd.y = Cow::Owned(ws);
     pd.x_format = None;
-    pd.err = None;
     pd.xerr = None;
     // The Z column places the points; it sizes no symbol.
     pd.size_z = None;
@@ -270,5 +313,41 @@ mod tests {
         // The trajectory joins the points.
         let g = p.plot_columns(Template::Trajectory3d, &[y]).unwrap();
         assert_eq!(p.graph(g).unwrap().layers[0].plots[0].kind, sheaf_core::graph::PlotKind::LineSymbol);
+    }
+
+    #[test]
+    fn z_error_bars_and_bars_from_the_floor() {
+        use sheaf_core::column::{ColumnData, Designation};
+        use sheaf_core::template::Template;
+        let mut p = Project::new();
+        let b = p.add_workbook("Book1");
+        p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0, 0.0, 1.0])).unwrap();
+        let y = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![0.0, 0.0, 1.0, 1.0])).unwrap();
+        let z = p.add_column(b, 0, Designation::Z, ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0])).unwrap();
+        let e = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![0.5; 4])).unwrap();
+        let g = p.plot_columns(Template::Scatter3dError, &[y]).unwrap();
+        let graph = p.graph(g).unwrap();
+        assert_eq!((graph.layers[0].plots[0].size_from, graph.layers[0].plots[0].y_error), (Some(z), Some(e)));
+        let layers = crate::data::collect_graph(&p, graph);
+        let pd = &layers[0].plots[0];
+        let bx = data_box(&p, &graph.layers[0]).unwrap();
+        let c = *graph.layers[0].coords.space3d().unwrap();
+        let per_z = 2.0 * c.elevation_deg.to_radians().cos() / (bx.axes[2].max - bx.axes[2].min);
+        let err = pd.err.as_deref().unwrap();
+        assert!(err.iter().all(|v| (v - 0.5 * per_z).abs() < 1e-12), "{err:?}");
+
+        let g = p.plot_columns(Template::Bars3d, &[y]).unwrap();
+        let graph = p.graph(g).unwrap();
+        let layers = crate::data::collect_graph(&p, graph);
+        let pd = &layers[0].plots[0];
+        let (floor, top) = pd.stack.as_ref().expect("bars stand on the floor");
+        assert!(floor.iter().zip(top).all(|(f, t)| f < t));
+        // Back to front: the depth falls along the drawn rows. A bar's floor is at
+        // w = -cos e + depth sin e, so the floor itself falls too.
+        let depth: Vec<f64> = floor
+            .iter()
+            .map(|w| (w + c.elevation_deg.to_radians().cos()) / c.elevation_deg.to_radians().sin())
+            .collect();
+        assert!(depth.windows(2).all(|w| w[0] >= w[1] - 1e-12), "{depth:?}");
     }
 }

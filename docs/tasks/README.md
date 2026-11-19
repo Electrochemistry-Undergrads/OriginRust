@@ -153,6 +153,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T152](T152-legend-order.md) | Legend Bring to front/back, front/back of data (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured; left: legend Cut/Copy |
 | [T153](T153-title-order.md) | Axis title Bring to the front / Push to the back (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured |
 | [T154](T154-notes-window.md) | Notes windows: File > New > Notes, New Notes (B14 slice) | M | done 2026-11-19 (notes-window spec), not measured; left: Add Notes as Sheet, .opj |
+| [T159](T159-object-align.md) | Shift+click multi-selection, Object Edit Align and Make Same Width/Height (B2 slice) | M | done 2026-11-19 (graphing "Aligning drawn objects and text"), not measured; left: Group/Ungroup, distribute |
 | [T155](T155-3d-scatter.md) | 3D Scatter, 3D Trajectory (B15 slice 1) | L | done 2026-11-19 (graphing "3D Scatter and 3D Trajectory"), not measured; left: rotation, Z axis dialog, other 3D plots |
 | [T156](T156-3d-bars-errors.md) | 3D Bars, 3D Scatter + Error Bar (B15 slice 2) | M | done 2026-11-19 (graphing "3D Scatter and 3D Trajectory"), not measured |
 | [T157](T157-3d-vectors.md) | 3D Vector XYZ XYZ, XYZ dXdYdZ (B15 slice 3) | M | done 2026-11-19 (graphing "3D Scatter and 3D Trajectory"), not measured |

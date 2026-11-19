@@ -23,6 +23,7 @@ mod format;
 use crate::actions::{Action, GraphTool, ViewOp};
 use crate::dialogs::analysis::AnalysisKind;
 use crate::menus::{self, Cmd, MenuContext, NOT_YET};
+use crate::obj_align::Arrange;
 use crate::panels::PanelId;
 use crate::theme;
 use eframe::egui::{self, Align2, Color32, FontId, Painter, Pos2, Rect, Sense, Shape, Stroke, Ui, vec2};
@@ -259,7 +260,7 @@ fn is_tool(cmd: &Cmd) -> bool {
 
 #[cfg(test)]
 fn is_order(cmd: &Cmd) -> bool {
-    matches!(cmd, Cmd::OrderSelectedShape { .. })
+    matches!(cmd, Cmd::OrderSelectedShape { .. } | Cmd::ArrangeSelected(_))
 }
 
 /// A Graph toolbar button that adds a layer of `kind` (the same command as Graph > New Layer(Axes)).
@@ -278,6 +279,12 @@ fn layer_button(icon: Icon, kind: NewLayerKind) -> Item {
 /// An Object Edit button that reorders the selected drawn shape (no menu entry; state-disabled).
 fn b_order(icon: Icon, tip: &'static str, front: bool) -> Item {
     Item::Button(Button { icon, tip, cmd: Some(Cmd::OrderSelectedShape { front }), menu: "", on: false })
+}
+
+/// An Object Edit button that aligns or sizes the selected objects to the last-selected one (T159;
+/// no menu entry; state-disabled below two selected objects).
+fn b_arrange(icon: Icon, tip: &'static str, op: Arrange) -> Item {
+    Item::Button(Button { icon, tip, cmd: Some(Cmd::ArrangeSelected(op)), menu: "", on: false })
 }
 
 /// A button for a feature Sheaf lacks.
@@ -412,15 +419,15 @@ fn build(bar: Bar) -> Vec<Item> {
             tool(Hand, "Pan", Cmd::PanTool),
         ],
         Bar::ObjectEdit => vec![
-            g(AlignLeft, "Align Left"),
-            g(AlignRight, "Align Right"),
-            g(AlignTop, "Align Top"),
-            g(AlignBottom, "Align Bottom"),
-            g(AlignCenterH, "Align Horizontal Center"),
-            g(AlignCenterV, "Align Vertical Center"),
+            b_arrange(AlignLeft, "Align Left", Arrange::Left),
+            b_arrange(AlignRight, "Align Right", Arrange::Right),
+            b_arrange(AlignTop, "Align Top", Arrange::Top),
+            b_arrange(AlignBottom, "Align Bottom", Arrange::Bottom),
+            b_arrange(AlignCenterH, "Align Horizontal Center", Arrange::CenterH),
+            b_arrange(AlignCenterV, "Align Vertical Center", Arrange::CenterV),
             gap(),
-            g(SameWidth, "Make Same Width"),
-            g(SameHeight, "Make Same Height"),
+            b_arrange(SameWidth, "Make Same Width", Arrange::SameWidth),
+            b_arrange(SameHeight, "Make Same Height", Arrange::SameHeight),
             gap(),
             b_order(Front, "Bring to Front", true),
             b_order(Back, "Send to Back", false),

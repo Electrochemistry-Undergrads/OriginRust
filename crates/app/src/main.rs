@@ -44,6 +44,7 @@ mod macprint;
 mod menus;
 mod mru;
 mod notes_view;
+mod obj_align;
 mod object_format;
 mod panels;
 mod project_find;

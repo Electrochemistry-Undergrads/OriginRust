@@ -116,10 +116,10 @@ fn xyam_conventions_rotate_the_arrow_tips_about_the_data_points() {
         spec.convention = convention;
         p.graph_mut(graph).unwrap().layers[0].plots[0].decor.vector = Some(spec);
         let scene = layout::build_scene(&p, graph, &FixedMetrics).unwrap();
-        assert_eq!(scene.layers[0].plots.len(), 4);
-        for ((dx, dy), (point, paths)) in
-            deltas.into_iter().zip([1.0, 2.0].into_iter().zip(scene.layers[0].plots.chunks_exact(2)))
-        {
+        let (arrows, remainder) = scene.layers[0].plots.as_chunks::<2>();
+        assert_eq!(arrows.len(), 2);
+        assert!(remainder.is_empty());
+        for ((dx, dy), (point, paths)) in deltas.into_iter().zip([1.0, 2.0].into_iter().zip(arrows)) {
             let [Item::Path { d: shaft, .. }, Item::Path { d: head, .. }] = paths else {
                 panic!("expected vector shaft and head");
             };

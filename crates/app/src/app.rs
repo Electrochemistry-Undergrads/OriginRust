@@ -1327,7 +1327,9 @@ impl SheafApp {
         };
         let placement =
             sheaf_plot::stack_places(project, graph, layer).ok().and_then(|p| p.get(plot).copied()).unwrap_or_default();
-        let (x0, x1) = (placement.source_x(geom.x.from_unit(0.25)), placement.source_x(geom.x.from_unit(0.75)));
+        // A Vertical Cursor (T144) is a thin band in the middle: its centre is the cursor.
+        let (u0, u1) = if kind == crate::gadget::GadgetKind::VerticalCursor { (0.49, 0.51) } else { (0.25, 0.75) };
+        let (x0, x1) = (placement.source_x(geom.x.from_unit(u0)), placement.source_x(geom.x.from_unit(u1)));
         state.gadget = Some(crate::gadget::Integrator { kind, layer, plot, x0, x1, end_point_baseline: false });
         self.focus(graph);
     }
@@ -2660,6 +2662,9 @@ impl SheafApp {
             Action::StartFft { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Fft),
             Action::StartStatisticsGadget { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Statistics),
             Action::StartQuickFit { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::QuickFit),
+            Action::StartVerticalCursor { graph } => {
+                self.start_gadget(graph, crate::gadget::GadgetKind::VerticalCursor)
+            }
             Action::Gadget { graph, op } => self.gadget(graph, op),
             Action::ExportGraph(graph) => {
                 self.export =

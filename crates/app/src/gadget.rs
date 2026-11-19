@@ -60,6 +60,18 @@ pub enum GadgetKind {
     Statistics,
     /// Gadgets > Quick Fit, a straight line (T143).
     QuickFit,
+    /// Gadgets > Vertical Cursor (T144): the range is a thin band whose centre is the cursor.
+    VerticalCursor,
+}
+
+/// The Y of a polyline at `xv`: straight interpolation on the first segment that spans it.
+pub fn y_at(x: &[f64], y: &[f64], xv: f64) -> Option<f64> {
+    (0..x.len().min(y.len()).saturating_sub(1)).find_map(|i| {
+        let (x0, x1, y0, y1) = (x[i], x[i + 1], y[i], y[i + 1]);
+        let ok = [x0, x1, y0, y1].iter().all(|v| v.is_finite());
+        let inside = (x0 <= xv && xv <= x1) || (x1 <= xv && xv <= x0);
+        (ok && inside).then(|| if x1 == x0 { y0 } else { y0 + (y1 - y0) * (xv - x0) / (x1 - x0) })
+    })
 }
 
 /// The finite (x, y) pairs of the rows inside a range.
@@ -189,6 +201,21 @@ impl Integrator {
         params.iter().all(|v| v.is_finite()).then_some(SigmoidFit { params, func })
     }
 
+    /// Vertical Cursor gadget: the cursor's X (the middle of the band).
+    pub fn cursor_x(&self) -> f64 {
+        (self.x0 + self.x1) / 2.0
+    }
+
+    /// Vertical Cursor gadget: (plot index, Y at the cursor) for every visible plot of the layer that spans it.
+    pub fn cursor_values(&self, project: &Project, graph: WindowId) -> Vec<(usize, f64)> {
+        let Some(l) = project.graph(graph).and_then(|g| g.layers.get(self.layer)) else { return Vec::new() };
+        let xc = self.cursor_x();
+        (0..l.plots.len())
+            .filter(|&i| l.plots[i].visible)
+            .filter_map(|i| plot_xy(project, graph, self.layer, i).and_then(|(x, y)| y_at(&x, &y, xc)).map(|v| (i, v)))
+            .collect()
+    }
+
     /// Statistics gadget: the Y values inside the range; `None` without any.
     pub fn stats(&self, x: &[f64], y: &[f64]) -> Option<RangeStats> {
         let ys: Vec<f64> = points_in(x, y, self.x0, self.x1).into_iter().map(|p| p.1).collect();
@@ -303,6 +330,30 @@ impl Integrator {
         let spectrum = if self.kind == GadgetKind::Fft { self.spectrum(&x, &y) } else { None };
         let stats = if self.kind == GadgetKind::Statistics { self.stats(&x, &y) } else { None };
         let line = if self.kind == GadgetKind::QuickFit { self.line_fit(&x, &y) } else { None };
+        let cursor =
+            if self.kind == GadgetKind::VerticalCursor { self.cursor_values(project, graph) } else { Vec::new() };
+        if self.kind == GadgetKind::VerticalCursor {
+            let xc = to_screen((geom.data_to_page(placement.x(self.cursor_x()), 0.0).0, f.y)).x;
+            painter.line_segment(
+                [Pos2::new(xc, top), Pos2::new(xc, bottom)],
+                Stroke::new(1.5_f32, Color32::from_rgb(200, 30, 30)),
+            );
+            for &(i, v) in &cursor {
+                let pl = sheaf_plot::stack_places(project, graph, self.layer)
+                    .ok()
+                    .and_then(|p| p.get(i).copied())
+                    .unwrap_or_default();
+                let at = to_screen(geom.data_to_page(pl.x(self.cursor_x()), pl.y(v)));
+                painter.circle_stroke(at, 4.0, Stroke::new(1.5_f32, Color32::from_rgb(200, 30, 30)));
+                painter.text(
+                    at + egui::vec2(6.0, -4.0),
+                    egui::Align2::LEFT_BOTTOM,
+                    sheaf_core::format::format_general(v, 5),
+                    egui::FontId::proportional(11.0),
+                    Color32::from_rgb(120, 20, 20),
+                );
+            }
+        }
         if let Some(l) = &line {
             let (lo, hi) = (self.x0.min(self.x1), self.x0.max(self.x1));
             let at = |xv: f64| to_screen(geom.data_to_page(placement.x(xv), placement.y(l.intercept + l.slope * xv)));
@@ -451,6 +502,9 @@ impl Integrator {
                 sheaf_core::format::format_general(r.time, 6)
             ),
             (GadgetKind::RiseTime, _, None) => "Rise Time: no step in the range".to_string(),
+            (GadgetKind::VerticalCursor, _, _) => {
+                format!("x = {}", sheaf_core::format::format_general(self.cursor_x(), 6))
+            }
             (GadgetKind::Statistics, _, _) => match &stats {
                 Some(s) => {
                     let g = |v: f64| sheaf_core::format::format_general(v, 5);
@@ -555,7 +609,8 @@ impl Integrator {
                 | GadgetKind::Sigmoid
                 | GadgetKind::Fft
                 | GadgetKind::Statistics
-                | GadgetKind::QuickFit => menus::rise_time_gadget_menu(),
+                | GadgetKind::QuickFit
+                | GadgetKind::VerticalCursor => menus::rise_time_gadget_menu(),
             };
             menus::show_context(ui, &menu, c, actions)
         });

@@ -1158,8 +1158,17 @@ unsigned 32-bit decimal integer. It adds that percentage of the legend's base fo
 before the next row. The separator does not occupy a row or draw ink. Consecutive separators
 add together within one column. Separators at the start or end of a column have no effect.
 The legend frame covers the tallest column including its added gaps. These rules use Sheaf
-layout metrics. Native multi-column geometry is unmeasured. Free labels and titles still
-need multiline layout for this escape.
+layout metrics. Native multi-column geometry is unmeasured.
+
+**Free graph-label line separators (T58).** The
+[Origin text properties documentation](https://docs.originlab.com/origin-help/textob-prop-text-tab/)
+describes the same escape for multiline text objects. Sheaf free labels lay out CRLF, LF and CR as
+line breaks, with the first row attached at the existing anchor. An ordinary row advances by
+1.3 times the base font size. A standalone top-level `\sep:nn` adds that percentage of the base
+size before the next row. Gaps add together and only affect spacing between rows. Styles can
+span line breaks, and each row rotates with the label. Literal spans and malformed separators
+render as text. Picking and exports use the same scene rows. The line advance and exact placement
+are Sheaf's layout choices. Axis titles, table cells and inline separator placement are outside this slice.
 
 ### 7.12 Reusable Custom RGB wells (T58/T59, documented contract)
 

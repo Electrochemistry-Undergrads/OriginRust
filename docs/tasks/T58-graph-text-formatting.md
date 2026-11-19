@@ -254,6 +254,11 @@ column membership intact, and the frame height accounts for the gaps. Graphing 7
 the Origin 2022b syntax and Sheaf's column and placement rules. Formatting, strict workspace Clippy, Nextest (4,489 passed and
 8 skipped), doc tests, inventory and eight Python tooling tests passed.
 
+Free graph-label line separators (2026-11-18): explicit line breaks and standalone `\sep:nn`
+use shared scene rows. Font styles and rotation span the label, and the label stays one pickable
+object. Graphing 7.11 records the documented escape and Sheaf's row geometry. Formatting, strict workspace Clippy, Nextest (4,536 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
+
 Prime notation follow-up (codex/t58-escape-alias-audit, 2026-11-16): exact closed
 prime/double-prime escapes now use Unicode U+2032/U+2033 with existing run styles,
 script columns and rendering. Graphing 7.11 records the official documented

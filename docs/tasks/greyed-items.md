@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **222 greyed items: 147 in the menu bar, 13 on the toolbars, 62 in context menus.**
+original inventory baseline. This is not a new runtime audit. **219 greyed items: 145 in the menu bar, 13 on the toolbars, 61 in context menus.**
 
 ## How to read and keep this file
 
@@ -40,7 +40,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T60` | 0 |
 | `T61` | 5 |
 | `T62` | 0 |
-| `T63` | 6 |
+| `T63` | 3 |
 | `T65` | 0 |
 | `T66` | 9 |
 | `T67` | 0 |
@@ -86,7 +86,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 43 items, backlog packages (`B`) 159, not planned (`N`) 20.
+Briefs (`T`) hold 40 items, backlog packages (`B`) 159, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -176,7 +176,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B2` Object Properties...
 - `B2` Snap Layers to Grid · Snap Objects to Grid [Graph]
 - `B15` Axes: Z Axis... [Graph]
-- `T63` Axis Tick Labels: X Axis Tick Labels... · Y Axis Tick Labels... [Graph]
 - `B6` Snap to Grid · Merge cells [Workbook]
 
 ### Window
@@ -198,7 +197,6 @@ changes. The baseline labels remain open until implementation or a documented re
 ## Context menus
 
 - `B5` Worksheet column header: Remove Links
-- `T63` Worksheet column header: Frequency Count...
 - `B6` Worksheet column header: Add or Update Sparklines...
 - `B5` Worksheet data cell: Paste Link · Paste Link Transpose · Remove Links
 - `B6` Worksheet data cell: Insert Graph... · Insert Images from Files... · Insert Sparklines... · Insert Variables...

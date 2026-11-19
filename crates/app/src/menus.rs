@@ -1830,7 +1830,13 @@ fn format_menu(kind: WindowKind) -> Vec<Entry> {
                     grey("&Z Axis..."),
                 ],
             ),
-            grey_sub("Axis Tick Labels", &["X Axis Tick Labels...", "Y Axis Tick Labels..."]),
+            sub(
+                "Axis Tick Labels",
+                vec![
+                    item("X Axis Tick Labels...", Cmd::GraphProps(PropsTab::XTickLabels)),
+                    item("Y Axis Tick Labels...", Cmd::GraphProps(PropsTab::YTickLabels)),
+                ],
+            ),
             sub(
                 "Axis Titles",
                 vec![
@@ -2000,7 +2006,7 @@ pub fn column_header_menu() -> Vec<Entry> {
     v.push(item("Reverse Order", Cmd::ReverseOrder));
     v.push(sep());
     v.push(item("Normalize...", Cmd::Analyze(AnalysisKind::Normalize)));
-    v.push(grey("Frequency Count..."));
+    v.push(item("Frequency Count...", Cmd::Analyze(AnalysisKind::Histogram)));
     v.push(item("Statistics on Columns...", Cmd::Analyze(AnalysisKind::Statistics)));
     v.push(sep());
     v.push(hide_menu());
@@ -2241,6 +2247,8 @@ fn graph_copy_format_menu(edit: bool, choices: &[(&str, Option<GraphPart>)]) -> 
 pub fn graph_axis_menu(layer: usize, y: bool, grids: bool, page: (f64, f64)) -> Vec<Entry> {
     let tab = if y { PropsTab::YAxis } else { PropsTab::XAxis };
     let at = Cmd::GraphPropsAt { layer, tab, plot: None };
+    let labels_tab = if y { PropsTab::YTickLabels } else { PropsTab::XTickLabels };
+    let labels = Cmd::GraphPropsAt { layer, tab: labels_tab, plot: None };
     let mut menu = vec![
         item("Hide Axis", Cmd::GraphEdit(GraphOp::HideAxis { layer, y })),
         item(if grids { "Hide Grids" } else { "Show Grids" }, Cmd::GraphEdit(GraphOp::ToggleGrids { layer, y })),
@@ -2254,7 +2262,7 @@ pub fn graph_axis_menu(layer: usize, y: bool, grids: bool, page: (f64, f64)) -> 
         item("Save Format as Theme...", Cmd::SaveAxisTheme { layer, y }),
         sep(),
         item("Scale...", at.clone()),
-        item("Tick Labels...", at.clone()),
+        item("Tick Labels...", labels),
         item("Properties...", at),
     ];
     // Paste Format To shows once an axis format is on the clipboard (Origin, spec 24).

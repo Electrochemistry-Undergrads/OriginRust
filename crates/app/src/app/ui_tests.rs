@@ -3590,10 +3590,10 @@ fn the_column_header_menu_has_origins_items_in_origins_order_and_runs_them() {
         "Set As",
         "Properties...",
         "Normalize...",
+        "Frequency Count...",
     ] {
         assert!(entry_enabled(&h, have), "{have} should be enabled");
     }
-    assert!(!entry_enabled(&h, "Frequency Count..."), "Frequency Count... should be greyed");
     // Clear empties the column and one undo brings it back.
     click_containing(&mut h, "Clear");
     assert!(column(&h, "C").is_empty());
@@ -9183,4 +9183,22 @@ fn the_step_and_spline_line_items_and_the_2d_toolbar_types_make_graphs() {
     bar_button!(h, "2D Graphs", "Box Chart").click();
     settle(&mut h);
     assert_eq!(project(&h).graphs().count(), before + 1, "Box Chart makes a graph");
+}
+
+#[test]
+fn axis_tick_labels_open_the_axis_dialog_on_its_tick_labels_tab() {
+    // T63 group I: Format > Axis Tick Labels > X/Y Axis Tick Labels...
+    use crate::dialogs::graph_axis::AxisTab;
+    let mut h = start(vec![data_file("tick-labels-menu")]);
+    for (item, tab) in [("X Axis Tick Labels...", PropsTab::XAxis), ("Y Axis Tick Labels...", PropsTab::YAxis)] {
+        show_window(&mut h, "Graph1 - sample");
+        menu_path(&mut h, &["Format", "Axis Tick Labels", item]);
+        let d = h.state().graph_props.as_ref().expect("the axis dialog is open");
+        assert_eq!((d.tab(), d.axis_tab()), (tab, Some(AxisTab::TickLabels)), "{item}");
+        click(&mut h, "Cancel");
+    }
+    // T63 group K: the column header's Frequency Count... is Statistics' Frequency Counts.
+    let c = menus::column_header_menu();
+    assert!(c.iter().any(|e| matches!(e, menus::Entry::Item(i) if menus::plain(&i.label) == "Frequency Count..."
+        && i.cmd == Some(menus::Cmd::Analyze(AnalysisKind::Histogram)))));
 }

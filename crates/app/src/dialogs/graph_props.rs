@@ -31,6 +31,9 @@ pub enum PropsTab {
     XAxis,
     /// The axis dialog on the vertical axis.
     YAxis,
+    /// The axis dialog on the horizontal or vertical axis, on its Tick Labels tab (T63 group I).
+    XTickLabels,
+    YTickLabels,
     /// Plot Details on a plot (when one is given) or on the layer (Layer Contents).
     Plots,
     /// Plot Details on the legend settings of the layer.
@@ -135,6 +138,8 @@ impl GraphPropsDialog {
         let view = match tab {
             PropsTab::XAxis => View::Axis { vertical: false, tab: AxisTab::Scale },
             PropsTab::YAxis => View::Axis { vertical: true, tab: AxisTab::Scale },
+            PropsTab::XTickLabels => View::Axis { vertical: false, tab: AxisTab::TickLabels },
+            PropsTab::YTickLabels => View::Axis { vertical: true, tab: AxisTab::TickLabels },
             PropsTab::Plots => View::Details { node: Node::Layer(layer), tab: DetailTab::LayerContents },
             PropsTab::Legend => View::Details { node: Node::Layer(layer), tab: DetailTab::Legend },
             PropsTab::Page => View::Details { node: Node::Graph, tab: DetailTab::Page },
@@ -163,6 +168,15 @@ impl GraphPropsDialog {
             View::Details { node: Node::Layer(_), tab: DetailTab::Legend } => PropsTab::Legend,
             View::Details { node: Node::Layer(_), tab: DetailTab::Background } => PropsTab::Layer,
             View::Details { .. } => PropsTab::Plots,
+        }
+    }
+
+    /// The axis dialog's tab, `None` in Plot Details.
+    #[cfg(test)]
+    pub fn axis_tab(&self) -> Option<AxisTab> {
+        match self.view {
+            View::Axis { tab, .. } => Some(tab),
+            View::Details { .. } => None,
         }
     }
 

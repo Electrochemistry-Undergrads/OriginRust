@@ -1189,6 +1189,12 @@ fn reference_choices(project: &Project, exclude: &[ColumnId]) -> Vec<(ColumnId, 
 }
 
 impl AnalysisDialog {
+    /// Which tool the window runs (tests).
+    #[cfg(test)]
+    pub fn kind(&self) -> AnalysisKind {
+        self.kind
+    }
+
     /// The columns the window runs on (for tests).
     #[cfg(test)]
     pub fn columns(&self) -> &[ColumnId] {

@@ -248,12 +248,58 @@ pub struct ProbPlotSpec {
     pub family: Family,
     /// Make the graph (default); without it only the result sheet is made.
     pub graph: bool,
+    /// How the plotting positions are estimated (T151): Filliben's by default, as scipy; Origin's
+    /// `plot_prob` documents Blom's as its default.
+    pub scores: calc::PlotScores,
+    /// Probability plot of the normal or lognormal family: a confidence band of this level (0.95 for
+    /// 95 %) round the fitted line (T151).
+    pub band: Option<f64>,
+    /// Q-Q plot: the ordered data on X and the quantiles on Y, as Origin's guide describes (T151);
+    /// scipy's order (quantiles on X) without it.
+    pub data_on_x: bool,
 }
 
 impl Default for ProbPlotSpec {
     fn default() -> Self {
-        ProbPlotSpec { kind: ProbPlotKind::Probability, family: Family::Normal, graph: true }
+        ProbPlotSpec {
+            kind: ProbPlotKind::Probability,
+            family: Family::Normal,
+            graph: true,
+            scores: calc::PlotScores::Filliben,
+            band: None,
+            data_on_x: false,
+        }
     }
+}
+
+/// The confidence band of a normal or lognormal probability plot (T151, Sheaf's method; Origin's is
+/// not measured): at each percent of `percents`, the fitted quantile `mu + z sigma` plus and minus
+/// `k sqrt(sigma^2 (1 + z^2 / 2) / n)`, the large-sample error of the maximum likelihood quantile, with
+/// `k` the normal quantile of `(1 + level) / 2`. A lognormal band is made on the log scale and
+/// returned as data. `None` for a level outside (0, 1).
+fn confidence_band(
+    family: Family,
+    params: &[f64],
+    n: usize,
+    level: f64,
+    percents: &[f64],
+) -> Option<(Vec<f64>, Vec<f64>)> {
+    if !(level > 0.0 && level < 1.0) || params.len() < 2 || n == 0 {
+        return None;
+    }
+    let (mu, sigma) = (params[0], params[1]);
+    let z_of = |p: f64| calc::standard_quantile(Family::Normal, 1.0, p);
+    let k = z_of((1.0 + level) / 2.0);
+    let back = |v: f64| if family == Family::Lognormal { v.exp() } else { v };
+    let (mut lower, mut upper) = (Vec::new(), Vec::new());
+    for &pct in percents {
+        let z = z_of(pct / 100.0);
+        let x = mu + z * sigma;
+        let se = (sigma * sigma * (1.0 + z * z / 2.0) / n as f64).sqrt();
+        lower.push(back(x - k * se));
+        upper.push(back(x + k * se));
+    }
+    Some((lower, upper))
 }
 
 /// The scale of the percent axis that straightens the distribution function of the family.
@@ -279,7 +325,7 @@ pub(super) fn prob_plot(spec: &ProbPlotSpec, inputs: &[Input<'_>]) -> Result<Out
         && (matches!(family, Family::Lognormal | Family::Weibull) || (family == Family::Exponential && all_positive));
     for inp in inputs {
         let bad = |e: calc::FitError| AnalysisError::BadOption(format!("{}: {e}", inp.name));
-        let pp = calc::probplot(family, inp.ys(), None).map_err(bad)?;
+        let pp = calc::probplot_with(family, inp.ys(), None, spec.scores).map_err(bad)?;
         let n = pp.ordered.len();
         let first = on_sheet.len();
         let u = &inp.units;
@@ -304,10 +350,25 @@ pub(super) fn prob_plot(spec: &ProbPlotSpec, inputs: &[Input<'_>]) -> Result<Out
                         ry.push(p);
                     }
                 }
+                let band = match (spec.band, family) {
+                    (Some(level), Family::Normal | Family::Lognormal) => {
+                        Some(confidence_band(family, &fit.params, n, level, &ry).ok_or_else(|| {
+                            AnalysisError::BadOption(format!("{level} is not a confidence level between 0 and 1"))
+                        })?)
+                    }
+                    (Some(_), _) => {
+                        notes.push(format!(
+                            "{}: the confidence band is drawn for the normal and lognormal families only.",
+                            inp.label
+                        ));
+                        None
+                    }
+                    (None, _) => None,
+                };
                 on_sheet.push(with(number_column("Data (ordered)", u, Designation::X, pp.ordered.clone())));
                 on_sheet.push(with(number_column("Percent", "%", Designation::Y, percent)));
                 on_sheet.push(with(number_column("Fit X", u, Designation::X, rx)));
-                on_sheet.push(with(number_column("Fit percent", "%", Designation::Y, ry)));
+                on_sheet.push(with(number_column("Fit percent", "%", Designation::Y, ry.clone())));
                 let units = param_units(family, u);
                 let p2 = fit.params.get(1).copied().unwrap_or(f64::NAN);
                 table.push_row(
@@ -329,6 +390,22 @@ pub(super) fn prob_plot(spec: &ProbPlotSpec, inputs: &[Input<'_>]) -> Result<Out
                     label: format!("{} fit of {}", family.name(), inp.name),
                     line_of: Some(plots.len() - 1),
                 });
+                if let Some((lower, upper)) = band {
+                    let points = plots.len() - 2;
+                    let level = spec.band.unwrap_or(0.95) * 100.0;
+                    for (name, x) in [("Lower", lower), ("Upper", upper)] {
+                        let at = on_sheet.len();
+                        on_sheet.push(with(number_column(&format!("{name} {} % X", num(level)), u, Designation::X, x)));
+                        on_sheet.push(with(number_column(&format!("{name} percent"), "%", Designation::Y, ry.clone())));
+                        plots.push(GraphPlot {
+                            x: at,
+                            y: at + 1,
+                            kind: PlotKind::Line,
+                            label: format!("{name} {} % confidence of {}", num(level), inp.name),
+                            line_of: Some(points),
+                        });
+                    }
+                }
                 notes.push(format!(
                     "{}: {} probability plot of {n} values, fitted {}.",
                     inp.label,
@@ -338,20 +415,20 @@ pub(super) fn prob_plot(spec: &ProbPlotSpec, inputs: &[Input<'_>]) -> Result<Out
             }
             ProbPlotKind::QQ => {
                 let (tmin, tmax) = (pp.theoretical[0], pp.theoretical[n - 1]);
-                on_sheet.push(with(number_column(
-                    &format!("{} quantile", family.name()),
-                    "",
-                    Designation::X,
-                    pp.theoretical.clone(),
-                )));
-                on_sheet.push(with(number_column("Data (ordered)", u, Designation::Y, pp.ordered.clone())));
-                on_sheet.push(with(number_column("Line X", "", Designation::X, vec![tmin, tmax])));
-                on_sheet.push(with(number_column(
-                    "Line Y",
-                    u,
-                    Designation::Y,
-                    vec![pp.slope * tmin + pp.intercept, pp.slope * tmax + pp.intercept],
-                )));
+                let quantile = format!("{} quantile", family.name());
+                let line = [pp.slope * tmin + pp.intercept, pp.slope * tmax + pp.intercept];
+                if spec.data_on_x {
+                    // The same least-squares line, drawn with the data on X.
+                    on_sheet.push(with(number_column("Data (ordered)", u, Designation::X, pp.ordered.clone())));
+                    on_sheet.push(with(number_column(&quantile, "", Designation::Y, pp.theoretical.clone())));
+                    on_sheet.push(with(number_column("Line X", u, Designation::X, line.to_vec())));
+                    on_sheet.push(with(number_column("Line Y", "", Designation::Y, vec![tmin, tmax])));
+                } else {
+                    on_sheet.push(with(number_column(&quantile, "", Designation::X, pp.theoretical.clone())));
+                    on_sheet.push(with(number_column("Data (ordered)", u, Designation::Y, pp.ordered.clone())));
+                    on_sheet.push(with(number_column("Line X", "", Designation::X, vec![tmin, tmax])));
+                    on_sheet.push(with(number_column("Line Y", u, Designation::Y, line.to_vec())));
+                }
                 table.push_row(
                     inp.label.clone(),
                     vec![n as f64, pp.shape.unwrap_or(f64::NAN), pp.slope, pp.intercept, pp.r],
@@ -396,14 +473,18 @@ pub(super) fn prob_plot(spec: &ProbPlotSpec, inputs: &[Input<'_>]) -> Result<Out
             y_title: "Cumulative probability (%)".to_string(),
             look: Look::default(),
         },
-        ProbPlotKind::QQ => XyGraph {
-            plots,
-            x_scale: ScaleKind::Linear,
-            y_scale: ScaleKind::Linear,
-            x_title: format!("{} quantile", family.name()),
-            y_title: data_title,
-            look: Look::default(),
-        },
+        ProbPlotKind::QQ => {
+            let quantile = format!("{} quantile", family.name());
+            let (x_title, y_title) = if spec.data_on_x { (data_title, quantile) } else { (quantile, data_title) };
+            XyGraph {
+                plots,
+                x_scale: ScaleKind::Linear,
+                y_scale: ScaleKind::Linear,
+                x_title,
+                y_title,
+                look: Look::default(),
+            }
+        }
     });
     Ok(Output { table: Some(table), on_sheet, notes, graph, more_graphs: Vec::new() })
 }
@@ -489,7 +570,8 @@ mod tests {
     #[test]
     fn a_probability_plot_makes_a_graph_with_points_a_fit_line_and_a_probability_axis() {
         let (mut p, ids) = project();
-        let spec = ProbPlotSpec { kind: ProbPlotKind::Probability, family: Family::Normal, graph: true };
+        let spec =
+            ProbPlotSpec { kind: ProbPlotKind::Probability, family: Family::Normal, graph: true, ..Default::default() };
         let r = run(&mut p, &ids[1..2], Tool::ProbPlot(spec));
         assert!(r.message.contains("Probability plot") && r.message.contains("ProbPlot1"), "{}", r.message);
         let ordered = cell(&p, &r, "Data (ordered)");
@@ -517,7 +599,12 @@ mod tests {
     #[test]
     fn weibull_and_lognormal_plots_use_log_x_and_the_matching_percent_axis() {
         let (mut p, ids) = project();
-        let w = ProbPlotSpec { kind: ProbPlotKind::Probability, family: Family::Weibull, graph: true };
+        let w = ProbPlotSpec {
+            kind: ProbPlotKind::Probability,
+            family: Family::Weibull,
+            graph: true,
+            ..Default::default()
+        };
         let r = run(&mut p, &ids[..1], Tool::ProbPlot(w));
         let l = &p.graph(r.new_graph.unwrap()).unwrap().layers[0];
         assert_eq!((l.x_axis.scale, l.y_axis.scale), (ScaleKind::Log10, ScaleKind::Weibull));
@@ -534,7 +621,12 @@ mod tests {
     #[test]
     fn an_exponential_plot_has_a_log_x_axis_only_when_every_number_is_positive() {
         let (mut p, ids) = project();
-        let spec = ProbPlotSpec { kind: ProbPlotKind::Probability, family: Family::Exponential, graph: true };
+        let spec = ProbPlotSpec {
+            kind: ProbPlotKind::Probability,
+            family: Family::Exponential,
+            graph: true,
+            ..Default::default()
+        };
         // all positive: log X and the Weibull percent scale
         let r = run(&mut p, &ids[..1], Tool::ProbPlot(spec));
         let l = &p.graph(r.new_graph.unwrap()).unwrap().layers[0];
@@ -562,7 +654,7 @@ mod tests {
     #[test]
     fn a_qq_plot_has_the_quantiles_the_ordered_data_and_the_least_squares_line() {
         let (mut p, ids) = project();
-        let spec = ProbPlotSpec { kind: ProbPlotKind::QQ, family: Family::Normal, graph: true };
+        let spec = ProbPlotSpec { kind: ProbPlotKind::QQ, family: Family::Normal, graph: true, ..Default::default() };
         let r = run(&mut p, &ids[..2], Tool::ProbPlot(spec));
         let g = p.graph(r.new_graph.unwrap()).unwrap();
         assert_eq!(g.layers[0].plots.len(), 4, "points and a line for each of the two columns");
@@ -574,6 +666,32 @@ mod tests {
         assert!((intercept - 10.0).abs() < 1.0);
         assert!(table.rows[0].1[1].is_nan(), "the normal family has no shape");
         assert_eq!(cell(&p, &r, "Normal quantile").len(), 24, "the first column has 24 numbers");
+    }
+
+    #[test]
+    fn origins_documented_options_blom_scores_a_band_and_data_on_x() {
+        let (mut p, ids) = project();
+        let spec = ProbPlotSpec { scores: calc::PlotScores::Blom, band: Some(0.95), ..Default::default() };
+        let r = run(&mut p, &ids[1..2], Tool::ProbPlot(spec));
+        let percent = cell(&p, &r, "Percent");
+        let blom = calc::PlotScores::Blom.positions(20);
+        assert!(percent.iter().zip(&blom).all(|(a, b)| (a - b * 100.0).abs() < 1e-9), "Blom positions");
+        let (lo, hi, fit) = (cell(&p, &r, "Lower 95 % X"), cell(&p, &r, "Upper 95 % X"), cell(&p, &r, "Fit X"));
+        assert_eq!(lo.len(), fit.len());
+        assert!(lo.iter().zip(&hi).zip(&fit).all(|((l, h), f)| l < f && f < h), "the band holds the fit line");
+        let g = p.graph(r.new_graph.unwrap()).unwrap();
+        assert_eq!(g.layers[0].plots.len(), 4, "points, fit and the two band lines");
+        // Q-Q with the data on X: the columns swap, the line stays the same least-squares line.
+        let qq = ProbPlotSpec { kind: ProbPlotKind::QQ, data_on_x: true, ..Default::default() };
+        let r = run(&mut p, &ids[1..2], Tool::ProbPlot(qq));
+        let g = p.graph(r.new_graph.unwrap()).unwrap();
+        assert_eq!(g.layers[0].x_axis.title.as_deref().map(|t| t.contains("quantile")), Some(false));
+        let data = cell(&p, &r, "Data (ordered)");
+        assert!(data.windows(2).all(|w| w[0] <= w[1]));
+        // A band for another family is left out with a note.
+        let w = ProbPlotSpec { family: Family::Weibull, band: Some(0.95), ..Default::default() };
+        let r = run(&mut p, &ids[..1], Tool::ProbPlot(w));
+        assert!(r.notes.iter().any(|n| n.contains("normal and lognormal families only")), "{:?}", r.notes);
     }
 
     #[test]

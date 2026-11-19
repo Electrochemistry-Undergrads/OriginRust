@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **209 greyed items: 141 in the menu bar, 13 on the toolbars, 55 in context menus.**
+original inventory baseline. This is not a new runtime audit. **207 greyed items: 139 in the menu bar, 13 on the toolbars, 55 in context menus.**
 
 ## How to read and keep this file
 
@@ -75,7 +75,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B5` | 12 |
 | `B6` | 20 |
 | `B7` | 0 |
-| `B8` | 3 |
+| `B8` | 1 |
 | `B9` | 2 |
 | `B11` | 3 |
 | `B12` | 1 |
@@ -86,7 +86,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 38 items, backlog packages (`B`) 151, not planned (`N`) 20.
+Briefs (`T`) hold 38 items, backlog packages (`B`) 149, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -125,7 +125,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B15` 3D XYY: XYY 3D Bars · 3D Ribbons · 3D Walls · 3D Waterfall
 - `B15` 3D Surface: Color Fill Surface · X Constant with Base · Y Constant with Base · Color Map Surface · Colormap Surface with Projection · Wire Frame · Wire Surface · 3D Ternary Colormap Surface
 - `B15` 3D Symbol/Bar/Vector: 3D Bars · 3D Scatter · 3D Trajectory · 3D Scatter + Error Bar · 3D Vector XYZ XYZ · 3D Vector XYZ dXdYdZ
-- `B8` Statistics: Probability Plot · Q-Q Plot
 - `B4` Statistics: Histogram + Probabilities
 - `B14` Contour/Heat Map: Color Fill · B/W Lines + Labels · Gray Scale Map · Heat Map · Polar Contour theta(X) r(Y) · Polar Contour r(X) theta(Y) · Ternary Contour
 - `B14` Profile: Contour Profiles · Image Profiles

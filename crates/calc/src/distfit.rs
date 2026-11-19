@@ -520,6 +520,51 @@ fn gamma_quantile(shape: f64, p: f64) -> f64 {
     (0.5 * (lo + hi)).exp()
 }
 
+/// How the plotting positions (the cumulative probability of the i-th of n ordered values) are
+/// estimated. Origin's `plot_prob` documents Blom, Benard, Hazen and Van der Waerden scores, Blom by
+/// default (T151, not measured); `scipy.stats.probplot` uses Filliben's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Scores {
+    /// Filliben's medians of the uniform order statistics ([`plotting_positions`]).
+    #[default]
+    Filliben,
+    /// `(i - 3/8) / (n + 1/4)`.
+    Blom,
+    /// Benard's median ranks, `(i - 0.3) / (n + 0.4)`.
+    Benard,
+    /// `(i - 1/2) / n`.
+    Hazen,
+    /// `i / (n + 1)`.
+    VanDerWaerden,
+}
+
+impl Scores {
+    pub const ALL: [Scores; 5] = [Scores::Filliben, Scores::Blom, Scores::Benard, Scores::Hazen, Scores::VanDerWaerden];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Scores::Filliben => "Filliben",
+            Scores::Blom => "Blom",
+            Scores::Benard => "Benard",
+            Scores::Hazen => "Hazen",
+            Scores::VanDerWaerden => "Van der Waerden",
+        }
+    }
+
+    /// The plotting positions of `n` ordered values, between 0 and 1.
+    pub fn positions(self, n: usize) -> Vec<f64> {
+        let nf = n as f64;
+        let at = |a: f64, b: f64| (1..=n).map(|i| (i as f64 - a) / (nf + b)).collect();
+        match self {
+            Scores::Filliben => plotting_positions(n),
+            Scores::Blom => at(0.375, 0.25),
+            Scores::Benard => at(0.3, 0.4),
+            Scores::Hazen => at(0.5, 0.0),
+            Scores::VanDerWaerden => at(0.0, 1.0),
+        }
+    }
+}
+
 /// Filliben's estimate of the medians of the uniform order statistics, as `scipy.stats.probplot` uses
 /// them as plotting positions.
 pub fn plotting_positions(n: usize) -> Vec<f64> {
@@ -556,6 +601,11 @@ pub struct ProbPlot {
 /// The quantile-quantile pairs of `data` against `family`. A family with a shape takes the shape fitted by
 /// maximum likelihood unless `shape` is given. Missing values are ignored; two numbers are the least.
 pub fn probplot(family: Family, data: &[f64], shape: Option<f64>) -> Result<ProbPlot, FitError> {
+    probplot_with(family, data, shape, Scores::Filliben)
+}
+
+/// [`probplot`] with the plotting positions of `scores`.
+pub fn probplot_with(family: Family, data: &[f64], shape: Option<f64>, scores: Scores) -> Result<ProbPlot, FitError> {
     let shape = match family {
         Family::Normal | Family::Exponential => None,
         _ => Some(match shape {
@@ -569,7 +619,7 @@ pub fn probplot(family: Family, data: &[f64], shape: Option<f64>) -> Result<Prob
     let mut ordered = prepared(family, data)?;
     ordered.sort_by(|a, b| a.total_cmp(b));
     let n = ordered.len();
-    let positions = plotting_positions(n);
+    let positions = scores.positions(n);
     let theoretical: Vec<f64> = positions.iter().map(|&p| standard_quantile(family, shape.unwrap_or(1.0), p)).collect();
     let (mx, my) = (mean(&theoretical), mean(&ordered));
     let sxx: f64 = theoretical.iter().map(|a| (a - mx).powi(2)).sum();
@@ -586,4 +636,23 @@ pub fn probplot(family: Family, data: &[f64], shape: Option<f64>) -> Result<Prob
         intercept: my - slope * mx,
         r: if syy > 0.0 { sxy / (sxx * syy).sqrt() } else { f64::NAN },
     })
+}
+
+#[cfg(test)]
+mod score_tests {
+    use super::*;
+
+    #[test]
+    fn plotting_position_scores() {
+        let close = |a: &[f64], b: &[f64]| a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-12);
+        assert!(close(&Scores::Blom.positions(4), &[0.625 / 4.25, 1.625 / 4.25, 2.625 / 4.25, 3.625 / 4.25]));
+        assert!(close(&Scores::Benard.positions(3), &[0.7 / 3.4, 1.7 / 3.4, 2.7 / 3.4]));
+        assert!(close(&Scores::Hazen.positions(2), &[0.25, 0.75]));
+        assert!(close(&Scores::VanDerWaerden.positions(3), &[0.25, 0.5, 0.75]));
+        assert_eq!(Scores::Filliben.positions(5), plotting_positions(5));
+        let data = [3.0, 1.0, 2.0, 5.0, 4.0];
+        let blom = probplot_with(Family::Normal, &data, None, Scores::Blom).unwrap();
+        assert_eq!(blom.positions, Scores::Blom.positions(5));
+        assert_eq!(probplot(Family::Normal, &data, None).unwrap().positions, plotting_positions(5));
+    }
 }

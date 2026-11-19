@@ -92,8 +92,9 @@ pub use decimate::{DecimateError, DecimateFilter, DecimateOptions, decimate};
 pub use differentiate::{DiffOptions, differentiate};
 pub use discfreq::{Category, DiscSort, DiscreteFreq, DiscreteRow, discrete_frequency};
 pub use distfit::{
-    DistFit, Family, FitError, ProbPlot, cdf as dist_cdf, estimate as dist_estimate, fit as dist_fit,
-    log_likelihood as dist_log_likelihood, plotting_positions, probplot, standard_quantile,
+    DistFit, Family, FitError, ProbPlot, Scores as PlotScores, cdf as dist_cdf, estimate as dist_estimate,
+    fit as dist_fit, log_likelihood as dist_log_likelihood, plotting_positions, probplot, probplot_with,
+    standard_quantile,
 };
 pub use dunnett::{dunnett_cdf, dunnett_critical, dunnett_loadings, dunnett_p};
 pub use envelope::{Envelope, EnvelopeError, EnvelopeOptions, EnvelopeType, envelope, extreme_points, natural_spline};

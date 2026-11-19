@@ -1258,7 +1258,12 @@ fn plot_menu() -> Vec<Entry> {
                 vec![item("QC (X bar R) Chart", Cmd::Plot(Template::QcXbarR))],
                 // Every letter of the label was taken; C moves Marginal Box Charts to n.
                 vec![item("S&catter Matrix", Cmd::Plot(Template::ScatterMatrix))],
-                greys(&["Probability Plot", "Q-Q Plot"]),
+                // T151: the same windows as Statistics > Descriptive Statistics.
+                vec![
+                    // Q, -, l, o and t are taken here: Q-Q Plot takes P, Probability Plot y.
+                    item("Probabilit&y Plot", Cmd::Analyze(AnalysisKind::ProbPlot)),
+                    item("Q-Q &Plot", Cmd::Analyze(AnalysisKind::QQPlot)),
+                ],
             ]
             .concat(),
         ),
@@ -2614,7 +2619,7 @@ pub fn show_context(ui: &mut egui::Ui, entries: &[Entry], c: &MenuContext, actio
 // ----- checks and helpers on the table --------------------------------------------------------
 
 /// Calls `f` for every item of the entries, submenus included.
-fn walk<'a>(entries: &'a [Entry], f: &mut dyn FnMut(&'a Item)) {
+pub(crate) fn walk<'a>(entries: &'a [Entry], f: &mut dyn FnMut(&'a Item)) {
     for e in entries {
         match e {
             Entry::Item(i) => f(i),

@@ -81,3 +81,29 @@ fn a_text_label_is_cut_and_pasted_with_its_anchor_at_the_clicked_point() {
     assert!((last.1 - 0.5).abs() < 1e-9 && (last.2 - 0.5).abs() < 1e-9, "{last:?}");
     assert_eq!(h.state().doc.undo_label(), Some("Paste text"));
 }
+
+#[test]
+fn an_axis_title_is_copied_as_a_text_label_and_cut_deletes_the_title() {
+    // T148: an axis title's right-click Cut and Copy.
+    crate::shape_clip::clear();
+    let mut h = start(vec![data_file("title-clip")]);
+    let ctx = h.ctx.clone();
+    let graph = project(&h).graphs().next().unwrap().id;
+    let shown = sheaf_plot::axis_title(project(&h), graph, 0, true).unwrap();
+    assert!(!shown.is_empty());
+    h.state_mut().apply(Action::CopyTitle { graph, layer: 0, y: true, cut: true }, &ctx);
+    settle(&mut h);
+    assert!(!project(&h).graph(graph).unwrap().layers[0].y_axis.show_title, "Cut deletes the title");
+    assert_eq!(h.state().doc.undo_label(), Some("Delete axis title"));
+    let g = project(&h).graph(graph).unwrap();
+    let f = g.absolute_frame(0).unwrap();
+    let page = (f.left * g.page.width_pt, f.top * g.page.height_pt);
+    let before = g.layers[0].labels.len();
+    h.state_mut().apply(Action::PasteShape { graph, layer: 0, page }, &ctx);
+    settle(&mut h);
+    let l = &project(&h).graph(graph).unwrap().layers[0];
+    assert_eq!(l.labels.len(), before + 1);
+    let pasted = l.labels.last().unwrap();
+    assert_eq!((pasted.text.as_str(), pasted.rotation_deg), (shown.as_str(), 90.0));
+    assert_eq!(pasted.font, l.y_axis.title_font);
+}

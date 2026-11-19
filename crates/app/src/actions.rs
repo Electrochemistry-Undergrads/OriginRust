@@ -291,6 +291,14 @@ pub enum Action {
         shape: usize,
         cut: bool,
     },
+    /// An axis title's right-click Copy as a text label (and Cut, which also deletes the title, one
+    /// undo step; T148).
+    CopyTitle {
+        graph: WindowId,
+        layer: usize,
+        y: bool,
+        cut: bool,
+    },
     /// A text label's right-click Copy (and Cut, which also deletes it, one undo step; T147).
     CopyLabel {
         graph: WindowId,

@@ -106,6 +106,12 @@ pub enum Cmd {
         layer: usize,
         page: (f64, f64),
     },
+    /// An axis title's right-click Cut and Copy (T148).
+    CopyTitle {
+        layer: usize,
+        y: bool,
+        cut: bool,
+    },
     /// A text label's right-click Cut and Copy (T147).
     CutLabel {
         layer: usize,
@@ -2325,8 +2331,8 @@ pub fn graph_title_menu(layer: usize, y: bool) -> Vec<Entry> {
     let tab = if y { PropsTab::YAxis } else { PropsTab::XAxis };
     vec![
         item("Edit Text...", Cmd::EditTitle { layer: Some(layer), vertical: y }),
-        grey_keyed("Cut", ctrl(Key::X)),
-        grey_keyed("Copy", ctrl(Key::C)),
+        keyed("Cut", ctrl(Key::X), Cmd::CopyTitle { layer, y, cut: true }),
+        keyed("Copy", ctrl(Key::C), Cmd::CopyTitle { layer, y, cut: false }),
         keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::HideTitle { layer, y })),
         sep(),
         grey("Bring to the front"),
@@ -2759,6 +2765,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::CopyShape { layer, shape } => {
             Action::CopyShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape, cut: false }
+        }
+        Cmd::CopyTitle { layer, y, cut } => {
+            Action::CopyTitle { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, y: *y, cut: *cut }
         }
         Cmd::CutLabel { layer, label } => {
             Action::CopyLabel { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, label: *label, cut: true }

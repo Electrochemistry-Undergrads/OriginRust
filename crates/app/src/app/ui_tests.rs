@@ -9087,6 +9087,7 @@ mod sampling;
 mod scatter_matrix;
 mod sheet_navigate;
 mod sheet_tab;
+mod sigmoid_gadget;
 mod slide_show;
 mod stats3;
 mod stock_plots;

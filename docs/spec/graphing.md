@@ -6174,3 +6174,17 @@ unregistered), so this follows Origin's documented behaviour. It reuses the Inte
   at the top reads "N peaks", "1 peak" or "No peak in the range".
 - **Right-click menu:** Delete (Esc) closes the gadget.
 
+## Quick Sigmoidal Fit gadget: Gadgets > Quick Sigmoidal Fit... (T141, 2026-11-18, **not measured**)
+
+Origin 2016's Gadgets menu has Quick Sigmoidal Fit.... It could not be probed (Origin's COM class was
+unregistered), so this follows Origin's documented behaviour. It reuses the Integrate gadget's range.
+
+- **Opening:** the gadget opens on the selected plot of the active layer, or its first visible plot of
+  numbers, over the middle half of the X axis. The range drags as the Integrate gadget's does.
+- **What it fits:** the built-in Boltzmann function `A2 + (A1 - A2) / (1 + exp((x - x0) / dx))`, fitted to
+  the rows inside the range (the first unbroken run of rows whose X lies in it). It uses Nonlinear Curve
+  Fit with its default options and guessed starting values. At least five points are needed.
+- **What it draws:** the fitted curve across the range in red, 2 pt. The label at the top reads
+  "x0 = …, dx = …", or "Sigmoidal fit failed in the range".
+- **Right-click menu:** Delete (Esc) closes the gadget.
+

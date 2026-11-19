@@ -3,7 +3,7 @@
 use super::*;
 use crate::scene::{Item, ObjectKind};
 use sheaf_core::template::Template;
-use sheaf_core::vector::VectorPosition;
+use sheaf_core::vector::{VectorAngleConvention, VectorPosition};
 use sheaf_core::{ColumnData, Designation};
 
 fn geometry(p: &Project, g: WindowId) -> LayerGeometry {
@@ -96,6 +96,39 @@ fn xyam_keeps_the_chosen_point_at_the_xy_coordinate() {
         let tip = crate::hit::path_points(head)[0];
         assert!((tail.0 - x - tail_offset).abs() < 0.01 && (tail.1 - y).abs() < 0.01, "{tail:?}");
         assert!((tip.0 - x - tip_offset).abs() < 0.01 && (tip.1 - y).abs() < 0.01, "{tip:?}");
+    }
+}
+
+#[test]
+fn xyam_conventions_rotate_the_arrow_tips_about_the_data_points() {
+    use VectorAngleConvention::{Custom, Meteorological};
+
+    let (mut p, graph) = sample_graph(Template::VectorXyam);
+    let mut spec = p.graph(graph).unwrap().layers[0].plots[0].decor.vector.unwrap();
+    p.column_mut(spec.a).unwrap().data = ColumnData::numeric(vec![0.0, 90.0]);
+    spec.degrees = true;
+    let geom = geometry(&p, graph);
+    for (convention, deltas) in [
+        (Meteorological, [(0.0, -16.0), (8.0, 0.0)]),
+        (Custom { offset_deg: 180.0, clockwise: false }, [(-16.0, 0.0), (0.0, 8.0)]),
+        (Custom { offset_deg: 180.0, clockwise: true }, [(-16.0, 0.0), (0.0, -8.0)]),
+    ] {
+        spec.convention = convention;
+        p.graph_mut(graph).unwrap().layers[0].plots[0].decor.vector = Some(spec);
+        let scene = layout::build_scene(&p, graph, &FixedMetrics).unwrap();
+        assert_eq!(scene.layers[0].plots.len(), 4);
+        for ((dx, dy), (point, paths)) in
+            deltas.into_iter().zip([1.0, 2.0].into_iter().zip(scene.layers[0].plots.chunks_exact(2)))
+        {
+            let [Item::Path { d: shaft, .. }, Item::Path { d: head, .. }] = paths else {
+                panic!("expected vector shaft and head");
+            };
+            let (x, y) = geom.data_to_page(point, point);
+            let tail = crate::hit::path_points(shaft)[0];
+            let tip = crate::hit::path_points(head)[0];
+            assert!((tail.0 - x).abs() < 0.01 && (tail.1 - y).abs() < 0.01, "{tail:?}");
+            assert!((tip.0 - x - dx).abs() < 0.01 && (tip.1 - y - dy).abs() < 0.01, "{convention:?}: {tip:?}");
+        }
     }
 }
 

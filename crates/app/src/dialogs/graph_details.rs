@@ -10,7 +10,7 @@
 
 use eframe::egui::{self, DragValue};
 use sheaf_core::graph::*;
-use sheaf_core::vector::VectorPosition;
+use sheaf_core::vector::{VectorAngleConvention, VectorPosition, VectorSpec};
 use sheaf_core::{Color, Column, ColumnId, Project};
 
 use super::details_look as look;
@@ -1016,6 +1016,7 @@ fn vector_tab(ui: &mut egui::Ui, plot: &mut Plot, project: &Project) {
             });
             ui.end_row();
         });
+        vector_convention(ui, spec);
     } else {
         group_box(ui, "End Point", |ui| {
             grid(ui, "vector_endpoints", |ui| {
@@ -1024,6 +1025,43 @@ fn vector_tab(ui: &mut egui::Ui, plot: &mut Plot, project: &Project) {
             });
         });
     }
+}
+
+fn vector_convention(ui: &mut egui::Ui, spec: &mut VectorSpec) {
+    use VectorAngleConvention::{Custom, Meteorological, Polar};
+
+    group_box(ui, "Convention", |ui| {
+        ui.horizontal(|ui| {
+            ui.radio_value(&mut spec.convention, Polar, "Polar");
+            ui.radio_value(&mut spec.convention, Meteorological, "Meteorological");
+            let custom = matches!(spec.convention, Custom { .. });
+            if ui.radio(custom, "Custom").clicked() {
+                let (offset_deg, clockwise) = spec.convention.offset_and_clockwise();
+                spec.convention = Custom { offset_deg, clockwise };
+            }
+        });
+        let custom = matches!(spec.convention, Custom { .. });
+        let (previous_offset, mut clockwise) = spec.convention.offset_and_clockwise();
+        let mut offset_deg = previous_offset;
+        grid(ui, "vector_convention", |ui| {
+            let label = ui.label("Offset Angle");
+            ui.add_enabled(custom, DragValue::new(&mut offset_deg).range(-f64::MAX..=f64::MAX).speed(1.0).suffix("°"))
+                .labelled_by(label.id);
+            ui.end_row();
+            ui.label("Direction");
+            ui.horizontal(|ui| {
+                ui.add_enabled_ui(custom, |ui| {
+                    ui.radio_value(&mut clockwise, true, "CW");
+                    ui.radio_value(&mut clockwise, false, "CCW");
+                });
+            });
+            ui.end_row();
+        });
+        if custom {
+            let offset_deg = if offset_deg.is_finite() { offset_deg } else { previous_offset };
+            spec.convention = Custom { offset_deg, clockwise };
+        }
+    });
 }
 
 fn vector_column(ui: &mut egui::Ui, label: &str, selected: &mut ColumnId, columns: &[Column], project: &Project) {

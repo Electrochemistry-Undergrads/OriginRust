@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **230 greyed items: 150 in the menu bar, 18 on the toolbars, 62 in context menus.**
+original inventory baseline. This is not a new runtime audit. **222 greyed items: 147 in the menu bar, 13 on the toolbars, 62 in context menus.**
 
 ## How to read and keep this file
 
@@ -40,7 +40,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T60` | 0 |
 | `T61` | 5 |
 | `T62` | 0 |
-| `T63` | 14 |
+| `T63` | 6 |
 | `T65` | 0 |
 | `T66` | 9 |
 | `T67` | 0 |
@@ -86,7 +86,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 51 items, backlog packages (`B`) 159, not planned (`N`) 20.
+Briefs (`T`) hold 43 items, backlog packages (`B`) 159, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -122,7 +122,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T66` Show Data Info [Graph]
 
 ### Plot
-- `T63` Line: Horizontal Step · Vertical Step · Spline Connected
 - `B15` Y-offset/Waterfall: 3D Waterfall
 - `B15` 3D XYY: XYY 3D Bars · 3D Ribbons · 3D Walls · 3D Waterfall
 - `B15` 3D Surface: Color Fill Surface · X Constant with Base · Y Constant with Base · Color Map Surface · Colormap Surface with Projection · Wire Frame · Wire Surface · 3D Ternary Colormap Surface
@@ -194,7 +193,6 @@ changes. The baseline labels remain open until implementation or a documented re
 ## Toolbars
 
 - `B14` Standard: New Matrix · New Layout · New Notes
-- `T63` 2D Graphs: Bar · Stacked Area · Box Chart · Histogram · Bubble
 - `B2` Object Edit: Align Left · Align Right · Align Top · Align Bottom · Align Horizontal Center · Align Vertical Center · Make Same Width · Make Same Height · Group · Ungroup
 
 ## Context menus

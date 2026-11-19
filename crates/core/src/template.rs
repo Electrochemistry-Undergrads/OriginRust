@@ -14,6 +14,11 @@ pub enum Template {
     /// General line plot: axes on the bottom and left, ticks pointing out.
     #[default]
     Line,
+    /// Plot > Line > Horizontal Step, Vertical Step and Spline Connected (T63 group B): the Line
+    /// template with each segment drawn as a step (horizontal or vertical first) or a spline.
+    StepHorizontal,
+    StepVertical,
+    SplineConnected,
     /// Scatter plot with the same axes as [`Template::Line`].
     Scatter,
     /// Scatter plot whose axes cross in the middle of the layer (Origin's "Scatter Central", 2016): both
@@ -198,8 +203,11 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 79] = [
+    pub const ALL: [Template; 82] = [
         Template::Line,
+        Template::StepHorizontal,
+        Template::StepVertical,
+        Template::SplineConnected,
         Template::Scatter,
         Template::LineSymbol,
         Template::Column,
@@ -284,6 +292,9 @@ impl Template {
     pub fn name(&self) -> &'static str {
         match self {
             Template::Line => "line",
+            Template::StepHorizontal => "step-horizontal",
+            Template::StepVertical => "step-vertical",
+            Template::SplineConnected => "spline-connected",
             Template::Scatter => "scatter",
             Template::ScatterCentral => "scatter-central",
             Template::ColumnScatter => "column-scatter",
@@ -368,6 +379,9 @@ impl Template {
     pub fn label(&self) -> &'static str {
         match self {
             Template::Line => "Line",
+            Template::StepHorizontal => "Horizontal Step",
+            Template::StepVertical => "Vertical Step",
+            Template::SplineConnected => "Spline Connected",
             Template::Scatter => "Scatter",
             Template::ScatterCentral => "Scatter Central",
             Template::ColumnScatter => "Column Scatter",
@@ -488,6 +502,9 @@ impl Template {
     pub fn new_graph(&self, id: WindowId, name: &str) -> Graph {
         let mut graph = match self {
             Template::Line => general(id, name, PlotKind::Line),
+            Template::StepHorizontal => connected(id, name, Connect::StepHorizontal),
+            Template::StepVertical => connected(id, name, Connect::StepVertical),
+            Template::SplineConnected => connected(id, name, Connect::Spline),
             Template::Scatter => general(id, name, PlotKind::Scatter),
             Template::ScatterCentral => scatter_central(id, name),
             Template::ColumnScatter => {
@@ -813,6 +830,13 @@ fn scatter_rug(id: WindowId, name: &str) -> Graph {
         l.x_axis.rug = Rug::shown();
         l.y_axis.rug = Rug::shown();
     }
+    g
+}
+
+/// The Line template with another connection between the points.
+fn connected(id: WindowId, name: &str, connect: Connect) -> Graph {
+    let mut g = general(id, name, PlotKind::Line);
+    g.layers[0].default_line.connect = connect;
     g
 }
 
@@ -1372,6 +1396,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn step_and_spline_templates_are_line_plots_with_their_connection() {
+        for (t, connect) in [
+            (Template::StepHorizontal, Connect::StepHorizontal),
+            (Template::StepVertical, Connect::StepVertical),
+            (Template::SplineConnected, Connect::Spline),
+        ] {
+            let g = t.new_graph(WindowId(1), "Graph1");
+            let l = &g.layers[0];
+            assert_eq!((l.default_kind, l.default_line.connect), (PlotKind::Line, connect), "{t:?}");
+            assert_eq!(Template::from_name(t.name()), Some(t));
+        }
+        let line = Template::Line.new_graph(WindowId(1), "Graph1");
+        assert_eq!(line.layers[0].default_line.connect, Connect::Straight);
+    }
+
+    #[test]
     fn cv_template_matches_the_requested_style() {
         let g = Template::CyclicVoltammetry.new_graph(WindowId(1), "Graph1");
         let l = &g.layers[0];
@@ -1420,7 +1460,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 79);
+        assert_eq!(Template::ALL.len(), 82);
         assert_eq!(Template::from_name("piper"), Some(Template::Piper));
         assert_eq!(Template::from_name("kde-2d"), Some(Template::Kde2d));
         assert_eq!(Template::from_name("smith-chart"), Some(Template::SmithChart));

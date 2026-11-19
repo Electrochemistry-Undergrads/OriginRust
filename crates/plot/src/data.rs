@@ -119,6 +119,8 @@ pub(crate) struct PlotData<'a> {
     pub sunburst: Option<Box<crate::sunburst::SunburstData>>,
     /// The colour mapping of a waterfall curve; `None` when the layer has none.
     pub wf: Option<WaterfallColors>,
+    /// The rows of a 3D ribbon (T161); `None` for other plots.
+    pub ribbon: Option<Vec<crate::space3d::RibbonRow>>,
 }
 
 /// How one curve of a colour mapped waterfall is coloured: `lo` and `hi` are the ends of the colour scale (over
@@ -722,6 +724,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             treemap: None,
             sunburst: None,
             wf: None,
+            ribbon: None,
             label_texts: match plot.decor.labels.form {
                 LabelForm::Column { column } if plot.decor.labels.enable => project.column(column).map(cell_texts),
                 _ => None,

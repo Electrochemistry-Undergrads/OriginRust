@@ -6480,7 +6480,23 @@ unregistered, so Origin's own templates for them were not checked.
 - **Index safety:** the selection names drawn objects by their place in the layer's list. Any other
   change to that list (delete, reorder, undo, redo) takes them out of the selection. Deleting a layer
   ends the selection.
-- Group and Ungroup stay grey.
+- **Group and Ungroup (T162, Origin: "Group the selected objects" / "Ungroup the selected objects",
+  not measured):**
+  - Group gives the selected drawn objects and text labels a new group number of their layer
+    (`Shape::group`, `TextLabel::group`). It needs two or more objects in one layer that are not
+    already exactly one group. A member of another group leaves it, and the rest of that group stays
+    together.
+  - Ungroup dissolves every group a selected object is in. Both buttons are state-disabled when they
+    have nothing to do. One undo step each ("Group objects", "Ungroup objects").
+  - A click on a grouped object selects the whole group, with the clicked object as the reference.
+    Shift+click adds or removes the whole group.
+  - A pasted copy of a member is not in the group. Delete removes only the reference object.
+  - The group number is saved in the `.sheaf` file only when set, so older files load unchanged.
+    `.opj` files do not carry it.
+- **Dragging a selection (T162):** a drag that starts on one of several selected objects, or on a
+  grouped object, moves all of them by the same page distance. Their handles follow the pointer, and
+  the move is made when the button is released, as one undo step ("Move objects"). The selection
+  stays.
 
 ## 3D Scatter and 3D Trajectory: Plot > 3D Symbol/Bar/Vector (T155, 2026-11-19, **not measured**)
 
@@ -6526,7 +6542,13 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
     bar can be misordered against another column's bar.
   - 3D Walls fill each curve down to the floor of the box (Area plots with the floor as their base).
   - 3D Waterfall draws the curves as lines.
-  - 3D Ribbons stays grey.
+- **3D Ribbons (T161, `3d-ribbons`):** a 3D Walls layer with `Space3dCoords::ribbons` set. Each Area
+  plot is a ribbon instead of a wall: the curve at its depth widened to half a depth step, from a
+  quarter step in front of it to a quarter step behind (Sheaf's width, not measured).
+  - Each pair of consecutive rows is one quadrilateral, filled with the plot's fill colour and edged
+    with its line. A missing value breaks the ribbon.
+  - The quadrilaterals of a ribbon are drawn from the farthest to the nearest; the ribbons in plot
+    order, the first farthest back.
 - **Not done:**
   - rotating the view, and the Z axis dialog (Format > Axes > Z Axis stays grey);
   - hiding points behind each other (points are drawn in row order);

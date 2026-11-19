@@ -260,7 +260,7 @@ fn is_tool(cmd: &Cmd) -> bool {
 
 #[cfg(test)]
 fn is_order(cmd: &Cmd) -> bool {
-    matches!(cmd, Cmd::OrderSelectedShape { .. } | Cmd::ArrangeSelected(_))
+    matches!(cmd, Cmd::OrderSelectedShape { .. } | Cmd::ArrangeSelected(_) | Cmd::GroupSelected { .. })
 }
 
 /// A Graph toolbar button that adds a layer of `kind` (the same command as Graph > New Layer(Axes)).
@@ -285,6 +285,11 @@ fn b_order(icon: Icon, tip: &'static str, front: bool) -> Item {
 /// no menu entry; state-disabled below two selected objects).
 fn b_arrange(icon: Icon, tip: &'static str, op: Arrange) -> Item {
     Item::Button(Button { icon, tip, cmd: Some(Cmd::ArrangeSelected(op)), menu: "", on: false })
+}
+
+/// The Object Edit Group / Ungroup buttons (T162; no menu entry; state-disabled).
+fn b_group(icon: Icon, tip: &'static str, ungroup: bool) -> Item {
+    Item::Button(Button { icon, tip, cmd: Some(Cmd::GroupSelected { ungroup }), menu: "", on: false })
 }
 
 /// A button for a feature Sheaf lacks.
@@ -431,8 +436,8 @@ fn build(bar: Bar) -> Vec<Item> {
             gap(),
             b_order(Front, "Bring to Front", true),
             b_order(Back, "Send to Back", false),
-            g(Group, "Group"),
-            g(Ungroup, "Ungroup"),
+            b_group(Group, "Group", false),
+            b_group(Ungroup, "Ungroup", true),
         ],
     }
 }

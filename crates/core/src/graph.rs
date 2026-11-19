@@ -522,11 +522,15 @@ pub struct Space3dCoords {
     /// farthest back; no Z column is read.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub xyy: bool,
+    /// 3D Ribbons (T161): in an XYY layer, each Area plot is a ribbon, a strip half a depth step
+    /// wide, instead of a wall down to the floor.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ribbons: bool,
 }
 
 impl Default for Space3dCoords {
     fn default() -> Self {
-        Space3dCoords { azimuth_deg: 40.0, elevation_deg: 25.0, xyy: false }
+        Space3dCoords { azimuth_deg: 40.0, elevation_deg: 25.0, xyy: false, ribbons: false }
     }
 }
 
@@ -2484,12 +2488,16 @@ pub struct TextLabel {
     /// cells, and it is drawn as a grid whose top-left corner is the anchor.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub table: bool,
+    /// The Object Edit group the label belongs to (T162): labels and drawn objects of one layer
+    /// with the same number are selected and moved together. Saved only when set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<u32>,
 }
 
 impl TextLabel {
     /// A label with no rotation.
     pub fn new(text: impl Into<String>, x: f64, y: f64, font: Font) -> Self {
-        TextLabel { text: text.into(), x, y, font, rotation_deg: 0.0, table: false }
+        TextLabel { text: text.into(), x, y, font, rotation_deg: 0.0, table: false, group: None }
     }
 
     /// A table of these cells (rows of cells), with its top-left corner at (x, y) of the layer frame.

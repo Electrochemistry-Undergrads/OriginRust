@@ -22,7 +22,6 @@ drawn objects and text labels. As Origin documents, the last-selected object is 
 
 ## Left
 
-- Group and Ungroup.
+- Group, Ungroup and dragging the whole selection: done in T162.
 - Origin's Distribute and Swap buttons. Sheaf's Object Edit bar does not show them.
-- Moving the whole selection by dragging.
 - Measuring Origin.

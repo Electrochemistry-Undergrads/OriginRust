@@ -625,6 +625,7 @@ fn push_text_label(
             font,
             rotation_deg: angle,
             table: false,
+            group: None,
         });
     }
 }

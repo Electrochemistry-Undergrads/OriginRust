@@ -887,6 +887,10 @@ pub enum Action {
     StartInterpolate {
         graph: WindowId,
     },
+    /// Gadgets > Cluster on a graph (T146).
+    StartCluster {
+        graph: WindowId,
+    },
     /// A command of a graph's open gadget.
     Gadget {
         graph: WindowId,

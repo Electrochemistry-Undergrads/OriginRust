@@ -9060,6 +9060,7 @@ fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
 
 mod audit_log;
 mod batch_plot;
+mod cluster_gadget;
 mod copy_columns;
 mod copy_variants;
 mod corner_menu;

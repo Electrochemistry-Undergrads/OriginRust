@@ -9091,6 +9091,7 @@ mod sheet_tab;
 mod sigmoid_gadget;
 mod slide_show;
 mod stats3;
+mod stats_fit_gadgets;
 mod stock_plots;
 mod swap_transpose;
 mod system_templates;

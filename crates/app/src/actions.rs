@@ -859,6 +859,14 @@ pub enum Action {
     StartFft {
         graph: WindowId,
     },
+    /// Gadgets > Statistics on a graph (T143).
+    StartStatisticsGadget {
+        graph: WindowId,
+    },
+    /// Gadgets > Quick Fit on a graph (T143).
+    StartQuickFit {
+        graph: WindowId,
+    },
     /// A command of a graph's open gadget.
     Gadget {
         graph: WindowId,

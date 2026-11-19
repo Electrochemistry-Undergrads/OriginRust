@@ -2406,6 +2406,14 @@ pub struct Legend {
     /// plots as they come and go.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
+    /// Drawn under the plots (the right-click Push to back of data; Bring to front of data undoes it,
+    /// T152).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub behind_data: bool,
+    /// Drawn over the layer's free text labels and drawn objects (the right-click Bring to the front;
+    /// Push to the back puts it under them again, the default; T152).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub on_top: bool,
 }
 
 fn one_column() -> u32 {

@@ -1365,6 +1365,8 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::AxisZoom { layer, .. }
         | GraphOp::AxisCenter { layer, .. }
         | GraphOp::HideLegend { layer }
+        | GraphOp::OrderLegend { layer, .. }
+        | GraphOp::LegendBehindData { layer, .. }
         | GraphOp::ReconstructLegend { layer }
         | GraphOp::UpdateLegend { layer }
         | GraphOp::HideTitle { layer, .. }
@@ -1548,6 +1550,8 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             }
         }
         GraphOp::HideLegend { .. } => l.legend.visible = false,
+        GraphOp::OrderLegend { front, .. } => l.legend.on_top = front,
+        GraphOp::LegendBehindData { behind, .. } => l.legend.behind_data = behind,
         GraphOp::ReconstructLegend { .. } => l.legend.text = None,
         GraphOp::HideTitle { y, .. } => {
             let a = if y { &mut l.y_axis } else { &mut l.x_axis };

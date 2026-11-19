@@ -251,6 +251,7 @@ fn scene(items: Vec<Item>) -> Scene {
             plots: vec![],
             overlay: items,
             underlay_len: 0,
+            data_on_top: false,
             objects: vec![],
         }],
     }

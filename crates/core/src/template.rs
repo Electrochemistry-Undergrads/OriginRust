@@ -865,6 +865,8 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             y_axis: axis,
             plots: Vec::new(),
             legend: Legend {
+                behind_data: false,
+                on_top: false,
                 visible: true,
                 position: LegendPosition::TopRight,
                 font: Font::new(DEFAULT_FONT, 22.0),
@@ -1043,6 +1045,8 @@ fn cyclic_voltammetry(id: WindowId, name: &str) -> Graph {
     layer.default_line =
         LineStyle { color: Color::BLACK, width_pt: 1.75, dash: Dash::Solid, connect: Connect::Spline, sort_x: false };
     layer.legend = Legend {
+        behind_data: false,
+        on_top: false,
         visible: true,
         position: LegendPosition::BottomRight,
         font: Font::new(DEFAULT_FONT, 10.0),

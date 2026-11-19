@@ -252,21 +252,21 @@ pub fn hit_test(scene: &Scene, p: (f64, f64), tol: f64) -> Hit {
         ObjectKind::StraightLine(_) => 5,
         ObjectKind::Legend | ObjectKind::Scale(_) => 1,
         ObjectKind::XTitle | ObjectKind::YTitle => {
-            if layer.underlay_len > 0 {
+            if layer.data_on_top {
                 3
             } else {
                 2
             }
         }
         ObjectKind::XAxis | ObjectKind::YAxis => {
-            if layer.underlay_len > 0 {
+            if layer.data_on_top {
                 4
             } else {
                 3
             }
         }
         ObjectKind::Plot(_) => {
-            if layer.underlay_len > 0 {
+            if layer.data_on_top {
                 2
             } else {
                 4
@@ -275,7 +275,10 @@ pub fn hit_test(scene: &Scene, p: (f64, f64), tol: f64) -> Hit {
     };
     for wanted in 0..=5 {
         for (layer, o) in all(wanted == 0) {
-            if rank(layer, o.kind) != wanted || !contains(o.bounds, p, tol) {
+            let under_data =
+                o.kind == ObjectKind::Legend && o.list == ItemList::Overlay && o.items.start < layer.underlay_len;
+            let rank = if under_data { 5 } else { rank(layer, o.kind) };
+            if rank != wanted || !contains(o.bounds, p, tol) {
                 continue;
             }
             let hit = match o.kind {

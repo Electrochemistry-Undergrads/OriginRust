@@ -84,6 +84,14 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
             hit::record(&mut last.objects, &last.overlay, start, ObjectKind::Legend, i, ItemList::Overlay, &[], m);
         }
     }
+    // A legend pushed to the back of the data is drawn before the plots of the layer it is in.
+    for (i, layer) in g.layers.iter().enumerate() {
+        if layer.legend.behind_data {
+            for ls in layers.iter_mut() {
+                legend_behind_data(ls, i);
+            }
+        }
+    }
     // The page's border line, over everything, inside the page edge.
     if let (Some(border), Some(last)) = (g.page.style.border.as_ref().filter(|b| b.width_pt > 0.0), layers.last_mut()) {
         let inset = border.width_pt / 2.0;
@@ -767,6 +775,7 @@ fn layer_scene(
         plots: Vec::new(),
         overlay: Vec::new(),
         underlay_len: 0,
+        data_on_top: false,
         objects: Vec::new(),
     };
     if layer.display.hidden {
@@ -897,6 +906,7 @@ fn layer_scene(
         }
         if layer.display.data_on_top {
             scene.underlay_len = out.len();
+            scene.data_on_top = true;
         }
         draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
         return scene;
@@ -907,6 +917,7 @@ fn layer_scene(
         rec(objects, out, start, ObjectKind::XAxis, &[]);
         if layer.display.data_on_top {
             scene.underlay_len = out.len();
+            scene.data_on_top = true;
         }
         draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
         return scene;
@@ -920,6 +931,7 @@ fn layer_scene(
         rec(objects, out, start, ObjectKind::YAxis, &[]);
         if layer.display.data_on_top {
             scene.underlay_len = out.len();
+            scene.data_on_top = true;
         }
         draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
         return scene;
@@ -981,6 +993,7 @@ fn layer_scene(
     rec(objects, out, start, ObjectKind::YTitle, &[]);
     if layer.display.data_on_top {
         scene.underlay_len = out.len();
+        scene.data_on_top = true;
     }
     if layer.display.show_data {
         crate::hexbin::draw_scale(out, layer, pds, geom, m);
@@ -1017,12 +1030,18 @@ fn draw_legend_and_labels(
     let rec = |objects: &mut Vec<SceneObject>, out: &Vec<Item>, start: usize, kind: ObjectKind, extra: &[Rect]| {
         hit::record(objects, out, start, kind, index, ItemList::Overlay, extra, m)
     };
-    if layer.legend.scope == LegendScope::Layer {
-        let entries: Vec<&PlotData> = pds.iter().collect();
-        let start = out.len();
-        let ids: Vec<String> = (1..=entries.len()).map(|k| k.to_string()).collect();
-        draw_legend(out, project, &layer.legend, f, &entries, &ids, &edge_ticks(g, index), m, &layer.plots);
-        rec(objects, out, start, ObjectKind::Legend, &[]);
+    // The legend is under the free labels and drawn objects, or over them after Bring to the front (T152).
+    let legend = |objects: &mut Vec<SceneObject>, out: &mut Vec<Item>| {
+        if layer.legend.scope == LegendScope::Layer {
+            let entries: Vec<&PlotData> = pds.iter().collect();
+            let start = out.len();
+            let ids: Vec<String> = (1..=entries.len()).map(|k| k.to_string()).collect();
+            draw_legend(out, project, &layer.legend, f, &entries, &ids, &edge_ticks(g, index), m, &layer.plots);
+            rec(objects, out, start, ObjectKind::Legend, &[]);
+        }
+    };
+    if !layer.legend.on_top {
+        legend(objects, out);
     }
     for (k, label) in layer.labels.iter().enumerate() {
         let start = out.len();
@@ -1042,6 +1061,40 @@ fn draw_legend_and_labels(
         rec(objects, out, start, ObjectKind::Label(k), &[]);
     }
     crate::shapes::draw_shapes(out, objects, layer, index, f, m);
+    if layer.legend.on_top {
+        legend(objects, out);
+    }
+}
+
+/// Moves the legend of model layer `model` into the part of `scene`'s overlay drawn before the data
+/// (Push to back of data, T152), keeping every object's item range right.
+fn legend_behind_data(scene: &mut LayerScene, model: usize) {
+    let Some(at) = scene
+        .objects
+        .iter()
+        .position(|o| o.kind == ObjectKind::Legend && o.layer == model && o.list == ItemList::Overlay)
+    else {
+        return;
+    };
+    let range = scene.objects[at].items.clone();
+    let to = scene.underlay_len;
+    if range.start < to || range.is_empty() {
+        return;
+    }
+    let n = range.len();
+    let items: Vec<Item> = scene.overlay.drain(range.clone()).collect();
+    scene.overlay.splice(to..to, items);
+    scene.underlay_len += n;
+    for (i, o) in scene.objects.iter_mut().enumerate() {
+        if o.list != ItemList::Overlay {
+            continue;
+        }
+        if i == at {
+            o.items = to..to + n;
+        } else if o.items.start >= to && o.items.start < range.start {
+            o.items = o.items.start + n..o.items.end + n;
+        }
+    }
 }
 
 // ----- axis colors ---------------------------------------------------------------------------

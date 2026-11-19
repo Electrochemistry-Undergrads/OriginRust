@@ -6429,3 +6429,20 @@ unregistered, so Origin's own templates for them were not checked.
   Minimum and Size. The right axis title ("Cumulative %" in Sheaf) and the exact start of Origin's step
   line were not measured.
 
+## Legend order: right-click Bring to the front, Push to the back, front / back of data (T152, 2026-11-19, **not measured**)
+
+- **Over or under the labels:** a legend is drawn under its layer's free text labels and drawn objects,
+  as before. The legend's right-click Bring to the front draws it over them (`Legend::on_top`), and Push
+  to the back puts it under them again. One undo step each ("Bring legend to front", "Push legend to
+  back").
+- **Behind the data:** Push to back of data (`Legend::behind_data`) draws the legend before the plots
+  of the layer its items are in, in the overlay part drawn before the data (`LayerScene::underlay_len`).
+  Bring to front of data undoes it.
+  - A legend that lists several layers is drawn with the last layer, so it goes under that layer's
+    plots only.
+  - A click where the legend lies under the data picks the plots and axes first.
+  - With Data on Top of Axes, the legend goes under the data together with the axes.
+  - Hit-testing now reads `LayerScene::data_on_top` for that mode, not "the underlay is not empty".
+- Both flags are saved only when set, so older files load unchanged. The legend's Cut and Copy stay
+  grey.
+

@@ -116,6 +116,13 @@ fn within_uses_the_explorer_folder_and_preserves_the_selected_scope() {
     h.get(find).click();
     settle(&mut h);
     assert!(has_label(&h, "Found: 2"));
+    let child = project(&h).root.folders[0].folders[0].windows[0];
+    let range = format!("[{}]", project(&h).workbook(child).unwrap().name);
+    assert!(h.state().menu_context().windows.iter().all(|(id, _)| *id != child));
+    click(&mut h, &range);
+    assert_eq!(h.state().panels.explorer.folder, [0, 0]);
+    assert_eq!(h.state().active, Some(child));
+    assert!(h.state().menu_context().windows.iter().any(|(id, _)| *id == child));
     click(&mut h, "Cancel");
     h.key_press(egui::Key::F3);
     settle(&mut h);

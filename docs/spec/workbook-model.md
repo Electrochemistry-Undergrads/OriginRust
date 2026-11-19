@@ -962,7 +962,8 @@ follow the [Origin Find documentation](https://docs.originlab.com/origin-help/fi
 Current Path shows the Explorer folder. The scope choice stays selected for the session,
 and each Find uses the folder and membership at the time of the search. Sheaf uses a window's
 own folder for its results and treats windows without explicit membership as root windows.
-Searching folder metadata and Notes remains open.
+Clicking a hit that View Windows hides first activates the window's folder so the result
+can be shown. Searching folder metadata and Notes remains open.
 
 ## 13k. Export > Worksheet as Image (T97, measured 2026-11-16, Origin 2016)
 

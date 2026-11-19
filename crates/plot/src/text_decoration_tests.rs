@@ -186,6 +186,50 @@ fn plot_color_escape_nests_and_keeps_the_surrounding_color_for_missing_indices()
     assert_eq!(crate::markup::plain(r"\cp1(context-free)"), r"\cp1(context-free)");
 }
 
+#[test]
+fn plot_colored_cartesian_titles_match_explicit_color_on_each_edge() {
+    use sheaf_core::graph::AxisSide;
+    use sheaf_core::template::Template;
+
+    let mut p = Project::new();
+    let book = p.add_workbook("");
+    p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0])).unwrap();
+    let a = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+    let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0, 3.0])).unwrap();
+    for (template, side) in [
+        (Template::Line, AxisSide::Normal),
+        (Template::Line, AxisSide::Opposite),
+        (Template::ScatterCentral, AxisSide::Normal),
+    ] {
+        let graph = p.add_graph(template);
+        p.add_plot(graph, 0, a).unwrap();
+        p.add_plot(graph, 0, b).unwrap();
+        let layer = &mut p.graph_mut(graph).unwrap().layers[0];
+        for (plot, color) in layer.plots.iter_mut().zip([Color::BLUE, Color::RED]) {
+            plot.line.color = color;
+            plot.symbol.color = color;
+        }
+        for (axis, text) in [(&mut layer.x_axis, "X field"), (&mut layer.y_axis, "Y field")] {
+            axis.side = side;
+            axis.title_color_follows_plot = true;
+            axis.title = Some(format!(r"\cp2(\u({text}))"));
+        }
+        let actual = crate::layout::build_scene(&p, graph, &FixedMetrics).unwrap();
+        let layer = &mut p.graph_mut(graph).unwrap().layers[0];
+        layer.x_axis.title = Some(r"\c2(\u(X field))".into());
+        layer.y_axis.title = Some(r"\c2(\u(Y field))".into());
+        let expected = crate::layout::build_scene(&p, graph, &FixedMetrics).unwrap();
+        assert_eq!(crate::svg::write_svg(&actual), crate::svg::write_svg(&expected));
+        for (kind, title) in [(ObjectKind::XTitle, "X field"), (ObjectKind::YTitle, "Y field")] {
+            let layer = &actual.layers[0];
+            let object = layer.objects.iter().find(|object| object.kind == kind).unwrap();
+            let items = &layer.overlay[object.items.clone()];
+            assert!(items.iter().any(|item| matches!(item, Item::Text(t) if t.text == title && t.color == Color::RED)));
+            assert!(paths(items).iter().any(|(_, stroke)| stroke.color == Color::RED));
+        }
+    }
+}
+
 fn paths(items: &[Item]) -> Vec<(&str, &Stroke)> {
     items
         .iter()

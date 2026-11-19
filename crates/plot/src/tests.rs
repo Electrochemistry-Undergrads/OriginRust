@@ -2265,6 +2265,31 @@ fn panels_side_by_side_that_share_y_hide_the_inner_y_labels_and_the_joint_x_labe
 }
 
 #[test]
+fn the_shared_panel_title_uses_the_drawing_layers_plot_color() {
+    let x: Vec<f64> = (0..=10).map(f64::from).collect();
+    let curves = vec![curve("A", "V", &x, |v| v), curve("B", "V", &x, |v| 2.0 * v)];
+    let layout = PanelLayout { h_gap: 0.0, link_y: true, ..PanelLayout::arrange(1, 2) };
+    let (mut p, g) = panel_graph(Template::Line, &layout, curves);
+    for (layer, color) in p.graph_mut(g).unwrap().layers.iter_mut().zip([Color::RED, Color::BLUE]) {
+        layer.plots[0].line.color = color;
+        layer.x_axis.title = Some(r"\cp1(Shared potential)".into());
+    }
+    let graph = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let titles: Vec<_> = graph
+        .layers
+        .iter()
+        .flat_map(|layer| texts_of(&layer.overlay))
+        .filter(|title| title.text == "Shared potential")
+        .collect();
+    let [title] = titles.as_slice() else { panic!("expected one shared title") };
+    assert_eq!(title.color, Color::RED);
+    let geometry = fixed_geometry(&p, g);
+    let left = geometry[0].frame.x;
+    let right = geometry[1].frame.x + geometry[1].frame.w;
+    assert!(near(title.x, (left + right) / 2.0));
+}
+
+#[test]
 fn a_right_y_axis_in_a_panel_lists_only_that_panels_curves_and_follows_the_shared_x() {
     let a: Vec<f64> = (0..=10).map(f64::from).collect();
     let b: Vec<f64> = (5..=20).map(f64::from).collect();

@@ -948,28 +948,33 @@ fn layer_scene(
     let start = out.len();
     let y_edge = (ya.side != AxisSide::Hidden).then(|| draw_y_labels(out, ya, &geom.y, f, &yp.labels, m));
     rec(objects, out, start, ObjectKind::YAxis, &[]);
+    let plot_color = |slot| layer.plots.get(slot).map(crate::rug::plot_color);
+    let place_title = |out: &mut Vec<Item>, title: &str, font: &Font, pos, angle| {
+        let segments = crate::markup::plot_segments(title, &|name| m.expand_inline_family(name), &plot_color);
+        text::place_segments(out, m, &segments, font, font.size_pt, pos, Anchor::Middle, angle);
+    };
     let start = out.len();
     if x_edge.is_some() && xa.offset_pct < 0.0 && xa.offset_pct.is_finite() && x_title == TitlePlace::Own {
-        draw_x_title_inward(out, project, xa, f, pds, crate::axis_offset::x_line_y(xa, f), &xp.title, m);
+        draw_x_title_inward(out, project, xa, f, pds, crate::axis_offset::x_line_y(xa, f), &xp.title, &place_title);
     } else if let Some(edge) = x_edge {
         match x_title {
-            TitlePlace::Own => draw_x_title(out, project, xa, f, pds, edge, &xp.title, m),
+            TitlePlace::Own => draw_x_title(out, project, xa, f, pds, edge, &xp.title, &place_title),
             TitlePlace::Shared => {}
             TitlePlace::Span { from, to, edge } => {
-                draw_x_title(out, project, xa, Rect { x: from, w: to - from, ..f }, pds, edge, &xp.title, m)
+                draw_x_title(out, project, xa, Rect { x: from, w: to - from, ..f }, pds, edge, &xp.title, &place_title)
             }
         }
     }
     rec(objects, out, start, ObjectKind::XTitle, &[]);
     let start = out.len();
     if y_edge.is_some() && ya.offset_pct < 0.0 && ya.offset_pct.is_finite() && y_title == TitlePlace::Own {
-        draw_y_title_inward(out, project, ya, f, pds, crate::axis_offset::y_line_x(ya, f), &yp.title, m);
+        draw_y_title_inward(out, project, ya, f, pds, crate::axis_offset::y_line_x(ya, f), &yp.title, &place_title);
     } else if let Some(edge) = y_edge {
         match y_title {
-            TitlePlace::Own => draw_y_title(out, project, ya, f, pds, edge, &yp.title, m),
+            TitlePlace::Own => draw_y_title(out, project, ya, f, pds, edge, &yp.title, &place_title),
             TitlePlace::Shared => {}
             TitlePlace::Span { from, to, edge } => {
-                draw_y_title(out, project, ya, Rect { y: from, h: to - from, ..f }, pds, edge, &yp.title, m)
+                draw_y_title(out, project, ya, Rect { y: from, h: to - from, ..f }, pds, edge, &yp.title, &place_title)
             }
         }
     }
@@ -1506,6 +1511,8 @@ pub(crate) fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_ax
     }
 }
 
+type PlaceTitle<'a> = dyn Fn(&mut Vec<Item>, &str, &Font, (f64, f64), f64) + 'a;
+
 /// X title, centred on the frame, `0.6 * size` beyond the labels' outer edge `labels_edge`.
 #[allow(clippy::too_many_arguments)]
 fn draw_x_title(
@@ -1516,7 +1523,7 @@ fn draw_x_title(
     pds: &[PlotData],
     labels_edge: f64,
     font: &Font,
-    m: &dyn TextMeasurer,
+    place: &PlaceTitle<'_>,
 ) {
     if !axis.show_title {
         return;
@@ -1529,7 +1536,7 @@ fn draw_x_title(
     } else {
         labels_edge + 0.6 * size + ASCENT * size
     };
-    text::place(out, m, &title, font, size, (f.x + f.w / 2.0, baseline), Anchor::Middle, 0.0);
+    place(out, &title, font, (f.x + f.w / 2.0, baseline), 0.0);
 }
 
 /// Y title, rotated 90 degrees counter-clockwise (read from bottom to top) on either side, centred
@@ -1543,7 +1550,7 @@ fn draw_y_title(
     pds: &[PlotData],
     labels_edge: f64,
     font: &Font,
-    m: &dyn TextMeasurer,
+    place: &PlaceTitle<'_>,
 ) {
     if !axis.show_title {
         return;
@@ -1557,7 +1564,7 @@ fn draw_y_title(
         // The text's bottom edge (baseline plus descent) faces the axis.
         labels_edge - 0.6 * size - DESCENT * size
     };
-    text::place(out, m, &title, font, size, (x, f.y + f.h / 2.0), Anchor::Middle, 90.0);
+    place(out, &title, font, (x, f.y + f.h / 2.0), 90.0);
 }
 
 /// Title of an X axis moved into the frame (Origin's Scatter Central): rotated 90 degrees like a Y
@@ -1571,7 +1578,7 @@ fn draw_x_title_inward(
     pds: &[PlotData],
     line_y: f64,
     font: &Font,
-    m: &dyn TextMeasurer,
+    place: &PlaceTitle<'_>,
 ) {
     if !axis.show_title {
         return;
@@ -1579,7 +1586,7 @@ fn draw_x_title_inward(
     let title = axis.title.clone().unwrap_or_else(|| first_title(project, axis, pds, false));
     let size = axis.title_font.size_pt;
     let x = f.x - 0.6 * size - DESCENT * size;
-    text::place(out, m, &title, font, size, (x, line_y), Anchor::Middle, 90.0);
+    place(out, &title, font, (x, line_y), 90.0);
 }
 
 /// Title of a Y axis moved into the frame (Origin's Scatter Central): horizontal, centred on the axis
@@ -1593,7 +1600,7 @@ fn draw_y_title_inward(
     pds: &[PlotData],
     line_x: f64,
     font: &Font,
-    m: &dyn TextMeasurer,
+    place: &PlaceTitle<'_>,
 ) {
     if !axis.show_title {
         return;
@@ -1601,7 +1608,7 @@ fn draw_y_title_inward(
     let title = axis.title.clone().unwrap_or_else(|| first_title(project, axis, pds, true));
     let size = axis.title_font.size_pt;
     let baseline = f.y - 0.6 * size - DESCENT * size;
-    text::place(out, m, &title, font, size, (line_x, baseline), Anchor::Middle, 0.0);
+    place(out, &title, font, (line_x, baseline), 0.0);
 }
 
 // ----- legend --------------------------------------------------------------------------------
@@ -1696,7 +1703,7 @@ fn draw_legend(
     let row_h = 1.3 * fs;
     let col_gap = fs;
     let plot_color = |slot| owner_plots.get(slot).map(crate::rug::plot_color);
-    let segments = |t: &str| crate::markup::legend_segments(t, &|name| m.expand_inline_family(name), &plot_color);
+    let segments = |t: &str| crate::markup::plot_segments(t, &|name| m.expand_inline_family(name), &plot_color);
     let text_width = |t: &str| text::segments_width(m, &segments(t), &lg.font, fs);
 
     // Piled, floating and lying bars list the last plot first (measured, spec 14.12).

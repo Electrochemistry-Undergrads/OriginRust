@@ -1186,12 +1186,15 @@ Nested styles, literal blocks and glyph decorations follow the existing text rul
 Sheaf counts the layer's saved plots in order, including hidden ones. It uses the same
 representative line or symbol color as its axis color-following control. Index zero and
 missing plot slots leave the text in its enclosing color. The slot and fallback behavior are
-Sheaf choices. This applies to free labels and ordinary legends, with the same results in
-graph exports and the legend editor's scene preview. A shared-frame legend resolves the
+Sheaf choices. This applies to free labels, ordinary legends and Cartesian axis titles.
+Graph exports and the legend and title editors' scene previews use the same rendering.
+A shared-frame legend resolves the
 color from its owning layer even when its text names a plot in a different layer. For example,
 `\l(2.1) \cp1(%(2.1))` draws the sample and name of the second layer's first plot and
-colors the name with the owning layer's first plot. Axis titles, point labels, the parallel
-coordinates group legend and the standalone free-label editor preview remain open.
+colors the name with the owning layer's first plot. A title shared by touching Cartesian
+panels uses the plot color from the panel that draws the title. Point labels, specialized
+axis titles, the parallel coordinates group legend and the standalone free-label editor
+preview remain open.
 
 ### 7.12 Reusable Custom RGB wells (T58/T59, documented contract)
 

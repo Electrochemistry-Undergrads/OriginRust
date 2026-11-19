@@ -196,6 +196,12 @@ use the same resolved text styles. Regressions cover substituted names, alignmen
 text, missing slots and live style changes (graphing 7.11). Formatting, strict workspace Clippy, Nextest (4,570 passed and
 8 skipped), doc tests, inventory and eight Python tooling tests passed.
 
+Cartesian X/Y titles and their scene previews now resolve `\cpN(text)`, including
+opposite, inward and shared-panel placements. The existing shared-panel title owner
+supplies the color. Scene and SVG regressions cover title placement, decoration color
+and the interaction with the base title color (graphing 7.11).
+Workspace verification pending.
+
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.
 **Spec:** [graphing](../spec/graphing.md) 7 and 16; [GUI](../spec/gui-look.md) 1 and 4;

@@ -263,6 +263,8 @@ pub struct SheafApp {
     show_x: Option<crate::dialogs::sampling::ShowXDialog>,
     /// The saved user templates as last read from the folder (at start and after a change).
     user_templates: Vec<String>,
+    /// The saved user workbook templates, read with them (T160).
+    user_book_templates: Vec<String>,
     power: Option<PowerDialog>,
     find: Option<FindDialog>,
     sort: Option<SortDialog>,
@@ -413,6 +415,11 @@ impl SheafApp {
             last_folder: Vec::new(),
             show_x: None,
             user_templates: startup.templates_dir.as_deref().map(sheaf_io::user_templates::names).unwrap_or_default(),
+            user_book_templates: startup
+                .templates_dir
+                .as_deref()
+                .map(|d| sheaf_io::user_templates::names_of(d, sheaf_io::user_templates::TemplateKind::Workbook))
+                .unwrap_or_default(),
             power: None,
             find: None,
             sort: None,
@@ -1947,6 +1954,13 @@ impl SheafApp {
                 }
             }
             Action::NewFromTemplate(name) => self.new_from_template(name),
+            Action::NewBookFromTemplate(name) => {
+                let Some(dir) = self.startup.templates_dir.clone() else { return };
+                match sheaf_io::user_templates::load_book(&dir, &name) {
+                    Ok(t) => self.new_book_from_template(&t),
+                    Err(e) => self.message = Some(("Could not read the template".to_string(), e.to_string())),
+                }
+            }
             Action::FitOrganizer => self.fit_organizer = Some(Default::default()),
             Action::FilterManager => {
                 self.filter_manager =
@@ -2741,17 +2755,28 @@ impl SheafApp {
                 }
             }
             Action::SaveWindowAs(id) => self.save_window_as(id),
-            Action::SaveTemplateAs(graph) => {
-                let name = self.doc.project().graph(graph).map(|g| g.name.clone()).unwrap_or_default();
+            Action::SaveTemplateAs(window) => {
+                use sheaf_io::user_templates::TemplateKind;
+                let project = self.doc.project();
+                let (kind, name, existing) = if let Some(b) = project.workbook(window) {
+                    (TemplateKind::Workbook, b.name.clone(), &self.user_book_templates)
+                } else if let Some(g) = project.graph(window) {
+                    (TemplateKind::Graph, g.name.clone(), &self.user_templates)
+                } else {
+                    return;
+                };
                 self.template_prompt = Some(crate::dialogs::user_templates::SaveTemplatePrompt::new(
-                    graph,
+                    window,
+                    kind,
                     &name,
-                    self.user_templates.clone(),
+                    existing.clone(),
                 ));
             }
             Action::ManageTemplates => {
-                self.template_manager =
-                    Some(crate::dialogs::user_templates::TemplateManager::new(self.user_templates.clone()));
+                self.template_manager = Some(crate::dialogs::user_templates::TemplateManager::new(
+                    self.user_templates.clone(),
+                    self.user_book_templates.clone(),
+                ));
             }
             Action::PlotUserTemplate { book, columns, name } => self.plot_user_template(book, columns, &name),
             Action::FillPattern { kind, columns } => {
@@ -3611,13 +3636,23 @@ impl SheafApp {
                 sheaf_io::user_templates::load(&dir, &name).map_err(|e| e.to_string())
             }
             None => {
+                use sheaf_io::user_templates::{BOOK_EXTENSION, EXTENSION, TemplateKind};
                 let mut chooser = rfd::FileDialog::new()
                     .set_title("New from template")
-                    .add_filter("Sheaf graph template", &["sheaftemplate"]);
+                    .add_filter("Sheaf template", &[EXTENSION, BOOK_EXTENSION])
+                    .add_filter("Sheaf graph template", &[EXTENSION])
+                    .add_filter("Sheaf workbook template", &[BOOK_EXTENSION]);
                 if let Some(dir) = self.startup.templates_dir.as_deref().filter(|d| d.is_dir()) {
                     chooser = chooser.set_directory(dir);
                 }
                 let Some(path) = chooser.pick_file() else { return };
+                if sheaf_io::user_templates::kind_of_file(&path) == Some(TemplateKind::Workbook) {
+                    match sheaf_io::user_templates::load_book_file(&path) {
+                        Ok(t) => self.new_book_from_template(&t),
+                        Err(e) => self.message = Some(("Could not read the template".to_string(), e.to_string())),
+                    }
+                    return;
+                }
                 sheaf_io::user_templates::load_file(&path).map_err(|e| e.to_string())
             }
         };
@@ -3635,6 +3670,14 @@ impl SheafApp {
             }
             Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
         }
+    }
+
+    /// File > New > From Template with a workbook template (T160): an empty workbook built like the
+    /// template, one undo step.
+    fn new_book_from_template(&mut self, template: &sheaf_core::BookTemplate) {
+        let id = self.doc.apply("New workbook from template", |p| p.new_workbook_from_template(template));
+        self.focus(id);
+        self.say(format!("New workbook from the template {}", template.name));
     }
 
     fn plot_user_template(&mut self, book: WindowId, columns: Vec<ColumnId>, name: &str) {
@@ -4089,8 +4132,10 @@ impl SheafApp {
 
     /// Reads the template names again after a change.
     fn refresh_user_templates(&mut self) {
-        self.user_templates =
-            self.startup.templates_dir.as_deref().map(sheaf_io::user_templates::names).unwrap_or_default();
+        use sheaf_io::user_templates::{TemplateKind, names_of};
+        let dir = self.startup.templates_dir.as_deref();
+        self.user_templates = dir.map(|d| names_of(d, TemplateKind::Graph)).unwrap_or_default();
+        self.user_book_templates = dir.map(|d| names_of(d, TemplateKind::Workbook)).unwrap_or_default();
     }
 
     /// The Save Template As prompt and the Manage window.
@@ -4102,23 +4147,28 @@ impl SheafApp {
                 PromptOutcome::Open => {}
                 PromptOutcome::Closed => self.template_prompt = None,
                 PromptOutcome::Save(name) => {
-                    let graph = prompt.graph;
-                    let made = self
-                        .doc
-                        .project()
-                        .graph(graph)
-                        .ok_or_else(|| "the graph was closed".to_string())
-                        .and_then(|g| sheaf_core::UserTemplate::from_graph(&name, g).map_err(|e| e.to_string()))
-                        .and_then(|t| {
-                            let dir = dir.as_deref().ok_or_else(|| "there is no template folder".to_string())?;
-                            sheaf_io::user_templates::save(dir, &t).map_err(|e| e.to_string())
+                    let window = prompt.window;
+                    let book = prompt.kind == sheaf_io::user_templates::TemplateKind::Workbook;
+                    let project = self.doc.project();
+                    let made =
+                        dir.as_deref().ok_or_else(|| "there is no template folder".to_string()).and_then(|dir| {
+                            if book {
+                                let b = project.workbook(window).ok_or("the workbook was closed")?;
+                                let t = sheaf_core::BookTemplate::from_workbook(&name, b);
+                                sheaf_io::user_templates::save_book(dir, &t).map_err(|e| e.to_string())
+                            } else {
+                                let g = project.graph(window).ok_or("the graph was closed")?;
+                                let t = sheaf_core::UserTemplate::from_graph(&name, g).map_err(|e| e.to_string())?;
+                                sheaf_io::user_templates::save(dir, &t).map_err(|e| e.to_string())
+                            }
                         });
                     match made {
                         Ok(saved) => {
                             self.template_prompt = None;
                             self.refresh_user_templates();
                             let verb = if saved.replaced { "Replaced" } else { "Saved" };
-                            self.say(format!("{verb} the template {} (Plot > User Templates)", saved.name));
+                            let place = if book { "File > New > From Template" } else { "Plot > User Templates" };
+                            self.say(format!("{verb} the template {} ({place})", saved.name));
                         }
                         Err(e) => prompt.set_error(e),
                     }
@@ -4131,20 +4181,24 @@ impl SheafApp {
             match outcome {
                 ManagerOutcome::Open => {}
                 ManagerOutcome::Closed => self.template_manager = None,
-                ManagerOutcome::Rename { from, to } => match sheaf_io::user_templates::rename(&dir, &from, &to) {
-                    Ok(new) => {
-                        let names = sheaf_io::user_templates::names(&dir);
-                        m.set_names(names.clone());
-                        m.select(&new);
-                        self.user_templates = names;
+                ManagerOutcome::Rename { kind, from, to } => {
+                    match sheaf_io::user_templates::rename_of(&dir, &from, &to, kind) {
+                        Ok(new) => {
+                            self.refresh_user_templates();
+                            if let Some(m) = &mut self.template_manager {
+                                m.set_names(self.user_templates.clone(), self.user_book_templates.clone());
+                                m.select(kind, &new);
+                            }
+                        }
+                        Err(e) => m.set_error(e.to_string()),
                     }
-                    Err(e) => m.set_error(e.to_string()),
-                },
-                ManagerOutcome::Delete(name) => match sheaf_io::user_templates::delete(&dir, &name) {
+                }
+                ManagerOutcome::Delete(kind, name) => match sheaf_io::user_templates::delete_of(&dir, &name, kind) {
                     Ok(_) => {
-                        let names = sheaf_io::user_templates::names(&dir);
-                        m.set_names(names.clone());
-                        self.user_templates = names;
+                        self.refresh_user_templates();
+                        if let Some(m) = &mut self.template_manager {
+                            m.set_names(self.user_templates.clone(), self.user_book_templates.clone());
+                        }
                     }
                     Err(e) => m.set_error(e.to_string()),
                 },
@@ -4601,6 +4655,7 @@ impl SheafApp {
             recent_commands: self.recent.commands(),
             recent_exports: self.recent.exports(),
             user_templates: &self.user_templates,
+            user_book_templates: &self.user_book_templates,
             templates: self.startup.templates_dir.is_some(),
             panels: self.panels.shown_flags(),
             ai_link: self.live.active(),

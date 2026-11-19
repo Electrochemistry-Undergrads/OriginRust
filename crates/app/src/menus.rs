@@ -48,6 +48,7 @@ const NEED_BOOK: &str = "Activate a workbook window first";
 pub const NO_COLOR_SCALE: &str = "New Color Scale needs a plot whose symbols take their colour from a Z column";
 pub const NO_CUMULATIVE: &str = "Cumulative needs a line, scatter or line + symbol plot in the layer";
 const NEED_GRAPH: &str = "Activate a graph window first";
+const NEED_GRAPH_OR_BOOK: &str = "Activate a graph or a workbook first";
 const NEED_SHAPE: &str = "Select a drawn object first";
 const NEED_PRINTABLE: &str = "Activate a graph or workbook window first";
 const NEED_COLUMNS: &str = "Select one or more columns first";
@@ -565,7 +566,8 @@ pub enum Entry {
     Windows,
     /// Window > Folders: the project's folders, the active one ticked (T100).
     Folders,
-    /// File > New > From Template: the saved user templates, each making an empty graph (T103).
+    /// File > New > From Template: the saved user templates, each making an empty graph (T103), then
+    /// the saved workbook templates, each making an empty workbook (T160).
     NewFromTemplates,
     /// The entries of File > Recent Projects, Recent Books, Recent Graphs or File > Import > Recent
     /// Imports, from the context.
@@ -649,6 +651,8 @@ pub struct MenuContext<'a> {
     /// The saved user graph templates (Plot > User Templates), and whether there is a template
     /// folder at all (File > Save Template As and Manage are greyed without one).
     pub user_templates: &'a [String],
+    /// The saved user workbook templates (File > New > From Template, T160).
+    pub user_book_templates: &'a [String],
     pub templates: bool,
     /// Which side panels are shown, in the order of `PanelId::ALL` (the ticks of the View menu).
     pub panels: [bool; 4],
@@ -881,7 +885,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
     if kind != WindowKind::None {
         v.push(sep());
         v.push(item("Save &Window As...", Cmd::SaveWindowAs));
-        if kind == WindowKind::Graph {
+        if matches!(kind, WindowKind::Graph | WindowKind::Workbook) {
             v.push(item("Save Temp&late As...", Cmd::SaveTemplateAs));
         } else {
             v.push(grey("Save Template As..."));
@@ -2853,7 +2857,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             if !c.templates {
                 return Err(NO_TEMPLATE_FOLDER);
             }
-            Action::SaveTemplateAs(c.graph.ok_or(NEED_GRAPH)?)
+            let window = match c.kind {
+                WindowKind::Workbook => c.book,
+                _ => c.graph,
+            };
+            Action::SaveTemplateAs(window.ok_or(NEED_GRAPH_OR_BOOK)?)
         }
         Cmd::ManageTemplates => {
             if !c.templates {
@@ -3435,12 +3443,22 @@ fn show_entries(
             Entry::Recent(kind) => show_recent(ui, *kind, c, actions),
             Entry::UserTemplates => show_user_templates(ui, c, actions),
             Entry::NewFromTemplates => {
-                if c.user_templates.is_empty() {
+                if c.user_templates.is_empty() && c.user_book_templates.is_empty() {
                     ui.add_enabled(false, egui::Button::new(label_job(ui, "(no saved templates)", true)));
                 }
                 for name in c.user_templates {
                     if ui.add(egui::Button::new(label_job(ui, name, true))).clicked() {
                         actions.push(Action::NewFromTemplate(Some(name.clone())));
+                        ui.close();
+                    }
+                }
+                // Workbook templates (T160) follow the graph templates, after a line.
+                if !c.user_templates.is_empty() && !c.user_book_templates.is_empty() {
+                    ui.separator();
+                }
+                for name in c.user_book_templates {
+                    if ui.add(egui::Button::new(label_job(ui, name, true))).clicked() {
+                        actions.push(Action::NewBookFromTemplate(name.clone()));
                         ui.close();
                     }
                 }
@@ -3877,6 +3895,7 @@ mod tests {
             recent_commands: &crate::menus::NO_COMMANDS,
             recent_exports: &[],
             user_templates: &[],
+            user_book_templates: &[],
             templates: false,
             panels: [true; 4],
             ai_link: false,

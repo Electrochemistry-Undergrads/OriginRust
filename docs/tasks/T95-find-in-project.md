@@ -11,7 +11,10 @@ when Find is reopened. The automated UI test verified search results and navigat
 
 Within added 2026-11-18. The default Entire Project matches the archived capture. Active Folder
 and Active Folder and Subfolders follow the Origin documentation and use the selected Project
-Explorer folder. Workspace verification pending.
+Explorer folder. Formatting, strict workspace Clippy, Nextest (4,528 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
+Desktop captures verified the active path, Within choices and selected subtree scope.
+Automated tests verified result counts, navigation to a hidden descendant and the session setting.
 
 **Size:** M. **Source:** greyed inventory package B7 (Edit > Find in Project... on a workbook, Find in
 Project on a graph; F3).

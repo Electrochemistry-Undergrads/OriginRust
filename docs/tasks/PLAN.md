@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 239 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 238 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -173,7 +173,7 @@ Backlog packages: write the brief first (step 3 above).
 | [x] | [T96](T96-wavelets.md) | Wavelets: Decompose, Reconstruction, Denoise, Smooth, Continuous Wavelet (B8 slice; done 2026-11-16; open corners in the brief) | L | 0 |
 | [x] | [T91](T91-simulate-surface-compare-implicit-area.md) | Simulate Surface, Compare Datasets, Nonlinear Implicit Curve Fit, XYZ Surface Area (B8 slice; done 2026-11-16) | L | 0 |
 | [x] | [T81](T81-partial-correlation-anova3-rmanova.md) | Partial Correlation Coefficient, Three-Way ANOVA, One-Way and Two-Way Repeated Measures ANOVA (B8 slice; claimed 2026-11-16) | L | 0 |
-| [ ] | B9 | Gadgets on the graph (Statistics, Quick Fit, Quick Peaks, Differentiate, Interpolate, Intersect, FFT, Rise Time, Cluster, Vertical Cursor, ...) | L | 3 |
+| [ ] | B9 | Gadgets on the graph (Statistics, Quick Fit, Quick Peaks, Differentiate, Interpolate, Intersect, FFT, Rise Time, Cluster, Vertical Cursor, ...) | L | 2 |
 | [x] | [T78](T78-recent-lists.md) | Most Recently Used lists in the Plot, Worksheet, Analysis and Statistics menus; Recent Exports (B10) | S | 0 |
 
 - **B8.** One brief per tool family, each checked against Origin where it can be scripted and

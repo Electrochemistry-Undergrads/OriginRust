@@ -469,6 +469,8 @@ pub enum Cmd {
     DifferentiateGadget,
     /// Gadgets > Interpolate... (T145).
     InterpolateGadget,
+    /// Gadgets > Cluster... (T146).
+    ClusterGadget,
     /// A command of the open gadget's right-click menu.
     Gadget(GadgetOp),
     /// View > Toolbars: the window that shows and hides the bars.
@@ -1748,7 +1750,7 @@ fn gadgets_menu() -> Vec<Entry> {
     v.push(item("Interpolate...", Cmd::InterpolateGadget));
     v.push(item("Intersect...", Cmd::IntersectGadget));
     v.push(item("Rise Time...", Cmd::RiseTimeGadget));
-    v.extend(greys(&["Cluster..."]));
+    v.push(item("Cluster...", Cmd::ClusterGadget));
     v.push(item("&FFT...", Cmd::FftGadget));
     v.extend(greys(&["2D Integrate...", "-"]));
     v.push(item("Vertical Cursor...", Cmd::VerticalCursorGadget));
@@ -3135,6 +3137,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::VerticalCursorGadget => Action::StartVerticalCursor { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::DifferentiateGadget => Action::StartDifferentiate { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::InterpolateGadget => Action::StartInterpolate { graph: c.graph.ok_or(NEED_GRAPH)? },
+        Cmd::ClusterGadget => Action::StartCluster { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Toolbars => Action::Toolbars,
         Cmd::Autosave => Action::Autosave,

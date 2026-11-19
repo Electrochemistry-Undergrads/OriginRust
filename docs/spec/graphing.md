@@ -6309,3 +6309,15 @@ range: they open on the active plot over the middle half of the X axis, and the 
     "Interpolate: too few points in the range".
 - **Right-click menu:** Delete (Esc) closes either gadget.
 
+## Cluster gadget: Gadgets > Cluster... (T146, 2026-11-19, **not measured**)
+
+Origin 2016's Gadgets menu has Cluster.... It could not be probed (Origin's COM class was unregistered),
+so this follows Origin's documented behaviour.
+
+- **Region:** a rectangle on the active plot. It opens over the middle half of both axes. The left and
+  right edges and the top and bottom edges each drag one side, and dragging inside moves the rectangle,
+  all kept inside the layer frame.
+- **Result:** every point with numbers inside the rectangle (edges included) gets a red ring. The label
+  reads "N = n, Mean X = x, Mean Y = y", or "No points in the region".
+- **Right-click menu:** Delete (Esc) closes the gadget.
+

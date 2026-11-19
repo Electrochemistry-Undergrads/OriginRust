@@ -2657,6 +2657,7 @@ impl SheafApp {
             Action::StartIntersect { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Intersect),
             Action::StartQuickPeaks { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::QuickPeaks),
             Action::StartSigmoid { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Sigmoid),
+            Action::StartFft { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Fft),
             Action::Gadget { graph, op } => self.gadget(graph, op),
             Action::ExportGraph(graph) => {
                 self.export =

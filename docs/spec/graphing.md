@@ -6197,3 +6197,24 @@ unregistered), so this follows Origin's documented behaviour. It reuses the Inte
   "x0 = …, dx = …", or "Sigmoidal fit failed in the range".
 - **Right-click menu:** Delete (Esc) closes the gadget.
 
+## FFT gadget: Gadgets > FFT... (T142, 2026-11-18, **not measured**)
+
+Origin 2016's Gadgets menu has FFT.... It could not be probed (Origin's COM class was unregistered), so
+this follows Origin's documented behaviour. It reuses the Integrate gadget's range.
+
+- **Opening:** the gadget opens on the selected plot of the active layer, or its first visible plot of
+  numbers, over the middle half of the X axis. The range drags as the Integrate gadget's does.
+- **What it computes:** the one-sided amplitude spectrum of the rows inside the range (at least four, all
+  with numbers).
+  - It uses `sheaf_calc::fft::fft_spectrum` with Analysis > FFT's defaults (rectangle window, amplitude
+    correction).
+  - The sampling interval is the mean X step of those rows.
+- **What it draws:**
+  - A small chart in the top third of the range: frequency across, amplitude up, both scaled to their
+    largest values.
+  - The label at the top reads "Strongest frequency = f" (the largest amplitude above zero frequency), or
+    "FFT: too few points in the range".
+- **Right-click menu:** Delete (Esc) closes the gadget.
+- **Not done:** Origin shows its spectrum in a preview graph window and can output it to a sheet; Sheaf has
+  neither yet.
+

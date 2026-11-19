@@ -10,6 +10,7 @@
 
 use eframe::egui::{self, DragValue};
 use sheaf_core::graph::*;
+use sheaf_core::vector::VectorPosition;
 use sheaf_core::{Color, ColumnId};
 
 use super::details_look as look;
@@ -48,6 +49,7 @@ pub enum DetailTab {
     TreemapLayout,
     /// A sunburst's Pie Geometry tab: start angle, hole, ring gap, labels (graphing spec 14.27).
     SunburstGeometry,
+    Vector,
     Display,
     PageDisplay,
     LegendsTitles,
@@ -93,6 +95,9 @@ fn tabs_for(node: Node, graph: &Graph) -> Vec<(DetailTab, &'static str, bool)> {
             let mut tabs = vec![(DetailTab::Group, "Group", true)];
             if plot.kind.has_line() {
                 tabs.push((DetailTab::Line, "Line", true));
+            }
+            if plot.kind.is_vector() && plot.decor.vector.is_some() {
+                tabs.push((DetailTab::Vector, "Vector", true));
             }
             if plot.kind.has_symbols() {
                 tabs.push((DetailTab::Symbol, "Symbol", true));
@@ -147,6 +152,7 @@ fn first_tab(tabs: &[(DetailTab, &str, bool)]) -> DetailTab {
         DetailTab::Parallel,
         DetailTab::TreemapLayout,
         DetailTab::SunburstGeometry,
+        DetailTab::Vector,
         DetailTab::Line,
         DetailTab::Pattern,
         DetailTab::Symbol,
@@ -453,6 +459,7 @@ fn plot_tab_body(
     node: &mut Node,
 ) {
     match tab {
+        DetailTab::Vector => vector_tab(ui, &mut graph.layers[l].plots[p]),
         DetailTab::Line => {
             let plot = &mut graph.layers[l].plots[p];
             grid(ui, "plot_line", |ui| {
@@ -924,6 +931,81 @@ fn plot_tab_body(
             }
         }
         _ => group_tab(ui, graph, l, p, labels, node),
+    }
+}
+
+/// The vector's shaft and arrowhead, with position and magnitude controls for XYAM.
+fn vector_tab(ui: &mut egui::Ui, plot: &mut Plot) {
+    let Some(spec) = &mut plot.decor.vector else { return };
+    grid(ui, "vector_shaft", |ui| {
+        ui.label("Color");
+        let before = plot.line.color;
+        color_button(ui, &mut plot.line.color);
+        if plot.line.color != before {
+            plot.auto_color = false;
+        }
+        ui.end_row();
+        let label = ui.label("Width");
+        ui.add(
+            DragValue::new(&mut plot.line.width_pt)
+                .range(0.1..=20.0)
+                .clamp_existing_to_range(false)
+                .speed(0.05)
+                .suffix(" pt"),
+        )
+        .labelled_by(label.id);
+        ui.end_row();
+    });
+    group_box(ui, "Arrowheads", |ui| {
+        grid(ui, "vector_head", |ui| {
+            let label = ui.label("Length");
+            ui.add(
+                DragValue::new(&mut spec.head_pt)
+                    .range(0.0..=f64::MAX)
+                    .clamp_existing_to_range(false)
+                    .speed(0.1)
+                    .suffix(" pt"),
+            )
+            .labelled_by(label.id);
+            ui.end_row();
+            let label = ui.label("Angle");
+            ui.add(
+                DragValue::new(&mut spec.head_angle_deg)
+                    .range(0.0..=179.0)
+                    .clamp_existing_to_range(false)
+                    .speed(1.0)
+                    .suffix("°"),
+            )
+            .labelled_by(label.id);
+            ui.end_row();
+        });
+        ui.horizontal(|ui| {
+            ui.radio_value(&mut spec.open_head, false, "Closed");
+            ui.radio_value(&mut spec.open_head, true, "Open");
+        });
+    });
+    if plot.kind == PlotKind::VectorXyam {
+        group_box(ui, "Position", |ui| {
+            ui.horizontal(|ui| {
+                ui.radio_value(&mut spec.position, VectorPosition::Head, "Head");
+                ui.radio_value(&mut spec.position, VectorPosition::Midpoint, "Midpoint");
+                ui.radio_value(&mut spec.position, VectorPosition::Tail, "Tail");
+            });
+        });
+        grid(ui, "vector_xyam", |ui| {
+            let label = ui.label("Magnitude multiplier");
+            ui.add(
+                DragValue::new(&mut spec.multiplier).range(0.0..=f64::MAX).clamp_existing_to_range(false).speed(0.01),
+            )
+            .labelled_by(label.id);
+            ui.end_row();
+            ui.label("Angle units");
+            ui.horizontal(|ui| {
+                ui.radio_value(&mut spec.degrees, false, "Radians");
+                ui.radio_value(&mut spec.degrees, true, "Degrees");
+            });
+            ui.end_row();
+        });
     }
 }
 

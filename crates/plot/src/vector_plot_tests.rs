@@ -3,6 +3,7 @@
 use super::*;
 use crate::scene::{Item, ObjectKind};
 use sheaf_core::template::Template;
+use sheaf_core::vector::VectorPosition;
 use sheaf_core::{ColumnData, Designation};
 
 fn geometry(p: &Project, g: WindowId) -> LayerGeometry {
@@ -76,6 +77,54 @@ fn sample_graph(template: Template) -> (Project, WindowId) {
     };
     let graph = p.plot_columns(template, &columns).unwrap();
     (p, graph)
+}
+
+#[test]
+fn xyam_keeps_the_chosen_point_at_the_xy_coordinate() {
+    let (mut p, graph) = sample_graph(Template::VectorXyam);
+    let geom = geometry(&p, graph);
+    let (x, y) = geom.data_to_page(1.0, 1.0);
+    for (position, tail_offset, tip_offset) in
+        [(VectorPosition::Tail, 0.0, 16.0), (VectorPosition::Midpoint, -8.0, 8.0), (VectorPosition::Head, -16.0, 0.0)]
+    {
+        p.graph_mut(graph).unwrap().layers[0].plots[0].decor.vector.as_mut().unwrap().position = position;
+        let scene = layout::build_scene(&p, graph, &FixedMetrics).unwrap();
+        let [Item::Path { d: shaft, .. }, Item::Path { d: head, .. }, ..] = scene.layers[0].plots.as_slice() else {
+            panic!("expected vector shaft and head");
+        };
+        let tail = crate::hit::path_points(shaft)[0];
+        let tip = crate::hit::path_points(head)[0];
+        assert!((tail.0 - x - tail_offset).abs() < 0.01 && (tail.1 - y).abs() < 0.01, "{tail:?}");
+        assert!((tip.0 - x - tip_offset).abs() < 0.01 && (tip.1 - y).abs() < 0.01, "{tip:?}");
+    }
+}
+
+#[test]
+fn open_vector_heads_join_the_shaft_at_the_tip_in_the_plot_and_legend() {
+    let (mut p, graph) = sample_graph(Template::VectorXyxy);
+    let plot = &mut p.graph_mut(graph).unwrap().layers[0].plots[0];
+    plot.line.color = sheaf_core::Color::rgb(40, 70, 120);
+    plot.decor.vector.as_mut().unwrap().open_head = true;
+    let geom = geometry(&p, graph);
+    let scene = layout::build_scene(&p, graph, &FixedMetrics).unwrap();
+    for items in [&scene.layers[0].plots[..2], &legend_items(&scene)[1..3]] {
+        let [
+            Item::Path { d: shaft, stroke: Some(shaft_stroke), fill: None },
+            Item::Path { d: head, stroke: Some(head_stroke), fill: None },
+        ] = items
+        else {
+            panic!("expected two unfilled paths");
+        };
+        assert_eq!((head_stroke.width, head_stroke.color), (shaft_stroke.width, shaft_stroke.color));
+        assert!(!head.ends_with('Z'));
+        let points = crate::hit::path_points(head);
+        assert_eq!(points.len(), 3);
+        assert_eq!(points[1], crate::hit::path_points(shaft)[1]);
+    }
+    let Item::Path { d, .. } = &scene.layers[0].plots[0] else { unreachable!() };
+    let tip = crate::hit::path_points(d)[1];
+    let end = geom.data_to_page(2.0, 1.5);
+    assert!((tip.0 - end.0).abs() < 0.01 && (tip.1 - end.1).abs() < 0.01);
 }
 
 fn legend_items(scene: &scene::Scene) -> &[Item] {

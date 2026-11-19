@@ -465,6 +465,10 @@ pub enum Cmd {
     QuickFitGadget,
     /// Gadgets > Vertical Cursor... (T144).
     VerticalCursorGadget,
+    /// Gadgets > Differentiate... (T145).
+    DifferentiateGadget,
+    /// Gadgets > Interpolate... (T145).
+    InterpolateGadget,
     /// A command of the open gadget's right-click menu.
     Gadget(GadgetOp),
     /// View > Toolbars: the window that shows and hides the bars.
@@ -1740,7 +1744,8 @@ fn gadgets_menu() -> Vec<Entry> {
     v.push(item("Quick Sigmoidal Fit...", Cmd::SigmoidGadget));
     v.push(item("Quick Peaks...", Cmd::QuickPeaksGadget));
     v.push(item("Integrate...", Cmd::IntegrateGadget));
-    v.extend(greys(&["Differentiate...", "Interpolate..."]));
+    v.push(item("Differentiate...", Cmd::DifferentiateGadget));
+    v.push(item("Interpolate...", Cmd::InterpolateGadget));
     v.push(item("Intersect...", Cmd::IntersectGadget));
     v.push(item("Rise Time...", Cmd::RiseTimeGadget));
     v.extend(greys(&["Cluster..."]));
@@ -3128,6 +3133,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::StatisticsGadget => Action::StartStatisticsGadget { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::QuickFitGadget => Action::StartQuickFit { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::VerticalCursorGadget => Action::StartVerticalCursor { graph: c.graph.ok_or(NEED_GRAPH)? },
+        Cmd::DifferentiateGadget => Action::StartDifferentiate { graph: c.graph.ok_or(NEED_GRAPH)? },
+        Cmd::InterpolateGadget => Action::StartInterpolate { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Toolbars => Action::Toolbars,
         Cmd::Autosave => Action::Autosave,

@@ -9065,6 +9065,7 @@ mod copy_variants;
 mod corner_menu;
 mod data_markers;
 mod data_range;
+mod diff_interp_gadgets;
 mod favorites;
 mod fft_gadget;
 mod fill_pattern;

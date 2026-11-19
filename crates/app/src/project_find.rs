@@ -1,7 +1,8 @@
 //! Edit > Find in Project (F3, T95): the search of Origin 2016's "Find" window, measured on 2026-11-16
 //! (`docs/spec/workbook-model.md`, "Find in Project"):
 //!
-//! - It looks in the names and labels of graphs, books, sheets and columns (the "Metadata" types, each
+//! - It looks in folder names and comments and the names and labels of graphs, books, sheets and
+//!   columns (the "Metadata" types, each
 //!   with its attributes under Select...; Units, F(x) and others are off by default), in the cells of
 //!   columns when "Data in Cells (1st Matched in Column)" is ticked (off by default), and in the text
 //!   objects of graphs (axis titles and legends as drawn) when "Text Objects on Graphs" is ticked (on).
@@ -32,6 +33,14 @@ impl FindScope {
             Self::ActiveFolderAndSubfolders => "Active Folder and Subfolders",
         }
     }
+
+    fn includes_path(self, path: &[usize], active_folder: &[usize]) -> bool {
+        match self {
+            Self::EntireProject => true,
+            Self::ActiveFolder => path == active_folder,
+            Self::ActiveFolderAndSubfolders => path.starts_with(active_folder),
+        }
+    }
 }
 
 /// The search and the parts of the project it looks at (Origin's defaults by `Default`).
@@ -43,6 +52,8 @@ pub struct FindSpec {
     pub whole_word: bool,
     /// `*` any run of characters, `?` one character.
     pub wildcards: bool,
+    pub folders: bool,
+    pub folder_comments: bool,
     pub graphs: bool,
     pub books: bool,
     pub sheets: bool,
@@ -63,6 +74,8 @@ impl Default for FindSpec {
             case_sensitive: false,
             whole_word: false,
             wildcards: false,
+            folders: true,
+            folder_comments: true,
             graphs: true,
             books: true,
             sheets: true,
@@ -77,11 +90,22 @@ impl Default for FindSpec {
 }
 
 /// What a hit leads to.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FindTarget {
+    Folder(Vec<usize>),
     Window(WindowId),
     Sheet { book: WindowId, sheet: usize },
     Column { book: WindowId, sheet: usize, column: ColumnId },
+}
+
+impl FindTarget {
+    pub fn window_id(&self) -> Option<WindowId> {
+        match *self {
+            Self::Folder(_) => None,
+            Self::Window(id) => Some(id),
+            Self::Sheet { book, .. } | Self::Column { book, .. } => Some(book),
+        }
+    }
 }
 
 /// One row of the result list.
@@ -146,14 +170,30 @@ fn word_ends(f: &[char], at: usize) -> bool {
 
 /// Searches the project as Origin's Find in Project does.
 pub fn find_in_project(project: &Project, spec: &FindSpec, active_folder: &[usize]) -> Vec<FindHit> {
-    let includes = |id| match spec.within {
-        FindScope::EntireProject => true,
-        FindScope::ActiveFolder => explorer::home(&project.root, id) == active_folder,
-        FindScope::ActiveFolderAndSubfolders => {
-            active_folder.is_empty() || explorer::home(&project.root, id).starts_with(active_folder)
-        }
-    };
+    let any_folder = spec.within == FindScope::EntireProject
+        || (spec.within == FindScope::ActiveFolderAndSubfolders && active_folder.is_empty());
+    let includes = |id| any_folder || spec.within.includes_path(&explorer::home(&project.root, id), active_folder);
     let mut hits = Vec::new();
+    if spec.folders {
+        for (path, range) in explorer::folder_list(&project.root) {
+            if !spec.within.includes_path(&path, active_folder) {
+                continue;
+            }
+            let Some(folder) = explorer::folder_at(&project.root, &path) else { continue };
+            for (attribute, value, enabled) in
+                [("Name", folder.name.as_str(), true), ("Comments", folder.comments.as_str(), spec.folder_comments)]
+            {
+                if enabled && spec.matches(value) {
+                    hits.push(FindHit {
+                        range: range.clone(),
+                        element: "Folder",
+                        attribute,
+                        target: FindTarget::Folder(path.clone()),
+                    });
+                }
+            }
+        }
+    }
     for g in project.graphs().filter(|g| includes(g.id)) {
         if spec.graphs {
             for (attr, text) in [("Short Name", g.name.as_str()), ("Long Name", g.long_name.as_str())] {
@@ -238,9 +278,14 @@ pub fn find_in_project(project: &Project, spec: &FindSpec, active_folder: &[usiz
                 } else {
                     format!("[{}]{}!{}\"{}\"", b.name, s.name, c.short_name, c.long_name)
                 };
-                let target = FindTarget::Column { book: b.id, sheet: si, column: c.id };
-                let mut push =
-                    |attribute| hits.push(FindHit { range: range.clone(), element: "Column", attribute, target });
+                let mut push = |attribute| {
+                    hits.push(FindHit {
+                        range: range.clone(),
+                        element: "Column",
+                        attribute,
+                        target: FindTarget::Column { book: b.id, sheet: si, column: c.id },
+                    });
+                };
                 if spec.columns {
                     let formula = c.formula.clone().unwrap_or_default();
                     let mut fields: Vec<(&'static str, &str, bool)> = vec![
@@ -398,6 +443,39 @@ mod tests {
             [FindTarget::Window(graph), sheet(active_book), sheet(child_book)],
         );
         assert_eq!(targets(FindScope::ActiveFolderAndSubfolders, &[]), all);
+    }
+
+    #[test]
+    fn folder_metadata_uses_names_and_full_comments_with_the_selected_scope() {
+        use sheaf_core::project::Folder;
+
+        let mut p = Project::new();
+        p.root.name = "Survey".into();
+        p.root.comments = "QC".into();
+        p.root.folders = vec![
+            Folder {
+                name: "QC".into(),
+                comments: "First line\nQC accepted".into(),
+                folders: vec![Folder { name: "Repeat".into(), comments: "QC".into(), ..Folder::default() }],
+                ..Folder::default()
+            },
+            Folder { name: "Other".into(), comments: "QC".into(), ..Folder::default() },
+        ];
+        let spec = text("qc");
+        let all = find_in_project(&p, &spec, &[0]);
+        assert_eq!(all.len(), 5);
+        assert_eq!(all[0].target, FindTarget::Folder(vec![]));
+        assert_eq!((&*all[1].range, all[1].element, all[1].attribute), ("/Survey/QC/", "Folder", "Name"));
+        assert_eq!(all[2].attribute, "Comments");
+        assert_eq!(all[2].target, FindTarget::Folder(vec![0]));
+        let active = FindSpec { within: FindScope::ActiveFolder, ..spec.clone() };
+        assert_eq!(find_in_project(&p, &active, &[0]), all[1..3]);
+        let subtree = FindSpec { within: FindScope::ActiveFolderAndSubfolders, ..spec.clone() };
+        assert_eq!(find_in_project(&p, &subtree, &[0]), all[1..4]);
+        let names = FindSpec { folder_comments: false, ..spec.clone() };
+        assert_eq!(find_in_project(&p, &names, &[]), all[1..2]);
+        let disabled = FindSpec { folders: false, ..spec };
+        assert!(find_in_project(&p, &disabled, &[]).is_empty());
     }
 
     #[test]

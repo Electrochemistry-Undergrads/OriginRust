@@ -930,8 +930,9 @@ Edit > Find in Project... (F3; "Find in Project" on a graph's Edit menu) opens O
 Sensitive, Match Whole Word, Allow Wildcards (* and ?), Types to be Included > Metadata: Folder, Graph,
 Book, Sheet, Column, Notes and Select..., then Data in Cells (1st Matched in Column), Text Objects on
 Graphs, Notes Content; a result list (No., Range, Element, Attribute, Folder) and "Found: N". Defaults
-(Select Metadata): Graph, Book, Sheet and Notes with Long Name, Short Name and Comments; Column with Long
-Name, Short Name, Comments, Parameters and User Parameters, **not** Units, F(x), Categories, Sampling
+(Select Metadata): Folder with Name and Comments; Graph, Book, Sheet and Notes with Long Name, Short
+Name and Comments; Column with Long Name, Short Name, Comments, Parameters and User Parameters, **not**
+Units, F(x), Categories, Sampling
 Intervals, Filters, Info Variables; Data in Cells off, Text Objects on Graphs on. Origin keeps the settings
 between sessions.
 
@@ -963,7 +964,13 @@ Current Path shows the Explorer folder. The scope choice stays selected for the 
 and each Find uses the folder and membership at the time of the search. Sheaf uses a window's
 own folder for its results and treats windows without explicit membership as root windows.
 Clicking a hit that View Windows hides first activates the window's folder so the result
-can be shown. Searching folder metadata and Notes remains open.
+can be shown.
+
+The archived Select Metadata capture shows Folder Name and Comments checked. Sheaf includes
+folder names and full comments by default within the selected scope. Clear Folder to omit both,
+or clear Folder Comments under Select... to keep only name matches. A folder hit shows its path
+and activates that folder when clicked. Notes, folder info variables and a separate Folder result
+column remain open.
 
 ## 13k. Export > Worksheet as Image (T97, measured 2026-11-16, Origin 2016)
 

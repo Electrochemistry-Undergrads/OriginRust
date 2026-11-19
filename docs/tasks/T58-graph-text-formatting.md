@@ -200,7 +200,8 @@ Cartesian X/Y titles and their scene previews now resolve `\cpN(text)`, includin
 opposite, inward and shared-panel placements. The existing shared-panel title owner
 supplies the color. Scene and SVG regressions cover title placement, decoration color
 and the interaction with the base title color (graphing 7.11).
-Workspace verification pending.
+Formatting, strict workspace Clippy, Nextest (4,573 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
 
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.

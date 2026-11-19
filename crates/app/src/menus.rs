@@ -439,6 +439,12 @@ pub enum Cmd {
         y: bool,
         part: sheaf_core::format_clip::AxisPart,
     },
+    CopyLegendStyles {
+        layer: usize,
+    },
+    PasteLegendStyles {
+        layer: usize,
+    },
     /// Edit > Paste Format...: the Apply Formats window.
     PasteFormatDialog,
     /// Gadgets > Integrate: starts the Integrate gadget on the active plot.
@@ -2334,7 +2340,7 @@ pub fn graph_legend_menu(layer: usize, can_color: bool, can_bubble: bool) -> Vec
     let add = |label: &str, can: bool, kind| {
         if can { item(label, Cmd::GraphEdit(GraphOp::AddScale { layer, kind })) } else { grey(label) }
     };
-    vec![
+    let mut menu = vec![
         item("Edit Text...", Cmd::EditLegendText { layer: Some(layer) }),
         item("Plot Details...", Cmd::GraphPropsAt { layer, tab: PropsTab::Plots, plot: None }),
         sub(
@@ -2360,9 +2366,16 @@ pub fn graph_legend_menu(layer: usize, can_color: bool, can_bubble: bool) -> Vec
         grey("Programming Control..."),
         item("Properties...", Cmd::GraphPropsAt { layer, tab: PropsTab::Legend, plot: None }),
         sep(),
-        grey_sub("Copy Format", &["Styles", "Dimensions", "-", "All"]),
-        grey("Save Format as Theme..."),
-    ]
+        sub(
+            "Copy Format",
+            vec![item("Styles", Cmd::CopyLegendStyles { layer }), grey("Dimensions"), sep(), grey("All")],
+        ),
+    ];
+    if crate::format_clip_ui::kind() == Some(crate::format_clip_ui::ClipKind::Legend) {
+        menu.push(sub("Paste Format To", vec![item("Styles", Cmd::PasteLegendStyles { layer })]));
+    }
+    menu.push(grey("Save Format as Theme..."));
+    menu
 }
 
 /// Graph > New Layer(Axes): the nine kinds of Origin 2016 (Open Dialog... is the `layadd` window, unmeasured).
@@ -2424,7 +2437,7 @@ fn page_paste_format_entry() -> Entry {
     match kind() {
         Some(ClipKind::Graph) => item("Paste Format", Cmd::PasteGraphFormat),
         Some(ClipKind::Axis) => grey_sub("Paste Format To", &["Bottom Axes", "All X Axes", "All Axes", "All"]),
-        None => grey("Paste Format"),
+        Some(ClipKind::Legend) | None => grey("Paste Format"),
     }
 }
 
@@ -3086,6 +3099,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::PasteGraphFormat => Action::PasteGraphFormat { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::PasteAxisFormat { layer, y, part } => {
             Action::PasteAxisFormat { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, y: *y, part: *part }
+        }
+        Cmd::CopyLegendStyles { layer } => {
+            Action::CopyLegendStyles { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer }
+        }
+        Cmd::PasteLegendStyles { layer } => {
+            Action::PasteLegendStyles { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer }
         }
         Cmd::PasteFormatDialog => Action::PasteFormatDialog { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::IntegrateGadget => Action::StartIntegrate { graph: c.graph.ok_or(NEED_GRAPH)? },

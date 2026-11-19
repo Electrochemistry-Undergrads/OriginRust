@@ -1,6 +1,6 @@
 # T72: Copy Format and Paste Format on graphs (B2, slice 1)
 
-**Status:** partly done (step 1 2026-11-16: Origin measured, spec graphing 26; step 2: core `format_clip.rs`, `format_clip_ui.rs`, menus and Apply Formats window built with the measured items enabled, see graphing 26.8). Open: the unmeasured choices (still greyed, listed in greyed-items.md as T72), the legend, graph/axis crossing and live cross-instance sharing.
+**Status:** partly done (step 1 2026-11-16: Origin measured, spec graphing 26; step 2: core `format_clip.rs`, `format_clip_ui.rs`, menus and Apply Formats window built with the measured items enabled, see graphing 26.8). Open: the unmeasured choices listed in greyed-items.md as T72, including legend Dimensions and All, graph/axis crossing and live cross-instance sharing.
 **Size:** M. **Priority:** wave 4 (B2). **Spec:** graphing 26. **Inventory:** the Edit menu's Copy
 Format (nine choices) and Paste Format... [Graph]; Graph axis, legend and page > Copy Format.
 Not in this slice (stay `B2`): object cut/copy/paste, align, same size, group, order across kinds,
@@ -48,6 +48,11 @@ desktop context Copy Styles and restarted context Paste Styles/Undo match saved
 whole graphs, with unchanged clipboard hash/timestamp and exact restored exports.
 Owned client-only mouse messages and accessibility actions target verified app
 identities; both apps and guards close0. Initial test-constant pilots are excluded.
+
+Legend Styles follow-up (2026-11-18) adds typed Copy Format > Styles and Paste Format To >
+Styles for a visible legend. The existing clipboard snapshot carries the font, frame and
+background. The chosen legend keeps its target text and placement. Graphing 26.12 records
+the measured menu entry and the Sheaf field whitelist. Workspace verification pending.
 
 ## Goal
 

@@ -2,9 +2,8 @@
 //!
 //! Copy Format takes one value per format group from a whole graph (every layer: page and layer
 //! size, scales, colours, fonts, layer background, axis thickness, symbols and lines, text) or from
-//! one axis. Paste Format applies the groups that the paste asks for and that the copy holds.
-//! What the clipboard holds decides what can be pasted where: a graph format goes to a graph, an
-//! axis format to an axis.
+//! one axis or legend. Paste Format applies the groups that the paste asks for and that the copy holds.
+//! The clipboard's format type identifies its matching target.
 //!
 //! The group of every property follows what was measured in Origin 2016 (spec 24): Colors takes
 //! the axis line, tick-label, title and text colours, the layer background colour and the plots'
@@ -117,12 +116,21 @@ impl GraphFormat {
     }
 }
 
-/// The format clipboard: a graph format or an axis format.
+/// The appearance of the selected legend.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct LegendStyles {
+    font: Font,
+    frame: bool,
+    background: Option<Color>,
+}
+
+/// The format clipboard for a graph, an axis or a legend.
 /// Serializable so that it can be kept as a graph theme (T102).
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum FormatClip {
     Graph(GraphFormat),
     Axis(AxisFormat),
+    LegendStyles(LegendStyles),
 }
 
 /// Copy Format on a graph.
@@ -157,6 +165,18 @@ pub fn copy_axis(graph: &Graph, layer: usize, y: bool, part: AxisPart) -> Option
         scales: matches!(part, AxisPart::All | AxisPart::Scales),
         axis: Box::new(if y { l.y_axis.clone() } else { l.x_axis.clone() }),
     }))
+}
+
+/// Copies the appearance of the visible legend on the selected layer.
+pub fn copy_legend_styles(graph: &Graph, layer: usize) -> Option<FormatClip> {
+    let legend = &graph.layers.get(layer)?.legend;
+    legend.visible.then(|| {
+        FormatClip::LegendStyles(LegendStyles {
+            font: legend.font.clone(),
+            frame: legend.frame,
+            background: legend.background,
+        })
+    })
 }
 
 fn paste_font(to: &mut Font, from: &Font) {
@@ -257,7 +277,7 @@ fn paste_layer(to: &mut Layer, to_linked: bool, from: &LayerFormat, has: &dyn Fn
 }
 
 /// Paste Format of a graph format onto a graph: the groups of `parts` that the format holds.
-/// Returns false (and changes nothing) when the clipboard holds an axis format.
+/// Returns false for a different clipboard type.
 pub fn paste_graph(graph: &mut Graph, clip: &FormatClip, parts: &[Group]) -> bool {
     let FormatClip::Graph(f) = clip else { return false };
     let has = |g: Group| parts.contains(&g) && f.groups.contains(&g);
@@ -272,7 +292,7 @@ pub fn paste_graph(graph: &mut Graph, clip: &FormatClip, parts: &[Group]) -> boo
 }
 
 /// Paste Format To on one axis: the parts of `part` that the format holds. Returns false (and
-/// changes nothing) when the clipboard holds a graph format or the axis is not there.
+/// changes nothing) for a different clipboard type or when the axis is absent.
 pub fn paste_axis(graph: &mut Graph, layer: usize, y: bool, clip: &FormatClip, part: AxisPart) -> bool {
     let FormatClip::Axis(f) = clip else { return false };
     let Some(l) = graph.layers.get_mut(layer) else { return false };
@@ -283,6 +303,20 @@ pub fn paste_axis(graph: &mut Graph, layer: usize, y: bool, clip: &FormatClip, p
     if f.styles && matches!(part, AxisPart::All | AxisPart::Styles) {
         paste_axis_styles(axis, &f.axis);
     }
+    true
+}
+
+/// Applies the stored style to the visible legend of one layer.
+pub fn paste_legend_styles(graph: &mut Graph, layer: usize, clip: &FormatClip) -> bool {
+    let FormatClip::LegendStyles(styles) = clip else { return false };
+    let Some(layer) = graph.layers.get_mut(layer) else { return false };
+    let legend = &mut layer.legend;
+    if !legend.visible {
+        return false;
+    }
+    legend.font.clone_from(&styles.font);
+    legend.frame = styles.frame;
+    legend.background = styles.background;
     true
 }
 
@@ -340,6 +374,44 @@ mod tests {
         let before = dst.clone();
         assert!(paste_graph(&mut dst, &copy_graph(&src, part), part.groups()));
         (before, dst)
+    }
+
+    #[test]
+    fn a_legend_style_clip_round_trips_and_only_changes_one_legend() {
+        use crate::graph::{LegendPosition, LegendScope};
+
+        let (mut src, mut dst) = pair();
+        let legend = &mut src.layers[0].legend;
+        legend.visible = true;
+        legend.frame = true;
+        legend.background = Some(Color::rgb(1, 2, 3));
+        legend.font.bold = true;
+        legend.font.italic = true;
+        let styles = legend.clone();
+        let clip = copy_legend_styles(&src, 0).unwrap();
+        let clip: FormatClip = serde_json::from_str(&serde_json::to_string(&clip).unwrap()).unwrap();
+        src.layers[0].legend.font.size_pt = 8.0;
+
+        dst.add_layer(crate::layers::NewLayerKind::Inset, 0);
+        let legend = &mut dst.layers[1].legend;
+        legend.visible = true;
+        legend.position = LegendPosition::Manual { x: 0.25, y: 0.5 };
+        legend.text = Some("Target \\l(1) %(1)".into());
+        legend.scope = LegendScope::Graph;
+        legend.columns = 2;
+        let mut expected = dst.clone();
+        let legend = &mut expected.layers[1].legend;
+        legend.font = styles.font;
+        legend.frame = styles.frame;
+        legend.background = styles.background;
+        assert!(paste_legend_styles(&mut dst, 1, &clip));
+        assert_eq!(dst, expected);
+        assert!(!paste_graph(&mut dst, &clip, GraphPart::All.groups()));
+        assert!(!paste_axis(&mut dst, 0, false, &clip, AxisPart::All));
+        assert!(!paste_legend_styles(&mut dst, 2, &clip));
+        dst.layers[1].legend.visible = false;
+        assert!(copy_legend_styles(&dst, 1).is_none());
+        assert!(!paste_legend_styles(&mut dst, 1, &clip));
     }
 
     #[test]

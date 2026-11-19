@@ -6248,3 +6248,17 @@ They work on the points with numbers among the rows inside the range.
 - **Not done:** Origin's Quick Fit offers other functions and both gadgets can write their results to a
   sheet; Sheaf's do not yet.
 
+## Vertical Cursor gadget: Gadgets > Vertical Cursor... (T144, 2026-11-18, **not measured**)
+
+Origin 2016's Gadgets menu has Vertical Cursor.... It could not be probed (Origin's COM class was
+unregistered), so this follows Origin's documented behaviour. It reuses the Integrate gadget's range.
+
+- **Opening:** a thin band (2 % of the X axis) in the middle of the active layer. Its centre is the cursor;
+  dragging the band moves the cursor.
+- **What it shows:**
+  - A red vertical line at the cursor; the label at the top reads "x = …".
+  - For every visible plot of the layer whose curve spans the cursor, a red circle at the curve's Y there
+    and the value beside it (five significant digits). The Y comes from straight interpolation on the
+    first segment that spans the cursor.
+- **Right-click menu:** Delete (Esc) closes the gadget.
+

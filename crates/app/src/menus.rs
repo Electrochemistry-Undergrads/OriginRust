@@ -463,6 +463,8 @@ pub enum Cmd {
     StatisticsGadget,
     /// Gadgets > Quick Fit... (T143).
     QuickFitGadget,
+    /// Gadgets > Vertical Cursor... (T144).
+    VerticalCursorGadget,
     /// A command of the open gadget's right-click menu.
     Gadget(GadgetOp),
     /// View > Toolbars: the window that shows and hides the bars.
@@ -1743,7 +1745,9 @@ fn gadgets_menu() -> Vec<Entry> {
     v.push(item("Rise Time...", Cmd::RiseTimeGadget));
     v.extend(greys(&["Cluster..."]));
     v.push(item("&FFT...", Cmd::FftGadget));
-    v.extend(greys(&["2D Integrate...", "-", "Vertical Cursor...", "Go To..."]));
+    v.extend(greys(&["2D Integrate...", "-"]));
+    v.push(item("Vertical Cursor...", Cmd::VerticalCursorGadget));
+    v.extend(greys(&["Go To..."]));
     v
 }
 
@@ -3123,6 +3127,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::FftGadget => Action::StartFft { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::StatisticsGadget => Action::StartStatisticsGadget { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::QuickFitGadget => Action::StartQuickFit { graph: c.graph.ok_or(NEED_GRAPH)? },
+        Cmd::VerticalCursorGadget => Action::StartVerticalCursor { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Toolbars => Action::Toolbars,
         Cmd::Autosave => Action::Autosave,

@@ -9099,6 +9099,7 @@ mod system_templates;
 mod trendline;
 mod user_templates;
 mod vector_plots;
+mod vertical_cursor;
 mod view_windows;
 mod wks_image;
 

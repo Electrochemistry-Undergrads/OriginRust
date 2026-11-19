@@ -930,7 +930,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         if let Some(c) = layer.coords.space3d()
             && let Some(b) = crate::space3d::data_box(project, layer)
         {
-            crate::space3d::columns(&mut pd, project, c, &b);
+            crate::space3d::columns(&mut pd, project, layer, c, &b);
         }
         pd.marker_display = layer.markers;
         plots.push(pd);

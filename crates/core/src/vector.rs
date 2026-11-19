@@ -2,7 +2,7 @@
 //! (`docs/spec/graphing.md`, "Vector plots"):
 //!
 //! - **XYAM** takes X, Y, an angle column and a magnitude column (the three Y columns of the selection in
-//!   order). Each arrow starts at (X, Y) (Position Tail) and points at the angle, counterclockwise from +X
+//!   order). Each arrow starts at (X, Y) by default (Position Tail) and points at the angle, counterclockwise from +X
 //!   (Convention Polar). Origin's default angle unit ("System") is radians: an angle of 90 drew an arrow at
 //!   116.6 degrees (90 rad). The length is magnitude x multiplier in points (Magnitude in real world space
 //!   off); Origin chose the multiplier from the data (0.16 for magnitudes up to 100, 9.6 for magnitudes up to
@@ -19,6 +19,16 @@ use crate::project::{Project, ProjectError};
 use crate::template::Template;
 use serde::{Deserialize, Serialize};
 
+/// The part of an XYAM vector fixed at its data coordinate.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VectorPosition {
+    #[default]
+    Tail,
+    Midpoint,
+    Head,
+}
+
 /// The extra columns and settings of a vector plot (in [`crate::graph::PlotDecor::vector`]).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct VectorSpec {
@@ -32,9 +42,13 @@ pub struct VectorSpec {
     /// XYAM: the angles are in degrees (Origin's "System" unit is radians).
     #[serde(default)]
     pub degrees: bool,
+    #[serde(default)]
+    pub position: VectorPosition,
     /// The arrowhead's length in points and its opening angle in degrees.
     pub head_pt: f64,
     pub head_angle_deg: f64,
+    #[serde(default)]
+    pub open_head: bool,
 }
 
 fn one() -> f64 {
@@ -72,8 +86,10 @@ impl Project {
                     b: chunk[2],
                     multiplier: auto_multiplier(&mags),
                     degrees: false,
+                    position: VectorPosition::Tail,
                     head_pt: 4.5,
                     head_angle_deg: 30.0,
+                    open_head: false,
                 }
             } else {
                 let (_, s2, _) = self.locate(chunk[1]).ok_or(ProjectError::NoSuchColumn(chunk[1]))?;
@@ -94,8 +110,10 @@ impl Project {
                     b: chunk[1],
                     multiplier: 1.0,
                     degrees: false,
+                    position: VectorPosition::Tail,
                     head_pt: 6.5,
                     head_angle_deg: 30.0,
+                    open_head: false,
                 }
             };
             self.add_plot_xy(id, 0, x, y, None)?;
@@ -119,6 +137,16 @@ impl Project {
 mod tests {
     use super::*;
     use crate::column::{ColumnData, Designation};
+
+    #[test]
+    fn old_vectors_keep_a_tail_anchor_and_closed_head() {
+        let legacy = serde_json::json!({"a": 1, "b": 2, "head_pt": 4.5, "head_angle_deg": 30.0});
+        let mut spec: VectorSpec = serde_json::from_value(legacy).unwrap();
+        assert_eq!((spec.position, spec.open_head), (VectorPosition::Tail, false));
+        spec.position = VectorPosition::Midpoint;
+        spec.open_head = true;
+        assert_eq!(serde_json::from_value::<VectorSpec>(serde_json::to_value(spec).unwrap()).unwrap(), spec);
+    }
 
     #[test]
     fn xyam_takes_y_angle_magnitude_and_xyxy_needs_x_y_x_y() {

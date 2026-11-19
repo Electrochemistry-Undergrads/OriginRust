@@ -5718,10 +5718,24 @@ multiplier points from the start; the multiplier is 16 points over the largest m
 Y columns two at a time with the X column of each and refuses a selection without a second X column. Both
 draw a black 0.5 pt shaft and a closed 30-degree head, 4.5 pt (XYAM) or 6.5 pt (XYXY) long (Origin's 45 and
 65 read as tenths of a point, matching the size on screen). `sheaf plot -t vector-xyam` / `vector-xyxy`. The
-`.opj` writer saves them as scatter plots of their start points and says so. The Vector tab,
-Head and Midpoint positions, and degree and meteorological angle controls remain open.
+`.opj` writer saves them as scatter plots of their start points and says so.
 
-Standard legend samples use the same shaft stroke and solid head geometry as the plotted
+Plot Details > Vector edits the shaft Color and Width and the arrowhead Length, Angle and
+Closed/Open style for both plot kinds. XYAM also has Head, Midpoint and Tail positions,
+the magnitude multiplier, and explicit Radians and Degrees options. The saved X,Y point
+anchors the selected position in page space. XYXY keeps both data endpoints. Older
+`.sheaf` projects load with Tail and Closed. Changes use the live preview, Apply, Cancel
+and Undo behavior of Plot Details.
+
+The Origin 2016 captures `pd1-c.png` and `pd-xyxy-c.png` show the available controls and
+initial settings. The [Origin Vector tab documentation](https://docs.originlab.com/origin-help/pd-dialog-vector-tab/)
+describes the positions, angle units and open head. Sheaf shows head dimensions in points
+and renders the open head as two unfilled arms meeting the shaft at its tip. The changed
+positions and open-head geometry have no separate native measurement. Data selectors,
+real-world magnitudes, meteorological and custom angles, and Origin's exact initial
+multiplier rule remain open.
+
+Standard legend samples use the same shaft stroke and head style as the plotted
 arrows. The sample points right and occupies the regular legend sample width. Sheaf limits
 the head to half that width and one font height so long or wide heads stay within the row.
 The shared scene carries the sample to the exports.

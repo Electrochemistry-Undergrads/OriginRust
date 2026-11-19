@@ -12,7 +12,10 @@ The saved graph matched the expected edits and the worksheet data matched byte f
 
 The Vector tab's worksheet column selectors added 2026-11-18 bind Angle and Magnitude
 for XYAM and X End and Y End for XYXY. Graphing 30 records the archived controls and Sheaf's
-worksheet scope. Workspace verification pending.
+worksheet scope. Formatting, strict workspace Clippy, Nextest (4,544 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
+Desktop checks selected and saved both vector column pairs. The saved graph records
+matched the expected bindings and worksheet data matched byte for byte.
 
 **Size:** M. **Source:** greyed inventory package B4 (Plot > Specialized > Vector XYAM, Vector XYXY).
 **Spec:** `docs/spec/graphing.md` (a new section).

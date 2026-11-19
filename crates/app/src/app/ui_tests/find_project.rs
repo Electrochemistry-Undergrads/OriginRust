@@ -16,14 +16,20 @@ fn f3_opens_find_and_a_hit_selects_the_column() {
     assert!(h.state().find_project.is_some(), "F3 opens Find");
     h.state_mut().find_project.as_mut().unwrap().spec.text = "density".into();
     // The Find button (its label is also the window's title): run the same search.
-    let project = h.state().doc.project().clone();
-    h.state_mut().find_project.as_mut().unwrap().search(&project, &[]);
+    let snapshot = h.state().doc.project().clone();
+    let root = snapshot.root.name.as_str();
+    let root_label = By::new().role(egui::accesskit::Role::Label).value(root);
+    let earlier_root_labels = h.query_all(root_label.clone()).count();
+    h.state_mut().find_project.as_mut().unwrap().search(&snapshot, &[]);
     settle(&mut h);
     let hits = h.state().find_project.as_ref().unwrap().hits.clone().unwrap();
     // The column's long name, and the legend of the graph that opening the file made.
     let column = hits.iter().find(|h| h.element == "Column").expect("the column is found");
     assert_eq!(column.attribute, "Long Name");
     assert!(hits.iter().all(|h| h.element == "Column" || h.attribute == "Legend"), "{hits:?}");
+    assert!(hits.iter().all(|hit| hit.folder == root));
+    assert!(h.query(By::new().role(egui::accesskit::Role::Label).value("Folder")).is_some());
+    assert_eq!(h.query_all(root_label).count(), earlier_root_labels + hits.len());
     assert!(h.query_by_label(&format!("Found: {}", hits.len())).is_some());
     let range = column.range.clone();
     click(&mut h, &range);
@@ -102,6 +108,10 @@ fn within_uses_the_explorer_folder_and_preserves_the_selected_scope() {
     h.get(find.clone()).click();
     settle(&mut h);
     assert!(has_label(&h, "Found: 3"));
+    let hits = h.state().find_project.as_ref().unwrap().hits.as_ref().unwrap();
+    let folders: Vec<_> = hits.iter().map(|hit| hit.folder.as_str()).collect();
+    assert_eq!(folders, [project(&h).root.name.as_str(), "Trials", "Repeat"]);
+    assert!(h.query(By::new().role(egui::accesskit::Role::Label).value("Repeat")).is_some());
 
     h.get_by_value("Entire Project").click();
     settle(&mut h);
@@ -153,6 +163,7 @@ fn folder_comments_are_searchable_and_the_hit_activates_its_folder() {
     assert!(has_label(&h, "Found: 1"));
     let hit = &h.state().find_project.as_ref().unwrap().hits.as_ref().unwrap()[0];
     assert_eq!((hit.element, hit.attribute), ("Folder", "Comments"));
+    assert_eq!(hit.folder, "Trials");
     let path = hit.range.clone();
     click(&mut h, &path);
     assert_eq!(h.state().panels.explorer.folder, [0]);

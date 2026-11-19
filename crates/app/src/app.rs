@@ -2601,6 +2601,18 @@ impl SheafApp {
                     Some(c) => self.doc.apply(op.undo_label(), |p| crate::obj_align::apply(p, graph, &c)),
                 }
             }
+            Action::GroupObjects { graph, ungroup } => {
+                let selection = self.graphs.get(&graph).map(|s| s.multi_selection()).unwrap_or_default();
+                let Some(g) = self.doc.project().graph(graph) else { return };
+                if ungroup && crate::obj_align::can_ungroup(g, &selection) {
+                    self.doc.apply("Ungroup objects", |p| crate::obj_align::ungroup(p, graph, &selection));
+                } else if !ungroup && crate::obj_align::can_group(g, &selection) {
+                    self.doc.apply("Group objects", |p| crate::obj_align::group(p, graph, &selection));
+                }
+            }
+            Action::MoveObjects { graph, changes } => {
+                self.doc.apply("Move objects", |p| crate::obj_align::apply(p, graph, &changes));
+            }
             Action::MoveShape { graph, layer, shape, dx, dy } => {
                 self.doc.apply("Move drawn object", |p| {
                     if let Some(s) =
@@ -4633,6 +4645,14 @@ impl SheafApp {
                 Some((layer, shape, project.graph(g)?.layers.get(layer)?.shapes.len()))
             }),
             multi_selected: graph.and_then(|g| self.graphs.get(&g)).map_or(0, |s| s.multi_selection().len()),
+            can_group: graph.is_some_and(|g| {
+                let selection = self.graphs.get(&g).map(|s| s.multi_selection()).unwrap_or_default();
+                project.graph(g).is_some_and(|gr| crate::obj_align::can_group(gr, &selection))
+            }),
+            can_ungroup: graph.is_some_and(|g| {
+                let selection = self.graphs.get(&g).map(|s| s.multi_selection()).unwrap_or_default();
+                project.graph(g).is_some_and(|gr| crate::obj_align::can_ungroup(gr, &selection))
+            }),
             view_mode: graph.map(|g| project.view_mode(g)).unwrap_or_default(),
             layer_icons: graph.and_then(|g| project.graph(g)).is_none_or(|g| g.page.style.layer_icons),
             active_layer_only: graph.and_then(|id| {

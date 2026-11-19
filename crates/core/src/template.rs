@@ -1712,6 +1712,7 @@ mod tests {
             font: Font::new(DEFAULT_FONT, 9.0),
             rotation_deg: 0.0,
             table: false,
+            group: None,
         });
         g.layers[0].plot_offset_mut(crate::ids::ColumnId(4)).y = 3.0;
         let r = right_y_layer(&g.layers[0], 0);

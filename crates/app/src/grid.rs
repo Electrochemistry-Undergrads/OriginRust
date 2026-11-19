@@ -451,6 +451,8 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         can_color_scale: false,
         selected_shape: None,
         multi_selected: 0,
+        can_group: false,
+        can_ungroup: false,
         view_mode: Default::default(),
         layer_icons: true,
         active_layer_only: None,

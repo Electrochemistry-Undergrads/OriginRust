@@ -49,6 +49,8 @@ pub const NO_COLOR_SCALE: &str = "New Color Scale needs a plot whose symbols tak
 pub const NO_CUMULATIVE: &str = "Cumulative needs a line, scatter or line + symbol plot in the layer";
 const NEED_GRAPH: &str = "Activate a graph window first";
 const NEED_SHAPE: &str = "Select a drawn object first";
+const CANNOT_GROUP: &str = "Select two or more drawn objects or text labels of one layer first (Shift+click adds one)";
+const NOT_GROUPED: &str = "Select a grouped object first";
 const NEED_TWO_OBJECTS: &str = "Select two or more drawn objects or text labels first (Shift+click adds one)";
 const NEED_PRINTABLE: &str = "Activate a graph or workbook window first";
 const NEED_COLUMNS: &str = "Select one or more columns first";
@@ -448,6 +450,10 @@ pub enum Cmd {
     /// Object Edit toolbar Align Left ... Make Same Height on the selected drawn objects and text
     /// labels, the last-selected one the reference (T159).
     ArrangeSelected(crate::obj_align::Arrange),
+    /// Object Edit toolbar Group / Ungroup on the selected drawn objects and text labels (T162).
+    GroupSelected {
+        ungroup: bool,
+    },
     /// Properties of a slope annotation.
     EditSlope {
         layer: usize,
@@ -685,6 +691,10 @@ pub struct MenuContext<'a> {
     pub selected_shape: Option<(usize, usize, usize)>,
     /// How many drawn objects and text labels are selected on the active graph (Shift+click, T159).
     pub multi_selected: usize,
+    /// The selected objects can be grouped: two or more, in one layer, not already one group (T162).
+    pub can_group: bool,
+    /// A selected object is in a group (T162).
+    pub can_ungroup: bool,
     /// The view mode of the active graph (the tick of View > Print View, Page View, Window View, Draft View).
     pub view_mode: sheaf_core::project::ViewMode,
     /// The active graph shows its layer icons (the tick of View > Show > Layer Icons).
@@ -3221,6 +3231,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::ArrangeSelected(_) if c.multi_selected < 2 => return Err(NEED_TWO_OBJECTS),
         Cmd::ArrangeSelected(op) => Action::ArrangeObjects { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
+        Cmd::GroupSelected { ungroup: false } if !c.can_group => return Err(CANNOT_GROUP),
+        Cmd::GroupSelected { ungroup: true } if !c.can_ungroup => return Err(NOT_GROUPED),
+        Cmd::GroupSelected { ungroup } => Action::GroupObjects { graph: c.graph.ok_or(NEED_GRAPH)?, ungroup: *ungroup },
         Cmd::SlopeTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Slope },
         Cmd::ZoomIn => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ZoomIn },
         Cmd::PanTool => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::Pan },
@@ -3911,6 +3924,8 @@ mod tests {
             can_color_scale: false,
             selected_shape: None,
             multi_selected: 0,
+            can_group: false,
+            can_ungroup: false,
             view_mode: Default::default(),
             layer_icons: true,
             active_layer_only: None,

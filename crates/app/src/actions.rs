@@ -817,6 +817,18 @@ pub enum Action {
         graph: WindowId,
         op: crate::obj_align::Arrange,
     },
+    /// Object Edit Group / Ungroup on the graph's selected drawn objects and text labels (T162):
+    /// one undo step.
+    GroupObjects {
+        graph: WindowId,
+        ungroup: bool,
+    },
+    /// Moves several drawn objects and text labels together (a drag of a selection or a group,
+    /// T162): one undo step.
+    MoveObjects {
+        graph: WindowId,
+        changes: Vec<crate::obj_align::Change>,
+    },
     /// Moves a drawn object by `(dx, dy)` fractions of the layer frame: one undo step.
     MoveShape {
         graph: WindowId,

@@ -441,6 +441,7 @@ fn free_labels_and_legend_frame() {
             font: sheaf_core::graph::Font::new("Arial", 10.0),
             rotation_deg: 45.0,
             table: false,
+            group: None,
         });
     }
     let svg = svg_of(&p, g);

@@ -64,6 +64,10 @@ pub struct Shape {
     /// The arrow also has a head at its start.
     #[serde(default)]
     pub head_at_start: bool,
+    /// The Object Edit group the object belongs to (T162): drawn objects and labels of one layer
+    /// with the same number are selected and moved together. Saved only when set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<u32>,
 }
 
 fn default_head() -> f64 {
@@ -93,6 +97,7 @@ impl Shape {
             fill: (kind == ShapeKind::Rectangle).then_some(Self::DEFAULT_RECT_FILL),
             head_pt: Self::DEFAULT_HEAD_PT,
             head_at_start: false,
+            group: None,
         }
     }
 

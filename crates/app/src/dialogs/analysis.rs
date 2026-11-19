@@ -19,9 +19,9 @@ use sheaf_core::analysis::{
 };
 use sheaf_core::analysis::{
     AreaType, BaselineSpec, Boundary, ColumnMathSpec, ConvolutionSpec, CrossingIndex, CurveMathSpec, CurveOp,
-    CurveOperand, DiffOptions, IntegrateRangesSpec, IntegrateSpec, InterpMethod, InterpSpec, LevelCrossingSpec,
-    LocalSpan, NormalizeMethod, OutputTarget, PeakDirection, PeakFilter, PeakOptions, Report, Request, RowRange,
-    SignalCorrelationSpec, SmoothMethod, SmoothOptions, SplineBoundary, Tool,
+    CurveOperand, DeconvolutionSpec, DiffOptions, IntegrateRangesSpec, IntegrateSpec, InterpMethod, InterpSpec,
+    LevelCrossingSpec, LocalSpan, NormalizeMethod, OutputTarget, PeakDirection, PeakFilter, PeakOptions, Report,
+    Request, RowRange, SignalCorrelationSpec, SmoothMethod, SmoothOptions, SplineBoundary, StftOutput, StftSpec, Tool,
 };
 use sheaf_core::analysis::{
     BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakChainSpec,
@@ -52,6 +52,8 @@ pub enum AnalysisKind {
     ColumnMath,
     /// Signal Processing > Convolution (Origin's `conv`).
     Convolution,
+    /// Signal Processing > Deconvolution (Origin's `deconv`, T57).
+    Deconvolution,
     /// Signal Processing > Correlation (Origin's `corr1`).
     SignalCorrelation,
     /// Level Crossing (Origin's `levelcrossing` X-Function, which has no menu item there).
@@ -60,6 +62,8 @@ pub enum AnalysisKind {
     Hilbert,
     /// Signal Processing > FFT > FFT (Origin's `fft1`).
     Fft,
+    /// Signal Processing > STFT (Origin's `stft`, T57).
+    Stft,
     /// Signal Processing > FFT > IFFT (Origin's `ifft1`).
     Ifft,
     /// Signal Processing > FFT Filters (Origin's `fft_filters`).
@@ -167,7 +171,7 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 31] = [
+    pub const ALL: [AnalysisKind; 33] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
         AnalysisKind::Differentiate,
@@ -178,10 +182,12 @@ impl AnalysisKind {
         AnalysisKind::CurveMath,
         AnalysisKind::ColumnMath,
         AnalysisKind::Convolution,
+        AnalysisKind::Deconvolution,
         AnalysisKind::SignalCorrelation,
         AnalysisKind::LevelCrossing,
         AnalysisKind::Hilbert,
         AnalysisKind::Fft,
+        AnalysisKind::Stft,
         AnalysisKind::Ifft,
         AnalysisKind::FftFilter,
         AnalysisKind::IirFilter,
@@ -214,6 +220,8 @@ impl AnalysisKind {
             AnalysisKind::CurveMath => "Simple Math...",
             AnalysisKind::ColumnMath => "Simple Column Math...",
             AnalysisKind::Convolution => "Convolution...",
+            AnalysisKind::Deconvolution => "Deconvolution...",
+            AnalysisKind::Stft => "STFT...",
             AnalysisKind::SignalCorrelation => "Correlation...",
             AnalysisKind::LevelCrossing => "Level Crossing...",
             AnalysisKind::Hilbert => "Hilbert Transform...",
@@ -301,6 +309,8 @@ impl AnalysisKind {
             "math" => AnalysisKind::CurveMath,
             "column-math" => AnalysisKind::ColumnMath,
             "convolution" => AnalysisKind::Convolution,
+            "deconvolution" => AnalysisKind::Deconvolution,
+            "stft" => AnalysisKind::Stft,
             "signal-correlation" => AnalysisKind::SignalCorrelation,
             "level-crossing" => AnalysisKind::LevelCrossing,
             "hilbert" => AnalysisKind::Hilbert,
@@ -779,6 +789,8 @@ pub struct AnalysisDialog {
     signal_interval: Option<f64>,
     level_crossing: LevelCrossingSpec,
     fft: FftSpec,
+    /// STFT: window, lengths, overlap and output.
+    stft: StftSpec,
     ifft: IfftSpec,
     fft_filter: FftFilterSpec,
     /// IIR Filter and FIR Filter (options in `filter_options.rs`).
@@ -1059,6 +1071,61 @@ fn trace_interp_options(ui: &mut egui::Ui, spec: &mut TraceInterpSpec) {
 }
 
 /// The options of Signal Processing > FFT > FFT, with Origin's names.
+const WINDOWS: [(&str, FftWindow); 7] = [
+    ("Rectangle", FftWindow::Rectangle),
+    ("Welch", FftWindow::Welch),
+    ("Triangular", FftWindow::Triangular),
+    ("Bartlett", FftWindow::Bartlett),
+    ("Hanning", FftWindow::Hanning),
+    ("Hamming", FftWindow::Hamming),
+    ("Blackman", FftWindow::Blackman),
+];
+
+/// STFT's options (T57; Origin's `stft` is documented, not measured).
+fn stft_options(ui: &mut egui::Ui, spec: &mut StftSpec) {
+    let o = &mut spec.options;
+    ui.horizontal(|ui| {
+        ui.label("Sampling interval");
+        ui.checkbox(&mut spec.auto_interval, "Auto")
+            .on_hover_text("The X step of the input column; 1 without an X column.");
+        ui.add_enabled(!spec.auto_interval, DragValue::new(&mut o.interval).speed(0.01).range(1e-300..=f64::MAX));
+    });
+    ui.horizontal(|ui| {
+        ui.label("Window");
+        egui::ComboBox::from_id_salt("stft_window")
+            .selected_text(WINDOWS.iter().find(|w| w.1 == o.window).map_or("", |w| w.0))
+            .show_ui(ui, |ui| {
+                for (label, w) in WINDOWS {
+                    ui.selectable_value(&mut o.window, w, label);
+                }
+            });
+    });
+    ui.horizontal(|ui| {
+        ui.label("Window Length");
+        ui.add(DragValue::new(&mut o.window_len).range(2..=1_048_576));
+    });
+    ui.horizontal(|ui| {
+        ui.label("FFT Length");
+        ui.add(DragValue::new(&mut o.fft_len).range(2..=1_048_576));
+    })
+    .response
+    .on_hover_text("At least the window length; each segment is padded with zeros to it.");
+    ui.horizontal(|ui| {
+        ui.label("Overlap");
+        ui.add(DragValue::new(&mut o.overlap).range(0..=1_048_575));
+    })
+    .response
+    .on_hover_text("Points shared by neighbouring segments.");
+    o.fft_len = o.fft_len.max(o.window_len);
+    o.overlap = o.overlap.min(o.window_len.saturating_sub(1));
+    ui.horizontal(|ui| {
+        ui.label("Output");
+        ui.radio_value(&mut o.output, StftOutput::Amplitude, "Amplitude");
+        ui.radio_value(&mut o.output, StftOutput::Db, "dB");
+    });
+    ui.weak("Origin writes a matrix; Sheaf writes a frequency column and one column per segment.");
+}
+
 fn fft_options(ui: &mut egui::Ui, spec: &mut FftSpec) {
     let o = &mut spec.options;
     ui.horizontal(|ui| {
@@ -1067,15 +1134,6 @@ fn fft_options(ui: &mut egui::Ui, spec: &mut FftSpec) {
             .on_hover_text("The X step of the input column; 1 without an X column.");
         ui.add_enabled(!spec.auto_interval, DragValue::new(&mut o.interval).speed(0.01).range(1e-300..=f64::MAX));
     });
-    const WINDOWS: [(&str, FftWindow); 7] = [
-        ("Rectangle", FftWindow::Rectangle),
-        ("Welch", FftWindow::Welch),
-        ("Triangular", FftWindow::Triangular),
-        ("Bartlett", FftWindow::Bartlett),
-        ("Hanning", FftWindow::Hanning),
-        ("Hamming", FftWindow::Hamming),
-        ("Blackman", FftWindow::Blackman),
-    ];
     ui.horizontal(|ui| {
         ui.label("Window");
         egui::ComboBox::from_id_salt("fft_window")
@@ -1176,6 +1234,7 @@ impl AnalysisDialog {
         let signal = matches!(
             kind,
             AnalysisKind::Convolution
+                | AnalysisKind::Deconvolution
                 | AnalysisKind::SignalCorrelation
                 | AnalysisKind::Ifft
                 | AnalysisKind::Coherence
@@ -1269,6 +1328,7 @@ impl AnalysisDialog {
             signal_interval: if kind == AnalysisKind::SignalCorrelation { Some(1.0) } else { None },
             level_crossing: LevelCrossingSpec { level: 0.0, index: CrossingIndex::Nearest, min_gap: 1, details: false },
             fft: FftSpec { auto_interval: true, ..Default::default() },
+            stft: StftSpec::default(),
             ifft: IfftSpec { auto_interval: true, ..Default::default() },
             fft_filter: FftFilterSpec {
                 options: FftFilterOptions { keep_offset: true, ..Default::default() },
@@ -1610,6 +1670,7 @@ impl AnalysisDialog {
             AnalysisKind::LevelCrossing => Tool::LevelCrossing(self.level_crossing),
             AnalysisKind::Hilbert => Tool::Hilbert,
             AnalysisKind::Fft => Tool::Fft(self.fft),
+            AnalysisKind::Stft => Tool::Stft(self.stft),
             AnalysisKind::FftFilter => Tool::FftFilter(self.fft_filter),
             AnalysisKind::IirFilter => self.filters.iir_tool(),
             AnalysisKind::FirFilter => self.filters.fir_tool(),
@@ -1656,14 +1717,20 @@ impl AnalysisDialog {
                 };
                 Tool::Ifft(IfftSpec { imaginary, ..self.ifft })
             }
-            AnalysisKind::Convolution | AnalysisKind::SignalCorrelation => {
+            AnalysisKind::Convolution | AnalysisKind::Deconvolution | AnalysisKind::SignalCorrelation => {
                 let other = self
                     .reference_choices
                     .get(self.reference)
                     .map(|(id, _)| *id)
                     .ok_or("there is no other column with numbers to use as the second signal")?;
                 let (circular, normalize) = (self.signal_circular, self.signal_normalize);
-                if self.kind == AnalysisKind::Convolution {
+                if self.kind == AnalysisKind::Deconvolution {
+                    Tool::Deconvolution(DeconvolutionSpec {
+                        response: other,
+                        normalize,
+                        interval: self.signal_interval,
+                    })
+                } else if self.kind == AnalysisKind::Convolution {
                     Tool::Convolution(ConvolutionSpec {
                         response: other,
                         circular,
@@ -1959,7 +2026,7 @@ impl AnalysisDialog {
         let column_math = self.kind == AnalysisKind::ColumnMath;
         let label = match self.kind {
             AnalysisKind::ColumnMath => "Column",
-            AnalysisKind::Convolution => "Response",
+            AnalysisKind::Convolution | AnalysisKind::Deconvolution => "Response",
             AnalysisKind::SignalCorrelation | AnalysisKind::Coherence => "Second signal",
             AnalysisKind::WaveletReconstruct => "Detail Coefficients",
             AnalysisKind::ContinuousWavelet => "Scale",
@@ -1987,6 +2054,7 @@ impl AnalysisDialog {
         if matches!(
             self.kind,
             AnalysisKind::Convolution
+                | AnalysisKind::Deconvolution
                 | AnalysisKind::SignalCorrelation
                 | AnalysisKind::Ifft
                 | AnalysisKind::Coherence
@@ -2039,6 +2107,7 @@ impl AnalysisDialog {
                 ui.weak("The reference is interpolated onto the X values of the data.");
             }
             AnalysisKind::Fft => fft_options(ui, &mut self.fft),
+            AnalysisKind::Stft => stft_options(ui, &mut self.stft),
             AnalysisKind::FftFilter => fft_filter_options(ui, &mut self.fft_filter),
             AnalysisKind::IirFilter => super::filter_options::iir_options(ui, &mut self.filters.iir, filter_fs),
             AnalysisKind::FirFilter => super::filter_options::fir_options(ui, &mut self.filters.fir, filter_fs),
@@ -2109,17 +2178,24 @@ impl AnalysisDialog {
                 .response
                 .on_hover_text("Both crossings of a pair closer than this are dropped (Origin's pts).");
             }
-            AnalysisKind::Convolution | AnalysisKind::SignalCorrelation => {
+            AnalysisKind::Convolution | AnalysisKind::Deconvolution | AnalysisKind::SignalCorrelation => {
                 self.reference_options(ui);
-                ui.horizontal(|ui| {
-                    ui.label("Type");
-                    ui.radio_value(&mut self.signal_circular, false, "Linear");
-                    ui.radio_value(&mut self.signal_circular, true, "Circular");
-                });
+                if self.kind == AnalysisKind::Deconvolution {
+                    ui.weak(
+                        "Divides the spectrum of each input by the response's (FFT over the input's points), so it \
+                         undoes a circular convolution, and a linear one followed by zeros.",
+                    );
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.label("Type");
+                        ui.radio_value(&mut self.signal_circular, false, "Linear");
+                        ui.radio_value(&mut self.signal_circular, true, "Circular");
+                    });
+                }
                 ui.checkbox(&mut self.signal_normalize, "Normalize");
                 ui.horizontal(|ui| {
                     ui.label("Sampling interval");
-                    if self.kind == AnalysisKind::Convolution {
+                    if self.kind != AnalysisKind::SignalCorrelation {
                         let mut auto = self.signal_interval.is_none();
                         if ui.checkbox(&mut auto, "Auto").changed() {
                             self.signal_interval = if auto { None } else { Some(1.0) };
@@ -2948,6 +3024,8 @@ impl AnalysisDialog {
             AnalysisKind::SubtractRef | AnalysisKind::CurveMath => "curvemath",
             AnalysisKind::ColumnMath => "vmathtool",
             AnalysisKind::Convolution => "conv",
+            AnalysisKind::Deconvolution => "deconv",
+            AnalysisKind::Stft => "stft",
             AnalysisKind::SignalCorrelation => "corr1",
             AnalysisKind::LevelCrossing => "levelcrossing",
             AnalysisKind::Hilbert => "hilbert",
@@ -3041,6 +3119,8 @@ impl AnalysisDialog {
                 "Add, subtract, multiply, divide or raise to a power with a constant or a column, row by row"
             }
             AnalysisKind::Convolution => "Convolve the input signals with a response",
+            AnalysisKind::Deconvolution => "Deconvolve the input signals by a response",
+            AnalysisKind::Stft => "The short-time frequency spectrum of the input signals",
             AnalysisKind::SignalCorrelation => "Correlate the input signals with a second signal",
             AnalysisKind::LevelCrossing => "Find where the input curves cross a level",
             AnalysisKind::Hilbert => "The Hilbert transform of the input signals",
@@ -3145,6 +3225,8 @@ impl AnalysisDialog {
             | AnalysisKind::FirFilter => "New columns beside the input",
             AnalysisKind::Envelope => "The envelopes of each input, each with its X, in a new sheet",
             AnalysisKind::Convolution => "The convolution of each input, with its X, in a new sheet",
+            AnalysisKind::Deconvolution => "The deconvolution of each input, with its X, in a new sheet",
+            AnalysisKind::Stft => "A frequency column and one spectrum column per segment in a new sheet",
             AnalysisKind::Decimate => "The kept points of each input, with their X, in a new sheet",
             AnalysisKind::WaveletDecompose => "The approximation and detail coefficients of each input in a new sheet",
             AnalysisKind::WaveletReconstruct => "The rebuilt signal in a new sheet",
@@ -3278,6 +3360,7 @@ impl AnalysisDialog {
         let signal = matches!(
             self.kind,
             AnalysisKind::Convolution
+                | AnalysisKind::Deconvolution
                 | AnalysisKind::SignalCorrelation
                 | AnalysisKind::Ifft
                 | AnalysisKind::Coherence

@@ -1561,6 +1561,65 @@ image plot and the coefficient matrix of `cwt` (no script route; the window's "C
 OK), the pseudo-frequency output, `mdwt`, `dwt2`, `idwt2`, missing values in the `cwt` signal, several signal columns in one `cwt` call, and the open
 rules of 19.4 (boundary samples, `sqtwolog` threshold) and 19.5 (non-power-of-two lengths, `K` at cutoff 0 and 1).
 
+## 20. Deconvolution and STFT (`deconv`, `stft`; T57, 2026-11-19, **not measured**)
+
+Origin 2016 has Analysis > Signal Processing > Deconvolution... and STFT.... Neither could be run
+(Origin's COM class was unregistered), so this follows Origin's documented definitions. The numbers
+below are Sheaf's choices, checked against numpy, not against Origin.
+
+### 20.1 Deconvolution
+
+- **Inputs:** the signal columns and one Response column (any numeric Y column of the project, the
+  signal itself included), as Convolution (section 13). Trailing missing values are dropped; a missing
+  value inside is refused.
+- **Method:** the FFT over the signal's `N` points. The response is padded with zeros to `N`, the
+  signal's spectrum is divided by the response's, and the inverse transform gives `N` values
+  (`sheaf_calc::deconvolve`).
+  - This undoes a circular convolution with the same response exactly.
+  - It also undoes a linear one: deconvolving the `n + m - 1` values of a linear convolution of `s`
+    gives `s` followed by `m - 1` zeros.
+- **Options:**
+  - Normalize divides the response by its Euclidean norm first, as Convolution's `norm`. So a
+    normalized convolution is undone by a normalized deconvolution.
+  - Sampling interval: Auto is the X step of the input, as Convolution.
+- **Refused:** a response longer than the signal, and a response whose spectrum has a zero (a value
+  at most 1e-12 of its largest), because nothing can be divided by it. A constant response as long
+  as the signal has zeros at every frequency but 0, so it is refused.
+- **Output:** a new sheet "Deconvolution" with X and Y for each input. The Y long name is
+  "<input> deconvolved by <response>" and the comment "<short> deconvolved by <short>[, normalized]".
+- **Command line:** `sheaf analyze deconvolution <file> --y <col> --response <col> [--normalize]
+  [--interval d]`. MCP reaches it through the analyze bridge.
+
+### 20.2 STFT
+
+- **Method:** segments of Window Length points start every Window Length - Overlap points while
+  they fit in the signal; a remainder at the end is left out (`sheaf_calc::stft`).
+  - Each segment is multiplied by the window. The windows are FFT's (section 15), symmetric over the
+    segment's points.
+  - The segment is padded with zeros to FFT Length and transformed.
+- **Output values:**
+  - Amplitude (the default) is one-sided, `2|X| / sum(w)`, and `|X| / sum(w)` at 0 and at the
+    Nyquist frequency. A sine of amplitude A filling a segment shows a peak of about A.
+  - dB is `20 log10(amplitude)`, missing where the amplitude is 0.
+- **Defaults (Sheaf's):** Hanning window, Window Length 64, FFT Length 64, Overlap 32, Amplitude,
+  and the sampling interval from the input's X (Auto).
+- **Refused:** a window under 2 points, an overlap not less than the window, an FFT length under the
+  window, a signal shorter than the window, and more than 2000 segments.
+- **Output:** Origin writes a matrix and an image plot; Sheaf has no matrix windows, so it writes a
+  new sheet "STFT".
+  - The X column is "Frequency", 0 to the Nyquist frequency in `fft_len / 2 + 1` rows.
+  - Then there is one Y column per segment. Its long name is "<input> at <X name> = t", where t is
+    the segment's centre: its first X value plus `(start + (window_len - 1) / 2)` samples, times the
+    interval. Its comment is "STFT amplitude of <short>" (or "STFT dB of ...").
+- **Command line:** `sheaf analyze stft <file> --y <col> [--window hanning] [--window-len 64]
+  [--fft-len 64] [--overlap 32] [--output amplitude|db] [--interval d]`.
+
+### 20.3 Not measured
+
+Not checked: Origin's dialog controls and defaults for both tools, its deconvolution length and
+wrap-around rules, its STFT window list, scaling, time axis and matrix layout, and missing values.
+Measure with `tools/origin-ref/` once Origin's COM class is registered again.
+
 ## Files
 
 `tools/iir-fir-ref.py` makes the scipy numbers of section 17 (not Origin).

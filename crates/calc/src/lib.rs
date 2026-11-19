@@ -56,6 +56,7 @@ pub mod roc;
 pub mod signal;
 pub mod smooth;
 pub mod stats;
+pub mod stft;
 pub mod sunburst;
 pub mod survival;
 pub mod trace;
@@ -151,9 +152,10 @@ pub use rmanova::{
     RmTerm, Sphericity as RmSphericity, rm_anova,
 };
 pub use roc::{Roc, RocError, RocOptions, RocPoint, roc};
-pub use signal::{convolve, correlate, hilbert};
+pub use signal::{convolve, correlate, deconvolve, hilbert};
 pub use smooth::{Boundary, LocalSpan, SmoothMethod, SmoothOptions, smooth, smooth_xy};
 pub use stats::{RowStats, Stats, mean_confidence_limits, quantile_origin, row_stats, stats};
+pub use stft::{StftOptions, StftOutput, StftResult, stft};
 pub use survival::{
     KaplanMeier, Quartile, RankResult, RankTest, SurvivalError, SurvivalRow, SurvivalStep, kaplan_meier, rank_test,
 };

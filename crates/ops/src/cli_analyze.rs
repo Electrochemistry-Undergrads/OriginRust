@@ -397,15 +397,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         } => {
             let options = analysis::FftOptions {
                 interval: interval.unwrap_or(1.0),
-                window: match window {
-                    FftWindowArg::Rectangle => analysis::FftWindow::Rectangle,
-                    FftWindowArg::Welch => analysis::FftWindow::Welch,
-                    FftWindowArg::Triangular => analysis::FftWindow::Triangular,
-                    FftWindowArg::Bartlett => analysis::FftWindow::Bartlett,
-                    FftWindowArg::Hanning => analysis::FftWindow::Hanning,
-                    FftWindowArg::Hamming => analysis::FftWindow::Hamming,
-                    FftWindowArg::Blackman => analysis::FftWindow::Blackman,
-                },
+                window: fft_window(window),
                 correction: match correction {
                     FftCorrectionArg::None => analysis::WindowCorrection::None,
                     FftCorrectionArg::Amplitude => analysis::WindowCorrection::Amplitude,
@@ -434,6 +426,23 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         }
         AnalyzeTool::Convolution { target, response, circular, normalize, interval } => {
             (target, Job::Signal { conv: true, other: response, circular, normalize, interval })
+        }
+        AnalyzeTool::Deconvolution { target, response, normalize, interval } => {
+            (target, Job::Deconvolution { response, normalize, interval })
+        }
+        AnalyzeTool::Stft { target, interval, window, window_len, fft_len, overlap, output } => {
+            let options = analysis::StftOptions {
+                interval: interval.unwrap_or(1.0),
+                window: fft_window(window),
+                window_len,
+                fft_len,
+                overlap,
+                output: match output {
+                    StftOutputArg::Amplitude => analysis::StftOutput::Amplitude,
+                    StftOutputArg::Db => analysis::StftOutput::Db,
+                },
+            };
+            (target, Job::Tool(Tool::Stft(analysis::StftSpec { options, auto_interval: interval.is_none() })))
         }
         AnalyzeTool::SignalCorrelation { target, other, circular, normalize, interval } => {
             (target, Job::Signal { conv: false, other, circular, normalize, interval: Some(interval) })
@@ -1292,4 +1301,16 @@ fn wavelet_arg(text: &str) -> Result<Wavelet> {
     Wavelet::parse(text).ok_or_else(|| {
         anyhow!("{text:?} is not a wavelet: haar, db2..db10, b11, b13, b15, b22, b24, b26, b28, b31, b33, b35 or b37")
     })
+}
+
+fn fft_window(w: FftWindowArg) -> analysis::FftWindow {
+    match w {
+        FftWindowArg::Rectangle => analysis::FftWindow::Rectangle,
+        FftWindowArg::Welch => analysis::FftWindow::Welch,
+        FftWindowArg::Triangular => analysis::FftWindow::Triangular,
+        FftWindowArg::Bartlett => analysis::FftWindow::Bartlett,
+        FftWindowArg::Hanning => analysis::FftWindow::Hanning,
+        FftWindowArg::Hamming => analysis::FftWindow::Hamming,
+        FftWindowArg::Blackman => analysis::FftWindow::Blackman,
+    }
 }

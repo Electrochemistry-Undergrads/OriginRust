@@ -1743,6 +1743,54 @@ fn simple_column_math_adds_ten_into_the_input_columns_as_origin() {
 }
 
 #[test]
+fn deconvolution_and_stft_open_from_signal_processing_and_write_a_new_sheet() {
+    let mut h = start(vec![data_file("deconv")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "Deconvolution..."]);
+    assert!(h.state().analysis.is_some(), "the Deconvolution window is open");
+    // The response is the first Y column, so that one comes back as an impulse.
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = b.sheets.iter().find(|s| s.name.starts_with("Deconvolution")).expect("a result sheet");
+    assert_eq!(sheet.columns.len(), 4, "X and Y for each of the two inputs");
+    let impulse = sheet.columns[1].numeric().unwrap();
+    assert!(impulse.iter().zip([1.0, 0.0, 0.0, 0.0]).all(|(g, w)| (g - w).abs() < 1e-9), "{impulse:?}");
+
+    // STFT's default window has 64 points: 100 samples give segments at 0 and 32.
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-stft-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("long.csv");
+    let text: String = (0..100)
+        .map(|i| {
+            format!(
+                "{i},{}
+",
+                (0.4 * f64::from(i)).sin()
+            )
+        })
+        .collect();
+    std::fs::write(
+        &path,
+        format!(
+            "t,y
+{text}"
+        ),
+    )
+    .unwrap();
+    let mut h = start(vec![path]);
+    show_window(&mut h, "Book1 - long.csv");
+    menu_path(&mut h, &["Analysis", "Signal Processing", "STFT..."]);
+    assert!(h.state().analysis.is_some(), "the STFT window is open");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let sheet = b.sheets.iter().find(|s| s.name.starts_with("STFT")).expect("a result sheet");
+    assert_eq!(sheet.columns.len(), 3, "frequency and two segments");
+    assert_eq!(sheet.columns[0].numeric().unwrap().len(), 33);
+    assert_eq!(h.state().doc.undo_label(), Some("STFT"));
+}
+
+#[test]
 fn convolution_and_correlation_open_from_signal_processing_and_write_a_new_sheet() {
     for (item, prefix, rows) in [("Convolution...", "Convolution", 7), ("Correlation...", "Correlation", 7)] {
         let mut h = start(vec![data_file("signal")]);

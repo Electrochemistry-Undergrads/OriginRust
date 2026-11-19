@@ -1503,7 +1503,7 @@ fn analysis_menu() -> Vec<Entry> {
         sub(
             "Si&gnal Processing",
             vec![
-                item("Smooth...", Cmd::Analyze(AnalysisKind::Smooth)),
+                item("S&mooth...", Cmd::Analyze(AnalysisKind::Smooth)),
                 item("FFT Filters...", Cmd::Analyze(AnalysisKind::FftFilter)),
                 sub(
                     "FFT",
@@ -1515,7 +1515,7 @@ fn analysis_menu() -> Vec<Entry> {
                     ],
                 ),
                 item("Convolution...", Cmd::Analyze(AnalysisKind::Convolution)),
-                grey("Deconvolution..."),
+                item("Deconvolution...", Cmd::Analyze(AnalysisKind::Deconvolution)),
                 item("Correlation...", Cmd::Analyze(AnalysisKind::SignalCorrelation)),
                 item("Coherence...", Cmd::Analyze(AnalysisKind::Coherence)),
                 item("Decimation...", Cmd::Analyze(AnalysisKind::Decimate)),
@@ -1523,7 +1523,7 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Hilbert Transform...", Cmd::Analyze(AnalysisKind::Hilbert)),
                 item("IIR Filter...", Cmd::Analyze(AnalysisKind::IirFilter)),
                 item("FIR Filter...", Cmd::Analyze(AnalysisKind::FirFilter)),
-                grey("STFT..."),
+                item("&STFT...", Cmd::Analyze(AnalysisKind::Stft)),
                 sub(
                     "Wavelet",
                     vec![

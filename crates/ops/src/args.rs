@@ -1567,6 +1567,13 @@ pub enum TraceMethodArg {
     Bspline,
 }
 
+/// What each STFT value is.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum StftOutputArg {
+    Amplitude,
+    Db,
+}
+
 /// FFT window (Origin's names).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum FftWindowArg {
@@ -1784,6 +1791,45 @@ pub enum AnalyzeTool {
         /// Sampling interval of the result.
         #[arg(long)]
         interval: Option<f64>,
+    },
+    /// Deconvolve each column by a response column (Origin's Signal Processing > Deconvolution):
+    /// the inverse of the convolution, done with the FFT, as many values as the column; X steps of
+    /// the input's X spacing unless --interval is given. The results go to a new sheet.
+    Deconvolution {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The response column (short or long name), not longer than the signal.
+        #[arg(long)]
+        response: String,
+        /// Divide the response by its Euclidean norm first.
+        #[arg(long)]
+        normalize: bool,
+        /// Sampling interval of the result.
+        #[arg(long)]
+        interval: Option<f64>,
+    },
+    /// The short-time Fourier transform of each column (Origin's Signal Processing > STFT): the
+    /// amplitude spectrum of overlapping windowed segments, a frequency column and one column per
+    /// segment in a new sheet.
+    Stft {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Sampling interval; by default the X step of the column (1 without an X column).
+        #[arg(long)]
+        interval: Option<f64>,
+        #[arg(long, value_enum, default_value_t = FftWindowArg::Hanning)]
+        window: FftWindowArg,
+        /// Points in each segment.
+        #[arg(long, default_value_t = 64)]
+        window_len: usize,
+        /// Points of each transform (at least the window length; zeros are padded).
+        #[arg(long, default_value_t = 64)]
+        fft_len: usize,
+        /// Points shared by neighbouring segments.
+        #[arg(long, default_value_t = 32)]
+        overlap: usize,
+        #[arg(long, value_enum, default_value_t = StftOutputArg::Amplitude)]
+        output: StftOutputArg,
     },
     /// Correlate each column with another column (Origin's Signal Processing > Correlation):
     /// lags -(N-1) to N-1, or 0 to N-1 when circular. The results go to a new sheet.

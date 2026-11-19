@@ -6526,7 +6526,13 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
     bar can be misordered against another column's bar.
   - 3D Walls fill each curve down to the floor of the box (Area plots with the floor as their base).
   - 3D Waterfall draws the curves as lines.
-  - 3D Ribbons stays grey.
+- **3D Ribbons (T161, `3d-ribbons`):** a 3D Walls layer with `Space3dCoords::ribbons` set. Each Area
+  plot is a ribbon instead of a wall: the curve at its depth widened to half a depth step, from a
+  quarter step in front of it to a quarter step behind (Sheaf's width, not measured).
+  - Each pair of consecutive rows is one quadrilateral, filled with the plot's fill colour and edged
+    with its line. A missing value breaks the ribbon.
+  - The quadrilaterals of a ribbon are drawn from the farthest to the nearest; the ribbons in plot
+    order, the first farthest back.
 - **Not done:**
   - rotating the view, and the Z axis dialog (Format > Axes > Z Axis stays grey);
   - hiding points behind each other (points are drawn in row order);

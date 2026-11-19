@@ -57,6 +57,9 @@ fn xyz_unit(project: &Project, layer: &Layer, plot: &sheaf_core::graph::Plot, b:
     }
 }
 
+/// Half the width of a 3D ribbon (T161) along the depth axis, in depth steps.
+const RIBBON_HALF: f64 = 0.25;
+
 /// The page position (in data units of the hidden axes) of a point of the cube -1..1.
 pub(crate) fn view(c: &Space3dCoords, [x, y, z]: [f64; 3]) -> (f64, f64) {
     let (sa, ca) = c.azimuth_deg.to_radians().sin_cos();
@@ -176,6 +179,26 @@ pub(crate) fn columns(pd: &mut PlotData, project: &Project, layer: &Layer, c: &S
         pd.stack = Some((floor, ws.clone()));
         pd.mask = None;
         pd.filters.clear();
+    } else if pd.plot.kind == sheaf_core::graph::PlotKind::Area && c.ribbons {
+        // 3D Ribbons (T161): the curve at its depth, widened to half a depth step, from a quarter
+        // step in front of it to a quarter step behind.
+        let (sa, ca) = c.azimuth_deg.to_radians().sin_cos();
+        pd.ribbon = xyz(project, layer, pd.plot).map(|(x, y, z)| {
+            (0..n)
+                .map(|r| {
+                    let cube = match (x.get(r), y.get(r), z.get(r)) {
+                        (Some(&x), Some(&y), Some(&z)) => [b.unit(0, x), b.unit(1, y), b.unit(2, z)],
+                        _ => [f64::NAN; 3],
+                    };
+                    let at = |dy: f64| {
+                        let p = [cube[0], b.unit(1, y.get(r).copied().unwrap_or(f64::NAN) + dy), cube[2]];
+                        if p.iter().all(|v| v.is_finite()) { view(c, p) } else { (f64::NAN, f64::NAN) }
+                    };
+                    RibbonRow { edges: [at(-RIBBON_HALF), at(RIBBON_HALF)], depth: cube[0] * sa + cube[1] * ca }
+                })
+                .collect()
+        });
+        pd.stack = None;
     } else if pd.plot.kind == sheaf_core::graph::PlotKind::Area {
         // 3D Walls (T158): the area of a curve down to the floor of the box, at the curve's depth.
         let floor = (0..n)
@@ -206,6 +229,42 @@ pub(crate) fn columns(pd: &mut PlotData, project: &Project, layer: &Layer, c: &S
     pd.xerr = None;
     // The Z column places the points; it sizes no symbol.
     pd.size_z = None;
+}
+
+/// One row of a 3D ribbon (T161): its front and back edge points in the units of the hidden axes,
+/// and its depth in the view (larger is farther).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct RibbonRow {
+    pub edges: [(f64, f64); 2],
+    pub depth: f64,
+}
+
+/// Draws a 3D ribbon (T161): one quadrilateral per pair of consecutive rows, filled with the plot's
+/// fill colour and edged with its line, the farthest first.
+pub(crate) fn draw_ribbon(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    let Some(rows) = &pd.ribbon else { return };
+    let plot = pd.plot;
+    let stroke = (plot.line.width_pt > 0.0).then(|| crate::plots::line_stroke(&plot.line));
+    let shown: Vec<usize> = pd.rows().filter(|&r| r < rows.len()).collect();
+    let ok = |r: &RibbonRow| r.edges.iter().all(|p| p.0.is_finite() && p.1.is_finite());
+    let mut quads: Vec<(f64, [(f64, f64); 4])> = shown
+        .windows(2)
+        .filter(|w| w[1] == w[0] + 1 && ok(&rows[w[0]]) && ok(&rows[w[1]]))
+        .map(|w| {
+            let (p, q) = (rows[w[0]], rows[w[1]]);
+            (p.depth + q.depth, [p.edges[0], q.edges[0], q.edges[1], p.edges[1]])
+        })
+        .collect();
+    quads.sort_by(|p, q| q.0.total_cmp(&p.0));
+    for (_, quad) in quads {
+        let mut d = String::new();
+        for (k, &(x, y)) in quad.iter().enumerate() {
+            let (px, py) = geom.data_to_page(x, y);
+            if k == 0 { scene::move_to(&mut d, px, py) } else { scene::line_to(&mut d, px, py) }
+        }
+        d.push('Z');
+        out.push(Item::Path { d, fill: Some(plot.symbol.color), stroke: stroke.clone() });
+    }
 }
 
 fn page(geom: &LayerGeometry, (x, y): (f64, f64)) -> (f64, f64) {
@@ -489,5 +548,50 @@ mod tests {
         }
         let titles = titles(&p, layer);
         assert_eq!((titles[1].as_str(), titles[2].as_str()), ("", "S0"));
+    }
+
+    #[test]
+    fn ribbons_are_strips_at_each_depth_drawn_back_to_front() {
+        use sheaf_core::column::{ColumnData, Designation};
+        use sheaf_core::template::Template;
+        let mut p = Project::new();
+        let b = p.add_workbook("Book1");
+        p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0, 2.0, 3.0])).unwrap();
+        let ys: Vec<_> = (0..2)
+            .map(|k| {
+                p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 3.0 + k as f64, 2.0, 4.0])).unwrap()
+            })
+            .collect();
+        let g = p.plot_columns(Template::Ribbons3d, &ys).unwrap();
+        let graph = p.graph(g).unwrap();
+        let layer = &graph.layers[0];
+        let c = *layer.coords.space3d().unwrap();
+        assert!(c.xyy && c.ribbons);
+        let bx = data_box(&p, layer).unwrap();
+        let layers = crate::data::collect_graph(&p, graph);
+        let geom = crate::layout::graph_geometry(&p, graph, &layers, &crate::FixedMetrics).remove(0);
+        for (k, pd) in layers[0].plots.iter().enumerate() {
+            assert!(pd.stack.is_none(), "a ribbon does not stand on the floor");
+            let rows = pd.ribbon.as_ref().expect("a ribbon");
+            let depth = (2 - k) as f64;
+            // Row 1: a quarter step in front of and behind the plot's depth.
+            let z = bx.unit(2, 3.0 + k as f64);
+            let front = view(&c, [bx.unit(0, 1.0), bx.unit(1, depth - RIBBON_HALF), z]);
+            let back = view(&c, [bx.unit(0, 1.0), bx.unit(1, depth + RIBBON_HALF), z]);
+            let close = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9;
+            assert!(close(rows[1].edges[0], front) && close(rows[1].edges[1], back), "plot {k}");
+            // Three quads, farthest (largest X, as sin a > 0) first.
+            let mut out = Vec::new();
+            draw_ribbon(&mut out, pd, &geom);
+            assert_eq!(out.len(), 3);
+            let first_x = |item: &Item| match item {
+                Item::Path { d, fill: Some(_), stroke: Some(_) } => {
+                    d.trim_start_matches('M').split([' ', 'L']).next().unwrap().parse::<f64>().unwrap()
+                }
+                other => panic!("a filled and edged quad, not {other:?}"),
+            };
+            let xs: Vec<f64> = out.iter().map(first_x).collect();
+            assert!(xs[0] > xs[1] && xs[1] > xs[2], "back to front: {xs:?}");
+        }
     }
 }

@@ -34,6 +34,8 @@ pub enum Template {
     Xyy3dBars,
     Walls3d,
     Waterfall3d,
+    /// Plot > 3D XYY > 3D Ribbons (T161): each Y column a ribbon at its own depth.
+    Ribbons3d,
     /// Scatter plot with the same axes as [`Template::Line`].
     Scatter,
     /// Scatter plot whose axes cross in the middle of the layer (Origin's "Scatter Central", 2016): both
@@ -221,7 +223,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 92] = [
+    pub const ALL: [Template; 93] = [
         Template::Line,
         Template::Scatter3d,
         Template::Trajectory3d,
@@ -232,6 +234,7 @@ impl Template {
         Template::Xyy3dBars,
         Template::Walls3d,
         Template::Waterfall3d,
+        Template::Ribbons3d,
         Template::StepHorizontal,
         Template::StepVertical,
         Template::SplineConnected,
@@ -329,6 +332,7 @@ impl Template {
             Template::Xyy3dBars => "xyy-3d-bars",
             Template::Walls3d => "3d-walls",
             Template::Waterfall3d => "3d-waterfall",
+            Template::Ribbons3d => "3d-ribbons",
             Template::StepHorizontal => "step-horizontal",
             Template::StepVertical => "step-vertical",
             Template::SplineConnected => "spline-connected",
@@ -426,6 +430,7 @@ impl Template {
             Template::Xyy3dBars => "XYY 3D Bars",
             Template::Walls3d => "3D Walls",
             Template::Waterfall3d => "3D Waterfall",
+            Template::Ribbons3d => "3D Ribbons",
             Template::StepHorizontal => "Horizontal Step",
             Template::StepVertical => "Vertical Step",
             Template::SplineConnected => "Spline Connected",
@@ -555,12 +560,15 @@ impl Template {
             Template::Scatter3dError => space3d(id, name, PlotKind::Scatter),
             Template::Vector3dXyz | Template::Vector3dDelta => space3d(id, name, PlotKind::VectorXyxy),
             Template::Xyy3dBars => xyy(bars3d(id, name)),
-            Template::Walls3d => {
-                let mut g = xyy(space3d(id, name, PlotKind::Area));
-                g.layers[0].default_line = LineStyle::solid(Color::BLACK, 0.5);
+            Template::Walls3d => walls3d(id, name),
+            Template::Waterfall3d => xyy(space3d(id, name, PlotKind::Line)),
+            Template::Ribbons3d => {
+                let mut g = walls3d(id, name);
+                if let Coords::Space3d(c) = &mut g.layers[0].coords {
+                    c.ribbons = true;
+                }
                 g
             }
-            Template::Waterfall3d => xyy(space3d(id, name, PlotKind::Line)),
             Template::Bars3d => bars3d(id, name),
             Template::StepHorizontal => connected(id, name, Connect::StepHorizontal),
             Template::StepVertical => connected(id, name, Connect::StepVertical),
@@ -1296,6 +1304,14 @@ fn bars3d(id: WindowId, name: &str) -> Graph {
     g
 }
 
+/// 3D Walls (T158): XYY Area plots with a black edge, each filled down to the floor; 3D Ribbons
+/// (T161) start from them.
+fn walls3d(id: WindowId, name: &str) -> Graph {
+    let mut g = xyy(space3d(id, name, PlotKind::Area));
+    g.layers[0].default_line = LineStyle::solid(Color::BLACK, 0.5);
+    g
+}
+
 /// A 3D layer read as XYY (T158): each plot at its own depth.
 fn xyy(mut g: Graph) -> Graph {
     if let Coords::Space3d(c) = &mut g.layers[0].coords {
@@ -1567,7 +1583,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 92);
+        assert_eq!(Template::ALL.len(), 93);
         assert_eq!(Template::from_name("piper"), Some(Template::Piper));
         assert_eq!(Template::from_name("kde-2d"), Some(Template::Kde2d));
         assert_eq!(Template::from_name("smith-chart"), Some(Template::SmithChart));

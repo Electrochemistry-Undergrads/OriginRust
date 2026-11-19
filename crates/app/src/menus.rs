@@ -1218,15 +1218,12 @@ fn plot_menu() -> Vec<Entry> {
         sep(),
         sub(
             "3D &XYY",
-            [
-                vec![item("XYY 3D Bars", Cmd::Plot(Template::Xyy3dBars))],
-                greys(&["3D Ribbons"]),
-                vec![
-                    item("3D Walls", Cmd::Plot(Template::Walls3d)),
-                    item("3D Waterfall", Cmd::Plot(Template::Waterfall3d)),
-                ],
-            ]
-            .concat(),
+            vec![
+                item("XYY 3D Bars", Cmd::Plot(Template::Xyy3dBars)),
+                item("3D Ribbons", Cmd::Plot(Template::Ribbons3d)),
+                item("3D Walls", Cmd::Plot(Template::Walls3d)),
+                item("3D Waterfall", Cmd::Plot(Template::Waterfall3d)),
+            ],
         ),
         grey_sub(
             "3D Su&rface",

@@ -1,6 +1,6 @@
 # T95: Find in Project
 
-**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13j): Origin's Find window, defaults and hits measured; Sheaf searches graph, book, sheet and column names and labels, data cells and graph text with the same switches, and goes to a hit. Left: Notes, folder info variables, a separate Folder result column and Origin's double-click.
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13j): Origin's Find window, defaults and hits measured; Sheaf searches graph, book, sheet and column names and labels, data cells and graph text with the same switches, and goes to a hit. Left: Notes, folder info variables and Origin's double-click.
 
 Worksheet Comments added 2026-11-18. The archived Origin 2016 Select Metadata window shows Comments
 checked under Sheet. Sheaf searches the full multiline comment and opens its sheet from the result.
@@ -21,6 +21,11 @@ matches respect Within and clicking a hit activates its folder. Formatting, stri
 8 skipped), doc tests, inventory and eight Python tooling tests passed.
 Desktop captures verified Folder Comments was checked by default and retained its changed setting
 when Find was reopened. The automated UI test verified matches and folder activation.
+
+The Folder result column added 2026-11-18 follows the archived results table. It shows
+the containing folder name for each window result and the matched name for a folder result.
+Workbook model 13j documents the archived root rows and Sheaf's membership rules.
+Workspace verification pending.
 
 **Size:** M. **Source:** greyed inventory package B7 (Edit > Find in Project... on a workbook, Find in
 Project on a graph; F3).

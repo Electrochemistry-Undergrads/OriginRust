@@ -2,7 +2,7 @@
 //! (`crate::project_find`). Fields as Origin's: Find What, Case Sensitive, Match Whole Word, Allow
 //! Wildcards, the types to include (Folder, Graph, Book, Sheet, Column, with Folder and Sheet Comments and the column's
 //! Units and F(x) behind Select...), Data in Cells (1st Matched in Column) and Text Objects on Graphs.
-//! Each hit shows its number, range, element and attribute. Clicking a hit goes to it.
+//! Each hit shows its number, range, element, attribute and folder. Clicking a hit goes to it.
 
 use crate::project_find::{FindHit, FindScope, FindSpec, FindTarget, find_in_project};
 use eframe::egui::{self, RichText};
@@ -112,8 +112,8 @@ impl FindProjectDialog {
                 }
                 if let Some(hits) = &self.hits {
                     egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
-                        egui::Grid::new("find_project_hits").striped(true).num_columns(4).show(ui, |ui| {
-                            for head in ["No.", "Range", "Element", "Attribute"] {
+                        egui::Grid::new("find_project_hits").striped(true).num_columns(5).show(ui, |ui| {
+                            for head in ["No.", "Range", "Element", "Attribute", "Folder"] {
                                 ui.label(RichText::new(head).strong());
                             }
                             ui.end_row();
@@ -124,6 +124,7 @@ impl FindProjectDialog {
                                 }
                                 ui.label(h.element);
                                 ui.label(h.attribute);
+                                ui.label(&h.folder);
                                 ui.end_row();
                             }
                         });

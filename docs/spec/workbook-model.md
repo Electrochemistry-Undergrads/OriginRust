@@ -969,8 +969,15 @@ can be shown.
 The archived Select Metadata capture shows Folder Name and Comments checked. Sheaf includes
 folder names and full comments by default within the selected scope. Clear Folder to omit both,
 or clear Folder Comments under Select... to keep only name matches. A folder hit shows its path
-and activates that folder when clicked. Notes, folder info variables and a separate Folder result
-column remain open.
+and activates that folder when clicked. Notes and folder info variables remain open.
+
+The archived Origin 2016 results show Folder after Attribute, with the root's short name
+`UNTITLED` in graph, legend, column and data cell rows. Sheaf fills the column with the
+containing folder's name for each window and its contents, using the project root for
+windows without explicit subfolder membership. For a folder metadata hit, Sheaf displays
+that folder's own name and uses its full path in Range. The archived results measured
+root window hits. The nested-folder and folder metadata display rules follow Sheaf's
+Project Explorer membership.
 
 ## 13k. Export > Worksheet as Image (T97, measured 2026-11-16, Origin 2016)
 

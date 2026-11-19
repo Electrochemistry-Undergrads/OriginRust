@@ -30,6 +30,10 @@ pub enum Template {
     /// 3D Vector XYZ XYZ and 3D Vector XYZ dXdYdZ (T157): an arrow per row from (X, Y, Z).
     Vector3dXyz,
     Vector3dDelta,
+    /// Plot > 3D XYY > XYY 3D Bars, 3D Walls and 3D Waterfall (T158): each Y column at its own depth.
+    Xyy3dBars,
+    Walls3d,
+    Waterfall3d,
     /// Scatter plot with the same axes as [`Template::Line`].
     Scatter,
     /// Scatter plot whose axes cross in the middle of the layer (Origin's "Scatter Central", 2016): both
@@ -217,7 +221,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 89] = [
+    pub const ALL: [Template; 92] = [
         Template::Line,
         Template::Scatter3d,
         Template::Trajectory3d,
@@ -225,6 +229,9 @@ impl Template {
         Template::Bars3d,
         Template::Vector3dXyz,
         Template::Vector3dDelta,
+        Template::Xyy3dBars,
+        Template::Walls3d,
+        Template::Waterfall3d,
         Template::StepHorizontal,
         Template::StepVertical,
         Template::SplineConnected,
@@ -319,6 +326,9 @@ impl Template {
             Template::Bars3d => "3d-bars",
             Template::Vector3dXyz => "3d-vector-xyz-xyz",
             Template::Vector3dDelta => "3d-vector-xyz-dxdydz",
+            Template::Xyy3dBars => "xyy-3d-bars",
+            Template::Walls3d => "3d-walls",
+            Template::Waterfall3d => "3d-waterfall",
             Template::StepHorizontal => "step-horizontal",
             Template::StepVertical => "step-vertical",
             Template::SplineConnected => "spline-connected",
@@ -413,6 +423,9 @@ impl Template {
             Template::Bars3d => "3D Bars",
             Template::Vector3dXyz => "3D Vector XYZ XYZ",
             Template::Vector3dDelta => "3D Vector XYZ dXdYdZ",
+            Template::Xyy3dBars => "XYY 3D Bars",
+            Template::Walls3d => "3D Walls",
+            Template::Waterfall3d => "3D Waterfall",
             Template::StepHorizontal => "Horizontal Step",
             Template::StepVertical => "Vertical Step",
             Template::SplineConnected => "Spline Connected",
@@ -541,13 +554,14 @@ impl Template {
             Template::Trajectory3d => space3d(id, name, PlotKind::LineSymbol),
             Template::Scatter3dError => space3d(id, name, PlotKind::Scatter),
             Template::Vector3dXyz | Template::Vector3dDelta => space3d(id, name, PlotKind::VectorXyxy),
-            Template::Bars3d => {
-                // Filled bars with a black edge, so that nearer bars stand out from farther ones.
-                let mut g = from_red(space3d(id, name, PlotKind::Column));
+            Template::Xyy3dBars => xyy(bars3d(id, name)),
+            Template::Walls3d => {
+                let mut g = xyy(space3d(id, name, PlotKind::Area));
                 g.layers[0].default_line = LineStyle::solid(Color::BLACK, 0.5);
-                g.layers[0].default_symbol.filled = true;
                 g
             }
+            Template::Waterfall3d => xyy(space3d(id, name, PlotKind::Line)),
+            Template::Bars3d => bars3d(id, name),
             Template::StepHorizontal => connected(id, name, Connect::StepHorizontal),
             Template::StepVertical => connected(id, name, Connect::StepVertical),
             Template::SplineConnected => connected(id, name, Connect::Spline),
@@ -1274,6 +1288,22 @@ fn space3d(id: WindowId, name: &str, kind: PlotKind) -> Graph {
     g
 }
 
+/// 3D bars (T156): filled bars with a black edge, so that nearer bars stand out from farther ones.
+fn bars3d(id: WindowId, name: &str) -> Graph {
+    let mut g = from_red(space3d(id, name, PlotKind::Column));
+    g.layers[0].default_line = LineStyle::solid(Color::BLACK, 0.5);
+    g.layers[0].default_symbol.filled = true;
+    g
+}
+
+/// A 3D layer read as XYY (T158): each plot at its own depth.
+fn xyy(mut g: Graph) -> Graph {
+    if let Coords::Space3d(c) = &mut g.layers[0].coords {
+        c.xyy = true;
+    }
+    g
+}
+
 /// Half the width of the hidden axes of a 3D layer: room for the turned cube (at most sqrt(3)).
 pub const SPACE3D_EXTENT: f64 = 1.8;
 
@@ -1537,7 +1567,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 89);
+        assert_eq!(Template::ALL.len(), 92);
         assert_eq!(Template::from_name("piper"), Some(Template::Piper));
         assert_eq!(Template::from_name("kde-2d"), Some(Template::Kde2d));
         assert_eq!(Template::from_name("smith-chart"), Some(Template::SmithChart));

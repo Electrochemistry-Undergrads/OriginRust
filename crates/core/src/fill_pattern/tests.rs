@@ -158,3 +158,27 @@ fn a_fill_writes_from_the_first_row_and_keeps_the_rows_below() {
     p.fill_pattern(d, &dp, 1).unwrap();
     assert!(matches!(p.column(d).unwrap().format, NumberFormat::Date(_)));
 }
+
+#[test]
+fn quick_fills_cover_every_row_of_the_sheet() {
+    let mut p = Project::new();
+    let book = p.add_workbook("B");
+    let x = p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![5.0; 6])).unwrap();
+    let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+    assert_eq!(p.fill_quick(y, QuickFill::RowNumbers, 1).unwrap(), 6, "the sheet's rows, not the column's");
+    assert_eq!(p.numeric(y).unwrap(), [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    p.fill_quick(x, QuickFill::Uniform, 3).unwrap();
+    let u = p.numeric(x).unwrap().to_vec();
+    assert!(u.iter().all(|v| (0.0..1.0).contains(v)), "{u:?}");
+    assert_ne!(u, QuickFill::Uniform.values(6, 4), "another seed, other numbers");
+    let empty = p.add_workbook("E");
+    let e = p.add_column(empty, 0, Designation::Y, ColumnData::numeric(Vec::new())).unwrap();
+    assert_eq!(p.fill_quick(e, QuickFill::Normal, 9).unwrap(), 32, "an empty sheet gets 32 rows");
+    let big = QuickFill::Normal.values(20_000, 11);
+    let mean = big.iter().sum::<f64>() / big.len() as f64;
+    let sd = (big.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (big.len() - 1) as f64).sqrt();
+    assert!(mean.abs() < 0.03 && (sd - 1.0).abs() < 0.03, "mean {mean}, sd {sd}");
+    let big = QuickFill::Uniform.values(20_000, 12);
+    let mean = big.iter().sum::<f64>() / big.len() as f64;
+    assert!((mean - 0.5).abs() < 0.01, "mean {mean}");
+}

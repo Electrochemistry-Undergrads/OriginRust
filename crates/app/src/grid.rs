@@ -443,6 +443,8 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         layer: 0,
         tool: Default::default(),
         curve: None,
+        graph_pick: None,
+        graph_paste: false,
         layer_curves: Vec::new(),
         stack: None,
         can_cumulate: false,

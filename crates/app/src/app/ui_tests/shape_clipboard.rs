@@ -107,3 +107,44 @@ fn an_axis_title_is_copied_as_a_text_label_and_cut_deletes_the_title() {
     assert_eq!((pasted.text.as_str(), pasted.rotation_deg), (shown.as_str(), 90.0));
     assert_eq!(pasted.font, l.y_axis.title_font);
 }
+
+#[test]
+fn the_graph_edit_menu_and_ctrl_c_v_copy_and_paste_the_selected_object() {
+    // T149: Edit > Cut, Copy, Paste and Clear on a graph, and Ctrl+C / Ctrl+V.
+    use sheaf_plot::scene::ObjectKind;
+    crate::shape_clip::clear();
+    let mut h = start(vec![data_file("graph-edit-clip")]);
+    let id = graph(&h).id;
+    let rect = Shape::new(ShapeKind::Rectangle, (0.2, 0.3), (0.4, 0.5));
+    h.state_mut().doc.apply("Shapes", |p| p.graph_mut(id).unwrap().layers[0].shapes = vec![rect]);
+    show_window(&mut h, "Graph1 - sample");
+    // Nothing selected, nothing copied: the four items are greyed.
+    h.state_mut().graphs.get_mut(&id).unwrap().selected = None;
+    settle(&mut h);
+    for op in [menus::GraphClip::Copy, menus::GraphClip::Paste, menus::GraphClip::Clear] {
+        let r = menus::resolve(&menus::Cmd::GraphClipboard(op), &h.state().menu_context());
+        assert!(r.is_err(), "{op:?} needs a selection or a copy");
+    }
+    h.state_mut().graphs.get_mut(&id).unwrap().selected = Some((0, ObjectKind::Shape(0)));
+    settle(&mut h);
+    menu_path(&mut h, &["Edit", "Copy"]);
+    // Paste goes to the last clicked point; set one in the frame's lower half.
+    let g = graph(&h);
+    let f = g.absolute_frame(0).unwrap();
+    let at = ((f.left + 0.6 * f.width) * g.page.width_pt, (f.top + 0.7 * f.height) * g.page.height_pt);
+    h.state_mut().graphs.get_mut(&id).unwrap().last_click = Some(at);
+    menu_path(&mut h, &["Edit", "Paste"]);
+    let s = shapes(&h);
+    assert_eq!(s.len(), 2);
+    assert!((s[1].x1 - 0.6).abs() < 1e-9 && (s[1].y1 - 0.7).abs() < 1e-9, "{:?}", s[1]);
+    // Ctrl+V pastes once more at the same point.
+    h.event(egui::Event::Paste(String::new()));
+    settle(&mut h);
+    assert_eq!(shapes(&h).len(), 3);
+    // Clear deletes the selected object.
+    h.state_mut().graphs.get_mut(&id).unwrap().selected = Some((0, ObjectKind::Shape(0)));
+    settle(&mut h);
+    menu_path(&mut h, &["Edit", "Clear"]);
+    assert_eq!(shapes(&h).len(), 2);
+    assert_eq!(h.state().doc.undo_label(), Some("Delete drawn object"));
+}

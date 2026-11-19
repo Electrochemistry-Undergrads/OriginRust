@@ -3822,9 +3822,14 @@ copying are distinct routes outside this slice.
   title font, and a 90-degree turn for a vertical axis. Paste makes it a free text label. Cut also
   deletes the title in one undo step ("Delete axis title"). The title's Bring to the front and Push
   to the back stay grey.
-- **Not done:** Edit menu and keyboard Cut/Copy/Paste for drawn objects and labels (Ctrl+X/C/V are
-  shown in the right-click menu, not bound), attachment to data or page, several objects at once,
-  and Ctrl+drag copies.
+- **Edit menu and keys (T149, 2026-11-19):** on a graph, Edit > Cut, Copy, Paste and Clear act on
+  the selected object, and so do Ctrl+X, Ctrl+C and Ctrl+V (while no text field has the keyboard).
+  - Cut and Copy work on a drawn object, a text label or an axis title. Clear deletes whatever the
+    Delete key deletes (also a legend, a slope, a straight line or a scale).
+  - Paste goes to the active layer, at the page point clicked last with either button, or the
+    middle of the layer before any click.
+  - Each item is greyed while it has nothing to work on.
+- **Not done:** attachment to data or page, several objects at once, and Ctrl+drag copies.
 
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 

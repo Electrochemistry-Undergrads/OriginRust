@@ -94,6 +94,9 @@ pub struct GraphUi {
     menu_on: Option<MenuTarget>,
     /// The page point (in points) that opened the right-click menu: Axis Center needs it.
     menu_page: (f64, f64),
+    /// The page point (in points) clicked last, with either button: the Edit menu's Paste puts a
+    /// copied object there (T149).
+    pub last_click: Option<(f64, f64)>,
     /// Where the page was drawn in the last frame (screen rectangle) and UI points per page point.
     view: Option<(Rect, f32)>,
     /// The open Integrate gadget, if any.
@@ -800,6 +803,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         && let Some(pos) = response.interact_pointer_pos()
     {
         let hit = pick(pos);
+        state.last_click = Some(to_page(pos));
         state.selected = match hit {
             Hit::Object { layer, kind } => Some((layer, kind)),
             _ => None,
@@ -840,6 +844,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         let hit = pick(pos);
         state.menu_on = Some(MenuTarget::Hit(hit));
         state.menu_page = to_page(pos);
+        state.last_click = Some(state.menu_page);
         if let Some(layer) = layer_of(hit) {
             state.active_layer = layer;
             actions.push(Action::ActivateLayer { graph: graph_id, layer });
@@ -1119,6 +1124,8 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         layer,
         tool,
         curve: None,
+        graph_pick: None,
+        graph_paste: false,
         layer_curves: Vec::new(),
         stack: None,
         can_cumulate: false,

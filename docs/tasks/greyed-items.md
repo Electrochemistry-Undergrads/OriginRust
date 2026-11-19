@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **213 greyed items: 145 in the menu bar, 13 on the toolbars, 55 in context menus.**
+original inventory baseline. This is not a new runtime audit. **209 greyed items: 141 in the menu bar, 13 on the toolbars, 55 in context menus.**
 
 ## How to read and keep this file
 
@@ -69,7 +69,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T126` | 0 |
 | `T127` | 0 |
 | `T128` | 0 |
-| `B2` | 25 |
+| `B2` | 21 |
 | `B3` | 6 |
 | `B4` | 1 |
 | `B5` | 12 |
@@ -86,7 +86,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 38 items, backlog packages (`B`) 155, not planned (`N`) 20.
+Briefs (`T`) hold 38 items, backlog packages (`B`) 151, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -109,7 +109,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B5` Paste Link Transpose · Select... [Workbook]
 - `B5` Remove Links [Workbook]
 - `B16` Button Edit Mode [Workbook, Graph]
-- `B2` Cut · Copy · Paste · Clear [Graph]
 - `N` Insert New Object · Links · Update Client [Graph]
 - `T72` Copy Format: Symbol/Line/Fill · Text [Graph]
 

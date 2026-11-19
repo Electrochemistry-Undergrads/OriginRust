@@ -1732,7 +1732,7 @@ fn gadgets_menu() -> Vec<Entry> {
     v.push(item("Intersect...", Cmd::IntersectGadget));
     v.push(item("Rise Time...", Cmd::RiseTimeGadget));
     v.extend(greys(&["Cluster..."]));
-    v.push(item("FFT...", Cmd::FftGadget));
+    v.push(item("&FFT...", Cmd::FftGadget));
     v.extend(greys(&["2D Integrate...", "-", "Vertical Cursor...", "Go To..."]));
     v
 }

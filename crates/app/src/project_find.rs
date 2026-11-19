@@ -8,8 +8,11 @@
 //!   objects of graphs (axis titles and legends as drawn) when "Text Objects on Graphs" is ticked (on).
 //! - Each hit is a row: Range (`[Graph1]Layer1!YL`, `[Graph1]Layer1!Legend`, `[Graph1]`,
 //!   `[Book1]Sheet1!B"Current density"`), Element (Graph, Book, Sheet, Column) and Attribute (Short Name,
-//!   Long Name, Axis Title, Legend, Data Cells, ...). A column gives one Data Cells hit however many of
-//!   its cells match. The text is found anywhere in a field, letter case ignored unless Case Sensitive.
+//!   Long Name, Axis Title, Legend, Data Cells, ...) and Folder. A column gives one Data Cells hit
+//!   however many of its cells match. The text is found anywhere in a field, letter case ignored
+//!   unless Case Sensitive.
+
+use std::collections::HashMap;
 
 use sheaf_core::{ColumnId, Project, WindowId};
 
@@ -114,6 +117,7 @@ pub struct FindHit {
     pub range: String,
     pub element: &'static str,
     pub attribute: &'static str,
+    pub folder: String,
     pub target: FindTarget,
 }
 
@@ -170,16 +174,18 @@ fn word_ends(f: &[char], at: usize) -> bool {
 
 /// Searches the project as Origin's Find in Project does.
 pub fn find_in_project(project: &Project, spec: &FindSpec, active_folder: &[usize]) -> Vec<FindHit> {
-    let any_folder = spec.within == FindScope::EntireProject
-        || (spec.within == FindScope::ActiveFolderAndSubfolders && active_folder.is_empty());
-    let includes = |id| any_folder || spec.within.includes_path(&explorer::home(&project.root, id), active_folder);
+    let folders = explorer::folder_list(&project.root);
+    let mut window_folders = HashMap::new();
     let mut hits = Vec::new();
-    if spec.folders {
-        for (path, range) in explorer::folder_list(&project.root) {
-            if !spec.within.includes_path(&path, active_folder) {
-                continue;
+    for (path, range) in &folders {
+        let Some(folder) = explorer::folder_at(&project.root, path) else { continue };
+        // Like Explorer, use the first explicit subfolder membership and fall back to the root.
+        if !path.is_empty() {
+            for &id in &folder.windows {
+                window_folders.entry(id).or_insert((path.as_slice(), folder.name.as_str()));
             }
-            let Some(folder) = explorer::folder_at(&project.root, &path) else { continue };
+        }
+        if spec.folders && spec.within.includes_path(path, active_folder) {
             for (attribute, value, enabled) in
                 [("Name", folder.name.as_str(), true), ("Comments", folder.comments.as_str(), spec.folder_comments)]
             {
@@ -188,13 +194,18 @@ pub fn find_in_project(project: &Project, spec: &FindSpec, active_folder: &[usiz
                         range: range.clone(),
                         element: "Folder",
                         attribute,
+                        folder: folder.name.clone(),
                         target: FindTarget::Folder(path.clone()),
                     });
                 }
             }
         }
     }
-    for g in project.graphs().filter(|g| includes(g.id)) {
+    let folder_for = |id| {
+        let (path, name) = window_folders.get(&id).copied().unwrap_or((&[], &project.root.name));
+        spec.within.includes_path(path, active_folder).then_some(name)
+    };
+    for (g, folder) in project.graphs().filter_map(|g| folder_for(g.id).map(|folder| (g, folder))) {
         if spec.graphs {
             for (attr, text) in [("Short Name", g.name.as_str()), ("Long Name", g.long_name.as_str())] {
                 if spec.matches(text) {
@@ -202,6 +213,7 @@ pub fn find_in_project(project: &Project, spec: &FindSpec, active_folder: &[usiz
                         range: format!("[{}]", g.name),
                         element: "Graph",
                         attribute: attr,
+                        folder: folder.to_string(),
                         target: FindTarget::Window(g.id),
                     });
                 }
@@ -217,6 +229,7 @@ pub fn find_in_project(project: &Project, spec: &FindSpec, active_folder: &[usiz
                             range: at(code),
                             element: "Graph",
                             attribute: "Axis Title",
+                            folder: folder.to_string(),
                             target: FindTarget::Window(g.id),
                         });
                     }
@@ -226,6 +239,7 @@ pub fn find_in_project(project: &Project, spec: &FindSpec, active_folder: &[usiz
                         range: at("Legend"),
                         element: "Graph",
                         attribute: "Legend",
+                        folder: folder.to_string(),
                         target: FindTarget::Window(g.id),
                     });
                 }
@@ -235,6 +249,7 @@ pub fn find_in_project(project: &Project, spec: &FindSpec, active_folder: &[usiz
                             range: at(&format!("Text{}", k + 1)),
                             element: "Graph",
                             attribute: "Text",
+                            folder: folder.to_string(),
                             target: FindTarget::Window(g.id),
                         });
                     }
@@ -242,7 +257,7 @@ pub fn find_in_project(project: &Project, spec: &FindSpec, active_folder: &[usiz
             }
         }
     }
-    for b in project.workbooks().filter(|b| includes(b.id)) {
+    for (b, folder) in project.workbooks().filter_map(|b| folder_for(b.id).map(|folder| (b, folder))) {
         if spec.books {
             for (attr, text) in [("Short Name", b.name.as_str()), ("Long Name", b.long_name.as_str())] {
                 if spec.matches(text) {
@@ -250,6 +265,7 @@ pub fn find_in_project(project: &Project, spec: &FindSpec, active_folder: &[usiz
                         range: format!("[{}]", b.name),
                         element: "Book",
                         attribute: attr,
+                        folder: folder.to_string(),
                         target: FindTarget::Window(b.id),
                     });
                 }
@@ -267,6 +283,7 @@ pub fn find_in_project(project: &Project, spec: &FindSpec, active_folder: &[usiz
                             range: format!("[{}]{}", b.name, s.name),
                             element: "Sheet",
                             attribute: attr,
+                            folder: folder.to_string(),
                             target: FindTarget::Sheet { book: b.id, sheet: si },
                         });
                     }
@@ -283,6 +300,7 @@ pub fn find_in_project(project: &Project, spec: &FindSpec, active_folder: &[usiz
                         range: range.clone(),
                         element: "Column",
                         attribute,
+                        folder: folder.to_string(),
                         target: FindTarget::Column { book: b.id, sheet: si, column: c.id },
                     });
                 };
@@ -432,6 +450,11 @@ mod tests {
             let spec = FindSpec { within, ..text("scope term") };
             find_in_project(&p, &spec, path).into_iter().map(|hit| hit.target).collect::<Vec<_>>()
         };
+        let hits = find_in_project(&p, &text("scope term"), &[]);
+        assert_eq!(
+            hits.iter().map(|hit| hit.folder.as_str()).collect::<Vec<_>>(),
+            ["Child", p.root.name.as_str(), "Active", "Child", "Sibling"],
+        );
         let sheet = |book| FindTarget::Sheet { book, sheet: 0 };
         let all =
             [FindTarget::Window(graph), sheet(root_book), sheet(active_book), sheet(child_book), sheet(sibling_book)];
@@ -464,6 +487,10 @@ mod tests {
         let spec = text("qc");
         let all = find_in_project(&p, &spec, &[0]);
         assert_eq!(all.len(), 5);
+        assert_eq!(
+            all.iter().map(|hit| hit.folder.as_str()).collect::<Vec<_>>(),
+            ["Survey", "QC", "QC", "Repeat", "Other"],
+        );
         assert_eq!(all[0].target, FindTarget::Folder(vec![]));
         assert_eq!((&*all[1].range, all[1].element, all[1].attribute), ("/Survey/QC/", "Folder", "Name"));
         assert_eq!(all[2].attribute, "Comments");

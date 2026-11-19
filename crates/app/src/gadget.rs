@@ -62,6 +62,42 @@ pub enum GadgetKind {
     QuickFit,
     /// Gadgets > Vertical Cursor (T144): the range is a thin band whose centre is the cursor.
     VerticalCursor,
+    /// Gadgets > Differentiate (T145).
+    Differentiate,
+    /// Gadgets > Interpolate (T145).
+    Interpolate,
+}
+
+/// A small line chart of `(u, v)` in the top third of `range`, both scaled to their own extent.
+fn mini_chart(painter: &egui::Painter, range: Rect, pts: &[(f64, f64)]) {
+    let chart = Rect::from_min_max(
+        range.left_top() + egui::vec2(4.0, 20.0),
+        Pos2::new(range.right() - 4.0, range.top() + 20.0 + range.height() / 3.0),
+    );
+    if chart.width() <= 20.0 || chart.height() <= 20.0 {
+        return;
+    }
+    painter.rect_filled(chart, 0.0, Color32::from_rgba_unmultiplied(255, 255, 255, 220));
+    painter.rect_stroke(chart, 0.0, Stroke::new(1.0_f32, Color32::GRAY), egui::StrokeKind::Inside);
+    let finite: Vec<(f64, f64)> = pts.iter().copied().filter(|(u, v)| u.is_finite() && v.is_finite()).collect();
+    let ext = |f: &dyn Fn(&(f64, f64)) -> f64| {
+        finite.iter().map(f).fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| (a.min(v), b.max(v)))
+    };
+    let ((u0, u1), (v0, v1)) = (ext(&|p| p.0), ext(&|p| p.1));
+    if u1 <= u0 {
+        return;
+    }
+    let vspan = if v1 > v0 { v1 - v0 } else { 1.0 };
+    let line: Vec<Pos2> = finite
+        .iter()
+        .map(|(u, v)| {
+            Pos2::new(
+                chart.left() + ((u - u0) / (u1 - u0)) as f32 * chart.width(),
+                chart.bottom() - ((v - v0) / vspan) as f32 * chart.height(),
+            )
+        })
+        .collect();
+    painter.add(egui::Shape::line(line, Stroke::new(1.0_f32, Color32::from_rgb(200, 30, 30))));
 }
 
 /// The Y of a polyline at `xv`: straight interpolation on the first segment that spans it.
@@ -199,6 +235,42 @@ impl Integrator {
         let report = sheaf_fit::nlsf::fit(&func, xs, ys, &Default::default()).ok()?;
         let params: Vec<f64> = report.params.iter().map(|p| p.value).collect();
         params.iter().all(|v| v.is_finite()).then_some(SigmoidFit { params, func })
+    }
+
+    /// Differentiate gadget: the first derivative at the rows inside the range, as (x, dy/dx).
+    pub fn derivative(&self, x: &[f64], y: &[f64]) -> Vec<(f64, f64)> {
+        let Some((a, b)) = rows_in(x, self.x0, self.x1) else { return Vec::new() };
+        let (xs, ys) = (&x[a - 1..b], &y[a - 1..b]);
+        if xs.len() < 2 {
+            return Vec::new();
+        }
+        let d = sheaf_calc::differentiate::differentiate(xs, ys, &Default::default());
+        xs.iter().copied().zip(d).collect()
+    }
+
+    /// Interpolate gadget: the not-a-knot cubic spline through the rows inside the range at 200 even
+    /// steps; empty with fewer than three points.
+    pub fn interpolated(&self, x: &[f64], y: &[f64]) -> Vec<(f64, f64)> {
+        let Some((a, b)) = rows_in(x, self.x0, self.x1) else { return Vec::new() };
+        let pts: Vec<(f64, f64)> = x[a - 1..b]
+            .iter()
+            .zip(&y[a - 1..b])
+            .map(|(u, v)| (*u, *v))
+            .filter(|(u, v)| u.is_finite() && v.is_finite())
+            .collect();
+        if pts.len() < 3 {
+            return Vec::new();
+        }
+        let (xs, ys): (Vec<f64>, Vec<f64>) = pts.into_iter().unzip();
+        let (lo, hi) =
+            (xs.iter().copied().fold(f64::INFINITY, f64::min), xs.iter().copied().fold(f64::NEG_INFINITY, f64::max));
+        let at: Vec<f64> = (0..=200).map(|k| lo + (hi - lo) * f64::from(k) / 200.0).collect();
+        let opts = sheaf_calc::interp::InterpOptions {
+            method: sheaf_calc::interp::InterpMethod::CubicSpline,
+            ..Default::default()
+        };
+        let v = sheaf_calc::interp::interp1(&xs, &ys, &at, &opts);
+        at.into_iter().zip(v).collect()
     }
 
     /// Vertical Cursor gadget: the cursor's X (the middle of the band).
@@ -502,6 +574,36 @@ impl Integrator {
                 sheaf_core::format::format_general(r.time, 6)
             ),
             (GadgetKind::RiseTime, _, None) => "Rise Time: no step in the range".to_string(),
+            (GadgetKind::Differentiate, _, _) => {
+                let d = self.derivative(&x, &y);
+                let xc = (self.x0 + self.x1) / 2.0;
+                let at_centre =
+                    d.iter().filter(|p| p.1.is_finite()).min_by(|p, q| (p.0 - xc).abs().total_cmp(&(q.0 - xc).abs()));
+                mini_chart(&painter, range, &d);
+                match at_centre {
+                    Some(&(px, slope)) => format!(
+                        "dy/dx = {} at x = {}",
+                        sheaf_core::format::format_general(slope, 5),
+                        sheaf_core::format::format_general(px, 5)
+                    ),
+                    None => "Differentiate: too few points in the range".to_string(),
+                }
+            }
+            (GadgetKind::Interpolate, _, _) => {
+                let curve = self.interpolated(&x, &y);
+                let line: Vec<Pos2> = curve
+                    .iter()
+                    .filter(|p| p.1.is_finite())
+                    .map(|&(u, v)| to_screen(geom.data_to_page(placement.x(u), placement.y(v))))
+                    .collect();
+                let n = line.len();
+                painter.add(egui::Shape::line(line, Stroke::new(2.0_f32, Color32::from_rgb(200, 30, 30))));
+                if n > 0 {
+                    "Cubic spline through the range".to_string()
+                } else {
+                    "Interpolate: too few points in the range".to_string()
+                }
+            }
             (GadgetKind::VerticalCursor, _, _) => {
                 format!("x = {}", sheaf_core::format::format_general(self.cursor_x(), 6))
             }
@@ -610,7 +712,9 @@ impl Integrator {
                 | GadgetKind::Fft
                 | GadgetKind::Statistics
                 | GadgetKind::QuickFit
-                | GadgetKind::VerticalCursor => menus::rise_time_gadget_menu(),
+                | GadgetKind::VerticalCursor
+                | GadgetKind::Differentiate
+                | GadgetKind::Interpolate => menus::rise_time_gadget_menu(),
             };
             menus::show_context(ui, &menu, c, actions)
         });

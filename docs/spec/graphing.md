@@ -6273,3 +6273,22 @@ unregistered), so this follows Origin's documented behaviour. It reuses the Inte
     first segment that spans the cursor.
 - **Right-click menu:** Delete (Esc) closes the gadget.
 
+## Differentiate and Interpolate gadgets: Gadgets > Differentiate..., Interpolate... (T145, 2026-11-18, **not measured**)
+
+Origin 2016's Gadgets menu has Differentiate... and Interpolate.... They could not be probed (Origin's COM
+class was unregistered), so this follows Origin's documented behaviour. Both reuse the Integrate gadget's
+range: they open on the active plot over the middle half of the X axis, and the range drags as before.
+
+- **Differentiate:**
+  - Computes the first derivative at the rows inside the range, with Analysis > Mathematics >
+    Differentiate's defaults (`sheaf_calc::differentiate`).
+  - Draws it as a small chart in the top third of the range, scaled to its own extent.
+  - The label reads "dy/dx = d at x = x", taken at the row nearest the middle of the range, or
+    "Differentiate: too few points in the range".
+- **Interpolate:**
+  - Draws the not-a-knot cubic spline through the points with numbers inside the range, at 200 even
+    steps, in red, 2 pt.
+  - At least three points are needed. The label reads "Cubic spline through the range", or
+    "Interpolate: too few points in the range".
+- **Right-click menu:** Delete (Esc) closes either gadget.
+

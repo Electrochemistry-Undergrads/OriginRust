@@ -25,7 +25,10 @@ when Find was reopened. The automated UI test verified matches and folder activa
 The Folder result column added 2026-11-18 follows the archived results table. It shows
 the containing folder name for each window result and the matched name for a folder result.
 Workbook model 13j documents the archived root rows and Sheaf's membership rules.
-Workspace verification pending.
+Formatting, strict workspace Clippy, Nextest (4,541 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
+A desktop search displayed the Folder column with the root and nested workbook names.
+App tests verified the folder column and result activation.
 
 **Size:** M. **Source:** greyed inventory package B7 (Edit > Find in Project... on a workbook, Find in
 Project on a graph; F3).

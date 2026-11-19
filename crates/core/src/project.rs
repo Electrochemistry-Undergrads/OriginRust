@@ -914,6 +914,13 @@ impl Project {
             .map(|c| c.id)
     }
 
+    /// The numeric column right after `c` in its sheet, if any (not an X column).
+    pub fn next_numeric_column(&self, c: ColumnId) -> Option<ColumnId> {
+        let (_, sheet, _) = self.locate(c)?;
+        let next = sheet.columns.get(sheet.column_index(c)? + 1)?;
+        (next.data.is_numeric() && next.designation != Designation::X).then_some(next.id)
+    }
+
     /// The column that holds the third part of a ternary plot of the Y column `y`: its Z column,
     /// or, when the sheet has none, the numeric column right after it (a sheet of three plain
     /// columns X, Y, Y).
@@ -1024,7 +1031,14 @@ impl Project {
         if template == Template::DoubleY || template == Template::ScatterMatrix || template.multi_y().is_some() {
             return ys.iter().map(|c| c.id).collect();
         }
-        if matches!(template, Template::Ternary | Template::Scatter3d | Template::Trajectory3d) {
+        if matches!(
+            template,
+            Template::Ternary
+                | Template::Scatter3d
+                | Template::Trajectory3d
+                | Template::Scatter3dError
+                | Template::Bars3d
+        ) {
             // The plots that have a third column; without a Z column the first Y column and the
             // column after it.
             let with_z: Vec<ColumnId> = ys.iter().map(|c| c.id).filter(|&y| self.z_column_for(y).is_some()).collect();
@@ -1204,8 +1218,19 @@ impl Project {
                 self.add_plot(graph, 0, *y)?;
                 // Bubble and colour mapped plots take their third variable from the Z column.
                 let z = self.z_column_for(*y);
-                let xyz = matches!(template, Template::Ternary | Template::Scatter3d | Template::Trajectory3d);
+                let xyz = matches!(
+                    template,
+                    Template::Ternary
+                        | Template::Scatter3d
+                        | Template::Trajectory3d
+                        | Template::Scatter3dError
+                        | Template::Bars3d
+                );
                 let ternary_z = if xyz { self.ternary_z_for(*y) } else { None };
+                // 3D Scatter + Error Bar (T156): the numeric column after Z holds the Z errors.
+                let z_error = (template == Template::Scatter3dError)
+                    .then(|| ternary_z.and_then(|z| self.next_numeric_column(z)))
+                    .flatten();
                 let z_name = ternary_z.and_then(|z| self.column(z)).map(|c| c.display_name().to_string());
                 let (size, color) = match template {
                     Template::Bubble => (true, false),
@@ -1222,8 +1247,11 @@ impl Project {
                         p.size_from = ternary_z;
                         p.label = z_name;
                     } else if xyz {
-                        // The Z column of a 3D plot (T155).
+                        // The Z column of a 3D plot (T155), and its Z errors (T156).
                         p.size_from = ternary_z;
+                        if z_error.is_some() {
+                            p.y_error = z_error;
+                        }
                     }
                 }
             }

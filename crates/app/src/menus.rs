@@ -1222,12 +1222,13 @@ fn plot_menu() -> Vec<Entry> {
         sub(
             "3D Symbol/Bar/&Vector",
             [
-                greys(&["3D Bars"]),
                 vec![
+                    item("3D Bars", Cmd::Plot(Template::Bars3d)),
                     item("3D Scatter", Cmd::Plot(Template::Scatter3d)),
                     item("3D Trajectory", Cmd::Plot(Template::Trajectory3d)),
+                    item("3D Scatter + Error Bar", Cmd::Plot(Template::Scatter3dError)),
                 ],
-                greys(&["3D Scatter + Error Bar", "3D Vector XYZ XYZ", "3D Vector XYZ dXdYdZ"]),
+                greys(&["3D Vector XYZ XYZ", "3D Vector XYZ dXdYdZ"]),
             ]
             .concat(),
         ),

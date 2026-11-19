@@ -205,11 +205,15 @@ fn the_3d_scatter_and_trajectory_items_make_xyz_graphs() {
     let plot = menus::bar(menus::WindowKind::Workbook).iter().find(|m| m.name() == "Plot").unwrap();
     let mut found = Vec::new();
     menus::walk(&plot.entries, &mut |i| {
-        if let Some(menus::Cmd::Plot(t @ (Template::Scatter3d | Template::Trajectory3d))) = &i.cmd {
+        if let Some(menus::Cmd::Plot(
+            t @ (Template::Scatter3d | Template::Trajectory3d | Template::Bars3d | Template::Scatter3dError),
+        )) = &i.cmd
+        {
             found.push(*t);
         }
     });
-    assert_eq!(found, [Template::Scatter3d, Template::Trajectory3d]);
+    // T156 added 3D Bars and 3D Scatter + Error Bar.
+    assert_eq!(found, [Template::Bars3d, Template::Scatter3d, Template::Trajectory3d, Template::Scatter3dError]);
     // The sample's "up" column with "down" after it as Z.
     let mut h = start(vec![data_file("plot-3d")]);
     show_window(&mut h, "Book1 - sample.csv");

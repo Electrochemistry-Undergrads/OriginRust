@@ -1004,10 +1004,16 @@ fn vector_tab(ui: &mut egui::Ui, plot: &mut Plot, project: &Project) {
         });
         grid(ui, "vector_xyam", |ui| {
             let label = ui.label("Magnitude multiplier");
-            ui.add(
-                DragValue::new(&mut spec.multiplier).range(0.0..=f64::MAX).clamp_existing_to_range(false).speed(0.01),
-            )
-            .labelled_by(label.id);
+            ui.horizontal(|ui| {
+                ui.add(
+                    DragValue::new(&mut spec.multiplier)
+                        .range(0.0..=f64::MAX)
+                        .clamp_existing_to_range(false)
+                        .speed(0.01),
+                )
+                .labelled_by(label.id);
+                ui.checkbox(&mut spec.real_world_space, "Magnitude in real world space");
+            });
             ui.end_row();
             ui.label("Angle units");
             ui.horizontal(|ui| {

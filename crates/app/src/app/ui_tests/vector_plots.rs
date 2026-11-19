@@ -114,6 +114,37 @@ fn xyam_vector_convention_shows_presets_and_edits_the_custom_offset() {
 }
 
 #[test]
+fn xyam_real_world_magnitude_previews_and_undoes_the_mode() {
+    let mut h = start(vec![data_file("vector-world-magnitude")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let mut id = WindowId(0);
+    h.state_mut().doc.apply("Make vector plot", |p| {
+        let columns = &p.workbook(book).unwrap().sheet().columns;
+        let (y, angle) = (columns[1].id, columns[2].id);
+        let magnitude = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![10.0; 4])).unwrap();
+        id = p.plot_columns(Template::VectorXyam, &[y, angle, magnitude]).unwrap();
+    });
+    settle(&mut h);
+    let before = project(&h).graph(id).unwrap().clone();
+    let before_svg = sheaf_plot::render_svg(project(&h), id).unwrap();
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::GraphProperties { graph: id, layer: 0, tab: PropsTab::Plots, plot: Some(0) }, &ctx);
+    settle(&mut h);
+    click(&mut h, "Vector");
+    assert_eq!(project(&h).graph(id), Some(&before));
+
+    click(&mut h, "Magnitude in real world space");
+    let mut expected = before.clone();
+    expected.layers[0].plots[0].decor.vector.as_mut().unwrap().real_world_space = true;
+    assert_eq!(project(&h).graph(id), Some(&expected));
+    assert_ne!(sheaf_plot::render_svg(project(&h), id).unwrap(), before_svg);
+    click(&mut h, "OK");
+    assert_eq!(project(&h).graph(id), Some(&expected));
+    menu(&mut h, "Edit", "Undo Change graph settings");
+    assert_eq!(project(&h).graph(id), Some(&before));
+}
+
+#[test]
 fn xyam_vector_data_rebinds_the_angle_and_magnitude_columns() {
     check_vector_data_selectors(Template::VectorXyam, "vector-xyam-data", "Vector Data");
 }

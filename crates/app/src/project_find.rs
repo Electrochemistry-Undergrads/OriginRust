@@ -12,10 +12,33 @@
 
 use sheaf_core::{ColumnId, Project, WindowId};
 
+use crate::panels::explorer;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FindScope {
+    #[default]
+    EntireProject,
+    ActiveFolder,
+    ActiveFolderAndSubfolders,
+}
+
+impl FindScope {
+    pub const ALL: [Self; 3] = [Self::EntireProject, Self::ActiveFolder, Self::ActiveFolderAndSubfolders];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::EntireProject => "Entire Project",
+            Self::ActiveFolder => "Active Folder",
+            Self::ActiveFolderAndSubfolders => "Active Folder and Subfolders",
+        }
+    }
+}
+
 /// The search and the parts of the project it looks at (Origin's defaults by `Default`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct FindSpec {
     pub text: String,
+    pub within: FindScope,
     pub case_sensitive: bool,
     pub whole_word: bool,
     /// `*` any run of characters, `?` one character.
@@ -36,6 +59,7 @@ impl Default for FindSpec {
     fn default() -> Self {
         FindSpec {
             text: String::new(),
+            within: FindScope::default(),
             case_sensitive: false,
             whole_word: false,
             wildcards: false,
@@ -121,9 +145,16 @@ fn word_ends(f: &[char], at: usize) -> bool {
 }
 
 /// Searches the project as Origin's Find in Project does.
-pub fn find_in_project(project: &Project, spec: &FindSpec) -> Vec<FindHit> {
+pub fn find_in_project(project: &Project, spec: &FindSpec, active_folder: &[usize]) -> Vec<FindHit> {
+    let includes = |id| match spec.within {
+        FindScope::EntireProject => true,
+        FindScope::ActiveFolder => explorer::home(&project.root, id) == active_folder,
+        FindScope::ActiveFolderAndSubfolders => {
+            active_folder.is_empty() || explorer::home(&project.root, id).starts_with(active_folder)
+        }
+    };
     let mut hits = Vec::new();
-    for g in project.graphs() {
+    for g in project.graphs().filter(|g| includes(g.id)) {
         if spec.graphs {
             for (attr, text) in [("Short Name", g.name.as_str()), ("Long Name", g.long_name.as_str())] {
                 if spec.matches(text) {
@@ -171,7 +202,7 @@ pub fn find_in_project(project: &Project, spec: &FindSpec) -> Vec<FindHit> {
             }
         }
     }
-    for b in project.workbooks() {
+    for b in project.workbooks().filter(|b| includes(b.id)) {
         if spec.books {
             for (attr, text) in [("Short Name", b.name.as_str()), ("Long Name", b.long_name.as_str())] {
                 if spec.matches(text) {
@@ -269,7 +300,7 @@ mod tests {
     }
 
     fn find(p: &Project, spec: FindSpec) -> Vec<(String, &'static str, &'static str)> {
-        find_in_project(p, &spec).into_iter().map(|h| (h.range, h.element, h.attribute)).collect()
+        find_in_project(p, &spec, &[]).into_iter().map(|h| (h.range, h.element, h.attribute)).collect()
     }
 
     fn text(t: &str) -> FindSpec {
@@ -317,16 +348,56 @@ mod tests {
         p.workbook_mut(book).unwrap().sheets.push(control);
 
         let spec = FindSpec { whole_word: true, ..text("BASELINE") };
-        let hits = find_in_project(&p, &spec);
+        let hits = find_in_project(&p, &spec, &[]);
         assert_eq!(hits.len(), 2);
         assert_eq!(hits[0].attribute, "Long Name");
         assert_eq!(hits[1].attribute, "Comments");
         assert_eq!(hits[1].element, "Sheet");
         assert_eq!(hits[1].target, FindTarget::Sheet { book, sheet: 1 });
         let names = FindSpec { sheet_comments: false, ..spec.clone() };
-        assert_eq!(find_in_project(&p, &names), hits[..1]);
+        assert_eq!(find_in_project(&p, &names, &[]), hits[..1]);
         let no_sheets = FindSpec { sheets: false, ..spec };
-        assert!(find_in_project(&p, &no_sheets).is_empty());
+        assert!(find_in_project(&p, &no_sheets, &[]).is_empty());
+    }
+
+    #[test]
+    fn folder_scope_gates_graph_and_workbook_hits_by_window_membership() {
+        use sheaf_core::project::Folder;
+
+        let mut p = project();
+        let root_book = p.workbooks().next().unwrap().id;
+        let graph = p.graphs().next().unwrap().id;
+        let active_book = p.add_workbook("");
+        let child_book = p.add_workbook("");
+        let sibling_book = p.add_workbook("");
+        for id in [root_book, active_book, child_book, sibling_book] {
+            p.workbook_mut(id).unwrap().sheets[0].comments = "scope term".into();
+        }
+        p.graph_mut(graph).unwrap().long_name = "scope term".into();
+        p.root.folders = vec![
+            Folder {
+                name: "Active".into(),
+                windows: vec![active_book],
+                folders: vec![Folder { name: "Child".into(), windows: vec![graph, child_book], ..Folder::default() }],
+                ..Folder::default()
+            },
+            Folder { name: "Sibling".into(), windows: vec![sibling_book], ..Folder::default() },
+        ];
+        let targets = |within, path: &[usize]| {
+            let spec = FindSpec { within, ..text("scope term") };
+            find_in_project(&p, &spec, path).into_iter().map(|hit| hit.target).collect::<Vec<_>>()
+        };
+        let sheet = |book| FindTarget::Sheet { book, sheet: 0 };
+        let all =
+            [FindTarget::Window(graph), sheet(root_book), sheet(active_book), sheet(child_book), sheet(sibling_book)];
+        assert_eq!(targets(FindScope::EntireProject, &[0]), all);
+        assert_eq!(targets(FindScope::ActiveFolder, &[]), [sheet(root_book)]);
+        assert_eq!(targets(FindScope::ActiveFolder, &[0]), [sheet(active_book)]);
+        assert_eq!(
+            targets(FindScope::ActiveFolderAndSubfolders, &[0]),
+            [FindTarget::Window(graph), sheet(active_book), sheet(child_book)],
+        );
+        assert_eq!(targets(FindScope::ActiveFolderAndSubfolders, &[]), all);
     }
 
     #[test]

@@ -3781,26 +3781,39 @@ impl SheafApp {
         use crate::dialogs::find_project::FindProjectOutcome;
         use crate::project_find::FindTarget;
         let Some(d) = &mut self.find_project else { return };
-        let outcome = d.show(ctx, self.doc.project());
+        let outcome = d.show(ctx, self.doc.project(), &self.panels.explorer.folder);
         self.find_spec = d.spec.clone();
         match outcome {
             FindProjectOutcome::Open => {}
             FindProjectOutcome::Closed => self.find_project = None,
-            FindProjectOutcome::Go(target) => match target {
-                FindTarget::Window(id) => self.apply(Action::Focus(id), ctx),
-                FindTarget::Sheet { book, sheet } => {
-                    self.apply(Action::Focus(book), ctx);
-                    self.apply(Action::SelectSheet { book, sheet }, ctx);
+            FindProjectOutcome::Go(target) => {
+                let window = match target {
+                    FindTarget::Window(id) => id,
+                    FindTarget::Sheet { book, .. } | FindTarget::Column { book, .. } => book,
+                };
+                let project = self.doc.project();
+                if project.window(window).is_none() {
+                    return;
                 }
-                FindTarget::Column { book, sheet, column } => {
-                    self.apply(Action::Focus(book), ctx);
-                    self.apply(Action::SelectSheet { book, sheet }, ctx);
-                    if let Some(state) = self.books.get_mut(&book) {
-                        state.sel = Sel::Columns;
-                        state.selected = vec![column];
+                if explorer::shown_windows(project, &self.panels.explorer.folder)
+                    .is_some_and(|shown| !shown.contains(&window))
+                {
+                    let folder = explorer::home(&project.root, window);
+                    self.apply(Action::GoToFolder(folder), ctx);
+                }
+                self.apply(Action::Focus(window), ctx);
+                match target {
+                    FindTarget::Window(_) => {}
+                    FindTarget::Sheet { book, sheet } => self.apply(Action::SelectSheet { book, sheet }, ctx),
+                    FindTarget::Column { book, sheet, column } => {
+                        self.apply(Action::SelectSheet { book, sheet }, ctx);
+                        if let Some(state) = self.books.get_mut(&book) {
+                            state.sel = Sel::Columns;
+                            state.selected = vec![column];
+                        }
                     }
                 }
-            },
+            }
         }
     }
 

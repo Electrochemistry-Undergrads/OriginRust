@@ -940,8 +940,8 @@ Measured hits (book with B "Current density", mA; a line graph of B): "density" 
 `[Book1]Sheet1!B"Current density"` Column / Long Name (text objects as drawn); "Graph" gave `[Graph1]`
 Graph / Short Name; "30" with Data in Cells gave column B once, attribute Data Cells.
 
-Sheaf (`crate::project_find` in the app, window `dialogs/find_project.rs`): the same fields except Within
-(always the whole project), Folder and Notes (Sheaf has no notes windows); Select... shows the sheet's
+Sheaf (`crate::project_find` in the app, window `dialogs/find_project.rs`) searches supported window
+types and their contents. Select... shows the sheet's
 Comments switch and the column's Units and F(x) switches; axis titles are searched as drawn
 (`sheaf_plot::axis_title`), legends with `%(n)`
 replaced by the plots' names, and text labels by their text. Clicking a hit brings its window forward (and
@@ -954,6 +954,16 @@ Sheaf searches the full saved worksheet comment by default. Select... can turn C
 retaining sheet name matches. Each matching comment gives one `[Book]Sheet` row with Element **Sheet**
 and Attribute **Comments**, using the existing sheet navigation. This result row and click behavior
 follow Sheaf's existing sheet hits. They were not measured separately in Origin 2016.
+
+Within defaults to **Entire Project**, as seen in the Origin 2016 capture. **Active Folder**
+restricts the search to books and graphs in the selected Project Explorer folder.
+**Active Folder and Subfolders** includes windows below that folder. These two scopes
+follow the [Origin Find documentation](https://docs.originlab.com/origin-help/finding-project/#within).
+Current Path shows the Explorer folder. The scope choice stays selected for the session,
+and each Find uses the folder and membership at the time of the search. Sheaf uses a window's
+own folder for its results and treats windows without explicit membership as root windows.
+Clicking a hit that View Windows hides first activates the window's folder so the result
+can be shown. Searching folder metadata and Notes remains open.
 
 ## 13k. Export > Worksheet as Image (T97, measured 2026-11-16, Origin 2016)
 

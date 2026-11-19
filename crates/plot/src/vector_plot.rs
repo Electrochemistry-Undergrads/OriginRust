@@ -30,14 +30,7 @@ impl VectorData {
         let (a, b) = (col(spec.a), col(spec.b));
         let at = |v: &[f64], i: usize| v.get(i).copied().unwrap_or(f64::NAN);
         let rows = if xyam {
-            VectorRows::Am(
-                (0..rows)
-                    .map(|i| {
-                        let angle = if spec.degrees { at(a, i).to_radians() } else { at(a, i) };
-                        (angle, at(b, i) * spec.multiplier)
-                    })
-                    .collect(),
-            )
+            VectorRows::Am((0..rows).map(|i| (spec.xyam_angle(at(a, i)), at(b, i) * spec.multiplier)).collect())
         } else {
             VectorRows::Xy((0..rows).map(|i| (at(a, i), at(b, i))).collect())
         };

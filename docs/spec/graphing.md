@@ -5754,9 +5754,28 @@ The Origin 2016 captures `pd1-c.png` and `pd-xyxy-c.png` show the available cont
 initial settings. The [Origin Vector tab documentation](https://docs.originlab.com/origin-help/pd-dialog-vector-tab/)
 describes the positions, angle units and open head. Sheaf shows head dimensions in points
 and renders the open head as two unfilled arms meeting the shaft at its tip. The changed
-positions and open-head geometry have no separate native measurement. Data selectors,
-real-world magnitudes, meteorological and custom angles, and Origin's exact initial
-multiplier rule remain open.
+positions and open-head geometry have no separate native measurement. Real-world magnitudes
+and Origin's exact initial multiplier rule remain open.
+
+The archived Vector tab shows **Angle** and **Magnitude** in Vector Data for XYAM and
+**X End** and **Y End** in End Point for XYXY, with column names such as `Col(C)`. Each
+selected column supplies values from the corresponding rows. [Origin Vector tab](https://docs.originlab.com/origin-help/pd-dialog-vector-tab/),
+[Origin dataset controls](https://docs.originlab.com/origin-help/plotattribute-datasetcontrol/)
+
+Sheaf offers columns with numeric storage from the plotted Y column's worksheet. Existing
+external bindings display their qualified names, and unavailable bindings display Missing
+column until a replacement is chosen. A selection changes the corresponding saved vector
+column ID and uses the standard Plot Details live preview, Apply, Cancel and Undo. The
+selection scope and handling of unavailable bindings are Sheaf policy. Constant values for
+XYAM and reassigning to a different worksheet remain open.
+
+The archived XYAM Vector tab shows Polar, Meteorological and Custom conventions. Sheaf's
+Polar preset measures counterclockwise from +X. Meteorological measures clockwise from +Y.
+The preset offsets and directions are read-only. Custom lets the user set the zero direction
+in degrees counterclockwise from +X and choose CW or CCW for the signed data angles, which
+use the Angle Units setting. Older projects keep Polar. Origin's documentation gives the
+preset values and editable Custom fields. The custom angle calculation follows Sheaf's
+reading of those fields. [Origin Vector tab](https://docs.originlab.com/origin-help/pd-dialog-vector-tab/)
 
 Standard legend samples use the same shaft stroke and head style as the plotted
 arrows. The sample points right and occupies the regular legend sample width. Sheaf limits

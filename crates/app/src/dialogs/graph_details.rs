@@ -10,8 +10,8 @@
 
 use eframe::egui::{self, DragValue};
 use sheaf_core::graph::*;
-use sheaf_core::vector::VectorPosition;
-use sheaf_core::{Color, ColumnId};
+use sheaf_core::vector::{VectorAngleConvention, VectorPosition, VectorSpec};
+use sheaf_core::{Color, Column, ColumnId, Project};
 
 use super::details_look as look;
 use super::graph_props::{
@@ -220,6 +220,7 @@ pub fn dialog_body(
     node: &mut Node,
     tab: &mut DetailTab,
     graph: &mut Graph,
+    project: &Project,
     labels: &[Vec<String>],
     names: &[Vec<String>],
     sources: &[Source],
@@ -362,6 +363,9 @@ pub fn dialog_body(
                         _ => page_tab(ui, graph),
                     },
                     Node::Layer(l) => layer_tab(ui, *tab, graph, l, sources, add_from, spans),
+                    Node::Plot(l, p) if *tab == DetailTab::Vector => {
+                        vector_tab(ui, &mut graph.layers[l].plots[p], project);
+                    }
                     Node::Plot(l, p) => plot_tab(ui, *tab, graph, l, p, labels, columns, numeric, node),
                 },
             );
@@ -459,7 +463,6 @@ fn plot_tab_body(
     node: &mut Node,
 ) {
     match tab {
-        DetailTab::Vector => vector_tab(ui, &mut graph.layers[l].plots[p]),
         DetailTab::Line => {
             let plot = &mut graph.layers[l].plots[p];
             grid(ui, "plot_line", |ui| {
@@ -934,9 +937,10 @@ fn plot_tab_body(
     }
 }
 
-/// The vector's shaft and arrowhead, with position and magnitude controls for XYAM.
-fn vector_tab(ui: &mut egui::Ui, plot: &mut Plot) {
+/// The vector's shaft, arrowhead and data bindings, with position and magnitude controls for XYAM.
+fn vector_tab(ui: &mut egui::Ui, plot: &mut Plot, project: &Project) {
     let Some(spec) = &mut plot.decor.vector else { return };
+    let columns = project.locate(plot.y).map_or(&[][..], |(_, sheet, _)| sheet.columns.as_slice());
     grid(ui, "vector_shaft", |ui| {
         ui.label("Color");
         let before = plot.line.color;
@@ -992,6 +996,12 @@ fn vector_tab(ui: &mut egui::Ui, plot: &mut Plot) {
                 ui.radio_value(&mut spec.position, VectorPosition::Tail, "Tail");
             });
         });
+        group_box(ui, "Vector Data", |ui| {
+            grid(ui, "vector_columns", |ui| {
+                vector_column(ui, "Angle", &mut spec.a, columns, project);
+                vector_column(ui, "Magnitude", &mut spec.b, columns, project);
+            });
+        });
         grid(ui, "vector_xyam", |ui| {
             let label = ui.label("Magnitude multiplier");
             ui.add(
@@ -1006,7 +1016,74 @@ fn vector_tab(ui: &mut egui::Ui, plot: &mut Plot) {
             });
             ui.end_row();
         });
+        vector_convention(ui, spec);
+    } else {
+        group_box(ui, "End Point", |ui| {
+            grid(ui, "vector_endpoints", |ui| {
+                vector_column(ui, "X End", &mut spec.a, columns, project);
+                vector_column(ui, "Y End", &mut spec.b, columns, project);
+            });
+        });
     }
+}
+
+fn vector_convention(ui: &mut egui::Ui, spec: &mut VectorSpec) {
+    use VectorAngleConvention::{Custom, Meteorological, Polar};
+
+    group_box(ui, "Convention", |ui| {
+        ui.horizontal(|ui| {
+            ui.radio_value(&mut spec.convention, Polar, "Polar");
+            ui.radio_value(&mut spec.convention, Meteorological, "Meteorological");
+            let custom = matches!(spec.convention, Custom { .. });
+            if ui.radio(custom, "Custom").clicked() {
+                let (offset_deg, clockwise) = spec.convention.offset_and_clockwise();
+                spec.convention = Custom { offset_deg, clockwise };
+            }
+        });
+        let custom = matches!(spec.convention, Custom { .. });
+        let (previous_offset, mut clockwise) = spec.convention.offset_and_clockwise();
+        let mut offset_deg = previous_offset;
+        grid(ui, "vector_convention", |ui| {
+            let label = ui.label("Offset Angle");
+            ui.add_enabled(custom, DragValue::new(&mut offset_deg).range(-f64::MAX..=f64::MAX).speed(1.0).suffix("°"))
+                .labelled_by(label.id);
+            ui.end_row();
+            ui.label("Direction");
+            ui.horizontal(|ui| {
+                ui.add_enabled_ui(custom, |ui| {
+                    ui.radio_value(&mut clockwise, true, "CW");
+                    ui.radio_value(&mut clockwise, false, "CCW");
+                });
+            });
+            ui.end_row();
+        });
+        if custom {
+            let offset_deg = if offset_deg.is_finite() { offset_deg } else { previous_offset };
+            spec.convention = Custom { offset_deg, clockwise };
+        }
+    });
+}
+
+fn vector_column(ui: &mut egui::Ui, label: &str, selected: &mut ColumnId, columns: &[Column], project: &Project) {
+    let column_name = |c: &Column| format!("Col({})", c.short_name);
+    let current = if let Some(c) = columns.iter().find(|c| c.id == *selected) {
+        column_name(c)
+    } else if let Some((book, sheet, c)) = project.locate(*selected) {
+        format!("[{}]{}!{}", book.name, sheet.name, c.short_name)
+    } else {
+        "Missing column".into()
+    };
+    let heading = ui.label(label);
+    egui::ComboBox::from_id_salt(label)
+        .selected_text(current)
+        .show_ui(ui, |ui| {
+            for column in columns.iter().filter(|c| c.data.is_numeric()) {
+                ui.selectable_value(selected, column.id, column_name(column));
+            }
+        })
+        .response
+        .labelled_by(heading.id);
+    ui.end_row();
 }
 
 /// A colour that can follow the plot's ("Auto", Origin's default for drop lines) or be set.

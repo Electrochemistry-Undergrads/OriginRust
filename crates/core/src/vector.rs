@@ -29,6 +29,34 @@ pub enum VectorPosition {
     Head,
 }
 
+/// The direction of zero and the rotation sense of the angles in an XYAM plot.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VectorAngleConvention {
+    #[default]
+    Polar,
+    Meteorological,
+    Custom {
+        offset_deg: f64,
+        clockwise: bool,
+    },
+}
+
+impl VectorAngleConvention {
+    fn is_polar(&self) -> bool {
+        *self == Self::Polar
+    }
+
+    /// The zero direction in degrees counterclockwise from +X, and whether data angles turn clockwise.
+    pub fn offset_and_clockwise(self) -> (f64, bool) {
+        match self {
+            Self::Polar => (0.0, false),
+            Self::Meteorological => (90.0, true),
+            Self::Custom { offset_deg, clockwise } => (offset_deg, clockwise),
+        }
+    }
+}
+
 /// The extra columns and settings of a vector plot (in [`crate::graph::PlotDecor::vector`]).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct VectorSpec {
@@ -42,6 +70,8 @@ pub struct VectorSpec {
     /// XYAM: the angles are in degrees (Origin's "System" unit is radians).
     #[serde(default)]
     pub degrees: bool,
+    #[serde(default, skip_serializing_if = "VectorAngleConvention::is_polar")]
+    pub convention: VectorAngleConvention,
     #[serde(default)]
     pub position: VectorPosition,
     /// The arrowhead's length in points and its opening angle in degrees.
@@ -49,6 +79,15 @@ pub struct VectorSpec {
     pub head_angle_deg: f64,
     #[serde(default)]
     pub open_head: bool,
+}
+
+impl VectorSpec {
+    /// An XYAM angle in radians counterclockwise from +X.
+    pub fn xyam_angle(&self, value: f64) -> f64 {
+        let angle = if self.degrees { value.to_radians() } else { value };
+        let (offset, clockwise) = self.convention.offset_and_clockwise();
+        offset.to_radians() + if clockwise { -angle } else { angle }
+    }
 }
 
 fn one() -> f64 {
@@ -86,6 +125,7 @@ impl Project {
                     b: chunk[2],
                     multiplier: auto_multiplier(&mags),
                     degrees: false,
+                    convention: VectorAngleConvention::Polar,
                     position: VectorPosition::Tail,
                     head_pt: 4.5,
                     head_angle_deg: 30.0,
@@ -110,6 +150,7 @@ impl Project {
                     b: chunk[1],
                     multiplier: 1.0,
                     degrees: false,
+                    convention: VectorAngleConvention::Polar,
                     position: VectorPosition::Tail,
                     head_pt: 6.5,
                     head_angle_deg: 30.0,
@@ -143,9 +184,29 @@ mod tests {
         let legacy = serde_json::json!({"a": 1, "b": 2, "head_pt": 4.5, "head_angle_deg": 30.0});
         let mut spec: VectorSpec = serde_json::from_value(legacy).unwrap();
         assert_eq!((spec.position, spec.open_head), (VectorPosition::Tail, false));
+        assert_eq!(spec.convention, VectorAngleConvention::Polar);
+        assert!(serde_json::to_value(spec).unwrap().get("convention").is_none());
         spec.position = VectorPosition::Midpoint;
         spec.open_head = true;
         assert_eq!(serde_json::from_value::<VectorSpec>(serde_json::to_value(spec).unwrap()).unwrap(), spec);
+    }
+
+    #[test]
+    fn vector_angle_conventions_round_trip_and_use_the_data_angle_unit() {
+        use std::f64::consts::FRAC_PI_2;
+        let legacy = serde_json::json!({"a": 1, "b": 2, "head_pt": 4.5, "head_angle_deg": 30.0});
+        let mut spec: VectorSpec = serde_json::from_value(legacy).unwrap();
+        spec.convention = VectorAngleConvention::Meteorological;
+        assert_eq!(spec.xyam_angle(0.0), FRAC_PI_2);
+        assert_eq!(spec.xyam_angle(FRAC_PI_2), 0.0);
+        spec.degrees = true;
+        assert_eq!(spec.xyam_angle(90.0), 0.0);
+        spec.convention = VectorAngleConvention::Custom { offset_deg: 30.0, clockwise: true };
+        let restored: VectorSpec = serde_json::from_value(serde_json::to_value(spec).unwrap()).unwrap();
+        assert_eq!(restored, spec);
+        assert!((restored.xyam_angle(60.0).to_degrees() + 30.0).abs() < 1e-12);
+        spec.convention = VectorAngleConvention::Custom { offset_deg: 30.0, clockwise: false };
+        assert!((spec.xyam_angle(60.0).to_degrees() - 90.0).abs() < 1e-12);
     }
 
     #[test]

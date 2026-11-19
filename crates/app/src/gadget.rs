@@ -7,6 +7,10 @@
 //!
 //! Sheaf starts the gadget at once on the active plot over the middle half of the X axis, where
 //! Origin first shows a settings dialog; the settings are in the right-click menu instead.
+//!
+//! The Rise Time gadget (T138, Gadgets > Rise Time, not measured) uses the same range: it draws the 10 %
+//! and 90 % levels of the curve's amplitude inside the range, marks where the curve crosses them and shows
+//! the rise time (or fall time) between the crossings (`sheaf_calc::risetime`).
 
 use crate::actions::Action;
 use crate::menus::{self, MenuContext};
@@ -15,9 +19,22 @@ use sheaf_calc::integrate::{IntegrateOptions, IntegrateResult, integrate};
 use sheaf_core::{Project, WindowId};
 use sheaf_plot::LayerGeometry;
 
-/// The state of an open Integrate gadget.
+/// Which gadget the range belongs to.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum GadgetKind {
+    #[default]
+    Integrate,
+    /// Gadgets > Rise Time (T138).
+    RiseTime,
+}
+
+/// The levels of the Rise Time gadget, in percent of the amplitude.
+pub const RISE_LEVELS: (f64, f64) = (10.0, 90.0);
+
+/// The state of an open gadget (Integrate or Rise Time).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Integrator {
+    pub kind: GadgetKind,
     pub layer: usize,
     pub plot: usize,
     /// The ends of the range, in X data units (in either order).
@@ -59,6 +76,12 @@ pub fn rows_in(x: &[f64], x0: f64, x1: f64) -> Option<(usize, usize)> {
 }
 
 impl Integrator {
+    /// The rise or fall time over the range (Rise Time gadget).
+    pub fn rise(&self, x: &[f64], y: &[f64]) -> Option<sheaf_calc::risetime::RiseTime> {
+        let (a, b) = rows_in(x, self.x0, self.x1)?;
+        sheaf_calc::risetime::rise_time(x, y, (a - 1, b - 1), RISE_LEVELS.0, RISE_LEVELS.1)
+    }
+
     /// The integration over the range, as the analysis tool computes it.
     pub fn result(&self, x: &[f64], y: &[f64]) -> Option<IntegrateResult> {
         let rows = rows_in(x, self.x0, self.x1)?;
@@ -96,7 +119,22 @@ impl Integrator {
         let painter = ui.painter().clone();
 
         // The shaded area, strip by strip (each strip is convex), at most about 2000 strips.
-        let result = self.result(&x, &y);
+        let integrating = self.kind == GadgetKind::Integrate;
+        let result = if integrating { self.result(&x, &y) } else { None };
+        let rise = if integrating { None } else { self.rise(&x, &y) };
+        if let Some(r) = &rise {
+            // The two levels across the range and the two crossings.
+            let level = |v: f64| to_screen(geom.data_to_page(placement.x(self.x0), placement.y(v))).y;
+            let line = Stroke::new(1.0_f32, Color32::from_rgb(60, 60, 200));
+            for v in [r.level_lo, r.level_hi] {
+                painter.line_segment([Pos2::new(range.left(), level(v)), Pos2::new(range.right(), level(v))], line);
+            }
+            let (first, second) = if r.rising { (r.level_lo, r.level_hi) } else { (r.level_hi, r.level_lo) };
+            for (xv, yv) in [(r.x_start, first), (r.x_end, second)] {
+                let p = to_screen(geom.data_to_page(placement.x(xv), placement.y(yv)));
+                painter.circle_stroke(p, 4.0, Stroke::new(1.5_f32, Color32::from_rgb(200, 30, 30)));
+            }
+        }
         if let (Some(r), Some((a, b))) = (&result, rows_in(&x, self.x0, self.x1)) {
             let (a, b) = (a - 1, b - 1);
             let base = |i: usize| -> f64 {
@@ -143,9 +181,15 @@ impl Integrator {
         let edge = Stroke::new(1.5_f32, Color32::from_rgb(230, 170, 0));
         painter.line_segment([range.left_top(), range.left_bottom()], edge);
         painter.line_segment([range.right_top(), range.right_bottom()], edge);
-        let text = match &result {
-            Some(r) => format!("Area = {}", sheaf_core::format::format_general(r.area, 6)),
-            None => "Area: too few points".to_string(),
+        let text = match (self.kind, &result, &rise) {
+            (GadgetKind::Integrate, Some(r), _) => format!("Area = {}", sheaf_core::format::format_general(r.area, 6)),
+            (GadgetKind::Integrate, None, _) => "Area: too few points".to_string(),
+            (GadgetKind::RiseTime, _, Some(r)) => format!(
+                "{} = {}",
+                if r.rising { "Rise Time" } else { "Fall Time" },
+                sheaf_core::format::format_general(r.time, 6)
+            ),
+            (GadgetKind::RiseTime, _, None) => "Rise Time: no step in the range".to_string(),
         };
         painter.text(
             range.center_top() + egui::vec2(0.0, 3.0),
@@ -199,7 +243,11 @@ impl Integrator {
             }
         }
         body.context_menu(|ui| {
-            menus::show_context(ui, &menus::integrate_gadget_menu(self.end_point_baseline), c, actions)
+            let menu = match self.kind {
+                GadgetKind::Integrate => menus::integrate_gadget_menu(self.end_point_baseline),
+                GadgetKind::RiseTime => menus::rise_time_gadget_menu(),
+            };
+            menus::show_context(ui, &menu, c, actions)
         });
         Some(range)
     }
@@ -221,7 +269,8 @@ mod tests {
     fn the_area_matches_the_trapezoid_rule_with_and_without_baseline() {
         let x: Vec<f64> = (0..=10).map(f64::from).collect();
         let y: Vec<f64> = x.iter().map(|v| v + 1.0).collect();
-        let mut g = Integrator { layer: 0, plot: 0, x0: 2.0, x1: 4.0, end_point_baseline: false };
+        let mut g =
+            Integrator { kind: GadgetKind::Integrate, layer: 0, plot: 0, x0: 2.0, x1: 4.0, end_point_baseline: false };
         assert!((g.result(&x, &y).unwrap().area - 8.0).abs() < 1e-12, "from 2 to 4 under x + 1");
         g.end_point_baseline = true;
         assert!(g.result(&x, &y).unwrap().area.abs() < 1e-12, "a straight line has no area above its chord");

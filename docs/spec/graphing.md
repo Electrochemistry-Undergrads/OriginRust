@@ -6124,3 +6124,23 @@ labels of a layer are drawn in list order, so the last one is drawn on top.
   across kinds the drawing order stays legend, labels, then shapes. Origin's order across object kinds is
   not measured.
 
+## Rise Time gadget: Gadgets > Rise Time... (T138, 2026-11-18, **not measured**)
+
+Origin 2016's Gadgets menu has Rise Time.... It could not be probed (Origin's COM class was unregistered),
+so this follows Origin's documented behaviour. It reuses the Integrate gadget's range.
+
+- **Opening:** the gadget opens on the selected plot of the active layer, or its first visible plot of
+  numbers, over the middle half of the X axis. Origin first shows a settings window; Sheaf has none.
+- **Moving the range:** its edges and body drag as the Integrate gadget's do.
+- **What it measures** (`sheaf_calc::risetime::rise_time`), inside the range (the first unbroken run of
+  rows whose X lies in it):
+  - The amplitude runs from the smallest to the largest Y.
+  - The levels are 10 % and 90 % of the amplitude above the smallest Y.
+  - A range whose last value is not below its first is a rise; otherwise it is a fall.
+  - The time is the X distance from the first crossing of the first level (10 % for a rise, 90 % for a
+    fall) to the next crossing of the other. Crossings are interpolated between neighbouring points.
+- **What it draws:** blue lines at the two levels across the range, and red circles at the two crossings.
+  The label at the top reads "Rise Time = t" or "Fall Time = t" (six significant digits), or
+  "Rise Time: no step in the range".
+- **Right-click menu:** Delete (Esc) closes the gadget.
+

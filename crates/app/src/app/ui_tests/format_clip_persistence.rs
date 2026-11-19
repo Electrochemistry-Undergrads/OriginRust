@@ -67,6 +67,47 @@ fn graph_color_clipboard_loads_in_a_fresh_app_and_paste_undo_do_not_rewrite_it()
 }
 
 #[test]
+fn legend_style_clipboard_restores_and_paste_keeps_target_content() {
+    let data = data_file("format-clip-restart-legend");
+    let file = data.parent().unwrap().join("format-clipboard.json");
+    let mut source = start_with(&data, &file);
+    edit(&mut source, |l| {
+        l.legend.font.color = Color::RED;
+        l.legend.font.size_pt = 18.0;
+        l.legend.frame = true;
+        l.legend.background = Some(Color::rgb(230, 245, 250));
+        l.legend.text = Some("Source legend".into());
+    });
+    let at = on(&source, 0, ObjectKind::Legend);
+    right_click_at(&mut source, at);
+    pick(&mut source, "Copy Format");
+    pick(&mut source, "Styles");
+    let saved = std::fs::read(&file).unwrap();
+    drop(source);
+    crate::format_clip_ui::initialize(None);
+
+    let mut target = start_with(&data, &file);
+    assert_eq!(crate::format_clip_ui::kind(), Some(crate::format_clip_ui::ClipKind::Legend));
+    let id = edit(&mut target, |l| l.legend.text = Some("Target legend".into()));
+    let before = project(&target).graph(id).unwrap().clone();
+    axis_menu(&mut target);
+    assert!(not_toolbar(&target, "Paste Format To").is_empty());
+    key(&mut target, egui::Key::Escape);
+    let at = on(&target, 0, ObjectKind::Legend);
+    right_click_at(&mut target, at);
+    pick(&mut target, "Paste Format To");
+    pick(&mut target, "Styles");
+    let mut expected = before.clone();
+    let legend = &mut expected.layers[0].legend;
+    legend.font.color = Color::RED;
+    legend.font.size_pt = 18.0;
+    legend.frame = true;
+    legend.background = Some(Color::rgb(230, 245, 250));
+    assert_eq!(project(&target).graph(id).unwrap(), &expected);
+    assert_eq!(std::fs::read(&file).unwrap(), saved);
+}
+
+#[test]
 fn partial_axis_clipboard_survives_restart_and_pastes_scales_without_source_styles() {
     let data = data_file("format-clip-restart-axis");
     let file = data.parent().unwrap().join("format-clipboard.json");

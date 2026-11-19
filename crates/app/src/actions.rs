@@ -830,6 +830,14 @@ pub enum Action {
         y: bool,
         part: sheaf_core::format_clip::AxisPart,
     },
+    CopyLegendStyles {
+        graph: WindowId,
+        layer: usize,
+    },
+    PasteLegendStyles {
+        graph: WindowId,
+        layer: usize,
+    },
     /// Edit > Paste Format...: the Apply Formats window.
     PasteFormatDialog {
         graph: WindowId,

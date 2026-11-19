@@ -1,6 +1,6 @@
 //! The format clipboard of the application and the Apply Formats window (brief T72, graphing spec
 //! section 26). Copy Format puts a [`FormatClip`] here; Paste Format and Paste Format To apply it
-//! to a graph or an axis as one undo step named "Apply Theme" (Origin's own word).
+//! to a graph, axis or legend as one undo step named "Apply Theme" (Origin's own word).
 //!
 //! The clipboard is inside the program: Origin does not use the system clipboard for formats.
 //! A private profile file remembers it across a restart (26.10); live copies stay in memory.
@@ -60,6 +60,7 @@ fn remember(value: FormatClip) {
 pub enum ClipKind {
     Graph,
     Axis,
+    Legend,
 }
 
 pub fn kind() -> Option<ClipKind> {
@@ -67,6 +68,7 @@ pub fn kind() -> Option<ClipKind> {
         c.borrow().value.as_ref().map(|c| match c {
             FormatClip::Graph(_) => ClipKind::Graph,
             FormatClip::Axis(_) => ClipKind::Axis,
+            FormatClip::LegendStyles(_) => ClipKind::Legend,
         })
     })
 }
@@ -86,6 +88,15 @@ pub fn copy_graph(doc: &Document, graph: WindowId, part: GraphPart) -> bool {
 /// Copy Format of one axis.
 pub fn copy_axis(doc: &Document, graph: WindowId, layer: usize, y: bool, part: AxisPart) -> bool {
     let Some(clip) = doc.project().graph(graph).and_then(|g| format_clip::copy_axis(g, layer, y, part)) else {
+        return false;
+    };
+    remember(clip);
+    true
+}
+
+/// Copy Format > Styles of one legend.
+pub fn copy_legend_styles(doc: &Document, graph: WindowId, layer: usize) -> bool {
+    let Some(clip) = doc.project().graph(graph).and_then(|g| format_clip::copy_legend_styles(g, layer)) else {
         return false;
     };
     remember(clip);
@@ -119,6 +130,12 @@ pub fn paste_graph(doc: &mut Document, graph: WindowId, parts: &[Group]) -> bool
 pub fn paste_axis(doc: &mut Document, graph: WindowId, layer: usize, y: bool, part: AxisPart) -> bool {
     let Some(clip) = held() else { return false };
     apply(doc, graph, |g| format_clip::paste_axis(g, layer, y, &clip, part))
+}
+
+/// Paste Format To > Styles onto one legend.
+pub fn paste_legend_styles(doc: &mut Document, graph: WindowId, layer: usize) -> bool {
+    let Some(clip) = held() else { return false };
+    apply(doc, graph, |g| format_clip::paste_legend_styles(g, layer, &clip))
 }
 
 /// The label of a group in the Apply Formats window.
@@ -211,6 +228,9 @@ impl ApplyFormats {
                             ui.radio_value(&mut self.y_axis, true, "Left Axes");
                         });
                     }
+                    Some(FormatClip::LegendStyles(_)) => {
+                        ui.label("Use Paste Format To on a legend.");
+                    }
                 }
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
@@ -219,7 +239,8 @@ impl ApplyFormats {
                         doc.undo();
                         self.applied = false;
                     }
-                    if ui.add_enabled(kind().is_some(), egui::Button::new("Apply")).clicked() {
+                    let can_apply = matches!(kind(), Some(ClipKind::Graph | ClipKind::Axis));
+                    if ui.add_enabled(can_apply, egui::Button::new("Apply")).clicked() {
                         self.apply(doc);
                     }
                     if ui.button("Close").clicked() {
@@ -246,7 +267,7 @@ impl ApplyFormats {
                 };
                 paste_axis(doc, self.graph, self.layer, self.y_axis, part)
             }
-            None => false,
+            Some(ClipKind::Legend) | None => false,
         };
         self.applied |= changed;
     }

@@ -2649,6 +2649,14 @@ impl SheafApp {
             Action::PasteAxisFormat { graph, layer, y, part } => {
                 crate::format_clip_ui::paste_axis(&mut self.doc, graph, layer, y, part);
             }
+            Action::CopyLegendStyles { graph, layer } => {
+                if crate::format_clip_ui::copy_legend_styles(&self.doc, graph, layer) {
+                    self.say("Format copied");
+                }
+            }
+            Action::PasteLegendStyles { graph, layer } => {
+                crate::format_clip_ui::paste_legend_styles(&mut self.doc, graph, layer);
+            }
             Action::PasteFormatDialog { graph, layer } => {
                 self.apply_formats = Some(crate::format_clip_ui::ApplyFormats::new(graph, layer));
             }
@@ -6527,6 +6535,7 @@ pub(crate) fn apply_graph_theme(g: &mut sheaf_core::graph::Graph, format: &sheaf
             let groups = f.groups().to_vec();
             paste_graph(g, format, &groups);
         }
+        FormatClip::LegendStyles(_) => {}
     }
 }
 

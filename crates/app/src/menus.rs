@@ -457,6 +457,12 @@ pub enum Cmd {
     QuickPeaksGadget,
     /// Gadgets > Quick Sigmoidal Fit... (T141).
     SigmoidGadget,
+    /// Gadgets > FFT... (T142).
+    FftGadget,
+    /// Gadgets > Statistics... (T143).
+    StatisticsGadget,
+    /// Gadgets > Quick Fit... (T143).
+    QuickFitGadget,
     /// A command of the open gadget's right-click menu.
     Gadget(GadgetOp),
     /// View > Toolbars: the window that shows and hides the bars.
@@ -1728,14 +1734,16 @@ fn data_menu() -> Vec<Entry> {
 }
 
 fn gadgets_menu() -> Vec<Entry> {
-    let mut v = greys(&["Statistics...", "Quick Fit..."]);
+    let mut v = vec![item("Statistics...", Cmd::StatisticsGadget), item("Quick Fit...", Cmd::QuickFitGadget)];
     v.push(item("Quick Sigmoidal Fit...", Cmd::SigmoidGadget));
     v.push(item("Quick Peaks...", Cmd::QuickPeaksGadget));
     v.push(item("Integrate...", Cmd::IntegrateGadget));
     v.extend(greys(&["Differentiate...", "Interpolate..."]));
     v.push(item("Intersect...", Cmd::IntersectGadget));
     v.push(item("Rise Time...", Cmd::RiseTimeGadget));
-    v.extend(greys(&["Cluster...", "FFT...", "2D Integrate...", "-", "Vertical Cursor...", "Go To..."]));
+    v.extend(greys(&["Cluster..."]));
+    v.push(item("&FFT...", Cmd::FftGadget));
+    v.extend(greys(&["2D Integrate...", "-", "Vertical Cursor...", "Go To..."]));
     v
 }
 
@@ -3112,6 +3120,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::IntersectGadget => Action::StartIntersect { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::QuickPeaksGadget => Action::StartQuickPeaks { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::SigmoidGadget => Action::StartSigmoid { graph: c.graph.ok_or(NEED_GRAPH)? },
+        Cmd::FftGadget => Action::StartFft { graph: c.graph.ok_or(NEED_GRAPH)? },
+        Cmd::StatisticsGadget => Action::StartStatisticsGadget { graph: c.graph.ok_or(NEED_GRAPH)? },
+        Cmd::QuickFitGadget => Action::StartQuickFit { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::Gadget(op) => Action::Gadget { graph: c.graph.ok_or(NEED_GRAPH)?, op: *op },
         Cmd::Toolbars => Action::Toolbars,
         Cmd::Autosave => Action::Autosave,

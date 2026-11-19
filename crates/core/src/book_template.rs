@@ -8,10 +8,17 @@
 //! mode and rows; per sheet the row filter, conditional formats and cell formats stay. The values,
 //! masks, cell notes, Set As Begin/End ranges, analysis marks and the import source go.
 //! [`Project::new_workbook_from_template`] adds a copy with fresh ids and a free `Book<n>` name. The
-//! rules are in `docs/spec/workbook.md` (section "User workbook templates").
+//! rules are in `docs/spec/workbook-model.md` (13o).
+//!
+//! An analysis template (File > Save Workbook As Analysis Template..., T163) is the same, plus the
+//! book's recalculating analysis runs ([`AnalysisLink`]s with Auto or Manual recalculation) whose
+//! input and result columns are all in the book: a new book from it runs them again when data
+//! arrives in their input columns.
 
-use crate::column::{ColumnData, FormulaState};
-use crate::ids::WindowId;
+use crate::analysis::OutputTarget;
+use crate::analysis_link::AnalysisLink;
+use crate::column::{AnalysisMark, ColumnData, FormulaState};
+use crate::ids::{ColumnId, WindowId};
 use crate::project::Project;
 use crate::worksheet::Workbook;
 use serde::{Deserialize, Serialize};
@@ -23,6 +30,10 @@ pub struct BookTemplate {
     pub name: String,
     /// The workbook with its values removed (see the module docs). Its id and short name mean nothing.
     pub book: Workbook,
+    /// The recalculating analysis runs of an analysis template (empty for a plain workbook
+    /// template); their column ids are those of `book`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub links: Vec<AnalysisLink>,
 }
 
 impl BookTemplate {
@@ -52,17 +63,74 @@ impl BookTemplate {
                 }
             }
         }
-        BookTemplate { name: name.to_string(), book: b }
+        BookTemplate { name: name.to_string(), book: b, links: Vec::new() }
+    }
+
+    /// True for an analysis template: it carries analysis runs.
+    pub fn is_analysis(&self) -> bool {
+        !self.links.is_empty()
+    }
+
+    /// File > Save Workbook As Analysis Template...: the structure of workbook `book` (as
+    /// [`BookTemplate::from_workbook`]) with the project's recalculating analysis runs that read and
+    /// write only columns of that book. Their result columns keep their Auto or Manual mark (now
+    /// current, as they are empty). `None` when there is no such workbook.
+    pub fn analysis_from_workbook(name: &str, project: &Project, book: WindowId) -> Option<BookTemplate> {
+        let source = project.workbook(book)?;
+        let mut t = BookTemplate::from_workbook(name, source);
+        let ids: std::collections::HashSet<ColumnId> =
+            source.sheets.iter().flat_map(|s| s.columns.iter().map(|c| c.id)).collect();
+        let inside = |c: &ColumnId| ids.contains(c);
+        t.links = project
+            .analysis_links
+            .iter()
+            .filter(|l| {
+                !l.columns.is_empty()
+                    && l.columns.iter().all(inside)
+                    && l.outputs.iter().all(inside)
+                    && match &l.output {
+                        OutputTarget::Existing(cols) => cols.iter().all(inside),
+                        OutputTarget::NextToInput | OutputTarget::NewSheet => true,
+                    }
+            })
+            .cloned()
+            .collect();
+        for link in &t.links {
+            let mark = AnalysisMark { mode: link.mode, state: FormulaState::Current };
+            for c in t.book.sheets.iter_mut().flat_map(|s| s.columns.iter_mut()) {
+                if link.outputs.contains(&c.id) {
+                    c.analysis = Some(mark);
+                }
+            }
+        }
+        Some(t)
     }
 }
 
 impl Project {
     /// File > New > From Template with a workbook template: adds an empty workbook built like the
     /// template, with fresh window and column ids and a free `Book<n>` name. Returns its id.
+    ///
+    /// The analysis runs of an analysis template join the project with the new column ids, so data
+    /// put into their input columns runs them (Auto) or marks them pending (Manual). A run that
+    /// names a column the template does not hold is left out.
     pub fn new_workbook_from_template(&mut self, template: &BookTemplate) -> WindowId {
         let mut book = template.book.clone();
         book.active_sheet = book.active_sheet.min(book.sheets.len().saturating_sub(1));
-        self.adopt_workbook(book)
+        let (id, map) = self.adopt_workbook_mapped(book);
+        let remap = |cols: &[ColumnId]| cols.iter().map(|c| map.get(c).copied()).collect::<Option<Vec<_>>>();
+        for link in &template.links {
+            let (Some(columns), Some(outputs)) = (remap(&link.columns), remap(&link.outputs)) else { continue };
+            let output = match &link.output {
+                OutputTarget::Existing(cols) => match remap(cols) {
+                    Some(cols) => OutputTarget::Existing(cols),
+                    None => continue,
+                },
+                other => other.clone(),
+            };
+            self.analysis_links.push(AnalysisLink { columns, outputs, output, ..link.clone() });
+        }
+        id
     }
 }
 
@@ -151,5 +219,72 @@ mod tests {
         let back: BookTemplate = serde_json::from_str(&json).unwrap();
         assert_eq!(back.book.sheets.len(), 2);
         assert_eq!(back.book.sheets[0].columns[1].long_name, "Signal");
+    }
+
+    fn linked_book() -> (Project, WindowId, ColumnId) {
+        use crate::analysis::{Request, RowRange, Tool};
+        use crate::column::RecalcMode;
+        use sheaf_calc::{Boundary, SmoothMethod, SmoothOptions};
+        let mut p = Project::new();
+        let book = p.add_workbook("Assay");
+        let x = (0..10).map(f64::from).collect();
+        let y = (0..10).map(|i| f64::from(i % 3)).collect();
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y)).unwrap();
+        let o = SmoothOptions {
+            method: SmoothMethod::AdjacentAveraging { weighted: false },
+            npts: 3,
+            boundary: Boundary::None,
+        };
+        let request = Request { columns: vec![y], rows: RowRange::All, tool: Tool::Smooth(o) };
+        p.analyze_linked(&request, &OutputTarget::NextToInput, RecalcMode::Auto).unwrap();
+        (p, book, y)
+    }
+
+    #[test]
+    fn an_analysis_template_keeps_the_books_linked_runs_and_a_new_book_runs_them_on_new_data() {
+        let (mut p, book, _) = linked_book();
+        assert_eq!(p.analysis_links.len(), 1);
+        let t = BookTemplate::analysis_from_workbook("Assay", &p, book).unwrap();
+        assert!(t.is_analysis());
+        let cols = &t.book.sheets[0].columns;
+        assert_eq!(cols.len(), 3, "X, Y and the smoothed result");
+        assert!(cols.iter().all(|c| c.is_empty()));
+        assert!(cols[2].analysis.is_some(), "the result column keeps its mark");
+        assert!(BookTemplate::from_workbook("Plain", p.workbook(book).unwrap()).links.is_empty());
+
+        let made = p.new_workbook_from_template(&t);
+        assert_eq!(p.analysis_links.len(), 2);
+        let (nx, ny, out) = {
+            let c = &p.workbook(made).unwrap().sheets[0].columns;
+            (c[0].id, c[1].id, c[2].id)
+        };
+        assert_eq!(p.analysis_links[1].columns, [ny]);
+        assert_eq!(p.analysis_links[1].outputs, [out]);
+
+        // New data in the input: the Auto run fills the result column in place.
+        let before = p.clone();
+        p.column_mut(nx).unwrap().data = ColumnData::numeric(vec![0.0, 1.0, 2.0, 3.0, 4.0]);
+        p.column_mut(ny).unwrap().data = ColumnData::numeric(vec![0.0, 3.0, 0.0, 3.0, 0.0]);
+        let problems = p.update_analysis_links(&before);
+        assert!(problems.is_empty(), "{problems:?}");
+        let result = p.column(out).unwrap();
+        assert_eq!(result.len(), 5);
+        assert_eq!(p.workbook(made).unwrap().sheets[0].columns.len(), 3, "written in place, no new column");
+        // The first book's run is untouched.
+        assert_eq!(p.workbook(book).unwrap().sheets[0].columns[2].len(), 10);
+    }
+
+    #[test]
+    fn runs_that_reach_outside_the_book_are_left_out() {
+        let (mut p, book, y) = linked_book();
+        let other = p.add_workbook("Elsewhere");
+        let foreign = p.add_column(other, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();
+        p.analysis_links[0].outputs.push(foreign);
+        let t = BookTemplate::analysis_from_workbook("Assay", &p, book).unwrap();
+        assert!(t.links.is_empty());
+        assert!(!t.is_analysis());
+        let _ = y;
+        assert!(BookTemplate::analysis_from_workbook("x", &p, WindowId(999)).is_none());
     }
 }

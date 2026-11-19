@@ -1118,7 +1118,18 @@ choices below are **unmeasured**, and Origin's own template files are never read
   their inputs change.
 - **Managing**: Plot > User Templates > Manage... lists the workbook templates under their own heading,
   with Rename (refused onto another workbook template's name) and Delete.
-- Not done: Save Workbook As Analysis Template (B11), CLI and MCP access, Origin `.otw` files.
+- **Analysis templates** (File > Save Workbook As Analysis Template... on a workbook, T163, 2026-11-19,
+  **unmeasured**: OriginLab's Analysis Template help pages returned 404 on 2026-11-19 and Origin COM was
+  unavailable): the same prompt, titled "Save As Analysis Template", writes a workbook template as above
+  that also keeps the book's recalculating analysis runs (Recalculate Auto or Manual, `AnalysisLink`)
+  whose input, result and target columns are all in the book (`BookTemplate::analysis_from_workbook`);
+  runs that read or write another book are left out. Values are cleared as for a workbook template; the
+  result columns keep their Auto/Manual mark. It is listed with the workbook templates. A new book from
+  it gets the runs with its own column ids: data put into an input column runs an Auto run at once (in
+  the same undo step, results written into the template's result columns) and marks a Manual run
+  pending. Origin's `.ogw`/`.ogwu` files are never read or written.
+- Not done: Origin's analysis-template options (unknown), batch processing with a template (B11), CLI and
+  MCP access, Origin `.otw` files.
 - Tests: `crates/core/src/book_template.rs`, `crates/io/src/user_templates/tests.rs`,
   `crates/app/src/app/ui_tests/user_templates.rs`.
 

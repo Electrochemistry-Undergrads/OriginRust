@@ -285,6 +285,9 @@ pub enum Action {
     /// File > Save Template As...: ask for a name and save the graph's look, or the workbook's
     /// structure (T160), as a user template.
     SaveTemplateAs(WindowId),
+    /// File > Save Workbook As Analysis Template...: ask for a name and save the workbook's structure
+    /// with its recalculating analysis runs (T163).
+    SaveAnalysisTemplateAs(WindowId),
     /// Plot > User Templates > Manage...: rename and delete the saved templates.
     ManageTemplates,
     /// File > New > Notes and the Standard toolbar's New Notes (T154).

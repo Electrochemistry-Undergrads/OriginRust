@@ -814,6 +814,12 @@ pub enum Action {
         layer: usize,
         shape: sheaf_core::shape::Shape,
     },
+    /// Object Edit Align / Make Same Width / Make Same Height on the graph's selected drawn objects
+    /// and text labels (T159): one undo step.
+    ArrangeObjects {
+        graph: WindowId,
+        op: crate::obj_align::Arrange,
+    },
     /// Moves a drawn object by `(dx, dy)` fractions of the layer frame: one undo step.
     MoveShape {
         graph: WindowId,

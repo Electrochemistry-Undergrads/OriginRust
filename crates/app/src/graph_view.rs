@@ -88,8 +88,12 @@ pub struct GraphUi {
     pub error: Option<String>,
     /// The active layer: menu commands such as Rescale and Plot Setup act on it.
     pub active_layer: usize,
-    /// The selected object, with its layer.
+    /// The selected object, with its layer. With more than one drawn object or text label selected
+    /// (Shift+click, T159) this is the last-selected one: the Object Edit toolbar's reference.
     pub selected: Option<(usize, ObjectKind)>,
+    /// The other selected drawn objects and text labels, in the order they were selected (T159).
+    /// Only meaningful while `selected` is a drawn object or text label itself.
+    pub also: Vec<(usize, ObjectKind)>,
     /// What the open right-click menu is about.
     menu_on: Option<MenuTarget>,
     /// The page point (in points) that opened the right-click menu: Axis Center needs it.
@@ -241,6 +245,7 @@ impl GraphUi {
 
     /// Drops the open menu and the drags, which name layers by index, after layers were renumbered.
     pub fn reset_layer_interactions(&mut self) {
+        self.also.clear();
         self.menu_on = None;
         self.shape_drag = None;
         self.label_drag = None;
@@ -252,6 +257,11 @@ impl GraphUi {
         let mut layers = Vec::new();
         if let Some((layer, ObjectKind::Shape(_))) = self.selected {
             layers.push(layer);
+        }
+        for (layer, kind) in &self.also {
+            if matches!(kind, ObjectKind::Shape(_)) && !layers.contains(layer) {
+                layers.push(*layer);
+            }
         }
         if let Some(MenuTarget::Hit(Hit::Object { layer, kind: ObjectKind::Shape(_) })) = self.menu_on
             && !layers.contains(&layer)
@@ -268,6 +278,8 @@ impl GraphUi {
 
     /// Discard index-based shape interactions after a layer's shape list changes.
     pub fn invalidate_shape_interaction(&mut self, layer: usize, keep_selection: bool) {
+        // The other selected objects name shapes by index too; a changed list ends the multi-selection.
+        self.also.retain(|(l, kind)| *l != layer || !matches!(kind, ObjectKind::Shape(_)));
         if !keep_selection && matches!(self.selected, Some((l, ObjectKind::Shape(_))) if l == layer) {
             self.selected = None;
         }
@@ -284,6 +296,7 @@ impl GraphUi {
     /// goes; other objects have no Delete in Origin's menus either.
     pub fn delete_selected(&mut self) -> Option<GraphOp> {
         let (layer, kind) = self.selected?;
+        self.also.clear();
         let op = match kind {
             ObjectKind::Legend => GraphOp::HideLegend { layer },
             ObjectKind::XTitle => GraphOp::HideTitle { layer, y: false },
@@ -297,6 +310,104 @@ impl GraphUi {
         };
         self.selected = None;
         Some(op)
+    }
+
+    /// The selected drawn objects and text labels in the order they were selected, the reference
+    /// (last-selected) last; empty when the selection is something else (T159).
+    pub fn multi_selection(&self) -> Vec<(usize, ObjectKind)> {
+        match self.selected {
+            Some(sel @ (_, ObjectKind::Shape(_) | ObjectKind::Label(_))) => {
+                let mut all: Vec<_> = self.also.iter().copied().filter(|o| *o != sel).collect();
+                all.push(sel);
+                all
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// Shift+click on a drawn object or text label (T159): adds it to the selection as the new
+    /// reference, or takes it out when it is already selected. Other objects select alone. (Takes
+    /// the two fields so the caller can hold the picture borrowed.)
+    fn toggle_in_selection(
+        selected: &mut Option<(usize, ObjectKind)>,
+        also: &mut Vec<(usize, ObjectKind)>,
+        hit: (usize, ObjectKind),
+    ) {
+        if !matches!(hit.1, ObjectKind::Shape(_) | ObjectKind::Label(_)) {
+            also.clear();
+            *selected = Some(hit);
+            return;
+        }
+        let mut all = match *selected {
+            Some(sel @ (_, ObjectKind::Shape(_) | ObjectKind::Label(_))) => {
+                let mut all: Vec<_> = also.iter().copied().filter(|o| *o != sel).collect();
+                all.push(sel);
+                all
+            }
+            _ => Vec::new(),
+        };
+        if let Some(i) = all.iter().position(|o| *o == hit) {
+            all.remove(i);
+        } else {
+            all.push(hit);
+        }
+        *selected = all.pop();
+        *also = all;
+    }
+
+    /// The selected objects as drawn in the last frame, for the Object Edit Align and Make Same
+    /// Width/Height buttons: (reference, the others). `None` with fewer than two objects drawn.
+    pub fn arrange_members(
+        &self,
+        project: &Project,
+        graph: WindowId,
+    ) -> Option<(crate::obj_align::Member, Vec<crate::obj_align::Member>)> {
+        use crate::obj_align::{Member, Target};
+        let t = self.texture.as_ref()?;
+        let g = project.graph(graph)?;
+        let mut members: Vec<Member> = self
+            .multi_selection()
+            .into_iter()
+            .filter_map(|(layer, kind)| {
+                let target = match kind {
+                    ObjectKind::Shape(i) => Target::Shape(i),
+                    ObjectKind::Label(i) => Target::Label(i),
+                    _ => return None,
+                };
+                let l = g.layers.get(layer)?;
+                let f = t.geometry.get(layer)?.frame;
+                let extent = match target {
+                    Target::Shape(i) => {
+                        let s = l.shapes.get(i)?;
+                        Some(((s.x2 - s.x1).abs() * f.w, (s.y2 - s.y1).abs() * f.h))
+                    }
+                    Target::Label(i) => {
+                        l.labels.get(i)?;
+                        None
+                    }
+                };
+                let bounds = t
+                    .scene
+                    .layers
+                    .iter()
+                    .flat_map(|sl| sl.objects.iter())
+                    .filter(|o| o.layer == layer && o.kind == kind)
+                    .map(|o| (o.bounds.x, o.bounds.y, o.bounds.x + o.bounds.w, o.bounds.y + o.bounds.h))
+                    .reduce(|a, b| (a.0.min(b.0), a.1.min(b.1), a.2.max(b.2), a.3.max(b.3)))?;
+                Some(Member {
+                    layer,
+                    target,
+                    bounds: (bounds.0, bounds.1, bounds.2 - bounds.0, bounds.3 - bounds.1),
+                    frame: (f.x, f.y, f.w, f.h),
+                    extent,
+                })
+            })
+            .collect();
+        if members.len() < 2 {
+            return None;
+        }
+        let reference = members.pop()?;
+        Some((reference, members))
     }
 
     /// A screen point on an object of the graph as drawn in the last frame: a data point in the
@@ -462,6 +573,10 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             .unwrap_or((0.0, 0.0));
         draw_selection(&painter, &t.scene, layer, kind, &|(x, y)| to_screen((x + shift.0, y + shift.1)));
     }
+    // The other objects of a Shift+click selection (T159).
+    for (layer, kind) in state.multi_selection().iter().rev().skip(1) {
+        draw_selection(&painter, &t.scene, *layer, *kind, &to_screen);
+    }
 
     // Data read-out under the pointer, in the layer under it.
     if let Some(pos) = response.hover_pos() {
@@ -563,6 +678,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
                         let index = graph.layers[first.layer].slopes.len();
                         state.slope_tool = false;
                         state.slope_first = None;
+                        state.also.clear();
                         state.selected = Some((first.layer, ObjectKind::Slope(index)));
                         actions.push(Action::ActivateLayer { graph: graph_id, layer: first.layer });
                         actions.push(Action::AddSlope { graph: graph_id, layer: first.layer, slope });
@@ -632,6 +748,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         && let Hit::Object { layer, kind: ObjectKind::Label(label) } = pick(pos)
         && let Some(l) = graph.layers.get(layer).and_then(|l| l.labels.get(label))
     {
+        state.also.clear();
         state.selected = Some((layer, ObjectKind::Label(label)));
         state.label_drag = Some(LabelDrag { layer, label, from: (l.x, l.y), delta: (0.0, 0.0) });
         actions.push(Action::ActivateLayer { graph: graph_id, layer });
@@ -691,6 +808,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
                 if ((to.0 - d.from.0) * f.w).hypot((to.1 - d.from.1) * f.h) >= MIN_DRAWN_PT {
                     let index = graph.layers.get(d.layer).map_or(0, |l| l.shapes.len());
                     state.shape_tool = None;
+                    state.also.clear();
                     state.selected = Some((d.layer, ObjectKind::Shape(index)));
                     actions.push(Action::AddShape { graph: graph_id, layer: d.layer, shape: preview });
                 }
@@ -710,6 +828,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
         && let Hit::Object { layer, kind: ObjectKind::Shape(shape) } = pick(pos)
     {
+        state.also.clear();
         state.selected = Some((layer, ObjectKind::Shape(shape)));
         state.shape_drag = Some(ShapeDrag { layer, shape, delta: (0.0, 0.0) });
         actions.push(Action::ActivateLayer { graph: graph_id, layer });
@@ -754,6 +873,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             .find(|o| o.layer == layer && o.kind == ObjectKind::Legend)
     {
         let centre = (o.bounds.x + o.bounds.w / 2.0, o.bounds.y + o.bounds.h / 2.0);
+        state.also.clear();
         state.selected = Some((layer, ObjectKind::Legend));
         state.legend_drag =
             Some(LegendDrag { layer, from: ((centre.0 - f.x) / f.w, (centre.1 - f.y) / f.h), delta: (0.0, 0.0) });
@@ -804,10 +924,20 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     {
         let hit = pick(pos);
         state.last_click = Some(to_page(pos));
-        state.selected = match hit {
-            Hit::Object { layer, kind } => Some((layer, kind)),
-            _ => None,
-        };
+        match hit {
+            // Shift+click adds a drawn object or text label to the selection, or takes it out (T159).
+            Hit::Object { layer, kind } if ui.input(|i| i.modifiers.shift) => {
+                GraphUi::toggle_in_selection(&mut state.selected, &mut state.also, (layer, kind))
+            }
+            Hit::Object { layer, kind } => {
+                state.also.clear();
+                state.selected = Some((layer, kind));
+            }
+            _ => {
+                state.also.clear();
+                state.selected = None;
+            }
+        }
         if let Some(layer) = layer_of(hit) {
             actions.push(Action::ActivateLayer { graph: graph_id, layer });
         }
@@ -839,7 +969,11 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             state.active_layer = layer;
             actions.push(Action::ActivateLayer { graph: graph_id, layer });
         }
-        if let Hit::Object { layer, kind } = hit {
+        // A right click on one of several selected objects keeps them selected.
+        if let Hit::Object { layer, kind } = hit
+            && !state.multi_selection().contains(&(layer, kind))
+        {
+            state.also.clear();
             state.selected = Some((layer, kind));
         }
     }
@@ -1122,6 +1256,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         can_cumulate: false,
         can_color_scale: false,
         selected_shape: None,
+        multi_selected: 0,
         view_mode: Default::default(),
         layer_icons: true,
         active_layer_only: None,

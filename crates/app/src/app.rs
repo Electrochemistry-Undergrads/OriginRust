@@ -2603,6 +2603,18 @@ impl SheafApp {
                     }
                 });
             }
+            Action::ArrangeObjects { graph, op } => {
+                let changes = self
+                    .graphs
+                    .get(&graph)
+                    .and_then(|s| s.arrange_members(self.doc.project(), graph))
+                    .map(|(reference, others)| crate::obj_align::plan(op, &reference, &others));
+                match changes {
+                    None => self.say("Select two or more drawn objects or text labels first (Shift+click adds one)"),
+                    Some(c) if c.is_empty() => self.say("The objects already match"),
+                    Some(c) => self.doc.apply(op.undo_label(), |p| crate::obj_align::apply(p, graph, &c)),
+                }
+            }
             Action::MoveShape { graph, layer, shape, dx, dy } => {
                 self.doc.apply("Move drawn object", |p| {
                     if let Some(s) =
@@ -4675,6 +4687,7 @@ impl SheafApp {
                 };
                 Some((layer, shape, project.graph(g)?.layers.get(layer)?.shapes.len()))
             }),
+            multi_selected: graph.and_then(|g| self.graphs.get(&g)).map_or(0, |s| s.multi_selection().len()),
             view_mode: graph.map(|g| project.view_mode(g)).unwrap_or_default(),
             layer_icons: graph.and_then(|g| project.graph(g)).is_none_or(|g| g.page.style.layer_icons),
             active_layer_only: graph.and_then(|id| {

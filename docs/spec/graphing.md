@@ -6454,6 +6454,34 @@ unregistered, so Origin's own templates for them were not checked.
   place among the axes (the default). One undo step each ("Bring axis title to front", "Push axis
   title to back"). Picking still tries labels before titles.
 
+## Aligning drawn objects and text: Object Edit toolbar Align, Make Same Width/Height (T159, 2026-11-19, from Origin's documentation, **not measured**)
+
+- **Origin (Object Edit Toolbar help page):** each button acts on the selected objects and takes the
+  **last-selected** object as the reference. Left, Right, Top and Bottom align the objects with that
+  edge of the reference. "Vertical" aligns them on the reference's vertical axis and "Horizontal" on
+  its horizontal axis. "Uniform Width" and "Uniform Height" give them the reference's width or height.
+- **Several objects selected:** Shift+click on a drawn object or a free text label adds it to the
+  selection, and it becomes the reference. Shift+click on one that is already selected takes it out.
+  A plain click, a drag or a click on anything else selects one object again. Every selected object
+  gets handles. A right click on one of them keeps the selection. Objects in different layers can be
+  selected together.
+- **Buttons:** Align Left, Align Right, Align Top, Align Bottom, Align Horizontal Center (same centre Y:
+  Origin's "Horizontal"), Align Vertical Center (same centre X: Origin's "Vertical"), Make Same Width
+  and Make Same Height. They have no menu entries and are state-disabled until two or more drawn
+  objects or text labels are selected. Each press is one undo step ("Align objects", "Make same width",
+  "Make same height"). A press that changes nothing adds no step. The selection stays, so the next
+  button acts on the same objects.
+- **Sheaf choices, not measured:**
+  - Alignment uses each object's drawn bounds (what the handles surround).
+  - A resized drawn object keeps its left (or top) edge. Its new size is the reference's own extent,
+    from its two points without line width or arrow heads, or a text label's drawn size.
+  - A text label keeps its size, because its font sets it. A line with no extent in that direction is
+    left as it is.
+- **Index safety:** the selection names drawn objects by their place in the layer's list. Any other
+  change to that list (delete, reorder, undo, redo) takes them out of the selection. Deleting a layer
+  ends the selection.
+- Group and Ungroup stay grey.
+
 ## 3D Scatter and 3D Trajectory: Plot > 3D Symbol/Bar/Vector (T155, 2026-11-19, **not measured**)
 
 Origin draws its 3D graphs with OpenGL, and they were not probed (its COM class was unregistered).

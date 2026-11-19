@@ -83,7 +83,7 @@ fn run_font(font: &Font, run: &Run) -> Font {
     f
 }
 
-fn segments_width(m: &dyn TextMeasurer, segments: &[Segment], font: &Font, size: f64) -> f64 {
+pub(crate) fn segments_width(m: &dyn TextMeasurer, segments: &[Segment], font: &Font, size: f64) -> f64 {
     segments
         .iter()
         .map(|segment| match segment {
@@ -261,7 +261,7 @@ fn text_rows(segments: Vec<Segment>) -> Vec<Vec<Segment>> {
     rows
 }
 
-fn place_segments(
+pub(crate) fn place_segments(
     items: &mut Vec<Item>,
     m: &dyn TextMeasurer,
     runs: &[Segment],

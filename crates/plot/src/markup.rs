@@ -112,6 +112,15 @@ pub(crate) fn label_segments(
     )
 }
 
+/// Parses a legend cell with access to the legend owner's plot colors.
+pub(crate) fn legend_segments(
+    text: &str,
+    expand_family: &impl Fn(&str) -> Option<String>,
+    plot_color: &impl Fn(usize) -> Option<Color>,
+) -> Vec<Segment> {
+    parse_segments(text, &ParseOptions { expand_family, label_separators: false, plot_color: Some(plot_color) })
+}
+
 struct ParseOptions<'a> {
     expand_family: &'a dyn Fn(&str) -> Option<String>,
     label_separators: bool,

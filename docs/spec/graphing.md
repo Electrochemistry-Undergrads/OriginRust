@@ -1178,16 +1178,20 @@ and an unclosed block protects the remainder of that row. References outside a b
 expand through the ordinary legend rules. Literal handling for the entire body is Sheaf's
 reading of the documented example. [Origin escape sequences](https://docs.originlab.com/origin-help/escape-sequences/)
 
-**Plot-colored free labels (T58).** `\cpN(text)` uses the color of the Nth plot in the
-label's layer. Repainting the graph after a style change resolves the color again. Nested text
-styles, literal blocks, multiline layout and glyph decorations follow the existing label rules.
+**Plot-colored graph text (T58).** `\cpN(text)` uses the color of the Nth plot in the
+text object's layer. Repainting the graph after a style change resolves the color again.
+Nested styles, literal blocks and glyph decorations follow the existing text rules.
 [Origin LabTalk Label reference](https://docs.originlab.com/labtalk/ref/label-cmd/)
 
 Sheaf counts the layer's saved plots in order, including hidden ones. It uses the same
 representative line or symbol color as its axis color-following control. Index zero and
 missing plot slots leave the text in its enclosing color. The slot and fallback behavior are
-Sheaf choices. This slice applies to free labels in the graph scene and its exports. Plot-color
-references in legends, axis titles, point labels and the standalone text editor preview remain open.
+Sheaf choices. This applies to free labels and ordinary legends, with the same results in
+graph exports and the legend editor's scene preview. A shared-frame legend resolves the
+color from its owning layer even when its text names a plot in a different layer. For example,
+`\l(2.1) \cp1(%(2.1))` draws the sample and name of the second layer's first plot and
+colors the name with the owning layer's first plot. Axis titles, point labels, the parallel
+coordinates group legend and the standalone free-label editor preview remain open.
 
 ### 7.12 Reusable Custom RGB wells (T58/T59, documented contract)
 

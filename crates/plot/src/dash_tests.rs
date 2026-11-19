@@ -78,6 +78,7 @@ fn thin_dash_raster_runs_match_origin_samples_at_both_resolutions() {
                     plots: vec![Item::Path { d: "M0 6L600 6".into(), fill: None, stroke: Some(stroke) }],
                     overlay: vec![],
                     underlay_len: 0,
+                    data_on_top: false,
                     objects: vec![],
                 }],
             };

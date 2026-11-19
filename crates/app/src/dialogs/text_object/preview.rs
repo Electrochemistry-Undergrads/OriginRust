@@ -177,6 +177,7 @@ fn render_object(key: &Key, context: Context<'_>) -> Result<Raster, String> {
             plots: vec![],
             overlay: items,
             underlay_len: 0,
+            data_on_top: false,
             objects: vec![],
         }],
     };
@@ -200,6 +201,7 @@ mod tests {
                 grid: vec![],
                 plots: vec![],
                 underlay_len: 0,
+                data_on_top: false,
                 objects: vec![],
                 overlay: vec![sheaf_plot::scene::Item::Rect {
                     rect: sheaf_plot::Rect { x: -40.0, y: -30.0, w: 20.0, h: 10.0 },

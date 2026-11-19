@@ -129,6 +129,11 @@ pub enum GraphOp {
     AxisCenter { layer: usize, y: bool, page: (f64, f64) },
     /// Delete on the legend: it is hidden.
     HideLegend { layer: usize },
+    /// The legend's Bring to the front (`front`) / Push to the back, over or under the labels and drawn
+    /// objects (T152).
+    OrderLegend { layer: usize, front: bool },
+    /// The legend's Push to back of data (`behind`) / Bring to front of data (T152).
+    LegendBehindData { layer: usize, behind: bool },
     /// Reconstruct Legend: the legend text is made again from the plots (the automatic text).
     ReconstructLegend { layer: usize },
     /// Update Legend: custom legend text is kept; lines of plots that are gone are dropped and

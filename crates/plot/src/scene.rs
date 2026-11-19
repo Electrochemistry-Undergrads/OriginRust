@@ -92,6 +92,9 @@ pub struct LayerScene {
     /// Prefix of `overlay` drawn before the clipped plots (Data on Top of Axes).
     /// The remaining overlay, including legends and annotations, is always drawn last.
     pub underlay_len: usize,
+    /// The layer draws its data over its axes (Data on Top of Axes): the underlay holds the axes then.
+    /// A legend pushed to the back of the data (T152) is in the underlay too, without this.
+    pub data_on_top: bool,
     /// What the items stand for, so that a click can be traced back to an object of the model
     /// (see [`crate::hit`]). Not written to any file.
     pub objects: Vec<SceneObject>,

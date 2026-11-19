@@ -410,3 +410,43 @@ fn the_settings_reach_every_export_format() {
     assert!(render_emf(&p, g).unwrap().len() > 100);
     assert!(render_tiff(&p, g, 100.0).unwrap().len() > 100);
 }
+
+#[test]
+fn a_legend_goes_behind_the_data_or_over_the_labels() {
+    // T152: the legend's Push to back of data and Bring to the front.
+    let (mut p, g) = project(Template::LineSymbol);
+    let font = layer_mut(&mut p, g).new_label_font();
+    layer_mut(&mut p, g).labels.push(sheaf_core::graph::TextLabel::new("note", 0.5, 0.5, font));
+    let legend_of = |s: &scene::Scene| {
+        s.layers[0].objects.iter().find(|o| o.kind == scene::ObjectKind::Legend).cloned().expect("a legend")
+    };
+    let label_of = |s: &scene::Scene| {
+        s.layers[0].objects.iter().find(|o| o.kind == scene::ObjectKind::Label(0)).cloned().expect("the label")
+    };
+    let before = scene(&p, g);
+    let (legend, label) = (legend_of(&before), label_of(&before));
+    assert_eq!(before.layers[0].underlay_len, 0);
+    assert!(legend.items.end <= label.items.start, "under the labels by default");
+    let drawn = before.layers[0].overlay[legend.items.clone()].to_vec();
+
+    layer_mut(&mut p, g).legend.behind_data = true;
+    let s = scene(&p, g);
+    let (l2, lab2) = (legend_of(&s), label_of(&s));
+    assert_eq!(s.layers[0].underlay_len, legend.items.len(), "only the legend is drawn before the data");
+    assert!(!s.layers[0].data_on_top);
+    assert_eq!(l2.items, 0..legend.items.len());
+    assert_eq!(s.layers[0].overlay[l2.items.clone()], drawn[..], "the same items, moved");
+    assert_eq!(
+        s.layers[0].overlay[lab2.items.clone()],
+        before.layers[0].overlay[label.items.clone()],
+        "ranges stay right"
+    );
+    assert_eq!(s.layers[0].overlay.len(), before.layers[0].overlay.len());
+
+    layer_mut(&mut p, g).legend.behind_data = false;
+    layer_mut(&mut p, g).legend.on_top = true;
+    let s = scene(&p, g);
+    let (l3, lab3) = (legend_of(&s), label_of(&s));
+    assert!(lab3.items.end <= l3.items.start, "over the labels after Bring to the front");
+    assert_eq!(s.layers[0].overlay[l3.items.clone()], drawn[..]);
+}

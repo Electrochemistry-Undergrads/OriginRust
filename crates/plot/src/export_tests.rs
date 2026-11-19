@@ -43,6 +43,7 @@ fn scene_with(items: Vec<Item>) -> Scene {
             plots: items,
             overlay: vec![],
             underlay_len: 0,
+            data_on_top: false,
             objects: vec![],
         }],
     }

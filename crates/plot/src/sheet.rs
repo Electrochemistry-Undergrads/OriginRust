@@ -109,6 +109,7 @@ fn scene_of(ops: &[PrintOp], size: (f64, f64), offset: (f64, f64), m: &dyn TextM
             plots: items,
             overlay: Vec::new(),
             underlay_len: 0,
+            data_on_top: false,
             objects: Vec::new(),
         }],
     }

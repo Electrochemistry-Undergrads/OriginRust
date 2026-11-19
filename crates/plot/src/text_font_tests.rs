@@ -91,6 +91,7 @@ fn inline_abbreviations_share_full_name_measurement_placement_and_svg() {
             plots: vec![],
             overlay: placed(source, &font, Anchor::Middle, 37.0),
             underlay_len: 0,
+            data_on_top: false,
             objects: vec![],
         }],
     };
@@ -224,6 +225,7 @@ fn empty_font_literals_export_like_explicit_literal_text() {
             plots: vec![],
             overlay: placed(source, &Font::new("Arial", 20.0), Anchor::Start, 0.0),
             underlay_len: 0,
+            data_on_top: false,
             objects: vec![],
         }],
     };
@@ -266,6 +268,7 @@ fn family_scene() -> Scene {
             plots: vec![],
             overlay: items,
             underlay_len: 0,
+            data_on_top: false,
             objects: vec![],
         }],
     }

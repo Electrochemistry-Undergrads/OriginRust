@@ -78,6 +78,7 @@ fn scene(source: &str) -> Scene {
             plots: vec![],
             overlay: placed(source, Anchor::Start, 0.0),
             underlay_len: 0,
+            data_on_top: false,
             objects: vec![],
         }],
     }

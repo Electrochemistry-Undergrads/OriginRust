@@ -13,7 +13,7 @@ use crate::analysis::free_sheet_name;
 use crate::column::ColumnData;
 use crate::ids::WindowId;
 use crate::project::{Project, ProjectError};
-use crate::worksheet::Worksheet;
+use crate::worksheet::{Workbook, Worksheet};
 use serde::{Deserialize, Serialize};
 
 /// What a sheet's tab shows.
@@ -53,6 +53,29 @@ impl Worksheet {
             SheetLabel::LongIfAvailable | SheetLabel::Long if self.long_name.trim().is_empty() => &self.name,
             SheetLabel::LongIfAvailable | SheetLabel::Long => &self.long_name,
         }
+    }
+}
+
+impl Workbook {
+    /// Reorders whole worksheets by their old indices, keeping the active worksheet selected.
+    /// Returns whether the order changed. A malformed permutation leaves the workbook intact.
+    pub fn reorder_sheets(&mut self, order: &[usize]) -> bool {
+        let len = self.sheets.len();
+        if order.len() != len || order.iter().copied().eq(0..len) {
+            return false;
+        }
+        let mut seen = vec![false; len];
+        for &index in order {
+            if index >= len || seen[index] {
+                return false;
+            }
+            seen[index] = true;
+        }
+        let active = self.active_sheet.min(len - 1);
+        self.active_sheet = order.iter().position(|&index| index == active).expect("validated permutation");
+        let mut sheets: Vec<_> = std::mem::take(&mut self.sheets).into_iter().map(Some).collect();
+        self.sheets = order.iter().map(|&index| sheets[index].take().expect("validated permutation")).collect();
+        true
     }
 }
 
@@ -143,6 +166,22 @@ mod tests {
         // A second copy takes the next long name.
         p.duplicate_sheet_without_data(b, 0).unwrap();
         assert_eq!(p.workbook(b).unwrap().sheets[3].long_name, "Potential scan 2");
+    }
+
+    #[test]
+    fn reordering_sheets_preserves_their_contents_and_the_active_sheet() {
+        let (mut project, book_id) = book();
+        let book = project.workbook_mut(book_id).unwrap();
+        book.sheets[0].comments = "Calibration notes".into();
+        book.sheets.push(Worksheet::new("Sheet3"));
+        let original = book.clone();
+        for bad in [&[0, 1][..], &[2, 2, 0], &[1, 2, 3], &[0, 1, 2]] {
+            assert!(!book.reorder_sheets(bad));
+            assert_eq!(*book, original);
+        }
+        assert!(book.reorder_sheets(&[1, 2, 0]));
+        assert_eq!(book.active_sheet, 2);
+        assert_eq!(book.sheets, [original.sheets[1].clone(), original.sheets[2].clone(), original.sheets[0].clone()]);
     }
 
     #[test]

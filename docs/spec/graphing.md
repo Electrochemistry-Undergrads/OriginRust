@@ -5754,8 +5754,8 @@ The Origin 2016 captures `pd1-c.png` and `pd-xyxy-c.png` show the available cont
 initial settings. The [Origin Vector tab documentation](https://docs.originlab.com/origin-help/pd-dialog-vector-tab/)
 describes the positions, angle units and open head. Sheaf shows head dimensions in points
 and renders the open head as two unfilled arms meeting the shaft at its tip. The changed
-positions and open-head geometry have no separate native measurement. Real-world magnitudes
-and Origin's exact initial multiplier rule remain open.
+positions and open-head geometry have no separate native measurement. Origin's exact initial
+multiplier rule remains open.
 
 The archived Vector tab shows **Angle** and **Magnitude** in Vector Data for XYAM and
 **X End** and **Y End** in End Point for XYXY, with column names such as `Col(C)`. Each
@@ -5776,6 +5776,15 @@ in degrees counterclockwise from +X and choose CW or CCW for the signed data ang
 use the Angle Units setting. Older projects keep Polar. Origin's documentation gives the
 preset values and editable Custom fields. The custom angle calculation follows Sheaf's
 reading of those fields. [Origin Vector tab](https://docs.originlab.com/origin-help/pd-dialog-vector-tab/)
+
+The archived XYAM Vector tab shows **Magnitude in real world space**, off by default.
+With the switch on, Sheaf computes both endpoints using the scaled magnitude and angle
+in X and Y data units. Tail, Midpoint or Head still identifies the data anchor. Changing
+the axis scales changes the arrow's page length while its data endpoints stay fixed.
+Sheaf's auto ranges include both endpoints of visible rows, subject to each axis scale.
+The switch is saved and defaults off in older projects. The exact Origin 2016 auto range
+behavior remains unmeasured. Per-axis magnitude options and the reference ruler remain
+open. [Origin Vector tab](https://docs.originlab.com/origin-help/pd-dialog-vector-tab/)
 
 Standard legend samples use the same shaft stroke and head style as the plotted
 arrows. The sample points right and occupies the regular legend sample width. Sheaf limits

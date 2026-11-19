@@ -3839,16 +3839,25 @@ impl SheafApp {
         }
     }
 
-    /// Navigate Worksheets: OK (or a double click) goes to the picked sheet.
+    /// Navigate Worksheets can activate a sheet or commit the displayed tab order.
     fn show_sheet_navigate(&mut self, ctx: &egui::Context) {
         use crate::dialogs::sheet_navigate::NavigateOutcome;
-        let Some(d) = &mut self.sheet_navigate else { return };
-        match d.show(ctx, self.doc.project()) {
-            NavigateOutcome::Open => {}
-            NavigateOutcome::Closed => self.sheet_navigate = None,
+        let Some(mut dialog) = self.sheet_navigate.take() else { return };
+        // Other dialogs may still hold worksheet indices from the current order.
+        let can_reorder = !self.dialog_open();
+        match dialog.show(ctx, self.doc.project(), can_reorder) {
+            NavigateOutcome::Open => self.sheet_navigate = Some(dialog),
+            NavigateOutcome::Closed => {}
             NavigateOutcome::Go { book, sheet } => {
-                self.sheet_navigate = None;
                 self.apply(Action::SelectSheet { book, sheet }, ctx);
+            }
+            NavigateOutcome::Reorder { book, order } => {
+                if self.doc.apply("Reorder worksheets", |project| {
+                    project.workbook_mut(book).is_some_and(|workbook| workbook.reorder_sheets(&order))
+                }) {
+                    dialog.reordered(&order);
+                }
+                self.sheet_navigate = Some(dialog);
             }
         }
     }

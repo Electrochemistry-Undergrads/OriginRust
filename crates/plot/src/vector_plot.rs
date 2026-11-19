@@ -1,5 +1,6 @@
 //! Vector XYAM and Vector XYXY plots (T107, graphing spec "Vector plots"): an arrow per row. XYAM
-//! anchors a point of the arrow at (X, Y) and runs `magnitude x multiplier` points at the row's angle.
+//! anchors a point of the arrow at (X, Y) and runs `magnitude x multiplier` at the row's angle,
+//! in page points or real-world data coordinates.
 //! XYXY runs from (X, Y) to the row's end point, whose X and Y count for the axis ranges.
 
 use crate::data::PlotData;
@@ -9,13 +10,15 @@ use sheaf_core::Project;
 use sheaf_core::graph::LineStyle;
 use sheaf_core::vector::{VectorPosition, VectorSpec};
 
+type Point = (f64, f64);
+
 /// The per-row data of a vector plot.
 #[derive(Clone, Debug, PartialEq)]
 pub enum VectorRows {
-    /// Angle (radians) and length (points) of each row.
-    Am(Vec<(f64, f64)>),
+    /// Displacement of each row, with +Y up. The spec selects page points or data units.
+    Am(Vec<Point>),
     /// The end point of each row, in data units.
-    Xy(Vec<(f64, f64)>),
+    Xy(Vec<Point>),
 }
 
 pub(crate) struct VectorData {
@@ -30,7 +33,15 @@ impl VectorData {
         let (a, b) = (col(spec.a), col(spec.b));
         let at = |v: &[f64], i: usize| v.get(i).copied().unwrap_or(f64::NAN);
         let rows = if xyam {
-            VectorRows::Am((0..rows).map(|i| (spec.xyam_angle(at(a, i)), at(b, i) * spec.multiplier)).collect())
+            VectorRows::Am(
+                (0..rows)
+                    .map(|i| {
+                        let angle = spec.xyam_angle(at(a, i));
+                        let length = at(b, i) * spec.multiplier;
+                        (length * angle.cos(), length * angle.sin())
+                    })
+                    .collect(),
+            )
         } else {
             VectorRows::Xy((0..rows).map(|i| (at(a, i), at(b, i))).collect())
         };
@@ -44,6 +55,26 @@ impl VectorData {
             VectorRows::Am(_) => &[],
         }
     }
+
+    /// Data-space XYAM endpoints with the same placement offsets used for the row's X and Y.
+    pub(crate) fn world_endpoints(&self, pd: &PlotData, row: usize) -> Option<[Point; 2]> {
+        let VectorRows::Am(deltas) = &self.rows else { return None };
+        if !self.spec.real_world_space {
+            return None;
+        }
+        let anchor = (pd.source_x_at(row), pd.source_y_at(row));
+        let ends = anchored_endpoints(self.spec.position, anchor, *deltas.get(row)?);
+        Some(ends.map(|(x, y)| (pd.display_x(x), pd.display_y(y))))
+    }
+}
+
+/// The endpoints in the coordinate system of the anchor and displacement.
+fn anchored_endpoints(position: VectorPosition, (x, y): Point, (dx, dy): Point) -> [Point; 2] {
+    match position {
+        VectorPosition::Tail => [(x, y), (x + dx, y + dy)],
+        VectorPosition::Midpoint => [(x - dx / 2.0, y - dy / 2.0), (x + dx / 2.0, y + dy / 2.0)],
+        VectorPosition::Head => [(x - dx, y - dy), (x, y)],
+    }
 }
 
 /// The arrows of a vector plot.
@@ -52,20 +83,22 @@ pub(crate) fn draw_vectors(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeome
     let stroke = line_stroke(&pd.plot.line);
     let spread = (v.spec.head_angle_deg / 2.0).to_radians().tan();
     for i in pd.start..pd.end {
-        let (x0, y0) = geom.data_to_page(pd.x_at(i), pd.y_at(i));
-        let (start, end) = match &v.rows {
-            VectorRows::Am(r) => {
-                let Some(&(angle, len)) = r.get(i) else { continue };
-                let (dx, dy) = (len * angle.cos(), -len * angle.sin());
-                match v.spec.position {
-                    VectorPosition::Tail => ((x0, y0), (x0 + dx, y0 + dy)),
-                    VectorPosition::Midpoint => ((x0 - dx / 2.0, y0 - dy / 2.0), (x0 + dx / 2.0, y0 + dy / 2.0)),
-                    VectorPosition::Head => ((x0 - dx, y0 - dy), (x0, y0)),
+        let [start, end] = match &v.rows {
+            VectorRows::Am(_) if v.spec.real_world_space => {
+                if !pd.row_shown(i) {
+                    continue;
                 }
+                let Some(ends) = v.world_endpoints(pd, i) else { continue };
+                ends.map(|(x, y)| geom.data_to_page(x, y))
+            }
+            VectorRows::Am(r) => {
+                let Some(&(dx, dy)) = r.get(i) else { continue };
+                let anchor = geom.data_to_page(pd.x_at(i), pd.y_at(i));
+                anchored_endpoints(v.spec.position, anchor, (dx, -dy))
             }
             VectorRows::Xy(e) => {
                 let Some(&(ex, ey)) = e.get(i) else { continue };
-                ((x0, y0), geom.data_to_page(ex, ey))
+                [geom.data_to_page(pd.x_at(i), pd.y_at(i)), geom.data_to_page(ex, ey)]
             }
         };
         draw_arrow(out, start, end, &stroke, v.spec.head_pt, spread, v.spec.open_head);

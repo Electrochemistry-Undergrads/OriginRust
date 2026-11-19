@@ -878,7 +878,14 @@ Measured in Origin 2016 by right-clicking a sheet tab (`tools/origin-ref/origin-
   active sheet selected, an Actions menu and Apply Reorder (greyed), OK and Close. Sheaf's window has Index,
   Name, Long Name, Columns, Rows and Comments. The Comments cell previews the first line and shows the
   full saved text on hover. Clicking an index or name picks a sheet, OK or a double click goes to it,
-  and Close or Escape closes. Name and Comments is the editing route. Actions and Apply Reorder remain open.
+  and Close or Escape closes. Name and Comments is the editing route. Actions remains open.
+- Clicking a Navigate Worksheets header in Sheaf previews its ascending order. Click it again for
+  descending order. Index refers to the workbook order before applying. Apply Reorder commits the
+  displayed permutation in one undo step and keeps the active worksheet. Equal values keep their
+  workbook order. Finish any other open dialog before applying the reorder, since it may refer to
+  the original sheet indices. Origin 2016's unsorted capture shows the disabled Apply Reorder
+  button. The documentation describes sorting by headers and committing the current order.
+  [Origin Navigate Worksheets](https://docs.originlab.com/origin-help/nav-wks-dialog/)
 
 ## 13i. Worksheet corner menu (T92, measured 2026-11-16, Origin 2016)
 

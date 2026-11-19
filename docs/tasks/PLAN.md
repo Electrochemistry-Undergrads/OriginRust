@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 217 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 215 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -99,7 +99,7 @@ Backlog packages: write the brief first (step 3 above).
 | [x] | [T69](T69-zoom-all-scale-tools.md) | Graph view, the rest of B1: View > Zoom All and the Tools-bar Scale In / Scale Out (measured in graphing 23) | S | 0 |
 | [ ] | [T72](T72-copy-paste-format.md) | Copy Format and Paste Format on graph, axis and legend (B2 slice 1) | M | 20 |
 | [x] | [T125](T125-drawn-shape-clipboard.md) | Drawn-shape Cut/Copy/Paste (B2 slice; done 2026-11-19, graphing 17.8) | M | 0 |
-| [ ] | B2 | Graph objects: cut/copy/paste, align, same size, group, order across object kinds, snap to grid (Copy/Paste Format is T72) | L | 29 |
+| [ ] | B2 | Graph objects: cut/copy/paste, align, same size, group, order across object kinds, snap to grid (Copy/Paste Format is T72) | L | 27 |
 | [x] | [T67](T67-add-straight-line.md) | Add Straight Line (B3 slice 1) | M | 0 |
 | [x] | [T70](T70-axis-center-fit-page-to-printer.md) | Axis Center and Fit Page To Printer (B3 slice 2) | S | 0 |
 | [x] | [T73](T73-change-xy-ungroup.md) | Change X, Change Y, Ungroup on a plot (B3 slice 3) | S | 0 |

@@ -2739,12 +2739,25 @@ impl SheafApp {
                     self.edit_graph(graph, crate::actions::GraphOp::DeleteShape { layer, shape });
                 }
             }
+            Action::CopyLabel { graph, layer, label, cut } => {
+                let copied =
+                    self.doc.project().graph(graph).is_some_and(|g| crate::shape_clip::copy_label(g, layer, label));
+                if copied && cut {
+                    self.edit_graph(graph, crate::actions::GraphOp::DeleteLabel { layer, label });
+                }
+            }
             Action::PasteShape { graph, layer, page } => {
-                if let Some(s) = self.doc.project().graph(graph).and_then(|g| crate::shape_clip::placed(g, layer, page))
+                use crate::shape_clip::Pasted;
+                if let Some(pasted) =
+                    self.doc.project().graph(graph).and_then(|g| crate::shape_clip::placed(g, layer, page))
                 {
-                    self.doc.apply("Paste drawn object", |p| {
+                    let what = if matches!(pasted, Pasted::Shape(_)) { "Paste drawn object" } else { "Paste text" };
+                    self.doc.apply(what, |p| {
                         if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {
-                            l.shapes.push(s);
+                            match pasted {
+                                Pasted::Shape(s) => l.shapes.push(s),
+                                Pasted::Label(t) => l.labels.push(t),
+                            }
                         }
                     });
                 }

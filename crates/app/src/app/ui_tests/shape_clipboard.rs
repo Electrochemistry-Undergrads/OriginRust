@@ -46,3 +46,38 @@ fn copy_then_paste_puts_a_same_size_copy_at_the_clicked_point_and_cut_removes_th
     settle(&mut h);
     assert_eq!(shapes(&h).len(), 2, "one undo step brings the source back");
 }
+
+#[test]
+fn a_text_label_is_cut_and_pasted_with_its_anchor_at_the_clicked_point() {
+    // T147: a label's right-click Cut and Copy, pasted by the page's Paste.
+    crate::shape_clip::clear();
+    let labels = menus::graph_label_menu(0, 0);
+    for want in [menus::Cmd::CutLabel { layer: 0, label: 0 }, menus::Cmd::CopyLabel { layer: 0, label: 0 }] {
+        assert!(labels.iter().any(|e| matches!(e, menus::Entry::Item(i) if i.cmd.as_ref() == Some(&want))));
+    }
+    let mut h = start(vec![data_file("label-clip")]);
+    let ctx = h.ctx.clone();
+    let graph = project(&h).graphs().next().unwrap().id;
+    h.state_mut().doc.apply("Labels", |p| {
+        let l = &mut p.graph_mut(graph).unwrap().layers[0];
+        let font = l.new_label_font();
+        l.labels.push(sheaf_core::graph::TextLabel::new("note", 0.3, 0.3, font));
+    });
+    let texts = |h: &Harness<'static, SheafApp>| -> Vec<(String, f64, f64)> {
+        project(h).graph(graph).unwrap().layers[0].labels.iter().map(|l| (l.text.clone(), l.x, l.y)).collect()
+    };
+    let n = texts(&h).len();
+    h.state_mut().apply(Action::CopyLabel { graph, layer: 0, label: n - 1, cut: true }, &ctx);
+    settle(&mut h);
+    assert_eq!(texts(&h).len(), n - 1, "Cut deletes the label");
+    // Paste at the page point of the frame's centre.
+    let g = project(&h).graph(graph).unwrap();
+    let f = g.absolute_frame(0).unwrap();
+    let page = ((f.left + 0.5 * f.width) * g.page.width_pt, (f.top + 0.5 * f.height) * g.page.height_pt);
+    h.state_mut().apply(Action::PasteShape { graph, layer: 0, page }, &ctx);
+    settle(&mut h);
+    let last = texts(&h).last().cloned().unwrap();
+    assert_eq!(last.0, "note");
+    assert!((last.1 - 0.5).abs() < 1e-9 && (last.2 - 0.5).abs() < 1e-9, "{last:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Paste text"));
+}

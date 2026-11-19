@@ -3813,9 +3813,13 @@ copying are distinct routes outside this slice.
     its direction) and its style.
   - The copy goes in front of the layer's other drawn objects (Origin's 2018b order; 2016 put it
     behind the last pasted object, which Sheaf does not track). One undo step ("Paste drawn object").
-- **Not done:** Edit menu and keyboard Cut/Copy/Paste for drawn objects (Ctrl+X/C/V are shown in
-  the right-click menu, not bound), attachment to data or page, several objects at once, and
-  Ctrl+drag copies.
+- **Text labels (T147, 2026-11-19):** a text label's right-click Cut and Copy use the same
+  clipboard. A label holds the clipboard instead of a drawn object, and the other way round. Paste
+  puts the label's anchor (a table's top-left corner) at the clicked point, with its text, font and
+  rotation unchanged ("Paste text"). Cut deletes it in one undo step ("Delete text").
+- **Not done:** Edit menu and keyboard Cut/Copy/Paste for drawn objects and labels (Ctrl+X/C/V are
+  shown in the right-click menu, not bound), attachment to data or page, several objects at once,
+  and Ctrl+drag copies.
 
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 

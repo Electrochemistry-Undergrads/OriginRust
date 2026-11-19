@@ -106,6 +106,15 @@ pub enum Cmd {
         layer: usize,
         page: (f64, f64),
     },
+    /// A text label's right-click Cut and Copy (T147).
+    CutLabel {
+        layer: usize,
+        label: usize,
+    },
+    CopyLabel {
+        layer: usize,
+        label: usize,
+    },
     /// Column > Fill Column With > Row Numbers / Uniform / Normal Random Numbers (T63 group H).
     QuickFill(QuickFill),
     /// Column > Set Sampling Interval... and Show X Column... (T84).
@@ -2330,8 +2339,8 @@ pub fn graph_title_menu(layer: usize, y: bool) -> Vec<Entry> {
 /// The menu of a free text label.
 pub fn graph_label_menu(layer: usize, label: usize) -> Vec<Entry> {
     vec![
-        grey_keyed("Cut", ctrl(Key::X)),
-        grey_keyed("Copy", ctrl(Key::C)),
+        keyed("Cut", ctrl(Key::X), Cmd::CutLabel { layer, label }),
+        keyed("Copy", ctrl(Key::C), Cmd::CopyLabel { layer, label }),
         keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteLabel { layer, label })),
         sep(),
         item("Bring to the front", Cmd::GraphEdit(GraphOp::OrderLabel { layer, label, front: true })),
@@ -2750,6 +2759,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::CopyShape { layer, shape } => {
             Action::CopyShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape, cut: false }
+        }
+        Cmd::CutLabel { layer, label } => {
+            Action::CopyLabel { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, label: *label, cut: true }
+        }
+        Cmd::CopyLabel { layer, label } => {
+            Action::CopyLabel { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, label: *label, cut: false }
         }
         Cmd::PasteShape { layer, page } => {
             Action::PasteShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, page: *page }

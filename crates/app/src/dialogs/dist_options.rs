@@ -3,7 +3,7 @@
 
 use super::analysis::AnalysisKind;
 use eframe::egui;
-use sheaf_core::analysis::{DistFamily, DistFitSpec, ProbPlotKind, ProbPlotSpec, Tool};
+use sheaf_core::analysis::{DistFamily, DistFitSpec, PlotScores, ProbPlotKind, ProbPlotSpec, Tool};
 
 /// What the windows keep between frames.
 pub struct DistOptions {
@@ -12,11 +12,26 @@ pub struct DistOptions {
     /// Probability Plot and Q-Q Plot: the family, and whether to draw the graph.
     family: DistFamily,
     graph: bool,
+    /// The plotting positions, the probability plot's confidence band (level in percent) and the Q-Q
+    /// plot's orientation, with the defaults Origin's `plot_prob` documents: Blom scores, a 95 %
+    /// band, the data on X (T151, not measured).
+    scores: PlotScores,
+    band: bool,
+    level: f64,
+    data_on_x: bool,
 }
 
 impl Default for DistOptions {
     fn default() -> Self {
-        DistOptions { fit: [true; 5], family: DistFamily::Normal, graph: true }
+        DistOptions {
+            fit: [true; 5],
+            family: DistFamily::Normal,
+            graph: true,
+            scores: PlotScores::Blom,
+            band: true,
+            level: 95.0,
+            data_on_x: true,
+        }
     }
 }
 
@@ -36,6 +51,9 @@ impl DistOptions {
                 kind: if kind == AnalysisKind::QQPlot { ProbPlotKind::QQ } else { ProbPlotKind::Probability },
                 family: self.family,
                 graph: self.graph,
+                scores: self.scores,
+                band: (kind != AnalysisKind::QQPlot && self.band).then_some(self.level / 100.0),
+                data_on_x: self.data_on_x,
             }),
         })
     }
@@ -63,6 +81,29 @@ impl DistOptions {
                         }
                     });
                 });
+                ui.horizontal(|ui| {
+                    ui.label("Scores");
+                    egui::ComboBox::from_id_salt("dist_scores").selected_text(self.scores.name()).show_ui(ui, |ui| {
+                        for s in PlotScores::ALL {
+                            ui.selectable_value(&mut self.scores, s, s.name());
+                        }
+                    });
+                })
+                .response
+                .on_hover_text("How the cumulative probability of each ordered value is estimated");
+                if kind == AnalysisKind::QQPlot {
+                    ui.checkbox(&mut self.data_on_x, "Data on X, quantiles on Y");
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut self.band, "Confidence band");
+                        ui.add_enabled(
+                            self.band,
+                            egui::DragValue::new(&mut self.level).range(50.0..=99.99).speed(0.1).suffix(" %"),
+                        );
+                    })
+                    .response
+                    .on_hover_text("Drawn round the fitted line of the normal and lognormal families");
+                }
                 ui.checkbox(&mut self.graph, "Make a graph");
                 ui.weak(if kind == AnalysisKind::QQPlot {
                     "The quantiles of the distribution against the ordered data, with the least-squares line. \

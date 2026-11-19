@@ -56,6 +56,7 @@ pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
 pub use multivariate::{KmeansSpec, PcaSpec};
 pub use roc::RocSpec;
 pub use sheaf_calc::Family as DistFamily;
+pub use sheaf_calc::PlotScores;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
 pub use sheaf_calc::{CwtWavelet, Wavelet, WaveletExtension};
 pub use sheaf_fit::simulate::Spacing as SimulateSpacing;

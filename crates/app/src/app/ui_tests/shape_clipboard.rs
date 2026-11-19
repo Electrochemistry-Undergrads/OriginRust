@@ -172,3 +172,28 @@ fn format_object_properties_opens_the_selected_objects_window() {
     menu_path(&mut h, &["Format", "Object Properties..."]);
     assert_eq!(h.state().graph_props.as_ref().map(|d| d.tab()), Some(PropsTab::YAxis));
 }
+
+#[test]
+fn the_plot_menus_probability_and_qq_plot_open_their_windows() {
+    // T151: Plot > Statistics > Probability Plot and Q-Q Plot run the Statistics windows.
+    use crate::dialogs::analysis::AnalysisKind;
+    let plot = menus::bar(menus::WindowKind::Workbook).iter().find(|m| m.name() == "Plot").unwrap();
+    let mut found = Vec::new();
+    menus::walk(&plot.entries, &mut |i| {
+        if let Some(menus::Cmd::Analyze(k @ (AnalysisKind::ProbPlot | AnalysisKind::QQPlot))) = &i.cmd {
+            found.push((menus::plain(&i.label), *k));
+        }
+    });
+    assert_eq!(
+        found,
+        [("Probability Plot".to_string(), AnalysisKind::ProbPlot), ("Q-Q Plot".to_string(), AnalysisKind::QQPlot)]
+    );
+    let mut h = start(vec![data_file("plot-menu-prob")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    click_text(&mut h, "C(Y1)");
+    let action = menus::resolve(&menus::Cmd::Analyze(AnalysisKind::QQPlot), &h.state().menu_context()).unwrap();
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(action, &ctx);
+    settle(&mut h);
+    assert_eq!(h.state().analysis.as_ref().map(|a| a.kind()), Some(AnalysisKind::QQPlot));
+}

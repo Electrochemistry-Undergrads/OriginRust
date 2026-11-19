@@ -1574,6 +1574,16 @@ pub enum StftOutputArg {
     Db,
 }
 
+/// Plotting positions of a probability or Q-Q plot.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ScoresArg {
+    Filliben,
+    Blom,
+    Benard,
+    Hazen,
+    VanDerWaerden,
+}
+
 /// FFT window (Origin's names).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum FftWindowArg {
@@ -3044,6 +3054,12 @@ pub enum AnalyzeTool {
         /// Do not make a graph.
         #[arg(long)]
         no_graph: bool,
+        /// Plotting positions (Origin documents Blom as its default; scipy uses Filliben).
+        #[arg(long, value_enum, default_value_t = ScoresArg::Filliben)]
+        scores: ScoresArg,
+        /// A confidence band of this level (0.95 for 95 %) round the fitted line (normal, lognormal).
+        #[arg(long)]
+        band: Option<f64>,
     },
     /// Q-Q plot: the quantiles of a distribution against the ordered data, with the least-squares line; makes
     /// a graph.
@@ -3055,6 +3071,12 @@ pub enum AnalyzeTool {
         /// Do not make a graph.
         #[arg(long)]
         no_graph: bool,
+        /// Plotting positions (Origin documents Blom as its default; scipy uses Filliben).
+        #[arg(long, value_enum, default_value_t = ScoresArg::Filliben)]
+        scores: ScoresArg,
+        /// The ordered data on X and the quantiles on Y, as Origin's guide describes.
+        #[arg(long)]
+        data_on_x: bool,
     },
     /// Principal component analysis of the --y columns (the variables): eigenvalues, percent of variance,
     /// loadings and scores; makes a scree plot, a loading plot and a biplot as graphs.

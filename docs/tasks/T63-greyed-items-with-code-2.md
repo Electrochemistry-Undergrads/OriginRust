@@ -53,6 +53,9 @@ open in the inventory and its owning package; T63 completion alone does not clai
 
 ## Group C review (2026-11-15)
 
+**Follow-up 2026-11-19 (T151):** the options this review asked for (scores, a confidence band, data on
+X) were added, and both Plot menu entries are live (statistics 16.2a, not measured).
+
 Both entries remain disabled and move to inventory package B8, with the existing T14
 probability/Q-Q work as their dependency. Origin's [plot_prob reference](https://docs.originlab.com/x-function/ref/plot_prob/)
 identifies the Plot menu entries and documents Blom scores and a checked 95% confidence band by

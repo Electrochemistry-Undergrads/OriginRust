@@ -1101,20 +1101,26 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             };
             (target, Job::Tool(Tool::DistFit(analysis::DistFitSpec { families })))
         }
-        AnalyzeTool::Probplot { target, family, no_graph } => (
+        AnalyzeTool::Probplot { target, family, no_graph, scores, band } => (
             target,
             Job::Tool(Tool::ProbPlot(analysis::ProbPlotSpec {
                 kind: analysis::ProbPlotKind::Probability,
                 family: family_of(family),
                 graph: !no_graph,
+                scores: scores_of(scores),
+                band,
+                data_on_x: false,
             })),
         ),
-        AnalyzeTool::Qqplot { target, family, no_graph } => (
+        AnalyzeTool::Qqplot { target, family, no_graph, scores, data_on_x } => (
             target,
             Job::Tool(Tool::ProbPlot(analysis::ProbPlotSpec {
                 kind: analysis::ProbPlotKind::QQ,
                 family: family_of(family),
                 graph: !no_graph,
+                scores: scores_of(scores),
+                band: None,
+                data_on_x,
             })),
         ),
         AnalyzeTool::Pca {
@@ -1312,5 +1318,15 @@ fn fft_window(w: FftWindowArg) -> analysis::FftWindow {
         FftWindowArg::Hanning => analysis::FftWindow::Hanning,
         FftWindowArg::Hamming => analysis::FftWindow::Hamming,
         FftWindowArg::Blackman => analysis::FftWindow::Blackman,
+    }
+}
+
+fn scores_of(s: ScoresArg) -> analysis::PlotScores {
+    match s {
+        ScoresArg::Filliben => analysis::PlotScores::Filliben,
+        ScoresArg::Blom => analysis::PlotScores::Blom,
+        ScoresArg::Benard => analysis::PlotScores::Benard,
+        ScoresArg::Hazen => analysis::PlotScores::Hazen,
+        ScoresArg::VanDerWaerden => analysis::PlotScores::VanDerWaerden,
     }
 }

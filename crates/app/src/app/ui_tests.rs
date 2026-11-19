@@ -5299,9 +5299,11 @@ fn the_statistics_menu_draws_a_roc_curve() {
 /// points and a reference line; one undo removes both.
 #[test]
 fn the_descriptive_menu_makes_probability_and_qq_plot_graphs() {
-    for (label, sheet_prefix, y_scale, undo) in [
-        ("Probability Plot...", "ProbPlot", ScaleKind::Probability, "Probability plot"),
-        ("Q-Q Plot...", "QQPlot", ScaleKind::Linear, "Q-Q plot"),
+    // The windows start with Origin's documented options (T151): the probability plot draws a 95 %
+    // band (two more lines per column), the Q-Q plot has the data on X.
+    for (label, sheet_prefix, y_scale, undo, plots) in [
+        ("Probability Plot...", "ProbPlot", ScaleKind::Probability, "Probability plot", 8),
+        ("Q-Q Plot...", "QQPlot", ScaleKind::Linear, "Q-Q plot", 4),
     ] {
         let mut h = start(vec![data_file("probplot")]);
         show_window(&mut h, "Book1 - sample.csv");
@@ -5314,7 +5316,7 @@ fn the_descriptive_menu_makes_probability_and_qq_plot_graphs() {
         let p = project(&h);
         assert_eq!(p.graphs().count(), graphs_before + 1, "{label}");
         let l = &p.graphs().last().unwrap().layers[0];
-        assert_eq!(l.plots.len(), 4, "{label}: points and a line for each of the two columns");
+        assert_eq!(l.plots.len(), plots, "{label}: points and lines for each of the two columns");
         assert_eq!(l.plots[0].kind, PlotKind::Scatter);
         assert_eq!(l.plots[1].kind, PlotKind::Line);
         assert_eq!(l.y_axis.scale, y_scale, "{label}");

@@ -660,6 +660,32 @@ intercept, r). One undo step removes sheet and graph.
 Auto Apply is not offered for these two windows (the checkbox is disabled): each run makes a new sheet and a new
 graph, so running at every option change would pile them up; they run on OK and Apply.
 
+### 16.2a Origin's documented options (T151, 2026-11-19, **not measured**)
+
+Origin's `plot_prob` reference documents Blom scores and a checked 95 % confidence band as the defaults
+of its probability plot. Its plot guide puts the observed values on X and the distribution quantiles on
+Y in a Q-Q plot. Sheaf now has these as options. Its windows start with Origin's documented choices,
+while the core and the command line keep scipy's, so the checked numbers above do not move.
+
+- **Scores** (plotting positions of the i-th of n ordered values):
+  - Filliben (scipy, above), Blom `(i - 3/8) / (n + 1/4)`, Benard `(i - 0.3) / (n + 0.4)`, Hazen
+    `(i - 1/2) / n`, and Van der Waerden `i / (n + 1)`.
+  - The windows start on Blom. `sheaf analyze probplot|qqplot --scores` starts on Filliben.
+- **Confidence band** (probability plot, normal and lognormal families):
+  - Two more lines round the fitted line, at the fit's percents. They are the fitted quantile
+    `mu + z sigma` plus and minus `k sqrt(sigma^2 (1 + z^2/2) / n)`, the large-sample error of the
+    maximum likelihood quantile, with `k` the normal quantile of `(1 + level) / 2`. Lognormal works on
+    the log scale.
+  - The columns are "Lower 95 % X", "Lower percent", "Upper 95 % X" and "Upper percent".
+  - Other families get a note instead. The window starts with the band on at 95 %; `--band 0.95` turns
+    it on from the command line.
+  - This is Sheaf's method; Origin's band formula is not documented in what was read.
+- **Q-Q orientation:** with "Data on X, quantiles on Y" (the window's start; `--data-on-x`), the
+  ordered data are the X column and the quantiles the Y column. The axis titles swap, and the
+  least-squares line is the same line drawn the other way round.
+- **Plot menu:** Plot > Statistics > Probability Plot and Q-Q Plot open the same windows as Statistics >
+  Descriptive Statistics. The Alt letters are y and P, since Q, -, l, o and t are taken in that submenu.
+
 ### 16.3 Checked against scipy, tolerances
 
 Normal, lognormal and exponential estimates, log-likelihood, AIC, BIC, KS D, A2, probability plot quantiles, slope,

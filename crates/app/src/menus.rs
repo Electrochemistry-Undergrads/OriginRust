@@ -111,6 +111,8 @@ pub enum Cmd {
     FillPattern(FillKind),
     /// Format > Object Properties... on a graph: the selected object's properties (T150).
     ObjectProperties,
+    /// File > New > Notes (T154).
+    NewNotes,
     /// The graph Edit menu's Cut, Copy, Paste and Clear on the selected object (T149).
     GraphClipboard(GraphClip),
     /// A drawn object's right-click Cut and Copy, and the page's Paste at a page point (T125).
@@ -853,7 +855,9 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                     "From Template",
                     vec![Entry::NewFromTemplates, sep(), item("More...", Cmd::NewFromTemplateFile)],
                 )],
-                greys(&["Excel", "Layout", "Notes", "Function Plot"]),
+                greys(&["Excel", "Layout"]),
+                vec![item("Notes", Cmd::NewNotes)],
+                greys(&["Function Plot"]),
             ]
             .concat(),
         ),
@@ -2790,6 +2794,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::CopyShape { layer, shape } => {
             Action::CopyShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape, cut: false }
         }
+        Cmd::NewNotes => Action::NewNotes,
         Cmd::ObjectProperties => {
             let graph = c.graph.ok_or(NEED_GRAPH)?;
             c.graph_pick.ok_or(NEED_SELECTED_OBJECT)?;

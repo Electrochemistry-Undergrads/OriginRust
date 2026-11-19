@@ -115,6 +115,8 @@ pub fn summarize(project: &Project) -> ProjectSummary {
                 out.order.push((true, out.workbooks.len()));
                 out.workbooks.push(WorkbookSummary { name: b.name.clone(), title: b.title().to_string(), sheets });
             }
+            // Notes windows (T154) hold no data.
+            Window::Notes(_) => {}
             Window::Graph(g) => {
                 out.order.push((false, out.graphs.len()));
                 out.graphs.push(GraphSummary {

@@ -286,6 +286,13 @@ pub enum Action {
     SaveTemplateAs(WindowId),
     /// Plot > User Templates > Manage...: rename and delete the saved templates.
     ManageTemplates,
+    /// File > New > Notes and the Standard toolbar's New Notes (T154).
+    NewNotes,
+    /// The text of a Notes window after editing: one undo step.
+    SetNotesText {
+        id: WindowId,
+        text: String,
+    },
     /// Column > Fill Column With > a pattern: open its window for these columns.
     FillPattern {
         kind: crate::dialogs::fill_pattern::FillKind,

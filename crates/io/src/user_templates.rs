@@ -209,7 +209,7 @@ pub fn load_file(path: &Path) -> Result<UserTemplate, IoError> {
         .into_iter()
         .find_map(|w| match w {
             Window::Graph(g) => Some(g),
-            Window::Workbook(_) => None,
+            Window::Workbook(_) | Window::Notes(_) => None,
         })
         .ok_or_else(|| corrupt("says the file holds a graph template, but it holds no graph".into()))?;
     let name = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| graph.name.clone());

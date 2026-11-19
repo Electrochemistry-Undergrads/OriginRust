@@ -301,7 +301,7 @@ fn build(bar: Bar) -> Vec<Item> {
             b(Graph, "New Graph", Cmd::NewGraph, "Graph"),
             g(Matrix, "New Matrix"),
             g(Layout, "New Layout"),
-            g(Notes, "New Notes"),
+            b(Notes, "New Notes", Cmd::NewNotes, "Notes"),
             gap(),
             b(OpenFolder, "Open", Cmd::OpenProject, "Open"),
             b(Disk, "Save Project", Cmd::SaveProject, "Save Project"),

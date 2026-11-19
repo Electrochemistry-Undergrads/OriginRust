@@ -49,6 +49,7 @@ mod lollipop;
 mod multi_y;
 mod multipeak;
 mod new_graph;
+mod notes_window;
 mod object_classic_colors;
 mod object_rgb;
 mod offset_multipliers;

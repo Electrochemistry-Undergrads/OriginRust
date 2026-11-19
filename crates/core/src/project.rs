@@ -16,6 +16,8 @@ use serde::{Deserialize, Serialize};
 pub enum Window {
     Workbook(Workbook),
     Graph(Graph),
+    /// File > New > Notes (T154).
+    Notes(crate::notes_window::Notes),
 }
 
 impl Window {
@@ -23,6 +25,7 @@ impl Window {
         match self {
             Window::Workbook(b) => b.id,
             Window::Graph(g) => g.id,
+            Window::Notes(n) => n.id,
         }
     }
 
@@ -30,6 +33,7 @@ impl Window {
         match self {
             Window::Workbook(b) => &b.name,
             Window::Graph(g) => &g.name,
+            Window::Notes(n) => &n.name,
         }
     }
 
@@ -37,6 +41,7 @@ impl Window {
         match self {
             Window::Workbook(b) => b.title(),
             Window::Graph(g) => g.title(),
+            Window::Notes(n) => n.title(),
         }
     }
 }
@@ -521,6 +526,7 @@ impl Project {
         match self.windows.iter_mut().find(|w| w.id() == id) {
             Some(Window::Workbook(b)) => b.name = new.clone(),
             Some(Window::Graph(g)) => g.name = new.clone(),
+            Some(Window::Notes(n)) => n.name = new.clone(),
             None => {}
         }
         if old != new {
@@ -571,15 +577,42 @@ impl Project {
     pub fn workbooks(&self) -> impl Iterator<Item = &Workbook> {
         self.windows.iter().filter_map(|w| match w {
             Window::Workbook(b) => Some(b),
-            Window::Graph(_) => None,
+            Window::Graph(_) | Window::Notes(_) => None,
         })
     }
 
     pub fn graphs(&self) -> impl Iterator<Item = &Graph> {
         self.windows.iter().filter_map(|w| match w {
             Window::Graph(g) => Some(g),
-            Window::Workbook(_) => None,
+            Window::Workbook(_) | Window::Notes(_) => None,
         })
+    }
+
+    /// The Notes windows (T154).
+    pub fn notes(&self) -> impl Iterator<Item = &crate::notes_window::Notes> {
+        self.windows.iter().filter_map(|w| match w {
+            Window::Notes(n) => Some(n),
+            _ => None,
+        })
+    }
+
+    pub fn notes_window(&self, id: WindowId) -> Option<&crate::notes_window::Notes> {
+        self.notes().find(|n| n.id == id)
+    }
+
+    pub fn notes_mut(&mut self, id: WindowId) -> Option<&mut crate::notes_window::Notes> {
+        self.windows.iter_mut().find_map(|w| match w {
+            Window::Notes(n) if n.id == id => Some(n),
+            _ => None,
+        })
+    }
+
+    /// Adds an empty Notes window (`Notes1`, `Notes2`, ...) and returns its id (T154).
+    pub fn add_notes(&mut self) -> WindowId {
+        let id = WindowId(self.fresh_id());
+        let notes = crate::notes_window::Notes::new(id, self.unique_name("Notes"));
+        self.windows.push(Window::Notes(notes));
+        id
     }
 
     pub fn workbook(&self, id: WindowId) -> Option<&Workbook> {
@@ -704,6 +737,7 @@ impl Project {
                     graph.id = w(graph.id);
                     graph.remap_columns(&c);
                 }
+                Window::Notes(notes) => notes.id = w(notes.id),
             }
         }
         fn shift_folder(f: &mut Folder, w: &dyn Fn(WindowId) -> WindowId) {
@@ -723,7 +757,11 @@ impl Project {
             let taken = self.windows.iter().any(|x| x.name().eq_ignore_ascii_case(&wanted));
             let mut window = window;
             if taken {
-                let prefix = if matches!(window, Window::Graph(_)) { "Graph" } else { "Book" };
+                let prefix = match window {
+                    Window::Graph(_) => "Graph",
+                    Window::Notes(_) => "Notes",
+                    Window::Workbook(_) => "Book",
+                };
                 let name = self.unique_name(prefix);
                 if matches!(window, Window::Workbook(_)) {
                     renames.push((wanted, name.clone()));
@@ -731,6 +769,7 @@ impl Project {
                 match &mut window {
                     Window::Workbook(b) => b.name = name,
                     Window::Graph(g) => g.name = name,
+                    Window::Notes(n) => n.name = name,
                 }
             }
             new_ids.push(window.id());
@@ -766,6 +805,13 @@ impl Project {
                 Some(self.adopt_workbook(book))
             }
             Window::Graph(graph) => Some(self.adopt_graph(graph)),
+            Window::Notes(mut notes) => {
+                notes.id = WindowId(self.fresh_id());
+                notes.name = self.unique_name("Notes");
+                let id = notes.id;
+                self.windows.push(Window::Notes(notes));
+                Some(id)
+            }
         }
     }
 
@@ -2501,7 +2547,7 @@ mod tests {
                 Window::Workbook(b) => {
                     b.sheets.iter().flat_map(|s| s.columns.iter()).filter_map(|c| c.formula.clone()).collect()
                 }
-                Window::Graph(_) => Vec::new(),
+                Window::Graph(_) | Window::Notes(_) => Vec::new(),
             })
             .next();
         assert_eq!(formula.as_deref(), Some("[Book4]Sheet1!col(A) * 10"));

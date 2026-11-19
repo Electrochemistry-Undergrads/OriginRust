@@ -63,9 +63,29 @@ pub fn write_file(project: &Project, path: &Path) -> Result<Vec<String>, IoError
 
 /// Like [`write`], with the project name and the time stamp given (the time is a Julian day number).
 pub fn write_named(project: &Project, name: &str, time: f64) -> Result<OpjWrite, IoError> {
+    // Notes windows (T154) are not written yet: the file gets the project without them.
+    let notes: Vec<WindowId> = project.notes().map(|n| n.id).collect();
+    let without;
+    let project = if notes.is_empty() {
+        project
+    } else {
+        let mut p = project.clone();
+        for id in &notes {
+            p.remove_window(*id);
+        }
+        without = p;
+        &without
+    };
     let mut w = Writer::new(time);
     w.project(project, name)?;
-    Ok(w.finish())
+    let mut out = w.finish();
+    if !notes.is_empty() {
+        out.warnings.push(format!(
+            "{} Notes window(s) were left out: this program does not write Notes windows to an Origin project yet.",
+            notes.len()
+        ));
+    }
+    Ok(out)
 }
 
 /// The current time as a Julian day number, the unit of the time stamps in the file.
@@ -256,6 +276,8 @@ impl Writer {
         match window {
             Window::Workbook(book) => self.workbook(book),
             Window::Graph(graph) => self.graph(project, graph, sets),
+            // Left out by `write_named`.
+            Window::Notes(_) => Ok(()),
         }
     }
 

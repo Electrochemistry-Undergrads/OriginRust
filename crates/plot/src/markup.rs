@@ -112,8 +112,8 @@ pub(crate) fn label_segments(
     )
 }
 
-/// Parses a legend cell with access to the legend owner's plot colors.
-pub(crate) fn legend_segments(
+/// Parses text with access to the owning layer's plot colors.
+pub(crate) fn plot_segments(
     text: &str,
     expand_family: &impl Fn(&str) -> Option<String>,
     plot_color: &impl Fn(usize) -> Option<Color>,

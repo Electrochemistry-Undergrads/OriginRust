@@ -181,7 +181,8 @@ Inventory 293 and eight Python tooling tests pass with frozen source/goldens and
 
 Protected substitution text renders `\h(...)` literally and prevents symbol and name
 expansion inside legend `\h(...)` and `\v(...)` spans. Graphing 7.11 records the documented
-example and Sheaf's literal-body rules. Workspace verification pending.
+example and Sheaf's literal-body rules. Formatting, strict workspace Clippy, Nextest (4,562 passed and
+8 skipped), doc tests, inventory and eight Python tooling tests passed.
 
 **Size:** L, four independently mergeable slices. **Branch:** `text-format`.
 **Priority:** P0, wave 1; the owner's first priority. Follow HANDOFF's agent/model rules.

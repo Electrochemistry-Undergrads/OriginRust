@@ -817,6 +817,8 @@ fn layer_scene(
             ternary::draw_grid(&mut scene.grid, layer, geom);
         } else if layer.coords.smith().is_some() {
             crate::smith::draw_grid(&mut scene.grid, geom);
+        } else if let Some(c) = layer.coords.space3d() {
+            crate::space3d::draw_box(&mut scene.grid, &mut scene.overlay, project, layer, geom, c, m);
         } else {
             draw_grid(&mut scene.grid, layer, geom);
         }

@@ -19,6 +19,10 @@ pub enum Template {
     StepHorizontal,
     StepVertical,
     SplineConnected,
+    /// Plot > 3D Symbol/Bar/Vector > 3D Scatter and 3D Trajectory (T155): an XYZ layer
+    /// ([`Coords::Space3d`]) of symbols, or of a line with symbols.
+    Scatter3d,
+    Trajectory3d,
     /// Scatter plot with the same axes as [`Template::Line`].
     Scatter,
     /// Scatter plot whose axes cross in the middle of the layer (Origin's "Scatter Central", 2016): both
@@ -206,8 +210,10 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 83] = [
+    pub const ALL: [Template; 85] = [
         Template::Line,
+        Template::Scatter3d,
+        Template::Trajectory3d,
         Template::StepHorizontal,
         Template::StepVertical,
         Template::SplineConnected,
@@ -296,6 +302,8 @@ impl Template {
     pub fn name(&self) -> &'static str {
         match self {
             Template::Line => "line",
+            Template::Scatter3d => "3d-scatter",
+            Template::Trajectory3d => "3d-trajectory",
             Template::StepHorizontal => "step-horizontal",
             Template::StepVertical => "step-vertical",
             Template::SplineConnected => "spline-connected",
@@ -384,6 +392,8 @@ impl Template {
     pub fn label(&self) -> &'static str {
         match self {
             Template::Line => "Line",
+            Template::Scatter3d => "3D Scatter",
+            Template::Trajectory3d => "3D Trajectory",
             Template::StepHorizontal => "Horizontal Step",
             Template::StepVertical => "Vertical Step",
             Template::SplineConnected => "Spline Connected",
@@ -508,6 +518,8 @@ impl Template {
     pub fn new_graph(&self, id: WindowId, name: &str) -> Graph {
         let mut graph = match self {
             Template::Line => general(id, name, PlotKind::Line),
+            Template::Scatter3d => space3d(id, name, PlotKind::Scatter),
+            Template::Trajectory3d => space3d(id, name, PlotKind::LineSymbol),
             Template::StepHorizontal => connected(id, name, Connect::StepHorizontal),
             Template::StepVertical => connected(id, name, Connect::StepVertical),
             Template::SplineConnected => connected(id, name, Connect::Spline),
@@ -1213,6 +1225,30 @@ fn wind_rose(id: WindowId, name: &str) -> Graph {
     g
 }
 
+/// A 3D XYZ graph (T155, Sheaf's own look; Origin's 3D graphs are OpenGL and not measured): a square
+/// layer whose X and Y axes run over the view's extent and are not drawn; the layer draws the XYZ box.
+fn space3d(id: WindowId, name: &str, kind: PlotKind) -> Graph {
+    let mut g = general(id, name, kind);
+    let (pw, ph) = (g.page.width_pt, g.page.height_pt);
+    let l = &mut g.layers[0];
+    l.coords = Coords::Space3d(Space3dCoords::default());
+    // A square frame, so that the cube is not stretched.
+    let side = 0.78 * ph;
+    l.frame = Frame { left: (pw - side) / 2.0 / pw, top: 0.1, width: side / pw, height: side / ph };
+    for a in [&mut l.x_axis, &mut l.y_axis] {
+        a.min = Some(-SPACE3D_EXTENT);
+        a.max = Some(SPACE3D_EXTENT);
+        a.side = AxisSide::Hidden;
+        a.show_opposite = false;
+        a.major_grid = None;
+        a.minor_grid = None;
+    }
+    g
+}
+
+/// Half the width of the hidden axes of a 3D layer: room for the turned cube (at most sqrt(3)).
+pub const SPACE3D_EXTENT: f64 = 1.8;
+
 /// A Smith chart (T115, from Origin's documentation, not measured): line + symbol plots in a square layer
 /// of the polar page whose axes run from -1 to 1 and are not drawn; the layer draws the Smith grid.
 fn smith(id: WindowId, name: &str) -> Graph {
@@ -1473,7 +1509,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 83);
+        assert_eq!(Template::ALL.len(), 85);
         assert_eq!(Template::from_name("piper"), Some(Template::Piper));
         assert_eq!(Template::from_name("kde-2d"), Some(Template::Kde2d));
         assert_eq!(Template::from_name("smith-chart"), Some(Template::SmithChart));

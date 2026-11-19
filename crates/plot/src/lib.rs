@@ -49,6 +49,7 @@ mod marginal_plot;
 mod piper_plot;
 mod qc_plot;
 pub mod smith;
+mod space3d;
 mod stack;
 mod stock_plot;
 mod sunburst;

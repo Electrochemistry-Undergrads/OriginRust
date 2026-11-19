@@ -506,6 +506,24 @@ pub enum Coords {
     /// A Smith chart (T115): the plots read X as resistance and Y as reactance, normalised by `z0`, and are
     /// drawn as the reflection coefficient inside the unit circle over the Smith grid.
     Smith(SmithCoords),
+    /// A 3D XYZ layer (T155): the plots take X, Y and the Z column named in `Plot::size_from` (as a
+    /// ternary plot does) and are drawn as a fixed view of the XYZ box.
+    Space3d(Space3dCoords),
+}
+
+/// The view of a 3D layer (T155; Sheaf's default angles, Origin's are not measured).
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Space3dCoords {
+    /// Turn about the vertical Z axis, in degrees.
+    pub azimuth_deg: f64,
+    /// Tilt towards the viewer, in degrees (0: seen from the side, 90: from above).
+    pub elevation_deg: f64,
+}
+
+impl Default for Space3dCoords {
+    fn default() -> Self {
+        Space3dCoords { azimuth_deg: 40.0, elevation_deg: 25.0 }
+    }
 }
 
 /// The settings of a Smith chart layer.
@@ -546,6 +564,14 @@ impl Coords {
     pub fn smith(&self) -> Option<&SmithCoords> {
         match self {
             Coords::Smith(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The view of a 3D layer, `None` for any other layer (T155).
+    pub fn space3d(&self) -> Option<&Space3dCoords> {
+        match self {
+            Coords::Space3d(s) => Some(s),
             _ => None,
         }
     }

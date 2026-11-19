@@ -927,6 +927,11 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         if layer.coords.ternary().is_some() {
             crate::ternary::columns(&mut pd, plot.size_from.and_then(|id| project.numeric(id)));
         }
+        if let Some(c) = layer.coords.space3d()
+            && let Some(b) = crate::space3d::data_box(project, layer)
+        {
+            crate::space3d::columns(&mut pd, project, c, &b);
+        }
         pd.marker_display = layer.markers;
         plots.push(pd);
     }

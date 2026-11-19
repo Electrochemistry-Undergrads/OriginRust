@@ -1219,16 +1219,17 @@ fn plot_menu() -> Vec<Entry> {
                 "3D Ternary Colormap Surface",
             ],
         ),
-        grey_sub(
+        sub(
             "3D Symbol/Bar/&Vector",
-            &[
-                "3D Bars",
-                "3D Scatter",
-                "3D Trajectory",
-                "3D Scatter + Error Bar",
-                "3D Vector XYZ XYZ",
-                "3D Vector XYZ dXdYdZ",
-            ],
+            [
+                greys(&["3D Bars"]),
+                vec![
+                    item("3D Scatter", Cmd::Plot(Template::Scatter3d)),
+                    item("3D Trajectory", Cmd::Plot(Template::Trajectory3d)),
+                ],
+                greys(&["3D Scatter + Error Bar", "3D Vector XYZ XYZ", "3D Vector XYZ dXdYdZ"]),
+            ]
+            .concat(),
         ),
         sep(),
         sub(

@@ -6451,3 +6451,29 @@ unregistered, so Origin's own templates for them were not checked.
   place among the axes (the default). One undo step each ("Bring axis title to front", "Push axis
   title to back"). Picking still tries labels before titles.
 
+## 3D Scatter and 3D Trajectory: Plot > 3D Symbol/Bar/Vector (T155, 2026-11-19, **not measured**)
+
+Origin draws its 3D graphs with OpenGL, and they were not probed (its COM class was unregistered).
+Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it exports to every format.
+
+- **Data:** like a ternary plot, each plot of a Y column takes its Z column: the Z-designated column
+  after it, else the next numeric column. Z is stored in `Plot::size_from` and sizes no symbol. X is
+  the plot's X column, or the row numbers.
+- **Layer:** `Coords::Space3d` with an azimuth (turn about Z, 40 degrees) and an elevation (tilt, 25
+  degrees), Sheaf's choice.
+  - The layer frame is square. Its own X and Y axes are hidden and run from -1.8 to 1.8
+    (`SPACE3D_EXTENT`).
+  - Each variable's automatic range (with about five ticks) maps to the cube -1..1. A point is drawn
+    at `u = x cos a - y sin a`, `w = z cos e + (x sin a + y cos a) sin e`.
+- **Box:** the three far planes (the two back walls and the floor) have LT Gray grid lines at the
+  major ticks and black outlines.
+  - Tick labels and the column names as titles sit on the near edges: X and Y along the floor, Z up the
+    near-left edge.
+  - Where two labelled edges meet, X leaves out its end label and Z its bottom one.
+- **Templates:** `3d-scatter` (symbols) and `3d-trajectory` (line and symbols).
+- **Not done:**
+  - rotating the view, and the Z axis dialog (Format > Axes > Z Axis stays grey);
+  - hiding points behind each other (points are drawn in row order);
+  - 3D Bars, error bars and vectors, surfaces, and 3D OpenGL settings.
+  - The Data Reader shows the view's coordinates, not X, Y and Z.
+

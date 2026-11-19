@@ -11,7 +11,7 @@
 use eframe::egui::{self, DragValue};
 use sheaf_core::graph::*;
 use sheaf_core::vector::VectorPosition;
-use sheaf_core::{Color, ColumnId};
+use sheaf_core::{Color, Column, ColumnId, Project};
 
 use super::details_look as look;
 use super::graph_props::{
@@ -220,6 +220,7 @@ pub fn dialog_body(
     node: &mut Node,
     tab: &mut DetailTab,
     graph: &mut Graph,
+    project: &Project,
     labels: &[Vec<String>],
     names: &[Vec<String>],
     sources: &[Source],
@@ -362,6 +363,9 @@ pub fn dialog_body(
                         _ => page_tab(ui, graph),
                     },
                     Node::Layer(l) => layer_tab(ui, *tab, graph, l, sources, add_from, spans),
+                    Node::Plot(l, p) if *tab == DetailTab::Vector => {
+                        vector_tab(ui, &mut graph.layers[l].plots[p], project);
+                    }
                     Node::Plot(l, p) => plot_tab(ui, *tab, graph, l, p, labels, columns, numeric, node),
                 },
             );
@@ -459,7 +463,6 @@ fn plot_tab_body(
     node: &mut Node,
 ) {
     match tab {
-        DetailTab::Vector => vector_tab(ui, &mut graph.layers[l].plots[p]),
         DetailTab::Line => {
             let plot = &mut graph.layers[l].plots[p];
             grid(ui, "plot_line", |ui| {
@@ -934,9 +937,10 @@ fn plot_tab_body(
     }
 }
 
-/// The vector's shaft and arrowhead, with position and magnitude controls for XYAM.
-fn vector_tab(ui: &mut egui::Ui, plot: &mut Plot) {
+/// The vector's shaft, arrowhead and data bindings, with position and magnitude controls for XYAM.
+fn vector_tab(ui: &mut egui::Ui, plot: &mut Plot, project: &Project) {
     let Some(spec) = &mut plot.decor.vector else { return };
+    let columns = project.locate(plot.y).map_or(&[][..], |(_, sheet, _)| sheet.columns.as_slice());
     grid(ui, "vector_shaft", |ui| {
         ui.label("Color");
         let before = plot.line.color;
@@ -992,6 +996,12 @@ fn vector_tab(ui: &mut egui::Ui, plot: &mut Plot) {
                 ui.radio_value(&mut spec.position, VectorPosition::Tail, "Tail");
             });
         });
+        group_box(ui, "Vector Data", |ui| {
+            grid(ui, "vector_columns", |ui| {
+                vector_column(ui, "Angle", &mut spec.a, columns, project);
+                vector_column(ui, "Magnitude", &mut spec.b, columns, project);
+            });
+        });
         grid(ui, "vector_xyam", |ui| {
             let label = ui.label("Magnitude multiplier");
             ui.add(
@@ -1006,7 +1016,36 @@ fn vector_tab(ui: &mut egui::Ui, plot: &mut Plot) {
             });
             ui.end_row();
         });
+    } else {
+        group_box(ui, "End Point", |ui| {
+            grid(ui, "vector_endpoints", |ui| {
+                vector_column(ui, "X End", &mut spec.a, columns, project);
+                vector_column(ui, "Y End", &mut spec.b, columns, project);
+            });
+        });
     }
+}
+
+fn vector_column(ui: &mut egui::Ui, label: &str, selected: &mut ColumnId, columns: &[Column], project: &Project) {
+    let column_name = |c: &Column| format!("Col({})", c.short_name);
+    let current = if let Some(c) = columns.iter().find(|c| c.id == *selected) {
+        column_name(c)
+    } else if let Some((book, sheet, c)) = project.locate(*selected) {
+        format!("[{}]{}!{}", book.name, sheet.name, c.short_name)
+    } else {
+        "Missing column".into()
+    };
+    let heading = ui.label(label);
+    egui::ComboBox::from_id_salt(label)
+        .selected_text(current)
+        .show_ui(ui, |ui| {
+            for column in columns.iter().filter(|c| c.data.is_numeric()) {
+                ui.selectable_value(selected, column.id, column_name(column));
+            }
+        })
+        .response
+        .labelled_by(heading.id);
+    ui.end_row();
 }
 
 /// A colour that can follow the plot's ("Auto", Origin's default for drop lines) or be set.

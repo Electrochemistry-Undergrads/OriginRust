@@ -72,3 +72,83 @@ fn vector_details_edits_position_and_arrow_style_with_live_preview_and_undo() {
     menu(&mut h, "Edit", "Undo Change graph settings");
     assert_eq!(plot(&h), before);
 }
+
+#[test]
+fn xyam_vector_data_rebinds_the_angle_and_magnitude_columns() {
+    check_vector_data_selectors(Template::VectorXyam, "vector-xyam-data", "Vector Data");
+}
+
+#[test]
+fn xyxy_vector_endpoints_rebind_the_x_and_y_columns() {
+    check_vector_data_selectors(Template::VectorXyxy, "vector-xyxy-data", "End Point");
+}
+
+fn check_vector_data_selectors(template: Template, fixture: &str, heading: &str) {
+    let path = data_file(fixture);
+    let saved = path.with_file_name("vectors.sheaf");
+    let mut h = start(vec![path]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let mut graph_id = WindowId(0);
+    let mut new_columns = None;
+    h.state_mut().doc.apply("Make vector plot", |p| {
+        let sheet = &p.workbook(book).unwrap().sheets[0];
+        let (y, a) = (sheet.columns[1].id, sheet.columns[2].id);
+        let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0])).unwrap();
+        let new_a = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![5.0, 6.0, 7.0, 8.0])).unwrap();
+        let new_b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![9.0, 10.0, 11.0, 12.0])).unwrap();
+        new_columns = Some((new_a, new_b));
+        p.add_column(book, 0, Designation::Label, ColumnData::text(vec!["text".into()])).unwrap();
+        p.workbook_mut(book).unwrap().sheets.push(sheaf_core::Worksheet::new("Other sheet"));
+        let other = p.add_column(book, 1, Designation::Y, ColumnData::numeric(vec![0.0])).unwrap();
+        p.column_mut(other).unwrap().short_name = "Other".into();
+        if template == Template::VectorXyam {
+            graph_id = p.plot_columns(template, &[y, a, b]).unwrap();
+        } else {
+            p.column_mut(a).unwrap().designation = Designation::X;
+            graph_id = p.plot_columns(template, &[y, b]).unwrap();
+        }
+    });
+    settle(&mut h);
+    let ctx = h.ctx.clone();
+    let open = |h: &mut Harness<'static, SheafApp>| {
+        h.state_mut()
+            .apply(Action::GraphProperties { graph: graph_id, layer: 0, tab: PropsTab::Plots, plot: Some(0) }, &ctx);
+        settle(h);
+        click(h, "Vector");
+        assert!(has_label(h, heading));
+    };
+    let rebind = |h: &mut Harness<'static, SheafApp>| {
+        h.get_by_value("Col(C)").click();
+        settle(h);
+        assert!(h.query_by_label("Col(G)").is_none(), "text column");
+        assert!(h.query_by_label("Col(Other)").is_none(), "different sheet");
+        click(h, "Col(E)");
+        h.get_by_value("Col(D)").click();
+        settle(h);
+        click(h, "Col(F)");
+    };
+
+    let before = project(&h).graph(graph_id).unwrap().clone();
+    let before_svg = sheaf_plot::render_svg(project(&h), graph_id).unwrap();
+    let mut expected = before.clone();
+    let spec = expected.layers[0].plots[0].decor.vector.as_mut().unwrap();
+    (spec.a, spec.b) = new_columns.unwrap();
+
+    open(&mut h);
+    rebind(&mut h);
+    assert_eq!(project(&h).graph(graph_id), Some(&expected));
+    assert_ne!(sheaf_plot::render_svg(project(&h), graph_id).unwrap(), before_svg);
+    click(&mut h, "Cancel");
+    assert_eq!(project(&h).graph(graph_id), Some(&before));
+
+    open(&mut h);
+    rebind(&mut h);
+    click(&mut h, "Apply");
+    click(&mut h, "Cancel");
+    assert_eq!(project(&h).graph(graph_id), Some(&expected));
+    sheaf_io::save::save_project(project(&h), &saved).unwrap();
+    let reopened = sheaf_io::open_project(&saved).unwrap().project;
+    assert_eq!(reopened.graph(graph_id), Some(&expected));
+    menu(&mut h, "Edit", "Undo Change graph settings");
+    assert_eq!(project(&h).graph(graph_id), Some(&before));
+}

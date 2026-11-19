@@ -90,6 +90,7 @@ fn segments_width(m: &dyn TextMeasurer, segments: &[Segment], font: &Font, size:
             Segment::Text(r) => m.width(&r.text, &run_font(font, r), size * r.scale),
             Segment::Pair { sub, sup } => segments_width(m, sub, font, size).max(segments_width(m, sup, font, size)),
             Segment::Accent { content, .. } => segments_width(m, content, font, size),
+            Segment::LineGap(_) => 0.0,
         })
         .sum()
 }
@@ -103,6 +104,7 @@ fn ink_top(segments: &[Segment]) -> f64 {
             Segment::Accent { kind, content, scale, .. } => {
                 ink_top(content) + scale * (ACCENT_GAP + accent_height(*kind))
             }
+            Segment::LineGap(_) => f64::NEG_INFINITY,
         })
         .fold(f64::NEG_INFINITY, f64::max)
 }
@@ -146,6 +148,7 @@ fn visit_ink(
                 }
                 cursor += width;
             }
+            Segment::LineGap(_) => {}
         }
     }
 }
@@ -170,6 +173,96 @@ pub fn place(
     rotate_ccw: f64,
 ) {
     let runs = markup::segments(text, &|name| m.expand_inline_family(name));
+    place_segments(items, m, &runs, font, size, (x, y), anchor, rotate_ccw);
+}
+
+/// Lays out free graph labels from the first line's baseline, including explicit extra gaps.
+pub(crate) fn place_label(
+    items: &mut Vec<Item>,
+    m: &dyn TextMeasurer,
+    raw: &str,
+    font: &Font,
+    (x, y): (f64, f64),
+    rotate_ccw: f64,
+) {
+    let size = font.size_pt;
+    if !raw.contains(['\r', '\n']) {
+        place(items, m, raw, font, size, (x, y), Anchor::Start, rotate_ccw);
+        return;
+    }
+    let normal = raw.replace("\r\n", "\n").replace('\r', "\n");
+    let rows = text_rows(markup::label_segments(&normal, &|name| m.expand_inline_family(name)));
+    let (sin, cos) = rotate_ccw.to_radians().sin_cos();
+    let mut offset = 0.0;
+    let mut next_advance = 0.0;
+    for row in rows {
+        if let [Segment::LineGap(percent)] = row.as_slice() {
+            if next_advance > 0.0 {
+                next_advance += f64::from(*percent) / 100.0 * size;
+            }
+            continue;
+        }
+        offset += next_advance;
+        let position = (x + offset * sin, y + offset * cos);
+        place_segments(items, m, &row, font, size, position, Anchor::Start, rotate_ccw);
+        next_advance = 1.3 * size;
+    }
+}
+
+/// Splits the parsed text so styles spanning a newline are retained on each row.
+fn text_rows(segments: Vec<Segment>) -> Vec<Vec<Segment>> {
+    let mut rows = vec![Vec::new()];
+    for segment in segments {
+        let chunks = match segment {
+            Segment::Text(mut run) if run.text.contains('\n') => {
+                let text = std::mem::take(&mut run.text);
+                text.split('\n')
+                    .map(|line| {
+                        if line.is_empty() {
+                            Vec::new()
+                        } else {
+                            vec![Segment::Text(Run { text: line.into(), ..run.clone() })]
+                        }
+                    })
+                    .collect()
+            }
+            Segment::Pair { sub, sup } => {
+                let mut sub = text_rows(sub).into_iter();
+                let mut sup = text_rows(sup).into_iter();
+                let count = sub.len().max(sup.len());
+                (0..count)
+                    .map(|_| {
+                        let sub = sub.next().unwrap_or_default();
+                        let sup = sup.next().unwrap_or_default();
+                        if sub.is_empty() && sup.is_empty() { Vec::new() } else { vec![Segment::Pair { sub, sup }] }
+                    })
+                    .collect()
+            }
+            Segment::Accent { kind, content, scale, color } => text_rows(content)
+                .into_iter()
+                .map(|content| {
+                    if content.is_empty() { Vec::new() } else { vec![Segment::Accent { kind, content, scale, color }] }
+                })
+                .collect(),
+            other => vec![vec![other]],
+        };
+        let mut chunks = chunks.into_iter();
+        rows.last_mut().expect("initial row").extend(chunks.next().unwrap_or_default());
+        rows.extend(chunks);
+    }
+    rows
+}
+
+fn place_segments(
+    items: &mut Vec<Item>,
+    m: &dyn TextMeasurer,
+    runs: &[Segment],
+    font: &Font,
+    size: f64,
+    (x, y): (f64, f64),
+    anchor: Anchor,
+    rotate_ccw: f64,
+) {
     if runs.is_empty() {
         return;
     }
@@ -187,7 +280,7 @@ pub fn place(
             rotate_ccw,
         })
     };
-    let mut glyphs = runs.as_slice();
+    let mut glyphs = runs;
     while let [Segment::Accent { content, .. }] = glyphs {
         glyphs = content;
     }
@@ -199,11 +292,11 @@ pub fn place(
     if let Some(run) = single_run {
         // One plain run: let the renderer align it with its own font metrics.
         items.push(item(run, x, y, anchor));
-        if !run.underline && !run.strikeout && matches!(runs.as_slice(), [Segment::Text(_)]) {
+        if !run.underline && !run.strikeout && matches!(runs, [Segment::Text(_)]) {
             return;
         }
     }
-    let total = segments_width(m, &runs, font, size);
+    let total = segments_width(m, runs, font, size);
     let cursor = match anchor {
         Anchor::Start => 0.0,
         Anchor::Middle => -total / 2.0,
@@ -221,7 +314,7 @@ pub fn place(
         push_num(&mut d, py - width * sin);
         Item::Path { d, fill: None, stroke: Some(stroke) }
     };
-    visit_ink(&runs, m, font, size, cursor, &mut |mark, cursor| {
+    visit_ink(runs, m, font, size, cursor, &mut |mark, cursor| {
         let run = match mark {
             Ink::Glyphs(run) => run,
             Ink::Accent { kind, rise, width, em, color } => {

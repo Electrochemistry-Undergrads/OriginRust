@@ -1031,7 +1031,7 @@ fn draw_legend_and_labels(
         let (sin, cos) = label.rotation_deg.to_radians().sin_cos();
         let dy = (ASCENT - DESCENT) / 2.0 * size;
         let pos = (anchor.0 + dy * sin, anchor.1 + dy * cos);
-        text::place(out, m, &label.text, &label.font, size, pos, Anchor::Start, label.rotation_deg);
+        text::place_label(out, m, &label.text, &label.font, pos, label.rotation_deg);
         rec(objects, out, start, ObjectKind::Label(k), &[]);
     }
     crate::shapes::draw_shapes(out, objects, layer, index, f, m);

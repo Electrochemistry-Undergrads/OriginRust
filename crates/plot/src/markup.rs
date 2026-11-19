@@ -64,6 +64,7 @@ pub(crate) enum Segment {
     Text(Run),
     Pair { sub: Vec<Segment>, sup: Vec<Segment> },
     Accent { kind: Accent, content: Vec<Segment>, scale: f64, color: Option<Color> },
+    LineGap(u32),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -85,6 +86,7 @@ pub fn parse(text: &str) -> Vec<Run> {
                     flatten(sup, out);
                 }
                 Segment::Accent { content, .. } => flatten(content, out),
+                Segment::LineGap(_) => {}
             }
         }
     }
@@ -94,6 +96,20 @@ pub fn parse(text: &str) -> Vec<Run> {
 }
 
 pub(crate) fn segments(text: &str, expand_family: &impl Fn(&str) -> Option<String>) -> Vec<Segment> {
+    parse_segments(text, &ParseOptions { expand_family, label_separators: false })
+}
+
+/// Parses a free label with normalized line endings, including its standalone gap lines.
+pub(crate) fn label_segments(text: &str, expand_family: &impl Fn(&str) -> Option<String>) -> Vec<Segment> {
+    parse_segments(text, &ParseOptions { expand_family, label_separators: true })
+}
+
+struct ParseOptions<'a> {
+    expand_family: &'a dyn Fn(&str) -> Option<String>,
+    label_separators: bool,
+}
+
+fn parse_segments(text: &str, options: &ParseOptions<'_>) -> Vec<Segment> {
     let chars: Vec<char> = text.chars().collect();
     let mut pos = 0;
     let mut out = Vec::new();
@@ -108,7 +124,7 @@ pub(crate) fn segments(text: &str, expand_family: &impl Fn(&str) -> Option<Strin
         scale: 1.0,
         rise: 0.0,
     };
-    parse_seq(&chars, &mut pos, base, false, 0, &mut out, expand_family);
+    parse_seq(&chars, &mut pos, base, false, 0, &mut out, options);
     out
 }
 
@@ -346,21 +362,31 @@ fn parse_seq(
     in_escape: bool,
     depth: usize,
     out: &mut Vec<Segment>,
-    expand_family: &impl Fn(&str) -> Option<String>,
+    options: &ParseOptions<'_>,
 ) {
     let mut parens = 0usize;
     while *pos < chars.len() {
         let c = chars[*pos];
+        if options.label_separators && depth == 0 && (*pos == 0 || chars[*pos - 1] == '\n') {
+            let line: String = chars[*pos..].iter().take_while(|&&c| c != '\n').collect();
+            if let Some(percent) = crate::legend::separation_percent(&line) {
+                out.push(Segment::LineGap(percent));
+                // A valid separator contains only ASCII syntax and digits, plus optional
+                // whitespace. Count characters because the parser indexes Unicode scalars.
+                *pos += line.chars().count();
+                continue;
+            }
+        }
         if c == '\\'
             && depth < MAX_DEPTH
-            && let Some((esc, start)) = escape_at(chars, *pos, &st, expand_family)
+            && let Some((esc, start)) = escape_at(chars, *pos, &st, &options.expand_family)
         {
             *pos = start;
             match esc {
-                Escape::Styled(inner) => parse_seq(chars, pos, inner, true, depth + 1, out, expand_family),
+                Escape::Styled(inner) => parse_seq(chars, pos, inner, true, depth + 1, out, options),
                 Escape::Accent(kind) => {
                     let mut content = Vec::new();
-                    parse_seq(chars, pos, st.clone(), true, depth + 1, &mut content, expand_family);
+                    parse_seq(chars, pos, st.clone(), true, depth + 1, &mut content, options);
                     if !content.is_empty() {
                         out.push(Segment::Accent { kind, content, scale: st.scale, color: st.color });
                     }
@@ -387,7 +413,7 @@ fn parse_seq(
                     let branch = |chars: &[char], rise: f64| {
                         let inner = Style { scale: st.scale * 0.6, rise: st.rise + rise * st.scale, ..st.clone() };
                         let mut out = Vec::new();
-                        parse_seq(chars, &mut 0, inner, false, depth + 1, &mut out, expand_family);
+                        parse_seq(chars, &mut 0, inner, false, depth + 1, &mut out, options);
                         out
                     };
                     let sub = branch(lower, -0.35);

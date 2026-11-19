@@ -1,9 +1,10 @@
 //! File > Save Template As... and Plot > User Templates > Manage... (T56): the name prompt for a new
-//! user graph template and the list that renames and deletes them. The files are written by
+//! user graph template (or workbook template, T160) and the list that renames and deletes them. The files are written by
 //! `sheaf_io::user_templates`; these windows only ask. Rules: `docs/spec/graphing.md`, section 24.
 
 use eframe::egui::{self, RichText};
 use sheaf_core::WindowId;
+use sheaf_io::user_templates::TemplateKind;
 
 /// What the Save Template As window asks for.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,8 +17,10 @@ pub enum PromptOutcome {
 
 /// The name prompt of File > Save Template As.
 pub struct SaveTemplatePrompt {
-    /// The graph whose look is saved.
-    pub graph: WindowId,
+    /// The graph whose look, or the workbook whose structure, is saved.
+    pub window: WindowId,
+    /// A graph template or a workbook template.
+    pub kind: TemplateKind,
     name: String,
     /// The saved names, to say that OK replaces one.
     existing: Vec<String>,
@@ -26,9 +29,10 @@ pub struct SaveTemplatePrompt {
 }
 
 impl SaveTemplatePrompt {
-    /// A prompt filled with `default_name` (the graph's short name).
-    pub fn new(graph: WindowId, default_name: &str, existing: Vec<String>) -> Self {
-        SaveTemplatePrompt { graph, name: default_name.to_string(), existing, error: None, focus: true }
+    /// A prompt filled with `default_name` (the window's short name); `existing` are the saved
+    /// templates of the same kind.
+    pub fn new(window: WindowId, kind: TemplateKind, default_name: &str, existing: Vec<String>) -> Self {
+        SaveTemplatePrompt { window, kind, name: default_name.to_string(), existing, error: None, focus: true }
     }
 
     /// Shows a problem of the last OK under the name; the window stays open.
@@ -57,7 +61,14 @@ impl SaveTemplatePrompt {
                 if self.existing.iter().any(|n| n.to_lowercase() == lower) {
                     ui.label("A template of this name is saved; OK replaces it.");
                 }
-                ui.weak("The template keeps the look of the graph, not its data (Plot > User Templates).");
+                ui.weak(match self.kind {
+                    TemplateKind::Graph => {
+                        "The template keeps the look of the graph, not its data (Plot > User Templates)."
+                    }
+                    TemplateKind::Workbook => {
+                        "The template keeps the sheets, columns, labels, formats and formulas of the                          workbook, not its data (File > New > From Template)."
+                    }
+                });
                 if let Some(e) = &self.error {
                     ui.label(RichText::new(e).color(egui::Color32::from_rgb(190, 30, 30)));
                 }
@@ -83,39 +94,45 @@ impl SaveTemplatePrompt {
 pub enum ManagerOutcome {
     Open,
     Closed,
-    Rename { from: String, to: String },
-    Delete(String),
+    Rename { kind: TemplateKind, from: String, to: String },
+    Delete(TemplateKind, String),
 }
 
-/// Plot > User Templates > Manage...: the saved templates with Rename and Delete.
+/// Plot > User Templates > Manage...: the saved graph templates, then the workbook templates (T160),
+/// with Rename and Delete.
 pub struct TemplateManager {
-    names: Vec<String>,
+    names: Vec<(TemplateKind, String)>,
     selected: Option<usize>,
     new_name: String,
     error: Option<String>,
 }
 
 impl TemplateManager {
-    pub fn new(names: Vec<String>) -> Self {
+    pub fn new(graphs: Vec<String>, books: Vec<String>) -> Self {
         let mut m = TemplateManager { names: Vec::new(), selected: None, new_name: String::new(), error: None };
-        m.set_names(names);
+        m.set_names(graphs, books);
         m
     }
 
-    /// The list after a change; the selection follows the name when it is still there.
-    pub fn set_names(&mut self, names: Vec<String>) {
-        let keep = self.selected.and_then(|i| self.names.get(i)).map(|n| n.to_lowercase());
-        self.names = names;
-        self.selected = keep.and_then(|k| self.names.iter().position(|n| n.to_lowercase() == k));
-        self.new_name = self.selected.map(|i| self.names[i].clone()).unwrap_or_default();
+    /// The lists after a change; the selection follows the name when it is still there.
+    pub fn set_names(&mut self, graphs: Vec<String>, books: Vec<String>) {
+        let keep = self.selected.and_then(|i| self.names.get(i)).map(|(k, n)| (*k, n.to_lowercase()));
+        self.names = graphs
+            .into_iter()
+            .map(|n| (TemplateKind::Graph, n))
+            .chain(books.into_iter().map(|n| (TemplateKind::Workbook, n)))
+            .collect();
+        self.selected =
+            keep.and_then(|(kind, k)| self.names.iter().position(|(nk, n)| *nk == kind && n.to_lowercase() == k));
+        self.new_name = self.selected.map(|i| self.names[i].1.clone()).unwrap_or_default();
         self.error = None;
     }
 
-    /// Selects a template by name (letter case does not matter).
-    pub fn select(&mut self, name: &str) {
+    /// Selects a template by kind and name (letter case does not matter).
+    pub fn select(&mut self, kind: TemplateKind, name: &str) {
         let lower = name.to_lowercase();
-        self.selected = self.names.iter().position(|n| n.to_lowercase() == lower);
-        self.new_name = self.selected.map(|i| self.names[i].clone()).unwrap_or_default();
+        self.selected = self.names.iter().position(|(k, n)| *k == kind && n.to_lowercase() == lower);
+        self.new_name = self.selected.map(|i| self.names[i].1.clone()).unwrap_or_default();
     }
 
     pub fn set_error(&mut self, error: String) {
@@ -132,10 +149,15 @@ impl TemplateManager {
             .open(&mut open)
             .show(ctx, |ui| {
                 if self.names.is_empty() {
-                    ui.weak("No templates are saved. On a graph: File > Save Template As...");
+                    ui.weak("No templates are saved. On a graph or a workbook: File > Save Template As...");
                 }
                 egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
-                    for (i, name) in self.names.iter().enumerate() {
+                    let mut heading = None;
+                    for (i, (kind, name)) in self.names.iter().enumerate() {
+                        if *kind == TemplateKind::Workbook && heading != Some(*kind) {
+                            ui.weak("Workbook templates");
+                        }
+                        heading = Some(*kind);
                         if ui.selectable_label(self.selected == Some(i), name).clicked() {
                             self.selected = Some(i);
                             self.new_name = name.clone();
@@ -143,7 +165,7 @@ impl TemplateManager {
                     }
                 });
                 if let Some(i) = self.selected {
-                    let name = self.names[i].clone();
+                    let (kind, name) = self.names[i].clone();
                     ui.separator();
                     ui.horizontal(|ui| {
                         ui.label("New name");
@@ -153,11 +175,11 @@ impl TemplateManager {
                                 .id(egui::Id::new("template_new_name")),
                         );
                         if ui.button("Rename").clicked() {
-                            outcome = ManagerOutcome::Rename { from: name.clone(), to: self.new_name.clone() };
+                            outcome = ManagerOutcome::Rename { kind, from: name.clone(), to: self.new_name.clone() };
                         }
                     });
                     if ui.button("Delete").clicked() {
-                        outcome = ManagerOutcome::Delete(name);
+                        outcome = ManagerOutcome::Delete(kind, name);
                     }
                 }
                 if let Some(f) = folder {

@@ -436,6 +436,7 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         recent_commands: &crate::menus::NO_COMMANDS,
         recent_exports: &[],
         user_templates: &[],
+        user_book_templates: &[],
         templates: false,
         recent_imports: &[],
         panels: [true; 4],

@@ -1093,6 +1093,35 @@ Sheaf (`crates/core/src/pivot.rs`, `crates/app/src/dialogs/pivot.rs`), choices *
 - **Left out** (shown disabled): Combine Direction/Others, extra row and column values, the user
   parameter position.
 
+## 13o. User workbook templates: Save Template As on a workbook (T160, 2026-11-19, not measured)
+
+Origin saves a workbook as a template (`.otw`/`.otwu`) from File > Save Template As..., and File > New >
+From Template lists workbook templates by file name (T103 measured the submenu: `Assays.ogw` and the like).
+Nothing about what an Origin workbook template keeps was measured (Origin COM was unavailable); Sheaf's
+choices below are **unmeasured**, and Origin's own template files are never read or written.
+
+- **Saving** (File > Save Template As... on a workbook; greyed without a template folder): the same name
+  prompt as a graph template (graphing 24), filled with the book's short name; OK writes
+  `<name>.sheafbooktemplate` in the same templates folder. Graph and workbook templates have names of
+  their own: a workbook template never replaces a graph template of the same name, and the reverse. The
+  file is a `.sheaf` archive with the marker `"template": "workbook"` holding one workbook without values.
+- **What is kept** (`sheaf_core::BookTemplate::from_workbook`): the book's long name and every sheet (name,
+  long name, comments, tab label, view switches, frozen panes, category fonts, row filter, conditional
+  formats, cell formats), and per column the short and long names, units, comments, user parameter rows,
+  designation, number format, storage kind (numeric, text, text & numeric), width, hidden and categorical
+  flags, sampling interval and the Set Column Values formula with its recalc mode and rows. **Dropped**:
+  every value, masks, cell notes, Set As Begin/End ranges, analysis marks and fit-result flags, the import
+  source and the comparison source of a report sheet.
+- **New from a template** (File > New > From Template, after the graph templates and a separator; More...
+  picks either kind of file): a new workbook built like the template with fresh ids and a free `Book<n>`
+  name, shown in front, one undo step ("New workbook from template"). Formula columns stay empty until
+  their inputs change.
+- **Managing**: Plot > User Templates > Manage... lists the workbook templates under their own heading,
+  with Rename (refused onto another workbook template's name) and Delete.
+- Not done: Save Workbook As Analysis Template (B11), CLI and MCP access, Origin `.otw` files.
+- Tests: `crates/core/src/book_template.rs`, `crates/io/src/user_templates/tests.rs`,
+  `crates/app/src/app/ui_tests/user_templates.rs`.
+
 ## 14. Suggested Rust data model (P0)
 
 ```

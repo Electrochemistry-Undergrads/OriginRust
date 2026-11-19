@@ -1,6 +1,6 @@
 # T103: File > New > From Template
 
-**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 24): Origin's submenu (templates by name, More...) measured; Sheaf lists the user graph templates and makes an empty graph from one. Left: workbook templates (Sheaf has none).
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 24): Origin's submenu (templates by name, More...) measured; Sheaf lists the user graph templates and makes an empty graph from one. Workbook templates followed in T160 (2026-11-19).
 **Size:** S. **Source:** greyed inventory package B11 (File > New > From Template).
 **Spec:** `docs/spec/graphing.md` section 24 (user templates).
 

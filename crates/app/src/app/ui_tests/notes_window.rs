@@ -31,3 +31,32 @@ fn a_notes_window_is_made_typed_in_and_its_edit_is_one_undo_step() {
     settle(&mut h);
     assert_eq!(project(&h).notes().count(), 2);
 }
+
+#[test]
+fn add_notes_as_sheet_makes_a_text_sheet_edited_in_place_of_the_grid() {
+    let entries = menus::sheet_tab_menu(&sheaf_core::Worksheet::new("Sheet1"));
+    assert!(entries.iter().any(|e| matches!(e, menus::Entry::Item(i)
+        if i.label == "Add Notes as Sheet" && i.cmd == Some(menus::Cmd::Sheet(SheetOp::AddNotes)))));
+    let mut h = start(vec![data_file("notes-sheet")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = h.state().books.keys().next().copied().unwrap();
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Sheet { book, op: SheetOp::AddNotes }, &ctx);
+    settle(&mut h);
+    let b = project(&h).workbook(book).unwrap();
+    assert_eq!(b.sheets.len(), 2);
+    assert_eq!((b.active_sheet, b.sheets[1].name.as_str()), (1, "Notes"));
+    assert!(b.sheets[1].is_notes());
+    assert_eq!(h.state().doc.undo_label(), Some("Add Notes as Sheet"));
+    h.query_all_by_role(egui::accesskit::Role::MultilineTextInput).last().expect("the text box").focus();
+    settle(&mut h);
+    h.event(egui::Event::Text("run notes".into()));
+    settle(&mut h);
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    assert_eq!(project(&h).workbook(book).unwrap().sheets[1].notes_text.as_deref(), Some("run notes"));
+    assert_eq!(h.state().doc.undo_label(), Some("Edit notes"));
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).workbook(book).unwrap().sheets[1].notes_text.as_deref(), Some(""));
+}

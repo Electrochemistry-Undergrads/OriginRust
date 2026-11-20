@@ -65,6 +65,10 @@ pub struct Worksheet {
     /// the report was made from, so that "Multiple Comparisons Plot" (T64) can draw them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comparison_source: Option<crate::compplot::ComparisonSource>,
+    /// Add Notes as Sheet (T188): `Some` makes this a Notes sheet, a page of free text with no columns,
+    /// shown as a text box in place of the grid.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes_text: Option<String>,
 }
 
 impl Worksheet {
@@ -84,7 +88,13 @@ impl Worksheet {
             cell_formats: Vec::new(),
             font_defaults: Default::default(),
             comparison_source: None,
+            notes_text: None,
         }
+    }
+
+    /// True for a Notes sheet (Add Notes as Sheet, T188).
+    pub fn is_notes(&self) -> bool {
+        self.notes_text.is_some()
     }
 
     /// Number of rows: the length of the longest column.
@@ -180,6 +190,20 @@ pub struct ImportSource {
 }
 
 impl Workbook {
+    /// Add Notes as Sheet (T188): a new empty Notes sheet after the last sheet, named `Notes` (then
+    /// `Notes2`, `Notes3`, ... when taken), made the active sheet. Returns its index.
+    pub fn add_notes_sheet(&mut self) -> usize {
+        let name = std::iter::once("Notes".to_string())
+            .chain((2..).map(|n| format!("Notes{n}")))
+            .find(|n| !self.sheets.iter().any(|s| s.name.eq_ignore_ascii_case(n)))
+            .expect("the name sequence is unbounded");
+        let mut sheet = Worksheet::new(name);
+        sheet.notes_text = Some(String::new());
+        self.sheets.push(sheet);
+        self.active_sheet = self.sheets.len() - 1;
+        self.active_sheet
+    }
+
     /// The title a graph made from this book takes: the book's long name, except that an imported
     /// book titled with its whole file name (`data.csv`, as Origin titles imports) gives the name
     /// without the extension, so graph titles and exported file names stay `data`.
@@ -303,5 +327,19 @@ mod title_tests {
         b.source = None;
         b.long_name = "notes.txt".into();
         assert_eq!(b.title_for_graph(), "notes.txt");
+    }
+
+    #[test]
+    fn a_notes_sheet_is_added_after_the_last_sheet_with_a_free_name() {
+        let mut b = Workbook::new(WindowId(1), "Book1");
+        let first = b.add_notes_sheet();
+        assert_eq!((first, b.sheets[first].name.as_str()), (1, "Notes"));
+        assert!(b.sheets[first].is_notes() && b.sheets[first].columns.is_empty());
+        let second = b.add_notes_sheet();
+        assert_eq!(b.sheets[second].name, "Notes2");
+        assert_eq!(b.active_sheet, second);
+        let json = serde_json::to_string(&b).unwrap();
+        let back: Workbook = serde_json::from_str(&json).unwrap();
+        assert!(back.sheets[1].is_notes() && !back.sheets[0].is_notes());
     }
 }

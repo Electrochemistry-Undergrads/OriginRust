@@ -85,11 +85,15 @@ pub struct Volume {
     pub sd: f64,
     pub sum: f64,
     pub volume: f64,
+    /// The full width at half maximum along X and along Y through the highest cell (T203); NaN when
+    /// the values do not fall below half the maximum on both sides inside the region.
+    pub fwhm_x: f64,
+    pub fwhm_y: f64,
 }
 
 /// The column names of the 2D Integrate gadget's output table (T198), one row per New Output.
-pub const VOLUME_COLUMNS: [&str; 11] =
-    ["X From", "X To", "Y From", "Y To", "Volume", "N", "Mean", "SD", "Min", "Max", "Sum"];
+pub const VOLUME_COLUMNS: [&str; 13] =
+    ["X From", "X To", "Y From", "Y To", "Volume", "N", "Mean", "SD", "Min", "Max", "Sum", "FWHM X", "FWHM Y"];
 
 /// The long name of the workbook that collects the 2D Integrate gadget's outputs (T198).
 pub const VOLUME_BOOK: &str = "2D Integrate Results";
@@ -123,7 +127,9 @@ pub fn write_volume(p: &mut Project, rect: [f64; 4], v: &Volume) -> WindowId {
             book
         }
     };
-    let row = [rect[0], rect[1], rect[2], rect[3], v.volume, v.n as f64, v.mean, v.sd, v.min, v.max, v.sum];
+    let row = [
+        rect[0], rect[1], rect[2], rect[3], v.volume, v.n as f64, v.mean, v.sd, v.min, v.max, v.sum, v.fwhm_x, v.fwhm_y,
+    ];
     let ids: Vec<sheaf_core::ColumnId> = p
         .workbook(book)
         .and_then(|b| b.sheets.first())
@@ -153,11 +159,12 @@ pub fn volume_in(
     let (cx, cy, rx, ry) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0, (x1 - x0).abs() / 2.0, (y1 - y0).abs() / 2.0);
     let in_ellipse =
         |x: f64, y: f64| rx > 0.0 && ry > 0.0 && ((x - cx) / rx).powi(2) + ((y - cy) / ry).powi(2) <= 1.0 + 1e-12;
-    let z: Vec<f64> = cells
+    let picked: Vec<[f64; 3]> = cells
         .iter()
         .filter(|p| if circle { in_ellipse(p[0], p[1]) } else { inside(p[0], x0, x1) && inside(p[1], y0, y1) })
-        .map(|p| p[2])
+        .copied()
         .collect();
+    let z: Vec<f64> = picked.iter().map(|p| p[2]).collect();
     let n = z.len();
     if n == 0 {
         return None;
@@ -166,7 +173,42 @@ pub fn volume_in(
     let mean = sum / n as f64;
     let sd = if n > 1 { (z.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (n - 1) as f64).sqrt() } else { 0.0 };
     let (min, max) = z.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| (a.min(*v), b.max(*v)));
-    Some(Volume { n, min, max, mean, sd, sum, volume: sum * area })
+    // FWHM (T203): along the row and the column of the highest cell.
+    let peak = picked.iter().max_by(|a, b| a[2].total_cmp(&b[2])).copied().expect("n > 0");
+    let line = |along: usize| -> Vec<(f64, f64)> {
+        let across = 1 - along;
+        let mut v: Vec<(f64, f64)> =
+            picked.iter().filter(|p| p[across] == peak[across]).map(|p| (p[along], p[2])).collect();
+        v.sort_by(|a, b| a.0.total_cmp(&b.0));
+        v
+    };
+    Some(Volume {
+        n,
+        min,
+        max,
+        mean,
+        sd,
+        sum,
+        volume: sum * area,
+        fwhm_x: fwhm(&line(0), max / 2.0),
+        fwhm_y: fwhm(&line(1), max / 2.0),
+    })
+}
+
+/// The width of the run around the highest point of `points` (position, value; sorted by position)
+/// that stays at or above `half`, with the ends found linearly between neighbours (T203); NaN when
+/// the values do not drop below `half` on both sides.
+pub fn fwhm(points: &[(f64, f64)], half: f64) -> f64 {
+    let Some(top) = points.iter().enumerate().max_by(|a, b| a.1.1.total_cmp(&b.1.1)).map(|(i, _)| i) else {
+        return f64::NAN;
+    };
+    let cross = |a: (f64, f64), b: (f64, f64)| a.0 + (half - a.1) / (b.1 - a.1) * (b.0 - a.0);
+    let left = (0..top).rev().find(|&i| points[i].1 < half).map(|i| cross(points[i], points[i + 1]));
+    let right = (top + 1..points.len()).find(|&i| points[i].1 < half).map(|i| cross(points[i - 1], points[i]));
+    match (left, right) {
+        (Some(l), Some(r)) => r - l,
+        _ => f64::NAN,
+    }
 }
 
 /// The Cluster gadget's numbers: how many points are inside and their mean X and Y.
@@ -791,14 +833,16 @@ impl Integrator {
                     Some(v) => {
                         let g = |v: f64| sheaf_core::format::format_general(v, 5);
                         format!(
-                            "Volume = {}\nN = {}, Mean = {}, SD = {}\nMin = {}, Max = {}, Sum = {}",
+                            "Volume = {}\nN = {}, Mean = {}, SD = {}\nMin = {}, Max = {}, Sum = {}\nFWHM X = {}, FWHM Y = {}",
                             g(v.volume),
                             v.n,
                             g(v.mean),
                             g(v.sd),
                             g(v.min),
                             g(v.max),
-                            g(v.sum)
+                            g(v.sum),
+                            g(v.fwhm_x),
+                            g(v.fwhm_y)
                         )
                     }
                     None => "No cells in the region".to_string(),
@@ -1012,5 +1056,28 @@ mod tests {
         assert_eq!(volume_in(&cells, 1.0, (-1.0, 3.0), (-1.0, 3.0), true).unwrap().n, 9);
         let round = volume_in(&cells, 1.0, (0.0, 2.0), (0.0, 2.0), true).unwrap();
         assert_eq!((round.n, round.sum), (5, 10.0), "the centre and the four edge middles");
+    }
+
+    #[test]
+    fn fwhm_is_the_width_at_half_the_peak() {
+        // T203: a triangle 0, 2, 4, 2, 0 at 0..4: half is 2, reached at 1 and 3, so 2 wide.
+        let tri = [(0.0, 0.0), (1.0, 2.0), (2.0, 4.0), (3.0, 2.0), (4.0, 0.0)];
+        assert!((fwhm(&tri, 2.0) - 2.0).abs() < 1e-12);
+        // Between cells: half 1.5 between (0, 0) and (1, 2) at 0.75, and (3, 2) and (4, 0) at 3.25.
+        assert!((fwhm(&tri, 1.5) - 2.5).abs() < 1e-12);
+        // No fall on one side: undefined.
+        assert!(fwhm(&[(0.0, 3.0), (1.0, 4.0), (2.0, 0.0)], 2.0).is_nan());
+        // On a grid: Z = 4 - |x - 2| - |y - 2| over 0..4: along each axis through (2, 2) the values
+        // are 2, 3, 4, 3, 2, never below half (2): undefined; with a lower peak cut it is defined.
+        let cells: Vec<[f64; 3]> = (0..5)
+            .flat_map(|r| {
+                (0..5).map(move |c| [c as f64, r as f64, 4.0 - (c as f64 - 2.0).abs() - (r as f64 - 2.0).abs()])
+            })
+            .collect();
+        let v = volume_in(&cells, 1.0, (0.0, 4.0), (0.0, 4.0), false).unwrap();
+        assert!(v.fwhm_x.is_nan() && v.fwhm_y.is_nan(), "{v:?}");
+        let cone: Vec<[f64; 3]> = cells.iter().map(|p| [p[0], p[1], (p[2] - 2.0).max(0.0)]).collect();
+        let v = volume_in(&cone, 1.0, (0.0, 4.0), (0.0, 4.0), false).unwrap();
+        assert!((v.fwhm_x - 2.0).abs() < 1e-12 && (v.fwhm_y - 2.0).abs() < 1e-12, "{v:?}");
     }
 }

@@ -917,6 +917,12 @@ block holds the major tick direction in bits 4 and 5 and the minor one in bits 6
 three bytes red, green, blue and 1 for a free colour. A text column as X sets the flag at `0x23` and
 `0x25` in blocks 2 and 4 of the X group; Origin then prints the texts of the column under the bars.
 
+**Plot-type IDs read (T223).** The type word uses LabTalk's plot-type IDs (200 to 204 agree with the
+curve records below). The reader also takes the documented single-Y types 206 Box, 213 stacked column, 214
+stacked area, 215 Bar, 216 stacked bar, 219 Histogram and 225 Pie as those kinds
+([LabTalk Plot Type IDs](https://docs.originlab.com/labtalk/ref/plot-type-ids/)); their records were not
+compared byte for byte with Origin's. Other types are read as line + symbol with a warning.
+
 **Curve records [orig].** Type words: 200 line, 201 scatter, 202 line and symbol, 203 column, 487 Y error
 (a 515-byte record whose `0x04` is the data set of the error column and `0x23` the Y data set of the curve).
 Data-set numbers at `0x04` (Y) and `0x23` (X, 0 for row numbers), first and after-last used row at `0x07`

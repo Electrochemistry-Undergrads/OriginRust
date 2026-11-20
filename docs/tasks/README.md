@@ -180,6 +180,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | T189 | Gadgets > 2D Integrate... on heat map / contour layers (B9) | S | done 2026-11-20 (graphing "2D Integrate gadget"), not measured; New Output to a results workbook added as T198, Region > Circle as T201, FWHM as T203, base plane as T206; left: free-hand regions |
 | T209 | Graph gadgets skip worksheet-filtered and masked rows (T10 remainder) | S | done 2026-11-20 (workbook-model 13.2a) |
 | T212 | Table UI walkthrough coverage: row/column operations, moving columns, sheet switching on new and imported tables | S | done 2026-11-20 (known-issues; added sheets now get A(X), B(Y)) |
+| T215 | Sheet control coverage: Insert/Duplicate/Delete with undo, paste across sheets, new and imported tables | S | done 2026-11-20 (known-issues) |
 | [T66](T66-graph-view-modes.md) (T177) | Graph View > Show > Labels and Data (T66 slice) | S | done 2026-11-19 (graphing 22.8), documentation contract, not measured; seven Show items left |
 | [T160](T160-workbook-templates.md) | User workbook templates: Save Template As on a workbook, New > From Template (T56/T103 follow-up) | M | done 2026-11-19 (workbook-model 13o), not measured; left: analysis templates (B11), CLI/MCP |
 | [T163](T163-analysis-templates.md) | Save Workbook As Analysis Template (B11 slice, on T160) | M | done 2026-11-19 (workbook-model 13o), not measured; left: Origin options, Batch Processing |

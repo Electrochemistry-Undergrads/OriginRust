@@ -160,6 +160,16 @@ pub enum Cmd {
         column: ColumnId,
         row: usize,
     },
+    /// A data cell's Insert Sparklines... (T200).
+    InsertCellSparkline {
+        column: ColumnId,
+        row: usize,
+    },
+    /// A data cell's Remove Sparkline (T200).
+    RemoveCellSparkline {
+        column: ColumnId,
+        row: usize,
+    },
     /// Analysis > Peaks and Baseline > Batch Peak Analysis Using Theme... (T169).
     BatchPeaks,
     /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values (T74).
@@ -2067,8 +2077,16 @@ pub fn rise_time_gadget_menu() -> Vec<Entry> {
 }
 
 /// The 2D Integrate gadget's right-click menu (T198).
-pub fn integrate_2d_gadget_menu() -> Vec<Entry> {
+pub fn integrate_2d_gadget_menu(circle: bool) -> Vec<Entry> {
+    let tick = |on: bool, name: &str| if on { format!("\u{2713} {name}") } else { name.to_string() };
     vec![
+        sub(
+            "Region",
+            vec![
+                item(&tick(!circle, "Rectangle"), Cmd::Gadget(GadgetOp::SetRegion(false))),
+                item(&tick(circle, "Circle"), Cmd::Gadget(GadgetOp::SetRegion(true))),
+            ],
+        ),
         item("New Output", Cmd::Gadget(GadgetOp::NewOutput)),
         sep(),
         keyed("Delete", plain_key(Key::Escape), Cmd::Gadget(GadgetOp::Close)),
@@ -2348,8 +2366,9 @@ pub fn label_cell_menu(read_only: bool) -> Vec<Entry> {
 }
 
 /// The menu of a data cell; `noted` when the cell has a note (Edit/Delete Note instead of Add);
-/// `cell` is the right-clicked cell and `graph` whether it shows a graph (T194).
-pub fn cell_menu_for(noted: bool, cell: (ColumnId, usize), graph: bool) -> Vec<Entry> {
+/// `cell` is the right-clicked cell, `graph` whether it shows a graph (T194) and `sparkline` whether it
+/// draws a sparkline (T200).
+pub fn cell_menu_for(noted: bool, cell: (ColumnId, usize), graph: bool, sparkline: bool) -> Vec<Entry> {
     let (column, row) = cell;
     let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut)];
     v.extend(copy_entries());
@@ -2368,7 +2387,12 @@ pub fn cell_menu_for(noted: bool, cell: (ColumnId, usize), graph: bool) -> Vec<E
     if graph {
         v.push(item("Remove Graph", Cmd::RemoveCellGraph { column, row }));
     }
-    v.extend(greys(&["Insert Images from Files...", "Insert Sparklines...", "Insert Variables...", "-"]));
+    v.push(grey("Insert Images from Files..."));
+    v.push(item("Insert Sparklines...", Cmd::InsertCellSparkline { column, row }));
+    if sparkline {
+        v.push(item("Remove Sparkline", Cmd::RemoveCellSparkline { column, row }));
+    }
+    v.extend(greys(&["Insert Variables...", "-"]));
     v.push(item("Format Cells...", Cmd::FormatCells));
     if noted {
         v.push(item("Edit Note...", Cmd::EditNote));
@@ -3194,6 +3218,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::InsertCellGraph { column, row } => Action::PickCellGraph { column: *column, row: *row },
         Cmd::RemoveCellGraph { column, row } => Action::SetCellGraph { column: *column, row: *row, graph: None },
+        Cmd::InsertCellSparkline { column, row } => Action::PickCellSparkline { column: *column, row: *row },
+        Cmd::RemoveCellSparkline { column, row } => {
+            Action::SetCellSparkline { column: *column, row: *row, source: None }
+        }
         Cmd::BatchProcessing => {
             if !c.templates {
                 return Err(NO_TEMPLATE_FOLDER);

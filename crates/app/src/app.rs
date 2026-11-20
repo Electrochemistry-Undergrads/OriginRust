@@ -237,6 +237,8 @@ pub struct SheafApp {
     batch: Option<crate::dialogs::batch_process::BatchDialog>,
     /// Add Graph as Sheet... (T190).
     graph_sheet_picker: Option<crate::dialogs::graph_sheet::GraphSheetPicker>,
+    /// A data cell's Insert Sparklines... (T200).
+    cell_sparkline_picker: Option<crate::dialogs::cell_sparkline::CellSparklinePicker>,
     /// Batch Peak Analysis Using Theme... (T169).
     batch_peaks: Option<crate::dialogs::batch_peaks::BatchPeaksDialog>,
     /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values.
@@ -415,6 +417,7 @@ impl SheafApp {
             template_manager: None,
             batch: None,
             graph_sheet_picker: None,
+            cell_sparkline_picker: None,
             batch_peaks: None,
             fill_pattern: None,
             sampling: None,
@@ -1374,8 +1377,17 @@ impl SheafApp {
             let (x0, x1) = (geom.x.from_unit(0.25), geom.x.from_unit(0.75));
             let (y0, y1) = (geom.y.from_unit(0.25), geom.y.from_unit(0.75));
             state.active_layer = layer;
-            state.gadget =
-                Some(crate::gadget::Integrator { kind, layer, plot: 0, x0, x1, y0, y1, end_point_baseline: false });
+            state.gadget = Some(crate::gadget::Integrator {
+                kind,
+                layer,
+                plot: 0,
+                x0,
+                x1,
+                y0,
+                y1,
+                end_point_baseline: false,
+                circle: false,
+            });
             self.focus(graph);
             return;
         }
@@ -1404,7 +1416,17 @@ impl SheafApp {
         let (x0, x1) = (placement.source_x(geom.x.from_unit(u0)), placement.source_x(geom.x.from_unit(u1)));
         // A Cluster (T146) is a rectangle over the middle half of both axes.
         let (y0, y1) = (placement.source_y(geom.y.from_unit(0.25)), placement.source_y(geom.y.from_unit(0.75)));
-        state.gadget = Some(crate::gadget::Integrator { kind, layer, plot, x0, x1, y0, y1, end_point_baseline: false });
+        state.gadget = Some(crate::gadget::Integrator {
+            kind,
+            layer,
+            plot,
+            x0,
+            x1,
+            y0,
+            y1,
+            end_point_baseline: false,
+            circle: false,
+        });
         self.focus(graph);
     }
 
@@ -1416,6 +1438,7 @@ impl SheafApp {
         let Some(g) = &mut state.gadget else { return };
         match op {
             GadgetOp::ToggleBaseline => g.end_point_baseline = !g.end_point_baseline,
+            GadgetOp::SetRegion(circle) => g.circle = circle,
             GadgetOp::Close => state.gadget = None,
             // 2D Integrate (T198): a row of the results table.
             GadgetOp::NewOutput if g.kind == crate::gadget::GadgetKind::Integrate2d => {
@@ -2015,6 +2038,36 @@ impl SheafApp {
                     crate::dialogs::graph_sheet::PickTarget::Cell { column, row },
                     graphs,
                 ));
+            }
+            Action::PickCellSparkline { column, row } => {
+                let sources: Vec<(ColumnId, String)> = self
+                    .doc
+                    .project()
+                    .locate(column)
+                    .map(|(_, sheet, _)| {
+                        sheet
+                            .columns
+                            .iter()
+                            .filter(|c| c.data.is_numeric())
+                            .map(|c| {
+                                let name = if c.long_name.is_empty() {
+                                    c.short_name.clone()
+                                } else {
+                                    format!("{} - {}", c.short_name, c.long_name)
+                                };
+                                (c.id, name)
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                self.cell_sparkline_picker =
+                    Some(crate::dialogs::cell_sparkline::CellSparklinePicker::new(column, row, sources));
+            }
+            Action::SetCellSparkline { column, row, source } => {
+                let label = if source.is_some() { "Insert Sparklines" } else { "Remove Sparkline" };
+                self.doc.apply(label, |p| {
+                    p.set_cell_sparkline(column, row, source);
+                });
             }
             Action::SetCellGraph { column, row, graph } => {
                 let label = if graph.is_some() { "Insert Graph" } else { "Remove Graph" };
@@ -4684,6 +4737,21 @@ impl SheafApp {
         }
     }
 
+    /// A data cell's Insert Sparklines... (T200): the column picker.
+    fn show_cell_sparkline_picker(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::cell_sparkline::CellSparklineOutcome;
+        let Some(p) = &mut self.cell_sparkline_picker else { return };
+        match p.show(ctx) {
+            CellSparklineOutcome::Open => {}
+            CellSparklineOutcome::Closed => self.cell_sparkline_picker = None,
+            CellSparklineOutcome::Pick(source) => {
+                let (column, row) = (p.column, p.row);
+                self.cell_sparkline_picker = None;
+                self.apply(Action::SetCellSparkline { column, row, source: Some(source) }, ctx);
+            }
+        }
+    }
+
     /// Add Graph as Sheet... (T190): the graph picker.
     fn show_graph_sheet_picker(&mut self, ctx: &egui::Context) {
         use crate::dialogs::graph_sheet::GraphSheetOutcome;
@@ -6463,6 +6531,7 @@ impl SheafApp {
         self.show_template_windows(ctx);
         self.show_batch(ctx);
         self.show_graph_sheet_picker(ctx);
+        self.show_cell_sparkline_picker(ctx);
         self.show_batch_peaks(ctx);
         self.show_fill_pattern(ctx);
         self.show_sampling(ctx);

@@ -360,6 +360,17 @@ pub enum Action {
         row: usize,
         graph: Option<WindowId>,
     },
+    /// A data cell's Insert Sparklines...: the window that picks the data column (T200).
+    PickCellSparkline {
+        column: ColumnId,
+        row: usize,
+    },
+    /// Draw a column's sparkline in a data cell or take it out (T200), one undo step.
+    SetCellSparkline {
+        column: ColumnId,
+        row: usize,
+        source: Option<ColumnId>,
+    },
     /// Add Graph as Sheet (T190): a sheet of `book` that shows `graph`, one undo step.
     AddGraphSheet {
         book: WindowId,

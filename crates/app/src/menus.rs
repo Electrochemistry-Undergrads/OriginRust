@@ -2402,12 +2402,25 @@ fn axis_copy_format_menu(layer: usize, y: bool) -> Entry {
 
 /// Paste Format To of an axis: existing All, Scales and Styles groups (spec 26.9/26.11).
 fn axis_paste_format_menu(layer: usize, y: bool) -> Entry {
-    let mut v = greys(&["Tick Direction", "Ticks", "Line", "Tick Labels", "Title Styles", "Colors", "Thickness"]);
-    v.push(item("Styles", Cmd::PasteAxisFormat { layer, y, part: AxisPart::Styles }));
+    let paste = |label: &str, part: AxisPart| item(label, Cmd::PasteAxisFormat { layer, y, part });
+    let mut v = vec![
+        paste("Tick Direction", AxisPart::TickDirection),
+        paste("Ticks", AxisPart::Ticks),
+        paste("Line", AxisPart::Line),
+        paste("Tick Labels", AxisPart::TickLabels),
+        paste("Title Styles", AxisPart::TitleStyles),
+        paste("Colors", AxisPart::Colors),
+        paste("Thickness", AxisPart::Thickness),
+        paste("Styles", AxisPart::Styles),
+        sep(),
+        paste("Scales", AxisPart::Scales),
+        sep(),
+    ];
+    // Title Dimensions: Sheaf keeps no title position or size of its own on an axis yet.
+    v.push(grey("Title Dimensions"));
+    v.push(paste("Title Text", AxisPart::TitleText));
     v.push(sep());
-    v.push(item("Scales", Cmd::PasteAxisFormat { layer, y, part: AxisPart::Scales }));
-    v.extend(greys(&["-", "Title Dimensions", "Title Text", "-"]));
-    v.push(item("All", Cmd::PasteAxisFormat { layer, y, part: AxisPart::All }));
+    v.push(paste("All", AxisPart::All));
     sub("Paste Format To", v)
 }
 

@@ -688,6 +688,49 @@ Analysis Using Theme... (11.1). Neither window was measured; Sheaf's are its own
   columns, one undo step ("Batch peak analysis"). Not done: Origin's per-dataset summary options, running
   on several books or files (use File > Batch Processing, workbook-model 13p).
 
+### 11.5 Create Baseline and Subtract Baseline goals, User Defined anchors (measured 2026-11-14)
+
+Measured by clicking Origin's Peak Analyzer through the goals with `tools/origin-ref/origin-dialog.ps1`
+(`re-workspace/scratch/t04base`: `run-base.sh` runs a curve through Create Baseline with Origin's defaults and
+reads the anchors back as the rows where the written baseline changes slope; `fit_rule.py`, `fit2.py`, `fit3.py`
+try candidate rules):
+
+- Pages: Goal, Baseline Mode, Create Baseline (`pa_basecreate`) or Subtract Baseline (`pa_basesubtr`), Finish.
+  For these goals Baseline Mode lists User Defined (default), XPS, End Points Weighted and Asymmetric Least
+  Squares Smoothing. User Defined: Snap to Spectrum (off); Anchor Points Finding Method 2nd Derivative (default),
+  1st Derivative and 2nd Derivative, Use Script to Search, Use Existing Dataset; Smoothing Window Size 3 and
+  Threshold 0.05, both Auto (the same shown values for 201, 401 and 801 points); Enable Auto Find (on); Number of
+  Points to Find; Find, Add, Modify/Del, Clear All, Save..., Load..., Anchor Points Info....
+- Create Baseline page: Connect by Interpolation, Snap to Spectrum (off), anchor Add and Modify/Del, Number of
+  Baseline Points (the input's, "Same as" ticked), Interpolation Method Line (default), Spline or BSpline, the
+  Baseline output and a Subtract button. Subtract Baseline page: Subtract, Subtracted Data and Baseline (ticked)
+  outputs.
+- Output, in the input sheet after its columns: Create Baseline writes `Baseline_Data X1` and
+  `Baseline_Data Y1` (comment "Baseline of B"); Subtract Baseline writes `Subtracted_Data X1`,
+  `Subtracted_Data Y1` ("Subtracted from B"), `Baseline_Data X1`, `Baseline_Data Y1` ("Baseline to Subtract
+  for B"). The anchors are data points; the baseline is the straight line through them at every X of the data.
+- Anchors, X = 0..20 step 0.05 (401 rows), two Gaussian peaks at 5 and 12 on 0.2 + 0.01 x: rows 0, 32, 64,
+  165, 197, 304, 336, 400; the same on the curved baseline 0.5 + 0.003 (x - 7)^2; one peak at 10 on that curve:
+  0, 41, 82, 123, 164, 276, 317, 400; the curve without a peak: only the two ends. Steps 0.1 and 0.025 (201 and
+  801 rows) with the two peaks: 0, 15, 30, 82, 97, 155, 170, 200 and 0, 65, 130, 328, 393, 603, 668, 800.
+- The rule these fit: the candidates are the rows where the second derivative is small compared with its
+  largest size, leaving out single rows (a peak's inflection point is not a candidate); with C candidates
+  and the step C / 8 (rounded down, 8 = Number of Points to Find), the candidates number 0, step, ..., 6 step
+  are anchors, and the last row is always one. A curve whose curvature is the same everywhere has no
+  candidate. The threshold is about 2.5 % of the largest |second derivative| at 401 points but about 1.3 % at
+  201 and 3.3 % at 801 points, although the page shows the same Auto values, so the exact test is not known.
+
+Sheaf (`sheaf_calc::second_derivative_anchors`, `ChainBaseline::SecondDerivative`, `Tool::PeakBaseline`): the
+candidates are the rows where |second derivative| (central differences) is at most 2.6 % of its largest value,
+runs of one row left out. This gives Origin's anchors for the straight-baseline and the one-peak cases above and
+for the curve without a peak; on the curved baseline three anchors are 1 to 4 rows away, and at 201 and 801
+points a few rows away. Those anchors lie on flat baseline, so the baseline hardly changes. The Peak Analyzer's
+Create Baseline and Subtract Baseline goals are offered with User Defined (2nd Derivative, Number of Points to
+Find 8, or Sheaf's own lowest point of each stretch) and Line, Spline or BSpline; the columns are named as
+Origin's (`Baseline_Data Y<n>`, `Subtracted_Data Y<n>`), without Origin's copies of X. The other methods, Snap
+to Spectrum, anchor editing, XPS, End Points Weighted and Asymmetric Least Squares are greyed. User Defined in
+the peak goals uses the same anchors with straight lines. The command line (`sheaf analyze peaks --baseline-goal`) is not built yet.
+
 ## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1 to 12.3)
 
 Analysis > Data Manipulation has Subtract Straight Line, Reduce Duplicate X Data (12.1), Reduce to Evenly Spaced X and Curve

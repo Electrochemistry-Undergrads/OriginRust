@@ -120,6 +120,8 @@ pub enum MatrixCmd {
     /// Analysis > Signal Processing > FFT > 2D FFT and 2D IFFT (T196).
     Fft2,
     Ifft2,
+    /// Analysis > Fitting > Nonlinear Surface Fit on the active matrix (T221).
+    SurfaceFit,
 }
 
 /// What the graph Edit menu's clipboard items do (T149).
@@ -967,6 +969,7 @@ fn base(kind: WindowKind) -> Vec<Menu> {
                 "&Analysis",
                 vec![
                     sub("&Mathematics", vec![item("&Inverse...", Cmd::Matrix(MatrixCmd::Inverse))]),
+                    sub("Fi&tting", vec![item("&Nonlinear Surface Fit...", Cmd::Matrix(MatrixCmd::SurfaceFit))]),
                     sub(
                         "Si&gnal Processing",
                         vec![sub(

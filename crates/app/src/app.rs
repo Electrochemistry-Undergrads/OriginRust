@@ -5787,7 +5787,12 @@ impl SheafApp {
 
     fn export_data(&mut self, book: WindowId) {
         if self.doc.project().workbook(book).is_some() {
-            self.export_sheet = Some(SheetExportDialog::new(book, self.folder()));
+            // T247: the active sheet's selection, for Selected cells only.
+            let selection = self.doc.project().workbook(book).and_then(|b| {
+                let t = self.books.get(&book)?.target(b.sheet())?;
+                Some((t.columns, t.rows))
+            });
+            self.export_sheet = Some(SheetExportDialog::new(book, self.folder()).with_selection(selection));
         }
     }
 

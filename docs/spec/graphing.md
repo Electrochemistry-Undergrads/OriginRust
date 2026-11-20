@@ -5780,7 +5780,13 @@ the name starts as the first free ThemeN and a theme of the same name is replace
 saved themes (Name, Size, Path User, Date); Apply Now gives the current graph's every axis the theme (one
 undo step, "Apply theme"); Delete removes a theme. Sheaf ships no system themes (Origin's are its own) and
 has no system theme, Worksheet/Dialog/Function tabs, Undo Apply button (Edit > Undo does it) or Formats to
-Save choice yet; the legend's Save Format as Theme stays grey until a legend format can be copied.
+Save choice yet.
+
+**Legend themes** (T167, 2026-11-19, not measured): the legend's right-click Save Format as Theme... (last
+item of the menu) saves the legend's Styles as Copy Format > Styles copies them (font, frame, background;
+section 26.12) through the same window and file; it needs a shown legend. Apply Now of such a theme gives
+every shown legend of the current graph those styles (one undo step, "Apply theme"); hidden legends stay
+as they are. Origin's legend theme options (Formats to Save) were not measured.
 
 ## 30. Vector plots: Plot > Specialized > Vector XYAM and Vector XYXY (T107, measured 2026-11-16, Origin 2016)
 

@@ -187,6 +187,10 @@ pub enum Cmd {
         layer: usize,
         y: bool,
     },
+    /// A legend's Save Format as Theme... (T167).
+    SaveLegendTheme {
+        layer: usize,
+    },
     /// Tools > Theme Organizer... (F7, T102).
     ThemeOrganizer,
     /// File > New > From Template > More...: pick a template file (T103).
@@ -2506,7 +2510,7 @@ pub fn graph_legend_menu(layer: usize, can_color: bool, can_bubble: bool) -> Vec
     if crate::format_clip_ui::kind() == Some(crate::format_clip_ui::ClipKind::Legend) {
         menu.push(sub("Paste Format To", vec![item("Styles", Cmd::PasteLegendStyles { layer })]));
     }
-    menu.push(grey("Save Format as Theme..."));
+    menu.push(item("Save Format as Theme...", Cmd::SaveLegendTheme { layer }));
     menu
 }
 
@@ -2933,6 +2937,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SaveAxisTheme { layer, y } => {
             Action::SaveAxisTheme { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, y: *y }
         }
+        Cmd::SaveLegendTheme { layer } => Action::SaveLegendTheme { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer },
         Cmd::ThemeOrganizer => Action::ThemeOrganizer,
         Cmd::NewFromTemplateFile => Action::NewFromTemplate(None),
         Cmd::FitOrganizer => Action::FitOrganizer,

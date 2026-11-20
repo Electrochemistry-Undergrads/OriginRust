@@ -1400,6 +1400,12 @@ fn file_export_graphs_opens_the_export_window_and_close_closes_it() {
     menu_path(&mut h, &["File", "Export Graphs..."]);
     assert!(h.state().export.is_some(), "the export window is open");
     assert!(h.query_by_label("Apply").is_some());
+    // T251: the preview's Image and Graph tabs.
+    let tab = |h: &Harness<'static, SheafApp>| h.state().export.as_ref().unwrap().preview_tab;
+    assert_eq!(tab(&h), crate::dialogs::export::PreviewTab::Image);
+    h.get_by_label("Export Graphs").get_by_label("Graph").click();
+    settle(&mut h);
+    assert_eq!(tab(&h), crate::dialogs::export::PreviewTab::Graph);
     click(&mut h, "Cancel");
     assert!(h.state().export.is_none());
 }

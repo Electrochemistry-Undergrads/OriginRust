@@ -155,6 +155,27 @@ fn margin_label(m: Margin) -> &'static str {
     }
 }
 
+/// The tabs of the preview pane (Origin's Image and Graph, T251).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+pub enum PreviewTab {
+    /// The picture the export writes.
+    #[default]
+    Image,
+    /// The whole graph page, with the area the export takes outlined.
+    Graph,
+}
+
+/// Where the exported area lies on the page, as fractions of the page's width and height (left,
+/// top, right, bottom); `None` when either is empty (T251).
+pub fn area_on_page(page: sheaf_plot::Rect, area: sheaf_plot::Rect) -> Option<[f32; 4]> {
+    if !(page.w > 0.0 && page.h > 0.0 && area.w > 0.0 && area.h > 0.0) {
+        return None;
+    }
+    let fx = |x: f64| ((x - page.x) / page.w) as f32;
+    let fy = |y: f64| ((y - page.y) / page.h) as f32;
+    Some([fx(area.x), fy(area.y), fx(area.x + area.w), fy(area.y + area.h)])
+}
+
 /// Which graphs are exported.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Which {
@@ -239,6 +260,10 @@ pub struct ExportDialog {
     auto_preview: bool,
     show_preview: bool,
     preview: Option<(egui::TextureHandle, String)>,
+    /// The preview pane's tab (T251).
+    pub preview_tab: PreviewTab,
+    /// On the Graph tab: the exported area on the page, as fractions (see [`area_on_page`]).
+    outline: Option<[f32; 4]>,
     /// Set when existing files need a yes: the files, and whether the window closes after writing.
     pending: Option<bool>,
     /// The files the last successful export wrote, with the graph of each, until taken (Recent Exports).
@@ -284,6 +309,8 @@ impl ExportDialog {
             auto_preview: true,
             show_preview: true,
             preview: None,
+            preview_tab: PreviewTab::Image,
+            outline: None,
             pending: None,
             written: Vec::new(),
             scope: None,
@@ -475,17 +502,35 @@ impl ExportDialog {
 
     fn settings_key(&self) -> String {
         format!(
-            "{:?}{:?}{:?}{:?}{:?}{:?}{:?}",
-            self.margin, self.border_px, self.width, self.width_unit, self.dpi, self.format, self.graph
+            "{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}",
+            self.margin,
+            self.border_px,
+            self.width,
+            self.width_unit,
+            self.dpi,
+            self.format,
+            self.graph,
+            self.preview_tab
         )
     }
 
     fn make_preview(&mut self, ctx: &egui::Context, doc: &Document) {
-        let layout = self.layout();
-        let Ok(area) = sheaf_plot::export_area(doc.project(), self.graph, layout, None) else {
+        self.outline = None;
+        let mut layout = self.layout();
+        let Ok(mut area) = sheaf_plot::export_area(doc.project(), self.graph, layout, None) else {
             self.preview = None;
             return;
         };
+        if self.preview_tab == PreviewTab::Graph {
+            // The whole page, and where the exported area lies on it.
+            let page_layout = ExportLayout { margin: Margin::Page, border_px: None };
+            let Ok(page) = sheaf_plot::export_area(doc.project(), self.graph, page_layout, None) else {
+                self.preview = None;
+                return;
+            };
+            self.outline = area_on_page(page, area);
+            (layout, area) = (page_layout, page);
+        }
         let dpi = 72.0 * 320.0 / area.w.max(area.h).max(1.0);
         match sheaf_plot::export_raster(doc.project(), self.graph, dpi, ExportSize::default(), layout) {
             Ok(r) => {
@@ -794,7 +839,12 @@ impl ExportDialog {
                         ui.add_space(8.0);
                         ui.vertical(|ui| {
                             ui.set_width(330.0);
-                            ui.label("Image");
+                            // T251: Origin's Image and Graph tabs.
+                            ui.horizontal(|ui| {
+                                ui.selectable_value(&mut self.preview_tab, PreviewTab::Image, "Image");
+                                ui.selectable_value(&mut self.preview_tab, PreviewTab::Graph, "Graph")
+                                    .on_hover_text("The whole page; the outline is the area the export takes");
+                            });
                             let (rect, _) = ui.allocate_exact_size(egui::vec2(330.0, 330.0), egui::Sense::hover());
                             ui.painter().rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
                             match &self.preview {
@@ -808,6 +858,15 @@ impl ExportDialog {
                                         egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
                                         egui::Color32::WHITE,
                                     );
+                                    if let (PreviewTab::Graph, Some([l, t, rr, b])) = (self.preview_tab, self.outline) {
+                                        let at = |fx: f32, fy: f32| r.min + egui::vec2(fx * r.width(), fy * r.height());
+                                        ui.painter().rect_stroke(
+                                            egui::Rect::from_min_max(at(l, t), at(rr, b)),
+                                            0.0,
+                                            egui::Stroke::new(1.5_f32, egui::Color32::from_rgb(220, 30, 30)),
+                                            egui::StrokeKind::Middle,
+                                        );
+                                    }
                                 }
                                 None => {
                                     ui.painter().text(
@@ -909,6 +968,23 @@ mod tests {
         d.which = Which::AllGraphs;
         d.multipage = true;
         (Document::new(project), d, dir)
+    }
+
+    #[test]
+    fn the_graph_tab_outlines_the_exported_area_on_the_page() {
+        // T251: fractions of the page.
+        let page = sheaf_plot::Rect { x: 0.0, y: 0.0, w: 400.0, h: 200.0 };
+        let area = sheaf_plot::Rect { x: 40.0, y: 20.0, w: 200.0, h: 100.0 };
+        assert_eq!(area_on_page(page, area), Some([0.1, 0.1, 0.6, 0.6]));
+        assert_eq!(area_on_page(page, sheaf_plot::Rect { w: 0.0, ..area }), None);
+        // A Tight area can reach past the page.
+        let wide = sheaf_plot::Rect { x: -40.0, y: 0.0, w: 480.0, h: 200.0 };
+        assert_eq!(area_on_page(page, wide), Some([-0.1, 0.0, 1.1, 1.0]));
+        // The tab is part of what makes a preview stale.
+        let mut d = ExportDialog::new(WindowId(1), None);
+        let image = d.settings_key();
+        d.preview_tab = PreviewTab::Graph;
+        assert_ne!(d.settings_key(), image);
     }
 
     #[test]

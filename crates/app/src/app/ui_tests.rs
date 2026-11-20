@@ -9287,3 +9287,37 @@ fn the_peak_analyzer_subtracts_a_baseline_with_origins_anchors() {
     assert!((base[1] - 0.200_500_000_002_844_2).abs() < 1e-12, "Origin's baseline: {}", base[1]);
     assert_eq!(h.state().doc.undo_label(), Some("Subtract baseline"));
 }
+
+#[test]
+fn the_text_export_can_write_only_the_selected_cells() {
+    // T247: expASC's select.
+    let mut h = start(vec![data_file("export-select")]);
+    let (book, _) = window_ids(&h);
+    show_window(&mut h, "Book1 - sample.csv");
+    menu_path(&mut h, &["File", "Export", "Worksheet as ASCII..."]);
+    assert!(
+        h.get_by_label("Selected cells only").accesskit_node().is_disabled(),
+        "nothing is selected: the choice is off"
+    );
+    click(&mut h, "Close");
+    h.state_mut().books.get_mut(&book).unwrap().sel = Sel::Cells { anchor: (1, 1), end: (2, 2) };
+    menu_path(&mut h, &["File", "Export", "Worksheet as ASCII..."]);
+    click(&mut h, "Selected cells only");
+    let d = h.state().export_sheet.as_ref().unwrap();
+    assert!(d.selected_only);
+    let sheet = project(&h).workbook(book).unwrap().sheet().clone();
+    let mut buf = Vec::new();
+    d.write(&sheet, &mut buf).unwrap();
+    let text = String::from_utf8(buf).unwrap();
+    // The data lines are those whose first field is a number; the label rows above them are not.
+    let data: Vec<&str> =
+        text.lines().filter(|l| l.split(',').next().is_some_and(|f| f.parse::<f64>().is_ok())).collect();
+    assert_eq!(data.len(), 2, "rows 2 and 3 only: {text}");
+    let cell = |c: usize, r: usize| sheet.columns[c].cell_text(r);
+    for (k, line) in data.iter().enumerate() {
+        assert_eq!(line.split(',').count(), 2, "two columns: {text}");
+        let first: f64 = line.split(',').next().unwrap().parse().unwrap();
+        let want: f64 = cell(1, k + 1).parse().unwrap();
+        assert!((first - want).abs() < 1e-9 * want.abs().max(1.0), "{line} vs {want}");
+    }
+}

@@ -401,7 +401,14 @@ file name; Origin adds the extension of the type (`.csv`, `.dat`, `.txt`) when t
   either way, `40000:12:00:00.00`), `parameter` and `sampinterv` (no visible effect on a plain sheet), `select`,
   `overwrite` (a second call on the same path appended), `addxcol`.
 
-Sheaf (`crates/io/src/export.rs`, `write_delimited`, Export window `dialogs/export_sheet.rs`) follows these. Known
+Sheaf (`crates/io/src/export.rs`, `write_delimited`, Export window `dialogs/export_sheet.rs`) follows these.
+**Selected cells only (T247, `select`, not measured).** The Export window's **Range** row has
+**Selected cells only**, enabled when the active sheet had a selection as the window opened (cells,
+whole rows, whole columns or the whole sheet). It writes the selected columns in sheet order and the
+selected rows (`write_selection`): the label rows are those of the selected columns, and with row
+labels each data line starts with its row number in the sheet (not 1, 2, ...). A selected row past
+the end of a column gives an empty field, as in a whole-sheet export. Origin's handling of a
+non-contiguous selection is not copied (Sheaf's selection is one block or a set of whole columns). Known
 differences: user-parameter rows are written in alphabetical order (Sheaf does not keep creation order); a text
 cell that is empty between values is written as `--`; numbers 15 digits long do not read back to the last bit.
 

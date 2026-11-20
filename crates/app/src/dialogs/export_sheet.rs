@@ -4,7 +4,7 @@
 use super::export::ExportOutcome;
 use eframe::egui;
 use sheaf_core::{Document, WindowId};
-use sheaf_io::export::{AsciiExportOptions, Separator, write_delimited};
+use sheaf_io::export::{AsciiExportOptions, Separator, write_selection};
 use std::path::PathBuf;
 
 /// The file types of the "File type" list: Origin's csv (comma or semicolon) and its text type
@@ -53,11 +53,38 @@ pub struct SheetExportDialog {
     file_type: FileType,
     opts: AsciiExportOptions,
     folder: Option<PathBuf>,
+    /// The selection of the active sheet when the window opened (T247): column positions and rows.
+    selection: Option<(Vec<usize>, std::ops::Range<usize>)>,
+    /// expASC's `select`: write only the selection.
+    pub selected_only: bool,
 }
 
 impl SheetExportDialog {
     pub fn new(book: WindowId, folder: Option<PathBuf>) -> Self {
-        SheetExportDialog { book, file_type: FileType::CsvComma, opts: AsciiExportOptions::default(), folder }
+        SheetExportDialog {
+            book,
+            file_type: FileType::CsvComma,
+            opts: AsciiExportOptions::default(),
+            folder,
+            selection: None,
+            selected_only: false,
+        }
+    }
+
+    /// The selection the window offers to write alone (T247); `None` when nothing is selected.
+    pub fn with_selection(mut self, selection: Option<(Vec<usize>, std::ops::Range<usize>)>) -> Self {
+        self.selection = selection.filter(|(c, r)| !c.is_empty() && !r.is_empty());
+        self
+    }
+
+    /// Writes the active sheet, or its selection when that is asked for, to `out`.
+    pub fn write(&self, sheet: &sheaf_core::Worksheet, out: &mut dyn std::io::Write) -> Result<(), String> {
+        let opts = self.options();
+        let (columns, rows) = match (&self.selection, self.selected_only) {
+            (Some((c, r)), true) => (c.clone(), r.clone()),
+            _ => ((0..sheet.columns.len()).collect(), 0..sheet.row_count()),
+        };
+        write_selection(sheet, &columns, rows, out, &opts).map_err(|e| e.to_string())
     }
 
     /// The options with the file type applied.
@@ -109,6 +136,13 @@ impl SheetExportDialog {
                     ui.label("Numbers");
                     ui.checkbox(&mut self.opts.full_precision, "Full precision (not the displayed digits)");
                     ui.end_row();
+                    // T247: expASC's select.
+                    ui.label("Range");
+                    ui.add_enabled_ui(self.selection.is_some(), |ui| {
+                        ui.checkbox(&mut self.selected_only, "Selected cells only")
+                            .on_disabled_hover_text("Select cells, rows or columns in the sheet first");
+                    });
+                    ui.end_row();
                     ui.label("Missing values");
                     ui.checkbox(&mut self.opts.missing_dashes, "Write -- (otherwise leave the field empty)");
                     ui.end_row();
@@ -130,12 +164,10 @@ impl SheetExportDialog {
                             if path.extension().is_none() {
                                 path.set_extension(ext);
                             }
-                            let opts = self.options();
                             let sheet = book.sheet();
-                            let result = std::fs::File::create(&path).map_err(|e| e.to_string()).and_then(|file| {
-                                let mut out = std::io::BufWriter::new(file);
-                                write_delimited(sheet, &mut out, &opts).map_err(|e| e.to_string())
-                            });
+                            let result = std::fs::File::create(&path)
+                                .map_err(|e| e.to_string())
+                                .and_then(|file| self.write(sheet, &mut std::io::BufWriter::new(file)));
                             outcome = match result {
                                 Ok(()) => ExportOutcome::Saved(path),
                                 Err(e) => ExportOutcome::Failed(e),

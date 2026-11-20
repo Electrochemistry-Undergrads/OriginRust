@@ -542,6 +542,10 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     if state.active_layer >= layers {
         state.active_layer = 0;
     }
+    // Set Active Layer By Layer Icon Only (T183): what a click inside the page activates is undone below.
+    let icon_only = graph.page.style.activate_by_icon_only;
+    let icon_plot_setup = graph.page.style.icon_double_click_plot_setup;
+    let (active_before, actions_before) = (state.active_layer, actions.len());
 
     let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
     ui.painter().rect_filled(rect, 0.0, GROUND);
@@ -1229,6 +1233,13 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         }
     }
 
+    if icon_only {
+        state.active_layer = active_before;
+        let rest: Vec<Action> =
+            actions.drain(actions_before..).filter(|a| !matches!(a, Action::ActivateLayer { .. })).collect();
+        actions.extend(rest);
+    }
+
     // Layer icons: after the page, so that they get the clicks on them.
     let mut icon_menu = None;
     // Plot Details > Miscellaneous can hide the icons.
@@ -1252,7 +1263,11 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             actions.push(Action::ActivateLayer { graph: graph_id, layer: i });
         }
         if resp.double_clicked() {
-            actions.push(Action::GraphProperties { graph: graph_id, layer: i, tab: PropsTab::Plots, plot: None });
+            if icon_plot_setup {
+                actions.push(Action::PlotSetup { graph: graph_id, layer: i });
+            } else {
+                actions.push(Action::GraphProperties { graph: graph_id, layer: i, tab: PropsTab::Plots, plot: None });
+            }
         }
         if resp.secondary_clicked() {
             state.active_layer = i;
@@ -1262,8 +1277,15 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         icon_menu = Some(icon_menu.map_or(resp.clone(), |r: egui::Response| r.union(resp)));
     }
 
-    // The right-click menus.
-    let c = graph_context(graph_id, state.active_layer, state.tool());
+    // The right-click menus; the layer icon menu ticks its switches from the page (T183).
+    let mut c = graph_context(graph_id, state.active_layer, state.tool());
+    if let Some(g) = doc.project().graph(graph_id) {
+        c.activate_by_icon_only = g.page.style.activate_by_icon_only;
+        c.icon_double_click_plot_setup = g.page.style.icon_double_click_plot_setup;
+        let layer = state.active_layer;
+        c.active_layer_only = (g.layers.len() >= 2 && layer < g.layers.len())
+            .then(|| g.layers.iter().enumerate().all(|(i, l)| l.display.hidden == (i != layer)));
+    }
     let entries = |target: MenuTarget| menu_for(doc.project(), graph_id, target, state.selected, state.menu_page);
     let target = state.menu_on;
     let mut shown = response.context_menu(|ui| {
@@ -1497,6 +1519,8 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         can_ungroup: false,
         view_mode: Default::default(),
         layer_icons: true,
+        activate_by_icon_only: false,
+        icon_double_click_plot_setup: false,
         show_labels: true,
         show_data: true,
         active_layer_only: None,

@@ -472,6 +472,10 @@ pub enum Cmd {
     SetViewMode(sheaf_core::project::ViewMode),
     /// View > Show > Layer Icons.
     ToggleLayerIcons,
+    /// The layer icon menu's Set Active Layer By Layer Icon Only (T183).
+    ToggleActivateByIconOnly,
+    /// The layer icon menu's Double click to open Plot Setup (T183).
+    ToggleIconPlotSetup,
     /// View > Show > Labels and Data on a graph (T177): every layer's labels or data plots.
     ToggleShowLabels,
     ToggleShowData,
@@ -757,6 +761,9 @@ pub struct MenuContext<'a> {
     pub view_mode: sheaf_core::project::ViewMode,
     /// The active graph shows its layer icons (the tick of View > Show > Layer Icons).
     pub layer_icons: bool,
+    /// The active graph's page switches of the layer icon menu (T183), for their ticks.
+    pub activate_by_icon_only: bool,
+    pub icon_double_click_plot_setup: bool,
     /// Every layer of the active graph shows its labels, and its data (the ticks of View > Show >
     /// Labels and Data, T177).
     pub show_labels: bool,
@@ -2692,8 +2699,12 @@ pub fn layer_icon_menu(layer: usize, layers: usize, plots: &[String], active: Op
     let mut v = vec![
         item("Hide Layer", Cmd::GraphEdit(GraphOp::HideLayer { layer })),
         others,
-        grey("Show Active Layer Only"),
-        grey("Set Active Layer By Layer Icon Only"),
+        if layers > 1 {
+            item("Show Active Layer Only", Cmd::ToggleActiveLayerOnly)
+        } else {
+            grey("Show Active Layer Only")
+        },
+        item("Set Active Layer By Layer Icon Only", Cmd::ToggleActivateByIconOnly),
         if layers > 1 {
             item("Delete Layer", Cmd::GraphEdit(GraphOp::DeleteLayer { layer }))
         } else {
@@ -2702,7 +2713,7 @@ pub fn layer_icon_menu(layer: usize, layers: usize, plots: &[String], active: Op
         sep(),
         keyed("Layer Contents...", plain_key(Key::F12), Cmd::LayerContents(Some(layer))),
         item("Plot Setup...", Cmd::PlotSetup(Some(layer))),
-        grey("Double click to open Plot Setup"),
+        item("Double click to open Plot Setup", Cmd::ToggleIconPlotSetup),
         sep(),
         item("Axis...", Cmd::GraphPropsAt { layer, tab: PropsTab::XAxis, plot: None }),
         item("Layer Properties...", Cmd::GraphPropsAt { layer, tab: PropsTab::Layer, plot: None }),
@@ -3403,6 +3414,16 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::SetViewMode(mode) => Action::SetViewMode { graph: c.graph.ok_or(NEED_GRAPH)?, mode: *mode },
         Cmd::ToggleLayerIcons => Action::SetLayerIcons { graph: c.graph.ok_or(NEED_GRAPH)?, on: !c.layer_icons },
+        Cmd::ToggleActivateByIconOnly => Action::SetPageSwitch {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            switch: crate::actions::PageSwitch::ActivateByIconOnly,
+            on: !c.activate_by_icon_only,
+        },
+        Cmd::ToggleIconPlotSetup => Action::SetPageSwitch {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            switch: crate::actions::PageSwitch::IconDoubleClickPlotSetup,
+            on: !c.icon_double_click_plot_setup,
+        },
         Cmd::ToggleShowLabels => {
             Action::SetShowElements { graph: c.graph.ok_or(NEED_GRAPH)?, labels: Some(!c.show_labels), data: None }
         }
@@ -3712,6 +3733,11 @@ fn show_entries(
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleLayerIcons)) && c.layer_icons {
+                    tick(ui, &response);
+                }
+                if (matches!(it.cmd, Some(Cmd::ToggleActivateByIconOnly)) && c.activate_by_icon_only)
+                    || (matches!(it.cmd, Some(Cmd::ToggleIconPlotSetup)) && c.icon_double_click_plot_setup)
+                {
                     tick(ui, &response);
                 }
                 if (matches!(it.cmd, Some(Cmd::ToggleShowLabels)) && c.show_labels)
@@ -4110,6 +4136,8 @@ mod tests {
             can_ungroup: false,
             view_mode: Default::default(),
             layer_icons: true,
+            activate_by_icon_only: false,
+            icon_double_click_plot_setup: false,
             show_labels: true,
             show_data: true,
             active_layer_only: None,

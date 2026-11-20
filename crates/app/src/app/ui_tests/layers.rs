@@ -148,3 +148,52 @@ fn an_axis_offset_survives_save_and_reload_of_the_graph() {
     assert_eq!(back.layers[1].y_axis.offset_pct, 12.0);
     assert_eq!(back.layers[0].y_axis.offset_pct, 0.0);
 }
+
+#[test]
+fn the_layer_icon_menu_switches_are_live_and_saved_with_the_page() {
+    let entries = menus::layer_icon_menu(0, 2, &[], None);
+    let cmd = |label: &str| {
+        entries.iter().find_map(|e| match e {
+            menus::Entry::Item(i) if i.label == label => i.cmd.clone(),
+            _ => None,
+        })
+    };
+    assert_eq!(cmd("Show Active Layer Only"), Some(menus::Cmd::ToggleActiveLayerOnly));
+    assert_eq!(cmd("Set Active Layer By Layer Icon Only"), Some(menus::Cmd::ToggleActivateByIconOnly));
+    assert_eq!(cmd("Double click to open Plot Setup"), Some(menus::Cmd::ToggleIconPlotSetup));
+
+    let (mut h, id) = setup("icon-switches");
+    let ctx = h.ctx.clone();
+    let c = h.state().menu_context();
+    let action = menus::resolve(&menus::Cmd::ToggleActivateByIconOnly, &c).unwrap();
+    drop(c);
+    h.state_mut().apply(action, &ctx);
+    settle(&mut h);
+    assert!(project(&h).graph(id).unwrap().page.style.activate_by_icon_only);
+    assert_eq!(h.state().doc.undo_label(), Some("Set Active Layer By Layer Icon Only"));
+    let c = h.state().menu_context();
+    assert!(c.activate_by_icon_only, "the menu ticks it");
+    let action = menus::resolve(&menus::Cmd::ToggleIconPlotSetup, &c).unwrap();
+    drop(c);
+    h.state_mut().apply(action, &ctx);
+    settle(&mut h);
+    assert!(project(&h).graph(id).unwrap().page.style.icon_double_click_plot_setup);
+}
+
+#[test]
+fn with_icon_only_activation_a_click_in_another_layer_keeps_the_active_layer() {
+    let (mut h, id) = setup("icon-only");
+    edit(&mut h, id, GraphOp::AddLayer { layer: 0, kind: NewLayerKind::InsetWithData });
+    assert_eq!(layers(&h), 2);
+    h.state_mut().graphs.get_mut(&id).unwrap().active_layer = 0;
+    h.state_mut().doc.apply("icon only", |p| p.graph_mut(id).unwrap().page.style.activate_by_icon_only = true);
+    settle(&mut h);
+    let at = on(&h, 1, ObjectKind::XAxis);
+    click_at(&mut h, at);
+    assert_eq!(graph_ui(&h).active_layer, 0, "a click inside layer 2 does not make it active");
+    h.state_mut().doc.apply("normal", |p| p.graph_mut(id).unwrap().page.style.activate_by_icon_only = false);
+    settle(&mut h);
+    let at = on(&h, 1, ObjectKind::XAxis);
+    click_at(&mut h, at);
+    assert_eq!(graph_ui(&h).active_layer, 1, "without the switch it does");
+}

@@ -77,7 +77,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B7` | 0 |
 | `B8` | 1 |
 | `B9` | 2 |
-| `B11` | 2 |
+| `B11` | 1 |
 | `B12` | 1 |
 | `B13` | 2 |
 | `B14` | 42 |
@@ -98,7 +98,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B14` New: Matrix... · Image · Excel · Layout · Function Plot
 - `T63` Open Excel...
 - `N` Add Word Bookmarks to Analysis Template... [Workbook]
-- `B11` Batch Processing... [Workbook, Graph]
 - `B14` Import: Image... · Binary 2D Array... [no window, Workbook]
 - `T63` Export: Graph as Image... · Multi-Page PDF... [no window, Workbook]
 

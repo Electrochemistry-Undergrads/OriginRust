@@ -290,6 +290,8 @@ pub enum Action {
     SaveAnalysisTemplateAs(WindowId),
     /// Plot > User Templates > Manage...: rename and delete the saved templates.
     ManageTemplates,
+    /// File > Batch Processing...: the window that runs a workbook template on data files (T165).
+    BatchProcessing,
     /// File > New > Notes and the Standard toolbar's New Notes (T154).
     NewNotes,
     /// The text of a Notes window after editing: one undo step.
@@ -874,6 +876,14 @@ pub enum Action {
     },
     /// Writes a hint on the status bar.
     Hint(String),
+    /// Resize a drawn object, if its original geometry still exists.
+    ResizeShape {
+        graph: WindowId,
+        layer: usize,
+        shape: usize,
+        before: sheaf_core::shape::Shape,
+        after: sheaf_core::shape::Shape,
+    },
     /// Opens the properties window of a drawn object (double click, Properties).
     EditShape {
         graph: WindowId,

@@ -3682,6 +3682,8 @@ Unmeasured, so chosen by Sheaf: the default line width and colour, the arrow hea
 - Add, Move, Edit and Delete of a drawn object are one undo step each ("Add drawn object", "Move drawn object", "Edit drawn object", "Delete drawn object").
 - The right-click menu of a drawn shape has Delete, Properties..., "Bring to the front" and "Push to the back". The ordering commands move that shape to the end or beginning of its layer's shape list, retaining all geometry and style. Cut and Copy remain greyed. This within-layer shape ordering is Sheaf's choice and has not been measured in Origin.
 - Ordering changes the renderer and topmost hit together. The moved shape's selection follows its new index; undo/redo clears a selected shape when its layer's shape list changed, so later Delete or Properties cannot silently target another object. An open shape-properties window closes when the layer's shapes change, as for other shape edits. An edge move or stale index does nothing and adds no undo step. Labels, legends and other layers retain their existing stacking behavior.
+- A selected line or arrow has two endpoint resize handles; a rectangle or ellipse has four corner handles. Their positions come from the shape's coordinates, not the stroke/arrowhead bounding box. In Pointer mode, dragging a handle fixes the opposite endpoint/corner and changes only the chosen coordinates. Arrow endpoint identities and all styles are retained; inverted/crossed corners and off-frame coordinates are allowed. This resize interaction is Sheaf's choice, not measured Origin behavior.
+- A resize previews without changing the project and commits one "Resize drawn object" undo step on release. A no-op, Escape or stale/cancelled drag leaves the project unchanged. Collapsed line/arrow geometry and zero-span rectangle/ellipse geometry are rejected with a 0.001 UI-point tolerance to absorb screen-coordinate roundoff. Resizing has no Shift aspect/snap constraint; the separate drawing-tool constraints above still apply.
 - `sheaf-app --show shape:N` opens the window of the N-th object of the first graph (for pictures).
 
 **Command line** (`sheaf plot`, `sheaf export`, style option):
@@ -3693,7 +3695,7 @@ An `.opj` file written here does not hold drawn objects. The writer says so in a
 
 ### 17.5 Not done
 
-Colour of the head apart from the line, head width, dash of the head, rounded rectangles, pattern fills, page and scale attachment, resizing by handles, Cut, Copy and Paste, ordering across object kinds/layers, grouping, snapping to a grid, polylines, curves, pictures and the inset graph.
+Colour of the head apart from the line, head width, dash of the head, rounded rectangles, pattern fills, page and scale attachment, ordering across object kinds/layers, snapping to a grid, polylines, curves, pictures and the inset graph.
 
 
 Measured with LabTalk's `draw` command (2026-11-13, `re-workspace/scratch/draw17/draw1.out.txt`), which

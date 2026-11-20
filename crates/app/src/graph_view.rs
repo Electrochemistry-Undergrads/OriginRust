@@ -139,6 +139,9 @@ pub struct GraphUi {
     drawing: Option<Drawing>,
     /// A drawn object being moved.
     shape_drag: Option<ShapeDrag>,
+    resize_drag: Option<ResizeDrag>,
+    /// Escape consumes the rest of a selected-shape pointer gesture.
+    cancelled_shape_gesture: bool,
     /// A label being dragged.
     label_drag: Option<LabelDrag>,
     /// A legend being dragged.
@@ -160,6 +163,53 @@ struct ShapeDrag {
     layer: usize,
     shape: usize,
     delta: (f64, f64),
+}
+
+/// Handle coordinates identify which stored x and y each corner changes.
+#[derive(Clone)]
+struct ResizeDrag {
+    layer: usize,
+    shape: usize,
+    original: Shape,
+    handle: (bool, bool),
+    delta: (f64, f64),
+}
+
+fn shape_handles(s: &Shape) -> Vec<((bool, bool), (f64, f64))> {
+    let mut handles = vec![((false, false), (s.x1, s.y1)), ((true, true), (s.x2, s.y2))];
+    if !s.kind.is_linear() {
+        handles.extend([((false, true), (s.x1, s.y2)), ((true, false), (s.x2, s.y1))]);
+    }
+    handles
+}
+
+fn handle_hit(s: &Shape, pos: Pos2, to_screen: &dyn Fn((f64, f64)) -> Pos2) -> Option<(bool, bool)> {
+    shape_handles(s).into_iter().find(|(_, p)| to_screen(*p).distance(pos) <= 7.0).map(|(handle, _)| handle)
+}
+
+fn resized(d: &ResizeDrag, frame: (f64, f64)) -> Shape {
+    let mut s = d.original.clone();
+    let (dx, dy) = (d.delta.0 / frame.0, d.delta.1 / frame.1);
+    if d.handle.0 {
+        s.x2 += dx;
+    } else {
+        s.x1 += dx;
+    }
+    if d.handle.1 {
+        s.y2 += dy;
+    } else {
+        s.y1 += dy;
+    }
+    s
+}
+
+// Screen coordinates are f32; sub-thousandth-point residue can remain after dragging exactly
+// onto the opposite handle. Reject only that visually indistinguishable collapsed geometry.
+fn valid_resize(s: &Shape, frame_screen: (f64, f64)) -> bool {
+    let (dx, dy) = ((s.x1 - s.x2).abs() * frame_screen.0, (s.y1 - s.y2).abs() * frame_screen.1);
+    const EPSILON: f64 = 0.001;
+    [s.x1, s.y1, s.x2, s.y2, dx, dy].iter().all(|v| v.is_finite())
+        && if s.kind.is_linear() { dx.hypot(dy) > EPSILON } else { dx > EPSILON && dy > EPSILON }
 }
 
 /// A legend being moved with the mouse: its centre when the drag began (fractions of the layer
@@ -276,6 +326,11 @@ impl GraphUi {
         {
             layers.push(drag.layer);
         }
+        if let Some(drag) = &self.resize_drag
+            && !layers.contains(&drag.layer)
+        {
+            layers.push(drag.layer);
+        }
         layers
     }
 
@@ -290,6 +345,9 @@ impl GraphUi {
         if matches!(self.menu_on, Some(MenuTarget::Hit(Hit::Object { layer: l, kind: ObjectKind::Shape(_) })) if l == layer)
         {
             self.menu_on = None;
+        }
+        if self.resize_drag.as_ref().is_some_and(|drag| drag.layer == layer) {
+            self.resize_drag = None;
         }
         if self.shape_drag.is_some_and(|drag| drag.layer == layer) {
             self.shape_drag = None;
@@ -588,7 +646,29 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             .or(moved_shape.map(|d| d.delta))
             .or(state.multi_drag)
             .unwrap_or((0.0, 0.0));
-        draw_selection(&painter, &t.scene, layer, kind, &|(x, y)| to_screen((x + shift.0, y + shift.1)));
+        if let ObjectKind::Shape(index) = kind {
+            if let Some(original) = graph.layers.get(layer).and_then(|l| l.shapes.get(index))
+                && let Some(f) = t.geometry.get(layer).map(|g| g.frame)
+            {
+                let s = state
+                    .resize_drag
+                    .as_ref()
+                    .filter(|d| d.layer == layer && d.shape == index)
+                    .map(|d| resized(d, (f.w, f.h)))
+                    .unwrap_or_else(|| original.clone());
+                let point = |(x, y): (f64, f64)| to_screen((f.x + x * f.w + shift.0, f.y + y * f.h + shift.1));
+                if state.resize_drag.is_some() {
+                    draw_preview(&painter, &s, &point);
+                }
+                for (_, p) in shape_handles(&s) {
+                    let r = Rect::from_center_size(point(p), Vec2::splat(8.0));
+                    painter.rect_filled(r, 0.0, Color32::from_rgb(0, 170, 0));
+                    painter.rect_stroke(r, 0.0, Stroke::new(1.0_f32, Color32::BLACK), egui::StrokeKind::Inside);
+                }
+            }
+        } else {
+            draw_selection(&painter, &t.scene, layer, kind, &|(x, y)| to_screen((x + shift.0, y + shift.1)));
+        }
     }
     // The other objects of a Shift+click selection (T159) or a group (T162), moved with a drag of them all.
     let shift = state.multi_drag.unwrap_or((0.0, 0.0));
@@ -753,9 +833,61 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         }
     }
 
+    // Escape can arrive on the same frame as the first drag movement. Consume that gesture
+    // through release so it cannot start a resize or a move after cancellation.
+    if ui.input(|i| i.key_pressed(egui::Key::Escape) && i.pointer.primary_down())
+        && matches!(state.selected, Some((_, ObjectKind::Shape(_))))
+    {
+        state.cancelled_shape_gesture = true;
+    }
+    // Selected geometric handles have priority over picking any object beneath them.
+    if state.tool() != GraphTool::Pointer
+        || state.gadget.is_some()
+        || state.menu_on.is_some()
+        || ui.input(|i| i.key_pressed(egui::Key::Escape))
+    {
+        state.resize_drag = None;
+    }
+    if response.drag_started()
+        && !state.cancelled_shape_gesture
+        && state.tool() == GraphTool::Pointer
+        && state.gadget.is_none()
+        && state.menu_on.is_none()
+        && let Some((layer, ObjectKind::Shape(index))) = state.selected
+        && let Some(pos) = ui.input(|i| i.pointer.press_origin())
+        && let Some(s) = graph.layers.get(layer).and_then(|l| l.shapes.get(index))
+        && let Some(f) = t.geometry.get(layer).map(|g| g.frame).filter(|f| f.w > 0.0 && f.h > 0.0)
+        && let Some(handle) = handle_hit(s, pos, &|(x, y)| to_screen((f.x + x * f.w, f.y + y * f.h)))
+    {
+        state.resize_drag = Some(ResizeDrag { layer, shape: index, original: s.clone(), handle, delta: (0.0, 0.0) });
+    }
+    if let Some(mut d) = state.resize_drag.take() {
+        let page = response.drag_delta() / fit;
+        d.delta.0 += f64::from(page.x);
+        d.delta.1 += f64::from(page.y);
+        if response.drag_stopped() {
+            if let Some(f) = t.geometry.get(d.layer).map(|g| g.frame).filter(|f| f.w > 0.0 && f.h > 0.0) {
+                let after = resized(&d, (f.w, f.h));
+                if after != d.original && valid_resize(&after, (f.w * f64::from(fit), f.h * f64::from(fit))) {
+                    actions.push(Action::ResizeShape {
+                        graph: graph_id,
+                        layer: d.layer,
+                        shape: d.shape,
+                        before: d.original,
+                        after,
+                    });
+                }
+            }
+        } else if ui.input(|i| i.pointer.primary_down()) {
+            state.resize_drag = Some(d);
+        }
+    }
+
     // Dragging one of several selected objects, or a grouped one, moves them all (T162); the
     // change is made, as one undo step, when the button is let go.
     if response.drag_started()
+        && state.resize_drag.is_none()
+        && !state.cancelled_shape_gesture
         && !state.reader
         && !state.text_tool
         && state.shape_tool.is_none()
@@ -805,6 +937,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     // Dragging a label moves it; the change is made when the button is let go.
     if response.drag_started()
         && state.multi_drag.is_none()
+        && state.resize_drag.is_none()
+        && !state.cancelled_shape_gesture
         && !state.reader
         && !state.text_tool
         && state.shape_tool.is_none()
@@ -886,6 +1020,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
 
     // Dragging a drawn object moves it; the change is made when the button is let go.
     if response.drag_started()
+        && state.resize_drag.is_none()
+        && !state.cancelled_shape_gesture
         && !state.reader
         && !state.text_tool
         && state.shape_tool.is_none()
@@ -924,6 +1060,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
 
     // Dragging the legend moves it too, and makes its position manual.
     if response.drag_started()
+        && state.resize_drag.is_none()
+        && !state.cancelled_shape_gesture
         && !state.reader
         && !state.text_tool
         && state.shape_tool.is_none()
@@ -967,6 +1105,24 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         }
     }
 
+    if !ui.input(|i| i.pointer.primary_down()) {
+        state.cancelled_shape_gesture = false;
+    }
+
+    // A click on a selected handle preserves selection even when the corner lies outside the shape.
+    let clicked_handle = if response.clicked()
+        && state.tool() == GraphTool::Pointer
+        && state.gadget.is_none()
+        && let Some((layer, ObjectKind::Shape(index))) = state.selected
+        && let Some(pos) = response.interact_pointer_pos()
+        && let Some(s) = graph.layers.get(layer).and_then(|l| l.shapes.get(index))
+        && let Some(f) = t.geometry.get(layer).map(|g| g.frame)
+        && handle_hit(s, pos, &|(x, y)| to_screen((f.x + x * f.w, f.y + y * f.h))).is_some()
+    {
+        true
+    } else {
+        false
+    };
     // Clicks on the page.
     let layer_of = layer_of_hit;
     if response.clicked()
@@ -985,6 +1141,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             });
         }
     } else if response.clicked()
+        && !clicked_handle
         && !state.reader
         && !slope_took_input
         && !zoom_took_input
@@ -1022,7 +1179,11 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         && state.data_tool.is_none()
         && let Some(pos) = response.interact_pointer_pos()
     {
-        let hit = pick(pos);
+        let hit = if clicked_handle {
+            state.selected.map_or_else(|| pick(pos), |(layer, kind)| Hit::Object { layer, kind })
+        } else {
+            pick(pos)
+        };
         let open = |layer, tab, plot| Action::GraphProperties { graph: graph_id, layer, tab, plot };
         let action = match hit {
             Hit::Object { layer, kind } => Some(properties_of(graph_id, layer, kind)),
@@ -1035,6 +1196,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         && let Some(pos) = response.interact_pointer_pos()
     {
         let hit = pick(pos);
+        state.resize_drag = None;
         state.menu_on = Some(MenuTarget::Hit(hit));
         state.menu_page = to_page(pos);
         state.last_click = Some(state.menu_page);
@@ -1917,5 +2079,34 @@ mod legend_update_tests {
         // Plot 4 is gone, plot 3 is new, plot 1 keeps its custom text.
         let custom = "\\l(1) T = 5 K\n\\l(4) %(4)\nnote\n\\l(2) %(2)";
         assert_eq!(update_legend_text(custom, auto), "\\l(1) T = 5 K\nnote\n\\l(2) %(2)\n\\l(3) %(3)");
+    }
+}
+
+#[cfg(test)]
+mod resize_tests {
+    use super::*;
+
+    #[test]
+    fn all_corner_identities_and_degenerate_geometry() {
+        let original = Shape::new(ShapeKind::Rectangle, (0.8, 0.7), (0.2, 0.3));
+        for (handle, _) in shape_handles(&original) {
+            let drag = ResizeDrag { layer: 0, shape: 0, original: original.clone(), handle, delta: (10.0, -20.0) };
+            let s = resized(&drag, (100.0, 200.0));
+            assert!((if handle.0 { s.x2 - original.x2 } else { s.x1 - original.x1 } - 0.1).abs() < 1e-10);
+            assert!((if handle.1 { s.y2 - original.y2 } else { s.y1 - original.y1 } + 0.1).abs() < 1e-10);
+            assert_eq!(if handle.0 { s.x1 } else { s.x2 }, if handle.0 { original.x1 } else { original.x2 });
+            assert_eq!(if handle.1 { s.y1 } else { s.y2 }, if handle.1 { original.y1 } else { original.y2 });
+        }
+        let mut s = original;
+        s.x1 = s.x2;
+        assert!(!valid_resize(&s, (100.0, 200.0)));
+        s.kind = ShapeKind::Line;
+        assert!(valid_resize(&s, (100.0, 200.0)));
+        s.y1 = s.y2;
+        assert!(!valid_resize(&s, (100.0, 200.0)));
+        s.x1 = s.x2 + 0.00002; // 0.002 screen points remains a valid, very short line.
+        assert!(valid_resize(&s, (100.0, 200.0)));
+        s.x1 = f64::NAN;
+        assert!(!valid_resize(&s, (100.0, 200.0)));
     }
 }

@@ -2303,6 +2303,12 @@ impl SheafApp {
                 self.function_graph = Some(crate::dialogs::function_graph::FunctionGraphDialog::new(graph, layer));
                 self.function_graph_new = false;
             }
+            Action::TernaryContour { a, b, c, z } => {
+                match self.doc.edit("New graph", |p| p.plot_ternary_contour(a, b, c, z)) {
+                    Ok(graph) => self.focus(graph),
+                    Err(e) => self.warn(e.to_string()),
+                }
+            }
             Action::PolarContour { theta, r, z } => {
                 match self.doc.edit("New graph", |p| p.plot_xyz_polar(theta, r, z)) {
                     Ok(graph) => self.focus(graph),

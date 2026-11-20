@@ -383,7 +383,7 @@ each matrix as not written).
 - **Sheaf choice:** Origin fits a matrix directly; Sheaf goes through XYZ columns, so the fit
   results, residuals and report are those of an ordinary XYZ surface fit.
 
-## 7k. Plot > Contour/Heat Map > Polar Contour (T222, 2026-11-20, not measured)
+## 7k. Plot > Contour/Heat Map > Polar Contour (T225, 2026-11-20, not measured)
 
 - Polar Contour theta(X) r(Y) and r(X) theta(Y) take three selected worksheet columns. The first
   item reads them as angle (degrees), radius and Z; the second as radius, angle and Z.
@@ -396,7 +396,12 @@ each matrix as not written).
   - The triangulation does not wrap from the last angle to the first: data that stops at 330 degrees
     leaves the wedge to 360 open.
   - Origin's own polar contour layout and levels are not measured.
-- Ternary Contour stays grey.
+- **Ternary Contour (T226):** takes four selected columns, the compositions A, B and C (any common
+  total; each point is normalized to fractions) and a value Z. It makes the same colour-fill contour
+  in Origin's ternary layer (graphing 14.20), whose frame is narrowed to the field templates' frame
+  so that the colour scale fits. The points are gridded over the fractions of A and B, and each
+  vertex is drawn through the ternary mapping (`FieldSource::Ternary`). Sheaf choice: grid cells
+  along the side opposite B show steps; Origin's layout and levels are not measured.
 
 ## 8. What was not verified, and what is left
 

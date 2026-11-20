@@ -1,4 +1,4 @@
-# T222: Plot > Contour/Heat Map > Polar Contour (B14 slice)
+# T225: Plot > Contour/Heat Map > Polar Contour (B14 slice)
 
 **Status:** done 2026-11-20 (Claude Windows "obj-align"), **not measured**.
 **Size:** S. **Source:** greyed inventory package B14 ("Polar Contour theta(X) r(Y)" and

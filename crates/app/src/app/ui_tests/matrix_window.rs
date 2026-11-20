@@ -390,3 +390,35 @@ fn polar_contour_items_plot_three_selected_columns_in_a_polar_layer() {
     let g = project(&h).graphs().next().expect("a polar contour graph");
     assert!(g.layers[0].coords.polar().is_some() && g.layers[0].field.is_some());
 }
+
+#[test]
+fn ternary_contour_plots_four_selected_columns_in_a_ternary_layer() {
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    h.state_mut().doc.apply("Data", |p| {
+        let book = p.add_workbook("ternary");
+        let a = vec![100.0, 0.0, 0.0, 50.0, 50.0, 0.0, 34.0];
+        let b = vec![0.0, 100.0, 0.0, 50.0, 0.0, 50.0, 33.0];
+        let c: Vec<f64> = a.iter().zip(&b).map(|(x, y)| 100.0 - x - y).collect();
+        let z: Vec<f64> = a.clone();
+        for v in [a, b, c, z] {
+            p.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap();
+        }
+    });
+    settle(&mut h);
+    let cols: Vec<sheaf_core::ColumnId> =
+        project(&h).workbooks().next().unwrap().sheet().columns.iter().map(|c| c.id).collect();
+    {
+        let mut c = h.state().menu_context();
+        c.book = project(&h).workbooks().next().map(|b| b.id);
+        c.selected = &cols[..3];
+        assert!(menus::resolve(&menus::Cmd::TernaryContour, &c).is_err(), "four columns needed");
+        c.selected = &cols;
+        let action = menus::resolve(&menus::Cmd::TernaryContour, &c).unwrap();
+        assert!(matches!(action, Action::TernaryContour { a, z, .. } if a == cols[0] && z == cols[3]));
+    }
+    h.state_mut().apply(Action::TernaryContour { a: cols[0], b: cols[1], c: cols[2], z: cols[3] }, &ctx);
+    settle(&mut h);
+    let g = project(&h).graphs().next().expect("a ternary contour graph");
+    assert!(g.layers[0].coords.ternary().is_some() && g.layers[0].field.is_some());
+}

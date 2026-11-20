@@ -5480,6 +5480,25 @@ their future implementation rather than treating them as equivalent toggles:
   in copy/print/export. The option depends on Use Master Items. This differs from
   ordinary layer hiding; master-page state/rendering is not supplied in this slice.
 
+### 22.8 View > Show > Labels and Data (T177, 2026-11-19, documentation contract, not measured)
+
+Origin's [layer reference](https://docs.originlab.com/labtalk/ref/layer-obj/) has `layer.showLabels`
+and `layer.showData`, separate switches of a layer; the menu items were not measured (22.3: both are
+ticked on a new graph). Sheaf reads them as page-wide switches of every layer:
+
+- **Labels** turns `LayerDisplay::show_labels` on or off on every layer of the graph: off draws no
+  legend, free text labels (tables included) or drawn objects (lines, arrows, rectangles, ellipses) in
+  the layer, on screen and in exports. Axis titles, tick labels, plots, slope annotations, straight
+  lines and colour scales stay. The hidden objects cannot be picked (Origin keeps them selectable:
+  not followed).
+- **Data** turns the existing Show Elements: Data (`LayerDisplay::show_data`) on or off on every
+  layer.
+- Each is ticked when every layer shows its labels (or data), and each click is one undo step
+  ("Show Labels", "Show Data"). Older files read `show_labels` as on; the `.opj` written here does
+  not hold it (its save warns that the layer's Display tab was not written).
+- Active Layer Indicator, Axis Layer Icons, Object Grid, Layer Grid, Frame, Master Items on Screen and
+  Show Data Info stay grey (22.7).
+
 ## 23. View > Zoom All and the Tools-bar Scale In / Scale Out (T69, measured 2026-11-15, Origin 2016)
 
 Measured in OriginPro 2016 on our own synthetic data (X = 1 to 10, Y = 2X+1 and 20-X, Line + Symbol graph; one run with a right-Y layer from `layadd type:=righty`; one with both axes logarithmic; a 4-graph project), a 1024x768 Origin window, drags and clicks sent by `tools/origin-ref/origin-dialog.ps1 -NoDialog` with `-AfterFile` (`@DRAG`, `@CLICK`, `@DCLICK`, `@KEYDOWN`, `@SHOT`, `@CURSOR`) and the axis ends read after each action with `?layer.x.from` / `.to` / `layer.y.from` / `.to` (raw outputs and pictures are local: `re-workspace/scratch/t69/`, `*.out.txt`, `*.png`). Anything not listed is **unmeasured**.

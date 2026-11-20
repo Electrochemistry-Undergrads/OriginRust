@@ -768,6 +768,12 @@ pub enum Action {
         mode: sheaf_core::project::ViewMode,
     },
     /// View > Show > Layer Icons.
+    /// View > Show > Labels or Data (T177): sets the flag on every layer of the graph, one undo step.
+    SetShowElements {
+        graph: WindowId,
+        labels: Option<bool>,
+        data: Option<bool>,
+    },
     SetLayerIcons {
         graph: WindowId,
         on: bool,

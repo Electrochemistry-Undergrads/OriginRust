@@ -64,6 +64,7 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
     // layer) is drawn after all layers, so that no layer's curves cover it.
     for (i, layer) in g.layers.iter().enumerate() {
         if !layer.display.hidden
+            && layer.display.show_labels
             && layer.legend.scope == LegendScope::Graph
             && let Some(last) = layers.last_mut()
         {
@@ -1040,6 +1041,10 @@ fn draw_legend_and_labels(
     m: &dyn TextMeasurer,
 ) {
     let layer = &g.layers[index];
+    // View > Show > Labels off (T177): no legend, free labels or drawn objects.
+    if !layer.display.show_labels {
+        return;
+    }
     let label_plot_color = |slot| layer.plots.get(slot).map(crate::rug::plot_color);
     let rec = |objects: &mut Vec<SceneObject>, out: &Vec<Item>, start: usize, kind: ObjectKind, extra: &[Rect]| {
         hit::record(objects, out, start, kind, index, ItemList::Overlay, extra, m)

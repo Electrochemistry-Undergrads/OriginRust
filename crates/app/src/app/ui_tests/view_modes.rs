@@ -82,9 +82,11 @@ fn layer_icons_in_the_show_menu_hides_and_shows_the_icons() {
 fn the_show_items_that_are_not_measured_stay_grey() {
     let mut h = start(vec![data_file("vm-grey")]);
     menu_path(&mut h, &["View", "Show"]);
-    for label in ["Active Layer Indicator", "Object Grid", "Frame", "Labels", "Master Items on Screen"] {
+    for label in ["Active Layer Indicator", "Object Grid", "Frame", "Master Items on Screen"] {
         assert!(h.get_by_label(label).accesskit_node().is_disabled(), "{label} is not built yet");
     }
+    // T177: Labels (and Data, which shares its name with the Data menu) are live (graphing 22.8).
+    assert!(!h.get_by_label("Labels").accesskit_node().is_disabled());
 }
 
 #[test]

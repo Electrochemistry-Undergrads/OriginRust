@@ -1,5 +1,9 @@
 # T66: Graph view modes, Show toggles, Show Data Info, Full Screen (B1, slice 2)
 
+**T177 (2026-11-19):** View > Show > Labels and Data are live as page-wide switches of every layer
+(LabTalk `layer.showLabels` / `layer.showData`, a documentation contract, graphing 22.8); seven items
+remain grey.
+
 **Status:** partly done (2026-11-15, branch `graph-view-modes`, Claude Windows). Done: the four view modes (menu, Ctrl+2/1/0, ticks, saved in the `.sheaf` file), Show > Layer Icons, Full Screen with the reminder, Esc and the arrow keys (menu, Ctrl+Shift+J, page context item). Remaining after the 2026-11-17 documented Active Layer Only wire-up: nine grey items, Active Layer Indicator, Axis Layer Icons, Object Grid, Layer Grid, Frame, Labels, Data, Master Items on Screen and Show Data Info; exact Native2016 effects remain unmeasured (graphing22.3/22.7). Step 1 (Origin 2016 measurement) is in [graphing](../spec/graphing.md) section 22. Zoom In/Out, Whole Page and Pan are T65 (done); Zoom All and the Scale In/Out tools are T69.
 Active Layer Only follow-up (codex/t66-show-controls-audit, 2026-11-17): View >
 Show > Active Layer Only and documented Ctrl+Alt+D call the published T61

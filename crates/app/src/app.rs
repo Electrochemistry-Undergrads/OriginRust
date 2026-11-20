@@ -2009,6 +2009,23 @@ impl SheafApp {
                     self.focus(id);
                 }
             }
+            Action::LayoutSetItem { layout, index, rect, resize } => {
+                let label = if resize { "Resize layout item" } else { "Move layout item" };
+                self.doc.apply(label, |p| {
+                    if let Some(it) = p.layout_mut(layout).and_then(|l| l.items.get_mut(index)) {
+                        (it.x, it.y, it.w, it.h) = rect;
+                    }
+                });
+            }
+            Action::LayoutDeleteItem { layout, index } => {
+                self.doc.apply("Delete layout item", |p| {
+                    if let Some(l) = p.layout_mut(layout)
+                        && index < l.items.len()
+                    {
+                        l.items.remove(index);
+                    }
+                });
+            }
             Action::LayoutAddGraph { layout } => {
                 match crate::dialogs::layout_add_graph::LayoutAddGraph::new(&self.doc, layout) {
                     Some(d) => self.layout_add_graph = Some(d),
@@ -6051,6 +6068,17 @@ impl SheafApp {
             if let Some(op) = state.delete_selected() {
                 actions.push(Action::GraphEdit { graph, op });
             }
+            ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete));
+        }
+        // Delete on a layout page removes its selected item (T237 slice 2).
+        if !typing
+            && let Some(layout) = self.active.filter(|id| self.doc.project().layout(*id).is_some())
+            && let Some(state) = self.layouts.get_mut(&layout)
+            && let Some(index) = state.selected
+            && ctx.input(|i| i.key_pressed(egui::Key::Delete))
+        {
+            state.selected = None;
+            actions.push(Action::LayoutDeleteItem { layout, index });
             ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete));
         }
         // Ctrl+X, Ctrl+C and Ctrl+V on a graph cut, copy and paste its selected object (T149); they

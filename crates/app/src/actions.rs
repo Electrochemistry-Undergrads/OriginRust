@@ -318,6 +318,19 @@ pub enum Action {
     NewMatrix,
     /// File > New > Layout and the Standard toolbar's New Layout (T237): an empty layout page.
     NewLayout,
+    /// A layout item moved or resized with the mouse (T237 slice 2): its new rectangle in page
+    /// fractions, one undo step.
+    LayoutSetItem {
+        layout: WindowId,
+        index: usize,
+        rect: (f64, f64, f64, f64),
+        resize: bool,
+    },
+    /// Delete on a selected layout item (T237 slice 2): one undo step.
+    LayoutDeleteItem {
+        layout: WindowId,
+        index: usize,
+    },
     /// Layout > Add Graph... (T237): the window that adds a graph's picture to `layout`.
     LayoutAddGraph {
         layout: WindowId,

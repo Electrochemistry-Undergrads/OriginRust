@@ -135,6 +135,8 @@ fn fill_sidelines_keep_each_connection_and_export_and_change_the_legend_to_a_lin
         Connect::Straight,
         Connect::StepHorizontal,
         Connect::StepVertical,
+        Connect::StepHorizontalCenter,
+        Connect::StepVerticalCenter,
         Connect::Spline,
         Connect::BSpline,
         Connect::Bezier,

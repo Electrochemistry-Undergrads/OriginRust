@@ -477,6 +477,8 @@ fn plot_tab_body(
                             Connect::Bezier,
                             Connect::StepHorizontal,
                             Connect::StepVertical,
+                            Connect::StepHorizontalCenter,
+                            Connect::StepVerticalCenter,
                             Connect::Segment2,
                             Connect::Segment3,
                         ] {

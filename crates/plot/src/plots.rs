@@ -906,6 +906,23 @@ fn polyline_path(d: &mut String, pts: &[(f64, f64)], connect: Connect) {
                 line_to(d, w[1].0, w[1].1);
             }
         }
+        // T252: the step halfway between the two points.
+        Connect::StepHorizontalCenter => {
+            for w in pts.windows(2) {
+                let mid = 0.5 * (w[0].0 + w[1].0);
+                line_to(d, mid, w[0].1);
+                line_to(d, mid, w[1].1);
+                line_to(d, w[1].0, w[1].1);
+            }
+        }
+        Connect::StepVerticalCenter => {
+            for w in pts.windows(2) {
+                let mid = 0.5 * (w[0].1 + w[1].1);
+                line_to(d, w[0].0, mid);
+                line_to(d, w[1].0, mid);
+                line_to(d, w[1].0, w[1].1);
+            }
+        }
         Connect::Segment2 | Connect::Segment3 | Connect::Segments(_) => {
             // groups of 2 (3) points counted from the first point of the piece; a last group with a
             // single point draws no line
@@ -1549,5 +1566,32 @@ fn draw_data_markers(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, (
         move_to(&mut d, x - 4.0, y + half);
         line_to(&mut d, x + 4.0, y + half);
         out.push(Item::Path { d, fill: None, stroke: Some(stroke.clone()) });
+    }
+}
+
+#[cfg(test)]
+mod step_center_tests {
+    use super::*;
+
+    #[test]
+    fn centred_steps_turn_halfway_between_the_points() {
+        // T252: Step Horizontal Center (Origin's line connection 13) and Step Vertical Center.
+        let pts = [(0.0, 0.0), (2.0, 4.0), (6.0, 2.0)];
+        let mut h = String::new();
+        polyline_path(&mut h, &pts, Connect::StepHorizontalCenter);
+        let mut want = String::new();
+        move_to(&mut want, 0.0, 0.0);
+        for (x, y) in [(1.0, 0.0), (1.0, 4.0), (2.0, 4.0), (4.0, 4.0), (4.0, 2.0), (6.0, 2.0)] {
+            line_to(&mut want, x, y);
+        }
+        assert_eq!(h, want);
+        let mut v = String::new();
+        polyline_path(&mut v, &pts, Connect::StepVerticalCenter);
+        let mut want = String::new();
+        move_to(&mut want, 0.0, 0.0);
+        for (x, y) in [(0.0, 2.0), (2.0, 2.0), (2.0, 4.0), (2.0, 3.0), (6.0, 3.0), (6.0, 2.0)] {
+            line_to(&mut want, x, y);
+        }
+        assert_eq!(v, want);
     }
 }

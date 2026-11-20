@@ -325,7 +325,7 @@ fn rendered_colors(h: &Harness<'static, SheafApp>, object: ObjectKind, fill: boo
                     stroke.as_ref().map(|s| s.color)
                 }
             }
-            Item::Text(_) => None,
+            Item::Text(_) | Item::Image { .. } => None,
         })
         .collect()
 }

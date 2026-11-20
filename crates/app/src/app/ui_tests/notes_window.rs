@@ -261,3 +261,35 @@ fn set_data_style_float_turns_on_for_the_selected_cells() {
     let sheet = &project(&h).workbook(book).unwrap().sheets[0];
     assert!(sheet.format_index().resolve(sheet, b, 0).float);
 }
+
+#[test]
+fn insert_images_from_files_puts_a_picture_object_on_the_graph() {
+    let entries = menus::graph_page_menu(0, (100.0, 80.0));
+    assert!(entries.iter().any(|e| matches!(e, menus::Entry::Item(i)
+        if i.label == "Insert Images From Files..."
+            && i.cmd == Some(menus::Cmd::InsertGraphImage { layer: 0, page: (100.0, 80.0) }))));
+    let mut h = start(vec![data_file("graph-picture")]);
+    let graph = project(&h).graphs().next().unwrap().id;
+    let mut png = Vec::new();
+    image::RgbaImage::from_raw(40, 20, vec![0u8; 40 * 20 * 4])
+        .unwrap()
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let ctx = h.ctx.clone();
+    let shapes = project(&h).graph(graph).unwrap().layers[0].shapes.len();
+    h.state_mut()
+        .apply(Action::InsertGraphImage { graph, layer: 0, page: (100.0, 80.0), png: std::sync::Arc::new(png) }, &ctx);
+    settle(&mut h);
+    let g = project(&h).graph(graph).unwrap();
+    assert_eq!(g.layers[0].shapes.len(), shapes + 1);
+    let s = g.layers[0].shapes.last().unwrap();
+    assert_eq!(s.kind, sheaf_core::shape::ShapeKind::Image);
+    assert_eq!(s.picture.as_ref().map(|p| (p.width_px, p.height_px)), Some((40, 20)));
+    assert_eq!(h.state().doc.undo_label(), Some("Insert Image"));
+    // A file that is not a PNG changes nothing.
+    h.state_mut().apply(
+        Action::InsertGraphImage { graph, layer: 0, page: (0.0, 0.0), png: std::sync::Arc::new(vec![1, 2, 3]) },
+        &ctx,
+    );
+    assert_eq!(project(&h).graph(graph).unwrap().layers[0].shapes.len(), shapes + 1);
+}

@@ -3868,6 +3868,19 @@ copying are distinct routes outside this slice.
   - Each item is greyed while it has nothing to work on.
 - **Not done:** attachment to data or page, several objects at once, and Ctrl+drag copies.
 
+
+### 17.9 Pictures on a graph page (T216, 2026-11-20, not measured)
+
+Origin's graph page right-click menu has Insert Images From Files... (section 26.2 lists it). Sheaf's
+version: the item opens the system file picker for a PNG file; the picture becomes a drawn object of the
+clicked layer (`ShapeKind::Image`, its PNG kept in the project as base64 text) with its top left corner
+at the clicked point, 96 pixels to the inch (0.75 point a pixel), made smaller with its proportions kept
+to fit two thirds of the page; one undo step ("Insert Image"). A file that is not a readable PNG is
+refused. Like the other drawn objects it is selected, moved, resized, aligned, grouped, cut, copied,
+pasted and deleted; it has no border unless its line width is set. It is drawn on screen and into SVG,
+PNG/TIFF/JPEG/BMP and PDF exports (an SVG `<image>` with a data URL); EMF and EPS exports leave it out,
+and an `.opj` written here leaves it out with the other drawn objects (the `.opj.sheaf` companion keeps
+it). Only PNG files; Origin's link-to-file and other formats were not measured.
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 
 Measured on 2026-11-13 by opening Origin's Plot Details on a line plot (`tools/origin-ref/origin-dialog.ps1`,

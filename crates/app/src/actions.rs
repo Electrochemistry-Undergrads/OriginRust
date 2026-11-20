@@ -382,6 +382,19 @@ pub enum Action {
         book: WindowId,
         on: bool,
     },
+    /// The graph page's Insert Images From Files...: the file picker (T216).
+    PickGraphImage {
+        graph: WindowId,
+        layer: usize,
+        page: (f64, f64),
+    },
+    /// Put a PNG picture on a graph layer with its top left corner at the page point (T216).
+    InsertGraphImage {
+        graph: WindowId,
+        layer: usize,
+        page: (f64, f64),
+        png: std::sync::Arc<Vec<u8>>,
+    },
     /// Draw an arrow across a data cell (`Some(double)`) or take it out (T205), one undo step.
     SetCellArrow {
         column: ColumnId,

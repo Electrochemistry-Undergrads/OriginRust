@@ -35,7 +35,7 @@ fn a_layout_page_is_made_and_shows_an_added_graph() {
     assert_eq!(h.state().doc.undo_label(), Some("Add graph to layout"));
     // The page draws the picture (a texture for the graph) without trouble.
     settle(&mut h);
-    assert!(h.state().layouts.get(&id).is_some(), "the layout window was drawn");
+    assert!(h.state().layouts.contains_key(&id), "the layout window was drawn");
     // The Standard toolbar's New Layout makes another page.
     let action = menus::resolve(&menus::Cmd::NewLayout, &h.state().menu_context()).unwrap();
     h.state_mut().apply(action, &ctx);

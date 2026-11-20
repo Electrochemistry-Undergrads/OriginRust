@@ -79,3 +79,38 @@ fn show_x_column_of_a_column_without_an_interval_says_so_and_changes_nothing() {
     assert!(h.query_by_label_contains("has no sampling interval").is_some());
     assert_eq!(h.state().doc.undo_label(), Some("Import data"), "no new undo step");
 }
+
+#[test]
+fn from_x_column_takes_the_start_and_step_of_an_evenly_spaced_x_column() {
+    let mut h = start(vec![data_file("sampling-from-x")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let (a, b) = (column_id(&h, "A"), column_id(&h, "B"));
+    // Not 1, 2, 3...: a start and step of 1 is how the window clears an interval.
+    h.state_mut().doc.apply("Set", |p| {
+        *p.column_mut(a).unwrap().numeric_mut().unwrap() = vec![0.0, 0.5, 1.0, 1.5];
+    });
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Column", "Set Sampling Interval..."]);
+    click(&mut h, "From X Column");
+    click(&mut h, "OK");
+    assert!(h.state().sampling.is_none(), "OK sets and closes");
+    let s = project(&h).column(b).unwrap().sampling.clone().unwrap();
+    let x_name = project(&h).column(a).unwrap().long_name.clone();
+    assert_eq!((s.x0, s.inc, s.long_name), (0.0, 0.5, x_name));
+}
+
+#[test]
+fn from_x_column_of_an_unevenly_spaced_x_column_says_so() {
+    let mut h = start(vec![data_file("sampling-from-x-uneven")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let (a, b) = (column_id(&h, "A"), column_id(&h, "B"));
+    h.state_mut().doc.apply("Set", |p| {
+        *p.column_mut(a).unwrap().numeric_mut().unwrap() = vec![1.0, 2.0, 4.0, 8.0];
+    });
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Column", "Set Sampling Interval..."]);
+    click(&mut h, "From X Column");
+    assert!(h.query_by_label_contains("is not evenly spaced").is_some(), "the window says why");
+    click(&mut h, "Cancel");
+    assert_eq!(project(&h).column(b).unwrap().sampling, None, "nothing changed");
+}

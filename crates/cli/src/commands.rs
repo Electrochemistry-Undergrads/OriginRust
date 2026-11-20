@@ -130,6 +130,11 @@ fn flag_settings(r: &ReadOptions) -> ReadSettings {
         no_rename_sheet: r.no_rename_sheet,
         no_rename_book: r.no_rename_book,
         blocks_as_sheets: r.blocks_as_sheets,
+        sparklines: match r.sparklines {
+            SparklinesArg::No => sheaf_io::ascii::AddSparklines::No,
+            SparklinesArg::Yes => sheaf_io::ascii::AddSparklines::Yes,
+            SparklinesArg::Auto => sheaf_io::ascii::AddSparklines::Auto,
+        },
         sheets: r.sheets.clone(),
         hidden_sheets: r.hidden_sheets,
         skip_hidden_sheets: r.skip_hidden_sheets,

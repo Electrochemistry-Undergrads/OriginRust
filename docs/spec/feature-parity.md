@@ -33,9 +33,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 53 | 198 | 10 | 261 |
+| All rows | 54 | 200 | 7 | 261 |
 | P0 | 33 | 70 | 0 | 103 |
-| P1 and P2 together | 20 | 128 | 10 | 158 |
+| P1 and P2 together | 21 | 130 | 7 | 158 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 63 are P2.
 
@@ -104,7 +104,7 @@ Cross-cutting findings:
 | Number separators | NumSep | comma, dot, space, apostrophe grouping and decimal comma; found when unambiguous; option in window and CLI | ✓ | stricter than Origin: groups must have three digits | P0 |
 | CH Instruments files | owner's workflow | `io/src/chi.rs`: CV, i-t, LSV, scan splitting, chronopotentiometry segments (one column group per charge or discharge segment), mA, charge, sign, clip warning, run parameters; `io/src/chi_bin.rs` reads `.bin` files directly into the same workbook | ✓ | a CV and a chronopotentiometry text export of the owner's were checked; the i-t text importer has not been checked against a real export, and the owner's `.bin` files have no text export to compare with (chi-binary-format.md) | P0 |
 | Batch import of many files | multiple files | dialog, drops, CLI `sheaf import <folder or pattern> --mode books/sheets/columns/rows`; CHI files go through the CHI importers | ✓ | | P0 |
-| Partial import | row, column ranges, read/skip patterns | skip rows, max rows | ◐ | no column range or patterns; max rows has no dialog control | P1 |
+| Partial import | row, column ranges, read/skip patterns | Partial Import page of the import and Excel windows and the wizard's Data Selection: first/last row and column with read/skip patterns (`ImportSelection`), skip rows; CLI `--first-row`, `--last-row`, `--read-rows`, `--skip-rows` and the column flags | ✓ | the older max rows option has no window control (Last row does the same) | P1 |
 | Fixed width, multi-character delimiter | ASCII options | `Delimiter::AnyOf`, `Delimiter::Multi`, `Delimiter::Fixed`; import dialog (Other character set, combine runs, Multiple Characters, Fixed Width with widths); CLI `--delimiter-chars`, `--combine-delimiters`, `--delimiter`, `--fixed-width`; window nodes and defaults as measured (OK and Cancel only, no Apply; Short Names on Header Lines; Rename Sheet and Rename Book with Filename, both on); row/column first-last and read/skip selection in API/UI/CLI, with all-files-except-first scope; plots keep their row ranges when data is replaced | ◐ | custom range lists, filename trimming and the comment options | P1 |
 | Encoding | none in Origin | BOMs, UTF-8, Windows-1252 | ✓ | no manual choice | P1 |
 | Import filters and saved settings | .oif, Import Filters Manager | Dialog Theme row (`<default>`, `<last used>`, named themes; Save, Save As, Delete) in the ASCII/CHI import window, the Import Wizard and the Excel import window; `sheaf import --theme NAME`/`--last-used` (typed flags win); one store per importer in the settings folder (import-ascii.md 17) | ◐ | Origin's theme list and defaults unmeasured; no `.oif` filters or Import Filters Manager | P1 |
@@ -112,7 +112,7 @@ Cross-cutting findings:
 | Excel import | File > Import > Excel | File > Import > Excel (XLS, XLSX, XLSM)... (sheet choice, hidden sheets, header rows, import modes, partial import, preview), drag-and-drop and command-line files, `sheaf import`/`info` with `--sheets`/`--skip-hidden-sheets`, MCP `import_files`; `calamine` (ADR 0012); cached formula values, Excel dates (1900/1904), one book per file and one sheet per Excel sheet; measured against Origin 2016's `impExcel` and copied: hidden sheets read, book long name with extension, leading empty columns kept, merged cells, booleans, error cells, dates and dates among text (import-excel.md 2) | ✓ | header rows detected (Origin reads none unless told); dates before 1900-03-01 as Excel shows them (Origin's are a day early); Origin's import window unseen; `.xlsb`/`.ods` read but untested; no live Open Excel window | P1 |
 | Drag and drop | drop on window | projects open, data goes to dialog | ✓ | | P1 |
 | Other importers, image, database | HDF5, NetCDF, JCAMP-DX, SPC, WAV, ODBC and more | File > Import > Image... (T204) and Binary 2D Array... (T199) into matrix books | ◐ | no HDF5, NetCDF, JCAMP-DX, SPC, WAV or ODBC | P2 |
-| Sparklines, auto width, write protection on import | ASCII options | none | ✗ | | P2 |
+| Sparklines, auto width, write protection on import | ASCII options | Add Sparklines (No, Yes, Yes(if less than 50 columns)) in the import window, themes and `sheaf import --sparklines` (import-ascii 10, T231) | ◐ | default No (Origin: if less than 50 columns) until `.opj` keeps sparklines; no auto width, no write protection | P2 |
 
 ## 3 Workbook and columns
 
@@ -188,7 +188,7 @@ Cross-cutting findings:
 | Translate X or Y | cxt, vshift | Curve Translate X and Y (Data Manipulation, T23) | ◐ | Origin's in-place/copy choice not measured | P1 |
 | Level crossing and curve intersect | levelcrossing, intersect | Intersect window and `analyze intersect` (two curves, crossings and optional touching points); Level Crossing window and `analyze level-crossing` (measured, analysis-tools 14) | ◐ | intersect not measured in Origin, `analysis-curve-math.md` | P1 |
 | Data reduction | reducerows, reducedup | Worksheet > Reduce Rows (T10), Reduce to Evenly Spaced X (Origin's reduce_ex: every N points, intervals, number of intervals, frequency, first point or Y mean, measured), Reduce Duplicate X Data (all eight methods, tolerance, counts, column names checked against Origin's reducedup) | ◐ | Reduce Rows layout not compared with Origin; reducedup writes a new sheet where Origin adds columns to the input sheet; no Reduce XY Data | P1 |
-| Sampling interval check | vinc | internal use only | ✗ | | P1 |
+| Sampling interval check | vinc | internal use only | ◐ | Set Sampling Interval's From X Column checks the X column's spacing and takes its start and step (workbook-model 13d, T228); no `vinc` command | P1 |
 | Average multiple curves | avecurves | Average Multiple Curves window and `analyze average` with Origin's defaults (Full X Range, Auto points, curves continued past their ends), Same as Source X and Common X Range, Std Dev, Std Err, N, Minimum, Maximum; Recalculate Auto/Manual; measured (`analysis-curve-math.md` 4) | ◐ | no Custom X, Follow Curve Trace or Concatenate; Origin sorts a turning X, Sheaf refuses it | P1 |
 | Polygon area | polyarea | Polygon Area window and `analyze polygon-area`: area, signed area, centroid, perimeter | ◐ | not measured in Origin, `analysis-curve-math.md` | P1 |
 | Cumulative sum | Mathematics | `cumsum()` in Set Column Values | ◐ | no Mathematics menu item | P1 |
@@ -323,7 +323,7 @@ Cross-cutting findings:
 | Hexbin | Plot > Contour/Heat Map > Hexbin | Plot > Contour/Heat Map > Hexbin only (T45, graphing.md 14.24; `-t hexbin`) | ◐ | Hexbin of XY data with Origin's bin controls and a count colour scale; contour and heat map need matrices | P2 |
 | Inset, pictures in graphs | Zoom, Insert picture | PNG pictures as drawn objects from the page menu (T216, graphing 17.9) | ◐ | Add Inset toolbar item remains grey (T61, wave 2); other picture formats, EMF/EPS export | P2 |
 | Other plot-type IDs when reading .opj | area, box, bar, histogram, pie | types 200 to 204 and, from LabTalk's plot-type ID table, 206 Box, 213 stacked column, 214 stacked area, 215 Bar, 216 stacked bar, 219 Histogram and 225 Pie (T223) | ◐ | multi-column types (high-low-close, vectors, floating bar), 3D and contour types still read as line + symbol with a warning; these records not compared byte for byte with Origin's | P2 |
-| Plotting X-Functions | plotgroup, plotbylabel, plotxyz | none | ✗ | | P2 |
+| Plotting X-Functions | plotgroup, plotbylabel, plotxyz | `sheaf plot --group` with XY templates | ◐ | one curve per group value only (graphing 17.10, T224); no graph or layer grouping, plotbylabel, plotxyz | P2 |
 
 ## 12 Graph styling
 

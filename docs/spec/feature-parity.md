@@ -143,7 +143,7 @@ Cross-cutting findings:
 | Date and time arithmetic | date columns | columns are plain numbers in formulas (days) | ◐ | no `date()`, `time()` or date functions | P1 |
 | String functions and text in formulas | text functions | `col(A)$`, strings, `+`, left/right/mid/len/upper/lower/trim/find/search/replace/substitute/char/code/compare/exact/text/format/value; `substitute(s,new,find[,n])$` replaces all or the nth occurrence, with text-function `$` suffixes; built-in headers `G/L/U/C/O` have text and numeric reads that follow header edits; direct-column `text()` defaults follow column format edits; a text result makes a Text & Numeric column (expression-language.md, section 3) | ◐ | no Origin global/`@SD` formatting defaults, parameter label rows, `%()` | P1 |
 | Worksheet operations | transpose, stack, unstack, join, reduce, copy, duplicates, pivot | Transpose (measured in Origin), Stack Columns, Unstack Columns, Split Columns, Reduce Rows and Pivot Table (`wpivot` options: count/sum/mean/min/max, totals, sorts, normalize; T124, workbook-model 13n), each writing a new sheet with one undo step | ◐ | Origin's Transpose replaces the sheet in place by default; option layouts of stack, unstack, split, reduce and pivot not compared with Origin; no pivot Others merging; no join or duplicates | P1 |
-| External links, Paste Link | Edit menu | none | ✗ | | P2 |
+| External links, Paste Link | Edit menu | Paste Link / Paste Link Transpose / Remove Links between worksheet cells (T211, ADR 0014) | ◐ | graph Paste Link, external files | P2 |
 | Complex numbers | complex type | none | ✗ | | P2 |
 | Worksheet script, query, clear | Worksheet menu | none | ✗ | | P2 |
 

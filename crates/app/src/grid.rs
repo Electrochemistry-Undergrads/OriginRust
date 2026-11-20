@@ -2374,6 +2374,15 @@ fn body_cell(
         ui.painter().rect_filled(room, 0.0, Color32::WHITE);
         ui.painter().image(tex.id(), shown, egui::Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
     }
+    // A linked cell (T211): a small blue corner at the bottom left.
+    if sheet.cell_link(column.id, r).is_some() {
+        let (l, b) = (rect.left() + 1.0, rect.bottom() - 1.0);
+        ui.painter().add(egui::Shape::convex_polygon(
+            vec![Pos2::new(l, b), Pos2::new(l + 6.0, b), Pos2::new(l, b - 6.0)],
+            Color32::from_rgb(40, 90, 200),
+            Stroke::NONE,
+        ));
+    }
     // An arrow across the cell (T205): left to right, a head at the right end (both ends when double).
     let cell_arrow = sheet.cell_arrow(column.id, r);
     if let Some(arrow) = cell_arrow {

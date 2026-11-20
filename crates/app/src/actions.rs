@@ -54,6 +54,11 @@ pub enum CellOp {
     /// Edit > Delete: the selected rows (only in the selected columns for a block of cells) or
     /// the selected columns.
     Delete,
+    /// Edit > Paste Link (false) or Paste Link Transpose (true): link the cells from the clicked one
+    /// to the block last copied (T211).
+    PasteLink(bool),
+    /// Edit > Remove Links: the selected cells keep their values and lose their links (T211).
+    RemoveLinks,
 }
 
 /// One of the label rows above the data of a column.

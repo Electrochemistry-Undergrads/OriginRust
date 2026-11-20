@@ -5410,6 +5410,18 @@ save behavior are reused. The developer capture route is `--show add-layer`.
 
 ---
 
+
+### 21.16 Layer icon menu switches (T183, 2026-11-19, not measured)
+
+The layer icon's right-click menu (Origin 2016 names in 21.x) now runs its three switches. **Show Active
+Layer Only** is View > Show > Active Layer Only (22.7, the 21.14 engine), ticked the same way, grey with
+one layer. **Set Active Layer By Layer Icon Only** (ticked when on) makes a click, double click or right
+click inside the page leave the active layer as it is; only a layer icon changes it (selection and the
+other click results are unchanged). **Double click to open Plot Setup** (ticked when on) makes a double
+click on a layer icon open Plot Setup for that layer instead of Plot Details. Both are page settings saved
+in the `.sheaf` file (`PageStyle::activate_by_icon_only`, `icon_double_click_plot_setup`; off by default,
+not written when off), one undo step each, not written to `.opj`. Origin's exact scope and saving were not
+measured.
 ## 22. Graph view modes, Show toggles and Full Screen (T66, measured 2026-11-15, Origin 2016)
 
 Measured in OriginPro 2016 on our own synthetic data (a workbook with X = 1 to 10, Y = 2X+1 and 20-X, a Line + Symbol graph, once with an extra right-Y layer), a 1024x768 Origin window, menus and keys driven through `tools/origin-ref/origin-dialog.ps1 -NoDialog` with `-AfterFile` (`@CLICK`, `@KEY`, `@SHOT`) and `page.viewmode` read through LabTalk. Pictures and raw outputs are local (`re-workspace/scratch/t66/`). Anything not listed is **unmeasured**.

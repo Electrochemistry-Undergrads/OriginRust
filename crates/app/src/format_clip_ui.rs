@@ -160,6 +160,7 @@ fn group_label(g: Group) -> &'static str {
         Group::Thickness => "Thickness",
         Group::SymbolLineFill => "Symbol/Line/Fill",
         Group::Text => "Text",
+        Group::PageBackground => "Page Background",
     }
 }
 

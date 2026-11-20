@@ -2793,8 +2793,8 @@ impl SheafApp {
                 }
             }
             Action::PasteGraphFormat { graph } => {
-                use sheaf_core::format_clip::GraphPart;
-                crate::format_clip_ui::paste_graph(&mut self.doc, graph, GraphPart::All.groups());
+                // Every group the clipboard holds (a Page Background copy holds only the page colour).
+                crate::format_clip_ui::paste_graph(&mut self.doc, graph, sheaf_core::format_clip::EVERY_GROUP);
             }
             Action::PasteAxesFormat { graph, targets, part } => {
                 crate::format_clip_ui::paste_axes(&mut self.doc, graph, targets, part);

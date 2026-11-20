@@ -1069,10 +1069,10 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
                 ("Colors", Some(GraphPart::Colors)),
                 ("Fonts", Some(GraphPart::Fonts)),
                 ("Background", Some(GraphPart::Background)),
-                ("Symbol/Line/Fill", None),
+                ("Symbol/Line/Fill", Some(GraphPart::SymbolLineFill)),
                 ("Dimensions", Some(GraphPart::Dimensions)),
                 ("Scales", Some(GraphPart::Scales)),
-                ("Text", None),
+                ("Text", Some(GraphPart::Text)),
             ],
         ));
         v.push(item("Paste Format...", Cmd::PasteFormatDialog));
@@ -2580,7 +2580,7 @@ pub fn graph_page_menu(layer: usize, page: (f64, f64)) -> Vec<Entry> {
         graph_copy_format_menu(
             false,
             &[
-                ("Page Background", None),
+                ("Page Background", Some(GraphPart::PageBackground)),
                 ("Legend Translation Mode", None),
                 ("Dimensions", Some(GraphPart::Dimensions)),
                 ("Scales", Some(GraphPart::Scales)),

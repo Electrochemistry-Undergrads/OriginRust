@@ -121,6 +121,69 @@ impl Workbook {
 }
 
 impl Project {
+    /// A copy of `src` whose columns have new ids; its cell formats, notes and conditional formats
+    /// follow them.
+    pub fn sheet_copy(&mut self, src: &Worksheet) -> Worksheet {
+        let mut copy = src.clone();
+        let mut renamed = std::collections::HashMap::new();
+        for c in &mut copy.columns {
+            let new = self.new_column_id();
+            renamed.insert(c.id, new);
+            c.id = new;
+        }
+        copy.remap_cond_format_columns(&|c| renamed.get(&c).copied());
+        copy.remap_note_columns(&|c| renamed.get(&c).copied());
+        copy.remap_format_columns(&|c| renamed.get(&c).copied());
+        copy
+    }
+
+    /// Navigate Worksheets' Move to New Book (T184): sheets `sheets` of `book` go, in their order, to a
+    /// new workbook, which is returned. Their columns keep their ids, so plots of them follow. Refused
+    /// when every sheet of the book would go.
+    pub fn move_sheets_to_new_book(&mut self, book: WindowId, sheets: &[usize]) -> Result<WindowId, ProjectError> {
+        let b = self.workbook(book).ok_or(ProjectError::NoSuchWindow(book))?;
+        let picked: Vec<usize> = (0..b.sheets.len()).filter(|i| sheets.contains(i)).collect();
+        if picked.is_empty() {
+            return Err(ProjectError::NoSuchLayer(sheets.first().copied().unwrap_or(0)));
+        }
+        if picked.len() == b.sheets.len() {
+            return Err(ProjectError::LastSheet);
+        }
+        let long = b.long_name.clone();
+        let b = self.workbook_mut(book).ok_or(ProjectError::NoSuchWindow(book))?;
+        let active = b.active_sheet;
+        let mut moved = Vec::new();
+        for &i in picked.iter().rev() {
+            moved.push(b.sheets.remove(i));
+        }
+        moved.reverse();
+        let before = picked.iter().filter(|&&i| i < active).count();
+        b.active_sheet = if picked.contains(&active) { 0 } else { active - before };
+        let new = self.add_workbook(&long);
+        let nb = self.workbook_mut(new).expect("just added");
+        nb.sheets = moved;
+        nb.active_sheet = 0;
+        Ok(new)
+    }
+
+    /// Navigate Worksheets' Duplicate to New Book (T184): copies of sheets `sheets` of `book`, with
+    /// their data and new column ids, in a new workbook, which is returned.
+    pub fn duplicate_sheets_to_new_book(&mut self, book: WindowId, sheets: &[usize]) -> Result<WindowId, ProjectError> {
+        let b = self.workbook(book).ok_or(ProjectError::NoSuchWindow(book))?;
+        let sources: Vec<Worksheet> =
+            b.sheets.iter().enumerate().filter(|(i, _)| sheets.contains(i)).map(|(_, s)| s.clone()).collect();
+        if sources.is_empty() {
+            return Err(ProjectError::NoSuchLayer(sheets.first().copied().unwrap_or(0)));
+        }
+        let long = b.long_name.clone();
+        let copies: Vec<Worksheet> = sources.iter().map(|s| self.sheet_copy(s)).collect();
+        let new = self.add_workbook(&long);
+        let nb = self.workbook_mut(new).expect("just added");
+        nb.sheets = copies;
+        nb.active_sheet = 0;
+        Ok(new)
+    }
+
     /// Duplicate Without Data: a copy of sheet `sheet`'s columns and labels without values, added after
     /// the last sheet. Returns the new sheet's index.
     pub fn duplicate_sheet_without_data(&mut self, book: WindowId, sheet: usize) -> Result<usize, ProjectError> {
@@ -258,5 +321,38 @@ mod tests {
         assert!(b.reorder_sheets(&b.moved_order(&[2], SheetMove::End)));
         assert_eq!(b.sheets[4].name, "Sheet3");
         assert_eq!(b.active_sheet, 4, "the active sheet stays active");
+    }
+
+    #[test]
+    fn sheets_move_or_copy_to_a_new_book() {
+        use crate::column::ColumnData;
+        let mut p = Project::new();
+        let book = p.add_workbook("Run");
+        let mut ids = Vec::new();
+        for k in 0..3 {
+            if k > 0 {
+                p.workbook_mut(book).unwrap().sheets.push(Worksheet::new(format!("Sheet{}", k + 1)));
+            }
+            p.workbook_mut(book).unwrap().active_sheet = k;
+            ids.push(p.add_column(book, k, Designation::Y, ColumnData::numeric(vec![k as f64])).unwrap());
+        }
+        p.workbook_mut(book).unwrap().active_sheet = 2;
+        // Every sheet cannot go.
+        assert!(matches!(p.move_sheets_to_new_book(book, &[0, 1, 2]), Err(ProjectError::LastSheet)));
+        let moved = p.move_sheets_to_new_book(book, &[0, 2]).unwrap();
+        let names = |p: &Project, b| p.workbook(b).unwrap().sheets.iter().map(|s| s.name.clone()).collect::<Vec<_>>();
+        assert_eq!(names(&p, book), ["Sheet2"]);
+        assert_eq!(names(&p, moved), ["Sheet1", "Sheet3"]);
+        assert_eq!(p.workbook(moved).unwrap().long_name, "Run");
+        // The columns kept their ids: plots of them follow.
+        let (b, s, _) = p.locate(ids[2]).unwrap();
+        assert_eq!((b.id, s.name.as_str()), (moved, "Sheet3"));
+        assert_eq!(p.workbook(book).unwrap().active_sheet, 0);
+        // A copy gets new ids and keeps the data.
+        let copy = p.duplicate_sheets_to_new_book(moved, &[1]).unwrap();
+        let c = &p.workbook(copy).unwrap().sheets[0].columns[0];
+        assert_ne!(c.id, ids[2]);
+        assert_eq!(c.numeric().unwrap(), [2.0]);
+        assert_eq!(names(&p, moved), ["Sheet1", "Sheet3"], "the source keeps its sheets");
     }
 }

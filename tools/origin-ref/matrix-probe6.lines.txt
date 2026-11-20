@@ -1,0 +1,38 @@
+newbook mat:=1;
+mdim cols:=3 rows:=3 x1:=1 x2:=3 y1:=1 y2:=3;
+msetvalue formula:="iff(i>1,100+i,-j)";
+double q = mat(1)[1,1];
+?q
+double q = mat(1)[2,1];
+?q
+msetvalue formula:="(i>1)*5+(j==2)";
+double q = mat(1)[1,1];
+?q
+double q = mat(1)[2,2];
+?q
+msetvalue formula:="i>1 && j<3";
+double q = mat(1)[2,2];
+?q
+double q = mat(1)[2,3];
+?q
+msetvalue formula:="i>1 ? 7 : 8";
+double q = mat(1)[2,2];
+?q
+msetvalue formula:="i*j";
+mat(1)[2,3] = -1.23456789E-300;
+double q = mat(1)[2,3];
+?q
+mat(1)[2,2] = 1/0;
+double q = mat(1)[2,2];
+?q
+double q = mat(1)[1,2];
+?q
+msetvalue formula:="(i==2 && j==2) ? -1.23456789E-300 : i*j";
+double q = mat(1)[2,2];
+?q
+double q = mat(1)[3,3];
+?q
+msetvalue formula:="i*j";
+msetvalue formula:="mat(1)[i,j] + x";
+double q = mat(1)[3,3];
+?q

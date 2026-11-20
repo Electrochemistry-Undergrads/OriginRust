@@ -219,3 +219,50 @@ fn navigate_ctrl_and_shift_clicks_select_several_sheets() {
     click_row(&mut h, &names[1], egui::Modifiers::NONE);
     assert_eq!(targets(&h), [1]);
 }
+
+#[test]
+fn navigate_moves_or_copies_sheets_to_a_new_book_and_excludes_them_from_plotting() {
+    // T184: Move to > New Book, Duplicate to New Book, Exclude from Plotting dialogs.
+    let (mut h, book) = four_sheets("sheet-navigate-books");
+    let first = names(&h, book);
+    let books = |h: &Harness<'static, SheafApp>| project(h).workbooks().count();
+    let before = books(&h);
+    pick(&mut h, &[0]);
+    act_in(&mut h, "Move to", "New Book");
+    assert_eq!(books(&h), before + 1);
+    assert_eq!(names(&h, book), &first[1..]);
+    let new = project(&h).workbooks().last().unwrap();
+    assert_eq!(new.sheets.len(), 1);
+    assert_eq!(new.sheets[0].name, first[0]);
+    assert!(new.sheets[0].row_count() > 0, "with its data");
+    assert_eq!(h.state().doc.undo_label(), Some("Move sheets to new book"));
+    menu(&mut h, "Edit", "Undo Move sheets to new book");
+    assert_eq!((books(&h), names(&h, book)), (before, first.clone()));
+
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Sheet { book, op: SheetOp::Navigate }, &ctx);
+    settle(&mut h);
+    pick(&mut h, &[0, 1]);
+    act(&mut h, "Duplicate to New Book");
+    assert_eq!(books(&h), before + 1);
+    assert_eq!(names(&h, book), first, "the sheets stay");
+    let copy = project(&h).workbooks().last().unwrap();
+    assert_eq!(copy.sheets.len(), 2);
+    let source = &project(&h).workbook(book).unwrap().sheets[0];
+    assert_ne!(copy.sheets[0].columns[0].id, source.columns[0].id, "new columns");
+
+    pick(&mut h, &[1]);
+    act(&mut h, "Exclude from Plotting dialogs");
+    assert!(project(&h).workbook(book).unwrap().sheets[1].exclude_from_plotting);
+    assert_eq!(h.state().doc.undo_label(), Some("Exclude from plotting dialogs"));
+    click(&mut h, "Actions");
+    assert!(h.query_by_label("\u{2713} Exclude from Plotting dialogs").is_some(), "ticked");
+    click(&mut h, "\u{2713} Exclude from Plotting dialogs");
+    settle(&mut h);
+    assert!(!project(&h).workbook(book).unwrap().sheets[1].exclude_from_plotting);
+}
+
+fn act_in(h: &mut Harness<'static, SheafApp>, submenu: &str, item: &str) {
+    click(h, "Actions");
+    menu_path(h, &[submenu, item]);
+}

@@ -901,8 +901,15 @@ Measured in Origin 2016 by right-clicking a sheet tab (`tools/origin-ref/origin-
     sheet; a selected block moves together and stops at the ends. Move to End puts the selected sheets
     last in their order ("Move worksheets"); the moved sheets stay selected.
   - Set Current Order as Sheet Order is Apply Reorder.
-  - Not done: Exclude from Plotting dialogs, Move to New Book / Selected Book and Duplicate to New
-    Book. [Origin Navigate Worksheets](https://docs.originlab.com/origin-help/nav-wks-dialog/)
+  - Move to > New Book (T184) moves the sheets, in their order, to one new workbook with the old
+    one's long name ("Move sheets to new book"); their columns keep their identities, so graphs of them
+    still plot them. It is greyed when every sheet is selected. Duplicate to New Book copies the
+    sheets with their data and new columns into one new workbook ("Duplicate sheets to new book").
+  - Exclude from Plotting dialogs (T184) marks the sheets (`Worksheet::exclude_from_plotting`), ticked
+    when all are marked; again clears it. Plot Setup and Layer Contents then do not list the sheets'
+    columns; plots already made stay. The `.opj` written here does not hold the mark (its save warns).
+  - Not done: Move to > Selected Book and Origin's Excel-export exclusion.
+    [Origin Navigate Worksheets](https://docs.originlab.com/origin-help/nav-wks-dialog/)
 - Clicking a Navigate Worksheets header in Sheaf previews its ascending order. Click it again for
   descending order. Index refers to the workbook order before applying. Apply Reorder commits the
   displayed permutation in one undo step and keeps the active worksheet. Equal values keep their

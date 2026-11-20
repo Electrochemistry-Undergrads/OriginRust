@@ -1,0 +1,19 @@
+newbook;
+col(1) = {1, 2, 3};
+wks.addcol();
+col(2) = {10, 20, 30};
+wks.addcol();
+col(3) = {100, 200, 300};
+int k = 2;
+double a = wcol(k)[2];
+?a
+double a = col($(k))[2];
+?a
+double a = wcol($(k))[2];
+?a
+double a = [Book1]1!wcol(k)[2];
+?a
+xyz_regular iz:=(1,2,3);
+$page.name$
+xyz_regular iz:=[Book1]1!(1,2,3);
+$page.name$

@@ -25,9 +25,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 50 | 169 | 38 | 257 |
+| All rows | 50 | 174 | 37 | 261 |
 | P0 | 32 | 71 | 0 | 103 |
-| P1 and P2 together | 18 | 98 | 38 | 154 |
+| P1 and P2 together | 18 | 103 | 37 | 158 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 63 are P2.
 
@@ -77,7 +77,8 @@ Cross-cutting findings:
 | Copy graph page to clipboard | Edit > Copy Page, Ctrl+J | Edit > Copy Page, Ctrl+J and the graph's right-click menu put the page on the clipboard as a 300 dpi picture at 40 % size (Origin's size factor) with the Auto margin, and on Windows an enhanced metafile next to the bitmap | ✓ | no WMF, no OLE object; the 40 % and the margin are read from the docs, not measured; pasting into another program was not tried | P1 |
 | Copy and paste format between graphs | Edit > Copy Format/Paste Format, page and axis context menus | Typed graph/axis format clipboard, measured graph groups and axis All, Apply Formats with one-step Undo; axis Scales/Styles context entries reuse existing typed groups (26.9/26.11, explicit Sheaf property mappings) | ◐ | Private profile clipboard survives restart (26.10); other per-property choices, legend/cross-target rules and live instance sharing remain open; exact Native axis Scales/Styles per-choice mappings are unmeasured | P1 |
 | Save or duplicate project without data | File menu | File > Save Project without Data... (copy to a file) and Duplicate Project without Data (unsaved copy replaces the project), T77 | ◐ | what Origin 2016 clears is undocumented; Sheaf follows Clone Project mode 0 (unmeasured) | P2 |
-| Other window types | Matrix, layout, notes, image, Excel windows; matrix operations, image processing, gridding, 3D | Window enum is workbook and graph only; project note text exists | ✗ | no matrix, layout, notes, image windows; no per-type menus | P2 |
+| Matrix window and matrix sheets | File > New > Matrix; matrix book with sheets of Z values, X and Y ranges, labels | model, project file and undo in `core/matrix.rs`, `matrix_project.rs` (stage 1; no window in the app yet); CLI `sheaf matrix new/set/transform/stats`; spec `matrices.md` | ◐ | no matrix window, menus or dialogs in the app; no .opj read or write of matrices; no image data, no multiple-layer matrix objects, no matrix thumbnails | P2 |
+| Other window types | layout, image, Excel windows; image processing | Window enum is workbook, graph, Notes (T154) and matrix (T179); project note text exists | ✗ | no layout or image windows; no per-type menus | P2 |
 | Autosave and recovery | Tools > Options | Tools > Autosave... (on, every 10 minutes by default; Sheaf's choice) writes the modified project as `.sheaf` to the platform recovery folder on a worker thread; at start-up a Recover / Discard / Later dialog offers what a crashed run left; a clean exit, a normal save and undo/redo to the saved content checkpoint remove it; recoveries older than 30 days are dropped (autosave.md) | ◐ | Origin's defaults and start-up prompt unmeasured; no "backup project before saving" switch; setting not yet in a Tools > Options dialog | P2 |
 | Tools managers and protection | Theme, Function Builder, Import Filters, Package, Custom Menu | none | ✗ | | P2 |
 | Help | Help menu | About only | ◐ | no help pages | P2 |
@@ -186,10 +187,12 @@ Cross-cutting findings:
 | Convolution, deconvolution | Signal Processing | Convolution window, `analyze convolution`, `Tool::Convolution`: linear and circular, normalized, Origin's automatic interval | ◐ | checked against Origin (analysis-tools 13); deconvolution and wrap response missing | P2 |
 | Hilbert transform | Signal Processing > Hilbert Transform (hilbert) | Hilbert Transform window, `analyze hilbert`, `Tool::Hilbert` | ◐ | transform checked against Origin (analysis-tools 13.1); no analytic signal (no complex columns) | P2 |
 | Correlation of two signals | Signal Processing > Correlation (corr1) | Correlation window, `analyze signal-correlation`, `Tool::SignalCorrelation`: linear and circular in Origin's lag order, normalized, autocorrelation | ✓ | checked against Origin (analysis-tools 13) | P2 |
-| XYZ gridding, matrix conversion | Convert to Matrix | none | ✗ | no matrix window | P2 |
+| Worksheet to matrix, matrix to worksheet | Worksheet > Convert to Matrix (Direct), Matrix > Convert to Worksheet | `core/matrix_convert.rs`: `w2m` (no coordinates, X or Y across columns from the first row or a label row, tolerance of even spacing, trim) and `m2w` (direct, XYZ columns), checked against Origin 2016 (`origin_matrix.json`); CLI `sheaf matrix convert`, `to-sheet` | ◐ | no dialogs; the text-parameter options of `m2w` (system and user parameter rows) are written but not checked in Origin; linear-fit option only partly checked | P2 |
+| XYZ gridding | Convert to Matrix > XYZ Gridding (random, sparse, regular) | regular XYZ data (`xyz_regular`, any order, gaps stay missing, repeats averaged), checked against Origin; scattered points: Delaunay triangulation read off a grid (our own method, used by contour plots) | ◐ | Renka-Cline, Shepard, thin plate spline and sparse gridding are not implemented, so numbers for scattered data differ from Origin's; no dialog | P2 |
+| Matrix operations | Matrix menu: Set Values, Transpose, Flip, Rotate 90, Expand, Shrink, Statistics, Set Dimensions | `MatrixOp` in `core/matrix_project.rs`; set values in i, j, x, y; transpose, flip (with coordinates), rotate, expand (bilinear), shrink (block mean), mstats; CLI `sheaf matrix set/transform/stats`; all checked against Origin 2016 | ◐ | no dialogs or menus; no crop, interpolation (`minterp2`), smoothing, filters, replace, integrate or `Cell(i,j)` / `mat(1)[i,j]` references in formulas | P2 |
 | Rank, remove duplicates | wdeldup | none | ✗ | | P2 |
 | Rise time, polygon area, roots, 2D integration | gadgets and Mathematics | none | ✗ | | P2 |
-| 2D and 3D interpolation, matrix math, white noise | Mathematics folder | none | ✗ | | P2 |
+| 2D and 3D interpolation, matrix math, white noise | Mathematics folder | none (expand is the only matrix interpolation) | ✗ | | P2 |
 
 ## 6 Signal processing
 
@@ -308,7 +311,8 @@ Cross-cutting findings:
 | Parallel plots | Plot > Categorical | Plot > Categorical > Parallel Plot and Parallel Index (T49, graphing.md 14.25; `-t parallel`, `parallel-index`, `--group`) | ◐ | one vertical axis per column, per-axis or shared range, lines coloured by a numeric column (colour scale) or by group (legend), Plot Details Parallel tab; Origin's defaults and colour map unmeasured, no Parallel Sets, curvature or axis reordering; written to .opj as line plots | P2 |
 | Treemap | Plot > Categorical | Plot > Categorical > Treemap (T50, graphing.md 14.26; `-t treemap`, `--group`, `--treemap-*`) | ◐ | nested rectangles by category columns sized by a value column, six layouts (squarified, squarified+, split, three pivots), order, depth, gap, per-level layout; Origin's defaults, colours and labels unmeasured; no hover or drill-down | P2 |
 | Sunburst plot | Plot > Categorical | Plot > Categorical > Sunburst Plot (T51, graphing.md 14.27; `-t sunburst`, `--group`, `--sunburst-*`) | ◐ | hierarchy of category columns as concentric rings, angles by a value column, leaves coloured by value and categories by their leaves' mean on the shared ramp with a colour scale, unfilled missing categories, radial labels, Pie Geometry tab (start angle, hole, ring gap, labels); Origin's defaults unmeasured; no hover or Collapse/Expand drilling; written to .opj as columns | P2 |
-| Contour, heat map | Plot > Contour | Plot > Contour/Heat Map > Hexbin only (T45, graphing.md 14.24; `-t hexbin`) | ◐ | Hexbin of XY data with Origin's bin controls and a count colour scale; contour and heat map need matrices | P2 |
+| Contour, heat map | Plot > Contour (Color Fill, Lines), Image Plot > Heat Map | `FieldPlot` in a layer: contour colour fill with lines at the major levels, contour lines with labels, heat map blocks, colour scale; from a matrix sheet or from XYZ columns (regular grid, or triangulated for contours); levels, range rounding, palettes and layout measured on Origin 2016 pictures; golden SVGs; CLI `sheaf matrix plot` | ◐ | not in the app (no menu, no Plot Details tab, no click on the scale); no gray-scale, filled-lines, polar, profile or 3D variants; no image plot of photographs; not written to .opj; Origin's tick step and the label places of contour lines are matched only approximately | P2 |
+| Hexbin | Plot > Contour/Heat Map > Hexbin | Plot > Contour/Heat Map > Hexbin only (T45, graphing.md 14.24; `-t hexbin`) | ◐ | Hexbin of XY data with Origin's bin controls and a count colour scale; contour and heat map need matrices | P2 |
 | Inset, pictures in graphs | Zoom, Insert picture | none | ✗ | Add Inset toolbar item remains grey (T61, wave 2); pictures remain separate backlog | P2 |
 | Other plot-type IDs when reading .opj | area, box, bar, histogram, pie | only types 200 to 203 mapped | ✗ | | P2 |
 | Plotting X-Functions | plotgroup, plotbylabel, plotxyz | none | ✗ | | P2 |

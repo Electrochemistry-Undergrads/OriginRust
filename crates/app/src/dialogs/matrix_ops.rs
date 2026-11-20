@@ -3,6 +3,8 @@
 //! as one undo step. The window stays open with the problem shown when the operation is refused.
 
 use eframe::egui;
+use sheaf_core::matrix::{FlipDirection, Rotation};
+use sheaf_core::matrix_image::{ImageOp, MathOp};
 use sheaf_core::matrix_project::MatrixOp;
 use sheaf_core::{Document, WindowId};
 
@@ -23,6 +25,34 @@ pub enum Form {
     Expand { cols: usize, rows: usize },
     /// Shrink: each block of `cols` x `rows` cells becomes their mean.
     Shrink { cols: usize, rows: usize },
+    /// An Image menu operation with one setting (T207).
+    Image(ImageForm),
+}
+
+/// The settings of an Image menu window (T207).
+#[derive(Clone, Debug, PartialEq)]
+pub enum ImageForm {
+    Brightness(f64),
+    Contrast(f64),
+    Gamma(f64),
+    Math(MathOp, f64),
+    ToBinary(f64),
+    Rotate(Rotation),
+    Flip(FlipDirection),
+}
+
+impl ImageForm {
+    fn op(&self) -> ImageOp {
+        match *self {
+            ImageForm::Brightness(a) => ImageOp::Brightness(a),
+            ImageForm::Contrast(k) => ImageOp::Contrast(k),
+            ImageForm::Gamma(g) => ImageOp::Gamma(g),
+            ImageForm::Math(op, k) => ImageOp::Math(op, k),
+            ImageForm::ToBinary(t) => ImageOp::ToBinary(t),
+            ImageForm::Rotate(r) => ImageOp::Rotate(r),
+            ImageForm::Flip(d) => ImageOp::Flip(d),
+        }
+    }
 }
 
 impl Form {
@@ -32,6 +62,15 @@ impl Form {
             Form::Dimensions { .. } => "Matrix Dimensions and Labels",
             Form::Expand { .. } => "Expand Matrix",
             Form::Shrink { .. } => "Shrink Matrix",
+            Form::Image(f) => match f {
+                ImageForm::Brightness(_) => "Brightness",
+                ImageForm::Contrast(_) => "Contrast",
+                ImageForm::Gamma(_) => "Gamma",
+                ImageForm::Math(..) => "Math",
+                ImageForm::ToBinary(_) => "To Binary",
+                ImageForm::Rotate(_) => "Rotate",
+                ImageForm::Flip(_) => "Flip",
+            },
         }
     }
 
@@ -44,6 +83,15 @@ impl Form {
             }
             Form::Expand { cols, rows } => MatrixOp::Expand { cols: *cols, rows: *rows },
             Form::Shrink { cols, rows } => MatrixOp::Shrink { cols: *cols, rows: *rows },
+            Form::Image(_) => unreachable!("an Image form runs through apply_image"),
+        }
+    }
+
+    /// Runs the form's operation on sheet `sheet` of `book` as one undo step.
+    fn run(&self, doc: &mut Document, book: WindowId, sheet: usize) -> Result<(), String> {
+        match self {
+            Form::Image(f) => apply_image(doc, book, sheet, &f.op()),
+            _ => apply(doc, book, sheet, &self.op()),
         }
     }
 }
@@ -53,6 +101,15 @@ pub struct MatrixOpDialog {
     pub sheet: usize,
     pub form: Form,
     problem: Option<String>,
+}
+
+/// Applies an Image menu operation to sheet `sheet` of `book`, in place, as one undo step (T207).
+pub fn apply_image(doc: &mut Document, book: WindowId, sheet: usize, op: &ImageOp) -> Result<(), String> {
+    doc.edit(op.label(), |p| {
+        let s = p.matrix_sheet_mut(book, sheet).map_err(|e| e.to_string())?;
+        *s = op.apply(s).map_err(|e| e.to_string())?;
+        Ok(())
+    })
 }
 
 /// Applies `op` to sheet `sheet` of `book` as one undo step named after the operation.
@@ -116,6 +173,7 @@ impl MatrixOpDialog {
                         });
                         ui.end_row();
                     }
+                    Form::Image(f) => image_controls(ui, f),
                     Form::Expand { cols, rows } | Form::Shrink { cols, rows } => {
                         ui.label("Column factor");
                         ui.add(egui::DragValue::new(cols).range(1..=1000));
@@ -140,11 +198,62 @@ impl MatrixOpDialog {
             return Outcome::Closed;
         }
         if ok {
-            match apply(doc, self.book, self.sheet, &self.form.op()) {
+            match self.form.run(doc, self.book, self.sheet) {
                 Ok(()) => return Outcome::Done,
                 Err(e) => self.problem = Some(e),
             }
         }
         result
     }
+}
+
+/// The controls of an Image menu window (T207).
+fn image_controls(ui: &mut egui::Ui, f: &mut ImageForm) {
+    match f {
+        ImageForm::Brightness(a) => {
+            ui.label("Brightness (added)");
+            ui.add(egui::DragValue::new(a).speed(1.0));
+        }
+        ImageForm::Contrast(k) => {
+            ui.label("Contrast factor");
+            ui.add(egui::DragValue::new(k).speed(0.05).range(0.0..=100.0));
+        }
+        ImageForm::Gamma(g) => {
+            ui.label("Gamma");
+            ui.add(egui::DragValue::new(g).speed(0.05).range(0.01..=100.0));
+        }
+        ImageForm::Math(op, k) => {
+            ui.label("Operator");
+            ui.horizontal(|ui| {
+                for (o, name) in
+                    [(MathOp::Add, "+"), (MathOp::Subtract, "-"), (MathOp::Multiply, "*"), (MathOp::Divide, "/")]
+                {
+                    ui.radio_value(op, o, name);
+                }
+            });
+            ui.end_row();
+            ui.label("Operand");
+            ui.add(egui::DragValue::new(k).speed(0.1));
+        }
+        ImageForm::ToBinary(t) => {
+            ui.label("Threshold");
+            ui.add(egui::DragValue::new(t).speed(1.0));
+        }
+        ImageForm::Rotate(r) => {
+            ui.label("Angle");
+            ui.horizontal(|ui| {
+                ui.radio_value(r, Rotation::Ccw90, "90 CCW");
+                ui.radio_value(r, Rotation::Cw90, "90 CW");
+                ui.radio_value(r, Rotation::Half, "180");
+            });
+        }
+        ImageForm::Flip(d) => {
+            ui.label("Direction");
+            ui.horizontal(|ui| {
+                ui.radio_value(d, FlipDirection::Horizontal, "Horizontal");
+                ui.radio_value(d, FlipDirection::Vertical, "Vertical");
+            });
+        }
+    }
+    ui.end_row();
 }

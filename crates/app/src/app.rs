@@ -2003,6 +2003,7 @@ impl SheafApp {
                 }
             }
             Action::MatrixCmd { id, cmd } => self.matrix_cmd(id, cmd),
+            Action::ImageCmd { id, cmd } => self.image_cmd(id, cmd),
             Action::ConvertToMatrix { book, columns, xyz } => {
                 let sheet = self.doc.project().workbook(book).map_or(0, |b| b.active_sheet);
                 let made = self.doc.edit("Convert to Matrix", |p| match (xyz, columns.as_slice()) {
@@ -5357,6 +5358,41 @@ impl SheafApp {
         if let Err(e) = crate::dialogs::matrix_ops::apply(&mut self.doc, id, sheet, &op) {
             self.warn(e);
         }
+    }
+
+    /// The Image menu (T207): the spatial filters run at once; the others open their window.
+    fn image_cmd(&mut self, id: WindowId, cmd: crate::menus::ImageCmd) {
+        use crate::dialogs::matrix_ops::{Form, ImageForm, MatrixOpDialog};
+        use crate::menus::ImageCmd as I;
+        use sheaf_core::matrix::{FlipDirection, Rotation};
+        use sheaf_core::matrix_image::{ImageOp, MathOp};
+        let Some(b) = self.doc.project().matrix_book(id) else { return };
+        let sheet = b.active_sheet;
+        let mean = b.sheets.get(sheet).map_or(0.0, |s| {
+            let v: Vec<f64> = s.values().iter().copied().filter(|x| x.is_finite()).collect();
+            v.iter().sum::<f64>() / v.len().max(1) as f64
+        });
+        let form = match cmd {
+            I::Brightness => ImageForm::Brightness(10.0),
+            I::Contrast => ImageForm::Contrast(1.5),
+            I::Gamma => ImageForm::Gamma(1.5),
+            I::Math => ImageForm::Math(MathOp::Add, 0.0),
+            I::ToBinary => ImageForm::ToBinary(mean),
+            I::Rotate => ImageForm::Rotate(Rotation::Ccw90),
+            I::Flip => ImageForm::Flip(FlipDirection::Horizontal),
+            I::Smooth | I::Sharpen | I::EdgeDetection => {
+                let op = match cmd {
+                    I::Smooth => ImageOp::Smooth,
+                    I::Sharpen => ImageOp::Sharpen,
+                    _ => ImageOp::EdgeDetection,
+                };
+                if let Err(e) = crate::dialogs::matrix_ops::apply_image(&mut self.doc, id, sheet, &op) {
+                    self.warn(e);
+                }
+                return;
+            }
+        };
+        self.matrix_dialog = MatrixOpDialog::new(&self.doc, id, Form::Image(form));
     }
 
     fn reimport(&mut self, book: WindowId, choose: bool) {

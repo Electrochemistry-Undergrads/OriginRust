@@ -253,3 +253,35 @@ fn an_imported_picture_becomes_a_matrix_of_gray_levels() {
     assert_eq!(project(&h).matrix_books().count(), 1);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn the_image_menu_adjusts_and_filters_the_active_matrix_in_place() {
+    use sheaf_core::matrix_image::ImageOp;
+    use sheaf_core::matrix_project::MatrixOp;
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let mut id = sheaf_core::WindowId(0);
+    h.state_mut().doc.apply("Matrix", |p| {
+        id = p.add_matrix_book("");
+        p.apply_matrix_op(id, 0, &MatrixOp::SetDimensions { rows: 3, cols: 3, ranges: None }).unwrap();
+        p.apply_matrix_op(id, 0, &MatrixOp::SetValues("i==2 && j==2 ? 9 : 0".into())).unwrap();
+    });
+    settle(&mut h);
+    assert!(menus::bar(menus::WindowKind::Matrix).iter().any(|m| m.label == "&Image"), "the matrix bar has Image");
+    // Smooth runs at once, in place, as one undo step.
+    h.state_mut().apply(Action::ImageCmd { id, cmd: menus::ImageCmd::Smooth }, &ctx);
+    settle(&mut h);
+    assert_eq!(h.state().doc.undo_label(), Some("Image Smooth"));
+    assert_eq!(project(&h).matrix_sheet(id, 0).unwrap().value(1, 1), 1.0);
+    assert_eq!(project(&h).matrix_books().count(), 1, "no new book");
+    // Brightness opens its window; OK adds the amount.
+    h.state_mut().apply(Action::ImageCmd { id, cmd: menus::ImageCmd::Brightness }, &ctx);
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Image Brightness"));
+    assert_eq!(project(&h).matrix_sheet(id, 0).unwrap().value(1, 1), 11.0, "the default amount is 10");
+    // The other operations run through the same in-place path.
+    crate::dialogs::matrix_ops::apply_image(&mut h.state_mut().doc, id, 0, &ImageOp::ToBinary(5.0)).unwrap();
+    let s = project(&h).matrix_sheet(id, 0).unwrap().clone();
+    assert!(s.values().iter().all(|v| *v == 1.0), "every cell is at least 5 now: {:?}", s.values());
+}

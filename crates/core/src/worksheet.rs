@@ -32,6 +32,10 @@ pub struct Worksheet {
     /// Plain-text comments about the whole sheet, edited from its tab (T90).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub comments: String,
+    /// Navigate Worksheets' Exclude from Plotting dialogs (T184): Plot Setup and Layer Contents do not
+    /// list the sheet's columns.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub exclude_from_plotting: bool,
     /// The sheet tab's Sheet Name to Show, per sheet as in Origin 2016.
     #[serde(default, skip_serializing_if = "crate::sheet_tab::SheetLabel::is_default")]
     pub tab_label: crate::sheet_tab::SheetLabel,
@@ -69,6 +73,7 @@ impl Worksheet {
             name: name.into(),
             long_name: String::new(),
             comments: String::new(),
+            exclude_from_plotting: false,
             tab_label: Default::default(),
             view: Default::default(),
             columns: Vec::new(),

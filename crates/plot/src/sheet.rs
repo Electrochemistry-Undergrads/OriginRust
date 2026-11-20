@@ -138,6 +138,15 @@ fn sheet_table(sheet: &Worksheet) -> SheetTable<'_> {
     })
 }
 
+/// Where the sheet's printed pages break on the paper of `setup` (Page Break Preview Lines, T185).
+pub fn sheet_page_breaks(
+    sheet: &Worksheet,
+    setup: &PageSetup,
+) -> Result<sheaf_core::sheet_print::PageBreaks, PlotError> {
+    let area = check(setup)?;
+    Ok(sheet_table(sheet).page_breaks(area.0, area.1))
+}
+
 /// How many pages the sheet prints on and the printed area.
 pub fn sheet_pages(sheet: &Worksheet, setup: &PageSetup) -> Result<SheetPages, PlotError> {
     let area = check(setup)?;

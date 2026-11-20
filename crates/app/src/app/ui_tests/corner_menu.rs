@@ -206,3 +206,31 @@ fn worksheet_cells_remain_selectable_when_every_header_band_is_hidden() {
     click_text(&mut h, "2.5");
     assert_eq!(cells(&h), Sel::Cells { anchor: (1, 0), end: (1, 0) });
 }
+
+#[test]
+fn page_break_preview_lines_follow_the_print_pages_and_the_view_menu_ticks() {
+    let mut h = start(vec![data_file("corner-page-breaks")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = h.state().books.keys().next().copied().unwrap();
+    let b = column_id(&h, "B");
+    h.state_mut().doc.apply("Long", |p| {
+        p.column_mut(b).unwrap().data = sheaf_core::ColumnData::numeric((0..400).map(f64::from).collect());
+    });
+    settle(&mut h);
+    assert!(h.state().books[&book].page_break_rows().is_none(), "off on a new sheet");
+    let labels: Vec<String> = crate::menus::corner_menu(&project(&h).workbook(book).unwrap().sheets[0])
+        .iter()
+        .filter_map(|e| match e {
+            crate::menus::Entry::Item(i) => Some(i.label.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(labels.contains(&"Page Break Preview Lines".to_string()), "{labels:?}");
+    menu_path(&mut h, &["View", "Page Break Preview Lines"]);
+    settle(&mut h);
+    assert!(project(&h).workbook(book).unwrap().sheets[0].view.page_breaks);
+    assert_eq!(h.state().doc.undo_label(), Some("Worksheet view"));
+    let rows = h.state().books[&book].page_break_rows().expect("the breaks are worked out");
+    assert!(!rows.is_empty() && rows.iter().all(|&r| r < 399), "400 rows print on several pages: {rows:?}");
+    assert!(h.state().menu_context().page_breaks, "the View menu ticks it");
+}

@@ -151,6 +151,7 @@ pub fn place_workbook_with(
                     name,
                     long_name: dest.sheets[t.sheet].long_name.clone(),
                     comments: dest.sheets[t.sheet].comments.clone(),
+                    exclude_from_plotting: dest.sheets[t.sheet].exclude_from_plotting,
                     tab_label: dest.sheets[t.sheet].tab_label,
                     view: dest.sheets[t.sheet].view,
                     columns,

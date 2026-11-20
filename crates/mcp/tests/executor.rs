@@ -315,8 +315,8 @@ fn attached_the_tools_that_open_replace_or_save_are_refused_and_hidden() {
     let all: Vec<String> = sheaf_mcp::tools::list().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect();
     let shown: Vec<String> =
         sheaf_mcp::tools::list_attached().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect();
-    assert_eq!(all.len(), 19);
-    assert_eq!(shown.len(), 16);
+    assert_eq!(all.len(), 20);
+    assert_eq!(shown.len(), 17);
     for hidden in ["new_project", "open_project", "save_project"] {
         assert!(all.iter().any(|n| n == hidden) && !shown.iter().any(|n| n == hidden), "{hidden}");
     }

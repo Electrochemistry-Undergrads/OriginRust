@@ -129,6 +129,7 @@ fn a_full_session_over_pipes() {
         "list_simulate_functions",
         "simulate_curve",
         "simulate_surface",
+        "batch_process",
     ] {
         assert!(names.contains(&want), "missing tool {want}");
     }

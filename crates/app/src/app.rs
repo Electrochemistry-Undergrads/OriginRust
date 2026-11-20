@@ -3903,6 +3903,9 @@ impl SheafApp {
                         b.sheets.insert(at, Worksheet::new(name));
                         b.active_sheet = at;
                     }
+                    // As a new workbook's sheet (T212): columns A(X) and B(Y) to type into.
+                    let _ = p.add_column(book, at, Designation::X, ColumnData::default());
+                    let _ = p.add_column(book, at, Designation::Y, ColumnData::default());
                 });
                 if let Some(state) = self.books.get_mut(&book) {
                     state.clear_selection();

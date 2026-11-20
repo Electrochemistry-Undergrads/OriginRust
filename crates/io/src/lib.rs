@@ -14,6 +14,7 @@ pub mod export;
 pub mod graph_themes;
 pub mod opj;
 pub mod opju;
+pub mod peak_themes;
 pub mod project_file;
 pub mod recent;
 pub mod recovery;

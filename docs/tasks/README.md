@@ -219,6 +219,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T232](T232-send-graphs-to-powerpoint.md) | Send Graphs to PowerPoint... and sheaf export -o .pptx: one slide per graph | S | done 2026-11-20 (graphing 17.11), not measured; left: slide templates, Send to Word |
 | [T236](T236-format-clipboard-race.md) | Format clipboard file: retry an open or rename Windows refuses during a replace (flaky concurrency test) | S | done 2026-11-20 |
 | [T239](T239-hour-minute-second.md) | Formula functions hour, minute, second of a date-time number | S | done 2026-11-20 (expression-language 7), not measured (Origin not installed) |
+| [T240](T240-mcp-link-test-flakes.md) | MCP link tests wait for a queued call or a logged job instead of sleeping (load flakes) | S | done 2026-11-20, tests only |
 | [T233](T233-batch-summary.md) | File > Batch Processing: Summary Sheet, Dataset Identifier, Delete Intermediate Books (a Batch Summary book stacking one sheet of every book) | S | done 2026-11-20 (workbook-model 13p), not measured; left: Origin's layout and identifier choices |
 | [T235](T235-batch-cli.md) | sheaf batch: Batch Processing without a window (template, summary, --summary-csv), core Project::batch_process shared with the window | S | done 2026-11-20 (workbook-model 13p); left: MCP |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |

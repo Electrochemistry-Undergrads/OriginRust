@@ -3892,6 +3892,20 @@ plotted against) by the values of the group column, in order of first appearance
 are left out; `Project::group_columns`), and plots its Y columns: one curve per value, the legend naming the
 values. The group column is never plotted. Not with `--y2`, `--graph` or `--panels`. Origin's graph and
 layer grouping (a graph or layer per value) and the dialog are not offered.
+
+### 17.11 Send Graphs to PowerPoint (T232, 2026-11-20, Sheaf's file, not measured)
+
+Origin's graph page and window title-bar menus have **Send Graphs to PowerPoint...** (`sendppt`), which hands
+graphs to a running PowerPoint. Sheaf writes a PowerPoint file instead (`sheaf_io::pptx`): the graph page's
+menu item (after Export Graphs...) opens a small window, **Active graph (name)** (the default) or **All graphs
+in the project (N)** in project order, OK then asks for a `.pptx` file (Graphs.pptx). The file has one slide per
+graph, 16:9 (13.333 x 7.5 in, PowerPoint's Widescreen), white, with nothing on it but the graph: a PNG of the
+page at 300 dpi (Export Graphs' default) made as large as fits inside a quarter-inch margin, proportions kept,
+centred, named after the graph. The command line does the same with `sheaf export project -o slides.pptx`
+(`--graph` repeated or `--all-graphs`; `--dpi`, `--image-width`, `--image-height` and `--margin` apply to the
+pictures). Checked by opening the file in PowerPoint (Microsoft 365, through COM: 2 slides, 960 x 540 pt, one
+picture each, no repair prompt). Origin's slide template, placement and title options and Send to Word are not
+offered.
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 
 Measured on 2026-11-13 by opening Origin's Plot Details on a line plot (`tools/origin-ref/origin-dialog.ps1`,

@@ -71,6 +71,7 @@ pub mod row_filter;
 pub mod sample_projects;
 pub mod sampling;
 pub mod scatter_matrix;
+pub mod send_ppt;
 pub mod set_values;
 pub mod shape_object;
 pub mod sheet_navigate;

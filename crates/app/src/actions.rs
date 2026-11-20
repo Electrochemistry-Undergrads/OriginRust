@@ -1216,6 +1216,13 @@ pub enum Action {
         layer: usize,
     },
     ExportGraph(WindowId),
+    /// Send Graphs to PowerPoint... of this graph's page: the window that picks the graphs (T232).
+    SendGraphsToPowerPoint(WindowId),
+    /// Write these graphs into a PowerPoint file, one slide each (T232).
+    WritePptx {
+        graphs: Vec<WindowId>,
+        path: std::path::PathBuf,
+    },
     /// File > Export without an active graph: the Export Graphs window on every graph of the project (T182).
     ExportProjectGraphs(crate::menus::ProjectGraphsExport),
     ExportData(WindowId),

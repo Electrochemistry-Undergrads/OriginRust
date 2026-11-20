@@ -525,12 +525,13 @@ fn export(a: ExportArgs) -> Result<()> {
             a.project.display()
         );
     }
-    if a.graph.len() > 1 && !is_pdf(&a.output) {
+    let pptx = sheaf_ops::render::is_pptx(&a.output);
+    if a.graph.len() > 1 && !is_pdf(&a.output) && !pptx {
         bail!(multipage_needs_pdf(a.graph.len(), &a.output));
     }
     let mut project = load_project(&a.project)?;
     let graphs = pick_graphs(&project, &a.graph, a.all_graphs)?;
-    if graphs.len() > 1 && !is_pdf(&a.output) {
+    if graphs.len() > 1 && !is_pdf(&a.output) && !pptx {
         bail!(multipage_needs_pdf(graphs.len(), &a.output));
     }
     let style = style_spec(&a.style);
@@ -543,6 +544,12 @@ fn export(a: ExportArgs) -> Result<()> {
         }
     }
     let settings = export_settings(a.dpi, &a.image_width, &a.image_height, &a.margin);
+    if pptx {
+        // Send Graphs to PowerPoint (T232): one slide per graph.
+        sheaf_ops::render::write_graphs_pptx(&project, &graphs, &a.output, &settings)?;
+        println!("wrote {} ({} slides)", a.output.display(), graphs.len());
+        return Ok(());
+    }
     match graphs.as_slice() {
         [graph] => {
             sheaf_ops::render::write_graph(&project, *graph, &a.output, &settings)?;

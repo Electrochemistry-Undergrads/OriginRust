@@ -33,9 +33,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 54 | 200 | 7 | 261 |
+| All rows | 54 | 202 | 5 | 261 |
 | P0 | 33 | 70 | 0 | 103 |
-| P1 and P2 together | 21 | 130 | 7 | 158 |
+| P1 and P2 together | 21 | 132 | 5 | 158 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 63 are P2.
 
@@ -166,7 +166,7 @@ Cross-cutting findings:
 | Export worksheet as text | File > Export > Worksheet | `write_delimited`; CSV or TSV by extension | ◐ | no options dialog; no semicolon, label rows, selected range, full-precision switch | P1 |
 | Write xlsx | export worksheets | Export > Worksheet as Excel..., `sheaf export`/`export-data` to `.xlsx` (`rust_xlsxwriter`): one Excel sheet per sheet, Long Name/Units/Comments rows, missing values empty, dates as Excel dates; resolved cell fonts/styles/RGB/alignment combined with column number codes, requested label styles and bounded styled blanks (T59/workbook-model 13b); refuses to overwrite a file that is not an xlsx (import-excel.md) | ◐ | Origin's Excel export layout unmeasured; conditional colours are snapshots, future/omitted-label formats and partial-alpha limits are reported; cell-style import remains separate | P1 |
 | Dependents and linked results | Window Properties > Dependents | analysis results follow their source with Recalculate Auto or Manual (column locks; graph analysis locks and their menu, T186/T195) | ◐ | no Window Properties > Dependents list | P1 |
-| Summary table across sheets | batch summary | none | ✗ | | P1 |
+| Summary table across sheets | batch summary | File > Batch Processing... Summary Sheet (T233): a Batch Summary book stacks one template sheet of every book made, led by a Dataset Identifier column; Delete Intermediate Books | ◐ | not measured; Origin's summary layout and identifier choices not compared | P1 |
 | LabTalk, Origin C, Python, MATLAB, R consoles | scripting windows | none | ✗ | only the formula language exists | P2 |
 | COM server | Origin COM object | none | ✗ | | P2 |
 | Read themes and templates | .oth, .otp | none | ✗ | | P2 |
@@ -374,7 +374,7 @@ Cross-cutting findings:
 | Batch export and naming | Export all, overwrite rules | one graph at a time | ◐ | no folder export, name templates | P1 |
 | Export preview | Preview button | Export Graphs preview pane with Auto Preview (T05) | ◐ | no Graph tab in the preview | P1 |
 | Export dialog themes | Dialog Theme flyout | named export settings, custom default/reset, last successful export, Save/Save As/Delete with isolated persistence (T05; graphing 9.8) | ◐ | no Compare/Generate Script, graph-specific settings or `.ois` interchange | P1 |
-| Send to PowerPoint or Word | Graph menu | none | ✗ | | P2 |
+| Send to PowerPoint or Word | Graph menu | Send Graphs to PowerPoint... on the graph page writes a `.pptx` (one 16:9 slide per graph, the graph as a PNG; active graph or all), `sheaf export -o slides.pptx` (graphing 17.11, T232) | ◐ | a file, not a running PowerPoint; no slide template or title options; no Send to Word | P2 |
 
 ## 14 Dialog details
 

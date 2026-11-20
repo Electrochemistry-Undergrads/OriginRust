@@ -237,6 +237,8 @@ pub struct SheafApp {
     batch: Option<crate::dialogs::batch_process::BatchDialog>,
     /// Add Graph as Sheet... (T190).
     graph_sheet_picker: Option<crate::dialogs::graph_sheet::GraphSheetPicker>,
+    /// Send Graphs to PowerPoint... (T232).
+    send_ppt: Option<crate::dialogs::send_ppt::SendPptDialog>,
     /// A data cell's Insert Sparklines... (T200).
     cell_sparkline_picker: Option<crate::dialogs::cell_sparkline::CellSparklinePicker>,
     /// Batch Peak Analysis Using Theme... (T169).
@@ -421,6 +423,7 @@ impl SheafApp {
             template_manager: None,
             batch: None,
             graph_sheet_picker: None,
+            send_ppt: None,
             cell_sparkline_picker: None,
             batch_peaks: None,
             fill_pattern: None,
@@ -3194,6 +3197,35 @@ impl SheafApp {
                 self.export =
                     Some(ExportDialog::new(graph, self.folder()).with_themes(self.startup.themes_dir.clone()));
             }
+            Action::SendGraphsToPowerPoint(graph) => {
+                let p = self.doc.project();
+                let name = p.graph(graph).map(|g| g.name.clone()).unwrap_or_default();
+                let all = p.graphs().map(|g| g.id).collect();
+                self.send_ppt = Some(crate::dialogs::send_ppt::SendPptDialog::new((graph, name), all));
+            }
+            Action::WritePptx { graphs, path } => {
+                // 300 dpi pictures, as Export Graphs' default resolution.
+                let project = self.doc.project();
+                let slides = graphs
+                    .iter()
+                    .map(|&g| {
+                        let png = sheaf_plot::render_png(project, g, 300.0).map_err(|e| e.to_string())?;
+                        let name = project.graph(g).map(|g| g.name.clone()).unwrap_or_default();
+                        Ok(sheaf_io::pptx::PptxSlide { png, name })
+                    })
+                    .collect::<Result<Vec<_>, String>>();
+                let written = slides
+                    .and_then(|s| sheaf_io::pptx::pptx_bytes(&s))
+                    .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+                match written {
+                    Ok(()) => {
+                        let n = graphs.len();
+                        let s = if n == 1 { "" } else { "s" };
+                        self.say(format!("Sent {n} graph{s} to {}", path.display()));
+                    }
+                    Err(e) => self.warn(format!("Could not write {}: {e}", path.display())),
+                }
+            }
             Action::ExportProjectGraphs(what) => {
                 use crate::dialogs::export::ExportFormat;
                 use crate::menus::ProjectGraphsExport;
@@ -3275,7 +3307,21 @@ impl SheafApp {
             }
             Action::BatchPeaks { book, columns } => self.open_batch_peaks(book, columns),
             Action::BatchProcessing => {
-                self.batch = Some(crate::dialogs::batch_process::BatchDialog::new(self.user_book_templates.clone()));
+                // T233: each template's sheet names, for the Summary Sheet list.
+                let dir = self.startup.templates_dir.clone();
+                let templates = self
+                    .user_book_templates
+                    .iter()
+                    .map(|name| {
+                        let sheets = dir
+                            .as_deref()
+                            .and_then(|d| sheaf_io::user_templates::load_book(d, name).ok())
+                            .map(|t| t.book.sheets.iter().map(|s| s.name.clone()).collect())
+                            .unwrap_or_default();
+                        (name.clone(), sheets)
+                    })
+                    .collect();
+                self.batch = Some(crate::dialogs::batch_process::BatchDialog::new(templates));
             }
             Action::ManageTemplates => {
                 self.template_manager = Some(crate::dialogs::user_templates::TemplateManager::new(
@@ -4988,6 +5034,27 @@ impl SheafApp {
         }
     }
 
+    /// Send Graphs to PowerPoint... (T232): the window, then the file picker and the file.
+    fn show_send_ppt(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::send_ppt::SendPptOutcome;
+        let Some(d) = &mut self.send_ppt else { return };
+        match d.show(ctx) {
+            SendPptOutcome::Open => {}
+            SendPptOutcome::Closed => self.send_ppt = None,
+            SendPptOutcome::Send(graphs) => {
+                self.send_ppt = None;
+                let picked = rfd::FileDialog::new()
+                    .set_title("Send Graphs to PowerPoint")
+                    .add_filter("PowerPoint presentation", &["pptx"])
+                    .set_file_name("Graphs.pptx")
+                    .save_file();
+                if let Some(path) = picked {
+                    self.apply(Action::WritePptx { graphs, path }, ctx);
+                }
+            }
+        }
+    }
+
     /// File > Batch Processing... (T165): the window, its file picker and the run.
     fn show_batch(&mut self, ctx: &egui::Context) {
         use crate::dialogs::batch_process::BatchOutcome;
@@ -5000,7 +5067,8 @@ impl SheafApp {
                     d.add_files(files);
                 }
             }
-            BatchOutcome::Run { template, files } => match self.run_batch(&template, &files) {
+            BatchOutcome::Run { template, files, summary } => match self.run_batch(&template, &files, summary.as_ref())
+            {
                 Ok(()) => self.batch = None,
                 Err(e) => {
                     if let Some(d) = &mut self.batch {
@@ -5011,10 +5079,16 @@ impl SheafApp {
         }
     }
 
-    /// Reads every file and makes one book per file from the workbook template `name`, all in one
-    /// undo step ("Batch processing"). Files that cannot be read are skipped and named in the status
+    /// Reads every file and makes one book per file from the workbook template `name`, then with a
+    /// `summary` (T233) the summary book (and deletes the books made when asked), all in one undo
+    /// step ("Batch processing"). Files that cannot be read are skipped and named in the status
     /// line; an error only when no book could be made.
-    pub(crate) fn run_batch(&mut self, name: &str, files: &[PathBuf]) -> Result<(), String> {
+    pub(crate) fn run_batch(
+        &mut self,
+        name: &str,
+        files: &[PathBuf],
+        summary: Option<&crate::dialogs::batch_process::BatchSummary>,
+    ) -> Result<(), String> {
         let dir = self.startup.templates_dir.clone().ok_or("there is no template folder")?;
         let template = sheaf_io::user_templates::load_book(&dir, name).map_err(|e| e.to_string())?;
         let mut read = Vec::new();
@@ -5031,23 +5105,49 @@ impl SheafApp {
         if read.is_empty() {
             return Err(format!("No file could be read. {}", failed.join("; ")));
         }
-        let made = self.doc.apply("Batch processing", |p| {
-            read.iter()
+        let (made, summary_book) = self.doc.apply("Batch processing", |p| {
+            let made: Vec<_> = read
+                .iter()
                 .map(|(title, book)| p.new_workbook_from_template_with_data(&template, book, title))
-                .collect::<Vec<_>>()
+                .collect();
+            let Some(s) = summary else { return (made, None) };
+            let books: Vec<(WindowId, String)> =
+                made.iter().zip(&read).map(|(m, (title, _))| (m.book, title.clone())).collect();
+            let summary_book = p.batch_summary(&books, &s.sheet, &s.identifier);
+            if summary_book.is_some() && s.delete_books {
+                for m in &made {
+                    let columns: Vec<ColumnId> = p
+                        .workbook(m.book)
+                        .map(|b| b.sheets.iter().flat_map(|s| s.columns.iter().map(|c| c.id)).collect())
+                        .unwrap_or_default();
+                    p.analysis_links.retain(|l| !l.columns.iter().chain(&l.outputs).any(|c| columns.contains(c)));
+                    delete_columns(p, &columns);
+                    p.remove_window(m.book);
+                }
+            }
+            (made, summary_book)
         });
-        if let Some(last) = made.last() {
-            self.focus(last.book);
+        if let Some(book) = summary_book.or(made.last().map(|m| m.book)) {
+            self.focus(book);
         }
         let problems: Vec<String> = made.iter().flat_map(|m| m.problems.iter().cloned()).collect();
         let mut text = format!("Batch processing: {} workbook(s) from the template {}", made.len(), template.name);
+        if let Some(s) = summary {
+            match summary_book.and_then(|b| self.doc.project().workbook(b)) {
+                Some(b) if s.delete_books => {
+                    text.push_str(&format!("; summary of {} in {} (the books were deleted)", s.sheet, b.name));
+                }
+                Some(b) => text.push_str(&format!("; summary of {} in {}", s.sheet, b.name)),
+                None => text.push_str(&format!("; no book has the sheet {}, so there is no summary", s.sheet)),
+            }
+        }
         if !failed.is_empty() {
             text.push_str(&format!("; not read: {}", failed.join("; ")));
         }
         if !problems.is_empty() {
             text.push_str(&format!("; analysis problems: {}", problems.join("; ")));
         }
-        if failed.is_empty() && problems.is_empty() {
+        if failed.is_empty() && problems.is_empty() && (summary.is_none() || summary_book.is_some()) {
             self.say(text);
         } else {
             self.warn(text);
@@ -6838,6 +6938,7 @@ impl SheafApp {
         self.show_template_windows(ctx);
         self.show_batch(ctx);
         self.show_graph_sheet_picker(ctx);
+        self.show_send_ppt(ctx);
         self.show_cell_sparkline_picker(ctx);
         self.show_batch_peaks(ctx);
         self.show_fill_pattern(ctx);

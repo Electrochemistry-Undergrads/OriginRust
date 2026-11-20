@@ -348,6 +348,8 @@ pub enum Cmd {
     /// Edit > Replace... (Ctrl+H) in a workbook.
     ReplaceInSheets,
     ExportGraph,
+    /// The graph page's Send Graphs to PowerPoint... (T232).
+    SendGraphsToPowerPoint,
     /// File > Export > Graphs..., Graph as Image... or Multi-Page PDF... without an active graph (T182).
     ExportProjectGraphs(ProjectGraphsExport),
     ExportWorksheet,
@@ -2941,6 +2943,7 @@ pub fn graph_page_menu(layer: usize, page: (f64, f64)) -> Vec<Entry> {
         item("Add Shortcut to Favorites", Cmd::AddFavorite),
         keyed("Copy Page", ctrl(Key::J), Cmd::CopyPage),
         item("Export Graphs...", Cmd::ExportGraph),
+        item("Send Graphs to PowerPoint...", Cmd::SendGraphsToPowerPoint),
         keyed("View Full Screen", ctrl_shift(Key::J), Cmd::FullScreen),
         sep(),
         keyed("Rescale To Show All", ctrl(Key::R), Cmd::GraphEdit(GraphOp::Rescale { layer })),
@@ -3419,6 +3422,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::FindInProject => Action::FindInProject,
         Cmd::ReplaceInSheets => Action::ReplaceInSheets(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
+        Cmd::SendGraphsToPowerPoint => Action::SendGraphsToPowerPoint(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::ExportProjectGraphs(what) => Action::ExportProjectGraphs(*what),
         Cmd::ExportWorksheet => Action::ExportData(book?),
         Cmd::ExportExcel => Action::ExportExcel(book?),

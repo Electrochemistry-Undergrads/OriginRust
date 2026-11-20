@@ -46,6 +46,7 @@ pub mod localtime;
 pub mod marginal;
 pub mod matrix;
 pub mod matrix_convert;
+pub mod matrix_image;
 pub mod matrix_project;
 pub mod merge;
 pub mod multi_y;

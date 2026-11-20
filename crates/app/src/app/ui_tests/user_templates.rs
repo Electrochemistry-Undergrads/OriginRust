@@ -200,3 +200,49 @@ fn an_analysis_template_brings_its_recalculating_run_to_a_new_book() {
     settle(&mut h);
     assert_eq!(project(&h).column(result).unwrap().len(), 4, "the result follows the new data");
 }
+
+#[test]
+fn batch_processing_makes_one_book_per_file_from_an_analysis_template() {
+    use sheaf_core::analysis::{Boundary, OutputTarget, Request, RowRange, SmoothMethod, SmoothOptions, Tool};
+    let file = data_file("batch-processing");
+    let folder = file.parent().unwrap().to_path_buf();
+    let dir = folder.join("templates");
+    // An analysis template: X, Y and an Auto smoothing of Y.
+    let mut p = sheaf_core::Project::new();
+    let b = p.add_workbook("Assay");
+    p.add_column(b, 0, sheaf_core::Designation::X, sheaf_core::ColumnData::numeric(vec![0.0, 1.0, 2.0])).unwrap();
+    let y =
+        p.add_column(b, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::numeric(vec![1.0, 0.0, 1.0])).unwrap();
+    let o = SmoothOptions {
+        method: SmoothMethod::AdjacentAveraging { weighted: false },
+        npts: 3,
+        boundary: Boundary::None,
+    };
+    let request = Request { columns: vec![y], rows: RowRange::All, tool: Tool::Smooth(o) };
+    p.analyze_linked(&request, &OutputTarget::NextToInput, sheaf_core::RecalcMode::Auto).unwrap();
+    let t = sheaf_core::BookTemplate::analysis_from_workbook("Assay", &p, b).unwrap();
+    sheaf_io::user_templates::save_book(&dir, &t).unwrap();
+    let runs = [folder.join("run1.csv"), folder.join("run2.csv"), folder.join("missing.csv")];
+    std::fs::write(&runs[0], "t,v\n1,0\n2,3\n3,0\n4,3\n5,0\n").unwrap();
+    std::fs::write(&runs[1], "t,v\n1,1\n2,1\n3,1\n").unwrap();
+
+    let mut h = start_with(file, Some(dir));
+    let books = project(&h).workbooks().count();
+    show_window(&mut h, "Book1 - sample.csv");
+    menu_path(&mut h, &["File", "Batch Processing..."]);
+    assert!(h.state().batch.is_some(), "the window is open");
+    h.state_mut().batch.as_mut().unwrap().add_files(runs.iter().cloned());
+    settle(&mut h);
+    h.get_by_label("Batch Processing").get_by_label("OK").click();
+    settle(&mut h);
+    assert!(h.state().batch.is_none(), "OK runs and closes");
+    let made: Vec<_> = project(&h).workbooks().skip(books).collect();
+    assert_eq!(made.len(), 2, "one book per readable file");
+    assert_eq!(made[0].long_name, "run1.csv");
+    assert_eq!(made[1].long_name, "run2.csv");
+    let cols = &made[0].sheets[0].columns;
+    assert_eq!(cols[1].numeric().unwrap(), [0.0, 3.0, 0.0, 3.0, 0.0]);
+    assert_eq!(cols[2].len(), 5, "the smoothing ran on the file's data");
+    assert_eq!(made[1].sheets[0].columns[2].len(), 3);
+    assert_eq!(h.state().doc.undo_label(), Some("Batch processing"));
+}

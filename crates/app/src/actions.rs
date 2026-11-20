@@ -290,6 +290,8 @@ pub enum Action {
     SaveAnalysisTemplateAs(WindowId),
     /// Plot > User Templates > Manage...: rename and delete the saved templates.
     ManageTemplates,
+    /// File > Batch Processing...: the window that runs a workbook template on data files (T165).
+    BatchProcessing,
     /// File > New > Notes and the Standard toolbar's New Notes (T154).
     NewNotes,
     /// The text of a Notes window after editing: one undo step.

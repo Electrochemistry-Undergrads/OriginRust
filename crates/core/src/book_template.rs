@@ -107,7 +107,74 @@ impl BookTemplate {
     }
 }
 
+/// What [`Project::new_workbook_from_template_with_data`] made (File > Batch Processing..., T165).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BatchBook {
+    pub book: WindowId,
+    /// Columns of the file copied into the book.
+    pub filled: usize,
+    /// Columns of the file beyond the book's data columns, left out.
+    pub ignored: usize,
+    /// Analysis runs that could not run on the new data.
+    pub problems: Vec<String>,
+}
+
 impl Project {
+    /// File > Batch Processing... (T165): a new workbook from `template` (as
+    /// [`Project::new_workbook_from_template`]) titled `title`, holding the first sheet of `data` (a
+    /// data file as read by an importer). The file's columns fill, in order, the data columns of the
+    /// book's first sheet: its columns that are neither the result of an analysis run nor computed
+    /// by a formula. Each takes the file's values and the long name, units and comments the file
+    /// gives (the template's designation and format stay); file columns beyond them are left out.
+    /// Then the book's analysis runs (Auto and Manual) run on the new data; formula columns follow
+    /// when the edit ends (as for any new column).
+    pub fn new_workbook_from_template_with_data(
+        &mut self,
+        template: &BookTemplate,
+        data: &Workbook,
+        title: &str,
+    ) -> BatchBook {
+        let book = self.new_workbook_from_template(template);
+        let outputs: std::collections::HashSet<ColumnId> =
+            self.analysis_links.iter().flat_map(|l| l.outputs.iter().copied()).collect();
+        let mut report = BatchBook { book, filled: 0, ignored: 0, problems: Vec::new() };
+        let source: &[crate::column::Column] = data.sheets.first().map(|s| s.columns.as_slice()).unwrap_or(&[]);
+        if let Some(b) = self.workbook_mut(book) {
+            b.long_name = title.to_string();
+            let targets = b.sheets.first_mut().map(|s| {
+                s.columns.iter_mut().filter(|c| !outputs.contains(&c.id) && c.formula.is_none()).collect::<Vec<_>>()
+            });
+            let targets = targets.unwrap_or_default();
+            report.ignored = source.len().saturating_sub(targets.len());
+            for (col, src) in targets.into_iter().zip(source) {
+                col.data = src.data.clone();
+                for (mine, theirs) in [
+                    (&mut col.long_name, &src.long_name),
+                    (&mut col.units, &src.units),
+                    (&mut col.comments, &src.comments),
+                ] {
+                    if !theirs.is_empty() {
+                        mine.clone_from(theirs);
+                    }
+                }
+                report.filled += 1;
+            }
+        }
+        let ids: std::collections::HashSet<ColumnId> = self
+            .workbook(book)
+            .map(|b| b.sheets.iter().flat_map(|s| s.columns.iter().map(|c| c.id)).collect())
+            .unwrap_or_default();
+        let runs: Vec<usize> = (0..self.analysis_links.len())
+            .filter(|&i| self.analysis_links[i].outputs.first().is_some_and(|c| ids.contains(c)))
+            .collect();
+        for i in runs {
+            if let Err(e) = self.recalculate_analysis(i) {
+                report.problems.push(e.to_string());
+            }
+        }
+        report
+    }
+
     /// File > New > From Template with a workbook template: adds an empty workbook built like the
     /// template, with fresh window and column ids and a free `Book<n>` name. Returns its id.
     ///
@@ -286,5 +353,35 @@ mod tests {
         assert!(!t.is_analysis());
         let _ = y;
         assert!(BookTemplate::analysis_from_workbook("x", &p, WindowId(999)).is_none());
+    }
+    #[test]
+    fn batch_data_fills_the_data_columns_and_runs_the_analysis() {
+        let (mut p, book, _) = linked_book();
+        let t = BookTemplate::analysis_from_workbook("Assay", &p, book).unwrap();
+        // A data file with three columns: two fill X and Y; the third has no data column to go to.
+        let mut file = Workbook::new(WindowId(0), "f");
+        let mut s = Worksheet::new("f");
+        for (k, v) in [vec![1.0, 2.0, 3.0, 4.0], vec![0.0, 3.0, 0.0, 3.0], vec![9.0; 4]].into_iter().enumerate() {
+            let mut c = crate::column::Column::new(
+                ColumnId(k as u64 + 1),
+                crate::column::default_short_name(k),
+                Designation::Y,
+                ColumnData::numeric(v),
+            );
+            c.long_name = format!("file {k}");
+            s.columns.push(c);
+        }
+        file.sheets = vec![s];
+        let r = p.new_workbook_from_template_with_data(&t, &file, "run1.csv");
+        assert_eq!((r.filled, r.ignored), (2, 1));
+        assert!(r.problems.is_empty(), "{:?}", r.problems);
+        let b = p.workbook(r.book).unwrap();
+        assert_eq!(b.long_name, "run1.csv");
+        let cols = &b.sheets[0].columns;
+        assert_eq!(cols.len(), 3, "no column added for the file's third");
+        assert_eq!(cols[0].designation, Designation::X, "the template's designation stays");
+        assert_eq!(cols[1].long_name, "file 1");
+        assert_eq!(cols[1].numeric().unwrap(), [0.0, 3.0, 0.0, 3.0]);
+        assert_eq!(cols[2].len(), 4, "the smoothing ran on the new data");
     }
 }

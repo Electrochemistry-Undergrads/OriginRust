@@ -114,6 +114,8 @@ pub enum Cmd {
     SaveAnalysisTemplateAs,
     /// Plot > User Templates > Manage... (T56).
     ManageTemplates,
+    /// File > Batch Processing... (T165).
+    BatchProcessing,
     /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values (T74).
     FillPattern(FillKind),
     /// Format > Object Properties... on a graph: the selected object's properties (T150).
@@ -917,7 +919,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
             v.push(item("Save Workbook As Analysis Template...", Cmd::SaveAnalysisTemplateAs));
             v.push(grey("Add Word Bookmarks to Analysis Template..."));
         }
-        v.push(grey("Batch Processing..."));
+        v.push(item("Batch Processing...", Cmd::BatchProcessing));
     }
     v.extend([
         sep(),
@@ -2906,6 +2908,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
                 return Err(NO_TEMPLATE_FOLDER);
             }
             Action::ManageTemplates
+        }
+        Cmd::BatchProcessing => {
+            if !c.templates {
+                return Err(NO_TEMPLATE_FOLDER);
+            }
+            Action::BatchProcessing
         }
         Cmd::Import => Action::ImportPick(ImportPick::Single),
         Cmd::ImportMultiple => Action::ImportPick(ImportPick::Multiple),

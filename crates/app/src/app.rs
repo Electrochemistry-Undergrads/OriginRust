@@ -2233,7 +2233,10 @@ impl SheafApp {
                             LabelRow::LongName => c.long_name = text,
                             LabelRow::Units => c.units = text,
                             LabelRow::Comments => c.comments = text,
-                            LabelRow::Formula | LabelRow::SamplingInterval | LabelRow::Sparklines => {}
+                            LabelRow::Formula
+                            | LabelRow::SamplingInterval
+                            | LabelRow::Sparklines
+                            | LabelRow::Categories => {}
                             LabelRow::Param(name) => {
                                 c.params.insert(name, text);
                             }
@@ -2664,6 +2667,15 @@ impl SheafApp {
                         }
                     }
                 });
+            }
+            Action::SetLockPosition { graph, position } => {
+                if self.doc.project().graph(graph).is_some_and(|g| g.page.style.lock_position != position) {
+                    self.doc.apply("Lock position", |p| {
+                        if let Some(g) = p.graph_mut(graph) {
+                            g.page.style.lock_position = position;
+                        }
+                    });
+                }
             }
             Action::SetLayerIcons { graph, on } => {
                 self.doc.apply("Show Layer Icons", |p| {
@@ -3364,6 +3376,10 @@ impl SheafApp {
             }
             if row == LabelRow::Sparklines {
                 self.warn("Sparklines are drawn from the column's values");
+                return;
+            }
+            if row == LabelRow::Categories && !matches!(op, CellOp::Copy(_)) {
+                self.warn("The categories come from the column's values");
                 return;
             }
             let Some(c) = self.doc.project().column(column) else { return };
@@ -5228,6 +5244,7 @@ impl SheafApp {
             }),
             view_mode: graph.map(|g| project.view_mode(g)).unwrap_or_default(),
             layer_icons: graph.and_then(|g| project.graph(g)).is_none_or(|g| g.page.style.layer_icons),
+            lock_position: graph.and_then(|g| project.graph(g)).map(|g| g.page.style.lock_position).unwrap_or_default(),
             page_breaks: book
                 .and_then(|b| project.workbook(b))
                 .and_then(|b| b.sheets.get(b.active_sheet))

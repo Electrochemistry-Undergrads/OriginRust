@@ -28,6 +28,8 @@ pub enum ViewSwitch {
     RowGrid,
     /// Page Break Preview Lines (T185): dashed lines where the printed pages break.
     PageBreaks,
+    /// The Categories row (T187): the categories of each categorical column.
+    Categories,
 }
 
 impl ViewSwitch {
@@ -49,6 +51,7 @@ impl ViewSwitch {
             ViewSwitch::ColumnGrid => "Column Grid",
             ViewSwitch::RowGrid => "Row Grid",
             ViewSwitch::PageBreaks => "Page Break Preview Lines",
+            ViewSwitch::Categories => "Categories",
         }
     }
 }
@@ -87,6 +90,9 @@ pub struct SheetView {
     /// Page Break Preview Lines (T185); off on a new sheet.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub page_breaks: bool,
+    /// The Categories row (T187); off on a new sheet.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub categories: bool,
 }
 
 impl Default for SheetView {
@@ -104,6 +110,7 @@ impl Default for SheetView {
             column_grid: true,
             row_grid: true,
             page_breaks: false,
+            categories: false,
         }
     }
 }
@@ -127,6 +134,7 @@ impl SheetView {
             ViewSwitch::ColumnGrid => &mut self.column_grid,
             ViewSwitch::RowGrid => &mut self.row_grid,
             ViewSwitch::PageBreaks => &mut self.page_breaks,
+            ViewSwitch::Categories => &mut self.categories,
         })
     }
 }

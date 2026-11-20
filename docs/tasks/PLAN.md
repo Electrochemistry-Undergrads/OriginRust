@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 127 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 123 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -104,7 +104,7 @@ Backlog packages: write the brief first (step 3 above).
 | [x] | [T70](T70-axis-center-fit-page-to-printer.md) | Axis Center and Fit Page To Printer (B3 slice 2) | S | 0 |
 | [x] | [T73](T73-change-xy-ungroup.md) | Change X, Change Y, Ungroup on a plot (B3 slice 3) | S | 0 |
 | [x] | [T80](T80-color-and-bubble-scale.md) | New Color Scale, legend Add Color Scale and Add Bubble Scale (B3 slice 4) | M | 0 |
-| [ ] | B3 | Graph additions: function graph, straight line, table, colour scale, legend title, Change X/Y, Data menu display range and markers | L | 6 |
+| [ ] | B3 | Graph additions: function graph, straight line, table, colour scale, legend title, Change X/Y, Data menu display range and markers | L | 3 |
 | [x] | [T71](T71-point-segments.md) | 2 and 3 Point Segment plots (B4 slice 2) | S | 0 |
 | [x] | [T75](T75-scatter-central.md) | Scatter Central (B4 slice 3) | S | 0 |
 | [x] | [T79](T79-column-scatter.md) | Column Scatter (B4 slice) | S | 0 |
@@ -141,7 +141,7 @@ Backlog packages: write the brief first (step 3 above).
 | [x] | [T126](T126-descriptive-statistics-data-range.md) | Statistics on Columns respects existing Begin/End ranges (T87 reader follow-up) | S | 0 |
 | [x] | [T127](T127-row-statistics-data-range.md) | Statistics on Rows respects existing Begin/End ranges (T87 reader follow-up) | S | 0 |
 | [ ] | B5 | Worksheet editing: copy variants, Paste Transpose/Link/Special, cell links, Set As Begin/End, fill with a set of numbers/dates/text, sampling interval, Copy Columns to, Swap Columns | L | 12 |
-| [ ] | B6 | Worksheet view and sheets: header and grid toggles, row label rows, sheet-tab items, Split, objects in cells (graphs, images, sparklines, variables), Merge cells | L | 16 |
+| [ ] | B6 | Worksheet view and sheets: header and grid toggles, row label rows, sheet-tab items, Split, objects in cells (graphs, images, sparklines, variables), Merge cells | L | 15 |
 | [x] | B7 | Worksheet tools: done (Find in Project as T95, Conditional Formatting as T120-T123, Pivot Table as T124) | M | 0 |
 | [x] | [T120](T120-conditional-heatmap.md) | Conditional Heatmap (B7 slice; done 2026-11-17) | M | 0 |
 | [x] | [T121](T121-conditional-outliers-pareto.md) | Conditional Outliers and Conditional Pareto (B7 slice; done 2026-11-17) | S | 0 |

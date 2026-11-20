@@ -6349,7 +6349,20 @@ Origin's documented behaviour. The markers they act on are the data markers of D
   - Hide: none.
 - **Size:** the height of the markers' I-beams: Tiny 8 pt, Small 16 pt, Medium 24 pt (the default, as in
   section 40), Large 36 pt.
-- Lock Position stays grey.
+- **Analysis locks and Data > Lock Position (T186, not measured).** Origin marks an analysis that
+  follows a graph's data with a lock icon on the graph; its hotkey reference lists Data > Lock Position >
+  Layer Icon, First Point and Last Point for where it sits. Sheaf draws a lock, on screen only (not in
+  exports or prints), for each shown layer whose first visible plot with such an analysis has its Y
+  column read by an Auto or Manual analysis link (Recalculate Auto or Manual in the analysis window):
+  - a 10 x 8 px padlock, green while the results are current and yellow while a result waits for
+    Recalculate; its hover text names the plot, the mode and the state;
+  - Layer Icon (the default) puts it at the top right of the layer's icon; First Point and Last Point
+    beside the plot's first or last drawn point (8 px left of it and 12 px above).
+  - Lock Position is a page setting (`PageStyle::lock_position`, ticked in the menu), one undo step
+    ("Lock position"); the `.opj` written here does not hold it (its save warns that page settings
+    were not written).
+  - Not done: Origin's click menu on the lock (Change Parameters, Recalculate) and View > Show > Lock
+    Icons. [Origin hotkeys](https://docs.originlab.com/origin-help/hotkey-in-origin/)
 
 ## Tables: Graph > New Table (T136, 2026-11-18, **not measured**)
 

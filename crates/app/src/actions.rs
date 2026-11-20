@@ -68,6 +68,8 @@ pub enum LabelRow {
     SamplingInterval,
     /// The Sparklines row (T175): a small line of the column's values, read-only.
     Sparklines,
+    /// The Categories row (T187): the categories of a categorical column, read-only.
+    Categories,
     /// A user parameter row, by name.
     Param(String),
 }
@@ -800,6 +802,11 @@ pub enum Action {
         graph: WindowId,
         labels: Option<bool>,
         data: Option<bool>,
+    },
+    /// Data > Lock Position (T186): one undo step.
+    SetLockPosition {
+        graph: WindowId,
+        position: sheaf_core::graph::LockPosition,
     },
     SetLayerIcons {
         graph: WindowId,

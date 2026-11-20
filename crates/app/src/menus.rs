@@ -35,7 +35,7 @@ use sheaf_core::clipboard::CopyPart;
 use sheaf_core::data_range::RangeEnd;
 use sheaf_core::fill_pattern::QuickFill;
 use sheaf_core::format_clip::{AxisPart, GraphPart, LegendPart};
-use sheaf_core::graph::{PlotKind, Stack};
+use sheaf_core::graph::{LockPosition, PlotKind, Stack};
 use sheaf_core::sheetops::{MaskOp, MoveTo};
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnId, Designation, WindowId};
@@ -497,6 +497,8 @@ pub enum Cmd {
     SetViewMode(sheaf_core::project::ViewMode),
     /// View > Show > Layer Icons.
     ToggleLayerIcons,
+    /// Data > Lock Position (T186): where the graph's analysis locks are drawn.
+    LockPosition(sheaf_core::graph::LockPosition),
     /// The layer icon menu's Set Active Layer By Layer Icon Only (T183).
     ToggleActivateByIconOnly,
     /// The layer icon menu's Double click to open Plot Setup (T183).
@@ -786,6 +788,8 @@ pub struct MenuContext<'a> {
     pub view_mode: sheaf_core::project::ViewMode,
     /// The active graph shows its layer icons (the tick of View > Show > Layer Icons).
     pub layer_icons: bool,
+    /// The active graph's Lock Position (the tick of Data > Lock Position, T186).
+    pub lock_position: sheaf_core::graph::LockPosition,
     /// The active sheet shows Page Break Preview Lines (the tick of the View menu's item, T185).
     pub page_breaks: bool,
     /// The active graph's page switches of the layer icon menu (T183), for their ticks.
@@ -1979,7 +1983,14 @@ fn data_menu() -> Vec<Entry> {
                 ],
             )
         },
-        grey_sub("Lock Position", &["Layer Icon", "First Point", "Last Point"]),
+        sub(
+            "Lock Position",
+            vec![
+                item("Layer Icon", Cmd::LockPosition(LockPosition::LayerIcon)),
+                item("First Point", Cmd::LockPosition(LockPosition::FirstPoint)),
+                item("Last Point", Cmd::LockPosition(LockPosition::LastPoint)),
+            ],
+        ),
         sep(),
         item("Mask Data Points", Cmd::DataTool(DataTool::Mask)),
         item("Move Data Points", Cmd::DataTool(DataTool::Move)),
@@ -2822,7 +2833,7 @@ pub fn corner_menu(sheet: &sheaf_core::Worksheet) -> Vec<Entry> {
         switch(V::Sparklines),
         grey("Filter"),
         switch(V::Formula),
-        grey("Categories"),
+        switch(V::Categories),
         sep(),
         switch(V::RowLabels),
         sep(),
@@ -3507,6 +3518,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::SetViewMode(mode) => Action::SetViewMode { graph: c.graph.ok_or(NEED_GRAPH)?, mode: *mode },
         Cmd::ToggleLayerIcons => Action::SetLayerIcons { graph: c.graph.ok_or(NEED_GRAPH)?, on: !c.layer_icons },
+        Cmd::LockPosition(position) => {
+            Action::SetLockPosition { graph: c.graph.ok_or(NEED_GRAPH)?, position: *position }
+        }
         Cmd::ToggleActivateByIconOnly => Action::SetPageSwitch {
             graph: c.graph.ok_or(NEED_GRAPH)?,
             switch: crate::actions::PageSwitch::ActivateByIconOnly,
@@ -3826,6 +3840,11 @@ fn show_entries(
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleLayerIcons)) && c.layer_icons {
+                    tick(ui, &response);
+                }
+                if let Some(Cmd::LockPosition(position)) = &it.cmd
+                    && *position == c.lock_position
+                {
                     tick(ui, &response);
                 }
                 if matches!(
@@ -4236,6 +4255,7 @@ mod tests {
             can_ungroup: false,
             view_mode: Default::default(),
             layer_icons: true,
+            lock_position: Default::default(),
             page_breaks: false,
             activate_by_icon_only: false,
             icon_double_click_plot_setup: false,

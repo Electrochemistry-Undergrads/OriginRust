@@ -68,6 +68,31 @@ pub fn write_graphs_pdf(project: &Project, graphs: &[WindowId], path: &Path, set
         .with_context(|| format!("could not write '{}'", path.display()))
 }
 
+/// Send Graphs to PowerPoint (T232): the bytes of a `.pptx` with one slide per graph in the order
+/// given, each graph a PNG rendered with these settings and fitted on its slide.
+pub fn render_graphs_pptx(project: &Project, graphs: &[WindowId], settings: &ExportSettings) -> Result<Vec<u8>> {
+    let slides = graphs
+        .iter()
+        .map(|&g| {
+            let png = render_graph(project, g, settings, "png")?;
+            let name = project.graph(g).map(|g| g.name.clone()).unwrap_or_default();
+            Ok(sheaf_io::pptx::PptxSlide { png, name })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    sheaf_io::pptx::pptx_bytes(&slides).map_err(anyhow::Error::msg)
+}
+
+/// [`render_graphs_pptx`] into a file.
+pub fn write_graphs_pptx(project: &Project, graphs: &[WindowId], path: &Path, settings: &ExportSettings) -> Result<()> {
+    let bytes = render_graphs_pptx(project, graphs, settings)?;
+    std::fs::write(path, bytes).with_context(|| format!("could not write '{}'", path.display()))
+}
+
+/// Whether a path names a PowerPoint presentation (`.pptx`).
+pub fn is_pptx(path: &Path) -> bool {
+    path.extension().is_some_and(|e| e.eq_ignore_ascii_case("pptx"))
+}
+
 /// The export size from `--image-width` and `--image-height`; a value in `%` is a page ratio.
 pub fn export_size(width: Option<&str>, height: Option<&str>, dpi: f64) -> Result<sheaf_plot::ExportSize> {
     let percent = |text: Option<&str>, what: &str| -> Result<Option<f64>> {

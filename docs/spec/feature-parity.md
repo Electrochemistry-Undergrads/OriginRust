@@ -33,9 +33,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 54 | 201 | 6 | 261 |
+| All rows | 54 | 202 | 5 | 261 |
 | P0 | 33 | 70 | 0 | 103 |
-| P1 and P2 together | 21 | 131 | 6 | 158 |
+| P1 and P2 together | 21 | 132 | 5 | 158 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 63 are P2.
 
@@ -374,7 +374,7 @@ Cross-cutting findings:
 | Batch export and naming | Export all, overwrite rules | one graph at a time | ◐ | no folder export, name templates | P1 |
 | Export preview | Preview button | Export Graphs preview pane with Auto Preview (T05) | ◐ | no Graph tab in the preview | P1 |
 | Export dialog themes | Dialog Theme flyout | named export settings, custom default/reset, last successful export, Save/Save As/Delete with isolated persistence (T05; graphing 9.8) | ◐ | no Compare/Generate Script, graph-specific settings or `.ois` interchange | P1 |
-| Send to PowerPoint or Word | Graph menu | none | ✗ | | P2 |
+| Send to PowerPoint or Word | Graph menu | Send Graphs to PowerPoint... on the graph page writes a `.pptx` (one 16:9 slide per graph, the graph as a PNG; active graph or all), `sheaf export -o slides.pptx` (graphing 17.11, T232) | ◐ | a file, not a running PowerPoint; no slide template or title options; no Send to Word | P2 |
 
 ## 14 Dialog details
 

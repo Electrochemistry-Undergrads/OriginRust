@@ -322,6 +322,12 @@ pub enum Action {
     ImportImage,
     /// File > New > Function Plot (T213): opens the function window for a graph made on OK.
     NewFunctionPlot,
+    /// Plot > Profile (T234): the profile window for matrix `book`, or for the matrix shown by the
+    /// contour of `graph`.
+    Profile {
+        book: Option<WindowId>,
+        graph: Option<WindowId>,
+    },
     /// Plot > Contour/Heat Map > Ternary Contour (T226).
     TernaryContour {
         a: sheaf_core::ColumnId,
@@ -1210,6 +1216,13 @@ pub enum Action {
         layer: usize,
     },
     ExportGraph(WindowId),
+    /// Send Graphs to PowerPoint... of this graph's page: the window that picks the graphs (T232).
+    SendGraphsToPowerPoint(WindowId),
+    /// Write these graphs into a PowerPoint file, one slide each (T232).
+    WritePptx {
+        graphs: Vec<WindowId>,
+        path: std::path::PathBuf,
+    },
     /// File > Export without an active graph: the Export Graphs window on every graph of the project (T182).
     ExportProjectGraphs(crate::menus::ProjectGraphsExport),
     ExportData(WindowId),

@@ -24,6 +24,7 @@ tempfile = "3.27"
 [dev-dependencies]
 serde_json.workspace = true
 flate2 = "1"
+zip = { version = "9.5.1", default-features = false, features = ["deflate"] }
 
 [lints]
 workspace = true

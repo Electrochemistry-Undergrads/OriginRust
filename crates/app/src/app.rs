@@ -237,6 +237,8 @@ pub struct SheafApp {
     batch: Option<crate::dialogs::batch_process::BatchDialog>,
     /// Add Graph as Sheet... (T190).
     graph_sheet_picker: Option<crate::dialogs::graph_sheet::GraphSheetPicker>,
+    /// Send Graphs to PowerPoint... (T232).
+    send_ppt: Option<crate::dialogs::send_ppt::SendPptDialog>,
     /// A data cell's Insert Sparklines... (T200).
     cell_sparkline_picker: Option<crate::dialogs::cell_sparkline::CellSparklinePicker>,
     /// Batch Peak Analysis Using Theme... (T169).
@@ -421,6 +423,7 @@ impl SheafApp {
             template_manager: None,
             batch: None,
             graph_sheet_picker: None,
+            send_ppt: None,
             cell_sparkline_picker: None,
             batch_peaks: None,
             fill_pattern: None,
@@ -2303,6 +2306,27 @@ impl SheafApp {
                 self.function_graph = Some(crate::dialogs::function_graph::FunctionGraphDialog::new(graph, layer));
                 self.function_graph_new = false;
             }
+            Action::Profile { book, graph } => {
+                use crate::dialogs::matrix_ops::{Form, MatrixOpDialog};
+                // The matrix: the given book, or the one that the graph's contour layer shows.
+                let target = book.map(|b| (b, None)).or_else(|| {
+                    let g = self.doc.project().graph(graph?)?;
+                    g.layers.iter().find_map(|l| match l.field.as_ref()?.source {
+                        sheaf_core::graph::FieldSource::Matrix { window, sheet } => Some((window, Some(sheet))),
+                        _ => None,
+                    })
+                });
+                match target {
+                    Some((b, sheet)) => {
+                        self.matrix_dialog =
+                            MatrixOpDialog::new(&self.doc, b, Form::Profile { horizontal: true, index: 1 });
+                        if let (Some(d), Some(s)) = (self.matrix_dialog.as_mut(), sheet) {
+                            d.sheet = s;
+                        }
+                    }
+                    None => self.warn("This graph shows no matrix; a profile needs a matrix contour or image"),
+                }
+            }
             Action::TernaryContour { a, b, c, z } => {
                 match self.doc.edit("New graph", |p| p.plot_ternary_contour(a, b, c, z)) {
                     Ok(graph) => self.focus(graph),
@@ -3172,6 +3196,35 @@ impl SheafApp {
             Action::ExportGraph(graph) => {
                 self.export =
                     Some(ExportDialog::new(graph, self.folder()).with_themes(self.startup.themes_dir.clone()));
+            }
+            Action::SendGraphsToPowerPoint(graph) => {
+                let p = self.doc.project();
+                let name = p.graph(graph).map(|g| g.name.clone()).unwrap_or_default();
+                let all = p.graphs().map(|g| g.id).collect();
+                self.send_ppt = Some(crate::dialogs::send_ppt::SendPptDialog::new((graph, name), all));
+            }
+            Action::WritePptx { graphs, path } => {
+                // 300 dpi pictures, as Export Graphs' default resolution.
+                let project = self.doc.project();
+                let slides = graphs
+                    .iter()
+                    .map(|&g| {
+                        let png = sheaf_plot::render_png(project, g, 300.0).map_err(|e| e.to_string())?;
+                        let name = project.graph(g).map(|g| g.name.clone()).unwrap_or_default();
+                        Ok(sheaf_io::pptx::PptxSlide { png, name })
+                    })
+                    .collect::<Result<Vec<_>, String>>();
+                let written = slides
+                    .and_then(|s| sheaf_io::pptx::pptx_bytes(&s))
+                    .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+                match written {
+                    Ok(()) => {
+                        let n = graphs.len();
+                        let s = if n == 1 { "" } else { "s" };
+                        self.say(format!("Sent {n} graph{s} to {}", path.display()));
+                    }
+                    Err(e) => self.warn(format!("Could not write {}: {e}", path.display())),
+                }
             }
             Action::ExportProjectGraphs(what) => {
                 use crate::dialogs::export::ExportFormat;
@@ -4977,6 +5030,27 @@ impl SheafApp {
                     PickTarget::Cell { column, row } => Action::SetCellGraph { column, row, graph: Some(graph) },
                 };
                 self.apply(action, ctx);
+            }
+        }
+    }
+
+    /// Send Graphs to PowerPoint... (T232): the window, then the file picker and the file.
+    fn show_send_ppt(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::send_ppt::SendPptOutcome;
+        let Some(d) = &mut self.send_ppt else { return };
+        match d.show(ctx) {
+            SendPptOutcome::Open => {}
+            SendPptOutcome::Closed => self.send_ppt = None,
+            SendPptOutcome::Send(graphs) => {
+                self.send_ppt = None;
+                let picked = rfd::FileDialog::new()
+                    .set_title("Send Graphs to PowerPoint")
+                    .add_filter("PowerPoint presentation", &["pptx"])
+                    .set_file_name("Graphs.pptx")
+                    .save_file();
+                if let Some(path) = picked {
+                    self.apply(Action::WritePptx { graphs, path }, ctx);
+                }
             }
         }
     }
@@ -6849,6 +6923,7 @@ impl SheafApp {
         self.show_template_windows(ctx);
         self.show_batch(ctx);
         self.show_graph_sheet_picker(ctx);
+        self.show_send_ppt(ctx);
         self.show_cell_sparkline_picker(ctx);
         self.show_batch_peaks(ctx);
         self.show_fill_pattern(ctx);

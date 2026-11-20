@@ -217,6 +217,8 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T228](T228-sampling-interval-check.md) | Set Sampling Interval: From X Column checks even spacing (vinc) | S | done 2026-11-20 (workbook-model 13d), not measured |
 | [T231](T231-import-sparklines.md) | Import Options > Add Sparklines (No / Yes / if less than 50 columns), themes, sheaf import --sparklines | S | done 2026-11-20 (import-ascii 10), default No; left: auto width, write protection |
 | [T232](T232-send-graphs-to-powerpoint.md) | Send Graphs to PowerPoint... and sheaf export -o .pptx: one slide per graph | S | done 2026-11-20 (graphing 17.11), not measured; left: slide templates, Send to Word |
+| [T236](T236-format-clipboard-race.md) | Format clipboard file: retry an open or rename Windows refuses during a replace (flaky concurrency test) | S | done 2026-11-20 |
+| [T239](T239-hour-minute-second.md) | Formula functions hour, minute, second of a date-time number | S | done 2026-11-20 (expression-language 7), not measured (Origin not installed) |
 | [T233](T233-batch-summary.md) | File > Batch Processing: Summary Sheet, Dataset Identifier, Delete Intermediate Books (a Batch Summary book stacking one sheet of every book) | S | done 2026-11-20 (workbook-model 13p), not measured; left: Origin's layout and identifier choices |
 | [T235](T235-batch-cli.md) | sheaf batch: Batch Processing without a window (template, summary, --summary-csv), core Project::batch_process shared with the window | S | done 2026-11-20 (workbook-model 13p); MCP: T238 |
 | [T238](T238-batch-mcp.md) | MCP batch_process: the shared batch run (books, summary, delete) on the session project, one undo step attached | S | done 2026-11-20 (mcp.md 5.1); left: read options |

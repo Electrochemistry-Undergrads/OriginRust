@@ -24,8 +24,8 @@ use sheaf_core::analysis::{
     Request, RowRange, SignalCorrelationSpec, SmoothMethod, SmoothOptions, SplineBoundary, StftOutput, StftSpec, Tool,
 };
 use sheaf_core::analysis::{
-    BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakChainSpec,
-    PeakFitSpec, PeakShape,
+    BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakBaselineSpec,
+    PeakChainSpec, PeakFitSpec, PeakShape,
 };
 use sheaf_core::analysis::{
     CoherenceOptions, CoherenceSpec, CoherenceWindow, DecimateFilter, DecimateSpec, EnvelopeOptions, EnvelopeSpec,
@@ -421,6 +421,8 @@ enum ChainBaselineKind {
     EndPoints,
     /// User Defined, with Sheaf's anchors: the lowest points of n stretches.
     Minima,
+    /// User Defined with Origin's 2nd Derivative anchor finding (Origin's default method).
+    SecondDerivative,
 }
 
 /// The Goal page of Origin's Peak Analyzer.
@@ -454,6 +456,11 @@ impl ChainGoal {
             ChainGoal::SubtractBaseline => &["Baseline Mode", "Subtract Baseline", "Finish"],
         }
     }
+}
+
+/// Two columns of labels and controls, as the analysis windows lay them out.
+fn grid_rows(ui: &mut egui::Ui, id: &str, add: impl FnOnce(&mut egui::Ui)) {
+    egui::Grid::new(id).num_columns(2).spacing([14.0, 6.0]).show(ui, add);
 }
 
 const FIND_METHODS: [(&str, FindMethod); 4] = [
@@ -764,6 +771,10 @@ pub struct AnalysisDialog {
     peak_count: usize,
     chain_baseline: ChainBaselineKind,
     chain_minima: usize,
+    /// User Defined, 2nd Derivative: Origin's Number of Points to Find (8).
+    chain_points: usize,
+    /// Create Baseline page: Origin's Interpolation Method (Line, Spline, BSpline).
+    chain_interp: InterpMethod,
     /// Constant baseline: a value of the data, or `None` for the custom number.
     chain_const: Option<BaselineStat>,
     chain_custom_y: f64,
@@ -1385,6 +1396,8 @@ impl AnalysisDialog {
             peak_count: 1,
             chain_baseline: ChainBaselineKind::Constant,
             chain_minima: 5,
+            chain_points: 8,
+            chain_interp: InterpMethod::Linear,
             chain_const: Some(BaselineStat::Minimum),
             chain_custom_y: 0.0,
             find_method: 0,
@@ -1553,21 +1566,34 @@ impl AnalysisDialog {
                             ChainGoal::Find,
                             ChainGoal::Fit,
                         ] {
-                            let offered = !matches!(g, ChainGoal::CreateBaseline | ChainGoal::SubtractBaseline);
-                            let r = ui.add_enabled_ui(offered, |ui| ui.radio_value(&mut self.chain_goal, g, g.name()));
-                            if !offered {
-                                r.response.on_disabled_hover_text(
-                                    "Not offered yet: use Analysis > Peaks and Baseline > Baseline",
-                                );
+                            let before = self.chain_goal;
+                            ui.radio_value(&mut self.chain_goal, g, g.name());
+                            // Origin's baseline goals start on User Defined, the peak goals on Constant.
+                            let baseline_goal =
+                                |g: ChainGoal| matches!(g, ChainGoal::CreateBaseline | ChainGoal::SubtractBaseline);
+                            if before != self.chain_goal && baseline_goal(before) != baseline_goal(self.chain_goal) {
+                                self.chain_baseline = if baseline_goal(self.chain_goal) {
+                                    ChainBaselineKind::SecondDerivative
+                                } else {
+                                    ChainBaselineKind::Constant
+                                };
                             }
                         }
                     });
                 });
             }
             "Baseline Mode" => {
+                let baseline_goal = matches!(self.chain_goal, ChainGoal::CreateBaseline | ChainGoal::SubtractBaseline);
+                // Origin's list for the baseline goals (measured).
+                const BASELINE_GOAL_MODES: [(&str, Option<ChainBaselineKind>); 4] = [
+                    ("User Defined", Some(ChainBaselineKind::SecondDerivative)),
+                    ("XPS", None),
+                    ("End Points Weighted", None),
+                    ("Asymmetric Least Squares Smoothing", None),
+                ];
                 const MODES: [(&str, Option<ChainBaselineKind>); 8] = [
                     ("Constant", Some(ChainBaselineKind::Constant)),
-                    ("User Defined", Some(ChainBaselineKind::Minima)),
+                    ("User Defined", Some(ChainBaselineKind::SecondDerivative)),
                     ("Use Existing Dataset", None),
                     ("XPS", None),
                     ("None (Y=0)", Some(ChainBaselineKind::None)),
@@ -1575,11 +1601,18 @@ impl AnalysisDialog {
                     ("Straight Line", Some(ChainBaselineKind::EndPoints)),
                     ("Asymmetric Least Squares Smoothing", None),
                 ];
-                let name = MODES.iter().find(|m| m.1 == Some(self.chain_baseline)).map_or("", |m| m.0);
+                let modes: &[(&str, Option<ChainBaselineKind>)] =
+                    if baseline_goal { &BASELINE_GOAL_MODES } else { &MODES };
+                // Both ways of finding anchors are Origin's User Defined.
+                let shown = match self.chain_baseline {
+                    ChainBaselineKind::Minima => ChainBaselineKind::SecondDerivative,
+                    k => k,
+                };
+                let name = modes.iter().find(|m| m.1 == Some(shown)).map_or("", |m| m.0);
                 ui.horizontal(|ui| {
                     ui.label("Baseline Mode");
                     egui::ComboBox::from_id_salt("pa_basemode").selected_text(name).width(240.0).show_ui(ui, |ui| {
-                        for (label, kind) in MODES {
+                        for &(label, kind) in modes {
                             match kind {
                                 Some(k) => {
                                     ui.selectable_value(&mut self.chain_baseline, k, label);
@@ -1610,18 +1643,79 @@ impl AnalysisDialog {
                             );
                         });
                     }
-                    ChainBaselineKind::Minima => {
-                        ui.horizontal(|ui| {
-                            ui.label("Anchor points: the lowest point of each of");
-                            ui.add(DragValue::new(&mut self.chain_minima).range(2..=1000));
-                            ui.label("stretches (Sheaf's way of finding them)");
+                    ChainBaselineKind::Minima | ChainBaselineKind::SecondDerivative => {
+                        ui.label(egui::RichText::new("Anchor Points Finding").strong());
+                        ui.horizontal_top(|ui| {
+                            ui.label("Method");
+                            ui.vertical(|ui| {
+                                ui.radio_value(
+                                    &mut self.chain_baseline,
+                                    ChainBaselineKind::SecondDerivative,
+                                    "2nd Derivative",
+                                );
+                                for greyed in [
+                                    "1st Derivative and 2nd Derivative",
+                                    "Use Script to Search",
+                                    "Use Existing Dataset",
+                                ] {
+                                    ui.add_enabled(false, egui::RadioButton::new(false, greyed));
+                                }
+                                ui.radio_value(
+                                    &mut self.chain_baseline,
+                                    ChainBaselineKind::Minima,
+                                    "Lowest point of each stretch (Sheaf's own)",
+                                );
+                            });
                         });
+                        if self.chain_baseline == ChainBaselineKind::SecondDerivative {
+                            grid_rows(ui, "pa_anchor_find", |ui| {
+                                ui.label("Smoothing Window Size");
+                                ui.add_enabled(false, egui::Label::new("Auto"));
+                                ui.end_row();
+                                ui.label("Threshold");
+                                ui.add_enabled(false, egui::Label::new("Auto"));
+                                ui.end_row();
+                                ui.label("Number of Points to Find");
+                                ui.add(DragValue::new(&mut self.chain_points).range(2..=1000));
+                                ui.end_row();
+                            });
+                        } else {
+                            ui.horizontal(|ui| {
+                                ui.label("Anchor points: the lowest point of each of");
+                                ui.add(DragValue::new(&mut self.chain_minima).range(2..=1000));
+                                ui.label("stretches");
+                            });
+                        }
                     }
                     ChainBaselineKind::EndPoints => {
                         ui.weak("The line through the first and the last point.");
                     }
                     ChainBaselineKind::None => {}
                 }
+            }
+            "Create Baseline" => {
+                grid_rows(ui, "pa_basecreate", |ui| {
+                    ui.label("Connect by");
+                    ui.add_enabled(false, egui::Button::selectable(true, "Interpolation"));
+                    ui.end_row();
+                    ui.label("Number of Baseline Points");
+                    ui.add_enabled(false, egui::Checkbox::new(&mut true, "Same as Input"));
+                    ui.end_row();
+                    ui.label("Interpolation Method");
+                    ui.vertical(|ui| {
+                        ui.radio_value(&mut self.chain_interp, InterpMethod::Linear, "Line");
+                        ui.radio_value(&mut self.chain_interp, InterpMethod::CubicSpline, "Spline");
+                        ui.radio_value(&mut self.chain_interp, InterpMethod::BSpline, "BSpline");
+                    });
+                    ui.end_row();
+                });
+                ui.weak("The baseline goes beside the data as Baseline_Data Y1, Y2, ...");
+            }
+            "Subtract Baseline" => {
+                ui.weak(
+                    "The data minus the baseline go beside the data as Subtracted_Data Y1, followed by the \
+                     baseline as Baseline_Data Y1.",
+                );
             }
             "Baseline Treatment" => {
                 ui.add_enabled(false, egui::Checkbox::new(&mut false, "Auto Subtract Baseline"));
@@ -1682,6 +1776,28 @@ impl AnalysisDialog {
             }
             _ => {
                 ui.label(format!("{}: press OK to run it.", self.chain_goal.name()));
+            }
+        }
+    }
+
+    /// The baseline the Peak Analyzer's Baseline Mode page describes.
+    fn chain_baseline_spec(&self) -> ChainBaseline {
+        match self.chain_baseline {
+            ChainBaselineKind::Constant => match self.chain_const {
+                Some(stat) => ChainBaseline::ConstantStat(stat),
+                None => ChainBaseline::Constant(self.chain_custom_y),
+            },
+            ChainBaselineKind::None => ChainBaseline::None,
+            ChainBaselineKind::EndPoints => ChainBaseline::EndPoints,
+            ChainBaselineKind::Minima => ChainBaseline::AutoMinima(self.chain_minima),
+            ChainBaselineKind::SecondDerivative => {
+                // The baseline goals join the anchors with the Create Baseline page's method; the
+                // peak goals with straight lines.
+                let method = match self.chain_goal {
+                    ChainGoal::CreateBaseline | ChainGoal::SubtractBaseline => self.chain_interp,
+                    _ => InterpMethod::Linear,
+                };
+                ChainBaseline::SecondDerivative { points: self.chain_points, method }
             }
         }
     }
@@ -1848,18 +1964,18 @@ impl AnalysisDialog {
                 },
                 ..self.peaks
             }),
+            AnalysisKind::PeakChain
+                if matches!(self.chain_goal, ChainGoal::CreateBaseline | ChainGoal::SubtractBaseline) =>
+            {
+                Tool::PeakBaseline(PeakBaselineSpec {
+                    baseline: self.chain_baseline_spec(),
+                    subtract: self.chain_goal == ChainGoal::SubtractBaseline,
+                })
+            }
             AnalysisKind::PeakChain => Tool::PeakChain(PeakChainSpec {
                 centers: Vec::new(),
                 chain: ChainOptions {
-                    baseline: match self.chain_baseline {
-                        ChainBaselineKind::Constant => match self.chain_const {
-                            Some(stat) => ChainBaseline::ConstantStat(stat),
-                            None => ChainBaseline::Constant(self.chain_custom_y),
-                        },
-                        ChainBaselineKind::None => ChainBaseline::None,
-                        ChainBaselineKind::EndPoints => ChainBaseline::EndPoints,
-                        ChainBaselineKind::Minima => ChainBaseline::AutoMinima(self.chain_minima),
-                    },
+                    baseline: self.chain_baseline_spec(),
                     find: FindOptions {
                         method: FIND_METHODS[self.find_method].1,
                         npts: self.peaks.npts,

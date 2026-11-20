@@ -9213,3 +9213,43 @@ fn axis_tick_labels_open_the_axis_dialog_on_its_tick_labels_tab() {
     assert!(c.iter().any(|e| matches!(e, menus::Entry::Item(i) if menus::plain(&i.label) == "Frequency Count..."
         && i.cmd == Some(menus::Cmd::Analyze(AnalysisKind::Histogram)))));
 }
+
+/// Peak Analyzer, goal Subtract Baseline: Origin's pages, User Defined with the 2nd derivative, and
+/// Origin's columns Subtracted_Data Y1 and Baseline_Data Y1 beside the data.
+#[test]
+fn the_peak_analyzer_subtracts_a_baseline_with_origins_anchors() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-pabase-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("two.csv");
+    let mut text = String::from(
+        "x,y
+",
+    );
+    for k in 0..401 {
+        let x = k as f64 * 0.05;
+        let g = |c: f64, w: f64| (-(x - c) * (x - c) / w).exp();
+        text.push_str(&format!(
+            "{x},{}
+",
+            0.2 + 0.01 * x + g(5.0, 0.5) + 0.6 * g(12.0, 0.8)
+        ));
+    }
+    std::fs::write(&path, text).unwrap();
+    let mut h = start(vec![path]);
+    show_window(&mut h, "Book1 - two.csv");
+    menu_path(&mut h, &["Analysis", "Peaks and Baseline", "Peak Analyzer..."]);
+    click(&mut h, "Subtract Baseline");
+    assert!(label_containing(&h, "Goal - Subtract Baseline"));
+    click(&mut h, "Next");
+    assert!(has_label(&h, "2nd Derivative") && has_label(&h, "Number of Points to Find"), "User Defined");
+    click(&mut h, "Next");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    assert_eq!(b.sheets.len(), 1, "no result sheet");
+    let names: Vec<&str> = b.sheet().columns.iter().map(|c| c.long_name.as_str()).collect();
+    assert_eq!(names[2..], ["Subtracted_Data Y1", "Baseline_Data Y1"]);
+    let base = b.sheet().columns[3].numeric().unwrap();
+    assert!((base[1] - 0.200_500_000_002_844_2).abs() < 1e-12, "Origin's baseline: {}", base[1]);
+    assert_eq!(h.state().doc.undo_label(), Some("Subtract baseline"));
+}

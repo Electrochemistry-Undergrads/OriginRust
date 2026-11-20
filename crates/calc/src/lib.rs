@@ -142,6 +142,7 @@ pub use pca::{EigenTest, Pca, PcaError, PcaOptions, pca};
 pub use peakchain::{
     BaselineStat, ChainBaseline, ChainError, ChainOptions, ChainResult, FindMethod, FindOptions, LimitMode, PeakInfo,
     analyze_peaks, analyze_peaks_at, auto_minima_anchors, find_peak_indices, integrate_peaks,
+    second_derivative_anchors,
 };
 pub use peaks::{PeakDirection, PeakFilter, PeakOptions, PeakResult, find_peaks};
 pub use power::{

@@ -46,6 +46,8 @@ impl BookTemplate {
         b.source = None;
         for sheet in &mut b.sheets {
             sheet.notes.clear();
+            // A graph sheet's graph is not in a template (T190).
+            sheet.graph_sheet = None;
             sheet.comparison_source = None;
             for c in &mut sheet.columns {
                 c.data = match &c.data {

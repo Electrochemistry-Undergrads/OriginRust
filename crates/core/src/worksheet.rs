@@ -69,6 +69,10 @@ pub struct Worksheet {
     /// shown as a text box in place of the grid.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notes_text: Option<String>,
+    /// Add Graph as Sheet (T190): `Some` makes this a graph sheet that shows that graph window of the
+    /// project in place of the grid. It has no columns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph_sheet: Option<WindowId>,
 }
 
 impl Worksheet {
@@ -89,6 +93,7 @@ impl Worksheet {
             font_defaults: Default::default(),
             comparison_source: None,
             notes_text: None,
+            graph_sheet: None,
         }
     }
 
@@ -190,6 +195,22 @@ pub struct ImportSource {
 }
 
 impl Workbook {
+    /// Add Graph as Sheet (T190): a new sheet after the last one that shows graph `graph`, named
+    /// `name` (or `name2`, `name3`, ... when a sheet has that name), made the active sheet. Returns its
+    /// index.
+    pub fn add_graph_sheet(&mut self, graph: WindowId, name: &str) -> usize {
+        let base = if name.trim().is_empty() { "Graph" } else { name.trim() };
+        let name = std::iter::once(base.to_string())
+            .chain((2..).map(|n| format!("{base}{n}")))
+            .find(|n| !self.sheets.iter().any(|s| s.name.eq_ignore_ascii_case(n)))
+            .expect("the name sequence is unbounded");
+        let mut sheet = Worksheet::new(name);
+        sheet.graph_sheet = Some(graph);
+        self.sheets.push(sheet);
+        self.active_sheet = self.sheets.len() - 1;
+        self.active_sheet
+    }
+
     /// Add Notes as Sheet (T188): a new empty Notes sheet after the last sheet, named `Notes` (then
     /// `Notes2`, `Notes3`, ... when taken), made the active sheet. Returns its index.
     pub fn add_notes_sheet(&mut self) -> usize {
@@ -341,5 +362,17 @@ mod title_tests {
         let json = serde_json::to_string(&b).unwrap();
         let back: Workbook = serde_json::from_str(&json).unwrap();
         assert!(back.sheets[1].is_notes() && !back.sheets[0].is_notes());
+    }
+
+    #[test]
+    fn a_graph_sheet_names_itself_after_the_graph_and_round_trips() {
+        let mut b = Workbook::new(WindowId(1), "Book1");
+        let i = b.add_graph_sheet(WindowId(7), "Graph1");
+        let j = b.add_graph_sheet(WindowId(8), "Graph1");
+        assert_eq!((b.sheets[i].name.as_str(), b.sheets[j].name.as_str()), ("Graph1", "Graph12"));
+        assert_eq!((b.sheets[i].graph_sheet, b.active_sheet), (Some(WindowId(7)), j));
+        let back: Workbook = serde_json::from_str(&serde_json::to_string(&b).unwrap()).unwrap();
+        assert_eq!(back.sheets[j].graph_sheet, Some(WindowId(8)));
+        assert_eq!(back.sheets[0].graph_sheet, None);
     }
 }

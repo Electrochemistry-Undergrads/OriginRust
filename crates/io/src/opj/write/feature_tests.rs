@@ -591,7 +591,7 @@ fn notes_sheets_are_left_out_with_a_warning() {
     let s = b.add_notes_sheet();
     b.sheets[s].notes_text = Some("hello".into());
     let out = written(&p);
-    assert!(out.warnings.iter().any(|w| w.contains("1 Notes sheet(s) were left out")), "{:?}", out.warnings);
+    assert!(out.warnings.iter().any(|w| w.contains("1 Notes or graph sheet(s) were left out")), "{:?}", out.warnings);
     let imp = read_back(&out.bytes);
     assert_eq!(imp.workbooks.len(), 1);
     assert_eq!(imp.workbooks[0].sheets.len(), 1, "only the data sheet");

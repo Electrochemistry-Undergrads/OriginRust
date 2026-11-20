@@ -120,6 +120,8 @@ pub struct BookUi {
     /// While a Notes sheet's text is edited (T188): the sheet, the text when editing began and the
     /// text typed.
     notes_edit: Option<(usize, String, String)>,
+    /// The graph views of the graph sheets (T190), by sheet index.
+    graph_sheets: std::collections::HashMap<usize, crate::graph_view::GraphUi>,
     /// The columns the selection touches (the whole columns for a column selection, the columns
     /// of the block for a block of cells), in the order they were clicked. Plot, Set Column
     /// Values and the analysis tools act on these.
@@ -886,6 +888,18 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                 }
             });
         });
+    }
+
+    // A graph sheet (T190): the graph, as its window shows it, in place of the grid.
+    if let Some(graph) = sheet.graph_sheet {
+        ui.scope_builder(UiBuilder::new().max_rect(body), |ui| {
+            if doc.project().graph(graph).is_some() {
+                crate::graph_view::show(ui, doc, graph, state.graph_sheets.entry(sheet_index).or_default(), actions);
+            } else {
+                ui.centered_and_justified(|ui| ui.weak("The graph this sheet showed was deleted."));
+            }
+        });
+        return;
     }
 
     // A Notes sheet (T188): a text box in place of the grid.

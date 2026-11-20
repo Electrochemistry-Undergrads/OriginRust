@@ -95,6 +95,8 @@ pub enum SheetOp {
     RenameDialog,
     /// Add Notes as Sheet: a Notes sheet after the last sheet (T188).
     AddNotes,
+    /// Add Graph as Sheet...: the window that picks the graph (T190).
+    AddGraph,
 }
 
 /// An edit of one object of a graph, from the graph window (Origin's right-click menus).
@@ -337,6 +339,11 @@ pub enum Action {
     SetNotesText {
         id: WindowId,
         text: String,
+    },
+    /// Add Graph as Sheet (T190): a sheet of `book` that shows `graph`, one undo step.
+    AddGraphSheet {
+        book: WindowId,
+        graph: WindowId,
     },
     /// The text of a Notes sheet after editing (T188): one undo step.
     SetNotesSheetText {

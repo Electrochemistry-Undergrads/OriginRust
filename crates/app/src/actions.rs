@@ -730,6 +730,11 @@ pub enum Action {
         plot: Option<usize>,
     },
     /// A change of a graph made from its window (right-click menus, the Delete key, Ctrl+R).
+    /// Graph > New Layer(Axes) > Open Dialog...: capture the input graph and active layer.
+    AddLayerDialog {
+        graph: WindowId,
+        layer: usize,
+    },
     GraphEdit {
         graph: WindowId,
         op: GraphOp,

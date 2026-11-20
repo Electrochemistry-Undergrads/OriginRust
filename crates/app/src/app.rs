@@ -2602,6 +2602,21 @@ impl SheafApp {
                     }
                 });
             }
+            Action::SetPageSwitch { graph, switch, on } => {
+                use crate::actions::PageSwitch;
+                let label = match switch {
+                    PageSwitch::ActivateByIconOnly => "Set Active Layer By Layer Icon Only",
+                    PageSwitch::IconDoubleClickPlotSetup => "Double click to open Plot Setup",
+                };
+                self.doc.apply(label, |p| {
+                    if let Some(g) = p.graph_mut(graph) {
+                        match switch {
+                            PageSwitch::ActivateByIconOnly => g.page.style.activate_by_icon_only = on,
+                            PageSwitch::IconDoubleClickPlotSetup => g.page.style.icon_double_click_plot_setup = on,
+                        }
+                    }
+                });
+            }
             Action::SetLayerIcons { graph, on } => {
                 self.doc.apply("Show Layer Icons", |p| {
                     if let Some(g) = p.graph_mut(graph) {
@@ -3592,23 +3607,7 @@ impl SheafApp {
                 }
             }
             SheetOp::Duplicate => {
-                let mut copy = b.sheets[active].clone();
-                copy.name = free_name(&b.sheets, &format!("{}_", copy.name));
-                self.doc.apply("Duplicate sheet", |p| {
-                    let mut renamed = std::collections::HashMap::new();
-                    for c in &mut copy.columns {
-                        let new = p.new_column_id();
-                        renamed.insert(c.id, new);
-                        c.id = new;
-                    }
-                    copy.remap_cond_format_columns(&|c| renamed.get(&c).copied());
-                    copy.remap_note_columns(&|c| renamed.get(&c).copied());
-                    copy.remap_format_columns(&|c| renamed.get(&c).copied());
-                    if let Some(b) = p.workbook_mut(book) {
-                        b.sheets.insert(active + 1, copy);
-                        b.active_sheet = active + 1;
-                    }
-                });
+                self.doc.apply("Duplicate sheet", |p| duplicate_sheet(p, book, active));
                 if let Some(state) = self.books.get_mut(&book) {
                     state.clear_selection();
                 }
@@ -4210,7 +4209,95 @@ impl SheafApp {
                 }
                 self.sheet_navigate = Some(dialog);
             }
+            NavigateOutcome::Act { book, sheets, action } => {
+                self.navigate_action(book, &sheets, action, &mut dialog, ctx);
+                self.sheet_navigate = Some(dialog);
+            }
         }
+    }
+
+    /// An item of Navigate Worksheets' Actions menu (T180) on `sheets`; each is one undo step.
+    fn navigate_action(
+        &mut self,
+        book: WindowId,
+        sheets: &[usize],
+        action: crate::dialogs::sheet_navigate::NavAction,
+        dialog: &mut crate::dialogs::sheet_navigate::SheetNavigateDialog,
+        ctx: &egui::Context,
+    ) {
+        use crate::dialogs::sheet_navigate::NavAction;
+        let Some(b) = self.doc.project().workbook(book) else { return };
+        let count = b.sheets.len();
+        let sheets: Vec<usize> = sheets.iter().copied().filter(|&s| s < count).collect();
+        if sheets.is_empty() {
+            return;
+        }
+        match action {
+            NavAction::Activate => {
+                self.apply(Action::SelectSheet { book, sheet: sheets[0] }, ctx);
+                dialog.reset(sheets[0]);
+                return;
+            }
+            NavAction::Move(to) => {
+                let order = b.moved_order(&sheets, to);
+                if self.doc.apply("Move worksheets", |p| p.workbook_mut(book).is_some_and(|w| w.reorder_sheets(&order)))
+                {
+                    dialog.reordered(&order);
+                }
+                return;
+            }
+            NavAction::Duplicate => {
+                // From the last, so that each copy lands right after its sheet.
+                self.doc.apply("Duplicate sheets", |p| {
+                    for &s in sheets.iter().rev() {
+                        duplicate_sheet(p, book, s);
+                    }
+                });
+            }
+            NavAction::DuplicateWithoutData => {
+                if let Err(e) = self.doc.edit("Duplicate sheets without data", |p| {
+                    sheets.iter().try_for_each(|&s| p.duplicate_sheet_without_data(book, s).map(|_| ()))
+                }) {
+                    self.warn(e.to_string());
+                }
+            }
+            NavAction::ClearData => {
+                self.doc.apply("Clear worksheet data", |p| {
+                    for &s in &sheets {
+                        p.clear_sheet(book, s);
+                    }
+                });
+            }
+            NavAction::Delete => {
+                if sheets.len() >= count {
+                    self.warn("A workbook keeps at least one sheet".to_string());
+                    return;
+                }
+                let ids: Vec<ColumnId> =
+                    sheets.iter().flat_map(|&s| b.sheets[s].columns.iter().map(|c| c.id)).collect();
+                self.doc.apply("Delete sheets", |p| {
+                    delete_columns(p, &ids);
+                    if let Some(w) = p.workbook_mut(book) {
+                        let active = w.active_sheet;
+                        for &s in sheets.iter().rev() {
+                            w.sheets.remove(s);
+                        }
+                        // The active sheet stays active when it is kept; else the sheet now in its place.
+                        let before = sheets.iter().filter(|&&s| s < active).count();
+                        w.active_sheet = if sheets.contains(&active) {
+                            active.saturating_sub(before).min(w.sheets.len() - 1)
+                        } else {
+                            active - before
+                        };
+                    }
+                });
+            }
+        }
+        if let Some(state) = self.books.get_mut(&book) {
+            state.clear_selection();
+        }
+        let active = self.doc.project().workbook(book).map_or(0, |w| w.active_sheet);
+        dialog.reset(active);
     }
 
     /// Copy Columns to: OK copies the columns, one undo step.
@@ -5012,6 +5099,12 @@ impl SheafApp {
             }),
             view_mode: graph.map(|g| project.view_mode(g)).unwrap_or_default(),
             layer_icons: graph.and_then(|g| project.graph(g)).is_none_or(|g| g.page.style.layer_icons),
+            activate_by_icon_only: graph
+                .and_then(|g| project.graph(g))
+                .is_some_and(|g| g.page.style.activate_by_icon_only),
+            icon_double_click_plot_setup: graph
+                .and_then(|g| project.graph(g))
+                .is_some_and(|g| g.page.style.icon_double_click_plot_setup),
             show_labels: graph
                 .and_then(|g| project.graph(g))
                 .is_none_or(|g| g.layers.iter().all(|l| l.display.show_labels)),
@@ -6870,6 +6963,34 @@ fn fit_report_lines(r: &sheaf_core::fitting::Report) -> Vec<String> {
 }
 
 /// Removes columns from every sheet, and from every graph the plots that used them.
+/// Duplicate: a copy of sheet `sheet` with its data right after it, active; its columns get new
+/// ids (their formats, notes and conditional formats follow them).
+fn duplicate_sheet(p: &mut Project, book: WindowId, sheet: usize) {
+    let Some(b) = p.workbook(book) else { return };
+    let Some(mut copy) = b.sheets.get(sheet).cloned() else { return };
+    let mut n = b.sheets.len() + 1;
+    copy.name = loop {
+        let name = format!("{}_{n}", copy.name);
+        if !b.sheets.iter().any(|s| s.name == name) {
+            break name;
+        }
+        n += 1;
+    };
+    let mut renamed = std::collections::HashMap::new();
+    for c in &mut copy.columns {
+        let new = p.new_column_id();
+        renamed.insert(c.id, new);
+        c.id = new;
+    }
+    copy.remap_cond_format_columns(&|c| renamed.get(&c).copied());
+    copy.remap_note_columns(&|c| renamed.get(&c).copied());
+    copy.remap_format_columns(&|c| renamed.get(&c).copied());
+    if let Some(b) = p.workbook_mut(book) {
+        b.sheets.insert(sheet + 1, copy);
+        b.active_sheet = sheet + 1;
+    }
+}
+
 fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
     if columns.is_empty() {
         return;

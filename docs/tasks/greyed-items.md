@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **137 greyed items: 106 in the menu bar, 2 on the toolbars, 29 in context menus.**
+original inventory baseline. This is not a new runtime audit. **134 greyed items: 106 in the menu bar, 2 on the toolbars, 26 in context menus.**
 
 ## How to read and keep this file
 
@@ -38,7 +38,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T58` | 0 |
 | `T59` | 0 |
 | `T60` | 0 |
-| `T61` | 3 |
+| `T61` | 0 |
 | `T62` | 0 |
 | `T63` | 1 |
 | `T65` | 0 |
@@ -86,7 +86,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 15 items, backlog packages (`B`) 102, not planned (`N`) 20.
+Briefs (`T`) hold 12 items, backlog packages (`B`) 102, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -194,6 +194,5 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B3` Graph legend > Legend: Add Legend Title
 - `T72` Graph page > Copy Format: Legend Translation Mode
 - `T72` Graph page > Paste Format To: All
-- `T61` Graph layer icon: Show Active Layer Only · Set Active Layer By Layer Icon Only · Double click to open Plot Setup
 
 No greyed item was found in the label-cell menu or the Integrate gadget menu.

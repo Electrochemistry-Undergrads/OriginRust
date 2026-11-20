@@ -343,6 +343,14 @@ pub struct PageStyle {
     /// joins the points before and after rows with a missing X or Y value instead of breaking the line.
     #[serde(default, skip_serializing_if = "is_false")]
     pub connect_across_missing: bool,
+    /// The layer icon menu's Set Active Layer By Layer Icon Only (T183): clicks inside a layer no longer
+    /// make it the active layer; only its icon does.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub activate_by_icon_only: bool,
+    /// The layer icon menu's Double click to open Plot Setup (T183): a double click on a layer icon opens
+    /// Plot Setup instead of the layer's properties.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub icon_double_click_plot_setup: bool,
 }
 
 fn is_false(v: &bool) -> bool {
@@ -358,6 +366,8 @@ impl Default for PageStyle {
             comments: String::new(),
             connect_across_breaks: false,
             connect_across_missing: false,
+            activate_by_icon_only: false,
+            icon_double_click_plot_setup: false,
         }
     }
 }
@@ -400,6 +410,8 @@ mod tests {
             comments: "notes".into(),
             connect_across_breaks: true,
             connect_across_missing: true,
+            activate_by_icon_only: true,
+            icon_double_click_plot_setup: true,
         };
         let json = serde_json::to_string(&page).unwrap();
         assert_eq!(serde_json::from_str::<PageStyle>(&json).unwrap(), page);

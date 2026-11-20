@@ -18,6 +18,7 @@ mod analyze;
 mod commands;
 mod fit;
 mod fit_datasets;
+mod matrix;
 mod merge;
 mod simulate;
 mod simulate_surface;

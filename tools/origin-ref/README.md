@@ -158,3 +158,18 @@ area in a variable), `imp1.lines.txt` (+ `circle-data.json`; a circle fitted wit
 `simsurface` and `fitcmpdata` through the menu with `origin-dialog.ps1 -MenuClicks`: eight or twelve separate `{DOWN}` keys
 after `K:%a;K:F`; edit boxes are numbered from 0). What they showed is in `docs/spec/fitting.md` 16-18 and
 `docs/spec/analysis-tools.md` 18.
+
+## Matrix reference runs
+
+`matrix-gen-ops.py` and `matrix-gen-conv.py` write the line scripts `matrix-ops.lines.txt` (set values,
+transpose, flip, rotate, expand, shrink, statistics) and `matrix-conv.lines.txt` (`w2m`, `m2w`, `xyz_regular`).
+Each case builds a small matrix or worksheet of our own, runs the X-Function and prints the result as text
+(data row by row, then the X coordinate of every column and the Y coordinate of every row, read back through
+the Set Values variables `x` and `y`). Run them with `run-labtalk-lines.ps1`, then
+`python matrix-make-fixture.py OPS_OUTPUT CONV_OUTPUT crates/core/tests/data/origin_matrix.json` writes the
+fixture that `crates/core/tests/matrix_origin.rs` compares with.
+
+`matrix-gen-pics.py OUT` and `matrix-gen-levels.py OUT [mantissa]` make Origin draw contour plots and heat maps
+(`worksheet -p 226 contour|contline|HeatMap`) and export PNGs into the folder OUT (keep it in `re-workspace/`,
+the pictures are not committed). The range rule of the colour scale in `docs/spec/matrices.md` was read from the
+labels of the `matrix-gen-levels.py` pictures. `matrix-probe*.lines.txt` are the first exploratory runs.

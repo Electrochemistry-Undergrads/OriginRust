@@ -3224,6 +3224,7 @@ impl SheafApp {
                         Window::Workbook(b) => b.long_name.clone(),
                         Window::Graph(g) => g.long_name.clone(),
                         Window::Notes(n) => n.long_name.clone(),
+                        Window::Matrix(m) => m.long_name.clone(),
                     };
                     let short_name = w.name().to_string();
                     self.rename = Some(RenameDialog { window: id, long_name, short_name, error: None, folder: None });
@@ -5436,6 +5437,7 @@ impl SheafApp {
             }
             Some(Window::Graph(g)) => format!("1: [{}]1!", g.name),
             Some(Window::Notes(n)) => n.name.clone(),
+            Some(Window::Matrix(m)) => format!("[{}]{}!", m.name, m.sheet().name),
             None => String::new(),
         }
     }
@@ -7004,6 +7006,7 @@ fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
                 }
             }
             Window::Notes(_) => {}
+            Window::Matrix(_) => {}
             Window::Graph(g) => {
                 for l in &mut g.layers {
                     l.plots.retain(|p| !columns.contains(&p.y));
@@ -7162,6 +7165,11 @@ impl eframe::App for SheafApp {
                         }
                         Some(Window::Notes(_)) => {
                             crate::notes_view::show(ui, doc, id, notes.entry(id).or_default(), actions);
+                        }
+                        // T179 slice 1 ports the matrix model, files, plots and command line; the
+                        // matrix window itself comes with the next slice.
+                        Some(Window::Matrix(_)) => {
+                            ui.label("Matrix windows are not shown in the app yet.");
                         }
                         None => {}
                     };

@@ -46,6 +46,9 @@ pub enum Command {
     /// Merge Graph Windows: copy graphs of a project into the cells of one new graph (Origin's
     /// merge_graph defaults), then write it as a figure and/or save the project with it.
     MergeGraphs(MergeGraphsArgs),
+    /// Matrices: make one, set its values by a formula, transpose, flip, rotate, expand or shrink
+    /// it, convert between worksheets and matrices, and plot heat maps and contour plots (T179).
+    Matrix(MatrixArgs),
 }
 
 /// `sheaf merge-graphs`: Graph > Merge Graph Windows without a window (graphing spec 15.11).
@@ -3246,4 +3249,313 @@ pub enum AnalyzeTool {
         #[arg(long)]
         in_place: bool,
     },
+}
+
+// ----- sheaf matrix ---------------------------------------------------------------------------
+
+#[derive(Args, Debug)]
+pub struct MatrixArgs {
+    #[command(subcommand)]
+    pub action: MatrixAction,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum MatrixAction {
+    /// Add a new matrix (optionally filled by a formula) to a project, which is made if needed.
+    New(NewArgs),
+    /// Convert worksheet columns (or XYZ columns on a regular grid) to a matrix.
+    Convert(Box<ConvertArgs>),
+    /// Change the size or the ranges of a matrix, or set its values by a formula in i, j, x and y.
+    Set(SetArgs),
+    /// Transpose, flip, rotate, expand or shrink a matrix.
+    Transform(TransformArgs),
+    /// Write a matrix as worksheet columns (direct, or three XYZ columns).
+    ToSheet(ToSheetArgs),
+    /// Statistics of the numbers in a matrix: n, missing, mean, sd, min, max, sum.
+    Stats(StatsArgs),
+    /// Plot a matrix or XYZ columns as a heat map or contour plot (PNG, SVG or PDF).
+    Plot(Box<PlotMatrixArgs>),
+}
+
+/// Which matrix of a project a command works on.
+#[derive(Args, Debug, Clone)]
+pub struct MatrixTarget {
+    /// The matrix window, for example MBook1 (default: the first one).
+    #[arg(long)]
+    pub matrix: Option<String>,
+    /// The sheet of the matrix, by name (default: its active sheet).
+    #[arg(long)]
+    pub sheet: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct NewArgs {
+    /// The project to write: an existing project gets the matrix added; .opj (with a companion
+    /// .opj.sheaf, because Origin files cannot hold matrices yet) or .sheaf.
+    #[arg(short, long)]
+    pub output: PathBuf,
+    /// Number of columns.
+    #[arg(long, default_value_t = 32)]
+    pub cols: usize,
+    /// Number of rows.
+    #[arg(long, default_value_t = 32)]
+    pub rows: usize,
+    /// X coordinate of the first and the last column, FROM:TO (default 1:10, as in Origin).
+    #[arg(long, value_name = "FROM:TO", allow_hyphen_values = true)]
+    pub x_range: Option<String>,
+    /// Y coordinate of the first and the last row, FROM:TO (default 1:10).
+    #[arg(long, value_name = "FROM:TO", allow_hyphen_values = true)]
+    pub y_range: Option<String>,
+    /// Fill the matrix from this formula in i (row), j (column), x and y, for example
+    /// "sin(x)*cos(y)".
+    #[arg(long)]
+    pub formula: Option<String>,
+    /// Long name of the matrix window.
+    #[arg(long)]
+    pub long_name: Option<String>,
+}
+
+/// Where the coordinates of a worksheet that is converted to or from a matrix are kept.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum LayoutArg {
+    /// No coordinates: columns and rows are numbered 1, 2, 3, ...
+    None,
+    /// X values across the columns (first data row or a label row); the Y values in the first
+    /// column with --coords-in-first-column.
+    XAcross,
+    /// Y values across the columns; the X values in the first column with --coords-in-first-column.
+    YAcross,
+}
+
+#[derive(Args, Debug)]
+pub struct ConvertArgs {
+    /// A data file, a .sheaf project or an Origin .opj project with the worksheet to convert.
+    pub input: PathBuf,
+    /// The project to write: the input's windows and the new matrix.
+    #[arg(short, long)]
+    pub output: PathBuf,
+    /// The workbook (default: the first one) and sheet (default: its active sheet).
+    #[arg(long)]
+    pub book: Option<String>,
+    #[arg(long)]
+    pub sheet: Option<String>,
+    /// The columns to convert, comma-separated names (default: all). With --xyz exactly the X, Y
+    /// and Z columns (default: the columns designated X, Y and Z, else the first three).
+    #[arg(short, long, value_delimiter = ',')]
+    pub columns: Vec<String>,
+    /// The columns are XYZ points on a regular grid (Origin's XYZ gridding for regular data), not
+    /// a table of Z values.
+    #[arg(long)]
+    pub xyz: bool,
+    /// Where the coordinates are (Direct conversion).
+    #[arg(long, value_enum, default_value_t = LayoutArg::None)]
+    pub layout: LayoutArg,
+    /// Where the coordinates across the columns are: none, row1 (the first data row), or
+    /// param:L / param:U / param:C (long name, units or comments row) or param:NAME (a parameter row).
+    #[arg(long, default_value = "none")]
+    pub labels: String,
+    /// The first column holds the other coordinate. (The import options own --first-column.)
+    #[arg(long)]
+    pub coords_in_first_column: bool,
+    /// How unevenly spaced the coordinates may be, in percent of the mean step (Origin: 5).
+    #[arg(long, default_value_t = 5.0)]
+    pub tolerance: f64,
+    /// Place the first and last coordinate on a straight line fitted through all of them.
+    #[arg(long)]
+    pub linear_fit: bool,
+    /// Keep rows and columns that hold no number (Origin trims them).
+    #[arg(long)]
+    pub no_trim: bool,
+    #[command(flatten)]
+    pub read: ReadOptions,
+}
+
+#[derive(Args, Debug)]
+pub struct SetArgs {
+    /// A .sheaf project (or .opj) that has a matrix.
+    pub project: PathBuf,
+    #[command(flatten)]
+    pub target: MatrixTarget,
+    /// The formula, in i (row, from 1), j (column, from 1), x and y (the cell's coordinates).
+    #[arg(long)]
+    pub formula: Option<String>,
+    /// New number of columns (the X range stays, so the spacing changes).
+    #[arg(long)]
+    pub cols: Option<usize>,
+    /// New number of rows.
+    #[arg(long)]
+    pub rows: Option<usize>,
+    /// New X range, FROM:TO.
+    #[arg(long, value_name = "FROM:TO", allow_hyphen_values = true)]
+    pub x_range: Option<String>,
+    /// New Y range, FROM:TO.
+    #[arg(long, value_name = "FROM:TO", allow_hyphen_values = true)]
+    pub y_range: Option<String>,
+    /// Write the result here instead of back to the project.
+    #[arg(short, long)]
+    pub output: Option<PathBuf>,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum TransformKind {
+    Transpose,
+    FlipHorizontal,
+    FlipVertical,
+    /// Quarter turn clockwise.
+    RotateCw,
+    /// Quarter turn counter-clockwise.
+    RotateCcw,
+    /// Half turn.
+    Rotate180,
+    /// More columns and rows by bilinear interpolation (--cols and --rows are the factors).
+    Expand,
+    /// Fewer columns and rows by averaging blocks (--cols and --rows are the factors).
+    Shrink,
+}
+
+#[derive(Args, Debug)]
+pub struct TransformArgs {
+    /// A .sheaf project (or .opj) that has a matrix.
+    pub project: PathBuf,
+    /// What to do.
+    #[arg(value_enum)]
+    pub op: TransformKind,
+    #[command(flatten)]
+    pub target: MatrixTarget,
+    /// Expand and shrink: the factor for the columns (Origin: 2).
+    #[arg(long, default_value_t = 2)]
+    pub cols: usize,
+    /// Expand and shrink: the factor for the rows (Origin: 2).
+    #[arg(long, default_value_t = 2)]
+    pub rows: usize,
+    /// Flip: mirror the X (horizontal) or Y (vertical) range too, so every value keeps its
+    /// coordinate.
+    #[arg(long)]
+    pub coordinates: bool,
+    /// Write the result here instead of back to the project.
+    #[arg(short, long)]
+    pub output: Option<PathBuf>,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ToSheetMethod {
+    /// A worksheet column per matrix column (per row with --layout y-across).
+    Direct,
+    /// Columns X, Y and Z with a row per matrix cell.
+    Xyz,
+}
+
+#[derive(Args, Debug)]
+pub struct ToSheetArgs {
+    /// A .sheaf project (or .opj) that has a matrix.
+    pub project: PathBuf,
+    #[command(flatten)]
+    pub target: MatrixTarget,
+    #[arg(long, value_enum, default_value_t = ToSheetMethod::Direct)]
+    pub method: ToSheetMethod,
+    /// Direct: write the coordinates in the first row and column (x-across, y-across) or not (none).
+    #[arg(long, value_enum, default_value_t = LayoutArg::None)]
+    pub layout: LayoutArg,
+    /// XYZ: let Y run in the inner loop with X fixed (default) or the other way round with this flag.
+    #[arg(long)]
+    pub y_const_first: bool,
+    /// XYZ: leave out the cells that hold no number.
+    #[arg(long)]
+    pub skip_missing: bool,
+    /// Also write the new worksheet as delimited text (.tsv or .txt gives tabs, else commas).
+    #[arg(long, value_name = "FILE")]
+    pub export: Option<PathBuf>,
+    /// Write the project with the new workbook here (default: back to the project, unless --export
+    /// is given).
+    #[arg(short, long)]
+    pub output: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+pub struct StatsArgs {
+    /// A .sheaf project (or .opj) that has a matrix.
+    pub project: PathBuf,
+    #[command(flatten)]
+    pub target: MatrixTarget,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum PaletteArg {
+    /// Blue, cyan, green, yellow, red.
+    Rainbow,
+    /// Blue, white, red.
+    BlueWhiteRed,
+    /// Black to white.
+    Gray,
+}
+
+#[derive(Args, Debug)]
+pub struct PlotMatrixArgs {
+    /// A .sheaf or .opj project with a matrix (or a data file or project with XYZ columns).
+    pub input: PathBuf,
+    /// The figure to write: .png, .svg or .pdf.
+    #[arg(short, long)]
+    pub output: PathBuf,
+    /// contour (colour fill with lines at the major levels), contour-lines (lines with labels) or
+    /// heatmap (a block per cell).
+    #[arg(short, long, default_value = "contour")]
+    pub template: String,
+    /// The matrix window (default: the first one) and its sheet.
+    #[arg(long)]
+    pub matrix: Option<String>,
+    #[arg(long)]
+    pub sheet: Option<String>,
+    /// Plot XYZ worksheet columns instead of a matrix: X,Y,Z. XYZ points on a regular grid are
+    /// used as the grid; scattered points are triangulated (contour plots only). The default when
+    /// the project has no matrix: the columns designated X, Y, Z, else the first three.
+    #[arg(long, value_delimiter = ',', value_name = "X,Y,Z")]
+    pub xyz: Vec<String>,
+    /// For XYZ columns: the workbook (default: the first one).
+    #[arg(long)]
+    pub book: Option<String>,
+    /// Number of major levels (steps of the colour scale).
+    #[arg(long)]
+    pub major: Option<u32>,
+    /// Number of bands in each major step.
+    #[arg(long)]
+    pub minor: Option<u32>,
+    /// Lowest and highest level (default: the data range rounded outwards as Origin does).
+    #[arg(long, allow_hyphen_values = true)]
+    pub z_min: Option<f64>,
+    #[arg(long, allow_hyphen_values = true)]
+    pub z_max: Option<f64>,
+    /// Draw level lines / leave them out.
+    #[arg(long, conflicts_with = "no_lines")]
+    pub lines: bool,
+    #[arg(long)]
+    pub no_lines: bool,
+    /// Write the level on the lines.
+    #[arg(long)]
+    pub labels: bool,
+    /// Leave out the colour scale.
+    #[arg(long)]
+    pub no_scale: bool,
+    /// Title of the colour scale (default: the Z label of the matrix).
+    #[arg(long)]
+    pub scale_title: Option<String>,
+    #[arg(long, value_enum)]
+    pub palette: Option<PaletteArg>,
+    /// Axis titles (default: the X and Y labels of the matrix).
+    #[arg(long)]
+    pub x_title: Option<String>,
+    #[arg(long)]
+    pub y_title: Option<String>,
+    /// Page size in inches (default 6.4 x 4.8).
+    #[arg(long)]
+    pub width: Option<f64>,
+    #[arg(long)]
+    pub height: Option<f64>,
+    /// Resolution of PNG output in dots per inch.
+    #[arg(long, default_value_t = 300.0)]
+    pub dpi: f64,
+    /// Also save the project with the graph here.
+    #[arg(long, value_name = "PROJECT")]
+    pub save: Option<PathBuf>,
+    #[command(flatten)]
+    pub read: ReadOptions,
 }

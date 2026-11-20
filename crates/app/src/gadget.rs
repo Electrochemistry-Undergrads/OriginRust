@@ -417,6 +417,23 @@ pub fn plot_xy(project: &Project, graph: WindowId, layer: usize, plot: usize) ->
     Some((x, y))
 }
 
+/// The X and Y values a gadget measures (T209): of the plot's rows, those inside its row range that
+/// pass its worksheet filters and are not masked in X or Y, in order (the rows the analysis tools
+/// read, and the points the plot's line joins). The Data Reader keeps [`plot_xy`] and its row numbers.
+pub fn gadget_xy(project: &Project, graph: WindowId, layer: usize, plot: usize) -> Option<(Vec<f64>, Vec<f64>)> {
+    let p = project.graph(graph)?.layers.get(layer)?.plots.get(plot)?;
+    let (x, y) = plot_xy(project, graph, layer, plot)?;
+    let filters = project.plot_row_filters(p);
+    let (start, end) = sheaf_core::stack::row_range(p, x.len().min(y.len()));
+    let masked = |id: Option<sheaf_core::ColumnId>, r: usize| {
+        id.and_then(|id| project.column(id)).and_then(|c| c.active_mask()).is_some_and(|m| m.contains(&r))
+    };
+    let keep: Vec<usize> = (start..end)
+        .filter(|&r| filters.iter().all(|f| f.passes(r)) && !masked(Some(p.y), r) && !masked(p.x, r))
+        .collect();
+    Some((keep.iter().map(|&r| x[r]).collect(), keep.iter().map(|&r| y[r]).collect()))
+}
+
 /// The first unbroken run of rows whose X lies inside the range, 1-based inclusive (the rule of
 /// the analysis tools' "X from .. to").
 pub fn rows_in(x: &[f64], x0: f64, x1: f64) -> Option<(usize, usize)> {
@@ -431,7 +448,7 @@ impl Integrator {
     /// Intersect gadget: where the gadget's plot crosses each other visible plot of numbers of its layer,
     /// with X inside the range, sorted by X.
     pub fn crossings(&self, project: &Project, graph: WindowId) -> Vec<sheaf_calc::curves::Intersection> {
-        let Some((ax, ay)) = plot_xy(project, graph, self.layer, self.plot) else { return Vec::new() };
+        let Some((ax, ay)) = gadget_xy(project, graph, self.layer, self.plot) else { return Vec::new() };
         let count = project.graph(graph).and_then(|g| g.layers.get(self.layer)).map_or(0, |l| l.plots.len());
         let visible = |i: usize| {
             project
@@ -443,7 +460,7 @@ impl Integrator {
         let (lo, hi) = (self.x0.min(self.x1), self.x0.max(self.x1));
         let mut out: Vec<sheaf_calc::curves::Intersection> = (0..count)
             .filter(|&i| i != self.plot && visible(i))
-            .filter_map(|i| plot_xy(project, graph, self.layer, i))
+            .filter_map(|i| gadget_xy(project, graph, self.layer, i))
             .flat_map(|(bx, by)| sheaf_calc::curves::intersections(&ax, &ay, &bx, &by, false))
             .filter(|p| p.x >= lo && p.x <= hi)
             .collect();
@@ -535,7 +552,9 @@ impl Integrator {
         let xc = self.cursor_x();
         (0..l.plots.len())
             .filter(|&i| l.plots[i].visible)
-            .filter_map(|i| plot_xy(project, graph, self.layer, i).and_then(|(x, y)| y_at(&x, &y, xc)).map(|v| (i, v)))
+            .filter_map(|i| {
+                gadget_xy(project, graph, self.layer, i).and_then(|(x, y)| y_at(&x, &y, xc)).map(|v| (i, v))
+            })
             .collect()
     }
 
@@ -638,7 +657,7 @@ impl Integrator {
         let (x, y) = if self.kind == GadgetKind::Integrate2d {
             (Vec::new(), Vec::new())
         } else {
-            plot_xy(project, graph, self.layer, self.plot)?
+            gadget_xy(project, graph, self.layer, self.plot)?
         };
         let f = geom.frame;
         let page_x = |v: f64| geom.data_to_page(placement.x(v), 0.0).0;

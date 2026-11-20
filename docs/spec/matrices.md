@@ -329,6 +329,17 @@ each matrix as not written).
   also `sheaf matrix plot --template grayscale`.
 - This is Sheaf's reading of Origin's Gray Scale Map; Origin's own levels and layout are not measured.
 
+## 7h. File > Import > Image (T204, 2026-11-20, not measured)
+
+- File > Import > Image... reads a PNG, JPEG, GIF or BMP picture into a new matrix book named after
+  the file, as one undo step ("Import Image"). It works with no window open or with a workbook.
+- Each pixel becomes its luminance, 0 (black) to 255 (white), from the `image` crate's Rec. 709
+  weights. The first matrix row is the picture's top row. The X and Y ranges are the default 1..cols
+  and 1..rows.
+- **Sheaf choice:** Origin also imports pictures into matrix books but keeps the colours (RGB image
+  mode). Sheaf keeps only the gray levels, so the matrix tools, heat maps and contours work on them
+  directly. TIFF and other formats, colour channels and the Image menu are left.
+
 ## 8. What was not verified, and what is left
 
 - Not run in Origin: `mdim` on a matrix that holds data; shrink with missing values; `w2m` options `lr` on accepted

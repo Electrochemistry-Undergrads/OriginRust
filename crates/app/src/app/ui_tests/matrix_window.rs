@@ -226,3 +226,30 @@ fn a_binary_2d_array_is_imported_into_a_matrix_book_named_after_the_file() {
     assert_eq!(project(&h).matrix_books().count(), 1);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn an_imported_picture_becomes_a_matrix_of_gray_levels() {
+    let dir = std::env::temp_dir().join(format!("sheaf-import-image-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("photo.png");
+    // 3 x 2 pixels: a gray ramp on top, white below.
+    let rgb: Vec<u8> = [0u8, 100, 200, 255, 255, 255].iter().flat_map(|&v| [v, v, v]).collect();
+    let mut bytes = Vec::new();
+    let enc = image::codecs::png::PngEncoder::new(&mut bytes);
+    image::ImageEncoder::write_image(enc, &rgb, 3, 2, image::ExtendedColorType::Rgb8).unwrap();
+    std::fs::write(&path, bytes).unwrap();
+    let mut h = start(Vec::new());
+    crate::matrix_view::import_image(&mut h.state_mut().doc, &path).unwrap();
+    settle(&mut h);
+    assert_eq!(h.state().doc.undo_label(), Some("Import Image"));
+    let book = project(&h).matrix_books().next().expect("a matrix book");
+    assert_eq!(book.long_name, "photo");
+    let s = &book.sheets[0];
+    assert_eq!((s.cols, s.rows), (3, 2));
+    assert_eq!((s.value(0, 0), s.value(0, 1), s.value(0, 2), s.value(1, 0)), (0.0, 100.0, 200.0, 255.0));
+    let not_a_picture = dir.join("notes.png");
+    std::fs::write(&not_a_picture, b"hello").unwrap();
+    assert!(crate::matrix_view::import_image(&mut h.state_mut().doc, &not_a_picture).is_err());
+    assert_eq!(project(&h).matrix_books().count(), 1);
+    let _ = std::fs::remove_dir_all(&dir);
+}

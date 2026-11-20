@@ -313,6 +313,8 @@ pub enum Action {
     NewMatrix,
     /// File > Import > Binary 2D Array...: choose a file, then its options window (T199).
     ImportBinary2d,
+    /// File > Import > Image...: choose a picture; it becomes a matrix book of gray levels (T204).
+    ImportImage,
     /// A typed matrix cell (T192): `None` clears it (missing). One undo step.
     SetMatrixCell {
         id: WindowId,

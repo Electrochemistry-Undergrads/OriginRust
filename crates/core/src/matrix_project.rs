@@ -1,6 +1,7 @@
 //! Matrix operations on a [`Project`]: each one changes or adds a window, so that
 //! [`crate::history::Document::edit`] makes it one undo step, as for workbooks.
 
+use crate::column::{ColumnData, Designation};
 use crate::graph::FieldSource;
 use crate::ids::{ColumnId, WindowId};
 use crate::matrix::{FlipDirection, MatrixError, MatrixSheet, MatrixStats, Rotation};
@@ -278,6 +279,47 @@ impl Project {
         let name = b.name.clone();
         let what = if inverse { "2D IFFT" } else { "2D FFT" };
         Ok(self.adopt_matrix_book(&format!("{what} of {name}"), sheets))
+    }
+
+    /// Plot > Profile (T234): the cut of sheet `sheet` of `book` along row `index` (`horizontal`, Z
+    /// against X) or column `index` (Z against Y), 0-based, as a new workbook of two columns and a
+    /// line graph of it. Returns (workbook, graph).
+    pub fn matrix_profile(
+        &mut self,
+        book: WindowId,
+        sheet: usize,
+        horizontal: bool,
+        index: usize,
+    ) -> Result<(WindowId, WindowId), ProjectError> {
+        let s = self.matrix_sheet(book, sheet)?.clone();
+        let (n, limit) = if horizontal { (s.cols, s.rows) } else { (s.rows, s.cols) };
+        if index >= limit {
+            return Err(crate::matrix::MatrixError::Invalid(format!(
+                "the matrix has {limit} {}; there is no number {}",
+                if horizontal { "rows" } else { "columns" },
+                index + 1
+            ))
+            .into());
+        }
+        let coords: Vec<f64> = (0..n).map(|k| if horizontal { s.x_at(k) } else { s.y_at(k) }).collect();
+        let z: Vec<f64> = (0..n).map(|k| if horizontal { s.value(index, k) } else { s.value(k, index) }).collect();
+        let name = self.matrix_book(book).map(|b| b.name.clone()).unwrap_or_default();
+        let what = if horizontal { format!("row {}", index + 1) } else { format!("column {}", index + 1) };
+        let wb = self.add_workbook(&format!("Profile of {name} at {what}"));
+        let xc = self.add_column(wb, 0, Designation::X, ColumnData::numeric(coords))?;
+        let zc = self.add_column(wb, 0, Designation::Y, ColumnData::numeric(z))?;
+        let (axis, axis_label) = if horizontal { (&s.x, "X") } else { (&s.y, "Y") };
+        if let Some(c) = self.column_mut(xc) {
+            c.long_name = if axis.long_name.is_empty() { axis_label.to_string() } else { axis.long_name.clone() };
+            c.units = axis.units.clone();
+        }
+        if let Some(c) = self.column_mut(zc) {
+            c.long_name = if s.z.long_name.is_empty() { "Z".to_string() } else { s.z.long_name.clone() };
+            c.units = s.z.units.clone();
+        }
+        let g = self.add_graph(crate::template::Template::Line);
+        self.add_plot(g, 0, zc)?;
+        Ok((wb, g))
     }
 
     /// Writes a matrix sheet to a new workbook and returns its id.

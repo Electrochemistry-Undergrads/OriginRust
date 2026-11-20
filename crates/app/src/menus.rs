@@ -240,6 +240,10 @@ pub enum Cmd {
     },
     /// Plot > Contour/Heat Map > Ternary Contour of four selected columns A, B, C, Z (T226).
     TernaryContour,
+    /// Plot > Profile > Contour Profiles / Image Profiles (T234).
+    Profile {
+        contour: bool,
+    },
     /// The Matrix menu of a matrix window (T192 slice 3).
     Matrix(MatrixCmd),
     /// The Image menu on the active matrix (T207).
@@ -971,7 +975,7 @@ fn base(kind: WindowKind) -> Vec<Menu> {
         Matrix => vec![
             m("&File", file_menu(kind)),
             m("&View", view_menu(kind)),
-            m("&Plot", vec![sub("Contour/&Heat Map", field_plot_items())]),
+            m("&Plot", vec![sub("Contour/&Heat Map", field_plot_items()), profile_menu()]),
             m("&Matrix", matrix_menu()),
             m("&Image", image_menu()),
             m(
@@ -1021,6 +1025,18 @@ fn field_plot_items() -> Vec<Entry> {
         item("Gray Scale Map", Cmd::PlotField(FieldTemplate::GrayScale)),
         item("Heat Map", Cmd::PlotField(FieldTemplate::HeatMap)),
     ]
+}
+
+/// Plot > Profile (T234): a row or column cut of the active matrix, or of the matrix that the active
+/// graph's contour shows.
+fn profile_menu() -> Entry {
+    sub(
+        "Pro&file",
+        vec![
+            item("Contour Profiles", Cmd::Profile { contour: true }),
+            item("Image Profiles", Cmd::Profile { contour: false }),
+        ],
+    )
 }
 
 /// The Matrix menu of a matrix window (T192 slice 3).
@@ -1614,7 +1630,7 @@ fn plot_menu() -> Vec<Entry> {
             ]
             .concat(),
         ),
-        grey_sub("Pro&file", &["Contour Profiles", "Image Profiles"]),
+        profile_menu(),
         sub(
             "Specialize&d",
             [
@@ -3256,6 +3272,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ImportBinary2d => Action::ImportBinary2d,
         Cmd::ImportImage => Action::ImportImage,
         Cmd::NewFunctionPlot => Action::NewFunctionPlot,
+        Cmd::Profile { contour } => match (c.kind, c.active, c.graph) {
+            (WindowKind::Matrix, Some(id), _) => Action::Profile { book: Some(id), graph: None },
+            (WindowKind::Graph, _, Some(g)) if *contour => Action::Profile { book: None, graph: Some(g) },
+            _ if *contour => return Err("Activate a matrix window or a contour graph of a matrix first"),
+            _ => return Err("Activate a matrix window first"),
+        },
         Cmd::TernaryContour => {
             let [a, b, c3, z] = c.selected[..] else {
                 return Err("Select the A, B and C composition columns and the Z column (four columns) first");

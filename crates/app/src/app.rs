@@ -2306,6 +2306,27 @@ impl SheafApp {
                 self.function_graph = Some(crate::dialogs::function_graph::FunctionGraphDialog::new(graph, layer));
                 self.function_graph_new = false;
             }
+            Action::Profile { book, graph } => {
+                use crate::dialogs::matrix_ops::{Form, MatrixOpDialog};
+                // The matrix: the given book, or the one that the graph's contour layer shows.
+                let target = book.map(|b| (b, None)).or_else(|| {
+                    let g = self.doc.project().graph(graph?)?;
+                    g.layers.iter().find_map(|l| match l.field.as_ref()?.source {
+                        sheaf_core::graph::FieldSource::Matrix { window, sheet } => Some((window, Some(sheet))),
+                        _ => None,
+                    })
+                });
+                match target {
+                    Some((b, sheet)) => {
+                        self.matrix_dialog =
+                            MatrixOpDialog::new(&self.doc, b, Form::Profile { horizontal: true, index: 1 });
+                        if let (Some(d), Some(s)) = (self.matrix_dialog.as_mut(), sheet) {
+                            d.sheet = s;
+                        }
+                    }
+                    None => self.warn("This graph shows no matrix; a profile needs a matrix contour or image"),
+                }
+            }
             Action::TernaryContour { a, b, c, z } => {
                 match self.doc.edit("New graph", |p| p.plot_ternary_contour(a, b, c, z)) {
                     Ok(graph) => self.focus(graph),

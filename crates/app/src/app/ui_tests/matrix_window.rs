@@ -422,3 +422,41 @@ fn ternary_contour_plots_four_selected_columns_in_a_ternary_layer() {
     let g = project(&h).graphs().next().expect("a ternary contour graph");
     assert!(g.layers[0].coords.ternary().is_some() && g.layers[0].field.is_some());
 }
+
+#[test]
+fn profiles_cut_a_row_or_column_into_a_workbook_and_line_graph() {
+    use sheaf_core::matrix_project::MatrixOp;
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let mut id = sheaf_core::WindowId(0);
+    h.state_mut().doc.apply("Matrix", |p| {
+        id = p.add_matrix_book("");
+        p.apply_matrix_op(id, 0, &MatrixOp::SetDimensions { rows: 3, cols: 4, ranges: Some((0.0, 3.0, 10.0, 30.0)) })
+            .unwrap();
+        p.apply_matrix_op(id, 0, &MatrixOp::SetValues("i*10+j".into())).unwrap();
+    });
+    settle(&mut h);
+    // Image Profiles opens on the active matrix; OK cuts row 1.
+    h.state_mut().apply(Action::Profile { book: Some(id), graph: None }, &ctx);
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Profile"));
+    let book = project(&h).workbooks().next().expect("the profile workbook").clone();
+    let cols = &book.sheet().columns;
+    assert_eq!(cols[0].numeric().unwrap(), [0.0, 1.0, 2.0, 3.0], "X of each column");
+    assert_eq!(cols[1].numeric().unwrap(), [11.0, 12.0, 13.0, 14.0], "row 1's values");
+    let g = project(&h).graphs().next().expect("a line graph");
+    assert_eq!(g.layers[0].plots[0].y, cols[1].id);
+    // A column cut directly, and a cut past the edge is refused.
+    let doc = &mut h.state_mut().doc;
+    doc.edit("Profile", |p| p.matrix_profile(id, 0, false, 3)).unwrap();
+    assert!(doc.edit("Profile", |p| p.matrix_profile(id, 0, true, 3)).is_err());
+    let b2 = project(&h).workbooks().nth(1).unwrap().clone();
+    assert_eq!(b2.sheet().columns[0].numeric().unwrap(), [10.0, 20.0, 30.0], "Y of each row");
+    assert_eq!(b2.sheet().columns[1].numeric().unwrap(), [14.0, 24.0, 34.0]);
+    // Contour Profiles of a graph that shows the matrix opens on that matrix.
+    let graph = h.state_mut().doc.edit("Heat", |p| p.plot_matrix(sheaf_core::template::FieldTemplate::HeatMap, id, 0));
+    h.state_mut().apply(Action::Profile { book: None, graph: Some(graph.unwrap()) }, &ctx);
+    settle(&mut h);
+    assert!(h.state().matrix_dialog.as_ref().is_some_and(|d| d.book == id), "the profile window is for that matrix");
+}

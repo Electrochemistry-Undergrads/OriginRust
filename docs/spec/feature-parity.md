@@ -374,7 +374,7 @@ Cross-cutting findings:
 | Batch export and naming | Export all, overwrite rules | one graph at a time | ◐ | no folder export, name templates | P1 |
 | Export preview | Preview button | Export Graphs preview pane with Auto Preview (T05) | ◐ | no Graph tab in the preview | P1 |
 | Export dialog themes | Dialog Theme flyout | named export settings, custom default/reset, last successful export, Save/Save As/Delete with isolated persistence (T05; graphing 9.8) | ◐ | no Compare/Generate Script, graph-specific settings or `.ois` interchange | P1 |
-| Send to PowerPoint or Word | Graph menu | Send Graphs to PowerPoint... on the graph page writes a `.pptx` (one 16:9 slide per graph, the graph as a PNG; active graph or all), `sheaf export -o slides.pptx` (graphing 17.11, T232) | ◐ | a file, not a running PowerPoint; no slide template or title options; no Send to Word | P2 |
+| Send to PowerPoint or Word | Graph menu | Send Graphs to PowerPoint... on the graph page writes a `.pptx` (one 16:9 slide per graph, the graph as a PNG; active graph or all) or, with its Word choice, a `.docx` (a graph per page with its name); `sheaf export -o slides.pptx` or `graphs.docx` (graphing 17.11, T232, T242) | ◐ | files, not a running PowerPoint or Word; no slide template or title options | P2 |
 
 ## 14 Dialog details
 

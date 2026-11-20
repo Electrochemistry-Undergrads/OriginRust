@@ -9,6 +9,7 @@ pub mod batch;
 pub mod bin2d;
 pub mod chi;
 pub mod chi_bin;
+pub mod docx;
 mod error;
 pub mod excel;
 pub mod export;

@@ -3923,8 +3923,16 @@ page at 300 dpi (Export Graphs' default) made as large as fits inside a quarter-
 centred, named after the graph. The command line does the same with `sheaf export project -o slides.pptx`
 (`--graph` repeated or `--all-graphs`; `--dpi`, `--image-width`, `--image-height` and `--margin` apply to the
 pictures). Checked by opening the file in PowerPoint (Microsoft 365, through COM: 2 slides, 960 x 540 pt, one
-picture each, no repair prompt). Origin's slide template, placement and title options and Send to Word are not
-offered.
+picture each, no repair prompt). Origin's slide template, placement and title options are not offered.
+
+**Word (T242, 2026-11-20).** The same window has **PowerPoint (.pptx)** (the default) and **Word (.docx)**; with
+Word, OK asks for a `.docx` (Graphs.docx) and writes one graph per page (`sheaf_io::docx`): a US Letter page with
+one-inch margins, the graph's 300 dpi PNG as an inline picture as large as fits the 6.5 in text width (and 8.5 in
+of height, leaving room for the caption), centred, with the graph's name in a centred paragraph under it and a
+page break before each graph but the first. The page menu keeps Origin's one item; Origin's own "Send Graphs to
+Word" (later versions) was not compared. `sheaf export project -o graphs.docx` does the same (`--graph` repeated
+or `--all-graphs`). Checked by opening the file in Word (Microsoft 365, through COM: 2 pages, 2 inline pictures
+468 pt wide, the captions Graph1 and Graph2).
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 
 Measured on 2026-11-13 by opening Origin's Plot Details on a line plot (`tools/origin-ref/origin-dialog.ps1`,

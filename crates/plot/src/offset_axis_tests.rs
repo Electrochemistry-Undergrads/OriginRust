@@ -285,3 +285,54 @@ fn an_axis_at_a_position_stands_where_the_other_axis_has_that_value() {
         other => panic!("a click on the moved line selects the Y axis: {other:?}"),
     }
 }
+
+/// The filled paths without a stroke, as their first point (the tip of an arrowhead).
+fn filled_tips(items: &[scene::Item]) -> Vec<(f64, f64)> {
+    items
+        .iter()
+        .filter_map(|i| match i {
+            scene::Item::Path { d, fill: Some(_), stroke: None } => {
+                let nums: Vec<f64> = d
+                    .split(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-' || c == 'e'))
+                    .filter_map(|t| t.parse().ok())
+                    .collect();
+                (nums.len() >= 6 && d.ends_with('Z')).then(|| (nums[0], nums[1]))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn axis_arrows_point_out_of_the_chosen_ends_in_the_line_colour() {
+    // T245: Arrow at Begin / Arrow at End.
+    let (x, shape) = super::tests::golden_data();
+    let (mut p, g) = super::tests::project(Template::Scatter, x, vec![shape(1.0)]);
+    let base = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let f = geoms(&p, g)[0].frame;
+    {
+        let l = &mut p.graph_mut(g).unwrap().layers[0];
+        l.x_axis.arrow_end = true;
+        l.y_axis.arrow_end = true;
+        l.y_axis.arrow_begin = true;
+    }
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let tips = filled_tips(&scene.layers[0].overlay);
+    let before = filled_tips(&base.layers[0].overlay);
+    assert_eq!(tips.len(), before.len() + 3, "{tips:?}");
+    let (len, _) = crate::layout::arrow_size(p.graph(g).unwrap().layers[0].x_axis.line_width_pt);
+    let near = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() < 1e-2 && (a.1 - b.1).abs() < 1e-2;
+    let has = |t: (f64, f64)| tips.iter().any(|&p| near(p, t));
+    assert!(has((f.x + f.w + len, f.y + f.h)), "X end arrow right of the frame: {tips:?} {f:?}");
+    assert!(has((f.x, f.y - len)), "Y end arrow above the frame: {tips:?}");
+    assert!(has((f.x, f.y + f.h + len)), "Y begin arrow below the frame: {tips:?}");
+    assert!(!has((f.x - len, f.y + f.h)), "no X begin arrow: {tips:?}");
+    // The arrows move with the axis.
+    p.graph_mut(g).unwrap().layers[0].x_axis.offset_pct = -50.0;
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let f = geoms(&p, g)[0].frame;
+    let tips = filled_tips(&scene.layers[0].overlay);
+    assert!(tips.iter().any(|&t| near(t, (f.x + f.w + len, f.y + 0.5 * f.h))), "{tips:?}");
+    assert_eq!(crate::layout::arrow_size(0.5), (6.0, 2.0), "small lines get the smallest head");
+    assert_eq!(crate::layout::arrow_size(2.0), (10.0, 3.5));
+}

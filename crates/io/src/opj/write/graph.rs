@@ -1245,6 +1245,11 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         );
     }
     for (name, axis) in [("X", &layer.x_axis), ("Y", &layer.y_axis)] {
+        if axis.arrow_begin || axis.arrow_end {
+            notes.push(format!(
+                "the arrows at the ends of the {name} axis line were not written (the .opj.sheaf companion keeps them)"
+            ));
+        }
         if axis.at_position.is_some() {
             notes.push(format!(
                 "the {name} axis' position at a value of the other axis (At Position =) was not written; the axis reopens at the frame (the .opj.sheaf companion keeps it)"

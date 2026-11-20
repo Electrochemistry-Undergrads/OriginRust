@@ -1028,11 +1028,13 @@ fn layer_scene(
     draw_additional_lines(out, xa, ya, geom, xp.line, yp.line);
     let start = out.len();
     draw_ticks(out, xa, &geom.x, f, true, xp.line);
+    draw_axis_arrows(out, xa, f, true, xp.line);
     if xa.side != AxisSide::Hidden {
         rec(objects, out, start, ObjectKind::XAxis, &[x_line]);
     }
     let start = out.len();
     draw_ticks(out, ya, &geom.y, f, false, yp.line);
+    draw_axis_arrows(out, ya, f, false, yp.line);
     if ya.side != AxisSide::Hidden {
         rec(objects, out, start, ObjectKind::YAxis, &[y_line]);
     }
@@ -1312,6 +1314,50 @@ const BREAK_MARK_PT: f64 = 8.0;
 
 /// Draws the axis lines of a layer: each shown axis on its own edge and, with `show_opposite`,
 /// on the edge across. `xc` and `yc` are the axes' line colors.
+/// Length and half width in points of the arrowhead of an axis line `width` points thick (T245): 5 and
+/// 1.75 times the width, at least 6 and 2 points. Sheaf's own sizes; Origin's are not measured.
+pub(crate) fn arrow_size(width: f64) -> (f64, f64) {
+    let w = if width.is_finite() { width.max(0.0) } else { 0.0 };
+    ((5.0 * w).max(6.0), (1.75 * w).max(2.0))
+}
+
+/// Arrow at Begin / Arrow at End (T245): a filled arrowhead whose base sits on the chosen end of the
+/// axis line (left or bottom is the beginning, right or top the end, as the page shows them) and whose
+/// tip points outward, in the line's colour.
+fn draw_axis_arrows(out: &mut Vec<Item>, axis: &Axis, f: Rect, horizontal: bool, color: Color) {
+    if axis.side == AxisSide::Hidden || !(axis.arrow_begin || axis.arrow_end) {
+        return;
+    }
+    let (len, half) = arrow_size(axis.line_width_pt);
+    let head = |out: &mut Vec<Item>, base: (f64, f64), dir: (f64, f64)| {
+        let tip = (base.0 + dir.0 * len, base.1 + dir.1 * len);
+        let n = (-dir.1 * half, dir.0 * half);
+        let mut d = String::new();
+        move_to(&mut d, tip.0, tip.1);
+        line_to(&mut d, base.0 + n.0, base.1 + n.1);
+        line_to(&mut d, base.0 - n.0, base.1 - n.1);
+        d.push('Z');
+        out.push(Item::Path { d, fill: Some(color), stroke: None });
+    };
+    if horizontal {
+        let y = crate::axis_offset::x_line_y(axis, f);
+        if axis.arrow_begin {
+            head(out, (f.x, y), (-1.0, 0.0));
+        }
+        if axis.arrow_end {
+            head(out, (f.x + f.w, y), (1.0, 0.0));
+        }
+    } else {
+        let x = crate::axis_offset::y_line_x(axis, f);
+        if axis.arrow_begin {
+            head(out, (x, f.y + f.h), (0.0, 1.0));
+        }
+        if axis.arrow_end {
+            head(out, (x, f.y), (0.0, -1.0));
+        }
+    }
+}
+
 fn draw_axis_lines(
     out: &mut Vec<Item>,
     xa: &Axis,

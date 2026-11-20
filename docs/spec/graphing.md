@@ -3046,6 +3046,16 @@ Origin's documented facts (documentation only, **not measured**; no Origin was a
   `grouped-box.svg`, `grouped-columns.svg`), `crates/app/src/app/ui_tests/grouped_indexed.rs`,
   `crates/cli/tests/grouped_indexed.rs`, `crates/io/src/opj/write/graph_feature_tests.rs`.
 
+**Arrow at Begin / Arrow at End (T245, not measured).** The Line and Ticks tab's **Arrow** row has
+**Arrow at Begin** and **Arrow at End** (`Axis::arrow_begin`, `arrow_end`). A filled arrowhead in
+the axis line's colour sits with its base on that end of the axis line and its tip outward: the
+beginning is the left end of an X axis and the bottom end of a Y axis, the end is the right or top
+end, as the page shows them (a reversed axis keeps its arrows on the page ends). The head is 5 times
+the line width long and 3.5 times wide (at least 6 by 4 points), Sheaf's own sizes. It moves with
+the axis line (`% From` offsets and At Position =), belongs to the axis' click area, and is drawn on
+the main side only. The `.opj` writer names it; the companion keeps it. Test:
+`axis_arrows_point_out_of_the_chosen_ends_in_the_line_colour` (`crates/plot/src/offset_axis_tests.rs`).
+
 **Leftovers:** Origin's dialog and data forms, raw-data bar statistics and the other error-bar statistics (CI, percentile
 ranges, MAD), stacking, two-row table tick labels, more than two group levels, Grouped Scatter, panels or pages split by a
 group, themes (half box, violin, ...), colour indexed by the main group, and a measurement of all of it in Origin 2016.

@@ -696,6 +696,13 @@ fn line_and_ticks_tab(ui: &mut egui::Ui, axis: &mut Axis, vertical: bool, id: &s
                 ui.label("Thickness");
                 ui.add(DragValue::new(&mut axis.line_width_pt).range(0.0..=10.0).speed(0.05).suffix(" pt"));
                 ui.end_row();
+                // T245: Origin's Arrow at Begin / Arrow at End.
+                ui.label("Arrow");
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut axis.arrow_begin, "Arrow at Begin");
+                    ui.checkbox(&mut axis.arrow_end, "Arrow at End");
+                });
+                ui.end_row();
                 ui.label("Axis Position");
                 let (normal, opposite) = if vertical { ("Left", "Right") } else { ("Bottom", "Top") };
                 const AT: &str = "At Position =";

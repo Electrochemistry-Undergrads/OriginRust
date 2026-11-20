@@ -94,6 +94,8 @@ pub enum MatrixCmd {
     Expand,
     Shrink,
     ToWorksheet,
+    /// Analysis > Mathematics > Inverse (T193).
+    Inverse,
 }
 
 /// What the graph Edit menu's clipboard items do (T149).
@@ -879,6 +881,7 @@ fn base(kind: WindowKind) -> Vec<Menu> {
             m("&View", view_menu(kind)),
             m("&Plot", vec![sub("Contour/&Heat Map", field_plot_items())]),
             m("&Matrix", matrix_menu()),
+            m("&Analysis", vec![sub("&Mathematics", vec![item("&Inverse...", Cmd::Matrix(MatrixCmd::Inverse))])]),
             m("&Tools", tools_menu()),
             m("&Window", window_menu(kind)),
             m("&Help", help_menu()),
@@ -1725,7 +1728,7 @@ fn analysis_menu() -> Vec<Entry> {
                 item("XYZ Surface Area...", Cmd::Analyze(AnalysisKind::XyzArea)),
                 item("Median Filter...", Cmd::Analyze(AnalysisKind::MedianFilter)),
                 grey("Special Filter..."),
-                grey("Inverse..."),
+                item("Inverse...", Cmd::Matrix(MatrixCmd::Inverse)),
             ],
         ),
         sub(

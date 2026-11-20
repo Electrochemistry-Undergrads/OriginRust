@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **119 greyed items: 95 in the menu bar, 1 on the toolbars, 23 in context menus.**
+original inventory baseline. This is not a new runtime audit. **118 greyed items: 94 in the menu bar, 1 on the toolbars, 23 in context menus.**
 
 ## How to read and keep this file
 
@@ -80,13 +80,13 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B11` | 0 |
 | `B12` | 1 |
 | `B13` | 2 |
-| `B14` | 35 |
+| `B14` | 34 |
 | `B15` | 1 |
 | `B16` | 15 |
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 12 items, backlog packages (`B`) 87, not planned (`N`) 20.
+Briefs (`T`) hold 12 items, backlog packages (`B`) 86, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -126,7 +126,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B16` Worksheet Script...
 
 ### Analysis
-- `B14` Mathematics: Special Filter... · Inverse...
+- `B14` Mathematics: Special Filter...
 - `B14` Signal Processing > FFT: 2D FFT... · 2D IFFT...
 
 ### Image

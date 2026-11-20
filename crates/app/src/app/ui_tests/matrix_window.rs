@@ -137,3 +137,34 @@ fn worksheet_convert_to_matrix_direct_and_xyz_gridding_make_matrix_books() {
     assert_eq!((m.cols, m.rows), (2, 6));
     assert_eq!(m.value(5, 1), 20.0);
 }
+
+#[test]
+fn analysis_mathematics_inverse_writes_the_inverse_to_a_new_matrix_book() {
+    use sheaf_core::matrix_project::MatrixOp;
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let mut id = sheaf_core::WindowId(0);
+    h.state_mut().doc.apply("Matrix", |p| {
+        id = p.add_matrix_book("");
+        p.apply_matrix_op(id, 0, &MatrixOp::SetDimensions { rows: 2, cols: 2, ranges: None }).unwrap();
+        p.apply_matrix_op(id, 0, &MatrixOp::SetValues("i==j ? 2 : 1".into())).unwrap();
+    });
+    settle(&mut h);
+    // The menu item is in the matrix bar's Analysis menu.
+    let analysis = menus::bar(menus::WindowKind::Matrix).iter().find(|m| m.label == "&Analysis").expect("Analysis");
+    let has_inverse = analysis.entries.iter().any(|e| match e {
+        menus::Entry::Submenu(s) => s.entries.iter().any(
+            |e| matches!(e, menus::Entry::Item(i) if i.cmd == Some(menus::Cmd::Matrix(menus::MatrixCmd::Inverse))),
+        ),
+        _ => false,
+    });
+    assert!(has_inverse, "Analysis > Mathematics > Inverse...");
+    h.state_mut().apply(Action::MatrixCmd { id, cmd: menus::MatrixCmd::Inverse }, &ctx);
+    settle(&mut h);
+    assert_eq!(h.state().doc.undo_label(), Some("Matrix Inverse"));
+    let inv = project(&h).matrix_books().nth(1).expect("a new matrix book").sheets[0].clone();
+    // [[2, 1], [1, 2]]^-1 = [[2, -1], [-1, 2]] / 3
+    for (r, c, v) in [(0, 0, 2.0 / 3.0), (0, 1, -1.0 / 3.0), (1, 0, -1.0 / 3.0), (1, 1, 2.0 / 3.0)] {
+        assert!((inv.value(r, c) - v).abs() < 1e-12, "{r},{c}: {}", inv.value(r, c));
+    }
+}

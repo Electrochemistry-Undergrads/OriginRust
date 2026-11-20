@@ -5124,6 +5124,13 @@ impl SheafApp {
             M::Rotate180 => MatrixOp::Rotate(Rotation::Half),
             M::FlipHorizontal => MatrixOp::Flip { direction: FlipDirection::Horizontal, coordinates: false },
             M::FlipVertical => MatrixOp::Flip { direction: FlipDirection::Vertical, coordinates: false },
+            M::Inverse => {
+                match self.doc.edit("Matrix Inverse", |p| p.matrix_inverse(id, sheet)) {
+                    Ok(_) => self.say("Inverted the matrix into a new matrix book".to_string()),
+                    Err(e) => self.warn(e.to_string()),
+                }
+                return;
+            }
             M::ToWorksheet => {
                 use sheaf_core::matrix_convert::{LabelSource, M2wMethod, XyLayout};
                 let method = M2wMethod::Direct {

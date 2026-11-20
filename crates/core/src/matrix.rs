@@ -338,6 +338,56 @@ impl MatrixSheet {
         s
     }
 
+    /// The inverse of a square matrix (Origin's `minverse`, Analysis > Mathematics > Inverse, T193):
+    /// Gauss-Jordan elimination with partial pivoting. The result keeps the sheet's size, ranges and
+    /// labels. Refused for a matrix that is not square, has a missing value, or is singular (a pivot
+    /// below 1e-12 of the largest cell).
+    pub fn inverse(&self) -> Result<MatrixSheet, MatrixError> {
+        let n = self.rows;
+        if n == 0 || self.cols != n {
+            return Err(MatrixError::Invalid(format!(
+                "only a square matrix has an inverse; this one has {} rows and {} columns",
+                self.rows, self.cols
+            )));
+        }
+        let a: Vec<f64> = (0..n * n).map(|k| self.value(k / n, k % n)).collect();
+        if a.iter().any(|v| !v.is_finite()) {
+            return Err(MatrixError::Invalid("the matrix has missing values; it has no inverse".into()));
+        }
+        let scale = a.iter().fold(0.0_f64, |m, v| m.max(v.abs()));
+        // Rows of [A | I], reduced to [I | A^-1].
+        let mut m: Vec<Vec<f64>> = (0..n)
+            .map(|r| {
+                let mut row = a[r * n..(r + 1) * n].to_vec();
+                row.extend((0..n).map(|c| if c == r { 1.0 } else { 0.0 }));
+                row
+            })
+            .collect();
+        for col in 0..n {
+            let pivot = (col..n).max_by(|&i, &j| m[i][col].abs().total_cmp(&m[j][col].abs())).unwrap_or(col);
+            if !(m[pivot][col].abs() > 1e-12 * scale) {
+                return Err(MatrixError::Invalid("the matrix is singular; it has no inverse".into()));
+            }
+            m.swap(col, pivot);
+            let p = m[col][col];
+            for v in &mut m[col] {
+                *v /= p;
+            }
+            for r in 0..n {
+                if r != col {
+                    let f = m[r][col];
+                    if f != 0.0 {
+                        for k in 0..2 * n {
+                            m[r][k] -= f * m[col][k];
+                        }
+                    }
+                }
+            }
+        }
+        let out: Vec<f64> = m.iter().flat_map(|row| row[n..].iter().copied()).collect();
+        Ok(self.like(n, n, out))
+    }
+
     /// Mirrors the data (Origin's `mflip`). With `coordinates` the X (horizontal) or Y (vertical)
     /// range is mirrored too, so every value keeps its coordinate; without, the values move
     /// to other coordinates.
@@ -550,5 +600,36 @@ impl MatrixBook {
     /// The window title: `MBook1 - long name` when a long name is set.
     pub fn title(&self) -> String {
         if self.long_name.is_empty() { self.name.clone() } else { format!("{} - {}", self.name, self.long_name) }
+    }
+}
+
+#[cfg(test)]
+mod inverse_tests {
+    use super::*;
+
+    #[test]
+    fn the_inverse_of_a_square_matrix_and_the_refusals() {
+        let mut m = MatrixSheet::new("M", 1, 2, 2);
+        for (r, c, v) in [(0, 0, 4.0), (0, 1, 7.0), (1, 0, 2.0), (1, 1, 6.0)] {
+            m.set_value(r, c, v).unwrap();
+        }
+        let inv = m.inverse().unwrap();
+        for (r, c, v) in [(0, 0, 0.6), (0, 1, -0.7), (1, 0, -0.2), (1, 1, 0.4)] {
+            assert!((inv.value(r, c) - v).abs() < 1e-12, "{r},{c}: {}", inv.value(r, c));
+        }
+        // A pivot of zero in the first column needs a row swap.
+        let mut p = MatrixSheet::new("P", 1, 2, 2);
+        for (r, c, v) in [(0, 0, 0.0), (0, 1, 1.0), (1, 0, 1.0), (1, 1, 0.0)] {
+            p.set_value(r, c, v).unwrap();
+        }
+        let pi = p.inverse().unwrap();
+        assert_eq!((pi.value(0, 1), pi.value(1, 0)), (1.0, 1.0));
+        let mut s = MatrixSheet::new("S", 1, 2, 2);
+        for (r, c, v) in [(0, 0, 1.0), (0, 1, 2.0), (1, 0, 2.0), (1, 1, 4.0)] {
+            s.set_value(r, c, v).unwrap();
+        }
+        assert!(s.inverse().unwrap_err().to_string().contains("singular"));
+        assert!(MatrixSheet::new("R", 1, 2, 3).inverse().unwrap_err().to_string().contains("square"));
+        assert!(MatrixSheet::new("N", 1, 2, 2).inverse().unwrap_err().to_string().contains("missing"));
     }
 }

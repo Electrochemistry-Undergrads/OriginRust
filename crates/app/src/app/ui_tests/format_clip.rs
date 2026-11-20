@@ -196,7 +196,8 @@ fn axis_menu_copy_format_all_then_paste_format_to_all_changes_only_that_axis() {
     plain(&mut h);
     right_click_on(&mut h, ObjectKind::XAxis);
     pick(&mut h, "Paste Format To");
-    assert!(disabled(&h, "Tick Direction") && disabled(&h, "Title Text"), "unmeasured choices are greyed");
+    assert!(!disabled(&h, "Tick Direction") && !disabled(&h, "Title Text"), "the finer groups paste (T171)");
+    assert!(disabled(&h, "Title Dimensions"), "no title geometry to paste");
     pick(&mut h, "All");
     let l = &graph(&h).layers[0];
     assert_eq!((l.x_axis.min, l.x_axis.max), (Some(1.0), Some(3.0)));
@@ -305,4 +306,27 @@ fn the_window_follows_the_clipboard_while_it_is_open() {
     menu_path(&mut h, &["Edit", "Copy Format", "All"]);
     settle(&mut h);
     assert!(h.query_by_label("Background").is_some(), "the check boxes follow the new clip");
+}
+
+#[test]
+fn axis_paste_format_to_line_takes_only_the_line_of_the_copied_axis() {
+    let mut h = start(vec![data_file("fmt-axis-groups")]);
+    styled(&mut h);
+    edit_layer(&mut h, |l| l.x_axis.title = Some("Copied title".into()));
+    right_click_on(&mut h, ObjectKind::XAxis);
+    pick(&mut h, "Copy Format");
+    pick(&mut h, "All");
+    let before = graph(&h).layers[0].y_axis.clone();
+    right_click_on(&mut h, ObjectKind::YAxis);
+    pick(&mut h, "Paste Format To");
+    pick(&mut h, "Line");
+    let y = graph(&h).layers[0].y_axis.clone();
+    assert_eq!((y.color, y.line_width_pt), (Color::RED, 3.0), "the line takes the copy");
+    assert_eq!(y.tick_font, before.tick_font, "tick labels stay");
+    assert_eq!((y.min, y.max), (before.min, before.max), "the scale stays");
+    assert_eq!(h.state().doc.undo_label(), Some("Apply Theme"), "one undo step, as the other pastes");
+    right_click_on(&mut h, ObjectKind::YAxis);
+    pick(&mut h, "Paste Format To");
+    pick(&mut h, "Title Text");
+    assert_eq!(graph(&h).layers[0].y_axis.title.as_deref(), Some("Copied title"));
 }

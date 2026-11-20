@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **162 greyed items: 113 in the menu bar, 2 on the toolbars, 47 in context menus.**
+original inventory baseline. This is not a new runtime audit. **154 greyed items: 113 in the menu bar, 2 on the toolbars, 39 in context menus.**
 
 ## How to read and keep this file
 
@@ -47,7 +47,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T69` | 0 |
 | `T70` | 0 |
 | `T71` | 0 |
-| `T72` | 20 |
+| `T72` | 12 |
 | `T73` | 0 |
 | `T75` | 0 |
 | `T76` | 0 |
@@ -86,7 +86,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 35 items, backlog packages (`B`) 107, not planned (`N`) 20.
+Briefs (`T`) hold 27 items, backlog packages (`B`) 107, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -193,7 +193,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B6` Worksheet sheet tab: Add Graph as Sheet... · Add Notes as Sheet
 - `B6` Worksheet corner: Parameters · Sparklines · Filter · Categories · Page Break Preview Lines
 - `T72` Graph axis > Copy Format: Dimensions
-- `T72` Graph axis > Paste Format To: Tick Direction · Ticks · Line · Tick Labels · Title Styles · Colors · Thickness · Title Dimensions · Title Text
+- `T72` Graph axis > Paste Format To: Title Dimensions
 - `B2` Graph legend: Cut · Copy
 - `B16` Graph legend: Programming Control...
 - `B3` Graph legend > Legend: Add Legend Title

@@ -34,7 +34,7 @@ use eframe::egui::{
 use sheaf_core::clipboard::CopyPart;
 use sheaf_core::data_range::RangeEnd;
 use sheaf_core::fill_pattern::QuickFill;
-use sheaf_core::format_clip::{AxisPart, GraphPart};
+use sheaf_core::format_clip::{AxisPart, GraphPart, LegendPart};
 use sheaf_core::graph::{PlotKind, Stack};
 use sheaf_core::sheetops::{MaskOp, MoveTo};
 use sheaf_core::template::Template;
@@ -93,6 +93,17 @@ pub const NEED_GRAPH_OBJECT: &str = "select a drawn object, a text label or an a
 pub const NEED_SELECTED_OBJECT: &str = "select an object of the graph first";
 /// Why the graph Edit menu's Paste cannot run.
 pub const NOTHING_COPIED: &str = "copy a drawn object, a text label or an axis title first";
+
+/// What File > Export starts the Export Graphs window with when no graph is active (T182).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ProjectGraphsExport {
+    /// Graphs...: every graph, the last format used (PNG at first).
+    Graphs,
+    /// Graph as Image...: every graph as PNG pictures.
+    Image,
+    /// Multi-Page PDF...: every graph into one PDF, one page each.
+    MultiPagePdf,
+}
 
 /// A command of Sheaf that a menu item runs. It is turned into an [`Action`] with the state of
 /// the program by [`resolve`].
@@ -211,6 +222,8 @@ pub enum Cmd {
     /// Edit > Replace... (Ctrl+H) in a workbook.
     ReplaceInSheets,
     ExportGraph,
+    /// File > Export > Graphs..., Graph as Image... or Multi-Page PDF... without an active graph (T182).
+    ExportProjectGraphs(ProjectGraphsExport),
     ExportWorksheet,
     /// File > Export > Worksheet as Excel...
     ExportExcel,
@@ -459,6 +472,9 @@ pub enum Cmd {
     SetViewMode(sheaf_core::project::ViewMode),
     /// View > Show > Layer Icons.
     ToggleLayerIcons,
+    /// View > Show > Labels and Data on a graph (T177): every layer's labels or data plots.
+    ToggleShowLabels,
+    ToggleShowData,
     /// View > Show > Active Layer Only uses the existing Hide Other Layers toggle.
     ToggleActiveLayerOnly,
     /// View > Full Screen (Ctrl+Shift+J) and the page's "View Full Screen".
@@ -534,6 +550,16 @@ pub enum Cmd {
     },
     PasteLegendStyles {
         layer: usize,
+    },
+    /// A legend's Copy Format > Dimensions or All (T179).
+    CopyLegendFormat {
+        layer: usize,
+        part: sheaf_core::format_clip::LegendPart,
+    },
+    /// A legend's Paste Format To > Dimensions or All (T179).
+    PasteLegendFormat {
+        layer: usize,
+        part: sheaf_core::format_clip::LegendPart,
     },
     /// Edit > Paste Format...: the Apply Formats window.
     PasteFormatDialog,
@@ -731,6 +757,10 @@ pub struct MenuContext<'a> {
     pub view_mode: sheaf_core::project::ViewMode,
     /// The active graph shows its layer icons (the tick of View > Show > Layer Icons).
     pub layer_icons: bool,
+    /// Every layer of the active graph shows its labels, and its data (the ticks of View > Show >
+    /// Labels and Data, T177).
+    pub show_labels: bool,
+    pub show_data: bool,
     /// None without a valid multi-layer target; otherwise the derived isolation check.
     pub active_layer_only: Option<bool>,
 }
@@ -989,17 +1019,15 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
     } else {
         v.push(sub(
             "E&xport",
-            [
-                vec![
-                    item("&Graphs...", Cmd::ExportGraph),
-                    item("&Worksheet as ASCII...", Cmd::ExportWorksheet),
-                    item("Worksheet as E&xcel...", Cmd::ExportExcel),
-                ],
-                greys(&["Graph as Image..."]),
-                vec![item("Worksheet as Image...", Cmd::ExportWorksheetImage)],
-                greys(&["Multi-Page PDF..."]),
-                vec![exports_submenu()],
-            ]
+            [vec![
+                item("&Graphs...", Cmd::ExportProjectGraphs(ProjectGraphsExport::Graphs)),
+                item("&Worksheet as ASCII...", Cmd::ExportWorksheet),
+                item("Worksheet as E&xcel...", Cmd::ExportExcel),
+                item("Graph as Image...", Cmd::ExportProjectGraphs(ProjectGraphsExport::Image)),
+                item("Worksheet as Image...", Cmd::ExportWorksheetImage),
+                item("Multi-Page PDF...", Cmd::ExportProjectGraphs(ProjectGraphsExport::MultiPagePdf)),
+                exports_submenu(),
+            ]]
             .concat(),
         ));
     }
@@ -1137,9 +1165,9 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
                 "Layer Grid",
                 "-",
                 "Frame",
-                "Labels",
-                "Data",
             ]));
+            show.push(item("Labels", Cmd::ToggleShowLabels));
+            show.push(item("Data", Cmd::ToggleShowData));
             show.push(keyed("Active Layer Only", ctrl_alt(Key::D), Cmd::ToggleActiveLayerOnly));
             show.push(sep());
             show.push(grey("Master Items on Screen"));
@@ -2545,11 +2573,26 @@ pub fn graph_legend_menu(layer: usize, can_color: bool, can_bubble: bool) -> Vec
         sep(),
         sub(
             "Copy Format",
-            vec![item("Styles", Cmd::CopyLegendStyles { layer }), grey("Dimensions"), sep(), grey("All")],
+            vec![
+                item("Styles", Cmd::CopyLegendStyles { layer }),
+                item("Dimensions", Cmd::CopyLegendFormat { layer, part: LegendPart::Dimensions }),
+                sep(),
+                item("All", Cmd::CopyLegendFormat { layer, part: LegendPart::All }),
+            ],
         ),
     ];
-    if crate::format_clip_ui::kind() == Some(crate::format_clip_ui::ClipKind::Legend) {
-        menu.push(sub("Paste Format To", vec![item("Styles", Cmd::PasteLegendStyles { layer })]));
+    if let Some((styles, dimensions)) = crate::format_clip_ui::legend_parts() {
+        // Each entry pastes what the copied legend format holds (T179).
+        let when = |held: bool, label: &str, cmd: Cmd| if held { item(label, cmd) } else { grey(label) };
+        menu.push(sub(
+            "Paste Format To",
+            vec![
+                when(styles, "Styles", Cmd::PasteLegendStyles { layer }),
+                when(dimensions, "Dimensions", Cmd::PasteLegendFormat { layer, part: LegendPart::Dimensions }),
+                sep(),
+                item("All", Cmd::PasteLegendFormat { layer, part: LegendPart::All }),
+            ],
+        ));
     }
     menu.push(item("Save Format as Theme...", Cmd::SaveLegendTheme { layer }));
     menu
@@ -2989,6 +3032,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::FindInProject => Action::FindInProject,
         Cmd::ReplaceInSheets => Action::ReplaceInSheets(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
+        Cmd::ExportProjectGraphs(what) => Action::ExportProjectGraphs(*what),
         Cmd::ExportWorksheet => Action::ExportData(book?),
         Cmd::ExportExcel => Action::ExportExcel(book?),
         Cmd::ExportWorksheetImage => Action::ExportWorksheetImage(book?),
@@ -3359,6 +3403,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::SetViewMode(mode) => Action::SetViewMode { graph: c.graph.ok_or(NEED_GRAPH)?, mode: *mode },
         Cmd::ToggleLayerIcons => Action::SetLayerIcons { graph: c.graph.ok_or(NEED_GRAPH)?, on: !c.layer_icons },
+        Cmd::ToggleShowLabels => {
+            Action::SetShowElements { graph: c.graph.ok_or(NEED_GRAPH)?, labels: Some(!c.show_labels), data: None }
+        }
+        Cmd::ToggleShowData => {
+            Action::SetShowElements { graph: c.graph.ok_or(NEED_GRAPH)?, labels: None, data: Some(!c.show_data) }
+        }
         Cmd::ToggleActiveLayerOnly => {
             let graph = c.graph.ok_or(NEED_GRAPH)?;
             c.active_layer_only.ok_or("Needs a valid active layer in a graph with at least two layers")?;
@@ -3401,6 +3451,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::PasteLegendStyles { layer } => {
             Action::PasteLegendStyles { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer }
+        }
+        Cmd::CopyLegendFormat { layer, part } => {
+            Action::CopyLegendFormat { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, part: *part }
+        }
+        Cmd::PasteLegendFormat { layer, part } => {
+            Action::PasteLegendFormat { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, part: *part }
         }
         Cmd::PasteFormatDialog => Action::PasteFormatDialog { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::IntegrateGadget => Action::StartIntegrate { graph: c.graph.ok_or(NEED_GRAPH)? },
@@ -3656,6 +3712,11 @@ fn show_entries(
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleLayerIcons)) && c.layer_icons {
+                    tick(ui, &response);
+                }
+                if (matches!(it.cmd, Some(Cmd::ToggleShowLabels)) && c.show_labels)
+                    || (matches!(it.cmd, Some(Cmd::ToggleShowData)) && c.show_data)
+                {
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleActiveLayerOnly)) && c.active_layer_only == Some(true) {
@@ -4049,6 +4110,8 @@ mod tests {
             can_ungroup: false,
             view_mode: Default::default(),
             layer_icons: true,
+            show_labels: true,
+            show_data: true,
             active_layer_only: None,
         };
         assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_BOOK);

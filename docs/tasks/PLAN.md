@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 143 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 137 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -86,7 +86,7 @@ Double-Y on linked layers (ADR 0009), stacked columns, bars and areas (graphing 
 
 | ✓ | Package | What | Size | Origin needed | Greyed items | Main files |
 |---|---|---|---|---|---|---|
-| [ ] | [T63](T63-greyed-items-with-code-2.md) | Second round of T01: toolbar plot buttons, step lines, Probability and Q-Q plots in the Plot menu, Open Excel, export from any window, Duplicate, Fill Column With, axis tick label items, Add Plot to Layer | M | no | 3 | `app/menus.rs`, `app/toolbar.rs` |
+| [ ] | [T63](T63-greyed-items-with-code-2.md) | Second round of T01: toolbar plot buttons, step lines, Probability and Q-Q plots in the Plot menu, Open Excel, export from any window, Duplicate, Fill Column With, axis tick label items, Add Plot to Layer | M | no | 1 | `app/menus.rs`, `app/toolbar.rs` |
 
 ## Wave 4: everyday graph editing
 
@@ -95,9 +95,9 @@ Backlog packages: write the brief first (step 3 above).
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
 | [x] | [T65](T65-graph-view-zoom-pan.md) | Graph view zoom and pan (B1 slice 1): Zoom In mode, Zoom Out, Whole Page, Pan | M | 0 |
-| [ ] | [T66](T66-graph-view-modes.md) | Graph view modes (Print, Page, Window, Draft), Show > Layer Icons, Active Layer Only and Full Screen done; eight other Show items and Show Data Info wait for measurement (B1 slice 2) | M | 9 |
+| [ ] | [T66](T66-graph-view-modes.md) | Graph view modes (Print, Page, Window, Draft), Show > Layer Icons, Active Layer Only and Full Screen done; eight other Show items and Show Data Info wait for measurement (B1 slice 2) | M | 7 |
 | [x] | [T69](T69-zoom-all-scale-tools.md) | Graph view, the rest of B1: View > Zoom All and the Tools-bar Scale In / Scale Out (measured in graphing 23) | S | 0 |
-| [ ] | [T72](T72-copy-paste-format.md) | Copy Format and Paste Format on graph, axis and legend (B2 slice 1) | M | 6 |
+| [ ] | [T72](T72-copy-paste-format.md) | Copy Format and Paste Format on graph, axis and legend (B2 slice 1) | M | 4 |
 | [x] | [T125](T125-drawn-shape-clipboard.md) | Drawn-shape Cut/Copy/Paste (B2 slice; done 2026-11-19, graphing 17.8) | M | 0 |
 | [ ] | B2 | Graph objects: cut/copy/paste, align, same size, group, order across object kinds, snap to grid (Copy/Paste Format is T72) | L | 3 |
 | [x] | [T67](T67-add-straight-line.md) | Add Straight Line (B3 slice 1) | M | 0 |

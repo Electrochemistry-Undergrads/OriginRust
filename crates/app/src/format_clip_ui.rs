@@ -73,6 +73,14 @@ pub fn kind() -> Option<ClipKind> {
     })
 }
 
+/// For a legend format: whether it holds the styles and the dimensions (T179); `None` otherwise.
+pub fn legend_parts() -> Option<(bool, bool)> {
+    CLIP.with(|c| match c.borrow().value.as_ref() {
+        Some(FormatClip::LegendStyles(l)) => Some((l.has_styles(), l.has_dimensions())),
+        _ => None,
+    })
+}
+
 fn held() -> Option<FormatClip> {
     CLIP.with(|c| c.borrow().value.clone())
 }
@@ -92,6 +100,21 @@ pub fn copy_axis(doc: &Document, graph: WindowId, layer: usize, y: bool, part: A
     };
     remember(clip);
     true
+}
+
+/// Copy Format > Dimensions or All of one legend (T179).
+pub fn copy_legend(doc: &Document, graph: WindowId, layer: usize, part: format_clip::LegendPart) -> bool {
+    let Some(clip) = doc.project().graph(graph).and_then(|g| format_clip::copy_legend(g, layer, part)) else {
+        return false;
+    };
+    remember(clip);
+    true
+}
+
+/// Paste Format To > Dimensions or All onto one legend (T179).
+pub fn paste_legend(doc: &mut Document, graph: WindowId, layer: usize, part: format_clip::LegendPart) -> bool {
+    let Some(clip) = held() else { return false };
+    apply(doc, graph, |g| format_clip::paste_legend(g, layer, &clip, part))
 }
 
 /// Copy Format > Styles of one legend.

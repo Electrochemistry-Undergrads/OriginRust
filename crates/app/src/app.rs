@@ -2587,6 +2587,21 @@ impl SheafApp {
                     self.doc.adjust_view(|p| p.set_view_mode(graph, mode));
                 }
             }
+            Action::SetShowElements { graph, labels, data } => {
+                let what = if labels.is_some() { "Show Labels" } else { "Show Data" };
+                self.doc.apply(what, |p| {
+                    if let Some(g) = p.graph_mut(graph) {
+                        for l in &mut g.layers {
+                            if let Some(on) = labels {
+                                l.display.show_labels = on;
+                            }
+                            if let Some(on) = data {
+                                l.display.show_data = on;
+                            }
+                        }
+                    }
+                });
+            }
             Action::SetLayerIcons { graph, on } => {
                 self.doc.apply("Show Layer Icons", |p| {
                     if let Some(g) = p.graph_mut(graph) {
@@ -2807,6 +2822,14 @@ impl SheafApp {
                     self.say("Format copied");
                 }
             }
+            Action::CopyLegendFormat { graph, layer, part } => {
+                if crate::format_clip_ui::copy_legend(&self.doc, graph, layer, part) {
+                    self.say("Format copied");
+                }
+            }
+            Action::PasteLegendFormat { graph, layer, part } => {
+                crate::format_clip_ui::paste_legend(&mut self.doc, graph, layer, part);
+            }
             Action::PasteLegendStyles { graph, layer } => {
                 crate::format_clip_ui::paste_legend_styles(&mut self.doc, graph, layer);
             }
@@ -2831,6 +2854,26 @@ impl SheafApp {
             Action::ExportGraph(graph) => {
                 self.export =
                     Some(ExportDialog::new(graph, self.folder()).with_themes(self.startup.themes_dir.clone()));
+            }
+            Action::ExportProjectGraphs(what) => {
+                use crate::dialogs::export::ExportFormat;
+                use crate::menus::ProjectGraphsExport;
+                // The graph that was active last starts the window (it names the first file), else the first.
+                let graphs: Vec<WindowId> = self.doc.project().graphs().map(|g| g.id).collect();
+                let Some(&first) = graphs.first() else {
+                    self.warn("The project has no graph to export");
+                    return;
+                };
+                let start = self.workspace.recent_order(&graphs).into_iter().next().unwrap_or(first);
+                let (format, multipage) = match what {
+                    ProjectGraphsExport::Graphs | ProjectGraphsExport::Image => (ExportFormat::Png, false),
+                    ProjectGraphsExport::MultiPagePdf => (ExportFormat::Pdf, true),
+                };
+                self.export = Some(
+                    ExportDialog::new(start, self.folder())
+                        .with_themes(self.startup.themes_dir.clone())
+                        .for_all_graphs(format, multipage),
+                );
             }
             Action::ExportData(book) => self.export_data(book),
             Action::ExportExcel(book) => {
@@ -4969,6 +5012,12 @@ impl SheafApp {
             }),
             view_mode: graph.map(|g| project.view_mode(g)).unwrap_or_default(),
             layer_icons: graph.and_then(|g| project.graph(g)).is_none_or(|g| g.page.style.layer_icons),
+            show_labels: graph
+                .and_then(|g| project.graph(g))
+                .is_none_or(|g| g.layers.iter().all(|l| l.display.show_labels)),
+            show_data: graph
+                .and_then(|g| project.graph(g))
+                .is_none_or(|g| g.layers.iter().all(|l| l.display.show_data)),
             active_layer_only: graph.and_then(|id| {
                 let g = project.graph(id)?;
                 let layer = self.graphs.get(&id).map_or(0, |s| s.active_layer);

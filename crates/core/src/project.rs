@@ -1048,7 +1048,8 @@ impl Project {
                 | Template::Trajectory3d
                 | Template::Scatter3dError
                 | Template::Bars3d
-        ) {
+        ) || template.is_surface3d()
+        {
             // The plots that have a third column; without a Z column the first Y column and the
             // column after it.
             let with_z: Vec<ColumnId> = ys.iter().map(|c| c.id).filter(|&y| self.z_column_for(y).is_some()).collect();
@@ -1241,7 +1242,7 @@ impl Project {
                         | Template::Trajectory3d
                         | Template::Scatter3dError
                         | Template::Bars3d
-                );
+                ) || template.is_surface3d();
                 let ternary_z = if xyz { self.ternary_z_for(*y) } else { None };
                 // 3D Scatter + Error Bar (T156): the numeric column after Z holds the Z errors.
                 let z_error = (template == Template::Scatter3dError)

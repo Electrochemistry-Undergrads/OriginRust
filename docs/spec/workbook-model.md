@@ -1128,10 +1128,33 @@ choices below are **unmeasured**, and Origin's own template files are never read
   it gets the runs with its own column ids: data put into an input column runs an Auto run at once (in
   the same undo step, results written into the template's result columns) and marks a Manual run
   pending. Origin's `.ogw`/`.ogwu` files are never read or written.
-- Not done: Origin's analysis-template options (unknown), batch processing with a template (B11), CLI and
-  MCP access, Origin `.otw` files.
+- Not done: Origin's analysis-template options (unknown), CLI and MCP access, Origin `.otw` files.
 - Tests: `crates/core/src/book_template.rs`, `crates/io/src/user_templates/tests.rs`,
   `crates/app/src/app/ui_tests/user_templates.rs`.
+
+## 13p. File > Batch Processing... (T165, 2026-11-19, not measured)
+
+Origin's Batch Processing (`batchProcess`) runs an analysis template on many data files. Its dialog and
+options were not measured (Origin COM unavailable, OriginLab's help pages for it not read); Sheaf's
+window is its own, **unmeasured**:
+
+- File > Batch Processing... (workbook and graph windows; greyed without a template folder) opens
+  "Batch Processing": a Template list (the saved workbook templates, T160/T163), the Data files list with
+  Add Files... (system picker, several at once; a file already listed is not added twice), Remove and
+  Clear, OK (enabled with a template and at least one file) and Cancel.
+- OK reads each file with the automatic importer and its default options (as File > Import) and makes
+  one workbook per readable file from the template (`Project::new_workbook_from_template_with_data`):
+  a free `Book<n>` name, the long name the file's name, the file's first sheet filling, in order, the
+  data columns of the book's first sheet (columns that are neither an analysis run's results nor
+  formula columns), each taking the file's values and the long name, units and comments the file gives
+  while the template's designation and format stay; file columns beyond them are left out. Then the
+  book's analysis runs run on the new data (Auto and Manual alike) and formula columns recalculate.
+- All books are one undo step ("Batch processing"); the last book comes to the front. Files that cannot
+  be read are skipped and named in the status line with any analysis problem; when no file can be read,
+  the window stays open with the error.
+- Not done: Origin's summary report sheet, dataset identifiers, import filters saved in the template,
+  deleting intermediate books, the graph-window variant that runs a graph template.
+- Tests: `crates/core/src/book_template.rs`, `crates/app/src/app/ui_tests/user_templates.rs`.
 
 ## 14. Suggested Rust data model (P0)
 

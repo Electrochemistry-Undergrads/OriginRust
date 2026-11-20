@@ -114,6 +114,8 @@ pub enum Cmd {
     SaveAnalysisTemplateAs,
     /// Plot > User Templates > Manage... (T56).
     ManageTemplates,
+    /// File > Batch Processing... (T165).
+    BatchProcessing,
     /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values (T74).
     FillPattern(FillKind),
     /// Format > Object Properties... on a graph: the selected object's properties (T150).
@@ -917,7 +919,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
             v.push(item("Save Workbook As Analysis Template...", Cmd::SaveAnalysisTemplateAs));
             v.push(grey("Add Word Bookmarks to Analysis Template..."));
         }
-        v.push(grey("Batch Processing..."));
+        v.push(item("Batch Processing...", Cmd::BatchProcessing));
     }
     v.extend([
         sep(),
@@ -1242,18 +1244,20 @@ fn plot_menu() -> Vec<Entry> {
                 item("3D Waterfall", Cmd::Plot(Template::Waterfall3d)),
             ],
         ),
-        grey_sub(
+        sub(
             "3D Su&rface",
-            &[
-                "Color Fill Surface",
-                "X Constant with Base",
-                "Y Constant with Base",
-                "Color Map Surface",
-                "Colormap Surface with Projection",
-                "Wire Frame",
-                "Wire Surface",
-                "3D Ternary Colormap Surface",
-            ],
+            [
+                vec![item("Color Fill Surface", Cmd::Plot(Template::ColorFillSurface3d))],
+                greys(&["X Constant with Base", "Y Constant with Base"]),
+                vec![item("Color Map Surface", Cmd::Plot(Template::ColorMapSurface3d))],
+                greys(&["Colormap Surface with Projection"]),
+                vec![
+                    item("Wire Frame", Cmd::Plot(Template::WireFrame3d)),
+                    item("Wire Surface", Cmd::Plot(Template::WireSurface3d)),
+                ],
+                greys(&["3D Ternary Colormap Surface"]),
+            ]
+            .concat(),
         ),
         sub(
             "3D Symbol/Bar/&Vector",
@@ -2906,6 +2910,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
                 return Err(NO_TEMPLATE_FOLDER);
             }
             Action::ManageTemplates
+        }
+        Cmd::BatchProcessing => {
+            if !c.templates {
+                return Err(NO_TEMPLATE_FOLDER);
+            }
+            Action::BatchProcessing
         }
         Cmd::Import => Action::ImportPick(ImportPick::Single),
         Cmd::ImportMultiple => Action::ImportPick(ImportPick::Multiple),

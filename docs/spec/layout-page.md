@@ -27,7 +27,17 @@ unregistered on the reference machine). Everything below is Sheaf's choice unles
 - The window draws the page on a grey ground, scaled to fit, with each graph rendered by
   `sheaf-plot` at the size it takes on screen. A deleted graph leaves an outlined empty box.
 
+## Editing items (T237 slice 2)
+
+- A click on an item selects it: a blue frame and a square handle at the bottom right corner. A
+  click on empty page clears the selection; the topmost item under the pointer wins.
+- Dragging an item moves it. Dragging the corner handle of the selected item resizes it, keeping
+  the top left corner, to at least 2 % of the page each way. The picture is redrawn at the new size,
+  so a resized graph picture can change its shape. The change is made when the button is released,
+  as one undo step ("Move layout item", "Resize layout item").
+- Delete removes the selected item ("Delete layout item") while no text box has the keyboard.
+
 ## Not yet
 
-- Moving and resizing items, Add Worksheet..., text and drawn objects on the page, picture holders,
+- Add Worksheet..., text and drawn objects on the page, picture holders,
   Layout Page properties (page size), print and export of the page, and `.opj`.

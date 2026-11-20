@@ -153,6 +153,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T152](T152-legend-order.md) | Legend Bring to front/back, front/back of data (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured; left: legend Cut/Copy |
 | [T153](T153-title-order.md) | Axis title Bring to the front / Push to the back (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured |
 | [T154](T154-notes-window.md) | Notes windows: File > New > Notes, New Notes (B14 slice) | M | done 2026-11-19 (notes-window spec), not measured; left: Add Notes as Sheet, .opj |
+| [T204](T204-import-image.md) | File > Import > Image into a matrix book of gray levels (B14 slice) | S | done 2026-11-20 (matrices 7h), not measured |
 | [T201](T201-gray-scale-map.md) | Plot > Contour/Heat Map > Gray Scale Map (B14 slice) | S | done 2026-11-20 (matrices 7g), not measured |
 | [T199](T199-import-binary-2d.md) | File > Import > Binary 2D Array into a matrix (B14 slice) | S | done 2026-11-20 (matrices 7f), not measured |
 | [T196](T196-matrix-fft2.md) | 2D FFT and 2D IFFT of a matrix (B14 slice) | S | done 2026-11-20 (matrices 7e), not measured |
@@ -174,7 +175,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T173](T173-3d-ternary-surface.md) | 3D Surface: 3D Ternary Colormap Surface (B15 slice 10) | M | done 2026-11-19 (graphing "3D Scatter and 3D Trajectory"), not measured; 3D Surface submenu fully live |
 | [T175](T175-sparklines.md) | Worksheet Sparklines: column header Add or Update Sparklines..., corner Sparklines switch (B6 slice) | S | done 2026-11-19 (workbook-model 13i), not measured; left: Insert Sparklines in cells, the options dialog |
 | [T186](T135-analysis-markers.md) | Graph analysis locks + Data > Lock Position: Layer Icon, First Point, Last Point (B3) | S | done 2026-11-20 (graphing "Analysis markers"), not measured; lock click menu (Recalculate, Go to Results) added 2026-11-20 as T195; left: Change Parameters |
-| T189 | Gadgets > 2D Integrate... on heat map / contour layers (B9) | S | done 2026-11-20 (graphing "2D Integrate gadget"), not measured; New Output to a results workbook added as T198, Region > Circle as T201; left: free-hand regions, base plane, FWHM |
+| T189 | Gadgets > 2D Integrate... on heat map / contour layers (B9) | S | done 2026-11-20 (graphing "2D Integrate gadget"), not measured; New Output to a results workbook added as T198, Region > Circle as T201, FWHM as T203; left: free-hand regions, base plane |
 | [T66](T66-graph-view-modes.md) (T177) | Graph View > Show > Labels and Data (T66 slice) | S | done 2026-11-19 (graphing 22.8), documentation contract, not measured; seven Show items left |
 | [T160](T160-workbook-templates.md) | User workbook templates: Save Template As on a workbook, New > From Template (T56/T103 follow-up) | M | done 2026-11-19 (workbook-model 13o), not measured; left: analysis templates (B11), CLI/MCP |
 | [T163](T163-analysis-templates.md) | Save Workbook As Analysis Template (B11 slice, on T160) | M | done 2026-11-19 (workbook-model 13o), not measured; left: Origin options, Batch Processing |

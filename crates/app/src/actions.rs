@@ -322,6 +322,13 @@ pub enum Action {
     ImportImage,
     /// File > New > Function Plot (T213): opens the function window for a graph made on OK.
     NewFunctionPlot,
+    /// Plot > Contour/Heat Map > Ternary Contour (T226).
+    TernaryContour {
+        a: sheaf_core::ColumnId,
+        b: sheaf_core::ColumnId,
+        c: sheaf_core::ColumnId,
+        z: sheaf_core::ColumnId,
+    },
     /// Plot > Contour/Heat Map > Polar Contour (T225): a polar contour of `z` over `theta` and `r`.
     PolarContour {
         theta: sheaf_core::ColumnId,

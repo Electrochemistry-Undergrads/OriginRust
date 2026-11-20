@@ -396,7 +396,12 @@ each matrix as not written).
   - The triangulation does not wrap from the last angle to the first: data that stops at 330 degrees
     leaves the wedge to 360 open.
   - Origin's own polar contour layout and levels are not measured.
-- Ternary Contour stays grey.
+- **Ternary Contour (T226):** takes four selected columns, the compositions A, B and C (any common
+  total; each point is normalized to fractions) and a value Z. It makes the same colour-fill contour
+  in Origin's ternary layer (graphing 14.20), whose frame is narrowed to the field templates' frame
+  so that the colour scale fits. The points are gridded over the fractions of A and B, and each
+  vertex is drawn through the ternary mapping (`FieldSource::Ternary`). Sheaf choice: grid cells
+  along the side opposite B show steps; Origin's layout and levels are not measured.
 
 ## 8. What was not verified, and what is left
 

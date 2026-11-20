@@ -97,6 +97,37 @@ pub(crate) fn resolve(project: &Project, field: &FieldPlot) -> Option<FieldGrid>
                 cells,
             })
         }
+        FieldSource::Ternary { a, b, c, z } => {
+            // Each point's compositions as fractions of their sum; then scattered points over
+            // the fractions of A and B (C is the rest), triangulated as for XYZ columns.
+            let (av, bv, cv, zs) =
+                (project.numeric(*a)?, project.numeric(*b)?, project.numeric(*c)?, project.numeric(*z)?);
+            let n = av.len().min(bv.len()).min(cv.len()).min(zs.len());
+            let (mut xs, mut ys, mut vs) = (Vec::with_capacity(n), Vec::with_capacity(n), Vec::with_capacity(n));
+            for k in 0..n {
+                let sum = av[k] + bv[k] + cv[k];
+                if sum.is_finite() && sum > 0.0 && zs[k].is_finite() {
+                    xs.push(av[k] / sum);
+                    ys.push(bv[k] / sum);
+                    vs.push(zs[k]);
+                }
+            }
+            let m = scatter_to_matrix(&xs, &ys, &vs, 0, 0, "").ok()?;
+            let label = |id| project.column(id).map(|c| c.axis_title()).unwrap_or_default();
+            Some(FieldGrid {
+                rows: m.rows,
+                cols: m.cols,
+                x_from: m.x_from,
+                x_to: m.x_to,
+                y_from: m.y_from,
+                y_to: m.y_to,
+                z: m.values().to_vec(),
+                x_label: label(*a),
+                y_label: label(*b),
+                z_label: label(*z),
+                cells,
+            })
+        }
         FieldSource::Xyz { x, y, z } => {
             let (xs, ys, zs) = (project.numeric(*x)?, project.numeric(*y)?, project.numeric(*z)?);
             let m = match xyz_to_matrix(xs, ys, zs, "") {

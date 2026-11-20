@@ -431,6 +431,10 @@ pub enum FieldSource {
     /// Three worksheet columns. XYZ values on a regular grid are used as the grid; scattered
     /// points are triangulated (Delaunay) and the surface is read off a grid (a contour plot only).
     Xyz { x: ColumnId, y: ColumnId, z: ColumnId },
+    /// Ternary Contour (T226): the compositions `a`, `b`, `c` (any common total; each point is
+    /// normalized to fractions) and the value `z`, read like scattered XYZ points over the
+    /// fractions of `a` and `b`.
+    Ternary { a: ColumnId, b: ColumnId, c: ColumnId, z: ColumnId },
 }
 
 /// How the cells of the field are drawn.
@@ -507,6 +511,7 @@ impl FieldPlot {
     pub fn referenced_columns(&self) -> Vec<ColumnId> {
         match &self.source {
             FieldSource::Xyz { x, y, z } => vec![*x, *y, *z],
+            FieldSource::Ternary { a, b, c, z } => vec![*a, *b, *c, *z],
             FieldSource::Matrix { .. } => Vec::new(),
         }
     }

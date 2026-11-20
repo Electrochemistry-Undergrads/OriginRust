@@ -197,6 +197,27 @@ impl Project {
         Ok(id)
     }
 
+    /// Plot > Contour/Heat Map > Ternary Contour (T226): a colour-fill contour of `z` over the
+    /// compositions `a`, `b`, `c` in Origin's ternary layer. Returns the id.
+    pub fn plot_ternary_contour(
+        &mut self,
+        a: ColumnId,
+        b: ColumnId,
+        c: ColumnId,
+        z: ColumnId,
+    ) -> Result<WindowId, ProjectError> {
+        for id in [a, b, c, z] {
+            self.numeric(id).ok_or(ProjectError::NoSuchColumn(id))?;
+        }
+        let long = self.locate(z).map(|(bk, _, _)| bk.long_name.clone()).unwrap_or_default();
+        let id = self.new_window_id();
+        let name = self.unique_name("Graph");
+        let mut g = FieldTemplate::ContourFill.new_ternary_graph(id, &name, FieldSource::Ternary { a, b, c, z });
+        g.long_name = long;
+        self.windows.push(Window::Graph(g));
+        Ok(id)
+    }
+
     fn add_field_graph(&mut self, template: FieldTemplate, source: FieldSource, long_name: &str) -> WindowId {
         let id = self.new_window_id();
         let name = self.unique_name("Graph");

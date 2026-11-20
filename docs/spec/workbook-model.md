@@ -1033,6 +1033,14 @@ follows its column when columns get new ids and goes with a deleted column; it i
 and not printed. Only PNG (Origin also reads JPEG, BMP and others); Origin's sizing options were not
 measured.
 
+**Arrows in cells and the row number's Insert Graph (T205, 2026-11-20, not measured).** A data cell's
+right-click Insert Arrow > Arrow draws a black arrow across the cell from left to right (head at the right
+end); Double Arrow puts heads at both ends; one undo step ("Insert Arrow"). One arrow per cell (inserting
+again replaces it); Remove Arrow takes it out. It follows its column like the other cell objects, is
+saved in `.sheaf` (the sheet's `cell_arrows`), not written to `.opj` and not printed. A row number's
+right-click Insert Graph... puts the picked graph in that row's first visible cell (as a data cell's Insert
+Graph..., T194). Origin's arrow direction, style and row behaviour were not measured.
+
 ## 13j. Find in Project (T95, measured 2026-11-16, Origin 2016)
 
 Edit > Find in Project... (F3; "Find in Project" on a graph's Edit menu) opens Origin's **Find** window

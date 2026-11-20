@@ -1963,6 +1963,18 @@ impl SheafApp {
                     crate::object_format::apply(&mut self.doc, request);
                 }
             }
+            Action::ImportImage => {
+                let picked = rfd::FileDialog::new()
+                    .set_title("Import Image")
+                    .add_filter("Pictures", &sheaf_io::image_import::EXTENSIONS)
+                    .pick_file();
+                if let Some(path) = picked {
+                    match crate::matrix_view::import_image(&mut self.doc, &path) {
+                        Ok(_) => self.say(format!("Imported {} into a new matrix book", path.display())),
+                        Err(e) => self.warn(e),
+                    }
+                }
+            }
             Action::ImportBinary2d => {
                 let picked = rfd::FileDialog::new().set_title("Import Binary 2D Array").pick_file();
                 if let Some(path) = picked {
@@ -2053,6 +2065,12 @@ impl SheafApp {
                     Ok(_) => self.warn(format!("{} is not a PNG picture Sheaf can read", path.display())),
                     Err(e) => self.warn(format!("{}: {e}", path.display())),
                 }
+            }
+            Action::SetCellArrow { column, row, double } => {
+                let label = if double.is_some() { "Insert Arrow" } else { "Remove Arrow" };
+                self.doc.apply(label, |p| {
+                    p.set_cell_arrow(column, row, double);
+                });
             }
             Action::SetCellImage { column, row, png } => {
                 let label = if png.is_some() { "Insert Image" } else { "Remove Image" };

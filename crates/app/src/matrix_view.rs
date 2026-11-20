@@ -33,6 +33,18 @@ impl MatrixUi {
     }
 }
 
+/// File > Import > Image (T204): reads a picture file as gray levels into a new matrix book named
+/// after the file, as one undo step, and returns its id.
+pub fn import_image(doc: &mut Document, path: &std::path::Path) -> Result<WindowId, String> {
+    let img = sheaf_io::image_import::read_gray(path)?;
+    let name = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    doc.edit("Import Image", |p| {
+        let mut sheet = sheaf_core::matrix::MatrixSheet::new("MSheet1", 0, img.rows, img.cols);
+        sheet.values_mut().copy_from_slice(&img.values);
+        Ok::<_, String>(p.adopt_matrix_book(&name, vec![sheet]))
+    })
+}
+
 /// What a typed cell text means: `Some(Some(v))` a number, `Some(None)` an empty cell (missing),
 /// `None` not a number.
 pub fn parse_cell(text: &str) -> Option<Option<f64>> {

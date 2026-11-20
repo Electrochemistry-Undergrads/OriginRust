@@ -160,6 +160,12 @@ pub enum Cmd {
         column: ColumnId,
         row: usize,
     },
+    /// A data cell's Insert Arrow > Arrow / Double Arrow, or Remove Arrow with `None` (T205).
+    SetCellArrow {
+        column: ColumnId,
+        row: usize,
+        double: Option<bool>,
+    },
     /// A data cell's Insert Images from Files... (T202).
     InsertCellImage {
         column: ColumnId,
@@ -192,6 +198,8 @@ pub enum Cmd {
     NewMatrix,
     /// File > Import > Binary 2D Array... (T199).
     ImportBinary2d,
+    /// File > Import > Image... into a matrix book (T204).
+    ImportImage,
     /// The Matrix menu of a matrix window (T192 slice 3).
     Matrix(MatrixCmd),
     /// Worksheet > Convert to Matrix > Direct (the selected columns, or the sheet) and XYZ Gridding
@@ -1138,8 +1146,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                     item("Comma &Delimited (CSV)...", Cmd::ImportCsv),
                     item("&Excel (XLS, XLSX, XLSM)...", Cmd::ImportExcel),
                 ],
-                greys(&["Image..."]),
-                vec![item("Binary 2D Array...", Cmd::ImportBinary2d)],
+                vec![item("Image...", Cmd::ImportImage), item("Binary 2D Array...", Cmd::ImportBinary2d)],
                 // Origin's graph File menu has no Re-Import items.
                 if kind == WindowKind::Graph {
                     Vec::new()
@@ -2379,8 +2386,16 @@ pub fn label_cell_menu(read_only: bool) -> Vec<Entry> {
 
 /// The menu of a data cell; `noted` when the cell has a note (Edit/Delete Note instead of Add);
 /// `cell` is the right-clicked cell, `graph` whether it shows a graph (T194) and `sparkline` whether it
-/// draws a sparkline (T200); `image` whether it shows a picture (T202).
-pub fn cell_menu_for(noted: bool, cell: (ColumnId, usize), graph: bool, sparkline: bool, image: bool) -> Vec<Entry> {
+/// draws a sparkline (T200); `image` whether it shows a picture (T202); `arrow` whether it has an arrow
+/// (T205).
+pub fn cell_menu_for(
+    noted: bool,
+    cell: (ColumnId, usize),
+    graph: bool,
+    sparkline: bool,
+    image: bool,
+    arrow: bool,
+) -> Vec<Entry> {
     let (column, row) = cell;
     let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut)];
     v.extend(copy_entries());
@@ -2394,7 +2409,16 @@ pub fn cell_menu_for(noted: bool, cell: (ColumnId, usize), graph: bool, sparklin
     v.push(item("Set as Begin", Cmd::SetRangeEnd(RangeEnd::Begin)));
     v.push(item("Set as End", Cmd::SetRangeEnd(RangeEnd::End)));
     v.push(sep());
-    v.push(grey_sub("Insert Arrow", &["Arrow", "Double Arrow"]));
+    v.push(sub(
+        "Insert Arrow",
+        vec![
+            item("Arrow", Cmd::SetCellArrow { column, row, double: Some(false) }),
+            item("Double Arrow", Cmd::SetCellArrow { column, row, double: Some(true) }),
+        ],
+    ));
+    if arrow {
+        v.push(item("Remove Arrow", Cmd::SetCellArrow { column, row, double: None }));
+    }
     v.push(item("Insert Graph...", Cmd::InsertCellGraph { column, row }));
     if graph {
         v.push(item("Remove Graph", Cmd::RemoveCellGraph { column, row }));
@@ -2425,13 +2449,17 @@ pub fn cell_menu_for(noted: bool, cell: (ColumnId, usize), graph: bool, sparklin
 }
 
 /// The menu of a row number: Origin's short form, the same items as the cell menu starts with.
-pub fn row_menu() -> Vec<Entry> {
+/// `first` is the row's first visible cell, where Insert Graph... puts the graph (T205).
+pub fn row_menu(first: Option<(ColumnId, usize)>) -> Vec<Entry> {
     let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut), keyed("Copy", ctrl(Key::C), Cmd::Copy(CopyKind::Plain))];
     v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
     v.push(item("Insert", Cmd::InsertCells));
     v.push(item("Delete", Cmd::DeleteCells));
     v.push(keyed("Clear", plain_key(Key::Delete), Cmd::Clear));
-    v.push(grey("Insert Graph..."));
+    v.push(match first {
+        Some((column, row)) => item("Insert Graph...", Cmd::InsertCellGraph { column, row }),
+        None => grey("Insert Graph..."),
+    });
     v.push(item("Format Cells...", Cmd::FormatCells));
     v
 }
@@ -3137,6 +3165,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::NewNotes => Action::NewNotes,
         Cmd::NewMatrix => Action::NewMatrix,
         Cmd::ImportBinary2d => Action::ImportBinary2d,
+        Cmd::ImportImage => Action::ImportImage,
         Cmd::ConvertToMatrix { xyz } => {
             let book = c.book.ok_or(NEED_BOOK)?;
             if *xyz && c.selected.len() != 3 {
@@ -3235,6 +3264,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::RemoveCellGraph { column, row } => Action::SetCellGraph { column: *column, row: *row, graph: None },
         Cmd::InsertCellSparkline { column, row } => Action::PickCellSparkline { column: *column, row: *row },
         Cmd::InsertCellImage { column, row } => Action::PickCellImage { column: *column, row: *row },
+        Cmd::SetCellArrow { column, row, double } => {
+            Action::SetCellArrow { column: *column, row: *row, double: *double }
+        }
         Cmd::RemoveCellImage { column, row } => Action::SetCellImage { column: *column, row: *row, png: None },
         Cmd::RemoveCellSparkline { column, row } => {
             Action::SetCellSparkline { column: *column, row: *row, source: None }

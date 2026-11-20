@@ -13,6 +13,7 @@ mod error;
 pub mod excel;
 pub mod export;
 pub mod graph_themes;
+pub mod image_import;
 pub mod opj;
 pub mod opju;
 pub mod peak_themes;

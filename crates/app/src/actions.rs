@@ -313,6 +313,8 @@ pub enum Action {
     NewMatrix,
     /// File > Import > Binary 2D Array...: choose a file, then its options window (T199).
     ImportBinary2d,
+    /// File > Import > Image...: choose a picture; it becomes a matrix book of gray levels (T204).
+    ImportImage,
     /// A typed matrix cell (T192): `None` clears it (missing). One undo step.
     SetMatrixCell {
         id: WindowId,
@@ -359,6 +361,12 @@ pub enum Action {
         column: ColumnId,
         row: usize,
         graph: Option<WindowId>,
+    },
+    /// Draw an arrow across a data cell (`Some(double)`) or take it out (T205), one undo step.
+    SetCellArrow {
+        column: ColumnId,
+        row: usize,
+        double: Option<bool>,
     },
     /// A data cell's Insert Images from Files...: the file picker (T202).
     PickCellImage {

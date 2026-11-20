@@ -2357,8 +2357,27 @@ unchanged, in one Undo/Redo step. Confirming the current source creates no undo 
 Escape and the close button discard choices. Changed/reordered plots and missing/non-numeric
 sources cannot be applied; switching projects closes the chooser. No data or designation is
 changed. Pure-text columns are excluded. Short, missing or negative error values retain the
-renderer’s existing handling. Origin's percentage/standard-deviation/square-root generation and
-its layout remain separate work; this chooser is not claimed as matching that dialog.
+renderer’s existing handling.
+
+**Generated errors (T241, not measured: Origin unusable on this computer on 2026-11-20).** OriginLab's
+help ("Adding Error Bars to Your Graph", section "Adding error bars to an existing graph by
+calculating simple dataset statistics") says the tool computes "a user-specified percentage of each
+data point", the "standard deviation with specified scaling factor of the data set" or the "square
+root of each data value", and that "the error data is output to a new column on the source
+worksheet. The column includes a comment indicating the error bar type. The formula used for error
+bar calculation will appear in the Set Column Values dialog." Sheaf's **Source of Errors** now lists
+**Percent of Data (%)** (a number, default 5), **Standard Deviation of Data** with **Scaling Factor**
+(default 1), **Square Root of Data**, and **Existing Column** (the chooser above). A plot that has, or
+sits next to, a Y error column starts on Existing Column, otherwise on Percent of Data (Origin's
+first choice, selected in the 14.13a capture). OK with a generated source inserts a new column
+right of the plot's Y column (Origin requires error data right of its Y), designation Y Error,
+comment `Error bars: Percent of Data 5%` / `Error bars: Standard Deviation of Data, Scaling Factor
+1` / `Error bars: Square Root of Data`, filled by Set Column Values with `abs(col(B))*5/100`,
+`sd(col(B))*1` (the sample standard deviation on every row) or `sqrt(col(B))` (negative values give
+missing errors), the formula kept on the column, run once; the plot's Y errors become that column.
+Column, link and values are one undo step ("Add error bars"). Percent and Scaling Factor must be
+positive. Not measured: Origin's defaults (the capture showed empty edits), its column name and
+long name, whether Percent uses the magnitude, and its rounding.
 
 ### 14.14 Colour lists of column and area templates; stacked area and fill area (T12)
 

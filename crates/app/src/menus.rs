@@ -97,6 +97,8 @@ pub enum ImageCmd {
     Subtract,
     Crop,
     Resize,
+    ColorToGray,
+    RgbSplit,
 }
 
 /// The Matrix menu's commands (T192 slice 3, matrices spec 7b).
@@ -2015,7 +2017,10 @@ fn image_menu() -> Vec<Entry> {
             ],
         ),
         sub("Arithmetic &Transform", vec![i("Math...", Math), i("Subtract...", Subtract)]),
-        sub("&Conversion", vec![i("To Binary...", ToBinary), grey("Color to Gray..."), grey("RGB Split...")]),
+        sub(
+            "&Conversion",
+            vec![i("To Binary...", ToBinary), i("Color to Gray...", ColorToGray), i("RGB Split...", RgbSplit)],
+        ),
         sub(
             "&Geometric Transform",
             vec![i("Crop...", Crop), i("Resize...", Resize), i("Rotate...", Rotate), i("Flip...", Flip)],

@@ -5538,6 +5538,28 @@ impl SheafApp {
                     self.doc.project().matrix_books().filter(|m| m.id != id).map(|m| (m.id, m.name.clone())).collect();
                 ImageForm::Subtract { choices, pick: 0 }
             }
+            I::ColorToGray | I::RgbSplit => {
+                use sheaf_core::matrix_image::{color_to_gray, rgb_sheets};
+                let split = cmd == I::RgbSplit;
+                let book_name = b.name.clone();
+                let Some(rgb) = rgb_sheets(&b.sheets).map(|s| s.map(|x| x.clone())) else {
+                    self.warn("This matrix book has no Red, Green and Blue sheets of a colour picture");
+                    return;
+                };
+                let label = if split { "RGB Split" } else { "Color to Gray" };
+                let _ = self.doc.edit(label, |p| {
+                    if split {
+                        for s in &rgb {
+                            p.adopt_matrix_book(&format!("{} of {book_name}", s.name), vec![s.clone()]);
+                        }
+                    } else {
+                        let [r, g, bl] = &rgb;
+                        p.adopt_matrix_book(&format!("Gray of {book_name}"), vec![color_to_gray([r, g, bl])]);
+                    }
+                    Ok::<_, String>(())
+                });
+                return;
+            }
             I::Smooth | I::Sharpen | I::EdgeDetection => {
                 let op = match cmd {
                     I::Smooth => ImageOp::Smooth,

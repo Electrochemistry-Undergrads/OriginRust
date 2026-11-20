@@ -217,6 +217,9 @@ static TABLE: &[(&str, Func)] = &[
     ("month", Func::U(month)),
     ("day", Func::U(day)),
     ("weekday", Func::U(weekday)),
+    ("hour", Func::U(hour)),
+    ("minute", Func::U(minute)),
+    ("second", Func::U(second)),
     ("rnd", Func::Rand { gauss: false }),
     ("grnd", Func::Rand { gauss: true }),
     ("lookup", Func::Lookup),
@@ -662,6 +665,29 @@ fn month(v: f64) -> f64 {
 
 fn day(v: f64) -> f64 {
     civil_of(v).map_or(NA, |c| c.2 as f64)
+}
+
+/// The time of day of a date-time number in milliseconds, rounded to the nearest one so that a
+/// value such as `date(2020,1,1) + 0.75` is 18:00 and not 17:59:59.999... (T239, Sheaf's rule: Origin
+/// was not available to measure). A time that rounds up to midnight is the start of the next day.
+fn day_millis(v: f64) -> Option<i64> {
+    civil_of(v)?;
+    Some(((v - v.floor()) * 86_400_000.0).round() as i64 % 86_400_000)
+}
+
+/// Hour of the day of a date-time number, 0 to 23 (T239).
+fn hour(v: f64) -> f64 {
+    day_millis(v).map_or(NA, |ms| (ms / 3_600_000) as f64)
+}
+
+/// Minute of the hour, 0 to 59 (T239).
+fn minute(v: f64) -> f64 {
+    day_millis(v).map_or(NA, |ms| (ms / 60_000 % 60) as f64)
+}
+
+/// Second of the minute with its fraction, to the millisecond: 0 to 59.999 (T239).
+fn second(v: f64) -> f64 {
+    day_millis(v).map_or(NA, |ms| (ms % 60_000) as f64 / 1000.0)
 }
 
 /// Day of the week, 0 = Sunday (measured in Origin).

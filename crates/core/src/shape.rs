@@ -20,6 +20,9 @@ pub enum ShapeKind {
     Rectangle,
     /// The ellipse inscribed in that rectangle.
     Ellipse,
+    /// A picture (the graph page's Insert Images From Files..., T216) stretched over that rectangle.
+    /// Not one of the drawing tools.
+    Image,
 }
 
 impl ShapeKind {
@@ -37,6 +40,7 @@ impl ShapeKind {
             ShapeKind::Arrow => "Arrow",
             ShapeKind::Rectangle => "Rectangle",
             ShapeKind::Ellipse => "Circle",
+            ShapeKind::Image => "Picture",
         }
     }
 }
@@ -68,6 +72,18 @@ pub struct Shape {
     /// with the same number are selected and moved together. Saved only when set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<u32>,
+    /// The picture of an [`ShapeKind::Image`] object (T216); `None` for every other kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub picture: Option<Picture>,
+}
+
+/// A PNG picture kept in the project (written as base64 text), with its size in pixels.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Picture {
+    #[serde(with = "crate::worksheet::base64_bytes")]
+    pub png: std::sync::Arc<Vec<u8>>,
+    pub width_px: u32,
+    pub height_px: u32,
 }
 
 fn default_head() -> f64 {
@@ -98,7 +114,18 @@ impl Shape {
             head_pt: Self::DEFAULT_HEAD_PT,
             head_at_start: false,
             group: None,
+            picture: None,
         }
+    }
+
+    /// A picture object (T216) with its top left corner at `at` and `size` fractions of the frame,
+    /// without a border.
+    pub fn picture(picture: Picture, at: (f64, f64), size: (f64, f64)) -> Shape {
+        let mut s = Shape::new(ShapeKind::Image, at, (at.0 + size.0, at.1 + size.1));
+        s.width_pt = 0.0;
+        s.fill = None;
+        s.picture = Some(picture);
+        s
     }
 
     /// Moves the whole object by `(dx, dy)` fractions.
@@ -199,5 +226,18 @@ mod tests {
         value = serde_json::to_value(&with).unwrap();
         assert_eq!(value["shapes"].as_array().map(Vec::len), Some(1));
         assert_eq!(serde_json::from_value::<crate::graph::Layer>(value).unwrap().shapes, with.shapes);
+    }
+
+    #[test]
+    fn a_picture_object_round_trips_with_its_bytes() {
+        let pic = Picture { png: std::sync::Arc::new(vec![137, 80, 78, 71, 1, 2, 3]), width_px: 2, height_px: 1 };
+        let s = Shape::picture(pic.clone(), (0.1, 0.2), (0.3, 0.15));
+        assert_eq!((s.kind, s.x2, s.width_pt), (ShapeKind::Image, 0.4, 0.0));
+        let json = serde_json::to_string(&s).unwrap();
+        let back: Shape = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.picture, Some(pic));
+        assert!(!ShapeKind::ALL.contains(&ShapeKind::Image), "not a drawing tool");
+        let plain = serde_json::to_string(&Shape::new(ShapeKind::Line, (0.0, 0.0), (1.0, 1.0))).unwrap();
+        assert!(!plain.contains("picture"));
     }
 }

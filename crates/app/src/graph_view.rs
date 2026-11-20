@@ -164,7 +164,7 @@ fn draw_preview(painter: &egui::Painter, s: &Shape, to_screen: &dyn Fn((f64, f64
         ShapeKind::Line | ShapeKind::Arrow => {
             painter.line_segment([a, b], stroke);
         }
-        ShapeKind::Rectangle => {
+        ShapeKind::Rectangle | ShapeKind::Image => {
             painter.rect_stroke(Rect::from_two_pos(a, b), 0.0, stroke, egui::StrokeKind::Middle);
         }
         ShapeKind::Ellipse => {

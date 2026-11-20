@@ -256,6 +256,11 @@ pub enum Cmd {
         layer: usize,
         page: (f64, f64),
     },
+    /// The page's Insert Images From Files...: a picture with its corner at the clicked point (T216).
+    InsertGraphImage {
+        layer: usize,
+        page: (f64, f64),
+    },
     /// An axis title's right-click Cut and Copy (T148).
     CopyTitle {
         layer: usize,
@@ -2895,6 +2900,7 @@ pub fn graph_page_menu(layer: usize, page: (f64, f64)) -> Vec<Entry> {
     let mut v: Vec<Entry> = paste.into_iter().collect();
     v.extend([
         item("Add Text...", Cmd::AddText),
+        item("Insert Images From Files...", Cmd::InsertGraphImage { layer, page }),
         item("Layer Management...", Cmd::LayerManagement(None)),
         new_layer_menu(),
         item("Add Shortcut to Favorites", Cmd::AddFavorite),
@@ -3298,6 +3304,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::CopyLabel { layer, label } => {
             Action::CopyLabel { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, label: *label, cut: false }
+        }
+        Cmd::InsertGraphImage { layer, page } => {
+            Action::PickGraphImage { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, page: *page }
         }
         Cmd::PasteShape { layer, page } => {
             Action::PasteShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, page: *page }

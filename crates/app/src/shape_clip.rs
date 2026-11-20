@@ -118,6 +118,19 @@ pub fn placed(graph: &Graph, layer: usize, page: (f64, f64)) -> Option<Pasted> {
     })
 }
 
+/// A picture object (T216) for a PNG of `width_px` x `height_px` with its top left corner at the page
+/// point `page`: 96 pixels to the inch (0.75 point a pixel), made smaller, keeping its proportions,
+/// to fit two thirds of the page. `None` when the layer is not there.
+pub fn picture_at(graph: &Graph, layer: usize, page: (f64, f64), picture: sheaf_core::shape::Picture) -> Option<Shape> {
+    let (fx, fy, fw, fh) = frame_pt(graph, layer)?;
+    let (mut w, mut h) = (f64::from(picture.width_px.max(1)) * 0.75, f64::from(picture.height_px.max(1)) * 0.75);
+    let k = (graph.page.width_pt * 2.0 / 3.0 / w).min(graph.page.height_pt * 2.0 / 3.0 / h).min(1.0);
+    w *= k;
+    h *= k;
+    let at = ((page.0 - fx) / fw, (page.1 - fy) / fh);
+    Some(Shape::picture(picture, at, (w / fw, h / fh)))
+}
+
 /// Forgets the copied object (tests).
 #[cfg(test)]
 pub fn clear() {

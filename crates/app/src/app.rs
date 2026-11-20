@@ -3334,6 +3334,39 @@ impl SheafApp {
                     self.edit_graph(graph, crate::actions::GraphOp::DeleteLabel { layer, label });
                 }
             }
+            Action::PickGraphImage { graph, layer, page } => {
+                let picked = rfd::FileDialog::new()
+                    .set_title("Insert Images From Files")
+                    .add_filter("PNG image", &["png"])
+                    .pick_file();
+                let Some(path) = picked else { return };
+                match std::fs::read(&path) {
+                    Ok(bytes) => {
+                        let png = std::sync::Arc::new(bytes);
+                        self.apply(Action::InsertGraphImage { graph, layer, page, png }, ctx);
+                    }
+                    Err(e) => self.warn(format!("{}: {e}", path.display())),
+                }
+            }
+            Action::InsertGraphImage { graph, layer, page, png } => {
+                let Ok(img) = image::load_from_memory_with_format(&png, image::ImageFormat::Png) else {
+                    self.warn("That file is not a PNG picture Sheaf can read".to_string());
+                    return;
+                };
+                let picture = sheaf_core::shape::Picture { png, width_px: img.width(), height_px: img.height() };
+                let shape = self
+                    .doc
+                    .project()
+                    .graph(graph)
+                    .and_then(|g| crate::shape_clip::picture_at(g, layer, page, picture));
+                if let Some(shape) = shape {
+                    self.doc.apply("Insert Image", |p| {
+                        if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {
+                            l.shapes.push(shape);
+                        }
+                    });
+                }
+            }
             Action::PasteShape { graph, layer, page } => {
                 use crate::shape_clip::Pasted;
                 if let Some(pasted) =

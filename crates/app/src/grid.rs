@@ -120,6 +120,8 @@ pub struct BookUi {
     /// While a Notes sheet's text is edited (T188): the sheet, the text when editing began and the
     /// text typed.
     notes_edit: Option<(usize, String, String)>,
+    /// The first visible column of the sheet shown, for the row number's Insert Graph... (T205).
+    first_visible_column: Option<ColumnId>,
     /// Textures of the pictures in cells (T202), by cell, with the address of the bytes they show.
     cell_image_pictures: std::collections::HashMap<(ColumnId, usize), (usize, egui::TextureHandle)>,
     /// Pictures of the graphs shown in cells (T194): the document revision each was drawn at.
@@ -908,6 +910,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
             state.cell_graph_pictures.insert(cg.graph, (doc.revision(), tex));
         }
     }
+
+    state.first_visible_column = sheet.columns.iter().find(|c| !c.hidden).map(|c| c.id);
 
     // Pictures in cells (T202): decoded once per picture.
     for ci in &sheet.cell_images {
@@ -2199,7 +2203,8 @@ fn row_header_cell(
     if response.secondary_clicked() && !selected {
         state.select_rows(r, r);
     }
-    response.context_menu(|ui| menus::show_context(ui, &menus::row_menu(), &book_ctx(book_id, state), actions));
+    let menu = menus::row_menu(state.first_visible_column.map(|c| (c, r)));
+    response.context_menu(|ui| menus::show_context(ui, &menu, &book_ctx(book_id, state), actions));
 }
 
 // ----- the cells -----------------------------------------------------------------------------------
@@ -2365,6 +2370,24 @@ fn body_cell(
         ui.painter().rect_filled(room, 0.0, Color32::WHITE);
         ui.painter().image(tex.id(), shown, egui::Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
     }
+    // An arrow across the cell (T205): left to right, a head at the right end (both ends when double).
+    let cell_arrow = sheet.cell_arrow(column.id, r);
+    if let Some(arrow) = cell_arrow {
+        let y = rect.center().y;
+        let (left, right) = (rect.left() + 4.0, rect.right() - 4.0);
+        let stroke = Stroke::new(1.5_f32, Color32::BLACK);
+        let painter = ui.painter().with_clip_rect(rect);
+        painter.line_segment([Pos2::new(left, y), Pos2::new(right, y)], stroke);
+        let head = (rect.height() * 0.25).clamp(3.0, 6.0);
+        let tip = |x: f32, dir: f32| {
+            painter.line_segment([Pos2::new(x, y), Pos2::new(x - dir * head, y - head)], stroke);
+            painter.line_segment([Pos2::new(x, y), Pos2::new(x - dir * head, y + head)], stroke);
+        };
+        tip(right, 1.0);
+        if arrow.double {
+            tip(left, -1.0);
+        }
+    }
     // A picture in the cell (T202), fitted into it.
     let cell_image = sheet.cell_image(column.id, r).is_some();
     if let Some((_, tex)) = state.cell_image_pictures.get(&(column.id, r)).filter(|_| cell_image) {
@@ -2409,6 +2432,7 @@ fn body_cell(
             cell_graph.is_some(),
             cell_sparkline.is_some(),
             cell_image,
+            cell_arrow.is_some(),
         );
         menus::show_context(ui, &menu, &book_ctx(book_id, state), actions);
         // A note belongs to the right-clicked cell even inside a larger selection.

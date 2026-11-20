@@ -2054,6 +2054,12 @@ impl SheafApp {
                     Err(e) => self.warn(format!("{}: {e}", path.display())),
                 }
             }
+            Action::SetCellArrow { column, row, double } => {
+                let label = if double.is_some() { "Insert Arrow" } else { "Remove Arrow" };
+                self.doc.apply(label, |p| {
+                    p.set_cell_arrow(column, row, double);
+                });
+            }
             Action::SetCellImage { column, row, png } => {
                 let label = if png.is_some() { "Insert Image" } else { "Remove Image" };
                 self.doc.apply(label, |p| {

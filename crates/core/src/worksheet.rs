@@ -82,6 +82,19 @@ pub struct Worksheet {
     /// Pictures shown in data cells (the cell menu's Insert Images from Files..., T202), at most one per cell.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cell_images: Vec<CellImage>,
+    /// Arrows drawn across data cells (the cell menu's Insert Arrow, T205), at most one per cell.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cell_arrows: Vec<CellArrow>,
+}
+
+/// An arrow drawn across a data cell (T205): left to right, with a head at the right end, or at both
+/// ends for a double arrow.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CellArrow {
+    pub column: ColumnId,
+    pub row: usize,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub double: bool,
 }
 
 /// A picture in a data cell (T202): the PNG file's bytes, kept in the project (written as base64 text).
@@ -200,6 +213,21 @@ impl Worksheet {
             cell_graphs: Vec::new(),
             cell_sparklines: Vec::new(),
             cell_images: Vec::new(),
+            cell_arrows: Vec::new(),
+        }
+    }
+
+    /// The arrow drawn across a data cell (T205).
+    pub fn cell_arrow(&self, column: ColumnId, row: usize) -> Option<CellArrow> {
+        self.cell_arrows.iter().find(|a| a.column == column && a.row == row).copied()
+    }
+
+    /// Draws an arrow (`Some(double)`) across a data cell, replacing the one there; `None` takes it
+    /// out (T205).
+    pub fn set_cell_arrow(&mut self, column: ColumnId, row: usize, double: Option<bool>) {
+        self.cell_arrows.retain(|a| !(a.column == column && a.row == row));
+        if let Some(double) = double {
+            self.cell_arrows.push(CellArrow { column, row, double });
         }
     }
 
@@ -245,6 +273,14 @@ impl Worksheet {
     /// Follows new column ids (or drops the cell graphs of deleted columns); called by
     /// [`Worksheet::remap_note_columns`], which every column re-id and deletion goes through.
     pub(crate) fn remap_cell_graph_columns(&mut self, map: &dyn Fn(ColumnId) -> Option<ColumnId>) {
+        // Cell arrows (T205) follow their column.
+        self.cell_arrows.retain_mut(|a| match map(a.column) {
+            Some(c) => {
+                a.column = c;
+                true
+            }
+            None => false,
+        });
         // Cell pictures (T202) follow their column.
         self.cell_images.retain_mut(|i| match map(i.column) {
             Some(c) => {
@@ -564,6 +600,19 @@ mod title_tests {
     }
 
     #[test]
+    fn a_cell_arrow_is_replaced_removed_and_follows_its_column() {
+        let mut s = Worksheet::new("S");
+        s.set_cell_arrow(ColumnId(1), 0, Some(false));
+        s.set_cell_arrow(ColumnId(1), 0, Some(true));
+        assert_eq!(s.cell_arrows.len(), 1);
+        assert!(s.cell_arrow(ColumnId(1), 0).is_some_and(|a| a.double));
+        s.remap_note_columns(&|c| Some(ColumnId(c.0 + 1)));
+        assert!(s.cell_arrow(ColumnId(2), 0).is_some());
+        s.set_cell_arrow(ColumnId(2), 0, None);
+        assert!(s.cell_arrows.is_empty());
+    }
+
+    #[test]
     fn a_cell_sparkline_follows_both_its_columns() {
         let mut s = Worksheet::new("S");
         s.set_cell_sparkline(ColumnId(1), 0, Some(ColumnId(2)));
@@ -591,6 +640,20 @@ mod title_tests {
 }
 
 impl crate::project::Project {
+    /// Draws an arrow across the data cell of `column` at `row` (`Some(double)`), or takes it out with
+    /// `None` (T205). False when there is no such column.
+    pub fn set_cell_arrow(&mut self, column: ColumnId, row: usize, double: Option<bool>) -> bool {
+        for w in &mut self.windows {
+            if let crate::project::Window::Workbook(b) = w
+                && let Some(s) = b.sheets.iter_mut().find(|s| s.column(column).is_some())
+            {
+                s.set_cell_arrow(column, row, double);
+                return true;
+            }
+        }
+        false
+    }
+
     /// Puts a PNG picture in the data cell of `column` at `row`, or takes it out with `None` (T202).
     /// False when there is no such column.
     pub fn set_cell_image(&mut self, column: ColumnId, row: usize, png: Option<std::sync::Arc<Vec<u8>>>) -> bool {

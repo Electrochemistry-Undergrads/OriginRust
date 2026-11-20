@@ -377,6 +377,11 @@ pub enum Action {
         book: WindowId,
         on: bool,
     },
+    /// Set Data Style > Float on or off for the selected cells of the active sheet (T214).
+    SetFloat {
+        book: WindowId,
+        on: bool,
+    },
     /// Draw an arrow across a data cell (`Some(double)`) or take it out (T205), one undo step.
     SetCellArrow {
         column: ColumnId,

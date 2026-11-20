@@ -185,6 +185,8 @@ pub enum Cmd {
     RemoveLinks,
     /// A data cell's Set Data Style > Rich Text: turn it on or off for the selected cells (T208).
     SetRichText(bool),
+    /// A data cell's Set Data Style > Float: turn it on or off for the selected cells (T214).
+    SetFloat(bool),
     /// A data cell's Insert Arrow > Arrow / Double Arrow, or Remove Arrow with `None` (T205).
     SetCellArrow {
         column: ColumnId,
@@ -2434,7 +2436,8 @@ pub fn label_cell_menu(read_only: bool) -> Vec<Entry> {
 /// The menu of a data cell; `noted` when the cell has a note (Edit/Delete Note instead of Add);
 /// `cell` is the right-clicked cell, `graph` whether it shows a graph (T194) and `sparkline` whether it
 /// draws a sparkline (T200); `image` whether it shows a picture (T202); `arrow` whether it has an arrow
-/// (T205); `rich_text` whether the cell's Set Data Style > Rich Text is on (T208).
+/// (T205); `rich_text` and `float` whether the cell's Set Data Style > Rich Text (T208) and Float (T214)
+/// are on.
 pub fn cell_menu_for(
     noted: bool,
     cell: (ColumnId, usize),
@@ -2442,7 +2445,7 @@ pub fn cell_menu_for(
     sparkline: bool,
     image: bool,
     arrow: bool,
-    rich_text: bool,
+    (rich_text, float): (bool, bool),
 ) -> Vec<Entry> {
     let (column, row) = cell;
     let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut)];
@@ -2497,7 +2500,7 @@ pub fn cell_menu_for(
         vec![
             item(if rich_text { "\u{2713} Rich Text" } else { "Rich Text" }, Cmd::SetRichText(!rich_text)),
             grey("Wrap Text"),
-            grey("Float"),
+            item(if float { "\u{2713} Float" } else { "Float" }, Cmd::SetFloat(!float)),
             item("More...", Cmd::FormatCells),
         ],
     ));
@@ -3325,6 +3328,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::InsertCellSparkline { column, row } => Action::PickCellSparkline { column: *column, row: *row },
         Cmd::InsertCellImage { column, row } => Action::PickCellImage { column: *column, row: *row },
         Cmd::SetRichText(on) => Action::SetRichText { book: c.book.ok_or(NEED_BOOK)?, on: *on },
+        Cmd::SetFloat(on) => Action::SetFloat { book: c.book.ok_or(NEED_BOOK)?, on: *on },
         Cmd::SetCellArrow { column, row, double } => {
             Action::SetCellArrow { column: *column, row: *row, double: *double }
         }

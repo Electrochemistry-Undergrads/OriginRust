@@ -877,6 +877,7 @@ mod tests {
             first_tick: None,
             axis_breaks: Vec::new(),
             additional_line: None,
+            at_position: None,
             special_ticks: Vec::new(),
             tick_label_formula: String::new(),
             minor_tick_labels: false,

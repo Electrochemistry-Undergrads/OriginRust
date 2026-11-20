@@ -228,3 +228,60 @@ fn scatter_central_titles_stand_at_the_ends_of_the_moved_axes() {
     let x_title = texts.iter().find(|t| t.rotate_ccw != 0.0 && t.x < f.x && (t.y - (f.y + 0.5 * f.h)).abs() < 1e-2);
     assert!(x_title.is_some(), "no rotated title left of the frame: {f:?}");
 }
+
+#[test]
+fn an_axis_at_a_position_stands_where_the_other_axis_has_that_value() {
+    // T243: Origin's Axis Position "At Position =". Y from -1 to 3: an X axis at Y = 0 stands a quarter
+    // of the way up; a Y axis at X = the middle of X stands in the middle.
+    let (x, shape) = super::tests::golden_data();
+    let (mut p, g) = super::tests::project(Template::Scatter, x, vec![shape(1.0)]);
+    {
+        let l = &mut p.graph_mut(g).unwrap().layers[0];
+        (l.y_axis.min, l.y_axis.max) = (Some(-1.0), Some(3.0));
+        l.x_axis.at_position = Some(0.0);
+    }
+    let f = geoms(&p, g)[0].frame;
+    let width = p.graph(g).unwrap().layers[0].x_axis.line_width_pt;
+    let ys =
+        |p: &Project| horizontal_lines(&layout::build_scene(p, g, &FixedMetrics).unwrap().layers[0].overlay, width);
+    let near = |v: &[f64], t: f64| v.iter().any(|a| (a - t).abs() < 1e-2);
+    let got = ys(&p);
+    assert!(near(&got, f.y + 0.75 * f.h), "X axis at Y = 0: {got:?} {f:?}");
+    assert!(!near(&got, f.y + f.h), "the bottom edge has no line: {got:?}");
+    // It follows the other axis: Y from 0 to 4 puts Y = 0 on the bottom edge.
+    {
+        let l = &mut p.graph_mut(g).unwrap().layers[0];
+        (l.y_axis.min, l.y_axis.max) = (Some(0.0), Some(4.0));
+    }
+    assert!(near(&ys(&p), f.y + f.h), "{:?}", ys(&p));
+    // A value beyond the range stays on the nearer edge; on the top side it is measured from the top.
+    {
+        let l = &mut p.graph_mut(g).unwrap().layers[0];
+        (l.y_axis.min, l.y_axis.max) = (Some(-1.0), Some(3.0));
+        l.x_axis.at_position = Some(10.0);
+    }
+    assert!(near(&ys(&p), f.y), "clamped to the top edge: {:?}", ys(&p));
+    {
+        let l = &mut p.graph_mut(g).unwrap().layers[0];
+        l.x_axis.at_position = Some(2.0);
+        l.x_axis.side = AxisSide::Opposite;
+    }
+    let f = geoms(&p, g)[0].frame;
+    assert!(near(&ys(&p), f.y + 0.25 * f.h), "{:?} {f:?}", ys(&p));
+    // A Y axis at an X value.
+    let x_mid = {
+        let l = &p.graph(g).unwrap().layers[0];
+        let geom = &geoms(&p, g)[0];
+        let _ = l;
+        0.5 * (geom.x.min + geom.x.max)
+    };
+    p.graph_mut(g).unwrap().layers[0].y_axis.at_position = Some(x_mid);
+    let f = geoms(&p, g)[0].frame;
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let xs = vertical_lines(&scene.layers[0].overlay, p.graph(g).unwrap().layers[0].y_axis.line_width_pt);
+    assert!(near(&xs, f.x + 0.5 * f.w), "Y axis at the middle X: {xs:?} {f:?}");
+    match hit::hit_test(&scene, (f.x + 0.5 * f.w, f.y + 0.6 * f.h), 3.0) {
+        hit::Hit::Object { layer: 0, kind: scene::ObjectKind::YAxis } => {}
+        other => panic!("a click on the moved line selects the Y axis: {other:?}"),
+    }
+}

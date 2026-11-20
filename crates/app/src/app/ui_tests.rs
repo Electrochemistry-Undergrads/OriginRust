@@ -510,6 +510,29 @@ fn graph_settings_change_the_axis_live_and_undo_as_one_step() {
     assert_eq!(h.state().doc.undo_label(), Some("Import data"));
 }
 
+#[test]
+fn the_axis_position_can_be_at_a_value_of_the_other_axis() {
+    // T243: Line and Ticks > Axis Position "At Position =".
+    let mut h = start(vec![data_file("axis-at")]);
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["Format", "Axes", "Y Axis..."]);
+    click(&mut h, "Line and Ticks");
+    let axis = |h: &Harness<'static, SheafApp>| project(h).graphs().next().unwrap().layers[0].y_axis.clone();
+    h.get_by_value("Left").click();
+    settle(&mut h);
+    click(&mut h, "At Position =");
+    assert_eq!(axis(&h).at_position, Some(0.0));
+    assert!(h.query_by_label("X =").is_some(), "the value of the other axis is asked for");
+    h.get_by_value("At Position =").click();
+    settle(&mut h);
+    // "Right" also names other controls of the window: the popup's entry is the last one.
+    h.query_all_by_label("Right").last().expect("the Right entry").click();
+    settle(&mut h);
+    assert_eq!((axis(&h).at_position, axis(&h).side), (None, sheaf_core::graph::AxisSide::Opposite));
+    menu(&mut h, "Edit", "Undo Change graph settings");
+    assert_eq!((axis(&h).at_position, axis(&h).side), (None, sheaf_core::graph::AxisSide::Normal));
+}
+
 fn open_props(h: &mut Harness<'static, SheafApp>, layer: usize, tab: PropsTab, plot: Option<usize>) {
     let (_, graph) = window_ids(h);
     let ctx = h.ctx.clone();

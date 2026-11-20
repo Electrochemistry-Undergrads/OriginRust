@@ -1002,6 +1002,23 @@ fn layer_scene(
         draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
         return scene;
     }
+    // Axis Position "At Position =" (T243): the line where the other axis has that value, drawn as an
+    // inward offset from the axis' edge (line, ticks, labels and title move together).
+    let (at_x, at_y);
+    let xa = match crate::axis_offset::at_position_pct(xa, &geom.y) {
+        Some(pct) => {
+            at_x = Axis { offset_pct: pct, ..xa.clone() };
+            &at_x
+        }
+        None => xa,
+    };
+    let ya = match crate::axis_offset::at_position_pct(ya, &geom.x) {
+        Some(pct) => {
+            at_y = Axis { offset_pct: pct, ..ya.clone() };
+            &at_y
+        }
+        None => ya,
+    };
     // The edge each axis line is drawn on, as a box of no height or width.
     let x_line = Rect { y: crate::axis_offset::x_line_y(xa, f), h: 0.0, ..f };
     let y_line = Rect { x: crate::axis_offset::y_line_x(ya, f), w: 0.0, ..f };

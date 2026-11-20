@@ -6,6 +6,25 @@
 use crate::Rect;
 use sheaf_core::graph::{Axis, AxisSide};
 
+/// The offset in percent that puts `axis` at its "At Position =" value (T243): where `other` (the
+/// other axis of the layer) has that value, measured inward from the axis' own edge, the frame's
+/// height for an X axis and its width for a Y axis. `None` without a value, for a hidden axis, or
+/// for a value the other axis cannot place (a non-positive value on a log axis, inside a break).
+pub(crate) fn at_position_pct(axis: &Axis, other: &crate::ticks::ResolvedAxis) -> Option<f64> {
+    let v = axis.at_position?;
+    if axis.side == AxisSide::Hidden || !v.is_finite() {
+        return None;
+    }
+    let u = other.to_unit(v);
+    if !u.is_finite() {
+        return None;
+    }
+    let u = u.clamp(0.0, 1.0);
+    // 0 at the bottom (left) of the frame: the Normal edge for an X (Y) axis, the far one for Opposite.
+    let inward = if axis.side == AxisSide::Opposite { 1.0 - u } else { u };
+    Some(-inward * 100.0)
+}
+
 /// The distance in points the Y axis line stands from its edge, outward positive.
 pub(crate) fn offset_pt(axis: &Axis, frame: Rect) -> f64 {
     if axis.side == AxisSide::Hidden || !axis.offset_pct.is_finite() { 0.0 } else { axis.offset_pct / 100.0 * frame.w }

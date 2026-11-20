@@ -41,6 +41,7 @@ impl Layout {
                     LabelRow::Formula => LabelKind::Formula,
                     LabelRow::SamplingInterval => LabelKind::SamplingInterval,
                     LabelRow::Sparklines => LabelKind::Sparklines,
+                    LabelRow::Categories => LabelKind::Categories,
                     LabelRow::Param(n) => LabelKind::Param(n.clone()),
                 };
                 // The Sparklines row (T175) is twice as tall as a text row, Sheaf's choice.

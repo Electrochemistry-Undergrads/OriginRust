@@ -986,6 +986,13 @@ the sheet on the project's page setup (the same pagination, `SheetTable::page_br
 nothing after the last row or column. Off on a new sheet, saved per sheet, one undo step ("Worksheet view").
 The lines are on screen only. Origin's colour, line style and which setup it uses were not measured.
 
+**Categories row (T187, 2026-11-20, not measured).** The corner menu's Categories switch shows a
+read-only label row titled "Categories", last of the label rows: for a categorical column (Column > Set as
+Categorical) its distinct non-empty cell texts in the order they first appear, joined by ", "; empty for
+other columns. Off on a new sheet, saved per sheet, one undo step ("Worksheet view"). Typing or pasting into
+it is refused with a status message (Copy works). Origin's row text and order (sorted or as set in the
+category editor) were not measured.
+
 ## 13j. Find in Project (T95, measured 2026-11-16, Origin 2016)
 
 Edit > Find in Project... (F3; "Find in Project" on a graph's Edit menu) opens Origin's **Find** window

@@ -43,6 +43,7 @@ pub mod kde2d;
 pub mod layer_manage;
 pub mod layer_scale;
 pub mod layers;
+pub mod layout_page;
 pub mod line_series;
 pub mod localtime;
 pub mod marginal;

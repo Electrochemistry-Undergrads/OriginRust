@@ -258,6 +258,7 @@ fn save_window(
         Window::Workbook(b) => b.name.clone_from(&name),
         Window::Notes(n) => n.name.clone_from(&name),
         Window::Matrix(m) => m.name.clone_from(&name),
+        Window::Layout(l) => l.name.clone_from(&name),
     }
     let mut project = Project::new();
     project.windows.push(window);
@@ -307,7 +308,7 @@ pub fn load_file(path: &Path) -> Result<UserTemplate, IoError> {
         .into_iter()
         .find_map(|w| match w {
             Window::Graph(g) => Some(g),
-            Window::Workbook(_) | Window::Notes(_) | Window::Matrix(_) => None,
+            Window::Workbook(_) | Window::Notes(_) | Window::Matrix(_) | Window::Layout(_) => None,
         })
         .ok_or_else(|| IoError::Corrupt {
             path: path.to_path_buf(),
@@ -326,7 +327,7 @@ pub fn load_book_file(path: &Path) -> Result<BookTemplate, IoError> {
         .into_iter()
         .find_map(|w| match w {
             Window::Workbook(b) => Some(b),
-            Window::Graph(_) | Window::Notes(_) | Window::Matrix(_) => None,
+            Window::Graph(_) | Window::Notes(_) | Window::Matrix(_) | Window::Layout(_) => None,
         })
         .ok_or_else(|| IoError::Corrupt {
             path: path.to_path_buf(),

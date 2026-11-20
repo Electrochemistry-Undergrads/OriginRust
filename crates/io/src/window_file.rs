@@ -66,7 +66,7 @@ impl WindowFileKind {
         match window {
             Window::Workbook(_) => Some(WindowFileKind::Book),
             Window::Graph(_) => Some(WindowFileKind::Graph),
-            Window::Notes(_) | Window::Matrix(_) => None,
+            Window::Notes(_) | Window::Matrix(_) | Window::Layout(_) => None,
         }
     }
 }

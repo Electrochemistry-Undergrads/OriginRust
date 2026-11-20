@@ -6,6 +6,7 @@ use sheaf_core::merge::{MERGE_PAGE_IN, MergeOptions, MergeTextScale, auto_grid};
 use sheaf_core::{Document, Project, WindowId};
 
 mod folders;
+mod preview;
 use folders::FolderScope;
 
 pub enum Outcome {
@@ -102,6 +103,7 @@ pub struct MergeGraphsDialog {
     scale: Scale,
     factor: f64,
     problem: Option<String>,
+    preview: preview::Preview,
 }
 
 impl MergeGraphsDialog {
@@ -127,6 +129,7 @@ impl MergeGraphsDialog {
             scale: Scale::Auto,
             factor: 1.0,
             problem: None,
+            preview: preview::Preview::default(),
         }
     }
 
@@ -196,13 +199,34 @@ impl MergeGraphsDialog {
             .id(egui::Id::new("merge_graphs"))
             .open(&mut open)
             .collapsible(false)
-            .default_width(460.0)
+            .default_width(800.0)
             .show(ctx, |ui| {
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false, true])
-                    .max_height(560.0)
-                    .show(ui, |ui| self.body(ui, doc.project()));
-                if let Some(e) = &self.problem {
+                let preview_width = (ui.available_width() * 0.4).min(320.0);
+                let controls_width = ui.available_width() - preview_width - ui.spacing().item_spacing.x;
+                ui.horizontal_top(|ui| {
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(controls_width, 560.0),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| {
+                            egui::ScrollArea::vertical()
+                                .auto_shrink([false, true])
+                                .max_height(560.0)
+                                .show(ui, |ui| self.body(ui, doc.project()));
+                        },
+                    );
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(preview_width, 0.0),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| {
+                            let options = self.options(doc.project());
+                            let valid_folder = !self.source.is_folder() || self.folder.valid(doc.project());
+                            self.preview.show(ui, doc, options, valid_folder);
+                        },
+                    );
+                });
+                if let Some(e) = &self.problem
+                    && self.preview.error() != Some(e.as_str())
+                {
                     ui.colored_label(ui.visuals().error_fg_color, e);
                 }
                 ui.separator();

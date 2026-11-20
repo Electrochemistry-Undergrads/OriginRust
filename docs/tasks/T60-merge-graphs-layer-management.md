@@ -5,7 +5,7 @@
 Merge Graph Windows (core `merge.rs`, dialog, `sheaf merge-graphs`), Layer Management (Arrange,
 Size/Position, Link; core `layer_manage.rs`), Fit Page to Layers (dialog and Format item). Fit Layer to
 Graph did nothing measurable in Origin and is tagged `N`. Left: Merge's Active Page/Open/embedded filters, extra layers
-for empty cells and Common Scale options, panel labels, the merge preview; Layer Management's Add
+for empty cells and Common Scale options, panel labels; Layer Management's Add
 (T61), Axes and remaining Display controls; MCP tool for merging. **Size:** L, merge then management.
 Background-colour follow-up (`codex/t60-layer-display`, 2026-11-16): Display > Color >
 Background Color supports selected layers, None, basic presets and opaque RGB. Native two-layer
@@ -46,6 +46,20 @@ all 4,360 tests (eight ignored), all 12 existing merge UI regressions, inventory
 tests and frozen source/goldens pass. Fresh owned accessibility captures and independent PNG
 export pass; all owned actors are terminal. No new behavior tests or enabled items were added.
 
+Merge-preview follow-up (`codex/t60-merge-preview`, 2026-11-16): the documented Preview
+button and Auto Preview option show a bounded whole-page rendering beside the settings. The
+existing core merge runs only on a disposable project clone, including source removal; the
+original project, IDs, dirty flag and undo/redo history remain untouched until existing OK.
+Changing a draft or source clears the old image; Auto redraws it, while manual mode waits for
+Preview. Validation errors replace the image, and stale folder trees require reopening.
+Auto starts off; exact geometry, timing, initial state and invalidation are explicit Sheaf
+policies, with no fresh live Origin measurement. Remaining filters, labels, Common Scale and
+extra-layer controls stay separate. Fmt, strict workspace/all-target Clippy, all 4,367 tests (eight ignored), all 19 merge
+regressions, inventory283 and eight Python tests pass with frozen source/goldens and four test
+threads. Current manual/Auto/folder/source-removal/merged/Undo captures and independent PNG
+were inspected; all owned builders/apps/helpers/guards are terminal. Initial fixture/layout/style
+pilots are excluded; published merge assertions are preserved.
+
 **Branch:** `merge-graphs`. **Priority:** P0, wave 2, owner's stacked-figure priority.
 **Spec:** [graphing](../spec/graphing.md) 15 (add Merge Graph Windows and Layer Management
 subsections); ADR 0009. **Inventory:** 0 locations tagged `T60`.
@@ -65,7 +79,7 @@ Origin 2016 merge/window controls, defaults, layout/scaling, linked source layer
 retention and fit margins are recorded in graphing 15.7c/15.7d. Folder membership and named
 recursive traversal have fresh controls; reverse-arrival ordering remains unmeasured.
 The spec distinguishes measured fixtures from Sheaf policies, including shared-X and the
-existing project/manual-list order. Remaining filters/preview/labels and unimplemented
+existing project/manual-list order. Remaining filters/labels and unimplemented
 management controls need separate measurements before being enabled.
 
 ## Where

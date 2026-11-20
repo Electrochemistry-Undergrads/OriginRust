@@ -293,3 +293,20 @@ fn insert_images_from_files_puts_a_picture_object_on_the_graph() {
     );
     assert_eq!(project(&h).graph(graph).unwrap().layers[0].shapes.len(), shapes + 1);
 }
+
+#[test]
+fn window_properties_list_a_books_dependents_and_a_graphs_books() {
+    let mut h = start(vec![data_file("window-dependents")]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let graph = project(&h).graphs().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::RenameWindow(book), &ctx);
+    settle(&mut h);
+    let graph_name = project(&h).graph(graph).unwrap().name.clone();
+    assert!(h.query_by_label(&format!("Dependents: {graph_name}")).is_some(), "the graph plots the book");
+    h.state_mut().rename = None;
+    h.state_mut().apply(Action::RenameWindow(graph), &ctx);
+    settle(&mut h);
+    let book_name = project(&h).workbook(book).unwrap().name.clone();
+    assert!(h.query_by_label(&format!("Plots data of: {book_name}")).is_some());
+}

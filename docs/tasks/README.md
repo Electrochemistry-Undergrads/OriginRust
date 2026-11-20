@@ -153,6 +153,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T152](T152-legend-order.md) | Legend Bring to front/back, front/back of data (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured; left: legend Cut/Copy |
 | [T153](T153-title-order.md) | Axis title Bring to the front / Push to the back (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured |
 | [T154](T154-notes-window.md) | Notes windows: File > New > Notes, New Notes (B14 slice) | M | done 2026-11-19 (notes-window spec), not measured; left: Add Notes as Sheet, .opj |
+| [T234](T234-matrix-profiles.md) | Plot > Profile: Contour and Image Profiles as row/column cuts (B14 slice) | S | done 2026-11-20 (matrices 7l), not measured |
 | [T226](T226-ternary-contour.md) | Plot > Contour/Heat Map > Ternary Contour (B14 slice) | S | done 2026-11-20 (matrices 7k), not measured |
 | [T225](T225-polar-contour.md) | Plot > Contour/Heat Map > Polar Contour theta(X) r(Y), r(X) theta(Y) (B14 slice) | S | done 2026-11-20 (matrices 7k), not measured |
 | [T221](T221-matrix-surface-fit.md) | Nonlinear Surface Fit on a matrix through XYZ columns | S | done 2026-11-20 (matrices 7j), not measured |
@@ -218,6 +219,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T232](T232-send-graphs-to-powerpoint.md) | Send Graphs to PowerPoint... and sheaf export -o .pptx: one slide per graph | S | done 2026-11-20 (graphing 17.11), not measured; left: slide templates, Send to Word |
 | [T236](T236-format-clipboard-race.md) | Format clipboard file: retry an open or rename Windows refuses during a replace (flaky concurrency test) | S | done 2026-11-20 |
 | [T233](T233-batch-summary.md) | File > Batch Processing: Summary Sheet, Dataset Identifier, Delete Intermediate Books (a Batch Summary book stacking one sheet of every book) | S | done 2026-11-20 (workbook-model 13p), not measured; left: Origin's layout and identifier choices |
+| [T235](T235-batch-cli.md) | sheaf batch: Batch Processing without a window (template, summary, --summary-csv), core Project::batch_process shared with the window | S | done 2026-11-20 (workbook-model 13p); left: MCP |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |

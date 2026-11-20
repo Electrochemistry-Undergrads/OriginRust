@@ -27,6 +27,9 @@ pub enum Form {
     Shrink { cols: usize, rows: usize },
     /// An Image menu operation with one setting (T207).
     Image(ImageForm),
+    /// Plot > Profile (T234): a horizontal cut at row `index` or a vertical one at column `index`
+    /// (1-based).
+    Profile { horizontal: bool, index: usize },
 }
 
 /// The settings of an Image menu window (T207).
@@ -101,6 +104,7 @@ impl Form {
             Form::Dimensions { .. } => "Matrix Dimensions and Labels",
             Form::Expand { .. } => "Expand Matrix",
             Form::Shrink { .. } => "Shrink Matrix",
+            Form::Profile { .. } => "Profile",
             Form::Image(f) => match f {
                 ImageForm::Brightness(_) => "Brightness",
                 ImageForm::Contrast(_) => "Contrast",
@@ -127,12 +131,17 @@ impl Form {
             Form::Expand { cols, rows } => MatrixOp::Expand { cols: *cols, rows: *rows },
             Form::Shrink { cols, rows } => MatrixOp::Shrink { cols: *cols, rows: *rows },
             Form::Image(_) => unreachable!("an Image form runs through apply_image"),
+            Form::Profile { .. } => unreachable!("a profile runs through matrix_profile"),
         }
     }
 
     /// Runs the form's operation on sheet `sheet` of `book` as one undo step.
     fn run(&self, doc: &mut Document, book: WindowId, sheet: usize) -> Result<(), String> {
         match self {
+            Form::Profile { horizontal, index } => doc
+                .edit("Profile", |p| p.matrix_profile(book, sheet, *horizontal, index.saturating_sub(1)))
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
             Form::Image(ImageForm::Subtract { choices, pick }) => match choices.get(*pick) {
                 Some((other, _)) => subtract_image(doc, book, sheet, *other),
                 None => Err("there is no other matrix book to subtract".to_string()),
@@ -221,6 +230,17 @@ impl MatrixOpDialog {
                         ui.end_row();
                     }
                     Form::Image(f) => image_controls(ui, f),
+                    Form::Profile { horizontal, index } => {
+                        ui.label("Cut");
+                        ui.horizontal(|ui| {
+                            ui.radio_value(horizontal, true, "Horizontal (a row)");
+                            ui.radio_value(horizontal, false, "Vertical (a column)");
+                        });
+                        ui.end_row();
+                        ui.label(if *horizontal { "Row" } else { "Column" });
+                        ui.add(egui::DragValue::new(index).range(1..=1_000_000));
+                        ui.end_row();
+                    }
                     Form::Expand { cols, rows } | Form::Shrink { cols, rows } => {
                         ui.label("Column factor");
                         ui.add(egui::DragValue::new(cols).range(1..=1000));

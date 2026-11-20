@@ -84,3 +84,33 @@ fn add_graph_as_sheet_shows_the_picked_graph_in_the_workbook() {
     settle(&mut h);
     assert!(h.query_by_label("The graph this sheet showed was deleted.").is_some());
 }
+
+#[test]
+fn insert_graph_puts_a_picture_of_the_graph_in_the_cell() {
+    let mut h = start(vec![data_file("cell-graph")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = h.state().books.keys().next().copied().unwrap();
+    let graph = project(&h).graphs().next().unwrap().id;
+    let b = project(&h).workbook(book).unwrap().sheets[0].columns[1].id;
+    let menu = menus::cell_menu_for(false, (b, 0), false);
+    assert!(menu.iter().any(|e| matches!(e, menus::Entry::Item(i)
+        if i.label == "Insert Graph..." && i.cmd == Some(menus::Cmd::InsertCellGraph { column: b, row: 0 }))));
+    assert!(!menu.iter().any(|e| matches!(e, menus::Entry::Item(i) if i.label == "Remove Graph")));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::PickCellGraph { column: b, row: 0 }, &ctx);
+    settle(&mut h);
+    h.get_by_label("Insert Graph").get_by_label("OK").click();
+    settle(&mut h);
+    assert_eq!(project(&h).workbook(book).unwrap().sheets[0].cell_graph(b, 0), Some(graph));
+    assert_eq!(h.state().doc.undo_label(), Some("Insert Graph"));
+    let menu = menus::cell_menu_for(false, (b, 0), true);
+    let remove = menu.iter().find_map(|e| match e {
+        menus::Entry::Item(i) if i.label == "Remove Graph" => i.cmd.clone(),
+        _ => None,
+    });
+    let action = menus::resolve(&remove.expect("Remove Graph"), &h.state().menu_context()).unwrap();
+    h.state_mut().apply(action, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).workbook(book).unwrap().sheets[0].cell_graph(b, 0), None);
+    assert_eq!(h.state().doc.undo_label(), Some("Remove Graph"));
+}

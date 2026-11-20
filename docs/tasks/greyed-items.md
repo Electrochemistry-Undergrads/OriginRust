@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **117 greyed items: 94 in the menu bar, 1 on the toolbars, 22 in context menus.**
+original inventory baseline. This is not a new runtime audit. **114 greyed items: 92 in the menu bar, 1 on the toolbars, 21 in context menus.**
 
 ## How to read and keep this file
 
@@ -73,20 +73,20 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B3` | 3 |
 | `B4` | 0 |
 | `B5` | 12 |
-| `B6` | 13 |
+| `B6` | 12 |
 | `B7` | 0 |
 | `B8` | 0 |
 | `B9` | 1 |
 | `B11` | 0 |
 | `B12` | 1 |
 | `B13` | 2 |
-| `B14` | 34 |
+| `B14` | 32 |
 | `B15` | 1 |
 | `B16` | 15 |
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 12 items, backlog packages (`B`) 85, not planned (`N`) 20.
+Briefs (`T`) hold 12 items, backlog packages (`B`) 82, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -127,7 +127,6 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ### Analysis
 - `B14` Mathematics: Special Filter...
-- `B14` Signal Processing > FFT: 2D FFT... · 2D IFFT...
 
 ### Image
 - `B14` Adjustments: Brightness... · Contrast... · Gamma... · Levels...
@@ -181,7 +180,7 @@ changes. The baseline labels remain open until implementation or a documented re
 
 - `B5` Worksheet column header: Remove Links
 - `B5` Worksheet data cell: Paste Link · Paste Link Transpose · Remove Links
-- `B6` Worksheet data cell: Insert Graph... · Insert Images from Files... · Insert Sparklines... · Insert Variables...
+- `B6` Worksheet data cell: Insert Images from Files... · Insert Sparklines... · Insert Variables...
 - `B6` Worksheet data cell > Insert Arrow: Arrow · Double Arrow
 - `B5` Worksheet data cell > Set Data Style: Rich Text · Wrap Text · Float
 - `B6` Worksheet row number: Insert Graph...

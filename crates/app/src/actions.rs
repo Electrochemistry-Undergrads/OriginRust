@@ -347,6 +347,17 @@ pub enum Action {
         id: WindowId,
         text: String,
     },
+    /// A data cell's Insert Graph...: the window that picks the graph (T194).
+    PickCellGraph {
+        column: ColumnId,
+        row: usize,
+    },
+    /// Put a graph in a data cell or take it out (T194), one undo step.
+    SetCellGraph {
+        column: ColumnId,
+        row: usize,
+        graph: Option<WindowId>,
+    },
     /// Add Graph as Sheet (T190): a sheet of `book` that shows `graph`, one undo step.
     AddGraphSheet {
         book: WindowId,

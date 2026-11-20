@@ -1995,6 +1995,20 @@ impl SheafApp {
                     p.add_notes();
                 });
             }
+            Action::PickCellGraph { column, row } => {
+                let graphs: Vec<(WindowId, String)> =
+                    self.doc.project().graphs().map(|g| (g.id, Window::Graph(g.clone()).title())).collect();
+                self.graph_sheet_picker = Some(crate::dialogs::graph_sheet::GraphSheetPicker::new(
+                    crate::dialogs::graph_sheet::PickTarget::Cell { column, row },
+                    graphs,
+                ));
+            }
+            Action::SetCellGraph { column, row, graph } => {
+                let label = if graph.is_some() { "Insert Graph" } else { "Remove Graph" };
+                self.doc.apply(label, |p| {
+                    p.set_cell_graph(column, row, graph);
+                });
+            }
             Action::AddGraphSheet { book, graph } => {
                 let name = self.doc.project().graph(graph).map(|g| g.name.clone()).unwrap_or_default();
                 self.doc.apply("Add Graph as Sheet", |p| {
@@ -3776,7 +3790,10 @@ impl SheafApp {
                 let project = self.doc.project();
                 let graphs: Vec<(WindowId, String)> =
                     project.graphs().map(|g| (g.id, Window::Graph(g.clone()).title())).collect();
-                self.graph_sheet_picker = Some(crate::dialogs::graph_sheet::GraphSheetPicker::new(book, graphs));
+                self.graph_sheet_picker = Some(crate::dialogs::graph_sheet::GraphSheetPicker::new(
+                    crate::dialogs::graph_sheet::PickTarget::Sheet(book),
+                    graphs,
+                ));
             }
             SheetOp::AddNotes => {
                 self.doc.apply("Add Notes as Sheet", |p| {
@@ -4662,9 +4679,14 @@ impl SheafApp {
             GraphSheetOutcome::Open => {}
             GraphSheetOutcome::Closed => self.graph_sheet_picker = None,
             GraphSheetOutcome::Pick(graph) => {
-                let book = p.book;
+                let target = p.target;
                 self.graph_sheet_picker = None;
-                self.apply(Action::AddGraphSheet { book, graph }, ctx);
+                use crate::dialogs::graph_sheet::PickTarget;
+                let action = match target {
+                    PickTarget::Sheet(book) => Action::AddGraphSheet { book, graph },
+                    PickTarget::Cell { column, row } => Action::SetCellGraph { column, row, graph: Some(graph) },
+                };
+                self.apply(action, ctx);
             }
         }
     }
@@ -5182,6 +5204,15 @@ impl SheafApp {
             M::Rotate180 => MatrixOp::Rotate(Rotation::Half),
             M::FlipHorizontal => MatrixOp::Flip { direction: FlipDirection::Horizontal, coordinates: false },
             M::FlipVertical => MatrixOp::Flip { direction: FlipDirection::Vertical, coordinates: false },
+            M::Fft2 | M::Ifft2 => {
+                let inverse = cmd == M::Ifft2;
+                let label = if inverse { "2D IFFT" } else { "2D FFT" };
+                match self.doc.edit(label, |p| p.matrix_fft2(id, sheet, inverse)) {
+                    Ok(_) => self.say(format!("{label}: the result is in a new matrix book")),
+                    Err(e) => self.warn(e.to_string()),
+                }
+                return;
+            }
             M::Inverse => {
                 match self.doc.edit("Matrix Inverse", |p| p.matrix_inverse(id, sheet)) {
                     Ok(_) => self.say("Inverted the matrix into a new matrix book".to_string()),

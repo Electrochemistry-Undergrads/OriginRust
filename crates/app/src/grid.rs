@@ -120,6 +120,8 @@ pub struct BookUi {
     /// While a Notes sheet's text is edited (T188): the sheet, the text when editing began and the
     /// text typed.
     notes_edit: Option<(usize, String, String)>,
+    /// Pictures of the graphs shown in cells (T194): the document revision each was drawn at.
+    cell_graph_pictures: std::collections::HashMap<WindowId, (u64, egui::TextureHandle)>,
     /// The graph views of the graph sheets (T190), by sheet index.
     graph_sheets: std::collections::HashMap<usize, crate::graph_view::GraphUi>,
     /// The columns the selection touches (the whole columns for a column selection, the columns
@@ -888,6 +890,21 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                 }
             });
         });
+    }
+
+    // Graphs in cells (T194): their pictures are drawn again when the document changed.
+    for cg in &sheet.cell_graphs {
+        let fresh = state.cell_graph_pictures.get(&cg.graph).is_some_and(|(rev, _)| *rev == doc.revision());
+        if fresh {
+            continue;
+        }
+        let Some(gr) = doc.project().graph(cg.graph) else { continue };
+        let ppp = 240.0 / gr.page.width_pt.max(1.0);
+        if let Ok(r) = sheaf_plot::render_raster(doc.project(), cg.graph, ppp) {
+            let image = egui::ColorImage::from_rgba_unmultiplied([r.width as usize, r.height as usize], &r.rgba);
+            let tex = ui.ctx().load_texture(format!("cell_graph_{}", cg.graph.0), image, egui::TextureOptions::LINEAR);
+            state.cell_graph_pictures.insert(cg.graph, (doc.revision(), tex));
+        }
     }
 
     // A graph sheet (T190): the graph, as its window shows it, in place of the grid.
@@ -2320,8 +2337,22 @@ fn body_cell(
         }
         formatted_text(ui, &text, color, &look_of_cell);
     });
-    // The values of a recalculating column come from its formula.
-    if response.double_clicked() && !column.is_locked() {
+    // A graph in the cell (T194): its picture over the cell; a double click opens the graph.
+    let cell_graph = sheet.cell_graph(column.id, r);
+    if let Some((_, tex)) = cell_graph.and_then(|g| state.cell_graph_pictures.get(&g)) {
+        let size = tex.size_vec2();
+        let room = rect.shrink(1.0);
+        let k = (room.width() / size.x).min(room.height() / size.y);
+        let shown = egui::Rect::from_center_size(room.center(), size * k);
+        ui.painter().rect_filled(room, 0.0, Color32::WHITE);
+        ui.painter().image(tex.id(), shown, egui::Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+    }
+    if response.double_clicked()
+        && let Some(g) = cell_graph
+    {
+        actions.push(Action::Focus(g));
+    } else if response.double_clicked() && !column.is_locked() {
+        // The values of a recalculating column come from its formula.
         start_editing(state, column, r);
     }
     if let Some(note) = noted {
@@ -2333,7 +2364,8 @@ fn body_cell(
     }
     response.context_menu(|ui| {
         let before = actions.len();
-        menus::show_context(ui, &menus::cell_menu_for(noted.is_some()), &book_ctx(book_id, state), actions);
+        let menu = menus::cell_menu_for(noted.is_some(), (column.id, r), cell_graph.is_some());
+        menus::show_context(ui, &menu, &book_ctx(book_id, state), actions);
         // A note belongs to the right-clicked cell even inside a larger selection.
         if actions[before..].iter().any(|a| matches!(a, Action::NoteDialog(_) | Action::DeleteNote(_))) {
             state.select_cells(sheet, (position, r), (position, r));

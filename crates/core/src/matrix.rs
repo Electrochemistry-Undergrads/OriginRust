@@ -126,6 +126,10 @@ pub enum Rotation {
     Half,
 }
 
+pub(crate) fn check_cells(rows: usize, cols: usize) -> Result<(), MatrixError> {
+    check_size(rows, cols)
+}
+
 fn check_size(rows: usize, cols: usize) -> Result<(), MatrixError> {
     match rows.checked_mul(cols) {
         Some(n) if n <= MAX_CELLS => Ok(()),

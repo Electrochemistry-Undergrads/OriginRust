@@ -6596,6 +6596,7 @@ mod change_xy;
 mod find_replace;
 mod find_selection;
 mod fit_page;
+mod gadget_filters;
 mod go_to;
 mod go_to_browser;
 mod go_to_picker;

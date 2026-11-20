@@ -381,8 +381,12 @@ still warns that it cannot store worksheet filters; the `.sheaf` companion retai
 persistence and the existing explicit Reapply behavior are unchanged. Sheaf still has one filter
 per worksheet, lacks the Ignore Hidden Rows override, and retains original category tick/radar
 spoke positions rather than compressing their labels. Date/text filters and independently hidden
-rows remain separate work. Graph gadgets retain their existing input behavior; only the Data
-Reader was updated here.
+rows remain separate work. Only the Data Reader was updated here; the graph gadgets followed in
+T209 (2026-11-20): every gadget (Integrate, Rise Time, Intersect, Quick Peaks, Sigmoidal Fit, FFT,
+Statistics, Quick Fit, Vertical Cursor, Differentiate, Interpolate, Cluster) reads only the plot's
+rows inside its row range that pass its worksheet filters and are not masked in X or Y, joined in
+order as the plot's line joins them, the rows the analysis tools (and the Integrate gadget's New
+Output) read. The Data Reader keeps the worksheet's row numbers.
 
 ### 13.3 Cell selection and editing (owner-requested behavior, 2026-11-13)
 

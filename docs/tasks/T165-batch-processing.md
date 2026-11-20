@@ -13,5 +13,5 @@ analysis template on files and can collect a summary sheet.
 
 ## Left
 
-- Measure Origin's Batch Processing dialog; saved import filters; CLI and MCP access. (The summary
-  sheet, dataset identifier and deleting intermediate books: T233.)
+- Measure Origin's Batch Processing dialog; saved import filters; MCP access. (The summary sheet,
+  dataset identifier and deleting intermediate books: T233; the CLI `sheaf batch`: T235.)

@@ -260,6 +260,8 @@ pub(crate) struct SurfaceData {
     pub style: Surface3d,
     /// Each triangle's corners in the units of the hidden axes, and its mean Z in data units.
     pub triangles: Vec<([(f64, f64); 3], f64)>,
+    /// The same triangles flat on the floor of the box, for a projection (T168); empty otherwise.
+    pub floor: Vec<([(f64, f64); 3], f64)>,
     pub z_range: (f64, f64),
 }
 
@@ -288,7 +290,19 @@ fn surface(c: &Space3dCoords, b: &DataBox, style: Surface3d, x: &[f64], y: &[f64
         })
         .collect();
     triangles.sort_by(|p, q| q.0.total_cmp(&p.0));
-    SurfaceData { style, triangles: triangles.into_iter().map(|t| t.1).collect(), z_range }
+    // Colormap Surface with Projection (T168): each triangle again at Z = the floor of the box.
+    let floor = match style {
+        Surface3d::ColorMapProjection => sheaf_calc::xyzarea::delaunay(&flat)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|t| {
+                let mean_z = t.iter().map(|&i| points[i].1).sum::<f64>() / 3.0;
+                (t.map(|i| view(c, [points[i].0[0], points[i].0[1], -1.0])), mean_z)
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    SurfaceData { style, triangles: triangles.into_iter().map(|t| t.1).collect(), floor, z_range }
 }
 
 /// Draws a 3D surface (T166): its triangles from the farthest to the nearest, filled as its style
@@ -297,9 +311,25 @@ pub(crate) fn draw_surface(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeome
     let Some(s) = &pd.surface else { return };
     let plot = pd.plot;
     let stroke = (plot.line.width_pt > 0.0).then(|| crate::plots::line_stroke(&plot.line));
+    let path = |corners: &[(f64, f64); 3]| {
+        let mut d = String::new();
+        for (k, &(x, y)) in corners.iter().enumerate() {
+            let (px, py) = geom.data_to_page(x, y);
+            if k == 0 { scene::move_to(&mut d, px, py) } else { scene::line_to(&mut d, px, py) }
+        }
+        d.push('Z');
+        d
+    };
+    let mapped = |z: f64| crate::plots::map_color(crate::plots::z_fraction(s.z_range, z));
+    // The projection (T168) first, under the surface: the colour map without mesh lines, each
+    // triangle edged in its own colour so that no seams show between them.
+    for (corners, mean_z) in &s.floor {
+        let c = mapped(*mean_z);
+        out.push(Item::Path { d: path(corners), fill: Some(c), stroke: Some(Stroke::solid(c, 0.25)) });
+    }
     for (corners, mean_z) in &s.triangles {
         let fill = match s.style {
-            Surface3d::ColorMap => Some(crate::plots::map_color(crate::plots::z_fraction(s.z_range, *mean_z))),
+            Surface3d::ColorMap | Surface3d::ColorMapProjection => Some(mapped(*mean_z)),
             Surface3d::ColorFill => Some(plot.symbol.color),
             Surface3d::WireFrame => None,
             Surface3d::WireSurface => Some(Color::WHITE),
@@ -307,13 +337,7 @@ pub(crate) fn draw_surface(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeome
         if fill.is_none() && stroke.is_none() {
             continue;
         }
-        let mut d = String::new();
-        for (k, &(x, y)) in corners.iter().enumerate() {
-            let (px, py) = geom.data_to_page(x, y);
-            if k == 0 { scene::move_to(&mut d, px, py) } else { scene::line_to(&mut d, px, py) }
-        }
-        d.push('Z');
-        out.push(Item::Path { d, fill, stroke: stroke.clone() });
+        out.push(Item::Path { d: path(corners), fill, stroke: stroke.clone() });
     }
 }
 
@@ -736,6 +760,7 @@ mod tests {
             (Template::ColorFillSurface3d, Surface3d::ColorFill),
             (Template::WireFrame3d, Surface3d::WireFrame),
             (Template::WireSurface3d, Surface3d::WireSurface),
+            (Template::ColorMapProjection3d, Surface3d::ColorMapProjection),
         ] {
             let g = p.plot_columns(t, &[y]).unwrap();
             let graph = p.graph(g).unwrap();
@@ -754,6 +779,29 @@ mod tests {
             let geom = crate::layout::graph_geometry(&p, graph, &layers, &crate::FixedMetrics).remove(0);
             let mut out = Vec::new();
             draw_surface(&mut out, pd, &geom);
+            // A projection (T168) draws the triangles again on the floor first, with no mesh.
+            if style == Surface3d::ColorMapProjection {
+                assert_eq!(s.floor.len(), 8);
+                // Every corner is a grid point seen at the floor of the box (Z unit -1).
+                let c = *layer.coords.space3d().unwrap();
+                let bx = data_box(&p, layer).unwrap();
+                let grid: Vec<(f64, f64)> = (0..3)
+                    .flat_map(|i| (0..3).map(move |j| (i as f64, j as f64)))
+                    .map(|(x, y)| view(&c, [bx.unit(0, x), bx.unit(1, y), -1.0]))
+                    .collect();
+                let on_floor =
+                    |q: &(f64, f64)| grid.iter().any(|g| (g.0 - q.0).abs() < 1e-9 && (g.1 - q.1).abs() < 1e-9);
+                assert!(s.floor.iter().all(|(t, _)| t.iter().all(on_floor)));
+                assert_eq!(out.len(), 16);
+                assert!(
+                    out[..8]
+                        .iter()
+                        .all(|i| matches!(i, Item::Path { fill: Some(f), stroke: Some(st), .. } if st.color == *f))
+                );
+                out.drain(..8);
+            } else {
+                assert!(s.floor.is_empty());
+            }
             assert_eq!(out.len(), 8);
             let fills: Vec<_> =
                 out.iter().map(|i| if let Item::Path { fill, .. } = i { *fill } else { None }).collect();
@@ -762,7 +810,9 @@ mod tests {
                 Surface3d::WireSurface => assert!(fills.iter().all(|f| *f == Some(sheaf_core::Color::WHITE))),
                 Surface3d::ColorFill => assert!(fills.iter().all(|f| *f == Some(plot.symbol.color))),
                 // Mean Z 0 (blue) to 4 (red): the colours differ.
-                Surface3d::ColorMap => assert!(fills.windows(2).any(|w| w[0] != w[1])),
+                Surface3d::ColorMap | Surface3d::ColorMapProjection => {
+                    assert!(fills.windows(2).any(|w| w[0] != w[1]))
+                }
             }
         }
         // Farthest first: at azimuth 40 the far corner is at the largest X and Y.

@@ -5833,7 +5833,13 @@ the name starts as the first free ThemeN and a theme of the same name is replace
 saved themes (Name, Size, Path User, Date); Apply Now gives the current graph's every axis the theme (one
 undo step, "Apply theme"); Delete removes a theme. Sheaf ships no system themes (Origin's are its own) and
 has no system theme, Worksheet/Dialog/Function tabs, Undo Apply button (Edit > Undo does it) or Formats to
-Save choice yet; the legend's Save Format as Theme stays grey until a legend format can be copied.
+Save choice yet.
+
+**Legend themes** (T167, 2026-11-19, not measured): the legend's right-click Save Format as Theme... (last
+item of the menu) saves the legend's Styles as Copy Format > Styles copies them (font, frame, background;
+section 26.12) through the same window and file; it needs a shown legend. Apply Now of such a theme gives
+every shown legend of the current graph those styles (one undo step, "Apply theme"); hidden legends stay
+as they are. Origin's legend theme options (Formats to Save) were not measured.
 
 ## 30. Vector plots: Plot > Specialized > Vector XYAM and Vector XYXY (T107, measured 2026-11-16, Origin 2016)
 
@@ -6628,7 +6634,11 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
   - Color Map fills each triangle by its mean Z over the plot's Z range with the colour-mapped
     symbols' map (blue, cyan, green, yellow, red); Color Fill with the plot colour (red first);
     Wire Surface with white, which hides the mesh behind; Wire Frame does not fill, so every line shows.
-  - X/Y Constant with Base, Colormap Surface with Projection and 3D Ternary Colormap Surface stay grey.
+  - **Colormap Surface with Projection (T168, `3d-colormap-surface-projection`):** the Color Map
+    surface, and under it the same triangles flat on the floor of the box in the same colours,
+    without mesh lines (each edged in its own colour, 0.25 pt, so that no seams show). The
+    projection is drawn before the surface.
+  - X/Y Constant with Base and 3D Ternary Colormap Surface stay grey.
 - **Not done:**
   - rotating the view; axis titles, tick label and scale type settings of the 3D axes;
   - hiding points behind each other (points are drawn in row order);

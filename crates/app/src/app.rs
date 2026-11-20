@@ -1960,14 +1960,22 @@ impl SheafApp {
             }
             Action::ExportWorksheetImage(book) => self.export_worksheet_image(book),
             Action::Reimport { book, choose } => self.reimport(book, choose),
-            Action::SaveAxisTheme { graph, layer, y } => {
+            Action::SaveAxisTheme { .. } | Action::SaveLegendTheme { .. } => {
                 let Some(dir) = self.startup.graph_themes_dir.clone() else {
                     self.warn("Sheaf has no settings folder for graph themes");
                     return;
                 };
-                let clip = self.doc.project().graph(graph).and_then(|g| {
-                    sheaf_core::format_clip::copy_axis(g, layer, y, sheaf_core::format_clip::AxisPart::All)
-                });
+                let clip = match action {
+                    Action::SaveAxisTheme { graph, layer, y } => self.doc.project().graph(graph).and_then(|g| {
+                        sheaf_core::format_clip::copy_axis(g, layer, y, sheaf_core::format_clip::AxisPart::All)
+                    }),
+                    Action::SaveLegendTheme { graph, layer } => self
+                        .doc
+                        .project()
+                        .graph(graph)
+                        .and_then(|g| sheaf_core::format_clip::copy_legend_styles(g, layer)),
+                    _ => None,
+                };
                 if let Some(clip) = clip {
                     let existing = sheaf_io::graph_themes::list(&dir).into_iter().map(|e| e.name).collect();
                     let name = sheaf_io::graph_themes::next_name(&dir);
@@ -6967,7 +6975,7 @@ fn panel_data<'a>(
 }
 
 /// Theme Organizer's Apply Now on a graph (T102): an axis theme goes to every axis of every layer, a
-/// graph theme to the whole graph.
+/// graph theme to the whole graph, a legend theme (T167) to every shown legend.
 pub(crate) fn apply_graph_theme(g: &mut sheaf_core::graph::Graph, format: &sheaf_core::format_clip::FormatClip) {
     use sheaf_core::format_clip::{AxisPart, FormatClip, paste_axis, paste_graph};
     match format {
@@ -6982,7 +6990,11 @@ pub(crate) fn apply_graph_theme(g: &mut sheaf_core::graph::Graph, format: &sheaf
             let groups = f.groups().to_vec();
             paste_graph(g, format, &groups);
         }
-        FormatClip::LegendStyles(_) => {}
+        FormatClip::LegendStyles(_) => {
+            for layer in 0..g.layers.len() {
+                sheaf_core::format_clip::paste_legend_styles(g, layer, format);
+            }
+        }
     }
 }
 

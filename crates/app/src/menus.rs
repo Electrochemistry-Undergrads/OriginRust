@@ -187,6 +187,10 @@ pub enum Cmd {
         layer: usize,
         y: bool,
     },
+    /// A legend's Save Format as Theme... (T167).
+    SaveLegendTheme {
+        layer: usize,
+    },
     /// Tools > Theme Organizer... (F7, T102).
     ThemeOrganizer,
     /// File > New > From Template > More...: pick a template file (T103).
@@ -1250,8 +1254,10 @@ fn plot_menu() -> Vec<Entry> {
             [
                 vec![item("Color Fill Surface", Cmd::Plot(Template::ColorFillSurface3d))],
                 greys(&["X Constant with Base", "Y Constant with Base"]),
-                vec![item("Color Map Surface", Cmd::Plot(Template::ColorMapSurface3d))],
-                greys(&["Colormap Surface with Projection"]),
+                vec![
+                    item("Color Map Surface", Cmd::Plot(Template::ColorMapSurface3d)),
+                    item("Colormap Surface with Projection", Cmd::Plot(Template::ColorMapProjection3d)),
+                ],
                 vec![
                     item("Wire Frame", Cmd::Plot(Template::WireFrame3d)),
                     item("Wire Surface", Cmd::Plot(Template::WireSurface3d)),
@@ -2509,7 +2515,7 @@ pub fn graph_legend_menu(layer: usize, can_color: bool, can_bubble: bool) -> Vec
     if crate::format_clip_ui::kind() == Some(crate::format_clip_ui::ClipKind::Legend) {
         menu.push(sub("Paste Format To", vec![item("Styles", Cmd::PasteLegendStyles { layer })]));
     }
-    menu.push(grey("Save Format as Theme..."));
+    menu.push(item("Save Format as Theme...", Cmd::SaveLegendTheme { layer }));
     menu
 }
 
@@ -2936,6 +2942,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SaveAxisTheme { layer, y } => {
             Action::SaveAxisTheme { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, y: *y }
         }
+        Cmd::SaveLegendTheme { layer } => Action::SaveLegendTheme { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer },
         Cmd::ThemeOrganizer => Action::ThemeOrganizer,
         Cmd::NewFromTemplateFile => Action::NewFromTemplate(None),
         Cmd::FitOrganizer => Action::FitOrganizer,

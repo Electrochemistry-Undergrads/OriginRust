@@ -88,6 +88,31 @@ pub fn write_graphs_pptx(project: &Project, graphs: &[WindowId], path: &Path, se
     std::fs::write(path, bytes).with_context(|| format!("could not write '{}'", path.display()))
 }
 
+/// Send Graphs to Word (T242): the bytes of a `.docx` with one graph per page, each a PNG rendered with
+/// these settings, fitted to the text width and named under it.
+pub fn render_graphs_docx(project: &Project, graphs: &[WindowId], settings: &ExportSettings) -> Result<Vec<u8>> {
+    let pictures = graphs
+        .iter()
+        .map(|&g| {
+            let png = render_graph(project, g, settings, "png")?;
+            let name = project.graph(g).map(|g| g.name.clone()).unwrap_or_default();
+            Ok(sheaf_io::docx::DocxPicture { png, name })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    sheaf_io::docx::docx_bytes(&pictures).map_err(anyhow::Error::msg)
+}
+
+/// [`render_graphs_docx`] into a file.
+pub fn write_graphs_docx(project: &Project, graphs: &[WindowId], path: &Path, settings: &ExportSettings) -> Result<()> {
+    let bytes = render_graphs_docx(project, graphs, settings)?;
+    std::fs::write(path, bytes).with_context(|| format!("could not write '{}'", path.display()))
+}
+
+/// Whether a path names a Word document (`.docx`).
+pub fn is_docx(path: &Path) -> bool {
+    path.extension().is_some_and(|e| e.eq_ignore_ascii_case("docx"))
+}
+
 /// Whether a path names a PowerPoint presentation (`.pptx`).
 pub fn is_pptx(path: &Path) -> bool {
     path.extension().is_some_and(|e| e.eq_ignore_ascii_case("pptx"))

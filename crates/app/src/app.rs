@@ -3203,19 +3203,30 @@ impl SheafApp {
                 let all = p.graphs().map(|g| g.id).collect();
                 self.send_ppt = Some(crate::dialogs::send_ppt::SendPptDialog::new((graph, name), all));
             }
-            Action::WritePptx { graphs, path } => {
+            Action::WriteGraphDocument { graphs, path } => {
                 // 300 dpi pictures, as Export Graphs' default resolution.
                 let project = self.doc.project();
-                let slides = graphs
+                let pictures = graphs
                     .iter()
                     .map(|&g| {
                         let png = sheaf_plot::render_png(project, g, 300.0).map_err(|e| e.to_string())?;
                         let name = project.graph(g).map(|g| g.name.clone()).unwrap_or_default();
-                        Ok(sheaf_io::pptx::PptxSlide { png, name })
+                        Ok((png, name))
                     })
                     .collect::<Result<Vec<_>, String>>();
-                let written = slides
-                    .and_then(|s| sheaf_io::pptx::pptx_bytes(&s))
+                let word = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("docx"));
+                let written = pictures
+                    .and_then(|p| {
+                        if word {
+                            let p: Vec<_> =
+                                p.into_iter().map(|(png, name)| sheaf_io::docx::DocxPicture { png, name }).collect();
+                            sheaf_io::docx::docx_bytes(&p)
+                        } else {
+                            let p: Vec<_> =
+                                p.into_iter().map(|(png, name)| sheaf_io::pptx::PptxSlide { png, name }).collect();
+                            sheaf_io::pptx::pptx_bytes(&p)
+                        }
+                    })
                     .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
                 match written {
                     Ok(()) => {
@@ -5041,15 +5052,16 @@ impl SheafApp {
         match d.show(ctx) {
             SendPptOutcome::Open => {}
             SendPptOutcome::Closed => self.send_ppt = None,
-            SendPptOutcome::Send(graphs) => {
+            SendPptOutcome::Send { graphs, word } => {
                 self.send_ppt = None;
+                let (filter, ext) = if word { ("Word document", "docx") } else { ("PowerPoint presentation", "pptx") };
                 let picked = rfd::FileDialog::new()
                     .set_title("Send Graphs to PowerPoint")
-                    .add_filter("PowerPoint presentation", &["pptx"])
-                    .set_file_name("Graphs.pptx")
+                    .add_filter(filter, &[ext])
+                    .set_file_name(format!("Graphs.{ext}"))
                     .save_file();
                 if let Some(path) = picked {
-                    self.apply(Action::WritePptx { graphs, path }, ctx);
+                    self.apply(Action::WriteGraphDocument { graphs, path }, ctx);
                 }
             }
         }

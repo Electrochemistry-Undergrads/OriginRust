@@ -407,6 +407,11 @@ pub enum Action {
         layer: usize,
         y: bool,
     },
+    /// A legend's Save Format as Theme...: ask for a name and save the legend's styles as a graph theme (T167).
+    SaveLegendTheme {
+        graph: WindowId,
+        layer: usize,
+    },
     /// Tools > Theme Organizer...: list the graph themes and apply one to the active graph.
     ThemeOrganizer,
     /// Tools > Fitting Function Organizer...: browse the built-in fit functions.

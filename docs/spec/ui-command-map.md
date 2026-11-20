@@ -476,6 +476,12 @@ Sheaf (T220, 2026-11-20, not measured): Window > Properties also lists a workboo
 graphs that plot its columns, the other workbooks whose formulas name it `[Book1]...`, and the other
 workbooks that hold its analysis results or cells linked to it) and, for a graph, the workbooks it
 **plots data of**; "none" when there are none. Read-only (`Project::dependents`, `Project::plotted_books`).
+Sheaf (T249, not measured): the same window has **Comments**, a few lines of text for any window
+kind, kept in the project (`Project::window_comments`, set with the long and short names in the
+"Rename window" undo step); the Project Explorer shows them as the window row's tooltip. A window
+deleted takes its comments along. An `.opj` does not keep them: the save names them and writes the
+`.opj.sheaf` companion. Origin's own layout of the comments box (and its Window Title options) is
+not copied.
 
 ### D6. Import (see B2) (P0)
 ### D7. Nonlinear Curve Fit (NLFit) (P0)

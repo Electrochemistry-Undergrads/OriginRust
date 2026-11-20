@@ -17,10 +17,10 @@
 
 use crate::analysis::OutputTarget;
 use crate::analysis_link::AnalysisLink;
-use crate::column::{AnalysisMark, ColumnData, FormulaState};
+use crate::column::{AnalysisMark, Column, ColumnData, Designation, FormulaState};
 use crate::ids::{ColumnId, WindowId};
 use crate::project::Project;
-use crate::worksheet::Workbook;
+use crate::worksheet::{Workbook, Worksheet};
 use serde::{Deserialize, Serialize};
 
 /// A named workbook structure without data.
@@ -179,6 +179,67 @@ impl Project {
         report
     }
 
+    /// File > Batch Processing...'s summary (T233): a new workbook (long name "Batch Summary", one
+    /// sheet "Summary") that holds, for each `(book, identifier)` in turn, every row of that book's
+    /// sheet named `sheet` (letter case ignored), each row led by the identifier in a first text
+    /// column named `identifier` (designation X). The other columns follow that sheet in the first
+    /// book that has it: long name (the short name when it has none), units, comments and
+    /// designation; the books' columns are matched by position and cells keep numbers and text. A
+    /// sheet's rows are as many as its longest column. Formula columns of the books are brought up to
+    /// date first. `None` (and nothing added) when no book has the sheet.
+    pub fn batch_summary(&mut self, books: &[(WindowId, String)], sheet: &str, identifier: &str) -> Option<WindowId> {
+        let columns: Vec<ColumnId> = books
+            .iter()
+            .filter_map(|(b, _)| self.workbook(*b))
+            .flat_map(|b| b.sheets.iter().flat_map(|s| s.columns.iter().map(|c| c.id)))
+            .collect();
+        self.refresh_formulas(&columns);
+        let sheets: Vec<(&str, &Worksheet)> = books
+            .iter()
+            .filter_map(|(b, id)| {
+                let ws = self.workbook(*b)?.sheets.iter().find(|s| s.name.eq_ignore_ascii_case(sheet))?;
+                Some((id.as_str(), ws))
+            })
+            .collect();
+        let first = sheets.first()?.1;
+        let mut out = Worksheet::new("Summary");
+        let mut ids = Vec::new();
+        let width = first.columns.len();
+        let mut numbers = vec![Vec::new(); width];
+        let mut texts = vec![std::collections::BTreeMap::new(); width];
+        for (id, ws) in &sheets {
+            let rows = ws.columns.iter().map(Column::len).max().unwrap_or(0);
+            for r in 0..rows {
+                let at = ids.len();
+                ids.push(id.to_string());
+                for k in 0..width {
+                    let c = ws.columns.get(k);
+                    let x = c.and_then(|c| c.numeric()).and_then(|v| v.get(r).copied()).unwrap_or(f64::NAN);
+                    numbers[k].push(x);
+                    if let Some(t) = c.and_then(|c| c.data.text_cell(r)) {
+                        texts[k].insert(at, t.to_string());
+                    }
+                }
+            }
+        }
+        let mut lead = Column::new(ColumnId(0), "A", Designation::X, ColumnData::text(ids));
+        lead.long_name = identifier.to_string();
+        out.columns.push(lead);
+        for (k, (nums, txt)) in numbers.into_iter().zip(texts).enumerate() {
+            let model = &first.columns[k];
+            let data = if txt.is_empty() { ColumnData::numeric(nums) } else { ColumnData::mixed(nums, txt) };
+            let mut c = Column::new(ColumnId(k as u64 + 1), out.next_short_name(), model.designation, data);
+            c.long_name = model.display_name().to_string();
+            c.units.clone_from(&model.units);
+            c.comments.clone_from(&model.comments);
+            out.columns.push(c);
+        }
+        let mut book = Workbook::new(WindowId(0), "");
+        book.long_name = "Batch Summary".into();
+        book.sheets = vec![out];
+        Some(self.adopt_workbook(book))
+    }
+
     /// File > New > From Template with a workbook template: adds an empty workbook built like the
     /// template, with fresh window and column ids and a free `Book<n>` name. Returns its id.
     ///
@@ -208,8 +269,6 @@ impl Project {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::column::Designation;
-    use crate::worksheet::Worksheet;
 
     fn sample() -> (Project, WindowId) {
         let mut p = Project::new();
@@ -387,5 +446,61 @@ mod tests {
         assert_eq!(cols[1].long_name, "file 1");
         assert_eq!(cols[1].numeric().unwrap(), [0.0, 3.0, 0.0, 3.0]);
         assert_eq!(cols[2].len(), 4, "the smoothing ran on the new data");
+    }
+
+    #[test]
+    fn the_batch_summary_stacks_one_sheet_of_every_book_led_by_its_identifier() {
+        // T233: a template with X, Y, a Label column and an Auto formula column D = B * 10, and a
+        // second sheet; two files of 3 and 2 rows.
+        let mut p = Project::new();
+        let book = p.add_workbook("Assay");
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![])).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![])).unwrap();
+        let note = p.add_column(book, 0, Designation::Label, ColumnData::text(vec![])).unwrap();
+        let f = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![])).unwrap();
+        p.column_mut(y).unwrap().units = "mV".into();
+        p.column_mut(note).unwrap().long_name = "Note".into();
+        let c = p.column_mut(f).unwrap();
+        c.formula = Some("col(B)*10".into());
+        c.recalc = crate::column::RecalcMode::Auto;
+        let b = p.workbook_mut(book).unwrap();
+        b.sheets[0].name = "Data".into();
+        b.sheets.push(Worksheet::new("Other"));
+        let t = BookTemplate::from_workbook("Assay", p.workbook(book).unwrap());
+        let file = |x: Vec<f64>, y: Vec<f64>, notes: Vec<&str>| {
+            let mut w = Workbook::new(WindowId(0), "f");
+            let mut s = Worksheet::new("f");
+            s.columns.push(Column::new(ColumnId(1), "A", Designation::X, ColumnData::numeric(x)));
+            s.columns.push(Column::new(ColumnId(2), "B", Designation::Y, ColumnData::numeric(y)));
+            let notes = notes.into_iter().map(String::from).collect();
+            s.columns.push(Column::new(ColumnId(3), "C", Designation::Label, ColumnData::text(notes)));
+            w.sheets = vec![s];
+            w
+        };
+        let one = file(vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0], vec!["a", "", "c"]);
+        let one = p.new_workbook_from_template_with_data(&t, &one, "one.csv");
+        let two = file(vec![7.0, 8.0], vec![9.0, f64::NAN], vec!["z"]);
+        let two = p.new_workbook_from_template_with_data(&t, &two, "two.csv");
+        let books = [(one.book, "one.csv".to_string()), (two.book, "two.csv".to_string())];
+        let windows = p.windows.len();
+        assert_eq!(p.batch_summary(&books, "missing", "Dataset"), None, "no book has the sheet");
+        assert_eq!(p.windows.len(), windows, "nothing added");
+        let id = p.batch_summary(&books, "data", "Dataset").unwrap();
+        let s = &p.workbook(id).unwrap().sheets[0];
+        assert_eq!(p.workbook(id).unwrap().long_name, "Batch Summary");
+        assert_eq!(s.name, "Summary");
+        let names: Vec<&str> = s.columns.iter().map(|c| c.short_name.as_str()).collect();
+        assert_eq!(names, ["A", "B", "C", "D", "E"]);
+        assert_eq!(s.columns[0].long_name, "Dataset");
+        assert_eq!(s.columns[0].text().unwrap(), ["one.csv", "one.csv", "one.csv", "two.csv", "two.csv"]);
+        assert_eq!(s.columns[1].numeric().unwrap(), [1.0, 2.0, 3.0, 7.0, 8.0]);
+        assert_eq!((s.columns[2].units.as_str(), s.columns[2].designation), ("mV", Designation::Y));
+        assert_eq!(s.columns[3].long_name, "Note");
+        let notes: Vec<String> = (0..5).map(|r| s.columns[3].cell_text(r)).collect();
+        assert_eq!((notes[0].as_str(), notes[2].as_str(), notes[3].as_str()), ("a", "c", "z"));
+        let tens = s.columns[4].numeric().unwrap();
+        assert_eq!(&tens[..4], [40.0, 50.0, 60.0, 90.0], "the formula column is up to date");
+        assert!(tens[4].is_nan());
+        assert!(s.columns.iter().all(|c| c.formula.is_none()), "the summary holds values");
     }
 }

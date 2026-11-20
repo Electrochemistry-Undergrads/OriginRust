@@ -157,6 +157,11 @@ pub enum Cmd {
     NewMatrix,
     /// The Matrix menu of a matrix window (T179 slice 3).
     Matrix(MatrixCmd),
+    /// Worksheet > Convert to Matrix > Direct (the selected columns, or the sheet) and XYZ Gridding
+    /// (three selected columns X, Y, Z on a regular grid), T179 slice 4.
+    ConvertToMatrix {
+        xyz: bool,
+    },
     /// Plot > Contour/Heat Map > Color Fill, B/W Lines + Labels, Heat Map: of the active matrix, or of
     /// three selected worksheet columns X, Y and Z (T179).
     PlotField(sheaf_core::template::FieldTemplate),
@@ -1675,7 +1680,14 @@ fn worksheet_menu() -> Vec<Entry> {
         item("Transpose...", Cmd::Reshape(ReshapeKind::Transpose)),
         item("Stack Columns...", Cmd::Reshape(ReshapeKind::Stack)),
         item("Unstack Columns...", Cmd::Reshape(ReshapeKind::Unstack)),
-        grey_sub("Convert to Matrix", &["Direct", "XYZ Gridding", "Extract"]),
+        sub(
+            "Convert to Matrix",
+            vec![
+                item("Direct", Cmd::ConvertToMatrix { xyz: false }),
+                item("XYZ Gridding", Cmd::ConvertToMatrix { xyz: true }),
+                grey("Extract"),
+            ],
+        ),
         sep(),
         grey("Worksheet Script..."),
         // Sheaf's "keep only the rows matching a condition" is Origin's worksheet query.
@@ -3046,6 +3058,13 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::NewNotes => Action::NewNotes,
         Cmd::NewMatrix => Action::NewMatrix,
+        Cmd::ConvertToMatrix { xyz } => {
+            let book = c.book.ok_or(NEED_BOOK)?;
+            if *xyz && c.selected.len() != 3 {
+                return Err("Select the X, Y and Z columns (three columns) first");
+            }
+            Action::ConvertToMatrix { book, columns: c.selected.to_vec(), xyz: *xyz }
+        }
         Cmd::Matrix(cmd) => match (c.kind, c.active) {
             (WindowKind::Matrix, Some(id)) => Action::MatrixCmd { id, cmd: *cmd },
             _ => return Err("Activate a matrix window first"),

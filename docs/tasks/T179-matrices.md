@@ -1,6 +1,6 @@
 # T179: Matrix books, heat maps, contour plots and `sheaf matrix` (B14, slice 1)
 
-**Status:** slices 1 to 3 done 2026-11-19 (Claude Windows "obj-align"). It ports the matrix branch of the
+**Status:** slices 1 to 4 done 2026-11-19 (Claude Windows "obj-align"). It ports the matrix branch of the
 offline session originrust-3a (`worktree-agent-a79f85b1afb5f0034`, commits 7994c3b3..8c21175b,
 2026-11-12, never merged) onto current main, with the original authorship kept. Its behaviour was
 measured on Origin 2016 (`docs/spec/matrices.md`, fixtures in `crates/core/tests/data/origin_matrix.json`).
@@ -35,9 +35,13 @@ measured on Origin 2016 (`docs/spec/matrices.md`, fixtures in `crates/core/tests
   The windows are in `dialogs/matrix_ops.rs`. Test:
   `matrix_window::the_matrix_menu_transforms_sets_values_converts_and_plots_the_active_sheet`.
 
+## Done in slice 4 (2026-11-19)
+
+- Worksheet > Convert to Matrix > Direct and XYZ Gridding (matrices spec 7c). Test:
+  `matrix_window::worksheet_convert_to_matrix_direct_and_xyz_gridding_make_matrix_books`.
+
 ## Left (next slices)
 
-- Matrix Statistics in the app, X/Y coordinate headers, selection and copy, Convert to Matrix in the
-  Worksheet menu, Gray Scale Map, and polar and ternary contours.
+- Matrix Statistics in the app, X/Y coordinate headers, selection and copy, the conversion options windows, Extract, Gray Scale Map, and polar and ternary contours.
 - Convert to Matrix in the Worksheet menu, profiles, image windows and 2D FFT.
 - Writing matrices to `.opj`.

@@ -269,6 +269,17 @@ each matrix as not written).
   points, and a heat map only from points on a regular grid. Gray Scale Map, the polar and ternary
   contours and the profiles stay grey.
 
+## 7c. Worksheet > Convert to Matrix in the app (T179 slice 4, 2026-11-19, not measured)
+
+- **Direct** converts the selected columns, or every column of the active sheet when none is
+  selected, to a new matrix book. It uses `w2m` with Origin's defaults (section 5): no coordinates,
+  5 % tolerance, empty rows and columns trimmed. Sheaf opens no options window; the command line
+  has the options (`sheaf matrix convert`).
+- **XYZ Gridding** takes exactly three selected columns as X, Y and Z on a regular grid
+  (`xyz_regular`, section 5). Scattered points are refused with the core's message. Origin's
+  random/sparse gridding methods are not built.
+- Each conversion is one undo step ("Convert to Matrix"). Extract stays grey.
+
 ## 8. What was not verified, and what is left
 
 - Not run in Origin: `mdim` on a matrix that holds data; shrink with missing values; `w2m` options `lr` on accepted

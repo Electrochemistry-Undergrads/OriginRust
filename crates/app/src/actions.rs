@@ -315,6 +315,13 @@ pub enum Action {
         col: usize,
         value: Option<f64>,
     },
+    /// Worksheet > Convert to Matrix (T179 slice 4): Direct converts `columns` (all of the active
+    /// sheet when empty); XYZ Gridding takes the three columns as X, Y and Z. One undo step.
+    ConvertToMatrix {
+        book: WindowId,
+        columns: Vec<sheaf_core::ColumnId>,
+        xyz: bool,
+    },
     /// A Matrix menu command on the active sheet of matrix book `id` (T179 slice 3).
     MatrixCmd {
         id: WindowId,

@@ -1922,6 +1922,19 @@ impl SheafApp {
                 }
             }
             Action::MatrixCmd { id, cmd } => self.matrix_cmd(id, cmd),
+            Action::ConvertToMatrix { book, columns, xyz } => {
+                let sheet = self.doc.project().workbook(book).map_or(0, |b| b.active_sheet);
+                let made = self.doc.edit("Convert to Matrix", |p| match (xyz, columns.as_slice()) {
+                    (true, [x, y, z]) => p.xyz_to_matrix(*x, *y, *z),
+                    (true, _) => Err(sheaf_core::project::ProjectError::NoSuchWindow(book)),
+                    (false, []) => p.worksheet_to_matrix(book, sheet, None, &Default::default()),
+                    (false, cols) => p.worksheet_to_matrix(book, sheet, Some(cols), &Default::default()),
+                });
+                match made {
+                    Ok(_) => self.say("Converted to a matrix".to_string()),
+                    Err(e) => self.warn(format!("Convert to Matrix: {e}")),
+                }
+            }
             Action::PlotField { template, matrix, xyz } => {
                 let made = self.doc.edit("New graph", |p| match (matrix, xyz) {
                     (Some(id), _) => {

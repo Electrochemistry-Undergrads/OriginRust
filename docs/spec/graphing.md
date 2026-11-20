@@ -6573,7 +6573,12 @@ standard deviation, sum of Z and FWHM, updated as the region moves. Sheaf's firs
   circle is the ellipse that fills the rectangle (a circle when the rectangle is square on screen,
   drawn in red over it); it takes the cells whose centres are inside it, edge included, and its
   outputs keep the rectangle's From and To. The edges still drag the rectangle.
-- **Not done:** free-hand regions and a base plane from the region's boundary. [Origin 2D Integration Gadget](https://www.originlab.com/doc/Origin-Help/surface-integ-gadget)
+- **Base (T206):** the right-click menu's Base: Plane Through Boundary (and back with Base: Zero)
+  fits the least-squares plane through the region's boundary cells (in each row its first and last
+  cell, in each column its lowest and highest), as Origin's help says the boundary is used to fit the
+  base plane. Volume and FWHM then use the height above that plane; N, Mean, SD, Min, Max and Sum stay
+  statistics of Z. Too few boundary cells for a plane (or all on one line) leave the zero base.
+- **Not done:** free-hand regions. [Origin 2D Integration Gadget](https://www.originlab.com/doc/Origin-Help/surface-integ-gadget)
 
 ## Step and spline line plots: Plot > Line > Horizontal Step, Vertical Step, Spline Connected (T63 groups A and B, 2026-11-19, **not measured**)
 

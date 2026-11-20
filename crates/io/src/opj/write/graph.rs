@@ -1244,6 +1244,13 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
                 .into(),
         );
     }
+    for (name, axis) in [("X", &layer.x_axis), ("Y", &layer.y_axis)] {
+        if axis.at_position.is_some() {
+            notes.push(format!(
+                "the {name} axis' position at a value of the other axis (At Position =) was not written; the axis reopens at the frame (the .opj.sheaf companion keeps it)"
+            ));
+        }
+    }
     if layer.legend.visible && layer.legend.columns > 1 {
         notes.push("the number of columns of the legend was not written; its entries stand in one column".into());
     }

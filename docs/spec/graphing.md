@@ -5196,6 +5196,20 @@ The dialog has OK, Cancel and Apply and a ">>" button; Apply is disabled until s
 
 **Axis Position** items: for the left axis "Left", "% From Left", "At Position ="; for the right axis "Right", "% From Right", "At Position =". "% From Right" with 12 draws the right axis 12 % of the layer's width **outside** the frame; "% From Left" with 11 draws the left axis 11 % outside; a negative value moves the axis inside (-50 puts a left axis at 50 % of the layer's width). In LabTalk the left/bottom axis reads as `layer.y.position`, `layer.y.posType`, `layer.x.position`, `layer.x.posType` and the right/top axis as **`layer.y2.position`, `layer.y2.posType`, `layer.x2.position`, `layer.x2.posType`** (`layer.y.opposite` is something else; names such as `axisPos` or `offset` do not exist). `posType` 0 = "Left"/"Right" (at the frame), 1 = "% From ..." (the value is the offset in % of the **X axis length**, outward positive), the "At Position =" type was not read. A hidden side of an axis keeps stale values (for example `posType` 1 with 0 on the left of a right-only layer), so read only the shown side.
 
+**"At Position =" in Sheaf (T243, the value's behaviour not measured).** The Axis window's Line and
+Ticks tab lists Left/Right (Bottom/Top) and **At Position =**; choosing it shows **X =** (for a Y axis)
+or **Y =** (for an X axis), starting at 0, and stores `Axis::at_position`. The axis line, its ticks,
+tick labels and title stand where the other axis has that value (an X axis at Y = 0 is Origin's
+"axis at zero"), like an inward "% From" offset computed when the layer is drawn: it follows the
+other axis' range, scale, reversal and breaks; a value outside the range puts the axis on the nearer
+edge of the frame; a value the other axis cannot place (non-positive on a log axis, inside a break)
+leaves the axis at its edge. The frame, grid and opposite line stay. Choosing Left/Right
+(Bottom/Top) again clears the value. The `.opj` writer does not write it (the axis reopens at the
+frame in Origin) and names it, so the `.opj.sheaf` companion keeps it. Tests:
+`crates/plot/src/offset_axis_tests.rs` (`an_axis_at_a_position_...`),
+`crates/app/src/app/ui_tests.rs` (`the_axis_position_can_be_at_a_value_of_the_other_axis`),
+`crates/io/src/opj/write/graph_feature_tests.rs`.
+
 ### 21.4 Deleting a layer
 
 Right-click icon > Delete Layer deletes the layer at once (no question). LabTalk: `layer -d;` deletes the **active** layer; `layer -d N;` deletes layer N. Undo text in the Edit menu afterwards: **"Undelete frame"** (Ctrl+Z). The icons renumber (4 layers: deleting layer 2 left icons 1 2 3).

@@ -173,7 +173,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T173](T173-3d-ternary-surface.md) | 3D Surface: 3D Ternary Colormap Surface (B15 slice 10) | M | done 2026-11-19 (graphing "3D Scatter and 3D Trajectory"), not measured; 3D Surface submenu fully live |
 | [T175](T175-sparklines.md) | Worksheet Sparklines: column header Add or Update Sparklines..., corner Sparklines switch (B6 slice) | S | done 2026-11-19 (workbook-model 13i), not measured; left: Insert Sparklines in cells, the options dialog |
 | [T186](T135-analysis-markers.md) | Graph analysis locks + Data > Lock Position: Layer Icon, First Point, Last Point (B3) | S | done 2026-11-20 (graphing "Analysis markers"), not measured; lock click menu (Recalculate, Go to Results) added 2026-11-20 as T195; left: Change Parameters |
-| T189 | Gadgets > 2D Integrate... on heat map / contour layers (B9) | S | done 2026-11-20 (graphing "2D Integrate gadget"), not measured; left: circle/free-hand regions, base plane, FWHM, output |
+| T189 | Gadgets > 2D Integrate... on heat map / contour layers (B9) | S | done 2026-11-20 (graphing "2D Integrate gadget"), not measured; New Output to a results workbook added as T198; left: circle/free-hand regions, base plane, FWHM |
 | [T66](T66-graph-view-modes.md) (T177) | Graph View > Show > Labels and Data (T66 slice) | S | done 2026-11-19 (graphing 22.8), documentation contract, not measured; seven Show items left |
 | [T160](T160-workbook-templates.md) | User workbook templates: Save Template As on a workbook, New > From Template (T56/T103 follow-up) | M | done 2026-11-19 (workbook-model 13o), not measured; left: analysis templates (B11), CLI/MCP |
 | [T163](T163-analysis-templates.md) | Save Workbook As Analysis Template (B11 slice, on T160) | M | done 2026-11-19 (workbook-model 13o), not measured; left: Origin options, Batch Processing |
@@ -190,6 +190,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T187](T187-categories-row.md) | Worksheet corner Categories row (B6 slice) | S | done 2026-11-20 (workbook-model 13i), not measured |
 | [T188](T188-notes-sheet.md) | Sheet tab Add Notes as Sheet (B6 slice) | S | done 2026-11-20 (notes-window spec), not measured |
 | [T190](T190-graph-sheet.md) | Sheet tab Add Graph as Sheet... (B6 slice) | S | done 2026-11-20 (workbook-model 13i), not measured |
+| [T194](T194-cell-graph.md) | Data cell Insert Graph... (B6 slice) | S | done 2026-11-20 (workbook-model 13i), not measured; left: row-number item, print/export |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |

@@ -41,4 +41,20 @@ fn the_2d_integrate_gadget_opens_on_a_heat_map_and_measures_the_cells_in_its_rec
     assert_eq!((cells.len(), area), (16, 1.0));
     let whole = crate::gadget::volume_in(&cells, area, (-1.0, 4.0), (-1.0, 4.0)).unwrap();
     assert_eq!((whole.n, whole.volume, whole.max), (16, 36.0, 9.0));
+
+    // T198: New Output adds a row to the results table, the second one below the first.
+    let inside = gadget.volume(project(&h), g).unwrap();
+    for _ in 0..2 {
+        h.state_mut().apply(Action::Gadget { graph: g, op: crate::gadget::GadgetOp::NewOutput }, &ctx);
+        settle(&mut h);
+    }
+    assert_eq!(h.state().doc.undo_label(), Some("2D Integrate"));
+    let book = project(&h).workbooks().find(|b| b.long_name == crate::gadget::VOLUME_BOOK).unwrap();
+    let sheet = &book.sheets[0];
+    let names: Vec<&str> = sheet.columns.iter().map(|c| c.long_name.as_str()).collect();
+    assert_eq!(names, crate::gadget::VOLUME_COLUMNS);
+    let volume = sheet.columns[4].numeric().unwrap();
+    assert_eq!(volume, [inside.volume, inside.volume]);
+    assert_eq!(sheet.columns[5].numeric().unwrap()[0], inside.n as f64);
+    assert_eq!(project(&h).workbooks().filter(|b| b.long_name == crate::gadget::VOLUME_BOOK).count(), 1);
 }

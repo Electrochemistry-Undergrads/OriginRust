@@ -1417,6 +1417,17 @@ impl SheafApp {
         match op {
             GadgetOp::ToggleBaseline => g.end_point_baseline = !g.end_point_baseline,
             GadgetOp::Close => state.gadget = None,
+            // 2D Integrate (T198): a row of the results table.
+            GadgetOp::NewOutput if g.kind == crate::gadget::GadgetKind::Integrate2d => {
+                let g = *g;
+                let Some(v) = g.volume(self.doc.project(), graph) else {
+                    self.warn("No cells in the region".to_string());
+                    return;
+                };
+                let rect = [g.x0.min(g.x1), g.x0.max(g.x1), g.y0.min(g.y1), g.y0.max(g.y1)];
+                self.doc.apply("2D Integrate", |p| crate::gadget::write_volume(p, rect, &v));
+                self.say(format!("The volume was added to {}", crate::gadget::VOLUME_BOOK));
+            }
             GadgetOp::NewOutput => {
                 let g = *g;
                 let column = self
@@ -1995,6 +2006,20 @@ impl SheafApp {
             Action::NewNotes => {
                 self.doc.apply("New notes", |p| {
                     p.add_notes();
+                });
+            }
+            Action::PickCellGraph { column, row } => {
+                let graphs: Vec<(WindowId, String)> =
+                    self.doc.project().graphs().map(|g| (g.id, Window::Graph(g.clone()).title())).collect();
+                self.graph_sheet_picker = Some(crate::dialogs::graph_sheet::GraphSheetPicker::new(
+                    crate::dialogs::graph_sheet::PickTarget::Cell { column, row },
+                    graphs,
+                ));
+            }
+            Action::SetCellGraph { column, row, graph } => {
+                let label = if graph.is_some() { "Insert Graph" } else { "Remove Graph" };
+                self.doc.apply(label, |p| {
+                    p.set_cell_graph(column, row, graph);
                 });
             }
             Action::AddGraphSheet { book, graph } => {
@@ -3778,7 +3803,10 @@ impl SheafApp {
                 let project = self.doc.project();
                 let graphs: Vec<(WindowId, String)> =
                     project.graphs().map(|g| (g.id, Window::Graph(g.clone()).title())).collect();
-                self.graph_sheet_picker = Some(crate::dialogs::graph_sheet::GraphSheetPicker::new(book, graphs));
+                self.graph_sheet_picker = Some(crate::dialogs::graph_sheet::GraphSheetPicker::new(
+                    crate::dialogs::graph_sheet::PickTarget::Sheet(book),
+                    graphs,
+                ));
             }
             SheetOp::AddNotes => {
                 self.doc.apply("Add Notes as Sheet", |p| {
@@ -4664,9 +4692,14 @@ impl SheafApp {
             GraphSheetOutcome::Open => {}
             GraphSheetOutcome::Closed => self.graph_sheet_picker = None,
             GraphSheetOutcome::Pick(graph) => {
-                let book = p.book;
+                let target = p.target;
                 self.graph_sheet_picker = None;
-                self.apply(Action::AddGraphSheet { book, graph }, ctx);
+                use crate::dialogs::graph_sheet::PickTarget;
+                let action = match target {
+                    PickTarget::Sheet(book) => Action::AddGraphSheet { book, graph },
+                    PickTarget::Cell { column, row } => Action::SetCellGraph { column, row, graph: Some(graph) },
+                };
+                self.apply(action, ctx);
             }
         }
     }

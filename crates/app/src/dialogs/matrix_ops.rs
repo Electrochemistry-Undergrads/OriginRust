@@ -39,6 +39,26 @@ pub enum ImageForm {
     ToBinary(f64),
     Rotate(Rotation),
     Flip(FlipDirection),
+    /// Levels (T210): input low/high to output low/high.
+    Levels {
+        input: (f64, f64),
+        output: (f64, f64),
+    },
+    /// Crop (T210): 1-based first and last row and column.
+    Crop {
+        rows: (usize, usize),
+        cols: (usize, usize),
+    },
+    /// Resize (T210): the new size.
+    Resize {
+        rows: usize,
+        cols: usize,
+    },
+    /// Subtract (T210): another matrix book (its active sheet), from `choices`.
+    Subtract {
+        choices: Vec<(WindowId, String)>,
+        pick: usize,
+    },
 }
 
 impl ImageForm {
@@ -51,8 +71,27 @@ impl ImageForm {
             ImageForm::ToBinary(t) => ImageOp::ToBinary(t),
             ImageForm::Rotate(r) => ImageOp::Rotate(r),
             ImageForm::Flip(d) => ImageOp::Flip(d),
+            ImageForm::Levels { input, output } => ImageOp::Levels { input, output },
+            ImageForm::Crop { rows, cols } => ImageOp::Crop {
+                rows: (rows.0.saturating_sub(1), rows.1.saturating_sub(1)),
+                cols: (cols.0.saturating_sub(1), cols.1.saturating_sub(1)),
+            },
+            ImageForm::Resize { rows, cols } => ImageOp::Resize { rows, cols },
+            ImageForm::Subtract { .. } => unreachable!("Subtract runs through subtract_image"),
         }
     }
+}
+
+/// Image > Arithmetic Transform > Subtract (T210): the active sheet of `other` is taken from sheet
+/// `sheet` of `book`, in place, as one undo step.
+pub fn subtract_image(doc: &mut Document, book: WindowId, sheet: usize, other: WindowId) -> Result<(), String> {
+    let o = doc.project().matrix_book(other).ok_or("the other matrix book is gone")?;
+    let o = o.sheets.get(o.active_sheet).ok_or("the other matrix book has no sheet")?.clone();
+    doc.edit("Image Subtract", |p| {
+        let s = p.matrix_sheet_mut(book, sheet).map_err(|e| e.to_string())?;
+        *s = sheaf_core::matrix_image::subtract(s, &o).map_err(|e| e.to_string())?;
+        Ok(())
+    })
 }
 
 impl Form {
@@ -70,6 +109,10 @@ impl Form {
                 ImageForm::ToBinary(_) => "To Binary",
                 ImageForm::Rotate(_) => "Rotate",
                 ImageForm::Flip(_) => "Flip",
+                ImageForm::Levels { .. } => "Levels",
+                ImageForm::Crop { .. } => "Crop",
+                ImageForm::Resize { .. } => "Resize",
+                ImageForm::Subtract { .. } => "Subtract",
             },
         }
     }
@@ -90,6 +133,10 @@ impl Form {
     /// Runs the form's operation on sheet `sheet` of `book` as one undo step.
     fn run(&self, doc: &mut Document, book: WindowId, sheet: usize) -> Result<(), String> {
         match self {
+            Form::Image(ImageForm::Subtract { choices, pick }) => match choices.get(*pick) {
+                Some((other, _)) => subtract_image(doc, book, sheet, *other),
+                None => Err("there is no other matrix book to subtract".to_string()),
+            },
             Form::Image(f) => apply_image(doc, book, sheet, &f.op()),
             _ => apply(doc, book, sheet, &self.op()),
         }
@@ -245,6 +292,48 @@ fn image_controls(ui: &mut egui::Ui, f: &mut ImageForm) {
                 ui.radio_value(r, Rotation::Ccw90, "90 CCW");
                 ui.radio_value(r, Rotation::Cw90, "90 CW");
                 ui.radio_value(r, Rotation::Half, "180");
+            });
+        }
+        ImageForm::Levels { input, output } => {
+            ui.label("Input low / high");
+            ui.horizontal(|ui| {
+                ui.add(egui::DragValue::new(&mut input.0).speed(1.0));
+                ui.add(egui::DragValue::new(&mut input.1).speed(1.0));
+            });
+            ui.end_row();
+            ui.label("Output low / high");
+            ui.horizontal(|ui| {
+                ui.add(egui::DragValue::new(&mut output.0).speed(1.0));
+                ui.add(egui::DragValue::new(&mut output.1).speed(1.0));
+            });
+        }
+        ImageForm::Crop { rows, cols } => {
+            ui.label("Rows from / to");
+            ui.horizontal(|ui| {
+                ui.add(egui::DragValue::new(&mut rows.0).range(1..=1_000_000));
+                ui.add(egui::DragValue::new(&mut rows.1).range(1..=1_000_000));
+            });
+            ui.end_row();
+            ui.label("Columns from / to");
+            ui.horizontal(|ui| {
+                ui.add(egui::DragValue::new(&mut cols.0).range(1..=1_000_000));
+                ui.add(egui::DragValue::new(&mut cols.1).range(1..=1_000_000));
+            });
+        }
+        ImageForm::Resize { rows, cols } => {
+            ui.label("Columns");
+            ui.add(egui::DragValue::new(cols).range(1..=100_000));
+            ui.end_row();
+            ui.label("Rows");
+            ui.add(egui::DragValue::new(rows).range(1..=100_000));
+        }
+        ImageForm::Subtract { choices, pick } => {
+            ui.label("Subtract");
+            let shown = choices.get(*pick).map_or("(no other matrix)", |c| c.1.as_str()).to_string();
+            egui::ComboBox::from_id_salt("image_subtract_pick").selected_text(shown).show_ui(ui, |ui| {
+                for (k, (_, name)) in choices.iter().enumerate() {
+                    ui.selectable_value(pick, k, name);
+                }
             });
         }
         ImageForm::Flip(d) => {

@@ -93,6 +93,10 @@ pub enum ImageCmd {
     Smooth,
     Sharpen,
     EdgeDetection,
+    Levels,
+    Subtract,
+    Crop,
+    Resize,
 }
 
 /// The Matrix menu's commands (T192 slice 3, matrices spec 7b).
@@ -1987,13 +1991,18 @@ fn image_menu() -> Vec<Entry> {
     vec![
         sub(
             "&Adjustments",
-            vec![i("Brightness...", Brightness), i("Contrast...", Contrast), i("Gamma...", Gamma), grey("Levels...")],
+            vec![
+                i("Brightness...", Brightness),
+                i("Contrast...", Contrast),
+                i("Gamma...", Gamma),
+                i("Levels...", Levels),
+            ],
         ),
-        sub("Arithmetic &Transform", vec![i("Math...", Math), grey("Subtract...")]),
+        sub("Arithmetic &Transform", vec![i("Math...", Math), i("Subtract...", Subtract)]),
         sub("&Conversion", vec![i("To Binary...", ToBinary), grey("Color to Gray..."), grey("RGB Split...")]),
         sub(
             "&Geometric Transform",
-            vec![grey("Crop..."), grey("Resize..."), i("Rotate...", Rotate), i("Flip...", Flip)],
+            vec![i("Crop...", Crop), i("Resize...", Resize), i("Rotate...", Rotate), i("Flip...", Flip)],
         ),
         sub(
             "&Spatial Filters",

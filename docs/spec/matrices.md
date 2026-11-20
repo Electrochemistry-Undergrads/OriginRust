@@ -360,7 +360,14 @@ each matrix as not written).
   - Smooth: the mean.
   - Sharpen: 5v minus the four neighbours.
   - Edge Detection: the Sobel gradient magnitude.
-- Still grey: Levels, Subtract, Color to Gray, RGB Split, Crop and Resize.
+- **T210 additions:**
+  - **Levels:** input low/high, which start at the sheet's range, to output low/high (0..255). Values
+    outside the input range take the nearest end.
+  - **Subtract:** the active sheet of another matrix book of the same size, cell by cell.
+  - **Crop:** 1-based first and last row and column, with the cells' X and Y coordinates kept.
+  - **Resize:** a new size by bilinear resampling, end to end, with the ranges kept. A missing
+    neighbour makes a missing cell.
+- Still grey: Color to Gray and RGB Split (Sheaf's images are gray).
 
 ## 8. What was not verified, and what is left
 

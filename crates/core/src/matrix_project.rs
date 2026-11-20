@@ -182,7 +182,7 @@ impl Project {
         Ok(self.add_field_graph(template, FieldSource::Xyz { x, y, z }, &long))
     }
 
-    /// Plot > Contour/Heat Map > Polar Contour (T222): a colour-fill contour of `z` over the angle
+    /// Plot > Contour/Heat Map > Polar Contour (T225): a colour-fill contour of `z` over the angle
     /// column `theta` (degrees) and the radius column `r`, in Origin's polar layer. Returns the id.
     pub fn plot_xyz_polar(&mut self, theta: ColumnId, r: ColumnId, z: ColumnId) -> Result<WindowId, ProjectError> {
         for id in [theta, r, z] {
@@ -192,6 +192,27 @@ impl Project {
         let id = self.new_window_id();
         let name = self.unique_name("Graph");
         let mut g = FieldTemplate::ContourFill.new_polar_graph(id, &name, FieldSource::Xyz { x: theta, y: r, z });
+        g.long_name = long;
+        self.windows.push(Window::Graph(g));
+        Ok(id)
+    }
+
+    /// Plot > Contour/Heat Map > Ternary Contour (T226): a colour-fill contour of `z` over the
+    /// compositions `a`, `b`, `c` in Origin's ternary layer. Returns the id.
+    pub fn plot_ternary_contour(
+        &mut self,
+        a: ColumnId,
+        b: ColumnId,
+        c: ColumnId,
+        z: ColumnId,
+    ) -> Result<WindowId, ProjectError> {
+        for id in [a, b, c, z] {
+            self.numeric(id).ok_or(ProjectError::NoSuchColumn(id))?;
+        }
+        let long = self.locate(z).map(|(bk, _, _)| bk.long_name.clone()).unwrap_or_default();
+        let id = self.new_window_id();
+        let name = self.unique_name("Graph");
+        let mut g = FieldTemplate::ContourFill.new_ternary_graph(id, &name, FieldSource::Ternary { a, b, c, z });
         g.long_name = long;
         self.windows.push(Window::Graph(g));
         Ok(id)

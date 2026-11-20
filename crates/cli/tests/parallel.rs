@@ -160,8 +160,8 @@ fn a_parallel_index_colours_by_group_and_refuses_what_it_cannot_draw() {
     assert!(e.contains("parallel plot cannot have a right Y axis"), "{e}");
     let (ok, e) =
         sheaf(&["plot", csv.to_str().unwrap(), "-t", "line", "--group", "species", "-o", svg.to_str().unwrap()]);
-    assert!(!ok);
-    assert!(e.contains("--group needs"), "{e}");
+    // Since T224 an XY template with --group plots one curve per group value.
+    assert!(ok, "{e}");
 }
 
 #[test]

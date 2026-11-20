@@ -1025,7 +1025,8 @@ pub struct PlotArgs {
     /// draws every line in the plot colour. For a treemap or sunburst the category columns, comma-separated, the first the top level or innermost ring
     /// (default: the text columns among --y, else every text column of the sheet). For grouped-columns and grouped-box
     /// one or two group columns, comma-separated (required): the first the groups along the X axis, the second the
-    /// subgroups side by side.
+    /// subgroups side by side. With any other template (line, scatter, ...) one curve per value of the group column
+    /// (Origin's plotgroup): the rows are split into a new sheet `Grouped`, the legend names the values.
     #[arg(long, value_name = "COLUMN", conflicts_with_all = ["graph", "panels"])]
     pub group: Option<String>,
     /// Make a graph of several panels: stack (one column of panels that share the X axis, the

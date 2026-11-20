@@ -209,6 +209,68 @@ impl Project {
         Ok(self.push_sheet(book, "Unstack", out))
     }
 
+    /// Plot by group (Origin's `plotgroup`, T224): the rows of the Y columns `ys` (and of the X column
+    /// each one is plotted against) split by the values of `group`, in order of first appearance, into
+    /// a new sheet `Grouped`: per value an X column (when there is one) and one Y column per Y, whose
+    /// long name is the value (followed by the Y's own name when there are several Ys). Rows with an
+    /// empty group value are left out. Returns the new sheet and its Y columns, ready to plot.
+    pub fn group_columns(
+        &mut self,
+        book: WindowId,
+        sheet: usize,
+        ys: &[ColumnId],
+        group: ColumnId,
+    ) -> Result<(usize, Vec<ColumnId>), AnalysisError> {
+        let keys = cells(self.source_columns(book, sheet, &[group])?.first().expect("one column"));
+        let src = self.source_columns(book, sheet, ys)?;
+        let x = {
+            let ws = self.workbook(book).and_then(|b| b.sheets.get(sheet)).ok_or(AnalysisError::NoSuchSheet)?;
+            let first = ys.first().and_then(|y| ws.column_index(*y)).ok_or(AnalysisError::NoColumns)?;
+            ws.x_for(first).cloned()
+        };
+        let label = |c: &Cell| match c {
+            Cell::Num(x) => Some(x.to_string()),
+            Cell::Text(t) => Some(t.clone()),
+            Cell::Empty => None,
+        };
+        let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
+        for (i, k) in keys.iter().enumerate() {
+            let Some(name) = label(k) else { continue };
+            match groups.iter_mut().find(|g| g.0 == name) {
+                Some(g) => g.1.push(i),
+                None => groups.push((name, vec![i])),
+            }
+        }
+        if groups.is_empty() {
+            return Err(AnalysisError::Empty("the group column".into()));
+        }
+        let pick = |c: &Column, rows: &[usize]| -> Vec<Cell> {
+            let all = cells(c);
+            rows.iter().map(|&r| all.get(r).cloned().unwrap_or(Cell::Empty)).collect()
+        };
+        let mut out = Vec::new();
+        let mut plotted = Vec::new();
+        let mut n = 0;
+        for (name, rows) in &groups {
+            if let Some(x) = &x {
+                let col =
+                    self.new_column(crate::column::default_short_name(n), Designation::X, data_of(&pick(x, rows)));
+                out.push(col.with_labels(&x.long_name, &x.units, name));
+                n += 1;
+            }
+            for c in &src {
+                let own = if c.long_name.is_empty() { c.short_name.clone() } else { c.long_name.clone() };
+                let long = if src.len() == 1 { name.clone() } else { format!("{name} {own}") };
+                let col =
+                    self.new_column(crate::column::default_short_name(n), Designation::Y, data_of(&pick(c, rows)));
+                plotted.push(col.id);
+                out.push(col.with_labels(&long, &c.units, &c.comments));
+                n += 1;
+            }
+        }
+        Ok((self.push_sheet(book, "Grouped", out), plotted))
+    }
+
     /// Split Columns: each chosen column is cut into pieces of `rows` rows, and the pieces become
     /// columns of a new sheet (the last piece may be shorter). Returns the new sheet's index.
     pub fn split_columns(
@@ -320,5 +382,33 @@ mod tests {
         let r = p.reduce_rows(b, 0, &[c], 2, Reduce::Median).unwrap();
         assert_eq!(sheet_values(&p, b, r), vec![vec![1.5, 3.5, 5.0]]);
         assert!(p.reduce_rows(b, 0, &[c], 0, Reduce::Sum).is_err());
+    }
+
+    #[test]
+    fn group_columns_splits_rows_by_the_group_value_with_their_x() {
+        let mut p = Project::new();
+        let b = p.add_workbook("");
+        p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0, 5.0])).unwrap();
+        let y = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![10.0, 20.0, 30.0, 40.0, 50.0])).unwrap();
+        let g = p
+            .add_column(
+                b,
+                0,
+                Designation::Y,
+                ColumnData::text(vec!["b".into(), "a".into(), "b".into(), String::new(), "a".into()]),
+            )
+            .unwrap();
+        let (s, ys) = p.group_columns(b, 0, &[y], g).unwrap();
+        let sheet = &p.workbook(b).unwrap().sheets[s];
+        assert_eq!(sheet.name, "Grouped1");
+        let cols: Vec<(Designation, &str, Vec<f64>)> = sheet
+            .columns
+            .iter()
+            .map(|c| (c.designation, c.long_name.as_str(), c.numeric().unwrap().to_vec()))
+            .collect();
+        assert_eq!(cols[0], (Designation::X, "", vec![1.0, 3.0]));
+        assert_eq!(cols[1], (Designation::Y, "b", vec![10.0, 30.0]));
+        assert_eq!(cols[3], (Designation::Y, "a", vec![20.0, 50.0]), "the empty group value is left out");
+        assert_eq!(ys, vec![sheet.columns[1].id, sheet.columns[3].id]);
     }
 }

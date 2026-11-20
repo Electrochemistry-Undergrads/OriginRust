@@ -17,6 +17,7 @@ pub mod image_import;
 pub mod opj;
 pub mod opju;
 pub mod peak_themes;
+pub mod pptx;
 pub mod project_file;
 pub mod recent;
 pub mod recovery;

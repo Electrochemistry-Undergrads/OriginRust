@@ -1045,6 +1045,21 @@ saved in `.sheaf` (the sheet's `cell_arrows`), not written to `.opj` and not pri
 right-click Insert Graph... puts the picked graph in that row's first visible cell (as a data cell's Insert
 Graph..., T194). Origin's arrow direction, style and row behaviour were not measured.
 
+## 13j0. Cell links: Paste Link, Paste Link Transpose, Remove Links (T211, 2026-11-20, not measured)
+
+Model and reasons: [ADR 0014](../adr/0014-cell-links.md). Origin's link storage and paste rules were not
+measured. In a workbook, Edit > Paste Link (Ctrl+Alt+V) and Paste Link Transpose (also on a data cell's
+right-click menu) link cells to the block last copied in Sheaf (Copy; a Cut leaves nothing to link to):
+from the clicked cell down and right, cell for cell, or with rows and columns swapped for Transpose. A
+linked cell takes its source's value at once and whenever the source changes, inside the same undo step
+(numbers exactly, text as text, a missing value as an empty cell); plots, formulas and analysis see the
+value. Cells past the sheet's last column and cells of formula columns are left out (the status line says
+how many). Remove Links (Edit menu, data cell, column header) drops the links of the selected cells and
+keeps their values; typing into a linked cell replaces its value and ends its link. A linked cell shows a
+small blue corner at its bottom left. Links follow their columns through re-ids and go with a deleted
+column; a sheet copied on its own (Duplicate) loses them. They are saved in `.sheaf` (the sheet's
+`cell_links`); `.opj` and other exports write the values. The graph window's Paste Link stays grey.
+
 ## 13j. Find in Project (T95, measured 2026-11-16, Origin 2016)
 
 Edit > Find in Project... (F3; "Find in Project" on a graph's Edit menu) opens Origin's **Find** window

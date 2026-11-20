@@ -85,6 +85,9 @@ pub struct Worksheet {
     /// Arrows drawn across data cells (the cell menu's Insert Arrow, T205), at most one per cell.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cell_arrows: Vec<CellArrow>,
+    /// Linked cells (Paste Link, T211, ADR 0014), at most one link per cell.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cell_links: Vec<crate::cell_links::CellLink>,
 }
 
 /// An arrow drawn across a data cell (T205): left to right, with a head at the right end, or at both
@@ -214,6 +217,7 @@ impl Worksheet {
             cell_sparklines: Vec::new(),
             cell_images: Vec::new(),
             cell_arrows: Vec::new(),
+            cell_links: Vec::new(),
         }
     }
 
@@ -273,6 +277,8 @@ impl Worksheet {
     /// Follows new column ids (or drops the cell graphs of deleted columns); called by
     /// [`Worksheet::remap_note_columns`], which every column re-id and deletion goes through.
     pub(crate) fn remap_cell_graph_columns(&mut self, map: &dyn Fn(ColumnId) -> Option<ColumnId>) {
+        // Cell links (T211) follow their target and source columns.
+        self.remap_cell_link_columns(map);
         // Cell arrows (T205) follow their column.
         self.cell_arrows.retain_mut(|a| match map(a.column) {
             Some(c) => {

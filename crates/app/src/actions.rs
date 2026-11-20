@@ -362,6 +362,12 @@ pub enum Action {
         row: usize,
         graph: Option<WindowId>,
     },
+    /// Draw an arrow across a data cell (`Some(double)`) or take it out (T205), one undo step.
+    SetCellArrow {
+        column: ColumnId,
+        row: usize,
+        double: Option<bool>,
+    },
     /// A data cell's Insert Images from Files...: the file picker (T202).
     PickCellImage {
         column: ColumnId,

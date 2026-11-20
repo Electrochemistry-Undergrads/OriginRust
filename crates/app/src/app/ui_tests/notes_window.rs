@@ -92,7 +92,7 @@ fn insert_graph_puts_a_picture_of_the_graph_in_the_cell() {
     let book = h.state().books.keys().next().copied().unwrap();
     let graph = project(&h).graphs().next().unwrap().id;
     let b = project(&h).workbook(book).unwrap().sheets[0].columns[1].id;
-    let menu = menus::cell_menu_for(false, (b, 0), false, false, false, false);
+    let menu = menus::cell_menu_for(false, (b, 0), false, false, false, false, false);
     assert!(menu.iter().any(|e| matches!(e, menus::Entry::Item(i)
         if i.label == "Insert Graph..." && i.cmd == Some(menus::Cmd::InsertCellGraph { column: b, row: 0 }))));
     assert!(!menu.iter().any(|e| matches!(e, menus::Entry::Item(i) if i.label == "Remove Graph")));
@@ -103,7 +103,7 @@ fn insert_graph_puts_a_picture_of_the_graph_in_the_cell() {
     settle(&mut h);
     assert_eq!(project(&h).workbook(book).unwrap().sheets[0].cell_graph(b, 0), Some(graph));
     assert_eq!(h.state().doc.undo_label(), Some("Insert Graph"));
-    let menu = menus::cell_menu_for(false, (b, 0), true, false, false, false);
+    let menu = menus::cell_menu_for(false, (b, 0), true, false, false, false, false);
     let remove = menu.iter().find_map(|e| match e {
         menus::Entry::Item(i) if i.label == "Remove Graph" => i.cmd.clone(),
         _ => None,
@@ -124,7 +124,7 @@ fn insert_sparklines_draws_a_columns_line_in_the_cell() {
         let s = &project(&h).workbook(book).unwrap().sheets[0];
         (s.columns[1].id, s.columns[2].id)
     };
-    let menu = menus::cell_menu_for(false, (b, 5), false, false, false, false);
+    let menu = menus::cell_menu_for(false, (b, 5), false, false, false, false, false);
     assert!(menu.iter().any(|e| matches!(e, menus::Entry::Item(i)
         if i.label == "Insert Sparklines..." && i.cmd == Some(menus::Cmd::InsertCellSparkline { column: b, row: 5 }))));
     let ctx = h.ctx.clone();
@@ -147,7 +147,7 @@ fn a_png_picture_in_a_cell_is_kept_in_the_project_and_removed_again() {
     show_window(&mut h, "Book1 - sample.csv");
     let book = h.state().books.keys().next().copied().unwrap();
     let b = project(&h).workbook(book).unwrap().sheets[0].columns[1].id;
-    let menu = menus::cell_menu_for(false, (b, 1), false, false, false, false);
+    let menu = menus::cell_menu_for(false, (b, 1), false, false, false, false, false);
     assert!(menu.iter().any(|e| matches!(e, menus::Entry::Item(i)
         if i.label == "Insert Images from Files..." && i.cmd == Some(menus::Cmd::InsertCellImage { column: b, row: 1 }))));
     // A 2 x 1 PNG made here (the file picker is the system's).
@@ -163,7 +163,7 @@ fn a_png_picture_in_a_cell_is_kept_in_the_project_and_removed_again() {
     let held = project(&h).workbook(book).unwrap().sheets[0].cell_image(b, 1).map(|i| i.png.clone());
     assert_eq!(held, Some(png));
     assert_eq!(h.state().doc.undo_label(), Some("Insert Image"));
-    let menu = menus::cell_menu_for(false, (b, 1), false, false, true, false);
+    let menu = menus::cell_menu_for(false, (b, 1), false, false, true, false, false);
     let remove = menu.iter().find_map(|e| match e {
         menus::Entry::Item(i) if i.label == "Remove Image" => i.cmd.clone(),
         _ => None,
@@ -183,7 +183,7 @@ fn insert_arrow_draws_across_the_cell_and_the_row_number_inserts_a_graph() {
         let s = &project(&h).workbook(book).unwrap().sheets[0];
         (s.columns[0].id, s.columns[1].id)
     };
-    let menu = menus::cell_menu_for(false, (b, 2), false, false, false, false);
+    let menu = menus::cell_menu_for(false, (b, 2), false, false, false, false, false);
     let double = menu.iter().find_map(|e| match e {
         menus::Entry::Submenu(s) if s.label == "Insert Arrow" => s.entries.iter().find_map(|e| match e {
             menus::Entry::Item(i) if i.label == "Double Arrow" => i.cmd.clone(),
@@ -204,4 +204,35 @@ fn insert_arrow_draws_across_the_cell_and_the_row_number_inserts_a_graph() {
         if i.label == "Insert Graph..." && i.cmd == Some(menus::Cmd::InsertCellGraph { column: a, row: 3 }))));
     assert!(menus::row_menu(None).iter().any(|e| matches!(e, menus::Entry::Item(i)
         if i.label == "Insert Graph..." && i.cmd.is_none())));
+}
+
+#[test]
+fn set_data_style_rich_text_turns_on_for_the_selected_cells() {
+    let mut h = start(vec![data_file("cell-rich-text")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = h.state().books.keys().next().copied().unwrap();
+    let b = project(&h).workbook(book).unwrap().sheets[0].columns[1].id;
+    h.state_mut().doc.apply("markup", |p| {
+        p.column_mut(b).unwrap().data =
+            sheaf_core::ColumnData::text(vec!["x\\+(2) \\b(bold)".into(), "a".into(), "b".into(), "c".into()]);
+    });
+    settle(&mut h);
+    right_click_text(&mut h, "x\\+(2) \\b(bold)");
+    let menu = menus::cell_menu_for(false, (b, 0), false, false, false, false, false);
+    let rich = menu.iter().find_map(|e| match e {
+        menus::Entry::Submenu(s) if s.label == "Set Data Style" => s.entries.iter().find_map(|e| match e {
+            menus::Entry::Item(i) if i.label == "Rich Text" => i.cmd.clone(),
+            _ => None,
+        }),
+        _ => None,
+    });
+    assert_eq!(rich, Some(menus::Cmd::SetRichText(true)));
+    let ctx = h.ctx.clone();
+    let action = menus::resolve(&menus::Cmd::SetRichText(true), &h.state().menu_context()).unwrap();
+    h.state_mut().apply(action, &ctx);
+    settle(&mut h);
+    assert_eq!(h.state().doc.undo_label(), Some("Set Data Style"));
+    let sheet = &project(&h).workbook(book).unwrap().sheets[0];
+    assert!(sheet.format_index().resolve(sheet, b, 0).rich_text, "the right-clicked cell is rich text");
+    assert!(h.query_by_label("x\\+(2) \\b(bold)").is_none(), "the markup is no longer shown as typed");
 }

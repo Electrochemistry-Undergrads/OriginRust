@@ -2358,7 +2358,11 @@ fn body_cell(
         if look_of_cell.h_align != Some(HAlign::Center) {
             ui.add_space(4.0);
         }
-        formatted_text(ui, &text, color, &look_of_cell);
+        if look_of_cell.rich_text {
+            rich_cell_text(ui, &text, color, &look_of_cell);
+        } else {
+            formatted_text(ui, &text, color, &look_of_cell);
+        }
     });
     // A graph in the cell (T194): its picture over the cell; a double click opens the graph.
     let cell_graph = sheet.cell_graph(column.id, r);
@@ -2433,6 +2437,7 @@ fn body_cell(
             cell_sparkline.is_some(),
             cell_image,
             cell_arrow.is_some(),
+            look_of_cell.rich_text,
         );
         menus::show_context(ui, &menu, &book_ctx(book_id, state), actions);
         // A note belongs to the right-clicked cell even inside a larger selection.
@@ -2455,6 +2460,43 @@ fn aligned_layout(h_align: Option<HAlign>, numeric: bool) -> Layout {
 
 /// Draws `text` in the current layout with the manual format of its cell. egui has no bold
 /// face when a system font is unavailable, so that fallback is drawn twice.
+/// A cell with Set Data Style > Rich Text on (T208): Origin's label markup (`\\b()`, `\\i()`, `\\u()`,
+/// `\\s()`, `\\+()`, `\\-()`, `\\g()`, `\\pN()`, `\\f:Name()`, `\\cN()`, ...) drawn as styled runs in the
+/// cell's own font, size and colour.
+fn rich_cell_text(ui: &mut egui::Ui, text: &str, color: Color32, f: &ResolvedStyle<'_>) {
+    let base = f.size_pt.map_or(12.0, |pt| sheaf_core::cellformat::clamp_cell_pt(pt) * 4.0 / 3.0);
+    let mut job = egui::text::LayoutJob::default();
+    for run in sheaf_plot::markup::parse(text) {
+        let style = ResolvedStyle {
+            bold: f.bold || run.bold,
+            italic: f.italic || run.italic,
+            font: run.family.as_deref().or(f.font),
+            ..*f
+        };
+        let face = crate::worksheet_fonts::cell_font(ui.ctx(), &style);
+        let size = (base * run.scale as f32).max(4.0);
+        let run_color = run.color.map_or(color, |c| Color32::from_rgba_unmultiplied(c.r, c.g, c.b, c.a));
+        let line = egui::Stroke::new(1.0_f32, run_color);
+        let format = egui::TextFormat {
+            font_id: egui::FontId::new(size, face.family),
+            color: run_color,
+            italics: face.synthetic_italic,
+            underline: if f.underline || run.underline { line } else { egui::Stroke::NONE },
+            strikethrough: if run.strikeout { line } else { egui::Stroke::NONE },
+            valign: if run.rise > 0.0 {
+                egui::Align::TOP
+            } else if run.rise < 0.0 {
+                egui::Align::BOTTOM
+            } else {
+                egui::Align::Center
+            },
+            ..Default::default()
+        };
+        job.append(&run.text, 0.0, format);
+    }
+    ui.label(job);
+}
+
 fn formatted_text(ui: &mut egui::Ui, text: &str, color: Color32, f: &ResolvedStyle<'_>) {
     let face = crate::worksheet_fonts::cell_font(ui.ctx(), f);
     let mut rich = RichText::new(text).color(color).family(face.family);

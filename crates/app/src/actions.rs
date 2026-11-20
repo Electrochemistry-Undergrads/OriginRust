@@ -367,6 +367,11 @@ pub enum Action {
         row: usize,
         graph: Option<WindowId>,
     },
+    /// Set Data Style > Rich Text on or off for the selected cells of the active sheet (T208).
+    SetRichText {
+        book: WindowId,
+        on: bool,
+    },
     /// Draw an arrow across a data cell (`Some(double)`) or take it out (T205), one undo step.
     SetCellArrow {
         column: ColumnId,

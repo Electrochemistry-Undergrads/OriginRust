@@ -58,6 +58,7 @@ impl Edit {
             text_color: (self.text != from.text).then(|| self.text.unwrap_or(Color::TRANSPARENT)),
             fill: (self.fill != from.fill).then(|| self.fill.unwrap_or(Color::TRANSPARENT)),
             h_align: (self.align != from.align).then_some(self.align),
+            rich_text: None,
         }
     }
 }

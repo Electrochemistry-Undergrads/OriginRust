@@ -68,7 +68,8 @@ Update the relevant brief/spec when resolving one; the historical snapshot is in
 - T10 filtered plots: graphs, exports, automatic axes/offsets and histogram/box/pie summaries
   skip worksheet-filtered rows. Masks, labels and error bars retain source-row references;
   the Data Reader skips hidden points. Filter Disable/Remove and Undo/Redo restore the view.
-  Category/spoke compression, filter overrides and graph gadgets remain open (workbook-model 13.2a).
+  Graph gadgets follow filters and masks since T209. Category/spoke compression and filter
+  overrides remain open (workbook-model 13.2a).
 
 - T07 clipboard: quoted table fields keep commas within one cell and preserve tabs, line breaks
   and quotes through Copy/Cut/Paste. Both new and imported-table UI paths cover Undo/Redo.

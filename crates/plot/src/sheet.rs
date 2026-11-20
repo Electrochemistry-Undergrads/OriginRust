@@ -386,6 +386,7 @@ mod tests {
                 text_color: Some(Color::rgb(200, 0, 0)),
                 fill: Some(Color::rgb(0, 200, 0)),
                 h_align: Some(HAlign::Center),
+                rich_text: None,
             },
         );
         ws

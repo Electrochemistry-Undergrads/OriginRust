@@ -76,6 +76,17 @@ pub struct Worksheet {
     /// Graphs shown in data cells (the cell menu's Insert Graph..., T194), at most one per cell.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cell_graphs: Vec<CellGraph>,
+    /// Sparklines drawn in data cells (the cell menu's Insert Sparklines..., T200), at most one per cell.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cell_sparklines: Vec<CellSparkline>,
+}
+
+/// A sparkline in a data cell (T200): the cell draws the values of column `source` as a small line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CellSparkline {
+    pub column: ColumnId,
+    pub row: usize,
+    pub source: ColumnId,
 }
 
 /// A graph shown in a data cell (T194): the cell holds a picture of graph window `graph`.
@@ -106,6 +117,20 @@ impl Worksheet {
             notes_text: None,
             graph_sheet: None,
             cell_graphs: Vec::new(),
+            cell_sparklines: Vec::new(),
+        }
+    }
+
+    /// The column whose sparkline a data cell draws (T200).
+    pub fn cell_sparkline(&self, column: ColumnId, row: usize) -> Option<ColumnId> {
+        self.cell_sparklines.iter().find(|s| s.column == column && s.row == row).map(|s| s.source)
+    }
+
+    /// Draws `source`'s sparkline in a data cell, replacing the one there; `None` takes it out (T200).
+    pub fn set_cell_sparkline(&mut self, column: ColumnId, row: usize, source: Option<ColumnId>) {
+        self.cell_sparklines.retain(|s| !(s.column == column && s.row == row));
+        if let Some(source) = source {
+            self.cell_sparklines.push(CellSparkline { column, row, source });
         }
     }
 
@@ -125,6 +150,15 @@ impl Worksheet {
     /// Follows new column ids (or drops the cell graphs of deleted columns); called by
     /// [`Worksheet::remap_note_columns`], which every column re-id and deletion goes through.
     pub(crate) fn remap_cell_graph_columns(&mut self, map: &dyn Fn(ColumnId) -> Option<ColumnId>) {
+        // Cell sparklines (T200) follow their cell's column and their data column; either gone drops it.
+        self.cell_sparklines.retain_mut(|s| match (map(s.column), map(s.source)) {
+            (Some(c), Some(src)) => {
+                s.column = c;
+                s.source = src;
+                true
+            }
+            _ => false,
+        });
         self.cell_graphs.retain_mut(|g| match map(g.column) {
             Some(c) => {
                 g.column = c;
@@ -414,6 +448,17 @@ mod title_tests {
     }
 
     #[test]
+    fn a_cell_sparkline_follows_both_its_columns() {
+        let mut s = Worksheet::new("S");
+        s.set_cell_sparkline(ColumnId(1), 0, Some(ColumnId(2)));
+        assert_eq!(s.cell_sparkline(ColumnId(1), 0), Some(ColumnId(2)));
+        s.remap_note_columns(&|c| Some(ColumnId(c.0 + 10)));
+        assert_eq!(s.cell_sparkline(ColumnId(11), 0), Some(ColumnId(12)));
+        s.remap_note_columns(&|c| (c.0 != 12).then_some(c));
+        assert!(s.cell_sparklines.is_empty(), "a deleted data column takes the sparkline");
+    }
+
+    #[test]
     fn a_cell_holds_one_graph_and_follows_its_column() {
         let mut s = Worksheet::new("S");
         s.set_cell_graph(ColumnId(1), 2, Some(WindowId(9)));
@@ -430,6 +475,20 @@ mod title_tests {
 }
 
 impl crate::project::Project {
+    /// Draws column `source`'s sparkline in the data cell of `column` at `row`, or takes it out with
+    /// `None` (T200). False when there is no such column.
+    pub fn set_cell_sparkline(&mut self, column: ColumnId, row: usize, source: Option<ColumnId>) -> bool {
+        for w in &mut self.windows {
+            if let crate::project::Window::Workbook(b) = w
+                && let Some(s) = b.sheets.iter_mut().find(|s| s.column(column).is_some())
+            {
+                s.set_cell_sparkline(column, row, source);
+                return true;
+            }
+        }
+        false
+    }
+
     /// Puts graph `graph` in the data cell of `column` at `row`, or takes it out with `None` (T194).
     /// False when there is no such column.
     pub fn set_cell_graph(&mut self, column: ColumnId, row: usize, graph: Option<WindowId>) -> bool {

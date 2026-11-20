@@ -539,6 +539,9 @@ pub struct Space3dCoords {
 pub enum Surface3d {
     /// Filled by the colour map at their mean Z, with mesh lines (Color Map Surface).
     ColorMap,
+    /// Color Map, with the colour map also flat on the floor of the box (Colormap Surface with
+    /// Projection, T168).
+    ColorMapProjection,
     /// Filled with the plot's colour, with mesh lines (Color Fill Surface).
     ColorFill,
     /// Mesh lines only, all of them seen (Wire Frame).

@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 169 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 168 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -216,7 +216,7 @@ Backlog packages: write the brief first (step 3 above).
 
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
-| [ ] | B15 | 3D graphs: XYY, surfaces, symbol/bar/vector, 3D waterfall, Z axis, OpenGL settings | L | 5 |
+| [ ] | B15 | 3D graphs: XYY, surfaces, symbol/bar/vector, 3D waterfall, Z axis, OpenGL settings | L | 4 |
 | [ ] | B16 | Scripting: Command Window, Script Window, Code Builder, Worksheet Script, Programming Control, consoles, X-Function Builder, Button Edit Mode | L | 15 |
 
 - **B15** is deferred behind the current formatting and stacked-figure priorities (T18 backlog).

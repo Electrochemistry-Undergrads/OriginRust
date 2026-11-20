@@ -6575,7 +6575,11 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
   - Color Map fills each triangle by its mean Z over the plot's Z range with the colour-mapped
     symbols' map (blue, cyan, green, yellow, red); Color Fill with the plot colour (red first);
     Wire Surface with white, which hides the mesh behind; Wire Frame does not fill, so every line shows.
-  - X/Y Constant with Base, Colormap Surface with Projection and 3D Ternary Colormap Surface stay grey.
+  - **Colormap Surface with Projection (T168, `3d-colormap-surface-projection`):** the Color Map
+    surface, and under it the same triangles flat on the floor of the box in the same colours,
+    without mesh lines (each edged in its own colour, 0.25 pt, so that no seams show). The
+    projection is drawn before the surface.
+  - X/Y Constant with Base and 3D Ternary Colormap Surface stay grey.
 - **Not done:**
   - rotating the view; axis titles, tick label and scale type settings of the 3D axes;
   - hiding points behind each other (points are drawn in row order);

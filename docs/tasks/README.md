@@ -161,7 +161,8 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T158](T158-3d-xyy.md) | 3D XYY: XYY 3D Bars, 3D Walls, 3D Waterfall (B15 slice 4) | M | done 2026-11-19 (graphing "3D Scatter and 3D Trajectory"), not measured |
 | [T161](T161-3d-ribbons.md) | 3D XYY: 3D Ribbons (B15 slice 5) | S | done 2026-11-19 (graphing "3D Scatter and 3D Trajectory"), not measured |
 | [T164](T164-3d-axes.md) | 3D Axis window: Format > Axes > Z Axis..., X/Y Axis... on a 3D layer (B15 slice 6) | S | done 2026-11-19 (graphing "3D Scatter and 3D Trajectory"), not measured; left: 3D axis titles, tick labels, scale types |
-| [T166](T166-3d-surface.md) | 3D Surface from XYZ columns: Color Map, Color Fill, Wire Frame, Wire Surface (B15 slice 7) | M | done 2026-11-19 (graphing "3D Scatter and 3D Trajectory"), not measured; left: constant with base, projection, ternary, matrices |
+| [T166](T166-3d-surface.md) | 3D Surface from XYZ columns: Color Map, Color Fill, Wire Frame, Wire Surface (B15 slice 7) | M | done 2026-11-19 (graphing "3D Scatter and 3D Trajectory"), not measured; left: constant with base, ternary, matrices |
+| [T168](T168-3d-projection.md) | 3D Surface: Colormap Surface with Projection (B15 slice 8) | S | done 2026-11-19 (graphing "3D Scatter and 3D Trajectory"), not measured |
 | [T160](T160-workbook-templates.md) | User workbook templates: Save Template As on a workbook, New > From Template (T56/T103 follow-up) | M | done 2026-11-19 (workbook-model 13o), not measured; left: analysis templates (B11), CLI/MCP |
 | [T163](T163-analysis-templates.md) | Save Workbook As Analysis Template (B11 slice, on T160) | M | done 2026-11-19 (workbook-model 13o), not measured; left: Origin options, Batch Processing |
 | [T165](T165-batch-processing.md) | File > Batch Processing... with a workbook or analysis template (B11 slice) | M | done 2026-11-19 (workbook-model 13p), not measured; left: summary sheet, Origin options |

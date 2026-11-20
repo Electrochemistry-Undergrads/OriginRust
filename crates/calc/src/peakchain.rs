@@ -93,6 +93,12 @@ pub enum ChainBaseline {
     /// Origin's Baseline Mode "Constant": Y is the minimum (Origin's default), maximum, mean or
     /// median of the data.
     ConstantStat(BaselineStat),
+    /// Origin's Baseline Mode "User Defined" with anchor points found by the 2nd derivative
+    /// ([`second_derivative_anchors`], at most `points` of them), joined by `method`.
+    SecondDerivative {
+        points: usize,
+        method: InterpMethod,
+    },
 }
 
 /// Which value of the data a constant baseline takes (Origin's Constant choices).
@@ -169,6 +175,70 @@ pub struct ChainResult {
     pub peaks: Vec<PeakInfo>,
 }
 
+/// The rows Origin's Peak Analyzer takes as baseline anchor points with its User Defined mode and
+/// the 2nd Derivative method at its Auto settings ("Number of Points to Find" = `points`, 8 by
+/// default), measured in analysis-tools.md 11.5:
+///
+/// - the candidates are the rows where the second derivative (central differences; the first and
+///   last row take their neighbour's) is at most 2.6 % of its largest size, leaving out runs of a
+///   single row (such as a peak's inflection point); a curve with the same curvature everywhere
+///   has no candidates;
+/// - with C candidates and the step C / `points` (rounded down), the candidates number 0, step,
+///   2 step, ... up to `points` - 1 of them are anchors, and the last row is always one; the first
+///   row is always one too.
+///
+/// This reproduces Origin's anchors for one and for two peaks on a straight or curved baseline
+/// (401 points) exactly, except two peaks on a curved baseline, where three anchors are 1 to 4
+/// rows away (Origin found the same anchors as on the straight baseline); for much finer or coarser
+/// sampling Origin's threshold moves a little, so anchors can be a few rows away. The anchors that
+/// move lie on the flat baseline, so the baseline itself hardly changes.
+pub fn second_derivative_anchors(x: &[f64], y: &[f64], points: usize) -> Vec<usize> {
+    let n = x.len().min(y.len());
+    if n < 3 {
+        return (0..n).collect();
+    }
+    let mut d2 = vec![f64::NAN; n];
+    for i in 1..n - 1 {
+        let (h0, h1) = (x[i] - x[i - 1], x[i + 1] - x[i]);
+        let v = 2.0 * ((y[i + 1] - y[i]) / h1 - (y[i] - y[i - 1]) / h0) / (h0 + h1);
+        d2[i] = if v.is_finite() { v } else { f64::NAN };
+    }
+    d2[0] = d2[1];
+    d2[n - 1] = d2[n - 2];
+    let largest = d2.iter().filter(|v| v.is_finite()).fold(0.0_f64, |m, v| m.max(v.abs()));
+    let small: Vec<bool> = d2.iter().map(|v| v.is_finite() && v.abs() <= 0.026 * largest).collect();
+    let mut candidates = Vec::new();
+    let mut i = 0;
+    while i < n {
+        if small[i] {
+            let start = i;
+            while i < n && small[i] {
+                i += 1;
+            }
+            if i - start >= 2 {
+                candidates.extend(start..i);
+            }
+        } else {
+            i += 1;
+        }
+    }
+    let points = points.max(2);
+    let step = candidates.len() / points;
+    let mut rows: Vec<usize> = if step == 0 {
+        candidates.clone()
+    } else {
+        (0..points - 1).map(|k| k * step).filter(|&k| k < candidates.len()).map(|k| candidates[k]).collect()
+    };
+    if rows.first() != Some(&0) {
+        rows.insert(0, 0);
+    }
+    if rows.last() != Some(&(n - 1)) {
+        rows.push(n - 1);
+    }
+    rows.dedup();
+    rows
+}
+
 /// Anchors of [`ChainBaseline::AutoMinima`].
 pub fn auto_minima_anchors(x: &[f64], y: &[f64], n: usize) -> Vec<(f64, f64)> {
     let len = x.len().min(y.len());
@@ -202,6 +272,17 @@ fn baseline_method(x: &[f64], y: &[f64], b: &ChainBaseline) -> Option<BaselineMe
             }
             let mut p = points.clone();
             p.sort_by(|a, b| a.0.total_cmp(&b.0));
+            BaselineMethod::Anchors { points: p, method: *method, boundary: SplineBoundary::NotAKnot }
+        }
+        ChainBaseline::SecondDerivative { points, method } => {
+            let p: Vec<(f64, f64)> = second_derivative_anchors(&x[..n], &y[..n], *points)
+                .into_iter()
+                .map(|i| (x[i], y[i]))
+                .filter(|(a, b)| a.is_finite() && b.is_finite())
+                .collect();
+            if p.len() < 2 {
+                return None;
+            }
             BaselineMethod::Anchors { points: p, method: *method, boundary: SplineBoundary::NotAKnot }
         }
         ChainBaseline::AutoMinima(k) => {
@@ -519,6 +600,31 @@ fn chain(x: &[f64], y: &[f64], opts: &ChainOptions, centers: Option<&[f64]>) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Origin's anchors (re-workspace/scratch/t04base: r-q1, c1, r-q2, n-create).
+    #[test]
+    fn second_derivative_anchors_match_origin() {
+        let g = |t: f64, c: f64, w: f64| (-(t - c) * (t - c) / w).exp();
+        let x: Vec<f64> = (0..401).map(|i| i as f64 * 0.05).collect();
+        let one: Vec<f64> = x.iter().map(|&t| 0.5 + 0.003 * (t - 7.0).powi(2) + g(t, 10.0, 0.5)).collect();
+        assert_eq!(second_derivative_anchors(&x, &one, 8), [0, 41, 82, 123, 164, 276, 317, 400]);
+        let two: Vec<f64> = x.iter().map(|&t| 0.2 + 0.01 * t + g(t, 5.0, 0.5) + 0.6 * g(t, 12.0, 0.8)).collect();
+        assert_eq!(second_derivative_anchors(&x, &two, 8), [0, 32, 64, 165, 197, 304, 336, 400]);
+        let curved: Vec<f64> =
+            x.iter().map(|&t| 0.5 + 0.003 * (t - 7.0).powi(2) + g(t, 5.0, 0.5) + 0.6 * g(t, 12.0, 0.8)).collect();
+        // Origin: [0, 32, 64, 165, 197, 304, 336, 400], the anchors of the straight baseline.
+        assert_eq!(second_derivative_anchors(&x, &curved, 8), [0, 31, 62, 164, 195, 301, 332, 400]);
+        // A curve with the same curvature everywhere has no candidates: only the ends.
+        let bowl: Vec<f64> = x.iter().map(|&t| 0.5 + 0.003 * (t - 7.0).powi(2)).collect();
+        assert_eq!(second_derivative_anchors(&x, &bowl, 8), [0, 400]);
+        // The baseline through them, as Origin's Create Baseline writes it (Line).
+        let opts = ChainOptions {
+            baseline: ChainBaseline::SecondDerivative { points: 8, method: InterpMethod::Linear },
+            ..ChainOptions::default()
+        };
+        let r = analyze_peaks(&x, &two, &opts).unwrap();
+        assert!((r.baseline[1] - 0.200_500_000_002_844_2).abs() < 1e-12, "{}", r.baseline[1]);
+    }
 
     fn gauss(x: f64, c: f64, s: f64, h: f64) -> f64 {
         h * (-(x - c).powi(2) / (2.0 * s * s)).exp()

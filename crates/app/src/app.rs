@@ -2587,6 +2587,21 @@ impl SheafApp {
                     self.doc.adjust_view(|p| p.set_view_mode(graph, mode));
                 }
             }
+            Action::SetShowElements { graph, labels, data } => {
+                let what = if labels.is_some() { "Show Labels" } else { "Show Data" };
+                self.doc.apply(what, |p| {
+                    if let Some(g) = p.graph_mut(graph) {
+                        for l in &mut g.layers {
+                            if let Some(on) = labels {
+                                l.display.show_labels = on;
+                            }
+                            if let Some(on) = data {
+                                l.display.show_data = on;
+                            }
+                        }
+                    }
+                });
+            }
             Action::SetLayerIcons { graph, on } => {
                 self.doc.apply("Show Layer Icons", |p| {
                     if let Some(g) = p.graph_mut(graph) {
@@ -4958,6 +4973,12 @@ impl SheafApp {
             }),
             view_mode: graph.map(|g| project.view_mode(g)).unwrap_or_default(),
             layer_icons: graph.and_then(|g| project.graph(g)).is_none_or(|g| g.page.style.layer_icons),
+            show_labels: graph
+                .and_then(|g| project.graph(g))
+                .is_none_or(|g| g.layers.iter().all(|l| l.display.show_labels)),
+            show_data: graph
+                .and_then(|g| project.graph(g))
+                .is_none_or(|g| g.layers.iter().all(|l| l.display.show_data)),
             active_layer_only: graph.and_then(|id| {
                 let g = project.graph(id)?;
                 let layer = self.graphs.get(&id).map_or(0, |s| s.active_layer);

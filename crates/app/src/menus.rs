@@ -454,6 +454,9 @@ pub enum Cmd {
     SetViewMode(sheaf_core::project::ViewMode),
     /// View > Show > Layer Icons.
     ToggleLayerIcons,
+    /// View > Show > Labels and Data on a graph (T177): every layer's labels or data plots.
+    ToggleShowLabels,
+    ToggleShowData,
     /// View > Show > Active Layer Only uses the existing Hide Other Layers toggle.
     ToggleActiveLayerOnly,
     /// View > Full Screen (Ctrl+Shift+J) and the page's "View Full Screen".
@@ -726,6 +729,10 @@ pub struct MenuContext<'a> {
     pub view_mode: sheaf_core::project::ViewMode,
     /// The active graph shows its layer icons (the tick of View > Show > Layer Icons).
     pub layer_icons: bool,
+    /// Every layer of the active graph shows its labels, and its data (the ticks of View > Show >
+    /// Labels and Data, T177).
+    pub show_labels: bool,
+    pub show_data: bool,
     /// None without a valid multi-layer target; otherwise the derived isolation check.
     pub active_layer_only: Option<bool>,
 }
@@ -1132,9 +1139,9 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
                 "Layer Grid",
                 "-",
                 "Frame",
-                "Labels",
-                "Data",
             ]));
+            show.push(item("Labels", Cmd::ToggleShowLabels));
+            show.push(item("Data", Cmd::ToggleShowData));
             show.push(keyed("Active Layer Only", ctrl_alt(Key::D), Cmd::ToggleActiveLayerOnly));
             show.push(sep());
             show.push(grey("Master Items on Screen"));
@@ -3351,6 +3358,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::SetViewMode(mode) => Action::SetViewMode { graph: c.graph.ok_or(NEED_GRAPH)?, mode: *mode },
         Cmd::ToggleLayerIcons => Action::SetLayerIcons { graph: c.graph.ok_or(NEED_GRAPH)?, on: !c.layer_icons },
+        Cmd::ToggleShowLabels => {
+            Action::SetShowElements { graph: c.graph.ok_or(NEED_GRAPH)?, labels: Some(!c.show_labels), data: None }
+        }
+        Cmd::ToggleShowData => {
+            Action::SetShowElements { graph: c.graph.ok_or(NEED_GRAPH)?, labels: None, data: Some(!c.show_data) }
+        }
         Cmd::ToggleActiveLayerOnly => {
             let graph = c.graph.ok_or(NEED_GRAPH)?;
             c.active_layer_only.ok_or("Needs a valid active layer in a graph with at least two layers")?;
@@ -3648,6 +3661,11 @@ fn show_entries(
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleLayerIcons)) && c.layer_icons {
+                    tick(ui, &response);
+                }
+                if (matches!(it.cmd, Some(Cmd::ToggleShowLabels)) && c.show_labels)
+                    || (matches!(it.cmd, Some(Cmd::ToggleShowData)) && c.show_data)
+                {
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleActiveLayerOnly)) && c.active_layer_only == Some(true) {
@@ -4041,6 +4059,8 @@ mod tests {
             can_ungroup: false,
             view_mode: Default::default(),
             layer_icons: true,
+            show_labels: true,
+            show_data: true,
             active_layer_only: None,
         };
         assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_BOOK);

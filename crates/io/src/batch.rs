@@ -119,6 +119,9 @@ pub fn place_workbook_with(
     let Some(dest) = project.workbook_mut(t.book) else {
         unreachable!("the target was checked above");
     };
+    // Add Sparklines (T231): the columns that arrive keep their mark, and a sheet that takes in
+    // marked columns shows its Sparklines row.
+    let sparklines = sheets.first().is_some_and(|s| s.view.sparklines);
     let mut first = t.sheet;
     if !options.rename_sheet {
         for sheet in &mut sheets {
@@ -196,9 +199,17 @@ pub fn place_workbook_with(
                 warnings.push(format!("the file has {} sheets; only the first was added", sheets.len()));
             }
             if let Some(new) = sheets.into_iter().next() {
-                append_rows(&mut dest.sheets[t.sheet], new, &mut warnings);
+                let marked = if sparklines { new.columns.len() } else { 0 };
+                let ws = &mut dest.sheets[t.sheet];
+                append_rows(ws, new, &mut warnings);
+                for c in ws.columns.iter_mut().take(marked) {
+                    c.sparkline = true;
+                }
             }
         }
+    }
+    if sparklines && mode != ImportMode::NewSheet {
+        dest.sheets[t.sheet].view.sparklines = true;
     }
     Placed { book: t.book, sheet: first, warnings }
 }
@@ -985,5 +996,31 @@ mod tests {
         assert!(b.sheets.len() >= 2, "the CHI sheets and the ICP sheet share one book");
         assert!(b.sheets.iter().any(|s| s.name == "b_icp"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn added_columns_and_rows_with_sparklines_turn_the_row_on_in_the_target_sheet() {
+        let marked = || {
+            let mut b = book("new", vec![num("A", "x", &[5.0, 6.0])]);
+            crate::ascii::AddSparklines::Yes.apply(&mut b);
+            b
+        };
+        for mode in [ImportMode::NewColumns, ImportMode::NewRows, ImportMode::ReplaceSheet] {
+            let (mut p, t) = project_with(book("old", vec![num("A", "x", &[1.0]), num("B", "y", &[2.0])]));
+            place_workbook(&mut p, marked(), mode, Some(t));
+            let sheet = &p.workbook(t.book).unwrap().sheets[0];
+            assert!(sheet.view.sparklines, "{mode:?}");
+            let flags: Vec<bool> = sheet.columns.iter().map(|c| c.sparkline).collect();
+            let want = match mode {
+                ImportMode::NewColumns => vec![false, false, true],
+                ImportMode::NewRows => vec![true, false],
+                _ => vec![true],
+            };
+            assert_eq!(flags, want, "{mode:?}");
+        }
+        // Without sparklines the target sheet's row stays as it was.
+        let (mut p, t) = project_with(book("old", vec![num("A", "x", &[1.0])]));
+        place_workbook(&mut p, book("new", vec![num("A", "x", &[5.0])]), ImportMode::NewColumns, Some(t));
+        assert!(!p.workbook(t.book).unwrap().sheets[0].view.sparklines);
     }
 }

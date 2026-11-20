@@ -394,7 +394,7 @@ files, and `~$` lock files are skipped.
   `--param-lines`, `--no-rename-columns`, `--no-rename-book`, `--first-row`, `--last-row`,
   `--read-rows`, `--skip-rows`, `--first-column`, `--last-column`, `--read-columns`,
   `--skip-columns` and `--dates-as-text`. The separator, number-format and block flags (`--delimiter*`,
-  `--fixed-width`, `--decimal-comma`, `--thousands`, `--day-first`, `--blocks-as-sheets`,
+  `--fixed-width`, `--decimal-comma`, `--thousands`, `--day-first`, `--blocks-as-sheets`, `--sparklines`,
   `--no-rename-sheet`) do not apply to a cell grid and are ignored. `--format ascii` forces the text
   reader on an Excel file.
 - `sheaf export project.sheaf -o out.xlsx` and `sheaf export-data project.sheaf -o out.xlsx` write a

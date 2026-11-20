@@ -158,3 +158,17 @@ fn the_data_import_options_change_names_and_labels() {
     assert_eq!(book.long_name, "");
     assert_eq!(book.sheets[0].columns[1].units, "");
 }
+
+#[test]
+fn sparklines_yes_marks_the_columns_and_shows_the_row() {
+    let dir = scratch("sparklines");
+    let text = "t,i\n1,2\n2,3\n3,4\n";
+    let (ok, err, p) = import(&dir, "s.csv", text, &["--sparklines", "yes"]);
+    assert!(ok, "{err}");
+    let sheet = &p.workbooks().next().unwrap().sheets[0];
+    assert!(sheet.view.sparklines);
+    assert!(sheet.columns.iter().all(|c| c.sparkline));
+    let (ok, err, p) = import(&dir, "s.csv", text, &[]);
+    assert!(ok, "{err}");
+    assert!(!p.workbooks().next().unwrap().sheets[0].view.sparklines, "no sparklines by default");
+}

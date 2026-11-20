@@ -299,6 +299,18 @@ Read with `tools/origin-ref/origin-dialog.ps1` from `impasc fname:=... -d;` (con
 
 Sheaf's window follows this: OK and Cancel (the Apply button and `ImportOutcome::Apply` are gone); the mode list reads `Replace Existing Data`, `Start New Books`, `Start New Sheets`, `Start New Columns`, `Start New Rows` (`ImportMode::label`); the node that used to be called "Data Import Options" is `(Re)Naming Worksheet and Workbook` with `Rename Sheet with (Partial) Filename` and `Rename Book with (Partial) Filename`, both on; the short-name line is on the Header Lines node (`Line with the short names`, none by default).
 
+**Add Sparklines (T231, 2026-11-20, not measured beyond the list).** The Import Options node has Origin's
+`Add Sparklines` list with its three texts: `No`, `Yes`, `Yes(if less than 50 columns)`
+(`AsciiOptions::sparklines`, `AddSparklines`; saved in dialog themes; CLI `sheaf import --sparklines
+no|yes|auto`). Yes marks every imported column for a sparkline and turns the sheet's Sparklines row on
+(workbook-model T175); the third does so only for a sheet of fewer than 50 columns (49 columns get them,
+50 do not), per sheet when the blocks of a file become sheets. Imported into an existing sheet, the
+arriving columns keep the mark and the target sheet's row is turned on (Start New Columns marks only the
+new columns; Start New Rows marks the columns the rows went into). **Sheaf's default is `No`**, not
+Origin's `Yes(if less than 50 columns)`: the `.opj` writer does not keep sparklines yet, so a default
+import saved as `.opj` would always need a companion file. Auto column width (`nAutoSize`) and write
+protection (`DataWriteProtection`) are not implemented.
+
 Name limits apply after derivation (book short name max 13 chars of letters/digits; sheet name 64 per the limits page; see workbook-model.md). When a book is made from a file name with spaces, punctuation or length over the limit, the short name is auto-generated and the file name goes into the long name. **[I]**
 
 ## 11. Encoding and misc (P1)

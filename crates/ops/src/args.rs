@@ -612,6 +612,11 @@ pub struct ReadOptions {
     /// Delimited text: a file with several blocks of data separated by blank lines gets one sheet per block.
     #[arg(long)]
     pub blocks_as_sheets: bool,
+    /// Delimited text: Add Sparklines (Origin's import option): the imported columns get sparklines
+    /// and the sheet shows its Sparklines row; auto only when the sheet has fewer than 50 columns
+    /// (Origin's default; Sheaf's is no).
+    #[arg(long, value_enum, default_value_t = SparklinesArg::No)]
+    pub sparklines: SparklinesArg,
     /// Excel (.xls, .xlsx, .xlsm): the sheets to read, as names or 1-based positions counted over
     /// all sheets, comma-separated (for example "Results,3"). A number is the sheet of that name if there
     /// is one, otherwise the sheet at that position.
@@ -704,6 +709,17 @@ pub enum ImportLayout {
     Columns,
     /// One sheet; the rows of the files one under the other.
     Rows,
+}
+
+/// Add Sparklines of delimited text (`sheaf import --sparklines`, T231).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum SparklinesArg {
+    /// No sparklines.
+    No,
+    /// Every imported column.
+    Yes,
+    /// Every imported column when the sheet has fewer than 50 columns (Origin's default).
+    Auto,
 }
 
 /// The digit-grouping character of numbers (`sheaf import --thousands`).

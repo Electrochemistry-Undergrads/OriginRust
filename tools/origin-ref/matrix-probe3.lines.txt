@@ -1,0 +1,25 @@
+newbook mat:=1;
+?wks.ncols
+?wks.nrows
+?layer.x.from
+?layer.x.to
+?layer.y.from
+?layer.y.to
+mdim cols:=4 rows:=3 xfrom:=10 xto:=40 yfrom:=1 yto:=3;
+?layer.x.from
+?layer.x.to
+?layer.y.from
+?layer.y.to
+layer.x.from=10;
+layer.x.to=40;
+layer.y.from=1;
+layer.y.to=3;
+?layer.x.from
+?layer.x.to
+?layer.y.from
+?layer.y.to
+$layer.x.unit$
+$layer.x.name$
+$layer.y.name$
+$layer.z.name$
+$mat.comment$

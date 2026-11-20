@@ -45,11 +45,32 @@ pub struct GraphSummary {
     pub height_in: f64,
 }
 
+/// One sheet of a matrix book.
+#[derive(Clone, Debug, Serialize)]
+pub struct MatrixSheetSummary {
+    pub name: String,
+    pub rows: usize,
+    pub cols: usize,
+    pub x_from: f64,
+    pub x_to: f64,
+    pub y_from: f64,
+    pub y_to: f64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct MatrixSummary {
+    pub name: String,
+    pub title: String,
+    pub sheets: Vec<MatrixSheetSummary>,
+}
+
 /// The windows of a project in creation order.
 #[derive(Clone, Debug, Serialize)]
 pub struct ProjectSummary {
     pub workbooks: Vec<WorkbookSummary>,
     pub graphs: Vec<GraphSummary>,
+    /// Matrix books (T179), in creation order; they are not in `order`.
+    pub matrices: Vec<MatrixSummary>,
     /// The windows in their order: `("workbook", index)` or `("graph", index)`.
     #[serde(skip)]
     pub order: Vec<(bool, usize)>,
@@ -57,7 +78,7 @@ pub struct ProjectSummary {
 
 /// Lists the workbooks, sheets, columns and graphs of a project.
 pub fn summarize(project: &Project) -> ProjectSummary {
-    let mut out = ProjectSummary { workbooks: Vec::new(), graphs: Vec::new(), order: Vec::new() };
+    let mut out = ProjectSummary { workbooks: Vec::new(), graphs: Vec::new(), matrices: Vec::new(), order: Vec::new() };
     for w in &project.windows {
         match w {
             Window::Workbook(b) => {
@@ -117,6 +138,23 @@ pub fn summarize(project: &Project) -> ProjectSummary {
             }
             // Notes windows (T154) hold no data.
             Window::Notes(_) => {}
+            Window::Matrix(m) => out.matrices.push(MatrixSummary {
+                name: m.name.clone(),
+                title: m.title().to_string(),
+                sheets: m
+                    .sheets
+                    .iter()
+                    .map(|s| MatrixSheetSummary {
+                        name: s.name.clone(),
+                        rows: s.rows,
+                        cols: s.cols,
+                        x_from: s.x_from,
+                        x_to: s.x_to,
+                        y_from: s.y_from,
+                        y_to: s.y_to,
+                    })
+                    .collect(),
+            }),
             Window::Graph(g) => {
                 out.order.push((false, out.graphs.len()));
                 out.graphs.push(GraphSummary {

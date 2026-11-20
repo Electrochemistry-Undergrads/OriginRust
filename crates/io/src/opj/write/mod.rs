@@ -280,6 +280,14 @@ impl Writer {
             Window::Graph(graph) => self.graph(project, graph, sets),
             // Left out by `write_named`.
             Window::Notes(_) => Ok(()),
+            Window::Matrix(m) => {
+                // Matrix windows are not written yet (the companion file keeps them).
+                self.notes.graph_notes.push(format!(
+                    "matrix book '{}' is not written to the Origin project (the writer does not store matrix windows yet)",
+                    m.name
+                ));
+                Ok(())
+            }
         }
     }
 

@@ -197,6 +197,19 @@ pub fn nice_step(raw: f64) -> f64 {
     round_up_to(raw, &[1.0, 2.0, 5.0, 10.0])
 }
 
+/// The value of 1, 2, 5 or 10 times a power of ten nearest to `raw` on a logarithmic scale.
+pub fn nearest_nice_step(raw: f64) -> f64 {
+    if !(raw.is_finite() && raw > 0.0) {
+        return 1.0;
+    }
+    let p = pow10(raw.log10().floor() as i32);
+    [1.0, 2.0, 5.0, 10.0]
+        .iter()
+        .map(|m| m * p)
+        .min_by(|a, b| (a / raw).ln().abs().total_cmp(&(b / raw).ln().abs()))
+        .unwrap_or(1.0)
+}
+
 /// Rounds `raw` up to 1, 1.5, 2, 2.5, 3, 4, 5 or 10 times a power of ten.
 pub fn step15(raw: f64) -> f64 {
     round_up_to(raw, &[1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 10.0])

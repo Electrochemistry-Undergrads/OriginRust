@@ -1,0 +1,13 @@
+newbook mat:=1;
+mdim cols:=4 rows:=3 x1:=10 x2:=40 y1:=1 y2:=3;
+msetvalue formula:="y*1000+x/7";
+string s$ = "";
+for(int r=1;r<=3;r++){ for(int c=1;c<=4;c++){ s$ = s$ + "$(mat(1)[r,c],*15) "; } s$ = s$ + "| "; }
+$s$
+string t$ = "$(1/3,*15) $(1/3,.15) $(1e-5/3,*15) $(1/0,*15)";
+$t$
+mdim cols:=5 rows:=4;
+msetvalue formula:="x*1000+y";
+string s$ = "";
+for(int r=1;r<=4;r++){ for(int c=1;c<=5;c++){ s$ = s$ + "$(mat(1)[r,c],*15) "; } s$ = s$ + "| "; }
+$s$

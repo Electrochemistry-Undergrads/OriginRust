@@ -1036,6 +1036,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             group_style: GroupStyle::default(),
             display: LayerDisplay::default(),
             xy_ratio: None,
+            field: None,
         }],
     }
 }
@@ -2370,5 +2371,95 @@ mod tests {
         // A partly written rug keeps the defaults for the rest.
         let r: Rug = serde_json::from_str(r#"{"show":true,"plot":2}"#).unwrap();
         assert!(r.show && r.plot == Some(crate::ids::ColumnId(2)) && r.overlap && r.size_pct == 5.0);
+    }
+}
+
+/// The templates of graphs made from a matrix or from XYZ columns. They are kept apart from
+/// [`Template`], whose members make graphs of curves from columns.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FieldTemplate {
+    /// Contour plot with colour fill: 8 major steps of 5 bands each, level lines at the major
+    /// levels (Origin's "Contour - Color Fill").
+    ContourFill,
+    /// Contour lines only: 10 major steps, a line and a label at every level in between (Origin's
+    /// "Contour - Lines").
+    ContourLines,
+    /// Heat map: a block per matrix cell, blue to white to red, 5 major steps of 6 bands (Origin's
+    /// "Heat Map").
+    HeatMap,
+}
+
+impl FieldTemplate {
+    pub const ALL: [FieldTemplate; 3] =
+        [FieldTemplate::ContourFill, FieldTemplate::ContourLines, FieldTemplate::HeatMap];
+
+    /// The name used on the command line.
+    pub fn name(&self) -> &'static str {
+        match self {
+            FieldTemplate::ContourFill => "contour",
+            FieldTemplate::ContourLines => "contour-lines",
+            FieldTemplate::HeatMap => "heatmap",
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            FieldTemplate::ContourFill => "Contour - Color Fill",
+            FieldTemplate::ContourLines => "Contour - Lines",
+            FieldTemplate::HeatMap => "Heat Map",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<FieldTemplate> {
+        FieldTemplate::ALL.into_iter().find(|t| t.name().eq_ignore_ascii_case(name))
+    }
+
+    /// An empty graph in this template's style: one layer whose field is `source`.
+    pub fn new_graph(&self, id: WindowId, name: &str, source: FieldSource) -> Graph {
+        let mut g = general(id, name, PlotKind::Line);
+        let layer = &mut g.layers[0];
+        // The frame leaves the right part of the page to the colour scale (Origin's proportions).
+        layer.frame = Frame { left: 0.14, top: 0.113, width: 0.5725, height: 0.733 };
+        if *self == FieldTemplate::ContourLines {
+            // No colour scale: the frame takes the width of the page (Origin: 0.179 to 0.8625).
+            layer.frame = Frame { left: 0.179, top: 0.113, width: 0.6835, height: 0.733 };
+        }
+        layer.legend.visible = false;
+        for axis in [&mut layer.x_axis, &mut layer.y_axis] {
+            axis.auto_range = AutoRange::Tight;
+            axis.show_opposite = true;
+            axis.opposite_ticks = false;
+            // Origin's matrix graphs have smaller text than its line graphs: more ticks fit.
+            axis.tick_font.size_pt = 10.0;
+            axis.title_font.size_pt = 12.0;
+        }
+        let kind = if *self == FieldTemplate::HeatMap { FieldKind::Cells } else { FieldKind::Contour };
+        let (fill, lines, labels, palette, major, minor) = match self {
+            FieldTemplate::ContourFill => (true, true, false, FieldPalette::Rainbow, 8, 5),
+            FieldTemplate::ContourLines => (false, true, true, FieldPalette::Rainbow, 10, 1),
+            FieldTemplate::HeatMap => (true, false, false, FieldPalette::BlueWhiteRed, 5, 6),
+        };
+        if *self == FieldTemplate::HeatMap {
+            layer.x_axis.tick_label_angle_deg = 90.0;
+        }
+        layer.field = Some(FieldPlot {
+            source,
+            kind,
+            fill,
+            lines,
+            labels,
+            palette,
+            levels: FieldLevels { min: None, max: None, major, minor },
+            line: LineStyle::solid(Color::BLACK, 0.5),
+            label_font: Font::new(DEFAULT_FONT, 11.0),
+            scale: ColorScale {
+                visible: fill,
+                title: None,
+                font: Font::new(DEFAULT_FONT, 8.0),
+                title_font: Font::new(DEFAULT_FONT, 12.0),
+            },
+        });
+        g
     }
 }

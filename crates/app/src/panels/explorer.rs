@@ -227,6 +227,7 @@ pub fn cell(w: &Window, column: usize) -> String {
         Window::Workbook(b) => &b.long_name,
         Window::Graph(g) => &g.long_name,
         Window::Notes(n) => &n.long_name,
+        Window::Matrix(m) => &m.long_name,
     };
     match column {
         0 | 2 => w.name().to_string(),
@@ -235,6 +236,7 @@ pub fn cell(w: &Window, column: usize) -> String {
             Window::Workbook(_) => "Workbook".to_string(),
             Window::Graph(_) => "Graph".to_string(),
             Window::Notes(_) => "Notes".to_string(),
+            Window::Matrix(_) => "Matrix".to_string(),
         },
     }
 }

@@ -778,6 +778,12 @@ pub enum Action {
         graph: WindowId,
         on: bool,
     },
+    /// A switch of the layer icon menu, saved with the page (T183).
+    SetPageSwitch {
+        graph: WindowId,
+        switch: PageSwitch,
+        on: bool,
+    },
     /// View > Full Screen: the graph's page over the whole screen until Esc.
     FullScreen(WindowId),
     /// Add Shortcut to Favorites (T130): the window gets a shortcut in the Project Explorer's Favorites.
@@ -1142,4 +1148,11 @@ pub enum Action {
     /// Tools > AI Assistants (MCP): turn the endpoint of `sheaf-mcp --attach` on or off.
     ToggleAiLink,
     Quit,
+}
+
+/// The page switches of the layer icon menu (T183).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PageSwitch {
+    ActivateByIconOnly,
+    IconDoubleClickPlotSetup,
 }

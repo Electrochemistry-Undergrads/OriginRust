@@ -28,6 +28,7 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::FitImplicit(a) => crate::fit_datasets::fit_implicit(a),
         Command::CompareDatasets(a) => crate::fit_datasets::compare_datasets(a),
         Command::MergeGraphs(a) => crate::merge::merge_graphs(a),
+        Command::Matrix(a) => crate::matrix::matrix(a),
     }
 }
 
@@ -162,6 +163,15 @@ fn describe(project: &Project) {
             println!(
                 "graph {} ({} layer(s), {} plot(s), {:.2} x {:.2} in)",
                 g.title, g.layers, g.plots, g.width_in, g.height_in
+            );
+        }
+    }
+    for m in &summary.matrices {
+        println!("matrix book {}", m.title);
+        for s in &m.sheets {
+            println!(
+                "  sheet {} ({} columns x {} rows, x {} to {}, y {} to {})",
+                s.name, s.cols, s.rows, s.x_from, s.x_to, s.y_from, s.y_to
             );
         }
     }

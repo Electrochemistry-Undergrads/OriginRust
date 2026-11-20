@@ -4,6 +4,7 @@
 use crate::column::{Column, ColumnData, Designation};
 use crate::graph::{ErrorStyle, Graph, Indexed, IndexedError, IntervalError, LegendScope, Plot, StatPlot};
 use crate::ids::{ColumnId, WindowId};
+use crate::matrix::{MatrixBook, MatrixSheet};
 use crate::multi_y::{MultiYError, MultiYKind, MultiYOptions, MultiYPlan};
 use crate::panels::{PanelError, PanelLayout, PanelPage, panel_layers};
 use crate::template::{Template, right_y_layer};
@@ -18,6 +19,7 @@ pub enum Window {
     Graph(Graph),
     /// File > New > Notes (T154).
     Notes(crate::notes_window::Notes),
+    Matrix(MatrixBook),
 }
 
 impl Window {
@@ -26,6 +28,7 @@ impl Window {
             Window::Workbook(b) => b.id,
             Window::Graph(g) => g.id,
             Window::Notes(n) => n.id,
+            Window::Matrix(m) => m.id,
         }
     }
 
@@ -34,6 +37,7 @@ impl Window {
             Window::Workbook(b) => &b.name,
             Window::Graph(g) => &g.name,
             Window::Notes(n) => &n.name,
+            Window::Matrix(m) => &m.name,
         }
     }
 
@@ -42,6 +46,7 @@ impl Window {
             Window::Workbook(b) => b.title(),
             Window::Graph(g) => g.title(),
             Window::Notes(n) => n.title(),
+            Window::Matrix(m) => m.title(),
         }
     }
 }
@@ -294,6 +299,10 @@ pub enum ProjectError {
     NotAWorkbook(String),
     #[error("window '{0}' is not a graph")]
     NotAGraph(String),
+    #[error("window '{0}' is not a matrix")]
+    NotAMatrix(String),
+    #[error("the matrix book has no sheet {0}")]
+    NoSuchMatrixSheet(usize),
     #[error("there is no column with id {0:?}")]
     NoSuchColumn(ColumnId),
     #[error("stacked histograms need at least one Y column that holds numbers")]
@@ -400,6 +409,8 @@ pub enum ProjectError {
     ParetoNoRightAxis,
     #[error("a stacked histograms graph cannot have a right Y axis; use one Y axis or another template")]
     StackedHistogramsNoRightAxis,
+    #[error("{0}")]
+    Matrix(#[from] crate::matrix::MatrixError),
 }
 
 impl Project {
@@ -494,6 +505,11 @@ impl Project {
         id
     }
 
+    /// A fresh window identifier.
+    pub fn new_window_id(&mut self) -> WindowId {
+        WindowId(self.fresh_id())
+    }
+
     pub fn new_column_id(&mut self) -> ColumnId {
         ColumnId(self.fresh_id())
     }
@@ -510,6 +526,9 @@ impl Project {
                         max = max.max(c.id.0);
                     }
                 }
+            }
+            if let Window::Matrix(m) = w {
+                max = m.sheets.iter().fold(max, |max, s| max.max(s.data_id));
             }
         }
         self.next_id = self.next_id.max(max + 1);
@@ -529,6 +548,7 @@ impl Project {
             Some(Window::Workbook(b)) => b.name = new.clone(),
             Some(Window::Graph(g)) => g.name = new.clone(),
             Some(Window::Notes(n)) => n.name = new.clone(),
+            Some(Window::Matrix(m)) => m.name = new.clone(),
             None => {}
         }
         if old != new {
@@ -579,14 +599,14 @@ impl Project {
     pub fn workbooks(&self) -> impl Iterator<Item = &Workbook> {
         self.windows.iter().filter_map(|w| match w {
             Window::Workbook(b) => Some(b),
-            Window::Graph(_) | Window::Notes(_) => None,
+            Window::Graph(_) | Window::Notes(_) | Window::Matrix(_) => None,
         })
     }
 
     pub fn graphs(&self) -> impl Iterator<Item = &Graph> {
         self.windows.iter().filter_map(|w| match w {
             Window::Graph(g) => Some(g),
-            Window::Workbook(_) | Window::Notes(_) => None,
+            Window::Workbook(_) | Window::Notes(_) | Window::Matrix(_) => None,
         })
     }
 
@@ -637,6 +657,55 @@ impl Project {
             Window::Graph(g) if g.id == id => Some(g),
             _ => None,
         })
+    }
+
+    pub fn matrix_books(&self) -> impl Iterator<Item = &MatrixBook> {
+        self.windows.iter().filter_map(|w| match w {
+            Window::Matrix(m) => Some(m),
+            _ => None,
+        })
+    }
+
+    pub fn matrix_book(&self, id: WindowId) -> Option<&MatrixBook> {
+        self.matrix_books().find(|m| m.id == id)
+    }
+
+    pub fn matrix_book_mut(&mut self, id: WindowId) -> Option<&mut MatrixBook> {
+        self.windows.iter_mut().find_map(|w| match w {
+            Window::Matrix(m) if m.id == id => Some(m),
+            _ => None,
+        })
+    }
+
+    /// A fresh identifier for the numbers of a matrix sheet.
+    pub fn new_matrix_data_id(&mut self) -> u64 {
+        self.fresh_id()
+    }
+
+    /// Adds a matrix book with one sheet of Origin's default size (32 x 32 missing values).
+    pub fn add_matrix_book(&mut self, long_name: &str) -> WindowId {
+        let id = WindowId(self.fresh_id());
+        let data_id = self.fresh_id();
+        let mut book = MatrixBook::new(id, self.unique_name("MBook"), data_id);
+        book.long_name = long_name.to_string();
+        self.windows.push(Window::Matrix(book));
+        id
+    }
+
+    /// Adds a matrix book that a conversion or an importer built from `sheets`. The book gets a
+    /// fresh window id and name, and every sheet a fresh data id.
+    pub fn adopt_matrix_book(&mut self, long_name: &str, mut sheets: Vec<MatrixSheet>) -> WindowId {
+        let id = WindowId(self.fresh_id());
+        for s in &mut sheets {
+            s.data_id = self.fresh_id();
+        }
+        let mut book = MatrixBook::new(id, self.unique_name("MBook"), 0);
+        book.long_name = long_name.to_string();
+        if !sheets.is_empty() {
+            book.sheets = sheets;
+        }
+        self.windows.push(Window::Matrix(book));
+        id
     }
 
     /// Adds an empty workbook (one empty sheet) and returns its id.
@@ -750,6 +819,13 @@ impl Project {
                     graph.remap_columns(&c);
                 }
                 Window::Notes(notes) => notes.id = w(notes.id),
+                Window::Matrix(m) => {
+                    m.id = w(m.id);
+                    // Data ids come from the same counter as window ids.
+                    for s in &mut m.sheets {
+                        s.data_id += shift;
+                    }
+                }
             }
         }
         fn shift_folder(f: &mut Folder, w: &dyn Fn(WindowId) -> WindowId) {
@@ -773,6 +849,7 @@ impl Project {
                     Window::Graph(_) => "Graph",
                     Window::Notes(_) => "Notes",
                     Window::Workbook(_) => "Book",
+                    Window::Matrix(_) => "MBook",
                 };
                 let name = self.unique_name(prefix);
                 if matches!(window, Window::Workbook(_)) {
@@ -782,6 +859,7 @@ impl Project {
                     Window::Workbook(b) => b.name = name,
                     Window::Graph(g) => g.name = name,
                     Window::Notes(n) => n.name = name,
+                    Window::Matrix(m) => m.name = name,
                 }
             }
             new_ids.push(window.id());
@@ -824,6 +902,7 @@ impl Project {
                 self.windows.push(Window::Notes(notes));
                 Some(id)
             }
+            Window::Matrix(m) => Some(self.adopt_matrix_book(&m.long_name, m.sheets)),
         }
     }
 
@@ -2605,7 +2684,7 @@ mod tests {
                 Window::Workbook(b) => {
                     b.sheets.iter().flat_map(|s| s.columns.iter()).filter_map(|c| c.formula.clone()).collect()
                 }
-                Window::Graph(_) | Window::Notes(_) => Vec::new(),
+                Window::Graph(_) | Window::Notes(_) | Window::Matrix(_) => Vec::new(),
             })
             .next();
         assert_eq!(formula.as_deref(), Some("[Book4]Sheet1!col(A) * 10"));

@@ -1,0 +1,23 @@
+newbook mat:=1;
+mdim cols:=4 rows:=3 x1:=10 x2:=40 y1:=1 y2:=3;
+?layer.cols
+?layer.rows
+?wks.ncols
+?wks.nrows
+?mat.nc
+?mat.nr
+?x1
+?x2
+?y1
+?y2
+?layer.x.from
+?layer.x.to
+?layer.y.from
+?layer.y.to
+?wks.xmin
+?mat.xmin
+?mat.x1
+?layer.xmin
+mproperty;
+?mproperty.xmin
+$mat.longname$

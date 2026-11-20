@@ -2602,6 +2602,21 @@ impl SheafApp {
                     }
                 });
             }
+            Action::SetPageSwitch { graph, switch, on } => {
+                use crate::actions::PageSwitch;
+                let label = match switch {
+                    PageSwitch::ActivateByIconOnly => "Set Active Layer By Layer Icon Only",
+                    PageSwitch::IconDoubleClickPlotSetup => "Double click to open Plot Setup",
+                };
+                self.doc.apply(label, |p| {
+                    if let Some(g) = p.graph_mut(graph) {
+                        match switch {
+                            PageSwitch::ActivateByIconOnly => g.page.style.activate_by_icon_only = on,
+                            PageSwitch::IconDoubleClickPlotSetup => g.page.style.icon_double_click_plot_setup = on,
+                        }
+                    }
+                });
+            }
             Action::SetLayerIcons { graph, on } => {
                 self.doc.apply("Show Layer Icons", |p| {
                     if let Some(g) = p.graph_mut(graph) {
@@ -3209,6 +3224,7 @@ impl SheafApp {
                         Window::Workbook(b) => b.long_name.clone(),
                         Window::Graph(g) => g.long_name.clone(),
                         Window::Notes(n) => n.long_name.clone(),
+                        Window::Matrix(m) => m.long_name.clone(),
                     };
                     let short_name = w.name().to_string();
                     self.rename = Some(RenameDialog { window: id, long_name, short_name, error: None, folder: None });
@@ -5118,6 +5134,12 @@ impl SheafApp {
             }),
             view_mode: graph.map(|g| project.view_mode(g)).unwrap_or_default(),
             layer_icons: graph.and_then(|g| project.graph(g)).is_none_or(|g| g.page.style.layer_icons),
+            activate_by_icon_only: graph
+                .and_then(|g| project.graph(g))
+                .is_some_and(|g| g.page.style.activate_by_icon_only),
+            icon_double_click_plot_setup: graph
+                .and_then(|g| project.graph(g))
+                .is_some_and(|g| g.page.style.icon_double_click_plot_setup),
             show_labels: graph
                 .and_then(|g| project.graph(g))
                 .is_none_or(|g| g.layers.iter().all(|l| l.display.show_labels)),
@@ -5450,6 +5472,7 @@ impl SheafApp {
             }
             Some(Window::Graph(g)) => format!("1: [{}]1!", g.name),
             Some(Window::Notes(n)) => n.name.clone(),
+            Some(Window::Matrix(m)) => format!("[{}]{}!", m.name, m.sheet().name),
             None => String::new(),
         }
     }
@@ -7011,6 +7034,7 @@ fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
                 }
             }
             Window::Notes(_) => {}
+            Window::Matrix(_) => {}
             Window::Graph(g) => {
                 for l in &mut g.layers {
                     l.plots.retain(|p| !columns.contains(&p.y));
@@ -7169,6 +7193,11 @@ impl eframe::App for SheafApp {
                         }
                         Some(Window::Notes(_)) => {
                             crate::notes_view::show(ui, doc, id, notes.entry(id).or_default(), actions);
+                        }
+                        // T179 slice 1 ports the matrix model, files, plots and command line; the
+                        // matrix window itself comes with the next slice.
+                        Some(Window::Matrix(_)) => {
+                            ui.label("Matrix windows are not shown in the app yet.");
                         }
                         None => {}
                     };

@@ -4,14 +4,32 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 pub(super) const FILE_NAME: &str = "format-clipboard.json";
 const MAX_BYTES: u64 = 16 * 1024 * 1024;
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
+/// How long an open or a rename refused because another write is replacing the file is tried
+/// again (T236): Windows says "access denied" for the moment a rename over the file is under way.
+const BUSY_RETRY: Duration = Duration::from_secs(1);
+
+/// Runs `op` again while it fails with access denied, for up to [`BUSY_RETRY`].
+fn retry_busy<T>(mut op: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+    let start = Instant::now();
+    loop {
+        match op() {
+            Err(e) if e.kind() == io::ErrorKind::PermissionDenied && start.elapsed() < BUSY_RETRY => {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            r => return r,
+        }
+    }
+}
+
 pub(super) fn load(path: &Path) -> Option<FormatClip> {
     let mut bytes = Vec::new();
-    File::open(path).ok()?.take(MAX_BYTES + 1).read_to_end(&mut bytes).ok()?;
+    retry_busy(|| File::open(path)).ok()?.take(MAX_BYTES + 1).read_to_end(&mut bytes).ok()?;
     if bytes.len() as u64 > MAX_BYTES {
         return None;
     }
@@ -42,7 +60,7 @@ pub(super) fn save(path: &Path, clip: &FormatClip) -> io::Result<()> {
             file.write_all(&bytes)?;
             file.sync_all()?;
             drop(file);
-            fs::rename(&tmp, path)
+            retry_busy(|| fs::rename(&tmp, path))
         })();
         if result.is_err() {
             let _ = fs::remove_file(&tmp);

@@ -108,6 +108,10 @@ pub(crate) fn draw_plot(
         crate::pie::draw_pie_bw(out, pd, geom);
         return;
     }
+    if pd.surface.is_some() {
+        crate::space3d::draw_surface(out, pd, geom);
+        return;
+    }
     if pd.ribbon.is_some() {
         crate::space3d::draw_ribbon(out, pd, geom);
         return;

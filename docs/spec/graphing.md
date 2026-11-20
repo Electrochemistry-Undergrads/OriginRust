@@ -6562,9 +6562,23 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
   - A set From or To fixes that end of the box; with Auto Increment the box keeps its about five
     steps. Points outside the box (and ribbon rows) are not drawn.
   - The Y axis of a 3D XYY layer keeps one tick per plot and is not set here.
+- **3D Surface from XYZ columns (T166, not measured):** Color Map Surface (`3d-colormap-surface`),
+  Color Fill Surface (`3d-color-fill-surface`), Wire Frame (`3d-wire-frame`) and Wire Surface
+  (`3d-wire-surface`) set `Space3dCoords::surface`. They read X, Y and Z columns as 3D Scatter does
+  (Origin also draws them from matrices, which Sheaf does not have yet).
+  - Each plot's points inside the box are joined by a Delaunay triangulation over X and Y (in the
+    box's units, so both axes weigh alike). Of points with the same X and Y the first is kept; fewer
+    than three points, or points on one line, draw nothing.
+  - The triangles are drawn from the farthest to the nearest (by their corners' mean depth), each
+    edged with the plot's line: black, 0.5 pt. The mesh keeps its line colour when plots are
+    recoloured, as a column's outline does.
+  - Color Map fills each triangle by its mean Z over the plot's Z range with the colour-mapped
+    symbols' map (blue, cyan, green, yellow, red); Color Fill with the plot colour (red first);
+    Wire Surface with white, which hides the mesh behind; Wire Frame does not fill, so every line shows.
+  - X/Y Constant with Base, Colormap Surface with Projection and 3D Ternary Colormap Surface stay grey.
 - **Not done:**
   - rotating the view; axis titles, tick label and scale type settings of the 3D axes;
   - hiding points behind each other (points are drawn in row order);
-  - surfaces and 3D OpenGL settings.
+  - surfaces from matrices, a colour scale for colour map surfaces, and 3D OpenGL settings.
   - The Data Reader shows the view's coordinates, not X, Y and Z.
 

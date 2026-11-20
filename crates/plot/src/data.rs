@@ -121,6 +121,8 @@ pub(crate) struct PlotData<'a> {
     pub wf: Option<WaterfallColors>,
     /// The rows of a 3D ribbon (T161); `None` for other plots.
     pub ribbon: Option<Vec<crate::space3d::RibbonRow>>,
+    /// The triangles of a 3D surface (T166); `None` for other plots.
+    pub surface: Option<crate::space3d::SurfaceData>,
 }
 
 /// How one curve of a colour mapped waterfall is coloured: `lo` and `hi` are the ends of the colour scale (over
@@ -725,6 +727,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             sunburst: None,
             wf: None,
             ribbon: None,
+            surface: None,
             label_texts: match plot.decor.labels.form {
                 LabelForm::Column { column } if plot.decor.labels.enable => project.column(column).map(cell_texts),
                 _ => None,

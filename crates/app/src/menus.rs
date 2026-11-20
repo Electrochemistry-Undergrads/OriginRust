@@ -1242,18 +1242,20 @@ fn plot_menu() -> Vec<Entry> {
                 item("3D Waterfall", Cmd::Plot(Template::Waterfall3d)),
             ],
         ),
-        grey_sub(
+        sub(
             "3D Su&rface",
-            &[
-                "Color Fill Surface",
-                "X Constant with Base",
-                "Y Constant with Base",
-                "Color Map Surface",
-                "Colormap Surface with Projection",
-                "Wire Frame",
-                "Wire Surface",
-                "3D Ternary Colormap Surface",
-            ],
+            [
+                vec![item("Color Fill Surface", Cmd::Plot(Template::ColorFillSurface3d))],
+                greys(&["X Constant with Base", "Y Constant with Base"]),
+                vec![item("Color Map Surface", Cmd::Plot(Template::ColorMapSurface3d))],
+                greys(&["Colormap Surface with Projection"]),
+                vec![
+                    item("Wire Frame", Cmd::Plot(Template::WireFrame3d)),
+                    item("Wire Surface", Cmd::Plot(Template::WireSurface3d)),
+                ],
+                greys(&["3D Ternary Colormap Surface"]),
+            ]
+            .concat(),
         ),
         sub(
             "3D Symbol/Bar/&Vector",

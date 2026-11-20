@@ -4261,6 +4261,41 @@ impl SheafApp {
                     self.warn(e.to_string());
                 }
             }
+            NavAction::MoveToNewBook | NavAction::DuplicateToNewBook => {
+                let moving = action == NavAction::MoveToNewBook;
+                let (label, done) = if moving {
+                    ("Move sheets to new book", "Moved")
+                } else {
+                    ("Duplicate sheets to new book", "Copied")
+                };
+                match self.doc.edit(label, |p| {
+                    if moving {
+                        p.move_sheets_to_new_book(book, &sheets)
+                    } else {
+                        p.duplicate_sheets_to_new_book(book, &sheets)
+                    }
+                }) {
+                    Ok(new) => {
+                        let name = self.doc.project().workbook(new).map(|w| w.name.clone()).unwrap_or_default();
+                        self.say(format!("{done} {} sheet(s) to {name}", sheets.len()));
+                    }
+                    Err(e) => {
+                        self.warn(e.to_string());
+                        return;
+                    }
+                }
+            }
+            NavAction::ExcludeFromPlotting => {
+                let all = sheets.iter().all(|&s| b.sheets[s].exclude_from_plotting);
+                self.doc.apply("Exclude from plotting dialogs", |p| {
+                    if let Some(w) = p.workbook_mut(book) {
+                        for &s in &sheets {
+                            w.sheets[s].exclude_from_plotting = !all;
+                        }
+                    }
+                });
+                return;
+            }
             NavAction::ClearData => {
                 self.doc.apply("Clear worksheet data", |p| {
                     for &s in &sheets {
@@ -6967,24 +7002,17 @@ fn fit_report_lines(r: &sheaf_core::fitting::Report) -> Vec<String> {
 /// ids (their formats, notes and conditional formats follow them).
 fn duplicate_sheet(p: &mut Project, book: WindowId, sheet: usize) {
     let Some(b) = p.workbook(book) else { return };
-    let Some(mut copy) = b.sheets.get(sheet).cloned() else { return };
+    let Some(src) = b.sheets.get(sheet).cloned() else { return };
     let mut n = b.sheets.len() + 1;
-    copy.name = loop {
-        let name = format!("{}_{n}", copy.name);
+    let name = loop {
+        let name = format!("{}_{n}", src.name);
         if !b.sheets.iter().any(|s| s.name == name) {
             break name;
         }
         n += 1;
     };
-    let mut renamed = std::collections::HashMap::new();
-    for c in &mut copy.columns {
-        let new = p.new_column_id();
-        renamed.insert(c.id, new);
-        c.id = new;
-    }
-    copy.remap_cond_format_columns(&|c| renamed.get(&c).copied());
-    copy.remap_note_columns(&|c| renamed.get(&c).copied());
-    copy.remap_format_columns(&|c| renamed.get(&c).copied());
+    let mut copy = p.sheet_copy(&src);
+    copy.name = name;
     if let Some(b) = p.workbook_mut(book) {
         b.sheets.insert(sheet + 1, copy);
         b.active_sheet = sheet + 1;

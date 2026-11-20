@@ -89,7 +89,8 @@ impl LayerContentsDialog {
     fn available(project: &Project) -> Vec<Available> {
         let mut out = Vec::new();
         for book in project.workbooks() {
-            for sheet in &book.sheets {
+            // Sheets marked Exclude from Plotting dialogs are not offered (T184).
+            for sheet in book.sheets.iter().filter(|s| !s.exclude_from_plotting) {
                 for i in sheet.y_columns() {
                     let c = &sheet.columns[i];
                     if !c.data.is_numeric() {

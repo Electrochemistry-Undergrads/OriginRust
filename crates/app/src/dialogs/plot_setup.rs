@@ -117,7 +117,14 @@ impl PlotSetupDialog {
         let sheets: Vec<((WindowId, usize), String)> = doc
             .project()
             .workbooks()
-            .flat_map(|b| b.sheets.iter().enumerate().map(move |(i, s)| ((b.id, i), format!("[{}]{}", b.name, s.name))))
+            .flat_map(|b| {
+                // Sheets marked Exclude from Plotting dialogs are not offered (T184).
+                b.sheets
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, s)| !s.exclude_from_plotting)
+                    .map(move |(i, s)| ((b.id, i), format!("[{}]{}", b.name, s.name)))
+            })
             .collect();
         let names: Vec<String> = original.layers[li].plots.iter().map(|p| doc.project().plot_data_name(p)).collect();
         let legends: Vec<String> = original.layers[li].plots.iter().map(|p| doc.project().plot_label(p)).collect();

@@ -147,6 +147,9 @@ running release build; its exact commit was not verified and it was not rebuilt 
       Ctrl+C/Ctrl+V copied and pasted a 2-by-2 block; Ctrl+Z removed the paste in one step
       and Ctrl+Shift+Z restored it. Typing in a new-table data cell and committing with Tab
       worked up to the subsequent focus failure described above.
-- [ ] Continue table UI coverage: row/column operations, sheet controls and switching, and
-      the remaining new-table/imported-table shortcut cases. These were not completed.
+- [x] Continue table UI coverage (2026-11-20, T212, `ui_tests/table_walkthrough.rs`): on a new and an
+      imported table, Ctrl++ / Ctrl+- on a cell shift only that column, Ctrl+Space then Ctrl+- / Ctrl++
+      delete and insert whole columns, Move Columns > Right, a typed value in an added sheet and
+      Ctrl+PageUp / PageDown between sheets, each with Undo. Found: an added sheet had no columns to
+      type into; Insert and Add now give it A(X) and B(Y) (workbook-model 13h).
 

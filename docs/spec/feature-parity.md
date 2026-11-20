@@ -23,7 +23,7 @@ Update of 2026-11-20 (T219): the 37 rows marked missing were checked against the
 code of local main 09d13926; 23 that have since been built changed status (22 to partial, Layer display
 options to done), each naming the menu items or code it rests on and the brief that added them. The gap
 text of 12 P0 rows that named things since built was corrected the same way (Names and limits to done),
-and of 12 P1 rows (T227) and 5 P2 rows (T229, Grids to done). The
+and of 12 P1 rows (T227) and 5 more P1 and P2 rows (T229, Grids to done). The
 other rows were not re-checked in this update, so some partial rows may understate the work since
 2026-11-12. Not checked against Origin.
 

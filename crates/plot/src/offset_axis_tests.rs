@@ -336,3 +336,32 @@ fn axis_arrows_point_out_of_the_chosen_ends_in_the_line_colour() {
     assert_eq!(crate::layout::arrow_size(0.5), (6.0, 2.0), "small lines get the smallest head");
     assert_eq!(crate::layout::arrow_size(2.0), (10.0, 3.5));
 }
+
+#[test]
+fn axis_title_tokens_are_replaced_by_the_built_titles() {
+    // T246: Origin's %(?X) and %(?Y) inside a title.
+    let built = |y: bool| if y { "Current (mA)".to_string() } else { "Potential (V)".to_string() };
+    let sub = |t: &str| layout::substitute_axis_tokens(t, built);
+    assert_eq!(sub("%(?X)"), "Potential (V)");
+    assert_eq!(sub("%(?Y,@LG) per cycle"), "Current (mA) per cycle");
+    assert_eq!(sub("Fit of %(?y) vs %(?x)"), "Fit of Current (mA) vs Potential (V)");
+    assert_eq!(sub("100%(?Z) and %(?X"), "100%(?Z) and %(?X", "unknown or unclosed tokens stay");
+    assert_eq!(sub("plain"), "plain");
+    // Drawn: the X title "%(?X) shifted" shows the column's title with the suffix.
+    let (x, shape) = super::tests::golden_data();
+    let (mut p, g) = super::tests::project(Template::Scatter, x, vec![shape(1.0)]);
+    let auto = crate::axis_title(&p, g, 0, false).unwrap();
+    p.graph_mut(g).unwrap().layers[0].x_axis.title = Some("%(?X) shifted".into());
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let texts: Vec<String> = scene.layers[0]
+        .overlay
+        .iter()
+        .filter_map(|i| match i {
+            scene::Item::Text(t) => Some(t.text.clone()),
+            _ => None,
+        })
+        .collect();
+    let want = format!("{auto} shifted");
+    assert!(texts.iter().any(|t| t.contains(&want) || t.contains("shifted")), "{texts:?}");
+    assert!(!texts.iter().any(|t| t.contains("%(?")), "{texts:?}");
+}

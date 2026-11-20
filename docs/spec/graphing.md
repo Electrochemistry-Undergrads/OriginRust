@@ -281,6 +281,17 @@ Observed themes: "Ticks All In" sets major=minor=1; "Ticks All Out" 2; "Ticks YL
 ### 3.4 Title tab [W:axesref-title, quick-help/customize-axistitle, options-dialog-axis-tab]
 Default text: the long name of the first plot's X (or Y) column, else its short name, plus the units when the page-level "show units" option is on. The notation is `%(?X)` and `%(?Y)` ("?" = first plot of the layer; `%(1X, @LL)` explicit). Units are written in a style chosen globally: parentheses, brackets, braces, slash, dash, "in", two lines; default Auto (language-dependent). Options: show, color or follow plot, rotation (positive counter-clockwise), offset along axis (begin / middle / end), font, size, same-for-opposite. Origin.ini has commented keys `XTitle`, `YTitle`, `Legend` to redefine defaults; example `%(1Y, @LG)` = long name plus unit.
 
+**Tokens inside a title (T246).** A title of Sheaf's own may hold `%(?X)` and `%(?Y)` anywhere, with
+or without options after a comma (`%(?X,@LG)`, letter case ignored); when the graph is drawn each is
+replaced by the title Sheaf builds for that axis from the first plot (the automatic title of the X or
+Y axis), so `%(?Y) per cycle` shows `Current (mA) per cycle`. Other `%(?...)` forms and an unclosed
+token are drawn as typed. The title editor shows the text with the tokens. The `.opj` reader takes a
+title that is only one token as the automatic title (as before) and now keeps a title with text
+around the token instead of dropping that text. Origin's options after the comma (`@LG` and others)
+are not interpreted. Tests: `axis_title_tokens_are_replaced_by_the_built_titles`
+(`crates/plot/src/offset_axis_tests.rs`), `only_a_lone_axis_token_is_the_automatic_title`
+(`crates/io/src/opj/graph.rs`).
+
 ### 3.5 Grids [W:axesref-grids]
 Per direction: major and minor grid each with show, color, style, thickness; plus "opposite" line and "line at value" (for columns/bars Y=0 is on). Shipped system theme stores two line sets per axis: {color 18 = light gray, style 1 = dash, width 0.3} and {color 19 = gray, style 0 = solid, width 0.5} with ids 66 color, 67 style, 68 width; which set is major is unconfirmed (U8) [F:Themes\Graph\Dark Colors & Light Grids.oth]. Grids off by default for new graphs [REC].
 

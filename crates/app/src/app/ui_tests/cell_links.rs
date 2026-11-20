@@ -51,7 +51,7 @@ fn the_link_items_are_live_in_the_edit_cell_and_column_menus() {
     settle(&mut h);
     close_menus(&mut h);
     let b = project(&h).workbooks().next().unwrap().sheets[0].columns[1].id;
-    let cell = menus::cell_menu_for(false, (b, 0), false, false, false, false, false);
+    let cell = menus::cell_menu_for(false, (b, 0), false, false, false, false, (false, false));
     for label in ["Paste Link", "Paste Link Transpose", "Remove Links"] {
         assert!(
             cell.iter().any(|e| matches!(e, menus::Entry::Item(i) if i.label == label && i.cmd.is_some())),

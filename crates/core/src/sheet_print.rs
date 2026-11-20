@@ -710,6 +710,7 @@ mod tests {
             fill: Some(Color::rgb(0, 200, 0)),
             h_align: Some(HAlign::Center),
             rich_text: None,
+            float: None,
         }
     }
 

@@ -2085,6 +2085,21 @@ impl SheafApp {
                 }
                 Err(e) => self.warn(e),
             },
+            Action::SetFloat { book, on } => match self.format_target(book) {
+                Ok(target) => {
+                    self.doc.apply("Set Data Style", |p| {
+                        if let Some(b) = p.workbook_mut(book) {
+                            let at = b.active_sheet.min(b.sheets.len().saturating_sub(1));
+                            if let Some(ws) = b.sheets.get_mut(at) {
+                                let style =
+                                    sheaf_core::cellformat::CellFormat { float: Some(on), ..Default::default() };
+                                ws.apply_cell_format(target, style);
+                            }
+                        }
+                    });
+                }
+                Err(e) => self.warn(e),
+            },
             Action::SetCellArrow { column, row, double } => {
                 let label = if double.is_some() { "Insert Arrow" } else { "Remove Arrow" };
                 self.doc.apply(label, |p| {

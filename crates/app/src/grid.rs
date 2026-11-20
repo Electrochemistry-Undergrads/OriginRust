@@ -542,6 +542,25 @@ const MASK_TEXT: Color32 = Color32::from_rgb(190, 0, 0);
 
 /// The width in pixels a column is drawn with when it starts being frozen: its own fixed width, the
 /// width the user dragged it to in the frozen block, or the width it had in the scrolling table.
+/// How far a floating cell's text may run on (T214): the widths of the visible columns right of
+/// `position` whose cell in row `r` is empty and holds no graph, picture, sparkline or arrow, up to the
+/// first one that is not.
+fn float_room(sheet: &Worksheet, position: usize, r: usize, state: &BookUi) -> f32 {
+    let mut room = 0.0;
+    for c in sheet.columns.iter().skip(position + 1).filter(|c| !c.hidden) {
+        let empty = c.shown_text(r).is_empty()
+            && sheet.cell_graph(c.id, r).is_none()
+            && sheet.cell_image(c.id, r).is_none()
+            && sheet.cell_sparkline(c.id, r).is_none()
+            && sheet.cell_arrow(c.id, r).is_none();
+        if !empty {
+            break;
+        }
+        room += column_px(state, c);
+    }
+    room
+}
+
 fn column_px(state: &BookUi, column: &Column) -> f32 {
     match column.width {
         Some(chars) => column_pixels(chars),
@@ -2354,7 +2373,23 @@ fn body_cell(
         },
     };
     let layout = aligned_layout(look_of_cell.h_align, numeric && !is_text_cell);
+    // Set Data Style > Float (T214): left-aligned text may run on over the empty cells to the right.
+    let left_aligned = match look_of_cell.h_align {
+        Some(HAlign::Left) => true,
+        None => !(numeric && !is_text_cell),
+        _ => false,
+    };
+    let float_room = if look_of_cell.float && left_aligned && !text.is_empty() {
+        float_room(sheet, position, r, state)
+    } else {
+        0.0
+    };
     ui.with_layout(layout, |ui| {
+        if float_room > 0.0 {
+            let clip = ui.clip_rect();
+            let wider = Rect::from_min_max(clip.min, Pos2::new(rect.right() + float_room, clip.max.y));
+            ui.set_clip_rect(wider.intersect(ui.ctx().content_rect()));
+        }
         if look_of_cell.h_align != Some(HAlign::Center) {
             ui.add_space(4.0);
         }
@@ -2446,7 +2481,7 @@ fn body_cell(
             cell_sparkline.is_some(),
             cell_image,
             cell_arrow.is_some(),
-            look_of_cell.rich_text,
+            (look_of_cell.rich_text, look_of_cell.float),
         );
         menus::show_context(ui, &menu, &book_ctx(book_id, state), actions);
         // A note belongs to the right-clicked cell even inside a larger selection.
@@ -3517,5 +3552,26 @@ mod tests {
         ws.columns[1].hidden = true;
         assert!(state.step_in_block((0, 0), 1, 0, &ws));
         assert_eq!(state.active_cell(), Some((2, 0)));
+    }
+
+    #[test]
+    fn floating_text_runs_on_over_empty_cells_up_to_the_first_filled_one() {
+        use sheaf_core::{Column, ColumnData, ColumnId, Designation};
+        let mut sheet = Worksheet::new("S");
+        let col = |id: u64, name: &str, data: ColumnData| Column::new(ColumnId(id), name, Designation::Y, data);
+        sheet.columns.push(col(1, "A", ColumnData::text(vec!["a long text".into(), "x".into()])));
+        sheet.columns.push(col(2, "B", ColumnData::text(vec![String::new(), "y".into()])));
+        sheet.columns.push(col(3, "C", ColumnData::text(vec![String::new()])));
+        sheet.columns.push(col(4, "D", ColumnData::text(vec!["stop".into()])));
+        let state = BookUi::default();
+        let w = column_px(&state, &sheet.columns[1]) + column_px(&state, &sheet.columns[2]);
+        assert_eq!(float_room(&sheet, 0, 0, &state), w, "B and C are empty, D is not");
+        assert_eq!(float_room(&sheet, 0, 1, &state), 0.0, "B holds text in row 2");
+        sheet.columns[1].hidden = true;
+        assert_eq!(
+            float_room(&sheet, 0, 0, &state),
+            column_px(&state, &sheet.columns[2]),
+            "hidden columns are skipped"
+        );
     }
 }

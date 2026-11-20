@@ -201,6 +201,7 @@ fn xlsx_formats_combine_number_codes_fonts_and_rgb_without_mutating_the_sheet() 
             fill: Some(Color::rgb(32, 128, 224)),
             h_align: Some(HAlign::Center),
             rich_text: None,
+            float: None,
         },
     );
     let before = serde_json::to_vec(&sheet).unwrap();

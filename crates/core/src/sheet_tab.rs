@@ -141,7 +141,45 @@ impl Project {
     /// new workbook, which is returned. Their columns keep their ids, so plots of them follow. Refused
     /// when every sheet of the book would go.
     pub fn move_sheets_to_new_book(&mut self, book: WindowId, sheets: &[usize]) -> Result<WindowId, ProjectError> {
-        let b = self.workbook(book).ok_or(ProjectError::NoSuchWindow(book))?;
+        let long = self.workbook(book).ok_or(ProjectError::NoSuchWindow(book))?.long_name.clone();
+        let moved = self.take_sheets(book, sheets)?;
+        let new = self.add_workbook(&long);
+        let nb = self.workbook_mut(new).expect("just added");
+        nb.sheets = moved;
+        nb.active_sheet = 0;
+        Ok(new)
+    }
+
+    /// Navigate Worksheets' Move to > a workbook (T191, Origin's Move to Selected Book): sheets `sheets`
+    /// of `book` go, in their order, after the last sheet of workbook `to`; the first of them becomes
+    /// its active sheet. A name `to` already has gets the next free number (`Sheet1` -> `Sheet11`).
+    /// Their columns keep their ids, so plots of them follow. Refused when every sheet of `book`
+    /// would go, or when `to` is `book` or not a workbook.
+    pub fn move_sheets_to_book(&mut self, book: WindowId, sheets: &[usize], to: WindowId) -> Result<(), ProjectError> {
+        if to == book {
+            return Err(ProjectError::NotAWorkbook(format!("{to:?}")));
+        }
+        self.workbook(to).ok_or(ProjectError::NoSuchWindow(to))?;
+        let moved = self.take_sheets(book, sheets)?;
+        let dest = self.workbook_mut(to).expect("checked above");
+        let first = dest.sheets.len();
+        for mut sheet in moved {
+            if dest.sheets.iter().any(|s| s.name == sheet.name) {
+                sheet.name = (1..)
+                    .map(|n| format!("{}{n}", sheet.name))
+                    .find(|name| !dest.sheets.iter().any(|s| &s.name == name))
+                    .expect("the sequence is unbounded");
+            }
+            dest.sheets.push(sheet);
+        }
+        dest.active_sheet = first;
+        Ok(())
+    }
+
+    /// Removes sheets `sheets` of `book` (in their order) and returns them; the active sheet stays
+    /// active when it is kept, else the first sheet is. Refused when none or every sheet would go.
+    fn take_sheets(&mut self, book: WindowId, sheets: &[usize]) -> Result<Vec<Worksheet>, ProjectError> {
+        let b = self.workbook_mut(book).ok_or(ProjectError::NoSuchWindow(book))?;
         let picked: Vec<usize> = (0..b.sheets.len()).filter(|i| sheets.contains(i)).collect();
         if picked.is_empty() {
             return Err(ProjectError::NoSuchLayer(sheets.first().copied().unwrap_or(0)));
@@ -149,8 +187,6 @@ impl Project {
         if picked.len() == b.sheets.len() {
             return Err(ProjectError::LastSheet);
         }
-        let long = b.long_name.clone();
-        let b = self.workbook_mut(book).ok_or(ProjectError::NoSuchWindow(book))?;
         let active = b.active_sheet;
         let mut moved = Vec::new();
         for &i in picked.iter().rev() {
@@ -159,11 +195,7 @@ impl Project {
         moved.reverse();
         let before = picked.iter().filter(|&&i| i < active).count();
         b.active_sheet = if picked.contains(&active) { 0 } else { active - before };
-        let new = self.add_workbook(&long);
-        let nb = self.workbook_mut(new).expect("just added");
-        nb.sheets = moved;
-        nb.active_sheet = 0;
-        Ok(new)
+        Ok(moved)
     }
 
     /// Navigate Worksheets' Duplicate to New Book (T184): copies of sheets `sheets` of `book`, with
@@ -354,5 +386,22 @@ mod tests {
         assert_ne!(c.id, ids[2]);
         assert_eq!(c.numeric().unwrap(), [2.0]);
         assert_eq!(names(&p, moved), ["Sheet1", "Sheet3"], "the source keeps its sheets");
+    }
+
+    #[test]
+    fn sheets_move_to_another_book_with_free_names() {
+        use crate::column::ColumnData;
+        let mut p = Project::new();
+        let (a, b) = (p.add_workbook("A"), p.add_workbook("B"));
+        p.workbook_mut(a).unwrap().sheets.push(Worksheet::new("Data"));
+        let y = p.add_column(a, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();
+        assert!(matches!(p.move_sheets_to_book(a, &[0], a), Err(ProjectError::NotAWorkbook(_))));
+        p.move_sheets_to_book(a, &[0], b).unwrap();
+        let names = |p: &Project, w| p.workbook(w).unwrap().sheets.iter().map(|s| s.name.clone()).collect::<Vec<_>>();
+        assert_eq!(names(&p, a), ["Data"]);
+        assert_eq!(names(&p, b), ["Sheet1", "Sheet11"], "B already had a Sheet1");
+        assert_eq!(p.workbook(b).unwrap().active_sheet, 1);
+        assert_eq!(p.locate(y).unwrap().0.id, b, "the column kept its id and moved");
+        assert!(matches!(p.move_sheets_to_book(a, &[0], b), Err(ProjectError::LastSheet)));
     }
 }

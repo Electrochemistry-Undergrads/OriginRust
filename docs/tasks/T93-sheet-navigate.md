@@ -4,7 +4,7 @@
 column now shows the worksheet's saved T90 comments with full text on hover. The Actions
 menu and row right-click (Activate, Duplicate, Duplicate without Data, Clear all Data, Delete, Move
 Before/Behind/to End, Set Current Order) with Ctrl/Shift multi-select landed 2026-11-19 as T180; Move to
-New Book, Duplicate to New Book and Exclude from Plotting dialogs as T184. Move to Selected Book remains open. Formatting, strict workspace Clippy, Nextest (4,517 passed and
+New Book, Duplicate to New Book and Exclude from Plotting dialogs as T184, Move to another workbook as T191. Formatting, strict workspace Clippy, Nextest (4,517 passed and
 8 skipped), doc tests, inventory and eight Python tooling tests passed.
 
 Apply Reorder previews header sorting before committing the displayed worksheet order.

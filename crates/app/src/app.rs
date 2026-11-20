@@ -4421,6 +4421,18 @@ impl SheafApp {
                     }
                 }
             }
+            NavAction::MoveToBook(to) => {
+                match self.doc.edit("Move sheets to book", |p| p.move_sheets_to_book(book, &sheets, to)) {
+                    Ok(()) => {
+                        let name = self.doc.project().workbook(to).map(|w| w.name.clone()).unwrap_or_default();
+                        self.say(format!("Moved {} sheet(s) to {name}", sheets.len()));
+                    }
+                    Err(e) => {
+                        self.warn(e.to_string());
+                        return;
+                    }
+                }
+            }
             NavAction::ExcludeFromPlotting => {
                 let all = sheets.iter().all(|&s| b.sheets[s].exclude_from_plotting);
                 self.doc.apply("Exclude from plotting dialogs", |p| {

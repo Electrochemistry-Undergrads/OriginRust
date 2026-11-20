@@ -3283,6 +3283,7 @@ dependencies = [
  "sheaf-ops",
  "sheaf-plot",
  "tempfile",
+ "zip",
 ]
 
 [[package]]

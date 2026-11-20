@@ -1,9 +1,11 @@
 //! The application's dialog windows. Each one is an egui window that the
 //! application shows while its `Option` is filled.
 
+pub mod add_layer;
 pub mod analysis;
 pub mod autosave;
 pub mod axis3d;
+pub mod batch_peaks;
 pub mod batch_plot;
 pub mod batch_process;
 pub mod bin2d_options;

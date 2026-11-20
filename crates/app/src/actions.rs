@@ -292,6 +292,12 @@ pub enum Action {
     ManageTemplates,
     /// File > Batch Processing...: the window that runs a workbook template on data files (T165).
     BatchProcessing,
+    /// Batch Peak Analysis Using Theme...: the window that runs a Peak Analyzer theme on these curves
+    /// (none: the curves a plot of the active sheet would show) (T169).
+    BatchPeaks {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
     /// File > New > Notes and the Standard toolbar's New Notes (T154).
     NewNotes,
     /// The text of a Notes window after editing: one undo step.
@@ -730,6 +736,11 @@ pub enum Action {
         plot: Option<usize>,
     },
     /// A change of a graph made from its window (right-click menus, the Delete key, Ctrl+R).
+    /// Graph > New Layer(Axes) > Open Dialog...: capture the input graph and active layer.
+    AddLayerDialog {
+        graph: WindowId,
+        layer: usize,
+    },
     GraphEdit {
         graph: WindowId,
         op: GraphOp,

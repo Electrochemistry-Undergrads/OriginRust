@@ -72,7 +72,7 @@ pub use xyzarea::default_columns as xyz_default_columns;
 /// The multi-peak fit of [`PeakChainSpec`]: a sum of peaks on `baseline`, one peak for every peak
 /// the search found, started at the found centre, width and height. Peak `k` (0-based) has the
 /// shape `shapes[k]`; peaks beyond the list have the shape `shape`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PeakFitSpec {
     pub shape: PeakShape,
     pub baseline: FitBaseline,
@@ -96,7 +96,7 @@ impl PeakFitSpec {
 
 /// What [`Tool::PeakChain`] does: baseline, peak search, per-peak integration and (optionally)
 /// a multi-peak fit, in one run with one result sheet.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PeakChainSpec {
     pub chain: ChainOptions,
     /// Add the integration columns (area, area percent, FWHM, limits).

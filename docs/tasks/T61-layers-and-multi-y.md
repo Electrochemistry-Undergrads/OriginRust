@@ -1,6 +1,6 @@
 # T61: Layers, insets and three/four Y axes
 
-**Status:** in progress; recovered and refined 2026-11-15. Step 0 (Origin measurements, graphing 21) and slice 1 (add/delete layers, inset, icon Delete and Layer Properties) are done; slice 2 (axis offsets, Move to Layer) and slice 3 (3Ys/4Ys templates, Multiple Y Axes, CLI/MCP names, .sheaf/.opj handling) are done. Open: Open Dialog..., Show Active Layer Only and Set Active Layer By Layer Icon Only (unmeasured), Double click to open Plot Setup. Hide Layer is a reversible whole-layer toggle (graphing 21.13); Hide Other Layers isolates/shows all whole layers from the published contract (21.14), with live 2016 behavior still unmeasured; Open Dialog... and the unsupported icon-menu items stay grey. **Size:** L, three slices.
+**Status:** in progress; recovered and refined 2026-11-15. Step 0 (Origin measurements, graphing 21) and slice 1 (add/delete layers, inset, icon Delete and Layer Properties) are done; slice 2 (axis offsets, Move to Layer) and slice 3 (3Ys/4Ys templates, Multiple Y Axes, CLI/MCP names, .sheaf/.opj handling) are done. Open: User Defined/Auto Offset/custom scales in Open Dialog..., Show Active Layer Only and Set Active Layer By Layer Icon Only (unmeasured), Double click to open Plot Setup. Hide Layer is a reversible whole-layer toggle (graphing 21.13); Hide Other Layers isolates/shows all whole layers from the published contract (21.14), with live 2016 behavior still unmeasured; Open Dialog... and the unsupported icon-menu items stay grey. **Size:** L, three slices.
 Legend-anchor follow-up (`codex/multi-y-template-legends`): the four stock templates use
 measured top-left positions above the frame, Arial 22 pt (YY-YY: 20 pt), and no frame or background.
 A compatible top-left position variant keeps the left edge fixed when labels grow; existing
@@ -31,6 +31,14 @@ contract; active-hidden/derived-check rules are explicit Sheaf choices, not fres
 2016 measurements. No new model/renderer/IO contracts or following-active mode.
 Three new UI regressions cover all three targets, rendering/geometry, settings,
 Undo/Redo, hidden targets and invalid/no-op history. Formatting, strict workspace/all-target Clippy and all 4,363 tests pass (eight existing ignored), including all six layer-visibility UI regressions, on integrated T118/T58 RGB/T60 viewport source. Inventory283, eight Python tooling tests and frozen 911 source/fixture/asset files pass. Fresh baseline/isolated/restored desktop captures and PNG/SVG exports were inspected; restored export pixels match exactly, and all own builders/apps/helpers are terminal. Remaining T61 claims and controls stay open.
+
+Preset Open Dialog follow-up (`codex/t61-add-layer-dialog`, merged 2026-11-19 by takeover as
+`add-layer-dialog-2`): Graph and graph-page routes
+open New Layer (Axes) with the existing nine kinds and Activate New Layer. The official layadd
+contract supports these controls; no new live Native measurement is claimed. Existing layer
+helpers, links, geometry, history and saves are reused. Input graph/parent capture and
+revision/generation rejection are explicit Sheaf policies. User Defined, automatic overlap
+offsets and custom scale expressions remain disabled; no model/backend/IO contract changes.
 
 **Branch:** `layers-multi-y`. **Priority:** P0, wave 2.
 **Spec:** [graphing](../spec/graphing.md) 1.3 and 12; ADR 0009.

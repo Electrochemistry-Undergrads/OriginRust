@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 113 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 112 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -201,7 +201,7 @@ Backlog packages: write the brief first (step 3 above).
 
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
-| [ ] | B14 | Matrix windows, contour and heat-map plots, profiles, Convert to Matrix, 2D FFT; Notes, Layout, Image, Function Plot and Excel windows; the Image menu | L | 31 |
+| [ ] | B14 | Matrix windows, contour and heat-map plots, profiles, Convert to Matrix, 2D FFT; Notes, Layout, Image, Function Plot and Excel windows; the Image menu | L | 30 |
 
 - A `Window` is only a workbook or a graph today (`crates/core/src/project.rs`). Each new window
   kind is its own brief, with an ADR when it changes the project file.

@@ -939,6 +939,7 @@ fn field_plot_items() -> Vec<Entry> {
     vec![
         item("Color Fill", Cmd::PlotField(FieldTemplate::ContourFill)),
         item("B/W Lines + Labels", Cmd::PlotField(FieldTemplate::ContourLines)),
+        item("Gray Scale Map", Cmd::PlotField(FieldTemplate::GrayScale)),
         item("Heat Map", Cmd::PlotField(FieldTemplate::HeatMap)),
     ]
 }
@@ -1523,12 +1524,7 @@ fn plot_menu() -> Vec<Entry> {
             "Contour/&Heat Map",
             [
                 field_plot_items(),
-                greys(&[
-                    "Gray Scale Map",
-                    "Polar Contour theta(X) r(Y)",
-                    "Polar Contour r(X) theta(Y)",
-                    "Ternary Contour",
-                ]),
+                greys(&["Polar Contour theta(X) r(Y)", "Polar Contour r(X) theta(Y)", "Ternary Contour"]),
                 vec![item("Hexbin", Cmd::Plot(Template::Hexbin))],
             ]
             .concat(),

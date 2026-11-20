@@ -924,4 +924,35 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn every_turn_and_tilt_keeps_the_points_inside_the_frame() {
+        // T172: the view can be turned all round and tilted from the side to above.
+        use sheaf_core::column::{ColumnData, Designation};
+        use sheaf_core::graph::Coords;
+        use sheaf_core::template::Template;
+        let mut p = Project::new();
+        let b = p.add_workbook("Book1");
+        p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0, 2.0, 3.0])).unwrap();
+        let y = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![3.0, 1.0, 2.0, 0.0])).unwrap();
+        p.add_column(b, 0, Designation::Z, ColumnData::numeric(vec![1.0, 5.0, 9.0, 2.0])).unwrap();
+        let g = p.plot_columns(Template::Bars3d, &[y]).unwrap();
+        for azimuth in [-180.0, -120.0, -45.0, 0.0, 40.0, 90.0, 135.0, 180.0] {
+            for elevation in [0.0, 25.0, 60.0, 90.0] {
+                if let Coords::Space3d(c) = &mut p.graph_mut(g).unwrap().layers[0].coords {
+                    (c.azimuth_deg, c.elevation_deg) = (azimuth, elevation);
+                }
+                let graph = p.graph(g).unwrap();
+                let layers = crate::data::collect_graph(&p, graph);
+                let pd = &layers[0].plots[0];
+                let x = pd.x.as_deref().unwrap();
+                // The turned cube stays within the hidden axes' -1.8..1.8 (SPACE3D_EXTENT).
+                for (u, w) in x.iter().zip(pd.y.iter()) {
+                    assert!(u.abs() <= 1.8 && w.abs() <= 1.8, "{azimuth}/{elevation}: ({u}, {w})");
+                }
+                let scene = crate::layout::build_scene(&p, g, &crate::FixedMetrics).unwrap();
+                assert!(!scene.layers[0].grid.is_empty(), "the box is drawn at {azimuth}/{elevation}");
+            }
+        }
+    }
 }

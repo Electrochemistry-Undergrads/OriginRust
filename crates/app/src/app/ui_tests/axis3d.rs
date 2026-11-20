@@ -32,6 +32,21 @@ fn z_axis_opens_the_3d_axis_window_on_a_3d_layer_only_and_sets_the_scale_in_one_
     assert_eq!(h.state().doc.undo_label(), Some("3D Axis"));
     menu(&mut h, "Edit", "Undo 3D Axis");
     assert_eq!(scales(&h)[2], Space3dScale::default());
+    // T172: the window also turns and tilts the view, in the same undo step.
+    apply_cmd(&mut h, menus::Cmd::ZAxis);
+    assert!(h.query_by_label("Turn").is_some() && h.query_by_label("Tilt").is_some());
+    {
+        let d = h.state_mut().axis3d.as_mut().unwrap();
+        (d.azimuth, d.elevation) = (-60.0, 70.0);
+    }
+    click(&mut h, "OK");
+    let view = |h: &Harness<'static, SheafApp>| {
+        let c = *project(h).graph(g).unwrap().layers[0].coords.space3d().unwrap();
+        (c.azimuth_deg, c.elevation_deg)
+    };
+    assert_eq!(view(&h), (-60.0, 70.0));
+    menu(&mut h, "Edit", "Undo 3D Axis");
+    assert_eq!(view(&h), (40.0, 25.0));
 }
 
 #[test]

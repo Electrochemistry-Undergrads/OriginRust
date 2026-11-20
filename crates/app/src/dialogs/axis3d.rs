@@ -1,6 +1,7 @@
 //! The 3D Axis window (T164): Format > Axes > Z Axis..., and X Axis... or Y Axis... on a 3D layer.
 //! It sets From, To and Increment of the box's X, Y and Z axes (`Space3dCoords::scales`), each
-//! automatic until set. Origin's 3D axis dialog was not probed; this is Sheaf's smaller window.
+//! automatic until set, and the view's Turn and Tilt (T172). Origin's 3D axis dialog was not
+//! probed; this is Sheaf's smaller window.
 
 use eframe::egui;
 use sheaf_core::graph::Space3dScale;
@@ -22,6 +23,9 @@ pub struct Axis3dDialog {
     /// The axis shown: 0 X, 1 Y, 2 Z.
     pub dim: usize,
     pub scales: [Space3dScale; 3],
+    /// The view (T172): turn about Z (azimuth) and tilt towards the viewer (elevation), in degrees.
+    pub azimuth: f64,
+    pub elevation: f64,
     /// What the box shows now on each axis (From, To, Increment), offered next to Auto.
     shown: [(f64, f64, f64); 3],
     /// An XYY layer's Y axis is its depth: one tick per plot, not set here.
@@ -44,14 +48,29 @@ pub fn check(scales: &[Space3dScale; 3]) -> Result<(), String> {
     Ok(())
 }
 
-/// Sets the scales of a 3D layer as one undo step.
-pub fn set_scales(doc: &mut Document, graph: WindowId, layer: usize, scales: [Space3dScale; 3]) -> Result<(), String> {
+/// Turn runs from -180 to 180 degrees, Tilt from 0 (seen from the side) to 90 (from above).
+pub const AZIMUTH: std::ops::RangeInclusive<f64> = -180.0..=180.0;
+pub const ELEVATION: std::ops::RangeInclusive<f64> = 0.0..=90.0;
+
+/// Sets the scales and the view angles of a 3D layer as one undo step.
+pub fn set_scales(
+    doc: &mut Document,
+    graph: WindowId,
+    layer: usize,
+    scales: [Space3dScale; 3],
+    (azimuth, elevation): (f64, f64),
+) -> Result<(), String> {
     check(&scales)?;
+    if !AZIMUTH.contains(&azimuth) || !ELEVATION.contains(&elevation) {
+        return Err("Turn must be from -180 to 180 and Tilt from 0 to 90 degrees".to_string());
+    }
     doc.edit("3D Axis", |p| {
         let l = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)).ok_or("the layer is gone")?;
         match &mut l.coords {
             sheaf_core::graph::Coords::Space3d(c) => {
                 c.scales = scales;
+                c.azimuth_deg = azimuth;
+                c.elevation_deg = elevation;
                 Ok(())
             }
             _ => Err("the layer is not a 3D layer".to_string()),
@@ -65,7 +84,17 @@ impl Axis3dDialog {
         let l = project.graph(graph)?.layers.get(layer)?;
         let c = l.coords.space3d()?;
         let shown = sheaf_plot::space3d_scales(project, l).unwrap_or([(-1.0, 1.0, 0.5); 3]);
-        Some(Axis3dDialog { graph, layer, dim: dim.min(2), scales: c.scales, shown, xyy: c.xyy, problem: None })
+        Some(Axis3dDialog {
+            graph,
+            layer,
+            dim: dim.min(2),
+            scales: c.scales,
+            azimuth: c.azimuth_deg,
+            elevation: c.elevation_deg,
+            shown,
+            xyy: c.xyy,
+            problem: None,
+        })
     }
 
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut Document) -> Outcome {
@@ -106,19 +135,30 @@ impl Axis3dDialog {
                         ui.end_row();
                     });
                 }
+                ui.separator();
+                egui::Grid::new("axis3d_view").num_columns(2).show(ui, |ui| {
+                    let label = ui.label("Turn");
+                    ui.add(egui::DragValue::new(&mut self.azimuth).range(AZIMUTH).speed(1.0).suffix("°"))
+                        .labelled_by(label.id);
+                    ui.end_row();
+                    let label = ui.label("Tilt");
+                    ui.add(egui::DragValue::new(&mut self.elevation).range(ELEVATION).speed(1.0).suffix("°"))
+                        .labelled_by(label.id);
+                    ui.end_row();
+                });
                 if let Some(e) = &self.problem {
                     ui.colored_label(ui.visuals().error_fg_color, e);
                 }
                 ui.separator();
                 ui.horizontal(|ui| {
                     if ui.button("OK").clicked() {
-                        match set_scales(doc, self.graph, self.layer, self.scales) {
+                        match set_scales(doc, self.graph, self.layer, self.scales, (self.azimuth, self.elevation)) {
                             Ok(()) => result = Outcome::Done,
                             Err(e) => self.problem = Some(e),
                         }
                     }
                     if ui.button("Apply").clicked() {
-                        match set_scales(doc, self.graph, self.layer, self.scales) {
+                        match set_scales(doc, self.graph, self.layer, self.scales, (self.azimuth, self.elevation)) {
                             Ok(()) => {
                                 self.problem = None;
                                 if let Some(l) = doc.project().graph(self.graph).and_then(|g| g.layers.get(self.layer))

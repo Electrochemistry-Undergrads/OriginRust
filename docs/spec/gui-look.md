@@ -831,8 +831,12 @@ switch that turns a cell-format property on or off for the selected cells (one u
 Style"; off by default, as measured); a cell with it on draws Origin's label markup (`\b()`, `\i()`,
 `\u()`, `\s()`, `\+()`, `\-()`, `\g()`, `\pN()`, `\f:Name()`, `\cN()`, ...) as styled text in its own font,
 size and colour on screen, while editing shows the typed text; print and image export still show the
-text as typed. Wrap Text/Float remain disabled (Wrap Text is on by default in Origin, so it would change
-every sheet), assigned to B5's worksheet text controls; they are not a Clear Formats operation. The earlier Default entry
+text as typed. Float works since T214 (2026-11-20, not measured): the same kind of ticked switch (off by
+default, as measured); left-aligned text (text cells, or any cell aligned left) that is wider than its
+cell runs on over the cells to its right while they are empty (no text or number, no graph, picture,
+sparkline or arrow) and visible, up to the first one that is not; hidden columns are skipped. Wrap Text
+remains disabled (it is on by default in Origin, so it would change every sheet), assigned to B5's
+worksheet text controls; it is not a Clear Formats operation. The earlier Default entry
 was a placeholder, not an Origin measurement. The [Origin 2016 training manual](https://blog.originlab.com/ftp/dist/Origin_2016_Intermediate_Training_Manual.pdf)
 also uses Set Data Style > Rich Text for report cells. Raw captures and control lists stay local in
 `re-workspace/scratch/t59-worksheet-dialog/`; delayed initial dialog captures and the misleadingly

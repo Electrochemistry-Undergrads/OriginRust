@@ -179,8 +179,14 @@ pub enum Cmd {
         column: ColumnId,
         row: usize,
     },
+    /// Edit > Paste Link (false) / Paste Link Transpose (true) (T211).
+    PasteLink(bool),
+    /// Edit > Remove Links (T211).
+    RemoveLinks,
     /// A data cell's Set Data Style > Rich Text: turn it on or off for the selected cells (T208).
     SetRichText(bool),
+    /// A data cell's Set Data Style > Float: turn it on or off for the selected cells (T214).
+    SetFloat(bool),
     /// A data cell's Insert Arrow > Arrow / Double Arrow, or Remove Arrow with `None` (T205).
     SetCellArrow {
         column: ColumnId,
@@ -1252,11 +1258,14 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         ));
         v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
         v.push(item("Paste Transpose", Cmd::PasteTranspose));
-        v.extend(greys(&["Paste Link", "Paste Link Transpose", "Paste Special", "-", "Select..."]));
+        v.push(keyed("Paste Link", ctrl_alt(Key::V), Cmd::PasteLink(false)));
+        v.push(item("Paste Link Transpose", Cmd::PasteLink(true)));
+        v.extend(greys(&["Paste Special", "-", "Select..."]));
         v.push(keyed("C&lear", plain_key(Key::Delete), Cmd::Clear));
         v.push(item("I&nsert", Cmd::InsertCells));
         v.push(item("&Delete", Cmd::DeleteCells));
-        v.extend(greys(&["Remove Links", "-"]));
+        v.push(item("Remove Links", Cmd::RemoveLinks));
+        v.push(sep());
         v.push(item("Set As Begin", Cmd::SetRangeEnd(RangeEnd::Begin)));
         // Every letter of its text is taken; it takes S from the greyed Paste Link.
         v.push(item("&Set As End", Cmd::SetRangeEnd(RangeEnd::End)));
@@ -2341,7 +2350,7 @@ pub fn column_header_menu() -> Vec<Entry> {
     v.push(item("Insert", Cmd::InsertCells));
     v.push(item("Delete", Cmd::DeleteColumns));
     v.push(keyed("Clear", plain_key(Key::Delete), Cmd::Clear));
-    v.push(grey("Remove Links"));
+    v.push(item("Remove Links", Cmd::RemoveLinks));
     v.push(sep());
     v.push(sub("Set As", set_as));
     v.push(item("Set As Categorical", Cmd::SetCategorical));
@@ -2429,7 +2438,8 @@ pub fn label_cell_menu(read_only: bool) -> Vec<Entry> {
 /// The menu of a data cell; `noted` when the cell has a note (Edit/Delete Note instead of Add);
 /// `cell` is the right-clicked cell, `graph` whether it shows a graph (T194) and `sparkline` whether it
 /// draws a sparkline (T200); `image` whether it shows a picture (T202); `arrow` whether it has an arrow
-/// (T205); `rich_text` whether the cell's Set Data Style > Rich Text is on (T208).
+/// (T205); `rich_text` and `float` whether the cell's Set Data Style > Rich Text (T208) and Float (T214)
+/// are on.
 pub fn cell_menu_for(
     noted: bool,
     cell: (ColumnId, usize),
@@ -2437,18 +2447,21 @@ pub fn cell_menu_for(
     sparkline: bool,
     image: bool,
     arrow: bool,
-    rich_text: bool,
+    (rich_text, float): (bool, bool),
 ) -> Vec<Entry> {
     let (column, row) = cell;
     let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut)];
     v.extend(copy_entries());
     v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
     v.push(item("Paste Transpose", Cmd::PasteTranspose));
-    v.extend(greys(&["Paste Link", "Paste Link Transpose", "-"]));
+    v.push(item("Paste Link", Cmd::PasteLink(false)));
+    v.push(item("Paste Link Transpose", Cmd::PasteLink(true)));
+    v.push(sep());
     v.push(item("Insert", Cmd::InsertCells));
     v.push(item("Delete", Cmd::DeleteCells));
     v.push(keyed("Clear", plain_key(Key::Delete), Cmd::Clear));
-    v.extend(greys(&["Remove Links", "-"]));
+    v.push(item("Remove Links", Cmd::RemoveLinks));
+    v.push(sep());
     v.push(item("Set as Begin", Cmd::SetRangeEnd(RangeEnd::Begin)));
     v.push(item("Set as End", Cmd::SetRangeEnd(RangeEnd::End)));
     v.push(sep());
@@ -2489,7 +2502,7 @@ pub fn cell_menu_for(
         vec![
             item(if rich_text { "\u{2713} Rich Text" } else { "Rich Text" }, Cmd::SetRichText(!rich_text)),
             grey("Wrap Text"),
-            grey("Float"),
+            item(if float { "\u{2713} Float" } else { "Float" }, Cmd::SetFloat(!float)),
             item("More...", Cmd::FormatCells),
         ],
     ));
@@ -3318,6 +3331,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::InsertCellSparkline { column, row } => Action::PickCellSparkline { column: *column, row: *row },
         Cmd::InsertCellImage { column, row } => Action::PickCellImage { column: *column, row: *row },
         Cmd::SetRichText(on) => Action::SetRichText { book: c.book.ok_or(NEED_BOOK)?, on: *on },
+        Cmd::SetFloat(on) => Action::SetFloat { book: c.book.ok_or(NEED_BOOK)?, on: *on },
         Cmd::SetCellArrow { column, row, double } => {
             Action::SetCellArrow { column: *column, row: *row, double: *double }
         }
@@ -3418,6 +3432,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Cut
         | Cmd::Paste
         | Cmd::PasteTranspose
+        | Cmd::PasteLink(_)
+        | Cmd::RemoveLinks
         | Cmd::SetRangeEnd(_)
         | Cmd::Clear
         | Cmd::InsertCells
@@ -3429,6 +3445,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
                 Cmd::Cut => CellOp::Cut,
                 Cmd::Paste => CellOp::Paste,
                 Cmd::PasteTranspose => CellOp::PasteTranspose,
+                Cmd::PasteLink(transpose) => CellOp::PasteLink(*transpose),
+                Cmd::RemoveLinks => CellOp::RemoveLinks,
                 Cmd::SetRangeEnd(which) => CellOp::SetRangeEnd(*which),
                 Cmd::InsertCells => CellOp::Insert,
                 Cmd::Mask(m) => CellOp::Mask(*m),

@@ -54,6 +54,11 @@ pub enum CellOp {
     /// Edit > Delete: the selected rows (only in the selected columns for a block of cells) or
     /// the selected columns.
     Delete,
+    /// Edit > Paste Link (false) or Paste Link Transpose (true): link the cells from the clicked one
+    /// to the block last copied (T211).
+    PasteLink(bool),
+    /// Edit > Remove Links: the selected cells keep their values and lose their links (T211).
+    RemoveLinks,
 }
 
 /// One of the label rows above the data of a column.
@@ -371,6 +376,11 @@ pub enum Action {
     },
     /// Set Data Style > Rich Text on or off for the selected cells of the active sheet (T208).
     SetRichText {
+        book: WindowId,
+        on: bool,
+    },
+    /// Set Data Style > Float on or off for the selected cells of the active sheet (T214).
+    SetFloat {
         book: WindowId,
         on: bool,
     },

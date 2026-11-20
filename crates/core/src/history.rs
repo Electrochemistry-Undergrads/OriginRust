@@ -130,8 +130,14 @@ impl Document {
             if result.is_ok() {
                 // Recalculating columns follow their inputs inside the same undo step, so Undo
                 // restores the source and everything computed from it together.
+                // Linked cells (T211) take their sources' values first, and again when the
+                // recalculation changed a source.
+                self.project.refresh_cell_links();
                 self.project.recalculate_since(&before);
                 self.project.update_analysis_links(&before);
+                if self.project.refresh_cell_links() {
+                    self.project.recalculate_since(&before);
+                }
                 self.project.apply_mask_switch();
             }
             result

@@ -291,6 +291,8 @@ pub struct SheafApp {
     sheet_name: Option<SheetNameDialog>,
     /// The text of the last Copy or Cut (the system clipboard has it too).
     copied: String,
+    /// The block last copied in Sheaf (columns and rows), for Paste Link (T211).
+    copied_cells: Option<(Vec<ColumnId>, std::ops::Range<usize>)>,
     /// Edit > Paste Transpose asked for the clipboard: the next pasted text is transposed.
     paste_transposed: bool,
     worksheet_clipboard: crate::wks_clipboard::WorksheetClipboard,
@@ -455,6 +457,7 @@ impl SheafApp {
             sort: None,
             sheet_name: None,
             copied: String::new(),
+            copied_cells: None,
             paste_transposed: false,
             worksheet_clipboard: crate::wks_clipboard::WorksheetClipboard::default(),
             copied_page: None,
@@ -2085,6 +2088,21 @@ impl SheafApp {
                 }
                 Err(e) => self.warn(e),
             },
+            Action::SetFloat { book, on } => match self.format_target(book) {
+                Ok(target) => {
+                    self.doc.apply("Set Data Style", |p| {
+                        if let Some(b) = p.workbook_mut(book) {
+                            let at = b.active_sheet.min(b.sheets.len().saturating_sub(1));
+                            if let Some(ws) = b.sheets.get_mut(at) {
+                                let style =
+                                    sheaf_core::cellformat::CellFormat { float: Some(on), ..Default::default() };
+                                ws.apply_cell_format(target, style);
+                            }
+                        }
+                    });
+                }
+                Err(e) => self.warn(e),
+            },
             Action::SetCellArrow { column, row, double } => {
                 let label = if double.is_some() { "Insert Arrow" } else { "Remove Arrow" };
                 self.doc.apply(label, |p| {
@@ -2415,6 +2433,8 @@ impl SheafApp {
                 if !(beyond_end && text.trim().is_empty()) {
                     let mut understood = true;
                     self.doc.apply("Edit cell", |p| {
+                        // Typing into a linked cell replaces its value and ends the link (T211).
+                        p.drop_cell_link(column, row);
                         if let Some(c) = p.column_mut(column) {
                             understood = c.set_cell_text(row, &text);
                         }
@@ -3657,6 +3677,10 @@ impl SheafApp {
                 );
                 self.worksheet_clipboard.write(ctx, &external, &text);
                 self.copied = text;
+                // Paste Link (T211) links to the copied cells; a Cut leaves nothing to link to.
+                self.copied_cells = (!matches!(op, CellOp::Cut)).then(|| {
+                    (t.columns.iter().filter_map(|&i| sheet.columns.get(i).map(|c| c.id)).collect(), t.rows.clone())
+                });
                 let what = format!("{} row(s) of {} column(s)", t.rows.len(), t.columns.len());
                 if matches!(op, CellOp::Cut) {
                     self.clear_cells(book, sheet_index, &t, "Cut cells");
@@ -3666,6 +3690,50 @@ impl SheafApp {
                 }
             }
             CellOp::Clear => self.clear_cells(book, sheet_index, &t, "Clear cells"),
+            CellOp::PasteLink(transpose) => {
+                let Some((sources, rows)) = self.copied_cells.clone() else {
+                    self.warn("Copy cells first: Paste Link links to the cells last copied".to_string());
+                    return;
+                };
+                let (anchor_col, anchor_row) = (t.columns.first().copied().unwrap_or(0), t.rows.start);
+                let mut links = Vec::new();
+                let mut left_out = 0;
+                for (i, src_row) in rows.clone().enumerate() {
+                    for (j, src) in sources.iter().enumerate() {
+                        let (dc, dr) = if transpose { (i, j) } else { (j, i) };
+                        match sheet.columns.get(anchor_col + dc) {
+                            Some(c) if !c.is_locked() => links.push((c.id, anchor_row + dr, *src, src_row)),
+                            _ => left_out += 1,
+                        }
+                    }
+                }
+                let label = if transpose { "Paste Link Transpose" } else { "Paste Link" };
+                let n = links.len();
+                self.doc.apply(label, |p| {
+                    if let Some(ws) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet_index)) {
+                        for (column, row, source, source_row) in links {
+                            ws.set_cell_link(column, row, Some((source, source_row)));
+                        }
+                    }
+                });
+                if left_out > 0 {
+                    self.warn(format!(
+                        "{n} cell(s) linked; {left_out} left out (past the last column, or a column calculated from a formula)"
+                    ));
+                } else {
+                    self.say(format!("{n} cell(s) linked"));
+                }
+            }
+            CellOp::RemoveLinks => {
+                let ids: Vec<ColumnId> = t.columns.iter().filter_map(|&i| sheet.columns.get(i).map(|c| c.id)).collect();
+                let mut removed = 0;
+                self.doc.apply("Remove Links", |p| {
+                    if let Some(ws) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet_index)) {
+                        removed = ws.remove_cell_links(&ids, Some(t.rows.clone()));
+                    }
+                });
+                self.say(format!("{removed} link(s) removed; the cells keep their values"));
+            }
             CellOp::Fill(text) => {
                 let (mut locked, mut not_understood) = (0, 0);
                 self.doc.apply("Fill cells", |p| {
@@ -3859,6 +3927,9 @@ impl SheafApp {
                         b.sheets.insert(at, Worksheet::new(name));
                         b.active_sheet = at;
                     }
+                    // As a new workbook's sheet (T212): columns A(X) and B(Y) to type into.
+                    let _ = p.add_column(book, at, Designation::X, ColumnData::default());
+                    let _ = p.add_column(book, at, Designation::Y, ColumnData::default());
                 });
                 if let Some(state) = self.books.get_mut(&book) {
                     state.clear_selection();

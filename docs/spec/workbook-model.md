@@ -862,6 +862,9 @@ details use Sheaf's row model. The filter-copy contract and default come from th
 Measured in Origin 2016 by right-clicking a sheet tab (`tools/origin-ref/origin-dialog.ps1 -NoDialog`,
 `@RCLICK`/`@CLICK`/`@SHOT`, `re-workspace/scratch/t90`, local only) and copied in `sheaf_core::sheet_tab`:
 
+- **Insert** and **Add** (T212, Sheaf's rule, not measured here) make a sheet with columns A(X) and
+  B(Y), as File > New > Worksheet does, so that it can be typed into at once (it used to have no
+  columns, hence no cells). One undo step ("Insert sheet", "Add sheet").
 - A sheet has a short name and a **long name** (`wks.longname$`). Sheaf keeps it in `Worksheet::long_name`
   (saved in `.sheaf`; Name and Comments... has a Long Name field).
 - Name and Comments also edits plain-text, multiline worksheet comments. OK saves the draft
@@ -1044,6 +1047,21 @@ again replaces it); Remove Arrow takes it out. It follows its column like the ot
 saved in `.sheaf` (the sheet's `cell_arrows`), not written to `.opj` and not printed. A row number's
 right-click Insert Graph... puts the picked graph in that row's first visible cell (as a data cell's Insert
 Graph..., T194). Origin's arrow direction, style and row behaviour were not measured.
+
+## 13j0. Cell links: Paste Link, Paste Link Transpose, Remove Links (T211, 2026-11-20, not measured)
+
+Model and reasons: [ADR 0014](../adr/0014-cell-links.md). Origin's link storage and paste rules were not
+measured. In a workbook, Edit > Paste Link (Ctrl+Alt+V) and Paste Link Transpose (also on a data cell's
+right-click menu) link cells to the block last copied in Sheaf (Copy; a Cut leaves nothing to link to):
+from the clicked cell down and right, cell for cell, or with rows and columns swapped for Transpose. A
+linked cell takes its source's value at once and whenever the source changes, inside the same undo step
+(numbers exactly, text as text, a missing value as an empty cell); plots, formulas and analysis see the
+value. Cells past the sheet's last column and cells of formula columns are left out (the status line says
+how many). Remove Links (Edit menu, data cell, column header) drops the links of the selected cells and
+keeps their values; typing into a linked cell replaces its value and ends its link. A linked cell shows a
+small blue corner at its bottom left. Links follow their columns through re-ids and go with a deleted
+column; a sheet copied on its own (Duplicate) loses them. They are saved in `.sheaf` (the sheet's
+`cell_links`); `.opj` and other exports write the values. The graph window's Paste Link stays grey.
 
 ## 13j. Find in Project (T95, measured 2026-11-16, Origin 2016)
 

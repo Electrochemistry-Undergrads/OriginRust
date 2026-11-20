@@ -53,6 +53,9 @@ pub struct CellFormat {
     /// Set Data Style > Rich Text (T208): the cell draws Origin's label markup as styled text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rich_text: Option<bool>,
+    /// Set Data Style > Float (T214): text too wide for the cell runs on over empty cells to its right.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub float: Option<bool>,
 }
 
 impl CellFormat {
@@ -65,7 +68,7 @@ impl CellFormat {
         macro_rules! take {
             ($($f:ident),*) => {$(if over.$f.is_some() { self.$f = over.$f.clone(); })*};
         }
-        take!(bold, italic, underline, font, size_pt, text_color, fill, h_align, rich_text);
+        take!(bold, italic, underline, font, size_pt, text_color, fill, h_align, rich_text, float);
     }
 
     /// [`CellFormat::merge`] without cloning the font name (the caller borrows it instead).
@@ -73,7 +76,7 @@ impl CellFormat {
         macro_rules! take {
             ($($f:ident),*) => {$(if over.$f.is_some() { self.$f = over.$f.clone(); })*};
         }
-        take!(bold, italic, underline, size_pt, text_color, fill, h_align, rich_text);
+        take!(bold, italic, underline, size_pt, text_color, fill, h_align, rich_text, float);
     }
 
     /// Unsets every property that `by` sets (the earlier range no longer matters for them).
@@ -81,7 +84,7 @@ impl CellFormat {
         macro_rules! drop {
             ($($f:ident),*) => {$(if by.$f.is_some() { self.$f = None; })*};
         }
-        drop!(bold, italic, underline, font, size_pt, text_color, fill, h_align, rich_text);
+        drop!(bold, italic, underline, font, size_pt, text_color, fill, h_align, rich_text, float);
     }
 }
 
@@ -246,6 +249,8 @@ pub struct ResolvedStyle<'a> {
     pub h_align: Option<HAlign>,
     /// Set Data Style > Rich Text (T208).
     pub rich_text: bool,
+    /// Set Data Style > Float (T214).
+    pub float: bool,
 }
 
 impl ResolvedStyle<'_> {
@@ -424,6 +429,7 @@ fn finish<'a>(f: &CellFormat, font: Option<&'a str>) -> ResolvedStyle<'a> {
         fill: visible(f.fill),
         h_align: f.h_align.filter(|a| *a != HAlign::Auto),
         rich_text: f.rich_text.unwrap_or(false),
+        float: f.float.unwrap_or(false),
     }
 }
 

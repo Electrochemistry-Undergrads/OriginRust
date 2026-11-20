@@ -10,7 +10,8 @@ fn data_style_more_formats_only_the_selected_range_and_keeps_apply_cancel_and_un
     let revision = h.state().doc.revision();
     right_click_text(&mut h, "4.5");
     menu_path(&mut h, &["Set Data Style"]);
-    for label in ["Rich Text", "Wrap Text", "Float"] {
+    assert!(entry_enabled(&h, "Rich Text"), "Rich Text works (T208)");
+    for label in ["Wrap Text", "Float"] {
         assert!(!entry_enabled(&h, label), "unsupported text controls remain disabled");
     }
     assert!(entry_enabled(&h, "More..."));

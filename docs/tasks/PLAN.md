@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 106 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 95 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -140,7 +140,7 @@ Backlog packages: write the brief first (step 3 above).
 |---|---|---|---|---|
 | [x] | [T126](T126-descriptive-statistics-data-range.md) | Statistics on Columns respects existing Begin/End ranges (T87 reader follow-up) | S | 0 |
 | [x] | [T127](T127-row-statistics-data-range.md) | Statistics on Rows respects existing Begin/End ranges (T87 reader follow-up) | S | 0 |
-| [ ] | B5 | Worksheet editing: copy variants, Paste Transpose/Link/Special, cell links, Set As Begin/End, fill with a set of numbers/dates/text, sampling interval, Copy Columns to, Swap Columns | L | 12 |
+| [ ] | B5 | Worksheet editing: copy variants, Paste Transpose/Link/Special, cell links, Set As Begin/End, fill with a set of numbers/dates/text, sampling interval, Copy Columns to, Swap Columns | L | 11 |
 | [ ] | B6 | Worksheet view and sheets: header and grid toggles, row label rows, sheet-tab items, Split, objects in cells (graphs, images, sparklines, variables), Merge cells | L | 7 |
 | [x] | B7 | Worksheet tools: done (Find in Project as T95, Conditional Formatting as T120-T123, Pivot Table as T124) | M | 0 |
 | [x] | [T120](T120-conditional-heatmap.md) | Conditional Heatmap (B7 slice; done 2026-11-17) | M | 0 |
@@ -201,7 +201,7 @@ Backlog packages: write the brief first (step 3 above).
 
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
-| [ ] | B14 | Matrix windows, contour and heat-map plots, profiles, Convert to Matrix, 2D FFT; Notes, Layout, Image, Function Plot and Excel windows; the Image menu | L | 29 |
+| [ ] | B14 | Matrix windows, contour and heat-map plots, profiles, Convert to Matrix, 2D FFT; Notes, Layout, Image, Function Plot and Excel windows; the Image menu | L | 19 |
 
 - A `Window` is only a workbook or a graph today (`crates/core/src/project.rs`). Each new window
   kind is its own brief, with an ADR when it changes the project file.

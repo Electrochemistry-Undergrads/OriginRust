@@ -340,6 +340,28 @@ each matrix as not written).
   mode). Sheaf keeps only the gray levels, so the matrix tools, heat maps and contours work on them
   directly. TIFF and other formats, colour channels and the Image menu are left.
 
+## 7i. The Image menu on a matrix (T207, 2026-11-20, Sheaf's formulas, not measured)
+
+- **Where:** the matrix window's Image menu and the workbook's Image menu. The items work on the
+  active matrix sheet, in place, as one undo step each ("Image Brightness", ...). They are disabled
+  unless a matrix window is active. Missing cells stay missing.
+- **Adjustments:**
+  - Brightness adds an amount (10 by default).
+  - Contrast stretches the values about their mean by a factor (1.5 by default).
+  - Gamma maps each value's place t between the sheet's lowest and highest value to t^(1/gamma)
+    (1.5 by default).
+- **Arithmetic Transform > Math:** +, -, * or / by an operand. Division by zero is refused.
+- **Conversion > To Binary:** 1 where the value is at least the threshold, else 0. The threshold
+  starts at the sheet's mean.
+- **Geometric Transform:** Rotate by 90 CCW, 90 CW or 180 (90 swaps the size), and Flip, horizontal
+  or vertical.
+- **Spatial Filters:** these run with no window, on 3 x 3 neighbourhoods. Edge cells repeat
+  outward.
+  - Smooth: the mean.
+  - Sharpen: 5v minus the four neighbours.
+  - Edge Detection: the Sobel gradient magnitude.
+- Still grey: Levels, Subtract, Color to Gray, RGB Split, Crop and Resize.
+
 ## 8. What was not verified, and what is left
 
 - Not run in Origin: `mdim` on a matrix that holds data; shrink with missing values; `w2m` options `lr` on accepted

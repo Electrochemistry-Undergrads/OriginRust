@@ -330,6 +330,11 @@ pub enum Action {
         columns: Vec<sheaf_core::ColumnId>,
         xyz: bool,
     },
+    /// An Image menu command on the active sheet of matrix book `id` (T207).
+    ImageCmd {
+        id: WindowId,
+        cmd: crate::menus::ImageCmd,
+    },
     /// A Matrix menu command on the active sheet of matrix book `id` (T192 slice 3).
     MatrixCmd {
         id: WindowId,
@@ -361,6 +366,11 @@ pub enum Action {
         column: ColumnId,
         row: usize,
         graph: Option<WindowId>,
+    },
+    /// Set Data Style > Rich Text on or off for the selected cells of the active sheet (T208).
+    SetRichText {
+        book: WindowId,
+        on: bool,
     },
     /// Draw an arrow across a data cell (`Some(double)`) or take it out (T205), one undo step.
     SetCellArrow {

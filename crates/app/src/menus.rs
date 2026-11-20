@@ -80,6 +80,21 @@ pub enum WindowKind {
     Matrix,
 }
 
+/// The Image menu's commands on the active matrix (T207, matrices spec 7i).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ImageCmd {
+    Brightness,
+    Contrast,
+    Gamma,
+    Math,
+    ToBinary,
+    Rotate,
+    Flip,
+    Smooth,
+    Sharpen,
+    EdgeDetection,
+}
+
 /// The Matrix menu's commands (T192 slice 3, matrices spec 7b).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MatrixCmd {
@@ -160,6 +175,8 @@ pub enum Cmd {
         column: ColumnId,
         row: usize,
     },
+    /// A data cell's Set Data Style > Rich Text: turn it on or off for the selected cells (T208).
+    SetRichText(bool),
     /// A data cell's Insert Arrow > Arrow / Double Arrow, or Remove Arrow with `None` (T205).
     SetCellArrow {
         column: ColumnId,
@@ -202,6 +219,8 @@ pub enum Cmd {
     ImportImage,
     /// The Matrix menu of a matrix window (T192 slice 3).
     Matrix(MatrixCmd),
+    /// The Image menu on the active matrix (T207).
+    Image(ImageCmd),
     /// Worksheet > Convert to Matrix > Direct (the selected columns, or the sheet) and XYZ Gridding
     /// (three selected columns X, Y, Z on a regular grid), T192 slice 4.
     ConvertToMatrix {
@@ -924,6 +943,7 @@ fn base(kind: WindowKind) -> Vec<Menu> {
             m("&View", view_menu(kind)),
             m("&Plot", vec![sub("Contour/&Heat Map", field_plot_items())]),
             m("&Matrix", matrix_menu()),
+            m("&Image", image_menu()),
             m(
                 "&Analysis",
                 vec![
@@ -1962,12 +1982,23 @@ fn statistics_menu() -> Vec<Entry> {
 }
 
 fn image_menu() -> Vec<Entry> {
+    use ImageCmd::*;
+    let i = |label: &str, c: ImageCmd| item(label, Cmd::Image(c));
     vec![
-        grey_sub("&Adjustments", &["Brightness...", "Contrast...", "Gamma...", "Levels..."]),
-        grey_sub("Arithmetic &Transform", &["Math...", "Subtract..."]),
-        grey_sub("&Conversion", &["To Binary...", "Color to Gray...", "RGB Split..."]),
-        grey_sub("&Geometric Transform", &["Crop...", "Resize...", "Rotate...", "Flip..."]),
-        grey_sub("&Spatial Filters", &["Smooth...", "Sharpen...", "Edge Detection..."]),
+        sub(
+            "&Adjustments",
+            vec![i("Brightness...", Brightness), i("Contrast...", Contrast), i("Gamma...", Gamma), grey("Levels...")],
+        ),
+        sub("Arithmetic &Transform", vec![i("Math...", Math), grey("Subtract...")]),
+        sub("&Conversion", vec![i("To Binary...", ToBinary), grey("Color to Gray..."), grey("RGB Split...")]),
+        sub(
+            "&Geometric Transform",
+            vec![grey("Crop..."), grey("Resize..."), i("Rotate...", Rotate), i("Flip...", Flip)],
+        ),
+        sub(
+            "&Spatial Filters",
+            vec![i("Smooth...", Smooth), i("Sharpen...", Sharpen), i("Edge Detection...", EdgeDetection)],
+        ),
     ]
 }
 
@@ -2387,7 +2418,7 @@ pub fn label_cell_menu(read_only: bool) -> Vec<Entry> {
 /// The menu of a data cell; `noted` when the cell has a note (Edit/Delete Note instead of Add);
 /// `cell` is the right-clicked cell, `graph` whether it shows a graph (T194) and `sparkline` whether it
 /// draws a sparkline (T200); `image` whether it shows a picture (T202); `arrow` whether it has an arrow
-/// (T205).
+/// (T205); `rich_text` whether the cell's Set Data Style > Rich Text is on (T208).
 pub fn cell_menu_for(
     noted: bool,
     cell: (ColumnId, usize),
@@ -2395,6 +2426,7 @@ pub fn cell_menu_for(
     sparkline: bool,
     image: bool,
     arrow: bool,
+    rich_text: bool,
 ) -> Vec<Entry> {
     let (column, row) = cell;
     let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut)];
@@ -2443,7 +2475,12 @@ pub fn cell_menu_for(
     v.push(cond_format_menu());
     v.push(sub(
         "Set Data Style",
-        vec![grey("Rich Text"), grey("Wrap Text"), grey("Float"), item("More...", Cmd::FormatCells)],
+        vec![
+            item(if rich_text { "\u{2713} Rich Text" } else { "Rich Text" }, Cmd::SetRichText(!rich_text)),
+            grey("Wrap Text"),
+            grey("Float"),
+            item("More...", Cmd::FormatCells),
+        ],
     ));
     v
 }
@@ -3173,6 +3210,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             }
             Action::ConvertToMatrix { book, columns: c.selected.to_vec(), xyz: *xyz }
         }
+        Cmd::Image(cmd) => match (c.kind, c.active) {
+            (WindowKind::Matrix, Some(id)) => Action::ImageCmd { id, cmd: *cmd },
+            _ => return Err("Activate a matrix window first"),
+        },
         Cmd::Matrix(cmd) => match (c.kind, c.active) {
             (WindowKind::Matrix, Some(id)) => Action::MatrixCmd { id, cmd: *cmd },
             _ => return Err("Activate a matrix window first"),
@@ -3264,6 +3305,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::RemoveCellGraph { column, row } => Action::SetCellGraph { column: *column, row: *row, graph: None },
         Cmd::InsertCellSparkline { column, row } => Action::PickCellSparkline { column: *column, row: *row },
         Cmd::InsertCellImage { column, row } => Action::PickCellImage { column: *column, row: *row },
+        Cmd::SetRichText(on) => Action::SetRichText { book: c.book.ok_or(NEED_BOOK)?, on: *on },
         Cmd::SetCellArrow { column, row, double } => {
             Action::SetCellArrow { column: *column, row: *row, double: *double }
         }

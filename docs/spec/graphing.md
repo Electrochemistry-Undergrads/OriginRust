@@ -6561,9 +6561,11 @@ standard deviation, sum of Z and FWHM, updated as the region moves. Sheaf's firs
   left out): "Volume = v", then N, Mean, SD (n - 1), Min, Max and Sum of Z. The volume is the sum of Z
   times the area of one cell (|dX dY| of the grid), from a zero base. XYZ columns are read on the grid
   the plot uses. "No cells in the region" when none is inside.
-- **Right-click menu:** Delete (Esc) closes the gadget.
-- **Not done:** circle and free-hand regions, a base plane from the region's boundary, FWHM, and
-  output to a worksheet. [Origin 2D Integration Gadget](https://www.originlab.com/doc/Origin-Help/surface-integ-gadget)
+- **Right-click menu:** New Output (T198) adds a row to the "2D Integrate Results" workbook, made
+  the first time with the columns X From, X To, Y From, Y To (the rectangle, smallest first), Volume,
+  N, Mean, SD, Min, Max and Sum; each output is one undo step ("2D Integrate"). Delete (Esc) closes
+  the gadget.
+- **Not done:** circle and free-hand regions, a base plane from the region's boundary, and FWHM. [Origin 2D Integration Gadget](https://www.originlab.com/doc/Origin-Help/surface-integ-gadget)
 
 ## Step and spline line plots: Plot > Line > Horizontal Step, Vertical Step, Spline Connected (T63 groups A and B, 2026-11-19, **not measured**)
 

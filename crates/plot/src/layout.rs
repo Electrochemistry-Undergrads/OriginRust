@@ -202,7 +202,7 @@ pub(crate) fn resolve_dim(
 ) -> ResolvedAxis {
     let first = sources.first().copied();
     let mut range = data::axis_range(sources.iter().copied(), dim, axis.scale);
-    // The extent of a heat map or contour plot counts as data (T179).
+    // The extent of a heat map or contour plot counts as data (T192).
     for f in fields {
         let (lo, hi) = f.extent(dim == Dim::X);
         if lo.is_finite() && hi.is_finite() && (axis.scale == sheaf_core::graph::ScaleKind::Linear || lo > 0.0) {
@@ -853,7 +853,7 @@ fn layer_scene(
         }
         (&layer.x_axis, &layer.y_axis)
     };
-    // A field that has labels gives its axes the titles of the matrix when they have none (T179).
+    // A field that has labels gives its axes the titles of the matrix when they have none (T192).
     let (field_x, field_y);
     let (xa, ya) = match &layer_data.field {
         Some(f) => {

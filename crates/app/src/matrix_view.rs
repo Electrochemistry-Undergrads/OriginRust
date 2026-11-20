@@ -1,4 +1,4 @@
-//! A matrix window (T179 slice 2, `docs/spec/matrices.md`): the active sheet's cells in a grid, with
+//! A matrix window (T192 slice 2, `docs/spec/matrices.md`): the active sheet's cells in a grid, with
 //! the column numbers across the top and the row numbers down the left as Origin's matrix window
 //! shows them, and the sheet tabs below when the book has more than one sheet.
 //!

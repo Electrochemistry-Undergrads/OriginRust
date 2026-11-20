@@ -76,11 +76,11 @@ pub enum WindowKind {
     None,
     Workbook,
     Graph,
-    /// A matrix window (T179).
+    /// A matrix window (T192).
     Matrix,
 }
 
-/// The Matrix menu's commands (T179 slice 3, matrices spec 7b).
+/// The Matrix menu's commands (T192 slice 3, matrices spec 7b).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MatrixCmd {
     SetValues,
@@ -153,17 +153,17 @@ pub enum Cmd {
     ObjectProperties,
     /// File > New > Notes (T154).
     NewNotes,
-    /// File > New > Matrix and the Standard toolbar's New Matrix (T179).
+    /// File > New > Matrix and the Standard toolbar's New Matrix (T192).
     NewMatrix,
-    /// The Matrix menu of a matrix window (T179 slice 3).
+    /// The Matrix menu of a matrix window (T192 slice 3).
     Matrix(MatrixCmd),
     /// Worksheet > Convert to Matrix > Direct (the selected columns, or the sheet) and XYZ Gridding
-    /// (three selected columns X, Y, Z on a regular grid), T179 slice 4.
+    /// (three selected columns X, Y, Z on a regular grid), T192 slice 4.
     ConvertToMatrix {
         xyz: bool,
     },
     /// Plot > Contour/Heat Map > Color Fill, B/W Lines + Labels, Heat Map: of the active matrix, or of
-    /// three selected worksheet columns X, Y and Z (T179).
+    /// three selected worksheet columns X, Y and Z (T192).
     PlotField(sheaf_core::template::FieldTemplate),
     /// The graph Edit menu's Cut, Copy, Paste and Clear on the selected object (T149).
     GraphClipboard(GraphClip),
@@ -900,7 +900,7 @@ fn base(kind: WindowKind) -> Vec<Menu> {
 }
 
 /// The heat map and contour items of Plot > Contour/Heat Map: from the active matrix window, or
-/// from three selected worksheet columns X, Y and Z (T179).
+/// from three selected worksheet columns X, Y and Z (T192).
 fn field_plot_items() -> Vec<Entry> {
     use sheaf_core::template::FieldTemplate;
     vec![
@@ -910,7 +910,7 @@ fn field_plot_items() -> Vec<Entry> {
     ]
 }
 
-/// The Matrix menu of a matrix window (T179 slice 3).
+/// The Matrix menu of a matrix window (T192 slice 3).
 fn matrix_menu() -> Vec<Entry> {
     use MatrixCmd::*;
     vec![

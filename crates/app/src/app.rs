@@ -175,7 +175,7 @@ pub struct SheafApp {
     graphs: HashMap<WindowId, GraphUi>,
     /// Notes windows (T154).
     notes: HashMap<WindowId, crate::notes_view::NotesUi>,
-    /// Matrix windows (T179).
+    /// Matrix windows (T192).
     matrices: HashMap<WindowId, crate::matrix_view::MatrixUi>,
     import: Option<ImportDialog>,
     import_excel: Option<ExcelImportDialog>,
@@ -185,7 +185,7 @@ pub struct SheafApp {
     layer_management: Option<crate::dialogs::layer_management::LayerManagementDialog>,
     add_layer_dialog: Option<crate::dialogs::add_layer::AddLayerDialog>,
     fit_page: Option<crate::dialogs::fit_page::FitPageDialog>,
-    /// The Matrix menu's Set Matrix Values, Set Dimensions, Expand and Shrink windows (T179).
+    /// The Matrix menu's Set Matrix Values, Set Dimensions, Expand and Shrink windows (T192).
     matrix_dialog: Option<crate::dialogs::matrix_ops::MatrixOpDialog>,
     axis3d: Option<crate::dialogs::axis3d::Axis3dDialog>,
     plot_setup: Option<crate::dialogs::plot_setup::PlotSetupDialog>,
@@ -5098,7 +5098,7 @@ impl SheafApp {
 
     /// File > Import > Re-Import Directly and Re-Import... (T98): reads the book's source file (or, for
     /// Re-Import..., a file picked starting from it) again and replaces the data, one undo step.
-    /// The Matrix menu (T179 slice 3): the operations without settings run at once as one undo step;
+    /// The Matrix menu (T192 slice 3): the operations without settings run at once as one undo step;
     /// the others open their window.
     fn matrix_cmd(&mut self, id: WindowId, cmd: crate::menus::MatrixCmd) {
         use crate::dialogs::matrix_ops::{Form, MatrixOpDialog};
@@ -7370,7 +7370,7 @@ impl eframe::App for SheafApp {
                         Some(Window::Notes(_)) => {
                             crate::notes_view::show(ui, doc, id, notes.entry(id).or_default(), actions);
                         }
-                        // T179 slice 1 ports the matrix model, files, plots and command line; the
+                        // T192 slice 1 ports the matrix model, files, plots and command line; the
                         // matrix window itself comes with the next slice.
                         Some(Window::Matrix(_)) => {
                             crate::matrix_view::show(ui, doc, id, matrices.entry(id).or_default(), actions);

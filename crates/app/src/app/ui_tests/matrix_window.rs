@@ -1,4 +1,4 @@
-//! File > New > Matrix and the matrix window (T179 slice 2).
+//! File > New > Matrix and the matrix window (T192 slice 2).
 
 use super::*;
 

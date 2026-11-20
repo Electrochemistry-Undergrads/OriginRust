@@ -6607,6 +6607,7 @@ mod layer_management;
 mod merge_graphs;
 mod show_elements;
 mod sparklines;
+mod table_walkthrough;
 
 #[path = "ui_tests/merge_folders.rs"]
 mod merge_folders;

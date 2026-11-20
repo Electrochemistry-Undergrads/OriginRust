@@ -862,6 +862,9 @@ details use Sheaf's row model. The filter-copy contract and default come from th
 Measured in Origin 2016 by right-clicking a sheet tab (`tools/origin-ref/origin-dialog.ps1 -NoDialog`,
 `@RCLICK`/`@CLICK`/`@SHOT`, `re-workspace/scratch/t90`, local only) and copied in `sheaf_core::sheet_tab`:
 
+- **Insert** and **Add** (T212, Sheaf's rule, not measured here) make a sheet with columns A(X) and
+  B(Y), as File > New > Worksheet does, so that it can be typed into at once (it used to have no
+  columns, hence no cells). One undo step ("Insert sheet", "Add sheet").
 - A sheet has a short name and a **long name** (`wks.longname$`). Sheaf keeps it in `Worksheet::long_name`
   (saved in `.sheaf`; Name and Comments... has a Long Name field).
 - Name and Comments also edits plain-text, multiline worksheet comments. OK saves the draft

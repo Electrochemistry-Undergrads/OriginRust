@@ -362,7 +362,7 @@ fn keep_as_bad(path: &Path) {
     let _ = std::fs::rename(path, path.with_file_name(format!("{name}.bad")));
 }
 
-/// Changes the store in the file at `path`: waits for the file lock (up to two seconds, then goes on
+/// Changes the store in the file at `path`: waits for the file lock (up to ten seconds, then goes on
 /// without it), reads the file as it is now, applies `change`, writes the file and returns the new
 /// store. Themes another instance added in the meantime are kept. A missing file is an empty store. A
 /// file that is damaged, or that a newer layout wrote (`version` above 1), is kept as `<name>.bad`

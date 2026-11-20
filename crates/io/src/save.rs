@@ -199,17 +199,36 @@ pub fn backup_original(path: &Path) -> Result<Option<PathBuf>, IoError> {
     Ok(Some(backup))
 }
 
-/// Writes to a temporary file next to `path` and renames it over `path`.
+/// Writes to a temporary file next to `path` and renames it over `path`. Each write has its own
+/// temporary file (process id and a count), so two writes of one file at once never share one and
+/// the later rename finds its file (T230: a shared name made it fail with NotFound).
 pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), IoError> {
+    static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "project".into());
-    let tmp = path.with_file_name(format!(".{name}.{}.tmp", std::process::id()));
-    let result = std::fs::write(&tmp, bytes)
-        .map_err(|e| IoError::io(&tmp, e))
-        .and_then(|()| std::fs::rename(&tmp, path).map_err(|e| IoError::io(path, e)));
+    let n = WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp = path.with_file_name(format!(".{name}.{}.{n}.tmp", std::process::id()));
+    let result = std::fs::write(&tmp, bytes).map_err(|e| IoError::io(&tmp, e)).and_then(|()| rename_over(&tmp, path));
     if result.is_err() {
         let _ = std::fs::remove_file(&tmp);
     }
     result
+}
+
+/// Renames `from` over `to`. Windows refuses (access denied) while another rename over `to` is
+/// under way, so that is tried again for a short while.
+fn rename_over(from: &Path, to: &Path) -> Result<(), IoError> {
+    let start = std::time::Instant::now();
+    loop {
+        match std::fs::rename(from, to) {
+            Err(e)
+                if e.kind() == std::io::ErrorKind::PermissionDenied
+                    && start.elapsed() < std::time::Duration::from_secs(1) =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            r => return r.map_err(|e| IoError::io(to, e)),
+        }
+    }
 }
 
 #[cfg(test)]

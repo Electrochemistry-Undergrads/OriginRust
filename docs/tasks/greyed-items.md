@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **154 greyed items: 113 in the menu bar, 2 on the toolbars, 39 in context menus.**
+original inventory baseline. This is not a new runtime audit. **150 greyed items: 112 in the menu bar, 2 on the toolbars, 36 in context menus.**
 
 ## How to read and keep this file
 
@@ -47,7 +47,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T69` | 0 |
 | `T70` | 0 |
 | `T71` | 0 |
-| `T72` | 12 |
+| `T72` | 9 |
 | `T73` | 0 |
 | `T75` | 0 |
 | `T76` | 0 |
@@ -81,12 +81,12 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B12` | 1 |
 | `B13` | 2 |
 | `B14` | 42 |
-| `B15` | 2 |
+| `B15` | 1 |
 | `B16` | 15 |
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 27 items, backlog packages (`B`) 107, not planned (`N`) 20.
+Briefs (`T`) hold 24 items, backlog packages (`B`) 106, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -118,7 +118,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T66` Show Data Info [Graph]
 
 ### Plot
-- `B15` 3D Surface: 3D Ternary Colormap Surface
 - `B14` Contour/Heat Map: Color Fill · B/W Lines + Labels · Gray Scale Map · Heat Map · Polar Contour theta(X) r(Y) · Polar Contour r(X) theta(Y) · Ternary Contour
 - `B14` Profile: Contour Profiles · Image Profiles
 
@@ -199,7 +198,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B3` Graph legend > Legend: Add Legend Title
 - `T72` Graph legend > Copy Format: Dimensions · All
 - `T72` Graph page > Copy Format: Page Background · Legend Translation Mode
-- `T72` Graph page > Paste Format To: Bottom Axes · All X Axes · All Axes · All
+- `T72` Graph page > Paste Format To: All
 - `T61` Graph layer icon: Show Active Layer Only · Set Active Layer By Layer Icon Only · Double click to open Plot Setup
 
 No greyed item was found in the label-cell menu or the Integrate gadget menu.

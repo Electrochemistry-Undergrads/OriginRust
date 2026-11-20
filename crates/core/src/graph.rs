@@ -532,6 +532,10 @@ pub struct Space3dCoords {
     /// 3D Surface (T166): each plot's points are joined into a surface of triangles over X and Y.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub surface: Option<Surface3d>,
+    /// 3D Ternary (T173): X, Y and Z are the three parts of a composition, placed in a triangle on
+    /// the floor; the height is the plot's `color_from` column.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ternary: bool,
 }
 
 /// How a 3D surface layer (T166) draws its triangles.
@@ -570,6 +574,7 @@ impl Default for Space3dCoords {
             ribbons: false,
             scales: Default::default(),
             surface: None,
+            ternary: false,
         }
     }
 }

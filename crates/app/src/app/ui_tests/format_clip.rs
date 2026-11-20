@@ -217,7 +217,7 @@ fn the_clipboard_kind_chooses_the_paste_menu() {
     right_click_page(&mut h);
     assert!(h.query_by_label("Paste Format").is_none());
     pick(&mut h, "Paste Format To");
-    assert!(disabled(&h, "Bottom Axes") && disabled(&h, "All Axes"), "its choices are unmeasured");
+    assert!(!disabled(&h, "Bottom Axes") && !disabled(&h, "All Axes"), "the axis targets paste (T174)");
     // A graph format gives the axis menu no Paste Format To (no axis selected, so Edit copies the graph).
     h.state_mut().graphs.values_mut().next().unwrap().selected = None;
     menu_path(&mut h, &["Edit", "Copy Format", "All"]);
@@ -329,4 +329,23 @@ fn axis_paste_format_to_line_takes_only_the_line_of_the_copied_axis() {
     pick(&mut h, "Paste Format To");
     pick(&mut h, "Title Text");
     assert_eq!(graph(&h).layers[0].y_axis.title.as_deref(), Some("Copied title"));
+}
+
+#[test]
+fn page_paste_format_to_all_axes_gives_every_axis_the_copied_thickness() {
+    let mut h = start(vec![data_file("fmt-page-axes")]);
+    styled(&mut h);
+    right_click_on(&mut h, ObjectKind::XAxis);
+    pick(&mut h, "Copy Format");
+    pick(&mut h, "Styles");
+    edit_layer(&mut h, |l| l.x_axis.line_width_pt = 1.0);
+    let before = graph(&h).layers[0].clone();
+    right_click_page(&mut h);
+    pick(&mut h, "Paste Format To");
+    pick(&mut h, "All Axes");
+    pick(&mut h, "Thickness");
+    let l = &graph(&h).layers[0];
+    assert_eq!((l.x_axis.line_width_pt, l.y_axis.line_width_pt), (3.0, 3.0));
+    assert_eq!(l.y_axis.color, before.y_axis.color, "Thickness leaves the colours");
+    assert_eq!(h.state().doc.undo_label(), Some("Apply Theme"));
 }

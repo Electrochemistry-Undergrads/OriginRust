@@ -2777,6 +2777,9 @@ impl SheafApp {
                 use sheaf_core::format_clip::GraphPart;
                 crate::format_clip_ui::paste_graph(&mut self.doc, graph, GraphPart::All.groups());
             }
+            Action::PasteAxesFormat { graph, targets, part } => {
+                crate::format_clip_ui::paste_axes(&mut self.doc, graph, targets, part);
+            }
             Action::PasteAxisFormat { graph, layer, y, part } => {
                 crate::format_clip_ui::paste_axis(&mut self.doc, graph, layer, y, part);
             }

@@ -145,6 +145,11 @@ pub enum Cmd {
         y: bool,
         cut: bool,
     },
+    /// The legend's right-click Cut and Copy (T178): a free text label with the legend's text.
+    CopyLegend {
+        layer: usize,
+        cut: bool,
+    },
     /// A text label's right-click Cut and Copy (T147).
     CutLabel {
         layer: usize,
@@ -454,6 +459,9 @@ pub enum Cmd {
     SetViewMode(sheaf_core::project::ViewMode),
     /// View > Show > Layer Icons.
     ToggleLayerIcons,
+    /// View > Show > Labels and Data on a graph (T177): every layer's labels or data plots.
+    ToggleShowLabels,
+    ToggleShowData,
     /// View > Show > Active Layer Only uses the existing Hide Other Layers toggle.
     ToggleActiveLayerOnly,
     /// View > Full Screen (Ctrl+Shift+J) and the page's "View Full Screen".
@@ -736,6 +744,10 @@ pub struct MenuContext<'a> {
     pub view_mode: sheaf_core::project::ViewMode,
     /// The active graph shows its layer icons (the tick of View > Show > Layer Icons).
     pub layer_icons: bool,
+    /// Every layer of the active graph shows its labels, and its data (the ticks of View > Show >
+    /// Labels and Data, T177).
+    pub show_labels: bool,
+    pub show_data: bool,
     /// None without a valid multi-layer target; otherwise the derived isolation check.
     pub active_layer_only: Option<bool>,
 }
@@ -1142,9 +1154,9 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
                 "Layer Grid",
                 "-",
                 "Frame",
-                "Labels",
-                "Data",
             ]));
+            show.push(item("Labels", Cmd::ToggleShowLabels));
+            show.push(item("Data", Cmd::ToggleShowData));
             show.push(keyed("Active Layer Only", ctrl_alt(Key::D), Cmd::ToggleActiveLayerOnly));
             show.push(sep());
             show.push(grey("Master Items on Screen"));
@@ -2536,8 +2548,8 @@ pub fn graph_legend_menu(layer: usize, can_color: bool, can_bubble: bool) -> Vec
         add("Add Color Scale", can_color, LayerScaleKind::Color),
         add("Add Bubble Scale", can_bubble, LayerScaleKind::Bubble),
         sep(),
-        grey_keyed("Cut", ctrl(Key::X)),
-        grey_keyed("Copy", ctrl(Key::C)),
+        keyed("Cut", ctrl(Key::X), Cmd::CopyLegend { layer, cut: true }),
+        keyed("Copy", ctrl(Key::C), Cmd::CopyLegend { layer, cut: false }),
         keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::HideLegend { layer })),
         sep(),
         item("Bring to the front", Cmd::GraphEdit(GraphOp::OrderLegend { layer, front: true })),
@@ -2928,7 +2940,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             let graph = c.graph.ok_or(NEED_GRAPH)?;
             let ok = match op {
                 GraphClip::Cut | GraphClip::Copy => {
-                    matches!(c.graph_pick, Some(K::Shape(_) | K::Label(_) | K::XTitle | K::YTitle))
+                    matches!(c.graph_pick, Some(K::Shape(_) | K::Label(_) | K::XTitle | K::YTitle | K::Legend))
                 }
                 GraphClip::Clear => matches!(
                     c.graph_pick,
@@ -2952,6 +2964,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
                 });
             }
             Action::GraphClipboard { graph, op: *op }
+        }
+        Cmd::CopyLegend { layer, cut } => {
+            Action::CopyLegend { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, cut: *cut }
         }
         Cmd::CopyTitle { layer, y, cut } => {
             Action::CopyTitle { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, y: *y, cut: *cut }
@@ -3376,6 +3391,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::SetViewMode(mode) => Action::SetViewMode { graph: c.graph.ok_or(NEED_GRAPH)?, mode: *mode },
         Cmd::ToggleLayerIcons => Action::SetLayerIcons { graph: c.graph.ok_or(NEED_GRAPH)?, on: !c.layer_icons },
+        Cmd::ToggleShowLabels => {
+            Action::SetShowElements { graph: c.graph.ok_or(NEED_GRAPH)?, labels: Some(!c.show_labels), data: None }
+        }
+        Cmd::ToggleShowData => {
+            Action::SetShowElements { graph: c.graph.ok_or(NEED_GRAPH)?, labels: None, data: Some(!c.show_data) }
+        }
         Cmd::ToggleActiveLayerOnly => {
             let graph = c.graph.ok_or(NEED_GRAPH)?;
             c.active_layer_only.ok_or("Needs a valid active layer in a graph with at least two layers")?;
@@ -3679,6 +3700,11 @@ fn show_entries(
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleLayerIcons)) && c.layer_icons {
+                    tick(ui, &response);
+                }
+                if (matches!(it.cmd, Some(Cmd::ToggleShowLabels)) && c.show_labels)
+                    || (matches!(it.cmd, Some(Cmd::ToggleShowData)) && c.show_data)
+                {
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleActiveLayerOnly)) && c.active_layer_only == Some(true) {
@@ -4072,6 +4098,8 @@ mod tests {
             can_ungroup: false,
             view_mode: Default::default(),
             layer_icons: true,
+            show_labels: true,
+            show_data: true,
             active_layer_only: None,
         };
         assert_eq!(resolve(&Cmd::SetColumnValues, &c).unwrap_err(), NEED_BOOK);

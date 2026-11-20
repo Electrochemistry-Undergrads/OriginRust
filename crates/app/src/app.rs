@@ -2587,6 +2587,21 @@ impl SheafApp {
                     self.doc.adjust_view(|p| p.set_view_mode(graph, mode));
                 }
             }
+            Action::SetShowElements { graph, labels, data } => {
+                let what = if labels.is_some() { "Show Labels" } else { "Show Data" };
+                self.doc.apply(what, |p| {
+                    if let Some(g) = p.graph_mut(graph) {
+                        for l in &mut g.layers {
+                            if let Some(on) = labels {
+                                l.display.show_labels = on;
+                            }
+                            if let Some(on) = data {
+                                l.display.show_data = on;
+                            }
+                        }
+                    }
+                });
+            }
             Action::SetLayerIcons { graph, on } => {
                 self.doc.apply("Show Layer Icons", |p| {
                     if let Some(g) = p.graph_mut(graph) {
@@ -2934,6 +2949,7 @@ impl SheafApp {
                         let next = match state.selected {
                             Some((layer, K::Shape(shape))) => Some(Action::CopyShape { graph, layer, shape, cut }),
                             Some((layer, K::Label(label))) => Some(Action::CopyLabel { graph, layer, label, cut }),
+                            Some((layer, K::Legend)) => Some(Action::CopyLegend { graph, layer, cut }),
                             Some((layer, K::XTitle)) => Some(Action::CopyTitle { graph, layer, y: false, cut }),
                             Some((layer, K::YTitle)) => Some(Action::CopyTitle { graph, layer, y: true, cut }),
                             _ => None,
@@ -2974,6 +2990,15 @@ impl SheafApp {
                 });
                 if copied && cut {
                     self.edit_graph(graph, crate::actions::GraphOp::HideTitle { layer, y });
+                }
+            }
+            Action::CopyLegend { graph, layer, cut } => {
+                let project = self.doc.project();
+                let copied = sheaf_plot::legend_text(project, graph, layer).ok().is_some_and(|text| {
+                    project.graph(graph).is_some_and(|g| crate::shape_clip::copy_legend(g, layer, text))
+                });
+                if copied && cut {
+                    self.edit_graph(graph, crate::actions::GraphOp::HideLegend { layer });
                 }
             }
             Action::CopyLabel { graph, layer, label, cut } => {
@@ -4966,6 +4991,12 @@ impl SheafApp {
             }),
             view_mode: graph.map(|g| project.view_mode(g)).unwrap_or_default(),
             layer_icons: graph.and_then(|g| project.graph(g)).is_none_or(|g| g.page.style.layer_icons),
+            show_labels: graph
+                .and_then(|g| project.graph(g))
+                .is_none_or(|g| g.layers.iter().all(|l| l.display.show_labels)),
+            show_data: graph
+                .and_then(|g| project.graph(g))
+                .is_none_or(|g| g.layers.iter().all(|l| l.display.show_data)),
             active_layer_only: graph.and_then(|id| {
                 let g = project.graph(id)?;
                 let layer = self.graphs.get(&id).map_or(0, |s| s.active_layer);

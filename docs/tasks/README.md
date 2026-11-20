@@ -153,6 +153,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T152](T152-legend-order.md) | Legend Bring to front/back, front/back of data (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured; left: legend Cut/Copy |
 | [T153](T153-title-order.md) | Axis title Bring to the front / Push to the back (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured |
 | [T154](T154-notes-window.md) | Notes windows: File > New > Notes, New Notes (B14 slice) | M | done 2026-11-19 (notes-window spec), not measured; left: Add Notes as Sheet, .opj |
+| [T178](T178-legend-clipboard.md) | Legend right-click Cut/Copy; `\l(n)` and `%(n)` in free text labels (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured |
 | [T162](T162-object-group.md) | Object Edit Group/Ungroup, dragging a selection or a group (B2 slice) | M | done 2026-11-19 (graphing "Aligning drawn objects and text"), not measured |
 | [T159](T159-object-align.md) | Shift+click multi-selection, Object Edit Align and Make Same Width/Height (B2 slice) | M | done 2026-11-19 (graphing "Aligning drawn objects and text"), not measured; left: Group/Ungroup, distribute |
 | [T155](T155-3d-scatter.md) | 3D Scatter, 3D Trajectory (B15 slice 1) | L | done 2026-11-19 (graphing "3D Scatter and 3D Trajectory"), not measured; left: rotation, Z axis dialog, other 3D plots |
@@ -167,6 +168,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T172](T172-3d-view.md) | 3D view Turn and Tilt in the 3D Axis window (B15 follow-up) | S | done 2026-11-19 (graphing "3D Scatter and 3D Trajectory"), not measured; left: mouse rotation |
 | [T173](T173-3d-ternary-surface.md) | 3D Surface: 3D Ternary Colormap Surface (B15 slice 10) | M | done 2026-11-19 (graphing "3D Scatter and 3D Trajectory"), not measured; 3D Surface submenu fully live |
 | [T175](T175-sparklines.md) | Worksheet Sparklines: column header Add or Update Sparklines..., corner Sparklines switch (B6 slice) | S | done 2026-11-19 (workbook-model 13i), not measured; left: Insert Sparklines in cells, the options dialog |
+| [T66](T66-graph-view-modes.md) (T177) | Graph View > Show > Labels and Data (T66 slice) | S | done 2026-11-19 (graphing 22.8), documentation contract, not measured; seven Show items left |
 | [T160](T160-workbook-templates.md) | User workbook templates: Save Template As on a workbook, New > From Template (T56/T103 follow-up) | M | done 2026-11-19 (workbook-model 13o), not measured; left: analysis templates (B11), CLI/MCP |
 | [T163](T163-analysis-templates.md) | Save Workbook As Analysis Template (B11 slice, on T160) | M | done 2026-11-19 (workbook-model 13o), not measured; left: Origin options, Batch Processing |
 | [T165](T165-batch-processing.md) | File > Batch Processing... with a workbook or analysis template (B11 slice) | M | done 2026-11-19 (workbook-model 13p), not measured; left: summary sheet, Origin options |

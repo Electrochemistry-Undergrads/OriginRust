@@ -64,6 +64,7 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
     // layer) is drawn after all layers, so that no layer's curves cover it.
     for (i, layer) in g.layers.iter().enumerate() {
         if !layer.display.hidden
+            && layer.display.show_labels
             && layer.legend.scope == LegendScope::Graph
             && let Some(last) = layers.last_mut()
         {
@@ -1040,6 +1041,10 @@ fn draw_legend_and_labels(
     m: &dyn TextMeasurer,
 ) {
     let layer = &g.layers[index];
+    // View > Show > Labels off (T177): no legend, free labels or drawn objects.
+    if !layer.display.show_labels {
+        return;
+    }
     let label_plot_color = |slot| layer.plots.get(slot).map(crate::rug::plot_color);
     let rec = |objects: &mut Vec<SceneObject>, out: &Vec<Item>, start: usize, kind: ObjectKind, extra: &[Rect]| {
         hit::record(objects, out, start, kind, index, ItemList::Overlay, extra, m)
@@ -1066,6 +1071,27 @@ fn draw_legend_and_labels(
             continue;
         }
         let size = label.font.size_pt;
+        // A label that names plots with \l(n) or %(n), as Origin's text objects may (a pasted copy of
+        // the legend, T178): drawn with the legend's line layout and the layer's plots, without the
+        // legend's frame or fill, the top of its first row at the anchor's text middle. Turned labels
+        // keep the plain text path.
+        if label.rotation_deg == 0.0 && !pds.is_empty() && f.h > 0.0 && legend::has_plot_refs(&label.text) {
+            let lg = Legend {
+                visible: true,
+                position: LegendPosition::ManualTopLeft { x: label.x, y: label.y - 0.5 * size / f.h },
+                font: label.font.clone(),
+                frame: false,
+                background: None,
+                columns: 1,
+                text: Some(label.text.clone()),
+                ..layer.legend.clone()
+            };
+            let entries: Vec<&PlotData> = pds.iter().collect();
+            let ids: Vec<String> = (1..=entries.len()).map(|k| k.to_string()).collect();
+            draw_legend(out, project, &lg, f, &entries, &ids, &edge_ticks(g, index), m, &layer.plots);
+            rec(objects, out, start, ObjectKind::Label(k), &[]);
+            continue;
+        }
         let anchor = (f.x + label.x * f.w, f.y + label.y * f.h);
         // The anchor is the vertical middle of the text's first character.
         let (sin, cos) = label.rotation_deg.to_radians().sin_cos();

@@ -337,6 +337,13 @@ pub enum Action {
         graph: WindowId,
         op: crate::menus::GraphClip,
     },
+    /// The legend's right-click Copy as a free text label with its text and font (and Cut, which
+    /// also hides the legend, one undo step; T178).
+    CopyLegend {
+        graph: WindowId,
+        layer: usize,
+        cut: bool,
+    },
     /// A text label's right-click Copy (and Cut, which also deletes it, one undo step; T147).
     CopyLabel {
         graph: WindowId,
@@ -761,6 +768,12 @@ pub enum Action {
         mode: sheaf_core::project::ViewMode,
     },
     /// View > Show > Layer Icons.
+    /// View > Show > Labels or Data (T177): sets the flag on every layer of the graph, one undo step.
+    SetShowElements {
+        graph: WindowId,
+        labels: Option<bool>,
+        data: Option<bool>,
+    },
     SetLayerIcons {
         graph: WindowId,
         on: bool,

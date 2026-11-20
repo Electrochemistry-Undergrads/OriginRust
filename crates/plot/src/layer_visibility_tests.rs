@@ -76,3 +76,26 @@ fn graph_legends_follow_their_owner_and_keep_entries_for_a_hidden_sibling() {
     assert!(render_eps(&p, g).unwrap().starts_with(b"%!PS"));
     assert!(!render_emf(&p, g).unwrap().is_empty());
 }
+
+#[test]
+fn show_labels_off_hides_the_legend_free_labels_and_drawn_objects_only() {
+    // T177: View > Show > Labels (LabTalk layer.showLabels).
+    let (mut p, g) = tests::project(Template::Line, vec![0., 1., 2.], vec![vec![0., 3., 1.]]);
+    {
+        let layer = &mut p.graph_mut(g).unwrap().layers[0];
+        layer.labels.push(sheaf_core::graph::TextLabel::new("note", 0.5, 0.5, layer.x_axis.title_font.clone()));
+    }
+    let kinds = |p: &Project| -> Vec<scene::ObjectKind> {
+        let s = layout::build_scene(p, g, &FixedMetrics).unwrap();
+        s.layers.iter().flat_map(|l| l.objects.iter().map(|o| o.kind)).collect()
+    };
+    let before = kinds(&p);
+    assert!(before.contains(&scene::ObjectKind::Legend) && before.contains(&scene::ObjectKind::Label(0)));
+    p.graph_mut(g).unwrap().layers[0].display.show_labels = false;
+    let after = kinds(&p);
+    assert!(!after.contains(&scene::ObjectKind::Legend) && !after.contains(&scene::ObjectKind::Label(0)));
+    // The plots, axes and titles stay.
+    for kind in [scene::ObjectKind::Plot(0), scene::ObjectKind::XAxis, scene::ObjectKind::XTitle] {
+        assert_eq!(before.contains(&kind), after.contains(&kind), "{kind:?}");
+    }
+}

@@ -5480,6 +5480,25 @@ their future implementation rather than treating them as equivalent toggles:
   in copy/print/export. The option depends on Use Master Items. This differs from
   ordinary layer hiding; master-page state/rendering is not supplied in this slice.
 
+### 22.8 View > Show > Labels and Data (T177, 2026-11-19, documentation contract, not measured)
+
+Origin's [layer reference](https://docs.originlab.com/labtalk/ref/layer-obj/) has `layer.showLabels`
+and `layer.showData`, separate switches of a layer; the menu items were not measured (22.3: both are
+ticked on a new graph). Sheaf reads them as page-wide switches of every layer:
+
+- **Labels** turns `LayerDisplay::show_labels` on or off on every layer of the graph: off draws no
+  legend, free text labels (tables included) or drawn objects (lines, arrows, rectangles, ellipses) in
+  the layer, on screen and in exports. Axis titles, tick labels, plots, slope annotations, straight
+  lines and colour scales stay. The hidden objects cannot be picked (Origin keeps them selectable:
+  not followed).
+- **Data** turns the existing Show Elements: Data (`LayerDisplay::show_data`) on or off on every
+  layer.
+- Each is ticked when every layer shows its labels (or data), and each click is one undo step
+  ("Show Labels", "Show Data"). Older files read `show_labels` as on; the `.opj` written here does
+  not hold it (its save warns that the layer's Display tab was not written).
+- Active Layer Indicator, Axis Layer Icons, Object Grid, Layer Grid, Frame, Master Items on Screen and
+  Show Data Info stay grey (22.7).
+
 ## 23. View > Zoom All and the Tools-bar Scale In / Scale Out (T69, measured 2026-11-15, Origin 2016)
 
 Measured in OriginPro 2016 on our own synthetic data (X = 1 to 10, Y = 2X+1 and 20-X, Line + Symbol graph; one run with a right-Y layer from `layadd type:=righty`; one with both axes logarithmic; a 4-graph project), a 1024x768 Origin window, drags and clicks sent by `tools/origin-ref/origin-dialog.ps1 -NoDialog` with `-AfterFile` (`@DRAG`, `@CLICK`, `@DCLICK`, `@KEYDOWN`, `@SHOT`, `@CURSOR`) and the axis ends read after each action with `?layer.x.from` / `.to` / `layer.y.from` / `.to` (raw outputs and pictures are local: `re-workspace/scratch/t69/`, `*.out.txt`, `*.png`). Anything not listed is **unmeasured**.
@@ -6551,9 +6570,20 @@ unregistered, so Origin's own templates for them were not checked.
   - A click where the legend lies under the data picks the plots and axes first.
   - With Data on Top of Axes, the legend goes under the data together with the axes.
   - Hit-testing now reads `LayerScene::data_on_top` for that mode, not "the underlay is not empty".
-- Both flags are saved only when set, so older files load unchanged. The legend's Cut and Copy stay
-  grey: a free text label does not draw the legend's `\l(n)` symbols, so a pasted copy would show them
-  as text.
+- Both flags are saved only when set, so older files load unchanged.
+- **Cut and Copy (T178, not measured):** the legend's right-click Cut and Copy, and the graph Edit
+  menu's Cut, Copy and Ctrl+X/C with the legend selected, copy it as a free text label. The label has
+  the legend's text as drawn, in Origin's notation (its custom text, or the automatic
+  `\l(1) %(1)` lines), and the legend's font. The page's Paste puts it at the clicked point, as for
+  other labels (17.8). Cut also hides the legend, as one undo step ("Delete legend").
+- **Plot references in free text labels (T178):** Origin's text objects may hold `\l(n)` and `%(n)`,
+  and a legend is such a text object. A free text label that refers to a plot this way is drawn with
+  the legend's line layout and the plots of its own layer: a line and symbol sample per `\l(n)`, the
+  plot's name per `%(n)`, one row per line. It has no frame and no fill, whatever the legend has. The
+  top of its first row sits half a font size above the anchor, so a label keeps about its place when
+  `\l(n)` is typed into it. Labels without such references, labels turned away from 0 degrees and
+  labels in a layer without plots keep the plain text path, where the escapes stay literal text.
+  This rendering is a Sheaf choice; Origin's exact spacing for text objects is not measured.
 - **Axis titles (T153):** an axis title's right-click Bring to the front (`Axis::title_on_top`) draws
   it last in its layer, over the labels, drawn objects and legend. Push to the back returns it to its
   place among the axes (the default). One undo step each ("Bring axis title to front", "Push axis

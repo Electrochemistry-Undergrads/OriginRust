@@ -5466,6 +5466,23 @@ impl SheafApp {
             M::Rotate180 => MatrixOp::Rotate(Rotation::Half),
             M::FlipHorizontal => MatrixOp::Flip { direction: FlipDirection::Horizontal, coordinates: false },
             M::FlipVertical => MatrixOp::Flip { direction: FlipDirection::Vertical, coordinates: false },
+            M::SurfaceFit => {
+                // The active sheet becomes X, Y and Z columns, then Origin's surface-fit window opens
+                // on them (T221).
+                use sheaf_core::matrix_convert::{M2wMethod, XyzOrder};
+                let method = M2wMethod::Xyz { order: XyzOrder::XConstFirst, skip_missing: true };
+                match self.doc.edit("Matrix to XYZ for surface fit", |p| p.matrix_to_worksheet(id, sheet, &method)) {
+                    Ok(book) => {
+                        self.fit =
+                            FitDialog::new(self.doc.project(), book, None, crate::dialogs::fit::FitKind::Surface);
+                        if self.fit.is_none() {
+                            self.warn("The matrix has no numbers to fit");
+                        }
+                    }
+                    Err(e) => self.warn(e.to_string()),
+                }
+                return;
+            }
             M::Fft2 | M::Ifft2 => {
                 let inverse = cmd == M::Ifft2;
                 let label = if inverse { "2D IFFT" } else { "2D FFT" };
@@ -5537,6 +5554,28 @@ impl SheafApp {
                 let choices: Vec<(WindowId, String)> =
                     self.doc.project().matrix_books().filter(|m| m.id != id).map(|m| (m.id, m.name.clone())).collect();
                 ImageForm::Subtract { choices, pick: 0 }
+            }
+            I::ColorToGray | I::RgbSplit => {
+                use sheaf_core::matrix_image::{color_to_gray, rgb_sheets};
+                let split = cmd == I::RgbSplit;
+                let book_name = b.name.clone();
+                let Some(rgb) = rgb_sheets(&b.sheets).map(|s| s.map(|x| x.clone())) else {
+                    self.warn("This matrix book has no Red, Green and Blue sheets of a colour picture");
+                    return;
+                };
+                let label = if split { "RGB Split" } else { "Color to Gray" };
+                let _ = self.doc.edit(label, |p| {
+                    if split {
+                        for s in &rgb {
+                            p.adopt_matrix_book(&format!("{} of {book_name}", s.name), vec![s.clone()]);
+                        }
+                    } else {
+                        let [r, g, bl] = &rgb;
+                        p.adopt_matrix_book(&format!("Gray of {book_name}"), vec![color_to_gray([r, g, bl])]);
+                    }
+                    Ok::<_, String>(())
+                });
+                return;
             }
             I::Smooth | I::Sharpen | I::EdgeDetection => {
                 let op = match cmd {

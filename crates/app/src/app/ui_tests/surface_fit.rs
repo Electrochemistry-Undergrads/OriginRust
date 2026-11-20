@@ -70,3 +70,27 @@ fn a_plane_is_fitted_from_the_window_and_the_results_are_one_undo_step() {
     menu(&mut h, "Edit", "Undo Fit");
     assert_eq!(project(&h), &before);
 }
+
+#[test]
+fn a_matrix_is_surface_fitted_through_xyz_columns() {
+    use sheaf_core::matrix_project::MatrixOp;
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let mut id = sheaf_core::WindowId(0);
+    h.state_mut().doc.apply("Matrix", |p| {
+        id = p.add_matrix_book("");
+        p.apply_matrix_op(id, 0, &MatrixOp::SetDimensions { rows: 6, cols: 6, ranges: Some((0.0, 5.0, 0.0, 5.0)) })
+            .unwrap();
+        p.apply_matrix_op(id, 0, &MatrixOp::SetValues("1 + 0.5*x - 0.2*y".into())).unwrap();
+    });
+    settle(&mut h);
+    h.state_mut().apply(Action::MatrixCmd { id, cmd: menus::MatrixCmd::SurfaceFit }, &ctx);
+    settle(&mut h);
+    assert_eq!(h.state().doc.undo_label(), Some("Matrix to XYZ for surface fit"));
+    let book = project(&h).workbooks().next().expect("the XYZ workbook");
+    let designations: Vec<_> = book.sheet().columns.iter().map(|c| c.designation).collect();
+    assert_eq!(designations, [Designation::X, Designation::Y, Designation::Z]);
+    assert_eq!(book.sheet().columns[2].len(), 36);
+    let d = h.state().fit.as_ref().expect("the surface-fit window opened");
+    assert!(d.request_for_test().unwrap().surface.is_some(), "a surface request on the Z column");
+}

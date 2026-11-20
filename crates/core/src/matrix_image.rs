@@ -203,6 +203,26 @@ pub fn subtract(s: &MatrixSheet, other: &MatrixSheet) -> Result<MatrixSheet, Mat
     Ok(s.like(s.rows, s.cols, data))
 }
 
+/// The Red, Green and Blue sheets of a matrix book of a colour picture (T218), found by name;
+/// `None` when the book has not all three or they differ in size.
+pub fn rgb_sheets(sheets: &[MatrixSheet]) -> Option<[&MatrixSheet; 3]> {
+    let find = |n: &str| sheets.iter().find(|s| s.name.eq_ignore_ascii_case(n));
+    let (r, g, b) = (find("Red")?, find("Green")?, find("Blue")?);
+    ((r.rows, r.cols) == (g.rows, g.cols) && (r.rows, r.cols) == (b.rows, b.cols)).then_some([r, g, b])
+}
+
+/// Conversion > Color to Gray (T218): the luminance `0.2126 R + 0.7152 G + 0.0722 B` (Rec. 709, as
+/// the importer's gray) as one sheet named Gray.
+pub fn color_to_gray(rgb: [&MatrixSheet; 3]) -> MatrixSheet {
+    let [r, g, b] = rgb;
+    let data = (0..r.rows * r.cols)
+        .map(|k| 0.2126 * r.values()[k] + 0.7152 * g.values()[k] + 0.0722 * b.values()[k])
+        .collect();
+    let mut out = r.like(r.rows, r.cols, data);
+    out.name = "Gray".into();
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -263,5 +283,19 @@ mod tests {
         let d = subtract(&s, &s).unwrap();
         assert!(d.values().iter().all(|v| *v == 0.0));
         assert!(subtract(&s, &r).is_err());
+    }
+
+    #[test]
+    fn colour_sheets_are_found_by_name_and_turned_to_gray() {
+        let mk = |name: &str, v: f64| {
+            let mut s = sheet(1, 2, &[v, v]);
+            s.name = name.into();
+            s
+        };
+        let sheets = vec![mk("Red", 100.0), mk("Green", 100.0), mk("Blue", 100.0)];
+        let gray = color_to_gray(rgb_sheets(&sheets).unwrap());
+        assert_eq!(gray.name, "Gray");
+        assert!((gray.value(0, 1) - 100.0).abs() < 1e-9);
+        assert!(rgb_sheets(&sheets[..2]).is_none());
     }
 }

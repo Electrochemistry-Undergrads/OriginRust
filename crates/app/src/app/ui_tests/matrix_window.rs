@@ -318,3 +318,40 @@ fn image_levels_crop_resize_and_subtract_change_the_active_matrix() {
     assert!(s.values().iter().all(|v| *v == 5.0), "zeros map to the middle of the output: {:?}", s.values());
     assert_eq!(h.state().doc.undo_label(), Some("Image Levels"));
 }
+
+#[test]
+fn a_colour_picture_imports_as_rgb_sheets_that_turn_gray_or_split() {
+    let dir = std::env::temp_dir().join(format!("sheaf-import-rgb-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("flag.png");
+    let rgb: Vec<u8> = vec![255, 0, 0, 0, 255, 0];
+    let mut bytes = Vec::new();
+    let enc = image::codecs::png::PngEncoder::new(&mut bytes);
+    image::ImageEncoder::write_image(enc, &rgb, 2, 1, image::ExtendedColorType::Rgb8).unwrap();
+    std::fs::write(&path, bytes).unwrap();
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    crate::matrix_view::import_image(&mut h.state_mut().doc, &path).unwrap();
+    settle(&mut h);
+    let book = project(&h).matrix_books().next().unwrap().clone();
+    let names: Vec<&str> = book.sheets.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["Red", "Green", "Blue"]);
+    h.state_mut().apply(Action::ImageCmd { id: book.id, cmd: menus::ImageCmd::ColorToGray }, &ctx);
+    settle(&mut h);
+    assert_eq!(h.state().doc.undo_label(), Some("Color to Gray"));
+    let gray = project(&h).matrix_books().nth(1).expect("a gray book").sheets[0].clone();
+    assert!((gray.value(0, 0) - 0.2126 * 255.0).abs() < 1e-9 && (gray.value(0, 1) - 0.7152 * 255.0).abs() < 1e-9);
+    h.state_mut().apply(Action::ImageCmd { id: book.id, cmd: menus::ImageCmd::RgbSplit }, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).matrix_books().count(), 5, "three one-channel books more");
+    // A book without colour sheets refuses, and adds nothing.
+    let gray_id = gray_book(&h);
+    h.state_mut().apply(Action::ImageCmd { id: gray_id, cmd: menus::ImageCmd::RgbSplit }, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).matrix_books().count(), 5);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+fn gray_book(h: &Harness<'static, SheafApp>) -> sheaf_core::WindowId {
+    project(h).matrix_books().nth(1).unwrap().id
+}

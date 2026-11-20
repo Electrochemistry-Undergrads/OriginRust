@@ -97,6 +97,8 @@ pub enum ImageCmd {
     Subtract,
     Crop,
     Resize,
+    ColorToGray,
+    RgbSplit,
 }
 
 /// The Matrix menu's commands (T192 slice 3, matrices spec 7b).
@@ -118,6 +120,8 @@ pub enum MatrixCmd {
     /// Analysis > Signal Processing > FFT > 2D FFT and 2D IFFT (T196).
     Fft2,
     Ifft2,
+    /// Analysis > Fitting > Nonlinear Surface Fit on the active matrix (T221).
+    SurfaceFit,
 }
 
 /// What the graph Edit menu's clipboard items do (T149).
@@ -965,6 +969,7 @@ fn base(kind: WindowKind) -> Vec<Menu> {
                 "&Analysis",
                 vec![
                     sub("&Mathematics", vec![item("&Inverse...", Cmd::Matrix(MatrixCmd::Inverse))]),
+                    sub("Fi&tting", vec![item("&Nonlinear Surface Fit...", Cmd::Matrix(MatrixCmd::SurfaceFit))]),
                     sub(
                         "Si&gnal Processing",
                         vec![sub(
@@ -2015,7 +2020,10 @@ fn image_menu() -> Vec<Entry> {
             ],
         ),
         sub("Arithmetic &Transform", vec![i("Math...", Math), i("Subtract...", Subtract)]),
-        sub("&Conversion", vec![i("To Binary...", ToBinary), grey("Color to Gray..."), grey("RGB Split...")]),
+        sub(
+            "&Conversion",
+            vec![i("To Binary...", ToBinary), i("Color to Gray...", ColorToGray), i("RGB Split...", RgbSplit)],
+        ),
         sub(
             "&Geometric Transform",
             vec![i("Crop...", Crop), i("Resize...", Resize), i("Rotate...", Rotate), i("Flip...", Flip)],

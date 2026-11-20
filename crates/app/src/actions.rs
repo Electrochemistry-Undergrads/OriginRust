@@ -320,6 +320,8 @@ pub enum Action {
     ImportBinary2d,
     /// File > Import > Image...: choose a picture; it becomes a matrix book of gray levels (T204).
     ImportImage,
+    /// File > New > Function Plot (T213): opens the function window for a graph made on OK.
+    NewFunctionPlot,
     /// A typed matrix cell (T192): `None` clears it (missing). One undo step.
     SetMatrixCell {
         id: WindowId,

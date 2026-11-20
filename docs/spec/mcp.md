@@ -158,6 +158,18 @@ example `col(B)*1000`). A column that does not exist is created when `create` is
 `{book, sheet, column, created, rows, recalculate: "none|auto|manual"}` (`book` and `sheet` name what was used). A column made by `create` is removed again when
 the formula fails. Limit: 10 000 000 rows. Nothing changes on error.
 
+**`batch_process`** `{files, template, summary?, identifier?, delete_books?}` (T238, workbook-model 13p):
+File > Batch Processing... and `sheaf batch` on the session project: one workbook per data file (files,
+folders and wildcards as `import_files`, read with the default options) made from the workbook or
+analysis template file `template` (`.sheafbooktemplate`, checked against the roots), the template's
+analysis runs and formulas run again; with `summary` a new Batch Summary book stacks that template
+sheet of every book, led by a column of file names named `identifier` (default `Dataset`);
+`delete_books` (only with `summary`) removes the books made. A summary sheet the template lacks, or
+`delete_books` without `summary`, is refused before anything changes; a file that cannot be read is in
+`errors`. Result `{template, books:[{file, book (null when deleted), filled, ignored, problems}],
+summary: {book, sheet, rows} | null, deleted, errors}`. Attached, one undo step
+(`AI: batch_process Assay run1.csv +2`).
+
 ### 5.2 Graphs and export
 
 **`plot`** creates a graph or restyles an existing one.
@@ -650,7 +662,7 @@ with writer shutdown deliberately omitted.
 | --- | --- |
 | `list_contents`, `read_columns`, `export_graph`, `export_data` | Run on a copy of the live project. No undo step. `export_*` write only under the roots, never replace a file, and never touch the protected set (section 11.11). |
 | `list_analysis_tools`, `list_fit_models`, `list_simulate_functions` | Run at once, even while a dialog is open. They do not read the project. |
-| `import_files`, `set_column_values`, `plot`, `analyze`, `sort_sheet`, `filter_sheet`, `fit`, `simulate_curve` | `mutates`: run inside `Document::edit`. One undo step, named as in section 11.8. |
+| `import_files`, `set_column_values`, `plot`, `analyze`, `sort_sheet`, `filter_sheet`, `fit`, `simulate_curve`, `simulate_surface`, `batch_process` | `mutates`: run inside `Document::edit`. One undo step, named as in section 11.8. |
 | `new_project`, `open_project`, `save_project` | `headless_only`: refused (section 11.5). |
 
 Resource operations run on a copy of the live project, like the reads.

@@ -152,4 +152,10 @@ running release build; its exact commit was not verified and it was not rebuilt 
       delete and insert whole columns, Move Columns > Right, a typed value in an added sheet and
       Ctrl+PageUp / PageDown between sheets, each with Undo. Found: an added sheet had no columns to
       type into; Insert and Add now give it A(X) and B(Y) (workbook-model 13h).
+      T215 adds the sheet controls on both tables: Insert places the sheet before the active one,
+      Duplicate copies into independent columns, Delete and its Undo, and a block copied on one
+      sheet pasted into another; no defect found.
+      T217 (`ui_tests/graph_walkthrough.rs`): a Line graph of data typed into a brand-new table,
+      Change Plot to Scatter, a Right-Y layer, Rescale from fixed limits, each undone, and a value
+      typed afterwards reaching the plot; no defect found.
 

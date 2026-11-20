@@ -227,6 +227,8 @@ pub enum Cmd {
     ImportBinary2d,
     /// File > Import > Image... into a matrix book (T204).
     ImportImage,
+    /// File > New > Function Plot (T213): the function window; OK makes a new graph.
+    NewFunctionPlot,
     /// The Matrix menu of a matrix window (T192 slice 3).
     Matrix(MatrixCmd),
     /// The Image menu on the active matrix (T207).
@@ -1127,7 +1129,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                 )],
                 greys(&["Excel", "Layout"]),
                 vec![item("Notes", Cmd::NewNotes)],
-                greys(&["Function Plot"]),
+                vec![item("Function Plot", Cmd::NewFunctionPlot)],
             ]
             .concat(),
         ),
@@ -3231,6 +3233,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::NewMatrix => Action::NewMatrix,
         Cmd::ImportBinary2d => Action::ImportBinary2d,
         Cmd::ImportImage => Action::ImportImage,
+        Cmd::NewFunctionPlot => Action::NewFunctionPlot,
         Cmd::ConvertToMatrix { xyz } => {
             let book = c.book.ok_or(NEED_BOOK)?;
             if *xyz && c.selected.len() != 3 {

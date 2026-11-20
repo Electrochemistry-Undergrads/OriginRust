@@ -129,3 +129,66 @@ fn moving_a_column_and_switching_sheets_keep_the_data() {
         assert_eq!(sheet(&h).columns[0].cell_text(0), "9", "the typed value is kept, imported={imported}");
     }
 }
+
+#[test]
+fn sheet_insert_duplicate_delete_and_a_paste_across_sheets() {
+    // T215: sheet controls on both kinds of table, each step one undo step.
+    for imported in [false, true] {
+        let (mut h, a, _b) = filled(imported, &format!("walk-sheets-{imported}"));
+        let book = h.state().books.keys().next().copied().unwrap();
+        let ctx = h.ctx.clone();
+        let sheets = |h: &Harness<'static, SheafApp>| project(h).workbook(book).unwrap().sheets.len();
+        let active = |h: &Harness<'static, SheafApp>| project(h).workbook(book).unwrap().active_sheet;
+        let a_of = |h: &Harness<'static, SheafApp>, s: usize| {
+            project(h).workbook(book).unwrap().sheets[s].columns.first().and_then(|c| c.numeric()).map(<[f64]>::to_vec)
+        };
+        // Insert puts the new sheet before the active one and goes to it.
+        h.state_mut().apply(Action::Sheet { book, op: SheetOp::Insert }, &ctx);
+        settle(&mut h);
+        assert_eq!((sheets(&h), active(&h)), (2, 0), "imported={imported}");
+        assert_eq!(a_of(&h, 1), Some(a.clone()), "the data sheet moved to second place");
+        h.state_mut().apply(Action::Undo, &ctx);
+        settle(&mut h);
+        assert_eq!(sheets(&h), 1, "undo, imported={imported}");
+
+        // Duplicate copies the data into independent columns.
+        h.state_mut().apply(Action::Sheet { book, op: SheetOp::Duplicate }, &ctx);
+        settle(&mut h);
+        assert_eq!((sheets(&h), active(&h)), (2, 1), "imported={imported}");
+        assert_eq!(a_of(&h, 1), Some(a.clone()));
+        let at = worksheet_cell_pos(&h, 0, 0);
+        click_at(&mut h, at);
+        h.event(egui::Event::Text("42".into()));
+        settle(&mut h);
+        key(&mut h, egui::Key::Enter);
+        assert_eq!(a_of(&h, 1).unwrap()[0], 42.0, "imported={imported}");
+        assert_eq!(a_of(&h, 0), Some(a.clone()), "the source sheet is untouched");
+
+        // Delete removes the duplicate; undo brings it back with the typed value.
+        h.state_mut().apply(Action::Sheet { book, op: SheetOp::Delete }, &ctx);
+        settle(&mut h);
+        assert_eq!((sheets(&h), active(&h)), (1, 0), "imported={imported}");
+        h.state_mut().apply(Action::Undo, &ctx);
+        settle(&mut h);
+        assert_eq!(sheets(&h), 2);
+        assert_eq!(a_of(&h, 1).unwrap()[0], 42.0, "imported={imported}");
+
+        // Copy A1:A3 of the first sheet, paste it into B1 of the second.
+        h.state_mut().apply(Action::SelectSheet { book, sheet: 0 }, &ctx);
+        settle(&mut h);
+        let at = worksheet_cell_pos(&h, 0, 0);
+        click_at(&mut h, at);
+        key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::ArrowDown);
+        key_with(&mut h, egui::Modifiers::SHIFT, egui::Key::ArrowDown);
+        ctrl(&mut h, egui::Key::C);
+        let copied = h.state().copied.clone();
+        key_with(&mut h, egui::Modifiers::COMMAND, egui::Key::PageDown);
+        assert_eq!(active(&h), 1);
+        let at = worksheet_cell_pos(&h, 1, 0);
+        click_at(&mut h, at);
+        paste(&mut h, &copied);
+        let b1 = project(&h).workbook(book).unwrap().sheets[1].columns[1].numeric().unwrap()[..3].to_vec();
+        assert_eq!(b1, a[..3], "imported={imported}");
+        assert_eq!(a_of(&h, 0), Some(a.clone()), "copying leaves the source alone");
+    }
+}

@@ -32,9 +32,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 52 | 198 | 11 | 261 |
+| All rows | 52 | 199 | 10 | 261 |
 | P0 | 33 | 70 | 0 | 103 |
-| P1 and P2 together | 19 | 128 | 11 | 158 |
+| P1 and P2 together | 19 | 129 | 10 | 158 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 63 are P2.
 
@@ -321,7 +321,7 @@ Cross-cutting findings:
 | Contour, heat map | Plot > Contour (Color Fill, Lines), Image Plot > Heat Map | `FieldPlot` in a layer: contour colour fill with lines at the major levels, contour lines with labels, heat map blocks, colour scale; from a matrix sheet or from XYZ columns (regular grid, or triangulated for contours); levels, range rounding, palettes and layout measured on Origin 2016 pictures; golden SVGs; CLI `sheaf matrix plot` | ◐ | not in the app (no menu, no Plot Details tab, no click on the scale); no gray-scale, filled-lines, polar, profile or 3D variants; no image plot of photographs; not written to .opj; Origin's tick step and the label places of contour lines are matched only approximately | P2 |
 | Hexbin | Plot > Contour/Heat Map > Hexbin | Plot > Contour/Heat Map > Hexbin only (T45, graphing.md 14.24; `-t hexbin`) | ◐ | Hexbin of XY data with Origin's bin controls and a count colour scale; contour and heat map need matrices | P2 |
 | Inset, pictures in graphs | Zoom, Insert picture | PNG pictures as drawn objects from the page menu (T216, graphing 17.9) | ◐ | Add Inset toolbar item remains grey (T61, wave 2); other picture formats, EMF/EPS export | P2 |
-| Other plot-type IDs when reading .opj | area, box, bar, histogram, pie | only types 200 to 203 mapped | ✗ | | P2 |
+| Other plot-type IDs when reading .opj | area, box, bar, histogram, pie | types 200 to 204 and, from LabTalk's plot-type ID table, 206 Box, 213 stacked column, 214 stacked area, 215 Bar, 216 stacked bar, 219 Histogram and 225 Pie (T223) | ◐ | multi-column types (high-low-close, vectors, floating bar), 3D and contour types still read as line + symbol with a warning; these records not compared byte for byte with Origin's | P2 |
 | Plotting X-Functions | plotgroup, plotbylabel, plotxyz | none | ✗ | | P2 |
 
 ## 12 Graph styling

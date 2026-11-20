@@ -355,3 +355,38 @@ fn a_colour_picture_imports_as_rgb_sheets_that_turn_gray_or_split() {
 fn gray_book(h: &Harness<'static, SheafApp>) -> sheaf_core::WindowId {
     project(h).matrix_books().nth(1).unwrap().id
 }
+
+#[test]
+fn polar_contour_items_plot_three_selected_columns_in_a_polar_layer() {
+    let ctx_cols = |h: &Harness<'static, SheafApp>| -> Vec<sheaf_core::ColumnId> {
+        project(h).workbooks().next().unwrap().sheet().columns.iter().map(|c| c.id).collect()
+    };
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    h.state_mut().doc.apply("Data", |p| {
+        let book = p.add_workbook("polar");
+        let th: Vec<f64> = (0..24).map(|k| f64::from(k % 6) * 60.0).collect();
+        let r: Vec<f64> = (0..24).map(|k| f64::from(k / 6 + 1)).collect();
+        let z: Vec<f64> = r.iter().map(|v| v * v).collect();
+        for (d, v) in [(Designation::X, th), (Designation::Y, r), (Designation::Z, z)] {
+            p.add_column(book, 0, d, ColumnData::numeric(v)).unwrap();
+        }
+    });
+    settle(&mut h);
+    let cols = ctx_cols(&h);
+    // r(X) theta(Y) swaps the first two columns; fewer than three columns are refused.
+    {
+        let mut c = h.state().menu_context();
+        c.book = project(&h).workbooks().next().map(|b| b.id);
+        c.selected = &cols;
+        let action = menus::resolve(&menus::Cmd::PolarContour { theta_first: false }, &c).unwrap();
+        assert!(matches!(action, Action::PolarContour { theta, r, .. } if theta == cols[1] && r == cols[0]));
+        c.selected = &cols[..2];
+        assert!(menus::resolve(&menus::Cmd::PolarContour { theta_first: true }, &c).is_err(), "three columns needed");
+    }
+    h.state_mut().apply(Action::PolarContour { theta: cols[0], r: cols[1], z: cols[2] }, &ctx);
+    settle(&mut h);
+    assert_eq!(h.state().doc.undo_label(), Some("New graph"));
+    let g = project(&h).graphs().next().expect("a polar contour graph");
+    assert!(g.layers[0].coords.polar().is_some() && g.layers[0].field.is_some());
+}

@@ -472,6 +472,10 @@ fonts, heading height and row heading width, column name/label rows to show, bac
 grid lines, "Multiple X" columns. Right-click header menu on a column offers Plot, Set As,
 Set Column Values, Fill with..., Filter, Mask, Sort, Normalize, Frequency Count, Statistics
 on Column, Properties. (OBSERVED context menu resource 570.)
+Sheaf (T220, 2026-11-20, not measured): Window > Properties also lists a workbook's **Dependents** (the
+graphs that plot its columns, the other workbooks whose formulas name it `[Book1]...`, and the other
+workbooks that hold its analysis results or cells linked to it) and, for a graph, the workbooks it
+**plots data of**; "none" when there are none. Read-only (`Project::dependents`, `Project::plotted_books`).
 
 ### D6. Import (see B2) (P0)
 ### D7. Nonlinear Curve Fit (NLFit) (P0)

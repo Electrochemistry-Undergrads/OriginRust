@@ -208,3 +208,39 @@ fn the_levels_can_be_set_by_hand() {
         assert!(t.contains(&want.to_string()), "{want} in {t:?}");
     }
 }
+
+#[test]
+fn a_polar_contour_is_drawn_inside_the_circle() {
+    // z = r over a grid of angles 0..330 and radii 1..4: the contour bands are rings.
+    let mut p = Project::new();
+    let book = p.add_workbook("polar");
+    let (mut th, mut r, mut z) = (Vec::new(), Vec::new(), Vec::new());
+    for i in 0..12 {
+        for k in 1..=4 {
+            th.push(f64::from(i) * 30.0);
+            r.push(f64::from(k));
+            z.push(f64::from(k));
+        }
+    }
+    let t = p.add_column(book, 0, Designation::X, ColumnData::numeric(th)).unwrap();
+    let rc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(r)).unwrap();
+    let zc = p.add_column(book, 0, Designation::Z, ColumnData::numeric(z)).unwrap();
+    let g = p.plot_xyz_polar(t, rc, zc).unwrap();
+    let graph = p.graph(g).unwrap();
+    assert!(graph.layers[0].coords.polar().is_some(), "a polar layer");
+    assert!(graph.layers[0].field.is_some(), "with a contour field");
+    let geom = crate::layout_geometry(&p, g).unwrap();
+    let f = geom[0].frame;
+    let (cx, cy, radius) = (f.x + f.w / 2.0, f.y + f.h / 2.0, f.w.min(f.h) / 2.0);
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let filled: Vec<&crate::scene::Item> =
+        scene.layers[0].plots.iter().filter(|i| matches!(i, crate::scene::Item::Path { fill: Some(_), .. })).collect();
+    assert!(!filled.is_empty(), "the contour bands are drawn");
+    for item in filled {
+        if let crate::scene::Item::Path { d, .. } = item {
+            for (x, y) in crate::hit::path_points(d) {
+                assert!((x - cx).hypot(y - cy) <= radius * 1.02, "({x}, {y}) lies outside the circle");
+            }
+        }
+    }
+}

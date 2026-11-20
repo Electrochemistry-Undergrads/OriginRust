@@ -24,6 +24,7 @@ pub mod copy_columns;
 pub mod data_markers;
 pub mod data_range;
 pub mod datetime;
+pub mod dependents;
 pub mod extract;
 pub mod fill_pattern;
 pub mod fit_page;

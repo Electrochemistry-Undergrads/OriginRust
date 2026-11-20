@@ -153,6 +153,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T152](T152-legend-order.md) | Legend Bring to front/back, front/back of data (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured; left: legend Cut/Copy |
 | [T153](T153-title-order.md) | Axis title Bring to the front / Push to the back (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured |
 | [T154](T154-notes-window.md) | Notes windows: File > New > Notes, New Notes (B14 slice) | M | done 2026-11-19 (notes-window spec), not measured; left: Add Notes as Sheet, .opj |
+| [T222](T222-polar-contour.md) | Plot > Contour/Heat Map > Polar Contour theta(X) r(Y), r(X) theta(Y) (B14 slice) | S | done 2026-11-20 (matrices 7k), not measured |
 | [T221](T221-matrix-surface-fit.md) | Nonlinear Surface Fit on a matrix through XYZ columns | S | done 2026-11-20 (matrices 7j), not measured |
 | [T218](T218-image-rgb.md) | Colour pictures as RGB sheets; Image > Color to Gray, RGB Split (B14 slice) | S | done 2026-11-20 (matrices 7h/7i), not measured |
 | [T213](T213-new-function-plot.md) | File > New > Function Plot (B14 slice) | S | done 2026-11-20 (graphing 41), not measured |
@@ -209,6 +210,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T211](T211-cell-links.md) | Cell links: Paste Link, Paste Link Transpose, Remove Links (B5 slice, ADR 0014) | M | done 2026-11-20 (workbook-model 13j0), not measured; left: graph Paste Link, Paste Special |
 | [T214](T214-cell-float.md) | Set Data Style > Float (B5 slice) | S | done 2026-11-20 (gui-look Set Data Style), not measured; left: print/export, Wrap Text |
 | [T216](T216-graph-picture.md) | Graph page Insert Images From Files... (PNG picture objects) | M | done 2026-11-20 (graphing 17.9), not measured; left: other formats, EMF/EPS |
+| [T220](T220-window-dependents.md) | Window Properties lists Dependents / plotted workbooks | S | done 2026-11-20 (ui-command-map Window Properties), not measured |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |

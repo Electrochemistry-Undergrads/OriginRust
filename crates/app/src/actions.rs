@@ -93,6 +93,8 @@ pub enum SheetOp {
     Navigate,
     /// Open the window that asks for a new name.
     RenameDialog,
+    /// Add Notes as Sheet: a Notes sheet after the last sheet (T188).
+    AddNotes,
 }
 
 /// An edit of one object of a graph, from the graph window (Origin's right-click menus).
@@ -341,6 +343,12 @@ pub enum Action {
     /// The text of a Notes window after editing: one undo step.
     SetNotesText {
         id: WindowId,
+        text: String,
+    },
+    /// The text of a Notes sheet after editing (T188): one undo step.
+    SetNotesSheetText {
+        book: WindowId,
+        sheet: usize,
         text: String,
     },
     /// Column > Fill Column With > a pattern: open its window for these columns.
@@ -1086,6 +1094,10 @@ pub enum Action {
         graph: WindowId,
     },
     /// Gadgets > Cluster on a graph (T146).
+    /// Gadgets > 2D Integrate... (T189): the gadget on a contour or heat map layer.
+    StartIntegrate2d {
+        graph: WindowId,
+    },
     StartCluster {
         graph: WindowId,
     },

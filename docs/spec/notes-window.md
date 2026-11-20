@@ -21,4 +21,10 @@ documented behaviour.
 - **Not written:** an Origin project written by File > Export (`.opj`) leaves Notes windows out, with
   a warning. File > Save Window As refuses a Notes window (there is no window file for it yet). The
   AI live context reports the active Notes window's text.
-- **Not done:** Add Notes as Sheet, Origin's Notes formatting and its HTML mode.
+- **Notes sheets (T188, 2026-11-20, not measured):** a sheet tab's right-click Add Notes as Sheet adds a
+  Notes sheet after the workbook's last sheet, named `Notes` (then `Notes2`, ...), and shows it, one undo
+  step ("Add Notes as Sheet"). It has no columns; the workbook shows the same plain-text box in place of
+  the grid (written as one "Edit notes" step when the box lets go of the keyboard). It is renamed,
+  duplicated and deleted like any sheet, saved in the `.sheaf` file (the sheet's `notes_text`), and left
+  out of an `.opj` with a warning (a workbook of only Notes sheets keeps one empty sheet there).
+- **Not done:** Origin's Notes formatting and its HTML mode.

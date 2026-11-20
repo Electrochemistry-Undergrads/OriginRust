@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 121 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 119 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -141,7 +141,7 @@ Backlog packages: write the brief first (step 3 above).
 | [x] | [T126](T126-descriptive-statistics-data-range.md) | Statistics on Columns respects existing Begin/End ranges (T87 reader follow-up) | S | 0 |
 | [x] | [T127](T127-row-statistics-data-range.md) | Statistics on Rows respects existing Begin/End ranges (T87 reader follow-up) | S | 0 |
 | [ ] | B5 | Worksheet editing: copy variants, Paste Transpose/Link/Special, cell links, Set As Begin/End, fill with a set of numbers/dates/text, sampling interval, Copy Columns to, Swap Columns | L | 12 |
-| [ ] | B6 | Worksheet view and sheets: header and grid toggles, row label rows, sheet-tab items, Split, objects in cells (graphs, images, sparklines, variables), Merge cells | L | 15 |
+| [ ] | B6 | Worksheet view and sheets: header and grid toggles, row label rows, sheet-tab items, Split, objects in cells (graphs, images, sparklines, variables), Merge cells | L | 14 |
 | [x] | B7 | Worksheet tools: done (Find in Project as T95, Conditional Formatting as T120-T123, Pivot Table as T124) | M | 0 |
 | [x] | [T120](T120-conditional-heatmap.md) | Conditional Heatmap (B7 slice; done 2026-11-17) | M | 0 |
 | [x] | [T121](T121-conditional-outliers-pareto.md) | Conditional Outliers and Conditional Pareto (B7 slice; done 2026-11-17) | S | 0 |
@@ -173,7 +173,7 @@ Backlog packages: write the brief first (step 3 above).
 | [x] | [T96](T96-wavelets.md) | Wavelets: Decompose, Reconstruction, Denoise, Smooth, Continuous Wavelet (B8 slice; done 2026-11-16; open corners in the brief) | L | 0 |
 | [x] | [T91](T91-simulate-surface-compare-implicit-area.md) | Simulate Surface, Compare Datasets, Nonlinear Implicit Curve Fit, XYZ Surface Area (B8 slice; done 2026-11-16) | L | 0 |
 | [x] | [T81](T81-partial-correlation-anova3-rmanova.md) | Partial Correlation Coefficient, Three-Way ANOVA, One-Way and Two-Way Repeated Measures ANOVA (B8 slice; claimed 2026-11-16) | L | 0 |
-| [ ] | B9 | Gadgets on the graph (Statistics, Quick Fit, Quick Peaks, Differentiate, Interpolate, Intersect, FFT, Rise Time, Cluster, Vertical Cursor, ...) | L | 2 |
+| [ ] | B9 | Gadgets on the graph (Statistics, Quick Fit, Quick Peaks, Differentiate, Interpolate, Intersect, FFT, Rise Time, Cluster, Vertical Cursor, ...) | L | 1 |
 | [x] | [T78](T78-recent-lists.md) | Most Recently Used lists in the Plot, Worksheet, Analysis and Statistics menus; Recent Exports (B10) | S | 0 |
 
 - **B8.** One brief per tool family, each checked against Origin where it can be scripted and

@@ -1353,6 +1353,25 @@ impl SheafApp {
         let Some(g) = project.graph(graph) else { return };
         let state = self.graphs.entry(graph).or_default();
         let layer = state.active_layer.min(g.layers.len().saturating_sub(1));
+        // 2D Integrate (T189) goes on a layer with a heat map or contour plot: the active one, else the first.
+        if kind == crate::gadget::GadgetKind::Integrate2d {
+            let has_field = |i: &usize| g.layers.get(*i).is_some_and(|l| l.field.is_some() && !l.display.hidden);
+            let Some(layer) = Some(layer).filter(has_field).or_else(|| (0..g.layers.len()).find(has_field)) else {
+                self.warn("2D Integrate needs a contour or heat map plot".to_string());
+                return;
+            };
+            let Some(geom) = sheaf_plot::layout_geometry(project, graph).ok().and_then(|v| v.into_iter().nth(layer))
+            else {
+                return;
+            };
+            let (x0, x1) = (geom.x.from_unit(0.25), geom.x.from_unit(0.75));
+            let (y0, y1) = (geom.y.from_unit(0.25), geom.y.from_unit(0.75));
+            state.active_layer = layer;
+            state.gadget =
+                Some(crate::gadget::Integrator { kind, layer, plot: 0, x0, x1, y0, y1, end_point_baseline: false });
+            self.focus(graph);
+            return;
+        }
         let numeric = |i: &usize| {
             g.layers
                 .get(layer)
@@ -1960,6 +1979,15 @@ impl SheafApp {
             Action::NewNotes => {
                 self.doc.apply("New notes", |p| {
                     p.add_notes();
+                });
+            }
+            Action::SetNotesSheetText { book, sheet, text } => {
+                self.doc.apply("Edit notes", |p| {
+                    if let Some(s) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet))
+                        && s.notes_text.is_some()
+                    {
+                        s.notes_text = Some(text);
+                    }
                 });
             }
             Action::SetNotesText { id, text } => {
@@ -2935,6 +2963,7 @@ impl SheafApp {
             Action::StartDifferentiate { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Differentiate),
             Action::StartInterpolate { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Interpolate),
             Action::StartCluster { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Cluster),
+            Action::StartIntegrate2d { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Integrate2d),
             Action::StartVerticalCursor { graph } => {
                 self.start_gadget(graph, crate::gadget::GadgetKind::VerticalCursor)
             }
@@ -3716,6 +3745,16 @@ impl SheafApp {
                             s.tab_label = label;
                         }
                     });
+                }
+            }
+            SheetOp::AddNotes => {
+                self.doc.apply("Add Notes as Sheet", |p| {
+                    if let Some(b) = p.workbook_mut(book) {
+                        b.add_notes_sheet();
+                    }
+                });
+                if let Some(state) = self.books.get_mut(&book) {
+                    state.clear_selection();
                 }
             }
             SheetOp::RenameDialog => {

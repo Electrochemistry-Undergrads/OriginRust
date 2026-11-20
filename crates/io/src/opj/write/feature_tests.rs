@@ -581,3 +581,18 @@ fn notes_windows_are_left_out_with_a_warning() {
     let imp = read_back(&out.bytes);
     assert_eq!((imp.workbooks.len(), imp.graphs.len()), (1, 0), "the workbook alone");
 }
+
+#[test]
+fn notes_sheets_are_left_out_with_a_warning() {
+    // T188: a workbook's Notes sheet is not written; its other sheets are.
+    let mut p = Project::new();
+    let id = p.adopt_named_workbook(abcd("Book1"));
+    let b = p.workbook_mut(id).unwrap();
+    let s = b.add_notes_sheet();
+    b.sheets[s].notes_text = Some("hello".into());
+    let out = written(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("1 Notes sheet(s) were left out")), "{:?}", out.warnings);
+    let imp = read_back(&out.bytes);
+    assert_eq!(imp.workbooks.len(), 1);
+    assert_eq!(imp.workbooks[0].sheets.len(), 1, "only the data sheet");
+}

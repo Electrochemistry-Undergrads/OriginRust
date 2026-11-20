@@ -33,9 +33,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 53 | 198 | 10 | 261 |
+| All rows | 53 | 200 | 8 | 261 |
 | P0 | 33 | 70 | 0 | 103 |
-| P1 and P2 together | 20 | 128 | 10 | 158 |
+| P1 and P2 together | 20 | 130 | 8 | 158 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 63 are P2.
 
@@ -188,7 +188,7 @@ Cross-cutting findings:
 | Translate X or Y | cxt, vshift | Curve Translate X and Y (Data Manipulation, T23) | ◐ | Origin's in-place/copy choice not measured | P1 |
 | Level crossing and curve intersect | levelcrossing, intersect | Intersect window and `analyze intersect` (two curves, crossings and optional touching points); Level Crossing window and `analyze level-crossing` (measured, analysis-tools 14) | ◐ | intersect not measured in Origin, `analysis-curve-math.md` | P1 |
 | Data reduction | reducerows, reducedup | Worksheet > Reduce Rows (T10), Reduce to Evenly Spaced X (Origin's reduce_ex: every N points, intervals, number of intervals, frequency, first point or Y mean, measured), Reduce Duplicate X Data (all eight methods, tolerance, counts, column names checked against Origin's reducedup) | ◐ | Reduce Rows layout not compared with Origin; reducedup writes a new sheet where Origin adds columns to the input sheet; no Reduce XY Data | P1 |
-| Sampling interval check | vinc | internal use only | ✗ | | P1 |
+| Sampling interval check | vinc | internal use only | ◐ | Set Sampling Interval's From X Column checks the X column's spacing and takes its start and step (workbook-model 13d, T228); no `vinc` command | P1 |
 | Average multiple curves | avecurves | Average Multiple Curves window and `analyze average` with Origin's defaults (Full X Range, Auto points, curves continued past their ends), Same as Source X and Common X Range, Std Dev, Std Err, N, Minimum, Maximum; Recalculate Auto/Manual; measured (`analysis-curve-math.md` 4) | ◐ | no Custom X, Follow Curve Trace or Concatenate; Origin sorts a turning X, Sheaf refuses it | P1 |
 | Polygon area | polyarea | Polygon Area window and `analyze polygon-area`: area, signed area, centroid, perimeter | ◐ | not measured in Origin, `analysis-curve-math.md` | P1 |
 | Cumulative sum | Mathematics | `cumsum()` in Set Column Values | ◐ | no Mathematics menu item | P1 |
@@ -323,7 +323,7 @@ Cross-cutting findings:
 | Hexbin | Plot > Contour/Heat Map > Hexbin | Plot > Contour/Heat Map > Hexbin only (T45, graphing.md 14.24; `-t hexbin`) | ◐ | Hexbin of XY data with Origin's bin controls and a count colour scale; contour and heat map need matrices | P2 |
 | Inset, pictures in graphs | Zoom, Insert picture | PNG pictures as drawn objects from the page menu (T216, graphing 17.9) | ◐ | Add Inset toolbar item remains grey (T61, wave 2); other picture formats, EMF/EPS export | P2 |
 | Other plot-type IDs when reading .opj | area, box, bar, histogram, pie | types 200 to 204 and, from LabTalk's plot-type ID table, 206 Box, 213 stacked column, 214 stacked area, 215 Bar, 216 stacked bar, 219 Histogram and 225 Pie (T223) | ◐ | multi-column types (high-low-close, vectors, floating bar), 3D and contour types still read as line + symbol with a warning; these records not compared byte for byte with Origin's | P2 |
-| Plotting X-Functions | plotgroup, plotbylabel, plotxyz | none | ✗ | | P2 |
+| Plotting X-Functions | plotgroup, plotbylabel, plotxyz | `sheaf plot --group` with XY templates | ◐ | one curve per group value only (graphing 17.10, T224); no graph or layer grouping, plotbylabel, plotxyz | P2 |
 
 ## 12 Graph styling
 

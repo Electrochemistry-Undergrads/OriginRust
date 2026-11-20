@@ -5466,6 +5466,23 @@ impl SheafApp {
             M::Rotate180 => MatrixOp::Rotate(Rotation::Half),
             M::FlipHorizontal => MatrixOp::Flip { direction: FlipDirection::Horizontal, coordinates: false },
             M::FlipVertical => MatrixOp::Flip { direction: FlipDirection::Vertical, coordinates: false },
+            M::SurfaceFit => {
+                // The active sheet becomes X, Y and Z columns, then Origin's surface-fit window opens
+                // on them (T221).
+                use sheaf_core::matrix_convert::{M2wMethod, XyzOrder};
+                let method = M2wMethod::Xyz { order: XyzOrder::XConstFirst, skip_missing: true };
+                match self.doc.edit("Matrix to XYZ for surface fit", |p| p.matrix_to_worksheet(id, sheet, &method)) {
+                    Ok(book) => {
+                        self.fit =
+                            FitDialog::new(self.doc.project(), book, None, crate::dialogs::fit::FitKind::Surface);
+                        if self.fit.is_none() {
+                            self.warn("The matrix has no numbers to fit");
+                        }
+                    }
+                    Err(e) => self.warn(e.to_string()),
+                }
+                return;
+            }
             M::Fft2 | M::Ifft2 => {
                 let inverse = cmd == M::Ifft2;
                 let label = if inverse { "2D IFFT" } else { "2D FFT" };

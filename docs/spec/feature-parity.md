@@ -31,9 +31,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 51 | 198 | 12 | 261 |
+| All rows | 51 | 199 | 11 | 261 |
 | P0 | 32 | 71 | 0 | 103 |
-| P1 and P2 together | 19 | 127 | 12 | 158 |
+| P1 and P2 together | 19 | 128 | 11 | 158 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 63 are P2.
 
@@ -263,7 +263,7 @@ Cross-cutting findings:
 | Fit range and several Y columns | nlbeginr | rows or X range; app one column per run | ◐ | | P1 |
 | Global fit | shared parameters | the fit window fits several columns independently or as a global fit with shared parameters (`fit/src/global.rs`) | ◐ | not compared with Origin's output | P2 |
 | Surface fit on XYZ columns | Analysis > Fitting > Nonlinear Surface Fit, `nlbeginz` | `fit/nlsf.rs` (`fit_xyz`) and `fit/surface.rs`: the 22 surface functions z = f(x, y), FDF files with two independent variables; Analysis > Fitting > Nonlinear Surface Fit... opens the NLFit window on the category Surface Fitting with X, Y and Z column boxes; `sheaf fit --z COL [--x COL] [--y COL]`; results in `FitSurface1`, `FitSurface1Stats`, a 50 x 50 `FitSurfaceCurve1` grid and fitted and residual columns (fitting.md sections 14 and 15) | ◐ | 9 functions (11 cases) compared with Origin's `nlbeginz` (from Origin's start values to 1e-7); starting values, window layout and the report sheet's layout in Origin unmeasured or approximate; no matrices, no 3D plot of data and surface, no bands, no multi-dataset or global surface fit | P2 |
-| Surface fit on a matrix | Nonlinear Surface Fit on a matrix | none | ✗ | waits for the matrix work of another branch | P2 |
+| Surface fit on a matrix | Nonlinear Surface Fit on a matrix | matrix window Analysis > Fitting > Nonlinear Surface Fit... through XYZ columns (T221, matrices 7j) | ◐ | Origin fits the matrix directly; Sheaf converts it to XYZ columns first (not measured) | P2 |
 | ODR, fit with X error | FitODR | Nonlinear Implicit Curve Fit... (orthogonal distance regression for a circle or an ellipse) | ◐ | no general fit with X errors | P2 |
 | Multiple linear regression | fitMR | Analysis > Fitting > Multiple Linear Regression... | ◐ | not compared with Origin's output | P2 |
 | Compare models and datasets, rank models | F-test, AIC, BIC | Analysis > Fitting > Compare Datasets... and Rank Models... | ◐ | not compared with Origin's output | P2 |

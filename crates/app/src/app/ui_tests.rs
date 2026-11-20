@@ -87,6 +87,7 @@ mod treemap;
 mod view_active_layer_only;
 mod view_modes;
 mod violin;
+mod wks_image_formats;
 mod worksheet_classic_colors;
 mod worksheet_color_wells;
 mod worksheet_controls;

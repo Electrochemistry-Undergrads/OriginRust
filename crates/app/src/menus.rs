@@ -1253,8 +1253,10 @@ fn plot_menu() -> Vec<Entry> {
             [
                 vec![item("Color Fill Surface", Cmd::Plot(Template::ColorFillSurface3d))],
                 greys(&["X Constant with Base", "Y Constant with Base"]),
-                vec![item("Color Map Surface", Cmd::Plot(Template::ColorMapSurface3d))],
-                greys(&["Colormap Surface with Projection"]),
+                vec![
+                    item("Color Map Surface", Cmd::Plot(Template::ColorMapSurface3d)),
+                    item("Colormap Surface with Projection", Cmd::Plot(Template::ColorMapProjection3d)),
+                ],
                 vec![
                     item("Wire Frame", Cmd::Plot(Template::WireFrame3d)),
                     item("Wire Surface", Cmd::Plot(Template::WireSurface3d)),

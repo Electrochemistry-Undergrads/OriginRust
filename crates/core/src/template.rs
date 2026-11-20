@@ -42,6 +42,8 @@ pub enum Template {
     ColorFillSurface3d,
     WireFrame3d,
     WireSurface3d,
+    /// Plot > 3D Surface > Colormap Surface with Projection (T168).
+    ColorMapProjection3d,
     /// Scatter plot with the same axes as [`Template::Line`].
     Scatter,
     /// Scatter plot whose axes cross in the middle of the layer (Origin's "Scatter Central", 2016): both
@@ -229,7 +231,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 97] = [
+    pub const ALL: [Template; 98] = [
         Template::Line,
         Template::Scatter3d,
         Template::Trajectory3d,
@@ -245,6 +247,7 @@ impl Template {
         Template::ColorFillSurface3d,
         Template::WireFrame3d,
         Template::WireSurface3d,
+        Template::ColorMapProjection3d,
         Template::StepHorizontal,
         Template::StepVertical,
         Template::SplineConnected,
@@ -347,6 +350,7 @@ impl Template {
             Template::ColorFillSurface3d => "3d-color-fill-surface",
             Template::WireFrame3d => "3d-wire-frame",
             Template::WireSurface3d => "3d-wire-surface",
+            Template::ColorMapProjection3d => "3d-colormap-surface-projection",
             Template::StepHorizontal => "step-horizontal",
             Template::StepVertical => "step-vertical",
             Template::SplineConnected => "spline-connected",
@@ -449,6 +453,7 @@ impl Template {
             Template::ColorFillSurface3d => "Color Fill Surface",
             Template::WireFrame3d => "Wire Frame",
             Template::WireSurface3d => "Wire Surface",
+            Template::ColorMapProjection3d => "Colormap Surface with Projection",
             Template::StepHorizontal => "Horizontal Step",
             Template::StepVertical => "Vertical Step",
             Template::SplineConnected => "Spline Connected",
@@ -572,6 +577,7 @@ impl Template {
                 | Template::ColorFillSurface3d
                 | Template::WireFrame3d
                 | Template::WireSurface3d
+                | Template::ColorMapProjection3d
         )
     }
 
@@ -595,6 +601,7 @@ impl Template {
             Template::ColorFillSurface3d => surface3d(id, name, Surface3d::ColorFill),
             Template::WireFrame3d => surface3d(id, name, Surface3d::WireFrame),
             Template::WireSurface3d => surface3d(id, name, Surface3d::WireSurface),
+            Template::ColorMapProjection3d => surface3d(id, name, Surface3d::ColorMapProjection),
             Template::Ribbons3d => {
                 let mut g = walls3d(id, name);
                 if let Coords::Space3d(c) = &mut g.layers[0].coords {
@@ -1626,7 +1633,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 97);
+        assert_eq!(Template::ALL.len(), 98);
         assert_eq!(Template::from_name("piper"), Some(Template::Piper));
         assert_eq!(Template::from_name("kde-2d"), Some(Template::Kde2d));
         assert_eq!(Template::from_name("smith-chart"), Some(Template::SmithChart));

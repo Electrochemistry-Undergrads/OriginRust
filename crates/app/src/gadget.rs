@@ -68,6 +68,39 @@ pub enum GadgetKind {
     Interpolate,
     /// Gadgets > Cluster (T146): the range is a rectangle (`y0`..`y1` as well).
     Cluster,
+    /// Gadgets > 2D Integrate (T189): a rectangle over a heat map or contour plot; the volume under
+    /// the surface inside it, from a zero base.
+    Integrate2d,
+}
+
+/// What the 2D Integrate gadget shows (T189): of the grid cells whose centres are inside the
+/// rectangle, how many, the least, greatest, mean, standard deviation and sum of Z, and the volume
+/// (the sum of Z times the area of a cell).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Volume {
+    pub n: usize,
+    pub min: f64,
+    pub max: f64,
+    pub mean: f64,
+    pub sd: f64,
+    pub sum: f64,
+    pub volume: f64,
+}
+
+/// [`Volume`] of `cells` (X, Y, Z) whose X is between `x0` and `x1` and Y between `y0` and `y1` (either
+/// order, ends included); `None` when no cell is inside.
+pub fn volume_in(cells: &[[f64; 3]], area: f64, (x0, x1): (f64, f64), (y0, y1): (f64, f64)) -> Option<Volume> {
+    let inside = |v: f64, a: f64, b: f64| v >= a.min(b) && v <= a.max(b);
+    let z: Vec<f64> = cells.iter().filter(|p| inside(p[0], x0, x1) && inside(p[1], y0, y1)).map(|p| p[2]).collect();
+    let n = z.len();
+    if n == 0 {
+        return None;
+    }
+    let sum: f64 = z.iter().sum();
+    let mean = sum / n as f64;
+    let sd = if n > 1 { (z.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (n - 1) as f64).sqrt() } else { 0.0 };
+    let (min, max) = z.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| (a.min(*v), b.max(*v)));
+    Some(Volume { n, min, max, mean, sd, sum, volume: sum * area })
 }
 
 /// The Cluster gadget's numbers: how many points are inside and their mean X and Y.
@@ -419,13 +452,19 @@ impl Integrator {
         c: &MenuContext,
         actions: &mut Vec<Action>,
     ) -> Option<Rect> {
-        let (x, y) = plot_xy(project, graph, self.layer, self.plot)?;
+        // The 2D Integrate gadget (T189) reads the layer's field, not a plot.
+        let (x, y) = if self.kind == GadgetKind::Integrate2d {
+            (Vec::new(), Vec::new())
+        } else {
+            plot_xy(project, graph, self.layer, self.plot)?
+        };
         let f = geom.frame;
         let page_x = |v: f64| geom.data_to_page(placement.x(v), 0.0).0;
         let (sx0, sx1) = (to_screen((page_x(self.x0), f.y)).x, to_screen((page_x(self.x1), f.y)).x);
         let frame_top = to_screen((f.x, f.y)).y;
         let frame_bottom = to_screen((f.x, f.y + f.h)).y;
-        let cluster = self.kind == GadgetKind::Cluster;
+        // Cluster and 2D Integrate take a rectangle, the others a band over the whole frame height.
+        let cluster = matches!(self.kind, GadgetKind::Cluster | GadgetKind::Integrate2d);
         let x_at = placement.x(self.x0);
         let screen_y = |v: f64| to_screen(geom.data_to_page(x_at, placement.y(v))).y;
         let (top, bottom) = if cluster {
@@ -663,6 +702,28 @@ impl Integrator {
                     "Interpolate: too few points in the range".to_string()
                 }
             }
+            (GadgetKind::Integrate2d, _, _) => {
+                let layer = project.graph(graph).and_then(|g| g.layers.get(self.layer));
+                let volume = layer
+                    .and_then(|l| sheaf_plot::field_cells(project, l))
+                    .and_then(|(cells, area)| volume_in(&cells, area, (self.x0, self.x1), (self.y0, self.y1)));
+                match volume {
+                    Some(v) => {
+                        let g = |v: f64| sheaf_core::format::format_general(v, 5);
+                        format!(
+                            "Volume = {}\nN = {}, Mean = {}, SD = {}\nMin = {}, Max = {}, Sum = {}",
+                            g(v.volume),
+                            v.n,
+                            g(v.mean),
+                            g(v.sd),
+                            g(v.min),
+                            g(v.max),
+                            g(v.sum)
+                        )
+                    }
+                    None => "No cells in the region".to_string(),
+                }
+            }
             (GadgetKind::VerticalCursor, _, _) => {
                 format!("x = {}", sheaf_core::format::format_general(self.cursor_x(), 6))
             }
@@ -812,7 +873,8 @@ impl Integrator {
                 | GadgetKind::VerticalCursor
                 | GadgetKind::Differentiate
                 | GadgetKind::Interpolate
-                | GadgetKind::Cluster => menus::rise_time_gadget_menu(),
+                | GadgetKind::Cluster
+                | GadgetKind::Integrate2d => menus::rise_time_gadget_menu(),
             };
             menus::show_context(ui, &menu, c, actions)
         });
@@ -849,5 +911,20 @@ mod tests {
         assert!((g.result(&x, &y).unwrap().area - 8.0).abs() < 1e-12, "from 2 to 4 under x + 1");
         g.end_point_baseline = true;
         assert!(g.result(&x, &y).unwrap().area.abs() < 1e-12, "a straight line has no area above its chord");
+    }
+
+    #[test]
+    fn the_2d_volume_sums_the_cells_inside_the_rectangle() {
+        // A 3 x 3 grid at 0, 1, 2 with Z = x + y; cells of area 1.
+        let cells: Vec<[f64; 3]> =
+            (0..3).flat_map(|r| (0..3).map(move |c| [c as f64, r as f64, (c + r) as f64])).collect();
+        let all = volume_in(&cells, 1.0, (-1.0, 3.0), (3.0, -1.0)).unwrap();
+        assert_eq!((all.n, all.sum, all.volume, all.min, all.max), (9, 18.0, 18.0, 0.0, 4.0));
+        assert!((all.mean - 2.0).abs() < 1e-12);
+        // The corner X, Y in 1..2: Z = 2, 3, 3, 4 (ends included), cells of area 0.5.
+        let corner = volume_in(&cells, 0.5, (1.0, 2.0), (1.0, 2.0)).unwrap();
+        assert_eq!((corner.n, corner.sum, corner.volume), (4, 12.0, 6.0));
+        assert!((corner.sd - (2.0f64 / 3.0).sqrt()).abs() < 1e-12);
+        assert!(volume_in(&cells, 1.0, (5.0, 6.0), (0.0, 1.0)).is_none());
     }
 }

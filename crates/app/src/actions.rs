@@ -308,10 +308,10 @@ pub enum Action {
     },
     /// File > New > Notes and the Standard toolbar's New Notes (T154).
     NewNotes,
-    /// File > New > Matrix and the Standard toolbar's New Matrix (T179): a matrix book with one
+    /// File > New > Matrix and the Standard toolbar's New Matrix (T192): a matrix book with one
     /// sheet of Origin's default size (32 x 32 missing values), one undo step.
     NewMatrix,
-    /// A typed matrix cell (T179): `None` clears it (missing). One undo step.
+    /// A typed matrix cell (T192): `None` clears it (missing). One undo step.
     SetMatrixCell {
         id: WindowId,
         sheet: usize,
@@ -319,12 +319,19 @@ pub enum Action {
         col: usize,
         value: Option<f64>,
     },
-    /// A Matrix menu command on the active sheet of matrix book `id` (T179 slice 3).
+    /// Worksheet > Convert to Matrix (T192 slice 4): Direct converts `columns` (all of the active
+    /// sheet when empty); XYZ Gridding takes the three columns as X, Y and Z. One undo step.
+    ConvertToMatrix {
+        book: WindowId,
+        columns: Vec<sheaf_core::ColumnId>,
+        xyz: bool,
+    },
+    /// A Matrix menu command on the active sheet of matrix book `id` (T192 slice 3).
     MatrixCmd {
         id: WindowId,
         cmd: crate::menus::MatrixCmd,
     },
-    /// A heat map or contour graph of a matrix sheet (its active one) or of XYZ columns (T179).
+    /// A heat map or contour graph of a matrix sheet (its active one) or of XYZ columns (T192).
     PlotField {
         template: sheaf_core::template::FieldTemplate,
         matrix: Option<WindowId>,
@@ -1094,6 +1101,10 @@ pub enum Action {
         graph: WindowId,
     },
     /// Gadgets > Cluster on a graph (T146).
+    /// Gadgets > 2D Integrate... (T189): the gadget on a contour or heat map layer.
+    StartIntegrate2d {
+        graph: WindowId,
+    },
     StartCluster {
         graph: WindowId,
     },

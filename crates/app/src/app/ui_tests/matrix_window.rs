@@ -1,4 +1,4 @@
-//! File > New > Matrix and the matrix window (T179 slice 2).
+//! File > New > Matrix and the matrix window (T192 slice 2).
 
 use super::*;
 
@@ -86,4 +86,54 @@ fn the_matrix_menu_transforms_sets_values_converts_and_plots_the_active_sheet() 
     settle(&mut h);
     assert_eq!(project(&h).graphs().count(), graphs + 1);
     assert!(project(&h).graphs().last().unwrap().layers[0].field.is_some(), "a heat map layer");
+}
+
+#[test]
+fn worksheet_convert_to_matrix_direct_and_xyz_gridding_make_matrix_books() {
+    // The Worksheet menu has both items.
+    let mut found = Vec::new();
+    for m in menus::bar(menus::WindowKind::Workbook) {
+        fn walk(entries: &[menus::Entry], found: &mut Vec<menus::Cmd>) {
+            for e in entries {
+                match e {
+                    menus::Entry::Item(i) => found.extend(i.cmd.clone()),
+                    menus::Entry::Submenu(s) => walk(&s.entries, found),
+                    _ => {}
+                }
+            }
+        }
+        walk(&m.entries, &mut found);
+    }
+    for xyz in [false, true] {
+        assert!(found.contains(&menus::Cmd::ConvertToMatrix { xyz }), "Convert to Matrix xyz={xyz}");
+    }
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    h.state_mut().doc.apply("Data", |p| {
+        let book = p.add_workbook("grid");
+        // A 3 x 2 grid of XYZ points, and two plain columns.
+        let xs = vec![1.0, 2.0, 3.0, 1.0, 2.0, 3.0];
+        let ys = vec![10.0, 10.0, 10.0, 20.0, 20.0, 20.0];
+        let zs = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        for (d, v) in [(Designation::X, xs), (Designation::Y, ys), (Designation::Z, zs)] {
+            p.add_column(book, 0, d, ColumnData::numeric(v)).unwrap();
+        }
+    });
+    settle(&mut h);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let cols: Vec<sheaf_core::ColumnId> =
+        project(&h).workbook(book).unwrap().sheet().columns.iter().map(|c| c.id).collect();
+    h.state_mut().apply(Action::ConvertToMatrix { book, columns: cols.clone(), xyz: true }, &ctx);
+    settle(&mut h);
+    assert_eq!(h.state().doc.undo_label(), Some("Convert to Matrix"));
+    let m = project(&h).matrix_books().next().expect("a matrix book").sheets[0].clone();
+    assert_eq!((m.cols, m.rows), (3, 2), "X across the columns, Y down the rows");
+    assert_eq!((m.x_from, m.x_to, m.y_from, m.y_to), (1.0, 3.0, 10.0, 20.0));
+    assert_eq!(m.value(1, 2), 6.0);
+    // Direct: the two first columns become two matrix columns of six rows.
+    h.state_mut().apply(Action::ConvertToMatrix { book, columns: cols[..2].to_vec(), xyz: false }, &ctx);
+    settle(&mut h);
+    let m = project(&h).matrix_books().nth(1).expect("a second matrix book").sheets[0].clone();
+    assert_eq!((m.cols, m.rows), (2, 6));
+    assert_eq!(m.value(5, 1), 20.0);
 }

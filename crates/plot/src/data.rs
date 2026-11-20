@@ -542,7 +542,7 @@ pub(crate) struct LayerData<'a> {
     /// The least level step of the layer's significance brackets in the transformed space of its Y axis that
     /// the label height asks for at the scale last laid out (0 at first; the layout raises it until it settles).
     pub bracket_step: std::cell::Cell<f64>,
-    /// The heat map or contour plot of the layer, with its numbers (T179).
+    /// The heat map or contour plot of the layer, with its numbers (T192).
     pub field: Option<crate::field::FieldGrid>,
 }
 

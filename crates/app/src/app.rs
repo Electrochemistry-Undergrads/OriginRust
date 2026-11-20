@@ -175,7 +175,7 @@ pub struct SheafApp {
     graphs: HashMap<WindowId, GraphUi>,
     /// Notes windows (T154).
     notes: HashMap<WindowId, crate::notes_view::NotesUi>,
-    /// Matrix windows (T179).
+    /// Matrix windows (T192).
     matrices: HashMap<WindowId, crate::matrix_view::MatrixUi>,
     import: Option<ImportDialog>,
     import_excel: Option<ExcelImportDialog>,
@@ -185,7 +185,7 @@ pub struct SheafApp {
     layer_management: Option<crate::dialogs::layer_management::LayerManagementDialog>,
     add_layer_dialog: Option<crate::dialogs::add_layer::AddLayerDialog>,
     fit_page: Option<crate::dialogs::fit_page::FitPageDialog>,
-    /// The Matrix menu's Set Matrix Values, Set Dimensions, Expand and Shrink windows (T179).
+    /// The Matrix menu's Set Matrix Values, Set Dimensions, Expand and Shrink windows (T192).
     matrix_dialog: Option<crate::dialogs::matrix_ops::MatrixOpDialog>,
     axis3d: Option<crate::dialogs::axis3d::Axis3dDialog>,
     plot_setup: Option<crate::dialogs::plot_setup::PlotSetupDialog>,
@@ -1356,6 +1356,25 @@ impl SheafApp {
         let Some(g) = project.graph(graph) else { return };
         let state = self.graphs.entry(graph).or_default();
         let layer = state.active_layer.min(g.layers.len().saturating_sub(1));
+        // 2D Integrate (T189) goes on a layer with a heat map or contour plot: the active one, else the first.
+        if kind == crate::gadget::GadgetKind::Integrate2d {
+            let has_field = |i: &usize| g.layers.get(*i).is_some_and(|l| l.field.is_some() && !l.display.hidden);
+            let Some(layer) = Some(layer).filter(has_field).or_else(|| (0..g.layers.len()).find(has_field)) else {
+                self.warn("2D Integrate needs a contour or heat map plot".to_string());
+                return;
+            };
+            let Some(geom) = sheaf_plot::layout_geometry(project, graph).ok().and_then(|v| v.into_iter().nth(layer))
+            else {
+                return;
+            };
+            let (x0, x1) = (geom.x.from_unit(0.25), geom.x.from_unit(0.75));
+            let (y0, y1) = (geom.y.from_unit(0.25), geom.y.from_unit(0.75));
+            state.active_layer = layer;
+            state.gadget =
+                Some(crate::gadget::Integrator { kind, layer, plot: 0, x0, x1, y0, y1, end_point_baseline: false });
+            self.focus(graph);
+            return;
+        }
         let numeric = |i: &usize| {
             g.layers
                 .get(layer)
@@ -1925,6 +1944,19 @@ impl SheafApp {
                 }
             }
             Action::MatrixCmd { id, cmd } => self.matrix_cmd(id, cmd),
+            Action::ConvertToMatrix { book, columns, xyz } => {
+                let sheet = self.doc.project().workbook(book).map_or(0, |b| b.active_sheet);
+                let made = self.doc.edit("Convert to Matrix", |p| match (xyz, columns.as_slice()) {
+                    (true, [x, y, z]) => p.xyz_to_matrix(*x, *y, *z),
+                    (true, _) => Err(sheaf_core::project::ProjectError::NoSuchWindow(book)),
+                    (false, []) => p.worksheet_to_matrix(book, sheet, None, &Default::default()),
+                    (false, cols) => p.worksheet_to_matrix(book, sheet, Some(cols), &Default::default()),
+                });
+                match made {
+                    Ok(_) => self.say("Converted to a matrix".to_string()),
+                    Err(e) => self.warn(format!("Convert to Matrix: {e}")),
+                }
+            }
             Action::PlotField { template, matrix, xyz } => {
                 let made = self.doc.edit("New graph", |p| match (matrix, xyz) {
                     (Some(id), _) => {
@@ -2945,6 +2977,7 @@ impl SheafApp {
             Action::StartDifferentiate { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Differentiate),
             Action::StartInterpolate { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Interpolate),
             Action::StartCluster { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Cluster),
+            Action::StartIntegrate2d { graph } => self.start_gadget(graph, crate::gadget::GadgetKind::Integrate2d),
             Action::StartVerticalCursor { graph } => {
                 self.start_gadget(graph, crate::gadget::GadgetKind::VerticalCursor)
             }
@@ -5100,7 +5133,7 @@ impl SheafApp {
 
     /// File > Import > Re-Import Directly and Re-Import... (T98): reads the book's source file (or, for
     /// Re-Import..., a file picked starting from it) again and replaces the data, one undo step.
-    /// The Matrix menu (T179 slice 3): the operations without settings run at once as one undo step;
+    /// The Matrix menu (T192 slice 3): the operations without settings run at once as one undo step;
     /// the others open their window.
     fn matrix_cmd(&mut self, id: WindowId, cmd: crate::menus::MatrixCmd) {
         use crate::dialogs::matrix_ops::{Form, MatrixOpDialog};
@@ -7373,7 +7406,7 @@ impl eframe::App for SheafApp {
                         Some(Window::Notes(_)) => {
                             crate::notes_view::show(ui, doc, id, notes.entry(id).or_default(), actions);
                         }
-                        // T179 slice 1 ports the matrix model, files, plots and command line; the
+                        // T192 slice 1 ports the matrix model, files, plots and command line; the
                         // matrix window itself comes with the next slice.
                         Some(Window::Matrix(_)) => {
                             crate::matrix_view::show(ui, doc, id, matrices.entry(id).or_default(), actions);

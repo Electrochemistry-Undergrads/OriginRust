@@ -69,7 +69,7 @@ pub struct MatrixSummary {
 pub struct ProjectSummary {
     pub workbooks: Vec<WorkbookSummary>,
     pub graphs: Vec<GraphSummary>,
-    /// Matrix books (T179), in creation order; they are not in `order`.
+    /// Matrix books (T192), in creation order; they are not in `order`.
     pub matrices: Vec<MatrixSummary>,
     /// The windows in their order: `("workbook", index)` or `("graph", index)`.
     #[serde(skip)]

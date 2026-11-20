@@ -47,7 +47,7 @@ pub enum Command {
     /// merge_graph defaults), then write it as a figure and/or save the project with it.
     MergeGraphs(MergeGraphsArgs),
     /// Matrices: make one, set its values by a formula, transpose, flip, rotate, expand or shrink
-    /// it, convert between worksheets and matrices, and plot heat maps and contour plots (T179).
+    /// it, convert between worksheets and matrices, and plot heat maps and contour plots (T192).
     Matrix(MatrixArgs),
 }
 

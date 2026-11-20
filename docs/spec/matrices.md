@@ -233,7 +233,7 @@ that was meant to make one did not finish).
 saving as `.opj` writes a companion `.opj.sheaf` because the Origin writer does not store matrices yet (it names
 each matrix as not written).
 
-## 7a. The matrix window in the app (T179 slice 2, 2026-11-19, not measured)
+## 7a. The matrix window in the app (T192 slice 2, 2026-11-19, not measured)
 
 - File > New > Matrix... and the Standard toolbar's New Matrix add a matrix book with one sheet of
   Origin's default size (32 x 32 missing values), named MBook1, MBook2, ..., as one undo step
@@ -249,7 +249,7 @@ each matrix as not written).
   headers, selection and copy, Plot > Contour/Heat Map from a matrix window, and Convert to Matrix in
   the Worksheet menu. The command line already has all of these (section 7).
 
-## 7b. The Matrix menu and Plot > Contour/Heat Map in the app (T179 slice 3, 2026-11-19, not measured)
+## 7b. The Matrix menu and Plot > Contour/Heat Map in the app (T192 slice 3, 2026-11-19, not measured)
 
 - A matrix window has its own menu bar: File, View, Plot, Matrix, Tools, Window, Help. Each item
   works on the active sheet and is one undo step named after the operation (section 4).
@@ -269,7 +269,7 @@ each matrix as not written).
   points, and a heat map only from points on a regular grid. Gray Scale Map, the polar and ternary
   contours and the profiles stay grey.
 
-## 7c. Worksheet > Convert to Matrix in the app (T179 slice 4, 2026-11-19, not measured)
+## 7c. Worksheet > Convert to Matrix in the app (T192 slice 4, 2026-11-19, not measured)
 
 - **Direct** converts the selected columns, or every column of the active sheet when none is
   selected, to a new matrix book. It uses `w2m` with Origin's defaults (section 5): no coordinates,

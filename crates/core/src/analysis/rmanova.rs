@@ -56,7 +56,8 @@ pub(super) fn rm_anova(
     let column = |id: ColumnId| sheet.column(id).ok_or(AnalysisError::NoSuchColumn(id));
     let level_cols: Vec<&Column> = columns[..factors].iter().map(|&id| column(id)).collect::<Result<_, _>>()?;
     let (cy, cs) = (column(columns[factors])?, column(columns[factors + 1])?);
-    let ys = cy.numeric().ok_or_else(|| AnalysisError::NotNumeric(cy.short_name.clone()))?;
+    // Masked cells and rows the worksheet filter hides are missing values (T253).
+    let ys = sheet.values_of(cy).ok_or_else(|| AnalysisError::NotNumeric(cy.short_name.clone()))?;
     let len = level_cols.iter().map(|c| c.data.len()).chain([ys.len(), cs.data.len()]).max().unwrap_or(0);
     if len == 0 {
         return Err(AnalysisError::Empty(cy.short_name.clone()));
@@ -506,5 +507,21 @@ mod tests {
             Request { columns: ids.clone(), rows: RowRange::Rows(1, 31), tool: Tool::RmAnova(RmAnovaSpec::new(false)) };
         let r = p.analyze(&req).unwrap();
         assert!(r.notes.iter().any(|n| n.contains("1 subjects without a number")), "{:?}", r.notes);
+    }
+
+    #[test]
+    fn masked_data_cells_are_left_out() {
+        // T253: as the other tools, a masked cell is a missing value.
+        let (mut p, ids) = project(false);
+        let data = ids[ids.len() - 2];
+        let table =
+            |p: &mut Project| format!("{:?}", run(p, &ids, RmAnovaSpec::new(false)).map(|r| r.table.map(|t| t.rows)));
+        let all = table(&mut p);
+        let mut gone = p.clone();
+        gone.column_mut(data).unwrap().numeric_mut().unwrap()[0] = f64::NAN;
+        let want = table(&mut gone);
+        assert_ne!(all, want);
+        p.column_mut(data).unwrap().mask.insert(0);
+        assert_eq!(table(&mut p), want);
     }
 }

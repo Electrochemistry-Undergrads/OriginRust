@@ -20,7 +20,7 @@ use crate::library::voigt;
 use crate::nlsf::FitFunction;
 
 /// The shape of every peak of the sum.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum PeakShape {
     Gauss,
     Lorentz,
@@ -48,7 +48,7 @@ fn voigt_unit_fwhm() -> f64 {
 }
 
 /// The baseline under the peaks.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum FitBaseline {
     Constant,
     Linear,

@@ -288,6 +288,19 @@ pub fn undo_label(tool: &str, args: &Value, project: &Project) -> String {
             parts.extend(book_shown());
             parts.extend(columns(names(args, "y")));
         }
+        "batch_process" => {
+            if let Some(t) = text(args, "template") {
+                let base = t.rsplit(['/', '\\']).next().unwrap_or(t);
+                parts.push(base.trim_end_matches(".sheafbooktemplate").to_string());
+            }
+            let files = names(args, "files");
+            if let Some(first) = files.first() {
+                parts.push(first.rsplit(['/', '\\']).next().unwrap_or(first).to_string());
+                if files.len() > 1 {
+                    parts.push(format!("+{}", files.len() - 1));
+                }
+            }
+        }
         "simulate_surface" => {
             parts.extend(text(args, "function").map(str::to_string).or_else(|| Some("Gauss2D".to_string())));
             parts.extend(book_shown());

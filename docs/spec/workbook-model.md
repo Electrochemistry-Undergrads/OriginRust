@@ -1330,7 +1330,8 @@ window is its own, **unmeasured**:
   options; an unreadable file is skipped with a warning, a summary sheet the template lacks is an
   error before anything is written.
 - Not done: import filters saved in the template, the graph-window variant that runs a graph template,
-  Origin's own summary layout and identifier choices, Minimize/Hide for intermediate books, MCP access.
+  Origin's own summary layout and identifier choices, Minimize/Hide for intermediate books. MCP:
+  `batch_process` (T238, mcp.md).
 - Tests: `crates/core/src/book_template.rs`, `crates/app/src/app/ui_tests/user_templates.rs`.
 
 ## 14. Suggested Rust data model (P0)

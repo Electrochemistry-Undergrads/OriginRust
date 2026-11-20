@@ -1406,6 +1406,14 @@ File names follow File Name(s) with its substitution (`<long name>`, `<short nam
 the Overwrite Existing rule, as for All Graphs in Project; with PDF and two or more graphs, the
 multi-page box (9.7) applies. Not built: Open (visible only), embedded graphs and Specified.
 
+### 9.7c Preview tabs (T251, Origin's tab contents not measured)
+
+The preview pane has Origin's two tabs, **Image** and **Graph** (gui-look: the pane shows tabs
+"Image" and "Graph"). Image is the picture the export writes (the area of Export Settings' margin
+mode). Graph shows the whole page with a red outline around the area the export takes (with Tight
+the outline can reach past the page). The tab is part of what makes Auto Preview redraw. Test:
+`the_graph_tab_outlines_the_exported_area_on_the_page` (`crates/app/src/dialogs/export.rs`).
+
 ### 9.8 Export Dialog Themes (T05)
 
 **Origin 2016, measured on Windows 2026-11-15.** Five isolated synthetic-graph sessions

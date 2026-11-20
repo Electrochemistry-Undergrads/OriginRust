@@ -19,15 +19,21 @@ What was not done: nobody built or ran the app or the CLI, so wiring was judged 
 
 Update of 2026-11-12: this update was made by reading code on 2026-11-12, again without building or running anything. Each row whose subject the work since the first version touches (app shell, graph window, dialogs, gadget, Data Reader, Copy Page, area, double-Y, stack, column and panel graphs, .opj saving and reading, CH Instruments .bin and chronopotentiometry, import dialog and NLFit dialog) was checked by opening the menu table in `crates/app/src/menus.rs`, the command-line options in `crates/cli/src/args.rs` and the function behind each entry. A row whose feature could not be confirmed that way keeps its earlier status. The rows were not re-checked against Origin.
 
+Update of 2026-11-20 (T219): the 37 rows marked missing were checked against the menu table and the
+code of local main 09d13926; 23 that have since been built changed status (22 to partial, Layer display
+options to done), each naming the menu items or code it rests on and the brief that added them. The
+other rows were not re-checked in this update, so some partial rows may understate the work since
+2026-11-12. Not checked against Origin.
+
 Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's daily work and the owner's explicit requests, P1 is useful, P2 is rare.
 
 ## Counts
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 50 | 174 | 37 | 261 |
+| All rows | 51 | 197 | 13 | 261 |
 | P0 | 32 | 71 | 0 | 103 |
-| P1 and P2 together | 18 | 103 | 37 | 158 |
+| P1 and P2 together | 19 | 126 | 13 | 158 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 63 are P2.
 
@@ -69,18 +75,18 @@ Cross-cutting findings:
 | Exit | File > Exit | File > Quit with save prompt | ✓ | | P1 |
 | Window properties and rename | Alt+Enter | Alt+Enter, Window > Properties and the Explorer's Properties open a small window for the long name | ◐ | short name automatic; no comments field or full Properties dialog | P1 |
 | Window menu | cascade, tile, duplicate, split, refresh | Cascade, Tile Horizontally, Tile Vertically, Properties (Alt+Enter), Refresh (F5: recalculates waiting columns) and the list of windows that focuses one | ◐ | no Arrange Icons, Duplicate, Duplicate (Batch Plotting), Split or Folders | P1 |
-| Preferences | Tools > Options, Ctrl+U | none | ✗ | no settings stored | P1 |
+| Preferences | Tools > Options, Ctrl+U | Tools > Options... (T134): Open/Close (the autosave switch and interval) and File Locations tabs | ◐ | most of Origin's ten tabs | P1 |
 | Panels | Results Log, Command Window, Object Manager, Quick Help, Data Display | Object Manager (right edge: layers and plots of the active graph with tick boxes that show or hide plots), Messages Log and Results Log (left edge, with Clear), status bar with hints, Average, Sum and Count of the selected cells, AU : ON, active sheet, Radian | ◐ | no Command Window, Code Builder, Quick Help, Smart Hint Log or Data Display; Results Log holds only the analysis and fit summaries; Object Manager has no plot groups and no layer-level settings | P1 |
 | Graph view modes and zoom | Page, Print, Window, Draft view; zoom commands | Page/Print/Window/Draft view, zoom/pan/Whole Page/Zoom All and axis scale tools; Layer Icons, Full Screen and documented Active Layer Only/Hide Other Layers toggle with Ctrl+Alt+D (22.7) | ◐ | Nine remaining Show/Data Info controls, exact Native view geometry/smoothing and active-layer-switch edges remain unmeasured; no master-page display/output or modern tooltip equivalence is inferred | P1 |
 | Find, replace, go to | Ctrl+F, Ctrl+H, F3, Ctrl+G | Find/Replace tabs (Ctrl+F/H): Numeric comparisons/missing/relative tolerance/sign options, displayed-text String search/wildcards, reverse search, selected-range restriction, one undo per replacement, formula columns protected; Go to (Ctrl+G): optional coordinates, zero/end, capacity bounds, extension, picker/Reset, names and a project Column Browser with multiple selection/block add (Origin 2016 measured, gui-look section 5) | ◐ | active-sheet data search only; no Find in Project (F3), wider scopes, label rows, cell links or saved dialog history; Column Browser row-range editing landed in T02 (`d9b4af7`); Exclude and saved preferences remain | P1 |
-| Set As Begin, End, Reset | Edit menu | none | ✗ | analysis dialogs take row ranges individually | P1 |
+| Set As Begin, End, Reset | Edit menu | Edit > Set As Begin, Set As End, Reset to Full Range: a data range per column that the worksheet shows and plots honour (T87, workbook-model 13f) | ◐ | not checked against every analysis tool | P1 |
 | Copy graph page to clipboard | Edit > Copy Page, Ctrl+J | Edit > Copy Page, Ctrl+J and the graph's right-click menu put the page on the clipboard as a 300 dpi picture at 40 % size (Origin's size factor) with the Auto margin, and on Windows an enhanced metafile next to the bitmap | ✓ | no WMF, no OLE object; the 40 % and the margin are read from the docs, not measured; pasting into another program was not tried | P1 |
 | Copy and paste format between graphs | Edit > Copy Format/Paste Format, page and axis context menus | Typed graph/axis format clipboard, measured graph groups and axis All, Apply Formats with one-step Undo; axis Scales/Styles context entries reuse existing typed groups (26.9/26.11, explicit Sheaf property mappings) | ◐ | Private profile clipboard survives restart (26.10); other per-property choices, legend/cross-target rules and live instance sharing remain open; exact Native axis Scales/Styles per-choice mappings are unmeasured | P1 |
 | Save or duplicate project without data | File menu | File > Save Project without Data... (copy to a file) and Duplicate Project without Data (unsaved copy replaces the project), T77 | ◐ | what Origin 2016 clears is undocumented; Sheaf follows Clone Project mode 0 (unmeasured) | P2 |
 | Matrix window and matrix sheets | File > New > Matrix; matrix book with sheets of Z values, X and Y ranges, labels | model, project file and undo in `core/matrix.rs`, `matrix_project.rs` (the app: File > New > Matrix, New Matrix button, a cell grid with editing, T192 slice 2); CLI `sheaf matrix new/set/transform/stats`; spec `matrices.md` | ◐ | no matrix window, menus or dialogs in the app; no .opj read or write of matrices; no image data, no multiple-layer matrix objects, no matrix thumbnails | P2 |
-| Other window types | layout, image, Excel windows; image processing | Window enum is workbook, graph, Notes (T154) and matrix (T192); project note text exists | ✗ | no layout or image windows; no per-type menus | P2 |
+| Other window types | layout, image, Excel windows; image processing | Window enum is workbook, graph, Notes (T154) and matrix (T192); matrix windows have the Image menu (T207) | ◐ | no layout, Excel or separate image windows | P2 |
 | Autosave and recovery | Tools > Options | Tools > Autosave... (on, every 10 minutes by default; Sheaf's choice) writes the modified project as `.sheaf` to the platform recovery folder on a worker thread; at start-up a Recover / Discard / Later dialog offers what a crashed run left; a clean exit, a normal save and undo/redo to the saved content checkpoint remove it; recoveries older than 30 days are dropped (autosave.md) | ◐ | Origin's defaults and start-up prompt unmeasured; no "backup project before saving" switch; setting not yet in a Tools > Options dialog | P2 |
-| Tools managers and protection | Theme, Function Builder, Import Filters, Package, Custom Menu | none | ✗ | | P2 |
+| Tools managers and protection | Theme, Function Builder, Import Filters, Package, Custom Menu | Theme Organizer (F7), Fitting Function Builder (F8) and Organizer (F9), Import Filters Manager | ◐ | no Package Manager, Custom Menu Organizer or project protection | P2 |
 | Help | Help menu | About only | ◐ | no help pages | P2 |
 
 ## 2 Import
@@ -103,7 +109,7 @@ Cross-cutting findings:
 | Import wizard, re-import | Ctrl+3, Ctrl+4 | the Import Wizard (File > Import > Import Wizard, Ctrl+3) with the pages Source, Header Lines, Column Names, File Name Options, Data Columns and Save Filters (grey) and Cancel, Back, Next, Finish; the options of the import window as a tree of option groups with a preview; source path recorded; the wizard lists the files (preview one, remove, add) and shows the header entries on the Header Lines page | ◐ | Binary, User Defined and Clipboard sources are grey; no saved import filters (page greyed); the File Name Options page has two ticks only; no re-import command (Ctrl+4), no remembered settings | P1 |
 | Excel import | File > Import > Excel | File > Import > Excel (XLS, XLSX, XLSM)... (sheet choice, hidden sheets, header rows, import modes, partial import, preview), drag-and-drop and command-line files, `sheaf import`/`info` with `--sheets`/`--skip-hidden-sheets`, MCP `import_files`; `calamine` (ADR 0012); cached formula values, Excel dates (1900/1904), one book per file and one sheet per Excel sheet; measured against Origin 2016's `impExcel` and copied: hidden sheets read, book long name with extension, leading empty columns kept, merged cells, booleans, error cells, dates and dates among text (import-excel.md 2) | ✓ | header rows detected (Origin reads none unless told); dates before 1900-03-01 as Excel shows them (Origin's are a day early); Origin's import window unseen; `.xlsb`/`.ods` read but untested; no live Open Excel window | P1 |
 | Drag and drop | drop on window | projects open, data goes to dialog | ✓ | | P1 |
-| Other importers, image, database | HDF5, NetCDF, JCAMP-DX, SPC, WAV, ODBC and more | none | ✗ | | P2 |
+| Other importers, image, database | HDF5, NetCDF, JCAMP-DX, SPC, WAV, ODBC and more | File > Import > Image... (T204) and Binary 2D Array... (T199) into matrix books | ◐ | no HDF5, NetCDF, JCAMP-DX, SPC, WAV or ODBC | P2 |
 | Sparklines, auto width, write protection on import | ASCII options | none | ✗ | | P2 |
 
 ## 3 Workbook and columns
@@ -145,7 +151,7 @@ Cross-cutting findings:
 | Worksheet operations | transpose, stack, unstack, join, reduce, copy, duplicates, pivot | Transpose (measured in Origin), Stack Columns, Unstack Columns, Split Columns, Reduce Rows and Pivot Table (`wpivot` options: count/sum/mean/min/max, totals, sorts, normalize; T124, workbook-model 13n), each writing a new sheet with one undo step | ◐ | Origin's Transpose replaces the sheet in place by default; option layouts of stack, unstack, split, reduce and pivot not compared with Origin; no pivot Others merging; no join or duplicates | P1 |
 | External links, Paste Link | Edit menu | Paste Link / Paste Link Transpose / Remove Links between worksheet cells (T211, ADR 0014) | ◐ | graph Paste Link, external files | P2 |
 | Complex numbers | complex type | none | ✗ | | P2 |
-| Worksheet script, query, clear | Worksheet menu | none | ✗ | | P2 |
+| Worksheet script, query, clear | Worksheet menu | Worksheet > Worksheet Query... (the row filter) and Clear Worksheet... | ◐ | no Worksheet Script | P2 |
 
 ## 4 Scripting, batch and interoperability
 
@@ -157,12 +163,12 @@ Cross-cutting findings:
 | Batch plotting | Duplicate (Batch Plotting) | one overlay figure per CLI call | ◐ | no graph per book or sheet, no app command | P1 |
 | Export worksheet as text | File > Export > Worksheet | `write_delimited`; CSV or TSV by extension | ◐ | no options dialog; no semicolon, label rows, selected range, full-precision switch | P1 |
 | Write xlsx | export worksheets | Export > Worksheet as Excel..., `sheaf export`/`export-data` to `.xlsx` (`rust_xlsxwriter`): one Excel sheet per sheet, Long Name/Units/Comments rows, missing values empty, dates as Excel dates; resolved cell fonts/styles/RGB/alignment combined with column number codes, requested label styles and bounded styled blanks (T59/workbook-model 13b); refuses to overwrite a file that is not an xlsx (import-excel.md) | ◐ | Origin's Excel export layout unmeasured; conditional colours are snapshots, future/omitted-label formats and partial-alpha limits are reported; cell-style import remains separate | P1 |
-| Dependents and linked results | Window Properties > Dependents | none | ✗ | results unlinked from sources | P1 |
+| Dependents and linked results | Window Properties > Dependents | analysis results follow their source with Recalculate Auto or Manual (column locks; graph analysis locks and their menu, T186/T195) | ◐ | no Window Properties > Dependents list | P1 |
 | Summary table across sheets | batch summary | none | ✗ | | P1 |
 | LabTalk, Origin C, Python, MATLAB, R consoles | scripting windows | none | ✗ | only the formula language exists | P2 |
 | COM server | Origin COM object | none | ✗ | | P2 |
 | Read themes and templates | .oth, .otp | none | ✗ | | P2 |
-| Read .opju | File > Open | none | ✗ | | P2 |
+| Read .opju | File > Open | `io/src/opju`: workbooks (sheets, columns, numbers and text) | ◐ | graphs, matrices, notes, folders and column labels not read (named in the warnings) | P2 |
 | Other exports | sheet as image, multi-page PDF, matrix ASCII, GIF | multi-page PDF (`render_multipage_pdf`, T32, graphing 9.7); GIF graph export | ◐ | sheet as image, matrix ASCII | P2 |
 
 ## 5 Mathematics and data manipulation
@@ -183,16 +189,16 @@ Cross-cutting findings:
 | Sampling interval check | vinc | internal use only | ✗ | | P1 |
 | Average multiple curves | avecurves | Average Multiple Curves window and `analyze average` with Origin's defaults (Full X Range, Auto points, curves continued past their ends), Same as Source X and Common X Range, Std Dev, Std Err, N, Minimum, Maximum; Recalculate Auto/Manual; measured (`analysis-curve-math.md` 4) | ◐ | no Custom X, Follow Curve Trace or Concatenate; Origin sorts a turning X, Sheaf refuses it | P1 |
 | Polygon area | polyarea | Polygon Area window and `analyze polygon-area`: area, signed area, centroid, perimeter | ◐ | not measured in Origin, `analysis-curve-math.md` | P1 |
-| Cumulative sum | Mathematics | running integral only | ✗ | | P1 |
+| Cumulative sum | Mathematics | `cumsum()` in Set Column Values | ◐ | no Mathematics menu item | P1 |
 | Convolution, deconvolution | Signal Processing | Convolution window, `analyze convolution`, `Tool::Convolution`: linear and circular, normalized, Origin's automatic interval | ◐ | checked against Origin (analysis-tools 13); deconvolution and wrap response missing | P2 |
 | Hilbert transform | Signal Processing > Hilbert Transform (hilbert) | Hilbert Transform window, `analyze hilbert`, `Tool::Hilbert` | ◐ | transform checked against Origin (analysis-tools 13.1); no analytic signal (no complex columns) | P2 |
 | Correlation of two signals | Signal Processing > Correlation (corr1) | Correlation window, `analyze signal-correlation`, `Tool::SignalCorrelation`: linear and circular in Origin's lag order, normalized, autocorrelation | ✓ | checked against Origin (analysis-tools 13) | P2 |
 | Worksheet to matrix, matrix to worksheet | Worksheet > Convert to Matrix (Direct), Matrix > Convert to Worksheet | `core/matrix_convert.rs`: `w2m` (no coordinates, X or Y across columns from the first row or a label row, tolerance of even spacing, trim) and `m2w` (direct, XYZ columns), checked against Origin 2016 (`origin_matrix.json`); CLI `sheaf matrix convert`, `to-sheet` | ◐ | no dialogs; the text-parameter options of `m2w` (system and user parameter rows) are written but not checked in Origin; linear-fit option only partly checked | P2 |
 | XYZ gridding | Convert to Matrix > XYZ Gridding (random, sparse, regular) | regular XYZ data (`xyz_regular`, any order, gaps stay missing, repeats averaged), checked against Origin; scattered points: Delaunay triangulation read off a grid (our own method, used by contour plots) | ◐ | Renka-Cline, Shepard, thin plate spline and sparse gridding are not implemented, so numbers for scattered data differ from Origin's; no dialog | P2 |
 | Matrix operations | Matrix menu: Set Values, Transpose, Flip, Rotate 90, Expand, Shrink, Statistics, Set Dimensions | `MatrixOp` in `core/matrix_project.rs`; set values in i, j, x, y; transpose, flip (with coordinates), rotate, expand (bilinear), shrink (block mean), mstats; CLI `sheaf matrix set/transform/stats`; all checked against Origin 2016 | ◐ | no dialogs or menus; no crop, interpolation (`minterp2`), smoothing, filters, replace, integrate or `Cell(i,j)` / `mat(1)[i,j]` references in formulas | P2 |
-| Rank, remove duplicates | wdeldup | none | ✗ | | P2 |
-| Rise time, polygon area, roots, 2D integration | gadgets and Mathematics | none | ✗ | | P2 |
-| 2D and 3D interpolation, matrix math, white noise | Mathematics folder | none (expand is the only matrix interpolation) | ✗ | | P2 |
+| Rank, remove duplicates | wdeldup | Reduce Duplicate X Data...; `rank()` in Set Column Values | ◐ | Origin's wdeldup options not compared | P2 |
+| Rise time, polygon area, roots, 2D integration | gadgets and Mathematics | Rise Time gadget (T138), Polygon Area..., 2D Integrate gadget (T189, T198-T206) | ◐ | no roots tool | P2 |
+| 2D and 3D interpolation, matrix math, white noise | Mathematics folder | matrix Inverse (T193) and the matrix Image menu's Math (T207) | ◐ | no 2D or 3D interpolation, no white noise | P2 |
 
 ## 6 Signal processing
 
@@ -207,7 +213,7 @@ Cross-cutting findings:
 | Decimation | Signal Processing > Decimation (decimate) | Decimation window, `analyze decimate`, `Tool::Decimate`: factor, none, moving average and FIR filter (analysis-tools 13.4) | ◐ | checked against Origin including its refusals; FIR is the triangle Origin computes; no missing values, no preview | P2 |
 | IIR filter | Signal Processing > IIR Filter (dfilter, OriginPro) | IIR Filter window, `analyze iir-filter`, `Tool::IirFilter`: Butterworth, Chebyshev I and II, elliptic; low, high, band pass, band stop; fixed or minimum order; forward-backward (analysis-tools 17.1) | ◐ | documented, not measured in Origin (checked against scipy.signal); no Bessel (Origin has none); no SOS/ZPK/state-space worksheets, no preview panels | P2 |
 | FIR filter | FIR Filter app (Origin 2027) | FIR Filter window, `analyze fir-filter`, `Tool::FirFilter`: Window (17 windows, Kaiser minimum order) and Least Squares designs, Scale Passband, forward-backward (analysis-tools 17.2) | ◐ | documented, not measured in Origin (checked against scipy.signal); no custom window data, no coefficient output, no preview panels | P2 |
-| Wavelets, STFT | Signal Processing | none | ✗ | | P2 |
+| Wavelets, STFT | Signal Processing | Signal Processing > Wavelet: Decompose, Reconstruction, Denoise, Smooth, Continuous Wavelet; STFT (T57) | ◐ | not compared with Origin's output | P2 |
 
 ## 7 Peaks and baseline
 
@@ -255,13 +261,13 @@ Cross-cutting findings:
 | Simulate Surface | simsurface | Analysis > Fitting > Simulate Surface... (22 functions with Origin's window values, 20 by 20 grid, noise), `sheaf simulate-surface`, MCP `simulate_surface` (fitting.md 16) | ◐ | Values, grid and names measured; Origin's noise sequence not reproducible; no matrix output or Recalculate | P2 |
 | XYZ Surface Area | xyzarea | Analysis > Mathematics > XYZ Surface Area... (Delaunay area of scattered XYZ points), `sheaf analyze xyz-area`, MCP analyze `xyz_area` (analysis-tools.md 18) | ✓ | Seven cases equal Origin to 1e-12; the window and Results Log line were not measured | P2 |
 | Fit range and several Y columns | nlbeginr | rows or X range; app one column per run | ◐ | | P1 |
-| Global fit | shared parameters | none | ✗ | | P2 |
+| Global fit | shared parameters | the fit window fits several columns independently or as a global fit with shared parameters (`fit/src/global.rs`) | ◐ | not compared with Origin's output | P2 |
 | Surface fit on XYZ columns | Analysis > Fitting > Nonlinear Surface Fit, `nlbeginz` | `fit/nlsf.rs` (`fit_xyz`) and `fit/surface.rs`: the 22 surface functions z = f(x, y), FDF files with two independent variables; Analysis > Fitting > Nonlinear Surface Fit... opens the NLFit window on the category Surface Fitting with X, Y and Z column boxes; `sheaf fit --z COL [--x COL] [--y COL]`; results in `FitSurface1`, `FitSurface1Stats`, a 50 x 50 `FitSurfaceCurve1` grid and fitted and residual columns (fitting.md sections 14 and 15) | ◐ | 9 functions (11 cases) compared with Origin's `nlbeginz` (from Origin's start values to 1e-7); starting values, window layout and the report sheet's layout in Origin unmeasured or approximate; no matrices, no 3D plot of data and surface, no bands, no multi-dataset or global surface fit | P2 |
 | Surface fit on a matrix | Nonlinear Surface Fit on a matrix | none | ✗ | waits for the matrix work of another branch | P2 |
-| ODR, fit with X error | FitODR | none | ✗ | | P2 |
-| Multiple linear regression | fitMR | none | ✗ | | P2 |
-| Compare models and datasets, rank models | F-test, AIC, BIC | none | ✗ | | P2 |
-| Find baseline region, function wizard | findBase | none | ✗ | | P2 |
+| ODR, fit with X error | FitODR | Nonlinear Implicit Curve Fit... (orthogonal distance regression for a circle or an ellipse) | ◐ | no general fit with X errors | P2 |
+| Multiple linear regression | fitMR | Analysis > Fitting > Multiple Linear Regression... | ◐ | not compared with Origin's output | P2 |
+| Compare models and datasets, rank models | F-test, AIC, BIC | Analysis > Fitting > Compare Datasets... and Rank Models... | ◐ | not compared with Origin's output | P2 |
+| Find baseline region, function wizard | findBase | Fitting Function Builder (F8); Peak Analyzer baseline anchors, User Defined second-derivative anchors (T04) | ◐ | no findBase tool of its own | P2 |
 
 ## 10 Statistics
 
@@ -305,9 +311,9 @@ Cross-cutting findings:
 | Histogram, box chart, statistics plots | Plot > Statistics | Plot > Statistics > Histogram and Box Chart, CLI `plot -t histogram`, `box`, `violin`: binned like Frequency Counts, touching bars; boxes with median, mean, whiskers, outliers | ◐ | violin plot variants (Violin, with Box, Point, Quartile, Stick, Half Violin; Origin 2019 documented, defaults unmeasured, graphing.md 14.22) but no Split Violin or violin settings; Ridgeline Chart (all four display types, bandwidth rules, quantile lines; T44, graphing.md 14.23); no distribution curve on box charts, no hatch fill, no grouped box charts (need T10's group columns), other statistics plots missing; written to .opj as plain columns | P1 |
 | Pie | Plot > Pie | Plot > Column/Bar/Pie > 2D Color Pie, CLI `plot -t pie`: flat colour pie, shares to two decimals, legend | ◐ | no 3D slant, no B&W hatch pie, no exploded slices; written to .opj as plain columns | P2 |
 | Polar, ternary, radar, Smith, wind rose | Specialized | Polar theta(X) r(Y) and r(X) theta(Y), Radar, Ternary (`Layer::coords`: polar, radar flag, ternary; templates `polar`, `polar-r-theta`, `radar`, `ternary`; menu, toolbar, CLI) | ◐ | Smith chart, wind rose, Piper; no polar or ternary axis dialog; not written to .opj (save warning); nothing measured against Origin | P2 |
-| Stock | Plot > Stock | none | ✗ | | P2 |
-| Vector | Plot > Vector | none | ✗ | | P2 |
-| 3D plots | Plot > 3D | none | ✗ | no 3D renderer | P2 |
+| Stock | Plot > Stock | Plot > Stock: High-Low-Close, Japanese Candlestick, OHLC Bar Chart, OHLC-Volume, Line (T108) | ◐ | not measured in Origin | P2 |
+| Vector | Plot > Vector | Plot > Specialized > Vector XYAM and XYXY (T107); 3D vectors (T157) | ◐ | not every Origin vector option | P2 |
+| 3D plots | Plot > 3D | fixed-view 3D layers (T155-T173): scatter, trajectory, bars, error bars, vectors, XYY bars/ribbons/walls/waterfall, surfaces from XYZ (colour map, fill, wire, projection, constant with base, ternary); 3D Axis window with turn and tilt | ◐ | no OpenGL rendering, no hidden-point removal, no mouse rotation, no surfaces from matrices | P2 |
 | Parallel plots | Plot > Categorical | Plot > Categorical > Parallel Plot and Parallel Index (T49, graphing.md 14.25; `-t parallel`, `parallel-index`, `--group`) | ◐ | one vertical axis per column, per-axis or shared range, lines coloured by a numeric column (colour scale) or by group (legend), Plot Details Parallel tab; Origin's defaults and colour map unmeasured, no Parallel Sets, curvature or axis reordering; written to .opj as line plots | P2 |
 | Treemap | Plot > Categorical | Plot > Categorical > Treemap (T50, graphing.md 14.26; `-t treemap`, `--group`, `--treemap-*`) | ◐ | nested rectangles by category columns sized by a value column, six layouts (squarified, squarified+, split, three pivots), order, depth, gap, per-level layout; Origin's defaults, colours and labels unmeasured; no hover or drill-down | P2 |
 | Sunburst plot | Plot > Categorical | Plot > Categorical > Sunburst Plot (T51, graphing.md 14.27; `-t sunburst`, `--group`, `--sunburst-*`) | ◐ | hierarchy of category columns as concentric rings, angles by a value column, leaves coloured by value and categories by their leaves' mean on the shared ramp with a colour scale, unfilled missing categories, radial labels, Pie Geometry tab (start angle, hole, ring gap, labels); Origin's defaults unmeasured; no hover or Collapse/Expand drilling; written to .opj as columns | P2 |
@@ -346,12 +352,12 @@ Cross-cutting findings:
 | Drawn lines, arrows, shapes | Tools toolbar | Tools bar: Line, Arrow, Rectangle and Circle (drag to draw, Shift to snap or square); move by dragging, Delete, double-click or right-click Properties (colour, width, dash, fill, arrow heads); undo for each step; front/back shape ordering within a layer with selection-safe undo/redo; drawn into the figure exports; kept in the project file (graphing.md 17) | ◐ | endpoint/corner shape resizing, Cut/Copy/Paste (T125) and grouping (T162) are supported; no ordering across object kinds/layers, page or scale attachment, polylines, curves or pictures (graphing.md 17.5); not written to .opj (the save warns) | P1 |
 | Slope annotation | Tools toolbar (2026b) | Tools bar: Slope; two clicks on data points of one plot mark the slope (segment, dashed legs, `slope = ...` label, per decade on a log axis); linked to the rows, recomputed with the data; Delete, double-click Properties, undo; CLI `--slope A,B`, MCP; kept in the project file, not written to .opj (graphing.md 17.6) | ◐ | Origin's look, label text and defaults unmeasured (documentation only); no label dragging or decimals setting | P2 |
 | Multiple comparisons plot | Report sheet icon (Origin 2027) | One-way ANOVA (with a means comparison) and two-sample t-test reports make a graph of the groups (bar, box, violin, scatter; SD, SEM or 95 % CI error bars) with significance brackets labelled by asterisks or p-values, significant only with a threshold; report-sheet button, Statistics menu, dialog, `analyze anova` and `analyze ttest` with `--comparison-plot`, MCP; brackets stacked by span and the Y axis grows (statistics.md 23) | ◐ | from Origin's documents only, nothing measured; no two-way ANOVA, paired or one-sample (Significance Plot); brackets not editable or pickable; not written to .opj | P2 |
-| Themes | Theme Organizer | none | ✗ | | P1 |
+| Themes | Theme Organizer | Theme Organizer (F7): graph themes (T102), legend themes (T167), Peak Analyzer themes (T169), dialog themes | ◐ | not every Origin theme kind | P1 |
 | Graph templates | Save Template As | 9 built-in in the Plot menu: Line, Scatter, Line + Symbol, Column, Area, Cyclic voltammetry, Double-Y, Stacked Lines, Waterfall | ◐ | cannot save or load; .otp not read | P1 |
 | Layer arrangement, merge | Arrange Layers, Merge Graph Windows | Merge Graph Windows (Origin 2016's cells, grid, text factor, links, Show Axes Frame; dialog with captured folder/recursive sources, isolated manual/Auto preview and `sheaf merge-graphs`), Layer Management (Arrange, Size/Position, Link, Display Background Color), Fit Page to Layers, column-built panels and Stack dialog (graphing 15.7c, 15.7d) | ◐ | T60 done 2026-11-15; left: merge Active Page/Open/embedded filters, panel labels, Add/Axes/remaining Display controls (Add is T61); measured border fill/outline need separate geometry/storage (graphing 15.7d), Fit Layer to Graph (no measurable effect in Origin, `N`) | P0 |
 | Backgrounds and frames | Background tab | page, legend and plot-area layer backgrounds; plot-frame border | ◐ | Layer Management border fill/outline rectangle is measured but needs separate layer-relative geometry and fill storage (graphing 15.7d) | P1 |
 | Data reader, zoom, pan | Gadgets, zoom tool | Data Reader tool (Tools toolbar): snaps to the nearest data point, a click pins it, Left and Right step through rows, a label shows plot, row, X and Y; axis zoom in the axis menu | ◐ | no region zoom, pan or zoom tool; no Data Display window | P1 |
-| Layer display options | clip, data on top | none | ✗ | | P2 |
+| Layer display options | clip, data on top | Plot Details > Display: Show Elements (data, axes), Clip Data to Frame, Data on Top, Grid on Top; Hide Layer | ✓ |  | P2 |
 
 ## 13 Export
 

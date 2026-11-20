@@ -166,6 +166,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T170](T170-3d-constant-base.md) | 3D Surface: X Constant with Base, Y Constant with Base (B15 slice 9) | S | done 2026-11-19 (graphing "3D Scatter and 3D Trajectory"), not measured |
 | [T172](T172-3d-view.md) | 3D view Turn and Tilt in the 3D Axis window (B15 follow-up) | S | done 2026-11-19 (graphing "3D Scatter and 3D Trajectory"), not measured; left: mouse rotation |
 | [T173](T173-3d-ternary-surface.md) | 3D Surface: 3D Ternary Colormap Surface (B15 slice 10) | M | done 2026-11-19 (graphing "3D Scatter and 3D Trajectory"), not measured; 3D Surface submenu fully live |
+| [T175](T175-sparklines.md) | Worksheet Sparklines: column header Add or Update Sparklines..., corner Sparklines switch (B6 slice) | S | done 2026-11-19 (workbook-model 13i), not measured; left: Insert Sparklines in cells, the options dialog |
 | [T160](T160-workbook-templates.md) | User workbook templates: Save Template As on a workbook, New > From Template (T56/T103 follow-up) | M | done 2026-11-19 (workbook-model 13o), not measured; left: analysis templates (B11), CLI/MCP |
 | [T163](T163-analysis-templates.md) | Save Workbook As Analysis Template (B11 slice, on T160) | M | done 2026-11-19 (workbook-model 13o), not measured; left: Origin options, Batch Processing |
 | [T165](T165-batch-processing.md) | File > Batch Processing... with a workbook or analysis template (B11 slice) | M | done 2026-11-19 (workbook-model 13p), not measured; left: summary sheet, Origin options |

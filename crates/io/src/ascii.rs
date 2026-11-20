@@ -112,6 +112,49 @@ pub enum Blocks {
     Sheets,
 }
 
+/// Import Options > Add Sparklines of Origin's impASC window (T231): whether the imported columns get
+/// sparklines and the sheet shows its Sparklines row (workbook-model T175).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum AddSparklines {
+    /// No sparklines (Sheaf's default: the `.opj` writer does not keep sparklines yet, so a default
+    /// import would otherwise always need a companion file).
+    #[default]
+    No,
+    /// Every imported column.
+    Yes,
+    /// Every imported column when the sheet has fewer than 50 columns (Origin's default).
+    Auto,
+}
+
+impl AddSparklines {
+    /// The texts of Origin's list.
+    pub fn label(self) -> &'static str {
+        match self {
+            AddSparklines::No => "No",
+            AddSparklines::Yes => "Yes",
+            AddSparklines::Auto => "Yes(if less than 50 columns)",
+        }
+    }
+
+    /// Marks every column of each sheet for a sparkline and turns its Sparklines row on, as the
+    /// setting says (a sheet of 50 or more columns gets none with `Auto`).
+    pub fn apply(self, book: &mut sheaf_core::Workbook) {
+        for sheet in &mut book.sheets {
+            let on = match self {
+                AddSparklines::No => false,
+                AddSparklines::Yes => true,
+                AddSparklines::Auto => sheet.columns.len() < 50,
+            };
+            if on && !sheet.columns.is_empty() {
+                for c in &mut sheet.columns {
+                    c.sparkline = true;
+                }
+                sheet.view.sparklines = true;
+            }
+        }
+    }
+}
+
 /// A 1-based input range, optionally taking `read` entries and skipping `skip`, repeatedly.
 /// A last position of zero means through the end. The pattern starts at `first`.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -204,6 +247,8 @@ pub struct AsciiOptions {
     /// Which order `11/12/2026` is read in when the file does not settle it
     /// (a day above 12 anywhere in the column does settle it).
     pub date_order: DateOrder,
+    /// Import Options > Add Sparklines (T231).
+    pub sparklines: AddSparklines,
 }
 
 impl Default for AsciiOptions {
@@ -232,6 +277,7 @@ impl Default for AsciiOptions {
             columns: ImportSelection::default(),
             dates: DateImport::Detect,
             date_order: DateOrder::Mdy,
+            sparklines: AddSparklines::No,
         }
     }
 }
@@ -1047,10 +1093,13 @@ pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<A
         }
         _ => {}
     }
-    if opts.blocks == Blocks::Sheets {
-        return parse_blocks(text, file_stem, opts);
-    }
-    parse_block(text, file_stem, opts)
+    let mut r = if opts.blocks == Blocks::Sheets {
+        parse_blocks(text, file_stem, opts)
+    } else {
+        parse_block(text, file_stem, opts)
+    }?;
+    opts.sparklines.apply(&mut r.workbook);
+    Ok(r)
 }
 
 /// Splits the text at blank lines into blocks that each hold data. A block of text without any
@@ -2374,5 +2423,30 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
         assert_eq!(cols[1].numeric().unwrap().len(), 4, "the header lines are still skipped");
         assert_eq!(plain.workbook.sheets[0].name, "Sheet1");
         assert_eq!(plain.workbook.long_name, "");
+    }
+
+    #[test]
+    fn add_sparklines_marks_the_columns_and_shows_the_row_as_origins_list_says() {
+        let text = "t,a,b\n1,2,3\n2,3,4\n3,4,5\n";
+        let with = |s: AddSparklines| AsciiOptions { sparklines: s, ..AsciiOptions::default() };
+        let r = parse_ascii(text, "f", &AsciiOptions::default()).unwrap();
+        let sheet = &r.workbook.sheets[0];
+        assert!(!sheet.view.sparklines && sheet.columns.iter().all(|c| !c.sparkline), "Sheaf's default is No");
+        for s in [AddSparklines::Yes, AddSparklines::Auto] {
+            let r = parse_ascii(text, "f", &with(s)).unwrap();
+            let sheet = &r.workbook.sheets[0];
+            assert!(sheet.view.sparklines && sheet.columns.iter().all(|c| c.sparkline), "{s:?}");
+        }
+        // Yes(if less than 50 columns): 50 columns get none, 49 get them; Yes always does.
+        let wide = |n: usize| {
+            let line = (0..n).map(|i| i.to_string()).collect::<Vec<_>>().join(",");
+            format!("{line}\n{line}\n{line}\n")
+        };
+        let sheet_of =
+            |n: usize, s: AddSparklines| parse_ascii(&wide(n), "f", &with(s)).unwrap().workbook.sheets.remove(0);
+        assert!(!sheet_of(50, AddSparklines::Auto).view.sparklines);
+        assert!(sheet_of(49, AddSparklines::Auto).view.sparklines);
+        assert!(sheet_of(50, AddSparklines::Yes).view.sparklines);
+        assert_eq!(AddSparklines::Auto.label(), "Yes(if less than 50 columns)");
     }
 }

@@ -37,6 +37,7 @@ fn busy_text_options() -> AsciiOptions {
         columns: ImportSelection { first: 2, last: 9, read: 3, skip: 2 },
         dates: DateImport::AsText,
         date_order: DateOrder::Dmy,
+        sparklines: sheaf_io::ascii::AddSparklines::Yes,
     }
 }
 

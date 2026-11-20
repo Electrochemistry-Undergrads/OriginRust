@@ -470,6 +470,18 @@ impl ImportDialog {
         });
         ui.add_space(4.0);
         if self.shown_format() == "ascii" {
+            // Origin's Import Options > Add Sparklines (T231).
+            ui.horizontal(|ui| {
+                ui.label("Add Sparklines");
+                egui::ComboBox::from_id_salt("import-add-sparklines")
+                    .selected_text(self.ascii.sparklines.label())
+                    .show_ui(ui, |ui| {
+                        use sheaf_io::ascii::AddSparklines;
+                        for s in [AddSparklines::No, AddSparklines::Yes, AddSparklines::Auto] {
+                            ui.selectable_value(&mut self.ascii.sparklines, s, s.label());
+                        }
+                    });
+            });
             self.ascii_page(ui);
         } else {
             ui.add_enabled_ui(false, |ui| ui.label("The separator applies to delimited text files."));

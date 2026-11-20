@@ -33,9 +33,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 53 | 200 | 8 | 261 |
+| All rows | 53 | 201 | 7 | 261 |
 | P0 | 33 | 70 | 0 | 103 |
-| P1 and P2 together | 20 | 130 | 8 | 158 |
+| P1 and P2 together | 20 | 131 | 7 | 158 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 63 are P2.
 
@@ -112,7 +112,7 @@ Cross-cutting findings:
 | Excel import | File > Import > Excel | File > Import > Excel (XLS, XLSX, XLSM)... (sheet choice, hidden sheets, header rows, import modes, partial import, preview), drag-and-drop and command-line files, `sheaf import`/`info` with `--sheets`/`--skip-hidden-sheets`, MCP `import_files`; `calamine` (ADR 0012); cached formula values, Excel dates (1900/1904), one book per file and one sheet per Excel sheet; measured against Origin 2016's `impExcel` and copied: hidden sheets read, book long name with extension, leading empty columns kept, merged cells, booleans, error cells, dates and dates among text (import-excel.md 2) | ✓ | header rows detected (Origin reads none unless told); dates before 1900-03-01 as Excel shows them (Origin's are a day early); Origin's import window unseen; `.xlsb`/`.ods` read but untested; no live Open Excel window | P1 |
 | Drag and drop | drop on window | projects open, data goes to dialog | ✓ | | P1 |
 | Other importers, image, database | HDF5, NetCDF, JCAMP-DX, SPC, WAV, ODBC and more | File > Import > Image... (T204) and Binary 2D Array... (T199) into matrix books | ◐ | no HDF5, NetCDF, JCAMP-DX, SPC, WAV or ODBC | P2 |
-| Sparklines, auto width, write protection on import | ASCII options | none | ✗ | | P2 |
+| Sparklines, auto width, write protection on import | ASCII options | Add Sparklines (No, Yes, Yes(if less than 50 columns)) in the import window, themes and `sheaf import --sparklines` (import-ascii 10, T231) | ◐ | default No (Origin: if less than 50 columns) until `.opj` keeps sparklines; no auto width, no write protection | P2 |
 
 ## 3 Workbook and columns
 

@@ -234,10 +234,12 @@ pub enum Cmd {
     /// File > New > Function Plot (T213): the function window; OK makes a new graph.
     NewFunctionPlot,
     /// Plot > Contour/Heat Map > Polar Contour theta(X) r(Y) / r(X) theta(Y) of three selected
-    /// columns (T222).
+    /// columns (T225).
     PolarContour {
         theta_first: bool,
     },
+    /// Plot > Contour/Heat Map > Ternary Contour of four selected columns A, B, C, Z (T226).
+    TernaryContour,
     /// The Matrix menu of a matrix window (T192 slice 3).
     Matrix(MatrixCmd),
     /// The Image menu on the active matrix (T207).
@@ -1607,7 +1609,7 @@ fn plot_menu() -> Vec<Entry> {
                     item("Polar Contour theta(X) r(Y)", Cmd::PolarContour { theta_first: true }),
                     item("Polar Contour r(X) theta(Y)", Cmd::PolarContour { theta_first: false }),
                 ],
-                greys(&["Ternary Contour"]),
+                vec![item("Ternary Contour", Cmd::TernaryContour)],
                 vec![item("Hexbin", Cmd::Plot(Template::Hexbin))],
             ]
             .concat(),
@@ -3254,6 +3256,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ImportBinary2d => Action::ImportBinary2d,
         Cmd::ImportImage => Action::ImportImage,
         Cmd::NewFunctionPlot => Action::NewFunctionPlot,
+        Cmd::TernaryContour => {
+            let [a, b, c3, z] = c.selected[..] else {
+                return Err("Select the A, B and C composition columns and the Z column (four columns) first");
+            };
+            Action::TernaryContour { a, b, c: c3, z }
+        }
         Cmd::PolarContour { theta_first } => {
             let [a, b, z] = c.selected[..] else {
                 return Err("Select the X, Y and Z columns (three columns) first");

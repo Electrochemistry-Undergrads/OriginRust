@@ -1313,8 +1313,19 @@ window is its own, **unmeasured**:
 - All books are one undo step ("Batch processing"); the last book comes to the front. Files that cannot
   be read are skipped and named in the status line with any analysis problem; when no file can be read,
   the window stays open with the error.
-- Not done: Origin's summary report sheet, dataset identifiers, import filters saved in the template,
-  deleting intermediate books, the graph-window variant that runs a graph template.
+- Summary (T233, **unmeasured**): Summary Sheet lists "(none)" and the sheets of the chosen template
+  (it goes back to none when another template does not have the sheet); Dataset Identifier (default
+  "Dataset"; empty is "Dataset") and Delete Intermediate Books are enabled with a sheet. With a sheet,
+  after the books are made (formula columns brought up to date) a new workbook, long name "Batch
+  Summary", one sheet "Summary", holds for each book in file order every row of its sheet of that
+  name (as many rows as its longest column), each row led by the file name in a first text column
+  (designation X) named by the identifier. The other columns follow the template sheet: long name
+  (the short name when it has none), units, comments and designation; values only (no formulas), text
+  cells kept. With Delete Intermediate Books the books made are deleted with their analysis runs once
+  the summary is made. All of it is the one undo step; the summary comes to the front and the status
+  line names it.
+- Not done: import filters saved in the template, the graph-window variant that runs a graph template,
+  Origin's own summary layout and identifier choices, Minimize/Hide for intermediate books.
 - Tests: `crates/core/src/book_template.rs`, `crates/app/src/app/ui_tests/user_templates.rs`.
 
 ## 14. Suggested Rust data model (P0)

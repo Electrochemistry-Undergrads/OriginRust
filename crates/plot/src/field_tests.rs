@@ -244,3 +244,41 @@ fn a_polar_contour_is_drawn_inside_the_circle() {
         }
     }
 }
+
+#[test]
+fn a_ternary_contour_is_drawn_inside_the_triangle() {
+    // A grid over the triangle in percent; the value is the share of A.
+    let mut p = Project::new();
+    let book = p.add_workbook("ternary");
+    let (mut a, mut b, mut c, mut z) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    for i in 0..=10 {
+        for j in 0..=(10 - i) {
+            a.push(f64::from(i) * 10.0);
+            b.push(f64::from(j) * 10.0);
+            c.push(f64::from(10 - i - j) * 10.0);
+            z.push(f64::from(i));
+        }
+    }
+    let cols: Vec<_> = [a, b, c, z]
+        .into_iter()
+        .zip([Designation::X, Designation::Y, Designation::Z, Designation::Z])
+        .map(|(v, d)| p.add_column(book, 0, d, ColumnData::numeric(v)).unwrap())
+        .collect();
+    let g = p.plot_ternary_contour(cols[0], cols[1], cols[2], cols[3]).unwrap();
+    let graph = p.graph(g).unwrap();
+    assert!(graph.layers[0].coords.ternary().is_some() && graph.layers[0].field.is_some());
+    let geom = crate::layout_geometry(&p, g).unwrap();
+    let map = geom[0].ternary.as_ref().expect("a ternary map");
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let filled: Vec<&crate::scene::Item> =
+        scene.layers[0].plots.iter().filter(|i| matches!(i, crate::scene::Item::Path { fill: Some(_), .. })).collect();
+    assert!(!filled.is_empty(), "the contour bands are drawn");
+    for item in filled {
+        if let crate::scene::Item::Path { d, .. } = item {
+            for (x, y) in crate::hit::path_points(d) {
+                let (fa, fb) = map.fractions(x, y);
+                assert!(fa >= -0.02 && fb >= -0.02 && fa + fb <= 1.02, "({x}, {y}) lies outside the triangle");
+            }
+        }
+    }
+}

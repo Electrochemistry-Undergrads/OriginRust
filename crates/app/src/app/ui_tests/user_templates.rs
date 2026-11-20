@@ -246,3 +246,74 @@ fn batch_processing_makes_one_book_per_file_from_an_analysis_template() {
     assert_eq!(made[1].sheets[0].columns[2].len(), 3);
     assert_eq!(h.state().doc.undo_label(), Some("Batch processing"));
 }
+
+#[test]
+fn batch_processing_collects_a_summary_sheet_and_can_delete_the_books_it_made() {
+    // T233: Summary Sheet, Dataset Identifier and Delete Intermediate Books.
+    use sheaf_core::analysis::{Boundary, OutputTarget, Request, RowRange, SmoothMethod, SmoothOptions, Tool};
+    let file = data_file("batch-summary");
+    let folder = file.parent().unwrap().to_path_buf();
+    let dir = folder.join("templates");
+    let mut p = sheaf_core::Project::new();
+    let b = p.add_workbook("Assay");
+    p.add_column(b, 0, sheaf_core::Designation::X, sheaf_core::ColumnData::numeric(vec![0.0, 1.0, 2.0])).unwrap();
+    let y =
+        p.add_column(b, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::numeric(vec![1.0, 0.0, 1.0])).unwrap();
+    let o = SmoothOptions {
+        method: SmoothMethod::AdjacentAveraging { weighted: false },
+        npts: 3,
+        boundary: Boundary::None,
+    };
+    let request = Request { columns: vec![y], rows: RowRange::All, tool: Tool::Smooth(o) };
+    p.analyze_linked(&request, &OutputTarget::NextToInput, sheaf_core::RecalcMode::Auto).unwrap();
+    p.workbook_mut(b).unwrap().sheets[0].name = "Data".into();
+    let t = sheaf_core::BookTemplate::analysis_from_workbook("Assay", &p, b).unwrap();
+    sheaf_io::user_templates::save_book(&dir, &t).unwrap();
+    let runs = [folder.join("run1.csv"), folder.join("run2.csv")];
+    std::fs::write(&runs[0], "t,v\n1,0\n2,3\n3,0\n4,3\n5,0\n").unwrap();
+    std::fs::write(&runs[1], "t,v\n1,1\n2,1\n3,1\n").unwrap();
+
+    let mut h = start_with(file, Some(dir));
+    let books = project(&h).workbooks().count();
+    let links = project(&h).analysis_links.len();
+    show_window(&mut h, "Book1 - sample.csv");
+    menu_path(&mut h, &["File", "Batch Processing..."]);
+    h.get_by_label("Batch Processing").get_by_label("Summary Sheet");
+    h.get_by_label("Batch Processing").get_by_label("Delete Intermediate Books");
+    let d = h.state_mut().batch.as_mut().unwrap();
+    d.add_files(runs.iter().cloned());
+    d.set_summary(Some("Data"), "File", true);
+    settle(&mut h);
+    h.get_by_label("Batch Processing").get_by_label("OK").click();
+    settle(&mut h);
+    assert!(h.state().batch.is_none(), "OK runs and closes");
+    let made: Vec<_> = project(&h).workbooks().skip(books).collect();
+    assert_eq!(made.len(), 1, "only the summary is left: {:?}", made.iter().map(|b| &b.long_name).collect::<Vec<_>>());
+    assert_eq!(made[0].long_name, "Batch Summary");
+    let cols = &made[0].sheets[0].columns;
+    assert_eq!(cols.len(), 4, "the identifier and the template's three columns");
+    assert_eq!(cols[0].long_name, "File");
+    assert_eq!(
+        cols[0].text().unwrap(),
+        ["run1.csv", "run1.csv", "run1.csv", "run1.csv", "run1.csv", "run2.csv", "run2.csv", "run2.csv"]
+    );
+    assert_eq!(cols[2].numeric().unwrap(), [0.0, 3.0, 0.0, 3.0, 0.0, 1.0, 1.0, 1.0]);
+    assert_eq!(cols[3].len(), 8, "the smoothing of every file is in the summary");
+    assert_eq!(project(&h).analysis_links.len(), links, "the deleted books' runs are gone");
+    assert_eq!(h.state().doc.undo_label(), Some("Batch processing"));
+    h.state_mut().doc.undo();
+    settle(&mut h);
+    assert_eq!(project(&h).workbooks().count(), books, "one undo step takes all of it back");
+
+    // Without deleting, the books stay next to the summary.
+    menu_path(&mut h, &["File", "Batch Processing..."]);
+    let d = h.state_mut().batch.as_mut().unwrap();
+    d.add_files(runs.iter().cloned());
+    d.set_summary(Some("Data"), "", false);
+    settle(&mut h);
+    h.get_by_label("Batch Processing").get_by_label("OK").click();
+    settle(&mut h);
+    let made: Vec<_> = project(&h).workbooks().skip(books).collect();
+    assert_eq!(made.len(), 3);
+    assert_eq!(made[2].sheets[0].columns[0].long_name, "Dataset", "an empty identifier is Dataset");
+}

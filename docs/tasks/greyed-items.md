@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **79 greyed items: 68 in the menu bar, 1 on the toolbars, 10 in context menus.**
+original inventory baseline. This is not a new runtime audit. **78 greyed items: 67 in the menu bar, 1 on the toolbars, 10 in context menus.**
 
 ## How to read and keep this file
 
@@ -80,13 +80,13 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B11` | 0 |
 | `B12` | 1 |
 | `B13` | 2 |
-| `B14` | 10 |
+| `B14` | 9 |
 | `B15` | 1 |
 | `B16` | 15 |
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 12 items, backlog packages (`B`) 47, not planned (`N`) 20.
+Briefs (`T`) hold 12 items, backlog packages (`B`) 46, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -115,7 +115,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T66` Show Data Info [Graph]
 
 ### Plot
-- `B14` Contour/Heat Map: Ternary Contour
 - `B14` Profile: Contour Profiles · Image Profiles
 
 ### Column

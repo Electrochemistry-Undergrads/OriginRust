@@ -2420,7 +2420,7 @@ impl FieldTemplate {
         FieldTemplate::ALL.into_iter().find(|t| t.name().eq_ignore_ascii_case(name))
     }
 
-    /// Polar Contour (T222): Origin's polar page and layer with this template's contour of `source`,
+    /// Polar Contour (T225): Origin's polar page and layer with this template's contour of `source`,
     /// whose X is the angle and Y the radius. The colour scale stands to the right of the circle.
     pub fn new_polar_graph(&self, id: WindowId, name: &str, source: FieldSource) -> Graph {
         let mut g = polar(id, name, RadiusColumn::Y);
@@ -2428,6 +2428,18 @@ impl FieldTemplate {
         let layer = &mut g.layers[0];
         layer.legend.visible = false;
         layer.field = field;
+        g
+    }
+
+    /// Ternary Contour (T226): Origin's ternary layer with this template's contour of `source`.
+    pub fn new_ternary_graph(&self, id: WindowId, name: &str, source: FieldSource) -> Graph {
+        let mut g = ternary(id, name);
+        let field = self.new_graph(id, name, source).layers.swap_remove(0).field;
+        let layer = &mut g.layers[0];
+        layer.legend.visible = false;
+        layer.field = field;
+        // The field templates' frame, so that the colour scale and its labels fit on the page.
+        layer.frame = Frame { left: 0.14, top: 0.113, width: 0.5725, height: 0.733 };
         g
     }
 

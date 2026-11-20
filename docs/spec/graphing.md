@@ -461,8 +461,8 @@ Line (200), scatter (201), line+symbol (202) are one plot object differing in co
 | Spline | 9 | cubic through points; X increasing; max 900 points; resolution = SplineStep |
 | Step horizontal | 11 | |
 | Step vertical | 12 | |
-| Step horizontal centred | 13 | |
-| Step vertical centred | not documented | |
+| Step horizontal centred | 13 | horizontal to the middle between two X values, vertical, horizontal on (Sheaf T252, not measured) |
+| Step vertical centred | not documented | vertical to the middle between two Y values, horizontal, vertical on (Sheaf T252; written to .opj as 12 with a note) |
 | Bezier | 15 | groups of 4, passes through 1st and 4th; leftovers unused |
 **Measured in Origin** (line graphs, `set %C -l N`, PNG export, curve read pixel by pixel; seven points X 0..6, Y 0 3 1 4 1 5 2):
 - **Spline (9)** is a *natural* cubic spline y(x) (zero second derivative at both ends): rms 0.5 px against the picture; not-a-knot, clamped, Akima and PCHIP are 10 to 38 px off. It is drawn only when X is strictly increasing and the plot has at most 900 points (900 splined, 901 straight, also when zoomed in to show 30 points; the count is all points of the plot, not the visible ones). Decreasing X, repeated X or more than 900 points: the whole plot is drawn with straight segments in row order. Two or three points work. Between points the curve is drawn as chords, with no inner points when a segment is shorter than about 4 px on screen (dense data therefore looks straight; at about 7 px a segment gets one inner point).

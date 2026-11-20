@@ -523,6 +523,8 @@ pub(super) fn connect_name(c: Connect) -> String {
         Connect::Bezier => "Bezier",
         Connect::StepHorizontal => "Step, horizontal first",
         Connect::StepVertical => "Step, vertical first",
+        Connect::StepHorizontalCenter => "Step Horizontal Center",
+        Connect::StepVerticalCenter => "Step Vertical Center",
         Connect::Segment2 => "2 Point Segment",
         Connect::Segment3 => "3 Point Segment",
         Connect::Segments(_) => unreachable!("handled above"),

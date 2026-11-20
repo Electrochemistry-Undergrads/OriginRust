@@ -322,6 +322,12 @@ pub enum Action {
     ImportImage,
     /// File > New > Function Plot (T213): opens the function window for a graph made on OK.
     NewFunctionPlot,
+    /// Plot > Contour/Heat Map > Polar Contour (T222): a polar contour of `z` over `theta` and `r`.
+    PolarContour {
+        theta: sheaf_core::ColumnId,
+        r: sheaf_core::ColumnId,
+        z: sheaf_core::ColumnId,
+    },
     /// A typed matrix cell (T192): `None` clears it (missing). One undo step.
     SetMatrixCell {
         id: WindowId,

@@ -87,6 +87,58 @@ pub struct Volume {
     pub volume: f64,
 }
 
+/// The column names of the 2D Integrate gadget's output table (T198), one row per New Output.
+pub const VOLUME_COLUMNS: [&str; 11] =
+    ["X From", "X To", "Y From", "Y To", "Volume", "N", "Mean", "SD", "Min", "Max", "Sum"];
+
+/// The long name of the workbook that collects the 2D Integrate gadget's outputs (T198).
+pub const VOLUME_BOOK: &str = "2D Integrate Results";
+
+impl Integrator {
+    /// The 2D Integrate gadget's numbers for its rectangle (T198), `None` without a field or cells.
+    pub fn volume(&self, project: &Project, graph: WindowId) -> Option<Volume> {
+        let layer = project.graph(graph)?.layers.get(self.layer)?;
+        let (cells, area) = sheaf_plot::field_cells(project, layer)?;
+        volume_in(&cells, area, (self.x0, self.x1), (self.y0, self.y1))
+    }
+}
+
+/// Adds a row with the rectangle and its [`Volume`] to the workbook named [`VOLUME_BOOK`], made with
+/// [`VOLUME_COLUMNS`] the first time (T198). Returns the workbook.
+pub fn write_volume(p: &mut Project, rect: [f64; 4], v: &Volume) -> WindowId {
+    use sheaf_core::{ColumnData, Designation};
+    let existing = p.workbooks().find(|b| b.long_name == VOLUME_BOOK).map(|b| b.id);
+    let book = match existing {
+        Some(book) => book,
+        None => {
+            let book = p.add_workbook(VOLUME_BOOK);
+            for (k, name) in VOLUME_COLUMNS.iter().enumerate() {
+                let designation = if k == 0 { Designation::X } else { Designation::Y };
+                if let Ok(id) = p.add_column(book, 0, designation, ColumnData::numeric(Vec::new()))
+                    && let Some(c) = p.column_mut(id)
+                {
+                    c.long_name = (*name).to_string();
+                }
+            }
+            book
+        }
+    };
+    let row = [rect[0], rect[1], rect[2], rect[3], v.volume, v.n as f64, v.mean, v.sd, v.min, v.max, v.sum];
+    let ids: Vec<sheaf_core::ColumnId> = p
+        .workbook(book)
+        .and_then(|b| b.sheets.first())
+        .map(|s| s.columns.iter().map(|c| c.id).collect())
+        .unwrap_or_default();
+    for (id, value) in ids.into_iter().zip(row) {
+        if let Some(c) = p.column_mut(id) {
+            let mut values = c.numeric().map(<[f64]>::to_vec).unwrap_or_default();
+            values.push(value);
+            c.data = ColumnData::numeric(values);
+        }
+    }
+    book
+}
+
 /// [`Volume`] of `cells` (X, Y, Z) whose X is between `x0` and `x1` and Y between `y0` and `y1` (either
 /// order, ends included); `None` when no cell is inside.
 pub fn volume_in(cells: &[[f64; 3]], area: f64, (x0, x1): (f64, f64), (y0, y1): (f64, f64)) -> Option<Volume> {
@@ -873,8 +925,8 @@ impl Integrator {
                 | GadgetKind::VerticalCursor
                 | GadgetKind::Differentiate
                 | GadgetKind::Interpolate
-                | GadgetKind::Cluster
-                | GadgetKind::Integrate2d => menus::rise_time_gadget_menu(),
+                | GadgetKind::Cluster => menus::rise_time_gadget_menu(),
+                GadgetKind::Integrate2d => menus::integrate_2d_gadget_menu(),
             };
             menus::show_context(ui, &menu, c, actions)
         });

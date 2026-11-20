@@ -1413,6 +1413,17 @@ impl SheafApp {
         match op {
             GadgetOp::ToggleBaseline => g.end_point_baseline = !g.end_point_baseline,
             GadgetOp::Close => state.gadget = None,
+            // 2D Integrate (T198): a row of the results table.
+            GadgetOp::NewOutput if g.kind == crate::gadget::GadgetKind::Integrate2d => {
+                let g = *g;
+                let Some(v) = g.volume(self.doc.project(), graph) else {
+                    self.warn("No cells in the region".to_string());
+                    return;
+                };
+                let rect = [g.x0.min(g.x1), g.x0.max(g.x1), g.y0.min(g.y1), g.y0.max(g.y1)];
+                self.doc.apply("2D Integrate", |p| crate::gadget::write_volume(p, rect, &v));
+                self.say(format!("The volume was added to {}", crate::gadget::VOLUME_BOOK));
+            }
             GadgetOp::NewOutput => {
                 let g = *g;
                 let column = self

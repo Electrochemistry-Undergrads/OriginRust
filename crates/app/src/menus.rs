@@ -2039,6 +2039,15 @@ pub fn rise_time_gadget_menu() -> Vec<Entry> {
     vec![keyed("Delete", plain_key(Key::Escape), Cmd::Gadget(GadgetOp::Close))]
 }
 
+/// The 2D Integrate gadget's right-click menu (T198).
+pub fn integrate_2d_gadget_menu() -> Vec<Entry> {
+    vec![
+        item("New Output", Cmd::Gadget(GadgetOp::NewOutput)),
+        sep(),
+        keyed("Delete", plain_key(Key::Escape), Cmd::Gadget(GadgetOp::Close)),
+    ]
+}
+
 pub fn integrate_gadget_menu(end_point_baseline: bool) -> Vec<Entry> {
     let baseline = if end_point_baseline { "Baseline: Zero" } else { "Baseline: Line Through End Points" };
     vec![

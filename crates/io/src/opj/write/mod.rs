@@ -178,6 +178,8 @@ struct Notes {
     sheet_names_dropped: usize,
     /// Sheets with comments, which the file written here does not hold.
     sheet_comments_dropped: usize,
+    /// Sheets marked Exclude from Plotting dialogs (T184), which the file written here does not hold.
+    plot_exclusions_dropped: usize,
     /// Sheets with hidden label rows, row labels or grid lines (T92), which the file written here does not hold.
     sheet_views_dropped: usize,
     /// Sheets with frozen panes: the file written here holds none.
@@ -349,6 +351,7 @@ impl Writer {
         self.notes.filters_dropped += usize::from(sheet.filter.is_some());
         self.notes.sheet_names_dropped += usize::from(!sheet.long_name.is_empty() || !sheet.tab_label.is_default());
         self.notes.sheet_comments_dropped += usize::from(!sheet.comments.is_empty());
+        self.notes.plot_exclusions_dropped += usize::from(sheet.exclude_from_plotting);
         self.notes.sheet_views_dropped += usize::from(!sheet.view.is_default());
         self.notes.frozen_dropped += usize::from(!sheet.frozen.is_none());
         self.notes.cond_formats_dropped += usize::from(!sheet.cond_formats.is_empty());
@@ -780,6 +783,12 @@ impl Writer {
             warnings.push(format!(
                 "{} sheet(s) have worksheet comments, which the project file written here does not hold.",
                 n.sheet_comments_dropped
+            ));
+        }
+        if n.plot_exclusions_dropped > 0 {
+            warnings.push(format!(
+                "{} sheet(s) are excluded from the plotting dialogs, which the project file written here does not hold.",
+                n.plot_exclusions_dropped
             ));
         }
         if n.filters_dropped > 0 {

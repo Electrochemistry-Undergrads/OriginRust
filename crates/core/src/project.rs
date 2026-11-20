@@ -316,6 +316,8 @@ pub enum ProjectError {
     MultiYNoRightAxis(&'static str),
     #[error("{0}")]
     VectorColumns(&'static str),
+    #[error("a workbook keeps at least one sheet")]
+    LastSheet,
     #[error("{0}")]
     StockColumns(&'static str),
     #[error("{0}")]

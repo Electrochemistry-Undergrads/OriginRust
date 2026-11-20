@@ -39,6 +39,12 @@ pub enum NavAction {
     ClearData,
     Delete,
     Move(SheetMove),
+    /// Move to > New Book and Duplicate to New Book (T184): the sheets go, or are copied, to one new
+    /// workbook.
+    MoveToNewBook,
+    DuplicateToNewBook,
+    /// Exclude from Plotting dialogs (T184): set on every sheet, or cleared when all have it.
+    ExcludeFromPlotting,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -114,7 +120,8 @@ impl SheetNavigateDialog {
     }
 
     /// The Actions items (T180), as Origin's list them; the chosen one ends in `outcome`.
-    fn actions_menu(&self, ui: &mut egui::Ui, sheets: usize, order: &[usize], outcome: &mut NavigateOutcome) {
+    fn actions_menu(&self, ui: &mut egui::Ui, all: &[Worksheet], order: &[usize], outcome: &mut NavigateOutcome) {
+        let sheets = all.len();
         let targets = self.targets();
         let mut act = |ui: &mut egui::Ui, label: &str, enabled: bool, action: NavAction| {
             if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
@@ -131,6 +138,14 @@ impl SheetNavigateDialog {
         act(ui, "Move Before", true, NavAction::Move(SheetMove::Before));
         act(ui, "Move to Behind", true, NavAction::Move(SheetMove::Behind));
         act(ui, "Move to End", true, NavAction::Move(SheetMove::End));
+        ui.menu_button("Move to", |ui| {
+            act(ui, "New Book", targets.len() < sheets, NavAction::MoveToNewBook);
+        });
+        act(ui, "Duplicate to New Book", true, NavAction::DuplicateToNewBook);
+        ui.separator();
+        let excluded = targets.iter().all(|&i| all.get(i).is_some_and(|s| s.exclude_from_plotting));
+        let label = if excluded { "\u{2713} Exclude from Plotting dialogs" } else { "Exclude from Plotting dialogs" };
+        act(ui, label, true, NavAction::ExcludeFromPlotting);
         ui.separator();
         let reorder = order.iter().copied().ne(0..sheets);
         if ui.add_enabled(reorder, egui::Button::new("Set Current Order as Sheet Order")).clicked() {
@@ -180,7 +195,7 @@ impl SheetNavigateDialog {
                     || (0..book.sheets.len()).collect::<Vec<_>>(),
                     |(column, descending)| column.order(&book.sheets, descending),
                 );
-                ui.menu_button("Actions", |ui| self.actions_menu(ui, book.sheets.len(), &shown, &mut outcome));
+                ui.menu_button("Actions", |ui| self.actions_menu(ui, &book.sheets, &shown, &mut outcome));
                 let order = egui::ScrollArea::vertical()
                     .max_height(280.0)
                     .show(ui, |ui| self.table(ui, &book.sheets, &mut outcome))
@@ -254,7 +269,7 @@ impl SheetNavigateDialog {
                         self.selected = i;
                     }
                     for row in [&index, &name] {
-                        row.context_menu(|ui| self.actions_menu(ui, sheets.len(), &order, outcome));
+                        row.context_menu(|ui| self.actions_menu(ui, sheets, &order, outcome));
                     }
                     if index.double_clicked() || name.double_clicked() {
                         *outcome = NavigateOutcome::Go { book: self.book, sheet: i };

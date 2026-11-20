@@ -3196,8 +3196,11 @@ impl SheafApp {
             }
             Action::Gadget { graph, op } => self.gadget(graph, op),
             Action::ExportGraph(graph) => {
-                self.export =
-                    Some(ExportDialog::new(graph, self.folder()).with_themes(self.startup.themes_dir.clone()));
+                self.export = Some(
+                    ExportDialog::new(graph, self.folder())
+                        .with_themes(self.startup.themes_dir.clone())
+                        .with_explorer_folder(self.doc.project(), &self.panels.explorer.folder),
+                );
             }
             Action::SendGraphsToPowerPoint(graph) => {
                 let p = self.doc.project();
@@ -3256,6 +3259,7 @@ impl SheafApp {
                 self.export = Some(
                     ExportDialog::new(start, self.folder())
                         .with_themes(self.startup.themes_dir.clone())
+                        .with_explorer_folder(self.doc.project(), &self.panels.explorer.folder)
                         .for_all_graphs(format, multipage),
                 );
             }

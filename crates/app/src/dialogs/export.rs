@@ -160,6 +160,11 @@ fn margin_label(m: Margin) -> &'static str {
 pub enum Which {
     ActivePage,
     AllGraphs,
+    /// The graphs of the Explorer folder open when the window opened (T250), as Merge Graph Windows
+    /// takes them (graphing 15.11, measured for merge_graph).
+    ActiveFolder,
+    /// The same with its subfolders, depth first, subfolders by name.
+    ActiveFolderRecursive,
 }
 
 /// What to do when the file exists.
@@ -176,6 +181,8 @@ fn which_label(w: Which) -> &'static str {
     match w {
         Which::ActivePage => "Active Page",
         Which::AllGraphs => "All Graphs in Project",
+        Which::ActiveFolder => "All in Active Folder",
+        Which::ActiveFolderRecursive => "All in Active Folder (Recursive)",
     }
 }
 
@@ -236,6 +243,8 @@ pub struct ExportDialog {
     pending: Option<bool>,
     /// The files the last successful export wrote, with the graph of each, until taken (Recent Exports).
     written: Vec<(WindowId, PathBuf)>,
+    /// The Explorer folder when the window opened, for the folder choices (T250).
+    scope: Option<crate::dialogs::merge_graphs::folders::FolderScope>,
 }
 
 /// What happened in one frame of the dialog.
@@ -277,7 +286,15 @@ impl ExportDialog {
             preview: None,
             pending: None,
             written: Vec::new(),
+            scope: None,
         }
+    }
+
+    /// The Explorer folder (its path) the folder choices of Select Graph(s) take their graphs from
+    /// (T250).
+    pub fn with_explorer_folder(mut self, project: &sheaf_core::Project, path: &[usize]) -> Self {
+        self.scope = Some(crate::dialogs::merge_graphs::folders::FolderScope::new(project, path));
+        self
     }
 
     /// File > Export from a workbook or with no window open (T182): the window starts on every graph of
@@ -356,6 +373,12 @@ impl ExportDialog {
         match self.which {
             Which::ActivePage => vec![self.graph],
             Which::AllGraphs => doc.project().graphs().map(|g| g.id).collect(),
+            // A changed folder tree gives no graphs: nothing is written (as Merge Graph Windows refuses).
+            Which::ActiveFolder | Which::ActiveFolderRecursive => self
+                .scope
+                .as_ref()
+                .map(|s| s.graphs(doc.project(), self.which == Which::ActiveFolderRecursive))
+                .unwrap_or_default(),
         }
     }
 
@@ -527,6 +550,11 @@ impl ExportDialog {
                                 .show_ui(ui, |ui| {
                                     for w in [Which::ActivePage, Which::AllGraphs] {
                                         ui.selectable_value(&mut self.which, w, which_label(w));
+                                    }
+                                    if self.scope.is_some() {
+                                        for w in [Which::ActiveFolder, Which::ActiveFolderRecursive] {
+                                            ui.selectable_value(&mut self.which, w, which_label(w));
+                                        }
                                     }
                                 });
                             ui.end_row();
@@ -881,6 +909,43 @@ mod tests {
         d.which = Which::AllGraphs;
         d.multipage = true;
         (Document::new(project), d, dir)
+    }
+
+    #[test]
+    fn the_folder_choices_export_the_graphs_of_the_explorer_folder() {
+        // T250: All in Active Folder and its Recursive form, in Merge Graph Windows' measured order.
+        use sheaf_core::project::Folder;
+        let mut project = sheaf_core::Project::new();
+        let line = || sheaf_core::template::Template::Line;
+        let (root_g, runs_b, runs_a, deep) = (
+            project.add_graph(line()),
+            project.add_graph(line()),
+            project.add_graph(line()),
+            project.add_graph(line()),
+        );
+        let zulu = Folder { name: "Zulu".into(), windows: vec![deep], ..Folder::default() };
+        let alpha = Folder { name: "alpha".into(), ..Folder::default() };
+        project.root.folders.push(Folder {
+            name: "Runs".into(),
+            windows: vec![runs_b, runs_a],
+            folders: vec![zulu, alpha],
+            ..Folder::default()
+        });
+        let doc = Document::new(project);
+        let mut d = ExportDialog::new(runs_a, None).with_explorer_folder(doc.project(), &[0]);
+        d.which = Which::ActiveFolder;
+        assert_eq!(d.graph_ids(&doc), vec![runs_b, runs_a], "the folder's own graphs, in project order");
+        d.which = Which::ActiveFolderRecursive;
+        assert_eq!(d.graph_ids(&doc), vec![runs_b, runs_a, deep]);
+        assert!(!d.graph_ids(&doc).contains(&root_g));
+        // The root folder: only the graphs no folder lists.
+        let mut r = ExportDialog::new(root_g, None).with_explorer_folder(doc.project(), &[]);
+        r.which = Which::ActiveFolder;
+        assert_eq!(r.graph_ids(&doc), vec![root_g]);
+        // A folder tree changed after opening gives no graphs (nothing is written).
+        let mut changed = doc.project().clone();
+        changed.root.folders.clear();
+        assert!(d.graph_ids(&Document::new(changed)).is_empty());
     }
 
     #[test]

@@ -1394,6 +1394,18 @@ that was active most recently (it names the first file): Graphs... and Graph as 
 PDF... in PDF with "Export as multi-page PDF file" ticked (9.7). Everything else in the window is as from a
 graph. With no graph in the project the items only say so in the status line.
 
+### 9.7b Export Graphs from a folder (T250, the order not measured for expGraph)
+
+Select Graph(s) also lists **All in Active Folder** and **All in Active Folder (Recursive)**
+(expGraph's `export` "all in folder" and "recursive", 9.1) when the window opens from a graph or from
+File > Export. They take the graphs of the Project Explorer folder that was open when the window
+opened, the recursive one with its subfolders, in the order measured for `merge_graph` (15.11: the
+folder's own graphs in project order, then each subfolder depth first, subfolders by name). If the
+folder tree changes while the window is open the choices give no graphs and nothing is written.
+File names follow File Name(s) with its substitution (`<long name>`, `<short name>`, `<index>`) and
+the Overwrite Existing rule, as for All Graphs in Project; with PDF and two or more graphs, the
+multi-page box (9.7) applies. Not built: Open (visible only), embedded graphs and Specified.
+
 ### 9.8 Export Dialog Themes (T05)
 
 **Origin 2016, measured on Windows 2026-11-15.** Five isolated synthetic-graph sessions

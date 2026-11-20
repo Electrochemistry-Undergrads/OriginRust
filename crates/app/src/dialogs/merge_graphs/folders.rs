@@ -1,26 +1,27 @@
-//! Captured Explorer scope for the two measured folder merge modes.
+//! Captured Explorer scope for the two measured folder merge modes (also Export Graphs' folder
+//! choices, T250).
 
 use crate::panels::explorer;
 use sheaf_core::project::Folder;
 use sheaf_core::{Project, WindowId};
 use std::collections::BTreeMap;
 
-pub(super) struct FolderScope {
+pub(crate) struct FolderScope {
     path: Vec<usize>,
     // Folders have no stable ids. Refuse a changed tree rather than retargeting an index path.
     root: Folder,
 }
 
 impl FolderScope {
-    pub(super) fn new(project: &Project, path: &[usize]) -> Self {
+    pub(crate) fn new(project: &Project, path: &[usize]) -> Self {
         Self { path: path.to_vec(), root: project.root.clone() }
     }
 
-    pub(super) fn valid(&self, project: &Project) -> bool {
+    pub(crate) fn valid(&self, project: &Project) -> bool {
         self.root == project.root && explorer::folder_at(&project.root, &self.path).is_some()
     }
 
-    pub(super) fn graphs(&self, project: &Project, recursive: bool) -> Vec<WindowId> {
+    pub(crate) fn graphs(&self, project: &Project, recursive: bool) -> Vec<WindowId> {
         if !self.valid(project) {
             return Vec::new();
         }

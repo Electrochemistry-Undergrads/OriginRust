@@ -5,7 +5,7 @@ use eframe::egui;
 use sheaf_core::merge::{MERGE_PAGE_IN, MergeOptions, MergeTextScale, auto_grid};
 use sheaf_core::{Document, Project, WindowId};
 
-mod folders;
+pub(crate) mod folders;
 mod preview;
 use folders::FolderScope;
 

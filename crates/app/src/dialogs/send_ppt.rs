@@ -9,8 +9,11 @@ use sheaf_core::WindowId;
 pub enum SendPptOutcome {
     Open,
     Closed,
-    /// Write these graphs, one slide each, in this order.
-    Send(Vec<WindowId>),
+    /// Write these graphs, one slide (or page) each, in this order; `word` for a .docx (T242).
+    Send {
+        graphs: Vec<WindowId>,
+        word: bool,
+    },
 }
 
 /// The window of the graph page's Send Graphs to PowerPoint....
@@ -21,11 +24,13 @@ pub struct SendPptDialog {
     all: Vec<WindowId>,
     /// All graphs of the project rather than the active one.
     pub all_graphs: bool,
+    /// Write a Word document (.docx, a graph per page) instead of a presentation (T242).
+    pub word: bool,
 }
 
 impl SendPptDialog {
     pub fn new(active: (WindowId, String), all: Vec<WindowId>) -> Self {
-        SendPptDialog { active, all, all_graphs: false }
+        SendPptDialog { active, all, all_graphs: false, word: false }
     }
 
     /// The graphs that OK sends.
@@ -44,13 +49,19 @@ impl SendPptDialog {
             .show(ctx, |ui| {
                 ui.radio_value(&mut self.all_graphs, false, format!("Active graph ({})", self.active.1));
                 ui.radio_value(&mut self.all_graphs, true, format!("All graphs in the project ({})", self.all.len()));
-                ui.weak(
+                ui.separator();
+                ui.radio_value(&mut self.word, false, "PowerPoint (.pptx)");
+                ui.radio_value(&mut self.word, true, "Word (.docx)");
+                ui.weak(if self.word {
+                    "Sheaf writes a Word document (.docx): one graph per page, the graph as a picture made \
+                     to fit the text width, with its name under it."
+                } else {
                     "Sheaf writes a PowerPoint file (.pptx): one slide per graph, the graph as a picture \
-                     made to fit the slide.",
-                );
+                     made to fit the slide."
+                });
                 ui.horizontal(|ui| {
                     if ui.button("OK").clicked() {
-                        outcome = SendPptOutcome::Send(self.chosen());
+                        outcome = SendPptOutcome::Send { graphs: self.chosen(), word: self.word };
                     }
                     if ui.button("Cancel").clicked() {
                         outcome = SendPptOutcome::Closed;

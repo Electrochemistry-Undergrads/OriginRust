@@ -922,3 +922,28 @@ fn an_x_axis_offset_is_named_in_the_notes() {
     let (_, out) = round_trip(&p);
     assert!(!out.warnings.iter().any(|w| w.contains("position of an X axis")), "{:?}", out.warnings);
 }
+
+#[test]
+fn an_axis_at_a_position_is_named_in_the_notes() {
+    // T243: Origin's "At Position =" is not written; the companion keeps it.
+    let mut p = source();
+    let c = ids(&p);
+    let id = p.plot_columns(Template::Scatter, &[c[1]]).unwrap();
+    p.graph_mut(id).unwrap().layers[0].y_axis.at_position = Some(0.0);
+    let (_, out) = round_trip(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("Y axis' position at a value")), "{:?}", out.warnings);
+    p.graph_mut(id).unwrap().layers[0].y_axis.at_position = None;
+    let (_, out) = round_trip(&p);
+    assert!(!out.warnings.iter().any(|w| w.contains("At Position")), "{:?}", out.warnings);
+}
+
+#[test]
+fn axis_arrows_are_named_in_the_notes() {
+    // T245: Arrow at Begin / End are not written; the companion keeps them.
+    let mut p = source();
+    let c = ids(&p);
+    let id = p.plot_columns(Template::Scatter, &[c[1]]).unwrap();
+    p.graph_mut(id).unwrap().layers[0].x_axis.arrow_end = true;
+    let (_, out) = round_trip(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("arrows at the ends of the X axis")), "{:?}", out.warnings);
+}

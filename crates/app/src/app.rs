@@ -151,6 +151,8 @@ struct RenameDialog {
     error: Option<String>,
     /// Set when a folder is renamed instead of a window: its path.
     folder: Option<Vec<usize>>,
+    /// The window's Comments (T249).
+    comments: String,
 }
 
 /// The draft of a sheet's names and comments.
@@ -3214,8 +3216,11 @@ impl SheafApp {
             }
             Action::Gadget { graph, op } => self.gadget(graph, op),
             Action::ExportGraph(graph) => {
-                self.export =
-                    Some(ExportDialog::new(graph, self.folder()).with_themes(self.startup.themes_dir.clone()));
+                self.export = Some(
+                    ExportDialog::new(graph, self.folder())
+                        .with_themes(self.startup.themes_dir.clone())
+                        .with_explorer_folder(self.doc.project(), &self.panels.explorer.folder),
+                );
             }
             Action::SendGraphsToPowerPoint(graph) => {
                 let p = self.doc.project();
@@ -3223,19 +3228,30 @@ impl SheafApp {
                 let all = p.graphs().map(|g| g.id).collect();
                 self.send_ppt = Some(crate::dialogs::send_ppt::SendPptDialog::new((graph, name), all));
             }
-            Action::WritePptx { graphs, path } => {
+            Action::WriteGraphDocument { graphs, path } => {
                 // 300 dpi pictures, as Export Graphs' default resolution.
                 let project = self.doc.project();
-                let slides = graphs
+                let pictures = graphs
                     .iter()
                     .map(|&g| {
                         let png = sheaf_plot::render_png(project, g, 300.0).map_err(|e| e.to_string())?;
                         let name = project.graph(g).map(|g| g.name.clone()).unwrap_or_default();
-                        Ok(sheaf_io::pptx::PptxSlide { png, name })
+                        Ok((png, name))
                     })
                     .collect::<Result<Vec<_>, String>>();
-                let written = slides
-                    .and_then(|s| sheaf_io::pptx::pptx_bytes(&s))
+                let word = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("docx"));
+                let written = pictures
+                    .and_then(|p| {
+                        if word {
+                            let p: Vec<_> =
+                                p.into_iter().map(|(png, name)| sheaf_io::docx::DocxPicture { png, name }).collect();
+                            sheaf_io::docx::docx_bytes(&p)
+                        } else {
+                            let p: Vec<_> =
+                                p.into_iter().map(|(png, name)| sheaf_io::pptx::PptxSlide { png, name }).collect();
+                            sheaf_io::pptx::pptx_bytes(&p)
+                        }
+                    })
                     .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
                 match written {
                     Ok(()) => {
@@ -3263,6 +3279,7 @@ impl SheafApp {
                 self.export = Some(
                     ExportDialog::new(start, self.folder())
                         .with_themes(self.startup.themes_dir.clone())
+                        .with_explorer_folder(self.doc.project(), &self.panels.explorer.folder)
                         .for_all_graphs(format, multipage),
                 );
             }
@@ -3584,6 +3601,7 @@ impl SheafApp {
                         short_name: String::new(),
                         error: None,
                         folder: Some(path),
+                        comments: String::new(),
                     });
                 }
             }
@@ -3653,7 +3671,9 @@ impl SheafApp {
                         Window::Layout(l) => l.long_name.clone(),
                     };
                     let short_name = w.name().to_string();
-                    self.rename = Some(RenameDialog { window: id, long_name, short_name, error: None, folder: None });
+                    let comments = self.doc.project().window_comments(id).to_string();
+                    self.rename =
+                        Some(RenameDialog { window: id, long_name, short_name, error: None, folder: None, comments });
                 }
             }
             Action::Cascade => self.workspace.cascade(),
@@ -5062,15 +5082,16 @@ impl SheafApp {
         match d.show(ctx) {
             SendPptOutcome::Open => {}
             SendPptOutcome::Closed => self.send_ppt = None,
-            SendPptOutcome::Send(graphs) => {
+            SendPptOutcome::Send { graphs, word } => {
                 self.send_ppt = None;
+                let (filter, ext) = if word { ("Word document", "docx") } else { ("PowerPoint presentation", "pptx") };
                 let picked = rfd::FileDialog::new()
                     .set_title("Send Graphs to PowerPoint")
-                    .add_filter("PowerPoint presentation", &["pptx"])
-                    .set_file_name("Graphs.pptx")
+                    .add_filter(filter, &[ext])
+                    .set_file_name(format!("Graphs.{ext}"))
                     .save_file();
                 if let Some(path) = picked {
-                    self.apply(Action::WritePptx { graphs, path }, ctx);
+                    self.apply(Action::WriteGraphDocument { graphs, path }, ctx);
                 }
             }
         }
@@ -5796,7 +5817,12 @@ impl SheafApp {
 
     fn export_data(&mut self, book: WindowId) {
         if self.doc.project().workbook(book).is_some() {
-            self.export_sheet = Some(SheetExportDialog::new(book, self.folder()));
+            // T247: the active sheet's selection, for Selected cells only.
+            let selection = self.doc.project().workbook(book).and_then(|b| {
+                let t = self.books.get(&book)?.target(b.sheet())?;
+                Some((t.columns, t.rows))
+            });
+            self.export_sheet = Some(SheetExportDialog::new(book, self.folder()).with_selection(selection));
         }
     }
 
@@ -7104,6 +7130,9 @@ impl SheafApp {
                         ui.add(egui::TextEdit::singleline(&mut d.short_name).desired_width(200.0));
                     });
                     ui.weak("Letters and digits, at most 13 characters (as in Origin).");
+                    // T249: Origin's Window Properties have Comments.
+                    ui.label("Comments");
+                    ui.add(egui::TextEdit::multiline(&mut d.comments).desired_width(320.0).desired_rows(3));
                     // Dependents (T220): what uses this window, and the books a graph plots.
                     let project = self.doc.project();
                     let titles = |ids: Vec<WindowId>| -> String {
@@ -7124,6 +7153,7 @@ impl SheafApp {
                     if ui.button("OK").clicked() {
                         let (id, name) = (d.window, d.long_name.clone());
                         let short = d.short_name.clone();
+                        let comments = d.comments.clone();
                         if let Some(path) = d.folder.clone() {
                             let name = name.trim().to_string();
                             if !name.is_empty() {
@@ -7148,6 +7178,7 @@ impl SheafApp {
                                 } else if let Some(n) = p.notes_mut(id) {
                                     n.long_name = name;
                                 }
+                                p.set_window_comments(id, &comments);
                                 Ok::<(), String>(())
                             });
                             match result {

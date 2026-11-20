@@ -1224,8 +1224,9 @@ pub enum Action {
     ExportGraph(WindowId),
     /// Send Graphs to PowerPoint... of this graph's page: the window that picks the graphs (T232).
     SendGraphsToPowerPoint(WindowId),
-    /// Write these graphs into a PowerPoint file, one slide each (T232).
-    WritePptx {
+    /// Write these graphs into a PowerPoint file, one slide each (T232), or, when the path ends in
+    /// `.docx`, a Word document, one page each (T242).
+    WriteGraphDocument {
         graphs: Vec<WindowId>,
         path: std::path::PathBuf,
     },

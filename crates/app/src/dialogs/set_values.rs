@@ -133,6 +133,9 @@ pub const FUNCTIONS: &[(&str, &[FuncInfo])] = &[
             f("month", "d", "Month of a date number.", "month(date(2020, 1, 1))"),
             f("day", "d", "Day of the month of a date number.", "day(date(2020, 1, 1))"),
             f("weekday", "d", "Day of the week, 0 for Sunday.", "weekday(date(2020, 1, 1))"),
+            f("hour", "d", "Hour of the day, 0 to 23.", "hour(date(2020, 1, 1) + 0.75)"),
+            f("minute", "d", "Minute of the hour, 0 to 59.", "minute(time(13, 30, 15))"),
+            f("second", "d", "Second of the minute, to the millisecond.", "second(time(13, 30, 15.5))"),
         ],
     ),
     (

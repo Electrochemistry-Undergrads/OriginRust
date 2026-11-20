@@ -117,6 +117,9 @@ pub struct Project {
     /// it on opening; it is view state, not data, so editing it is never an undo step.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub window_places: Vec<WindowPlace>,
+    /// Window Properties' Comments of the windows that have them (T249), one entry per window.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub window_comments: Vec<WindowComment>,
     /// Analysis runs whose results follow their input (Recalculate Auto or Manual).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub analysis_links: Vec<crate::analysis_link::AnalysisLink>,
@@ -220,6 +223,13 @@ fn is_default_mask_color(c: &u8) -> bool {
 
 fn is_default_page_setup(s: &crate::page_setup::PageSetup) -> bool {
     *s == crate::page_setup::PageSetup::default()
+}
+
+/// The Comments of one window (Window Properties, T249).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WindowComment {
+    pub window: WindowId,
+    pub text: String,
 }
 
 /// The place of one window in the desktop app's workspace (ADR 0007 point 1).
@@ -463,6 +473,7 @@ impl Project {
             view_windows: ViewWindows::default(),
             root: Folder { name: "Project".into(), ..Folder::default() },
             window_places: Vec::new(),
+            window_comments: Vec::new(),
             analysis_links: Vec::new(),
             page_setup: crate::page_setup::PageSetup::default(),
             mask_color: default_mask_color(),
@@ -473,6 +484,24 @@ impl Project {
             audit: None,
             next_id: 1,
         }
+    }
+
+    /// The Comments of window `id` (Window Properties, T249); empty when it has none.
+    pub fn window_comments(&self, id: WindowId) -> &str {
+        self.window_comments.iter().find(|c| c.window == id).map_or("", |c| c.text.as_str())
+    }
+
+    /// Sets the Comments of window `id`; empty text removes them. A window the project does not hold
+    /// is left alone. Returns whether anything changed.
+    pub fn set_window_comments(&mut self, id: WindowId, text: &str) -> bool {
+        if self.window(id).is_none() || self.window_comments(id) == text {
+            return false;
+        }
+        self.window_comments.retain(|c| c.window != id);
+        if !text.is_empty() {
+            self.window_comments.push(WindowComment { window: id, text: text.to_string() });
+        }
+        true
     }
 
     /// Add Shortcut to Favorites (T130): true when the window was added (it exists and was not there yet).
@@ -598,6 +627,7 @@ impl Project {
         }
         forget(&mut self.root, id);
         self.window_places.retain(|p| p.window != id);
+        self.window_comments.retain(|c| c.window != id);
         self.favorites.retain(|w| *w != id);
         Some(self.windows.remove(i))
     }
@@ -2123,6 +2153,27 @@ impl Graph {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn window_comments_are_kept_per_window_and_go_with_the_window() {
+        // T249: Window Properties' Comments.
+        let mut p = Project::new();
+        let a = p.add_workbook("A");
+        let b = p.add_workbook("B");
+        assert_eq!(p.window_comments(a), "");
+        assert!(p.set_window_comments(a, "run of 3 May\nsecond line"));
+        assert!(!p.set_window_comments(a, "run of 3 May\nsecond line"), "no change");
+        assert!(!p.set_window_comments(WindowId(999), "x"), "an unknown window is left alone");
+        assert!(p.set_window_comments(b, "B notes"));
+        assert_eq!(p.window_comments(a), "run of 3 May\nsecond line");
+        let json = serde_json::to_string(&p).unwrap();
+        let back: Project = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.window_comments(b), "B notes");
+        assert!(p.set_window_comments(a, ""));
+        assert_eq!(p.window_comments.len(), 1, "empty text removes the entry");
+        p.remove_window(b);
+        assert!(p.window_comments.is_empty(), "the comments go with the window");
+    }
 
     #[test]
     fn favorites_hold_shortcuts_once_and_lose_deleted_windows() {

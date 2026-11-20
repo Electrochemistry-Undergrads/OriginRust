@@ -461,3 +461,19 @@ fn a_project_without_data_reloads_with_its_columns_and_no_values_in_both_formats
     // The project that was saved from is not touched.
     assert_eq!(p.workbooks().next().unwrap().sheets[0].columns[0].len(), 3);
 }
+
+#[test]
+fn window_comments_need_the_companion() {
+    // T249: an .opj does not keep Window Properties' Comments; the companion does.
+    let dir = scratch("window-comments");
+    let opj = dir.join("lab.opj");
+    let mut p = workbook_project();
+    let book = p.windows[0].id();
+    p.set_window_comments(book, "calibrated");
+    let out = save_project(&p, &opj).unwrap();
+    assert!(out.warnings.iter().any(|w| w.contains("Window comments")), "{:?}", out.warnings);
+    assert!(out.companion.is_some());
+    let opened = open_project(&opj).unwrap();
+    assert!(opened.companion_used);
+    assert_eq!(opened.project.window_comments(opened.project.windows[0].id()), "calibrated");
+}

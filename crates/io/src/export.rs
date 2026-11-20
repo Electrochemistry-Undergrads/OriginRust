@@ -91,8 +91,23 @@ impl AsciiExportOptions {
 /// when its option is on and at least one column has something to say), then one line per row.
 /// A missing value inside a column is `--`, past the end of a column the field is empty.
 pub fn write_delimited(sheet: &Worksheet, out: &mut dyn Write, opts: &AsciiExportOptions) -> Result<(), IoError> {
+    let all: Vec<usize> = (0..sheet.columns.len()).collect();
+    write_selection(sheet, &all, 0..sheet.row_count(), out, opts)
+}
+
+/// Like [`write_delimited`] for part of the sheet: expASC's `select` (T247), the columns at the
+/// positions `columns` (in that order) and the rows `rows` (0-based; cut at the sheet's last row).
+/// The label rows are those of the chosen columns; with row labels each data line starts with its
+/// row number in the sheet. A position past the last column is skipped.
+pub fn write_selection(
+    sheet: &Worksheet,
+    columns: &[usize],
+    rows: std::ops::Range<usize>,
+    out: &mut dyn Write,
+    opts: &AsciiExportOptions,
+) -> Result<(), IoError> {
     let io_err = |e: std::io::Error| IoError::Io { path: PathBuf::from(format!("<{}>", sheet.name)), source: e };
-    let cols = &sheet.columns;
+    let cols: Vec<&Column> = columns.iter().filter_map(|&i| sheet.columns.get(i)).collect();
 
     let mut label_lines: Vec<(String, Vec<String>)> = Vec::new();
     if opts.short_names {
@@ -123,8 +138,8 @@ pub fn write_delimited(sheet: &Worksheet, out: &mut dyn Write, opts: &AsciiExpor
         let first = opts.row_labels.then_some(name);
         put_line(first, line.iter().map(|f| quote(f, opts)).collect()).map_err(io_err)?;
     }
-    let used: Vec<usize> = cols.iter().map(used_rows).collect();
-    for row in 0..sheet.row_count() {
+    let used: Vec<usize> = cols.iter().map(|c| used_rows(c)).collect();
+    for row in rows.start..rows.end.min(sheet.row_count()) {
         let first = opts.row_labels.then(|| (row + 1).to_string());
         let fields = cols.iter().zip(&used).map(|(c, n)| cell(c, row, *n, opts)).collect();
         put_line(first, fields).map_err(io_err)?;
@@ -222,6 +237,21 @@ mod tests {
         let mut buf = Vec::new();
         write_delimited(s, &mut buf, opts).unwrap();
         String::from_utf8(buf).unwrap()
+    }
+
+    #[test]
+    fn a_selection_writes_its_columns_and_rows_with_the_sheets_row_numbers() {
+        // T247: expASC's select.
+        let s = origin_sheet();
+        let mut buf = Vec::new();
+        let opts = AsciiExportOptions { row_labels: true, ..AsciiExportOptions::csv() };
+        write_selection(&s, &[2, 0], 1..3, &mut buf, &opts).unwrap();
+        let want = "Long Name,Txt,Pot\r\nUnits,,V\r\nComments,,cmt\r\n2,\"a,b\",0.123456789012345\r\n3,,--\r\n";
+        assert_eq!(String::from_utf8(buf).unwrap(), want);
+        // The whole sheet is the same as write_delimited; rows past the end are cut.
+        let mut whole = Vec::new();
+        write_selection(&s, &[0, 1, 2], 0..99, &mut whole, &AsciiExportOptions::csv()).unwrap();
+        assert_eq!(String::from_utf8(whole).unwrap(), export(&s, &AsciiExportOptions::csv()));
     }
 
     #[test]

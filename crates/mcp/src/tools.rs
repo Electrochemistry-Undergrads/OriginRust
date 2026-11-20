@@ -191,6 +191,7 @@ pub fn call(server: &mut Ctx, name: &str, a: &Value) -> Res {
         "list_simulate_functions" => list_simulate_functions(a),
         "simulate_curve" => simulate_curve(server, a),
         "simulate_surface" => simulate_surface(server, a),
+        "batch_process" => batch_process(server, a),
         other => Err(ToolError::new(format!("unknown tool: {other}"))),
     }
 }
@@ -2041,6 +2042,89 @@ struct SimulateSurfaceArgs {
     seed: Option<u64>,
     book: Option<String>,
     values: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BatchArgs {
+    files: Vec<String>,
+    template: String,
+    summary: Option<String>,
+    identifier: Option<String>,
+    #[serde(default)]
+    delete_books: bool,
+}
+
+/// The shared batch run of the window and `sheaf batch` (`Project::batch_process`, T238).
+fn batch_process(s: &mut Ctx, a: &Value) -> Res {
+    let a: BatchArgs = args(a)?;
+    if a.files.is_empty() {
+        return Err(ToolError::new("give at least one file in \"files\""));
+    }
+    if a.delete_books && a.summary.is_none() {
+        return Err(ToolError::new(
+            "delete_books needs summary: the books are deleted once the summary holds their rows",
+        ));
+    }
+    let template_path = s.policy.roots.check_open(&a.template)?;
+    let template = sheaf_io::user_templates::load_book_file(&template_path)
+        .map_err(|e| ToolError::new(format!("could not read the workbook template '{}': {e}", a.template)))?;
+    if let Some(sheet) = &a.summary
+        && !template.book.sheets.iter().any(|w| w.name.eq_ignore_ascii_case(sheet))
+    {
+        let names: Vec<&str> = template.book.sheets.iter().map(|w| w.name.as_str()).collect();
+        return Err(ToolError::new(format!(
+            "the template {} has no sheet '{sheet}' (its sheets: {})",
+            template.name,
+            names.join(", ")
+        )));
+    }
+    let files = expand_checked(s, &a.files)?;
+    let mut data = Vec::new();
+    let mut errors = Vec::new();
+    for path in &files {
+        match sheaf_ops::read::read_data_file(path, &Default::default()) {
+            Ok(imported) => {
+                let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                data.push((name, imported.workbook));
+            }
+            Err(e) => errors.push(format!("{}: {e:#}", path.display())),
+        }
+    }
+    if data.is_empty() {
+        return Err(ToolError::new(format!(
+            "none of the {} file(s) could be read: {}",
+            files.len(),
+            errors.join("; ")
+        )));
+    }
+    let identifier = a.identifier.as_deref().map(str::trim).filter(|t| !t.is_empty()).unwrap_or("Dataset");
+    let request = a.summary.as_ref().map(|sheet| sheaf_core::BatchSummaryRequest {
+        sheet: sheet.clone(),
+        identifier: identifier.to_string(),
+        delete_books: a.delete_books,
+    });
+    let run = s.project.batch_process(&template, &data, request.as_ref());
+    let project = &*s.project;
+    let books: Vec<Value> = run
+        .books
+        .iter()
+        .zip(&data)
+        .map(|(b, (file, _))| {
+            json!({
+                "file": file,
+                "book": if run.deleted { Value::Null } else { json!(book_title(project, b.book)) },
+                "filled": b.filled, "ignored": b.ignored, "problems": b.problems,
+            })
+        })
+        .collect();
+    let summary = run
+        .summary
+        .and_then(|id| project.workbook(id))
+        .map(|w| json!({"book": w.name, "sheet": w.sheets[0].name, "rows": w.sheets[0].row_count()}));
+    Ok(ToolOut::json(json!({
+        "template": template.name, "books": books, "summary": summary, "deleted": run.deleted, "errors": errors,
+    })))
 }
 
 /// The shared simulation of `sheaf simulate-surface` (`sheaf_ops::simulate_surface::run`).

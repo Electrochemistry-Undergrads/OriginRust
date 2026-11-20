@@ -8,7 +8,7 @@ use sheaf_mcp::files::Protected;
 use sheaf_mcp::link::client::{self, ClientOptions};
 use sheaf_mcp::link::discovery;
 use sheaf_mcp::link::frame::{self, Line};
-use sheaf_mcp::link::host::{Event, LinkConfig, LinkServer, StartError, sweep};
+use sheaf_mcp::link::host::{Event, Job, LinkConfig, LinkServer, StartError, sweep};
 use sheaf_mcp::link::proto::{self, NoticeKind, Request};
 use sheaf_mcp::link::transport::{Endpoint, Kind, Listener, Stream};
 use sheaf_mcp::proxy::{self, ProxyConfig};
@@ -80,6 +80,10 @@ struct Executor {
     slow: Arc<AtomicU64>,
     log: Arc<Mutex<Vec<String>>>,
     doc: Arc<Mutex<Document>>,
+    /// While paused and holding ([`Executor::hold`]), the jobs taken from the link but not run, so a test
+    /// can wait until a call is really queued instead of sleeping (T240).
+    holding: Arc<AtomicBool>,
+    held: Arc<Mutex<Vec<Job>>>,
     handle: Option<JoinHandle<()>>,
 }
 
@@ -90,12 +94,22 @@ impl Executor {
         let slow = Arc::new(AtomicU64::new(0));
         let log = Arc::new(Mutex::new(Vec::new()));
         let doc = Arc::new(Mutex::new(Document::default()));
+        let holding = Arc::new(AtomicBool::new(false));
+        let held: Arc<Mutex<Vec<Job>>> = Arc::new(Mutex::new(Vec::new()));
         let handle = {
             let (stop, paused, slow, log, doc) = (stop.clone(), paused.clone(), slow.clone(), log.clone(), doc.clone());
+            let (holding, held) = (holding.clone(), held.clone());
             std::thread::spawn(move || {
                 while !stop.load(Ordering::Acquire) {
-                    if !paused.load(Ordering::Acquire) {
-                        for job in server.poll_jobs() {
+                    if paused.load(Ordering::Acquire) {
+                        if holding.load(Ordering::Acquire) {
+                            held.lock().unwrap().extend(server.poll_jobs());
+                        }
+                    } else {
+                        // Held jobs first, in order; one that was cancelled meanwhile does not start.
+                        let mut jobs: Vec<Job> = held.lock().unwrap().drain(..).collect();
+                        jobs.extend(server.poll_jobs());
+                        for job in jobs {
                             let mut doc = doc.lock().unwrap();
                             let delay = slow.load(Ordering::Acquire);
                             let done = if delay > 0 {
@@ -115,15 +129,33 @@ impl Executor {
                 }
             })
         };
-        Executor { stop, paused, slow, log, doc, handle: Some(handle) }
+        Executor { stop, paused, slow, log, doc, holding, held, handle: Some(handle) }
     }
 
     fn pause(&self, on: bool) {
         self.paused.store(on, Ordering::Release);
     }
 
+    /// Pauses and takes the jobs off the link without running them (see `held`).
+    fn hold(&self) {
+        self.holding.store(true, Ordering::Release);
+        self.pause(true);
+    }
+
+    /// How many jobs are held and still waiting to start.
+    fn held_queued(&self) -> usize {
+        self.held.lock().unwrap().iter().filter(|j| j.is_queued()).count()
+    }
+
     fn ran(&self) -> Vec<String> {
         self.log.lock().unwrap().clone()
+    }
+
+    /// The log once it holds at least `n` jobs: a job is logged after its reply has gone out, so a test
+    /// that has its reply waits for the entry (T240).
+    fn ran_at_least(&self, n: usize) -> Vec<String> {
+        eventually("the job log", || self.ran().len() >= n);
+        self.ran()
     }
 
     fn end(&mut self) {
@@ -318,7 +350,7 @@ fn a_call_goes_to_the_app_and_back_on_every_transport() {
         who.send(json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}));
         let tools = who.reply(2)["result"]["tools"].clone();
         let names: Vec<&str> = tools.as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert_eq!(names.len(), 16, "{names:?}");
+        assert_eq!(names.len(), 17, "{names:?}");
         for hidden in ["new_project", "open_project", "save_project"] {
             assert!(!names.contains(&hidden), "{hidden} is hidden");
         }
@@ -615,7 +647,7 @@ fn a_cancelled_call_that_was_still_queued_never_runs() {
         // Another call works, which also shows the connection is free again.
         let r = who.call(9, "list_contents", json!({}));
         assert_eq!(r["isError"], false);
-        assert_eq!(a.exec.ran(), ["list_contents"], "only the second call ran");
+        assert_eq!(a.exec.ran_at_least(1), ["list_contents"], "only the second call ran");
         who.finish();
         a.stop();
     }
@@ -634,7 +666,7 @@ fn a_call_that_waits_too_long_is_cancelled_and_says_that_it_did_not_run() {
     // The call was cancelled in the app, so it never runs; the next one uses a new connection.
     let r = who.call(3, "list_contents", json!({}));
     assert_eq!(r["isError"], false);
-    assert_eq!(a.exec.ran(), ["list_contents"]);
+    assert_eq!(a.exec.ran_at_least(1), ["list_contents"]);
     who.finish();
     a.stop();
 }
@@ -654,7 +686,7 @@ fn a_call_that_runs_too_long_says_so_and_is_not_repeated() {
     eventually("the slow job", || a.exec.ran().len() == 1);
     a.exec.slow.store(0, Ordering::Release);
     assert_eq!(who.call(3, "list_contents", json!({}))["isError"], false);
-    assert_eq!(a.exec.ran().len(), 2);
+    assert_eq!(a.exec.ran_at_least(2).len(), 2);
     who.finish();
     a.stop();
 }
@@ -672,7 +704,7 @@ fn a_call_that_waits_is_answered_after_the_end_of_input() {
     a.exec.pause(false);
     assert_eq!(who.reply(2)["result"]["isError"], false);
     assert_eq!(who.finish(), 0);
-    assert_eq!(a.exec.ran(), ["list_contents"]);
+    assert_eq!(a.exec.ran_at_least(1), ["list_contents"]);
     a.stop();
 }
 
@@ -693,12 +725,14 @@ fn calls_read_before_the_end_of_input_are_all_answered_in_order() {
 #[test]
 fn a_cancelled_call_that_waited_behind_another_never_runs() {
     let a = app_with("cancel-backlog", Kind::native(), true, |_| {});
+    a.exec.hold();
     let who = a.assistant();
     who.init();
     // A is with the app (queued); B waits in the proxy behind it.
     who.request(2, "list_contents", json!({}));
     who.request(3, "list_contents", json!({}));
-    std::thread::sleep(Duration::from_millis(100));
+    eventually("call 2 to wait in Sheaf", || a.exec.held_queued() == 1);
+    std::thread::sleep(Duration::from_millis(50));
     for id in [3, 2] {
         who.send(json!({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": id}}));
     }
@@ -707,7 +741,7 @@ fn a_cancelled_call_that_waited_behind_another_never_runs() {
     a.exec.pause(false);
     // Another call goes through, which shows that the queue behind the cancelled ones is free.
     assert_eq!(who.call(5, "list_contents", json!({}))["isError"], false);
-    assert_eq!(a.exec.ran(), ["list_contents"], "only the last call ran");
+    assert_eq!(a.exec.ran_at_least(1), ["list_contents"], "only the last call ran");
     who.silent_for(3, 100);
     who.silent_for(2, 0);
     who.finish();
@@ -723,7 +757,7 @@ fn a_call_cancelled_before_it_arrives_is_never_sent() {
     who.request(6, "list_contents", json!({}));
     assert_eq!(who.call(7, "list_contents", json!({}))["isError"], false);
     who.silent_for(6, 100);
-    assert_eq!(a.exec.ran(), ["list_contents"]);
+    assert_eq!(a.exec.ran_at_least(1), ["list_contents"]);
     who.finish();
     a.stop();
 }
@@ -926,19 +960,24 @@ fn the_socket_and_its_folder_are_private() {
 #[test]
 fn the_owner_replacing_the_project_tells_the_assistant_once() {
     let a = app_with("replaced", Kind::native(), true, |_| {});
+    a.exec.hold();
     let who = a.assistant();
     who.init();
-    // A call that waits is answered with the news, and the notice that follows is not told again.
+    // A call that waits is answered with the news, and the notice that follows is not told again. The
+    // call must be queued in Sheaf before the project is replaced (T240: a fixed sleep was too short
+    // under load, so the replace closed a connection still saying hello, or came before the call).
     who.request(2, "list_contents", json!({}));
-    std::thread::sleep(Duration::from_millis(100));
+    eventually("call 2 to wait in Sheaf", || a.exec.held_queued() == 1);
     a.server.drop_connections(NoticeKind::Replaced);
     let r = who.reply(2)["result"].clone();
     assert_eq!((r["isError"].clone(), text(&r)), (json!(true), proto::REPLACED_FOR_ASSISTANT.to_string()));
     a.exec.pause(false);
     assert_eq!(who.call(3, "list_contents", json!({}))["isError"], false);
-    assert_eq!(a.exec.ran(), ["list_contents"], "only the call after the news ran");
+    // The executor logs a job after its reply has gone out.
+    assert_eq!(a.exec.ran_at_least(1), ["list_contents"], "only the call after the news ran");
     // With nothing waiting, the next call hears the news and is not sent; the one after works.
     a.server.drop_connections(NoticeKind::Replaced);
+    eventually("the connection to close", || a.server.connections().is_empty());
     std::thread::sleep(Duration::from_millis(100));
     let r = who.call(4, "list_contents", json!({}));
     assert_eq!(text(&r), proto::REPLACED_FOR_ASSISTANT);
@@ -1049,14 +1088,14 @@ fn the_binary_attaches_to_the_app_and_says_where_it_looked_when_there_is_none() 
     };
     let replies = run(&a.scratch, &a.scratch.run());
     assert_eq!(replies.len(), 3);
-    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 16);
+    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 17);
     assert_eq!(replies[2]["result"]["isError"], false, "{}", replies[2]);
     assert!(replies[0]["result"]["instructions"].as_str().unwrap().contains("attached to Sheaf"));
     a.stop();
 
     let none = Scratch::new("none");
     let replies = run(&none, &none.run());
-    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 16, "tools/list needs no app");
+    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 17, "tools/list needs no app");
     let message = text(&replies[2]["result"]);
     assert_eq!(replies[2]["result"]["isError"], true);
     assert!(message.contains("no Sheaf is listening") && message.contains(none.run().to_str().unwrap()), "{message}");

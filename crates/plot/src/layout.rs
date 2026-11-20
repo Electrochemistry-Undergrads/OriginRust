@@ -737,7 +737,7 @@ fn title_places(
     let axis = |i: usize| if dim == Dim::X { &g.layers[i].x_axis } else { &g.layers[i].y_axis };
     let title = |i: usize| {
         let a = axis(i);
-        a.title.clone().unwrap_or_else(|| first_title(project, a, &pds[i].plots, dim == Dim::Y))
+        resolved_title(project, a, &pds[i].plots, dim == Dim::Y)
     };
     // Along the axis: start and length of a frame; across it: start and length.
     let along = |f: Rect| if dim == Dim::X { (f.x, f.w) } else { (f.y, f.h) };
@@ -1002,6 +1002,23 @@ fn layer_scene(
         draw_legend_and_labels(out, objects, project, g, index, f, pds, m);
         return scene;
     }
+    // Axis Position "At Position =" (T243): the line where the other axis has that value, drawn as an
+    // inward offset from the axis' edge (line, ticks, labels and title move together).
+    let (at_x, at_y);
+    let xa = match crate::axis_offset::at_position_pct(xa, &geom.y) {
+        Some(pct) => {
+            at_x = Axis { offset_pct: pct, ..xa.clone() };
+            &at_x
+        }
+        None => xa,
+    };
+    let ya = match crate::axis_offset::at_position_pct(ya, &geom.x) {
+        Some(pct) => {
+            at_y = Axis { offset_pct: pct, ..ya.clone() };
+            &at_y
+        }
+        None => ya,
+    };
     // The edge each axis line is drawn on, as a box of no height or width.
     let x_line = Rect { y: crate::axis_offset::x_line_y(xa, f), h: 0.0, ..f };
     let y_line = Rect { x: crate::axis_offset::y_line_x(ya, f), w: 0.0, ..f };
@@ -1011,11 +1028,13 @@ fn layer_scene(
     draw_additional_lines(out, xa, ya, geom, xp.line, yp.line);
     let start = out.len();
     draw_ticks(out, xa, &geom.x, f, true, xp.line);
+    draw_axis_arrows(out, xa, f, true, xp.line);
     if xa.side != AxisSide::Hidden {
         rec(objects, out, start, ObjectKind::XAxis, &[x_line]);
     }
     let start = out.len();
     draw_ticks(out, ya, &geom.y, f, false, yp.line);
+    draw_axis_arrows(out, ya, f, false, yp.line);
     if ya.side != AxisSide::Hidden {
         rec(objects, out, start, ObjectKind::YAxis, &[y_line]);
     }
@@ -1295,6 +1314,50 @@ const BREAK_MARK_PT: f64 = 8.0;
 
 /// Draws the axis lines of a layer: each shown axis on its own edge and, with `show_opposite`,
 /// on the edge across. `xc` and `yc` are the axes' line colors.
+/// Length and half width in points of the arrowhead of an axis line `width` points thick (T245): 5 and
+/// 1.75 times the width, at least 6 and 2 points. Sheaf's own sizes; Origin's are not measured.
+pub(crate) fn arrow_size(width: f64) -> (f64, f64) {
+    let w = if width.is_finite() { width.max(0.0) } else { 0.0 };
+    ((5.0 * w).max(6.0), (1.75 * w).max(2.0))
+}
+
+/// Arrow at Begin / Arrow at End (T245): a filled arrowhead whose base sits on the chosen end of the
+/// axis line (left or bottom is the beginning, right or top the end, as the page shows them) and whose
+/// tip points outward, in the line's colour.
+fn draw_axis_arrows(out: &mut Vec<Item>, axis: &Axis, f: Rect, horizontal: bool, color: Color) {
+    if axis.side == AxisSide::Hidden || !(axis.arrow_begin || axis.arrow_end) {
+        return;
+    }
+    let (len, half) = arrow_size(axis.line_width_pt);
+    let head = |out: &mut Vec<Item>, base: (f64, f64), dir: (f64, f64)| {
+        let tip = (base.0 + dir.0 * len, base.1 + dir.1 * len);
+        let n = (-dir.1 * half, dir.0 * half);
+        let mut d = String::new();
+        move_to(&mut d, tip.0, tip.1);
+        line_to(&mut d, base.0 + n.0, base.1 + n.1);
+        line_to(&mut d, base.0 - n.0, base.1 - n.1);
+        d.push('Z');
+        out.push(Item::Path { d, fill: Some(color), stroke: None });
+    };
+    if horizontal {
+        let y = crate::axis_offset::x_line_y(axis, f);
+        if axis.arrow_begin {
+            head(out, (f.x, y), (-1.0, 0.0));
+        }
+        if axis.arrow_end {
+            head(out, (f.x + f.w, y), (1.0, 0.0));
+        }
+    } else {
+        let x = crate::axis_offset::y_line_x(axis, f);
+        if axis.arrow_begin {
+            head(out, (x, f.y + f.h), (0.0, 1.0));
+        }
+        if axis.arrow_end {
+            head(out, (x, f.y), (0.0, -1.0));
+        }
+    }
+}
+
 fn draw_axis_lines(
     out: &mut Vec<Item>,
     xa: &Axis,
@@ -1637,6 +1700,40 @@ fn draw_y_labels(
 /// The title of an axis without a title of its own, from the layer's first plot: its Y column for
 /// a Y axis; for an X axis its X column (numbers or text), else the column that labels the ticks,
 /// else `Row`.
+/// The title an axis shows: its own text with Origin's `%(?X)` and `%(?Y)` (with any options after
+/// a comma, such as `%(?X,@LG)`) replaced by the title built from the plotted X or Y column (T246),
+/// or that built title when the axis has no text of its own.
+pub(crate) fn resolved_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -> String {
+    match &axis.title {
+        None => first_title(project, axis, pds, y_axis),
+        Some(text) => substitute_axis_tokens(text, |y| first_title(project, axis, pds, y)),
+    }
+}
+
+/// Replaces each `%(?X...)` and `%(?Y...)` of `text` (letter case ignored) by `built(is_y)`; other
+/// text, and a `%(?` not followed by X or Y and a closing parenthesis, stay as they are.
+pub(crate) fn substitute_axis_tokens(text: &str, mut built: impl FnMut(bool) -> String) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find("%(?") {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + 3..];
+        let which = after.chars().next().map(|c| c.to_ascii_uppercase());
+        match (which, after.find(')')) {
+            (Some(w @ ('X' | 'Y')), Some(close)) if after[1..close].is_empty() || after[1..close].starts_with(',') => {
+                out.push_str(&built(w == 'Y'));
+                rest = &after[close + 1..];
+            }
+            _ => {
+                out.push_str("%(?");
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 pub(crate) fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -> String {
     let Some(pd) = pds.first() else { return String::new() };
     if pd.plot.kind == PlotKind::Histogram {
@@ -1702,7 +1799,7 @@ fn draw_x_title(
     if !axis.show_title {
         return;
     }
-    let title = axis.title.clone().unwrap_or_else(|| first_title(project, axis, pds, false));
+    let title = resolved_title(project, axis, pds, false);
     let size = axis.title_font.size_pt;
     let baseline = if axis.side == AxisSide::Opposite {
         // The text's bottom edge (baseline plus descent) faces the labels below it.
@@ -1729,7 +1826,7 @@ fn draw_y_title(
     if !axis.show_title {
         return;
     }
-    let title = axis.title.clone().unwrap_or_else(|| first_title(project, axis, pds, true));
+    let title = resolved_title(project, axis, pds, true);
     let size = axis.title_font.size_pt;
     let x = if axis.side == AxisSide::Opposite {
         // The tops of the letters (the ascent side) face the labels on the left.
@@ -1757,7 +1854,7 @@ fn draw_x_title_inward(
     if !axis.show_title {
         return;
     }
-    let title = axis.title.clone().unwrap_or_else(|| first_title(project, axis, pds, false));
+    let title = resolved_title(project, axis, pds, false);
     let size = axis.title_font.size_pt;
     let x = f.x - 0.6 * size - DESCENT * size;
     place(out, &title, font, (x, line_y), 90.0);
@@ -1779,7 +1876,7 @@ fn draw_y_title_inward(
     if !axis.show_title {
         return;
     }
-    let title = axis.title.clone().unwrap_or_else(|| first_title(project, axis, pds, true));
+    let title = resolved_title(project, axis, pds, true);
     let size = axis.title_font.size_pt;
     let baseline = f.y - 0.6 * size - DESCENT * size;
     place(out, &title, font, (line_x, baseline), 0.0);

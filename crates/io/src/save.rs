@@ -125,6 +125,9 @@ pub fn save_project(project: &Project, path: &Path) -> Result<SaveOutcome, IoErr
         }
         Err(e) => return Err(e),
     };
+    if !project.window_comments.is_empty() {
+        written.warnings.push("Window comments (Window Properties) are not stored in an .opj file.".to_string());
+    }
     if project.page_setup != sheaf_core::page_setup::PageSetup::default() {
         written.warnings.push("Page Setup (paper, orientation and margins) is not stored in an .opj file.".to_string());
     }

@@ -26,4 +26,4 @@ the project (`-o`, `.sheaf` or `.opj`, `--append`) and/or writes the summary as 
 
 ## Left
 
-- MCP access; a template given by name from the template folder.
+- A template given by name from the template folder. (MCP access: T238.)

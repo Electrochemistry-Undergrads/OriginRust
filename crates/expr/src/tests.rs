@@ -1221,3 +1221,23 @@ fn a_relative_column_is_found_by_a_host_that_registers_it() {
     let e = Expr::parse("col(j+5)").unwrap().eval_rows(&host, 3).unwrap_err();
     assert!(e.to_string().contains("unknown column col(j+5)"), "{e}");
 }
+
+#[test]
+fn hour_minute_and_second_of_a_date_time_number() {
+    // T239, Sheaf's rule (not measured): the time of day rounded to the millisecond.
+    assert_eq!(ev("hour(date(2020,1,1)+0.75)"), 18.0);
+    assert_eq!(ev("minute(date(2020,1,1)+0.75)"), 0.0);
+    assert_eq!(ev("hour(date(2020,1,1)+time(12,0,30))"), 12.0);
+    assert_eq!(ev("second(date(2020,1,1)+time(12,0,30))"), 30.0);
+    let t = "date(2020,1,1)+time(12,34,56.789)";
+    assert_eq!((ev(&format!("hour({t})")), ev(&format!("minute({t})"))), (12.0, 34.0));
+    assert_eq!(ev(&format!("second({t})")), 56.789);
+    // A pure time and a negative number: the fraction of the day.
+    assert_eq!(ev("hour(time(13,30,15))"), 13.0);
+    assert_eq!(ev("minute(time(13,30,15))"), 30.0);
+    assert_eq!(ev("hour(-0.25)"), 18.0);
+    // A hair below midnight rounds to the next day's 0:00:00.
+    assert_eq!(ev("hour(date(2020,1,1)+0.999999999999)"), 0.0);
+    assert_eq!(ev("second(date(2020,1,1)+0.9999999)"), 59.991);
+    assert!(ev("hour(na())").is_nan() && ev("second(na())").is_nan());
+}

@@ -16,4 +16,4 @@ PowerPoint file with one 16:9 slide per graph, the graph as a PNG fitted and cen
 ## Left
 
 - Origin's sendppt options (slide template, placement, slide titles, embedding as a graph object), the
-  window title-bar menu entry, the Project Explorer folder entry, and Send to Word.
+  window title-bar menu entry and the Project Explorer folder entry. (Send to Word: T242.)

@@ -669,6 +669,24 @@ pub fn defs() -> Vec<Def> {
             ),
             example: json!({"function": "Gauss2D", "params": {"xc": 0.2}, "x_points": 10, "y_points": 10, "noise": 0}),
         },
+        Def {
+            name: "batch_process",
+            description: "Batch Processing (File > Batch Processing..., sheaf batch): one new workbook per data file from a saved workbook or analysis template (.sheafbooktemplate); the file's columns fill the template's data columns and the template's analysis runs and formulas run again on them. With summary, a new Batch Summary book stacks the rows of that template sheet of every book, led by a column of file names (identifier); delete_books then removes the books made. A file that cannot be read is listed in errors; the others are processed.",
+            read_only: false,
+            mutates: true,
+            headless_only: false,
+            schema: obj(
+                vec![
+                    ("files", strs("Data files, folders or wildcards (in the file name); one workbook each.")),
+                    ("template", s("The workbook or analysis template file (.sheafbooktemplate).")),
+                    ("summary", s("The template sheet whose rows from every book are stacked in a new summary book.")),
+                    ("identifier", s("Name of the summary's first column, the file names. Default Dataset.")),
+                    ("delete_books", b("Delete the books made once the summary holds their rows (needs summary).")),
+                ],
+                &["files", "template"],
+            ),
+            example: json!({"files": ["runs/*.csv"], "template": "templates/Assay.sheafbooktemplate", "summary": "Data"}),
+        },
     ]
 }
 

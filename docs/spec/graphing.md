@@ -281,6 +281,17 @@ Observed themes: "Ticks All In" sets major=minor=1; "Ticks All Out" 2; "Ticks YL
 ### 3.4 Title tab [W:axesref-title, quick-help/customize-axistitle, options-dialog-axis-tab]
 Default text: the long name of the first plot's X (or Y) column, else its short name, plus the units when the page-level "show units" option is on. The notation is `%(?X)` and `%(?Y)` ("?" = first plot of the layer; `%(1X, @LL)` explicit). Units are written in a style chosen globally: parentheses, brackets, braces, slash, dash, "in", two lines; default Auto (language-dependent). Options: show, color or follow plot, rotation (positive counter-clockwise), offset along axis (begin / middle / end), font, size, same-for-opposite. Origin.ini has commented keys `XTitle`, `YTitle`, `Legend` to redefine defaults; example `%(1Y, @LG)` = long name plus unit.
 
+**Tokens inside a title (T246).** A title of Sheaf's own may hold `%(?X)` and `%(?Y)` anywhere, with
+or without options after a comma (`%(?X,@LG)`, letter case ignored); when the graph is drawn each is
+replaced by the title Sheaf builds for that axis from the first plot (the automatic title of the X or
+Y axis), so `%(?Y) per cycle` shows `Current (mA) per cycle`. Other `%(?...)` forms and an unclosed
+token are drawn as typed. The title editor shows the text with the tokens. The `.opj` reader takes a
+title that is only one token as the automatic title (as before) and now keeps a title with text
+around the token instead of dropping that text. Origin's options after the comma (`@LG` and others)
+are not interpreted. Tests: `axis_title_tokens_are_replaced_by_the_built_titles`
+(`crates/plot/src/offset_axis_tests.rs`), `only_a_lone_axis_token_is_the_automatic_title`
+(`crates/io/src/opj/graph.rs`).
+
 ### 3.5 Grids [W:axesref-grids]
 Per direction: major and minor grid each with show, color, style, thickness; plus "opposite" line and "line at value" (for columns/bars Y=0 is on). Shipped system theme stores two line sets per axis: {color 18 = light gray, style 1 = dash, width 0.3} and {color 19 = gray, style 0 = solid, width 0.5} with ids 66 color, 67 style, 68 width; which set is major is unconfirmed (U8) [F:Themes\Graph\Dark Colors & Light Grids.oth]. Grids off by default for new graphs [REC].
 
@@ -1383,6 +1394,18 @@ that was active most recently (it names the first file): Graphs... and Graph as 
 PDF... in PDF with "Export as multi-page PDF file" ticked (9.7). Everything else in the window is as from a
 graph. With no graph in the project the items only say so in the status line.
 
+### 9.7b Export Graphs from a folder (T250, the order not measured for expGraph)
+
+Select Graph(s) also lists **All in Active Folder** and **All in Active Folder (Recursive)**
+(expGraph's `export` "all in folder" and "recursive", 9.1) when the window opens from a graph or from
+File > Export. They take the graphs of the Project Explorer folder that was open when the window
+opened, the recursive one with its subfolders, in the order measured for `merge_graph` (15.11: the
+folder's own graphs in project order, then each subfolder depth first, subfolders by name). If the
+folder tree changes while the window is open the choices give no graphs and nothing is written.
+File names follow File Name(s) with its substitution (`<long name>`, `<short name>`, `<index>`) and
+the Overwrite Existing rule, as for All Graphs in Project; with PDF and two or more graphs, the
+multi-page box (9.7) applies. Not built: Open (visible only), embedded graphs and Specified.
+
 ### 9.8 Export Dialog Themes (T05)
 
 **Origin 2016, measured on Windows 2026-11-15.** Five isolated synthetic-graph sessions
@@ -2357,8 +2380,27 @@ unchanged, in one Undo/Redo step. Confirming the current source creates no undo 
 Escape and the close button discard choices. Changed/reordered plots and missing/non-numeric
 sources cannot be applied; switching projects closes the chooser. No data or designation is
 changed. Pure-text columns are excluded. Short, missing or negative error values retain the
-renderer’s existing handling. Origin's percentage/standard-deviation/square-root generation and
-its layout remain separate work; this chooser is not claimed as matching that dialog.
+renderer’s existing handling.
+
+**Generated errors (T241, not measured: Origin unusable on this computer on 2026-11-20).** OriginLab's
+help ("Adding Error Bars to Your Graph", section "Adding error bars to an existing graph by
+calculating simple dataset statistics") says the tool computes "a user-specified percentage of each
+data point", the "standard deviation with specified scaling factor of the data set" or the "square
+root of each data value", and that "the error data is output to a new column on the source
+worksheet. The column includes a comment indicating the error bar type. The formula used for error
+bar calculation will appear in the Set Column Values dialog." Sheaf's **Source of Errors** now lists
+**Percent of Data (%)** (a number, default 5), **Standard Deviation of Data** with **Scaling Factor**
+(default 1), **Square Root of Data**, and **Existing Column** (the chooser above). A plot that has, or
+sits next to, a Y error column starts on Existing Column, otherwise on Percent of Data (Origin's
+first choice, selected in the 14.13a capture). OK with a generated source inserts a new column
+right of the plot's Y column (Origin requires error data right of its Y), designation Y Error,
+comment `Error bars: Percent of Data 5%` / `Error bars: Standard Deviation of Data, Scaling Factor
+1` / `Error bars: Square Root of Data`, filled by Set Column Values with `abs(col(B))*5/100`,
+`sd(col(B))*1` (the sample standard deviation on every row) or `sqrt(col(B))` (negative values give
+missing errors), the formula kept on the column, run once; the plot's Y errors become that column.
+Column, link and values are one undo step ("Add error bars"). Percent and Scaling Factor must be
+positive. Not measured: Origin's defaults (the capture showed empty edits), its column name and
+long name, whether Percent uses the magnitude, and its rounding.
 
 ### 14.14 Colour lists of column and area templates; stacked area and fill area (T12)
 
@@ -3026,6 +3068,16 @@ Origin's documented facts (documentation only, **not measured**; no Origin was a
 - Tests: `crates/core/src/template.rs`, `crates/core/src/indexed.rs`, `crates/plot/src/grouped_tests.rs` (goldens
   `grouped-box.svg`, `grouped-columns.svg`), `crates/app/src/app/ui_tests/grouped_indexed.rs`,
   `crates/cli/tests/grouped_indexed.rs`, `crates/io/src/opj/write/graph_feature_tests.rs`.
+
+**Arrow at Begin / Arrow at End (T245, not measured).** The Line and Ticks tab's **Arrow** row has
+**Arrow at Begin** and **Arrow at End** (`Axis::arrow_begin`, `arrow_end`). A filled arrowhead in
+the axis line's colour sits with its base on that end of the axis line and its tip outward: the
+beginning is the left end of an X axis and the bottom end of a Y axis, the end is the right or top
+end, as the page shows them (a reversed axis keeps its arrows on the page ends). The head is 5 times
+the line width long and 3.5 times wide (at least 6 by 4 points), Sheaf's own sizes. It moves with
+the axis line (`% From` offsets and At Position =), belongs to the axis' click area, and is drawn on
+the main side only. The `.opj` writer names it; the companion keeps it. Test:
+`axis_arrows_point_out_of_the_chosen_ends_in_the_line_colour` (`crates/plot/src/offset_axis_tests.rs`).
 
 **Leftovers:** Origin's dialog and data forms, raw-data bar statistics and the other error-bar statistics (CI, percentile
 ranges, MAD), stacking, two-row table tick labels, more than two group levels, Grouped Scatter, panels or pages split by a
@@ -3904,8 +3956,16 @@ page at 300 dpi (Export Graphs' default) made as large as fits inside a quarter-
 centred, named after the graph. The command line does the same with `sheaf export project -o slides.pptx`
 (`--graph` repeated or `--all-graphs`; `--dpi`, `--image-width`, `--image-height` and `--margin` apply to the
 pictures). Checked by opening the file in PowerPoint (Microsoft 365, through COM: 2 slides, 960 x 540 pt, one
-picture each, no repair prompt). Origin's slide template, placement and title options and Send to Word are not
-offered.
+picture each, no repair prompt). Origin's slide template, placement and title options are not offered.
+
+**Word (T242, 2026-11-20).** The same window has **PowerPoint (.pptx)** (the default) and **Word (.docx)**; with
+Word, OK asks for a `.docx` (Graphs.docx) and writes one graph per page (`sheaf_io::docx`): a US Letter page with
+one-inch margins, the graph's 300 dpi PNG as an inline picture as large as fits the 6.5 in text width (and 8.5 in
+of height, leaving room for the caption), centred, with the graph's name in a centred paragraph under it and a
+page break before each graph but the first. The page menu keeps Origin's one item; Origin's own "Send Graphs to
+Word" (later versions) was not compared. `sheaf export project -o graphs.docx` does the same (`--graph` repeated
+or `--all-graphs`). Checked by opening the file in Word (Microsoft 365, through COM: 2 pages, 2 inline pictures
+468 pt wide, the captions Graph1 and Graph2).
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 
 Measured on 2026-11-13 by opening Origin's Plot Details on a line plot (`tools/origin-ref/origin-dialog.ps1`,
@@ -5168,6 +5228,20 @@ Plotting into a new layer: `plotxy iy:=[Book]Sheet!(1,3) plot:=200 ogl:=[Graph1]
 The dialog has OK, Cancel and Apply and a ">>" button; Apply is disabled until something changes. The axis dialog opened by Axis... or by double-clicking an axis ("Y Axis - Layer 3") has a left strip with Bottom, Top, Left, Right (or Horizontal, Vertical when the layer shows one side per direction) and the tabs Scale, Tick Labels, Title, Grids, Line and Ticks, Special Ticks, Breaks. **Line and Ticks** has, per side: Show Line and Ticks, "Use Same Options for Left and Right", Line: Show, Color (Auto), Thickness (0.2, 0.5, 1, 1.5, 2, 3, 4, 5; default 1.5), **Axis Position** with three items and **Percent/Value**; Major Ticks and Minor Ticks: Style (In & Out, In, Out, None; Out), Length (3, 5, 8, 10, 15; major 8), Color, Thickness.
 
 **Axis Position** items: for the left axis "Left", "% From Left", "At Position ="; for the right axis "Right", "% From Right", "At Position =". "% From Right" with 12 draws the right axis 12 % of the layer's width **outside** the frame; "% From Left" with 11 draws the left axis 11 % outside; a negative value moves the axis inside (-50 puts a left axis at 50 % of the layer's width). In LabTalk the left/bottom axis reads as `layer.y.position`, `layer.y.posType`, `layer.x.position`, `layer.x.posType` and the right/top axis as **`layer.y2.position`, `layer.y2.posType`, `layer.x2.position`, `layer.x2.posType`** (`layer.y.opposite` is something else; names such as `axisPos` or `offset` do not exist). `posType` 0 = "Left"/"Right" (at the frame), 1 = "% From ..." (the value is the offset in % of the **X axis length**, outward positive), the "At Position =" type was not read. A hidden side of an axis keeps stale values (for example `posType` 1 with 0 on the left of a right-only layer), so read only the shown side.
+
+**"At Position =" in Sheaf (T243, the value's behaviour not measured).** The Axis window's Line and
+Ticks tab lists Left/Right (Bottom/Top) and **At Position =**; choosing it shows **X =** (for a Y axis)
+or **Y =** (for an X axis), starting at 0, and stores `Axis::at_position`. The axis line, its ticks,
+tick labels and title stand where the other axis has that value (an X axis at Y = 0 is Origin's
+"axis at zero"), like an inward "% From" offset computed when the layer is drawn: it follows the
+other axis' range, scale, reversal and breaks; a value outside the range puts the axis on the nearer
+edge of the frame; a value the other axis cannot place (non-positive on a log axis, inside a break)
+leaves the axis at its edge. The frame, grid and opposite line stay. Choosing Left/Right
+(Bottom/Top) again clears the value. The `.opj` writer does not write it (the axis reopens at the
+frame in Origin) and names it, so the `.opj.sheaf` companion keeps it. Tests:
+`crates/plot/src/offset_axis_tests.rs` (`an_axis_at_a_position_...`),
+`crates/app/src/app/ui_tests.rs` (`the_axis_position_can_be_at_a_value_of_the_other_axis`),
+`crates/io/src/opj/write/graph_feature_tests.rs`.
 
 ### 21.4 Deleting a layer
 

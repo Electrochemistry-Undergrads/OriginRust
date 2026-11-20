@@ -696,16 +696,43 @@ fn line_and_ticks_tab(ui: &mut egui::Ui, axis: &mut Axis, vertical: bool, id: &s
                 ui.label("Thickness");
                 ui.add(DragValue::new(&mut axis.line_width_pt).range(0.0..=10.0).speed(0.05).suffix(" pt"));
                 ui.end_row();
+                // T245: Origin's Arrow at Begin / Arrow at End.
+                ui.label("Arrow");
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut axis.arrow_begin, "Arrow at Begin");
+                    ui.checkbox(&mut axis.arrow_end, "Arrow at End");
+                });
+                ui.end_row();
                 ui.label("Axis Position");
                 let (normal, opposite) = if vertical { ("Left", "Right") } else { ("Bottom", "Top") };
-                egui::ComboBox::from_id_salt(format!("{id}_side"))
-                    .selected_text(if axis.side == AxisSide::Opposite { opposite } else { normal })
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut axis.side, AxisSide::Normal, normal);
-                        ui.selectable_value(&mut axis.side, AxisSide::Opposite, opposite);
-                    });
+                const AT: &str = "At Position =";
+                let shown = if axis.at_position.is_some() {
+                    AT
+                } else if axis.side == AxisSide::Opposite {
+                    opposite
+                } else {
+                    normal
+                };
+                egui::ComboBox::from_id_salt(format!("{id}_side")).selected_text(shown).show_ui(ui, |ui| {
+                    if ui.selectable_label(shown == normal, normal).clicked() {
+                        (axis.side, axis.at_position) = (AxisSide::Normal, None);
+                    }
+                    if ui.selectable_label(shown == opposite, opposite).clicked() {
+                        (axis.side, axis.at_position) = (AxisSide::Opposite, None);
+                    }
+                    // T243: Origin's "At Position =": the line where the other axis has a value.
+                    if ui.selectable_label(shown == AT, AT).clicked() && axis.at_position.is_none() {
+                        (axis.side, axis.at_position) = (AxisSide::Normal, Some(0.0));
+                    }
+                });
                 ui.end_row();
-                if vertical {
+                if let Some(v) = &mut axis.at_position {
+                    ui.label(if vertical { "X =" } else { "Y =" });
+                    ui.add(DragValue::new(v).speed(0.1)).on_hover_text(
+                        "The axis stands where the other axis has this value; outside its range it stays on the nearer edge",
+                    );
+                    ui.end_row();
+                } else if vertical {
                     // Origin's "% From Left" / "% From Right" axis position (graphing spec 21.3): the axis
                     // line, ticks and labels stand outward from the frame by a share of its width.
                     ui.label(if axis.side == AxisSide::Opposite { "% From Right" } else { "% From Left" });

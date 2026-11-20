@@ -46,6 +46,82 @@ fn layer_of_hit(hit: Hit) -> Option<usize> {
 /// A drag shorter than this (page points) draws nothing.
 const MIN_DRAWN_PT: f64 = 3.0;
 
+/// Where the analysis lock of each layer goes (T186): beside the layer's icon, or beside the
+/// locked plot's first or last drawn point, as the page's Lock Position says. `None` for a layer
+/// with no lock or when the point is not drawn.
+pub(crate) fn analysis_lock_places(
+    project: &sheaf_core::Project,
+    graph: sheaf_core::WindowId,
+    geometry: &[sheaf_plot::LayerGeometry],
+    to_screen: &dyn Fn((f64, f64)) -> Pos2,
+    image_rect: Rect,
+) -> Vec<(usize, Pos2, sheaf_core::analysis_link::PlotLock)> {
+    use sheaf_core::graph::LockPosition;
+    let Some(g) = project.graph(graph) else { return Vec::new() };
+    let mut out = Vec::new();
+    for (li, layer) in g.layers.iter().enumerate().filter(|(_, l)| !l.display.hidden) {
+        let Some(lock) = project.layer_analysis_lock(layer) else { continue };
+        let at = match g.page.style.lock_position {
+            // At the top right corner of the layer's icon (left of the page when icons are hidden).
+            LockPosition::LayerIcon => Some(image_rect.min + egui::vec2(2.0 + li as f32 * (ICON + 2.0) + ICON, 4.0)),
+            position => {
+                let rows = layer.plots.get(lock.plot).and_then(|p| project.numeric(p.y)).map_or(0, |v| v.len());
+                let point = |row| {
+                    reader::screen_point(
+                        project,
+                        graph,
+                        geometry,
+                        to_screen,
+                        reader::Point { layer: li, plot: lock.plot, row },
+                    )
+                };
+                let found = if position == LockPosition::FirstPoint {
+                    (0..rows).find_map(point)
+                } else {
+                    (0..rows).rev().find_map(point)
+                };
+                found.map(|p| p + egui::vec2(-8.0, -12.0))
+            }
+        };
+        if let Some(at) = at {
+            out.push((li, at, lock));
+        }
+    }
+    out
+}
+
+/// Draws the analysis locks (T186): a padlock, green while the results are current, yellow while a
+/// Manual result waits for Recalculate; its hover text says which.
+fn draw_analysis_locks(
+    ui: &egui::Ui,
+    painter: &egui::Painter,
+    project: &sheaf_core::Project,
+    graph: sheaf_core::WindowId,
+    geometry: &[sheaf_plot::LayerGeometry],
+    to_screen: &dyn Fn((f64, f64)) -> Pos2,
+    image_rect: Rect,
+) {
+    use sheaf_core::column::RecalcMode;
+    for (li, at, lock) in analysis_lock_places(project, graph, geometry, to_screen, image_rect) {
+        let fill = if lock.pending { Color32::from_rgb(235, 190, 0) } else { Color32::from_rgb(0, 160, 0) };
+        let body = Rect::from_center_size(at + egui::vec2(0.0, 2.0), egui::vec2(10.0, 8.0));
+        let shackle: Vec<Pos2> = (0..=12)
+            .map(|k| {
+                let a = std::f32::consts::PI * k as f32 / 12.0;
+                Pos2::new(at.x + 3.0 * a.cos(), body.top() - 3.5 * a.sin())
+            })
+            .collect();
+        painter.add(egui::Shape::line(shackle, Stroke::new(1.5_f32, Color32::from_gray(60))));
+        painter.rect_filled(body, 1.0, fill);
+        painter.rect_stroke(body, 1.0, Stroke::new(1.0_f32, Color32::from_gray(60)), egui::StrokeKind::Inside);
+        let mode = if lock.mode == RecalcMode::Auto { "Auto" } else { "Manual" };
+        let state = if lock.pending { "needs Recalculate" } else { "up to date" };
+        let id = ui.id().with(("analysis_lock", graph.0, li));
+        ui.interact(body.expand(3.0), id, egui::Sense::hover())
+            .on_hover_text(format!("Analysis of plot {} (Recalculate {mode}): {state}", lock.plot + 1));
+    }
+}
+
 /// The outline of an object being drawn, in screen points; `to_screen` takes frame fractions.
 fn draw_preview(painter: &egui::Painter, s: &Shape, to_screen: &dyn Fn((f64, f64)) -> Pos2) {
     let stroke = Stroke::new(1.0_f32, Color32::from_rgb(0, 90, 200));
@@ -701,6 +777,9 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             );
         }
     }
+
+    // Analysis locks (T186): on screen only, where Data > Lock Position puts them.
+    draw_analysis_locks(ui, &painter, doc.project(), graph_id, &t.geometry, &to_screen, image_rect);
 
     // The Data Reader takes the clicks on the page while it is on.
     if state.reader {
@@ -1519,6 +1598,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         can_ungroup: false,
         view_mode: Default::default(),
         layer_icons: true,
+        lock_position: Default::default(),
         page_breaks: false,
         activate_by_icon_only: false,
         icon_double_click_plot_setup: false,

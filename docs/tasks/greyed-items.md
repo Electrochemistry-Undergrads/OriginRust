@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **129 greyed items: 104 in the menu bar, 1 on the toolbars, 24 in context menus.**
+original inventory baseline. This is not a new runtime audit. **126 greyed items: 101 in the menu bar, 1 on the toolbars, 24 in context menus.**
 
 ## How to read and keep this file
 
@@ -70,7 +70,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T127` | 0 |
 | `T128` | 0 |
 | `B2` | 3 |
-| `B3` | 6 |
+| `B3` | 3 |
 | `B4` | 0 |
 | `B5` | 12 |
 | `B6` | 15 |
@@ -86,7 +86,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 12 items, backlog packages (`B`) 97, not planned (`N`) 20.
+Briefs (`T`) hold 12 items, backlog packages (`B`) 94, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -142,7 +142,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B3` Legend: Add Legend Title
 
 ### Data
-- `B3` Lock Position: Layer Icon · First Point · Last Point
 
 ### Gadgets
 - `B9` 2D Integrate... · Go To...

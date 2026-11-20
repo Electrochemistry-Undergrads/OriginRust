@@ -2650,6 +2650,15 @@ impl SheafApp {
                     }
                 });
             }
+            Action::SetLockPosition { graph, position } => {
+                if self.doc.project().graph(graph).is_some_and(|g| g.page.style.lock_position != position) {
+                    self.doc.apply("Lock position", |p| {
+                        if let Some(g) = p.graph_mut(graph) {
+                            g.page.style.lock_position = position;
+                        }
+                    });
+                }
+            }
             Action::SetLayerIcons { graph, on } => {
                 self.doc.apply("Show Layer Icons", |p| {
                     if let Some(g) = p.graph_mut(graph) {
@@ -5171,6 +5180,7 @@ impl SheafApp {
             }),
             view_mode: graph.map(|g| project.view_mode(g)).unwrap_or_default(),
             layer_icons: graph.and_then(|g| project.graph(g)).is_none_or(|g| g.page.style.layer_icons),
+            lock_position: graph.and_then(|g| project.graph(g)).map(|g| g.page.style.lock_position).unwrap_or_default(),
             page_breaks: book
                 .and_then(|b| project.workbook(b))
                 .and_then(|b| b.sheets.get(b.active_sheet))

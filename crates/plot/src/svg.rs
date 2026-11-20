@@ -110,6 +110,20 @@ fn stroke_attrs(s: &mut String, stroke: &Option<Stroke>) {
 
 fn write_item(s: &mut String, item: &Item) {
     match item {
+        // A picture object (T216): the PNG embedded as a data URL, stretched over its rectangle.
+        Item::Image { rect, png } => {
+            s.push_str("<image x=\"");
+            push_num(s, rect.x);
+            s.push_str("\" y=\"");
+            push_num(s, rect.y);
+            s.push_str("\" width=\"");
+            push_num(s, rect.w);
+            s.push_str("\" height=\"");
+            push_num(s, rect.h);
+            s.push_str("\" preserveAspectRatio=\"none\" href=\"data:image/png;base64,");
+            s.push_str(&sheaf_core::worksheet::encode_base64(png));
+            s.push_str("\"/>\n");
+        }
         Item::Rect { rect, fill, stroke } => {
             s.push_str("<rect x=\"");
             push_num(s, rect.x);

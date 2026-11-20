@@ -6600,6 +6600,7 @@ mod gadget_filters;
 mod go_to;
 mod go_to_browser;
 mod go_to_picker;
+mod graph_walkthrough;
 mod integrate_2d_gadget;
 mod label_panels;
 mod layer_management;

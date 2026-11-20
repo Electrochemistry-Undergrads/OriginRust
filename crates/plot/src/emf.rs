@@ -268,6 +268,8 @@ impl Emf<'_> {
         let (fill, stroke) = match item {
             Item::Text(t) => return self.text(t),
             Item::Rect { fill, stroke, .. } | Item::Path { fill, stroke, .. } => (*fill, stroke),
+            // Pictures (T216) are not written to EMF yet.
+            Item::Image { .. } => return,
         };
         let fill = fill.filter(|c| c.a > 0);
         let stroke = stroke.as_ref().filter(|s| s.color.a > 0 && s.width > 0.0);

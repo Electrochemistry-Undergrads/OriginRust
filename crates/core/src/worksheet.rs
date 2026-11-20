@@ -110,7 +110,10 @@ pub struct CellImage {
 }
 
 /// Bytes as standard base64 text (RFC 4648, with padding), so that a picture stays inside `project.json`.
-mod base64_bytes {
+/// Standard base64 text of bytes (used for pictures kept in a project and drawn into SVG, T202/T216).
+pub use base64_bytes::encode as encode_base64;
+
+pub(crate) mod base64_bytes {
     use serde::{Deserialize, Deserializer, Serializer};
 
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

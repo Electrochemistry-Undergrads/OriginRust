@@ -151,6 +151,7 @@ fn visible_bounds(item: &Item, m: &dyn TextMeasurer) -> Option<Rect> {
             let b = of_points(path_extent(d))?;
             Some(widen(b, stroke.as_ref().map_or(0.0, |s| s.width / 2.0)))
         }
+        Item::Image { rect, .. } => Some(*rect),
         Item::Text(t) => {
             if t.text.trim().is_empty() {
                 return None;

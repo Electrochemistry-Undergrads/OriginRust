@@ -1130,6 +1130,7 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         let count = |k| layer.shapes.iter().filter(|s| s.kind == k).count();
         let names: Vec<String> = sheaf_core::shape::ShapeKind::ALL
             .iter()
+            .chain([sheaf_core::shape::ShapeKind::Image].iter())
             .filter(|k| count(**k) > 0)
             .map(|k| {
                 let noun =

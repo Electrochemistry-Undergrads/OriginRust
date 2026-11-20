@@ -908,7 +908,11 @@ Measured in Origin 2016 by right-clicking a sheet tab (`tools/origin-ref/origin-
   - Exclude from Plotting dialogs (T184) marks the sheets (`Worksheet::exclude_from_plotting`), ticked
     when all are marked; again clears it. Plot Setup and Layer Contents then do not list the sheets'
     columns; plots already made stay. The `.opj` written here does not hold the mark (its save warns).
-  - Not done: Move to > Selected Book and Origin's Excel-export exclusion.
+  - Move to also lists the project's other workbooks (T191, Origin's Move to Selected Book): the
+    sheets go after that workbook's last sheet, the first of them active; a name the workbook already
+    has gets the next free number (`Sheet1` becomes `Sheet11`). Columns keep their identities, so
+    graphs follow; greyed when every sheet is selected ("Move sheets to book").
+  - Not done: Origin's Excel-export exclusion.
     [Origin Navigate Worksheets](https://docs.originlab.com/origin-help/nav-wks-dialog/)
 - Clicking a Navigate Worksheets header in Sheaf previews its ascending order. Click it again for
   descending order. Index refers to the workbook order before applying. Apply Reorder commits the
@@ -992,6 +996,15 @@ Categorical) its distinct non-empty cell texts in the order they first appear, j
 other columns. Off on a new sheet, saved per sheet, one undo step ("Worksheet view"). Typing or pasting into
 it is refused with a status message (Copy works). Origin's row text and order (sorted or as set in the
 category editor) were not measured.
+
+**Graph sheets (T190, 2026-11-20, not measured).** A sheet tab's right-click Add Graph as Sheet... opens a
+list of the project's graphs; OK adds a sheet after the last one, named after the graph (`Graph1`, then
+`Graph12`, ... when the name is taken), that shows that graph in place of the grid, live and as its window
+does (clicks, menus and edits act on the graph), one undo step ("Add Graph as Sheet"). The graph window stays
+in the project (Origin embeds the graph; that was not measured, so Sheaf keeps both). Deleting the graph
+leaves the sheet with a note. The sheet has no columns; it is saved in `.sheaf` (the sheet's `graph_sheet`,
+following the graph's id on Append), dropped from workbook templates, and left out of an `.opj` with a
+warning (as Notes sheets are).
 
 ## 13j. Find in Project (T95, measured 2026-11-16, Origin 2016)
 

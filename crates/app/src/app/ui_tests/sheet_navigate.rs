@@ -266,3 +266,22 @@ fn act_in(h: &mut Harness<'static, SheafApp>, submenu: &str, item: &str) {
     click(h, "Actions");
     menu_path(h, &[submenu, item]);
 }
+
+#[test]
+fn navigate_moves_sheets_to_another_workbook() {
+    // T191: Move to > <workbook>, Origin's Move to Selected Book.
+    let (mut h, book) = four_sheets("sheet-navigate-move-book");
+    let first = names(&h, book);
+    let other = h.state_mut().doc.apply("Other book", |p| p.add_workbook("Other"));
+    settle(&mut h);
+    let other_name = project(&h).workbook(other).unwrap().name.clone();
+    pick(&mut h, &[0, 2]);
+    act_in(&mut h, "Move to", &other_name);
+    assert_eq!(names(&h, book), [first[1].clone(), first[3].clone()]);
+    let moved = names(&h, other);
+    assert_eq!(moved.len(), 3, "after the book's own sheet");
+    assert!(moved[1].starts_with(&first[0]) && moved[2].starts_with(&first[2]), "{moved:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Move sheets to book"));
+    menu(&mut h, "Edit", "Undo Move sheets to book");
+    assert_eq!(names(&h, book), first);
+}

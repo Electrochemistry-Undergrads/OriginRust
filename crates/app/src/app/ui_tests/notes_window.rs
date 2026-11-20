@@ -60,3 +60,27 @@ fn add_notes_as_sheet_makes_a_text_sheet_edited_in_place_of_the_grid() {
     settle(&mut h);
     assert_eq!(project(&h).workbook(book).unwrap().sheets[1].notes_text.as_deref(), Some(""));
 }
+
+#[test]
+fn add_graph_as_sheet_shows_the_picked_graph_in_the_workbook() {
+    let mut h = start(vec![data_file("graph-sheet")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = h.state().books.keys().next().copied().unwrap();
+    let graph = project(&h).graphs().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Sheet { book, op: SheetOp::AddGraph }, &ctx);
+    settle(&mut h);
+    assert!(h.state().graph_sheet_picker.is_some(), "the picker is open");
+    h.get_by_label("Add Graph as Sheet").get_by_label("OK").click();
+    settle(&mut h);
+    assert!(h.state().graph_sheet_picker.is_none());
+    let b = project(&h).workbook(book).unwrap();
+    assert_eq!(b.sheets.len(), 2);
+    assert_eq!((b.active_sheet, b.sheets[1].graph_sheet), (1, Some(graph)));
+    assert_eq!(b.sheets[1].name, "Graph1");
+    assert_eq!(h.state().doc.undo_label(), Some("Add Graph as Sheet"));
+    // The graph window stays; deleting it leaves the sheet with a note.
+    h.state_mut().doc.apply("drop graph", |p| p.windows.retain(|w| w.id() != graph));
+    settle(&mut h);
+    assert!(h.query_by_label("The graph this sheet showed was deleted.").is_some());
+}

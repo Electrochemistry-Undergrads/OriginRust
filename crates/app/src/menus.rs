@@ -2375,7 +2375,7 @@ pub fn sheet_tab_menu(sheet: &sheaf_core::Worksheet) -> Vec<Entry> {
         item("Insert", Cmd::Sheet(SheetOp::Insert)),
         item("Delete", Cmd::Sheet(SheetOp::Delete)),
         item("Add", Cmd::Sheet(SheetOp::Add)),
-        grey("Add Graph as Sheet..."),
+        item("Add Graph as Sheet...", Cmd::Sheet(SheetOp::AddGraph)),
         item("Add Notes as Sheet", Cmd::Sheet(SheetOp::AddNotes)),
         sep(),
         item("Duplicate Without Data", Cmd::Sheet(SheetOp::DuplicateWithoutData)),

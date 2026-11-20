@@ -28,8 +28,10 @@ pub const MAX_COMMANDS: usize = 10;
 /// The name of the file in the settings folder.
 pub const FILE_NAME: &str = "recent.json";
 
-/// How long [`update`] waits for another instance to finish its change before going on without the lock.
-const LOCK_WAIT: Duration = Duration::from_secs(2);
+/// How long [`update`] waits for another instance to finish its change before going on without the
+/// lock. Ten seconds (T230: two were too short when many writers queued on a busy machine, and going
+/// on without the lock can lose the other writer's change).
+const LOCK_WAIT: Duration = Duration::from_secs(10);
 
 /// Whether two spellings that differ only in letter case name the same file (Windows and macOS).
 const FOLD_CASE: bool = cfg!(any(windows, target_os = "macos"));
@@ -240,7 +242,7 @@ impl RecentList {
     }
 }
 
-/// Changes the lists in the file at `path`: waits for the file lock (up to two seconds, then goes on
+/// Changes the lists in the file at `path`: waits for the file lock (up to ten seconds, then goes on
 /// without it), reads the file as it is now, applies `change`, writes the file and returns the new
 /// lists. Entries another instance added in the meantime are kept.
 pub fn update(path: &Path, change: impl FnOnce(&mut RecentList)) -> Result<RecentList, IoError> {

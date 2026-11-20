@@ -53,6 +53,31 @@ fn set_mtime(path: &Path, when: SystemTime) {
 }
 
 #[test]
+fn writes_of_one_file_at_once_all_succeed() {
+    // T230: the temporary file was named after the process only, so two threads writing one file
+    // shared it and the second rename failed with NotFound.
+    let dir = scratch("atomic-writers");
+    let path = dir.join("store.json");
+    let handles: Vec<_> = (0..8)
+        .map(|w| {
+            let path = path.clone();
+            std::thread::spawn(move || {
+                for i in 0..20 {
+                    write_atomically(&path, format!("{w}-{i}").as_bytes()).unwrap();
+                }
+            })
+        })
+        .collect();
+    for h in handles {
+        h.join().unwrap();
+    }
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(text.ends_with("-19"), "the last write of some writer: {text}");
+    let left: Vec<_> = std::fs::read_dir(&dir).unwrap().filter_map(Result::ok).map(|e| e.file_name()).collect();
+    assert_eq!(left, vec![std::ffi::OsString::from("store.json")], "no temporary file is left");
+}
+
+#[test]
 fn a_name_without_extension_becomes_opj() {
     let dir = scratch("ext");
     let out = save_project(&workbook_project(), &dir.join("lab")).unwrap();

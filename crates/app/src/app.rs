@@ -151,6 +151,8 @@ struct RenameDialog {
     error: Option<String>,
     /// Set when a folder is renamed instead of a window: its path.
     folder: Option<Vec<usize>>,
+    /// The window's Comments (T249).
+    comments: String,
 }
 
 /// The draft of a sheet's names and comments.
@@ -3575,6 +3577,7 @@ impl SheafApp {
                         short_name: String::new(),
                         error: None,
                         folder: Some(path),
+                        comments: String::new(),
                     });
                 }
             }
@@ -3643,7 +3646,9 @@ impl SheafApp {
                         Window::Matrix(m) => m.long_name.clone(),
                     };
                     let short_name = w.name().to_string();
-                    self.rename = Some(RenameDialog { window: id, long_name, short_name, error: None, folder: None });
+                    let comments = self.doc.project().window_comments(id).to_string();
+                    self.rename =
+                        Some(RenameDialog { window: id, long_name, short_name, error: None, folder: None, comments });
                 }
             }
             Action::Cascade => self.workspace.cascade(),
@@ -7090,6 +7095,9 @@ impl SheafApp {
                         ui.add(egui::TextEdit::singleline(&mut d.short_name).desired_width(200.0));
                     });
                     ui.weak("Letters and digits, at most 13 characters (as in Origin).");
+                    // T249: Origin's Window Properties have Comments.
+                    ui.label("Comments");
+                    ui.add(egui::TextEdit::multiline(&mut d.comments).desired_width(320.0).desired_rows(3));
                     // Dependents (T220): what uses this window, and the books a graph plots.
                     let project = self.doc.project();
                     let titles = |ids: Vec<WindowId>| -> String {
@@ -7110,6 +7118,7 @@ impl SheafApp {
                     if ui.button("OK").clicked() {
                         let (id, name) = (d.window, d.long_name.clone());
                         let short = d.short_name.clone();
+                        let comments = d.comments.clone();
                         if let Some(path) = d.folder.clone() {
                             let name = name.trim().to_string();
                             if !name.is_empty() {
@@ -7134,6 +7143,7 @@ impl SheafApp {
                                 } else if let Some(n) = p.notes_mut(id) {
                                     n.long_name = name;
                                 }
+                                p.set_window_comments(id, &comments);
                                 Ok::<(), String>(())
                             });
                             match result {

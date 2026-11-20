@@ -9321,3 +9321,25 @@ fn the_text_export_can_write_only_the_selected_cells() {
         assert!((first - want).abs() < 1e-9 * want.abs().max(1.0), "{line} vs {want}");
     }
 }
+
+#[test]
+fn window_properties_keep_comments_with_undo() {
+    // T249: Window Properties' Comments.
+    let mut h = start(vec![data_file("window-comments")]);
+    let (book, _) = window_ids(&h);
+    right_click(&mut h, "Book1 - sample.csv");
+    click(&mut h, "Properties...");
+    h.get_by_label("Rename window").get_by_label("Comments");
+    h.state_mut().rename.as_mut().unwrap().comments = "calibrated 3 May".to_string();
+    click(&mut h, "OK");
+    assert_eq!(project(&h).window_comments(book), "calibrated 3 May");
+    assert_eq!(h.state().doc.undo_label(), Some("Rename window"));
+    // The window opens again with them.
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::RenameWindow(book), &ctx);
+    settle(&mut h);
+    assert_eq!(h.state().rename.as_ref().unwrap().comments, "calibrated 3 May");
+    click(&mut h, "Cancel");
+    menu(&mut h, "Edit", "Undo Rename window");
+    assert_eq!(project(&h).window_comments(book), "");
+}

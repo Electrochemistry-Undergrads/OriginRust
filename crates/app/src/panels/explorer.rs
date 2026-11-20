@@ -470,6 +470,9 @@ fn row(
     let (rect, response) = ui.allocate_exact_size(Vec2::new(edges[4], ROW_H), Sense::click_and_drag());
     let title = w.title();
     response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, &title));
+    // T249: the window's Comments as the row's tooltip.
+    let comments = data.project.window_comments(id);
+    let response = if comments.is_empty() { response } else { response.on_hover_text(comments) };
     if selected {
         ui.painter().rect_filled(rect, 0.0, Color32::from_rgb(204, 228, 247));
     } else if response.hovered() {

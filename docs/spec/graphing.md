@@ -5769,6 +5769,15 @@ every layer's X and Y axes. Each opens the axis groups of 26.13 (Tick Direction 
 Text, All; Title Dimensions grey), pasted onto each of those axes as on one axis; the whole paste is one
 undo step ("Apply Theme"). The first-level **All** stays grey: Sheaf cannot tell it apart from All Axes.
 
+### 26.15 Copy Format: Symbol, Line and Fill, Text and Page Background (T176, 2026-11-19, not measured)
+
+The three were not measured (26.3). Sheaf's choices: the Edit menu's **Symbol/Line/Fill** copies the
+plots' lines and symbols (the Symbol, Line and Fill group that All already holds) and **Text** the words of
+the text labels (the Text group of All), each alone; the page menu's **Page Background** copies the page
+colour, which Paste Format (page menu; it now pastes every group the clipboard holds) and Paste Format...
+(Apply Formats, listed as "Page Background") give the target page. All and All Style Formats keep Origin's measured groups and do not carry the page
+colour. Each paste is one undo step ("Apply Theme"). **Legend Translation Mode** stays grey (unknown).
+
 ## 27. Colour scales and bubble scales: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (T80)
 
 Not measured: Origin 2016 is on Windows only and this slice was built on macOS from Origin's help, so everything

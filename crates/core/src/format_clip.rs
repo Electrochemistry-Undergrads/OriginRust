@@ -37,7 +37,22 @@ pub enum Group {
     SymbolLineFill,
     /// The words of the text labels.
     Text,
+    /// The page's colour (the page menu's Copy Format > Page Background, T176).
+    PageBackground,
 }
+
+/// Every group, for a paste of whatever the clipboard holds (the page's Paste Format).
+pub const EVERY_GROUP: &[Group] = &[
+    Group::Dimensions,
+    Group::Scales,
+    Group::Colors,
+    Group::Fonts,
+    Group::Background,
+    Group::Thickness,
+    Group::SymbolLineFill,
+    Group::Text,
+    Group::PageBackground,
+];
 
 /// What Copy Format of a graph copies (Edit menu and page menu of Origin).
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -49,6 +64,12 @@ pub enum GraphPart {
     Background,
     Dimensions,
     Scales,
+    /// The Edit menu's Symbol, Line and Fill (T176).
+    SymbolLineFill,
+    /// The Edit menu's Text (T176).
+    Text,
+    /// The page menu's Page Background (T176).
+    PageBackground,
 }
 
 impl GraphPart {
@@ -63,6 +84,9 @@ impl GraphPart {
             GraphPart::Background => &[Background],
             GraphPart::Dimensions => &[Dimensions],
             GraphPart::Scales => &[Scales],
+            GraphPart::SymbolLineFill => &[SymbolLineFill],
+            GraphPart::Text => &[Text],
+            GraphPart::PageBackground => &[PageBackground],
         }
     }
 }
@@ -124,6 +148,9 @@ struct LayerFormat {
 pub struct GraphFormat {
     groups: Vec<Group>,
     page_width_pt: f64,
+    /// The page colour; absent in formats saved before T176.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    page_background: Option<Color>,
     layers: Vec<LayerFormat>,
 }
 
@@ -156,6 +183,7 @@ pub fn copy_graph(graph: &Graph, part: GraphPart) -> FormatClip {
     FormatClip::Graph(GraphFormat {
         groups: part.groups().to_vec(),
         page_width_pt: graph.page.width_pt,
+        page_background: Some(graph.page.background),
         layers: graph
             .layers
             .iter()
@@ -301,6 +329,11 @@ pub fn paste_graph(graph: &mut Graph, clip: &FormatClip, parts: &[Group]) -> boo
     let has = |g: Group| parts.contains(&g) && f.groups.contains(&g);
     if has(Group::Dimensions) {
         graph.page.width_pt = f.page_width_pt;
+    }
+    if has(Group::PageBackground)
+        && let Some(c) = f.page_background
+    {
+        graph.page.background = c;
     }
     let linked: Vec<bool> = (0..graph.layers.len()).map(|i| graph.link_parent(i).is_some()).collect();
     for ((layer, from), to_linked) in graph.layers.iter_mut().zip(&f.layers).zip(linked) {
@@ -853,5 +886,30 @@ mod tests {
             background: g.layers[0].legend.background,
         });
         assert!(!paste_axes(&mut g.clone(), AxisTargets::AllAxes, &legend, AxisPart::All));
+    }
+
+    #[test]
+    fn page_background_symbol_and_text_copy_alone() {
+        let (mut src, dst) = pair();
+        src.page.background = Color::rgb(9, 8, 7);
+        let paste = |part: GraphPart| {
+            let clip = copy_graph(&src, part);
+            let mut t = dst.clone();
+            assert!(paste_graph(&mut t, &clip, part.groups()));
+            t
+        };
+        let t = paste(GraphPart::PageBackground);
+        assert_eq!(t.page.background, Color::rgb(9, 8, 7));
+        assert_eq!(
+            (t.page.width_pt, &t.layers[0].x_axis),
+            (dst.page.width_pt, &dst.layers[0].x_axis),
+            "only the colour"
+        );
+        let t = paste(GraphPart::Text);
+        assert_eq!(t.page.background, dst.page.background, "Text leaves the page");
+        let t = paste(GraphPart::SymbolLineFill);
+        assert_eq!(t.layers[0].x_axis, dst.layers[0].x_axis, "plots only");
+        // All keeps Origin's measured groups: no page colour.
+        assert_eq!(paste(GraphPart::All).page.background, dst.page.background);
     }
 }

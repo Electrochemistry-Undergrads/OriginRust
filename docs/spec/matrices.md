@@ -383,7 +383,7 @@ each matrix as not written).
 - **Sheaf choice:** Origin fits a matrix directly; Sheaf goes through XYZ columns, so the fit
   results, residuals and report are those of an ordinary XYZ surface fit.
 
-## 7k. Plot > Contour/Heat Map > Polar Contour (T222, 2026-11-20, not measured)
+## 7k. Plot > Contour/Heat Map > Polar Contour (T225, 2026-11-20, not measured)
 
 - Polar Contour theta(X) r(Y) and r(X) theta(Y) take three selected worksheet columns. The first
   item reads them as angle (degrees), radius and Z; the second as radius, angle and Z.

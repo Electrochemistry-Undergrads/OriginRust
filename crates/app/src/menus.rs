@@ -234,7 +234,7 @@ pub enum Cmd {
     /// File > New > Function Plot (T213): the function window; OK makes a new graph.
     NewFunctionPlot,
     /// Plot > Contour/Heat Map > Polar Contour theta(X) r(Y) / r(X) theta(Y) of three selected
-    /// columns (T222).
+    /// columns (T225).
     PolarContour {
         theta_first: bool,
     },

@@ -153,7 +153,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T152](T152-legend-order.md) | Legend Bring to front/back, front/back of data (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured; left: legend Cut/Copy |
 | [T153](T153-title-order.md) | Axis title Bring to the front / Push to the back (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured |
 | [T154](T154-notes-window.md) | Notes windows: File > New > Notes, New Notes (B14 slice) | M | done 2026-11-19 (notes-window spec), not measured; left: Add Notes as Sheet, .opj |
-| [T222](T222-polar-contour.md) | Plot > Contour/Heat Map > Polar Contour theta(X) r(Y), r(X) theta(Y) (B14 slice) | S | done 2026-11-20 (matrices 7k), not measured |
+| [T225](T225-polar-contour.md) | Plot > Contour/Heat Map > Polar Contour theta(X) r(Y), r(X) theta(Y) (B14 slice) | S | done 2026-11-20 (matrices 7k), not measured |
 | [T221](T221-matrix-surface-fit.md) | Nonlinear Surface Fit on a matrix through XYZ columns | S | done 2026-11-20 (matrices 7j), not measured |
 | [T218](T218-image-rgb.md) | Colour pictures as RGB sheets; Image > Color to Gray, RGB Split (B14 slice) | S | done 2026-11-20 (matrices 7h/7i), not measured |
 | [T213](T213-new-function-plot.md) | File > New > Function Plot (B14 slice) | S | done 2026-11-20 (graphing 41), not measured |

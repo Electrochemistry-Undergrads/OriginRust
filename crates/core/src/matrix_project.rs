@@ -182,7 +182,7 @@ impl Project {
         Ok(self.add_field_graph(template, FieldSource::Xyz { x, y, z }, &long))
     }
 
-    /// Plot > Contour/Heat Map > Polar Contour (T222): a colour-fill contour of `z` over the angle
+    /// Plot > Contour/Heat Map > Polar Contour (T225): a colour-fill contour of `z` over the angle
     /// column `theta` (degrees) and the radius column `r`, in Origin's polar layer. Returns the id.
     pub fn plot_xyz_polar(&mut self, theta: ColumnId, r: ColumnId, z: ColumnId) -> Result<WindowId, ProjectError> {
         for id in [theta, r, z] {

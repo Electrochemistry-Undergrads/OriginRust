@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **167 greyed items: 117 in the menu bar, 2 on the toolbars, 48 in context menus.**
+original inventory baseline. This is not a new runtime audit. **164 greyed items: 115 in the menu bar, 2 on the toolbars, 47 in context menus.**
 
 ## How to read and keep this file
 
@@ -38,7 +38,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T58` | 0 |
 | `T59` | 0 |
 | `T60` | 0 |
-| `T61` | 5 |
+| `T61` | 3 |
 | `T62` | 0 |
 | `T63` | 3 |
 | `T65` | 0 |
@@ -81,12 +81,12 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B12` | 1 |
 | `B13` | 2 |
 | `B14` | 42 |
-| `B15` | 5 |
+| `B15` | 4 |
 | `B16` | 15 |
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 37 items, backlog packages (`B`) 110, not planned (`N`) 20.
+Briefs (`T`) hold 35 items, backlog packages (`B`) 109, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -118,7 +118,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `T66` Show Data Info [Graph]
 
 ### Plot
-- `B15` 3D Surface: X Constant with Base · Y Constant with Base · Colormap Surface with Projection · 3D Ternary Colormap Surface
+- `B15` 3D Surface: X Constant with Base · Y Constant with Base · 3D Ternary Colormap Surface
 - `B14` Contour/Heat Map: Color Fill · B/W Lines + Labels · Gray Scale Map · Heat Map · Polar Contour theta(X) r(Y) · Polar Contour r(X) theta(Y) · Ternary Contour
 - `B14` Profile: Contour Profiles · Image Profiles
 
@@ -142,7 +142,6 @@ changes. The baseline labels remain open until implementation or a documented re
 ### Graph
 - `N` Fit Layer to Graph
 - `B3` Convert to Standard Font Size
-- `T61` New Layer(Axes): Open Dialog...
 - `B3` Legend: Add Legend Title
 
 ### Data
@@ -199,7 +198,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B16` Graph legend: Programming Control...
 - `B3` Graph legend > Legend: Add Legend Title
 - `T72` Graph legend > Copy Format: Dimensions · All
-- `T61` Graph page > New Layer(Axes): Open Dialog...
 - `T72` Graph page > Copy Format: Page Background · Legend Translation Mode
 - `T72` Graph page > Paste Format To: Bottom Axes · All X Axes · All Axes · All
 - `T61` Graph layer icon: Show Active Layer Only · Set Active Layer By Layer Icon Only · Double click to open Plot Setup

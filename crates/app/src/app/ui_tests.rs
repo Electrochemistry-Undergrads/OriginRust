@@ -6586,6 +6586,7 @@ mod clipboard_origin;
 #[path = "ui_tests/clipboard_formats.rs"]
 mod clipboard_formats;
 
+mod add_layer_dialog;
 mod add_plot_to_layer;
 mod axis3d;
 mod change_xy;

@@ -5230,7 +5230,7 @@ Implemented in `crates/core/src/layers.rs` (`Graph::add_layer`, `Graph::delete_l
 - Delete follows 21.4: children are unlinked and keep their place on the page (the parent's rectangle for a layer that covers it; for an inset the inset's own place, **unmeasured**), later links are renumbered, no confirmation, undo text "Undelete frame". Deleting the **only** layer is refused (Origin's behaviour unmeasured). After a delete the active layer is the one before the deleted layer (or the first), a selection in a later layer moves up, a selection in the deleted layer is cleared, and Plot Details, Layer Contents, Plot Setup and the drawn-object window of that graph close.
 - Add makes the new layer active and clears the selection; one undo step each ("Create", "Undelete frame").
 - Layer Properties... (Format menu and layer icon) opens Plot Details on the layer's node with the Background tab. Sheaf's layer node keeps its Layer Contents and Legend tabs as well.
-- Still grey: Open Dialog... of New Layer(Axes), Show Active Layer Only and Set Active Layer By Layer Icon Only (effects unmeasured). Hide Layer is a reversible whole-layer toggle (21.13); Hide Other Layers toggles whole-layer isolation/show-all from the published contract in 21.14; its live 2016 behavior remains unmeasured.
+- Still grey: Show Active Layer Only and Set Active Layer By Layer Icon Only (effects unmeasured). Hide Layer is a reversible whole-layer toggle (21.13); Hide Other Layers toggles whole-layer isolation/show-all from the published contract in 21.14; its live 2016 behavior remains unmeasured.
 
 ### 21.10 How Sheaf draws a displaced Y axis (slice 2)
 
@@ -5373,6 +5373,33 @@ edge choices are explicit Sheaf policies, unmeasured in Origin2016. A single-lay
 stale/invalid request changes no document, history or revision. Selecting another icon
 does not automatically transfer isolation; the separate Show Active Layer Only and
 Set Active Layer By Layer Icon Only modes remain disabled pending verification.
+
+### 21.15 New Layer (Axes) preset dialog (T61 follow-up, 2026-11-16)
+
+Origin's [layer-add guide](https://docs.originlab.com/origin-help/addlayers-insertlayer/) and
+[layadd reference](https://docs.originlab.com/x-function/ref/layadd/) document Open Dialog...,
+the nine layer presets, a normal-layer default and Activate New Layer enabled by default.
+They also document custom axis definitions/scale formulas and an automatic overlap-offset
+option, disabled by default. These are primary-documentation references, not fresh Native2016
+measurements; live COM was unavailable and no registration/installation repair was attempted.
+
+Sheaf's Graph > New Layer(Axes) > Open Dialog... and the corresponding graph-page menu open
+New Layer (Axes). The first slice selects among the same nine preset helpers as the existing
+menu and toolbar, retaining all measured/provisional rules in 21.9. Activate New Layer chooses
+whether the new child or its captured source remains active. The source graph is fixed when
+opened and the source layer is shown; changing the active layer later does not retarget it.
+OK adds exactly one layer through the existing Create history operation, clears object selection
+and focuses that graph; Cancel, Escape and closing the dialog make no edit. Any intervening
+project revision or replacement closes a stale draft instead of applying it. Source capture,
+conservative stale rejection, this compact layout and post-confirmation focus are Sheaf choices.
+
+User Defined and Auto Offset Overlapped Axes remain disabled with reasons. Arbitrary axis-side
+combinations, custom scale expressions and choosing another input graph within the dialog are
+not implemented by this preset facade. No model, layer-helper, renderer, file or CLI/MCP
+contract changes. The existing preset links, geometry, inset-data copying and native/companion
+save behavior are reused. The developer capture route is `--show add-layer`.
+
+---
 
 ## 22. Graph view modes, Show toggles and Full Screen (T66, measured 2026-11-15, Origin 2016)
 
@@ -6607,7 +6634,11 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
   - Color Map fills each triangle by its mean Z over the plot's Z range with the colour-mapped
     symbols' map (blue, cyan, green, yellow, red); Color Fill with the plot colour (red first);
     Wire Surface with white, which hides the mesh behind; Wire Frame does not fill, so every line shows.
-  - X/Y Constant with Base, Colormap Surface with Projection and 3D Ternary Colormap Surface stay grey.
+  - **Colormap Surface with Projection (T168, `3d-colormap-surface-projection`):** the Color Map
+    surface, and under it the same triangles flat on the floor of the box in the same colours,
+    without mesh lines (each edged in its own colour, 0.25 pt, so that no seams show). The
+    projection is drawn before the surface.
+  - X/Y Constant with Base and 3D Ternary Colormap Surface stay grey.
 - **Not done:**
   - rotating the view; axis titles, tick label and scale type settings of the 3D axes;
   - hiding points behind each other (points are drawn in row order);

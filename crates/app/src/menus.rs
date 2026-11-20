@@ -381,6 +381,7 @@ pub enum Cmd {
     GraphEdit(GraphOp),
     /// Graph > New Layer(Axes) or a Graph toolbar button: a layer of this kind next to the active layer.
     AddLayer(sheaf_core::layers::NewLayerKind),
+    AddLayerDialog,
     /// Rescale to Show All on the active layer (Ctrl+R).
     Rescale,
     /// Graph > Exchange X-Y Axes on the active layer.
@@ -1255,8 +1256,10 @@ fn plot_menu() -> Vec<Entry> {
             [
                 vec![item("Color Fill Surface", Cmd::Plot(Template::ColorFillSurface3d))],
                 greys(&["X Constant with Base", "Y Constant with Base"]),
-                vec![item("Color Map Surface", Cmd::Plot(Template::ColorMapSurface3d))],
-                greys(&["Colormap Surface with Projection"]),
+                vec![
+                    item("Color Map Surface", Cmd::Plot(Template::ColorMapSurface3d)),
+                    item("Colormap Surface with Projection", Cmd::Plot(Template::ColorMapProjection3d)),
+                ],
                 vec![
                     item("Wire Frame", Cmd::Plot(Template::WireFrame3d)),
                     item("Wire Surface", Cmd::Plot(Template::WireSurface3d)),
@@ -2518,13 +2521,13 @@ pub fn graph_legend_menu(layer: usize, can_color: bool, can_bubble: bool) -> Vec
     menu
 }
 
-/// Graph > New Layer(Axes): the nine kinds of Origin 2016 (Open Dialog... is the `layadd` window, unmeasured).
+/// Graph > New Layer(Axes): the nine kinds and the preset facade of the `layadd` window.
 fn new_layer_menu() -> Entry {
     use sheaf_core::layers::NewLayerKind;
     let mut entries: Vec<Entry> =
         NewLayerKind::ALL.iter().map(|&kind| item(kind.menu_label(), Cmd::AddLayer(kind))).collect();
     entries.push(sep());
-    entries.push(grey("Open Dialog..."));
+    entries.push(item("Open Dialog...", Cmd::AddLayerDialog));
     sub("New Layer(Axes)", entries)
 }
 
@@ -3229,6 +3232,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             graph: c.graph.ok_or(NEED_GRAPH)?,
             op: GraphOp::AddLayer { layer: c.layer, kind: *kind },
         },
+        Cmd::AddLayerDialog => Action::AddLayerDialog { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::Rescale => {
             Action::GraphEdit { graph: c.graph.ok_or(NEED_GRAPH)?, op: GraphOp::Rescale { layer: c.layer } }
         }

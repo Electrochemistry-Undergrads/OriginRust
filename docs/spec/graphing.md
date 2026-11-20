@@ -6611,7 +6611,12 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
     surface, and under it the same triangles flat on the floor of the box in the same colours,
     without mesh lines (each edged in its own colour, 0.25 pt, so that no seams show). The
     projection is drawn before the surface.
-  - X/Y Constant with Base and 3D Ternary Colormap Surface stay grey.
+  - **X Constant with Base and Y Constant with Base (T170, `3d-x-constant-base`,
+    `3d-y-constant-base`):** the points of each X value (or Y value) are joined in order of Y (or X)
+    into a curve of Z and filled down to the floor of the box: one wall per value, in the plot
+    colour (red first) with the black line as edge. Values with one point draw nothing. The walls
+    are drawn from the farthest to the nearest by their mean depth.
+  - 3D Ternary Colormap Surface stays grey.
 - **Not done:**
   - rotating the view; axis titles, tick label and scale type settings of the 3D axes;
   - hiding points behind each other (points are drawn in row order);

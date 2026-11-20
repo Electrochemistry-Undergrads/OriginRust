@@ -2855,6 +2855,26 @@ impl SheafApp {
                 self.export =
                     Some(ExportDialog::new(graph, self.folder()).with_themes(self.startup.themes_dir.clone()));
             }
+            Action::ExportProjectGraphs(what) => {
+                use crate::dialogs::export::ExportFormat;
+                use crate::menus::ProjectGraphsExport;
+                // The graph that was active last starts the window (it names the first file), else the first.
+                let graphs: Vec<WindowId> = self.doc.project().graphs().map(|g| g.id).collect();
+                let Some(&first) = graphs.first() else {
+                    self.warn("The project has no graph to export");
+                    return;
+                };
+                let start = self.workspace.recent_order(&graphs).into_iter().next().unwrap_or(first);
+                let (format, multipage) = match what {
+                    ProjectGraphsExport::Graphs | ProjectGraphsExport::Image => (ExportFormat::Png, false),
+                    ProjectGraphsExport::MultiPagePdf => (ExportFormat::Pdf, true),
+                };
+                self.export = Some(
+                    ExportDialog::new(start, self.folder())
+                        .with_themes(self.startup.themes_dir.clone())
+                        .for_all_graphs(format, multipage),
+                );
+            }
             Action::ExportData(book) => self.export_data(book),
             Action::ExportExcel(book) => {
                 if let Some(b) = self.doc.project().workbook(book) {

@@ -235,6 +235,8 @@ pub enum Cmd {
     LayoutAddGraph,
     /// Layout > Export Page as Image... (T237 slice 3).
     LayoutExport,
+    /// Layout > Page Setup... (T237 slice 4).
+    LayoutPageSetup,
     /// File > Import > Binary 2D Array... (T199).
     ImportBinary2d,
     /// File > Import > Image... into a matrix book (T204).
@@ -996,6 +998,8 @@ fn base(kind: WindowKind) -> Vec<Menu> {
                     item("Add &Graph...", Cmd::LayoutAddGraph),
                     sep(),
                     item("&Export Page as Image...", Cmd::LayoutExport),
+                    sep(),
+                    item("Page &Setup...", Cmd::LayoutPageSetup),
                 ],
             ),
             m("&Tools", tools_menu()),
@@ -3301,6 +3305,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::NewNotes => Action::NewNotes,
         Cmd::NewMatrix => Action::NewMatrix,
         Cmd::NewLayout => Action::NewLayout,
+        Cmd::LayoutPageSetup => match (c.kind, c.active) {
+            (WindowKind::Layout, Some(id)) => Action::LayoutPageSetup { layout: id },
+            _ => return Err("Activate a layout page first"),
+        },
         Cmd::LayoutExport => match (c.kind, c.active) {
             (WindowKind::Layout, Some(id)) => Action::LayoutExport { layout: id },
             _ => return Err("Activate a layout page first"),

@@ -183,6 +183,8 @@ pub struct SheafApp {
     layouts: HashMap<WindowId, crate::layout_view::LayoutUi>,
     /// Layout > Add Graph's window (T237).
     layout_add_graph: Option<crate::dialogs::layout_add_graph::LayoutAddGraph>,
+    /// Layout > Page Setup's window (T237 slice 4).
+    layout_page_setup: Option<crate::dialogs::layout_page_setup::LayoutPageSetup>,
     import: Option<ImportDialog>,
     import_excel: Option<ExcelImportDialog>,
     import_wizard: Option<ImportWizard>,
@@ -377,6 +379,7 @@ impl SheafApp {
             matrices: HashMap::new(),
             layouts: HashMap::new(),
             layout_add_graph: None,
+            layout_page_setup: None,
             import: None,
             import_excel: None,
             import_wizard: None,
@@ -970,6 +973,7 @@ impl SheafApp {
         self.fit_page = None;
         self.matrix_dialog = None;
         self.layout_add_graph = None;
+        self.layout_page_setup = None;
         self.import_bin2d = None;
         self.axis3d = None;
         self.label_panels = None;
@@ -2008,6 +2012,9 @@ impl SheafApp {
                 if let Some(id) = new {
                     self.focus(id);
                 }
+            }
+            Action::LayoutPageSetup { layout } => {
+                self.layout_page_setup = crate::dialogs::layout_page_setup::LayoutPageSetup::new(&self.doc, layout);
             }
             Action::LayoutExport { layout } => {
                 let name = self.doc.project().layout(layout).map(|l| l.name.clone()).unwrap_or_default();
@@ -6198,6 +6205,7 @@ impl SheafApp {
             || self.fit_page.is_some()
             || self.matrix_dialog.is_some()
             || self.layout_add_graph.is_some()
+            || self.layout_page_setup.is_some()
             || self.import_bin2d.is_some()
             || self.axis3d.is_some()
             || self.plot_setup.is_some()
@@ -6544,6 +6552,13 @@ impl SheafApp {
                     self.import_bin2d = None;
                     self.say("Imported the binary 2D array into a new matrix book".to_string());
                 }
+            }
+        }
+        if let Some(d) = &mut self.layout_page_setup {
+            use crate::dialogs::layout_page_setup::Outcome;
+            match d.show(ctx, &mut self.doc) {
+                Outcome::Open => {}
+                Outcome::Closed | Outcome::Done => self.layout_page_setup = None,
             }
         }
         if let Some(d) = &mut self.layout_add_graph {

@@ -25,7 +25,7 @@ use crate::peaks::{PeakDirection, PeakFilter, PeakOptions, find_peaks};
 use crate::smooth::{SmoothOptions, smooth};
 
 /// How peaks are located (the `method` of `pkFind`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum FindMethod {
     /// A point larger than its `npts` neighbours on each side.
     #[default]
@@ -39,7 +39,7 @@ pub enum FindMethod {
 }
 
 /// Settings of the peak search.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FindOptions {
     pub method: FindMethod,
     /// Neighbours compared (local maximum, window search) or half the window of the derivative.
@@ -68,7 +68,7 @@ impl Default for FindOptions {
 }
 
 /// Where a peak starts and ends.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum LimitMode {
     /// Where the corrected curve reaches zero (the baseline) or the valley to the next peak.
     #[default]
@@ -78,7 +78,7 @@ pub enum LimitMode {
 }
 
 /// How the baseline is made.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ChainBaseline {
     /// Data are used as they are.
     None,
@@ -96,7 +96,7 @@ pub enum ChainBaseline {
 }
 
 /// Which value of the data a constant baseline takes (Origin's Constant choices).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum BaselineStat {
     #[default]
     Minimum,
@@ -126,7 +126,7 @@ impl BaselineStat {
 }
 
 /// Everything [`analyze_peaks`] needs.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainOptions {
     pub baseline: ChainBaseline,
     pub find: FindOptions,

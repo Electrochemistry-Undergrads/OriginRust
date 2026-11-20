@@ -670,6 +670,24 @@ Sheaf (`crates/app/src/dialogs/multipeak.rs`, the chain of 11 with given centres
   arrow-key stepping specific to Get Points (the Data Reader's Left/Right
   keys step the pinned point).
 
+### 11.4 Peak Analyzer themes and batch peak analysis (T169, 2026-11-19, not measured)
+
+Origin keeps Peak Analyzer settings as dialog themes and its Peaks and Baseline menu has Batch Peak
+Analysis Using Theme... (11.1). Neither window was measured; Sheaf's are its own (**unmeasured**):
+
+- **Save as Theme** (the Peak Analyzer window, below Prev/Next): a Theme name and Save as Theme store
+  the window's current settings (the `PeakChainSpec` that OK would run: goal, baseline, peak search,
+  integration and fit) as a named theme in `peak-themes.json` in the settings folder
+  (`sheaf_io::peak_themes`). Names are trimmed and white space collapsed; a theme of the same name
+  (letter case ignored) is replaced in its place. A theme this version cannot read is kept in the file
+  and hides no other. Loading a theme back into the window is not offered yet.
+- **Batch Peak Analysis Using Theme...** (Analysis > Peaks and Baseline): a window with the saved themes
+  and the curves it runs on: the selected numeric columns of the active workbook, else the columns a plot
+  of the active sheet would show; on a graph the active layer's curves. OK runs Peak Analyzer with the
+  theme on all of them at once, the results in one new sheet as an ordinary Peak Analyzer run on several
+  columns, one undo step ("Batch peak analysis"). Not done: Origin's per-dataset summary options, running
+  on several books or files (use File > Batch Processing, workbook-model 13p).
+
 ## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1 to 12.3)
 
 Analysis > Data Manipulation has Subtract Straight Line, Reduce Duplicate X Data (12.1), Reduce to Evenly Spaced X and Curve

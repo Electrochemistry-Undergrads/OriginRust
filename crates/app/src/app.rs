@@ -113,6 +113,8 @@ pub struct Startup {
     pub templates_dir: Option<PathBuf>,
     /// Where graph themes are kept (Save Format as Theme, Theme Organizer); `None` greys them out.
     pub graph_themes_dir: Option<PathBuf>,
+    /// The Peak Analyzer themes file (T169); `None` hides Save as Theme and lists no theme.
+    pub peak_themes_path: Option<PathBuf>,
     /// Where the Fitting Function Builder saves its `.FDF` files (T132); `None` saves nothing.
     pub fit_functions_dir: Option<PathBuf>,
     /// Turn the AI link on at start (`--mcp`). It is never saved: a run starts with it off.
@@ -227,6 +229,8 @@ pub struct SheafApp {
     template_manager: Option<crate::dialogs::user_templates::TemplateManager>,
     /// File > Batch Processing... (T165).
     batch: Option<crate::dialogs::batch_process::BatchDialog>,
+    /// Batch Peak Analysis Using Theme... (T169).
+    batch_peaks: Option<crate::dialogs::batch_peaks::BatchPeaksDialog>,
     /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values.
     fill_pattern: Option<crate::dialogs::fill_pattern::FillPatternDialog>,
     /// Column > Set Sampling Interval... and Show X Column....
@@ -399,6 +403,7 @@ impl SheafApp {
             template_prompt: None,
             template_manager: None,
             batch: None,
+            batch_peaks: None,
             fill_pattern: None,
             sampling: None,
             copy_columns: None,
@@ -2864,6 +2869,7 @@ impl SheafApp {
                     self.user_book_templates.clone(),
                 ));
             }
+            Action::BatchPeaks { book, columns } => self.open_batch_peaks(book, columns),
             Action::BatchProcessing => {
                 self.batch = Some(crate::dialogs::batch_process::BatchDialog::new(self.user_book_templates.clone()));
             }
@@ -4234,6 +4240,59 @@ impl SheafApp {
     }
 
     /// The Save Template As prompt and the Manage window.
+    /// Batch Peak Analysis Using Theme... (T169): the window on the given curves, or the curves a plot of
+    /// the active sheet would show; columns without numbers are left out.
+    fn open_batch_peaks(&mut self, book: WindowId, columns: Vec<ColumnId>) {
+        let project = self.doc.project();
+        let columns: Vec<ColumnId> = if columns.is_empty() {
+            let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
+            project.default_plot_columns(book, sheet, Template::Line)
+        } else {
+            columns.into_iter().filter(|id| project.column(*id).is_some_and(|c| c.data.is_numeric())).collect()
+        };
+        let names: Vec<String> =
+            columns.iter().filter_map(|id| project.column(*id).map(|c| c.short_name.clone())).collect();
+        let themes = self.startup.peak_themes_path.as_deref().map(sheaf_io::peak_themes::names).unwrap_or_default();
+        self.batch_peaks = Some(crate::dialogs::batch_peaks::BatchPeaksDialog::new(themes, columns, names.join(", ")));
+    }
+
+    fn show_batch_peaks(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::batch_peaks::BatchPeaksOutcome;
+        let Some(d) = &mut self.batch_peaks else { return };
+        match d.show(ctx) {
+            BatchPeaksOutcome::Open => {}
+            BatchPeaksOutcome::Closed => self.batch_peaks = None,
+            BatchPeaksOutcome::Run(name) => {
+                let columns = d.columns.clone();
+                let theme =
+                    self.startup.peak_themes_path.as_deref().and_then(|p| sheaf_io::peak_themes::load(p, &name));
+                let Some(theme) = theme else {
+                    d.set_error(format!("The theme {name} is no longer saved"));
+                    return;
+                };
+                let request = sheaf_core::analysis::Request {
+                    columns,
+                    rows: sheaf_core::analysis::RowRange::All,
+                    tool: sheaf_core::analysis::Tool::PeakChain(theme.spec),
+                };
+                let made = self.doc.edit("Batch peak analysis", |p| {
+                    p.analyze_to(&request, &sheaf_core::analysis::OutputTarget::default())
+                });
+                match made {
+                    Ok(report) => {
+                        self.batch_peaks = None;
+                        self.say(format!("Batch peak analysis with the theme {}: {}", theme.name, report.message));
+                    }
+                    Err(e) => {
+                        if let Some(d) = &mut self.batch_peaks {
+                            d.set_error(e.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// File > Batch Processing... (T165): the window, its file picker and the run.
     fn show_batch(&mut self, ctx: &egui::Context) {
         use crate::dialogs::batch_process::BatchOutcome;
@@ -4569,6 +4628,9 @@ impl SheafApp {
             return;
         }
         self.analysis = AnalysisDialog::new(project, kind, columns);
+        if let Some(d) = &mut self.analysis {
+            d.peak_themes = self.startup.peak_themes_path.clone();
+        }
     }
 
     fn sort_sheet(&mut self, column: ColumnId, descending: bool) {
@@ -5889,6 +5951,7 @@ impl SheafApp {
         }
         self.show_template_windows(ctx);
         self.show_batch(ctx);
+        self.show_batch_peaks(ctx);
         self.show_fill_pattern(ctx);
         self.show_sampling(ctx);
         self.show_copy_columns(ctx);

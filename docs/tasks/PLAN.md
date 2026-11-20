@@ -216,7 +216,7 @@ Backlog packages: write the brief first (step 3 above).
 
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
-| [ ] | B15 | 3D graphs: XYY, surfaces, symbol/bar/vector, 3D waterfall, Z axis, OpenGL settings | L | 10 |
+| [ ] | B15 | 3D graphs: XYY, surfaces, symbol/bar/vector, 3D waterfall, Z axis, OpenGL settings | L | 9 |
 | [ ] | B16 | Scripting: Command Window, Script Window, Code Builder, Worksheet Script, Programming Control, consoles, X-Function Builder, Button Edit Mode | L | 15 |
 
 - **B15** is deferred behind the current formatting and stacked-figure priorities (T18 backlog).

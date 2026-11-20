@@ -180,6 +180,7 @@ pub struct SheafApp {
     layer_contents: Option<crate::dialogs::layer_contents::LayerContentsDialog>,
     layer_management: Option<crate::dialogs::layer_management::LayerManagementDialog>,
     fit_page: Option<crate::dialogs::fit_page::FitPageDialog>,
+    axis3d: Option<crate::dialogs::axis3d::Axis3dDialog>,
     plot_setup: Option<crate::dialogs::plot_setup::PlotSetupDialog>,
     error_bars: Option<ErrorBarsDialog>,
     trendline: Option<TrendlineDialog>,
@@ -353,6 +354,7 @@ impl SheafApp {
             layer_contents: None,
             layer_management: None,
             fit_page: None,
+            axis3d: None,
             plot_setup: None,
             error_bars: None,
             trendline: None,
@@ -926,6 +928,7 @@ impl SheafApp {
         self.merge_graphs = None;
         self.layer_management = None;
         self.fit_page = None;
+        self.axis3d = None;
         self.label_panels = None;
         self.simulate = None;
         self.simulate_surface = None;
@@ -1227,6 +1230,18 @@ impl SheafApp {
     /// Page Setup's paper in the page's orientation (the Page Setup paper less the measured edges
     /// when no printer answers, and always under test); the layers keep their frames, which are
     /// fractions of the page. One undo step.
+    /// Opens the 3D Axis window (T164) on axis `dim` of a 3D layer.
+    fn open_axis3d(&mut self, graph: WindowId, layer: usize, dim: usize) {
+        match crate::dialogs::axis3d::Axis3dDialog::new(self.doc.project(), graph, layer, dim) {
+            Some(d) => {
+                self.axis3d = Some(d);
+                self.focus(graph);
+                self.graphs.entry(graph).or_default().active_layer = layer;
+            }
+            None => self.warn("The 3D Axis window needs a 3D layer"),
+        }
+    }
+
     fn fit_page_to_printer(&mut self, graph: WindowId) {
         let setup = self.doc.project().page_setup;
         let Some(page) = self.doc.project().graph(graph).map(|g| (g.page.width_pt, g.page.height_pt)) else { return };
@@ -2429,6 +2444,19 @@ impl SheafApp {
                     self.warn("Layer Management needs a graph with layers");
                 }
             }
+            Action::Axis3d { graph, layer, dim } => self.open_axis3d(graph, layer, dim),
+            // The X and Y Axis windows of a 3D layer are the 3D Axis window (T164): the layer's own
+            // axes are the hidden frame of the view.
+            Action::GraphProperties { graph, layer, tab: tab @ (PropsTab::XAxis | PropsTab::YAxis), plot: None }
+                if self
+                    .doc
+                    .project()
+                    .graph(graph)
+                    .and_then(|g| g.layers.get(layer))
+                    .is_some_and(|l| l.coords.space3d().is_some()) =>
+            {
+                self.open_axis3d(graph, layer, if tab == PropsTab::XAxis { 0 } else { 1 });
+            }
             Action::GraphProperties { graph, layer, tab, plot } => {
                 let token = self.token();
                 let mut dialog = GraphPropsDialog::new(graph, layer, tab, token);
@@ -2657,6 +2685,18 @@ impl SheafApp {
                 self.straight_line_dialog = StraightLineDialog::edit(&self.doc, graph, layer, line);
             }
             Action::Hint(text) => self.say(text),
+            Action::ResizeShape { graph, layer, shape, before, after } => {
+                let dialogs = self.shape_dialog_shapes();
+                self.doc.apply("Resize drawn object", |p| {
+                    if let Some(s) =
+                        p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)).and_then(|l| l.shapes.get_mut(shape))
+                        && *s == before
+                    {
+                        *s = after;
+                    }
+                });
+                self.close_shape_dialog_if_changed(dialogs);
+            }
             Action::EditShape { graph, layer, shape } => {
                 self.shape_dialog = ShapeDialog::edit(&self.doc, graph, layer, shape);
             }
@@ -4814,6 +4854,10 @@ impl SheafApp {
                 }
                 Some(g.layers.iter().enumerate().all(|(i, l)| l.display.hidden == (i != layer)))
             }),
+            space3d: graph.is_some_and(|g| {
+                let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
+                project.graph(g).and_then(|gr| gr.layers.get(layer)).is_some_and(|l| l.coords.space3d().is_some())
+            }),
             can_color_scale: graph.is_some_and(|g| {
                 let layer = self.graphs.get(&g).map_or(0, |s| s.active_layer);
                 project.graph(g).and_then(|gr| gr.layers.get(layer)).is_some_and(|l| {
@@ -5022,6 +5066,7 @@ impl SheafApp {
             || self.layer_contents.is_some()
             || self.layer_management.is_some()
             || self.fit_page.is_some()
+            || self.axis3d.is_some()
             || self.plot_setup.is_some()
             || self.error_bars.is_some()
             || self.trendline.is_some()
@@ -5341,6 +5386,17 @@ impl SheafApp {
                     self.stack_panels = None;
                     self.focus(graph);
                     self.say("Created stacked panels");
+                }
+            }
+        }
+        if let Some(d) = &mut self.axis3d {
+            use crate::dialogs::axis3d::Outcome;
+            match d.show(ctx, &mut self.doc) {
+                Outcome::Open => {}
+                Outcome::Closed => self.axis3d = None,
+                Outcome::Done => {
+                    self.axis3d = None;
+                    self.say("Set the 3D axis scales");
                 }
             }
         }

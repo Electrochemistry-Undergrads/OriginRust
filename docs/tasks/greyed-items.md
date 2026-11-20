@@ -81,7 +81,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B12` | 1 |
 | `B13` | 2 |
 | `B14` | 42 |
-| `B15` | 10 |
+| `B15` | 9 |
 | `B16` | 15 |
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
@@ -166,7 +166,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B16` Programming Control...
 - `B2` Object Properties... [Workbook]
 - `B2` Snap Layers to Grid · Snap Objects to Grid [Graph]
-- `B15` Axes: Z Axis... [Graph]
 - `B6` Snap to Grid · Merge cells [Workbook]
 
 ### Window

@@ -62,6 +62,7 @@ mod save_window;
 mod set_multiple;
 mod shape_clipboard;
 mod shape_ordering;
+mod shape_resize;
 mod simulate;
 mod skip_points;
 mod slope;
@@ -6586,6 +6587,7 @@ mod clipboard_origin;
 mod clipboard_formats;
 
 mod add_plot_to_layer;
+mod axis3d;
 mod change_xy;
 mod find_replace;
 mod find_selection;

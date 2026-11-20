@@ -702,6 +702,12 @@ pub enum Action {
     FitPageToLayers {
         graph: WindowId,
     },
+    /// The 3D Axis window of a 3D layer (T164) on its X, Y or Z data axis (`dim` 0, 1 or 2).
+    Axis3d {
+        graph: WindowId,
+        layer: usize,
+        dim: usize,
+    },
     /// Format > Fit Page To Printer: the page takes the default printer's printable size at once.
     FitPageToPrinter {
         graph: WindowId,
@@ -870,6 +876,14 @@ pub enum Action {
     },
     /// Writes a hint on the status bar.
     Hint(String),
+    /// Resize a drawn object, if its original geometry still exists.
+    ResizeShape {
+        graph: WindowId,
+        layer: usize,
+        shape: usize,
+        before: sheaf_core::shape::Shape,
+        after: sheaf_core::shape::Shape,
+    },
     /// Opens the properties window of a drawn object (double click, Properties).
     EditShape {
         graph: WindowId,

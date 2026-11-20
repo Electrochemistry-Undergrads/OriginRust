@@ -48,6 +48,7 @@ const NEED_BOOK: &str = "Activate a workbook window first";
 pub const NO_COLOR_SCALE: &str = "New Color Scale needs a plot whose symbols take their colour from a Z column";
 pub const NO_CUMULATIVE: &str = "Cumulative needs a line, scatter or line + symbol plot in the layer";
 const NEED_GRAPH: &str = "Activate a graph window first";
+const NEED_3D: &str = "The active layer is not a 3D layer";
 const NEED_GRAPH_OR_BOOK: &str = "Activate a graph or a workbook first";
 const NEED_SHAPE: &str = "Select a drawn object first";
 const CANNOT_GROUP: &str = "Select two or more drawn objects or text labels of one layer first (Shift+click adds one)";
@@ -358,6 +359,8 @@ pub enum Cmd {
     LayerManagement(Option<usize>),
     /// Graph > Fit Page to Layers... (the window) and Format > Fit Page To Layers... (T60).
     FitPageToLayers,
+    /// Format > Axes > Z Axis...: the 3D Axis window on Z (T164); greyed outside a 3D layer.
+    ZAxis,
     /// Format > Fit Page To Printer: the page takes the printable size of the default printer (T70).
     FitPageToPrinter,
     /// Graph > Plot Setup...: Origin's own window for the data of a layer's plots.
@@ -695,6 +698,8 @@ pub struct MenuContext<'a> {
     pub can_cumulate: bool,
     /// The active layer has a plot whose symbols take their colour from a Z column (New Color Scale).
     pub can_color_scale: bool,
+    /// The active layer of the active graph is a 3D layer (T155): Format > Axes > Z Axis... works on it.
+    pub space3d: bool,
     /// The selected drawn shape of the active graph as (layer, shape index, shapes in that layer).
     pub selected_shape: Option<(usize, usize, usize)>,
     /// How many drawn objects and text labels are selected on the active graph (Shift+click, T159).
@@ -1921,7 +1926,7 @@ fn format_menu(kind: WindowKind) -> Vec<Entry> {
                 vec![
                     item("&X Axis...", Cmd::GraphProps(PropsTab::XAxis)),
                     item("&Y Axis...", Cmd::GraphProps(PropsTab::YAxis)),
-                    grey("&Z Axis..."),
+                    item("&Z Axis...", Cmd::ZAxis),
                 ],
             ),
             sub(
@@ -3264,6 +3269,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ScaleIn => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ScaleIn },
         Cmd::ScaleOut => Action::GraphTool { graph: c.graph.ok_or(NEED_GRAPH)?, tool: GraphTool::ScaleOut },
         Cmd::NewColorScale if !c.can_color_scale => return Err(NO_COLOR_SCALE),
+        Cmd::ZAxis if !c.space3d => return Err(NEED_3D),
+        Cmd::ZAxis => Action::Axis3d { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer, dim: 2 },
         Cmd::NewColorScale => Action::GraphEdit {
             graph: c.graph.ok_or(NEED_GRAPH)?,
             op: GraphOp::AddScale { layer: c.layer, kind: sheaf_core::layer_scale::LayerScaleKind::Color },
@@ -3954,6 +3961,7 @@ mod tests {
             stack: None,
             can_cumulate: false,
             can_color_scale: false,
+            space3d: false,
             selected_shape: None,
             multi_selected: 0,
             can_group: false,

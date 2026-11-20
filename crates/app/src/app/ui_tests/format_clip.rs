@@ -262,7 +262,7 @@ fn legend_menu_copies_and_pastes_styles_as_one_undo_step() {
     pick(&mut h, "Copy Format");
     assert!(!disabled(&h, "Styles"));
     for label in ["Dimensions", "All"] {
-        assert!(disabled(&h, label), "{label} is greyed until measured");
+        assert!(!disabled(&h, label), "{label} copies too (T179)");
     }
     let revision = h.state().doc.revision();
     pick(&mut h, "Styles");
@@ -375,5 +375,32 @@ fn page_paste_format_to_all_axes_gives_every_axis_the_copied_thickness() {
     let l = &graph(&h).layers[0];
     assert_eq!((l.x_axis.line_width_pt, l.y_axis.line_width_pt), (3.0, 3.0));
     assert_eq!(l.y_axis.color, before.y_axis.color, "Thickness leaves the colours");
+    assert_eq!(h.state().doc.undo_label(), Some("Apply Theme"));
+}
+
+#[test]
+fn legend_copy_format_dimensions_pastes_only_the_place_and_columns() {
+    use sheaf_core::graph::LegendPosition;
+    let mut h = start(vec![data_file("fmt-legend-dims")]);
+    edit_layer(&mut h, |l| {
+        l.legend.position = LegendPosition::Manual { x: 0.25, y: 0.6 };
+        l.legend.columns = 2;
+    });
+    right_click_on(&mut h, ObjectKind::Legend);
+    pick(&mut h, "Copy Format");
+    pick(&mut h, "Dimensions");
+    edit_layer(&mut h, |l| {
+        l.legend.position = LegendPosition::TopRight;
+        l.legend.columns = 1;
+        l.legend.frame = !l.legend.frame;
+    });
+    let frame = graph(&h).layers[0].legend.frame;
+    right_click_on(&mut h, ObjectKind::Legend);
+    pick(&mut h, "Paste Format To");
+    assert!(disabled(&h, "Styles"), "a Dimensions copy holds no styles");
+    pick(&mut h, "Dimensions");
+    let l = &graph(&h).layers[0].legend;
+    assert_eq!((l.position, l.columns), (LegendPosition::Manual { x: 0.25, y: 0.6 }, 2));
+    assert_eq!(l.frame, frame, "the frame is a style");
     assert_eq!(h.state().doc.undo_label(), Some("Apply Theme"));
 }

@@ -2807,6 +2807,14 @@ impl SheafApp {
                     self.say("Format copied");
                 }
             }
+            Action::CopyLegendFormat { graph, layer, part } => {
+                if crate::format_clip_ui::copy_legend(&self.doc, graph, layer, part) {
+                    self.say("Format copied");
+                }
+            }
+            Action::PasteLegendFormat { graph, layer, part } => {
+                crate::format_clip_ui::paste_legend(&mut self.doc, graph, layer, part);
+            }
             Action::PasteLegendStyles { graph, layer } => {
                 crate::format_clip_ui::paste_legend_styles(&mut self.doc, graph, layer);
             }

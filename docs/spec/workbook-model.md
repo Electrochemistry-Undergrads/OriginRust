@@ -979,6 +979,13 @@ X-Function's options. Sheaf has no dialog and no graph object in the cell:
   that sparklines are drawn from the column's values. Printing and worksheet images leave the row out.
 - `.opj` does not hold the marks; the save warning names the sheet when the row is on.
 
+**Page Break Preview Lines (T185, 2026-11-19, not measured).** The corner menu's switch and the workbook
+View menu's item (ticked when on) show dashed blue lines in the grid where the printed pages break: below
+the last row of each page and right of the last column of each band of columns, as File > Print would cut
+the sheet on the project's page setup (the same pagination, `SheetTable::page_breaks`, real font metrics);
+nothing after the last row or column. Off on a new sheet, saved per sheet, one undo step ("Worksheet view").
+The lines are on screen only. Origin's colour, line style and which setup it uses were not measured.
+
 ## 13j. Find in Project (T95, measured 2026-11-16, Origin 2016)
 
 Edit > Find in Project... (F3; "Find in Project" on a graph's Edit menu) opens Origin's **Find** window

@@ -1519,6 +1519,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         can_ungroup: false,
         view_mode: Default::default(),
         layer_icons: true,
+        page_breaks: false,
         activate_by_icon_only: false,
         icon_double_click_plot_setup: false,
         show_labels: true,

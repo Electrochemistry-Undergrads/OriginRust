@@ -26,6 +26,8 @@ pub enum ViewSwitch {
     ColumnGrid,
     /// The horizontal lines between the cells.
     RowGrid,
+    /// Page Break Preview Lines (T185): dashed lines where the printed pages break.
+    PageBreaks,
 }
 
 impl ViewSwitch {
@@ -46,6 +48,7 @@ impl ViewSwitch {
             ViewSwitch::RowHeader => "Row Header",
             ViewSwitch::ColumnGrid => "Column Grid",
             ViewSwitch::RowGrid => "Row Grid",
+            ViewSwitch::PageBreaks => "Page Break Preview Lines",
         }
     }
 }
@@ -81,6 +84,9 @@ pub struct SheetView {
     pub column_grid: bool,
     #[serde(default = "yes")]
     pub row_grid: bool,
+    /// Page Break Preview Lines (T185); off on a new sheet.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub page_breaks: bool,
 }
 
 impl Default for SheetView {
@@ -97,6 +103,7 @@ impl Default for SheetView {
             row_header: true,
             column_grid: true,
             row_grid: true,
+            page_breaks: false,
         }
     }
 }
@@ -119,6 +126,7 @@ impl SheetView {
             ViewSwitch::RowHeader => &mut self.row_header,
             ViewSwitch::ColumnGrid => &mut self.column_grid,
             ViewSwitch::RowGrid => &mut self.row_grid,
+            ViewSwitch::PageBreaks => &mut self.page_breaks,
         })
     }
 }

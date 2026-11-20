@@ -5134,6 +5134,10 @@ impl SheafApp {
             }),
             view_mode: graph.map(|g| project.view_mode(g)).unwrap_or_default(),
             layer_icons: graph.and_then(|g| project.graph(g)).is_none_or(|g| g.page.style.layer_icons),
+            page_breaks: book
+                .and_then(|b| project.workbook(b))
+                .and_then(|b| b.sheets.get(b.active_sheet))
+                .is_some_and(|s| s.view.page_breaks),
             activate_by_icon_only: graph
                 .and_then(|g| project.graph(g))
                 .is_some_and(|g| g.page.style.activate_by_icon_only),

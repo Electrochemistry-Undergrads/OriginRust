@@ -306,6 +306,21 @@ each matrix as not written).
   first cell. Missing values are refused.
 - Origin's own `fft2` options (normalization, shift, amplitude units, windowing) are not measured.
 
+## 7f. File > Import > Binary 2D Array (T199, 2026-11-20, from Origin's `impBin2D` documentation, not measured)
+
+- File > Import > Binary 2D Array... asks for a file, then opens the options window:
+  - **Data Type:** 8/16/32-bit signed or unsigned integers, or 32/64-bit floats.
+  - **Columns** and **Rows.**
+  - **Header Bytes** to skip.
+  - **Byte Order:** little or big endian.
+- The numbers are read row by row into a new matrix book whose long name is the file's name. The
+  import is one undo step ("Import Binary 2D Array"). Bytes after the array are ignored, and NaN or
+  infinite floats become missing values.
+- Sheaf's starting guess: 32-bit floats, square when their count is a square number, else one row.
+  Changing the type guesses the size again. A file too short for the options is refused, and the
+  window says why and stays open.
+- Not built: Origin's import filters and templates for binary files, and several frames from one file.
+
 ## 8. What was not verified, and what is left
 
 - Not run in Origin: `mdim` on a matrix that holds data; shrink with missing values; `w2m` options `lr` on accepted

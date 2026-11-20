@@ -311,6 +311,8 @@ pub enum Action {
     /// File > New > Matrix and the Standard toolbar's New Matrix (T192): a matrix book with one
     /// sheet of Origin's default size (32 x 32 missing values), one undo step.
     NewMatrix,
+    /// File > Import > Binary 2D Array...: choose a file, then its options window (T199).
+    ImportBinary2d,
     /// A typed matrix cell (T192): `None` clears it (missing). One undo step.
     SetMatrixCell {
         id: WindowId,

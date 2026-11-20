@@ -4813,7 +4813,7 @@ impl SheafApp {
         }
     }
 
-    /// File > Export > Worksheet as Image (T97): the active sheet as PNG (300 dpi), PDF or SVG.
+    /// File > Export > Worksheet as Image (T97): the active sheet in the supported image formats.
     fn export_worksheet_image(&mut self, book: WindowId) {
         let Some(b) = self.doc.project().workbook(book) else { return };
         let sheet = b.sheet();
@@ -4821,6 +4821,13 @@ impl SheafApp {
         let mut chooser = rfd::FileDialog::new()
             .set_title("Export worksheet as image")
             .add_filter("PNG image", &["png"])
+            .add_filter("JPEG image", &["jpg", "jpeg"])
+            .add_filter("TIFF image", &["tif", "tiff"])
+            .add_filter("Windows bitmap", &["bmp"])
+            .add_filter("GIF image", &["gif"])
+            .add_filter("Targa image", &["tga"])
+            .add_filter("PCX image", &["pcx"])
+            .add_filter("Photoshop document", &["psd"])
             .add_filter("PDF", &["pdf"])
             .add_filter("SVG", &["svg"])
             .set_file_name(format!("{stem}_{}.png", sheet.name));
@@ -7097,17 +7104,11 @@ pub(crate) fn reimport_book(
 pub(crate) fn write_worksheet_image(sheet: &sheaf_core::Worksheet, path: &Path) -> Result<PathBuf, String> {
     let mut path = path.to_path_buf();
     let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase);
-    let bytes = match ext.as_deref() {
-        Some("pdf") => sheaf_plot::sheet_image_pdf(sheet),
-        Some("svg") => sheaf_plot::sheet_image_svg(sheet).map(String::into_bytes),
-        Some("png") => sheaf_plot::sheet_image_png(sheet, 300.0),
-        None => {
-            path.set_extension("png");
-            sheaf_plot::sheet_image_png(sheet, 300.0)
-        }
-        Some(other) => return Err(format!("Sheaf writes worksheet pictures as PNG, PDF or SVG, not .{other}")),
+    if ext.is_none() {
+        path.set_extension("png");
     }
-    .map_err(|e| e.to_string())?;
+    let bytes =
+        sheaf_plot::sheet_image_bytes(sheet, ext.as_deref().unwrap_or("png"), 300.0).map_err(|e| e.to_string())?;
     std::fs::write(&path, bytes).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(path)
 }

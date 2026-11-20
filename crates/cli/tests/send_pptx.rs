@@ -72,3 +72,17 @@ fn one_graph_by_name_gives_one_slide() {
     let slide = String::from_utf8(entry(&out, "ppt/slides/slide1.xml").unwrap()).unwrap();
     assert!(slide.contains(r#"name="Graph2""#), "{slide}");
 }
+
+#[test]
+fn a_docx_output_puts_each_graph_on_its_own_page() {
+    let dir = scratch("docx");
+    let project = fixture(&dir, 2);
+    let out = dir.join("graphs.docx");
+    let o = cli(&["export", project.to_str().unwrap(), "--all-graphs", "--dpi", "72", "-o", out.to_str().unwrap()]);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(String::from_utf8_lossy(&o.stdout).contains("(2 pages)"));
+    let doc = String::from_utf8(entry(&out, "word/document.xml").unwrap()).unwrap();
+    assert_eq!(doc.matches("<wp:inline ").count(), 2);
+    assert!(doc.contains(">Graph2</w:t>"), "the caption names the graph");
+    assert!(entry(&out, "word/media/image2.png").is_some());
+}

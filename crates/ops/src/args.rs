@@ -1147,14 +1147,14 @@ pub struct ExportArgs {
     pub project: PathBuf,
     /// Name of the graph (default: the only graph of the project). Repeat it to export several
     /// graphs into one multi-page .pdf, one page per graph in the order given (Origin's Export
-    /// Graphs "multipage" option), or into one .pptx, a slide per graph; a name given twice gets a
+    /// Graphs "multipage" option), or into one .pptx (a slide per graph) or .docx (a page per graph); a name given twice gets a
     /// page each time. Not used for .opj or .xlsx output.
     #[arg(long, value_name = "NAME", conflicts_with = "all_graphs")]
     pub graph: Vec<String>,
     /// Export every graph of the project, in project order (Sheaf's choice of page order).
-    /// More than one graph needs a .pdf output (one multi-page PDF, one page per graph) or a .pptx
-    /// output (one slide per graph), with --image-width, --image-height and --margin applied to every
-    /// page.
+    /// More than one graph needs a .pdf output (one multi-page PDF, one page per graph), a .pptx
+    /// output (one slide per graph) or a .docx output (one page per graph), with --image-width,
+    /// --image-height and --margin applied to every page.
     #[arg(long)]
     pub all_graphs: bool,
     /// Excel output: name of the workbook to write (default: the first one).
@@ -1165,7 +1165,8 @@ pub struct ExportArgs {
     #[arg(long)]
     pub sheet: Option<String>,
     /// What to write: a figure (.png, .tif, .jpg, .bmp, .gif, .tga, .pcx, .psd, .svg, .pdf, .eps or .emf),
-    /// a PowerPoint presentation (.pptx, one slide per graph, the graph as a PNG at --dpi),
+    /// a PowerPoint presentation (.pptx, one slide per graph, the graph as a PNG at --dpi), a Word
+    /// document (.docx, one graph per page with its name under it),
     /// with .opj, the whole project as an Origin project file (workbooks and graphs;
     /// what the file cannot hold is listed as warnings), or with .xlsx one workbook as an Excel file
     /// (a data file is also accepted; see --book, --sheet and the Excel options).

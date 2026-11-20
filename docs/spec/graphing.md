@@ -5744,6 +5744,21 @@ The field mapping is Sheaf policy. Origin 2016's exact per-field Styles behavior
 unmeasured. Copy is read-only and uses the private clipboard snapshot. A changed paste
 is one Apply Theme step. Repeated pastes of the same style add no history.
 
+### 26.13 Axis Paste Format To groups (T171, 2026-11-19, not measured)
+
+The axis's Paste Format To ▸ names twelve groups (26.2); Styles, Scales and All were built (26.8, 26.9,
+26.11). The other groups now paste too, each a part of what Styles pastes, with Sheaf's field choices
+(Origin's per-group fields were not measured): **Tick Direction** the major and minor tick directions;
+**Ticks** the directions, lengths, tick width and tick colour; **Line** the axis colour (and following the
+plot) and line thickness; **Tick Labels** shown or hidden, the tick-label font, angle, number format, prefix
+and suffix, minor labels and the end label; **Title Styles** the title font and following the plot's
+colour; **Colors** every colour (line, ticks, tick labels, title) and the follow-the-plot switches;
+**Thickness** the line and tick widths. They need a clipboard that holds Styles (Copy Format > Styles or
+All); a Scales copy pastes nothing for them. **Title Text** pastes the title's text and whether it is shown,
+only from a Copy Format > All clipboard. No group touches the scale, the other axis or other layers; each
+paste is one undo step ("Apply Theme", as the other pastes). **Title Dimensions** stays grey: Sheaf's axis title has no
+position or size of its own to paste.
+
 ## 27. Colour scales and bubble scales: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (T80)
 
 Not measured: Origin 2016 is on Windows only and this slice was built on macOS from Origin's help, so everything
@@ -6621,6 +6636,10 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
   - A set From or To fixes that end of the box; with Auto Increment the box keeps its about five
     steps. Points outside the box (and ribbon rows) are not drawn.
   - The Y axis of a 3D XYY layer keeps one tick per plot and is not set here.
+  - **View (T172):** Turn (the azimuth, -180 to 180 degrees, default 40) and Tilt (the elevation, 0
+    seen from the side to 90 seen from above, default 25) turn the box about Z and tilt it towards
+    the viewer, in the same undo step as the scales. The labelled edges and the back planes follow
+    the turn. Tools > 3D OpenGL Settings... stays grey: Sheaf draws 3D without OpenGL.
 - **3D Surface from XYZ columns (T166, not measured):** Color Map Surface (`3d-colormap-surface`),
   Color Fill Surface (`3d-color-fill-surface`), Wire Frame (`3d-wire-frame`) and Wire Surface
   (`3d-wire-surface`) set `Space3dCoords::surface`. They read X, Y and Z columns as 3D Scatter does
@@ -6645,7 +6664,8 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
     are drawn from the farthest to the nearest by their mean depth.
   - 3D Ternary Colormap Surface stays grey.
 - **Not done:**
-  - rotating the view; axis titles, tick label and scale type settings of the 3D axes;
+  - rotating the view with the mouse or a 3D Rotation toolbar; axis titles, tick label and scale
+    type settings of the 3D axes;
   - hiding points behind each other (points are drawn in row order);
   - surfaces from matrices, a colour scale for colour map surfaces, and 3D OpenGL settings.
   - The Data Reader shows the view's coordinates, not X, Y and Z.

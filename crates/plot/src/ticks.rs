@@ -878,6 +878,8 @@ mod tests {
             axis_breaks: Vec::new(),
             additional_line: None,
             at_position: None,
+            arrow_begin: false,
+            arrow_end: false,
             special_ticks: Vec::new(),
             tick_label_formula: String::new(),
             minor_tick_labels: false,

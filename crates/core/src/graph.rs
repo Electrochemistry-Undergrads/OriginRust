@@ -1357,6 +1357,12 @@ pub struct Axis {
     /// axis on the nearer edge). `None` is the edge with [`Axis::offset_pct`]; a value wins over it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at_position: Option<f64>,
+    /// Origin's Line and Ticks "Arrow at Begin" / "Arrow at End" (T245): a filled arrowhead past the
+    /// left (bottom) end / the right (top) end of the axis line, in the line's colour.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub arrow_begin: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub arrow_end: bool,
     /// Draw the axis line, its ticks and its tick labels in the color of the layer's first
     /// visible plot instead of `color` and the tick font's color.
     #[serde(default, skip_serializing_if = "is_false")]

@@ -35,7 +35,7 @@ use sheaf_core::clipboard::CopyPart;
 use sheaf_core::data_range::RangeEnd;
 use sheaf_core::fill_pattern::QuickFill;
 use sheaf_core::format_clip::{AxisPart, GraphPart, LegendPart};
-use sheaf_core::graph::{PlotKind, Stack};
+use sheaf_core::graph::{LockPosition, PlotKind, Stack};
 use sheaf_core::sheetops::{MaskOp, MoveTo};
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnId, Designation, WindowId};
@@ -76,6 +76,24 @@ pub enum WindowKind {
     None,
     Workbook,
     Graph,
+    /// A matrix window (T179).
+    Matrix,
+}
+
+/// The Matrix menu's commands (T179 slice 3, matrices spec 7b).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MatrixCmd {
+    SetValues,
+    Dimensions,
+    Transpose,
+    RotateCcw,
+    RotateCw,
+    Rotate180,
+    FlipHorizontal,
+    FlipVertical,
+    Expand,
+    Shrink,
+    ToWorksheet,
 }
 
 /// What the graph Edit menu's clipboard items do (T149).
@@ -137,6 +155,11 @@ pub enum Cmd {
     NewNotes,
     /// File > New > Matrix and the Standard toolbar's New Matrix (T179).
     NewMatrix,
+    /// The Matrix menu of a matrix window (T179 slice 3).
+    Matrix(MatrixCmd),
+    /// Plot > Contour/Heat Map > Color Fill, B/W Lines + Labels, Heat Map: of the active matrix, or of
+    /// three selected worksheet columns X, Y and Z (T179).
+    PlotField(sheaf_core::template::FieldTemplate),
     /// The graph Edit menu's Cut, Copy, Paste and Clear on the selected object (T149).
     GraphClipboard(GraphClip),
     /// A drawn object's right-click Cut and Copy, and the page's Paste at a page point (T125).
@@ -474,6 +497,8 @@ pub enum Cmd {
     SetViewMode(sheaf_core::project::ViewMode),
     /// View > Show > Layer Icons.
     ToggleLayerIcons,
+    /// Data > Lock Position (T186): where the graph's analysis locks are drawn.
+    LockPosition(sheaf_core::graph::LockPosition),
     /// The layer icon menu's Set Active Layer By Layer Icon Only (T183).
     ToggleActivateByIconOnly,
     /// The layer icon menu's Double click to open Plot Setup (T183).
@@ -763,6 +788,8 @@ pub struct MenuContext<'a> {
     pub view_mode: sheaf_core::project::ViewMode,
     /// The active graph shows its layer icons (the tick of View > Show > Layer Icons).
     pub layer_icons: bool,
+    /// The active graph's Lock Position (the tick of Data > Lock Position, T186).
+    pub lock_position: sheaf_core::graph::LockPosition,
     /// The active sheet shows Page Break Preview Lines (the tick of the View menu's item, T185).
     pub page_breaks: bool,
     /// The active graph's page switches of the layer icon menu (T183), for their ticks.
@@ -792,12 +819,15 @@ impl<'a> MenuContext<'a> {
 
 /// The menus of a bar, in order.
 pub fn bar(kind: WindowKind) -> &'static [Menu] {
-    static BARS: OnceLock<[Vec<Menu>; 3]> = OnceLock::new();
-    let bars = BARS.get_or_init(|| [build(WindowKind::None), build(WindowKind::Workbook), build(WindowKind::Graph)]);
+    static BARS: OnceLock<[Vec<Menu>; 4]> = OnceLock::new();
+    let bars = BARS.get_or_init(|| {
+        [build(WindowKind::None), build(WindowKind::Workbook), build(WindowKind::Graph), build(WindowKind::Matrix)]
+    });
     &bars[match kind {
         WindowKind::None => 0,
         WindowKind::Workbook => 1,
         WindowKind::Graph => 2,
+        WindowKind::Matrix => 3,
     }]
 }
 
@@ -837,6 +867,15 @@ fn base(kind: WindowKind) -> Vec<Menu> {
             m("&Window", window_menu(kind)),
             m("&Help", help_menu()),
         ],
+        Matrix => vec![
+            m("&File", file_menu(kind)),
+            m("&View", view_menu(kind)),
+            m("&Plot", vec![sub("Contour/&Heat Map", field_plot_items())]),
+            m("&Matrix", matrix_menu()),
+            m("&Tools", tools_menu()),
+            m("&Window", window_menu(kind)),
+            m("&Help", help_menu()),
+        ],
         Graph => vec![
             m("&File", file_menu(kind)),
             m("&Edit", edit_menu(kind)),
@@ -851,6 +890,44 @@ fn base(kind: WindowKind) -> Vec<Menu> {
             m("&Help", help_menu()),
         ],
     }
+}
+
+/// The heat map and contour items of Plot > Contour/Heat Map: from the active matrix window, or
+/// from three selected worksheet columns X, Y and Z (T179).
+fn field_plot_items() -> Vec<Entry> {
+    use sheaf_core::template::FieldTemplate;
+    vec![
+        item("Color Fill", Cmd::PlotField(FieldTemplate::ContourFill)),
+        item("B/W Lines + Labels", Cmd::PlotField(FieldTemplate::ContourLines)),
+        item("Heat Map", Cmd::PlotField(FieldTemplate::HeatMap)),
+    ]
+}
+
+/// The Matrix menu of a matrix window (T179 slice 3).
+fn matrix_menu() -> Vec<Entry> {
+    use MatrixCmd::*;
+    vec![
+        item("Set Matrix &Values...", Cmd::Matrix(SetValues)),
+        item("Set &Dimensions/Labels...", Cmd::Matrix(Dimensions)),
+        sep(),
+        item("&Transpose", Cmd::Matrix(Transpose)),
+        sub(
+            "&Rotate90",
+            vec![
+                item("90 CCW", Cmd::Matrix(RotateCcw)),
+                item("90 CW", Cmd::Matrix(RotateCw)),
+                item("180", Cmd::Matrix(Rotate180)),
+            ],
+        ),
+        sub(
+            "&Flip",
+            vec![item("Horizontal", Cmd::Matrix(FlipHorizontal)), item("Vertical", Cmd::Matrix(FlipVertical))],
+        ),
+        item("&Expand...", Cmd::Matrix(Expand)),
+        item("&Shrink...", Cmd::Matrix(Shrink)),
+        sep(),
+        item("&Convert to Worksheet", Cmd::Matrix(ToWorksheet)),
+    ]
 }
 
 // Small builders, so that the table reads like the menu.
@@ -1190,7 +1267,7 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
             v.push(grey("Show Data Info"));
             v.push(keyed("Full Screen", ctrl_shift(Key::J), Cmd::FullScreen));
         }
-        WindowKind::None => {}
+        WindowKind::None | WindowKind::Matrix => {}
     }
     v
 }
@@ -1404,11 +1481,9 @@ fn plot_menu() -> Vec<Entry> {
         sub(
             "Contour/&Heat Map",
             [
+                field_plot_items(),
                 greys(&[
-                    "Color Fill",
-                    "B/W Lines + Labels",
                     "Gray Scale Map",
-                    "Heat Map",
                     "Polar Contour theta(X) r(Y)",
                     "Polar Contour r(X) theta(Y)",
                     "Ternary Contour",
@@ -1908,7 +1983,14 @@ fn data_menu() -> Vec<Entry> {
                 ],
             )
         },
-        grey_sub("Lock Position", &["Layer Icon", "First Point", "Last Point"]),
+        sub(
+            "Lock Position",
+            vec![
+                item("Layer Icon", Cmd::LockPosition(LockPosition::LayerIcon)),
+                item("First Point", Cmd::LockPosition(LockPosition::FirstPoint)),
+                item("Last Point", Cmd::LockPosition(LockPosition::LastPoint)),
+            ],
+        ),
         sep(),
         item("Mask Data Points", Cmd::DataTool(DataTool::Mask)),
         item("Move Data Points", Cmd::DataTool(DataTool::Move)),
@@ -2051,7 +2133,7 @@ fn window_menu(kind: WindowKind) -> Vec<Entry> {
             ],
         )),
         WindowKind::Workbook => v.push(grey("Sp&lit")),
-        WindowKind::None => {}
+        WindowKind::None | WindowKind::Matrix => {}
     }
     v.extend([
         sep(),
@@ -2961,6 +3043,19 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::NewNotes => Action::NewNotes,
         Cmd::NewMatrix => Action::NewMatrix,
+        Cmd::Matrix(cmd) => match (c.kind, c.active) {
+            (WindowKind::Matrix, Some(id)) => Action::MatrixCmd { id, cmd: *cmd },
+            _ => return Err("Activate a matrix window first"),
+        },
+        Cmd::PlotField(template) => match (c.kind, c.active) {
+            (WindowKind::Matrix, Some(id)) => Action::PlotField { template: *template, matrix: Some(id), xyz: None },
+            _ if c.book.is_some() && c.selected.len() >= 3 => Action::PlotField {
+                template: *template,
+                matrix: None,
+                xyz: Some((c.selected[0], c.selected[1], c.selected[2])),
+            },
+            _ => return Err("Select the X, Y and Z columns (three columns), or activate a matrix window"),
+        },
         Cmd::ObjectProperties => {
             let graph = c.graph.ok_or(NEED_GRAPH)?;
             c.graph_pick.ok_or(NEED_SELECTED_OBJECT)?;
@@ -3423,6 +3518,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::SetViewMode(mode) => Action::SetViewMode { graph: c.graph.ok_or(NEED_GRAPH)?, mode: *mode },
         Cmd::ToggleLayerIcons => Action::SetLayerIcons { graph: c.graph.ok_or(NEED_GRAPH)?, on: !c.layer_icons },
+        Cmd::LockPosition(position) => {
+            Action::SetLockPosition { graph: c.graph.ok_or(NEED_GRAPH)?, position: *position }
+        }
         Cmd::ToggleActivateByIconOnly => Action::SetPageSwitch {
             graph: c.graph.ok_or(NEED_GRAPH)?,
             switch: crate::actions::PageSwitch::ActivateByIconOnly,
@@ -3742,6 +3840,11 @@ fn show_entries(
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleLayerIcons)) && c.layer_icons {
+                    tick(ui, &response);
+                }
+                if let Some(Cmd::LockPosition(position)) = &it.cmd
+                    && *position == c.lock_position
+                {
                     tick(ui, &response);
                 }
                 if matches!(
@@ -4152,6 +4255,7 @@ mod tests {
             can_ungroup: false,
             view_mode: Default::default(),
             layer_icons: true,
+            lock_position: Default::default(),
             page_breaks: false,
             activate_by_icon_only: false,
             icon_double_click_plot_setup: false,

@@ -101,7 +101,31 @@ impl AnalysisLink {
     }
 }
 
+/// The analysis lock a graph layer shows (T186): the plot whose data an analysis that follows it
+/// reads, and whether a result waits for Recalculate.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct PlotLock {
+    pub plot: usize,
+    pub mode: RecalcMode,
+    pub pending: bool,
+}
+
 impl Project {
+    /// The lock of `layer` (T186): its first visible plot whose Y column is read by an Auto or Manual
+    /// analysis link. Pending when a result column of such a link is not current.
+    pub fn layer_analysis_lock(&self, layer: &crate::graph::Layer) -> Option<PlotLock> {
+        layer.plots.iter().enumerate().filter(|(_, p)| p.visible).find_map(|(i, plot)| {
+            let links: Vec<&AnalysisLink> =
+                self.analysis_links.iter().filter(|l| l.columns.contains(&plot.y)).collect();
+            let first = links.first()?;
+            let pending = links
+                .iter()
+                .flat_map(|l| &l.outputs)
+                .any(|id| self.column(*id).and_then(|c| c.analysis).is_some_and(|m| m.state != FormulaState::Current));
+            Some(PlotLock { plot: i, mode: first.mode, pending })
+        })
+    }
+
     /// True if the tool can be run with Recalculate Auto or Manual.
     pub fn can_link(tool: &Tool) -> bool {
         LinkTool::from_tool(tool).is_some()
@@ -471,6 +495,30 @@ mod tests {
         p.recalculate_analysis(link).unwrap();
         assert_eq!(p.numeric(out).unwrap(), vec![9.0; 20].as_slice());
         assert_eq!(p.column(out).unwrap().analysis.unwrap().state, FormulaState::Current);
+    }
+
+    #[test]
+    fn a_graph_layer_shows_the_lock_of_an_analysis_of_its_plot() {
+        // T186: the lock follows the plot whose data a linked analysis reads.
+        let (mut p, _x, y, _) = setup();
+        let g = p.plot_columns(crate::template::Template::Line, &[y]).unwrap();
+        let layer = |p: &Project| p.graph(g).unwrap().layers[0].clone();
+        assert_eq!(p.layer_analysis_lock(&layer(&p)), None, "no linked analysis yet");
+        // A run made once (no link) shows none either.
+        p.analyze_linked(&smooth_request(y), &OutputTarget::NextToInput, RecalcMode::None).unwrap();
+        assert_eq!(p.layer_analysis_lock(&layer(&p)), None);
+        p.analyze_linked(&smooth_request(y), &OutputTarget::NextToInput, RecalcMode::Manual).unwrap();
+        assert_eq!(
+            p.layer_analysis_lock(&layer(&p)),
+            Some(PlotLock { plot: 0, mode: RecalcMode::Manual, pending: false })
+        );
+        let before = p.clone();
+        p.column_mut(y).unwrap().data = ColumnData::numeric(vec![9.0; 20]);
+        p.update_analysis_links(&before);
+        assert!(p.layer_analysis_lock(&layer(&p)).unwrap().pending, "yellow until recalculated");
+        // A hidden plot shows no lock.
+        p.graph_mut(g).unwrap().layers[0].plots[0].visible = false;
+        assert_eq!(p.layer_analysis_lock(&layer(&p)), None);
     }
 
     #[test]

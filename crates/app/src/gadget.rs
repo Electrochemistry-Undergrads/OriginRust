@@ -103,7 +103,7 @@ impl Integrator {
     pub fn volume(&self, project: &Project, graph: WindowId) -> Option<Volume> {
         let layer = project.graph(graph)?.layers.get(self.layer)?;
         let (cells, area) = sheaf_plot::field_cells(project, layer)?;
-        volume_in(&cells, area, (self.x0, self.x1), (self.y0, self.y1), self.circle)
+        volume_in(&cells, area, (self.x0, self.x1), (self.y0, self.y1), self.circle, self.end_point_baseline)
     }
 }
 
@@ -154,6 +154,7 @@ pub fn volume_in(
     (x0, x1): (f64, f64),
     (y0, y1): (f64, f64),
     circle: bool,
+    plane: bool,
 ) -> Option<Volume> {
     let inside = |v: f64, a: f64, b: f64| v >= a.min(b) && v <= a.max(b);
     let (cx, cy, rx, ry) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0, (x1 - x0).abs() / 2.0, (y1 - y0).abs() / 2.0);
@@ -173,6 +174,15 @@ pub fn volume_in(
     let mean = sum / n as f64;
     let sd = if n > 1 { (z.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (n - 1) as f64).sqrt() } else { 0.0 };
     let (min, max) = z.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| (a.min(*v), b.max(*v)));
+    // With a base plane (T206) the volume and FWHM use the height above it; the statistics stay of Z.
+    let base = if plane { boundary_plane(&picked) } else { None };
+    let height: Vec<[f64; 3]> = match base {
+        Some((a, b, c)) => picked.iter().map(|p| [p[0], p[1], p[2] - (a + b * p[0] + c * p[1])]).collect(),
+        None => picked.clone(),
+    };
+    let volume = height.iter().map(|p| p[2]).sum::<f64>() * area;
+    let top = height.iter().map(|p| p[2]).fold(f64::NEG_INFINITY, f64::max);
+    let picked = height;
     // FWHM (T203): along the row and the column of the highest cell.
     let peak = picked.iter().max_by(|a, b| a[2].total_cmp(&b[2])).copied().expect("n > 0");
     let line = |along: usize| -> Vec<(f64, f64)> {
@@ -189,10 +199,69 @@ pub fn volume_in(
         mean,
         sd,
         sum,
-        volume: sum * area,
-        fwhm_x: fwhm(&line(0), max / 2.0),
-        fwhm_y: fwhm(&line(1), max / 2.0),
+        volume,
+        fwhm_x: fwhm(&line(0), top / 2.0),
+        fwhm_y: fwhm(&line(1), top / 2.0),
     })
+}
+
+/// The least-squares plane `z = a + b x + c y` through the boundary of `cells` (T206): in each row
+/// its first and last cell, in each column its lowest and highest. `None` when those cells do not
+/// fix a plane (fewer than three, or all on one line).
+pub fn boundary_plane(cells: &[[f64; 3]]) -> Option<(f64, f64, f64)> {
+    let ends = |along: usize| {
+        let across = 1 - along;
+        let mut by_line: std::collections::BTreeMap<u64, (usize, usize)> = std::collections::BTreeMap::new();
+        for (i, p) in cells.iter().enumerate() {
+            let e = by_line.entry((p[across] + 0.0).to_bits()).or_insert((i, i));
+            if p[along] < cells[e.0][along] {
+                e.0 = i;
+            }
+            if p[along] > cells[e.1][along] {
+                e.1 = i;
+            }
+        }
+        by_line.into_values().flat_map(|(a, b)| [a, b]).collect::<Vec<usize>>()
+    };
+    let mut edge: Vec<usize> = ends(0).into_iter().chain(ends(1)).collect();
+    edge.sort_unstable();
+    edge.dedup();
+    if edge.len() < 3 {
+        return None;
+    }
+    // Normal equations of the fit, solved by Cramer's rule.
+    let (mut s, mut sx, mut sy, mut sxx, mut sxy, mut syy, mut sz, mut sxz, mut syz) =
+        (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    for &i in &edge {
+        let [x, y, z] = cells[i];
+        s += 1.0;
+        sx += x;
+        sy += y;
+        sxx += x * x;
+        sxy += x * y;
+        syy += y * y;
+        sz += z;
+        sxz += x * z;
+        syz += y * z;
+    }
+    let det3 = |m: [[f64; 3]; 3]| {
+        m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+    };
+    let m = [[s, sx, sy], [sx, sxx, sxy], [sy, sxy, syy]];
+    let d = det3(m);
+    let scale = (s * sxx * syy).abs().max(1e-300);
+    if d.abs() <= 1e-12 * scale {
+        return None;
+    }
+    let col = |k: usize| {
+        let mut n = m;
+        for (row, v) in [sz, sxz, syz].into_iter().enumerate() {
+            n[row][k] = v;
+        }
+        det3(n) / d
+    };
+    Some((col(0), col(1), col(2)))
 }
 
 /// The width of the run around the highest point of `points` (position, value; sorted by position)
@@ -318,7 +387,8 @@ pub struct Integrator {
     /// Cluster gadget only: the bottom and top of the rectangle, in Y data units (in either order).
     pub y0: f64,
     pub y1: f64,
-    /// Subtract the straight line through the first and last point of the range.
+    /// Subtract the straight line through the first and last point of the range; for 2D Integrate
+    /// (T206), the plane through the region's boundary cells.
     pub end_point_baseline: bool,
     /// 2D Integrate only (T201): the region is the ellipse that fills the rectangle.
     pub circle: bool,
@@ -817,7 +887,14 @@ impl Integrator {
             (GadgetKind::Integrate2d, _, _) => {
                 let layer = project.graph(graph).and_then(|g| g.layers.get(self.layer));
                 let volume = layer.and_then(|l| sheaf_plot::field_cells(project, l)).and_then(|(cells, area)| {
-                    volume_in(&cells, area, (self.x0, self.x1), (self.y0, self.y1), self.circle)
+                    volume_in(
+                        &cells,
+                        area,
+                        (self.x0, self.x1),
+                        (self.y0, self.y1),
+                        self.circle,
+                        self.end_point_baseline,
+                    )
                 });
                 if self.circle {
                     // The circle region (T201): the ellipse inside the rectangle the edges drag.
@@ -998,7 +1075,7 @@ impl Integrator {
                 | GadgetKind::Differentiate
                 | GadgetKind::Interpolate
                 | GadgetKind::Cluster => menus::rise_time_gadget_menu(),
-                GadgetKind::Integrate2d => menus::integrate_2d_gadget_menu(self.circle),
+                GadgetKind::Integrate2d => menus::integrate_2d_gadget_menu(self.circle, self.end_point_baseline),
             };
             menus::show_context(ui, &menu, c, actions)
         });
@@ -1043,18 +1120,18 @@ mod tests {
         // A 3 x 3 grid at 0, 1, 2 with Z = x + y; cells of area 1.
         let cells: Vec<[f64; 3]> =
             (0..3).flat_map(|r| (0..3).map(move |c| [c as f64, r as f64, (c + r) as f64])).collect();
-        let all = volume_in(&cells, 1.0, (-1.0, 3.0), (3.0, -1.0), false).unwrap();
+        let all = volume_in(&cells, 1.0, (-1.0, 3.0), (3.0, -1.0), false, false).unwrap();
         assert_eq!((all.n, all.sum, all.volume, all.min, all.max), (9, 18.0, 18.0, 0.0, 4.0));
         assert!((all.mean - 2.0).abs() < 1e-12);
         // The corner X, Y in 1..2: Z = 2, 3, 3, 4 (ends included), cells of area 0.5.
-        let corner = volume_in(&cells, 0.5, (1.0, 2.0), (1.0, 2.0), false).unwrap();
+        let corner = volume_in(&cells, 0.5, (1.0, 2.0), (1.0, 2.0), false, false).unwrap();
         assert_eq!((corner.n, corner.sum, corner.volume), (4, 12.0, 6.0));
         assert!((corner.sd - (2.0f64 / 3.0).sqrt()).abs() < 1e-12);
-        assert!(volume_in(&cells, 1.0, (5.0, 6.0), (0.0, 1.0), false).is_none());
+        assert!(volume_in(&cells, 1.0, (5.0, 6.0), (0.0, 1.0), false, false).is_none());
         // T201: the circle in the square -1..3 (radius 2 about (1, 1)) holds all 9 cells, the corners
         // being sqrt(2) away; the circle in 0..2 (radius 1) leaves the four corners out.
-        assert_eq!(volume_in(&cells, 1.0, (-1.0, 3.0), (-1.0, 3.0), true).unwrap().n, 9);
-        let round = volume_in(&cells, 1.0, (0.0, 2.0), (0.0, 2.0), true).unwrap();
+        assert_eq!(volume_in(&cells, 1.0, (-1.0, 3.0), (-1.0, 3.0), true, false).unwrap().n, 9);
+        let round = volume_in(&cells, 1.0, (0.0, 2.0), (0.0, 2.0), true, false).unwrap();
         assert_eq!((round.n, round.sum), (5, 10.0), "the centre and the four edge middles");
     }
 
@@ -1074,10 +1151,33 @@ mod tests {
                 (0..5).map(move |c| [c as f64, r as f64, 4.0 - (c as f64 - 2.0).abs() - (r as f64 - 2.0).abs()])
             })
             .collect();
-        let v = volume_in(&cells, 1.0, (0.0, 4.0), (0.0, 4.0), false).unwrap();
+        let v = volume_in(&cells, 1.0, (0.0, 4.0), (0.0, 4.0), false, false).unwrap();
         assert!(v.fwhm_x.is_nan() && v.fwhm_y.is_nan(), "{v:?}");
         let cone: Vec<[f64; 3]> = cells.iter().map(|p| [p[0], p[1], (p[2] - 2.0).max(0.0)]).collect();
-        let v = volume_in(&cone, 1.0, (0.0, 4.0), (0.0, 4.0), false).unwrap();
+        let v = volume_in(&cone, 1.0, (0.0, 4.0), (0.0, 4.0), false, false).unwrap();
         assert!((v.fwhm_x - 2.0).abs() < 1e-12 && (v.fwhm_y - 2.0).abs() < 1e-12, "{v:?}");
+    }
+
+    #[test]
+    fn a_base_plane_through_the_boundary_removes_a_tilt() {
+        // T206: a peak of 6 at (2, 2) on a tilted floor z = 1 + 0.5 x + 0.25 y over a 5 x 5 grid.
+        let floor = |x: f64, y: f64| 1.0 + 0.5 * x + 0.25 * y;
+        let cells: Vec<[f64; 3]> = (0..5)
+            .flat_map(|r| {
+                (0..5).map(move |c| {
+                    let (x, y) = (c as f64, r as f64);
+                    [x, y, floor(x, y) + if (c, r) == (2, 2) { 6.0 } else { 0.0 }]
+                })
+            })
+            .collect();
+        let (a, b, c) = boundary_plane(&cells).unwrap();
+        assert!((a - 1.0).abs() < 1e-9 && (b - 0.5).abs() < 1e-9 && (c - 0.25).abs() < 1e-9);
+        let flat = volume_in(&cells, 1.0, (0.0, 4.0), (0.0, 4.0), false, true).unwrap();
+        assert!((flat.volume - 6.0).abs() < 1e-9, "only the peak is above the plane: {flat:?}");
+        let zero = volume_in(&cells, 1.0, (0.0, 4.0), (0.0, 4.0), false, false).unwrap();
+        assert!(zero.volume > flat.volume);
+        assert_eq!((flat.sum, flat.n), (zero.sum, zero.n), "the statistics stay of Z");
+        // Too few cells for a plane: the zero base.
+        assert!(boundary_plane(&cells[..2]).is_none());
     }
 }

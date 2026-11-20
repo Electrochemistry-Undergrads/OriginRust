@@ -56,7 +56,48 @@ impl Worksheet {
     }
 }
 
+/// Where Navigate Worksheets' Actions move the selected sheets (T180, Origin's Move Before, Move to
+/// Behind and Move to End).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SheetMove {
+    /// One place towards the first sheet.
+    Before,
+    /// One place towards the last sheet.
+    Behind,
+    /// After every other sheet, in their present order.
+    End,
+}
+
 impl Workbook {
+    /// The sheet order (old indices) after moving the sheets `picked` as `to` says, for
+    /// [`Workbook::reorder_sheets`]. A sheet does not pass another picked sheet or the ends, so
+    /// moving a block keeps it together; unknown indices are ignored.
+    pub fn moved_order(&self, picked: &[usize], to: SheetMove) -> Vec<usize> {
+        let n = self.sheets.len();
+        let is_picked = |i: usize| picked.contains(&i);
+        let mut order: Vec<usize> = (0..n).collect();
+        match to {
+            SheetMove::Before => {
+                for pos in 1..n {
+                    if is_picked(order[pos]) && !is_picked(order[pos - 1]) {
+                        order.swap(pos, pos - 1);
+                    }
+                }
+            }
+            SheetMove::Behind => {
+                for pos in (0..n.saturating_sub(1)).rev() {
+                    if is_picked(order[pos]) && !is_picked(order[pos + 1]) {
+                        order.swap(pos, pos + 1);
+                    }
+                }
+            }
+            SheetMove::End => {
+                order = (0..n).filter(|&i| !is_picked(i)).chain((0..n).filter(|&i| is_picked(i))).collect();
+            }
+        }
+        order
+    }
+
     /// Reorders whole worksheets by their old indices, keeping the active worksheet selected.
     /// Returns whether the order changed. A malformed permutation leaves the workbook intact.
     pub fn reorder_sheets(&mut self, order: &[usize]) -> bool {
@@ -200,5 +241,22 @@ mod tests {
         let back: Worksheet = serde_json::from_str(&json).unwrap();
         assert_eq!((back.long_name.as_str(), back.tab_label), ("Potential scan", SheetLabel::Long));
         assert!(!serde_json::to_string(&Worksheet::new("S")).unwrap().contains("tab_label"));
+    }
+
+    #[test]
+    fn moving_sheets_keeps_picked_blocks_together_and_stops_at_the_ends() {
+        let mut b = Workbook::new(WindowId(1), "Book1");
+        b.sheets = (1..=5).map(|k| crate::Worksheet::new(format!("Sheet{k}"))).collect();
+        assert_eq!(b.moved_order(&[2], SheetMove::Before), [0, 2, 1, 3, 4]);
+        assert_eq!(b.moved_order(&[0, 3], SheetMove::Before), [0, 1, 3, 2, 4]);
+        assert_eq!(b.moved_order(&[1, 2], SheetMove::Before), [1, 2, 0, 3, 4]);
+        assert_eq!(b.moved_order(&[3, 4], SheetMove::Behind), [0, 1, 2, 3, 4]);
+        assert_eq!(b.moved_order(&[1, 3], SheetMove::Behind), [0, 2, 1, 4, 3]);
+        assert_eq!(b.moved_order(&[0, 2], SheetMove::End), [1, 3, 4, 0, 2]);
+        assert_eq!(b.moved_order(&[9], SheetMove::End), [0, 1, 2, 3, 4]);
+        b.active_sheet = 2;
+        assert!(b.reorder_sheets(&b.moved_order(&[2], SheetMove::End)));
+        assert_eq!(b.sheets[4].name, "Sheet3");
+        assert_eq!(b.active_sheet, 4, "the active sheet stays active");
     }
 }

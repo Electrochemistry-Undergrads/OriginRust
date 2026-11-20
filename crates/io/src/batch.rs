@@ -163,6 +163,7 @@ pub fn place_workbook_with(
                     font_defaults: Default::default(),
                     comparison_source: None,
                     notes_text: None,
+                    graph_sheet: None,
                 };
             }
             // Further sheets of the file (several data blocks) follow as new sheets.

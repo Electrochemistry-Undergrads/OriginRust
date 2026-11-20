@@ -233,6 +233,8 @@ pub struct SheafApp {
     template_manager: Option<crate::dialogs::user_templates::TemplateManager>,
     /// File > Batch Processing... (T165).
     batch: Option<crate::dialogs::batch_process::BatchDialog>,
+    /// Add Graph as Sheet... (T190).
+    graph_sheet_picker: Option<crate::dialogs::graph_sheet::GraphSheetPicker>,
     /// Batch Peak Analysis Using Theme... (T169).
     batch_peaks: Option<crate::dialogs::batch_peaks::BatchPeaksDialog>,
     /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values.
@@ -409,6 +411,7 @@ impl SheafApp {
             template_prompt: None,
             template_manager: None,
             batch: None,
+            graph_sheet_picker: None,
             batch_peaks: None,
             fill_pattern: None,
             sampling: None,
@@ -1980,6 +1983,17 @@ impl SheafApp {
                 self.doc.apply("New notes", |p| {
                     p.add_notes();
                 });
+            }
+            Action::AddGraphSheet { book, graph } => {
+                let name = self.doc.project().graph(graph).map(|g| g.name.clone()).unwrap_or_default();
+                self.doc.apply("Add Graph as Sheet", |p| {
+                    if let Some(b) = p.workbook_mut(book) {
+                        b.add_graph_sheet(graph, &name);
+                    }
+                });
+                if let Some(state) = self.books.get_mut(&book) {
+                    state.clear_selection();
+                }
             }
             Action::SetNotesSheetText { book, sheet, text } => {
                 self.doc.apply("Edit notes", |p| {
@@ -3747,6 +3761,12 @@ impl SheafApp {
                     });
                 }
             }
+            SheetOp::AddGraph => {
+                let project = self.doc.project();
+                let graphs: Vec<(WindowId, String)> =
+                    project.graphs().map(|g| (g.id, Window::Graph(g.clone()).title())).collect();
+                self.graph_sheet_picker = Some(crate::dialogs::graph_sheet::GraphSheetPicker::new(book, graphs));
+            }
             SheetOp::AddNotes => {
                 self.doc.apply("Add Notes as Sheet", |p| {
                     if let Some(b) = p.workbook_mut(book) {
@@ -4607,6 +4627,21 @@ impl SheafApp {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /// Add Graph as Sheet... (T190): the graph picker.
+    fn show_graph_sheet_picker(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::graph_sheet::GraphSheetOutcome;
+        let Some(p) = &mut self.graph_sheet_picker else { return };
+        match p.show(ctx) {
+            GraphSheetOutcome::Open => {}
+            GraphSheetOutcome::Closed => self.graph_sheet_picker = None,
+            GraphSheetOutcome::Pick(graph) => {
+                let book = p.book;
+                self.graph_sheet_picker = None;
+                self.apply(Action::AddGraphSheet { book, graph }, ctx);
             }
         }
     }
@@ -6341,6 +6376,7 @@ impl SheafApp {
         }
         self.show_template_windows(ctx);
         self.show_batch(ctx);
+        self.show_graph_sheet_picker(ctx);
         self.show_batch_peaks(ctx);
         self.show_fill_pattern(ctx);
         self.show_sampling(ctx);

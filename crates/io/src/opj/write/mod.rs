@@ -66,7 +66,8 @@ pub fn write_named(project: &Project, name: &str, time: f64) -> Result<OpjWrite,
     // Notes windows (T154) are not written yet: the file gets the project without them.
     // Notes sheets (T188) are not written either: a workbook keeps its other sheets (or one empty one).
     let notes: Vec<WindowId> = project.notes().map(|n| n.id).collect();
-    let notes_sheets: usize = project.workbooks().map(|b| b.sheets.iter().filter(|s| s.is_notes()).count()).sum();
+    let left_out = |s: &sheaf_core::Worksheet| s.is_notes() || s.graph_sheet.is_some();
+    let notes_sheets: usize = project.workbooks().map(|b| b.sheets.iter().filter(|s| left_out(s)).count()).sum();
     let without;
     let project = if notes.is_empty() && notes_sheets == 0 {
         project
@@ -78,13 +79,14 @@ pub fn write_named(project: &Project, name: &str, time: f64) -> Result<OpjWrite,
         let books: Vec<WindowId> = p.workbooks().map(|b| b.id).collect();
         for id in books {
             if let Some(b) = p.workbook_mut(id) {
-                if b.sheets.iter().all(|s| s.is_notes()) {
+                if b.sheets.iter().all(left_out) {
                     b.sheets.truncate(1);
                     if let Some(s) = b.sheets.first_mut() {
                         s.notes_text = None;
+                        s.graph_sheet = None;
                     }
                 } else {
-                    b.sheets.retain(|s| !s.is_notes());
+                    b.sheets.retain(|s| !left_out(s));
                 }
                 b.active_sheet = b.active_sheet.min(b.sheets.len().saturating_sub(1));
             }
@@ -103,7 +105,7 @@ pub fn write_named(project: &Project, name: &str, time: f64) -> Result<OpjWrite,
     }
     if notes_sheets > 0 {
         out.warnings.push(format!(
-            "{notes_sheets} Notes sheet(s) were left out: this program does not write Notes sheets to an Origin project yet."
+            "{notes_sheets} Notes or graph sheet(s) were left out: this program does not write Notes sheets or graph sheets to an Origin project yet."
         ));
     }
     Ok(out)

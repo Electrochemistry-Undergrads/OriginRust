@@ -132,6 +132,17 @@ pub fn paste_axis(doc: &mut Document, graph: WindowId, layer: usize, y: bool, pa
     apply(doc, graph, |g| format_clip::paste_axis(g, layer, y, &clip, part))
 }
 
+/// The page's Paste Format To of an axis format onto several axes (T174).
+pub fn paste_axes(
+    doc: &mut Document,
+    graph: WindowId,
+    targets: format_clip::AxisTargets,
+    part: format_clip::AxisPart,
+) -> bool {
+    let Some(clip) = held() else { return false };
+    apply(doc, graph, |g| format_clip::paste_axes(g, targets, &clip, part))
+}
+
 /// Paste Format To > Styles onto one legend.
 pub fn paste_legend_styles(doc: &mut Document, graph: WindowId, layer: usize) -> bool {
     let Some(clip) = held() else { return false };

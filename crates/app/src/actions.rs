@@ -943,6 +943,12 @@ pub enum Action {
     PasteGraphFormat {
         graph: WindowId,
     },
+    /// The page's Paste Format To: an axis format onto several axes of the graph (T174).
+    PasteAxesFormat {
+        graph: WindowId,
+        targets: sheaf_core::format_clip::AxisTargets,
+        part: sheaf_core::format_clip::AxisPart,
+    },
     /// Paste Format To: an axis format onto one axis.
     PasteAxisFormat {
         graph: WindowId,

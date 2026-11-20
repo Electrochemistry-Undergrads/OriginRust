@@ -6356,13 +6356,17 @@ Origin's documented behaviour. The markers they act on are the data markers of D
   column read by an Auto or Manual analysis link (Recalculate Auto or Manual in the analysis window):
   - a 10 x 8 px padlock, green while the results are current and yellow while a result waits for
     Recalculate; its hover text names the plot, the mode and the state;
-  - Layer Icon (the default) puts it at the top right of the layer's icon; First Point and Last Point
+  - Layer Icon (the default) puts it just below the layer's icon (T195: clear of it, so the icon keeps
+    its clicks); First Point and Last Point
     beside the plot's first or last drawn point (8 px left of it and 12 px above).
   - Lock Position is a page setting (`PageStyle::lock_position`, ticked in the menu), one undo step
     ("Lock position"); the `.opj` written here does not hold it (its save warns that page settings
     were not written).
-  - Not done: Origin's click menu on the lock (Change Parameters, Recalculate) and View > Show > Lock
-    Icons. [Origin hotkeys](https://docs.originlab.com/origin-help/hotkey-in-origin/)
+  - **Click menu (T195):** a click on the lock opens Recalculate, which runs the analysis again on its
+    result columns as the column menu's Recalculate does (one undo step, "Recalculate"; the lock turns
+    green), and Go to Results, which brings the workbook of its first result column forward on that
+    sheet.
+  - Not done: Origin's Change Parameters and View > Show > Lock Icons. [Origin hotkeys](https://docs.originlab.com/origin-help/hotkey-in-origin/)
 
 ## Tables: Graph > New Table (T136, 2026-11-18, **not measured**)
 

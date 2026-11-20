@@ -62,8 +62,11 @@ pub(crate) fn analysis_lock_places(
     for (li, layer) in g.layers.iter().enumerate().filter(|(_, l)| !l.display.hidden) {
         let Some(lock) = project.layer_analysis_lock(layer) else { continue };
         let at = match g.page.style.lock_position {
-            // At the top right corner of the layer's icon (left of the page when icons are hidden).
-            LockPosition::LayerIcon => Some(image_rect.min + egui::vec2(2.0 + li as f32 * (ICON + 2.0) + ICON, 4.0)),
+            // Just below the layer's icon, clear of it so that the icon keeps its clicks (top left of
+            // the page when icons are hidden).
+            LockPosition::LayerIcon => {
+                Some(image_rect.min + egui::vec2(2.0 + li as f32 * (ICON + 2.0) + ICON / 2.0, 2.0 + ICON + 9.0))
+            }
             position => {
                 let rows = layer.plots.get(lock.plot).and_then(|p| project.numeric(p.y)).map_or(0, |v| v.len());
                 let point = |row| {
@@ -94,6 +97,7 @@ pub(crate) fn analysis_lock_places(
 /// Manual result waits for Recalculate; its hover text says which.
 fn draw_analysis_locks(
     ui: &egui::Ui,
+    actions: &mut Vec<Action>,
     painter: &egui::Painter,
     project: &sheaf_core::Project,
     graph: sheaf_core::WindowId,
@@ -117,8 +121,38 @@ fn draw_analysis_locks(
         let mode = if lock.mode == RecalcMode::Auto { "Auto" } else { "Manual" };
         let state = if lock.pending { "needs Recalculate" } else { "up to date" };
         let id = ui.id().with(("analysis_lock", graph.0, li));
-        ui.interact(body.expand(3.0), id, egui::Sense::hover())
+        let resp = ui
+            .interact(body.expand(3.0), id, egui::Sense::click())
             .on_hover_text(format!("Analysis of plot {} (Recalculate {mode}): {state}", lock.plot + 1));
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Analysis lock"));
+        // A click opens the lock's menu (T195).
+        egui::Popup::menu(&resp).show(|ui| lock_menu(ui, project, &lock, actions));
+    }
+}
+
+/// The menu of an analysis lock (T195): Recalculate runs the link again on its result columns (one
+/// undo step, as the column menu's Recalculate); Go to Results shows the sheet of its first result.
+fn lock_menu(
+    ui: &mut egui::Ui,
+    project: &sheaf_core::Project,
+    lock: &sheaf_core::analysis_link::PlotLock,
+    actions: &mut Vec<Action>,
+) {
+    let Some(link) = project.analysis_links.get(lock.link) else { return };
+    if ui.button("Recalculate").clicked() {
+        actions.push(Action::Recalculate(link.outputs.clone()));
+        ui.close();
+    }
+    let place = link.outputs.first().and_then(|id| {
+        let (book, sheet, _) = project.locate(*id)?;
+        Some((book.id, book.sheets.iter().position(|s| std::ptr::eq(s, sheet))?))
+    });
+    if ui.add_enabled(place.is_some(), egui::Button::new("Go to Results")).clicked()
+        && let Some((book, sheet)) = place
+    {
+        actions.push(Action::Focus(book));
+        actions.push(Action::SelectSheet { book, sheet });
+        ui.close();
     }
 }
 
@@ -779,7 +813,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     }
 
     // Analysis locks (T186): on screen only, where Data > Lock Position puts them.
-    draw_analysis_locks(ui, &painter, doc.project(), graph_id, &t.geometry, &to_screen, image_rect);
+    draw_analysis_locks(ui, actions, &painter, doc.project(), graph_id, &t.geometry, &to_screen, image_rect);
 
     // The Data Reader takes the clicks on the page while it is on.
     if state.reader {

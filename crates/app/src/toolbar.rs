@@ -311,7 +311,7 @@ fn build(bar: Bar) -> Vec<Item> {
             b(Project, "New Project", Cmd::NewProject, "Project"),
             b(Workbook, "New Workbook", Cmd::NewWorkbook, "Worksheet"),
             b(Graph, "New Graph", Cmd::NewGraph, "Graph"),
-            g(Matrix, "New Matrix"),
+            b(Matrix, "New Matrix", Cmd::NewMatrix, "Matrix"),
             g(Layout, "New Layout"),
             b(Notes, "New Notes", Cmd::NewNotes, "Notes"),
             gap(),

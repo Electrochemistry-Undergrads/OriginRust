@@ -233,6 +233,22 @@ that was meant to make one did not finish).
 saving as `.opj` writes a companion `.opj.sheaf` because the Origin writer does not store matrices yet (it names
 each matrix as not written).
 
+## 7a. The matrix window in the app (T179 slice 2, 2026-11-19, not measured)
+
+- File > New > Matrix... and the Standard toolbar's New Matrix add a matrix book with one sheet of
+  Origin's default size (32 x 32 missing values), named MBook1, MBook2, ..., as one undo step
+  ("New matrix"). Sheaf asks for no size first; Set Dimensions is the later Matrix menu.
+- The window shows the active sheet's cells in a grid, with the column numbers across the top and the
+  row numbers down the left. Missing values show as `--`, and numbers use the General format. A book
+  with more than one sheet shows its sheet tabs below the grid. A tab click changes the active sheet as
+  view state, with no undo step.
+- A double click on a cell edits its number. Enter or a click elsewhere writes it as one undo step
+  ("Edit matrix cell"). Esc cancels. Empty text or `--` clears the cell. Text that is not a number
+  changes nothing and says so on the status bar.
+- Not yet in the app: the Matrix menu (Set Values, Set Dimensions, Transpose, ...), X/Y coordinate
+  headers, selection and copy, Plot > Contour/Heat Map from a matrix window, and Convert to Matrix in
+  the Worksheet menu. The command line already has all of these (section 7).
+
 ## 8. What was not verified, and what is left
 
 - Not run in Origin: `mdim` on a matrix that holds data; shrink with missing values; `w2m` options `lr` on accepted

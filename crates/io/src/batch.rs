@@ -165,6 +165,7 @@ pub fn place_workbook_with(
                     notes_text: None,
                     graph_sheet: None,
                     cell_graphs: Vec::new(),
+                    cell_sparklines: Vec::new(),
                 };
             }
             // Further sheets of the file (several data blocks) follow as new sheets.

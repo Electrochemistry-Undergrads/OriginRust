@@ -2347,6 +2347,17 @@ fn body_cell(
         ui.painter().rect_filled(room, 0.0, Color32::WHITE);
         ui.painter().image(tex.id(), shown, egui::Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
     }
+    // A sparkline in the cell (T200): its data column's values as a small line over the cell.
+    let cell_sparkline = sheet.cell_sparkline(column.id, r);
+    if let Some(values) = cell_sparkline.and_then(|src| sheet.column(src)).and_then(|c| c.numeric()) {
+        let room = rect.shrink(2.0);
+        ui.painter().rect_filled(rect.shrink(1.0), 0.0, Color32::WHITE);
+        if let Some(points) = sparkline_points(values, room) {
+            ui.painter()
+                .with_clip_rect(room)
+                .add(egui::Shape::line(points, Stroke::new(1.0_f32, Color32::from_rgb(30, 60, 150))));
+        }
+    }
     if response.double_clicked()
         && let Some(g) = cell_graph
     {
@@ -2364,7 +2375,8 @@ fn body_cell(
     }
     response.context_menu(|ui| {
         let before = actions.len();
-        let menu = menus::cell_menu_for(noted.is_some(), (column.id, r), cell_graph.is_some());
+        let menu =
+            menus::cell_menu_for(noted.is_some(), (column.id, r), cell_graph.is_some(), cell_sparkline.is_some());
         menus::show_context(ui, &menu, &book_ctx(book_id, state), actions);
         // A note belongs to the right-clicked cell even inside a larger selection.
         if actions[before..].iter().any(|a| matches!(a, Action::NoteDialog(_) | Action::DeleteNote(_))) {

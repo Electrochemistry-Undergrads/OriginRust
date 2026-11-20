@@ -11,6 +11,7 @@ pub mod batch_process;
 pub mod bin2d_options;
 pub mod cell_format;
 pub mod cell_note;
+pub mod cell_sparkline;
 pub mod column_props;
 pub mod comparison_plot;
 pub mod cond_format;

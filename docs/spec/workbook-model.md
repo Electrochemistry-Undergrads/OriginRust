@@ -1016,6 +1016,14 @@ templates, not written to `.opj`, and not printed or exported with the sheet. Ro
 above do not move it. The row number's Insert Graph... stays grey. Origin's sizing and embedding were not
 measured.
 
+**Sparklines in cells (T200, 2026-11-20, not measured).** A data cell's right-click Insert Sparklines...
+lists the numeric columns of the cell's sheet (the cell's own column first chosen); OK makes the cell draw
+that column's values as a small line on white, as the Sparklines row does (T175: finite values, first to
+last, filling the cell), one undo step ("Insert Sparklines"). One sparkline per cell; Remove Sparkline
+takes it out. It follows both columns when they get new ids and goes when either is deleted; saved in
+`.sheaf` (the sheet's `cell_sparklines`), not written to `.opj`, not printed. Origin's dialog (it can make
+several at once and pick rows) was not measured.
+
 ## 13j. Find in Project (T95, measured 2026-11-16, Origin 2016)
 
 Edit > Find in Project... (F3; "Find in Project" on a graph's Edit menu) opens Origin's **Find** window

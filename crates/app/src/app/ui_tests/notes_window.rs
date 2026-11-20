@@ -92,7 +92,7 @@ fn insert_graph_puts_a_picture_of_the_graph_in_the_cell() {
     let book = h.state().books.keys().next().copied().unwrap();
     let graph = project(&h).graphs().next().unwrap().id;
     let b = project(&h).workbook(book).unwrap().sheets[0].columns[1].id;
-    let menu = menus::cell_menu_for(false, (b, 0), false);
+    let menu = menus::cell_menu_for(false, (b, 0), false, false);
     assert!(menu.iter().any(|e| matches!(e, menus::Entry::Item(i)
         if i.label == "Insert Graph..." && i.cmd == Some(menus::Cmd::InsertCellGraph { column: b, row: 0 }))));
     assert!(!menu.iter().any(|e| matches!(e, menus::Entry::Item(i) if i.label == "Remove Graph")));
@@ -103,7 +103,7 @@ fn insert_graph_puts_a_picture_of_the_graph_in_the_cell() {
     settle(&mut h);
     assert_eq!(project(&h).workbook(book).unwrap().sheets[0].cell_graph(b, 0), Some(graph));
     assert_eq!(h.state().doc.undo_label(), Some("Insert Graph"));
-    let menu = menus::cell_menu_for(false, (b, 0), true);
+    let menu = menus::cell_menu_for(false, (b, 0), true, false);
     let remove = menu.iter().find_map(|e| match e {
         menus::Entry::Item(i) if i.label == "Remove Graph" => i.cmd.clone(),
         _ => None,
@@ -113,4 +113,30 @@ fn insert_graph_puts_a_picture_of_the_graph_in_the_cell() {
     settle(&mut h);
     assert_eq!(project(&h).workbook(book).unwrap().sheets[0].cell_graph(b, 0), None);
     assert_eq!(h.state().doc.undo_label(), Some("Remove Graph"));
+}
+
+#[test]
+fn insert_sparklines_draws_a_columns_line_in_the_cell() {
+    let mut h = start(vec![data_file("cell-sparkline")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = h.state().books.keys().next().copied().unwrap();
+    let (b, c) = {
+        let s = &project(&h).workbook(book).unwrap().sheets[0];
+        (s.columns[1].id, s.columns[2].id)
+    };
+    let menu = menus::cell_menu_for(false, (b, 5), false, false);
+    assert!(menu.iter().any(|e| matches!(e, menus::Entry::Item(i)
+        if i.label == "Insert Sparklines..." && i.cmd == Some(menus::Cmd::InsertCellSparkline { column: b, row: 5 }))));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::PickCellSparkline { column: b, row: 5 }, &ctx);
+    settle(&mut h);
+    click(&mut h, "C - down");
+    h.get_by_label("Insert Sparklines").get_by_label("OK").click();
+    settle(&mut h);
+    assert_eq!(project(&h).workbook(book).unwrap().sheets[0].cell_sparkline(b, 5), Some(c));
+    assert_eq!(h.state().doc.undo_label(), Some("Insert Sparklines"));
+    h.state_mut().apply(Action::SetCellSparkline { column: b, row: 5, source: None }, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).workbook(book).unwrap().sheets[0].cell_sparkline(b, 5), None);
+    assert_eq!(h.state().doc.undo_label(), Some("Remove Sparkline"));
 }

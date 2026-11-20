@@ -1,6 +1,6 @@
 # T237: Layout pages (B14, slice 1)
 
-**Status:** slice 1 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
+**Status:** slices 1 and 2 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
 **Size:** L (several slices). **Source:** greyed inventory package B14 ("New: Layout",
 "Standard: New Layout").
 **Spec:** `docs/spec/layout-page.md`.
@@ -15,9 +15,14 @@
   `layout_view.rs`.
 - Tests: `layout_page::tests` (core) and `ui_tests::layout_page`.
 
+## Done in slice 2 (2026-11-20)
+
+- Click to select, drag to move, corner handle to resize, and Delete; one undo step each
+  (`layout_view.rs`, `Action::LayoutSetItem` and `Action::LayoutDeleteItem`). Test:
+  `layout_page::layout_items_are_moved_resized_and_deleted_with_the_mouse`.
+
 ## Left (next slices)
 
-- Moving and resizing items with the mouse.
 - Add Worksheet....
 - Page properties.
 - Print and export of the page.

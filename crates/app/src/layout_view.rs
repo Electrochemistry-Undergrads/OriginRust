@@ -15,6 +15,22 @@ const GROUND: Color32 = Color32::from_gray(192);
 pub struct LayoutUi {
     /// Graph pictures: (document revision, pixel width) they were drawn for, and the texture.
     pictures: HashMap<WindowId, ((u64, u32), TextureHandle)>,
+    /// The selected item (T237 slice 2).
+    pub selected: Option<usize>,
+    /// An item being moved or resized: (index, resize, how far the pointer went in page fractions).
+    drag: Option<(usize, bool, (f64, f64))>,
+    /// Where the page was drawn in the last frame (tests aim at it).
+    pub page_on_screen: Option<Rect>,
+}
+
+/// The size of the corner handle that resizes, in screen points.
+const HANDLE: f32 = 7.0;
+
+/// An item's rectangle in fractions of the page after a drag of `delta` (page fractions): moved, or
+/// resized from its bottom right corner (at least 2 % of the page each way).
+pub fn dragged(rect: (f64, f64, f64, f64), resize: bool, delta: (f64, f64)) -> (f64, f64, f64, f64) {
+    let (x, y, w, h) = rect;
+    if resize { (x, y, (w + delta.0).max(0.02), (h + delta.1).max(0.02)) } else { (x + delta.0, y + delta.1, w, h) }
 }
 
 /// Where the page lies in `area`: the largest rectangle of the page's shape, centred.
@@ -26,20 +42,39 @@ pub fn page_rect(area: Rect, width_pt: f64, height_pt: f64) -> Rect {
     Rect::from_center_size(area.center(), vec2(w, h))
 }
 
-pub fn show(ui: &mut egui::Ui, doc: &Document, id: WindowId, state: &mut LayoutUi, _actions: &mut Vec<Action>) {
+pub fn show(ui: &mut egui::Ui, doc: &Document, id: WindowId, state: &mut LayoutUi, actions: &mut Vec<Action>) {
     let Some(page) = doc.project().layout(id) else { return };
+    if state.selected.is_some_and(|k| k >= page.items.len()) {
+        state.selected = None;
+    }
+    if state.drag.is_some_and(|d| d.0 >= page.items.len()) {
+        state.drag = None;
+    }
     let area = ui.available_rect_before_wrap();
+    // The page takes the clicks and drags of its whole area (T237 slice 2).
+    let response = ui.interact(area, ui.id().with(("layout_page", id.0)), egui::Sense::click_and_drag());
     let painter = ui.painter_at(area);
     painter.rect_filled(area, 0.0, GROUND);
     let rect = page_rect(area, page.width_pt, page.height_pt);
+    state.page_on_screen = Some(rect);
     painter.rect_filled(rect, 0.0, Color32::WHITE);
     painter.rect_stroke(rect, 0.0, Stroke::new(1.0_f32, Color32::from_gray(96)), egui::StrokeKind::Outside);
     let ppp = ui.ctx().pixels_per_point();
-    for item in &page.items {
-        let r = Rect::from_min_size(
-            Pos2::new(rect.left() + item.x as f32 * rect.width(), rect.top() + item.y as f32 * rect.height()),
-            vec2(item.w as f32 * rect.width(), item.h as f32 * rect.height()),
-        );
+    let screen = |(x, y, w, h): (f64, f64, f64, f64)| {
+        Rect::from_min_size(
+            Pos2::new(rect.left() + x as f32 * rect.width(), rect.top() + y as f32 * rect.height()),
+            vec2(w as f32 * rect.width(), h as f32 * rect.height()),
+        )
+    };
+    let shown = |k: usize, it: &sheaf_core::layout_page::LayoutItem| {
+        let base = (it.x, it.y, it.w, it.h);
+        match state.drag {
+            Some((d, resize, delta)) if d == k => dragged(base, resize, delta),
+            _ => base,
+        }
+    };
+    for (k, item) in page.items.iter().enumerate() {
+        let r = screen(shown(k, item));
         let LayoutContent::Graph { graph } = item.content;
         let Some(g) = doc.project().graph(graph) else {
             painter.rect_stroke(r, 0.0, Stroke::new(1.0_f32, Color32::GRAY), egui::StrokeKind::Inside);
@@ -63,13 +98,65 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, id: WindowId, state: &mut LayoutU
             painter.image(tex.id(), r, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
         }
     }
-    // The window takes the space (and the clicks) of its whole area.
-    ui.allocate_rect(area, egui::Sense::hover());
+    // The selection: a frame and the resize handle at the bottom right corner.
+    if let Some(k) = state.selected
+        && let Some(item) = page.items.get(k)
+    {
+        let r = screen(shown(k, item));
+        let blue = Color32::from_rgb(0, 90, 200);
+        painter.rect_stroke(r, 0.0, Stroke::new(1.0_f32, blue), egui::StrokeKind::Outside);
+        painter.rect_filled(Rect::from_center_size(r.right_bottom(), vec2(HANDLE, HANDLE)), 0.0, blue);
+    }
+    let hit = |p: Pos2| {
+        page.items.iter().enumerate().rev().find(|(_, it)| screen((it.x, it.y, it.w, it.h)).contains(p)).map(|(k, _)| k)
+    };
+    if response.clicked()
+        && let Some(p) = response.interact_pointer_pos()
+    {
+        state.selected = hit(p);
+    }
+    if response.drag_started()
+        && let Some(p) = ui.input(|i| i.pointer.press_origin())
+    {
+        let on_handle = state.selected.and_then(|k| page.items.get(k).map(|it| (k, it))).and_then(|(k, it)| {
+            let corner = screen((it.x, it.y, it.w, it.h)).right_bottom();
+            (corner.distance(p) <= HANDLE).then_some(k)
+        });
+        match on_handle {
+            Some(k) => state.drag = Some((k, true, (0.0, 0.0))),
+            None => {
+                state.selected = hit(p);
+                state.drag = state.selected.map(|k| (k, false, (0.0, 0.0)));
+            }
+        }
+    }
+    if let Some((k, resize, delta)) = state.drag {
+        let d = response.drag_delta();
+        let delta = (delta.0 + f64::from(d.x / rect.width()), delta.1 + f64::from(d.y / rect.height()));
+        state.drag = Some((k, resize, delta));
+        if response.drag_stopped() {
+            state.drag = None;
+            if (delta.0 != 0.0 || delta.1 != 0.0)
+                && let Some(it) = page.items.get(k)
+            {
+                let rect = dragged((it.x, it.y, it.w, it.h), resize, delta);
+                actions.push(Action::LayoutSetItem { layout: id, index: k, rect, resize });
+            }
+        }
+    }
+    // Delete on the selected item is handled with the app's keys (`SheafApp::shortcuts`).
 }
 
 #[cfg(test)]
 mod tests {
-    use super::page_rect;
+    use super::{dragged, page_rect};
+
+    #[test]
+    fn a_drag_moves_or_resizes_from_the_corner() {
+        assert_eq!(dragged((0.1, 0.2, 0.3, 0.4), false, (0.05, -0.1)), (0.15000000000000002, 0.1, 0.3, 0.4));
+        assert_eq!(dragged((0.1, 0.2, 0.3, 0.4), true, (0.1, 0.1)), (0.1, 0.2, 0.4, 0.5));
+        assert_eq!(dragged((0.1, 0.2, 0.3, 0.4), true, (-1.0, -1.0)), (0.1, 0.2, 0.02, 0.02), "a smallest size");
+    }
     use eframe::egui::{Pos2, Rect};
 
     #[test]

@@ -76,6 +76,24 @@ pub enum AxisPart {
     Styles,
     /// Limits, scale type, steps.
     Scales,
+    // The finer groups of the axis's Paste Format To (T171; Sheaf's field choices, not measured).
+    // Each pastes a part of Styles and needs a clipboard that holds Styles.
+    /// Major and minor tick directions.
+    TickDirection,
+    /// Tick directions, lengths, width and colour.
+    Ticks,
+    /// The axis line: colour (and following the plot) and thickness.
+    Line,
+    /// Tick label display: shown, font, angle, number format, prefix and suffix, minor and end labels.
+    TickLabels,
+    /// The title's font (family, size, bold, italic, colour) and following the plot's colour.
+    TitleStyles,
+    /// Every colour: line, ticks, tick labels and title, and following the plot.
+    Colors,
+    /// Line and tick widths.
+    Thickness,
+    /// The title's text and whether it is shown; needs a clipboard that holds All.
+    TitleText,
 }
 
 /// The values of one axis format (a whole axis is kept; the groups say what pastes).
@@ -303,7 +321,66 @@ pub fn paste_axis(graph: &mut Graph, layer: usize, y: bool, clip: &FormatClip, p
     if f.styles && matches!(part, AxisPart::All | AxisPart::Styles) {
         paste_axis_styles(axis, &f.axis);
     }
+    if f.styles {
+        paste_axis_group(axis, &f.axis, part, f.scales);
+    }
     true
+}
+
+/// The finer groups of Paste Format To (T171). `all`: the clipboard holds All (styles and scales).
+fn paste_axis_group(to: &mut Axis, from: &Axis, part: AxisPart, all: bool) {
+    match part {
+        AxisPart::All | AxisPart::Styles | AxisPart::Scales => {}
+        AxisPart::TickDirection => {
+            to.major_tick = from.major_tick;
+            to.minor_tick = from.minor_tick;
+        }
+        AxisPart::Ticks => {
+            to.major_tick = from.major_tick;
+            to.minor_tick = from.minor_tick;
+            to.major_tick_len_pt = from.major_tick_len_pt;
+            to.minor_tick_len_pt = from.minor_tick_len_pt;
+            to.tick_width_pt = from.tick_width_pt;
+            to.tick_color = from.tick_color;
+        }
+        AxisPart::Line => {
+            to.color = from.color;
+            to.color_follows_plot = from.color_follows_plot;
+            to.line_width_pt = from.line_width_pt;
+        }
+        AxisPart::TickLabels => {
+            to.show_tick_labels = from.show_tick_labels;
+            to.tick_font = from.tick_font.clone();
+            to.tick_label_angle_deg = from.tick_label_angle_deg;
+            to.tick_format = from.tick_format;
+            to.tick_prefix.clone_from(&from.tick_prefix);
+            to.tick_suffix.clone_from(&from.tick_suffix);
+            to.minor_tick_labels = from.minor_tick_labels;
+            to.hide_end_label = from.hide_end_label;
+        }
+        AxisPart::TitleStyles => {
+            to.title_font = from.title_font.clone();
+            to.title_color_follows_plot = from.title_color_follows_plot;
+        }
+        AxisPart::Colors => {
+            to.color = from.color;
+            to.color_follows_plot = from.color_follows_plot;
+            to.title_color_follows_plot = from.title_color_follows_plot;
+            to.tick_color = from.tick_color;
+            to.tick_font.color = from.tick_font.color;
+            to.title_font.color = from.title_font.color;
+        }
+        AxisPart::Thickness => {
+            to.line_width_pt = from.line_width_pt;
+            to.tick_width_pt = from.tick_width_pt;
+        }
+        AxisPart::TitleText => {
+            if all {
+                to.title.clone_from(&from.title);
+                to.show_title = from.show_title;
+            }
+        }
+    }
 }
 
 /// Applies the stored style to the visible legend of one layer.
@@ -649,5 +726,70 @@ mod tests {
         let clip = copy_graph(&linked_src, GraphPart::Dimensions);
         paste_graph(&mut root_dst, &clip, GraphPart::Dimensions.groups());
         assert_eq!(root_dst.layers[1].frame, root_before);
+    }
+
+    /// Two axes that differ in every group of the axis's Paste Format To.
+    fn axis_group_source() -> (Graph, FormatClip, FormatClip) {
+        let mut g = Template::Line.new_graph(WindowId(1), "G");
+        let x = &mut g.layers[0].x_axis;
+        x.color = Color::RED;
+        x.line_width_pt = 3.0;
+        x.major_tick = crate::graph::TickDirection::In;
+        x.major_tick_len_pt = 9.0;
+        x.tick_width_pt = Some(2.5);
+        x.tick_font.size_pt = 21.0;
+        x.tick_font.color = Color::BLUE;
+        x.tick_prefix = "~".into();
+        x.title_font.size_pt = 30.0;
+        x.title = Some("Source title".into());
+        x.min = Some(-5.0);
+        let styles = copy_axis(&g, 0, false, AxisPart::Styles).unwrap();
+        let all = copy_axis(&g, 0, false, AxisPart::All).unwrap();
+        (g, styles, all)
+    }
+
+    #[test]
+    fn each_paste_group_takes_only_its_part_of_the_axis() {
+        let (g, styles, all) = axis_group_source();
+        let fresh = || {
+            let mut t = g.clone();
+            t.layers[0].y_axis = Template::Line.new_graph(WindowId(2), "T").layers[0].y_axis.clone();
+            t
+        };
+        let base = fresh().layers[0].y_axis.clone();
+        let paste = |part: AxisPart, clip: &FormatClip| {
+            let mut t = fresh();
+            assert!(paste_axis(&mut t, 0, true, clip, part));
+            t.layers[0].y_axis.clone()
+        };
+        let y = paste(AxisPart::TickDirection, &styles);
+        assert_eq!(y.major_tick, crate::graph::TickDirection::In);
+        assert_eq!((y.major_tick_len_pt, y.line_width_pt), (base.major_tick_len_pt, base.line_width_pt));
+        let y = paste(AxisPart::Ticks, &styles);
+        assert_eq!((y.major_tick_len_pt, y.tick_width_pt), (9.0, Some(2.5)));
+        assert_eq!(y.color, base.color, "ticks leave the line colour");
+        let y = paste(AxisPart::Line, &styles);
+        assert_eq!((y.color, y.line_width_pt), (Color::RED, 3.0));
+        assert_eq!(y.tick_font, base.tick_font);
+        let y = paste(AxisPart::TickLabels, &styles);
+        assert_eq!((y.tick_font.size_pt, y.tick_prefix.as_str()), (21.0, "~"));
+        assert_eq!(y.title_font, base.title_font);
+        let y = paste(AxisPart::TitleStyles, &styles);
+        assert_eq!(y.title_font.size_pt, 30.0);
+        assert_eq!(y.title, base.title, "the text is not a style");
+        let y = paste(AxisPart::Colors, &styles);
+        assert_eq!((y.color, y.tick_font.color), (Color::RED, Color::BLUE));
+        assert_eq!((y.line_width_pt, y.tick_font.size_pt), (base.line_width_pt, base.tick_font.size_pt));
+        let y = paste(AxisPart::Thickness, &styles);
+        assert_eq!((y.line_width_pt, y.tick_width_pt), (3.0, Some(2.5)));
+        assert_eq!(y.color, base.color);
+        // Title Text needs an All copy; no group touches the scale.
+        assert_eq!(paste(AxisPart::TitleText, &styles).title, base.title);
+        let y = paste(AxisPart::TitleText, &all);
+        assert_eq!(y.title.as_deref(), Some("Source title"));
+        assert_eq!(y.min, base.min);
+        // A Scales-only clipboard pastes no group.
+        let scales = copy_axis(&g, 0, false, AxisPart::Scales).unwrap();
+        assert_eq!(paste(AxisPart::Line, &scales), base);
     }
 }

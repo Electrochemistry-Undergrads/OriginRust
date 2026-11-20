@@ -374,6 +374,15 @@ each matrix as not written).
   - **RGB Split:** three new one-channel books, "Red of MBookN" and so on.
   - Each is one undo step.
 
+## 7j. Analysis > Fitting > Nonlinear Surface Fit on a matrix (T221, 2026-11-20, not measured)
+
+- The matrix window's Analysis > Fitting > Nonlinear Surface Fit... first writes the active sheet to
+  a new workbook of X, Y and Z columns (`m2w` XYZ, X constant first, missing cells skipped), as one
+  undo step ("Matrix to XYZ for surface fit"). It then opens the usual surface-fit window (Find Z,
+  the 22 surface functions) on that workbook's Z column.
+- **Sheaf choice:** Origin fits a matrix directly; Sheaf goes through XYZ columns, so the fit
+  results, residuals and report are those of an ordinary XYZ surface fit.
+
 ## 8. What was not verified, and what is left
 
 - Not run in Origin: `mdim` on a matrix that holds data; shrink with missing values; `w2m` options `lr` on accepted

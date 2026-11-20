@@ -12,9 +12,11 @@
 //! sheaf import run1.txt run2.txt -o lab.opj
 //! sheaf export lab.sheaf --graph Graph1 -o fig.svg
 //! sheaf merge-graphs lab.sheaf --graph Graph1 --graph Graph2 --graph Graph3 --rows 3 --cols 1 --share-x -o stack.png
+//! sheaf batch run*.csv -t assay.sheafbooktemplate --summary Data --summary-csv summary.csv -o runs.sheaf
 //! ```
 
 mod analyze;
+mod batch;
 mod commands;
 mod fit;
 mod fit_datasets;

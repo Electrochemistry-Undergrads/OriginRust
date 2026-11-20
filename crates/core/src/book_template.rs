@@ -123,7 +123,60 @@ pub struct BatchBook {
     pub problems: Vec<String>,
 }
 
+/// The summary a batch run collects (T233): one sheet of every book made, stacked in a new book.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BatchSummaryRequest {
+    /// The template sheet whose rows are collected (letter case ignored).
+    pub sheet: String,
+    /// The name of the summary's first column, which holds each row's dataset name.
+    pub identifier: String,
+    /// Delete the books made, with their analysis runs, once the summary holds their rows.
+    pub delete_books: bool,
+}
+
+/// What [`Project::batch_process`] did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BatchRun {
+    /// One per data set, in order (the books are gone when they were deleted).
+    pub books: Vec<BatchBook>,
+    /// The summary book, when a summary was asked for and some book had its sheet.
+    pub summary: Option<WindowId>,
+    /// Whether the books made were deleted.
+    pub deleted: bool,
+}
+
 impl Project {
+    /// File > Batch Processing... and `sheaf batch` (T165, T233, T235): one workbook per
+    /// `(name, data)` from `template` ([`Project::new_workbook_from_template_with_data`]), then with
+    /// `summary` the summary book ([`Project::batch_summary`], the names as identifiers) and, when
+    /// asked and the summary was made, the books deleted with their analysis runs.
+    pub fn batch_process(
+        &mut self,
+        template: &BookTemplate,
+        data: &[(String, Workbook)],
+        summary: Option<&BatchSummaryRequest>,
+    ) -> BatchRun {
+        let books: Vec<BatchBook> =
+            data.iter().map(|(name, book)| self.new_workbook_from_template_with_data(template, book, name)).collect();
+        let mut run = BatchRun { books, summary: None, deleted: false };
+        let Some(s) = summary else { return run };
+        let named: Vec<(WindowId, String)> =
+            run.books.iter().zip(data).map(|(b, (name, _))| (b.book, name.clone())).collect();
+        run.summary = self.batch_summary(&named, &s.sheet, &s.identifier);
+        if run.summary.is_some() && s.delete_books {
+            for b in &run.books {
+                let columns: std::collections::HashSet<ColumnId> = self
+                    .workbook(b.book)
+                    .map(|w| w.sheets.iter().flat_map(|s| s.columns.iter().map(|c| c.id)).collect())
+                    .unwrap_or_default();
+                self.analysis_links.retain(|l| !l.columns.iter().chain(&l.outputs).any(|c| columns.contains(c)));
+                self.remove_window(b.book);
+            }
+            run.deleted = true;
+        }
+        run
+    }
+
     /// File > Batch Processing... (T165): a new workbook from `template` (as
     /// [`Project::new_workbook_from_template`]) titled `title`, holding the first sheet of `data` (a
     /// data file as read by an importer). The file's columns fill, in order, the data columns of the

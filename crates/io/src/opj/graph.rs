@@ -302,8 +302,10 @@ fn build_layer(
                         continue;
                     }
                 };
-                // "%(?X)" and "%(?Y)" ask for the title built from the plotted column.
-                axis.title = if text.trim_start().starts_with("%(?") { None } else { Some(clean_markup(&text)) };
+                // "%(?X)" and "%(?Y)" ask for the title built from the plotted column: a title that is
+                // only that token is the automatic title; text around it is kept, and the renderer
+                // replaces the token (T246).
+                axis.title = if is_only_axis_token(&text) { None } else { Some(clean_markup(&text)) };
                 axis.show_title = true;
                 axis.title_font.size_pt = size_pt;
             }
@@ -632,6 +634,12 @@ fn push_text_label(
 
 /// Drops the size escape `\p<digits>(...)` (the model has no relative text size) and keeps the
 /// escapes it can draw.
+/// True when `text` is a single `%(?X...)` or `%(?Y...)` token and nothing else (T246).
+fn is_only_axis_token(text: &str) -> bool {
+    let t = text.trim();
+    t.starts_with("%(?") && t.ends_with(')') && t.matches(')').count() == 1
+}
+
 pub(crate) fn clean_markup(s: &str) -> String {
     #[derive(Clone, Copy, PartialEq)]
     enum Open {
@@ -1443,5 +1451,15 @@ mod tests {
             let warned = warnings.iter().any(|w| w.contains(&format!("plot type {ptype}")));
             assert_eq!(warned, ptype == 205, "type {ptype}: {warnings:?}");
         }
+    }
+
+    #[test]
+    fn only_a_lone_axis_token_is_the_automatic_title() {
+        // T246: text around %(?X) is kept for the renderer to fill in.
+        assert!(is_only_axis_token("%(?X)"));
+        assert!(is_only_axis_token(" %(?Y,@LG) "));
+        assert!(!is_only_axis_token("%(?X) shifted"));
+        assert!(!is_only_axis_token("Time %(?X)"));
+        assert!(!is_only_axis_token("Potential (V)"));
     }
 }

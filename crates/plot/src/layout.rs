@@ -737,7 +737,7 @@ fn title_places(
     let axis = |i: usize| if dim == Dim::X { &g.layers[i].x_axis } else { &g.layers[i].y_axis };
     let title = |i: usize| {
         let a = axis(i);
-        a.title.clone().unwrap_or_else(|| first_title(project, a, &pds[i].plots, dim == Dim::Y))
+        resolved_title(project, a, &pds[i].plots, dim == Dim::Y)
     };
     // Along the axis: start and length of a frame; across it: start and length.
     let along = |f: Rect| if dim == Dim::X { (f.x, f.w) } else { (f.y, f.h) };
@@ -1700,6 +1700,40 @@ fn draw_y_labels(
 /// The title of an axis without a title of its own, from the layer's first plot: its Y column for
 /// a Y axis; for an X axis its X column (numbers or text), else the column that labels the ticks,
 /// else `Row`.
+/// The title an axis shows: its own text with Origin's `%(?X)` and `%(?Y)` (with any options after
+/// a comma, such as `%(?X,@LG)`) replaced by the title built from the plotted X or Y column (T246),
+/// or that built title when the axis has no text of its own.
+pub(crate) fn resolved_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -> String {
+    match &axis.title {
+        None => first_title(project, axis, pds, y_axis),
+        Some(text) => substitute_axis_tokens(text, |y| first_title(project, axis, pds, y)),
+    }
+}
+
+/// Replaces each `%(?X...)` and `%(?Y...)` of `text` (letter case ignored) by `built(is_y)`; other
+/// text, and a `%(?` not followed by X or Y and a closing parenthesis, stay as they are.
+pub(crate) fn substitute_axis_tokens(text: &str, mut built: impl FnMut(bool) -> String) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find("%(?") {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + 3..];
+        let which = after.chars().next().map(|c| c.to_ascii_uppercase());
+        match (which, after.find(')')) {
+            (Some(w @ ('X' | 'Y')), Some(close)) if after[1..close].is_empty() || after[1..close].starts_with(',') => {
+                out.push_str(&built(w == 'Y'));
+                rest = &after[close + 1..];
+            }
+            _ => {
+                out.push_str("%(?");
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 pub(crate) fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -> String {
     let Some(pd) = pds.first() else { return String::new() };
     if pd.plot.kind == PlotKind::Histogram {
@@ -1765,7 +1799,7 @@ fn draw_x_title(
     if !axis.show_title {
         return;
     }
-    let title = axis.title.clone().unwrap_or_else(|| first_title(project, axis, pds, false));
+    let title = resolved_title(project, axis, pds, false);
     let size = axis.title_font.size_pt;
     let baseline = if axis.side == AxisSide::Opposite {
         // The text's bottom edge (baseline plus descent) faces the labels below it.
@@ -1792,7 +1826,7 @@ fn draw_y_title(
     if !axis.show_title {
         return;
     }
-    let title = axis.title.clone().unwrap_or_else(|| first_title(project, axis, pds, true));
+    let title = resolved_title(project, axis, pds, true);
     let size = axis.title_font.size_pt;
     let x = if axis.side == AxisSide::Opposite {
         // The tops of the letters (the ascent side) face the labels on the left.
@@ -1820,7 +1854,7 @@ fn draw_x_title_inward(
     if !axis.show_title {
         return;
     }
-    let title = axis.title.clone().unwrap_or_else(|| first_title(project, axis, pds, false));
+    let title = resolved_title(project, axis, pds, false);
     let size = axis.title_font.size_pt;
     let x = f.x - 0.6 * size - DESCENT * size;
     place(out, &title, font, (x, line_y), 90.0);
@@ -1842,7 +1876,7 @@ fn draw_y_title_inward(
     if !axis.show_title {
         return;
     }
-    let title = axis.title.clone().unwrap_or_else(|| first_title(project, axis, pds, true));
+    let title = resolved_title(project, axis, pds, true);
     let size = axis.title_font.size_pt;
     let baseline = f.y - 0.6 * size - DESCENT * size;
     place(out, &title, font, (line_x, baseline), 0.0);

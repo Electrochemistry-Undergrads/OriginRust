@@ -390,10 +390,18 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
             interval_graph(project, &ys, &a.style)?
         } else if template == Template::ScatterMatrix {
             scatter_matrix_graph(project, &ys, &a.style)?
-        } else if a.group.is_some() {
-            bail!(
-                "--group needs -t parallel, -t parallel-index, -t treemap, -t sunburst, -t grouped-columns or -t grouped-box"
-            );
+        } else if let Some(name) = a.group.as_deref() {
+            // Plot by group (Origin's plotgroup, T224): one curve per value of the group column.
+            if !a.y2.is_empty() || template == Template::DoubleY {
+                bail!("--group with an XY template cannot have a right Y axis; leave out --y2");
+            }
+            let key = named_columns(project, book, sheet, &[name.to_string()])?[0];
+            let ys: Vec<ColumnId> = ys.into_iter().filter(|y| *y != key).collect();
+            if ys.is_empty() {
+                bail!("--group {name}: there are no Y columns left to plot besides the group column");
+            }
+            let (_, grouped) = project.group_columns(book, sheet, &ys, key)?;
+            project.plot_columns(template, &grouped)?
         } else if a.y2.is_empty() && template != Template::DoubleY {
             project.plot_columns(template, &ys)?
         } else {

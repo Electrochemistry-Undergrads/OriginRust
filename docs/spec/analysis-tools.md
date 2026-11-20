@@ -729,7 +729,8 @@ Create Baseline and Subtract Baseline goals are offered with User Defined (2nd D
 Find 8, or Sheaf's own lowest point of each stretch) and Line, Spline or BSpline; the columns are named as
 Origin's (`Baseline_Data Y<n>`, `Subtracted_Data Y<n>`), without Origin's copies of X. The other methods, Snap
 to Spectrum, anchor editing, XPS, End Points Weighted and Asymmetric Least Squares are greyed. User Defined in
-the peak goals uses the same anchors with straight lines. The command line (`sheaf analyze peaks --baseline-goal`) is not built yet.
+the peak goals uses the same anchors with straight lines. Command line: `sheaf analyze peaks FILE --baseline-goal
+create|subtract [--baseline second-derivative] [--baseline-points N]`.
 
 ## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1 to 12.3)
 

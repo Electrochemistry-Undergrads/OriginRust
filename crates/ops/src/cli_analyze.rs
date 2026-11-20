@@ -621,6 +621,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             min_width,
             baseline,
             baseline_points,
+            baseline_goal,
             anchors,
             limits,
             integrate,
@@ -639,7 +640,13 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 (None, None, true) => analysis::PeakFilter::None,
                 (None, None, false) => analysis::PeakFilter::Height(0.0),
             };
+            // Origin's baseline goals start on User Defined.
+            let baseline = match (baseline_goal, baseline, &anchors) {
+                (Some(_), None, None) => Some(PeakBaselineKind::SecondDerivative),
+                (_, b, _) => b,
+            };
             let chain = integrate
+                || baseline_goal.is_some()
                 || fit.is_some()
                 || method.is_some()
                 || smooth > 0
@@ -674,7 +681,13 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                         bail!("--anchors cannot be combined with --baseline none")
                     }
                     (Some(PeakBaselineKind::EndPoints), _) => analysis::ChainBaseline::EndPoints,
-                    (Some(PeakBaselineKind::Minima), _) => analysis::ChainBaseline::AutoMinima(baseline_points),
+                    (Some(PeakBaselineKind::Minima), _) => {
+                        analysis::ChainBaseline::AutoMinima(baseline_points.unwrap_or(5))
+                    }
+                    (Some(PeakBaselineKind::SecondDerivative), _) => analysis::ChainBaseline::SecondDerivative {
+                        points: baseline_points.unwrap_or(8),
+                        method: analysis::InterpMethod::Linear,
+                    },
                     (Some(PeakBaselineKind::Minimum), _) => {
                         analysis::ChainBaseline::ConstantStat(analysis::BaselineStat::Minimum)
                     }
@@ -721,6 +734,16 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     filter,
                     min_fwhm: min_width,
                 };
+                if let Some(goal) = baseline_goal {
+                    if integrate || fit.is_some() {
+                        bail!("--baseline-goal only makes the baseline; leave out --integrate and --fit");
+                    }
+                    let subtract = goal == BaselineGoalKind::Subtract;
+                    return Ok((
+                        target,
+                        Job::Tool(Tool::PeakBaseline(analysis::PeakBaselineSpec { baseline, subtract })),
+                    ));
+                }
                 (
                     target,
                     Job::Tool(Tool::PeakChain(analysis::PeakChainSpec {

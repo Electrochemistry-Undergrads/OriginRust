@@ -1701,11 +1701,21 @@ pub enum PeakBaselineKind {
     EndPoints,
     Minima,
     Anchors,
+    /// Origin's User Defined baseline: anchor points found by the 2nd derivative (at most
+    /// --baseline-points of them, 8 when not given), joined by straight lines.
+    SecondDerivative,
     /// Origin's Constant baseline at the minimum (its default), maximum, mean or median of the data.
     Minimum,
     Maximum,
     Mean,
     Median,
+}
+
+/// Origin's Peak Analyzer goals that only make the baseline (analysis-tools 11.5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum BaselineGoalKind {
+    Create,
+    Subtract,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
@@ -2467,12 +2477,18 @@ pub enum AnalyzeTool {
         min_width: f64,
         /// Baseline to subtract before the search: none, end-points (straight line through the
         /// first and last point), minima (the lowest point of each of --baseline-points stretches),
-        /// or anchors (--anchors).
+        /// second-derivative (Origin's User Defined anchors), or anchors (--anchors).
         #[arg(long, value_enum)]
         baseline: Option<PeakBaselineKind>,
-        /// Number of stretches (anchor points) of the minima baseline.
-        #[arg(long, default_value_t = 5)]
-        baseline_points: usize,
+        /// Number of anchor points of the minima (default 5) and second-derivative (default 8)
+        /// baselines.
+        #[arg(long)]
+        baseline_points: Option<usize>,
+        /// Only make the baseline (Origin's Peak Analyzer goals Create Baseline and Subtract
+        /// Baseline): Baseline_Data Y<n> beside each curve, after Subtracted_Data Y<n> for
+        /// subtract. Without --baseline, Origin's User Defined (second-derivative) baseline.
+        #[arg(long, value_enum)]
+        baseline_goal: Option<BaselineGoalKind>,
         /// Anchor points of the anchors baseline, written X1:Y1,X2:Y2,... (linear interpolation).
         #[arg(long)]
         anchors: Option<String>,

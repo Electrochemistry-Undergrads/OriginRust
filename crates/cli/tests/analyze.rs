@@ -1957,3 +1957,36 @@ fn cwt_writes_one_column_per_scale_and_refuses_what_origin_refuses() {
         sheaf(&["analyze", "cwt", data.to_str().unwrap(), "--y", "sig", "--with", "scale", "--param", "3"]);
     assert!(!ok && stderr.contains("wave number"), "{stderr}");
 }
+
+/// Origin's Peak Analyzer goal Subtract Baseline: User Defined anchors by the 2nd derivative,
+/// Subtracted_Data Y1 and Baseline_Data Y1 beside the curve.
+#[test]
+fn baseline_goal_subtract_writes_origins_columns() {
+    let dir = scratch("baseline-goal");
+    let mut text = String::from("x,y\n");
+    for k in 0..401 {
+        let x = k as f64 * 0.05;
+        let g = |c: f64, w: f64| (-(x - c) * (x - c) / w).exp();
+        text.push_str(&format!("{x},{}\n", 0.2 + 0.01 * x + g(5.0, 0.5) + 0.6 * g(12.0, 0.8)));
+    }
+    let data = dir.join("two.csv");
+    std::fs::write(&data, text).unwrap();
+    let out = dir.join("out.csv");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "peaks",
+        data.to_str().unwrap(),
+        "--baseline-goal",
+        "subtract",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("through 8 anchor points"), "{stdout}");
+    let csv = std::fs::read_to_string(&out).unwrap();
+    let header = csv.lines().next().unwrap();
+    assert!(header.contains("Subtracted_Data Y1") && header.contains("Baseline_Data Y1"), "{header}");
+    let (ok, _, stderr) =
+        sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--baseline-goal", "create", "--integrate"]);
+    assert!(!ok && stderr.contains("only makes the baseline"), "{stderr}");
+}

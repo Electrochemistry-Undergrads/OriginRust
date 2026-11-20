@@ -170,6 +170,8 @@ pub enum Cmd {
     NewNotes,
     /// File > New > Matrix and the Standard toolbar's New Matrix (T192).
     NewMatrix,
+    /// File > Import > Binary 2D Array... (T199).
+    ImportBinary2d,
     /// The Matrix menu of a matrix window (T192 slice 3).
     Matrix(MatrixCmd),
     /// Worksheet > Convert to Matrix > Direct (the selected columns, or the sheet) and XYZ Gridding
@@ -1115,7 +1117,8 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                     item("Comma &Delimited (CSV)...", Cmd::ImportCsv),
                     item("&Excel (XLS, XLSX, XLSM)...", Cmd::ImportExcel),
                 ],
-                greys(&["Image...", "Binary 2D Array..."]),
+                greys(&["Image..."]),
+                vec![item("Binary 2D Array...", Cmd::ImportBinary2d)],
                 // Origin's graph File menu has no Re-Import items.
                 if kind == WindowKind::Graph {
                     Vec::new()
@@ -3098,6 +3101,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::NewNotes => Action::NewNotes,
         Cmd::NewMatrix => Action::NewMatrix,
+        Cmd::ImportBinary2d => Action::ImportBinary2d,
         Cmd::ConvertToMatrix { xyz } => {
             let book = c.book.ok_or(NEED_BOOK)?;
             if *xyz && c.selected.len() != 3 {

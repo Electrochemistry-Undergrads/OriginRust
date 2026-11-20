@@ -135,6 +135,8 @@ pub enum Cmd {
     ObjectProperties,
     /// File > New > Notes (T154).
     NewNotes,
+    /// File > New > Matrix and the Standard toolbar's New Matrix (T179).
+    NewMatrix,
     /// The graph Edit menu's Cut, Copy, Paste and Clear on the selected object (T149).
     GraphClipboard(GraphClip),
     /// A drawn object's right-click Cut and Copy, and the page's Paste at a page point (T125).
@@ -934,7 +936,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                 vec![
                     keyed("&Project", ctrl(Key::N), Cmd::NewProject),
                     item("&Worksheet...", Cmd::NewWorkbook),
-                    grey("Matrix..."),
+                    item("Matrix...", Cmd::NewMatrix),
                     item("&Graph", Cmd::NewGraph),
                 ],
                 greys(&["Image"]),
@@ -2958,6 +2960,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::CopyShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape, cut: false }
         }
         Cmd::NewNotes => Action::NewNotes,
+        Cmd::NewMatrix => Action::NewMatrix,
         Cmd::ObjectProperties => {
             let graph = c.graph.ok_or(NEED_GRAPH)?;
             c.graph_pick.ok_or(NEED_SELECTED_OBJECT)?;

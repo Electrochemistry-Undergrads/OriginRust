@@ -24,6 +24,6 @@ fn the_menu_item_is_enabled_and_the_picture_is_written_by_its_extension() {
     assert!(std::fs::read(pdf).unwrap().starts_with(b"%PDF"));
     let svg = crate::app::write_worksheet_image(sheet, &dir.join("three.svg")).unwrap();
     assert!(std::fs::read_to_string(svg).unwrap().contains(">2.5<"));
-    assert!(crate::app::write_worksheet_image(sheet, &dir.join("four.bmp")).is_err());
+    assert!(crate::app::write_worksheet_image(sheet, &dir.join("four.wmf")).is_err());
     let _ = std::fs::remove_dir_all(&dir);
 }

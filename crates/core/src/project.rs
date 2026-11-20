@@ -1248,6 +1248,10 @@ impl Project {
                 let z_error = (template == Template::Scatter3dError)
                     .then(|| ternary_z.and_then(|z| self.next_numeric_column(z)))
                     .flatten();
+                // 3D Ternary Colormap Surface (T173): the numeric column after Z is the height.
+                let height = (template == Template::TernarySurface3d)
+                    .then(|| ternary_z.and_then(|z| self.next_numeric_column(z)))
+                    .flatten();
                 let z_name = ternary_z.and_then(|z| self.column(z)).map(|c| c.display_name().to_string());
                 let (size, color) = match template {
                     Template::Bubble => (true, false),
@@ -1268,6 +1272,9 @@ impl Project {
                         p.size_from = ternary_z;
                         if z_error.is_some() {
                             p.y_error = z_error;
+                        }
+                        if height.is_some() {
+                            p.color_from = height;
                         }
                     }
                 }

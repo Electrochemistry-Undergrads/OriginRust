@@ -60,6 +60,18 @@ fn xyz_unit(project: &Project, layer: &Layer, plot: &sheaf_core::graph::Plot, b:
 /// Half the width of a 3D ribbon (T161) along the depth axis, in depth steps.
 const RIBBON_HALF: f64 = 0.25;
 
+/// The corners of a 3D ternary floor (T173) in the cube's units, as the 2D ternary layer has them:
+/// Z = 1 at the front left, X = 1 at the front right, Y = 1 at the back. The triangle is equilateral.
+const TERNARY_Z: (f64, f64) = (-1.0, -1.0);
+const TERNARY_X: (f64, f64) = (1.0, -1.0);
+const TERNARY_Y: (f64, f64) = (0.0, 0.732_050_807_568_877_2);
+
+/// The place on the ternary floor (T173) of the fractions `fx` and `fy` (and `1 - fx - fy`).
+fn ternary_floor(fx: f64, fy: f64) -> (f64, f64) {
+    let fz = 1.0 - fx - fy;
+    (fx * TERNARY_X.0 + fy * TERNARY_Y.0 + fz * TERNARY_Z.0, fx * TERNARY_X.1 + fy * TERNARY_Y.1 + fz * TERNARY_Z.1)
+}
+
 /// True for a point of the cube -1..1: points outside a set axis range (T164) are not drawn.
 fn inside(p: [f64; 3]) -> bool {
     p.iter().all(|v| v.is_finite() && v.abs() <= 1.0 + 1e-9)
@@ -83,6 +95,19 @@ fn xyz<'a>(project: &'a Project, layer: &Layer, plot: &sheaf_core::graph::Plot) 
         Some(x) => Cow::Borrowed(x),
         None => Cow::Owned((1..=data.len()).map(|r| r as f64).collect()),
     };
+    if layer.coords.space3d().is_some_and(|c| c.ternary) {
+        // 3D Ternary (T173): the composition's place on the triangular floor, the height as Z.
+        let third = project.numeric(plot.size_from?)?;
+        let height = project.numeric(plot.color_from?)?;
+        let n = data.len().min(x.len()).min(third.len()).min(height.len());
+        let (mut px, mut py) = (vec![f64::NAN; n], vec![f64::NAN; n]);
+        for r in 0..n {
+            if let Some((fx, fy)) = crate::ternary::normalise(x[r], data[r], third[r]) {
+                (px[r], py[r]) = ternary_floor(fx, fy);
+            }
+        }
+        return Some((Cow::Owned(px), Cow::Owned(py), Cow::Borrowed(&height[..n])));
+    }
     if layer.coords.space3d().is_some_and(|c| c.xyy) {
         let k = layer.plots.iter().position(|p| std::ptr::eq(p, plot))?;
         let depth = (layer.plots.len() - k) as f64;
@@ -134,6 +159,20 @@ pub(crate) fn data_box(project: &Project, layer: &Layer) -> Option<DataBox> {
         resolve(&layer.y_axis, ext[1], &scales[1]),
         resolve(&layer.y_axis, ext[2], &scales[2]),
     ];
+    // 3D Ternary (T173): the floor is the triangle itself, in the cube's own units.
+    if layer.coords.space3d().is_some_and(|c| c.ternary) {
+        for a in &mut axes[..2] {
+            *a = ResolvedAxis {
+                min: -1.0,
+                max: 1.0,
+                step: 0.5,
+                major: Vec::new(),
+                minor: Vec::new(),
+                labels: Vec::new(),
+                ..a.clone()
+            };
+        }
+    }
     // XYY (T158): the depth axis has one tick per plot, labelled with the plot's name.
     if layer.coords.space3d().is_some_and(|c| c.xyy) && !layer.plots.is_empty() {
         let n = layer.plots.len();
@@ -445,6 +484,87 @@ fn titles(project: &Project, layer: &Layer) -> [String; 3] {
     }
 }
 
+/// The prism of a 3D ternary layer (T173): the triangular floor with grid lines at every 0.2 of
+/// each part, the three upright edges and the top triangle, the fractions along the floor's sides,
+/// the column names at the corners and the height's ticks and title up the leftmost upright edge.
+#[allow(clippy::too_many_arguments)]
+fn draw_ternary_box(
+    grid: &mut Vec<Item>,
+    overlay: &mut Vec<Item>,
+    project: &Project,
+    layer: &Layer,
+    geom: &LayerGeometry,
+    c: &Space3dCoords,
+    m: &dyn TextMeasurer,
+    b: &DataBox,
+) {
+    let edge = Stroke::solid(Color::BLACK, 0.75);
+    let gridline = Stroke::solid(Color::rgb(192, 192, 192), 0.5);
+    let at = |(x, y): (f64, f64), z: f64| [x, y, z];
+    let floor = |fx: f64, fy: f64| at(ternary_floor(fx, fy), -1.0);
+    let steps = [0.2, 0.4, 0.6, 0.8];
+    for f in steps {
+        line(grid, geom, c, floor(f, 0.0), floor(f, 1.0 - f), &gridline);
+        line(grid, geom, c, floor(0.0, f), floor(1.0 - f, f), &gridline);
+        line(grid, geom, c, floor(1.0 - f, 0.0), floor(0.0, 1.0 - f), &gridline);
+    }
+    let corners = [TERNARY_Z, TERNARY_X, TERNARY_Y];
+    for k in 0..3 {
+        let (p, q) = (corners[k], corners[(k + 1) % 3]);
+        line(grid, geom, c, at(p, -1.0), at(q, -1.0), &edge);
+        line(grid, geom, c, at(p, 1.0), at(q, 1.0), &edge);
+        line(grid, geom, c, at(p, -1.0), at(p, 1.0), &edge);
+    }
+    let font = &layer.x_axis.tick_font;
+    let title_font = &layer.x_axis.title_font;
+    // Labels are pushed outwards from the middle of the prism.
+    let centroid = ((TERNARY_Z.0 + TERNARY_X.0 + TERNARY_Y.0) / 3.0, (TERNARY_Z.1 + TERNARY_X.1 + TERNARY_Y.1) / 3.0);
+    let centre = page(geom, view(c, at(centroid, 0.0)));
+    let place = |out: &mut Vec<Item>, p: [f64; 3], text: &str, font: &sheaf_core::graph::Font, gap: f64| {
+        let q = page(geom, view(c, p));
+        let (dx, dy) = (q.0 - centre.0, q.1 - centre.1);
+        let len = (dx * dx + dy * dy).sqrt().max(1e-9);
+        let w = crate::text::width(m, text, font, font.size_pt);
+        let (x, y) = (q.0 + dx / len * gap - w / 2.0, q.1 + dy / len * gap);
+        crate::text::place_label(out, m, text, font, (x, y), 0.0, &|_| None);
+    };
+    // The fractions along the sides: X along Z-X, Y along X-Y, Z along Y-Z, as the 2D layer runs them.
+    // A side behind the middle of the floor puts its labels under the data, which can hide them.
+    let (sa, ca) = c.azimuth_deg.to_radians().sin_cos();
+    let depth = |(x, y): (f64, f64)| x * sa + y * ca;
+    let behind = |p: (f64, f64), q: (f64, f64)| depth(((p.0 + q.0) / 2.0, (p.1 + q.1) / 2.0)) > depth(centroid);
+    let sides: [(bool, Box<dyn Fn(f64) -> [f64; 3]>); 3] = [
+        (behind(TERNARY_Z, TERNARY_X), Box::new(|f| floor(f, 0.0))),
+        (behind(TERNARY_X, TERNARY_Y), Box::new(|f| floor(1.0 - f, f))),
+        (behind(TERNARY_Y, TERNARY_Z), Box::new(|f| floor(0.0, 1.0 - f))),
+    ];
+    for (back, at_f) in &sides {
+        let out = if *back { &mut *grid } else { &mut *overlay };
+        for f in steps {
+            place(out, at_f(f), &sheaf_core::format::format_general(f, 6), font, font.size_pt);
+        }
+    }
+    // The parts' column names at their corners, the height's ticks up the leftmost upright edge.
+    let plot = layer.plots.iter().find(|p| p.visible);
+    let name = |id: Option<sheaf_core::ColumnId>| {
+        id.and_then(|id| project.column(id)).map(|c| c.axis_title()).unwrap_or_default()
+    };
+    let gap = font.size_pt + 2.5 * title_font.size_pt;
+    if let Some(p) = plot {
+        for (corner, id) in [(TERNARY_X, p.x), (TERNARY_Y, Some(p.y)), (TERNARY_Z, p.size_from)] {
+            place(overlay, at(corner, -1.0), &name(id), title_font, gap);
+        }
+    }
+    let left = *corners.iter().min_by(|p, q| view(c, at(**p, 0.0)).0.total_cmp(&view(c, at(**q, 0.0)).0)).unwrap();
+    let z_axis = &b.axes[2];
+    for (v, label) in z_axis.major.iter().zip(&z_axis.labels) {
+        place(overlay, at(left, b.unit(2, *v)), label, font, font.size_pt);
+    }
+    if let Some(p) = plot {
+        place(overlay, at(left, 0.0), &name(p.color_from), title_font, gap);
+    }
+}
+
 /// The box of a 3D layer: the three back planes with grid lines at the major ticks in `grid`, and the
 /// tick labels and axis titles on the front edges in `overlay`.
 pub(crate) fn draw_box(
@@ -457,6 +577,10 @@ pub(crate) fn draw_box(
     m: &dyn TextMeasurer,
 ) {
     let Some(b) = data_box(project, layer) else { return };
+    if c.ternary {
+        draw_ternary_box(grid, overlay, project, layer, geom, c, m, &b);
+        return;
+    }
     let (sa, ca) = c.azimuth_deg.to_radians().sin_cos();
     // The far side of each horizontal axis (larger depth `x sin a + y cos a` is farther away).
     let far = [if sa >= 0.0 { 1.0 } else { -1.0 }, if ca >= 0.0 { 1.0 } else { -1.0 }];
@@ -954,5 +1078,50 @@ mod tests {
                 assert!(!scene.layers[0].grid.is_empty(), "the box is drawn at {azimuth}/{elevation}");
             }
         }
+    }
+
+    #[test]
+    fn a_ternary_surface_stands_on_the_triangle_with_the_height_as_z() {
+        // T173: X, Y and Z are the parts, the column after Z the height.
+        use sheaf_core::column::{ColumnData, Designation};
+        use sheaf_core::template::Template;
+        let (mut a, mut bb, mut cc, mut h) = (vec![], vec![], vec![], vec![]);
+        for i in 0..=4 {
+            for j in 0..=(4 - i) {
+                // Parts that do not sum to 1 are normalised.
+                a.push(2.0 * i as f64);
+                bb.push(2.0 * j as f64);
+                cc.push(2.0 * (4 - i - j) as f64);
+                h.push((i * j) as f64);
+            }
+        }
+        let mut p = Project::new();
+        let b = p.add_workbook("Book1");
+        let xa = p.add_column(b, 0, Designation::X, ColumnData::numeric(a)).unwrap();
+        let y = p.add_column(b, 0, Designation::Y, ColumnData::numeric(bb)).unwrap();
+        let zc = p.add_column(b, 0, Designation::Y, ColumnData::numeric(cc)).unwrap();
+        let hc = p.add_column(b, 0, Designation::Y, ColumnData::numeric(h)).unwrap();
+        let g = p.plot_columns(Template::TernarySurface3d, &[y]).unwrap();
+        let graph = p.graph(g).unwrap();
+        let layer = &graph.layers[0];
+        let c = *layer.coords.space3d().unwrap();
+        assert!(c.ternary && c.surface == Some(sheaf_core::graph::Surface3d::ColorMap));
+        let plot = &layer.plots[0];
+        assert_eq!((plot.x, plot.size_from, plot.color_from), (Some(xa), Some(zc), Some(hc)));
+        let (x, yv, z) = xyz(&p, layer, plot).unwrap();
+        // Row 0 is all Z (the front left corner), the last row all X (front right); the height is Z.
+        assert_eq!((x[0], yv[0]), TERNARY_Z);
+        let last = x.len() - 1;
+        assert!((x[last] - TERNARY_X.0).abs() < 1e-12 && (yv[last] - TERNARY_X.1).abs() < 1e-12);
+        assert_eq!(z[6], 1.0);
+        let bx = data_box(&p, layer).unwrap();
+        assert_eq!((bx.axes[0].min, bx.axes[0].max, bx.axes[1].min, bx.axes[1].max), (-1.0, 1.0, -1.0, 1.0));
+        assert!(bx.axes[0].major.is_empty());
+        // 15 points on the triangle: 16 triangles.
+        let layers = crate::data::collect_graph(&p, graph);
+        assert_eq!(layers[0].plots[0].surface.as_ref().unwrap().triangles.len(), 16);
+        // The prism: 3 x 4 grid lines and 9 edges, plus the back side's labels.
+        let scene = crate::layout::build_scene(&p, g, &crate::FixedMetrics).unwrap();
+        assert!(scene.layers[0].grid.len() >= 21);
     }
 }

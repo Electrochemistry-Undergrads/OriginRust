@@ -73,6 +73,17 @@ pub struct Worksheet {
     /// project in place of the grid. It has no columns.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub graph_sheet: Option<WindowId>,
+    /// Graphs shown in data cells (the cell menu's Insert Graph..., T194), at most one per cell.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cell_graphs: Vec<CellGraph>,
+}
+
+/// A graph shown in a data cell (T194): the cell holds a picture of graph window `graph`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CellGraph {
+    pub column: ColumnId,
+    pub row: usize,
+    pub graph: WindowId,
 }
 
 impl Worksheet {
@@ -94,7 +105,33 @@ impl Worksheet {
             comparison_source: None,
             notes_text: None,
             graph_sheet: None,
+            cell_graphs: Vec::new(),
         }
+    }
+
+    /// The graph shown in a data cell (T194).
+    pub fn cell_graph(&self, column: ColumnId, row: usize) -> Option<WindowId> {
+        self.cell_graphs.iter().find(|g| g.column == column && g.row == row).map(|g| g.graph)
+    }
+
+    /// Puts graph `graph` in a data cell, replacing the one there; `None` takes it out (T194).
+    pub fn set_cell_graph(&mut self, column: ColumnId, row: usize, graph: Option<WindowId>) {
+        self.cell_graphs.retain(|g| !(g.column == column && g.row == row));
+        if let Some(graph) = graph {
+            self.cell_graphs.push(CellGraph { column, row, graph });
+        }
+    }
+
+    /// Follows new column ids (or drops the cell graphs of deleted columns); called by
+    /// [`Worksheet::remap_note_columns`], which every column re-id and deletion goes through.
+    pub(crate) fn remap_cell_graph_columns(&mut self, map: &dyn Fn(ColumnId) -> Option<ColumnId>) {
+        self.cell_graphs.retain_mut(|g| match map(g.column) {
+            Some(c) => {
+                g.column = c;
+                true
+            }
+            None => false,
+        });
     }
 
     /// True for a Notes sheet (Add Notes as Sheet, T188).
@@ -374,5 +411,36 @@ mod title_tests {
         let back: Workbook = serde_json::from_str(&serde_json::to_string(&b).unwrap()).unwrap();
         assert_eq!(back.sheets[j].graph_sheet, Some(WindowId(8)));
         assert_eq!(back.sheets[0].graph_sheet, None);
+    }
+
+    #[test]
+    fn a_cell_holds_one_graph_and_follows_its_column() {
+        let mut s = Worksheet::new("S");
+        s.set_cell_graph(ColumnId(1), 2, Some(WindowId(9)));
+        s.set_cell_graph(ColumnId(1), 2, Some(WindowId(10)));
+        assert_eq!((s.cell_graphs.len(), s.cell_graph(ColumnId(1), 2)), (1, Some(WindowId(10))));
+        s.remap_note_columns(&|c| Some(ColumnId(c.0 + 100)));
+        assert_eq!(s.cell_graph(ColumnId(101), 2), Some(WindowId(10)));
+        s.remap_note_columns(&|_| None);
+        assert!(s.cell_graphs.is_empty(), "a deleted column takes its graphs");
+        s.set_cell_graph(ColumnId(3), 0, Some(WindowId(4)));
+        s.set_cell_graph(ColumnId(3), 0, None);
+        assert!(s.cell_graphs.is_empty());
+    }
+}
+
+impl crate::project::Project {
+    /// Puts graph `graph` in the data cell of `column` at `row`, or takes it out with `None` (T194).
+    /// False when there is no such column.
+    pub fn set_cell_graph(&mut self, column: ColumnId, row: usize, graph: Option<WindowId>) -> bool {
+        for w in &mut self.windows {
+            if let crate::project::Window::Workbook(b) = w
+                && let Some(s) = b.sheets.iter_mut().find(|s| s.column(column).is_some())
+            {
+                s.set_cell_graph(column, row, graph);
+                return true;
+            }
+        }
+        false
     }
 }

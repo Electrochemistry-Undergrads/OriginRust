@@ -3642,7 +3642,7 @@ fn the_cell_and_row_menus_copy_and_clear_and_grey_what_sheaf_lacks() {
     assert!(entry_enabled(&h, "Copy"));
     assert!(entry_enabled(&h, "Paste Transpose"), "T86");
     assert!(!entry_enabled(&h, "Paste Link"));
-    assert!(!entry_enabled(&h, "Insert Graph..."));
+    assert!(entry_enabled(&h, "Insert Graph..."), "T194");
     click_containing(&mut h, "Clear");
     assert!(column(&h, "B")[2].is_nan());
     ctrl(&mut h, egui::Key::Z);

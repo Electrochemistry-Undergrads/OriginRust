@@ -93,4 +93,4 @@ pub use ids::{ColumnId, WindowId};
 pub use matrix::{MatrixBook, MatrixSheet};
 pub use project::{Project, Window};
 pub use user_template::{UserTemplate, UserTemplateError};
-pub use worksheet::{Frozen, MAX_FROZEN, Workbook, Worksheet};
+pub use worksheet::{CellGraph, Frozen, MAX_FROZEN, Workbook, Worksheet};

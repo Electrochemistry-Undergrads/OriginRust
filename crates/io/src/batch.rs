@@ -164,6 +164,7 @@ pub fn place_workbook_with(
                     comparison_source: None,
                     notes_text: None,
                     graph_sheet: None,
+                    cell_graphs: Vec::new(),
                 };
             }
             // Further sheets of the file (several data blocks) follow as new sheets.

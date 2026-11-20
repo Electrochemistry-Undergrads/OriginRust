@@ -403,6 +403,18 @@ each matrix as not written).
   vertex is drawn through the ternary mapping (`FieldSource::Ternary`). Sheaf choice: grid cells
   along the side opposite B show steps; Origin's layout and levels are not measured.
 
+## 7l. Plot > Profile (T234, 2026-11-20, not measured)
+
+- **Image Profiles:** with a matrix window active, in the workbook and matrix Plot menus.
+- **Contour Profiles:** with a matrix window, or a graph whose contour or heat map shows a matrix
+  sheet, active. Graphs of XYZ columns are refused.
+- Both open a window: a horizontal cut at a row or a vertical cut at a column (1-based). OK writes a
+  new workbook, "Profile of MBookN at row k", with the cut's coordinates (the X of each column or
+  the Y of each row, named after the matrix's X or Y label) and its Z values. It also makes a line
+  graph of them. All of this is one undo step ("Profile"). A row or column past the edge is refused.
+- **Sheaf choice:** Origin's profiles are interactive (lines dragged on the graph, with live
+  profile panels); Sheaf makes a static cut.
+
 ## 8. What was not verified, and what is left
 
 - Not run in Origin: `mdim` on a matrix that holds data; shrink with missing values; `w2m` options `lr` on accepted

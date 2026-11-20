@@ -322,6 +322,12 @@ pub enum Action {
     ImportImage,
     /// File > New > Function Plot (T213): opens the function window for a graph made on OK.
     NewFunctionPlot,
+    /// Plot > Profile (T234): the profile window for matrix `book`, or for the matrix shown by the
+    /// contour of `graph`.
+    Profile {
+        book: Option<WindowId>,
+        graph: Option<WindowId>,
+    },
     /// Plot > Contour/Heat Map > Ternary Contour (T226).
     TernaryContour {
         a: sheaf_core::ColumnId,

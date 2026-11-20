@@ -235,6 +235,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T250](T250-export-folder.md) | Export Graphs: All in Active Folder and All in Active Folder (Recursive) | S | done 2026-11-20 (graphing 9.7b) |
 | [T251](T251-export-preview-tabs.md) | Export Graphs preview: Image and Graph tabs (the page with the exported area outlined) | S | done 2026-11-20 (graphing 9.7c) |
 | [T252](T252-step-center.md) | Step Horizontal Center (code 13) and Step Vertical Center line connections; two stale parity rows corrected | S | done 2026-11-20, not measured |
+| [T253](T253-anova-masks.md) | Bug: two-way, three-way and repeated-measures ANOVA counted masked cells and filtered rows | S | done 2026-11-20 |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |

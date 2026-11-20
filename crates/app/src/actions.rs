@@ -337,6 +337,13 @@ pub enum Action {
         graph: WindowId,
         op: crate::menus::GraphClip,
     },
+    /// The legend's right-click Copy as a free text label with its text and font (and Cut, which
+    /// also hides the legend, one undo step; T178).
+    CopyLegend {
+        graph: WindowId,
+        layer: usize,
+        cut: bool,
+    },
     /// A text label's right-click Copy (and Cut, which also deletes it, one undo step; T147).
     CopyLabel {
         graph: WindowId,

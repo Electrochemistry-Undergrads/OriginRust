@@ -276,3 +276,51 @@ fn automatic_legend_anchor_stays_fixed_as_content_and_geometry_change() {
     p.graph_mut(g).unwrap().page = Page::inches(15.0, 7.5);
     check_origin_anchor(&p, g);
 }
+
+/// The items and bounds of free label `k` of the first layer.
+fn label_items(s: &Scene, k: usize) -> (Vec<(f64, f64, String)>, usize, crate::Rect) {
+    let layer = &s.layers[0];
+    let obj = layer.objects.iter().find(|o| o.kind == ObjectKind::Label(k)).expect("the label is drawn");
+    let items = &layer.overlay[obj.items.clone()];
+    let texts = items
+        .iter()
+        .filter_map(|i| if let Item::Text(t) = i { Some((t.x, t.y, t.text.clone())) } else { None })
+        .collect();
+    let samples = items.iter().filter(|i| matches!(i, Item::Path { fill: None, .. })).count();
+    (texts, samples, obj.bounds)
+}
+
+#[test]
+fn a_free_label_draws_plot_symbols_and_names_like_the_legend_without_its_frame() {
+    use sheaf_core::graph::TextLabel;
+    let (mut p, g) = project(2);
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    let font = layer.legend.font.clone();
+    layer.labels.push(TextLabel::new(r"\l(2) %(2)".to_string() + "\nNote", 0.2, 0.3, font.clone()));
+    layer.labels.push(TextLabel::new("plain 50% text", 0.2, 0.7, font.clone()));
+    let mut turned = TextLabel::new(r"\l(1) %(1)", 0.6, 0.5, font);
+    turned.rotation_deg = 90.0;
+    layer.labels.push(turned);
+    let s = scene(&p, g);
+    let (texts, samples, bounds) = label_items(&s, 0);
+    let names: Vec<&str> = texts.iter().map(|t| t.2.as_str()).collect();
+    assert_eq!(names, ["Series 2", "Note"]);
+    assert_eq!(samples, 1, "the line sample of plot 2");
+    assert!(
+        !s.layers[0].overlay
+            [s.layers[0].objects.iter().find(|o| o.kind == ObjectKind::Label(0)).unwrap().items.clone()]
+        .iter()
+        .any(|i| matches!(i, Item::Rect { .. })),
+        "no frame or fill"
+    );
+    // The top of the first row sits half a font size above the anchor.
+    let f = crate::layout_geometry(&p, g).unwrap()[0].frame;
+    let anchor_y = f.y + 0.3 * f.h;
+    assert!(bounds.y >= anchor_y - 22.0 && bounds.y <= anchor_y, "{bounds:?} {anchor_y}");
+    assert!((bounds.x - (f.x + 0.2 * f.w)).abs() < 1.0, "the left edge at the anchor: {bounds:?}");
+    // Labels without plot references and turned labels keep the plain text path.
+    assert_eq!(label_items(&s, 1).0.iter().map(|t| t.2.as_str()).collect::<Vec<_>>(), ["plain 50% text"]);
+    let (turned_texts, turned_samples, _) = label_items(&s, 2);
+    assert_eq!((turned_texts.len(), turned_samples), (1, 0));
+    assert_eq!(turned_texts[0].2, r"\l(1) %(1)");
+}

@@ -826,8 +826,13 @@ Merge is None. Other controls and mutation/precedence rules were not measured.
 
 The stock **Set Data Style** submenu contains Rich Text, Wrap Text, Float and More...; there is
 no Default entry. More... opens that same selected-range Format Cells dialog. Sheaf enables More
-through its existing Format Cells command. Rich Text/Wrap Text/Float remain disabled, assigned to
-B5's worksheet text controls; they are not a Clear Formats operation. The earlier Default entry
+through its existing Format Cells command. Rich Text works since T208 (2026-11-20, not measured): a ticked
+switch that turns a cell-format property on or off for the selected cells (one undo step, "Set Data
+Style"; off by default, as measured); a cell with it on draws Origin's label markup (`\b()`, `\i()`,
+`\u()`, `\s()`, `\+()`, `\-()`, `\g()`, `\pN()`, `\f:Name()`, `\cN()`, ...) as styled text in its own font,
+size and colour on screen, while editing shows the typed text; print and image export still show the
+text as typed. Wrap Text/Float remain disabled (Wrap Text is on by default in Origin, so it would change
+every sheet), assigned to B5's worksheet text controls; they are not a Clear Formats operation. The earlier Default entry
 was a placeholder, not an Origin measurement. The [Origin 2016 training manual](https://blog.originlab.com/ftp/dist/Origin_2016_Intermediate_Training_Manual.pdf)
 also uses Set Data Style > Rich Text for report cells. Raw captures and control lists stay local in
 `re-workspace/scratch/t59-worksheet-dialog/`; delayed initial dialog captures and the misleadingly

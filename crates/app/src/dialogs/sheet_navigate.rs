@@ -43,6 +43,8 @@ pub enum NavAction {
     /// workbook.
     MoveToNewBook,
     DuplicateToNewBook,
+    /// Move to > a workbook (T191): the sheets go to the end of that workbook.
+    MoveToBook(WindowId),
     /// Exclude from Plotting dialogs (T184): set on every sheet, or cleared when all have it.
     ExcludeFromPlotting,
 }
@@ -92,11 +94,19 @@ pub struct SheetNavigateDialog {
     /// The sheets the Actions work on (T180); only `selected` when it does not hold it.
     pub picked: BTreeSet<usize>,
     sort: Option<(SortColumn, bool)>,
+    /// The project's other workbooks (id, name), for Move to (T191); refreshed each frame.
+    other_books: Vec<(WindowId, String)>,
 }
 
 impl SheetNavigateDialog {
     pub fn new(book: WindowId, active: usize) -> Self {
-        SheetNavigateDialog { book, selected: active, picked: BTreeSet::from([active]), sort: None }
+        SheetNavigateDialog {
+            book,
+            selected: active,
+            picked: BTreeSet::from([active]),
+            sort: None,
+            other_books: Vec::new(),
+        }
     }
 
     pub fn reordered(&mut self, order: &[usize]) {
@@ -140,6 +150,12 @@ impl SheetNavigateDialog {
         act(ui, "Move to End", true, NavAction::Move(SheetMove::End));
         ui.menu_button("Move to", |ui| {
             act(ui, "New Book", targets.len() < sheets, NavAction::MoveToNewBook);
+            if !self.other_books.is_empty() {
+                ui.separator();
+            }
+            for (id, name) in &self.other_books {
+                act(ui, name, targets.len() < sheets, NavAction::MoveToBook(*id));
+            }
         });
         act(ui, "Duplicate to New Book", true, NavAction::DuplicateToNewBook);
         ui.separator();
@@ -182,6 +198,7 @@ impl SheetNavigateDialog {
 
     pub fn show(&mut self, ctx: &egui::Context, project: &Project, can_reorder: bool) -> NavigateOutcome {
         let Some(book) = project.workbook(self.book) else { return NavigateOutcome::Closed };
+        self.other_books = project.workbooks().filter(|b| b.id != self.book).map(|b| (b.id, b.name.clone())).collect();
         let mut outcome = NavigateOutcome::Open;
         let mut open = true;
         egui::Window::new(format!("Navigate Worksheets - {}", book.name))

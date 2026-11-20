@@ -908,7 +908,11 @@ Measured in Origin 2016 by right-clicking a sheet tab (`tools/origin-ref/origin-
   - Exclude from Plotting dialogs (T184) marks the sheets (`Worksheet::exclude_from_plotting`), ticked
     when all are marked; again clears it. Plot Setup and Layer Contents then do not list the sheets'
     columns; plots already made stay. The `.opj` written here does not hold the mark (its save warns).
-  - Not done: Move to > Selected Book and Origin's Excel-export exclusion.
+  - Move to also lists the project's other workbooks (T191, Origin's Move to Selected Book): the
+    sheets go after that workbook's last sheet, the first of them active; a name the workbook already
+    has gets the next free number (`Sheet1` becomes `Sheet11`). Columns keep their identities, so
+    graphs follow; greyed when every sheet is selected ("Move sheets to book").
+  - Not done: Origin's Excel-export exclusion.
     [Origin Navigate Worksheets](https://docs.originlab.com/origin-help/nav-wks-dialog/)
 - Clicking a Navigate Worksheets header in Sheaf previews its ascending order. Click it again for
   descending order. Index refers to the workbook order before applying. Apply Reorder commits the

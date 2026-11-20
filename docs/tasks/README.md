@@ -153,6 +153,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T152](T152-legend-order.md) | Legend Bring to front/back, front/back of data (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured; left: legend Cut/Copy |
 | [T153](T153-title-order.md) | Axis title Bring to the front / Push to the back (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured |
 | [T154](T154-notes-window.md) | Notes windows: File > New > Notes, New Notes (B14 slice) | M | done 2026-11-19 (notes-window spec), not measured; left: Add Notes as Sheet, .opj |
+| [T210](T210-image-menu-2.md) | Image menu Levels, Subtract, Crop, Resize (B14 slice) | S | done 2026-11-20 (matrices 7i), not measured |
 | [T207](T207-image-menu.md) | Image menu on a matrix: adjustments, math, binary, rotate/flip, spatial filters (B14 slice) | M | done 2026-11-20 (matrices 7i), not measured |
 | [T204](T204-import-image.md) | File > Import > Image into a matrix book of gray levels (B14 slice) | S | done 2026-11-20 (matrices 7h), not measured |
 | [T201](T201-gray-scale-map.md) | Plot > Contour/Heat Map > Gray Scale Map (B14 slice) | S | done 2026-11-20 (matrices 7g), not measured |

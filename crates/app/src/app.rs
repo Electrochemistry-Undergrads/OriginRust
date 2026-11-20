@@ -5380,6 +5380,23 @@ impl SheafApp {
             I::ToBinary => ImageForm::ToBinary(mean),
             I::Rotate => ImageForm::Rotate(Rotation::Ccw90),
             I::Flip => ImageForm::Flip(FlipDirection::Horizontal),
+            I::Levels => {
+                let (lo, hi) = b.sheets.get(sheet).and_then(|s| s.z_range()).unwrap_or((0.0, 255.0));
+                ImageForm::Levels { input: (lo, hi), output: (0.0, 255.0) }
+            }
+            I::Crop => {
+                let (rows, cols) = b.sheets.get(sheet).map_or((1, 1), |s| (s.rows.max(1), s.cols.max(1)));
+                ImageForm::Crop { rows: (1, rows), cols: (1, cols) }
+            }
+            I::Resize => {
+                let (rows, cols) = b.sheets.get(sheet).map_or((1, 1), |s| (s.rows.max(1), s.cols.max(1)));
+                ImageForm::Resize { rows, cols }
+            }
+            I::Subtract => {
+                let choices: Vec<(WindowId, String)> =
+                    self.doc.project().matrix_books().filter(|m| m.id != id).map(|m| (m.id, m.name.clone())).collect();
+                ImageForm::Subtract { choices, pick: 0 }
+            }
             I::Smooth | I::Sharpen | I::EdgeDetection => {
                 let op = match cmd {
                     I::Smooth => ImageOp::Smooth,

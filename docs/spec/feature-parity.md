@@ -31,9 +31,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 51 | 197 | 13 | 261 |
+| All rows | 51 | 198 | 12 | 261 |
 | P0 | 32 | 71 | 0 | 103 |
-| P1 and P2 together | 19 | 126 | 13 | 158 |
+| P1 and P2 together | 19 | 127 | 12 | 158 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 63 are P2.
 

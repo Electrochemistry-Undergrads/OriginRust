@@ -39,7 +39,7 @@ fn the_2d_integrate_gadget_opens_on_a_heat_map_and_measures_the_cells_in_its_rec
     let layer = &project(&h).graph(g).unwrap().layers[0];
     let (cells, area) = sheaf_plot::field_cells(project(&h), layer).unwrap();
     assert_eq!((cells.len(), area), (16, 1.0));
-    let whole = crate::gadget::volume_in(&cells, area, (-1.0, 4.0), (-1.0, 4.0), false).unwrap();
+    let whole = crate::gadget::volume_in(&cells, area, (-1.0, 4.0), (-1.0, 4.0), false, false).unwrap();
     assert_eq!((whole.n, whole.volume, whole.max), (16, 36.0, 9.0));
 
     // T198: New Output adds a row to the results table, the second one below the first.

@@ -80,6 +80,21 @@ pub enum WindowKind {
     Matrix,
 }
 
+/// The Image menu's commands on the active matrix (T207, matrices spec 7i).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ImageCmd {
+    Brightness,
+    Contrast,
+    Gamma,
+    Math,
+    ToBinary,
+    Rotate,
+    Flip,
+    Smooth,
+    Sharpen,
+    EdgeDetection,
+}
+
 /// The Matrix menu's commands (T192 slice 3, matrices spec 7b).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MatrixCmd {
@@ -204,6 +219,8 @@ pub enum Cmd {
     ImportImage,
     /// The Matrix menu of a matrix window (T192 slice 3).
     Matrix(MatrixCmd),
+    /// The Image menu on the active matrix (T207).
+    Image(ImageCmd),
     /// Worksheet > Convert to Matrix > Direct (the selected columns, or the sheet) and XYZ Gridding
     /// (three selected columns X, Y, Z on a regular grid), T192 slice 4.
     ConvertToMatrix {
@@ -926,6 +943,7 @@ fn base(kind: WindowKind) -> Vec<Menu> {
             m("&View", view_menu(kind)),
             m("&Plot", vec![sub("Contour/&Heat Map", field_plot_items())]),
             m("&Matrix", matrix_menu()),
+            m("&Image", image_menu()),
             m(
                 "&Analysis",
                 vec![
@@ -1964,12 +1982,23 @@ fn statistics_menu() -> Vec<Entry> {
 }
 
 fn image_menu() -> Vec<Entry> {
+    use ImageCmd::*;
+    let i = |label: &str, c: ImageCmd| item(label, Cmd::Image(c));
     vec![
-        grey_sub("&Adjustments", &["Brightness...", "Contrast...", "Gamma...", "Levels..."]),
-        grey_sub("Arithmetic &Transform", &["Math...", "Subtract..."]),
-        grey_sub("&Conversion", &["To Binary...", "Color to Gray...", "RGB Split..."]),
-        grey_sub("&Geometric Transform", &["Crop...", "Resize...", "Rotate...", "Flip..."]),
-        grey_sub("&Spatial Filters", &["Smooth...", "Sharpen...", "Edge Detection..."]),
+        sub(
+            "&Adjustments",
+            vec![i("Brightness...", Brightness), i("Contrast...", Contrast), i("Gamma...", Gamma), grey("Levels...")],
+        ),
+        sub("Arithmetic &Transform", vec![i("Math...", Math), grey("Subtract...")]),
+        sub("&Conversion", vec![i("To Binary...", ToBinary), grey("Color to Gray..."), grey("RGB Split...")]),
+        sub(
+            "&Geometric Transform",
+            vec![grey("Crop..."), grey("Resize..."), i("Rotate...", Rotate), i("Flip...", Flip)],
+        ),
+        sub(
+            "&Spatial Filters",
+            vec![i("Smooth...", Smooth), i("Sharpen...", Sharpen), i("Edge Detection...", EdgeDetection)],
+        ),
     ]
 }
 
@@ -2096,7 +2125,7 @@ pub fn rise_time_gadget_menu() -> Vec<Entry> {
 }
 
 /// The 2D Integrate gadget's right-click menu (T198).
-pub fn integrate_2d_gadget_menu(circle: bool) -> Vec<Entry> {
+pub fn integrate_2d_gadget_menu(circle: bool, plane: bool) -> Vec<Entry> {
     let tick = |on: bool, name: &str| if on { format!("\u{2713} {name}") } else { name.to_string() };
     vec![
         sub(
@@ -2106,6 +2135,8 @@ pub fn integrate_2d_gadget_menu(circle: bool) -> Vec<Entry> {
                 item(&tick(circle, "Circle"), Cmd::Gadget(GadgetOp::SetRegion(true))),
             ],
         ),
+        // T206: the base the volume is measured from.
+        item(if plane { "Base: Zero" } else { "Base: Plane Through Boundary" }, Cmd::Gadget(GadgetOp::ToggleBaseline)),
         item("New Output", Cmd::Gadget(GadgetOp::NewOutput)),
         sep(),
         keyed("Delete", plain_key(Key::Escape), Cmd::Gadget(GadgetOp::Close)),
@@ -3179,6 +3210,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             }
             Action::ConvertToMatrix { book, columns: c.selected.to_vec(), xyz: *xyz }
         }
+        Cmd::Image(cmd) => match (c.kind, c.active) {
+            (WindowKind::Matrix, Some(id)) => Action::ImageCmd { id, cmd: *cmd },
+            _ => return Err("Activate a matrix window first"),
+        },
         Cmd::Matrix(cmd) => match (c.kind, c.active) {
             (WindowKind::Matrix, Some(id)) => Action::MatrixCmd { id, cmd: *cmd },
             _ => return Err("Activate a matrix window first"),

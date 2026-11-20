@@ -135,6 +135,8 @@ pub enum Cmd {
     ObjectProperties,
     /// File > New > Notes (T154).
     NewNotes,
+    /// File > New > Matrix and the Standard toolbar's New Matrix (T179).
+    NewMatrix,
     /// The graph Edit menu's Cut, Copy, Paste and Clear on the selected object (T149).
     GraphClipboard(GraphClip),
     /// A drawn object's right-click Cut and Copy, and the page's Paste at a page point (T125).
@@ -765,6 +767,8 @@ pub struct MenuContext<'a> {
     pub layer_icons: bool,
     /// The active graph's Lock Position (the tick of Data > Lock Position, T186).
     pub lock_position: sheaf_core::graph::LockPosition,
+    /// The active sheet shows Page Break Preview Lines (the tick of the View menu's item, T185).
+    pub page_breaks: bool,
     /// The active graph's page switches of the layer icon menu (T183), for their ticks.
     pub activate_by_icon_only: bool,
     pub icon_double_click_plot_setup: bool,
@@ -936,7 +940,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                 vec![
                     keyed("&Project", ctrl(Key::N), Cmd::NewProject),
                     item("&Worksheet...", Cmd::NewWorkbook),
-                    grey("Matrix..."),
+                    item("Matrix...", Cmd::NewMatrix),
                     item("&Graph", Cmd::NewGraph),
                 ],
                 greys(&["Image"]),
@@ -1152,7 +1156,11 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
         WindowKind::Workbook => {
             v.push(sep());
             v.push(keyed("&Freeze/Unfreeze Panes", ctrl_shift(Key::F), Cmd::FreezePanes));
-            v.extend(greys(&["Actively Update Plots", "Page Break Preview Lines"]));
+            v.push(grey("Actively Update Plots"));
+            v.push(item(
+                "Page Break Preview Lines",
+                Cmd::Sheet(SheetOp::ToggleView(sheaf_core::sheet_view::ViewSwitch::PageBreaks)),
+            ));
         }
         WindowKind::Graph => {
             v.push(sep());
@@ -2754,7 +2762,7 @@ pub fn corner_menu(sheet: &sheaf_core::Worksheet) -> Vec<Entry> {
         switch(V::Sparklines),
         grey("Filter"),
         switch(V::Formula),
-        grey("Categories"),
+        switch(V::Categories),
         sep(),
         switch(V::RowLabels),
         sep(),
@@ -2763,7 +2771,7 @@ pub fn corner_menu(sheet: &sheaf_core::Worksheet) -> Vec<Entry> {
         sep(),
         switch(V::ColumnGrid),
         switch(V::RowGrid),
-        grey("Page Break Preview Lines"),
+        switch(V::PageBreaks),
     ]
 }
 
@@ -2963,6 +2971,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::CopyShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape, cut: false }
         }
         Cmd::NewNotes => Action::NewNotes,
+        Cmd::NewMatrix => Action::NewMatrix,
         Cmd::ObjectProperties => {
             let graph = c.graph.ok_or(NEED_GRAPH)?;
             c.graph_pick.ok_or(NEED_SELECTED_OBJECT)?;
@@ -3754,6 +3763,13 @@ fn show_entries(
                 {
                     tick(ui, &response);
                 }
+                if matches!(
+                    it.cmd,
+                    Some(Cmd::Sheet(SheetOp::ToggleView(sheaf_core::sheet_view::ViewSwitch::PageBreaks)))
+                ) && c.page_breaks
+                {
+                    tick(ui, &response);
+                }
                 if (matches!(it.cmd, Some(Cmd::ToggleActivateByIconOnly)) && c.activate_by_icon_only)
                     || (matches!(it.cmd, Some(Cmd::ToggleIconPlotSetup)) && c.icon_double_click_plot_setup)
                 {
@@ -4156,6 +4172,7 @@ mod tests {
             view_mode: Default::default(),
             layer_icons: true,
             lock_position: Default::default(),
+            page_breaks: false,
             activate_by_icon_only: false,
             icon_double_click_plot_setup: false,
             show_labels: true,

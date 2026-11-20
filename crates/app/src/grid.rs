@@ -23,6 +23,17 @@ struct CondCache {
 }
 
 /// Cell-format lookup index with what it was built for (see `sheaf_core::cellformat`).
+/// Where the printed pages of the sheet shown break (Page Break Preview Lines, T185), worked out once
+/// per document revision and sheet.
+struct BreakCache {
+    revision: u64,
+    sheet: usize,
+    breaks: std::sync::Arc<sheaf_core::sheet_print::PageBreaks>,
+}
+
+/// The colour of the dashed page break lines (Sheaf's choice; Origin's was not measured).
+const PAGE_BREAK: Color32 = Color32::from_rgb(40, 90, 200);
+
 struct FormatCache {
     revision: u64,
     sheet: usize,
@@ -157,6 +168,8 @@ pub struct BookUi {
     cond_cache: Option<CondCache>,
     /// Which cell-format ranges reach each column, built once per document revision and sheet.
     fmt_cache: Option<FormatCache>,
+    /// Page Break Preview Lines: where the printed pages break (T185).
+    break_cache: Option<BreakCache>,
     layout_cache: Option<LayoutCache>,
     /// Horizontal scroll position and the sizes it ranges over, from the last frame; the bar
     /// next to the sheet tabs draws and changes them.
@@ -183,6 +196,12 @@ pub struct BookUi {
 }
 
 impl BookUi {
+    /// The sheet rows after which Page Break Preview Lines draw a line (T185), once the sheet was shown.
+    #[cfg(test)]
+    pub fn page_break_rows(&self) -> Option<Vec<usize>> {
+        self.break_cache.as_ref().map(|c| c.breaks.rows.iter().copied().collect())
+    }
+
     /// The horizontal and vertical scroll positions of the last frame, for the tests.
     #[cfg(test)]
     pub fn scroll_offsets(&self) -> (f32, f32) {
@@ -458,6 +477,7 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         view_mode: Default::default(),
         layer_icons: true,
         lock_position: Default::default(),
+        page_breaks: false,
         activate_by_icon_only: false,
         icon_double_click_plot_setup: false,
         show_labels: true,
@@ -676,6 +696,7 @@ fn label_rows(sheet: &Worksheet) -> Vec<LabelRow> {
         (v.formula, LabelRow::Formula),
         (sheet.shows_view_switch(ViewSwitch::SamplingInterval), LabelRow::SamplingInterval),
         (v.sparklines, LabelRow::Sparklines),
+        (v.categories, LabelRow::Categories),
     ]
     .into_iter()
     .filter_map(|(shown, row)| shown.then_some(row))
@@ -694,6 +715,7 @@ pub fn label_kind(row: &LabelRow) -> sheaf_core::cellformat::LabelKind {
         LabelRow::Formula => LabelKind::Formula,
         LabelRow::SamplingInterval => LabelKind::SamplingInterval,
         LabelRow::Sparklines => LabelKind::Sparklines,
+        LabelRow::Categories => LabelKind::Categories,
         LabelRow::Param(name) => LabelKind::Param(name.clone()),
     }
 }
@@ -706,6 +728,7 @@ fn row_title(row: &LabelRow) -> String {
         LabelRow::Formula => "F(x)=".to_string(),
         LabelRow::SamplingInterval => ViewSwitch::SamplingInterval.name().into(),
         LabelRow::Sparklines => ViewSwitch::Sparklines.name().into(),
+        LabelRow::Categories => ViewSwitch::Categories.name().into(),
         LabelRow::Param(name) => name.clone(),
     }
 }
@@ -730,6 +753,7 @@ fn label_text(column: &Column, row: &LabelRow) -> String {
             text
         }),
         LabelRow::Sparklines => String::new(),
+        LabelRow::Categories => column.categories_text(),
         LabelRow::Param(name) => column.params.get(name).cloned().unwrap_or_default(),
     }
 }
@@ -798,6 +822,15 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
             sheet: sheet_index,
             index: std::sync::Arc::new(sheet.format_index()),
         });
+    }
+
+    // Page Break Preview Lines (T185): the breaks of the print layout, on the project's page setup.
+    if !sheet.view.page_breaks {
+        state.break_cache = None;
+    } else if !state.break_cache.as_ref().is_some_and(|c| c.revision == doc.revision() && c.sheet == sheet_index) {
+        let breaks = sheaf_plot::sheet_page_breaks(sheet, &doc.project().page_setup).unwrap_or_default();
+        state.break_cache =
+            Some(BreakCache { revision: doc.revision(), sheet: sheet_index, breaks: std::sync::Arc::new(breaks) });
     }
 
     // The strip of sheet tabs along the bottom edge, the grid above it.
@@ -1800,7 +1833,7 @@ fn label_cell(
             }
         }
     }
-    let read_only = matches!(row, LabelRow::SamplingInterval | LabelRow::Sparklines);
+    let read_only = matches!(row, LabelRow::SamplingInterval | LabelRow::Sparklines | LabelRow::Categories);
     let response = if read_only && !text.is_empty() { response.on_hover_text(text) } else { response };
     response.context_menu(|ui| {
         menus::show_context(ui, &menus::label_cell_menu(read_only), &book_ctx(book_id, state), actions)
@@ -1816,7 +1849,7 @@ pub fn label_text_full(column: &Column, row: &LabelRow) -> String {
 }
 
 fn start_editing_label(state: &mut BookUi, column: &Column, row: &LabelRow, replacement: Option<String>) {
-    if matches!(row, LabelRow::SamplingInterval | LabelRow::Sparklines) {
+    if matches!(row, LabelRow::SamplingInterval | LabelRow::Sparklines | LabelRow::Categories) {
         return;
     }
     let original = label_text_full(column, row);
@@ -2155,6 +2188,18 @@ fn body_cell(
     }
     if sheet.view.column_grid {
         ui.painter().vline(right, rect.y_range(), grid);
+    }
+    // Page Break Preview Lines (T185): dashed where a printed page ends.
+    if let Some(b) = &state.break_cache {
+        let dash = Stroke::new(1.5_f32, PAGE_BREAK);
+        if b.breaks.rows.contains(&r) {
+            let line = [Pos2::new(rect.left(), bottom), Pos2::new(rect.right(), bottom)];
+            ui.painter().extend(egui::Shape::dashed_line(&line, dash, 4.0, 3.0));
+        }
+        if b.breaks.columns.contains(&column.id) {
+            let line = [Pos2::new(right, rect.top()), Pos2::new(right, rect.bottom())];
+            ui.painter().extend(egui::Shape::dashed_line(&line, dash, 4.0, 3.0));
+        }
     }
     if look == Look::Anchor {
         ui.painter().rect_stroke(rect.shrink(0.5), 0.0, Stroke::new(1.5_f32, Color32::BLACK), egui::StrokeKind::Inside);

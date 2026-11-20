@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **131 greyed items: 103 in the menu bar, 2 on the toolbars, 26 in context menus.**
+original inventory baseline. This is not a new runtime audit. **126 greyed items: 101 in the menu bar, 1 on the toolbars, 24 in context menus.**
 
 ## How to read and keep this file
 
@@ -73,20 +73,20 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B3` | 3 |
 | `B4` | 0 |
 | `B5` | 12 |
-| `B6` | 18 |
+| `B6` | 15 |
 | `B7` | 0 |
 | `B8` | 0 |
 | `B9` | 2 |
 | `B11` | 0 |
 | `B12` | 1 |
 | `B13` | 2 |
-| `B14` | 42 |
+| `B14` | 40 |
 | `B15` | 1 |
 | `B16` | 15 |
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 12 items, backlog packages (`B`) 99, not planned (`N`) 20.
+Briefs (`T`) hold 12 items, backlog packages (`B`) 94, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -95,7 +95,7 @@ changes. The baseline labels remain open until implementation or a documented re
 ## Menu bar
 
 ### File
-- `B14` New: Matrix... · Image · Excel · Layout · Function Plot
+- `B14` New: Image · Excel · Layout · Function Plot
 - `T63` Open Excel...
 - `N` Add Word Bookmarks to Analysis Template... [Workbook]
 - `B14` Import: Image... · Binary 2D Array... [no window, Workbook]
@@ -111,7 +111,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `N` Menu
 - `B16` Command Window · Code Builder
 - `N` Quick Help · Smart Hint Log
-- `B6` Actively Update Plots · Page Break Preview Lines [Workbook]
+- `B6` Actively Update Plots [Workbook]
 - `T66` Show: Active Layer Indicator · Axis Layer Icons · Object Grid · Layer Grid · Frame · Master Items on Screen [Graph]
 - `T66` Show Data Info [Graph]
 
@@ -175,7 +175,7 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ## Toolbars
 
-- `B14` Standard: New Matrix · New Layout
+- `B14` Standard: New Layout
 
 ## Context menus
 
@@ -186,7 +186,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B5` Worksheet data cell > Set Data Style: Rich Text · Wrap Text · Float
 - `B6` Worksheet row number: Insert Graph...
 - `B6` Worksheet sheet tab: Add Graph as Sheet... · Add Notes as Sheet
-- `B6` Worksheet corner: Parameters · Filter · Categories · Page Break Preview Lines
+- `B6` Worksheet corner: Parameters · Filter
 - `T72` Graph axis > Copy Format: Dimensions
 - `T72` Graph axis > Paste Format To: Title Dimensions
 - `B16` Graph legend: Programming Control...

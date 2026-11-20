@@ -46,6 +46,7 @@ mod layers;
 mod legend_position;
 mod live;
 mod lollipop;
+mod matrix_window;
 mod multi_y;
 mod multipeak;
 mod new_graph;
@@ -3906,12 +3907,12 @@ fn greyed_toolbar_buttons_do_nothing_and_enabled_ones_follow_the_selection() {
     let mut h = start(vec![data_file("tb-grey")]);
     show_window(&mut h, "Book1 - sample.csv");
     let windows = project(&h).windows.len();
-    // New Matrix is a window Sheaf lacks: greyed, a click changes nothing.
-    assert!(bar_button!(h, "Standard", "New Matrix").accesskit_node().is_disabled());
-    bar_button!(h, "Standard", "New Matrix").click();
+    // New Layout is a window Sheaf lacks: greyed, a click changes nothing.
+    assert!(bar_button!(h, "Standard", "New Layout").accesskit_node().is_disabled());
+    bar_button!(h, "Standard", "New Layout").click();
     settle(&mut h);
     assert_eq!(project(&h).windows.len(), windows);
-    assert!(h.state().doc.undo_label().is_some_and(|l| !l.contains("Matrix")));
+    assert!(h.state().doc.undo_label().is_some_and(|l| !l.contains("Layout")));
     // Line needs a selected column.
     click_text(&mut h, "C(Y1)");
     assert!(!bar_button!(h, "2D Graphs", "Line").accesskit_node().is_disabled());

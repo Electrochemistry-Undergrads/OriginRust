@@ -68,6 +68,8 @@ pub enum LabelRow {
     SamplingInterval,
     /// The Sparklines row (T175): a small line of the column's values, read-only.
     Sparklines,
+    /// The Categories row (T187): the categories of a categorical column, read-only.
+    Categories,
     /// A user parameter row, by name.
     Param(String),
 }
@@ -302,6 +304,22 @@ pub enum Action {
     },
     /// File > New > Notes and the Standard toolbar's New Notes (T154).
     NewNotes,
+    /// File > New > Matrix and the Standard toolbar's New Matrix (T179): a matrix book with one
+    /// sheet of Origin's default size (32 x 32 missing values), one undo step.
+    NewMatrix,
+    /// A typed matrix cell (T179): `None` clears it (missing). One undo step.
+    SetMatrixCell {
+        id: WindowId,
+        sheet: usize,
+        row: usize,
+        col: usize,
+        value: Option<f64>,
+    },
+    /// A matrix book's sheet tab was clicked (view state, no undo step).
+    SetMatrixSheet {
+        id: WindowId,
+        sheet: usize,
+    },
     /// The text of a Notes window after editing: one undo step.
     SetNotesText {
         id: WindowId,

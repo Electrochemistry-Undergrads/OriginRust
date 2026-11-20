@@ -41,6 +41,7 @@ mod grid;
 mod live;
 #[cfg(target_os = "macos")]
 mod macprint;
+mod matrix_view;
 mod menus;
 mod mru;
 mod notes_view;

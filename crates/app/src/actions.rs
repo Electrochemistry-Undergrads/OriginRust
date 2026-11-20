@@ -362,6 +362,17 @@ pub enum Action {
         row: usize,
         graph: Option<WindowId>,
     },
+    /// A data cell's Insert Images from Files...: the file picker (T202).
+    PickCellImage {
+        column: ColumnId,
+        row: usize,
+    },
+    /// Put a PNG picture in a data cell or take it out (T202), one undo step.
+    SetCellImage {
+        column: ColumnId,
+        row: usize,
+        png: Option<std::sync::Arc<Vec<u8>>>,
+    },
     /// A data cell's Insert Sparklines...: the window that picks the data column (T200).
     PickCellSparkline {
         column: ColumnId,

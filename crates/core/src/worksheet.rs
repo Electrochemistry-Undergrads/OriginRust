@@ -79,6 +79,87 @@ pub struct Worksheet {
     /// Sparklines drawn in data cells (the cell menu's Insert Sparklines..., T200), at most one per cell.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cell_sparklines: Vec<CellSparkline>,
+    /// Pictures shown in data cells (the cell menu's Insert Images from Files..., T202), at most one per cell.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cell_images: Vec<CellImage>,
+}
+
+/// A picture in a data cell (T202): the PNG file's bytes, kept in the project (written as base64 text).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CellImage {
+    pub column: ColumnId,
+    pub row: usize,
+    #[serde(with = "base64_bytes")]
+    pub png: std::sync::Arc<Vec<u8>>,
+}
+
+/// Bytes as standard base64 text (RFC 4648, with padding), so that a picture stays inside `project.json`.
+mod base64_bytes {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    pub fn encode(bytes: &[u8]) -> String {
+        let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+        for chunk in bytes.chunks(3) {
+            let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+            let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+            for k in 0..4 {
+                if k <= chunk.len() {
+                    out.push(ALPHABET[((n >> (18 - 6 * k)) & 63) as usize] as char);
+                } else {
+                    out.push('=');
+                }
+            }
+        }
+        out
+    }
+
+    pub fn decode(text: &str) -> Option<Vec<u8>> {
+        let value = |c: u8| ALPHABET.iter().position(|&a| a == c).map(|v| v as u32);
+        let clean: Vec<u8> = text.bytes().filter(|c| !c.is_ascii_whitespace()).collect();
+        if !clean.len().is_multiple_of(4) {
+            return None;
+        }
+        let mut out = Vec::with_capacity(clean.len() / 4 * 3);
+        for quad in clean.chunks(4) {
+            let pad = quad.iter().rev().take_while(|&&c| c == b'=').count();
+            if pad > 2 {
+                return None;
+            }
+            let mut n = 0u32;
+            for &c in &quad[..4 - pad] {
+                n = (n << 6) | value(c)?;
+            }
+            n <<= 6 * pad as u32;
+            let bytes = [(n >> 16) as u8, (n >> 8) as u8, n as u8];
+            out.extend_from_slice(&bytes[..3 - pad]);
+        }
+        Some(out)
+    }
+
+    pub fn serialize<S: Serializer>(bytes: &std::sync::Arc<Vec<u8>>, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&encode(bytes))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<std::sync::Arc<Vec<u8>>, D::Error> {
+        let text = String::deserialize(d)?;
+        decode(&text).map(std::sync::Arc::new).ok_or_else(|| serde::de::Error::custom("bad base64 picture"))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        #[test]
+        fn round_trips_every_length() {
+            for n in 0..40u8 {
+                let bytes: Vec<u8> = (0..n).map(|i| i.wrapping_mul(37).wrapping_add(n)).collect();
+                assert_eq!(super::decode(&super::encode(&bytes)).unwrap(), bytes);
+            }
+            assert_eq!(super::encode(b"Man"), "TWFu");
+            assert_eq!(super::encode(b"Ma"), "TWE=");
+            assert!(super::decode("abc").is_none(), "not a multiple of four");
+        }
+    }
 }
 
 /// A sparkline in a data cell (T200): the cell draws the values of column `source` as a small line.
@@ -118,6 +199,20 @@ impl Worksheet {
             graph_sheet: None,
             cell_graphs: Vec::new(),
             cell_sparklines: Vec::new(),
+            cell_images: Vec::new(),
+        }
+    }
+
+    /// The picture shown in a data cell (T202).
+    pub fn cell_image(&self, column: ColumnId, row: usize) -> Option<&CellImage> {
+        self.cell_images.iter().find(|i| i.column == column && i.row == row)
+    }
+
+    /// Puts a PNG picture in a data cell, replacing the one there; `None` takes it out (T202).
+    pub fn set_cell_image(&mut self, column: ColumnId, row: usize, png: Option<std::sync::Arc<Vec<u8>>>) {
+        self.cell_images.retain(|i| !(i.column == column && i.row == row));
+        if let Some(png) = png {
+            self.cell_images.push(CellImage { column, row, png });
         }
     }
 
@@ -150,6 +245,14 @@ impl Worksheet {
     /// Follows new column ids (or drops the cell graphs of deleted columns); called by
     /// [`Worksheet::remap_note_columns`], which every column re-id and deletion goes through.
     pub(crate) fn remap_cell_graph_columns(&mut self, map: &dyn Fn(ColumnId) -> Option<ColumnId>) {
+        // Cell pictures (T202) follow their column.
+        self.cell_images.retain_mut(|i| match map(i.column) {
+            Some(c) => {
+                i.column = c;
+                true
+            }
+            None => false,
+        });
         // Cell sparklines (T200) follow their cell's column and their data column; either gone drops it.
         self.cell_sparklines.retain_mut(|s| match (map(s.column), map(s.source)) {
             (Some(c), Some(src)) => {
@@ -448,6 +551,19 @@ mod title_tests {
     }
 
     #[test]
+    fn a_cell_picture_round_trips_as_text_and_follows_its_column() {
+        let mut s = Worksheet::new("S");
+        let png = std::sync::Arc::new(vec![137u8, 80, 78, 71, 0, 255, 7]);
+        s.set_cell_image(ColumnId(1), 3, Some(png.clone()));
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(json.contains("\"png\":\"iVBORwD/Bw==\""), "{json}");
+        let back: Worksheet = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.cell_image(ColumnId(1), 3).map(|i| i.png.clone()), Some(png));
+        s.remap_note_columns(&|_| None);
+        assert!(s.cell_images.is_empty());
+    }
+
+    #[test]
     fn a_cell_sparkline_follows_both_its_columns() {
         let mut s = Worksheet::new("S");
         s.set_cell_sparkline(ColumnId(1), 0, Some(ColumnId(2)));
@@ -475,6 +591,20 @@ mod title_tests {
 }
 
 impl crate::project::Project {
+    /// Puts a PNG picture in the data cell of `column` at `row`, or takes it out with `None` (T202).
+    /// False when there is no such column.
+    pub fn set_cell_image(&mut self, column: ColumnId, row: usize, png: Option<std::sync::Arc<Vec<u8>>>) -> bool {
+        for w in &mut self.windows {
+            if let crate::project::Window::Workbook(b) = w
+                && let Some(s) = b.sheets.iter_mut().find(|s| s.column(column).is_some())
+            {
+                s.set_cell_image(column, row, png);
+                return true;
+            }
+        }
+        false
+    }
+
     /// Draws column `source`'s sparkline in the data cell of `column` at `row`, or takes it out with
     /// `None` (T200). False when there is no such column.
     pub fn set_cell_sparkline(&mut self, column: ColumnId, row: usize, source: Option<ColumnId>) -> bool {

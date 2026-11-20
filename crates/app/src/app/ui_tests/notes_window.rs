@@ -92,7 +92,7 @@ fn insert_graph_puts_a_picture_of_the_graph_in_the_cell() {
     let book = h.state().books.keys().next().copied().unwrap();
     let graph = project(&h).graphs().next().unwrap().id;
     let b = project(&h).workbook(book).unwrap().sheets[0].columns[1].id;
-    let menu = menus::cell_menu_for(false, (b, 0), false, false);
+    let menu = menus::cell_menu_for(false, (b, 0), false, false, false);
     assert!(menu.iter().any(|e| matches!(e, menus::Entry::Item(i)
         if i.label == "Insert Graph..." && i.cmd == Some(menus::Cmd::InsertCellGraph { column: b, row: 0 }))));
     assert!(!menu.iter().any(|e| matches!(e, menus::Entry::Item(i) if i.label == "Remove Graph")));
@@ -103,7 +103,7 @@ fn insert_graph_puts_a_picture_of_the_graph_in_the_cell() {
     settle(&mut h);
     assert_eq!(project(&h).workbook(book).unwrap().sheets[0].cell_graph(b, 0), Some(graph));
     assert_eq!(h.state().doc.undo_label(), Some("Insert Graph"));
-    let menu = menus::cell_menu_for(false, (b, 0), true, false);
+    let menu = menus::cell_menu_for(false, (b, 0), true, false, false);
     let remove = menu.iter().find_map(|e| match e {
         menus::Entry::Item(i) if i.label == "Remove Graph" => i.cmd.clone(),
         _ => None,
@@ -124,7 +124,7 @@ fn insert_sparklines_draws_a_columns_line_in_the_cell() {
         let s = &project(&h).workbook(book).unwrap().sheets[0];
         (s.columns[1].id, s.columns[2].id)
     };
-    let menu = menus::cell_menu_for(false, (b, 5), false, false);
+    let menu = menus::cell_menu_for(false, (b, 5), false, false, false);
     assert!(menu.iter().any(|e| matches!(e, menus::Entry::Item(i)
         if i.label == "Insert Sparklines..." && i.cmd == Some(menus::Cmd::InsertCellSparkline { column: b, row: 5 }))));
     let ctx = h.ctx.clone();
@@ -139,4 +139,37 @@ fn insert_sparklines_draws_a_columns_line_in_the_cell() {
     settle(&mut h);
     assert_eq!(project(&h).workbook(book).unwrap().sheets[0].cell_sparkline(b, 5), None);
     assert_eq!(h.state().doc.undo_label(), Some("Remove Sparkline"));
+}
+
+#[test]
+fn a_png_picture_in_a_cell_is_kept_in_the_project_and_removed_again() {
+    let mut h = start(vec![data_file("cell-image")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = h.state().books.keys().next().copied().unwrap();
+    let b = project(&h).workbook(book).unwrap().sheets[0].columns[1].id;
+    let menu = menus::cell_menu_for(false, (b, 1), false, false, false);
+    assert!(menu.iter().any(|e| matches!(e, menus::Entry::Item(i)
+        if i.label == "Insert Images from Files..." && i.cmd == Some(menus::Cmd::InsertCellImage { column: b, row: 1 }))));
+    // A 2 x 1 PNG made here (the file picker is the system's).
+    let mut png = Vec::new();
+    image::RgbaImage::from_raw(2, 1, vec![255, 0, 0, 255, 0, 0, 255, 255])
+        .unwrap()
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let ctx = h.ctx.clone();
+    let png = std::sync::Arc::new(png);
+    h.state_mut().apply(Action::SetCellImage { column: b, row: 1, png: Some(png.clone()) }, &ctx);
+    settle(&mut h);
+    let held = project(&h).workbook(book).unwrap().sheets[0].cell_image(b, 1).map(|i| i.png.clone());
+    assert_eq!(held, Some(png));
+    assert_eq!(h.state().doc.undo_label(), Some("Insert Image"));
+    let menu = menus::cell_menu_for(false, (b, 1), false, false, true);
+    let remove = menu.iter().find_map(|e| match e {
+        menus::Entry::Item(i) if i.label == "Remove Image" => i.cmd.clone(),
+        _ => None,
+    });
+    let action = menus::resolve(&remove.expect("Remove Image"), &h.state().menu_context()).unwrap();
+    h.state_mut().apply(action, &ctx);
+    settle(&mut h);
+    assert!(project(&h).workbook(book).unwrap().sheets[0].cell_image(b, 1).is_none());
 }

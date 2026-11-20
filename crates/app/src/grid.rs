@@ -120,6 +120,8 @@ pub struct BookUi {
     /// While a Notes sheet's text is edited (T188): the sheet, the text when editing began and the
     /// text typed.
     notes_edit: Option<(usize, String, String)>,
+    /// Textures of the pictures in cells (T202), by cell, with the address of the bytes they show.
+    cell_image_pictures: std::collections::HashMap<(ColumnId, usize), (usize, egui::TextureHandle)>,
     /// Pictures of the graphs shown in cells (T194): the document revision each was drawn at.
     cell_graph_pictures: std::collections::HashMap<WindowId, (u64, egui::TextureHandle)>,
     /// The graph views of the graph sheets (T190), by sheet index.
@@ -904,6 +906,22 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
             let image = egui::ColorImage::from_rgba_unmultiplied([r.width as usize, r.height as usize], &r.rgba);
             let tex = ui.ctx().load_texture(format!("cell_graph_{}", cg.graph.0), image, egui::TextureOptions::LINEAR);
             state.cell_graph_pictures.insert(cg.graph, (doc.revision(), tex));
+        }
+    }
+
+    // Pictures in cells (T202): decoded once per picture.
+    for ci in &sheet.cell_images {
+        let key = std::sync::Arc::as_ptr(&ci.png) as usize;
+        if state.cell_image_pictures.get(&(ci.column, ci.row)).is_some_and(|(k, _)| *k == key) {
+            continue;
+        }
+        if let Ok(img) = image::load_from_memory_with_format(&ci.png, image::ImageFormat::Png) {
+            let rgba = img.to_rgba8();
+            let size = [rgba.width() as usize, rgba.height() as usize];
+            let image = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+            let name = format!("cell_image_{}_{}", ci.column.0, ci.row);
+            let tex = ui.ctx().load_texture(name, image, egui::TextureOptions::LINEAR);
+            state.cell_image_pictures.insert((ci.column, ci.row), (key, tex));
         }
     }
 
@@ -2347,6 +2365,16 @@ fn body_cell(
         ui.painter().rect_filled(room, 0.0, Color32::WHITE);
         ui.painter().image(tex.id(), shown, egui::Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
     }
+    // A picture in the cell (T202), fitted into it.
+    let cell_image = sheet.cell_image(column.id, r).is_some();
+    if let Some((_, tex)) = state.cell_image_pictures.get(&(column.id, r)).filter(|_| cell_image) {
+        let size = tex.size_vec2();
+        let room = rect.shrink(1.0);
+        let k = (room.width() / size.x).min(room.height() / size.y);
+        let shown = egui::Rect::from_center_size(room.center(), size * k);
+        ui.painter().rect_filled(room, 0.0, Color32::WHITE);
+        ui.painter().image(tex.id(), shown, egui::Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+    }
     // A sparkline in the cell (T200): its data column's values as a small line over the cell.
     let cell_sparkline = sheet.cell_sparkline(column.id, r);
     if let Some(values) = cell_sparkline.and_then(|src| sheet.column(src)).and_then(|c| c.numeric()) {
@@ -2375,8 +2403,13 @@ fn body_cell(
     }
     response.context_menu(|ui| {
         let before = actions.len();
-        let menu =
-            menus::cell_menu_for(noted.is_some(), (column.id, r), cell_graph.is_some(), cell_sparkline.is_some());
+        let menu = menus::cell_menu_for(
+            noted.is_some(),
+            (column.id, r),
+            cell_graph.is_some(),
+            cell_sparkline.is_some(),
+            cell_image,
+        );
         menus::show_context(ui, &menu, &book_ctx(book_id, state), actions);
         // A note belongs to the right-clicked cell even inside a larger selection.
         if actions[before..].iter().any(|a| matches!(a, Action::NoteDialog(_) | Action::DeleteNote(_))) {

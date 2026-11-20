@@ -280,6 +280,32 @@ each matrix as not written).
   random/sparse gridding methods are not built.
 - Each conversion is one undo step ("Convert to Matrix"). Extract stays grey.
 
+## 7d. Analysis > Mathematics > Inverse (T193, 2026-11-20, from Origin's `minverse` documentation, not measured)
+
+- The matrix window's Analysis > Mathematics > Inverse..., and the same item in the workbook and
+  graph Analysis menus, invert the active square matrix sheet. The item is disabled unless a matrix
+  window is active. The inverse goes to a new matrix book named "Inverse of MBookN", which keeps the
+  sheet's ranges and labels. It is one undo step ("Matrix Inverse").
+- The method is Gauss-Jordan elimination with partial pivoting. It refuses a matrix that is not
+  square, that has a missing value, or that is singular (a pivot below 1e-12 of the largest cell),
+  and says why on the status bar. Sheaf opens no options window: `minverse` has only its input and
+  output.
+
+## 7e. Analysis > Signal Processing > FFT > 2D FFT and 2D IFFT (T196, 2026-11-20, not measured)
+
+- **Where:** the matrix window's Analysis > Signal Processing > FFT and the workbook and graph
+  Analysis menus. The items work on the active matrix window and are disabled otherwise. Each run
+  makes a new matrix book ("2D FFT of MBookN" / "2D IFFT of MBookN") as one undo step.
+- **2D FFT:** transforms the active sheet's values into four sheets: Real, Imaginary, Amplitude
+  (|F|) and Phase (atan2, in radians).
+- **2D IFFT:** uses the book's sheets named Real and Imaginary when it has both, of one size, so a
+  2D FFT book transforms back. Otherwise it uses the active sheet as real values. It writes Real and
+  Imaginary.
+- **Conventions:** numpy's `fft2`/`ifft2`. The forward transform is not normalized, and the inverse
+  divides by rows x cols, so IFFT(FFT(a)) = a. The output is not shifted: the zero frequency is the
+  first cell. Missing values are refused.
+- Origin's own `fft2` options (normalization, shift, amplitude units, windowing) are not measured.
+
 ## 8. What was not verified, and what is left
 
 - Not run in Origin: `mdim` on a matrix that holds data; shrink with missing values; `w2m` options `lr` on accepted

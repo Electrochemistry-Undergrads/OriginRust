@@ -106,6 +106,8 @@ impl AnalysisLink {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PlotLock {
     pub plot: usize,
+    /// The first such link, an index into `Project::analysis_links` (its lock menu acts on it, T195).
+    pub link: usize,
     pub mode: RecalcMode,
     pub pending: bool,
 }
@@ -115,14 +117,14 @@ impl Project {
     /// analysis link. Pending when a result column of such a link is not current.
     pub fn layer_analysis_lock(&self, layer: &crate::graph::Layer) -> Option<PlotLock> {
         layer.plots.iter().enumerate().filter(|(_, p)| p.visible).find_map(|(i, plot)| {
-            let links: Vec<&AnalysisLink> =
-                self.analysis_links.iter().filter(|l| l.columns.contains(&plot.y)).collect();
-            let first = links.first()?;
+            let links: Vec<(usize, &AnalysisLink)> =
+                self.analysis_links.iter().enumerate().filter(|(_, l)| l.columns.contains(&plot.y)).collect();
+            let &(link, first) = links.first()?;
             let pending = links
                 .iter()
-                .flat_map(|l| &l.outputs)
+                .flat_map(|(_, l)| &l.outputs)
                 .any(|id| self.column(*id).and_then(|c| c.analysis).is_some_and(|m| m.state != FormulaState::Current));
-            Some(PlotLock { plot: i, mode: first.mode, pending })
+            Some(PlotLock { plot: i, link, mode: first.mode, pending })
         })
     }
 
@@ -510,7 +512,7 @@ mod tests {
         p.analyze_linked(&smooth_request(y), &OutputTarget::NextToInput, RecalcMode::Manual).unwrap();
         assert_eq!(
             p.layer_analysis_lock(&layer(&p)),
-            Some(PlotLock { plot: 0, mode: RecalcMode::Manual, pending: false })
+            Some(PlotLock { plot: 0, link: 0, mode: RecalcMode::Manual, pending: false })
         );
         let before = p.clone();
         p.column_mut(y).unwrap().data = ColumnData::numeric(vec![9.0; 20]);

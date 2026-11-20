@@ -4438,6 +4438,18 @@ impl SheafApp {
                     }
                 }
             }
+            NavAction::MoveToBook(to) => {
+                match self.doc.edit("Move sheets to book", |p| p.move_sheets_to_book(book, &sheets, to)) {
+                    Ok(()) => {
+                        let name = self.doc.project().workbook(to).map(|w| w.name.clone()).unwrap_or_default();
+                        self.say(format!("Moved {} sheet(s) to {name}", sheets.len()));
+                    }
+                    Err(e) => {
+                        self.warn(e.to_string());
+                        return;
+                    }
+                }
+            }
             NavAction::ExcludeFromPlotting => {
                 let all = sheets.iter().all(|&s| b.sheets[s].exclude_from_plotting);
                 self.doc.apply("Exclude from plotting dialogs", |p| {
@@ -5181,6 +5193,22 @@ impl SheafApp {
             M::Rotate180 => MatrixOp::Rotate(Rotation::Half),
             M::FlipHorizontal => MatrixOp::Flip { direction: FlipDirection::Horizontal, coordinates: false },
             M::FlipVertical => MatrixOp::Flip { direction: FlipDirection::Vertical, coordinates: false },
+            M::Fft2 | M::Ifft2 => {
+                let inverse = cmd == M::Ifft2;
+                let label = if inverse { "2D IFFT" } else { "2D FFT" };
+                match self.doc.edit(label, |p| p.matrix_fft2(id, sheet, inverse)) {
+                    Ok(_) => self.say(format!("{label}: the result is in a new matrix book")),
+                    Err(e) => self.warn(e.to_string()),
+                }
+                return;
+            }
+            M::Inverse => {
+                match self.doc.edit("Matrix Inverse", |p| p.matrix_inverse(id, sheet)) {
+                    Ok(_) => self.say("Inverted the matrix into a new matrix book".to_string()),
+                    Err(e) => self.warn(e.to_string()),
+                }
+                return;
+            }
             M::ToWorksheet => {
                 use sheaf_core::matrix_convert::{LabelSource, M2wMethod, XyLayout};
                 let method = M2wMethod::Direct {

@@ -1,6 +1,6 @@
 # T179: Matrix books, heat maps, contour plots and `sheaf matrix` (B14, slice 1)
 
-**Status:** slices 1 and 2 done 2026-11-19 (Claude Windows "obj-align"). It ports the matrix branch of the
+**Status:** slices 1 to 3 done 2026-11-19 (Claude Windows "obj-align"). It ports the matrix branch of the
 offline session originrust-3a (`worktree-agent-a79f85b1afb5f0034`, commits 7994c3b3..8c21175b,
 2026-11-12, never merged) onto current main, with the original authorship kept. Its behaviour was
 measured on Origin 2016 (`docs/spec/matrices.md`, fixtures in `crates/core/tests/data/origin_matrix.json`).
@@ -28,9 +28,16 @@ measured on Origin 2016 (`docs/spec/matrices.md`, fixtures in `crates/core/tests
   editing on double click (one undo step) and sheet tabs. File > New > Matrix... and the Standard
   toolbar's New Matrix make a book. See matrices spec 7a. Test: `app/ui_tests/matrix_window.rs`.
 
+## Done in slice 3 (2026-11-19)
+
+- The matrix menu bar (`WindowKind::Matrix`) with the Matrix menu and Plot > Contour/Heat Map, and
+  the same three plot items in the workbook Plot menu for X, Y and Z columns. See matrices spec 7b.
+  The windows are in `dialogs/matrix_ops.rs`. Test:
+  `matrix_window::the_matrix_menu_transforms_sets_values_converts_and_plots_the_active_sheet`.
+
 ## Left (next slices)
 
-- The Matrix menu (Set Values, Set Dimensions, Transpose, Flip, Rotate, Expand, Shrink, Statistics),
-  X/Y coordinate headers, selection and copy, and Plot > Contour/Heat Map on a matrix window.
+- Matrix Statistics in the app, X/Y coordinate headers, selection and copy, Convert to Matrix in the
+  Worksheet menu, Gray Scale Map, and polar and ternary contours.
 - Convert to Matrix in the Worksheet menu, profiles, image windows and 2D FFT.
 - Writing matrices to `.opj`.

@@ -6334,6 +6334,10 @@ unregistered, see 36), so this follows Origin's documented behaviour.
 - **To measure:** Origin's window and its defaults, whether the curve follows the X axis range, and its
   line style.
 
+
+- **File > New > Function Plot (T213, not measured):** opens the same window for a graph that does
+  not exist yet. OK makes a new graph from the default template with the function's curve in it, as
+  one undo step ("New function plot"), and shows it. Cancel makes nothing.
 ## Analysis markers: graph Data > Analysis Markers (T135, 2026-11-18, **not measured**)
 
 Origin 2016's graph Data menu has Analysis Markers with Hide, Show Partial Ranges, Show All, then Tiny,

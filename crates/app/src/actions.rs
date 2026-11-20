@@ -316,6 +316,12 @@ pub enum Action {
     /// File > New > Matrix and the Standard toolbar's New Matrix (T192): a matrix book with one
     /// sheet of Origin's default size (32 x 32 missing values), one undo step.
     NewMatrix,
+    /// File > New > Layout and the Standard toolbar's New Layout (T237): an empty layout page.
+    NewLayout,
+    /// Layout > Add Graph... (T237): the window that adds a graph's picture to `layout`.
+    LayoutAddGraph {
+        layout: WindowId,
+    },
     /// File > Import > Binary 2D Array...: choose a file, then its options window (T199).
     ImportBinary2d,
     /// File > Import > Image...: choose a picture; it becomes a matrix book of gray levels (T204).

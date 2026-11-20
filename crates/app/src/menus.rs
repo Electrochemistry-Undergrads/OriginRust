@@ -78,6 +78,8 @@ pub enum WindowKind {
     Graph,
     /// A matrix window (T192).
     Matrix,
+    /// A layout page (T237).
+    Layout,
 }
 
 /// The Image menu's commands on the active matrix (T207, matrices spec 7i).
@@ -227,6 +229,10 @@ pub enum Cmd {
     NewNotes,
     /// File > New > Matrix and the Standard toolbar's New Matrix (T192).
     NewMatrix,
+    /// File > New > Layout and the Standard toolbar's New Layout (T237).
+    NewLayout,
+    /// Layout > Add Graph... on the active layout page (T237).
+    LayoutAddGraph,
     /// File > Import > Binary 2D Array... (T199).
     ImportBinary2d,
     /// File > Import > Image... into a matrix book (T204).
@@ -924,15 +930,22 @@ impl<'a> MenuContext<'a> {
 
 /// The menus of a bar, in order.
 pub fn bar(kind: WindowKind) -> &'static [Menu] {
-    static BARS: OnceLock<[Vec<Menu>; 4]> = OnceLock::new();
+    static BARS: OnceLock<[Vec<Menu>; 5]> = OnceLock::new();
     let bars = BARS.get_or_init(|| {
-        [build(WindowKind::None), build(WindowKind::Workbook), build(WindowKind::Graph), build(WindowKind::Matrix)]
+        [
+            build(WindowKind::None),
+            build(WindowKind::Workbook),
+            build(WindowKind::Graph),
+            build(WindowKind::Matrix),
+            build(WindowKind::Layout),
+        ]
     });
     &bars[match kind {
         WindowKind::None => 0,
         WindowKind::Workbook => 1,
         WindowKind::Graph => 2,
         WindowKind::Matrix => 3,
+        WindowKind::Layout => 4,
     }]
 }
 
@@ -969,6 +982,14 @@ fn base(kind: WindowKind) -> Vec<Menu> {
             m("&Image", image_menu()),
             m("&Tools", tools_menu()),
             m("F&ormat", format_menu(kind)),
+            m("&Window", window_menu(kind)),
+            m("&Help", help_menu()),
+        ],
+        Layout => vec![
+            m("&File", file_menu(kind)),
+            m("&View", view_menu(kind)),
+            m("&Layout", vec![item("Add &Graph...", Cmd::LayoutAddGraph)]),
+            m("&Tools", tools_menu()),
             m("&Window", window_menu(kind)),
             m("&Help", help_menu()),
         ],
@@ -1157,7 +1178,8 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                     "From Template",
                     vec![Entry::NewFromTemplates, sep(), item("More...", Cmd::NewFromTemplateFile)],
                 )],
-                greys(&["Excel", "Layout"]),
+                greys(&["Excel"]),
+                vec![item("Layout", Cmd::NewLayout)],
                 vec![item("Notes", Cmd::NewNotes)],
                 vec![item("Function Plot", Cmd::NewFunctionPlot)],
             ]
@@ -1406,7 +1428,7 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
             v.push(grey("Show Data Info"));
             v.push(keyed("Full Screen", ctrl_shift(Key::J), Cmd::FullScreen));
         }
-        WindowKind::None | WindowKind::Matrix => {}
+        WindowKind::None | WindowKind::Matrix | WindowKind::Layout => {}
     }
     v
 }
@@ -2317,7 +2339,7 @@ fn window_menu(kind: WindowKind) -> Vec<Entry> {
             ],
         )),
         WindowKind::Workbook => v.push(grey("Sp&lit")),
-        WindowKind::None | WindowKind::Matrix => {}
+        WindowKind::None | WindowKind::Matrix | WindowKind::Layout => {}
     }
     v.extend([
         sep(),
@@ -3269,6 +3291,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::NewNotes => Action::NewNotes,
         Cmd::NewMatrix => Action::NewMatrix,
+        Cmd::NewLayout => Action::NewLayout,
+        Cmd::LayoutAddGraph => match (c.kind, c.active) {
+            (WindowKind::Layout, Some(id)) => Action::LayoutAddGraph { layout: id },
+            _ => return Err("Activate a layout page first"),
+        },
         Cmd::ImportBinary2d => Action::ImportBinary2d,
         Cmd::ImportImage => Action::ImportImage,
         Cmd::NewFunctionPlot => Action::NewFunctionPlot,

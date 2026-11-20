@@ -43,6 +43,7 @@ mod label_frames;
 mod label_whiteout;
 mod layer_visibility;
 mod layers;
+mod layout_page;
 mod legend_position;
 mod live;
 mod lollipop;
@@ -3932,16 +3933,15 @@ fn ctrl_t_opens_the_toolbars_window() {
 }
 
 #[test]
-fn greyed_toolbar_buttons_do_nothing_and_enabled_ones_follow_the_selection() {
+fn new_layout_is_live_and_enabled_toolbar_buttons_follow_the_selection() {
     let mut h = start(vec![data_file("tb-grey")]);
     show_window(&mut h, "Book1 - sample.csv");
+    // New Layout (T237), the last greyed toolbar button, now makes a page.
+    assert!(!bar_button!(h, "Standard", "New Layout").accesskit_node().is_disabled());
     let windows = project(&h).windows.len();
-    // New Layout is a window Sheaf lacks: greyed, a click changes nothing.
-    assert!(bar_button!(h, "Standard", "New Layout").accesskit_node().is_disabled());
     bar_button!(h, "Standard", "New Layout").click();
     settle(&mut h);
-    assert_eq!(project(&h).windows.len(), windows);
-    assert!(h.state().doc.undo_label().is_some_and(|l| !l.contains("Layout")));
+    assert_eq!(project(&h).windows.len(), windows + 1, "New Layout makes a page");
     // Line needs a selected column.
     click_text(&mut h, "C(Y1)");
     assert!(!bar_button!(h, "2D Graphs", "Line").accesskit_node().is_disabled());

@@ -52,7 +52,8 @@ pub(super) fn three_way_anova(
     }
     let column = |id: ColumnId| sheet.column(id).ok_or(AnalysisError::NoSuchColumn(id));
     let (ca, cb, cc, cy) = (column(columns[0])?, column(columns[1])?, column(columns[2])?, column(columns[3])?);
-    let ys = cy.numeric().ok_or_else(|| AnalysisError::NotNumeric(cy.short_name.clone()))?;
+    // Masked cells and rows the worksheet filter hides are missing values (T253).
+    let ys = sheet.values_of(cy).ok_or_else(|| AnalysisError::NotNumeric(cy.short_name.clone()))?;
     let len = ca.data.len().max(cb.data.len()).max(cc.data.len()).max(ys.len());
     if len == 0 {
         return Err(AnalysisError::Empty(cy.short_name.clone()));
@@ -421,5 +422,21 @@ mod tests {
         let r = p.analyze(&request(&ids, spec)).unwrap();
         let t = r.table.as_ref().unwrap();
         assert_eq!(t.rows.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().len(), 4 + 3);
+    }
+
+    #[test]
+    fn masked_data_cells_are_left_out() {
+        // T253: as the other tools, a masked cell is a missing value.
+        let (mut p, ids) = project();
+        let table = |p: &mut Project| {
+            format!("{:?}", p.analyze(&request(&ids, ThreeWayAnovaSpec::default())).map(|r| r.table.map(|t| t.rows)))
+        };
+        let all = table(&mut p);
+        let mut gone = p.clone();
+        gone.column_mut(ids[3]).unwrap().numeric_mut().unwrap()[0] = f64::NAN;
+        let want = table(&mut gone);
+        assert_ne!(all, want);
+        p.column_mut(ids[3]).unwrap().mask.insert(0);
+        assert_eq!(table(&mut p), want);
     }
 }

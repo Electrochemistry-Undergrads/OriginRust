@@ -1058,9 +1058,11 @@ pub(super) fn two_way_anova(
         ));
     }
     let column = |id: ColumnId| sheet.column(id).ok_or(AnalysisError::NoSuchColumn(id));
-    fn numeric(c: &Column) -> Result<&[f64], AnalysisError> {
-        c.numeric().ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))
+    // Masked cells and rows the worksheet filter hides are missing values, as for the other tools (T253).
+    fn values<'a>(sheet: &Worksheet, c: &'a Column) -> Result<std::borrow::Cow<'a, [f64]>, AnalysisError> {
+        sheet.values_of(c).ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))
     }
+    let numeric = |c| values(sheet, c);
     let row_limits = |len: usize, short: &str| -> Result<(usize, usize), AnalysisError> {
         match rows {
             RowRange::All => Ok((0, len.saturating_sub(1))),
@@ -2290,6 +2292,27 @@ mod tests {
         assert!(r.notes.iter().any(|n| n.contains("type III")), "{:?}", r.notes);
         // One undo step per run is the app's job (Document::edit); here the sheet is new and the input untouched.
         assert_eq!(p.workbook(r.book).unwrap().sheets[0].columns.len(), 3);
+    }
+
+    #[test]
+    fn the_two_way_anova_leaves_out_masked_cells_and_filtered_rows() {
+        // T253: a masked data cell, or a row the worksheet filter hides, counts as missing.
+        let (mut p, ids) = two_way_project();
+        let table = |p: &mut Project| {
+            let r = p.analyze(&request(&ids, Tool::TwoWayAnova(TwoWayAnovaSpec::default()))).unwrap();
+            format!("{:?}", r.table.unwrap().rows)
+        };
+        let all = table(&mut p);
+        let mut gone = p.clone();
+        gone.column_mut(ids[2]).unwrap().numeric_mut().unwrap()[0] = f64::NAN;
+        let want = table(&mut gone);
+        assert_ne!(all, want);
+        let mut masked = p.clone();
+        masked.column_mut(ids[2]).unwrap().mask.insert(0);
+        assert_eq!(table(&mut masked), want, "a masked cell is left out");
+        let book = p.workbooks().next().unwrap().id;
+        p.set_row_filter(book, 0, "i > 1").unwrap();
+        assert_eq!(table(&mut p), want, "a filtered row is left out");
     }
 
     #[test]

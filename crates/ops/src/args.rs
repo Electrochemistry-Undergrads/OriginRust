@@ -49,6 +49,42 @@ pub enum Command {
     /// Matrices: make one, set its values by a formula, transpose, flip, rotate, expand or shrink
     /// it, convert between worksheets and matrices, and plot heat maps and contour plots (T192).
     Matrix(MatrixArgs),
+    /// Batch Processing: one workbook per data file from a saved workbook or analysis template (its
+    /// analysis runs again on each file's data), optionally a summary book that stacks one sheet of
+    /// every book; saves the project and/or writes the summary as delimited text.
+    Batch(BatchArgs),
+}
+
+/// `sheaf batch`: File > Batch Processing... without a window (T235; workbook-model 13p).
+#[derive(Args, Debug)]
+pub struct BatchArgs {
+    /// Data files; each becomes one workbook made from the template.
+    #[arg(required = true)]
+    pub files: Vec<PathBuf>,
+    /// The workbook or analysis template file (.sheafbooktemplate, saved by File > Save Template As...
+    /// or Save Workbook As Analysis Template... on a workbook).
+    #[arg(long, short = 't', value_name = "FILE")]
+    pub template: PathBuf,
+    /// Save the project with the books (and the summary) here: .sheaf, or .opj for Origin.
+    #[arg(long, short = 'o', value_name = "FILE")]
+    pub output: Option<PathBuf>,
+    /// Add to the existing project at --output instead of starting a new one.
+    #[arg(long, requires = "output")]
+    pub append: bool,
+    /// The template sheet whose rows from every file are stacked in a new summary book.
+    #[arg(long, value_name = "SHEET")]
+    pub summary: Option<String>,
+    /// The name of the summary's first column, which holds each row's file name.
+    #[arg(long, value_name = "NAME", default_value = "Dataset", requires = "summary")]
+    pub identifier: String,
+    /// Delete the books made from the files once the summary holds their rows.
+    #[arg(long, requires = "summary")]
+    pub delete_books: bool,
+    /// Write the summary sheet as delimited text (CSV, or TSV/TXT by the extension).
+    #[arg(long, value_name = "FILE", requires = "summary")]
+    pub summary_csv: Option<PathBuf>,
+    #[command(flatten)]
+    pub read: ReadOptions,
 }
 
 /// `sheaf merge-graphs`: Graph > Merge Graph Windows without a window (graphing spec 15.11).

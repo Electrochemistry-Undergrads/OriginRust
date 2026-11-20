@@ -1324,8 +1324,13 @@ window is its own, **unmeasured**:
   cells kept. With Delete Intermediate Books the books made are deleted with their analysis runs once
   the summary is made. All of it is the one undo step; the summary comes to the front and the status
   line names it.
+- Without a window (T235): `sheaf batch FILES... -t TEMPLATE.sheafbooktemplate [-o project]
+  [--append] [--summary SHEET [--identifier NAME] [--delete-books] [--summary-csv FILE]]` does the same
+  run (`Project::batch_process`, shared with the window), reading the files with the usual read
+  options; an unreadable file is skipped with a warning, a summary sheet the template lacks is an
+  error before anything is written.
 - Not done: import filters saved in the template, the graph-window variant that runs a graph template,
-  Origin's own summary layout and identifier choices, Minimize/Hide for intermediate books.
+  Origin's own summary layout and identifier choices, Minimize/Hide for intermediate books, MCP access.
 - Tests: `crates/core/src/book_template.rs`, `crates/app/src/app/ui_tests/user_templates.rs`.
 
 ## 14. Suggested Rust data model (P0)

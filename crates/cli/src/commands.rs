@@ -29,6 +29,7 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::CompareDatasets(a) => crate::fit_datasets::compare_datasets(a),
         Command::MergeGraphs(a) => crate::merge::merge_graphs(a),
         Command::Matrix(a) => crate::matrix::matrix(a),
+        Command::Batch(a) => crate::batch::batch(a),
     }
 }
 

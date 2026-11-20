@@ -5031,28 +5031,13 @@ impl SheafApp {
         if read.is_empty() {
             return Err(format!("No file could be read. {}", failed.join("; ")));
         }
-        let (made, summary_book) = self.doc.apply("Batch processing", |p| {
-            let made: Vec<_> = read
-                .iter()
-                .map(|(title, book)| p.new_workbook_from_template_with_data(&template, book, title))
-                .collect();
-            let Some(s) = summary else { return (made, None) };
-            let books: Vec<(WindowId, String)> =
-                made.iter().zip(&read).map(|(m, (title, _))| (m.book, title.clone())).collect();
-            let summary_book = p.batch_summary(&books, &s.sheet, &s.identifier);
-            if summary_book.is_some() && s.delete_books {
-                for m in &made {
-                    let columns: Vec<ColumnId> = p
-                        .workbook(m.book)
-                        .map(|b| b.sheets.iter().flat_map(|s| s.columns.iter().map(|c| c.id)).collect())
-                        .unwrap_or_default();
-                    p.analysis_links.retain(|l| !l.columns.iter().chain(&l.outputs).any(|c| columns.contains(c)));
-                    delete_columns(p, &columns);
-                    p.remove_window(m.book);
-                }
-            }
-            (made, summary_book)
+        let request = summary.map(|s| sheaf_core::BatchSummaryRequest {
+            sheet: s.sheet.clone(),
+            identifier: s.identifier.clone(),
+            delete_books: s.delete_books,
         });
+        let run = self.doc.apply("Batch processing", |p| p.batch_process(&template, &read, request.as_ref()));
+        let (made, summary_book) = (run.books, run.summary);
         if let Some(book) = summary_book.or(made.last().map(|m| m.book)) {
             self.focus(book);
         }

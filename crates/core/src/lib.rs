@@ -84,7 +84,7 @@ pub mod without_data;
 pub mod worksheet;
 pub mod zoom;
 
-pub use book_template::BookTemplate;
+pub use book_template::{BatchBook, BatchRun, BatchSummaryRequest, BookTemplate};
 pub use clipboard::{CopyOptions, PasteReport};
 pub use color::Color;
 pub use column::{Column, ColumnData, Designation, FormulaState, RecalcMode};

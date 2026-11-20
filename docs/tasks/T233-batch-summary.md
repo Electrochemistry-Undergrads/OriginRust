@@ -21,4 +21,4 @@ same undo step; the books made can be deleted once the summary holds their rows.
 
 - Measure Origin's dialog: its summary layout (one row per file or every row), the identifier choices
   (file name, path, a column of the file), Origin's Minimize and Hide choices for intermediate books.
-- Summaries of several sheets, a summary of report sheets, CLI and MCP access.
+- Summaries of several sheets, a summary of report sheets, MCP access (the CLI: `sheaf batch`, T235).

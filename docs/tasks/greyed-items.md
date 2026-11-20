@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **121 greyed items: 97 in the menu bar, 1 on the toolbars, 23 in context menus.**
+original inventory baseline. This is not a new runtime audit. **118 greyed items: 95 in the menu bar, 1 on the toolbars, 22 in context menus.**
 
 ## How to read and keep this file
 
@@ -73,20 +73,20 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B3` | 3 |
 | `B4` | 0 |
 | `B5` | 12 |
-| `B6` | 14 |
+| `B6` | 13 |
 | `B7` | 0 |
 | `B8` | 0 |
 | `B9` | 1 |
 | `B11` | 0 |
 | `B12` | 1 |
 | `B13` | 2 |
-| `B14` | 37 |
+| `B14` | 35 |
 | `B15` | 1 |
 | `B16` | 15 |
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 12 items, backlog packages (`B`) 89, not planned (`N`) 20.
+Briefs (`T`) hold 12 items, backlog packages (`B`) 86, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -122,7 +122,7 @@ changes. The baseline labels remain open until implementation or a documented re
 ### Column
 
 ### Worksheet
-- `B14` Convert to Matrix: Direct · XYZ Gridding · Extract
+- `B14` Convert to Matrix: Extract
 - `B16` Worksheet Script...
 
 ### Analysis
@@ -185,7 +185,6 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B6` Worksheet data cell > Insert Arrow: Arrow · Double Arrow
 - `B5` Worksheet data cell > Set Data Style: Rich Text · Wrap Text · Float
 - `B6` Worksheet row number: Insert Graph...
-- `B6` Worksheet sheet tab: Add Graph as Sheet...
 - `B6` Worksheet corner: Parameters · Filter
 - `T72` Graph axis > Copy Format: Dimensions
 - `T72` Graph axis > Paste Format To: Title Dimensions

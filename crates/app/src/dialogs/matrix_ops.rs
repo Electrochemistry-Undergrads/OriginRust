@@ -1,4 +1,4 @@
-//! The windows of the Matrix menu that ask for something (T179 slice 3, matrices spec 7b): Set Matrix
+//! The windows of the Matrix menu that ask for something (T192 slice 3, matrices spec 7b): Set Matrix
 //! Values..., Set Dimensions..., Expand... and Shrink.... OK applies the operation to the active sheet
 //! as one undo step. The window stays open with the problem shown when the operation is refused.
 

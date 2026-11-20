@@ -95,6 +95,8 @@ pub enum SheetOp {
     RenameDialog,
     /// Add Notes as Sheet: a Notes sheet after the last sheet (T188).
     AddNotes,
+    /// Add Graph as Sheet...: the window that picks the graph (T190).
+    AddGraph,
 }
 
 /// An edit of one object of a graph, from the graph window (Origin's right-click menus).
@@ -306,10 +308,10 @@ pub enum Action {
     },
     /// File > New > Notes and the Standard toolbar's New Notes (T154).
     NewNotes,
-    /// File > New > Matrix and the Standard toolbar's New Matrix (T179): a matrix book with one
+    /// File > New > Matrix and the Standard toolbar's New Matrix (T192): a matrix book with one
     /// sheet of Origin's default size (32 x 32 missing values), one undo step.
     NewMatrix,
-    /// A typed matrix cell (T179): `None` clears it (missing). One undo step.
+    /// A typed matrix cell (T192): `None` clears it (missing). One undo step.
     SetMatrixCell {
         id: WindowId,
         sheet: usize,
@@ -317,12 +319,19 @@ pub enum Action {
         col: usize,
         value: Option<f64>,
     },
-    /// A Matrix menu command on the active sheet of matrix book `id` (T179 slice 3).
+    /// Worksheet > Convert to Matrix (T192 slice 4): Direct converts `columns` (all of the active
+    /// sheet when empty); XYZ Gridding takes the three columns as X, Y and Z. One undo step.
+    ConvertToMatrix {
+        book: WindowId,
+        columns: Vec<sheaf_core::ColumnId>,
+        xyz: bool,
+    },
+    /// A Matrix menu command on the active sheet of matrix book `id` (T192 slice 3).
     MatrixCmd {
         id: WindowId,
         cmd: crate::menus::MatrixCmd,
     },
-    /// A heat map or contour graph of a matrix sheet (its active one) or of XYZ columns (T179).
+    /// A heat map or contour graph of a matrix sheet (its active one) or of XYZ columns (T192).
     PlotField {
         template: sheaf_core::template::FieldTemplate,
         matrix: Option<WindowId>,
@@ -337,6 +346,11 @@ pub enum Action {
     SetNotesText {
         id: WindowId,
         text: String,
+    },
+    /// Add Graph as Sheet (T190): a sheet of `book` that shows `graph`, one undo step.
+    AddGraphSheet {
+        book: WindowId,
+        graph: WindowId,
     },
     /// The text of a Notes sheet after editing (T188): one undo step.
     SetNotesSheetText {

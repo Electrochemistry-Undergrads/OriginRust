@@ -76,11 +76,11 @@ pub enum WindowKind {
     None,
     Workbook,
     Graph,
-    /// A matrix window (T179).
+    /// A matrix window (T192).
     Matrix,
 }
 
-/// The Matrix menu's commands (T179 slice 3, matrices spec 7b).
+/// The Matrix menu's commands (T192 slice 3, matrices spec 7b).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MatrixCmd {
     SetValues,
@@ -153,12 +153,17 @@ pub enum Cmd {
     ObjectProperties,
     /// File > New > Notes (T154).
     NewNotes,
-    /// File > New > Matrix and the Standard toolbar's New Matrix (T179).
+    /// File > New > Matrix and the Standard toolbar's New Matrix (T192).
     NewMatrix,
-    /// The Matrix menu of a matrix window (T179 slice 3).
+    /// The Matrix menu of a matrix window (T192 slice 3).
     Matrix(MatrixCmd),
+    /// Worksheet > Convert to Matrix > Direct (the selected columns, or the sheet) and XYZ Gridding
+    /// (three selected columns X, Y, Z on a regular grid), T192 slice 4.
+    ConvertToMatrix {
+        xyz: bool,
+    },
     /// Plot > Contour/Heat Map > Color Fill, B/W Lines + Labels, Heat Map: of the active matrix, or of
-    /// three selected worksheet columns X, Y and Z (T179).
+    /// three selected worksheet columns X, Y and Z (T192).
     PlotField(sheaf_core::template::FieldTemplate),
     /// The graph Edit menu's Cut, Copy, Paste and Clear on the selected object (T149).
     GraphClipboard(GraphClip),
@@ -895,7 +900,7 @@ fn base(kind: WindowKind) -> Vec<Menu> {
 }
 
 /// The heat map and contour items of Plot > Contour/Heat Map: from the active matrix window, or
-/// from three selected worksheet columns X, Y and Z (T179).
+/// from three selected worksheet columns X, Y and Z (T192).
 fn field_plot_items() -> Vec<Entry> {
     use sheaf_core::template::FieldTemplate;
     vec![
@@ -905,7 +910,7 @@ fn field_plot_items() -> Vec<Entry> {
     ]
 }
 
-/// The Matrix menu of a matrix window (T179 slice 3).
+/// The Matrix menu of a matrix window (T192 slice 3).
 fn matrix_menu() -> Vec<Entry> {
     use MatrixCmd::*;
     vec![
@@ -1675,7 +1680,14 @@ fn worksheet_menu() -> Vec<Entry> {
         item("Transpose...", Cmd::Reshape(ReshapeKind::Transpose)),
         item("Stack Columns...", Cmd::Reshape(ReshapeKind::Stack)),
         item("Unstack Columns...", Cmd::Reshape(ReshapeKind::Unstack)),
-        grey_sub("Convert to Matrix", &["Direct", "XYZ Gridding", "Extract"]),
+        sub(
+            "Convert to Matrix",
+            vec![
+                item("Direct", Cmd::ConvertToMatrix { xyz: false }),
+                item("XYZ Gridding", Cmd::ConvertToMatrix { xyz: true }),
+                grey("Extract"),
+            ],
+        ),
         sep(),
         grey("Worksheet Script..."),
         // Sheaf's "keep only the rows matching a condition" is Origin's worksheet query.
@@ -2360,7 +2372,7 @@ pub fn sheet_tab_menu(sheet: &sheaf_core::Worksheet) -> Vec<Entry> {
         item("Insert", Cmd::Sheet(SheetOp::Insert)),
         item("Delete", Cmd::Sheet(SheetOp::Delete)),
         item("Add", Cmd::Sheet(SheetOp::Add)),
-        grey("Add Graph as Sheet..."),
+        item("Add Graph as Sheet...", Cmd::Sheet(SheetOp::AddGraph)),
         item("Add Notes as Sheet", Cmd::Sheet(SheetOp::AddNotes)),
         sep(),
         item("Duplicate Without Data", Cmd::Sheet(SheetOp::DuplicateWithoutData)),
@@ -3046,6 +3058,13 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::NewNotes => Action::NewNotes,
         Cmd::NewMatrix => Action::NewMatrix,
+        Cmd::ConvertToMatrix { xyz } => {
+            let book = c.book.ok_or(NEED_BOOK)?;
+            if *xyz && c.selected.len() != 3 {
+                return Err("Select the X, Y and Z columns (three columns) first");
+            }
+            Action::ConvertToMatrix { book, columns: c.selected.to_vec(), xyz: *xyz }
+        }
         Cmd::Matrix(cmd) => match (c.kind, c.active) {
             (WindowKind::Matrix, Some(id)) => Action::MatrixCmd { id, cmd: *cmd },
             _ => return Err("Activate a matrix window first"),

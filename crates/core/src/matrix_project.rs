@@ -191,6 +191,14 @@ impl Project {
         id
     }
 
+    /// Analysis > Mathematics > Inverse (T193): the inverse of a square matrix sheet as a new matrix
+    /// book, whose long name says what it is. Returns the new book's id.
+    pub fn matrix_inverse(&mut self, book: WindowId, sheet: usize) -> Result<WindowId, ProjectError> {
+        let inv = self.matrix_sheet(book, sheet)?.inverse()?;
+        let name = self.matrix_book(book).map(|b| b.name.clone()).unwrap_or_default();
+        Ok(self.adopt_matrix_book(&format!("Inverse of {name}"), vec![inv]))
+    }
+
     /// Writes a matrix sheet to a new workbook and returns its id.
     pub fn matrix_to_worksheet(
         &mut self,

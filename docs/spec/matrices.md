@@ -280,6 +280,17 @@ each matrix as not written).
   random/sparse gridding methods are not built.
 - Each conversion is one undo step ("Convert to Matrix"). Extract stays grey.
 
+## 7d. Analysis > Mathematics > Inverse (T193, 2026-11-20, from Origin's `minverse` documentation, not measured)
+
+- The matrix window's Analysis > Mathematics > Inverse..., and the same item in the workbook and
+  graph Analysis menus, invert the active square matrix sheet. The item is disabled unless a matrix
+  window is active. The inverse goes to a new matrix book named "Inverse of MBookN", which keeps the
+  sheet's ranges and labels. It is one undo step ("Matrix Inverse").
+- The method is Gauss-Jordan elimination with partial pivoting. It refuses a matrix that is not
+  square, that has a missing value, or that is singular (a pivot below 1e-12 of the largest cell),
+  and says why on the status bar. Sheaf opens no options window: `minverse` has only its input and
+  output.
+
 ## 8. What was not verified, and what is left
 
 - Not run in Origin: `mdim` on a matrix that holds data; shrink with missing values; `w2m` options `lr` on accepted

@@ -322,7 +322,7 @@ Cross-cutting findings:
 | Hexbin | Plot > Contour/Heat Map > Hexbin | Plot > Contour/Heat Map > Hexbin only (T45, graphing.md 14.24; `-t hexbin`) | ◐ | Hexbin of XY data with Origin's bin controls and a count colour scale; contour and heat map need matrices | P2 |
 | Inset, pictures in graphs | Zoom, Insert picture | PNG pictures as drawn objects from the page menu (T216, graphing 17.9) | ◐ | Add Inset toolbar item remains grey (T61, wave 2); other picture formats, EMF/EPS export | P2 |
 | Other plot-type IDs when reading .opj | area, box, bar, histogram, pie | types 200 to 204 and, from LabTalk's plot-type ID table, 206 Box, 213 stacked column, 214 stacked area, 215 Bar, 216 stacked bar, 219 Histogram and 225 Pie (T223) | ◐ | multi-column types (high-low-close, vectors, floating bar), 3D and contour types still read as line + symbol with a warning; these records not compared byte for byte with Origin's | P2 |
-| Plotting X-Functions | plotgroup, plotbylabel, plotxyz | none | ✗ | | P2 |
+| Plotting X-Functions | plotgroup, plotbylabel, plotxyz | `sheaf plot --group` with XY templates | ◐ | one curve per group value only (graphing 17.10, T224); no graph or layer grouping, plotbylabel, plotxyz | P2 |
 
 ## 12 Graph styling
 

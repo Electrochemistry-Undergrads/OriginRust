@@ -3881,6 +3881,17 @@ pasted and deleted; it has no border unless its line width is set. It is drawn o
 PNG/TIFF/JPEG/BMP and PDF exports (an SVG `<image>` with a data URL); EMF and EPS exports leave it out,
 and an `.opj` written here leaves it out with the other drawn objects (the `.opj.sheaf` companion keeps
 it). Only PNG files; Origin's link-to-file and other formats were not measured.
+
+### 17.10 Plot by group from the command line (T224, 2026-11-20, not measured)
+
+Origin's `plotgroup` X-Function plots worksheet data grouped by the values of a column. Sheaf's command line
+does the data-grouping part: `sheaf plot FILE -t line -y Current --group Cell` (any ordinary XY template:
+line, scatter, line + symbol, column, ...) splits the rows of the Y columns (and of the X column they are
+plotted against) by the values of the group column, in order of first appearance, into a new sheet
+`Grouped` (per value an X column and the Y columns, named after the value; rows with an empty group value
+are left out; `Project::group_columns`), and plots its Y columns: one curve per value, the legend naming the
+values. The group column is never plotted. Not with `--y2`, `--graph` or `--panels`. Origin's graph and
+layer grouping (a graph or layer per value) and the dialog are not offered.
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 
 Measured on 2026-11-13 by opening Origin's Plot Details on a line plot (`tools/origin-ref/origin-dialog.ps1`,

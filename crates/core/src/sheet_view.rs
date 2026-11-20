@@ -16,6 +16,8 @@ pub enum ViewSwitch {
     Comments,
     Formula,
     SamplingInterval,
+    /// The Sparklines row (T175): a small line of the values of each column marked for one.
+    Sparklines,
     /// The titles ("Long Name", "Units", ...) to the left of the label rows.
     RowLabels,
     ColumnHeader,
@@ -38,6 +40,7 @@ impl ViewSwitch {
             ViewSwitch::Comments => "Comments",
             ViewSwitch::Formula => "F(x)=",
             ViewSwitch::SamplingInterval => "Sampling Interval",
+            ViewSwitch::Sparklines => "Sparklines",
             ViewSwitch::RowLabels => "Row Labels for Column Label Rows",
             ViewSwitch::ColumnHeader => "Column Header",
             ViewSwitch::RowHeader => "Row Header",
@@ -65,6 +68,9 @@ pub struct SheetView {
     /// `None` shows the row whenever a column has an interval.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sampling_interval: Option<bool>,
+    /// The Sparklines row (T175); off on a new sheet, turned on by Add or Update Sparklines.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sparklines: bool,
     #[serde(default = "yes")]
     pub row_labels: bool,
     #[serde(default = "yes", skip_serializing_if = "is_yes")]
@@ -85,6 +91,7 @@ impl Default for SheetView {
             comments: true,
             formula: true,
             sampling_interval: None,
+            sparklines: false,
             row_labels: true,
             column_header: true,
             row_header: true,
@@ -106,6 +113,7 @@ impl SheetView {
             ViewSwitch::Comments => &mut self.comments,
             ViewSwitch::Formula => &mut self.formula,
             ViewSwitch::SamplingInterval => return None,
+            ViewSwitch::Sparklines => &mut self.sparklines,
             ViewSwitch::RowLabels => &mut self.row_labels,
             ViewSwitch::ColumnHeader => &mut self.column_header,
             ViewSwitch::RowHeader => &mut self.row_header,

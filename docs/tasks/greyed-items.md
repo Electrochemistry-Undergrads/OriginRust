@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **153 greyed items: 112 in the menu bar, 2 on the toolbars, 39 in context menus.**
+original inventory baseline. This is not a new runtime audit. **151 greyed items: 112 in the menu bar, 2 on the toolbars, 37 in context menus.**
 
 ## How to read and keep this file
 
@@ -73,7 +73,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B3` | 6 |
 | `B4` | 0 |
 | `B5` | 12 |
-| `B6` | 20 |
+| `B6` | 18 |
 | `B7` | 0 |
 | `B8` | 0 |
 | `B9` | 2 |
@@ -86,7 +86,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 27 items, backlog packages (`B`) 106, not planned (`N`) 20.
+Briefs (`T`) hold 27 items, backlog packages (`B`) 104, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -183,14 +183,13 @@ changes. The baseline labels remain open until implementation or a documented re
 ## Context menus
 
 - `B5` Worksheet column header: Remove Links
-- `B6` Worksheet column header: Add or Update Sparklines...
 - `B5` Worksheet data cell: Paste Link · Paste Link Transpose · Remove Links
 - `B6` Worksheet data cell: Insert Graph... · Insert Images from Files... · Insert Sparklines... · Insert Variables...
 - `B6` Worksheet data cell > Insert Arrow: Arrow · Double Arrow
 - `B5` Worksheet data cell > Set Data Style: Rich Text · Wrap Text · Float
 - `B6` Worksheet row number: Insert Graph...
 - `B6` Worksheet sheet tab: Add Graph as Sheet... · Add Notes as Sheet
-- `B6` Worksheet corner: Parameters · Sparklines · Filter · Categories · Page Break Preview Lines
+- `B6` Worksheet corner: Parameters · Filter · Categories · Page Break Preview Lines
 - `T72` Graph axis > Copy Format: Dimensions
 - `T72` Graph axis > Paste Format To: Title Dimensions
 - `B2` Graph legend: Cut · Copy

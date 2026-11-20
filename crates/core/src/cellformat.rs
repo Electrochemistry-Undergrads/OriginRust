@@ -105,6 +105,8 @@ pub enum LabelKind {
     Formula,
     Param(String),
     SamplingInterval,
+    /// The Sparklines row (T175).
+    Sparklines,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

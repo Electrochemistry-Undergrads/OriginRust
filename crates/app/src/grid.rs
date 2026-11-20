@@ -670,6 +670,7 @@ fn label_rows(sheet: &Worksheet) -> Vec<LabelRow> {
         (v.comments, LabelRow::Comments),
         (v.formula, LabelRow::Formula),
         (sheet.shows_view_switch(ViewSwitch::SamplingInterval), LabelRow::SamplingInterval),
+        (v.sparklines, LabelRow::Sparklines),
     ]
     .into_iter()
     .filter_map(|(shown, row)| shown.then_some(row))
@@ -687,6 +688,7 @@ pub fn label_kind(row: &LabelRow) -> sheaf_core::cellformat::LabelKind {
         LabelRow::Comments => LabelKind::Comments,
         LabelRow::Formula => LabelKind::Formula,
         LabelRow::SamplingInterval => LabelKind::SamplingInterval,
+        LabelRow::Sparklines => LabelKind::Sparklines,
         LabelRow::Param(name) => LabelKind::Param(name.clone()),
     }
 }
@@ -698,6 +700,7 @@ fn row_title(row: &LabelRow) -> String {
         LabelRow::Comments => "Comments".to_string(),
         LabelRow::Formula => "F(x)=".to_string(),
         LabelRow::SamplingInterval => ViewSwitch::SamplingInterval.name().into(),
+        LabelRow::Sparklines => ViewSwitch::Sparklines.name().into(),
         LabelRow::Param(name) => name.clone(),
     }
 }
@@ -721,8 +724,34 @@ fn label_text(column: &Column, row: &LabelRow) -> String {
             }
             text
         }),
+        LabelRow::Sparklines => String::new(),
         LabelRow::Param(name) => column.params.get(name).cloned().unwrap_or_default(),
     }
+}
+
+/// The line a sparkline (T175) draws in `cell`: the column's finite values against their row,
+/// from the first to the last value, filling the cell inside a small margin. `None` without two
+/// finite values. Rows are thinned to about one point per pixel of the cell's width.
+pub fn sparkline_points(values: &[f64], cell: Rect) -> Option<Vec<Pos2>> {
+    let finite: Vec<(usize, f64)> = values.iter().copied().enumerate().filter(|(_, v)| v.is_finite()).collect();
+    if finite.len() < 2 {
+        return None;
+    }
+    let (lo, hi) = finite.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), (_, v)| (a.min(*v), b.max(*v)));
+    let (first, last) = (finite[0].0 as f64, finite[finite.len() - 1].0 as f64);
+    let area = cell.shrink2(vec2(3.0, 3.0));
+    let step = (finite.len() as f32 / area.width().max(1.0)).ceil().max(1.0) as usize;
+    let x = |r: usize| area.left() + area.width() * ((r as f64 - first) / (last - first).max(1.0)) as f32;
+    let y = |v: f64| {
+        let t = if hi > lo { (v - lo) / (hi - lo) } else { 0.5 };
+        area.bottom() - area.height() * t as f32
+    };
+    let mut points: Vec<Pos2> = finite.iter().step_by(step).map(|&(r, v)| Pos2::new(x(r), y(v))).collect();
+    let end = finite[finite.len() - 1];
+    if points.last().is_none_or(|p| p.x < x(end.0)) {
+        points.push(Pos2::new(x(end.0), y(end.1)));
+    }
+    Some(points)
 }
 
 /// The name in the grey row of the head: the letter and, in brackets, the kind of data and the
@@ -1739,9 +1768,17 @@ fn label_cell(
         left = 17.0;
     }
     let inner = Rect::from_min_max(Pos2::new(cell.left() + left, cell.top()), cell.right_bottom());
-    ui.scope_builder(UiBuilder::new().max_rect(inner).layout(aligned_layout(manual.h_align, false)), |ui| {
-        formatted_text(ui, &text, color, &manual);
-    });
+    if *row == LabelRow::Sparklines {
+        if column.sparkline
+            && let Some(points) = column.numeric().and_then(|v| sparkline_points(v, cell))
+        {
+            ui.painter().with_clip_rect(cell).add(egui::Shape::line(points, egui::Stroke::new(1.0_f32, color)));
+        }
+    } else {
+        ui.scope_builder(UiBuilder::new().max_rect(inner).layout(aligned_layout(manual.h_align, false)), |ui| {
+            formatted_text(ui, &text, color, &manual);
+        });
+    }
     if response.clicked() {
         state.select_label(column.id, row.clone());
         state.focus(ui.ctx());
@@ -1758,7 +1795,7 @@ fn label_cell(
             }
         }
     }
-    let read_only = *row == LabelRow::SamplingInterval;
+    let read_only = matches!(row, LabelRow::SamplingInterval | LabelRow::Sparklines);
     let response = if read_only && !text.is_empty() { response.on_hover_text(text) } else { response };
     response.context_menu(|ui| {
         menus::show_context(ui, &menus::label_cell_menu(read_only), &book_ctx(book_id, state), actions)
@@ -1774,7 +1811,7 @@ pub fn label_text_full(column: &Column, row: &LabelRow) -> String {
 }
 
 fn start_editing_label(state: &mut BookUi, column: &Column, row: &LabelRow, replacement: Option<String>) {
-    if *row == LabelRow::SamplingInterval {
+    if matches!(row, LabelRow::SamplingInterval | LabelRow::Sparklines) {
         return;
     }
     let original = label_text_full(column, row);

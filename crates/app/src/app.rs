@@ -2095,6 +2095,25 @@ impl SheafApp {
                 });
                 self.say(if all { "Categorical mark removed" } else { "Set as categorical" });
             }
+            Action::AddSparklines(columns) => {
+                self.doc.apply("Add or Update Sparklines", |p| {
+                    for id in &columns {
+                        if let Some(c) = p.column_mut(*id) {
+                            c.sparkline = true;
+                        }
+                    }
+                    let place = columns.first().and_then(|id| {
+                        let (book, sheet, _) = p.locate(*id)?;
+                        Some((book.id, book.sheets.iter().position(|s| std::ptr::eq(s, sheet))?))
+                    });
+                    if let Some((book, sheet)) = place
+                        && let Some(s) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet))
+                    {
+                        s.view.sparklines = true;
+                    }
+                });
+                self.say("Added sparklines");
+            }
             Action::SetDesignation { columns, designation } => {
                 self.doc.apply("Set column designation", |p| {
                     for id in &columns {
@@ -2166,7 +2185,7 @@ impl SheafApp {
                             LabelRow::LongName => c.long_name = text,
                             LabelRow::Units => c.units = text,
                             LabelRow::Comments => c.comments = text,
-                            LabelRow::Formula | LabelRow::SamplingInterval => {}
+                            LabelRow::Formula | LabelRow::SamplingInterval | LabelRow::Sparklines => {}
                             LabelRow::Param(name) => {
                                 c.params.insert(name, text);
                             }
@@ -3221,6 +3240,10 @@ impl SheafApp {
         if let Some(Sel::Label { column, row }) = self.books.get(&book).map(|s| s.sel.clone()) {
             if row == LabelRow::SamplingInterval && !matches!(op, CellOp::Copy(_)) {
                 self.warn("Change the interval in Set Sampling Interval");
+                return;
+            }
+            if row == LabelRow::Sparklines {
+                self.warn("Sparklines are drawn from the column's values");
                 return;
             }
             let Some(c) = self.doc.project().column(column) else { return };

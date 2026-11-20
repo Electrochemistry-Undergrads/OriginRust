@@ -66,6 +66,8 @@ pub enum LabelRow {
     Formula,
     /// The read-only summary of a column's own X values.
     SamplingInterval,
+    /// The Sparklines row (T175): a small line of the column's values, read-only.
+    Sparklines,
     /// A user parameter row, by name.
     Param(String),
 }
@@ -464,6 +466,9 @@ pub enum Action {
     /// Column > Set as Categorical: marks the columns as categorical, or, when they all are
     /// already, takes the mark off.
     SetCategorical(Vec<ColumnId>),
+    /// Column header > Add or Update Sparklines... (T175): gives the columns sparklines and shows
+    /// the sheet's Sparklines row, as one undo step.
+    AddSparklines(Vec<ColumnId>),
     SetDesignation {
         columns: Vec<ColumnId>,
         designation: Designation,

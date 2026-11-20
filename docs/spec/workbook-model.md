@@ -909,7 +909,7 @@ Sheaf's corner menu is that list (`sheaf_core::sheet_view`, saved per sheet in `
 the per-book or per-sheet scope was not checked): Long Name, Units, Comments and F(x)= hide or show their
 label row; Row Labels hides the row titles; Column Grid and Row Grid the vertical and horizontal lines
 between data cells. One undo step each ("Worksheet view"). Grey: Parameters (Origin's system rows),
-Sparklines, Filter, Categories and Page Break Preview Lines. User parameter rows show whenever a column has one. The `.opj`
+Filter, Categories and Page Break Preview Lines (Sparklines: T175, below). User parameter rows show whenever a column has one. The `.opj`
 written here does not hold the switches (the save warning names the sheets).
 
 **Column Header and Row Header (T92).** Origin's View-tab illustration distinguishes the
@@ -936,6 +936,24 @@ describes the read-only row and its offset and increment. Sheaf displays nonzero
 the single-line form `x0 = 2, dx = 0.5 (s)` and uses round-trippable numeric text. Cells without
 an interval are empty. The displayed value can be copied. Edit the underlying metadata via
 Set Sampling Interval. Column heading icons and print/export support are follow-up work.
+
+**Sparklines (T175, 2026-11-19, not measured).** Origin draws a sparkline, a small graph of a column,
+in the Sparklines label row; its column header item Add or Update Sparklines... opens the `sparklines`
+X-Function's options. Sheaf has no dialog and no graph object in the cell:
+
+- Column header > **Add or Update Sparklines...** marks the selected columns (`Column::sparkline`) and
+  turns on the sheet's Sparklines row (`SheetView::sparklines`), as one undo step ("Add or Update
+  Sparklines").
+- The **Sparklines** corner switch shows or hides the row ("Worksheet view"); a new sheet has it off.
+  It sits after Sampling Interval.
+- In the row, each marked column draws its finite values against their row number as a 1 px line in
+  the text colour, from the first value at the left to the last at the right and from the smallest at
+  the bottom to the largest at the top, inside a 3 px margin. Long columns are thinned to about one
+  point per pixel. Unmarked columns' cells stay empty. The row is 32 px high (twice a text row), Sheaf's
+  choice. The line follows the data as it changes ("Update" needs no action).
+- The cells are read-only: editing them does nothing, and Cut, Copy, Paste and Clear on them only say
+  that sparklines are drawn from the column's values. Printing and worksheet images leave the row out.
+- `.opj` does not hold the marks; the save warning names the sheet when the row is on.
 
 ## 13j. Find in Project (T95, measured 2026-11-16, Origin 2016)
 

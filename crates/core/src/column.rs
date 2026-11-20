@@ -273,6 +273,10 @@ pub struct Column {
     /// that need a grouping column, such as Unstack Columns, offer these columns first.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub categorical: bool,
+    /// Add or Update Sparklines (T175): the worksheet's Sparklines row draws a small line of the
+    /// column's values.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sparkline: bool,
     /// Column > Set Sampling Interval: the column's own X (`x0 + i * inc` for row `i`), which its
     /// plots use instead of an X column (Origin's `colint`; see [`crate::sampling`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -416,6 +420,7 @@ impl Column {
             mask: BTreeSet::new(),
             mask_disabled: false,
             categorical: false,
+            sparkline: false,
             sampling: None,
             data_range: None,
             data,

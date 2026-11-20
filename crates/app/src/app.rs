@@ -6958,6 +6958,18 @@ impl SheafApp {
                         ui.add(egui::TextEdit::singleline(&mut d.short_name).desired_width(200.0));
                     });
                     ui.weak("Letters and digits, at most 13 characters (as in Origin).");
+                    // Dependents (T220): what uses this window, and the books a graph plots.
+                    let project = self.doc.project();
+                    let titles = |ids: Vec<WindowId>| -> String {
+                        let names: Vec<String> =
+                            ids.iter().filter_map(|w| project.window(*w).map(|w| w.name().to_string())).collect();
+                        if names.is_empty() { "none".to_string() } else { names.join(", ") }
+                    };
+                    if project.workbook(d.window).is_some() {
+                        ui.label(format!("Dependents: {}", titles(project.dependents(d.window))));
+                    } else if project.graph(d.window).is_some() {
+                        ui.label(format!("Plots data of: {}", titles(project.plotted_books(d.window))));
+                    }
                     if let Some(e) = &d.error {
                         ui.colored_label(ui.visuals().error_fg_color, e);
                     }

@@ -179,6 +179,7 @@ pub struct SheafApp {
     graph_props: Option<GraphPropsDialog>,
     layer_contents: Option<crate::dialogs::layer_contents::LayerContentsDialog>,
     layer_management: Option<crate::dialogs::layer_management::LayerManagementDialog>,
+    add_layer_dialog: Option<crate::dialogs::add_layer::AddLayerDialog>,
     fit_page: Option<crate::dialogs::fit_page::FitPageDialog>,
     axis3d: Option<crate::dialogs::axis3d::Axis3dDialog>,
     plot_setup: Option<crate::dialogs::plot_setup::PlotSetupDialog>,
@@ -353,6 +354,7 @@ impl SheafApp {
             graph_props: None,
             layer_contents: None,
             layer_management: None,
+            add_layer_dialog: None,
             fit_page: None,
             axis3d: None,
             plot_setup: None,
@@ -927,6 +929,7 @@ impl SheafApp {
         self.stack_panels = None;
         self.merge_graphs = None;
         self.layer_management = None;
+        self.add_layer_dialog = None;
         self.fit_page = None;
         self.axis3d = None;
         self.label_panels = None;
@@ -2466,6 +2469,12 @@ impl SheafApp {
                 self.graph_props = Some(dialog);
                 self.focus(graph);
                 self.graphs.entry(graph).or_default().active_layer = layer;
+            }
+            Action::AddLayerDialog { graph, layer } => {
+                self.add_layer_dialog = crate::dialogs::add_layer::AddLayerDialog::new(&self.doc, graph, layer);
+                if self.add_layer_dialog.is_some() {
+                    self.focus(graph);
+                }
             }
             Action::GraphEdit { graph, op } => self.edit_graph(graph, op),
             Action::ActivateLayer { graph, layer } => {
@@ -5065,6 +5074,7 @@ impl SheafApp {
             || self.graph_props.is_some()
             || self.layer_contents.is_some()
             || self.layer_management.is_some()
+            || self.add_layer_dialog.is_some()
             || self.fit_page.is_some()
             || self.axis3d.is_some()
             || self.plot_setup.is_some()
@@ -5408,6 +5418,25 @@ impl SheafApp {
                 Outcome::Done => {
                     self.fit_page = None;
                     self.say("Fitted the page to the layers");
+                }
+            }
+        }
+        if let Some(d) = &mut self.add_layer_dialog {
+            use crate::dialogs::add_layer::Outcome;
+            match d.show(ctx, &self.doc) {
+                Outcome::Open => {}
+                Outcome::Closed => self.add_layer_dialog = None,
+                Outcome::Stale => {
+                    self.add_layer_dialog = None;
+                    self.warn("The project changed. Open New Layer (Axes) again.");
+                }
+                Outcome::Add { graph, layer, kind, activate } => {
+                    self.add_layer_dialog = None;
+                    self.add_layer(graph, layer, kind);
+                    self.focus(graph);
+                    if !activate && let Some(state) = self.graphs.get_mut(&graph) {
+                        state.active_layer = layer;
+                    }
                 }
             }
         }
@@ -6299,6 +6328,12 @@ impl SheafApp {
                 }
                 "merge-graphs" if self.doc.project().graphs().count() >= 2 => {
                     self.merge_graphs = Some(MergeGraphsDialog::new(self.doc.project(), &self.panels.explorer.folder));
+                }
+                "add-layer" => {
+                    if let Some(graph) = first_graph {
+                        self.add_layer_dialog = crate::dialogs::add_layer::AddLayerDialog::new(&self.doc, graph, 0);
+                        self.focus(graph);
+                    }
                 }
                 "layer-management" => {
                     if let Some(graph) = first_graph {

@@ -40,14 +40,17 @@ impl Layout {
                     LabelRow::Comments => LabelKind::Comments,
                     LabelRow::Formula => LabelKind::Formula,
                     LabelRow::SamplingInterval => LabelKind::SamplingInterval,
+                    LabelRow::Sparklines => LabelKind::Sparklines,
                     LabelRow::Param(n) => LabelKind::Param(n.clone()),
                 };
+                // The Sparklines row (T175) is twice as tall as a text row, Sheaf's choice.
+                let least = if matches!(l, LabelRow::Sparklines) { 32.0 } else { 16.0 };
                 sheet
                     .columns
                     .iter()
                     .filter(|c| !c.hidden)
                     .map(|c| height(ctx, index.resolve_label(sheet, c.id, &kind)))
-                    .fold(16.0, f64::max) as f32
+                    .fold(least, f64::max) as f32
             })
             .collect();
         let column_header_height = if sheet.view.column_header { crate::grid::ROW_HEIGHT } else { 0.0 };

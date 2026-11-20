@@ -248,6 +248,8 @@ pub enum Cmd {
     MaskByCondition,
     /// Column > Set as Categorical.
     SetCategorical,
+    /// Column header > Add or Update Sparklines... (T175).
+    AddSparklines,
     /// Worksheet > Transpose, Stack, Unstack, Split Columns, Reduce Rows.
     Reshape(ReshapeKind),
     /// Worksheet > Pivot Table.
@@ -2141,7 +2143,8 @@ pub fn column_header_menu() -> Vec<Entry> {
     v.push(item("Column Width...", Cmd::ColumnProperties));
     v.push(sep());
     v.push(item("Slide Show of Dependent Graphs", Cmd::SlideShow));
-    v.extend(greys(&["Add or Update Sparklines...", "-"]));
+    v.push(item("Add or Update Sparklines...", Cmd::AddSparklines));
+    v.push(sep());
     v.push(item("Format Cells...", Cmd::FormatCells));
     v.push(item("Properties...", Cmd::ColumnProperties));
     v
@@ -2678,7 +2681,7 @@ pub fn corner_menu(sheet: &sheaf_core::Worksheet) -> Vec<Entry> {
         switch(V::Comments),
         grey("Parameters"),
         switch(V::SamplingInterval),
-        grey("Sparklines"),
+        switch(V::Sparklines),
         grey("Filter"),
         switch(V::Formula),
         grey("Categories"),
@@ -3127,6 +3130,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SetCategorical => {
             book?;
             Action::SetCategorical(some()?)
+        }
+        Cmd::AddSparklines => {
+            book?;
+            Action::AddSparklines(some()?)
         }
         Cmd::Reshape(kind) => Action::Reshape { book: book?, columns: c.selected.to_vec(), kind: *kind },
         Cmd::PivotTable => Action::PivotTable { book: book?, columns: c.selected.to_vec() },

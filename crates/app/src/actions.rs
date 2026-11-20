@@ -315,6 +315,17 @@ pub enum Action {
         col: usize,
         value: Option<f64>,
     },
+    /// A Matrix menu command on the active sheet of matrix book `id` (T179 slice 3).
+    MatrixCmd {
+        id: WindowId,
+        cmd: crate::menus::MatrixCmd,
+    },
+    /// A heat map or contour graph of a matrix sheet (its active one) or of XYZ columns (T179).
+    PlotField {
+        template: sheaf_core::template::FieldTemplate,
+        matrix: Option<WindowId>,
+        xyz: Option<(sheaf_core::ColumnId, sheaf_core::ColumnId, sheaf_core::ColumnId)>,
+    },
     /// A matrix book's sheet tab was clicked (view state, no undo step).
     SetMatrixSheet {
         id: WindowId,

@@ -50,6 +50,7 @@ pub mod layer_management;
 pub mod manip_options;
 pub mod mask_condition;
 pub mod math_curves;
+pub mod matrix_ops;
 pub mod merge_graphs;
 pub mod multi_y;
 pub mod multipeak;

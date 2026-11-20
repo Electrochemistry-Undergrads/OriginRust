@@ -6565,7 +6565,11 @@ standard deviation, sum of Z and FWHM, updated as the region moves. Sheaf's firs
   the first time with the columns X From, X To, Y From, Y To (the rectangle, smallest first), Volume,
   N, Mean, SD, Min, Max and Sum; each output is one undo step ("2D Integrate"). Delete (Esc) closes
   the gadget.
-- **Not done:** circle and free-hand regions, a base plane from the region's boundary, and FWHM. [Origin 2D Integration Gadget](https://www.originlab.com/doc/Origin-Help/surface-integ-gadget)
+- **Region (T201):** the right-click menu's Region > Rectangle (the default) or Circle, ticked. The
+  circle is the ellipse that fills the rectangle (a circle when the rectangle is square on screen,
+  drawn in red over it); it takes the cells whose centres are inside it, edge included, and its
+  outputs keep the rectangle's From and To. The edges still drag the rectangle.
+- **Not done:** free-hand regions, a base plane from the region's boundary, and FWHM. [Origin 2D Integration Gadget](https://www.originlab.com/doc/Origin-Help/surface-integ-gadget)
 
 ## Step and spline line plots: Plot > Line > Horizontal Step, Vertical Step, Spline Connected (T63 groups A and B, 2026-11-19, **not measured**)
 

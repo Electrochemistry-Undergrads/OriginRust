@@ -1370,8 +1370,17 @@ impl SheafApp {
             let (x0, x1) = (geom.x.from_unit(0.25), geom.x.from_unit(0.75));
             let (y0, y1) = (geom.y.from_unit(0.25), geom.y.from_unit(0.75));
             state.active_layer = layer;
-            state.gadget =
-                Some(crate::gadget::Integrator { kind, layer, plot: 0, x0, x1, y0, y1, end_point_baseline: false });
+            state.gadget = Some(crate::gadget::Integrator {
+                kind,
+                layer,
+                plot: 0,
+                x0,
+                x1,
+                y0,
+                y1,
+                end_point_baseline: false,
+                circle: false,
+            });
             self.focus(graph);
             return;
         }
@@ -1400,7 +1409,17 @@ impl SheafApp {
         let (x0, x1) = (placement.source_x(geom.x.from_unit(u0)), placement.source_x(geom.x.from_unit(u1)));
         // A Cluster (T146) is a rectangle over the middle half of both axes.
         let (y0, y1) = (placement.source_y(geom.y.from_unit(0.25)), placement.source_y(geom.y.from_unit(0.75)));
-        state.gadget = Some(crate::gadget::Integrator { kind, layer, plot, x0, x1, y0, y1, end_point_baseline: false });
+        state.gadget = Some(crate::gadget::Integrator {
+            kind,
+            layer,
+            plot,
+            x0,
+            x1,
+            y0,
+            y1,
+            end_point_baseline: false,
+            circle: false,
+        });
         self.focus(graph);
     }
 
@@ -1412,6 +1431,7 @@ impl SheafApp {
         let Some(g) = &mut state.gadget else { return };
         match op {
             GadgetOp::ToggleBaseline => g.end_point_baseline = !g.end_point_baseline,
+            GadgetOp::SetRegion(circle) => g.circle = circle,
             GadgetOp::Close => state.gadget = None,
             // 2D Integrate (T198): a row of the results table.
             GadgetOp::NewOutput if g.kind == crate::gadget::GadgetKind::Integrate2d => {

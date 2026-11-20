@@ -18,6 +18,7 @@ mod data;
 mod emf;
 mod eps;
 mod field;
+pub use field::field_cells;
 mod fill;
 mod fonts;
 mod hexbin;

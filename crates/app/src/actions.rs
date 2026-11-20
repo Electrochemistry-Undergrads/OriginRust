@@ -1087,6 +1087,10 @@ pub enum Action {
         graph: WindowId,
     },
     /// Gadgets > Cluster on a graph (T146).
+    /// Gadgets > 2D Integrate... (T189): the gadget on a contour or heat map layer.
+    StartIntegrate2d {
+        graph: WindowId,
+    },
     StartCluster {
         graph: WindowId,
     },

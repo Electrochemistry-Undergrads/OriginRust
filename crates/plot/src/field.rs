@@ -122,6 +122,21 @@ pub(crate) fn resolve(project: &Project, field: &FieldPlot) -> Option<FieldGrid>
     }
 }
 
+/// The cells of a layer's heat map or contour plot (T189, the 2D Integrate gadget): each grid
+/// point's X, Y and Z (missing values left out), and the area one cell covers (|dX dY|). `None`
+/// for a layer without a field or with an empty one.
+pub fn field_cells(project: &Project, layer: &sheaf_core::graph::Layer) -> Option<(Vec<[f64; 3]>, f64)> {
+    let grid = resolve(project, layer.field.as_ref()?)?;
+    let dx = FieldGrid::step(grid.x_from, grid.x_to, grid.cols).abs();
+    let dy = FieldGrid::step(grid.y_from, grid.y_to, grid.rows).abs();
+    let cells = (0..grid.rows)
+        .flat_map(|r| (0..grid.cols).map(move |c| (r, c)))
+        .map(|(r, c)| [grid.x_at(c), grid.y_at(r), grid.at(r, c)])
+        .filter(|p| p[2].is_finite())
+        .collect();
+    Some((cells, dx * dy))
+}
+
 // ----- levels -------------------------------------------------------------------------------
 
 /// The largest of 1, 2, 5 times a power of ten that is not above `v` (`v` > 0).

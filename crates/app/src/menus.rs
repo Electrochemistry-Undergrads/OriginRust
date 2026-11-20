@@ -761,6 +761,8 @@ pub struct MenuContext<'a> {
     pub view_mode: sheaf_core::project::ViewMode,
     /// The active graph shows its layer icons (the tick of View > Show > Layer Icons).
     pub layer_icons: bool,
+    /// The active sheet shows Page Break Preview Lines (the tick of the View menu's item, T185).
+    pub page_breaks: bool,
     /// The active graph's page switches of the layer icon menu (T183), for their ticks.
     pub activate_by_icon_only: bool,
     pub icon_double_click_plot_setup: bool,
@@ -1148,7 +1150,11 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
         WindowKind::Workbook => {
             v.push(sep());
             v.push(keyed("&Freeze/Unfreeze Panes", ctrl_shift(Key::F), Cmd::FreezePanes));
-            v.extend(greys(&["Actively Update Plots", "Page Break Preview Lines"]));
+            v.push(grey("Actively Update Plots"));
+            v.push(item(
+                "Page Break Preview Lines",
+                Cmd::Sheet(SheetOp::ToggleView(sheaf_core::sheet_view::ViewSwitch::PageBreaks)),
+            ));
         }
         WindowKind::Graph => {
             v.push(sep());
@@ -2752,7 +2758,7 @@ pub fn corner_menu(sheet: &sheaf_core::Worksheet) -> Vec<Entry> {
         sep(),
         switch(V::ColumnGrid),
         switch(V::RowGrid),
-        grey("Page Break Preview Lines"),
+        switch(V::PageBreaks),
     ]
 }
 
@@ -3735,6 +3741,13 @@ fn show_entries(
                 if matches!(it.cmd, Some(Cmd::ToggleLayerIcons)) && c.layer_icons {
                     tick(ui, &response);
                 }
+                if matches!(
+                    it.cmd,
+                    Some(Cmd::Sheet(SheetOp::ToggleView(sheaf_core::sheet_view::ViewSwitch::PageBreaks)))
+                ) && c.page_breaks
+                {
+                    tick(ui, &response);
+                }
                 if (matches!(it.cmd, Some(Cmd::ToggleActivateByIconOnly)) && c.activate_by_icon_only)
                     || (matches!(it.cmd, Some(Cmd::ToggleIconPlotSetup)) && c.icon_double_click_plot_setup)
                 {
@@ -4136,6 +4149,7 @@ mod tests {
             can_ungroup: false,
             view_mode: Default::default(),
             layer_icons: true,
+            page_breaks: false,
             activate_by_icon_only: false,
             icon_double_click_plot_setup: false,
             show_labels: true,

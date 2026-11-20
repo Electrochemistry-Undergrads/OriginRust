@@ -262,6 +262,27 @@ impl<'a> SheetTable<'a> {
         pages
     }
 
+    /// Where the pages of a printed area `area_w` x `area_h` points break (Page Break Preview Lines,
+    /// T185): the sheet rows that end a page and the columns that end a band of columns, the last
+    /// row and column left out (nothing follows them).
+    pub fn page_breaks(&self, area_w: f64, area_h: f64) -> PageBreaks {
+        let pages = self.pages(area_w, area_h);
+        let mut breaks = PageBreaks::default();
+        for page in &pages {
+            if page.rows.end < self.rows.len()
+                && let Some(&row) = page.rows.end.checked_sub(1).and_then(|i| self.rows.get(i))
+            {
+                breaks.rows.insert(row);
+            }
+            if page.cols.end < self.cols.len()
+                && let Some(&col) = page.cols.end.checked_sub(1).and_then(|i| self.cols.get(i))
+            {
+                breaks.columns.insert(self.sheet.columns[col].id);
+            }
+        }
+        breaks
+    }
+
     /// The pages of the sheet on the paper of `setup`: the area inside the margins.
     pub fn pages_for(&self, setup: &PageSetup) -> (Vec<PageSlot>, (f64, f64)) {
         let area = print_area(setup);
@@ -481,6 +502,15 @@ pub struct TextFmt {
 /// The font size of the grid's body text in points; a formatted size is scaled by the ratio of
 /// the printed font to this, so that a cell looks as big next to the others as it does on screen.
 const GRID_BODY_PT: f64 = 9.0;
+
+/// Where printed pages break in a sheet (see [`SheetTable::page_breaks`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PageBreaks {
+    /// 0-based sheet rows after which a new page starts.
+    pub rows: std::collections::BTreeSet<usize>,
+    /// Columns after which a new band of pages starts.
+    pub columns: std::collections::BTreeSet<crate::ids::ColumnId>,
+}
 
 /// One printed page: which of the table's shown rows and visible columns it holds.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -814,5 +844,33 @@ mod tests {
         let ops = t.draw_page(&pages[0], 1);
         let has = |s: &str| ops.iter().any(|o| matches!(o, PrintOp::Text { text, .. } if text == s));
         assert!(has("39") && has("40") && !has("t1") && !has("t38"));
+    }
+
+    #[test]
+    fn page_breaks_mark_the_last_row_and_column_of_each_band_but_the_last() {
+        let mut sheet = Worksheet::new("S");
+        for k in 0..6 {
+            let mut c = Column::new(
+                ColumnId(k + 1),
+                crate::column::default_short_name(k as usize),
+                crate::column::Designation::Y,
+                ColumnData::numeric((0..200).map(f64::from).collect()),
+            );
+            c.width = Some(30);
+            sheet.columns.push(c);
+        }
+        let table = SheetTable::new(&sheet, PrintStyle::default());
+        let (w, h) = (300.0, 400.0);
+        let pages = table.pages(w, h);
+        let breaks = table.page_breaks(w, h);
+        let row_ends: std::collections::BTreeSet<usize> =
+            pages.iter().filter(|p| p.rows.end < 200).map(|p| p.rows.end - 1).collect();
+        assert!(!row_ends.is_empty(), "200 rows take more than one page");
+        assert_eq!(breaks.rows, row_ends);
+        assert!(!breaks.rows.contains(&199), "nothing follows the last row");
+        let bands = pages.iter().map(|p| (p.cols.start, p.cols.end)).collect::<std::collections::BTreeSet<_>>().len();
+        assert_eq!(breaks.columns.len(), bands - 1);
+        // A wide page takes every row and column: no breaks.
+        assert_eq!(table.page_breaks(10_000.0, 100_000.0), PageBreaks::default());
     }
 }

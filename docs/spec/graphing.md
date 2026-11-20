@@ -6543,6 +6543,24 @@ so this follows Origin's documented behaviour.
   reads "N = n, Mean X = x, Mean Y = y", or "No points in the region".
 - **Right-click menu:** Delete (Esc) closes the gadget.
 
+## 2D Integrate gadget: Gadgets > 2D Integrate... (T189, 2026-11-20, **not measured**)
+
+Origin's help ("2D Integration Gadget", OriginPro) describes it for a contour or image plot of a matrix
+or of XYZ data: the volume from a base to the surface inside a region, with N, minimum, maximum, mean,
+standard deviation, sum of Z and FWHM, updated as the region moves. Sheaf's first version:
+
+- **Where:** the active layer when it has a heat map or contour plot (`Layer::field`), else the
+  graph's first such layer; on other graphs it says that it needs one.
+- **Region:** a rectangle, opened over the middle half of both axes and dragged like the Cluster
+  gadget's.
+- **Result:** of the grid cells whose centres are inside the rectangle (edges included, missing Z
+  left out): "Volume = v", then N, Mean, SD (n - 1), Min, Max and Sum of Z. The volume is the sum of Z
+  times the area of one cell (|dX dY| of the grid), from a zero base. XYZ columns are read on the grid
+  the plot uses. "No cells in the region" when none is inside.
+- **Right-click menu:** Delete (Esc) closes the gadget.
+- **Not done:** circle and free-hand regions, a base plane from the region's boundary, FWHM, and
+  output to a worksheet. [Origin 2D Integration Gadget](https://www.originlab.com/doc/Origin-Help/surface-integ-gadget)
+
 ## Step and spline line plots: Plot > Line > Horizontal Step, Vertical Step, Spline Connected (T63 groups A and B, 2026-11-19, **not measured**)
 
 Origin 2016's Plot > Line submenu has these three items under Line. Origin's COM class was

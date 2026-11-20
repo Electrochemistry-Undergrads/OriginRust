@@ -6599,6 +6599,7 @@ mod fit_page;
 mod go_to;
 mod go_to_browser;
 mod go_to_picker;
+mod integrate_2d_gadget;
 mod label_panels;
 mod layer_management;
 #[path = "ui_tests/merge_graphs.rs"]

@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **126 greyed items: 101 in the menu bar, 1 on the toolbars, 24 in context menus.**
+original inventory baseline. This is not a new runtime audit. **125 greyed items: 100 in the menu bar, 1 on the toolbars, 24 in context menus.**
 
 ## How to read and keep this file
 
@@ -76,7 +76,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B6` | 15 |
 | `B7` | 0 |
 | `B8` | 0 |
-| `B9` | 2 |
+| `B9` | 1 |
 | `B11` | 0 |
 | `B12` | 1 |
 | `B13` | 2 |
@@ -86,7 +86,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 12 items, backlog packages (`B`) 94, not planned (`N`) 20.
+Briefs (`T`) hold 12 items, backlog packages (`B`) 93, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -144,7 +144,7 @@ changes. The baseline labels remain open until implementation or a documented re
 ### Data
 
 ### Gadgets
-- `B9` 2D Integrate... · Go To...
+- `B9` Go To...
 
 ### Tools
 - `B13` System Variables...

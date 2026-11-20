@@ -168,3 +168,34 @@ fn analysis_mathematics_inverse_writes_the_inverse_to_a_new_matrix_book() {
         assert!((inv.value(r, c) - v).abs() < 1e-12, "{r},{c}: {}", inv.value(r, c));
     }
 }
+
+#[test]
+fn two_d_fft_and_ifft_round_trip_through_new_matrix_books() {
+    use sheaf_core::matrix_project::MatrixOp;
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let mut id = sheaf_core::WindowId(0);
+    h.state_mut().doc.apply("Matrix", |p| {
+        id = p.add_matrix_book("");
+        p.apply_matrix_op(id, 0, &MatrixOp::SetDimensions { rows: 2, cols: 3, ranges: None }).unwrap();
+        p.apply_matrix_op(id, 0, &MatrixOp::SetValues("i*3+j-3".into())).unwrap();
+    });
+    settle(&mut h);
+    let a: Vec<f64> = project(&h).matrix_sheet(id, 0).unwrap().values().to_vec();
+    assert_eq!(a, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    h.state_mut().apply(Action::MatrixCmd { id, cmd: menus::MatrixCmd::Fft2 }, &ctx);
+    settle(&mut h);
+    assert_eq!(h.state().doc.undo_label(), Some("2D FFT"));
+    let fft = project(&h).matrix_books().nth(1).expect("the FFT book").clone();
+    let names: Vec<&str> = fft.sheets.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["Real", "Imaginary", "Amplitude", "Phase"]);
+    assert_eq!(fft.sheets[0].value(0, 0), 21.0, "the zero frequency is the sum");
+    assert!((fft.sheets[2].value(0, 1) - 12f64.sqrt()).abs() < 1e-12, "|-3 + 1.732i|");
+    // The inverse of that book gives the data back.
+    h.state_mut().apply(Action::MatrixCmd { id: fft.id, cmd: menus::MatrixCmd::Ifft2 }, &ctx);
+    settle(&mut h);
+    let back = project(&h).matrix_books().nth(2).expect("the IFFT book").sheets[0].clone();
+    for (k, v) in a.iter().enumerate() {
+        assert!((back.values()[k] - v).abs() < 1e-12, "{k}: {}", back.values()[k]);
+    }
+}

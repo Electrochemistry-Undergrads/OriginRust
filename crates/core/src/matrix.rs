@@ -315,7 +315,7 @@ impl MatrixSheet {
         MatrixStats { n, missing: self.rows * self.cols - n, mean, sd, min, max, sum }
     }
 
-    fn like(&self, rows: usize, cols: usize, data: Vec<f64>) -> MatrixSheet {
+    pub(crate) fn like(&self, rows: usize, cols: usize, data: Vec<f64>) -> MatrixSheet {
         MatrixSheet { rows, cols, data: ColumnData::numeric(data), ..self.clone() }
     }
 

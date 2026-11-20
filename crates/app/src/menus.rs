@@ -1728,7 +1728,7 @@ fn analysis_menu() -> Vec<Entry> {
                 item("XYZ Surface Area...", Cmd::Analyze(AnalysisKind::XyzArea)),
                 item("Median Filter...", Cmd::Analyze(AnalysisKind::MedianFilter)),
                 grey("Special Filter..."),
-                item("Inverse...", Cmd::Matrix(MatrixCmd::Inverse)),
+                item("In&verse...", Cmd::Matrix(MatrixCmd::Inverse)),
             ],
         ),
         sub(

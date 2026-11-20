@@ -29,6 +29,38 @@ pub struct SamplingInterval {
     pub units: String,
 }
 
+/// What [`check_increment`] finds about a run of X values (Origin's `vinc`, T228).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct IncrementCheck {
+    /// The first value.
+    pub x0: f64,
+    /// The mean step: (last - first) / (count - 1).
+    pub inc: f64,
+    /// The largest difference between one step and the mean step.
+    pub max_deviation: f64,
+    /// The steps are equal within the tolerance: `max_deviation <= tolerance * |inc|`.
+    pub uniform: bool,
+}
+
+/// The default relative tolerance of [`check_increment`] (Sheaf's choice; Origin's was not measured).
+pub const INCREMENT_TOLERANCE: f64 = 1e-6;
+
+/// Checks whether `xs` are evenly spaced (Origin's `vinc`): the start, the mean step and the largest
+/// deviation of a step from it, and whether that deviation is within `tolerance` times the step. `None`
+/// with fewer than two values, a missing value, or a zero mean step.
+pub fn check_increment(xs: &[f64], tolerance: f64) -> Option<IncrementCheck> {
+    if xs.len() < 2 || xs.iter().any(|x| !x.is_finite()) {
+        return None;
+    }
+    let (first, last) = (xs[0], xs[xs.len() - 1]);
+    let inc = (last - first) / (xs.len() - 1) as f64;
+    if inc == 0.0 {
+        return None;
+    }
+    let max_deviation = xs.windows(2).map(|w| ((w[1] - w[0]) - inc).abs()).fold(0.0, f64::max);
+    Some(IncrementCheck { x0: first, inc, max_deviation, uniform: max_deviation <= tolerance * inc.abs() })
+}
+
 impl SamplingInterval {
     /// The X of row `i` (from 0).
     pub fn x_at(&self, i: usize) -> f64 {
@@ -119,4 +151,21 @@ impl Project {
 }
 
 #[cfg(test)]
-mod tests;
+mod increment_tests {
+    use super::*;
+
+    #[test]
+    fn check_increment_finds_even_steps_and_reports_uneven_ones() {
+        let even = check_increment(&[2.0, 2.5, 3.0, 3.5], INCREMENT_TOLERANCE).unwrap();
+        assert_eq!((even.x0, even.inc, even.uniform), (2.0, 0.5, true));
+        let uneven = check_increment(&[0.0, 1.0, 3.0], INCREMENT_TOLERANCE).unwrap();
+        assert!(!uneven.uniform);
+        assert!((uneven.max_deviation - 0.5).abs() < 1e-12);
+        assert!(check_increment(&[1.0], INCREMENT_TOLERANCE).is_none());
+        assert!(check_increment(&[1.0, f64::NAN, 2.0], INCREMENT_TOLERANCE).is_none());
+        assert!(check_increment(&[1.0, 1.0], INCREMENT_TOLERANCE).is_none());
+        // Floating-point steps such as 0.1 still count as even.
+        let xs: Vec<f64> = (0..50).map(|i| f64::from(i) * 0.1).collect();
+        assert!(check_increment(&xs, INCREMENT_TOLERANCE).unwrap().uniform);
+    }
+}

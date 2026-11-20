@@ -743,6 +743,15 @@ Name) and `colshowx` (Clear Sampling Interval, default off). Measured from LabTa
   "units"}`). The `.opj` written here does not hold it: the save warning says "N column(s) have a sampling
   interval ...", and the companion keeps it for Sheaf. Not read from Origin's `.opj` files yet. Sheaf's
   analysis tools (fits, statistics) still take the X column or the row number, not the interval.
+- **From X Column** (T228, Sheaf's button, **not measured**; Origin's `vinc` / `vinc_check` X-Functions
+  are for internal use): when the first selected column has an X column, Set Sampling Interval has a
+  "From X Column" button. It checks the X values (up to the last number) the way `vinc` does: the mean
+  step is (last - first) / (count - 1), and the column is evenly spaced when no step differs from it by
+  more than 1e-6 of the step (`sheaf_core::sampling::check_increment`, Sheaf's tolerance). Evenly spaced,
+  the button fills Initial X Value with the first value and X Increment with the mean step, and Units and
+  Long Name with the X column's when it has them; otherwise the window says "X column A is not evenly
+  spaced: a step differs from the mean step M by D" (or "needs at least two numbers and no gaps" for
+  fewer than two numbers, a missing value or a zero step) and changes nothing. The X column stays.
 
 ## 13e. Swap Columns and Paste Transpose (T86, 2026-11-16)
 

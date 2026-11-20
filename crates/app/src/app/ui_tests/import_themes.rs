@@ -494,3 +494,18 @@ fn the_wizard_closes_the_save_as_window_when_it_leaves_the_source_page() {
     click(&mut h, "<< Back");
     assert!(!has_label(&h, "Theme name"), "the window does not come back with a stale name and no focus");
 }
+
+#[test]
+fn add_sparklines_in_import_options_gives_the_imported_sheet_its_sparklines_row() {
+    let dir = scratch("sparklines");
+    let mut h = start_with(Some(dir.join("themes")));
+    let file = csv(&dir, "s.csv");
+    open_ascii(&mut h, &file);
+    assert_eq!(ascii(&h).theme_state().0.ascii.sparklines, sheaf_io::ascii::AddSparklines::No);
+    // The list of Import Options: Origin's three choices.
+    choose(&mut h, "No", "Yes(if less than 50 columns)");
+    click(&mut h, "OK");
+    let sheet = &project(&h).workbooks().next().unwrap().sheets[0];
+    assert!(sheet.view.sparklines, "the Sparklines row is on");
+    assert!(sheet.columns.iter().all(|c| c.sparkline));
+}

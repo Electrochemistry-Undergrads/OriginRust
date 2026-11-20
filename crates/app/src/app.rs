@@ -3414,7 +3414,9 @@ impl SheafApp {
             Action::SetSamplingInterval { columns } => {
                 let current =
                     columns.first().and_then(|c| self.doc.project().column(*c)).and_then(|c| c.sampling.as_ref());
-                self.sampling = Some(crate::dialogs::sampling::SamplingDialog::new(columns.clone(), current));
+                let mut dialog = crate::dialogs::sampling::SamplingDialog::new(columns.clone(), current);
+                dialog.from_x = columns.first().and_then(|c| sampling_from_x(self.doc.project(), *c));
+                self.sampling = Some(dialog);
             }
             Action::ShowXColumn { columns } => {
                 self.show_x = Some(crate::dialogs::sampling::ShowXDialog::new(columns));
@@ -7971,6 +7973,24 @@ pub(crate) fn apply_graph_theme(g: &mut sheaf_core::graph::Graph, format: &sheaf
             }
         }
     }
+}
+
+/// Set Sampling Interval's "From X Column" (T228): the X column the column is plotted against, checked
+/// for even spacing (Origin's `vinc`); `None` when it has no X column.
+fn sampling_from_x(project: &sheaf_core::Project, column: ColumnId) -> Option<crate::dialogs::sampling::FromX> {
+    use sheaf_core::sampling::{INCREMENT_TOLERANCE, check_increment};
+    let (_, sheet, _) = project.locate(column)?;
+    let x = sheet.x_for(sheet.column_index(column)?)?;
+    let values = x.numeric().unwrap_or(&[]);
+    let finite_end = values.iter().rposition(|v| v.is_finite()).map_or(0, |i| i + 1);
+    Some(match check_increment(&values[..finite_end], INCREMENT_TOLERANCE) {
+        Some(c) if c.uniform => Ok((c.x0, c.inc, x.units.clone(), x.long_name.clone())),
+        Some(c) => Err(format!(
+            "X column {} is not evenly spaced: a step differs from the mean step {} by {}",
+            x.short_name, c.inc, c.max_deviation
+        )),
+        None => Err(format!("X column {} needs at least two numbers and no gaps", x.short_name)),
+    })
 }
 
 /// The importer a book's source file is read again with (Re-Import, T98); `None` for a book not

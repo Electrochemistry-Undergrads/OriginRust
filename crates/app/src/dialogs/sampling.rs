@@ -13,7 +13,13 @@ pub enum SamplingOutcome {
     Set { columns: Vec<ColumnId>, x0: f64, inc: f64, long_name: String, units: String },
 }
 
+/// What the "From X Column" button of Set Sampling Interval offers (T228): the start, step, units and
+/// long name of the selected column's evenly spaced X column, or why there is none.
+pub type FromX = Result<(f64, f64, String, String), String>;
+
 pub struct SamplingDialog {
+    /// The selected column's X column checked for even spacing (T228); `None` without an X column.
+    pub from_x: Option<FromX>,
     columns: Vec<ColumnId>,
     x0: f64,
     inc: f64,
@@ -29,7 +35,7 @@ impl SamplingDialog {
             Some(s) => (s.x0, s.inc, s.units.clone(), s.long_name.clone()),
             None => (1.0, 1.0, String::new(), String::new()),
         };
-        SamplingDialog { columns, x0, inc, units, long_name, problem: None }
+        SamplingDialog { from_x: None, columns, x0, inc, units, long_name, problem: None }
     }
 
     pub fn set_problem(&mut self, p: String) {
@@ -59,6 +65,25 @@ impl SamplingDialog {
                     ui.add(egui::TextEdit::singleline(&mut self.long_name).desired_width(160.0));
                     ui.end_row();
                 });
+                if let Some(from) = &self.from_x {
+                    // Origin's vinc check (T228): take the start and step of the column's evenly spaced X.
+                    if ui.button("From X Column").clicked() {
+                        match from {
+                            Ok((x0, inc, units, long_name)) => {
+                                self.x0 = *x0;
+                                self.inc = *inc;
+                                if !units.is_empty() {
+                                    self.units.clone_from(units);
+                                }
+                                if !long_name.is_empty() {
+                                    self.long_name.clone_from(long_name);
+                                }
+                                self.problem = None;
+                            }
+                            Err(why) => self.problem = Some(why.clone()),
+                        }
+                    }
+                }
                 ui.weak("To clear the sampling interval, set both Initial X Value and X Increment to 1.");
                 if let Some(p) = &self.problem {
                     ui.label(RichText::new(p).color(egui::Color32::from_rgb(190, 30, 30)));

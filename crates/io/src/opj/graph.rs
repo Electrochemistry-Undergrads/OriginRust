@@ -814,6 +814,15 @@ fn read_curve(
         202 => PlotKind::LineSymbol,
         203 => PlotKind::Column,
         204 => PlotKind::Area,
+        // LabTalk's documented plot-type IDs (T223) of plots that read one Y column; the record layout
+        // of these kinds was not compared byte for byte with Origin's.
+        206 => PlotKind::Box,
+        213 => PlotKind::StackedColumn,
+        214 => PlotKind::StackedArea,
+        215 => PlotKind::Bar,
+        216 => PlotKind::StackedBar,
+        219 => PlotKind::Histogram,
+        225 => PlotKind::Pie,
         _ => {
             notes.push(format!("plot type {ptype} is not supported and is drawn as a line with symbols"));
             PlotKind::LineSymbol
@@ -1411,5 +1420,28 @@ mod tests {
         let g = build(&w, &ids(), &mut Vec::new());
         assert!(!g.layers[0].legend.visible);
         assert!(g.layers[0].labels.is_empty());
+    }
+
+    #[test]
+    fn documented_single_column_plot_types_are_read_as_their_kind() {
+        // T223: LabTalk's plot-type IDs; a multi-column type (205 High-Low-Close) keeps the fallback.
+        for (ptype, kind) in [
+            (206, PlotKind::Box),
+            (213, PlotKind::StackedColumn),
+            (214, PlotKind::StackedArea),
+            (215, PlotKind::Bar),
+            (216, PlotKind::StackedBar),
+            (219, PlotKind::Histogram),
+            (225, PlotKind::Pie),
+            (205, PlotKind::LineSymbol),
+        ] {
+            let mut w = window();
+            w.layers[0].columns = vec![curve(2, 1, ptype, [3, 0, 0, 0])];
+            let mut warnings = Vec::new();
+            let g = build(&w, &ids(), &mut warnings);
+            assert_eq!(g.layers[0].plots[0].kind, kind, "type {ptype}");
+            let warned = warnings.iter().any(|w| w.contains(&format!("plot type {ptype}")));
+            assert_eq!(warned, ptype == 205, "type {ptype}: {warnings:?}");
+        }
     }
 }

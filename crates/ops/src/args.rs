@@ -612,6 +612,11 @@ pub struct ReadOptions {
     /// Delimited text: a file with several blocks of data separated by blank lines gets one sheet per block.
     #[arg(long)]
     pub blocks_as_sheets: bool,
+    /// Delimited text: Add Sparklines (Origin's import option): the imported columns get sparklines
+    /// and the sheet shows its Sparklines row; auto only when the sheet has fewer than 50 columns
+    /// (Origin's default; Sheaf's is no).
+    #[arg(long, value_enum, default_value_t = SparklinesArg::No)]
+    pub sparklines: SparklinesArg,
     /// Excel (.xls, .xlsx, .xlsm): the sheets to read, as names or 1-based positions counted over
     /// all sheets, comma-separated (for example "Results,3"). A number is the sheet of that name if there
     /// is one, otherwise the sheet at that position.
@@ -704,6 +709,17 @@ pub enum ImportLayout {
     Columns,
     /// One sheet; the rows of the files one under the other.
     Rows,
+}
+
+/// Add Sparklines of delimited text (`sheaf import --sparklines`, T231).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum SparklinesArg {
+    /// No sparklines.
+    No,
+    /// Every imported column.
+    Yes,
+    /// Every imported column when the sheet has fewer than 50 columns (Origin's default).
+    Auto,
 }
 
 /// The digit-grouping character of numbers (`sheaf import --thousands`).
@@ -1025,7 +1041,8 @@ pub struct PlotArgs {
     /// draws every line in the plot colour. For a treemap or sunburst the category columns, comma-separated, the first the top level or innermost ring
     /// (default: the text columns among --y, else every text column of the sheet). For grouped-columns and grouped-box
     /// one or two group columns, comma-separated (required): the first the groups along the X axis, the second the
-    /// subgroups side by side.
+    /// subgroups side by side. With any other template (line, scatter, ...) one curve per value of the group column
+    /// (Origin's plotgroup): the rows are split into a new sheet `Grouped`, the legend names the values.
     #[arg(long, value_name = "COLUMN", conflicts_with_all = ["graph", "panels"])]
     pub group: Option<String>,
     /// Make a graph of several panels: stack (one column of panels that share the X axis, the

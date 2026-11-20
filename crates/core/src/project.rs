@@ -814,6 +814,9 @@ impl Project {
                         sheet.remap_format_columns(&|id| Some(c(id)));
                         // A graph sheet (T190) follows its graph's new id.
                         sheet.graph_sheet = sheet.graph_sheet.map(w);
+                        for g in &mut sheet.cell_graphs {
+                            g.graph = w(g.graph);
+                        }
                     }
                 }
                 Window::Graph(graph) => {

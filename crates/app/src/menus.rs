@@ -145,6 +145,16 @@ pub enum Cmd {
     ManageTemplates,
     /// File > Batch Processing... (T165).
     BatchProcessing,
+    /// A data cell's Insert Graph... (T194).
+    InsertCellGraph {
+        column: ColumnId,
+        row: usize,
+    },
+    /// A data cell's Remove Graph (T194).
+    RemoveCellGraph {
+        column: ColumnId,
+        row: usize,
+    },
     /// Analysis > Peaks and Baseline > Batch Peak Analysis Using Theme... (T169).
     BatchPeaks,
     /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values (T74).
@@ -2308,8 +2318,10 @@ pub fn label_cell_menu(read_only: bool) -> Vec<Entry> {
     ]
 }
 
-/// The menu of a data cell; `noted` when the cell has a note (Edit/Delete Note instead of Add).
-pub fn cell_menu_for(noted: bool) -> Vec<Entry> {
+/// The menu of a data cell; `noted` when the cell has a note (Edit/Delete Note instead of Add);
+/// `cell` is the right-clicked cell and `graph` whether it shows a graph (T194).
+pub fn cell_menu_for(noted: bool, cell: (ColumnId, usize), graph: bool) -> Vec<Entry> {
+    let (column, row) = cell;
     let mut v = vec![keyed("Cut", ctrl(Key::X), Cmd::Cut)];
     v.extend(copy_entries());
     v.push(keyed("Paste", ctrl(Key::V), Cmd::Paste));
@@ -2323,13 +2335,11 @@ pub fn cell_menu_for(noted: bool) -> Vec<Entry> {
     v.push(item("Set as End", Cmd::SetRangeEnd(RangeEnd::End)));
     v.push(sep());
     v.push(grey_sub("Insert Arrow", &["Arrow", "Double Arrow"]));
-    v.extend(greys(&[
-        "Insert Graph...",
-        "Insert Images from Files...",
-        "Insert Sparklines...",
-        "Insert Variables...",
-        "-",
-    ]));
+    v.push(item("Insert Graph...", Cmd::InsertCellGraph { column, row }));
+    if graph {
+        v.push(item("Remove Graph", Cmd::RemoveCellGraph { column, row }));
+    }
+    v.extend(greys(&["Insert Images from Files...", "Insert Sparklines...", "Insert Variables...", "-"]));
     v.push(item("Format Cells...", Cmd::FormatCells));
     if noted {
         v.push(item("Edit Note...", Cmd::EditNote));
@@ -3152,6 +3162,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             }
             Action::ManageTemplates
         }
+        Cmd::InsertCellGraph { column, row } => Action::PickCellGraph { column: *column, row: *row },
+        Cmd::RemoveCellGraph { column, row } => Action::SetCellGraph { column: *column, row: *row, graph: None },
         Cmd::BatchProcessing => {
             if !c.templates {
                 return Err(NO_TEMPLATE_FOLDER);

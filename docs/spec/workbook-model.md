@@ -1002,6 +1002,16 @@ leaves the sheet with a note. The sheet has no columns; it is saved in `.sheaf` 
 following the graph's id on Append), dropped from workbook templates, and left out of an `.opj` with a
 warning (as Notes sheets are).
 
+**Graphs in cells (T194, 2026-11-20, not measured).** A data cell's right-click Insert Graph... opens the list
+of the project's graphs; OK puts that graph in the cell, one undo step ("Insert Graph"). The cell shows a
+picture of the graph fitted into it on white (drawn again whenever the project changes); a double click
+opens the graph window instead of editing the cell. One graph per cell (inserting again replaces it); the
+cell's Remove Graph takes it out ("Remove Graph"). The graph follows its column when columns get new ids
+and goes with a deleted column; it is saved in `.sheaf` (the sheet's `cell_graphs`), dropped from workbook
+templates, not written to `.opj`, and not printed or exported with the sheet. Rows inserted or deleted
+above do not move it. The row number's Insert Graph... stays grey. Origin's sizing and embedding were not
+measured.
+
 ## 13j. Find in Project (T95, measured 2026-11-16, Origin 2016)
 
 Edit > Find in Project... (F3; "Find in Project" on a graph's Edit menu) opens Origin's **Find** window

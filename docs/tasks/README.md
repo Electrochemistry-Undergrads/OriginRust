@@ -153,7 +153,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T152](T152-legend-order.md) | Legend Bring to front/back, front/back of data (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured; left: legend Cut/Copy |
 | [T153](T153-title-order.md) | Axis title Bring to the front / Push to the back (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured |
 | [T154](T154-notes-window.md) | Notes windows: File > New > Notes, New Notes (B14 slice) | M | done 2026-11-19 (notes-window spec), not measured; left: Add Notes as Sheet, .opj |
-| [T179](T179-matrices.md) | Matrix books, heat maps, contour plots, `sheaf matrix` (B14 slice 1, port of the offline originrust-3a branch) | L | slices 1-2 done 2026-11-19 (matrices spec, Origin 2016 measured; app window, New Matrix); left: Matrix menu, contour/heat map menus, .opj |
+| [T179](T179-matrices.md) | Matrix books, heat maps, contour plots, `sheaf matrix` (B14 slice 1, port of the offline originrust-3a branch) | L | slices 1-3 done 2026-11-19 (matrices spec, Origin 2016 measured; app window, New Matrix, Matrix menu, Contour/Heat Map plots); left: Convert to Matrix menu, statistics, .opj |
 | [T178](T178-legend-clipboard.md) | Legend right-click Cut/Copy; `\l(n)` and `%(n)` in free text labels (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured |
 | [T162](T162-object-group.md) | Object Edit Group/Ungroup, dragging a selection or a group (B2 slice) | M | done 2026-11-19 (graphing "Aligning drawn objects and text"), not measured |
 | [T159](T159-object-align.md) | Shift+click multi-selection, Object Edit Align and Make Same Width/Height (B2 slice) | M | done 2026-11-19 (graphing "Aligning drawn objects and text"), not measured; left: Group/Ungroup, distribute |
@@ -185,6 +185,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T183](T183-layer-icon-switches.md) | Layer icon menu: Show Active Layer Only, Set Active Layer By Layer Icon Only, Double click to open Plot Setup (T61 leftovers) | S | done 2026-11-19 (graphing 21.16), not measured |
 | [T185](T185-page-break-lines.md) | Worksheet Page Break Preview Lines (View menu, corner menu) (B6 slice) | S | done 2026-11-19 (workbook-model 13i), not measured |
 | [T187](T187-categories-row.md) | Worksheet corner Categories row (B6 slice) | S | done 2026-11-20 (workbook-model 13i), not measured |
+| [T188](T188-notes-sheet.md) | Sheet tab Add Notes as Sheet (B6 slice) | S | done 2026-11-20 (notes-window spec), not measured |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |

@@ -185,6 +185,8 @@ pub struct SheafApp {
     layer_management: Option<crate::dialogs::layer_management::LayerManagementDialog>,
     add_layer_dialog: Option<crate::dialogs::add_layer::AddLayerDialog>,
     fit_page: Option<crate::dialogs::fit_page::FitPageDialog>,
+    /// The Matrix menu's Set Matrix Values, Set Dimensions, Expand and Shrink windows (T179).
+    matrix_dialog: Option<crate::dialogs::matrix_ops::MatrixOpDialog>,
     axis3d: Option<crate::dialogs::axis3d::Axis3dDialog>,
     plot_setup: Option<crate::dialogs::plot_setup::PlotSetupDialog>,
     error_bars: Option<ErrorBarsDialog>,
@@ -363,6 +365,7 @@ impl SheafApp {
             layer_management: None,
             add_layer_dialog: None,
             fit_page: None,
+            matrix_dialog: None,
             axis3d: None,
             plot_setup: None,
             error_bars: None,
@@ -939,6 +942,7 @@ impl SheafApp {
         self.layer_management = None;
         self.add_layer_dialog = None;
         self.fit_page = None;
+        self.matrix_dialog = None;
         self.axis3d = None;
         self.label_panels = None;
         self.simulate = None;
@@ -1936,6 +1940,20 @@ impl SheafApp {
                     self.say(e);
                 }
             }
+            Action::MatrixCmd { id, cmd } => self.matrix_cmd(id, cmd),
+            Action::PlotField { template, matrix, xyz } => {
+                let made = self.doc.edit("New graph", |p| match (matrix, xyz) {
+                    (Some(id), _) => {
+                        let sheet = p.matrix_book(id).map_or(0, |b| b.active_sheet);
+                        p.plot_matrix(template, id, sheet)
+                    }
+                    (None, Some((x, y, z))) => p.plot_xyz(template, x, y, z),
+                    (None, None) => Err(sheaf_core::project::ProjectError::NoSuchWindow(sheaf_core::WindowId(0))),
+                });
+                if let Err(e) = made {
+                    self.warn(e.to_string());
+                }
+            }
             Action::SetMatrixSheet { id, sheet } => {
                 self.doc.adjust_view(|p| {
                     if let Some(b) = p.matrix_book_mut(id)
@@ -1948,6 +1966,15 @@ impl SheafApp {
             Action::NewNotes => {
                 self.doc.apply("New notes", |p| {
                     p.add_notes();
+                });
+            }
+            Action::SetNotesSheetText { book, sheet, text } => {
+                self.doc.apply("Edit notes", |p| {
+                    if let Some(s) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet))
+                        && s.notes_text.is_some()
+                    {
+                        s.notes_text = Some(text);
+                    }
                 });
             }
             Action::SetNotesText { id, text } => {
@@ -3707,6 +3734,16 @@ impl SheafApp {
                     });
                 }
             }
+            SheetOp::AddNotes => {
+                self.doc.apply("Add Notes as Sheet", |p| {
+                    if let Some(b) = p.workbook_mut(book) {
+                        b.add_notes_sheet();
+                    }
+                });
+                if let Some(state) = self.books.get_mut(&book) {
+                    state.clear_selection();
+                }
+            }
             SheetOp::RenameDialog => {
                 let sheet = &b.sheets[active];
                 self.sheet_name = Some(SheetNameDialog {
@@ -5048,6 +5085,51 @@ impl SheafApp {
 
     /// File > Import > Re-Import Directly and Re-Import... (T98): reads the book's source file (or, for
     /// Re-Import..., a file picked starting from it) again and replaces the data, one undo step.
+    /// The Matrix menu (T179 slice 3): the operations without settings run at once as one undo step;
+    /// the others open their window.
+    fn matrix_cmd(&mut self, id: WindowId, cmd: crate::menus::MatrixCmd) {
+        use crate::dialogs::matrix_ops::{Form, MatrixOpDialog};
+        use crate::menus::MatrixCmd as M;
+        use sheaf_core::matrix::{FlipDirection, Rotation};
+        use sheaf_core::matrix_project::MatrixOp;
+        let Some(sheet) = self.doc.project().matrix_book(id).map(|b| b.active_sheet) else { return };
+        let form = match cmd {
+            M::SetValues => Some(Form::Values { formula: String::new() }),
+            M::Dimensions => Some(Form::Dimensions { cols: 0, rows: 0, x: (0.0, 0.0), y: (0.0, 0.0) }),
+            M::Expand => Some(Form::Expand { cols: 2, rows: 2 }),
+            M::Shrink => Some(Form::Shrink { cols: 2, rows: 2 }),
+            _ => None,
+        };
+        if let Some(form) = form {
+            self.matrix_dialog = MatrixOpDialog::new(&self.doc, id, form);
+            return;
+        }
+        let op = match cmd {
+            M::Transpose => MatrixOp::Transpose,
+            M::RotateCcw => MatrixOp::Rotate(Rotation::Ccw90),
+            M::RotateCw => MatrixOp::Rotate(Rotation::Cw90),
+            M::Rotate180 => MatrixOp::Rotate(Rotation::Half),
+            M::FlipHorizontal => MatrixOp::Flip { direction: FlipDirection::Horizontal, coordinates: false },
+            M::FlipVertical => MatrixOp::Flip { direction: FlipDirection::Vertical, coordinates: false },
+            M::ToWorksheet => {
+                use sheaf_core::matrix_convert::{LabelSource, M2wMethod, XyLayout};
+                let method = M2wMethod::Direct {
+                    layout: XyLayout::None,
+                    labels: LabelSource::None,
+                    coords_in_first_column: false,
+                };
+                if let Err(e) = self.doc.edit("Convert to Worksheet", |p| p.matrix_to_worksheet(id, sheet, &method)) {
+                    self.warn(e.to_string());
+                }
+                return;
+            }
+            _ => return,
+        };
+        if let Err(e) = crate::dialogs::matrix_ops::apply(&mut self.doc, id, sheet, &op) {
+            self.warn(e);
+        }
+    }
+
     fn reimport(&mut self, book: WindowId, choose: bool) {
         let Some(b) = self.doc.project().workbook(book) else { return };
         let Some((source, kind)) = b.source.clone().zip(reimport_kind(b)) else {
@@ -5125,6 +5207,7 @@ impl SheafApp {
         let kind = match (book, graph) {
             (Some(_), _) => WindowKind::Workbook,
             (_, Some(_)) => WindowKind::Graph,
+            _ if self.active.is_some_and(|id| project.matrix_book(id).is_some()) => WindowKind::Matrix,
             _ => WindowKind::None,
         };
         let selected: &[ColumnId] = book.and_then(|b| self.books.get(&b)).map(|s| s.selected.as_slice()).unwrap_or(&[]);
@@ -5438,6 +5521,7 @@ impl SheafApp {
             || self.layer_management.is_some()
             || self.add_layer_dialog.is_some()
             || self.fit_page.is_some()
+            || self.matrix_dialog.is_some()
             || self.axis3d.is_some()
             || self.plot_setup.is_some()
             || self.error_bars.is_some()
@@ -5771,6 +5855,13 @@ impl SheafApp {
                     self.axis3d = None;
                     self.say("Set the 3D axis scales");
                 }
+            }
+        }
+        if let Some(d) = &mut self.matrix_dialog {
+            use crate::dialogs::matrix_ops::Outcome;
+            match d.show(ctx, &mut self.doc) {
+                Outcome::Open => {}
+                Outcome::Closed | Outcome::Done => self.matrix_dialog = None,
             }
         }
         if let Some(d) = &mut self.fit_page {

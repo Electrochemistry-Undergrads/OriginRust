@@ -249,6 +249,26 @@ each matrix as not written).
   headers, selection and copy, Plot > Contour/Heat Map from a matrix window, and Convert to Matrix in
   the Worksheet menu. The command line already has all of these (section 7).
 
+## 7b. The Matrix menu and Plot > Contour/Heat Map in the app (T179 slice 3, 2026-11-19, not measured)
+
+- A matrix window has its own menu bar: File, View, Plot, Matrix, Tools, Window, Help. Each item
+  works on the active sheet and is one undo step named after the operation (section 4).
+  - **Set Matrix Values...:** a formula in i, j, x and y.
+  - **Set Dimensions/Labels...:** columns, rows and the X and Y ranges, filled from the sheet.
+  - **Transpose.**
+  - **Rotate90:** 90 CCW, 90 CW, 180.
+  - **Flip:** Horizontal, Vertical. The coordinates are not mirrored.
+  - **Expand...** and **Shrink...:** column and row factors, 2 by default.
+  - **Convert to Worksheet:** Direct, with no coordinates, into a new workbook.
+
+  The labels follow Origin's documented Matrix menu but are not measured. A window shows the refusal
+  of its operation (for example a bad formula) and stays open.
+- Plot > Contour/Heat Map > Color Fill, B/W Lines + Labels and Heat Map make a graph from the
+  sheet's templates (section 6). In a matrix window they plot the active sheet. In a workbook they plot
+  three selected columns, in selection order, as X, Y and Z: a contour from scattered or gridded
+  points, and a heat map only from points on a regular grid. Gray Scale Map, the polar and ternary
+  contours and the profiles stay grey.
+
 ## 8. What was not verified, and what is left
 
 - Not run in Origin: `mdim` on a matrix that holds data; shrink with missing values; `w2m` options `lr` on accepted

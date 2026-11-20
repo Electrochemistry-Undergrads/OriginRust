@@ -162,6 +162,7 @@ pub fn place_workbook_with(
                     cell_formats: Vec::new(),
                     font_defaults: Default::default(),
                     comparison_source: None,
+                    notes_text: None,
                 };
             }
             // Further sheets of the file (several data blocks) follow as new sheets.

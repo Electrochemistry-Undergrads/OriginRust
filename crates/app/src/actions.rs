@@ -93,6 +93,8 @@ pub enum SheetOp {
     Navigate,
     /// Open the window that asks for a new name.
     RenameDialog,
+    /// Add Notes as Sheet: a Notes sheet after the last sheet (T188).
+    AddNotes,
 }
 
 /// An edit of one object of a graph, from the graph window (Origin's right-click menus).
@@ -315,6 +317,17 @@ pub enum Action {
         col: usize,
         value: Option<f64>,
     },
+    /// A Matrix menu command on the active sheet of matrix book `id` (T179 slice 3).
+    MatrixCmd {
+        id: WindowId,
+        cmd: crate::menus::MatrixCmd,
+    },
+    /// A heat map or contour graph of a matrix sheet (its active one) or of XYZ columns (T179).
+    PlotField {
+        template: sheaf_core::template::FieldTemplate,
+        matrix: Option<WindowId>,
+        xyz: Option<(sheaf_core::ColumnId, sheaf_core::ColumnId, sheaf_core::ColumnId)>,
+    },
     /// A matrix book's sheet tab was clicked (view state, no undo step).
     SetMatrixSheet {
         id: WindowId,
@@ -323,6 +336,12 @@ pub enum Action {
     /// The text of a Notes window after editing: one undo step.
     SetNotesText {
         id: WindowId,
+        text: String,
+    },
+    /// The text of a Notes sheet after editing (T188): one undo step.
+    SetNotesSheetText {
+        book: WindowId,
+        sheet: usize,
         text: String,
     },
     /// Column > Fill Column With > a pattern: open its window for these columns.

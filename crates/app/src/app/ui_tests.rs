@@ -3699,7 +3699,7 @@ fn the_sheet_tab_menu_adds_duplicates_renames_and_deletes_sheets() {
             "Navigate...",
         ],
     );
-    assert!(!entry_enabled(&h, "Add Notes as Sheet"));
+    assert!(entry_enabled(&h, "Add Notes as Sheet"), "Add Notes as Sheet works (T188)");
     menu_entry(&h, "Add").click();
     settle(&mut h);
     assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 2);

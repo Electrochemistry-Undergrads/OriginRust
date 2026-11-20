@@ -41,3 +41,49 @@ fn a_matrix_is_made_shown_and_a_typed_cell_is_one_undo_step() {
     settle(&mut h);
     assert_eq!(project(&h).matrix_books().count(), 2);
 }
+
+#[test]
+fn the_matrix_menu_transforms_sets_values_converts_and_plots_the_active_sheet() {
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::NewMatrix, &ctx);
+    settle(&mut h);
+    let id = project(&h).matrix_books().next().unwrap().id;
+    let sheet = |h: &Harness<'static, SheafApp>| project(h).matrix_sheet(id, 0).unwrap().clone();
+    assert_eq!(h.state().menu_context().kind, menus::WindowKind::Matrix, "the new matrix window is active");
+    // Set Matrix Values... with a formula in i and j.
+    menu_path(&mut h, &["Matrix", "Set Matrix Values..."]);
+    h.query_all_by_role(egui::accesskit::Role::TextInput).last().expect("the formula box").focus();
+    settle(&mut h);
+    h.event(egui::Event::Text("i*100+j".into()));
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert_eq!(sheet(&h).value(0, 1), 102.0, "row 1, column 2");
+    assert_eq!(h.state().doc.undo_label(), Some("Set Matrix Values"));
+    // Transpose swaps rows and columns, one undo step.
+    menu_path(&mut h, &["Matrix", "Transpose"]);
+    assert_eq!(sheet(&h).value(1, 0), 102.0);
+    assert_eq!(h.state().doc.undo_label(), Some("Transpose Matrix"));
+    h.state_mut().apply(Action::Undo, &ctx);
+    settle(&mut h);
+    assert_eq!(sheet(&h).value(0, 1), 102.0);
+    // Flip Horizontal mirrors the columns.
+    menu_path(&mut h, &["Matrix", "Flip", "Horizontal"]);
+    assert_eq!(sheet(&h).value(0, 31), 101.0);
+    // Convert to Worksheet makes a workbook of the cells.
+    let books = project(&h).workbooks().count();
+    let action = menus::resolve(&menus::Cmd::Matrix(menus::MatrixCmd::ToWorksheet), &h.state().menu_context()).unwrap();
+    h.state_mut().apply(action, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).workbooks().count(), books + 1);
+    // Plot > Contour/Heat Map > Heat Map of the active matrix.
+    show_window(&mut h, "MBook1");
+    let graphs = project(&h).graphs().count();
+    let action =
+        menus::resolve(&menus::Cmd::PlotField(sheaf_core::template::FieldTemplate::HeatMap), &h.state().menu_context())
+            .unwrap();
+    h.state_mut().apply(action, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).graphs().count(), graphs + 1);
+    assert!(project(&h).graphs().last().unwrap().layers[0].field.is_some(), "a heat map layer");
+}

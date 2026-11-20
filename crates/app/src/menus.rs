@@ -34,7 +34,7 @@ use eframe::egui::{
 use sheaf_core::clipboard::CopyPart;
 use sheaf_core::data_range::RangeEnd;
 use sheaf_core::fill_pattern::QuickFill;
-use sheaf_core::format_clip::{AxisPart, GraphPart};
+use sheaf_core::format_clip::{AxisPart, GraphPart, LegendPart};
 use sheaf_core::graph::{PlotKind, Stack};
 use sheaf_core::sheetops::{MaskOp, MoveTo};
 use sheaf_core::template::Template;
@@ -537,6 +537,16 @@ pub enum Cmd {
     },
     PasteLegendStyles {
         layer: usize,
+    },
+    /// A legend's Copy Format > Dimensions or All (T179).
+    CopyLegendFormat {
+        layer: usize,
+        part: sheaf_core::format_clip::LegendPart,
+    },
+    /// A legend's Paste Format To > Dimensions or All (T179).
+    PasteLegendFormat {
+        layer: usize,
+        part: sheaf_core::format_clip::LegendPart,
     },
     /// Edit > Paste Format...: the Apply Formats window.
     PasteFormatDialog,
@@ -2552,11 +2562,26 @@ pub fn graph_legend_menu(layer: usize, can_color: bool, can_bubble: bool) -> Vec
         sep(),
         sub(
             "Copy Format",
-            vec![item("Styles", Cmd::CopyLegendStyles { layer }), grey("Dimensions"), sep(), grey("All")],
+            vec![
+                item("Styles", Cmd::CopyLegendStyles { layer }),
+                item("Dimensions", Cmd::CopyLegendFormat { layer, part: LegendPart::Dimensions }),
+                sep(),
+                item("All", Cmd::CopyLegendFormat { layer, part: LegendPart::All }),
+            ],
         ),
     ];
-    if crate::format_clip_ui::kind() == Some(crate::format_clip_ui::ClipKind::Legend) {
-        menu.push(sub("Paste Format To", vec![item("Styles", Cmd::PasteLegendStyles { layer })]));
+    if let Some((styles, dimensions)) = crate::format_clip_ui::legend_parts() {
+        // Each entry pastes what the copied legend format holds (T179).
+        let when = |held: bool, label: &str, cmd: Cmd| if held { item(label, cmd) } else { grey(label) };
+        menu.push(sub(
+            "Paste Format To",
+            vec![
+                when(styles, "Styles", Cmd::PasteLegendStyles { layer }),
+                when(dimensions, "Dimensions", Cmd::PasteLegendFormat { layer, part: LegendPart::Dimensions }),
+                sep(),
+                item("All", Cmd::PasteLegendFormat { layer, part: LegendPart::All }),
+            ],
+        ));
     }
     menu.push(item("Save Format as Theme...", Cmd::SaveLegendTheme { layer }));
     menu
@@ -3414,6 +3439,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::PasteLegendStyles { layer } => {
             Action::PasteLegendStyles { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer }
+        }
+        Cmd::CopyLegendFormat { layer, part } => {
+            Action::CopyLegendFormat { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, part: *part }
+        }
+        Cmd::PasteLegendFormat { layer, part } => {
+            Action::PasteLegendFormat { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, part: *part }
         }
         Cmd::PasteFormatDialog => Action::PasteFormatDialog { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::IntegrateGadget => Action::StartIntegrate { graph: c.graph.ok_or(NEED_GRAPH)? },

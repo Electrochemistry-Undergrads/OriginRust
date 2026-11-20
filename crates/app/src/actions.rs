@@ -977,6 +977,18 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
     },
+    /// A legend's Copy Format > Dimensions or All (T179).
+    CopyLegendFormat {
+        graph: WindowId,
+        layer: usize,
+        part: sheaf_core::format_clip::LegendPart,
+    },
+    /// A legend's Paste Format To > Dimensions or All (T179).
+    PasteLegendFormat {
+        graph: WindowId,
+        layer: usize,
+        part: sheaf_core::format_clip::LegendPart,
+    },
     /// Edit > Paste Format...: the Apply Formats window.
     PasteFormatDialog {
         graph: WindowId,

@@ -89,3 +89,21 @@ fn layout_items_are_moved_resized_and_deleted_with_the_mouse() {
     settle(&mut h);
     assert_eq!(project(&h).layout(id).unwrap().items.len(), 1);
 }
+
+#[test]
+fn a_layout_page_is_exported_as_a_picture_file() {
+    let mut p = sheaf_core::Project::new();
+    let g = p.add_graph(sheaf_core::template::Template::Line);
+    let id = p.add_layout();
+    p.layout_mut(id).unwrap().add_graph(g, 4.0 / 3.0);
+    let dir = std::env::temp_dir().join(format!("sheaf-layout-export-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let written = crate::layout_view::write_layout_image(&p, id, &dir.join("page")).unwrap();
+    assert_eq!(written.extension().and_then(|e| e.to_str()), Some("png"), "no extension: PNG");
+    assert!(std::fs::read(&written).unwrap().starts_with(&[0x89, b'P', b'N', b'G']));
+    let jpg = crate::layout_view::write_layout_image(&p, id, &dir.join("page.JPG")).unwrap();
+    assert!(std::fs::read(jpg).unwrap().starts_with(&[0xff, 0xd8]));
+    assert!(crate::layout_view::write_layout_image(&p, id, &dir.join("page.svg")).is_err());
+    assert!(menus::bar(menus::WindowKind::Layout).iter().any(|m| m.label == "&Layout"));
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -2009,6 +2009,23 @@ impl SheafApp {
                     self.focus(id);
                 }
             }
+            Action::LayoutExport { layout } => {
+                let name = self.doc.project().layout(layout).map(|l| l.name.clone()).unwrap_or_default();
+                let picked = rfd::FileDialog::new()
+                    .set_title("Export layout page")
+                    .add_filter("PNG image", &["png"])
+                    .add_filter("JPEG image", &["jpg", "jpeg"])
+                    .add_filter("TIFF image", &["tif", "tiff"])
+                    .add_filter("Windows bitmap", &["bmp"])
+                    .set_file_name(format!("{name}.png"))
+                    .save_file();
+                if let Some(path) = picked {
+                    match crate::layout_view::write_layout_image(self.doc.project(), layout, &path) {
+                        Ok(written) => self.say(format!("Exported {}", written.display())),
+                        Err(e) => self.warn(e),
+                    }
+                }
+            }
             Action::LayoutSetItem { layout, index, rect, resize } => {
                 let label = if resize { "Resize layout item" } else { "Move layout item" };
                 self.doc.apply(label, |p| {

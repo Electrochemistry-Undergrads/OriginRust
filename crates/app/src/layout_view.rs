@@ -33,6 +33,26 @@ pub fn dragged(rect: (f64, f64, f64, f64), resize: bool, delta: (f64, f64)) -> (
     if resize { (x, y, (w + delta.0).max(0.02), (h + delta.1).max(0.02)) } else { (x + delta.0, y + delta.1, w, h) }
 }
 
+/// Layout > Export Page as Image (T237 slice 3): writes `layout` to `path` at 300 dpi in the format
+/// of its extension (`.png` when it has none) and returns the path written.
+pub fn write_layout_image(
+    project: &sheaf_core::Project,
+    layout: WindowId,
+    path: &std::path::Path,
+) -> Result<std::path::PathBuf, String> {
+    let mut path = path.to_path_buf();
+    let ext = match path.extension().and_then(|e| e.to_str()) {
+        Some(e) => e.to_ascii_lowercase(),
+        None => {
+            path.set_extension("png");
+            "png".to_string()
+        }
+    };
+    let bytes = sheaf_plot::render_layout_image(project, layout, &ext, 300.0).map_err(|e| e.to_string())?;
+    std::fs::write(&path, bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(path)
+}
+
 /// Where the page lies in `area`: the largest rectangle of the page's shape, centred.
 pub fn page_rect(area: Rect, width_pt: f64, height_pt: f64) -> Rect {
     let aspect = (width_pt / height_pt.max(1.0)) as f32;

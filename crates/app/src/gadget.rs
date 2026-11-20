@@ -99,7 +99,7 @@ impl Integrator {
     pub fn volume(&self, project: &Project, graph: WindowId) -> Option<Volume> {
         let layer = project.graph(graph)?.layers.get(self.layer)?;
         let (cells, area) = sheaf_plot::field_cells(project, layer)?;
-        volume_in(&cells, area, (self.x0, self.x1), (self.y0, self.y1))
+        volume_in(&cells, area, (self.x0, self.x1), (self.y0, self.y1), self.circle)
     }
 }
 
@@ -140,10 +140,24 @@ pub fn write_volume(p: &mut Project, rect: [f64; 4], v: &Volume) -> WindowId {
 }
 
 /// [`Volume`] of `cells` (X, Y, Z) whose X is between `x0` and `x1` and Y between `y0` and `y1` (either
-/// order, ends included); `None` when no cell is inside.
-pub fn volume_in(cells: &[[f64; 3]], area: f64, (x0, x1): (f64, f64), (y0, y1): (f64, f64)) -> Option<Volume> {
+/// order, ends included), or with `circle` inside the ellipse that fills that rectangle (T201, its
+/// edge included); `None` when no cell is inside.
+pub fn volume_in(
+    cells: &[[f64; 3]],
+    area: f64,
+    (x0, x1): (f64, f64),
+    (y0, y1): (f64, f64),
+    circle: bool,
+) -> Option<Volume> {
     let inside = |v: f64, a: f64, b: f64| v >= a.min(b) && v <= a.max(b);
-    let z: Vec<f64> = cells.iter().filter(|p| inside(p[0], x0, x1) && inside(p[1], y0, y1)).map(|p| p[2]).collect();
+    let (cx, cy, rx, ry) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0, (x1 - x0).abs() / 2.0, (y1 - y0).abs() / 2.0);
+    let in_ellipse =
+        |x: f64, y: f64| rx > 0.0 && ry > 0.0 && ((x - cx) / rx).powi(2) + ((y - cy) / ry).powi(2) <= 1.0 + 1e-12;
+    let z: Vec<f64> = cells
+        .iter()
+        .filter(|p| if circle { in_ellipse(p[0], p[1]) } else { inside(p[0], x0, x1) && inside(p[1], y0, y1) })
+        .map(|p| p[2])
+        .collect();
     let n = z.len();
     if n == 0 {
         return None;
@@ -264,6 +278,8 @@ pub struct Integrator {
     pub y1: f64,
     /// Subtract the straight line through the first and last point of the range.
     pub end_point_baseline: bool,
+    /// 2D Integrate only (T201): the region is the ellipse that fills the rectangle.
+    pub circle: bool,
 }
 
 /// What the gadget asks the app to do.
@@ -271,6 +287,8 @@ pub struct Integrator {
 pub enum GadgetOp {
     /// Switch the baseline between zero and the line through the end points.
     ToggleBaseline,
+    /// 2D Integrate (T201): the region becomes the rectangle (`false`) or the circle in it (`true`).
+    SetRegion(bool),
     /// Write the result into a sheet.
     NewOutput,
     Close,
@@ -756,9 +774,19 @@ impl Integrator {
             }
             (GadgetKind::Integrate2d, _, _) => {
                 let layer = project.graph(graph).and_then(|g| g.layers.get(self.layer));
-                let volume = layer
-                    .and_then(|l| sheaf_plot::field_cells(project, l))
-                    .and_then(|(cells, area)| volume_in(&cells, area, (self.x0, self.x1), (self.y0, self.y1)));
+                let volume = layer.and_then(|l| sheaf_plot::field_cells(project, l)).and_then(|(cells, area)| {
+                    volume_in(&cells, area, (self.x0, self.x1), (self.y0, self.y1), self.circle)
+                });
+                if self.circle {
+                    // The circle region (T201): the ellipse inside the rectangle the edges drag.
+                    let pts: Vec<Pos2> = (0..64)
+                        .map(|k| {
+                            let t = std::f32::consts::TAU * k as f32 / 64.0;
+                            range.center() + egui::vec2(t.cos() * range.width() / 2.0, t.sin() * range.height() / 2.0)
+                        })
+                        .collect();
+                    painter.add(egui::Shape::closed_line(pts, Stroke::new(1.5_f32, Color32::from_rgb(200, 30, 30))));
+                }
                 match volume {
                     Some(v) => {
                         let g = |v: f64| sheaf_core::format::format_general(v, 5);
@@ -926,7 +954,7 @@ impl Integrator {
                 | GadgetKind::Differentiate
                 | GadgetKind::Interpolate
                 | GadgetKind::Cluster => menus::rise_time_gadget_menu(),
-                GadgetKind::Integrate2d => menus::integrate_2d_gadget_menu(),
+                GadgetKind::Integrate2d => menus::integrate_2d_gadget_menu(self.circle),
             };
             menus::show_context(ui, &menu, c, actions)
         });
@@ -959,6 +987,7 @@ mod tests {
             y0: 0.0,
             y1: 0.0,
             end_point_baseline: false,
+            circle: false,
         };
         assert!((g.result(&x, &y).unwrap().area - 8.0).abs() < 1e-12, "from 2 to 4 under x + 1");
         g.end_point_baseline = true;
@@ -970,13 +999,18 @@ mod tests {
         // A 3 x 3 grid at 0, 1, 2 with Z = x + y; cells of area 1.
         let cells: Vec<[f64; 3]> =
             (0..3).flat_map(|r| (0..3).map(move |c| [c as f64, r as f64, (c + r) as f64])).collect();
-        let all = volume_in(&cells, 1.0, (-1.0, 3.0), (3.0, -1.0)).unwrap();
+        let all = volume_in(&cells, 1.0, (-1.0, 3.0), (3.0, -1.0), false).unwrap();
         assert_eq!((all.n, all.sum, all.volume, all.min, all.max), (9, 18.0, 18.0, 0.0, 4.0));
         assert!((all.mean - 2.0).abs() < 1e-12);
         // The corner X, Y in 1..2: Z = 2, 3, 3, 4 (ends included), cells of area 0.5.
-        let corner = volume_in(&cells, 0.5, (1.0, 2.0), (1.0, 2.0)).unwrap();
+        let corner = volume_in(&cells, 0.5, (1.0, 2.0), (1.0, 2.0), false).unwrap();
         assert_eq!((corner.n, corner.sum, corner.volume), (4, 12.0, 6.0));
         assert!((corner.sd - (2.0f64 / 3.0).sqrt()).abs() < 1e-12);
-        assert!(volume_in(&cells, 1.0, (5.0, 6.0), (0.0, 1.0)).is_none());
+        assert!(volume_in(&cells, 1.0, (5.0, 6.0), (0.0, 1.0), false).is_none());
+        // T201: the circle in the square -1..3 (radius 2 about (1, 1)) holds all 9 cells, the corners
+        // being sqrt(2) away; the circle in 0..2 (radius 1) leaves the four corners out.
+        assert_eq!(volume_in(&cells, 1.0, (-1.0, 3.0), (-1.0, 3.0), true).unwrap().n, 9);
+        let round = volume_in(&cells, 1.0, (0.0, 2.0), (0.0, 2.0), true).unwrap();
+        assert_eq!((round.n, round.sum), (5, 10.0), "the centre and the four edge middles");
     }
 }

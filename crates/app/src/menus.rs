@@ -959,6 +959,7 @@ fn field_plot_items() -> Vec<Entry> {
     vec![
         item("Color Fill", Cmd::PlotField(FieldTemplate::ContourFill)),
         item("B/W Lines + Labels", Cmd::PlotField(FieldTemplate::ContourLines)),
+        item("Gray Scale Map", Cmd::PlotField(FieldTemplate::GrayScale)),
         item("Heat Map", Cmd::PlotField(FieldTemplate::HeatMap)),
     ]
 }
@@ -1543,12 +1544,7 @@ fn plot_menu() -> Vec<Entry> {
             "Contour/&Heat Map",
             [
                 field_plot_items(),
-                greys(&[
-                    "Gray Scale Map",
-                    "Polar Contour theta(X) r(Y)",
-                    "Polar Contour r(X) theta(Y)",
-                    "Ternary Contour",
-                ]),
+                greys(&["Polar Contour theta(X) r(Y)", "Polar Contour r(X) theta(Y)", "Ternary Contour"]),
                 vec![item("Hexbin", Cmd::Plot(Template::Hexbin))],
             ]
             .concat(),
@@ -2091,8 +2087,16 @@ pub fn rise_time_gadget_menu() -> Vec<Entry> {
 }
 
 /// The 2D Integrate gadget's right-click menu (T198).
-pub fn integrate_2d_gadget_menu() -> Vec<Entry> {
+pub fn integrate_2d_gadget_menu(circle: bool) -> Vec<Entry> {
+    let tick = |on: bool, name: &str| if on { format!("\u{2713} {name}") } else { name.to_string() };
     vec![
+        sub(
+            "Region",
+            vec![
+                item(&tick(!circle, "Rectangle"), Cmd::Gadget(GadgetOp::SetRegion(false))),
+                item(&tick(circle, "Circle"), Cmd::Gadget(GadgetOp::SetRegion(true))),
+            ],
+        ),
         item("New Output", Cmd::Gadget(GadgetOp::NewOutput)),
         sep(),
         keyed("Delete", plain_key(Key::Escape), Cmd::Gadget(GadgetOp::Close)),

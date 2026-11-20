@@ -2388,11 +2388,14 @@ pub enum FieldTemplate {
     /// Heat map: a block per matrix cell, blue to white to red, 5 major steps of 6 bands (Origin's
     /// "Heat Map").
     HeatMap,
+    /// Gray Scale Map (T201): heat-map cells from black (lowest) to white (highest), with a colour
+    /// scale. Sheaf's reading of Origin's "Gray Scale Map"; not measured.
+    GrayScale,
 }
 
 impl FieldTemplate {
-    pub const ALL: [FieldTemplate; 3] =
-        [FieldTemplate::ContourFill, FieldTemplate::ContourLines, FieldTemplate::HeatMap];
+    pub const ALL: [FieldTemplate; 4] =
+        [FieldTemplate::ContourFill, FieldTemplate::ContourLines, FieldTemplate::HeatMap, FieldTemplate::GrayScale];
 
     /// The name used on the command line.
     pub fn name(&self) -> &'static str {
@@ -2400,6 +2403,7 @@ impl FieldTemplate {
             FieldTemplate::ContourFill => "contour",
             FieldTemplate::ContourLines => "contour-lines",
             FieldTemplate::HeatMap => "heatmap",
+            FieldTemplate::GrayScale => "grayscale",
         }
     }
 
@@ -2408,6 +2412,7 @@ impl FieldTemplate {
             FieldTemplate::ContourFill => "Contour - Color Fill",
             FieldTemplate::ContourLines => "Contour - Lines",
             FieldTemplate::HeatMap => "Heat Map",
+            FieldTemplate::GrayScale => "Gray Scale Map",
         }
     }
 
@@ -2434,13 +2439,18 @@ impl FieldTemplate {
             axis.tick_font.size_pt = 10.0;
             axis.title_font.size_pt = 12.0;
         }
-        let kind = if *self == FieldTemplate::HeatMap { FieldKind::Cells } else { FieldKind::Contour };
+        let kind = if matches!(self, FieldTemplate::HeatMap | FieldTemplate::GrayScale) {
+            FieldKind::Cells
+        } else {
+            FieldKind::Contour
+        };
         let (fill, lines, labels, palette, major, minor) = match self {
             FieldTemplate::ContourFill => (true, true, false, FieldPalette::Rainbow, 8, 5),
             FieldTemplate::ContourLines => (false, true, true, FieldPalette::Rainbow, 10, 1),
             FieldTemplate::HeatMap => (true, false, false, FieldPalette::BlueWhiteRed, 5, 6),
+            FieldTemplate::GrayScale => (true, false, false, FieldPalette::Gray, 5, 6),
         };
-        if *self == FieldTemplate::HeatMap {
+        if matches!(self, FieldTemplate::HeatMap | FieldTemplate::GrayScale) {
             layer.x_axis.tick_label_angle_deg = 90.0;
         }
         layer.field = Some(FieldPlot {

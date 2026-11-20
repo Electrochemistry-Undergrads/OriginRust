@@ -365,7 +365,8 @@ impl MatrixSheet {
             .collect();
         for col in 0..n {
             let pivot = (col..n).max_by(|&i, &j| m[i][col].abs().total_cmp(&m[j][col].abs())).unwrap_or(col);
-            if !(m[pivot][col].abs() > 1e-12 * scale) {
+            // Every cell is finite (checked above), so the pivot compares normally.
+            if m[pivot][col].abs() <= 1e-12 * scale {
                 return Err(MatrixError::Invalid("the matrix is singular; it has no inverse".into()));
             }
             m.swap(col, pivot);
@@ -373,13 +374,12 @@ impl MatrixSheet {
             for v in &mut m[col] {
                 *v /= p;
             }
-            for r in 0..n {
-                if r != col {
-                    let f = m[r][col];
-                    if f != 0.0 {
-                        for k in 0..2 * n {
-                            m[r][k] -= f * m[col][k];
-                        }
+            let pivot_row = m[col].clone();
+            for (r, row) in m.iter_mut().enumerate() {
+                let f = row[col];
+                if r != col && f != 0.0 {
+                    for (v, p) in row.iter_mut().zip(&pivot_row) {
+                        *v -= f * p;
                     }
                 }
             }

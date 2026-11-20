@@ -331,6 +331,10 @@ pub enum Action {
         layout: WindowId,
         index: usize,
     },
+    /// Layout > Export Page as Image... (T237 slice 3): asks for a file and writes the page.
+    LayoutExport {
+        layout: WindowId,
+    },
     /// Layout > Add Graph... (T237): the window that adds a graph's picture to `layout`.
     LayoutAddGraph {
         layout: WindowId,

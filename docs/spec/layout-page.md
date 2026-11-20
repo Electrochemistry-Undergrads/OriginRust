@@ -37,7 +37,16 @@ unregistered on the reference machine). Everything below is Sheaf's choice unles
   as one undo step ("Move layout item", "Resize layout item").
 - Delete removes the selected item ("Delete layout item") while no text box has the keyboard.
 
+## Export (T237 slice 3)
+
+- Layout > Export Page as Image... asks for a file and writes the whole page at 300 dpi as PNG,
+  JPEG, TIFF or BMP, by the file's extension (`.png` when there is none). The page is white; each
+  graph is drawn at the pixel size it takes on the page and laid at its place, so a stretched item
+  is drawn stretched (nearest pixel). An item whose graph was deleted stays blank. Vector formats
+  (SVG, EMF, PDF) are refused with a message. Code: `sheaf_plot::render_layout_raster` /
+  `render_layout_image` (`crates/plot/src/layout_render.rs`), `layout_view::write_layout_image`.
+
 ## Not yet
 
 - Add Worksheet..., text and drawn objects on the page, picture holders,
-  Layout Page properties (page size), print and export of the page, and `.opj`.
+  Layout Page properties (page size), print, vector export of the page, and `.opj`.

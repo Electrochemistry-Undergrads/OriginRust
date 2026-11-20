@@ -289,6 +289,8 @@ pub struct SheafApp {
     sheet_name: Option<SheetNameDialog>,
     /// The text of the last Copy or Cut (the system clipboard has it too).
     copied: String,
+    /// The block last copied in Sheaf (columns and rows), for Paste Link (T211).
+    copied_cells: Option<(Vec<ColumnId>, std::ops::Range<usize>)>,
     /// Edit > Paste Transpose asked for the clipboard: the next pasted text is transposed.
     paste_transposed: bool,
     worksheet_clipboard: crate::wks_clipboard::WorksheetClipboard,
@@ -452,6 +454,7 @@ impl SheafApp {
             sort: None,
             sheet_name: None,
             copied: String::new(),
+            copied_cells: None,
             paste_transposed: false,
             worksheet_clipboard: crate::wks_clipboard::WorksheetClipboard::default(),
             copied_page: None,
@@ -2406,6 +2409,8 @@ impl SheafApp {
                 if !(beyond_end && text.trim().is_empty()) {
                     let mut understood = true;
                     self.doc.apply("Edit cell", |p| {
+                        // Typing into a linked cell replaces its value and ends the link (T211).
+                        p.drop_cell_link(column, row);
                         if let Some(c) = p.column_mut(column) {
                             understood = c.set_cell_text(row, &text);
                         }
@@ -3648,6 +3653,10 @@ impl SheafApp {
                 );
                 self.worksheet_clipboard.write(ctx, &external, &text);
                 self.copied = text;
+                // Paste Link (T211) links to the copied cells; a Cut leaves nothing to link to.
+                self.copied_cells = (!matches!(op, CellOp::Cut)).then(|| {
+                    (t.columns.iter().filter_map(|&i| sheet.columns.get(i).map(|c| c.id)).collect(), t.rows.clone())
+                });
                 let what = format!("{} row(s) of {} column(s)", t.rows.len(), t.columns.len());
                 if matches!(op, CellOp::Cut) {
                     self.clear_cells(book, sheet_index, &t, "Cut cells");
@@ -3657,6 +3666,50 @@ impl SheafApp {
                 }
             }
             CellOp::Clear => self.clear_cells(book, sheet_index, &t, "Clear cells"),
+            CellOp::PasteLink(transpose) => {
+                let Some((sources, rows)) = self.copied_cells.clone() else {
+                    self.warn("Copy cells first: Paste Link links to the cells last copied".to_string());
+                    return;
+                };
+                let (anchor_col, anchor_row) = (t.columns.first().copied().unwrap_or(0), t.rows.start);
+                let mut links = Vec::new();
+                let mut left_out = 0;
+                for (i, src_row) in rows.clone().enumerate() {
+                    for (j, src) in sources.iter().enumerate() {
+                        let (dc, dr) = if transpose { (i, j) } else { (j, i) };
+                        match sheet.columns.get(anchor_col + dc) {
+                            Some(c) if !c.is_locked() => links.push((c.id, anchor_row + dr, *src, src_row)),
+                            _ => left_out += 1,
+                        }
+                    }
+                }
+                let label = if transpose { "Paste Link Transpose" } else { "Paste Link" };
+                let n = links.len();
+                self.doc.apply(label, |p| {
+                    if let Some(ws) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet_index)) {
+                        for (column, row, source, source_row) in links {
+                            ws.set_cell_link(column, row, Some((source, source_row)));
+                        }
+                    }
+                });
+                if left_out > 0 {
+                    self.warn(format!(
+                        "{n} cell(s) linked; {left_out} left out (past the last column, or a column calculated from a formula)"
+                    ));
+                } else {
+                    self.say(format!("{n} cell(s) linked"));
+                }
+            }
+            CellOp::RemoveLinks => {
+                let ids: Vec<ColumnId> = t.columns.iter().filter_map(|&i| sheet.columns.get(i).map(|c| c.id)).collect();
+                let mut removed = 0;
+                self.doc.apply("Remove Links", |p| {
+                    if let Some(ws) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet_index)) {
+                        removed = ws.remove_cell_links(&ids, Some(t.rows.clone()));
+                    }
+                });
+                self.say(format!("{removed} link(s) removed; the cells keep their values"));
+            }
             CellOp::Fill(text) => {
                 let (mut locked, mut not_understood) = (0, 0);
                 self.doc.apply("Fill cells", |p| {
@@ -5398,6 +5451,23 @@ impl SheafApp {
             I::ToBinary => ImageForm::ToBinary(mean),
             I::Rotate => ImageForm::Rotate(Rotation::Ccw90),
             I::Flip => ImageForm::Flip(FlipDirection::Horizontal),
+            I::Levels => {
+                let (lo, hi) = b.sheets.get(sheet).and_then(|s| s.z_range()).unwrap_or((0.0, 255.0));
+                ImageForm::Levels { input: (lo, hi), output: (0.0, 255.0) }
+            }
+            I::Crop => {
+                let (rows, cols) = b.sheets.get(sheet).map_or((1, 1), |s| (s.rows.max(1), s.cols.max(1)));
+                ImageForm::Crop { rows: (1, rows), cols: (1, cols) }
+            }
+            I::Resize => {
+                let (rows, cols) = b.sheets.get(sheet).map_or((1, 1), |s| (s.rows.max(1), s.cols.max(1)));
+                ImageForm::Resize { rows, cols }
+            }
+            I::Subtract => {
+                let choices: Vec<(WindowId, String)> =
+                    self.doc.project().matrix_books().filter(|m| m.id != id).map(|m| (m.id, m.name.clone())).collect();
+                ImageForm::Subtract { choices, pick: 0 }
+            }
             I::Smooth | I::Sharpen | I::EdgeDetection => {
                 let op = match cmd {
                     I::Smooth => ImageOp::Smooth,

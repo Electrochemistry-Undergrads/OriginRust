@@ -3641,7 +3641,7 @@ fn the_cell_and_row_menus_copy_and_clear_and_grey_what_sheaf_lacks() {
     );
     assert!(entry_enabled(&h, "Copy"));
     assert!(entry_enabled(&h, "Paste Transpose"), "T86");
-    assert!(!entry_enabled(&h, "Paste Link"));
+    assert!(entry_enabled(&h, "Paste Link"), "T211");
     assert!(entry_enabled(&h, "Insert Graph..."), "T194");
     click_containing(&mut h, "Clear");
     assert!(column(&h, "B")[2].is_nan());
@@ -9126,6 +9126,7 @@ fn the_multivariate_menu_runs_a_k_means_cluster_analysis() {
 mod audit_log;
 mod batch_peaks;
 mod batch_plot;
+mod cell_links;
 mod cluster_gadget;
 mod copy_columns;
 mod copy_variants;

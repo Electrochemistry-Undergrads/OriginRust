@@ -285,3 +285,36 @@ fn the_image_menu_adjusts_and_filters_the_active_matrix_in_place() {
     let s = project(&h).matrix_sheet(id, 0).unwrap().clone();
     assert!(s.values().iter().all(|v| *v == 1.0), "every cell is at least 5 now: {:?}", s.values());
 }
+
+#[test]
+fn image_levels_crop_resize_and_subtract_change_the_active_matrix() {
+    use crate::dialogs::matrix_ops::{apply_image, subtract_image};
+    use sheaf_core::matrix_image::ImageOp;
+    use sheaf_core::matrix_project::MatrixOp;
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let (mut a, mut b) = (sheaf_core::WindowId(0), sheaf_core::WindowId(0));
+    h.state_mut().doc.apply("Matrices", |p| {
+        for id in [&mut a, &mut b] {
+            *id = p.add_matrix_book("");
+            p.apply_matrix_op(*id, 0, &MatrixOp::SetDimensions { rows: 2, cols: 2, ranges: None }).unwrap();
+            p.apply_matrix_op(*id, 0, &MatrixOp::SetValues("i*10+j".into())).unwrap();
+        }
+    });
+    settle(&mut h);
+    // Subtract opens its window with the other book chosen.
+    h.state_mut().apply(Action::ImageCmd { id: a, cmd: menus::ImageCmd::Subtract }, &ctx);
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Image Subtract"));
+    assert!(project(&h).matrix_sheet(a, 0).unwrap().values().iter().all(|v| *v == 0.0));
+    subtract_image(&mut h.state_mut().doc, b, 0, b).unwrap();
+    let doc = &mut h.state_mut().doc;
+    apply_image(doc, b, 0, &ImageOp::Resize { rows: 4, cols: 4 }).unwrap();
+    apply_image(doc, b, 0, &ImageOp::Crop { rows: (0, 1), cols: (2, 3) }).unwrap();
+    apply_image(doc, b, 0, &ImageOp::Levels { input: (-1.0, 1.0), output: (0.0, 10.0) }).unwrap();
+    let s = project(&h).matrix_sheet(b, 0).unwrap().clone();
+    assert_eq!((s.rows, s.cols), (2, 2));
+    assert!(s.values().iter().all(|v| *v == 5.0), "zeros map to the middle of the output: {:?}", s.values());
+    assert_eq!(h.state().doc.undo_label(), Some("Image Levels"));
+}

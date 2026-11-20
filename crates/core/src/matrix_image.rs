@@ -30,6 +30,14 @@ pub enum ImageOp {
     Sharpen,
     /// Spatial Filters > Edge Detection: the Sobel gradient magnitude.
     EdgeDetection,
+    /// Adjustments > Levels (T210): values from `input.0` to `input.1` are spread linearly over
+    /// `output.0` to `output.1`; values outside the input range take the nearest end.
+    Levels { input: (f64, f64), output: (f64, f64) },
+    /// Geometric Transform > Crop (T210): the 0-based rows `rows.0..=rows.1` and columns
+    /// `cols.0..=cols.1`, with the X and Y ranges of the cells kept.
+    Crop { rows: (usize, usize), cols: (usize, usize) },
+    /// Geometric Transform > Resize (T210): a new size by bilinear resampling, the ranges kept.
+    Resize { rows: usize, cols: usize },
 }
 
 /// The operator of Arithmetic Transform > Math.
@@ -55,6 +63,9 @@ impl ImageOp {
             ImageOp::Smooth => "Image Smooth",
             ImageOp::Sharpen => "Image Sharpen",
             ImageOp::EdgeDetection => "Image Edge Detection",
+            ImageOp::Levels { .. } => "Image Levels",
+            ImageOp::Crop { .. } => "Image Crop",
+            ImageOp::Resize { .. } => "Image Resize",
         }
     }
 
@@ -93,6 +104,50 @@ impl ImageOp {
             }
             ImageOp::ToBinary(t) => map(&|x| if x >= t { 1.0 } else { 0.0 }),
             ImageOp::Rotate(r) => return Ok(s.rotate90(r)),
+            ImageOp::Levels { input: (a, b), output: (lo, hi) } => {
+                if !(a.is_finite() && b.is_finite() && b > a) {
+                    return Err(MatrixError::Invalid("the input high level must be above the low level".into()));
+                }
+                map(&|x| lo + (x.clamp(a, b) - a) / (b - a) * (hi - lo))
+            }
+            ImageOp::Crop { rows: (r0, r1), cols: (c0, c1) } => {
+                if r0 > r1 || c0 > c1 || r1 >= rows || c1 >= cols {
+                    return Err(MatrixError::Invalid(format!(
+                        "the crop must lie inside the {rows} x {cols} cells, first before last"
+                    )));
+                }
+                let (nr, nc) = (r1 - r0 + 1, c1 - c0 + 1);
+                let data = (0..nr * nc).map(|k| v(r0 + k / nc, c0 + k % nc)).collect();
+                let mut out = s.like(nr, nc, data);
+                (out.x_from, out.x_to) = (s.x_at(c0), s.x_at(c1));
+                (out.y_from, out.y_to) = (s.y_at(r0), s.y_at(r1));
+                return Ok(out);
+            }
+            ImageOp::Resize { rows: nr, cols: nc } => {
+                if nr == 0 || nc == 0 {
+                    return Err(MatrixError::Invalid("the new size needs at least one row and column".into()));
+                }
+                crate::matrix::check_cells(nr, nc)?;
+                // Cell centres map onto the old grid end to end; a missing neighbour makes a missing cell.
+                let at = |i: usize, n_new: usize, n_old: usize| {
+                    if n_new == 1 || n_old == 1 { 0.0 } else { i as f64 * (n_old - 1) as f64 / (n_new - 1) as f64 }
+                };
+                let mut data = Vec::with_capacity(nr * nc);
+                for r in 0..nr {
+                    let fr = at(r, nr, rows);
+                    let (r0, tr) = (fr.floor() as usize, fr - fr.floor());
+                    let r1 = (r0 + 1).min(rows - 1);
+                    for c in 0..nc {
+                        let fc = at(c, nc, cols);
+                        let (c0, tc) = (fc.floor() as usize, fc - fc.floor());
+                        let c1 = (c0 + 1).min(cols - 1);
+                        let top = v(r0, c0) * (1.0 - tc) + v(r0, c1) * tc;
+                        let bottom = v(r1, c0) * (1.0 - tc) + v(r1, c1) * tc;
+                        data.push(top * (1.0 - tr) + bottom * tr);
+                    }
+                }
+                return Ok(s.like(nr, nc, data));
+            }
             ImageOp::Flip(d) => return Ok(s.flip(d, false)),
             ImageOp::Smooth | ImageOp::Sharpen | ImageOp::EdgeDetection => {
                 // The neighbourhood repeats the edge cells (a cell outside the sheet takes the
@@ -136,6 +191,18 @@ impl ImageOp {
     }
 }
 
+/// Arithmetic Transform > Subtract (T210): `s - other`, cell by cell; the sheets must be the same size.
+pub fn subtract(s: &MatrixSheet, other: &MatrixSheet) -> Result<MatrixSheet, MatrixError> {
+    if (s.rows, s.cols) != (other.rows, other.cols) {
+        return Err(MatrixError::Invalid(format!(
+            "the matrices differ in size ({} x {} and {} x {})",
+            s.rows, s.cols, other.rows, other.cols
+        )));
+    }
+    let data = s.values().iter().zip(other.values()).map(|(a, b)| a - b).collect();
+    Ok(s.like(s.rows, s.cols, data))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,5 +241,27 @@ mod tests {
         assert!(edges.value(1, 0) > 0.0, "an edge next to the bright cell");
         let flat = sheet(2, 2, &[3.0; 4]);
         assert!(ImageOp::EdgeDetection.apply(&flat).unwrap().values().iter().all(|v| *v == 0.0));
+    }
+
+    #[test]
+    fn levels_crop_resize_and_subtract() {
+        let s = sheet(2, 3, &[0.0, 50.0, 100.0, 150.0, 200.0, 250.0]);
+        let lv = ImageOp::Levels { input: (50.0, 150.0), output: (0.0, 255.0) }.apply(&s).unwrap();
+        assert_eq!(lv.values(), [0.0, 0.0, 127.5, 255.0, 255.0, 255.0]);
+        assert!(ImageOp::Levels { input: (5.0, 5.0), output: (0.0, 1.0) }.apply(&s).is_err());
+        let mut ranged = s.clone();
+        (ranged.x_from, ranged.x_to, ranged.y_from, ranged.y_to) = (0.0, 20.0, 0.0, 10.0);
+        let c = ImageOp::Crop { rows: (1, 1), cols: (1, 2) }.apply(&ranged).unwrap();
+        assert_eq!((c.rows, c.cols, c.values().to_vec()), (1, 2, vec![200.0, 250.0]));
+        assert_eq!((c.x_from, c.x_to, c.y_from, c.y_to), (10.0, 20.0, 10.0, 10.0));
+        assert!(ImageOp::Crop { rows: (0, 2), cols: (0, 0) }.apply(&s).is_err());
+        let r = ImageOp::Resize { rows: 3, cols: 5 }.apply(&s).unwrap();
+        assert_eq!((r.rows, r.cols), (3, 5));
+        assert_eq!(r.value(0, 0), 0.0);
+        assert_eq!(r.value(2, 4), 250.0);
+        assert_eq!(r.value(1, 2), 125.0, "the middle of the four central cells");
+        let d = subtract(&s, &s).unwrap();
+        assert!(d.values().iter().all(|v| *v == 0.0));
+        assert!(subtract(&s, &r).is_err());
     }
 }

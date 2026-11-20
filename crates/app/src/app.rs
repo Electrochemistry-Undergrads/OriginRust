@@ -2039,6 +2039,27 @@ impl SheafApp {
                     graphs,
                 ));
             }
+            Action::PickCellImage { column, row } => {
+                let picked = rfd::FileDialog::new()
+                    .set_title("Insert Images from Files")
+                    .add_filter("PNG image", &["png"])
+                    .pick_file();
+                let Some(path) = picked else { return };
+                match std::fs::read(&path) {
+                    Ok(bytes) if image::load_from_memory_with_format(&bytes, image::ImageFormat::Png).is_ok() => {
+                        let png = Some(std::sync::Arc::new(bytes));
+                        self.apply(Action::SetCellImage { column, row, png }, ctx);
+                    }
+                    Ok(_) => self.warn(format!("{} is not a PNG picture Sheaf can read", path.display())),
+                    Err(e) => self.warn(format!("{}: {e}", path.display())),
+                }
+            }
+            Action::SetCellImage { column, row, png } => {
+                let label = if png.is_some() { "Insert Image" } else { "Remove Image" };
+                self.doc.apply(label, |p| {
+                    p.set_cell_image(column, row, png);
+                });
+            }
             Action::PickCellSparkline { column, row } => {
                 let sources: Vec<(ColumnId, String)> = self
                     .doc

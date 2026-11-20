@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **85 greyed items: 73 in the menu bar, 1 on the toolbars, 11 in context menus.**
+original inventory baseline. This is not a new runtime audit. **84 greyed items: 73 in the menu bar, 1 on the toolbars, 10 in context menus.**
 
 ## How to read and keep this file
 
@@ -72,7 +72,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B2` | 3 |
 | `B3` | 3 |
 | `B4` | 0 |
-| `B5` | 5 |
+| `B5` | 4 |
 | `B6` | 7 |
 | `B7` | 0 |
 | `B8` | 0 |
@@ -86,7 +86,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 12 items, backlog packages (`B`) 53, not planned (`N`) 20.
+Briefs (`T`) hold 12 items, backlog packages (`B`) 52, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -174,7 +174,7 @@ changes. The baseline labels remain open until implementation or a documented re
 ## Context menus
 
 - `B6` Worksheet data cell: Insert Variables...
-- `B5` Worksheet data cell > Set Data Style: Wrap Text · Float
+- `B5` Worksheet data cell > Set Data Style: Wrap Text
 - `B6` Worksheet corner: Parameters · Filter
 - `T72` Graph axis > Copy Format: Dimensions
 - `T72` Graph axis > Paste Format To: Title Dimensions

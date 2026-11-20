@@ -5171,6 +5171,15 @@ impl SheafApp {
             M::Rotate180 => MatrixOp::Rotate(Rotation::Half),
             M::FlipHorizontal => MatrixOp::Flip { direction: FlipDirection::Horizontal, coordinates: false },
             M::FlipVertical => MatrixOp::Flip { direction: FlipDirection::Vertical, coordinates: false },
+            M::Fft2 | M::Ifft2 => {
+                let inverse = cmd == M::Ifft2;
+                let label = if inverse { "2D IFFT" } else { "2D FFT" };
+                match self.doc.edit(label, |p| p.matrix_fft2(id, sheet, inverse)) {
+                    Ok(_) => self.say(format!("{label}: the result is in a new matrix book")),
+                    Err(e) => self.warn(e.to_string()),
+                }
+                return;
+            }
             M::Inverse => {
                 match self.doc.edit("Matrix Inverse", |p| p.matrix_inverse(id, sheet)) {
                     Ok(_) => self.say("Inverted the matrix into a new matrix book".to_string()),

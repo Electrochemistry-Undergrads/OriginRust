@@ -199,6 +199,51 @@ impl Project {
         Ok(self.adopt_matrix_book(&format!("Inverse of {name}"), vec![inv]))
     }
 
+    /// Analysis > Signal Processing > FFT > 2D FFT and 2D IFFT (T196): a new matrix book with the
+    /// transform of a sheet, numpy's `fft2`/`ifft2` conventions (`sheaf_calc::fft2`). The forward
+    /// transform of the sheet's values gives the sheets Real, Imaginary, Amplitude and Phase (radians).
+    /// The inverse reads the book's sheets named Real and Imaginary when it has both, else the sheet
+    /// as real values, and gives Real and Imaginary. Missing values are refused.
+    pub fn matrix_fft2(&mut self, book: WindowId, sheet: usize, inverse: bool) -> Result<WindowId, ProjectError> {
+        let b = self.matrix_book(book).ok_or(ProjectError::NoSuchWindow(book))?;
+        let named = |n: &str| b.sheets.iter().find(|s| s.name.eq_ignore_ascii_case(n));
+        let src = self.matrix_sheet(book, sheet)?;
+        let (re_sheet, im_sheet) = match (inverse, named("Real"), named("Imaginary")) {
+            (true, Some(r), Some(i)) if r.rows == i.rows && r.cols == i.cols => (r, Some(i)),
+            _ => (src, None),
+        };
+        let (rows, cols) = (re_sheet.rows, re_sheet.cols);
+        let re: Vec<f64> = re_sheet.values().to_vec();
+        let im: Vec<f64> = im_sheet.map(|s| s.values().to_vec()).unwrap_or_default();
+        if re.len() != rows * cols || re.iter().chain(&im).any(|v| !v.is_finite()) {
+            return Err(crate::matrix::MatrixError::Invalid(
+                "the matrix has missing values; fill them before a 2D FFT".into(),
+            )
+            .into());
+        }
+        let (out_re, out_im) = sheaf_calc::fft2::fft2(&re, &im, rows, cols, inverse);
+        let named_like = |name: &str, data: Vec<f64>| {
+            let mut s = re_sheet.like(rows, cols, data);
+            s.name = name.to_string();
+            s
+        };
+        let mut sheets = Vec::new();
+        if !inverse {
+            let amp = out_re.iter().zip(&out_im).map(|(a, b)| a.hypot(*b)).collect();
+            let phase = out_re.iter().zip(&out_im).map(|(a, b)| b.atan2(*a)).collect();
+            sheets.push(named_like("Real", out_re));
+            sheets.push(named_like("Imaginary", out_im));
+            sheets.push(named_like("Amplitude", amp));
+            sheets.push(named_like("Phase", phase));
+        } else {
+            sheets.push(named_like("Real", out_re));
+            sheets.push(named_like("Imaginary", out_im));
+        }
+        let name = b.name.clone();
+        let what = if inverse { "2D IFFT" } else { "2D FFT" };
+        Ok(self.adopt_matrix_book(&format!("{what} of {name}"), sheets))
+    }
+
     /// Writes a matrix sheet to a new workbook and returns its id.
     pub fn matrix_to_worksheet(
         &mut self,

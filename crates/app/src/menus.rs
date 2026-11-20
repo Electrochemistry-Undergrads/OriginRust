@@ -96,6 +96,9 @@ pub enum MatrixCmd {
     ToWorksheet,
     /// Analysis > Mathematics > Inverse (T193).
     Inverse,
+    /// Analysis > Signal Processing > FFT > 2D FFT and 2D IFFT (T196).
+    Fft2,
+    Ifft2,
 }
 
 /// What the graph Edit menu's clipboard items do (T149).
@@ -881,7 +884,22 @@ fn base(kind: WindowKind) -> Vec<Menu> {
             m("&View", view_menu(kind)),
             m("&Plot", vec![sub("Contour/&Heat Map", field_plot_items())]),
             m("&Matrix", matrix_menu()),
-            m("&Analysis", vec![sub("&Mathematics", vec![item("&Inverse...", Cmd::Matrix(MatrixCmd::Inverse))])]),
+            m(
+                "&Analysis",
+                vec![
+                    sub("&Mathematics", vec![item("&Inverse...", Cmd::Matrix(MatrixCmd::Inverse))]),
+                    sub(
+                        "Si&gnal Processing",
+                        vec![sub(
+                            "&FFT",
+                            vec![
+                                item("2D FFT...", Cmd::Matrix(MatrixCmd::Fft2)),
+                                item("2D IFFT...", Cmd::Matrix(MatrixCmd::Ifft2)),
+                            ],
+                        )],
+                    ),
+                ],
+            ),
             m("&Tools", tools_menu()),
             m("&Window", window_menu(kind)),
             m("&Help", help_menu()),
@@ -1777,8 +1795,8 @@ fn analysis_menu() -> Vec<Entry> {
                     vec![
                         item("FFT...", Cmd::Analyze(AnalysisKind::Fft)),
                         item("IFFT...", Cmd::Analyze(AnalysisKind::Ifft)),
-                        grey("2D FFT..."),
-                        grey("2D IFFT..."),
+                        item("2D FFT...", Cmd::Matrix(MatrixCmd::Fft2)),
+                        item("2D IFFT...", Cmd::Matrix(MatrixCmd::Ifft2)),
                     ],
                 ),
                 item("Convolution...", Cmd::Analyze(AnalysisKind::Convolution)),

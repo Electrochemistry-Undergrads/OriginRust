@@ -27,6 +27,7 @@ pub mod distfit;
 pub mod dunnett;
 pub mod envelope;
 pub mod fft;
+pub mod fft2;
 pub mod fir;
 pub mod freq;
 pub mod graph_summary;

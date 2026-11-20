@@ -321,6 +321,19 @@ impl TitleDisplay {
     }
 }
 
+/// Where a graph shows the lock of an analysis that follows its data (T186, Origin's Data > Lock
+/// Position).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LockPosition {
+    /// At the layer's icon, top left of the window.
+    #[default]
+    LayerIcon,
+    /// Beside the plot's first point.
+    FirstPoint,
+    /// Beside the plot's last point.
+    LastPoint,
+}
+
 /// The settings of the page beyond its size and colour.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PageStyle {
@@ -330,6 +343,9 @@ pub struct PageStyle {
     /// The small layer number buttons at the top left of the graph window.
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub layer_icons: bool,
+    /// Data > Lock Position (T186).
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub lock_position: LockPosition,
     #[serde(default, skip_serializing_if = "is_default")]
     pub title_display: TitleDisplay,
     /// Free notes about the graph; the Object Manager shows them as the page's hover text.
@@ -362,6 +378,7 @@ impl Default for PageStyle {
         PageStyle {
             border: None,
             layer_icons: true,
+            lock_position: LockPosition::LayerIcon,
             title_display: TitleDisplay::Both,
             comments: String::new(),
             connect_across_breaks: false,
@@ -406,6 +423,7 @@ mod tests {
         let page = PageStyle {
             border: Some(BorderStyle::solid(Color::BLACK, 0.5)),
             layer_icons: false,
+            lock_position: LockPosition::LastPoint,
             title_display: TitleDisplay::LongName,
             comments: "notes".into(),
             connect_across_breaks: true,

@@ -774,6 +774,11 @@ pub enum Action {
         labels: Option<bool>,
         data: Option<bool>,
     },
+    /// Data > Lock Position (T186): one undo step.
+    SetLockPosition {
+        graph: WindowId,
+        position: sheaf_core::graph::LockPosition,
+    },
     SetLayerIcons {
         graph: WindowId,
         on: bool,

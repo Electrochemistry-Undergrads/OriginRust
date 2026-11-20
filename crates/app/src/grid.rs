@@ -457,6 +457,7 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         can_ungroup: false,
         view_mode: Default::default(),
         layer_icons: true,
+        lock_position: Default::default(),
         activate_by_icon_only: false,
         icon_double_click_plot_setup: false,
         show_labels: true,

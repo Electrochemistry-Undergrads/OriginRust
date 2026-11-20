@@ -6589,6 +6589,7 @@ mod clipboard_formats;
 
 mod add_layer_dialog;
 mod add_plot_to_layer;
+mod analysis_lock;
 mod axis3d;
 mod change_xy;
 mod find_replace;

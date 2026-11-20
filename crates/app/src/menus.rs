@@ -1255,7 +1255,10 @@ fn plot_menu() -> Vec<Entry> {
             "3D Su&rface",
             [
                 vec![item("Color Fill Surface", Cmd::Plot(Template::ColorFillSurface3d))],
-                greys(&["X Constant with Base", "Y Constant with Base"]),
+                vec![
+                    item("X Constant with Base", Cmd::Plot(Template::XConstant3d)),
+                    item("Y Constant with Base", Cmd::Plot(Template::YConstant3d)),
+                ],
                 vec![
                     item("Color Map Surface", Cmd::Plot(Template::ColorMapSurface3d)),
                     item("Colormap Surface with Projection", Cmd::Plot(Template::ColorMapProjection3d)),

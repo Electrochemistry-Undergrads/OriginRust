@@ -548,6 +548,11 @@ pub enum Surface3d {
     WireFrame,
     /// Mesh lines over a white fill, which hides the lines behind the surface (Wire Surface).
     WireSurface,
+    /// The points of each X value joined along Y into a curve of Z, filled down to the floor of
+    /// the box (X Constant with Base, T170).
+    XConstant,
+    /// The same with the points of each Y value joined along X (Y Constant with Base, T170).
+    YConstant,
 }
 
 impl Space3dCoords {

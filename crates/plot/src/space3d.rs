@@ -262,6 +262,9 @@ pub(crate) struct SurfaceData {
     pub triangles: Vec<([(f64, f64); 3], f64)>,
     /// The same triangles flat on the floor of the box, for a projection (T168); empty otherwise.
     pub floor: Vec<([(f64, f64); 3], f64)>,
+    /// The walls of X or Y Constant with Base (T170), farthest first: each a curve of Z and the
+    /// floor under it, as one polygon; empty for the other styles.
+    pub walls: Vec<Vec<(f64, f64)>>,
     pub z_range: (f64, f64),
 }
 
@@ -278,8 +281,12 @@ fn surface(c: &Space3dCoords, b: &DataBox, style: Surface3d, x: &[f64], y: &[f64
         }
     }
     let z_range = points.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| (lo.min(p.1), hi.max(p.1)));
-    let flat: Vec<(f64, f64)> = points.iter().map(|(p, _)| (p[0], p[1])).collect();
     let (sa, ca) = c.azimuth_deg.to_radians().sin_cos();
+    if let Surface3d::XConstant | Surface3d::YConstant = style {
+        let walls = constant_walls(c, &points, style == Surface3d::XConstant);
+        return SurfaceData { style, triangles: Vec::new(), floor: Vec::new(), walls, z_range };
+    }
+    let flat: Vec<(f64, f64)> = points.iter().map(|(p, _)| (p[0], p[1])).collect();
     let mut triangles: Vec<(f64, ([(f64, f64); 3], f64))> = sheaf_calc::xyzarea::delaunay(&flat)
         .unwrap_or_default()
         .into_iter()
@@ -302,7 +309,33 @@ fn surface(c: &Space3dCoords, b: &DataBox, style: Surface3d, x: &[f64], y: &[f64
             .collect(),
         _ => Vec::new(),
     };
-    SurfaceData { style, triangles: triangles.into_iter().map(|t| t.1).collect(), floor, z_range }
+    SurfaceData { style, triangles: triangles.into_iter().map(|t| t.1).collect(), floor, walls: Vec::new(), z_range }
+}
+
+/// X or Y Constant with Base (T170): the points (in the box's units) of each X value (`by_x`) or Y
+/// value joined in order of the other coordinate into a curve of Z, closed down along the floor of
+/// the box. Groups of one point draw nothing. Farthest first, by the mean depth of the curve.
+fn constant_walls(c: &Space3dCoords, points: &[([f64; 3], f64)], by_x: bool) -> Vec<Vec<(f64, f64)>> {
+    let (key, along) = if by_x { (0, 1) } else { (1, 0) };
+    let mut groups: std::collections::BTreeMap<u64, Vec<[f64; 3]>> = std::collections::BTreeMap::new();
+    for (p, _) in points {
+        // The box units of equal data values are equal, so their bits group them.
+        groups.entry((p[key] + 0.0).to_bits()).or_default().push(*p);
+    }
+    let (sa, ca) = c.azimuth_deg.to_radians().sin_cos();
+    let mut walls: Vec<(f64, Vec<(f64, f64)>)> = groups
+        .into_values()
+        .filter(|g| g.len() >= 2)
+        .map(|mut g| {
+            g.sort_by(|a, b| a[along].total_cmp(&b[along]));
+            let depth = g.iter().map(|p| p[0] * sa + p[1] * ca).sum::<f64>() / g.len() as f64;
+            let mut poly: Vec<(f64, f64)> = g.iter().map(|p| view(c, *p)).collect();
+            poly.extend(g.iter().rev().map(|p| view(c, [p[0], p[1], -1.0])));
+            (depth, poly)
+        })
+        .collect();
+    walls.sort_by(|p, q| q.0.total_cmp(&p.0));
+    walls.into_iter().map(|w| w.1).collect()
 }
 
 /// Draws a 3D surface (T166): its triangles from the farthest to the nearest, filled as its style
@@ -327,10 +360,19 @@ pub(crate) fn draw_surface(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeome
         let c = mapped(*mean_z);
         out.push(Item::Path { d: path(corners), fill: Some(c), stroke: Some(Stroke::solid(c, 0.25)) });
     }
+    for wall in &s.walls {
+        let mut d = String::new();
+        for (k, &(x, y)) in wall.iter().enumerate() {
+            let (px, py) = geom.data_to_page(x, y);
+            if k == 0 { scene::move_to(&mut d, px, py) } else { scene::line_to(&mut d, px, py) }
+        }
+        d.push('Z');
+        out.push(Item::Path { d, fill: Some(plot.symbol.color), stroke: stroke.clone() });
+    }
     for (corners, mean_z) in &s.triangles {
         let fill = match s.style {
             Surface3d::ColorMap | Surface3d::ColorMapProjection => Some(mapped(*mean_z)),
-            Surface3d::ColorFill => Some(plot.symbol.color),
+            Surface3d::ColorFill | Surface3d::XConstant | Surface3d::YConstant => Some(plot.symbol.color),
             Surface3d::WireFrame => None,
             Surface3d::WireSurface => Some(Color::WHITE),
         };
@@ -813,6 +855,8 @@ mod tests {
                 Surface3d::ColorMap | Surface3d::ColorMapProjection => {
                     assert!(fills.windows(2).any(|w| w[0] != w[1]))
                 }
+                // Walls, not triangles: their own test.
+                Surface3d::XConstant | Surface3d::YConstant => unreachable!(),
             }
         }
         // Farthest first: at azimuth 40 the far corner is at the largest X and Y.
@@ -822,5 +866,93 @@ mod tests {
         let tris = &layers[0].plots[0].surface.as_ref().unwrap().triangles;
         // Z = X * Y: the far corner (2, 2) has the largest Z, the near corner (0, 0) the smallest.
         assert!(tris.first().unwrap().1 > tris.last().unwrap().1);
+    }
+
+    #[test]
+    fn constant_with_base_draws_one_wall_per_x_or_y_value_back_to_front() {
+        use sheaf_core::column::{ColumnData, Designation};
+        use sheaf_core::graph::Surface3d;
+        use sheaf_core::template::Template;
+        // Three X values by four Y values, in a shuffled row order, and a point alone in X and Y (no wall).
+        let mut rows = Vec::new();
+        for j in [2, 0, 3, 1] {
+            for i in 0..3 {
+                rows.push((i as f64, j as f64, (i + j) as f64));
+            }
+        }
+        rows.push((9.0, 9.0, 1.0));
+        let mut p = Project::new();
+        let b = p.add_workbook("Book1");
+        p.add_column(b, 0, Designation::X, ColumnData::numeric(rows.iter().map(|r| r.0).collect())).unwrap();
+        let y = p.add_column(b, 0, Designation::Y, ColumnData::numeric(rows.iter().map(|r| r.1).collect())).unwrap();
+        p.add_column(b, 0, Designation::Z, ColumnData::numeric(rows.iter().map(|r| r.2).collect())).unwrap();
+        for (t, style, walls, points) in
+            [(Template::XConstant3d, Surface3d::XConstant, 3, 4), (Template::YConstant3d, Surface3d::YConstant, 4, 3)]
+        {
+            let g = p.plot_columns(t, &[y]).unwrap();
+            let graph = p.graph(g).unwrap();
+            let layer = &graph.layers[0];
+            let c = *layer.coords.space3d().unwrap();
+            assert_eq!(c.surface, Some(style));
+            let bx = data_box(&p, layer).unwrap();
+            let layers = crate::data::collect_graph(&p, graph);
+            let pd = &layers[0].plots[0];
+            let s = pd.surface.as_ref().unwrap();
+            assert!(s.triangles.is_empty());
+            assert_eq!(s.walls.len(), walls, "{t:?}");
+            // Each wall: the curve in order of the other coordinate, then the floor back.
+            assert!(s.walls.iter().all(|w| w.len() == 2 * points));
+            let at = |x: f64, y: f64, z: f64| view(&c, [bx.unit(0, x), bx.unit(1, y), bx.unit(2, z)]);
+            let floor = |x: f64, y: f64| view(&c, [bx.unit(0, x), bx.unit(1, y), -1.0]);
+            let close = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9;
+            // The last wall is the nearest: X = 0 (or Y = 0) at azimuth 40.
+            let near = s.walls.last().unwrap();
+            if style == Surface3d::XConstant {
+                assert!(close(near[0], at(0.0, 0.0, 0.0)) && close(near[3], at(0.0, 3.0, 3.0)));
+                assert!(close(near[4], floor(0.0, 3.0)) && close(near[7], floor(0.0, 0.0)));
+            } else {
+                assert!(close(near[0], at(0.0, 0.0, 0.0)) && close(near[2], at(2.0, 0.0, 2.0)));
+            }
+            let geom = crate::layout::graph_geometry(&p, graph, &layers, &crate::FixedMetrics).remove(0);
+            let mut out = Vec::new();
+            draw_surface(&mut out, pd, &geom);
+            assert_eq!(out.len(), walls);
+            assert!(
+                out.iter().all(
+                    |i| matches!(i, Item::Path { fill: Some(f), stroke: Some(_), .. } if *f == pd.plot.symbol.color)
+                )
+            );
+        }
+    }
+
+    #[test]
+    fn every_turn_and_tilt_keeps_the_points_inside_the_frame() {
+        // T172: the view can be turned all round and tilted from the side to above.
+        use sheaf_core::column::{ColumnData, Designation};
+        use sheaf_core::graph::Coords;
+        use sheaf_core::template::Template;
+        let mut p = Project::new();
+        let b = p.add_workbook("Book1");
+        p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0, 2.0, 3.0])).unwrap();
+        let y = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![3.0, 1.0, 2.0, 0.0])).unwrap();
+        p.add_column(b, 0, Designation::Z, ColumnData::numeric(vec![1.0, 5.0, 9.0, 2.0])).unwrap();
+        let g = p.plot_columns(Template::Bars3d, &[y]).unwrap();
+        for azimuth in [-180.0, -120.0, -45.0, 0.0, 40.0, 90.0, 135.0, 180.0] {
+            for elevation in [0.0, 25.0, 60.0, 90.0] {
+                if let Coords::Space3d(c) = &mut p.graph_mut(g).unwrap().layers[0].coords {
+                    (c.azimuth_deg, c.elevation_deg) = (azimuth, elevation);
+                }
+                let graph = p.graph(g).unwrap();
+                let layers = crate::data::collect_graph(&p, graph);
+                let pd = &layers[0].plots[0];
+                let x = pd.x.as_deref().unwrap();
+                // The turned cube stays within the hidden axes' -1.8..1.8 (SPACE3D_EXTENT).
+                for (u, w) in x.iter().zip(pd.y.iter()) {
+                    assert!(u.abs() <= 1.8 && w.abs() <= 1.8, "{azimuth}/{elevation}: ({u}, {w})");
+                }
+                let scene = crate::layout::build_scene(&p, g, &crate::FixedMetrics).unwrap();
+                assert!(!scene.layers[0].grid.is_empty(), "the box is drawn at {azimuth}/{elevation}");
+            }
+        }
     }
 }

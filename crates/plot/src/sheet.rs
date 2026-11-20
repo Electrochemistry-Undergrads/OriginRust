@@ -11,6 +11,9 @@ use sheaf_core::page_setup::PageSetup;
 use sheaf_core::sheet_print::{Align, PrintOp, PrintStyle, SheetTable, print_area};
 use sheaf_core::worksheet::Worksheet;
 
+mod image_formats;
+pub use image_formats::sheet_image_bytes;
+
 const FAMILY: &str = "Arial";
 
 /// What a printed sheet comes to: the pages of the table and the size of the printed area (the

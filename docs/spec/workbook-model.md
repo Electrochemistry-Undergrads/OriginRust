@@ -1008,8 +1008,34 @@ of the default 32-row sheet, about 300 dpi). With no file name the script wrote 
 Sheaf: one picture of the active sheet (its data rows, not empty spare rows), drawn from the printed table
 (`sheaf_core::sheet_print`) with the heads, row numbers and grid left out (`sheaf_plot::sheet_image_svg`).
 The save window offers PNG (300 dpi), PDF and SVG; the name defaults to `<book long name or name>_<sheet>.png`
-in the project's folder (Sheaf's choice). Not done: the other image types, several sheets at once, the size
-and overwrite options.
+in the project's folder (Sheaf's choice). The raster-format follow-up below adds JPEG, TIFF, BMP, GIF,
+TGA, PCX and PSD. Other vector types, several sheets at once, size and overwrite options remain open.
+
+### 13k.1 Additional worksheet raster formats (2026-11-17)
+
+The existing 2016 expWks list above and the [official expWks reference](https://docs.originlab.com/x-function/ref/expwks/)
+support the added types. File filters and extension dispatch now expose JPG/JPEG,
+TIF/TIFF, BMP, GIF, TGA, PCX and PSD. The new sheet_image_bytes facade routes the
+unchanged worksheet SVG through existing graph raster encoders; PNG/PDF/SVG keep
+their prior functions. No new Native measurement, COM retry or codec/layout/font
+change is claimed. SVG remains an existing Sheaf addition to the measured list.
+
+Defaults are explicit Sheaf choices: fixed300dpi in the App, graph RasterOptions
+defaults (24-bit colour, JPEG quality90, TIFF LZW), opaque formats flattened onto
+white, palette GIF and flattened RGB PSD without editable layers. Resolution is
+written where the existing encoder supports it. The existing400M-pixel cap applies
+before allocation. Side caps are30,000 for PSD,65,535 for JPEG/GIF/TGA and a common
+conservative65,534 for PCX (its even padded plane-row length must fit u16). Invalid
+resolution or unsupported formats return errors before a target file is written.
+App extensions are case-insensitive, aliases retain the requested path, and a
+missing extension still adds .png. Unknown vector formats stay unsupported.
+
+Original worksheet layout, labels/styles, file-name/folder default and overwrite
+behavior remain. The existing whole-sheet picture still includes retained source
+values outside a column's Begin/End display range; whether Origin expWks renders
+those values is unmeasured. This format slice does not change that rendering policy.
+AI/CGM/DXF/EMF/EPS/WMF, multi-sheet export and additional size/depth/quality/compression/
+overwrite controls remain open.
 
 ## 13l. Re-Import (T98, measured 2026-11-16, Origin 2016)
 

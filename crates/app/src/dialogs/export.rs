@@ -280,6 +280,25 @@ impl ExportDialog {
         }
     }
 
+    /// File > Export from a workbook or with no window open (T182): the window starts on every graph of
+    /// the project, in `format`; `multipage` ticks the multi-page PDF box.
+    pub fn for_all_graphs(mut self, format: ExportFormat, multipage: bool) -> Self {
+        self.which = Which::AllGraphs;
+        self.format = format;
+        self.multipage = multipage;
+        self
+    }
+
+    #[cfg(test)]
+    pub fn starts_on_all_graphs(&self) -> bool {
+        self.which == Which::AllGraphs
+    }
+
+    #[cfg(test)]
+    pub fn format_and_multipage(&self) -> (ExportFormat, bool) {
+        (self.format, self.multipage)
+    }
+
     /// The files written since the last call, each with the graph it shows (for Recent Exports).
     pub fn take_written(&mut self) -> Vec<(WindowId, PathBuf)> {
         std::mem::take(&mut self.written)

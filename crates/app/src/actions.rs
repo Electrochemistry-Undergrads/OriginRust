@@ -977,6 +977,18 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
     },
+    /// A legend's Copy Format > Dimensions or All (T179).
+    CopyLegendFormat {
+        graph: WindowId,
+        layer: usize,
+        part: sheaf_core::format_clip::LegendPart,
+    },
+    /// A legend's Paste Format To > Dimensions or All (T179).
+    PasteLegendFormat {
+        graph: WindowId,
+        layer: usize,
+        part: sheaf_core::format_clip::LegendPart,
+    },
     /// Edit > Paste Format...: the Apply Formats window.
     PasteFormatDialog {
         graph: WindowId,
@@ -1041,6 +1053,8 @@ pub enum Action {
         layer: usize,
     },
     ExportGraph(WindowId),
+    /// File > Export without an active graph: the Export Graphs window on every graph of the project (T182).
+    ExportProjectGraphs(crate::menus::ProjectGraphsExport),
     ExportData(WindowId),
     /// File > Export > Worksheet as Excel...: the sheets of this book as an `.xlsx` file.
     ExportExcel(WindowId),

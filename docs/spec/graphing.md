@@ -1374,6 +1374,15 @@ Sheaf (`sheaf_plot::render_multipage_pdf`, `crates/plot/src/multipage.rs`):
 ---
 
 
+### 9.7a Export from a workbook or with no window (T182, 2026-11-19, not measured)
+
+Outside a graph window, File > Export holds Graphs..., Graph as Image... and Multi-Page PDF... (with the
+worksheet exports). Origin's behaviour with no graph active was not measured; Sheaf opens the Export
+Graphs window on **every graph of the project** (the window's "all graphs" choice), started from the graph
+that was active most recently (it names the first file): Graphs... and Graph as Image... in PNG, Multi-Page
+PDF... in PDF with "Export as multi-page PDF file" ticked (9.7). Everything else in the window is as from a
+graph. With no graph in the project the items only say so in the status line.
+
 ### 9.8 Export Dialog Themes (T05)
 
 **Origin 2016, measured on Windows 2026-11-15.** Five isolated synthetic-graph sessions
@@ -5796,6 +5805,16 @@ the text labels (the Text group of All), each alone; the page menu's **Page Back
 colour, which Paste Format (page menu; it now pastes every group the clipboard holds) and Paste Format...
 (Apply Formats, listed as "Page Background") give the target page. All and All Style Formats keep Origin's measured groups and do not carry the page
 colour. Each paste is one undo step ("Apply Theme"). **Legend Translation Mode** stays grey (unknown).
+
+### 26.16 Legend Copy Format Dimensions and All (T179, 2026-11-19, not measured)
+
+Origin 2016's legend Copy Format lists Styles, Dimensions | All (26.2); OriginLab's legend guide puts the
+translation mode and custom format strings under All. Sheaf's choices: **Dimensions** copies the legend's
+position (automatic corner or manual place) and its number of columns; **All** copies the styles (26.12),
+the dimensions and the legend text (Sheaf's custom text, `None` for the automatic one). The legend's
+Paste Format To then lists Styles, Dimensions | All: Styles and Dimensions are grey when the copy does not
+hold them (a Dimensions copy holds no styles), and All pastes whatever the copy holds. Each paste is one
+undo step ("Apply Theme"); hidden legends are left alone. Clipboards saved before this read as Styles copies.
 
 ## 27. Colour scales and bubble scales: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (T80)
 

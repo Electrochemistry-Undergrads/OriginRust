@@ -185,6 +185,8 @@ pub struct SheafApp {
     layer_management: Option<crate::dialogs::layer_management::LayerManagementDialog>,
     add_layer_dialog: Option<crate::dialogs::add_layer::AddLayerDialog>,
     fit_page: Option<crate::dialogs::fit_page::FitPageDialog>,
+    /// File > Import > Binary 2D Array's options window (T199).
+    import_bin2d: Option<crate::dialogs::import_bin2d::ImportBin2dDialog>,
     /// The Matrix menu's Set Matrix Values, Set Dimensions, Expand and Shrink windows (T192).
     matrix_dialog: Option<crate::dialogs::matrix_ops::MatrixOpDialog>,
     axis3d: Option<crate::dialogs::axis3d::Axis3dDialog>,
@@ -235,6 +237,8 @@ pub struct SheafApp {
     batch: Option<crate::dialogs::batch_process::BatchDialog>,
     /// Add Graph as Sheet... (T190).
     graph_sheet_picker: Option<crate::dialogs::graph_sheet::GraphSheetPicker>,
+    /// A data cell's Insert Sparklines... (T200).
+    cell_sparkline_picker: Option<crate::dialogs::cell_sparkline::CellSparklinePicker>,
     /// Batch Peak Analysis Using Theme... (T169).
     batch_peaks: Option<crate::dialogs::batch_peaks::BatchPeaksDialog>,
     /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values.
@@ -368,6 +372,7 @@ impl SheafApp {
             add_layer_dialog: None,
             fit_page: None,
             matrix_dialog: None,
+            import_bin2d: None,
             axis3d: None,
             plot_setup: None,
             error_bars: None,
@@ -412,6 +417,7 @@ impl SheafApp {
             template_manager: None,
             batch: None,
             graph_sheet_picker: None,
+            cell_sparkline_picker: None,
             batch_peaks: None,
             fill_pattern: None,
             sampling: None,
@@ -946,6 +952,7 @@ impl SheafApp {
         self.add_layer_dialog = None;
         self.fit_page = None;
         self.matrix_dialog = None;
+        self.import_bin2d = None;
         self.axis3d = None;
         self.label_panels = None;
         self.simulate = None;
@@ -1956,6 +1963,15 @@ impl SheafApp {
                     crate::object_format::apply(&mut self.doc, request);
                 }
             }
+            Action::ImportBinary2d => {
+                let picked = rfd::FileDialog::new().set_title("Import Binary 2D Array").pick_file();
+                if let Some(path) = picked {
+                    match crate::dialogs::import_bin2d::ImportBin2dDialog::new(path) {
+                        Ok(d) => self.import_bin2d = Some(d),
+                        Err(e) => self.warn(e),
+                    }
+                }
+            }
             Action::NewMatrix => {
                 self.doc.apply("New matrix", |p| {
                     p.add_matrix_book("");
@@ -2022,6 +2038,36 @@ impl SheafApp {
                     crate::dialogs::graph_sheet::PickTarget::Cell { column, row },
                     graphs,
                 ));
+            }
+            Action::PickCellSparkline { column, row } => {
+                let sources: Vec<(ColumnId, String)> = self
+                    .doc
+                    .project()
+                    .locate(column)
+                    .map(|(_, sheet, _)| {
+                        sheet
+                            .columns
+                            .iter()
+                            .filter(|c| c.data.is_numeric())
+                            .map(|c| {
+                                let name = if c.long_name.is_empty() {
+                                    c.short_name.clone()
+                                } else {
+                                    format!("{} - {}", c.short_name, c.long_name)
+                                };
+                                (c.id, name)
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                self.cell_sparkline_picker =
+                    Some(crate::dialogs::cell_sparkline::CellSparklinePicker::new(column, row, sources));
+            }
+            Action::SetCellSparkline { column, row, source } => {
+                let label = if source.is_some() { "Insert Sparklines" } else { "Remove Sparkline" };
+                self.doc.apply(label, |p| {
+                    p.set_cell_sparkline(column, row, source);
+                });
             }
             Action::SetCellGraph { column, row, graph } => {
                 let label = if graph.is_some() { "Insert Graph" } else { "Remove Graph" };
@@ -4691,6 +4737,21 @@ impl SheafApp {
         }
     }
 
+    /// A data cell's Insert Sparklines... (T200): the column picker.
+    fn show_cell_sparkline_picker(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::cell_sparkline::CellSparklineOutcome;
+        let Some(p) = &mut self.cell_sparkline_picker else { return };
+        match p.show(ctx) {
+            CellSparklineOutcome::Open => {}
+            CellSparklineOutcome::Closed => self.cell_sparkline_picker = None,
+            CellSparklineOutcome::Pick(source) => {
+                let (column, row) = (p.column, p.row);
+                self.cell_sparkline_picker = None;
+                self.apply(Action::SetCellSparkline { column, row, source: Some(source) }, ctx);
+            }
+        }
+    }
+
     /// Add Graph as Sheet... (T190): the graph picker.
     fn show_graph_sheet_picker(&mut self, ctx: &egui::Context) {
         use crate::dialogs::graph_sheet::GraphSheetOutcome;
@@ -5651,6 +5712,7 @@ impl SheafApp {
             || self.add_layer_dialog.is_some()
             || self.fit_page.is_some()
             || self.matrix_dialog.is_some()
+            || self.import_bin2d.is_some()
             || self.axis3d.is_some()
             || self.plot_setup.is_some()
             || self.error_bars.is_some()
@@ -5983,6 +6045,17 @@ impl SheafApp {
                 Outcome::Done => {
                     self.axis3d = None;
                     self.say("Set the 3D axis scales");
+                }
+            }
+        }
+        if let Some(d) = &mut self.import_bin2d {
+            use crate::dialogs::import_bin2d::Outcome;
+            match d.show(ctx, &mut self.doc) {
+                Outcome::Open => {}
+                Outcome::Closed => self.import_bin2d = None,
+                Outcome::Done => {
+                    self.import_bin2d = None;
+                    self.say("Imported the binary 2D array into a new matrix book".to_string());
                 }
             }
         }
@@ -6458,6 +6531,7 @@ impl SheafApp {
         self.show_template_windows(ctx);
         self.show_batch(ctx);
         self.show_graph_sheet_picker(ctx);
+        self.show_cell_sparkline_picker(ctx);
         self.show_batch_peaks(ctx);
         self.show_fill_pattern(ctx);
         self.show_sampling(ctx);

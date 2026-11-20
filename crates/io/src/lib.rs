@@ -6,6 +6,7 @@
 
 pub mod ascii;
 pub mod batch;
+pub mod bin2d;
 pub mod chi;
 pub mod chi_bin;
 mod error;

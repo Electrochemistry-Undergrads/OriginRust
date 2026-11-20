@@ -311,6 +311,8 @@ pub enum Action {
     /// File > New > Matrix and the Standard toolbar's New Matrix (T192): a matrix book with one
     /// sheet of Origin's default size (32 x 32 missing values), one undo step.
     NewMatrix,
+    /// File > Import > Binary 2D Array...: choose a file, then its options window (T199).
+    ImportBinary2d,
     /// A typed matrix cell (T192): `None` clears it (missing). One undo step.
     SetMatrixCell {
         id: WindowId,
@@ -357,6 +359,17 @@ pub enum Action {
         column: ColumnId,
         row: usize,
         graph: Option<WindowId>,
+    },
+    /// A data cell's Insert Sparklines...: the window that picks the data column (T200).
+    PickCellSparkline {
+        column: ColumnId,
+        row: usize,
+    },
+    /// Draw a column's sparkline in a data cell or take it out (T200), one undo step.
+    SetCellSparkline {
+        column: ColumnId,
+        row: usize,
+        source: Option<ColumnId>,
     },
     /// Add Graph as Sheet (T190): a sheet of `book` that shows `graph`, one undo step.
     AddGraphSheet {

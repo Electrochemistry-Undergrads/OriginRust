@@ -1,8 +1,10 @@
 # T93: Sheet tab Navigate...
 
 **Status:** sheet listing and activation landed 2026-11-16 (workbook-model 13h). The Comments
-column now shows the worksheet's saved T90 comments with full text on hover. Actions
-remains open. Formatting, strict workspace Clippy, Nextest (4,517 passed and
+column now shows the worksheet's saved T90 comments with full text on hover. The Actions
+menu and row right-click (Activate, Duplicate, Duplicate without Data, Clear all Data, Delete, Move
+Before/Behind/to End, Set Current Order) with Ctrl/Shift multi-select landed 2026-11-19 as T180; Exclude
+from Plotting dialogs and the to-other-book moves remain open. Formatting, strict workspace Clippy, Nextest (4,517 passed and
 8 skipped), doc tests, inventory and eight Python tooling tests passed.
 
 Apply Reorder previews header sorting before committing the displayed worksheet order.

@@ -885,7 +885,24 @@ Measured in Origin 2016 by right-clicking a sheet tab (`tools/origin-ref/origin-
   active sheet selected, an Actions menu and Apply Reorder (greyed), OK and Close. Sheaf's window has Index,
   Name, Long Name, Columns, Rows and Comments. The Comments cell previews the first line and shows the
   full saved text on hover. Clicking an index or name picks a sheet, OK or a double click goes to it,
-  and Close or Escape closes. Name and Comments is the editing route. Actions remains open.
+  and Close or Escape closes. Name and Comments is the editing route.
+- **Actions (T180, not measured; Origin's help lists the items).** The Actions menu above the list and a
+  row's right-click menu hold the same items and act on the selected sheets. A click picks one sheet,
+  Ctrl+click adds or removes one (the last stays) and Shift+click selects the run from the last click in
+  the shown order; a right-click on an unselected row picks it first. Each item is one undo step:
+  - Activate (one sheet) goes to it, as OK does.
+  - Duplicate puts a copy with data right after each sheet ("Duplicate sheets"; the copy is named
+    `<name>_<n>` and becomes active). Duplicate without Data adds T90's copies after the last sheet.
+  - Clear all Data empties the sheets' columns, keeping columns, labels and formulas ("Clear worksheet
+    data").
+  - Delete removes the sheets and their columns from plots ("Delete sheets"); it is greyed when every
+    sheet is selected, since a workbook keeps one. The active sheet stays active when it is kept.
+  - Move Before and Move to Behind move each selected sheet one place towards the first or the last
+    sheet; a selected block moves together and stops at the ends. Move to End puts the selected sheets
+    last in their order ("Move worksheets"); the moved sheets stay selected.
+  - Set Current Order as Sheet Order is Apply Reorder.
+  - Not done: Exclude from Plotting dialogs, Move to New Book / Selected Book and Duplicate to New
+    Book. [Origin Navigate Worksheets](https://docs.originlab.com/origin-help/nav-wks-dialog/)
 - Clicking a Navigate Worksheets header in Sheaf previews its ascending order. Click it again for
   descending order. Index refers to the workbook order before applying. Apply Reorder commits the
   displayed permutation in one undo step and keeps the active worksheet. Equal values keep their

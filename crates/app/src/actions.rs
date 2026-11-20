@@ -1053,6 +1053,8 @@ pub enum Action {
         layer: usize,
     },
     ExportGraph(WindowId),
+    /// File > Export without an active graph: the Export Graphs window on every graph of the project (T182).
+    ExportProjectGraphs(crate::menus::ProjectGraphsExport),
     ExportData(WindowId),
     /// File > Export > Worksheet as Excel...: the sheets of this book as an `.xlsx` file.
     ExportExcel(WindowId),

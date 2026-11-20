@@ -28,7 +28,7 @@ before calling them Origin-compatible; otherwise preserve disabled state or docu
 | B | Horizontal Step, Vertical Step, Spline Connected (3) | Done 2026-11-19: `Template::StepHorizontal`, `StepVertical`, `SplineConnected` (the Line template with that connection); UI test in `ui_tests.rs` |
 | C | Probability Plot, Q-Q Plot (2) | Reviewed: deferred to B8/T14; documented score/confidence defaults need feature work before these entries can be wired (see review below) |
 | D | Open Excel (1) | T30 imports Excel into worksheets; Origin's item opens an Excel window. Reassign to B14 unless equivalent behaviour is established; do not relabel import as parity |
-| E | Graph as Image, Multi-Page PDF without graph active (2) | T05/T32; either state-disable as Origin does or choose project graphs through Export Graphs |
+| E | Graph as Image, Multi-Page PDF without graph active (2) | Done 2026-11-19 (T182): they open Export Graphs on every project graph (PNG; PDF with multi-page ticked), graphing 9.7a; not measured |
 | F | Standard/Explorer Duplicate (2) | Done: Standard toolbar uses the active window; Explorer window context item uses the clicked window; both reuse the existing duplicate command |
 | G | Object Edit Bring to Front/Send to Back (2) | T24 shape ordering; only shape selection supported today, broader object order is B2 |
 | H | Row Numbers/Uniform/Normal in menu and column context (6) | Done 2026-11-19: `Project::fill_quick` writes values (no formula) into every row of the sheet, one undo step; UI test `ui_tests/fill_pattern.rs` |

@@ -94,6 +94,17 @@ pub const NEED_SELECTED_OBJECT: &str = "select an object of the graph first";
 /// Why the graph Edit menu's Paste cannot run.
 pub const NOTHING_COPIED: &str = "copy a drawn object, a text label or an axis title first";
 
+/// What File > Export starts the Export Graphs window with when no graph is active (T182).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ProjectGraphsExport {
+    /// Graphs...: every graph, the last format used (PNG at first).
+    Graphs,
+    /// Graph as Image...: every graph as PNG pictures.
+    Image,
+    /// Multi-Page PDF...: every graph into one PDF, one page each.
+    MultiPagePdf,
+}
+
 /// A command of Sheaf that a menu item runs. It is turned into an [`Action`] with the state of
 /// the program by [`resolve`].
 #[derive(Clone, Debug, PartialEq)]
@@ -211,6 +222,8 @@ pub enum Cmd {
     /// Edit > Replace... (Ctrl+H) in a workbook.
     ReplaceInSheets,
     ExportGraph,
+    /// File > Export > Graphs..., Graph as Image... or Multi-Page PDF... without an active graph (T182).
+    ExportProjectGraphs(ProjectGraphsExport),
     ExportWorksheet,
     /// File > Export > Worksheet as Excel...
     ExportExcel,
@@ -1006,17 +1019,15 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
     } else {
         v.push(sub(
             "E&xport",
-            [
-                vec![
-                    item("&Graphs...", Cmd::ExportGraph),
-                    item("&Worksheet as ASCII...", Cmd::ExportWorksheet),
-                    item("Worksheet as E&xcel...", Cmd::ExportExcel),
-                ],
-                greys(&["Graph as Image..."]),
-                vec![item("Worksheet as Image...", Cmd::ExportWorksheetImage)],
-                greys(&["Multi-Page PDF..."]),
-                vec![exports_submenu()],
-            ]
+            [vec![
+                item("&Graphs...", Cmd::ExportProjectGraphs(ProjectGraphsExport::Graphs)),
+                item("&Worksheet as ASCII...", Cmd::ExportWorksheet),
+                item("Worksheet as E&xcel...", Cmd::ExportExcel),
+                item("Graph as Image...", Cmd::ExportProjectGraphs(ProjectGraphsExport::Image)),
+                item("Worksheet as Image...", Cmd::ExportWorksheetImage),
+                item("Multi-Page PDF...", Cmd::ExportProjectGraphs(ProjectGraphsExport::MultiPagePdf)),
+                exports_submenu(),
+            ]]
             .concat(),
         ));
     }
@@ -3021,6 +3032,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::FindInProject => Action::FindInProject,
         Cmd::ReplaceInSheets => Action::ReplaceInSheets(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
+        Cmd::ExportProjectGraphs(what) => Action::ExportProjectGraphs(*what),
         Cmd::ExportWorksheet => Action::ExportData(book?),
         Cmd::ExportExcel => Action::ExportExcel(book?),
         Cmd::ExportWorksheetImage => Action::ExportWorksheetImage(book?),

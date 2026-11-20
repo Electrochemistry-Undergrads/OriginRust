@@ -1374,6 +1374,15 @@ Sheaf (`sheaf_plot::render_multipage_pdf`, `crates/plot/src/multipage.rs`):
 ---
 
 
+### 9.7a Export from a workbook or with no window (T182, 2026-11-19, not measured)
+
+Outside a graph window, File > Export holds Graphs..., Graph as Image... and Multi-Page PDF... (with the
+worksheet exports). Origin's behaviour with no graph active was not measured; Sheaf opens the Export
+Graphs window on **every graph of the project** (the window's "all graphs" choice), started from the graph
+that was active most recently (it names the first file): Graphs... and Graph as Image... in PNG, Multi-Page
+PDF... in PDF with "Export as multi-page PDF file" ticked (9.7). Everything else in the window is as from a
+graph. With no graph in the project the items only say so in the status line.
+
 ### 9.8 Export Dialog Themes (T05)
 
 **Origin 2016, measured on Windows 2026-11-15.** Five isolated synthetic-graph sessions

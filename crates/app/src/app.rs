@@ -175,6 +175,8 @@ pub struct SheafApp {
     graphs: HashMap<WindowId, GraphUi>,
     /// Notes windows (T154).
     notes: HashMap<WindowId, crate::notes_view::NotesUi>,
+    /// Matrix windows (T179).
+    matrices: HashMap<WindowId, crate::matrix_view::MatrixUi>,
     import: Option<ImportDialog>,
     import_excel: Option<ExcelImportDialog>,
     import_wizard: Option<ImportWizard>,
@@ -352,6 +354,7 @@ impl SheafApp {
             books: HashMap::new(),
             graphs: HashMap::new(),
             notes: HashMap::new(),
+            matrices: HashMap::new(),
             import: None,
             import_excel: None,
             import_wizard: None,
@@ -1895,6 +1898,33 @@ impl SheafApp {
                 if self.object_format().is_some_and(|state| state.target == request.target) {
                     crate::object_format::apply(&mut self.doc, request);
                 }
+            }
+            Action::NewMatrix => {
+                self.doc.apply("New matrix", |p| {
+                    p.add_matrix_book("");
+                });
+            }
+            Action::SetMatrixCell { id, sheet, row, col, value } => {
+                let mut failed = None;
+                self.doc.apply("Edit matrix cell", |p| {
+                    if let Ok(s) = p.matrix_sheet_mut(id, sheet)
+                        && let Err(e) = s.set_value(row, col, value.unwrap_or(f64::NAN))
+                    {
+                        failed = Some(e.to_string());
+                    }
+                });
+                if let Some(e) = failed {
+                    self.say(e);
+                }
+            }
+            Action::SetMatrixSheet { id, sheet } => {
+                self.doc.adjust_view(|p| {
+                    if let Some(b) = p.matrix_book_mut(id)
+                        && sheet < b.sheets.len()
+                    {
+                        b.active_sheet = sheet;
+                    }
+                });
             }
             Action::NewNotes => {
                 self.doc.apply("New notes", |p| {
@@ -7177,6 +7207,7 @@ impl eframe::App for SheafApp {
                     let books = &mut self.books;
                     let graphs = &mut self.graphs;
                     let notes = &mut self.notes;
+                    let matrices = &mut self.matrices;
                     let actions = &mut actions;
                     // View > View Windows: windows outside the active folder are not drawn (T100).
                     let shown = explorer::shown_windows(doc.project(), &self.panels.explorer.folder);
@@ -7201,7 +7232,7 @@ impl eframe::App for SheafApp {
                         // T179 slice 1 ports the matrix model, files, plots and command line; the
                         // matrix window itself comes with the next slice.
                         Some(Window::Matrix(_)) => {
-                            ui.label("Matrix windows are not shown in the app yet.");
+                            crate::matrix_view::show(ui, doc, id, matrices.entry(id).or_default(), actions);
                         }
                         None => {}
                     };

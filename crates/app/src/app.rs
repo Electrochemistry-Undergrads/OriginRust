@@ -256,6 +256,8 @@ pub struct SheafApp {
     batch_plot: Option<crate::dialogs::batch_plot::BatchPlotDialog>,
     qc_chart: Option<crate::dialogs::qc_chart::QcDialog>,
     function_graph: Option<crate::dialogs::function_graph::FunctionGraphDialog>,
+    /// The open function window is File > New > Function Plot's: OK makes the graph (T213).
+    function_graph_new: bool,
     /// The Audit Log window is open (T131).
     audit_log: bool,
     fit_builder: Option<crate::dialogs::fit_builder::FitBuilder>,
@@ -430,6 +432,7 @@ impl SheafApp {
             batch_plot: None,
             qc_chart: None,
             function_graph: None,
+            function_graph_new: false,
             audit_log: false,
             fit_builder: None,
             sample_projects: None,
@@ -2298,6 +2301,12 @@ impl SheafApp {
             }
             Action::AddFunctionGraph { graph, layer } => {
                 self.function_graph = Some(crate::dialogs::function_graph::FunctionGraphDialog::new(graph, layer));
+                self.function_graph_new = false;
+            }
+            Action::NewFunctionPlot => {
+                // The graph is made on OK, in the same undo step as its function (T213).
+                self.function_graph = Some(crate::dialogs::function_graph::FunctionGraphDialog::new(WindowId(0), 0));
+                self.function_graph_new = true;
             }
             Action::BatchPlot { graph, columns } => {
                 match crate::dialogs::batch_plot::BatchPlotDialog::new(self.doc.project(), graph, columns) {
@@ -4418,18 +4427,31 @@ impl SheafApp {
             FunctionOutcome::Open => return,
             FunctionOutcome::Closed => {
                 self.function_graph = None;
+                self.function_graph_new = false;
                 return;
             }
             add => add,
         }) else {
             return;
         };
-        match self.doc.edit("Add function graph", |p| p.add_function_graph(graph, layer, &expr, (from, to), points)) {
-            Ok(_) => {
+        let new = std::mem::take(&mut self.function_graph_new);
+        let label = if new { "New function plot" } else { "Add function graph" };
+        let made = self.doc.edit(label, |p| {
+            let graph = if new { p.add_graph(sheaf_core::template::Template::default()) } else { graph };
+            p.add_function_graph(graph, layer, &expr, (from, to), points).map(|_| graph)
+        });
+        match made {
+            Ok(graph) => {
                 self.function_graph = None;
+                if new {
+                    self.focus(graph);
+                }
                 self.say(format!("Added y = {expr}"));
             }
-            Err(e) => self.warn(e.to_string()),
+            Err(e) => {
+                self.function_graph_new = new;
+                self.warn(e.to_string());
+            }
         }
     }
 

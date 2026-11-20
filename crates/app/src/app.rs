@@ -1931,6 +1931,15 @@ impl SheafApp {
                     p.add_notes();
                 });
             }
+            Action::SetNotesSheetText { book, sheet, text } => {
+                self.doc.apply("Edit notes", |p| {
+                    if let Some(s) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet))
+                        && s.notes_text.is_some()
+                    {
+                        s.notes_text = Some(text);
+                    }
+                });
+            }
             Action::SetNotesText { id, text } => {
                 self.doc.apply("Edit notes", |p| {
                     if let Some(n) = p.notes_mut(id) {
@@ -3676,6 +3685,16 @@ impl SheafApp {
                             s.tab_label = label;
                         }
                     });
+                }
+            }
+            SheetOp::AddNotes => {
+                self.doc.apply("Add Notes as Sheet", |p| {
+                    if let Some(b) = p.workbook_mut(book) {
+                        b.add_notes_sheet();
+                    }
+                });
+                if let Some(state) = self.books.get_mut(&book) {
+                    state.clear_selection();
                 }
             }
             SheetOp::RenameDialog => {

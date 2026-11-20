@@ -117,6 +117,9 @@ struct HeadDrag {
 /// What the user is doing in one workbook window.
 #[derive(Default)]
 pub struct BookUi {
+    /// While a Notes sheet's text is edited (T188): the sheet, the text when editing began and the
+    /// text typed.
+    notes_edit: Option<(usize, String, String)>,
     /// The columns the selection touches (the whole columns for a column selection, the columns
     /// of the block for a block of cells), in the order they were clicked. Plot, Set Column
     /// Values and the analysis tools act on these.
@@ -684,6 +687,37 @@ fn cell_scope(ui: &mut egui::Ui, rect: Rect, salt: impl std::hash::Hash, add: im
     );
 }
 
+/// The text box of a Notes sheet (T188), as a Notes window's: the text is written to the project as one
+/// undo step ("Edit notes") when the box lets go of the keyboard; an undo or redo meanwhile wins.
+fn notes_sheet_body(
+    ui: &mut egui::Ui,
+    project_text: &str,
+    book_id: WindowId,
+    sheet: usize,
+    state: &mut BookUi,
+    actions: &mut Vec<Action>,
+) {
+    if state.notes_edit.as_ref().is_some_and(|(s, base, _)| *s != sheet || base != project_text) {
+        state.notes_edit = None;
+    }
+    let (_, base, text) =
+        state.notes_edit.get_or_insert_with(|| (sheet, project_text.to_string(), project_text.to_string()));
+    let edit = egui::TextEdit::multiline(text)
+        .id_salt(("notes_sheet", book_id.0, sheet))
+        .desired_width(f32::INFINITY)
+        .font(egui::TextStyle::Monospace);
+    let r = egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| ui.add_sized(ui.available_size(), edit))
+        .inner;
+    if !r.has_focus() {
+        if *text != *base {
+            actions.push(Action::SetNotesSheetText { book: book_id, sheet, text: text.clone() });
+        }
+        state.notes_edit = None;
+    }
+}
+
 /// The label rows in display order, followed by one per user parameter.
 fn label_rows(sheet: &Worksheet) -> Vec<LabelRow> {
     // The corner menu's View switches hide label rows (T92).
@@ -851,6 +885,14 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                 }
             });
         });
+    }
+
+    // A Notes sheet (T188): a text box in place of the grid.
+    if let Some(text) = &sheet.notes_text {
+        ui.scope_builder(UiBuilder::new().max_rect(body), |ui| {
+            notes_sheet_body(ui, text, book_id, sheet_index, state, actions);
+        });
+        return;
     }
 
     let rows = sheet.row_count() + SPARE_ROWS;

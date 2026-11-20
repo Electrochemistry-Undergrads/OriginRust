@@ -138,6 +138,8 @@ pub fn summarize(project: &Project) -> ProjectSummary {
             }
             // Notes windows (T154) hold no data.
             Window::Notes(_) => {}
+            // Layout pages (T237) hold no data of their own.
+            Window::Layout(_) => {}
             Window::Matrix(m) => out.matrices.push(MatrixSummary {
                 name: m.name.clone(),
                 title: m.title().to_string(),

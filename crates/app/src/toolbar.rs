@@ -312,7 +312,7 @@ fn build(bar: Bar) -> Vec<Item> {
             b(Workbook, "New Workbook", Cmd::NewWorkbook, "Worksheet"),
             b(Graph, "New Graph", Cmd::NewGraph, "Graph"),
             b(Matrix, "New Matrix", Cmd::NewMatrix, "Matrix"),
-            g(Layout, "New Layout"),
+            b(Layout, "New Layout", Cmd::NewLayout, "Layout"),
             b(Notes, "New Notes", Cmd::NewNotes, "Notes"),
             gap(),
             b(OpenFolder, "Open", Cmd::OpenProject, "Open"),

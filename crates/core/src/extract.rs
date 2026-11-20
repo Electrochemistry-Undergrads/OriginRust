@@ -64,7 +64,7 @@ impl Project {
             self.analysis_links.iter().filter(|l| l.columns.iter().chain(&l.outputs).any(|c| kept.contains(c))).count();
         for col in out.windows.iter_mut().filter_map(|w| match w {
             Window::Workbook(b) => Some(b),
-            Window::Graph(_) | Window::Notes(_) | Window::Matrix(_) => None,
+            Window::Graph(_) | Window::Notes(_) | Window::Matrix(_) | Window::Layout(_) => None,
         }) {
             for c in col.sheets.iter_mut().flat_map(|s| &mut s.columns) {
                 c.analysis = None;

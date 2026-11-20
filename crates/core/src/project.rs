@@ -20,6 +20,8 @@ pub enum Window {
     /// File > New > Notes (T154).
     Notes(crate::notes_window::Notes),
     Matrix(MatrixBook),
+    /// File > New > Layout (T237).
+    Layout(crate::layout_page::LayoutPage),
 }
 
 impl Window {
@@ -28,6 +30,7 @@ impl Window {
             Window::Workbook(b) => b.id,
             Window::Graph(g) => g.id,
             Window::Notes(n) => n.id,
+            Window::Layout(l) => l.id,
             Window::Matrix(m) => m.id,
         }
     }
@@ -37,6 +40,7 @@ impl Window {
             Window::Workbook(b) => &b.name,
             Window::Graph(g) => &g.name,
             Window::Notes(n) => &n.name,
+            Window::Layout(l) => &l.name,
             Window::Matrix(m) => &m.name,
         }
     }
@@ -46,6 +50,7 @@ impl Window {
             Window::Workbook(b) => b.title(),
             Window::Graph(g) => g.title(),
             Window::Notes(n) => n.title(),
+            Window::Layout(l) => l.title(),
             Window::Matrix(m) => m.title(),
         }
     }
@@ -577,6 +582,7 @@ impl Project {
             Some(Window::Workbook(b)) => b.name = new.clone(),
             Some(Window::Graph(g)) => g.name = new.clone(),
             Some(Window::Notes(n)) => n.name = new.clone(),
+            Some(Window::Layout(l)) => l.name = new.clone(),
             Some(Window::Matrix(m)) => m.name = new.clone(),
             None => {}
         }
@@ -629,14 +635,14 @@ impl Project {
     pub fn workbooks(&self) -> impl Iterator<Item = &Workbook> {
         self.windows.iter().filter_map(|w| match w {
             Window::Workbook(b) => Some(b),
-            Window::Graph(_) | Window::Notes(_) | Window::Matrix(_) => None,
+            Window::Graph(_) | Window::Notes(_) | Window::Matrix(_) | Window::Layout(_) => None,
         })
     }
 
     pub fn graphs(&self) -> impl Iterator<Item = &Graph> {
         self.windows.iter().filter_map(|w| match w {
             Window::Graph(g) => Some(g),
-            Window::Workbook(_) | Window::Notes(_) | Window::Matrix(_) => None,
+            Window::Workbook(_) | Window::Notes(_) | Window::Matrix(_) | Window::Layout(_) => None,
         })
     }
 
@@ -655,6 +661,33 @@ impl Project {
     pub fn notes_mut(&mut self, id: WindowId) -> Option<&mut crate::notes_window::Notes> {
         self.windows.iter_mut().find_map(|w| match w {
             Window::Notes(n) if n.id == id => Some(n),
+            _ => None,
+        })
+    }
+
+    /// Adds an empty layout page (`Layout1`, `Layout2`, ...) and returns its id (T237).
+    pub fn add_layout(&mut self) -> WindowId {
+        let id = WindowId(self.fresh_id());
+        let page = crate::layout_page::LayoutPage::new(id, self.unique_name("Layout"));
+        self.windows.push(Window::Layout(page));
+        id
+    }
+
+    /// The layout pages (T237).
+    pub fn layouts(&self) -> impl Iterator<Item = &crate::layout_page::LayoutPage> {
+        self.windows.iter().filter_map(|w| match w {
+            Window::Layout(l) => Some(l),
+            _ => None,
+        })
+    }
+
+    pub fn layout(&self, id: WindowId) -> Option<&crate::layout_page::LayoutPage> {
+        self.layouts().find(|l| l.id == id)
+    }
+
+    pub fn layout_mut(&mut self, id: WindowId) -> Option<&mut crate::layout_page::LayoutPage> {
+        self.windows.iter_mut().find_map(|w| match w {
+            Window::Layout(l) if l.id == id => Some(l),
             _ => None,
         })
     }
@@ -854,6 +887,10 @@ impl Project {
                     graph.remap_columns(&c);
                 }
                 Window::Notes(notes) => notes.id = w(notes.id),
+                Window::Layout(l) => {
+                    l.id = w(l.id);
+                    l.remap_windows(&w);
+                }
                 Window::Matrix(m) => {
                     m.id = w(m.id);
                     // Data ids come from the same counter as window ids.
@@ -883,6 +920,7 @@ impl Project {
                 let prefix = match window {
                     Window::Graph(_) => "Graph",
                     Window::Notes(_) => "Notes",
+                    Window::Layout(_) => "Layout",
                     Window::Workbook(_) => "Book",
                     Window::Matrix(_) => "MBook",
                 };
@@ -894,6 +932,7 @@ impl Project {
                     Window::Workbook(b) => b.name = name,
                     Window::Graph(g) => g.name = name,
                     Window::Notes(n) => n.name = name,
+                    Window::Layout(l) => l.name = name,
                     Window::Matrix(m) => m.name = name,
                 }
             }
@@ -938,6 +977,13 @@ impl Project {
                 Some(id)
             }
             Window::Matrix(m) => Some(self.adopt_matrix_book(&m.long_name, m.sheets)),
+            Window::Layout(mut l) => {
+                l.id = WindowId(self.fresh_id());
+                l.name = self.unique_name("Layout");
+                let id = l.id;
+                self.windows.push(Window::Layout(l));
+                Some(id)
+            }
         }
     }
 
@@ -2740,7 +2786,7 @@ mod tests {
                 Window::Workbook(b) => {
                     b.sheets.iter().flat_map(|s| s.columns.iter()).filter_map(|c| c.formula.clone()).collect()
                 }
-                Window::Graph(_) | Window::Notes(_) | Window::Matrix(_) => Vec::new(),
+                Window::Graph(_) | Window::Notes(_) | Window::Matrix(_) | Window::Layout(_) => Vec::new(),
             })
             .next();
         assert_eq!(formula.as_deref(), Some("[Book4]Sheet1!col(A) * 10"));

@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **76 greyed items: 65 in the menu bar, 1 on the toolbars, 10 in context menus.**
+original inventory baseline. This is not a new runtime audit. **74 greyed items: 64 in the menu bar, 0 on the toolbars, 10 in context menus.**
 
 ## How to read and keep this file
 
@@ -80,13 +80,13 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `B11` | 0 |
 | `B12` | 1 |
 | `B13` | 2 |
-| `B14` | 7 |
+| `B14` | 5 |
 | `B15` | 1 |
 | `B16` | 15 |
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 12 items, backlog packages (`B`) 44, not planned (`N`) 20.
+Briefs (`T`) hold 12 items, backlog packages (`B`) 42, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -95,7 +95,7 @@ changes. The baseline labels remain open until implementation or a documented re
 ## Menu bar
 
 ### File
-- `B14` New: Image · Excel · Layout
+- `B14` New: Image · Excel
 - `T63` Open Excel...
 - `N` Add Word Bookmarks to Analysis Template... [Workbook]
 
@@ -166,7 +166,6 @@ changes. The baseline labels remain open until implementation or a documented re
 
 ## Toolbars
 
-- `B14` Standard: New Layout
 
 ## Context menus
 

@@ -50,6 +50,7 @@ impl<'a> Context<'a> {
             Window::Graph(_) => "graph",
             Window::Notes(_) => "notes",
             Window::Matrix(_) => "matrix",
+            Window::Layout(_) => "layout",
         };
         out["active_window"] = json!({"id": window.id(), "name": window.name(), "kind": kind});
         match window {
@@ -68,6 +69,9 @@ impl<'a> Context<'a> {
             }
             Window::Notes(notes) => {
                 out["notes"] = json!({"text": notes.text});
+            }
+            Window::Layout(l) => {
+                out["layout"] = json!({"name": l.name, "items": l.items.len()});
             }
             Window::Matrix(m) => {
                 if let Some(s) = m.sheets.get(m.active_sheet) {

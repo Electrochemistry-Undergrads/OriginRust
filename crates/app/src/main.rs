@@ -38,6 +38,7 @@ mod graph_scale;
 mod graph_view;
 mod graph_zoom;
 mod grid;
+mod layout_view;
 mod live;
 #[cfg(target_os = "macos")]
 mod macprint;

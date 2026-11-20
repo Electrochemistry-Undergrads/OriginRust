@@ -179,6 +179,10 @@ pub struct SheafApp {
     notes: HashMap<WindowId, crate::notes_view::NotesUi>,
     /// Matrix windows (T192).
     matrices: HashMap<WindowId, crate::matrix_view::MatrixUi>,
+    /// Layout pages (T237).
+    layouts: HashMap<WindowId, crate::layout_view::LayoutUi>,
+    /// Layout > Add Graph's window (T237).
+    layout_add_graph: Option<crate::dialogs::layout_add_graph::LayoutAddGraph>,
     import: Option<ImportDialog>,
     import_excel: Option<ExcelImportDialog>,
     import_wizard: Option<ImportWizard>,
@@ -371,6 +375,8 @@ impl SheafApp {
             graphs: HashMap::new(),
             notes: HashMap::new(),
             matrices: HashMap::new(),
+            layouts: HashMap::new(),
+            layout_add_graph: None,
             import: None,
             import_excel: None,
             import_wizard: None,
@@ -963,6 +969,7 @@ impl SheafApp {
         self.add_layer_dialog = None;
         self.fit_page = None;
         self.matrix_dialog = None;
+        self.layout_add_graph = None;
         self.import_bin2d = None;
         self.axis3d = None;
         self.label_panels = None;
@@ -1993,6 +2000,19 @@ impl SheafApp {
                         Ok(d) => self.import_bin2d = Some(d),
                         Err(e) => self.warn(e),
                     }
+                }
+            }
+            Action::NewLayout => {
+                let mut new = None;
+                self.doc.apply("New layout", |p| new = Some(p.add_layout()));
+                if let Some(id) = new {
+                    self.focus(id);
+                }
+            }
+            Action::LayoutAddGraph { layout } => {
+                match crate::dialogs::layout_add_graph::LayoutAddGraph::new(&self.doc, layout) {
+                    Some(d) => self.layout_add_graph = Some(d),
+                    None => self.warn("The project has no graph to add"),
                 }
             }
             Action::NewMatrix => {
@@ -3648,6 +3668,7 @@ impl SheafApp {
                         Window::Graph(g) => g.long_name.clone(),
                         Window::Notes(n) => n.long_name.clone(),
                         Window::Matrix(m) => m.long_name.clone(),
+                        Window::Layout(l) => l.long_name.clone(),
                     };
                     let short_name = w.name().to_string();
                     let comments = self.doc.project().window_comments(id).to_string();
@@ -5816,6 +5837,7 @@ impl SheafApp {
             (Some(_), _) => WindowKind::Workbook,
             (_, Some(_)) => WindowKind::Graph,
             _ if self.active.is_some_and(|id| project.matrix_book(id).is_some()) => WindowKind::Matrix,
+            _ if self.active.is_some_and(|id| project.layout(id).is_some()) => WindowKind::Layout,
             _ => WindowKind::None,
         };
         let selected: &[ColumnId] = book.and_then(|b| self.books.get(&b)).map(|s| s.selected.as_slice()).unwrap_or(&[]);
@@ -6130,6 +6152,7 @@ impl SheafApp {
             || self.add_layer_dialog.is_some()
             || self.fit_page.is_some()
             || self.matrix_dialog.is_some()
+            || self.layout_add_graph.is_some()
             || self.import_bin2d.is_some()
             || self.axis3d.is_some()
             || self.plot_setup.is_some()
@@ -6237,6 +6260,7 @@ impl SheafApp {
             Some(Window::Graph(g)) => format!("1: [{}]1!", g.name),
             Some(Window::Notes(n)) => n.name.clone(),
             Some(Window::Matrix(m)) => format!("[{}]{}!", m.name, m.sheet().name),
+            Some(Window::Layout(l)) => l.name.clone(),
             None => String::new(),
         }
     }
@@ -6475,6 +6499,13 @@ impl SheafApp {
                     self.import_bin2d = None;
                     self.say("Imported the binary 2D array into a new matrix book".to_string());
                 }
+            }
+        }
+        if let Some(d) = &mut self.layout_add_graph {
+            use crate::dialogs::layout_add_graph::Outcome;
+            match d.show(ctx, &mut self.doc) {
+                Outcome::Open => {}
+                Outcome::Closed | Outcome::Done => self.layout_add_graph = None,
             }
         }
         if let Some(d) = &mut self.matrix_dialog {
@@ -7836,7 +7867,7 @@ fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
                 }
             }
             Window::Notes(_) => {}
-            Window::Matrix(_) => {}
+            Window::Matrix(_) | Window::Layout(_) => {}
             Window::Graph(g) => {
                 for l in &mut g.layers {
                     l.plots.retain(|p| !columns.contains(&p.y));
@@ -7976,6 +8007,7 @@ impl eframe::App for SheafApp {
                     let graphs = &mut self.graphs;
                     let notes = &mut self.notes;
                     let matrices = &mut self.matrices;
+                    let layouts = &mut self.layouts;
                     let actions = &mut actions;
                     // View > View Windows: windows outside the active folder are not drawn (T100).
                     let shown = explorer::shown_windows(doc.project(), &self.panels.explorer.folder);
@@ -8001,6 +8033,9 @@ impl eframe::App for SheafApp {
                         // matrix window itself comes with the next slice.
                         Some(Window::Matrix(_)) => {
                             crate::matrix_view::show(ui, doc, id, matrices.entry(id).or_default(), actions);
+                        }
+                        Some(Window::Layout(_)) => {
+                            crate::layout_view::show(ui, doc, id, layouts.entry(id).or_default(), actions);
                         }
                         None => {}
                     };

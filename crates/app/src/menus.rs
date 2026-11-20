@@ -2094,7 +2094,7 @@ pub fn rise_time_gadget_menu() -> Vec<Entry> {
 }
 
 /// The 2D Integrate gadget's right-click menu (T198).
-pub fn integrate_2d_gadget_menu(circle: bool) -> Vec<Entry> {
+pub fn integrate_2d_gadget_menu(circle: bool, plane: bool) -> Vec<Entry> {
     let tick = |on: bool, name: &str| if on { format!("\u{2713} {name}") } else { name.to_string() };
     vec![
         sub(
@@ -2104,6 +2104,8 @@ pub fn integrate_2d_gadget_menu(circle: bool) -> Vec<Entry> {
                 item(&tick(circle, "Circle"), Cmd::Gadget(GadgetOp::SetRegion(true))),
             ],
         ),
+        // T206: the base the volume is measured from.
+        item(if plane { "Base: Zero" } else { "Base: Plane Through Boundary" }, Cmd::Gadget(GadgetOp::ToggleBaseline)),
         item("New Output", Cmd::Gadget(GadgetOp::NewOutput)),
         sep(),
         keyed("Delete", plain_key(Key::Escape), Cmd::Gadget(GadgetOp::Close)),

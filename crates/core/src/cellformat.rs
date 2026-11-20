@@ -50,6 +50,9 @@ pub struct CellFormat {
     pub fill: Option<Color>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub h_align: Option<HAlign>,
+    /// Set Data Style > Rich Text (T208): the cell draws Origin's label markup as styled text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rich_text: Option<bool>,
 }
 
 impl CellFormat {
@@ -62,7 +65,7 @@ impl CellFormat {
         macro_rules! take {
             ($($f:ident),*) => {$(if over.$f.is_some() { self.$f = over.$f.clone(); })*};
         }
-        take!(bold, italic, underline, font, size_pt, text_color, fill, h_align);
+        take!(bold, italic, underline, font, size_pt, text_color, fill, h_align, rich_text);
     }
 
     /// [`CellFormat::merge`] without cloning the font name (the caller borrows it instead).
@@ -70,7 +73,7 @@ impl CellFormat {
         macro_rules! take {
             ($($f:ident),*) => {$(if over.$f.is_some() { self.$f = over.$f.clone(); })*};
         }
-        take!(bold, italic, underline, size_pt, text_color, fill, h_align);
+        take!(bold, italic, underline, size_pt, text_color, fill, h_align, rich_text);
     }
 
     /// Unsets every property that `by` sets (the earlier range no longer matters for them).
@@ -78,7 +81,7 @@ impl CellFormat {
         macro_rules! drop {
             ($($f:ident),*) => {$(if by.$f.is_some() { self.$f = None; })*};
         }
-        drop!(bold, italic, underline, font, size_pt, text_color, fill, h_align);
+        drop!(bold, italic, underline, font, size_pt, text_color, fill, h_align, rich_text);
     }
 }
 
@@ -241,6 +244,8 @@ pub struct ResolvedStyle<'a> {
     pub text_color: Option<Color>,
     pub fill: Option<Color>,
     pub h_align: Option<HAlign>,
+    /// Set Data Style > Rich Text (T208).
+    pub rich_text: bool,
 }
 
 impl ResolvedStyle<'_> {
@@ -418,6 +423,7 @@ fn finish<'a>(f: &CellFormat, font: Option<&'a str>) -> ResolvedStyle<'a> {
         text_color: visible(f.text_color),
         fill: visible(f.fill),
         h_align: f.h_align.filter(|a| *a != HAlign::Auto),
+        rich_text: f.rich_text.unwrap_or(false),
     }
 }
 
@@ -1214,5 +1220,22 @@ mod tests {
         assert_eq!(span_minus(Some((2, Some(3))), None), Vec::<Option<RowSpan>>::new());
         assert_eq!(span_minus(Some((2, Some(3))), Some((9, None))), vec![Some((2, Some(3)))]);
         assert!(span_covers(None, Some((5, None))) && !span_covers(Some((1, Some(3))), Some((1, None))));
+    }
+
+    #[test]
+    fn rich_text_is_a_cell_format_switch_that_later_ranges_turn_off() {
+        let mut s = Worksheet::new("S");
+        s.columns.push(crate::column::Column::new(
+            ColumnId(1),
+            "A",
+            crate::column::Designation::Y,
+            crate::column::ColumnData::text(vec!["x".into(); 3]),
+        ));
+        let cells = |rows: (usize, Option<usize>)| FormatTarget::Cells { columns: vec![ColumnId(1)], rows: Some(rows) };
+        s.apply_cell_format(cells((0, Some(2))), CellFormat { rich_text: Some(true), ..CellFormat::default() });
+        s.apply_cell_format(cells((1, Some(1))), CellFormat { rich_text: Some(false), ..CellFormat::default() });
+        let index = s.format_index();
+        let on: Vec<bool> = (0..3).map(|r| index.resolve(&s, ColumnId(1), r).rich_text).collect();
+        assert_eq!(on, [true, false, true]);
     }
 }

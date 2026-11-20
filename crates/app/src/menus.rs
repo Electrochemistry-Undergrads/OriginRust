@@ -180,6 +180,8 @@ pub enum Cmd {
     NewNotes,
     /// File > New > Matrix and the Standard toolbar's New Matrix (T192).
     NewMatrix,
+    /// File > Import > Binary 2D Array... (T199).
+    ImportBinary2d,
     /// The Matrix menu of a matrix window (T192 slice 3).
     Matrix(MatrixCmd),
     /// Worksheet > Convert to Matrix > Direct (the selected columns, or the sheet) and XYZ Gridding
@@ -1125,7 +1127,8 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                     item("Comma &Delimited (CSV)...", Cmd::ImportCsv),
                     item("&Excel (XLS, XLSX, XLSM)...", Cmd::ImportExcel),
                 ],
-                greys(&["Image...", "Binary 2D Array..."]),
+                greys(&["Image..."]),
+                vec![item("Binary 2D Array...", Cmd::ImportBinary2d)],
                 // Origin's graph File menu has no Re-Import items.
                 if kind == WindowKind::Graph {
                     Vec::new()
@@ -2075,6 +2078,15 @@ fn gadgets_menu() -> Vec<Entry> {
 /// The right-click menu of the Rise Time gadget (T138).
 pub fn rise_time_gadget_menu() -> Vec<Entry> {
     vec![keyed("Delete", plain_key(Key::Escape), Cmd::Gadget(GadgetOp::Close))]
+}
+
+/// The 2D Integrate gadget's right-click menu (T198).
+pub fn integrate_2d_gadget_menu() -> Vec<Entry> {
+    vec![
+        item("New Output", Cmd::Gadget(GadgetOp::NewOutput)),
+        sep(),
+        keyed("Delete", plain_key(Key::Escape), Cmd::Gadget(GadgetOp::Close)),
+    ]
 }
 
 pub fn integrate_gadget_menu(end_point_baseline: bool) -> Vec<Entry> {
@@ -3105,6 +3117,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::NewNotes => Action::NewNotes,
         Cmd::NewMatrix => Action::NewMatrix,
+        Cmd::ImportBinary2d => Action::ImportBinary2d,
         Cmd::ConvertToMatrix { xyz } => {
             let book = c.book.ok_or(NEED_BOOK)?;
             if *xyz && c.selected.len() != 3 {

@@ -199,3 +199,30 @@ fn two_d_fft_and_ifft_round_trip_through_new_matrix_books() {
         assert!((back.values()[k] - v).abs() < 1e-12, "{k}: {}", back.values()[k]);
     }
 }
+
+#[test]
+fn a_binary_2d_array_is_imported_into_a_matrix_book_named_after_the_file() {
+    use sheaf_io::bin2d::{Bin2dOptions, BinType};
+    let dir = std::env::temp_dir().join(format!("sheaf-bin2d-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("frame.bin");
+    let bytes: Vec<u8> = (0..6).flat_map(|k| (k as f32 * 0.5).to_le_bytes()).collect();
+    std::fs::write(&path, bytes).unwrap();
+    let mut h = start(Vec::new());
+    // The options window guesses 32-bit floats; six of them are one row.
+    let d = crate::dialogs::import_bin2d::ImportBin2dDialog::new(path.clone()).unwrap();
+    assert_eq!((d.options.kind, d.options.cols, d.options.rows), (BinType::F32, 6, 1));
+    let opts = Bin2dOptions { kind: BinType::F32, cols: 3, rows: 2, header: 0, big_endian: false };
+    crate::dialogs::import_bin2d::import_bin2d(&mut h.state_mut().doc, &path, &opts).unwrap();
+    settle(&mut h);
+    assert_eq!(h.state().doc.undo_label(), Some("Import Binary 2D Array"));
+    let book = project(&h).matrix_books().next().expect("a matrix book");
+    assert_eq!(book.long_name, "frame");
+    let s = &book.sheets[0];
+    assert_eq!((s.cols, s.rows, s.value(1, 2)), (3, 2, 2.5));
+    // Too many numbers for the file are refused and add nothing.
+    let big = Bin2dOptions { rows: 3, ..opts };
+    assert!(crate::dialogs::import_bin2d::import_bin2d(&mut h.state_mut().doc, &path, &big).is_err());
+    assert_eq!(project(&h).matrix_books().count(), 1);
+    let _ = std::fs::remove_dir_all(&dir);
+}

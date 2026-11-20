@@ -185,6 +185,8 @@ pub struct SheafApp {
     layer_management: Option<crate::dialogs::layer_management::LayerManagementDialog>,
     add_layer_dialog: Option<crate::dialogs::add_layer::AddLayerDialog>,
     fit_page: Option<crate::dialogs::fit_page::FitPageDialog>,
+    /// File > Import > Binary 2D Array's options window (T199).
+    import_bin2d: Option<crate::dialogs::import_bin2d::ImportBin2dDialog>,
     /// The Matrix menu's Set Matrix Values, Set Dimensions, Expand and Shrink windows (T192).
     matrix_dialog: Option<crate::dialogs::matrix_ops::MatrixOpDialog>,
     axis3d: Option<crate::dialogs::axis3d::Axis3dDialog>,
@@ -370,6 +372,7 @@ impl SheafApp {
             add_layer_dialog: None,
             fit_page: None,
             matrix_dialog: None,
+            import_bin2d: None,
             axis3d: None,
             plot_setup: None,
             error_bars: None,
@@ -949,6 +952,7 @@ impl SheafApp {
         self.add_layer_dialog = None;
         self.fit_page = None;
         self.matrix_dialog = None;
+        self.import_bin2d = None;
         self.axis3d = None;
         self.label_panels = None;
         self.simulate = None;
@@ -1416,6 +1420,17 @@ impl SheafApp {
         match op {
             GadgetOp::ToggleBaseline => g.end_point_baseline = !g.end_point_baseline,
             GadgetOp::Close => state.gadget = None,
+            // 2D Integrate (T198): a row of the results table.
+            GadgetOp::NewOutput if g.kind == crate::gadget::GadgetKind::Integrate2d => {
+                let g = *g;
+                let Some(v) = g.volume(self.doc.project(), graph) else {
+                    self.warn("No cells in the region".to_string());
+                    return;
+                };
+                let rect = [g.x0.min(g.x1), g.x0.max(g.x1), g.y0.min(g.y1), g.y0.max(g.y1)];
+                self.doc.apply("2D Integrate", |p| crate::gadget::write_volume(p, rect, &v));
+                self.say(format!("The volume was added to {}", crate::gadget::VOLUME_BOOK));
+            }
             GadgetOp::NewOutput => {
                 let g = *g;
                 let column = self
@@ -1926,6 +1941,15 @@ impl SheafApp {
             Action::FormatObject(request) => {
                 if self.object_format().is_some_and(|state| state.target == request.target) {
                     crate::object_format::apply(&mut self.doc, request);
+                }
+            }
+            Action::ImportBinary2d => {
+                let picked = rfd::FileDialog::new().set_title("Import Binary 2D Array").pick_file();
+                if let Some(path) = picked {
+                    match crate::dialogs::import_bin2d::ImportBin2dDialog::new(path) {
+                        Ok(d) => self.import_bin2d = Some(d),
+                        Err(e) => self.warn(e),
+                    }
                 }
             }
             Action::NewMatrix => {
@@ -5668,6 +5692,7 @@ impl SheafApp {
             || self.add_layer_dialog.is_some()
             || self.fit_page.is_some()
             || self.matrix_dialog.is_some()
+            || self.import_bin2d.is_some()
             || self.axis3d.is_some()
             || self.plot_setup.is_some()
             || self.error_bars.is_some()
@@ -6000,6 +6025,17 @@ impl SheafApp {
                 Outcome::Done => {
                     self.axis3d = None;
                     self.say("Set the 3D axis scales");
+                }
+            }
+        }
+        if let Some(d) = &mut self.import_bin2d {
+            use crate::dialogs::import_bin2d::Outcome;
+            match d.show(ctx, &mut self.doc) {
+                Outcome::Open => {}
+                Outcome::Closed => self.import_bin2d = None,
+                Outcome::Done => {
+                    self.import_bin2d = None;
+                    self.say("Imported the binary 2D array into a new matrix book".to_string());
                 }
             }
         }

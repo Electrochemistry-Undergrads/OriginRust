@@ -116,6 +116,8 @@ pub enum Cmd {
     ManageTemplates,
     /// File > Batch Processing... (T165).
     BatchProcessing,
+    /// Analysis > Peaks and Baseline > Batch Peak Analysis Using Theme... (T169).
+    BatchPeaks,
     /// Column > Fill Column With > A set of Numbers / Date/Time values / Text&Numeric values (T74).
     FillPattern(FillKind),
     /// Format > Object Properties... on a graph: the selected object's properties (T150).
@@ -1655,7 +1657,7 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Find Peaks...", Cmd::Analyze(AnalysisKind::Peaks)),
                 item("Subtract Baseline...", Cmd::Analyze(AnalysisKind::Baseline)),
                 item("Multiple Peak Fit", Cmd::MultiPeakFit),
-                grey("Batch Peak Analysis Using Theme..."),
+                item("Batch Peak Analysis Using Theme...", Cmd::BatchPeaks),
             ],
         ),
         sep(),
@@ -3147,6 +3149,15 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::CondFormatManager => Action::CondFormatManager(book?),
         // On a graph the tools take the active data plot, as Origin's Analysis menu does; the
         // results go to its workbook (ADR 0005), and a fit draws its curve on the graph (ADR 0006).
+        Cmd::BatchPeaks => match (c.book, c.curve) {
+            (Some(book), _) => Action::BatchPeaks { book, columns: c.selected.to_vec() },
+            (None, Some((book, y))) if c.kind == WindowKind::Graph => {
+                let columns = if c.layer_curves.is_empty() { vec![y] } else { c.layer_curves.clone() };
+                Action::BatchPeaks { book, columns }
+            }
+            (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
+            (None, _) => return Err(NEED_BOOK),
+        },
         Cmd::Analyze(kind) => match (c.book, c.curve) {
             (Some(book), _) => Action::Analyze { book, columns: c.selected.to_vec(), kind: *kind },
             (None, Some((book, y))) if c.kind == WindowKind::Graph => {

@@ -721,6 +721,11 @@ pub(crate) fn next_undo_token() -> u64 {
 }
 
 pub struct AnalysisDialog {
+    /// The Peak Analyzer themes file (T169); `None` hides Save as Theme.
+    pub peak_themes: Option<std::path::PathBuf>,
+    /// The name typed for Save as Theme and what the last save did.
+    theme_name: String,
+    theme_note: Option<String>,
     kind: AnalysisKind,
     columns: Vec<ColumnId>,
     /// "B, C, D" for the first line of the window.
@@ -1318,6 +1323,9 @@ impl AnalysisDialog {
             super::rm_options::RmState::new(kind == AnalysisKind::RmAnova2, &chosen, sheet_columns.len())
         };
         Some(AnalysisDialog {
+            peak_themes: None,
+            theme_name: String::new(),
+            theme_note: None,
             kind,
             column_names: names.join(", "),
             ranges: vec![(x_lo, x_hi)],
@@ -1459,6 +1467,33 @@ impl AnalysisDialog {
 
     /// Origin's Peak Analyzer as a wizard: the page list of the goal, Prev and Next, and the page
     /// (analysis-tools.md 11.1). OK runs it (Origin's Finish).
+    /// Save as Theme (T169): the window's settings under a name, for Batch Peak Analysis Using Theme.
+    fn peak_theme_row(&mut self, ui: &mut egui::Ui) {
+        let Some(path) = self.peak_themes.clone() else { return };
+        ui.horizontal(|ui| {
+            ui.label("Theme");
+            ui.add(
+                egui::TextEdit::singleline(&mut self.theme_name)
+                    .desired_width(140.0)
+                    .id(egui::Id::new("peak_theme_name")),
+            );
+            if ui.button("Save as Theme").clicked() {
+                self.theme_note = Some(match self.tool() {
+                    Ok(Tool::PeakChain(spec)) => match sheaf_io::peak_themes::save(&path, &self.theme_name, &spec) {
+                        Ok((name, true)) => format!("Replaced the theme {name}"),
+                        Ok((name, false)) => format!("Saved the theme {name}"),
+                        Err(e) => e,
+                    },
+                    Ok(_) => "Only Peak Analyzer settings can be saved as a theme".to_string(),
+                    Err(e) => e,
+                });
+            }
+        });
+        if let Some(note) = &self.theme_note {
+            ui.weak(note.as_str());
+        }
+    }
+
     fn peak_wizard(&mut self, ui: &mut egui::Ui) {
         let pages = self.chain_goal.pages();
         self.chain_page = self.chain_page.min(pages.len());
@@ -1503,6 +1538,7 @@ impl AnalysisDialog {
             }
             ui.weak("OK runs the analysis (Origin's Finish).");
         });
+        self.peak_theme_row(ui);
         ui.separator();
         match current {
             "Goal" => {

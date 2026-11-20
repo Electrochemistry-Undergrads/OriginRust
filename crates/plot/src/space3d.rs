@@ -11,7 +11,7 @@ use crate::data::PlotData;
 use crate::fonts::TextMeasurer;
 use crate::scene::{self, Item, Stroke};
 use crate::ticks::{self, ResolvedAxis};
-use sheaf_core::graph::{Axis, Layer, ScaleKind, Space3dCoords, Space3dScale};
+use sheaf_core::graph::{Axis, Layer, ScaleKind, Space3dCoords, Space3dScale, Surface3d};
 use sheaf_core::{Color, Project};
 use std::borrow::Cow;
 
@@ -230,6 +230,10 @@ pub(crate) fn columns(pd: &mut PlotData, project: &Project, layer: &Layer, c: &S
     } else {
         pd.stack = None;
     }
+    // 3D surfaces (T166): the points joined into triangles over X and Y.
+    if let Some(style) = c.surface {
+        pd.surface = xyz(project, layer, pd.plot).map(|(x, y, z)| surface(c, b, style, &x, &y, &z));
+    }
     // 3D vectors (T157): the arrows end at their end points in the view.
     if let (Some((x, y, z)), Some(v)) = (xyz(project, layer, pd.plot), pd.vector.as_mut())
         && let Some(ends) = vector_ends(project, pd.plot, &x, &y, &z)
@@ -248,6 +252,69 @@ pub(crate) fn columns(pd: &mut PlotData, project: &Project, layer: &Layer, c: &S
     pd.xerr = None;
     // The Z column places the points; it sizes no symbol.
     pd.size_z = None;
+}
+
+/// The triangles of a 3D surface (T166), farthest first, and the Z range its colour map spans.
+#[derive(Clone, Debug)]
+pub(crate) struct SurfaceData {
+    pub style: Surface3d,
+    /// Each triangle's corners in the units of the hidden axes, and its mean Z in data units.
+    pub triangles: Vec<([(f64, f64); 3], f64)>,
+    pub z_range: (f64, f64),
+}
+
+/// Joins the points of a plot inside the box into a Delaunay triangulation over X and Y (in the
+/// box's units, so that both axes weigh alike). Of points with the same X and Y the first is kept.
+/// Fewer than three points, or points all on a line, make no triangle.
+fn surface(c: &Space3dCoords, b: &DataBox, style: Surface3d, x: &[f64], y: &[f64], z: &[f64]) -> SurfaceData {
+    let mut seen = std::collections::HashSet::new();
+    let mut points: Vec<([f64; 3], f64)> = Vec::new();
+    for r in 0..x.len().min(y.len()).min(z.len()) {
+        let p = [b.unit(0, x[r]), b.unit(1, y[r]), b.unit(2, z[r])];
+        if inside(p) && seen.insert((x[r].to_bits(), y[r].to_bits())) {
+            points.push((p, z[r]));
+        }
+    }
+    let z_range = points.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| (lo.min(p.1), hi.max(p.1)));
+    let flat: Vec<(f64, f64)> = points.iter().map(|(p, _)| (p[0], p[1])).collect();
+    let (sa, ca) = c.azimuth_deg.to_radians().sin_cos();
+    let mut triangles: Vec<(f64, ([(f64, f64); 3], f64))> = sheaf_calc::xyzarea::delaunay(&flat)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|t| {
+            let depth = t.iter().map(|&i| points[i].0[0] * sa + points[i].0[1] * ca).sum::<f64>();
+            let mean_z = t.iter().map(|&i| points[i].1).sum::<f64>() / 3.0;
+            (depth, (t.map(|i| view(c, points[i].0)), mean_z))
+        })
+        .collect();
+    triangles.sort_by(|p, q| q.0.total_cmp(&p.0));
+    SurfaceData { style, triangles: triangles.into_iter().map(|t| t.1).collect(), z_range }
+}
+
+/// Draws a 3D surface (T166): its triangles from the farthest to the nearest, filled as its style
+/// says and edged with the plot's line.
+pub(crate) fn draw_surface(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
+    let Some(s) = &pd.surface else { return };
+    let plot = pd.plot;
+    let stroke = (plot.line.width_pt > 0.0).then(|| crate::plots::line_stroke(&plot.line));
+    for (corners, mean_z) in &s.triangles {
+        let fill = match s.style {
+            Surface3d::ColorMap => Some(crate::plots::map_color(crate::plots::z_fraction(s.z_range, *mean_z))),
+            Surface3d::ColorFill => Some(plot.symbol.color),
+            Surface3d::WireFrame => None,
+            Surface3d::WireSurface => Some(Color::WHITE),
+        };
+        if fill.is_none() && stroke.is_none() {
+            continue;
+        }
+        let mut d = String::new();
+        for (k, &(x, y)) in corners.iter().enumerate() {
+            let (px, py) = geom.data_to_page(x, y);
+            if k == 0 { scene::move_to(&mut d, px, py) } else { scene::line_to(&mut d, px, py) }
+        }
+        d.push('Z');
+        out.push(Item::Path { d, fill, stroke: stroke.clone() });
+    }
 }
 
 /// One row of a 3D ribbon (T161): its front and back edge points in the units of the hidden axes,
@@ -640,5 +707,70 @@ mod tests {
         let pd = &layers[0].plots[0];
         // Z = 9 is above To = 6: that point is left out.
         assert!(pd.y[0].is_finite() && pd.y[1].is_finite() && pd.y[2].is_nan());
+    }
+
+    #[test]
+    fn surfaces_join_the_points_into_triangles_drawn_back_to_front() {
+        use sheaf_core::column::{ColumnData, Designation};
+        use sheaf_core::graph::Surface3d;
+        use sheaf_core::template::Template;
+        // A 3 x 3 grid, plus a repeat of the first point (left out) and a point with no Z.
+        let (mut xs, mut ys, mut zs) = (Vec::new(), Vec::new(), Vec::new());
+        for i in 0..3 {
+            for j in 0..3 {
+                xs.push(i as f64);
+                ys.push(j as f64);
+                zs.push((i * j) as f64);
+            }
+        }
+        xs.extend([0.0, 5.0]);
+        ys.extend([0.0, 5.0]);
+        zs.extend([7.0, f64::NAN]);
+        let mut p = Project::new();
+        let b = p.add_workbook("Book1");
+        p.add_column(b, 0, Designation::X, ColumnData::numeric(xs)).unwrap();
+        let y = p.add_column(b, 0, Designation::Y, ColumnData::numeric(ys)).unwrap();
+        p.add_column(b, 0, Designation::Z, ColumnData::numeric(zs)).unwrap();
+        for (t, style) in [
+            (Template::ColorMapSurface3d, Surface3d::ColorMap),
+            (Template::ColorFillSurface3d, Surface3d::ColorFill),
+            (Template::WireFrame3d, Surface3d::WireFrame),
+            (Template::WireSurface3d, Surface3d::WireSurface),
+        ] {
+            let g = p.plot_columns(t, &[y]).unwrap();
+            let graph = p.graph(g).unwrap();
+            let layer = &graph.layers[0];
+            assert_eq!(layer.coords.space3d().unwrap().surface, Some(style));
+            // The mesh keeps the template's black line; the plot colour fills (red first).
+            let plot = &layer.plots[0];
+            assert_eq!(plot.line.color, sheaf_core::Color::BLACK);
+            assert_eq!(plot.symbol.color, sheaf_core::Color::rgb(255, 0, 0));
+            let layers = crate::data::collect_graph(&p, graph);
+            let pd = &layers[0].plots[0];
+            let s = pd.surface.as_ref().expect("a surface");
+            // Nine distinct points on a grid make eight triangles; the Z range is 0..4.
+            assert_eq!(s.triangles.len(), 8, "{t:?}");
+            assert_eq!(s.z_range, (0.0, 4.0));
+            let geom = crate::layout::graph_geometry(&p, graph, &layers, &crate::FixedMetrics).remove(0);
+            let mut out = Vec::new();
+            draw_surface(&mut out, pd, &geom);
+            assert_eq!(out.len(), 8);
+            let fills: Vec<_> =
+                out.iter().map(|i| if let Item::Path { fill, .. } = i { *fill } else { None }).collect();
+            match style {
+                Surface3d::WireFrame => assert!(fills.iter().all(Option::is_none)),
+                Surface3d::WireSurface => assert!(fills.iter().all(|f| *f == Some(sheaf_core::Color::WHITE))),
+                Surface3d::ColorFill => assert!(fills.iter().all(|f| *f == Some(plot.symbol.color))),
+                // Mean Z 0 (blue) to 4 (red): the colours differ.
+                Surface3d::ColorMap => assert!(fills.windows(2).any(|w| w[0] != w[1])),
+            }
+        }
+        // Farthest first: at azimuth 40 the far corner is at the largest X and Y.
+        let g = p.plot_columns(Template::ColorFillSurface3d, &[y]).unwrap();
+        let graph = p.graph(g).unwrap();
+        let layers = crate::data::collect_graph(&p, graph);
+        let tris = &layers[0].plots[0].surface.as_ref().unwrap().triangles;
+        // Z = X * Y: the far corner (2, 2) has the largest Z, the near corner (0, 0) the smallest.
+        assert!(tris.first().unwrap().1 > tris.last().unwrap().1);
     }
 }

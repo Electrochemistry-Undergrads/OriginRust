@@ -6602,6 +6602,7 @@ mod merge_graphs;
 
 #[path = "ui_tests/merge_folders.rs"]
 mod merge_folders;
+mod merge_preview;
 mod segments;
 #[path = "ui_tests/stack_panels.rs"]
 mod stack_panels;

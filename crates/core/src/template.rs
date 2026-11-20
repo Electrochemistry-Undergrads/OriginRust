@@ -36,6 +36,12 @@ pub enum Template {
     Waterfall3d,
     /// Plot > 3D XYY > 3D Ribbons (T161): each Y column a ribbon at its own depth.
     Ribbons3d,
+    /// Plot > 3D Surface > Color Map Surface, Color Fill Surface, Wire Frame and Wire Surface (T166):
+    /// XYZ points joined into triangles over X and Y.
+    ColorMapSurface3d,
+    ColorFillSurface3d,
+    WireFrame3d,
+    WireSurface3d,
     /// Scatter plot with the same axes as [`Template::Line`].
     Scatter,
     /// Scatter plot whose axes cross in the middle of the layer (Origin's "Scatter Central", 2016): both
@@ -223,7 +229,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 93] = [
+    pub const ALL: [Template; 97] = [
         Template::Line,
         Template::Scatter3d,
         Template::Trajectory3d,
@@ -235,6 +241,10 @@ impl Template {
         Template::Walls3d,
         Template::Waterfall3d,
         Template::Ribbons3d,
+        Template::ColorMapSurface3d,
+        Template::ColorFillSurface3d,
+        Template::WireFrame3d,
+        Template::WireSurface3d,
         Template::StepHorizontal,
         Template::StepVertical,
         Template::SplineConnected,
@@ -333,6 +343,10 @@ impl Template {
             Template::Walls3d => "3d-walls",
             Template::Waterfall3d => "3d-waterfall",
             Template::Ribbons3d => "3d-ribbons",
+            Template::ColorMapSurface3d => "3d-colormap-surface",
+            Template::ColorFillSurface3d => "3d-color-fill-surface",
+            Template::WireFrame3d => "3d-wire-frame",
+            Template::WireSurface3d => "3d-wire-surface",
             Template::StepHorizontal => "step-horizontal",
             Template::StepVertical => "step-vertical",
             Template::SplineConnected => "spline-connected",
@@ -431,6 +445,10 @@ impl Template {
             Template::Walls3d => "3D Walls",
             Template::Waterfall3d => "3D Waterfall",
             Template::Ribbons3d => "3D Ribbons",
+            Template::ColorMapSurface3d => "Color Map Surface",
+            Template::ColorFillSurface3d => "Color Fill Surface",
+            Template::WireFrame3d => "Wire Frame",
+            Template::WireSurface3d => "Wire Surface",
             Template::StepHorizontal => "Horizontal Step",
             Template::StepVertical => "Vertical Step",
             Template::SplineConnected => "Spline Connected",
@@ -546,6 +564,17 @@ impl Template {
         )
     }
 
+    /// True for the 3D Surface templates (T166), which read X, Y and Z columns.
+    pub fn is_surface3d(&self) -> bool {
+        matches!(
+            self,
+            Template::ColorMapSurface3d
+                | Template::ColorFillSurface3d
+                | Template::WireFrame3d
+                | Template::WireSurface3d
+        )
+    }
+
     pub fn from_name(name: &str) -> Option<Template> {
         Template::ALL.into_iter().find(|t| t.name().eq_ignore_ascii_case(name))
     }
@@ -562,6 +591,10 @@ impl Template {
             Template::Xyy3dBars => xyy(bars3d(id, name)),
             Template::Walls3d => walls3d(id, name),
             Template::Waterfall3d => xyy(space3d(id, name, PlotKind::Line)),
+            Template::ColorMapSurface3d => surface3d(id, name, Surface3d::ColorMap),
+            Template::ColorFillSurface3d => surface3d(id, name, Surface3d::ColorFill),
+            Template::WireFrame3d => surface3d(id, name, Surface3d::WireFrame),
+            Template::WireSurface3d => surface3d(id, name, Surface3d::WireSurface),
             Template::Ribbons3d => {
                 let mut g = walls3d(id, name);
                 if let Coords::Space3d(c) = &mut g.layers[0].coords {
@@ -1312,6 +1345,16 @@ fn walls3d(id: WindowId, name: &str) -> Graph {
     g
 }
 
+/// A 3D surface layer (T166): red surfaces (Color Fill) with black mesh lines, 0.5 pt.
+fn surface3d(id: WindowId, name: &str, kind: Surface3d) -> Graph {
+    let mut g = from_red(space3d(id, name, PlotKind::Line));
+    g.layers[0].default_line = LineStyle::solid(Color::BLACK, 0.5);
+    if let Coords::Space3d(c) = &mut g.layers[0].coords {
+        c.surface = Some(kind);
+    }
+    g
+}
+
 /// A 3D layer read as XYY (T158): each plot at its own depth.
 fn xyy(mut g: Graph) -> Graph {
     if let Coords::Space3d(c) = &mut g.layers[0].coords {
@@ -1583,7 +1626,7 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 93);
+        assert_eq!(Template::ALL.len(), 97);
         assert_eq!(Template::from_name("piper"), Some(Template::Piper));
         assert_eq!(Template::from_name("kde-2d"), Some(Template::Kde2d));
         assert_eq!(Template::from_name("smith-chart"), Some(Template::SmithChart));

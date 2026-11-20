@@ -3402,7 +3402,7 @@ and manual-list order is retained.
 Duplicate, missing or non-graph sources, fewer than two graphs, too few cells, a factor outside 0.05
 to 20 and a page side outside 0.5 to 200 in are refused without changing the project. Not built:
 Add Extra Layer(s) for Grid, Set Layer Width/Height by Common Scale, panel labels, Active Page,
-Open/embedded-only source filters, the merge preview and "Treat Each Source Graph as a Unit" off.
+Open/embedded-only source filters and "Treat Each Source Graph as a Unit" off.
 
 **Folder source choices** (Origin 2016, T60 follow-up measured 2026-11-16): fresh
 standard Line graphs were placed using public Project Explorer commands. RootZ/RootA remain
@@ -3446,6 +3446,32 @@ The Merge dialog's vertical scroll viewport fills the available dialog width. Sh
 choices no longer shrink its clipping rectangle around the narrow top controls, so longer
 option labels remain readable. The existing height limit, source choices and footer remain.
 This is a Sheaf layout correction, checked against desktop captures, not a new Origin measurement.
+
+**Merge preview** (T60 follow-up, 2026-11-16): Origin's current
+[FAQ139](https://docs.originlab.com/quick-help/mergegraphs/) documents a Preview button and
+an Auto Preview checkbox, and notes that previewing many graphs can be slow. Its
+[multilayer tutorial](https://docs.originlab.com/tutorials/multilayer-graph-customization/)
+shows an approximation of the merged page to the right of the settings. These are documentation
+contracts; no fresh Origin 2016 timing, default checkbox state or exact geometry was measured
+because COM activation is currently unavailable. No registry or installation changes were made.
+
+Sheaf shows the full draft page to the right of the scrollable settings. **Preview** renders
+on demand; **Auto Preview** updates after a draft or source change. Auto starts off (Sheaf policy),
+avoiding an initial expensive render on large projects. Both use the exact same `MergeOptions`
+and existing core operation as OK, applied to a disposable project clone. The normal screen/export
+renderer draws the resulting plots, axes, linked layers, labels and page margins; source-removal
+options affect only that clone. Preview does not allocate IDs in the real project or change its
+revision, dirty flag, Undo or Redo. OK retains the existing one-step edit; Cancel/Escape discard
+the preview.
+
+The cached image is invalidated by any option, document revision/generation, folder validity or
+pixel-density change. With Auto off, a changed draft shows the Preview prompt instead of an
+outdated image. Invalid merges show the core validation error instead of the previous image;
+folder-tree changes require reopening before any preview computation. The whole page is fitted
+inside a 640 by 480 pixel raster at normal density (up to 1280 by 960 at high density), preserving
+its aspect ratio. The right-hand image is fitted to the available width and at most 240 screen
+points high. These bounds, responsive geometry, invalidation and error rules are Sheaf policies,
+not measured Origin behavior. No model, renderer, file-format, CLI or MCP behavior changes.
 
 **Command line:** `sheaf merge-graphs PROJECT (--graph NAME ... | --all-graphs) [--rows N]
 [--cols N] [--gap H,V] [--margins L,R,T,B] [--portrait] [--page-size W,H] [--keep-aspect]
@@ -6568,9 +6594,23 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
   - A set From or To fixes that end of the box; with Auto Increment the box keeps its about five
     steps. Points outside the box (and ribbon rows) are not drawn.
   - The Y axis of a 3D XYY layer keeps one tick per plot and is not set here.
+- **3D Surface from XYZ columns (T166, not measured):** Color Map Surface (`3d-colormap-surface`),
+  Color Fill Surface (`3d-color-fill-surface`), Wire Frame (`3d-wire-frame`) and Wire Surface
+  (`3d-wire-surface`) set `Space3dCoords::surface`. They read X, Y and Z columns as 3D Scatter does
+  (Origin also draws them from matrices, which Sheaf does not have yet).
+  - Each plot's points inside the box are joined by a Delaunay triangulation over X and Y (in the
+    box's units, so both axes weigh alike). Of points with the same X and Y the first is kept; fewer
+    than three points, or points on one line, draw nothing.
+  - The triangles are drawn from the farthest to the nearest (by their corners' mean depth), each
+    edged with the plot's line: black, 0.5 pt. The mesh keeps its line colour when plots are
+    recoloured, as a column's outline does.
+  - Color Map fills each triangle by its mean Z over the plot's Z range with the colour-mapped
+    symbols' map (blue, cyan, green, yellow, red); Color Fill with the plot colour (red first);
+    Wire Surface with white, which hides the mesh behind; Wire Frame does not fill, so every line shows.
+  - X/Y Constant with Base, Colormap Surface with Projection and 3D Ternary Colormap Surface stay grey.
 - **Not done:**
   - rotating the view; axis titles, tick label and scale type settings of the 3D axes;
   - hiding points behind each other (points are drawn in row order);
-  - surfaces and 3D OpenGL settings.
+  - surfaces from matrices, a colour scale for colour map surfaces, and 3D OpenGL settings.
   - The Data Reader shows the view's coordinates, not X, Y and Z.
 

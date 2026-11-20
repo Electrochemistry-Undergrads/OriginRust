@@ -529,6 +529,22 @@ pub struct Space3dCoords {
     /// The scales of the X, Y and Z data axes (T164, the 3D Axis window); automatic when unset.
     #[serde(default, skip_serializing_if = "Space3dCoords::auto_scales")]
     pub scales: [Space3dScale; 3],
+    /// 3D Surface (T166): each plot's points are joined into a surface of triangles over X and Y.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub surface: Option<Surface3d>,
+}
+
+/// How a 3D surface layer (T166) draws its triangles.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Surface3d {
+    /// Filled by the colour map at their mean Z, with mesh lines (Color Map Surface).
+    ColorMap,
+    /// Filled with the plot's colour, with mesh lines (Color Fill Surface).
+    ColorFill,
+    /// Mesh lines only, all of them seen (Wire Frame).
+    WireFrame,
+    /// Mesh lines over a white fill, which hides the lines behind the surface (Wire Surface).
+    WireSurface,
 }
 
 impl Space3dCoords {
@@ -539,7 +555,14 @@ impl Space3dCoords {
 
 impl Default for Space3dCoords {
     fn default() -> Self {
-        Space3dCoords { azimuth_deg: 40.0, elevation_deg: 25.0, xyy: false, ribbons: false, scales: Default::default() }
+        Space3dCoords {
+            azimuth_deg: 40.0,
+            elevation_deg: 25.0,
+            xyy: false,
+            ribbons: false,
+            scales: Default::default(),
+            surface: None,
+        }
     }
 }
 
@@ -964,15 +987,16 @@ impl Layer {
     /// spreads its colors over the number of plots, every automatic color moves along.
     ///
     /// A column plot gets the color as its fill only; its outline keeps its own color (black in
-    /// the column template, as in Origin).
+    /// the column template, as in Origin). So does a 3D surface's mesh (T166).
     pub fn recolor_automatic(&mut self) {
         let n = self.plots.len();
         let g = self.group_style;
+        let surface = self.coords.space3d().is_some_and(|c| c.surface.is_some());
         for (i, p) in self.plots.iter_mut().enumerate().filter(|(_, p)| p.auto_color) {
             // With subgroups the colour list runs over the plots of a subgroup (or over the subgroups).
             let ((ci, cn), _, _) = group_steps(g.subgrouping, g.subgroup_on, i, n);
             let c = self.palette.color(ci, cn);
-            if !p.kind.is_bar() {
+            if !p.kind.is_bar() && !surface {
                 p.line.color = c;
             }
             p.symbol.color = c;

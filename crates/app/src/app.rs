@@ -2185,7 +2185,10 @@ impl SheafApp {
                             LabelRow::LongName => c.long_name = text,
                             LabelRow::Units => c.units = text,
                             LabelRow::Comments => c.comments = text,
-                            LabelRow::Formula | LabelRow::SamplingInterval | LabelRow::Sparklines => {}
+                            LabelRow::Formula
+                            | LabelRow::SamplingInterval
+                            | LabelRow::Sparklines
+                            | LabelRow::Categories => {}
                             LabelRow::Param(name) => {
                                 c.params.insert(name, text);
                             }
@@ -3316,6 +3319,10 @@ impl SheafApp {
             }
             if row == LabelRow::Sparklines {
                 self.warn("Sparklines are drawn from the column's values");
+                return;
+            }
+            if row == LabelRow::Categories && !matches!(op, CellOp::Copy(_)) {
+                self.warn("The categories come from the column's values");
                 return;
             }
             let Some(c) = self.doc.project().column(column) else { return };

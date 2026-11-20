@@ -2749,7 +2749,7 @@ pub fn corner_menu(sheet: &sheaf_core::Worksheet) -> Vec<Entry> {
         switch(V::Sparklines),
         grey("Filter"),
         switch(V::Formula),
-        grey("Categories"),
+        switch(V::Categories),
         sep(),
         switch(V::RowLabels),
         sep(),

@@ -234,3 +234,28 @@ fn page_break_preview_lines_follow_the_print_pages_and_the_view_menu_ticks() {
     assert!(!rows.is_empty() && rows.iter().all(|&r| r < 399), "400 rows print on several pages: {rows:?}");
     assert!(h.state().menu_context().page_breaks, "the View menu ticks it");
 }
+
+#[test]
+fn the_categories_row_lists_a_categorical_columns_categories() {
+    let mut h = start(vec![data_file("corner-categories")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = h.state().books.keys().next().copied().unwrap();
+    let b = column_id(&h, "B");
+    h.state_mut().doc.apply("Groups", |p| {
+        let c = p.column_mut(b).unwrap();
+        c.data = sheaf_core::ColumnData::text(vec!["ctrl".into(), "dose".into(), "ctrl".into(), "high".into()]);
+        c.categorical = true;
+    });
+    settle(&mut h);
+    assert!(h.query_by_label("Categories").is_none(), "off on a new sheet");
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Sheet { book, op: SheetOp::ToggleView(ViewSwitch::Categories) }, &ctx);
+    settle(&mut h);
+    assert!(h.query_by_label("Categories").is_some(), "the row title shows");
+    assert!(h.query_by_label("ctrl, dose, high").is_some() || grid_has_text(&h, "ctrl, dose, high"));
+    assert_eq!(h.state().doc.undo_label(), Some("Worksheet view"));
+}
+
+fn grid_has_text(h: &Harness<'static, SheafApp>, text: &str) -> bool {
+    h.query_all_by_value(text).next().is_some()
+}

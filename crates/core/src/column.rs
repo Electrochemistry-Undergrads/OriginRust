@@ -395,6 +395,22 @@ impl Column {
 
     /// True for a column whose values come from a formula that keeps running (mode Auto or
     /// Manual). Origin shows a lock on such a column and refuses hand edits of its cells.
+    /// The Categories row of a categorical column (T187): its distinct non-empty cell texts in the order
+    /// they first appear, joined by ", ". Empty for a column that is not categorical.
+    pub fn categories_text(&self) -> String {
+        if !self.categorical {
+            return String::new();
+        }
+        let mut seen: Vec<String> = Vec::new();
+        for r in 0..self.len() {
+            let t = self.shown_text(r);
+            if !t.is_empty() && t != "--" && !seen.contains(&t) {
+                seen.push(t);
+            }
+        }
+        seen.join(", ")
+    }
+
     pub fn is_locked(&self) -> bool {
         self.formula.is_some() && self.recalc != RecalcMode::None
     }
@@ -769,5 +785,18 @@ mod tests {
         a.numeric_mut().unwrap()[0] = 9.0;
         assert_eq!(snapshot.numeric().unwrap(), &[1.0, 2.0]);
         assert_eq!(a.numeric().unwrap(), &[9.0, 2.0]);
+    }
+
+    #[test]
+    fn the_categories_row_lists_the_categories_in_order_of_appearance() {
+        let mut c = Column::new(
+            ColumnId(1),
+            "A",
+            Designation::Y,
+            ColumnData::text(vec!["b".into(), "a".into(), String::new(), "b".into(), "c".into()]),
+        );
+        assert_eq!(c.categories_text(), "", "not categorical");
+        c.categorical = true;
+        assert_eq!(c.categories_text(), "b, a, c");
     }
 }

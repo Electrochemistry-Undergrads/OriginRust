@@ -695,6 +695,7 @@ fn label_rows(sheet: &Worksheet) -> Vec<LabelRow> {
         (v.formula, LabelRow::Formula),
         (sheet.shows_view_switch(ViewSwitch::SamplingInterval), LabelRow::SamplingInterval),
         (v.sparklines, LabelRow::Sparklines),
+        (v.categories, LabelRow::Categories),
     ]
     .into_iter()
     .filter_map(|(shown, row)| shown.then_some(row))
@@ -713,6 +714,7 @@ pub fn label_kind(row: &LabelRow) -> sheaf_core::cellformat::LabelKind {
         LabelRow::Formula => LabelKind::Formula,
         LabelRow::SamplingInterval => LabelKind::SamplingInterval,
         LabelRow::Sparklines => LabelKind::Sparklines,
+        LabelRow::Categories => LabelKind::Categories,
         LabelRow::Param(name) => LabelKind::Param(name.clone()),
     }
 }
@@ -725,6 +727,7 @@ fn row_title(row: &LabelRow) -> String {
         LabelRow::Formula => "F(x)=".to_string(),
         LabelRow::SamplingInterval => ViewSwitch::SamplingInterval.name().into(),
         LabelRow::Sparklines => ViewSwitch::Sparklines.name().into(),
+        LabelRow::Categories => ViewSwitch::Categories.name().into(),
         LabelRow::Param(name) => name.clone(),
     }
 }
@@ -749,6 +752,7 @@ fn label_text(column: &Column, row: &LabelRow) -> String {
             text
         }),
         LabelRow::Sparklines => String::new(),
+        LabelRow::Categories => column.categories_text(),
         LabelRow::Param(name) => column.params.get(name).cloned().unwrap_or_default(),
     }
 }
@@ -1828,7 +1832,7 @@ fn label_cell(
             }
         }
     }
-    let read_only = matches!(row, LabelRow::SamplingInterval | LabelRow::Sparklines);
+    let read_only = matches!(row, LabelRow::SamplingInterval | LabelRow::Sparklines | LabelRow::Categories);
     let response = if read_only && !text.is_empty() { response.on_hover_text(text) } else { response };
     response.context_menu(|ui| {
         menus::show_context(ui, &menus::label_cell_menu(read_only), &book_ctx(book_id, state), actions)
@@ -1844,7 +1848,7 @@ pub fn label_text_full(column: &Column, row: &LabelRow) -> String {
 }
 
 fn start_editing_label(state: &mut BookUi, column: &Column, row: &LabelRow, replacement: Option<String>) {
-    if matches!(row, LabelRow::SamplingInterval | LabelRow::Sparklines) {
+    if matches!(row, LabelRow::SamplingInterval | LabelRow::Sparklines | LabelRow::Categories) {
         return;
     }
     let original = label_text_full(column, row);

@@ -94,6 +94,16 @@ impl PeakFitSpec {
     }
 }
 
+/// What [`Tool::PeakBaseline`] does: the Peak Analyzer's goals Create Baseline and Subtract
+/// Baseline (analysis-tools.md 11.5). The baseline of each curve is written beside it as Origin's
+/// `Baseline_Data Y<n>`; with `subtract`, the data minus the baseline come first as
+/// `Subtracted_Data Y<n>`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PeakBaselineSpec {
+    pub baseline: ChainBaseline,
+    pub subtract: bool,
+}
+
 /// What [`Tool::PeakChain`] does: baseline, peak search, per-peak integration and (optionally)
 /// a multi-peak fit, in one run with one result sheet.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -997,6 +1007,8 @@ pub enum Tool {
     Interpolate(InterpSpec),
     FindPeaks(PeakOptions),
     PeakChain(PeakChainSpec),
+    /// The Peak Analyzer's Create Baseline and Subtract Baseline goals.
+    PeakBaseline(PeakBaselineSpec),
     Statistics(StatisticsSpec),
     TTest(TTestSpec),
     VarTest(VarTestSpec),
@@ -1104,6 +1116,13 @@ impl Tool {
             Tool::Interpolate(_) => "Interpolate",
             Tool::FindPeaks(_) => "Find peaks",
             Tool::PeakChain(_) => "Analyze peaks",
+            Tool::PeakBaseline(s) => {
+                if s.subtract {
+                    "Subtract baseline"
+                } else {
+                    "Create baseline"
+                }
+            }
             Tool::Statistics(_) => "Statistics",
             Tool::TTest(spec) => match spec.kind {
                 TTestKind::OneSample { .. } => "One-sample t-test",
@@ -1191,7 +1210,7 @@ impl Tool {
             Tool::Translate(_) => "Translate",
             Tool::Interpolate(_) => "Interpolate",
             Tool::FindPeaks(_) => "Peaks",
-            Tool::PeakChain(_) => "PeakAnalysis",
+            Tool::PeakChain(_) | Tool::PeakBaseline(_) => "PeakAnalysis",
             Tool::Statistics(_) => "Statistics",
             Tool::TTest(_) => "TTest",
             Tool::VarTest(_) => "VarTest",
@@ -1781,6 +1800,72 @@ fn row_statistics(
 
 /// The peak chain for every input column: one table row per peak, a baseline column beside each
 /// source and, with a fit, the fitted curve.
+/// The number Origin gives the next column named `<prefix><n>` in a sheet: one more than the
+/// largest in use.
+fn next_numbered(sheet: &Worksheet, prefix: &str) -> usize {
+    sheet
+        .columns
+        .iter()
+        .filter_map(|c| c.long_name.strip_prefix(prefix)?.parse::<usize>().ok())
+        .max()
+        .map_or(1, |n| n + 1)
+}
+
+/// The Create Baseline and Subtract Baseline goals: Origin's column names and comments (measured,
+/// analysis-tools.md 11.5). Origin also writes a copy of X before each Y column; Sheaf's columns use
+/// the input's X.
+fn run_peak_baseline(
+    spec: &PeakBaselineSpec,
+    inputs: &[Input<'_>],
+    sheet: &Worksheet,
+    beside: &mut Vec<NewColumn>,
+    notes: &mut Vec<String>,
+) -> Result<(), AnalysisError> {
+    let opts = ChainOptions { baseline: spec.baseline.clone(), ..ChainOptions::default() };
+    let (first_b, first_s) = (next_numbered(sheet, "Baseline_Data Y"), next_numbered(sheet, "Subtracted_Data Y"));
+    for (k, inp) in inputs.iter().enumerate() {
+        let r = calc::analyze_peaks(inp.xs(), inp.ys(), &opts).map_err(|e| match e {
+            calc::ChainError::NoBaseline => AnalysisError::BadOption(format!(
+                "column {}: the baseline could not be made (it needs at least two points)",
+                inp.short
+            )),
+            calc::ChainError::UnsortedX => {
+                AnalysisError::BadOption(format!("column {}: X is not sorted; sort the rows along X first", inp.short))
+            }
+        })?;
+        if spec.subtract {
+            beside.push(NewColumn {
+                after: inp.id,
+                long_name: format!("Subtracted_Data Y{}", first_s + k),
+                units: inp.units.clone(),
+                comments: format!("Subtracted from {}{}", inp.short, inp.range_note()),
+                data: inp.aligned(&r.corrected),
+            });
+        }
+        let comments = if spec.subtract {
+            format!("Baseline to Subtract for {}{}", inp.short, inp.range_note())
+        } else {
+            format!("Baseline of {}{}", inp.short, inp.range_note())
+        };
+        beside.push(NewColumn {
+            after: inp.id,
+            long_name: format!("Baseline_Data Y{}", first_b + k),
+            units: inp.units.clone(),
+            comments,
+            data: inp.aligned(&r.baseline),
+        });
+        let anchors = match &spec.baseline {
+            ChainBaseline::SecondDerivative { points, .. } => {
+                let n = calc::second_derivative_anchors(inp.xs(), inp.ys(), *points).len();
+                format!(" through {n} anchor points")
+            }
+            _ => String::new(),
+        };
+        notes.push(format!("baseline of {}{anchors}", inp.short));
+    }
+    Ok(())
+}
+
 fn run_peak_chain(
     spec: &PeakChainSpec,
     inputs: &[Input<'_>],
@@ -2314,6 +2399,7 @@ impl Project {
             Tool::PeakChain(spec) => {
                 table = Some(run_peak_chain(spec, &inputs, &mut beside, &mut notes)?);
             }
+            Tool::PeakBaseline(spec) => run_peak_baseline(spec, &inputs, sheet, &mut beside, &mut notes)?,
             Tool::Integrate(spec) => {
                 let mut t =
                     ResultTable::new(&["Area", "X start", "X end", "Peak X", "Peak height", "Width at half height"]);
@@ -4615,6 +4701,37 @@ mod tests {
         let want = sheaf_calc::hilbert(&(0..=10).map(f64::from).collect::<Vec<_>>());
         assert_eq!(h, want);
         assert!(r.message.starts_with("Hilbert transform"), "{}", r.message);
+    }
+
+    #[test]
+    fn peak_baseline_goals_write_origins_columns() {
+        // Origin's Create and Subtract Baseline goals on two peaks over a sloped line (analysis-tools 11.5).
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let x: Vec<f64> = (0..401).map(|i| i as f64 * 0.05).collect();
+        let g = |t: f64, c: f64, w: f64| (-(t - c) * (t - c) / w).exp();
+        let y: Vec<f64> = x.iter().map(|&t| 0.2 + 0.01 * t + g(t, 5.0, 0.5) + 0.6 * g(t, 12.0, 0.8)).collect();
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+        let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y.clone())).unwrap();
+        let baseline = ChainBaseline::SecondDerivative { points: 8, method: InterpMethod::Linear };
+        let create = Tool::PeakBaseline(PeakBaselineSpec { baseline: baseline.clone(), subtract: false });
+        let r = p.analyze(&request(&[b], create)).unwrap();
+        let col = p.column(r.new_columns[0]).unwrap();
+        assert_eq!((col.long_name.as_str(), col.comments.as_str()), ("Baseline_Data Y1", "Baseline of B"));
+        let base = p.numeric(r.new_columns[0]).unwrap().to_vec();
+        assert!((base[1] - 0.200_500_000_002_844_2).abs() < 1e-12, "{}", base[1]);
+        assert_eq!(r.notes, ["baseline of B through 8 anchor points"]);
+        let subtract = Tool::PeakBaseline(PeakBaselineSpec { baseline, subtract: true });
+        let r = p.analyze(&request(&[b], subtract)).unwrap();
+        let names: Vec<(String, String)> = r
+            .new_columns
+            .iter()
+            .map(|&id| p.column(id).map(|c| (c.long_name.clone(), c.comments.clone())).unwrap())
+            .collect();
+        assert_eq!(names[0], ("Subtracted_Data Y1".to_string(), "Subtracted from B".to_string()));
+        assert_eq!(names[1], ("Baseline_Data Y2".to_string(), "Baseline to Subtract for B".to_string()));
+        let sub = p.numeric(r.new_columns[0]).unwrap();
+        assert!((sub[100] - (y[100] - base[100])).abs() < 1e-12);
     }
 
     #[test]

@@ -6672,7 +6672,18 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
     into a curve of Z and filled down to the floor of the box: one wall per value, in the plot
     colour (red first) with the black line as edge. Values with one point draw nothing. The walls
     are drawn from the farthest to the nearest by their mean depth.
-  - 3D Ternary Colormap Surface stays grey.
+  - **3D Ternary Colormap Surface (T173, `3d-ternary-colormap-surface`):** `Space3dCoords::ternary`.
+    The plot's X, Y and Z columns are the three parts of a composition (normalised as in a ternary
+    layer: rows with a missing or negative part, or a zero sum, are left out); the numeric column
+    after Z is the height (`Plot::color_from`).
+    - The floor is an equilateral triangle as the 2D ternary layer has it: Z = 1 at the front
+      left, X = 1 at the front right, Y = 1 at the back (at Turn 40). The height runs up the box.
+    - The box is a prism: grid lines at every 0.2 of each part on the floor, the floor and top
+      triangles and the three upright edges in black. The fractions 0.2 to 0.8 label the sides
+      (X along Z-X, Y along X-Y, Z along Y-Z); a side behind the middle of the floor has its labels
+      under the data. The parts' column names are at their corners; the height's ticks and column
+      name are up the leftmost upright edge.
+    - The Color Map surface (T166) is drawn over the triangle.
 - **Not done:**
   - rotating the view with the mouse or a 3D Rotation toolbar; axis titles, tick label and scale
     type settings of the 3D axes;

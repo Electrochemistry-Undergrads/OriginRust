@@ -1272,7 +1272,7 @@ fn plot_menu() -> Vec<Entry> {
                     item("Wire Frame", Cmd::Plot(Template::WireFrame3d)),
                     item("Wire Surface", Cmd::Plot(Template::WireSurface3d)),
                 ],
-                greys(&["3D Ternary Colormap Surface"]),
+                vec![item("3D Ternary Colormap Surface", Cmd::Plot(Template::TernarySurface3d))],
             ]
             .concat(),
         ),

@@ -4,6 +4,6 @@
 Surface, Color Fill Surface, Wire Frame and Wire Surface are live for worksheet X, Y and Z columns on
 T155's fixed view: a Delaunay triangulation over X and Y (`sheaf_calc::xyzarea::delaunay`), triangles
 drawn back to front with black mesh lines. Left (X/Y Constant with Base: T170; Colormap Surface with
-Projection: T168): 3D Ternary Colormap Surface, surfaces from matrices (B14), a colour scale for the map.
+Projection: T168): 3D Ternary Colormap Surface (T173), surfaces from matrices (B14), a colour scale for the map.
 **Size:** M. **Source:** greyed inventory package B15.
 **Spec:** `docs/spec/graphing.md` ("3D Scatter and 3D Trajectory").

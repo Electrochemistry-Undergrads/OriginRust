@@ -2420,6 +2420,17 @@ impl FieldTemplate {
         FieldTemplate::ALL.into_iter().find(|t| t.name().eq_ignore_ascii_case(name))
     }
 
+    /// Polar Contour (T222): Origin's polar page and layer with this template's contour of `source`,
+    /// whose X is the angle and Y the radius. The colour scale stands to the right of the circle.
+    pub fn new_polar_graph(&self, id: WindowId, name: &str, source: FieldSource) -> Graph {
+        let mut g = polar(id, name, RadiusColumn::Y);
+        let field = self.new_graph(id, name, source).layers.swap_remove(0).field;
+        let layer = &mut g.layers[0];
+        layer.legend.visible = false;
+        layer.field = field;
+        g
+    }
+
     /// An empty graph in this template's style: one layer whose field is `source`.
     pub fn new_graph(&self, id: WindowId, name: &str, source: FieldSource) -> Graph {
         let mut g = general(id, name, PlotKind::Line);

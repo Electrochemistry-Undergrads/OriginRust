@@ -517,6 +517,11 @@ pub enum Cmd {
         y: bool,
         part: sheaf_core::format_clip::AxisPart,
     },
+    /// The page's Paste Format To of an axis format onto several axes (T174).
+    PasteAxesFormat {
+        targets: sheaf_core::format_clip::AxisTargets,
+        part: sheaf_core::format_clip::AxisPart,
+    },
     CopyLegendStyles {
         layer: usize,
     },
@@ -2402,7 +2407,12 @@ fn axis_copy_format_menu(layer: usize, y: bool) -> Entry {
 
 /// Paste Format To of an axis: existing All, Scales and Styles groups (spec 26.9/26.11).
 fn axis_paste_format_menu(layer: usize, y: bool) -> Entry {
-    let paste = |label: &str, part: AxisPart| item(label, Cmd::PasteAxisFormat { layer, y, part });
+    sub("Paste Format To", axis_paste_groups(|part| Cmd::PasteAxisFormat { layer, y, part }))
+}
+
+/// The groups of an axis format's Paste Format To, each pasted by the command `make` gives.
+fn axis_paste_groups(make: impl Fn(AxisPart) -> Cmd) -> Vec<Entry> {
+    let paste = |label: &str, part: AxisPart| item(label, make(part));
     let mut v = vec![
         paste("Tick Direction", AxisPart::TickDirection),
         paste("Ticks", AxisPart::Ticks),
@@ -2421,7 +2431,7 @@ fn axis_paste_format_menu(layer: usize, y: bool) -> Entry {
     v.push(paste("Title Text", AxisPart::TitleText));
     v.push(sep());
     v.push(paste("All", AxisPart::All));
-    sub("Paste Format To", v)
+    v
 }
 
 /// The menu of an axis title.
@@ -2594,13 +2604,28 @@ pub fn graph_page_menu(layer: usize, page: (f64, f64)) -> Vec<Entry> {
 }
 
 /// Paste Format of the page menu: it acts at once for a graph format; for an axis format Origin
-/// shows Paste Format To with Bottom Axes, All X Axes, All Axes and All (their submenus are
-/// unmeasured, so they stay greyed); with nothing copied it is greyed.
+/// shows Paste Format To with Bottom Axes, All X Axes, All Axes and All; the first three paste the
+/// axis groups onto those axes of every layer (T174, Sheaf's meanings), All stays greyed (Origin's
+/// target is unmeasured and Sheaf cannot tell it from All Axes); with nothing copied it is greyed.
 fn page_paste_format_entry() -> Entry {
     use crate::format_clip_ui::{ClipKind, kind};
     match kind() {
         Some(ClipKind::Graph) => item("Paste Format", Cmd::PasteGraphFormat),
-        Some(ClipKind::Axis) => grey_sub("Paste Format To", &["Bottom Axes", "All X Axes", "All Axes", "All"]),
+        Some(ClipKind::Axis) => {
+            use sheaf_core::format_clip::AxisTargets;
+            let to = |label: &str, targets: AxisTargets| {
+                sub(label, axis_paste_groups(|part| Cmd::PasteAxesFormat { targets, part }))
+            };
+            sub(
+                "Paste Format To",
+                vec![
+                    to("Bottom Axes", AxisTargets::Bottom),
+                    to("All X Axes", AxisTargets::AllX),
+                    to("All Axes", AxisTargets::AllAxes),
+                    grey("All"),
+                ],
+            )
+        }
         Some(ClipKind::Legend) | None => grey("Paste Format"),
     }
 }
@@ -3350,6 +3375,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::CopyAxisFormat { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, y: *y, part: *part }
         }
         Cmd::PasteGraphFormat => Action::PasteGraphFormat { graph: c.graph.ok_or(NEED_GRAPH)? },
+        Cmd::PasteAxesFormat { targets, part } => {
+            Action::PasteAxesFormat { graph: c.graph.ok_or(NEED_GRAPH)?, targets: *targets, part: *part }
+        }
         Cmd::PasteAxisFormat { layer, y, part } => {
             Action::PasteAxisFormat { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, y: *y, part: *part }
         }

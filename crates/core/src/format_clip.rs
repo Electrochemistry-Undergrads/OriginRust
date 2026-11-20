@@ -327,6 +327,39 @@ pub fn paste_axis(graph: &mut Graph, layer: usize, y: bool, clip: &FormatClip, p
     true
 }
 
+/// Which axes of a graph the page's Paste Format To reaches with an axis format (T174; Sheaf's
+/// meanings, not measured).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum AxisTargets {
+    /// The X axis of every layer that is drawn at the bottom (not moved to the top or hidden).
+    Bottom,
+    /// The X axis of every layer.
+    AllX,
+    /// The X and Y axes of every layer.
+    AllAxes,
+}
+
+/// Page Paste Format To: [`paste_axis`] onto every axis of `targets`. False when the clipboard holds
+/// no axis format.
+pub fn paste_axes(graph: &mut Graph, targets: AxisTargets, clip: &FormatClip, part: AxisPart) -> bool {
+    if !matches!(clip, FormatClip::Axis(_)) {
+        return false;
+    }
+    for layer in 0..graph.layers.len() {
+        for y in [false, true] {
+            let take = match targets {
+                AxisTargets::Bottom => !y && graph.layers[layer].x_axis.side == crate::graph::AxisSide::Normal,
+                AxisTargets::AllX => !y,
+                AxisTargets::AllAxes => true,
+            };
+            if take {
+                paste_axis(graph, layer, y, clip, part);
+            }
+        }
+    }
+    true
+}
+
 /// The finer groups of Paste Format To (T171). `all`: the clipboard holds All (styles and scales).
 fn paste_axis_group(to: &mut Axis, from: &Axis, part: AxisPart, all: bool) {
     match part {
@@ -791,5 +824,34 @@ mod tests {
         // A Scales-only clipboard pastes no group.
         let scales = copy_axis(&g, 0, false, AxisPart::Scales).unwrap();
         assert_eq!(paste(AxisPart::Line, &scales), base);
+    }
+
+    #[test]
+    fn page_paste_reaches_the_chosen_axes_of_every_layer() {
+        let (src, _, _) = axis_group_source();
+        let clip = copy_axis(&src, 0, false, AxisPart::Styles).unwrap();
+        let mut g = Template::Line.new_graph(WindowId(3), "T");
+        g.layers.push(g.layers[0].clone());
+        g.layers.push(g.layers[0].clone());
+        g.layers[2].x_axis.side = crate::graph::AxisSide::Opposite;
+        let base = g.layers[0].x_axis.line_width_pt;
+        let widths = |g: &Graph| -> Vec<(f64, f64)> {
+            g.layers.iter().map(|l| (l.x_axis.line_width_pt, l.y_axis.line_width_pt)).collect()
+        };
+        let mut b = g.clone();
+        assert!(paste_axes(&mut b, AxisTargets::Bottom, &clip, AxisPart::Thickness));
+        assert_eq!(widths(&b), [(3.0, base), (3.0, base), (base, base)], "a top X axis is not a bottom axis");
+        let mut x = g.clone();
+        paste_axes(&mut x, AxisTargets::AllX, &clip, AxisPart::Thickness);
+        assert_eq!(widths(&x), [(3.0, base), (3.0, base), (3.0, base)]);
+        let mut all = g.clone();
+        paste_axes(&mut all, AxisTargets::AllAxes, &clip, AxisPart::Thickness);
+        assert_eq!(widths(&all), [(3.0, 3.0), (3.0, 3.0), (3.0, 3.0)]);
+        let legend = FormatClip::LegendStyles(LegendStyles {
+            font: g.layers[0].legend.font.clone(),
+            frame: g.layers[0].legend.frame,
+            background: g.layers[0].legend.background,
+        });
+        assert!(!paste_axes(&mut g.clone(), AxisTargets::AllAxes, &legend, AxisPart::All));
     }
 }

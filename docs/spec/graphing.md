@@ -5759,6 +5759,16 @@ only from a Copy Format > All clipboard. No group touches the scale, the other a
 paste is one undo step ("Apply Theme", as the other pastes). **Title Dimensions** stays grey: Sheaf's axis title has no
 position or size of its own to paste.
 
+### 26.14 Page Paste Format To with an axis format (T174, 2026-11-19, not measured)
+
+With an axis format copied, the page's right-click menu shows Paste Format To ▸ Bottom Axes ▸, All X Axes
+▸, All Axes ▸, All ▸ (26.2; Origin's second level was not opened, and OriginLab's Copying and Pasting
+Formats page does not name these targets). Sheaf's meanings: **Bottom Axes** the X axis of every layer that
+is drawn at the bottom (not moved to the top, not hidden); **All X Axes** every layer's X axis; **All Axes**
+every layer's X and Y axes. Each opens the axis groups of 26.13 (Tick Direction ... Styles, Scales, Title
+Text, All; Title Dimensions grey), pasted onto each of those axes as on one axis; the whole paste is one
+undo step ("Apply Theme"). The first-level **All** stays grey: Sheaf cannot tell it apart from All Axes.
+
 ## 27. Colour scales and bubble scales: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (T80)
 
 Not measured: Origin 2016 is on Windows only and this slice was built on macOS from Origin's help, so everything

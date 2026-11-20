@@ -81,6 +81,16 @@ pub fn copy_title(graph: &Graph, layer: usize, vertical: bool, text: String) -> 
     true
 }
 
+/// Copies the legend of `layer` as a text label (T178): `text` is the legend's text as it is
+/// drawn (Origin's notation, `\l(n)` and `%(n)` kept, so the pasted label shows the same symbols
+/// and names), with the legend's font. False when there is no such layer.
+pub fn copy_legend(graph: &Graph, layer: usize, text: String) -> bool {
+    let Some(l) = graph.layers.get(layer) else { return false };
+    let label = TextLabel::new(text, 0.0, 0.0, l.legend.font.clone());
+    CLIP.with(|c| *c.borrow_mut() = Some(Clip::Label(label)));
+    true
+}
+
 /// Copies text label `label` of `layer`; false when there is no such label.
 pub fn copy_label(graph: &Graph, layer: usize, label: usize) -> bool {
     let Some(l) = graph.layers.get(layer).and_then(|l| l.labels.get(label)) else { return false };

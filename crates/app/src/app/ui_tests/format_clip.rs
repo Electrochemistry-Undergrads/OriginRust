@@ -139,12 +139,33 @@ fn page_menu_copy_format_lists_origins_choices_and_greys_the_unmeasured_ones() {
     let mut h = start(vec![data_file("fmt-pagelist")]);
     right_click_page(&mut h);
     pick(&mut h, "Copy Format");
-    for label in ["Dimensions", "Scales", "Colors", "Fonts", "Background", "All Style Formats", "All"] {
+    for label in
+        ["Page Background", "Dimensions", "Scales", "Colors", "Fonts", "Background", "All Style Formats", "All"]
+    {
         assert!(!disabled(&h, label), "{label} is enabled");
     }
-    for label in ["Page Background", "Legend Translation Mode"] {
-        assert!(disabled(&h, label), "{label} is greyed");
-    }
+    assert!(disabled(&h, "Legend Translation Mode"), "Legend Translation Mode is greyed");
+}
+
+#[test]
+fn page_copy_format_page_background_gives_another_graph_the_page_colour() {
+    let mut h = start(vec![data_file("fmt-pagebg")]);
+    let id = *h.state().graphs.keys().next().unwrap();
+    h.state_mut().doc.apply("colour", |p| p.graph_mut(id).unwrap().page.background = Color::rgb(250, 240, 200));
+    settle(&mut h);
+    page_copy(&mut h, "Page Background");
+    let width = graph(&h).page.width_pt;
+    h.state_mut().doc.apply("plain", |p| {
+        let g = p.graph_mut(id).unwrap();
+        g.page.background = Color::WHITE;
+        g.page.width_pt = width + 50.0;
+    });
+    settle(&mut h);
+    right_click_page(&mut h);
+    pick(&mut h, "Paste Format");
+    let g = graph(&h);
+    assert_eq!(g.page.background, Color::rgb(250, 240, 200));
+    assert_eq!(g.page.width_pt, width + 50.0, "only the colour pastes");
 }
 
 #[test]
@@ -276,14 +297,21 @@ fn legend_menu_copies_and_pastes_styles_as_one_undo_step() {
 }
 
 #[test]
-fn edit_menu_copy_format_lists_nine_choices_with_symbol_and_text_greyed() {
+fn edit_menu_copy_format_lists_nine_choices_all_enabled() {
     let mut h = start(vec![data_file("fmt-editlist")]);
     menu(&mut h, "Edit", "Copy Format");
-    for label in ["All", "All Style Formats", "Colors", "Fonts", "Background", "Dimensions", "Scales"] {
+    for label in [
+        "All",
+        "All Style Formats",
+        "Colors",
+        "Fonts",
+        "Background",
+        "Symbol/Line/Fill",
+        "Dimensions",
+        "Scales",
+        "Text",
+    ] {
         assert!(!disabled(&h, label), "{label} is enabled");
-    }
-    for label in ["Symbol/Line/Fill", "Text"] {
-        assert!(disabled(&h, label), "{label} is greyed until measured");
     }
 }
 

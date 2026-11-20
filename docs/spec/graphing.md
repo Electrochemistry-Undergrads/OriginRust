@@ -5788,6 +5788,15 @@ every layer's X and Y axes. Each opens the axis groups of 26.13 (Tick Direction 
 Text, All; Title Dimensions grey), pasted onto each of those axes as on one axis; the whole paste is one
 undo step ("Apply Theme"). The first-level **All** stays grey: Sheaf cannot tell it apart from All Axes.
 
+### 26.15 Copy Format: Symbol, Line and Fill, Text and Page Background (T176, 2026-11-19, not measured)
+
+The three were not measured (26.3). Sheaf's choices: the Edit menu's **Symbol/Line/Fill** copies the
+plots' lines and symbols (the Symbol, Line and Fill group that All already holds) and **Text** the words of
+the text labels (the Text group of All), each alone; the page menu's **Page Background** copies the page
+colour, which Paste Format (page menu; it now pastes every group the clipboard holds) and Paste Format...
+(Apply Formats, listed as "Page Background") give the target page. All and All Style Formats keep Origin's measured groups and do not carry the page
+colour. Each paste is one undo step ("Apply Theme"). **Legend Translation Mode** stays grey (unknown).
+
 ## 27. Colour scales and bubble scales: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (T80)
 
 Not measured: Origin 2016 is on Windows only and this slice was built on macOS from Origin's help, so everything
@@ -6551,9 +6560,20 @@ unregistered, so Origin's own templates for them were not checked.
   - A click where the legend lies under the data picks the plots and axes first.
   - With Data on Top of Axes, the legend goes under the data together with the axes.
   - Hit-testing now reads `LayerScene::data_on_top` for that mode, not "the underlay is not empty".
-- Both flags are saved only when set, so older files load unchanged. The legend's Cut and Copy stay
-  grey: a free text label does not draw the legend's `\l(n)` symbols, so a pasted copy would show them
-  as text.
+- Both flags are saved only when set, so older files load unchanged.
+- **Cut and Copy (T178, not measured):** the legend's right-click Cut and Copy, and the graph Edit
+  menu's Cut, Copy and Ctrl+X/C with the legend selected, copy it as a free text label. The label has
+  the legend's text as drawn, in Origin's notation (its custom text, or the automatic
+  `\l(1) %(1)` lines), and the legend's font. The page's Paste puts it at the clicked point, as for
+  other labels (17.8). Cut also hides the legend, as one undo step ("Delete legend").
+- **Plot references in free text labels (T178):** Origin's text objects may hold `\l(n)` and `%(n)`,
+  and a legend is such a text object. A free text label that refers to a plot this way is drawn with
+  the legend's line layout and the plots of its own layer: a line and symbol sample per `\l(n)`, the
+  plot's name per `%(n)`, one row per line. It has no frame and no fill, whatever the legend has. The
+  top of its first row sits half a font size above the anchor, so a label keeps about its place when
+  `\l(n)` is typed into it. Labels without such references, labels turned away from 0 degrees and
+  labels in a layer without plots keep the plain text path, where the escapes stay literal text.
+  This rendering is a Sheaf choice; Origin's exact spacing for text objects is not measured.
 - **Axis titles (T153):** an axis title's right-click Bring to the front (`Axis::title_on_top`) draws
   it last in its layer, over the labels, drawn objects and legend. Push to the back returns it to its
   place among the axes (the default). One undo step each ("Bring axis title to front", "Push axis

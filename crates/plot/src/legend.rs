@@ -14,6 +14,12 @@ pub(crate) enum Part<'a> {
     Name(&'a str),
 }
 
+/// Whether `text` refers to a plot with `\l(n)` or `%(n)` on any line: a free text label with such a
+/// reference is drawn with the legend's line layout (T178).
+pub(crate) fn has_plot_refs(text: &str) -> bool {
+    lines(text).iter().any(|l| parse_line(l).iter().any(|p| !matches!(p, Part::Text(_))))
+}
+
 /// Splits one legend line into its pieces. An escape that is not closed, or that holds anything
 /// but a plot id, stays literal text.
 pub(crate) fn parse_line(line: &str) -> Vec<Part<'_>> {

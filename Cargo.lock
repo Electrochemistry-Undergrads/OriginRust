@@ -3323,6 +3323,7 @@ name = "sheaf-io"
 version = "0.1.0"
 dependencies = [
  "calamine",
+ "image",
  "rust_xlsxwriter",
  "serde",
  "serde_json",

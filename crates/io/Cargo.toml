@@ -17,6 +17,8 @@ zip = { version = "9.5.1", default-features = false, features = ["deflate"] }
 calamine = { version = "0.38", default-features = false }
 # Excel export (xlsx), pure Rust (ADR 0012).
 rust_xlsxwriter = { version = "0.102", default-features = false }
+# File > Import > Image into a matrix book (T204): decoders only, no new crates beyond the lockfile.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp"] }
 
 [lints]
 workspace = true

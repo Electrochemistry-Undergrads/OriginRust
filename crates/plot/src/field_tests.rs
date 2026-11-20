@@ -67,6 +67,16 @@ fn golden_heat_map_of_a_matrix() {
 }
 
 #[test]
+fn golden_gray_scale_map_of_a_matrix() {
+    let (p, g) = graph_of(FieldTemplate::GrayScale);
+    let svg = svg(&p, g);
+    // Black for the lowest band, white for the highest; no blue or red of the heat map.
+    assert!(svg.contains("#000000") && svg.contains("#FFFFFF"), "gray ramp");
+    assert!(!svg.contains("#0000FF"), "no heat-map blue");
+    crate::tests::compare_golden("matrix-grayscale", &svg);
+}
+
+#[test]
 fn golden_contour_of_scattered_xyz_columns() {
     // 25 points off a grid, on a smooth surface of plain arithmetic.
     let mut p = Project::new();

@@ -1024,6 +1024,15 @@ takes it out. It follows both columns when they get new ids and goes when either
 `.sheaf` (the sheet's `cell_sparklines`), not written to `.opj`, not printed. Origin's dialog (it can make
 several at once and pick rows) was not measured.
 
+**Pictures in cells (T202, 2026-11-20, not measured).** A data cell's right-click Insert Images from Files...
+opens the system file picker for a PNG file; the picture is kept in the project (the sheet's `cell_images`,
+the file's bytes written as base64 text in `project.json`, so window files and templates carry it too) and
+drawn fitted into the cell on white, one undo step ("Insert Image"). A file that is not a readable PNG is
+refused with a status message. One picture per cell; Remove Image takes it out ("Remove Image"). It
+follows its column when columns get new ids and goes with a deleted column; it is not written to `.opj`
+and not printed. Only PNG (Origin also reads JPEG, BMP and others); Origin's sizing options were not
+measured.
+
 ## 13j. Find in Project (T95, measured 2026-11-16, Origin 2016)
 
 Edit > Find in Project... (F3; "Find in Project" on a graph's Edit menu) opens Origin's **Find** window

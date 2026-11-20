@@ -321,6 +321,14 @@ each matrix as not written).
   window says why and stays open.
 - Not built: Origin's import filters and templates for binary files, and several frames from one file.
 
+## 7g. Plot > Contour/Heat Map > Gray Scale Map (T201, 2026-11-20, not measured)
+
+- A heat map of the matrix (or of XYZ columns on a regular grid) whose cells go from black at the
+  lowest band to white at the highest. It has the heat map's levels (5 major steps of 6 bands), frame
+  and colour scale (section 6) and no level lines. Template `grayscale` (`FieldTemplate::GrayScale`),
+  also `sheaf matrix plot --template grayscale`.
+- This is Sheaf's reading of Origin's Gray Scale Map; Origin's own levels and layout are not measured.
+
 ## 8. What was not verified, and what is left
 
 - Not run in Origin: `mdim` on a matrix that holds data; shrink with missing values; `w2m` options `lr` on accepted

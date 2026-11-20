@@ -115,6 +115,8 @@ fn inclusive_fill_keeps_closed_polygons_connections_and_vector_exports() {
         Connect::Straight,
         Connect::StepHorizontal,
         Connect::StepVertical,
+        Connect::StepHorizontalCenter,
+        Connect::StepVerticalCenter,
         Connect::Spline,
         Connect::BSpline,
         Connect::Bezier,

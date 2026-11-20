@@ -78,6 +78,11 @@ pub enum Item {
         stroke: Option<Stroke>,
     },
     Text(TextItem),
+    /// A PNG picture stretched over `rect` (a picture object of the graph page, T216).
+    Image {
+        rect: Rect,
+        png: std::sync::Arc<Vec<u8>>,
+    },
 }
 
 /// Everything drawn for one layer, in drawing order within each list.

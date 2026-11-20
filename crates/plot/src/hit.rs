@@ -78,7 +78,7 @@ fn of_points(points: impl IntoIterator<Item = (f64, f64)>) -> Option<Rect> {
 /// The bounding box of one item in page points.
 pub(crate) fn item_bounds(item: &Item, m: &dyn TextMeasurer) -> Option<Rect> {
     match item {
-        Item::Rect { rect, .. } => Some(*rect),
+        Item::Rect { rect, .. } | Item::Image { rect, .. } => Some(*rect),
         Item::Path { d, .. } => of_points(subpaths(d).into_iter().flatten()),
         Item::Text(t) => {
             let font =
@@ -186,7 +186,7 @@ fn segment_distance((px, py): (f64, f64), (ax, ay): (f64, f64), (bx, by): (f64, 
 /// True when `p` is within `tol` points of a line or symbol of the items.
 fn near_items(items: &[Item], p: (f64, f64), tol: f64) -> bool {
     items.iter().any(|item| match item {
-        Item::Rect { rect, .. } => contains(*rect, p, tol),
+        Item::Rect { rect, .. } | Item::Image { rect, .. } => contains(*rect, p, tol),
         Item::Path { d, fill, stroke } => {
             let half = stroke.as_ref().map_or(0.0, |s| s.width / 2.0);
             subpaths(d).iter().any(|sub| {

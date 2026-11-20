@@ -336,9 +336,10 @@ each matrix as not written).
 - Each pixel becomes its luminance, 0 (black) to 255 (white), from the `image` crate's Rec. 709
   weights. The first matrix row is the picture's top row. The X and Y ranges are the default 1..cols
   and 1..rows.
-- **Sheaf choice:** Origin also imports pictures into matrix books but keeps the colours (RGB image
-  mode). Sheaf keeps only the gray levels, so the matrix tools, heat maps and contours work on them
-  directly. TIFF and other formats, colour channels and the Image menu are left.
+- **Colour (T218):** a picture with any coloured pixel gets three sheets, Red, Green and Blue, each
+  0 to 255. A gray picture gets one sheet named Gray. Origin keeps colour pictures as one RGB image;
+  Sheaf keeps the channels as plain matrices, so every matrix tool works on each of them. TIFF and
+  other formats are left.
 
 ## 7i. The Image menu on a matrix (T207, 2026-11-20, Sheaf's formulas, not measured)
 
@@ -367,7 +368,11 @@ each matrix as not written).
   - **Crop:** 1-based first and last row and column, with the cells' X and Y coordinates kept.
   - **Resize:** a new size by bilinear resampling, end to end, with the ranges kept. A missing
     neighbour makes a missing cell.
-- Still grey: Color to Gray and RGB Split (Sheaf's images are gray).
+- **Conversion (T218):** these need a book with Red, Green and Blue sheets of one size; any other
+  book is refused with a note.
+  - **Color to Gray:** a new book "Gray of MBookN" with the luminance 0.2126 R + 0.7152 G + 0.0722 B.
+  - **RGB Split:** three new one-channel books, "Red of MBookN" and so on.
+  - Each is one undo step.
 
 ## 8. What was not verified, and what is left
 

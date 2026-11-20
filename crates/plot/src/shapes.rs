@@ -83,6 +83,19 @@ pub(crate) fn shape_items(shape: &Shape, f: Rect) -> Vec<Item> {
                 items.push(Item::Path { d: polygon(&h), fill: Some(shape.color), stroke: Some(solid) });
             }
         }
+        ShapeKind::Image => {
+            let (x0, x1) = (a.0.min(b.0), a.0.max(b.0));
+            let (y0, y1) = (a.1.min(b.1), a.1.max(b.1));
+            let rect = crate::Rect { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+            if let Some(p) = &shape.picture {
+                items.push(Item::Image { rect, png: p.png.clone() });
+            }
+            // A border when the object has a line width (none for a new picture).
+            if shape.width_pt > 0.0 {
+                let d = polygon(&[(x0, y0), (x1, y0), (x1, y1), (x0, y1)]);
+                items.push(Item::Path { d, fill: None, stroke: Some(stroke) });
+            }
+        }
         ShapeKind::Rectangle => {
             let (x0, x1) = (a.0.min(b.0), a.0.max(b.0));
             let (y0, y1) = (a.1.min(b.1), a.1.max(b.1));

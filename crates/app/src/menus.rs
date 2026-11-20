@@ -97,6 +97,8 @@ pub enum ImageCmd {
     Subtract,
     Crop,
     Resize,
+    ColorToGray,
+    RgbSplit,
 }
 
 /// The Matrix menu's commands (T192 slice 3, matrices spec 7b).
@@ -253,6 +255,11 @@ pub enum Cmd {
         shape: usize,
     },
     PasteShape {
+        layer: usize,
+        page: (f64, f64),
+    },
+    /// The page's Insert Images From Files...: a picture with its corner at the clicked point (T216).
+    InsertGraphImage {
         layer: usize,
         page: (f64, f64),
     },
@@ -2010,7 +2017,10 @@ fn image_menu() -> Vec<Entry> {
             ],
         ),
         sub("Arithmetic &Transform", vec![i("Math...", Math), i("Subtract...", Subtract)]),
-        sub("&Conversion", vec![i("To Binary...", ToBinary), grey("Color to Gray..."), grey("RGB Split...")]),
+        sub(
+            "&Conversion",
+            vec![i("To Binary...", ToBinary), i("Color to Gray...", ColorToGray), i("RGB Split...", RgbSplit)],
+        ),
         sub(
             "&Geometric Transform",
             vec![i("Crop...", Crop), i("Resize...", Resize), i("Rotate...", Rotate), i("Flip...", Flip)],
@@ -2895,6 +2905,7 @@ pub fn graph_page_menu(layer: usize, page: (f64, f64)) -> Vec<Entry> {
     let mut v: Vec<Entry> = paste.into_iter().collect();
     v.extend([
         item("Add Text...", Cmd::AddText),
+        item("Insert Images From Files...", Cmd::InsertGraphImage { layer, page }),
         item("Layer Management...", Cmd::LayerManagement(None)),
         new_layer_menu(),
         item("Add Shortcut to Favorites", Cmd::AddFavorite),
@@ -3298,6 +3309,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::CopyLabel { layer, label } => {
             Action::CopyLabel { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, label: *label, cut: false }
+        }
+        Cmd::InsertGraphImage { layer, page } => {
+            Action::PickGraphImage { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, page: *page }
         }
         Cmd::PasteShape { layer, page } => {
             Action::PasteShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, page: *page }

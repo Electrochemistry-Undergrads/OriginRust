@@ -180,7 +180,7 @@ pub(crate) fn item_segs(item: &Item) -> Option<Vec<Seg>> {
             Seg::Close,
         ]),
         Item::Path { d, .. } => Some(parse_path(d)),
-        Item::Text(_) => None,
+        Item::Text(_) | Item::Image { .. } => None,
     }
 }
 

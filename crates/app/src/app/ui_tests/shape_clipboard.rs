@@ -228,3 +228,37 @@ fn the_3d_scatter_and_trajectory_items_make_xyz_graphs() {
     assert!(g.layers[0].coords.space3d().is_some());
     assert!(g.layers[0].plots[0].size_from.is_some(), "the Z column");
 }
+
+#[test]
+fn the_legend_is_copied_as_a_label_that_draws_its_symbols_and_cut_hides_it() {
+    // T178: the legend's right-click Cut and Copy, pasted by the page's Paste.
+    crate::shape_clip::clear();
+    let legend = menus::graph_legend_menu(0, false, false);
+    for want in [menus::Cmd::CopyLegend { layer: 0, cut: true }, menus::Cmd::CopyLegend { layer: 0, cut: false }] {
+        assert!(legend.iter().any(|e| matches!(e, menus::Entry::Item(i) if i.cmd.as_ref() == Some(&want))));
+    }
+    let mut h = start(vec![data_file("legend-clip")]);
+    let ctx = h.ctx.clone();
+    let graph = project(&h).graphs().next().unwrap().id;
+    let text = sheaf_plot::legend_text(project(&h), graph, 0).unwrap();
+    assert!(text.contains(r"\l(1)"), "{text}");
+    h.state_mut().apply(Action::CopyLegend { graph, layer: 0, cut: true }, &ctx);
+    settle(&mut h);
+    assert!(!project(&h).graph(graph).unwrap().layers[0].legend.visible, "Cut hides the legend");
+    assert_eq!(h.state().doc.undo_label(), Some("Delete legend"));
+    let g = project(&h).graph(graph).unwrap();
+    let f = g.absolute_frame(0).unwrap();
+    let page = ((f.left + 0.5 * f.width) * g.page.width_pt, (f.top + 0.5 * f.height) * g.page.height_pt);
+    h.state_mut().apply(Action::PasteShape { graph, layer: 0, page }, &ctx);
+    settle(&mut h);
+    let l = &project(&h).graph(graph).unwrap().layers[0];
+    let pasted = l.labels.last().unwrap();
+    assert_eq!(pasted.text, text);
+    assert_eq!(pasted.font, l.legend.font);
+    // The pasted label draws the plot's line sample, as the legend did.
+    let scene = sheaf_plot::graph_scene(project(&h), graph).unwrap();
+    let k = l.labels.len() - 1;
+    let obj = scene.layers[0].objects.iter().find(|o| o.kind == ObjectKind::Label(k)).expect("drawn");
+    let items = &scene.layers[0].overlay[obj.items.clone()];
+    assert!(items.iter().any(|i| matches!(i, sheaf_plot::scene::Item::Path { fill: None, .. })), "a line sample");
+}

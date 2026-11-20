@@ -2926,6 +2926,7 @@ impl SheafApp {
                         let next = match state.selected {
                             Some((layer, K::Shape(shape))) => Some(Action::CopyShape { graph, layer, shape, cut }),
                             Some((layer, K::Label(label))) => Some(Action::CopyLabel { graph, layer, label, cut }),
+                            Some((layer, K::Legend)) => Some(Action::CopyLegend { graph, layer, cut }),
                             Some((layer, K::XTitle)) => Some(Action::CopyTitle { graph, layer, y: false, cut }),
                             Some((layer, K::YTitle)) => Some(Action::CopyTitle { graph, layer, y: true, cut }),
                             _ => None,
@@ -2966,6 +2967,15 @@ impl SheafApp {
                 });
                 if copied && cut {
                     self.edit_graph(graph, crate::actions::GraphOp::HideTitle { layer, y });
+                }
+            }
+            Action::CopyLegend { graph, layer, cut } => {
+                let project = self.doc.project();
+                let copied = sheaf_plot::legend_text(project, graph, layer).ok().is_some_and(|text| {
+                    project.graph(graph).is_some_and(|g| crate::shape_clip::copy_legend(g, layer, text))
+                });
+                if copied && cut {
+                    self.edit_graph(graph, crate::actions::GraphOp::HideLegend { layer });
                 }
             }
             Action::CopyLabel { graph, layer, label, cut } => {

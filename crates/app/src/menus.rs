@@ -145,6 +145,11 @@ pub enum Cmd {
         y: bool,
         cut: bool,
     },
+    /// The legend's right-click Cut and Copy (T178): a free text label with the legend's text.
+    CopyLegend {
+        layer: usize,
+        cut: bool,
+    },
     /// A text label's right-click Cut and Copy (T147).
     CutLabel {
         layer: usize,
@@ -2526,8 +2531,8 @@ pub fn graph_legend_menu(layer: usize, can_color: bool, can_bubble: bool) -> Vec
         add("Add Color Scale", can_color, LayerScaleKind::Color),
         add("Add Bubble Scale", can_bubble, LayerScaleKind::Bubble),
         sep(),
-        grey_keyed("Cut", ctrl(Key::X)),
-        grey_keyed("Copy", ctrl(Key::C)),
+        keyed("Cut", ctrl(Key::X), Cmd::CopyLegend { layer, cut: true }),
+        keyed("Copy", ctrl(Key::C), Cmd::CopyLegend { layer, cut: false }),
         keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::HideLegend { layer })),
         sep(),
         item("Bring to the front", Cmd::GraphEdit(GraphOp::OrderLegend { layer, front: true })),
@@ -2903,7 +2908,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             let graph = c.graph.ok_or(NEED_GRAPH)?;
             let ok = match op {
                 GraphClip::Cut | GraphClip::Copy => {
-                    matches!(c.graph_pick, Some(K::Shape(_) | K::Label(_) | K::XTitle | K::YTitle))
+                    matches!(c.graph_pick, Some(K::Shape(_) | K::Label(_) | K::XTitle | K::YTitle | K::Legend))
                 }
                 GraphClip::Clear => matches!(
                     c.graph_pick,
@@ -2927,6 +2932,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
                 });
             }
             Action::GraphClipboard { graph, op: *op }
+        }
+        Cmd::CopyLegend { layer, cut } => {
+            Action::CopyLegend { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, cut: *cut }
         }
         Cmd::CopyTitle { layer, y, cut } => {
             Action::CopyTitle { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, y: *y, cut: *cut }

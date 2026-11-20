@@ -171,7 +171,7 @@ impl Project {
         for id in [x, y, z] {
             self.numeric(id).ok_or(ProjectError::NoSuchColumn(id))?;
         }
-        if template == FieldTemplate::HeatMap {
+        if matches!(template, FieldTemplate::HeatMap | FieldTemplate::GrayScale) {
             // A heat map has a block per grid cell: the points must lie on a regular grid.
             let (xs, ys, zs) = (self.numeric(x), self.numeric(y), self.numeric(z));
             if let (Some(xs), Some(ys), Some(zs)) = (xs, ys, zs) {

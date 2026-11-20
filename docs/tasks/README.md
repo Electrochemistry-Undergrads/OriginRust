@@ -153,6 +153,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T152](T152-legend-order.md) | Legend Bring to front/back, front/back of data (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured; left: legend Cut/Copy |
 | [T153](T153-title-order.md) | Axis title Bring to the front / Push to the back (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured |
 | [T154](T154-notes-window.md) | Notes windows: File > New > Notes, New Notes (B14 slice) | M | done 2026-11-19 (notes-window spec), not measured; left: Add Notes as Sheet, .opj |
+| [T201](T201-gray-scale-map.md) | Plot > Contour/Heat Map > Gray Scale Map (B14 slice) | S | done 2026-11-20 (matrices 7g), not measured |
 | [T199](T199-import-binary-2d.md) | File > Import > Binary 2D Array into a matrix (B14 slice) | S | done 2026-11-20 (matrices 7f), not measured |
 | [T196](T196-matrix-fft2.md) | 2D FFT and 2D IFFT of a matrix (B14 slice) | S | done 2026-11-20 (matrices 7e), not measured |
 | [T193](T193-matrix-inverse.md) | Analysis > Mathematics > Inverse of a matrix (B14 slice) | S | done 2026-11-20 (matrices 7d), not measured |

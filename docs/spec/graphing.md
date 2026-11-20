@@ -6621,6 +6621,10 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
   - A set From or To fixes that end of the box; with Auto Increment the box keeps its about five
     steps. Points outside the box (and ribbon rows) are not drawn.
   - The Y axis of a 3D XYY layer keeps one tick per plot and is not set here.
+  - **View (T172):** Turn (the azimuth, -180 to 180 degrees, default 40) and Tilt (the elevation, 0
+    seen from the side to 90 seen from above, default 25) turn the box about Z and tilt it towards
+    the viewer, in the same undo step as the scales. The labelled edges and the back planes follow
+    the turn. Tools > 3D OpenGL Settings... stays grey: Sheaf draws 3D without OpenGL.
 - **3D Surface from XYZ columns (T166, not measured):** Color Map Surface (`3d-colormap-surface`),
   Color Fill Surface (`3d-color-fill-surface`), Wire Frame (`3d-wire-frame`) and Wire Surface
   (`3d-wire-surface`) set `Space3dCoords::surface`. They read X, Y and Z columns as 3D Scatter does
@@ -6645,7 +6649,8 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
     are drawn from the farthest to the nearest by their mean depth.
   - 3D Ternary Colormap Surface stays grey.
 - **Not done:**
-  - rotating the view; axis titles, tick label and scale type settings of the 3D axes;
+  - rotating the view with the mouse or a 3D Rotation toolbar; axis titles, tick label and scale
+    type settings of the 3D axes;
   - hiding points behind each other (points are drawn in row order);
   - surfaces from matrices, a colour scale for colour map surfaces, and 3D OpenGL settings.
   - The Data Reader shows the view's coordinates, not X, Y and Z.

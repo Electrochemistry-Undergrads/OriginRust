@@ -121,8 +121,9 @@ fn is_white(c: &Color) -> bool {
 }
 
 impl LayoutPage {
-    /// Sheaf's default page: US Letter in landscape, 11 x 8.5 in.
-    pub const DEFAULT_SIZE_PT: (f64, f64) = (792.0, 612.0);
+    /// The default page, as Origin 2016's new layout page (T274, measured 2026-11-21: `page.width`
+    /// 6400 and `page.height` 4800 at `page.resx` 600 dpi), 10.667 x 8 in.
+    pub const DEFAULT_SIZE_PT: (f64, f64) = (768.0, 576.0);
 
     pub fn new(id: WindowId, name: impl Into<String>) -> Self {
         let (width_pt, height_pt) = Self::DEFAULT_SIZE_PT;
@@ -221,6 +222,11 @@ mod tests {
         let g = p.add_graph(Template::Line);
         let id = p.add_layout();
         assert_eq!(p.layout(id).unwrap().name, "Layout1");
+        let l = p.layout(id).unwrap();
+        assert_eq!((l.width_pt, l.height_pt), (768.0, 576.0), "Origin 2016's 6400 x 4800 at 600 dpi");
+        // The placements below are checked on an 11 x 8.5 in page.
+        let l = p.layout_mut(id).unwrap();
+        (l.width_pt, l.height_pt) = (792.0, 612.0);
         let l = p.layout_mut(id).unwrap();
         assert_eq!(l.add_graph(g, 4.0 / 3.0), 0);
         assert_eq!(l.add_graph(g, 4.0 / 3.0), 1);

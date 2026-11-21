@@ -326,6 +326,11 @@ mod tests {
         let g = p.add_graph(Template::Line);
         p.add_plot(g, 0, y).unwrap();
         let id = p.add_layout();
+        // The numbers below are for an 11 x 8.5 in page (the default is Origin's 768 x 576 pt).
+        {
+            let l = p.layout_mut(id).unwrap();
+            (l.width_pt, l.height_pt) = (792.0, 612.0);
+        }
         p.layout_mut(id).unwrap().add_graph(g, 4.0 / 3.0);
         let r = render_layout_raster(&p, id, 36.0).unwrap();
         assert_eq!((r.width, r.height), (396, 306), "11 x 8.5 in at 36 dpi");

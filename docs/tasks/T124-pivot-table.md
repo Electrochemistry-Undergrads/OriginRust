@@ -1,6 +1,6 @@
 # T124: Worksheet > Pivot Table...
 
-**Status:** done 2026-11-17 (Claude Windows, scheduled session "cond-heatmap", branch `pivot-table`; workbook-model.md 13n), not measured (Origin COM unavailable). Left: Combine/Others, extra values, user-parameter position, a check against Origin 2016 (it has `wpivot`).
+**Status:** done 2026-11-17 (Claude Windows, scheduled session "cond-heatmap", branch `pivot-table`; workbook-model.md 13n), not measured (Origin COM unavailable); measured and corrected in T276 (2026-11-21). Left: Combine/Others, extra values, user-parameter position, a check against Origin 2016 (it has `wpivot`).
 **Size:** M. **Source:** greyed inventory package B7 (its last item).
 **Spec:** `docs/spec/workbook-model.md` (a new section next to the reshaping tools).
 

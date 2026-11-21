@@ -31,15 +31,17 @@ pub struct StftOptions {
     pub output: StftOutput,
 }
 
+/// Origin 2016's `stft` defaults (T292, measured): Hanning, window and FFT length 256, overlap 128,
+/// amplitude in dB.
 impl Default for StftOptions {
     fn default() -> Self {
         StftOptions {
             interval: 1.0,
             window: FftWindow::Hanning,
-            window_len: 64,
-            fft_len: 64,
-            overlap: 32,
-            output: StftOutput::Amplitude,
+            window_len: 256,
+            fft_len: 256,
+            overlap: 128,
+            output: StftOutput::Db,
         }
     }
 }
@@ -119,11 +121,38 @@ pub fn stft(y: &[f64], o: &StftOptions) -> Result<StftResult, String> {
 mod tests {
     use super::*;
 
+    /// Origin 2016's `stft` on 1024 samples of a unit sine of period 16 with its defaults (T292, measured
+    /// 2026-11-21): 7 segments centred at 127.5 to 895.5, 129 frequencies; the peak and the DC and Nyquist
+    /// bins in amplitude, and the dB of the peak.
+    #[test]
+    fn defaults_match_origin_2016() {
+        let y: Vec<f64> = (0..1024).map(|i| (2.0 * std::f64::consts::PI * i as f64 / 16.0).sin()).collect();
+        let amp = stft(&y, &StftOptions { output: StftOutput::Amplitude, ..Default::default() }).unwrap();
+        assert_eq!((amp.spectra.len(), amp.frequency.len()), (7, 129));
+        assert_eq!((amp.time[0], amp.time[6]), (127.5, 895.5));
+        let s = &amp.spectra[0];
+        let close = |a: f64, b: f64| ((a - b) / b).abs() < 1e-9;
+        assert!(close(s[16], 0.999_996_527_367_71), "{}", s[16]);
+        assert!(close(s[15], 0.502_934_178_623_76), "{}", s[15]);
+        assert!(close(s[0], 3.004_213_250_942_7e-6), "{}", s[0]);
+        assert!(close(s[128], 1.184_097_720_863_4e-7), "{}", s[128]);
+        let db = stft(&y, &StftOptions::default()).unwrap();
+        assert!((db.spectra[0][16] - -3.016_295_319_458_5e-5).abs() < 1e-12, "{}", db.spectra[0][16]);
+        assert!((db.spectra[0][0] - -110.445_384_852_66).abs() < 1e-9);
+    }
+
     #[test]
     fn a_sine_peaks_at_its_frequency_with_its_amplitude() {
         // 3 s at 64 samples per second: a 8 Hz sine of amplitude 2 in every segment.
         let y: Vec<f64> = (0..192).map(|i| 2.0 * (2.0 * std::f64::consts::PI * 8.0 * i as f64 / 64.0).sin()).collect();
-        let o = StftOptions { interval: 1.0 / 64.0, window: FftWindow::Rectangle, ..Default::default() };
+        let o = StftOptions {
+            interval: 1.0 / 64.0,
+            window: FftWindow::Rectangle,
+            window_len: 64,
+            fft_len: 64,
+            overlap: 32,
+            output: StftOutput::Amplitude,
+        };
         let r = stft(&y, &o).unwrap();
         assert_eq!(r.frequency.len(), 33);
         assert_eq!(r.frequency[8], 8.0);
@@ -142,7 +171,8 @@ mod tests {
         // numpy: w = np.hanning(8); X = np.fft.rfft(y[s:s+8] * w, 16); a = 2*abs(X)/w.sum(),
         // a[0] and a[-1] halved, for s = 0, 5 and y = cos(0.7 i) + 0.1 i.
         let y: Vec<f64> = (0..20).map(|i| (0.7 * i as f64).cos() + 0.1 * i as f64).collect();
-        let o = StftOptions { window_len: 8, fft_len: 16, overlap: 3, ..Default::default() };
+        let o =
+            StftOptions { window_len: 8, fft_len: 16, overlap: 3, output: StftOutput::Amplitude, ..Default::default() };
         let r = stft(&y, &o).unwrap();
         assert_eq!(r.spectra.len(), 3, "starts 0, 5, 10");
         let want0 =

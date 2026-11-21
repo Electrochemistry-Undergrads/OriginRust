@@ -40,6 +40,7 @@ impl Values {
             size_pt: f64::from(self.size),
             bold: self.bold,
             italic: self.italic,
+            underline: false,
             color: self.color,
         }
     }

@@ -427,8 +427,8 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         AnalyzeTool::Convolution { target, response, circular, normalize, interval } => {
             (target, Job::Signal { conv: true, other: response, circular, normalize, interval })
         }
-        AnalyzeTool::Deconvolution { target, response, normalize, interval } => {
-            (target, Job::Deconvolution { response, normalize, interval })
+        AnalyzeTool::Deconvolution { target, response, normalize, circular, interval } => {
+            (target, Job::Deconvolution { response, normalize, circular, interval })
         }
         AnalyzeTool::Stft { target, interval, window, window_len, fft_len, overlap, output } => {
             let options = analysis::StftOptions {

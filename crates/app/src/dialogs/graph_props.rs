@@ -471,6 +471,7 @@ pub(super) fn font_ui(ui: &mut egui::Ui, font: &mut Font) {
         ui.add(DragValue::new(&mut font.size_pt).range(4.0..=96.0).speed(0.25).suffix(" pt"));
         ui.checkbox(&mut font.bold, "Bold");
         ui.checkbox(&mut font.italic, "Italic");
+        ui.checkbox(&mut font.underline, "Underline");
         color_button(ui, &mut font.color);
     });
 }

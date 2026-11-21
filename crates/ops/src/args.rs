@@ -1897,6 +1897,9 @@ pub enum AnalyzeTool {
         /// Divide the response by its Euclidean norm first.
         #[arg(long)]
         normalize: bool,
+        /// Circular deconvolution (the FFT over the signal's points) instead of the default linear one.
+        #[arg(long)]
+        circular: bool,
         /// Sampling interval of the result.
         #[arg(long)]
         interval: Option<f64>,
@@ -1912,16 +1915,17 @@ pub enum AnalyzeTool {
         interval: Option<f64>,
         #[arg(long, value_enum, default_value_t = FftWindowArg::Hanning)]
         window: FftWindowArg,
-        /// Points in each segment.
-        #[arg(long, default_value_t = 64)]
+        /// Points in each segment (Origin's default 256).
+        #[arg(long, default_value_t = 256)]
         window_len: usize,
         /// Points of each transform (at least the window length; zeros are padded).
-        #[arg(long, default_value_t = 64)]
+        #[arg(long, default_value_t = 256)]
         fft_len: usize,
         /// Points shared by neighbouring segments.
-        #[arg(long, default_value_t = 32)]
+        #[arg(long, default_value_t = 128)]
         overlap: usize,
-        #[arg(long, value_enum, default_value_t = StftOutputArg::Amplitude)]
+        /// Amplitude in dB by default, as Origin.
+        #[arg(long, value_enum, default_value_t = StftOutputArg::Db)]
         output: StftOutputArg,
     },
     /// Correlate each column with another column (Origin's Signal Processing > Correlation):

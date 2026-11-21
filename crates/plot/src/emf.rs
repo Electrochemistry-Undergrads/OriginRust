@@ -504,8 +504,14 @@ impl Emf<'_> {
             self.state.align = Some(align);
         }
         // Advance of each UTF-16 unit, from the same measurer as the layout.
-        let measure =
-            Font { family: t.family.clone(), size_pt: t.size, bold: t.bold, italic: t.italic, color: t.color };
+        let measure = Font {
+            family: t.family.clone(),
+            size_pt: t.size,
+            bold: t.bold,
+            italic: t.italic,
+            underline: false,
+            color: t.color,
+        };
         let mut units: Vec<u16> = Vec::new();
         let mut dx: Vec<u32> = Vec::new();
         let mut total = 0.0;

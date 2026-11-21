@@ -61,6 +61,19 @@ fn graph_with(p: &mut Project, template: Template, plots: &[(usize, usize)], f: 
 }
 
 #[test]
+fn an_underlined_title_is_written_with_origins_underline_markup() {
+    // T293: as bold is written as \b(..).
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        g.layers[0].x_axis.title = Some("Time".into());
+        g.layers[0].x_axis.title_font.underline = true;
+    });
+    let out = write_named(&p, "g", TIME).unwrap();
+    let pat: &[u8] = br"\u(Time)";
+    assert!(out.bytes.windows(pat.len()).any(|w| w == pat), "the title is underlined");
+}
+
+#[test]
 fn a_turned_title_keeps_its_angle_in_the_opj() {
     // T291: the title object's rotation is written and read back; the default angle stays default.
     let mut p = source();

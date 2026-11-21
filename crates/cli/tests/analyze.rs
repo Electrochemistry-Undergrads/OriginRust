@@ -656,13 +656,17 @@ fn deconvolution_and_stft_write_a_new_sheet() {
     let out = dir.join("deconv.csv");
     let o = out.to_str().unwrap();
     let (ok, stdout, stderr) =
-        sheaf(&["analyze", "deconvolution", d, "--y", "flat", "--response", "ramp", "--export", o]);
+        sheaf(&["analyze", "deconvolution", d, "--y", "flat", "--response", "ramp", "--circular", "--export", o]);
     assert!(ok, "stderr: {stderr}");
     assert!(stdout.contains("Deconvolution"), "{stdout}");
     let rows = std::fs::read_to_string(&out).unwrap().lines().skip(3).count();
-    assert_eq!(rows, 11, "as many values as the signal");
-    // Eleven 2s have zeros in their spectrum: nothing can be divided by it.
-    let (ok, _, stderr) = sheaf(&["analyze", "deconvolution", d, "--y", "ramp", "--response", "flat"]);
+    assert_eq!(rows, 11, "circular: as many values as the signal");
+    // Linear (the default, as Origin): N - m + 1 values, one here.
+    let (ok, _, stderr) = sheaf(&["analyze", "deconvolution", d, "--y", "flat", "--response", "ramp", "--export", o]);
+    assert!(ok, "stderr: {stderr}");
+    assert_eq!(std::fs::read_to_string(&out).unwrap().lines().skip(3).count(), 1);
+    // Eleven 2s have zeros in their spectrum over 11 points: nothing can be divided by it.
+    let (ok, _, stderr) = sheaf(&["analyze", "deconvolution", d, "--y", "ramp", "--response", "flat", "--circular"]);
     assert!(!ok && stderr.contains("zero"), "{stderr}");
     let out = dir.join("stft.csv");
     let o = out.to_str().unwrap();

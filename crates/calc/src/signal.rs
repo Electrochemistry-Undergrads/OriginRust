@@ -39,7 +39,7 @@ pub fn convolve(signal: &[f64], response: &[f64], circular: bool, normalize: boo
 /// convolution of `s` (`n` values) gives back `s` followed by `m - 1` zeros. With `normalize` the
 /// response is first divided by its Euclidean norm, as in [`convolve`]. Refused when the response
 /// is longer than the signal or its spectrum has a zero (nothing can be divided by it).
-pub fn deconvolve(signal: &[f64], response: &[f64], normalize: bool) -> Result<Vec<f64>, String> {
+pub fn deconvolve(signal: &[f64], response: &[f64], normalize: bool, circular: bool) -> Result<Vec<f64>, String> {
     use rustfft::{FftPlanner, num_complex::Complex};
     let (n, m) = (signal.len(), response.len());
     if n == 0 || m == 0 {
@@ -49,11 +49,14 @@ pub fn deconvolve(signal: &[f64], response: &[f64], normalize: bool) -> Result<V
         return Err(format!("the response ({m} points) is longer than the signal ({n} points)"));
     }
     let scale = if normalize { norm(response) } else { 1.0 };
+    // Circular: the FFT over the signal's N points, N values. Linear (Origin 2016's default, T292,
+    // measured): both padded with zeros to 2N - 1 points, and the first N - m + 1 values kept.
+    let (len, keep) = if circular { (n, n) } else { (2 * n - 1, n - m + 1) };
     let mut planner = FftPlanner::<f64>::new();
-    let forward = planner.plan_fft_forward(n);
-    let mut c: Vec<Complex<f64>> = signal.iter().map(|&v| Complex::new(v, 0.0)).collect();
+    let forward = planner.plan_fft_forward(len);
+    let mut c: Vec<Complex<f64>> = (0..len).map(|i| Complex::new(signal.get(i).copied().unwrap_or(0.0), 0.0)).collect();
     let mut r: Vec<Complex<f64>> =
-        (0..n).map(|i| Complex::new(response.get(i).map_or(0.0, |v| v / scale), 0.0)).collect();
+        (0..len).map(|i| Complex::new(response.get(i).map_or(0.0, |v| v / scale), 0.0)).collect();
     forward.process(&mut c);
     forward.process(&mut r);
     let largest = r.iter().map(|z| z.norm()).fold(0.0, f64::max);
@@ -63,8 +66,8 @@ pub fn deconvolve(signal: &[f64], response: &[f64], normalize: bool) -> Result<V
     for (a, b) in c.iter_mut().zip(&r) {
         *a /= *b;
     }
-    planner.plan_fft_inverse(n).process(&mut c);
-    Ok(c.iter().map(|z| z.re / n as f64).collect())
+    planner.plan_fft_inverse(len).process(&mut c);
+    Ok(c.iter().take(keep).map(|z| z.re / len as f64).collect())
 }
 
 /// Correlation of `a` with `b`, with the lag of each value.
@@ -142,20 +145,50 @@ mod tests {
     fn deconvolution_undoes_convolution() {
         let (s, r) = ([1.0, 2.0, -1.0, 3.0, 0.5], [2.0, -1.0, 0.5]);
         // Linear: numpy np.real(ifft(fft(np.convolve(s, r)) / fft(r, 7))) gives s and two zeros.
-        let d = deconvolve(&convolve(&s, &r, false, false), &r, false).unwrap();
+        let d = deconvolve(&convolve(&s, &r, false, false), &r, false, true).unwrap();
         assert_eq!(d.len(), 7);
         for (g, w) in d.iter().zip([1.0, 2.0, -1.0, 3.0, 0.5, 0.0, 0.0]) {
             assert!((g - w).abs() < 1e-12, "{d:?}");
         }
         for normalize in [false, true] {
-            let d = deconvolve(&convolve(&s, &r, true, normalize), &r, normalize).unwrap();
+            let d = deconvolve(&convolve(&s, &r, true, normalize), &r, normalize, true).unwrap();
             for (g, w) in d.iter().zip(s) {
                 assert!((g - w).abs() < 1e-12, "{d:?}");
             }
         }
-        assert!(deconvolve(&r, &s, false).is_err(), "a longer response");
-        assert!(deconvolve(&s, &[1.0, -1.0], false).is_err(), "a zero at frequency 0");
-        assert_eq!(deconvolve(&[], &r, false).unwrap(), Vec::<f64>::new());
+        assert!(deconvolve(&r, &s, false, true).is_err(), "a longer response");
+        assert!(deconvolve(&s, &[1.0, -1.0], false, true).is_err(), "a zero at frequency 0");
+        assert_eq!(deconvolve(&[], &r, false, true).unwrap(), Vec::<f64>::new());
+    }
+
+    /// Origin 2016's `deconv` (T292, measured 2026-11-21).
+    #[test]
+    fn deconvolution_matches_origin_2016() {
+        let close = |a: &[f64], b: &[f64]| a.len() == b.len() && a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-9);
+        // Linear (default): N - m + 1 values; an exact linear convolution comes back.
+        let lin = deconvolve(&[1.0, 3.0, 5.0, 3.0, 0.0, 0.0], &[1.0, 1.0], false, false).unwrap();
+        assert!(close(&lin, &[1.0, 2.0, 3.0, 0.0, 0.0]), "{lin:?}");
+        // Normalize (Origin's default) scales by the response's norm.
+        let n = deconvolve(&[1.0, 3.0, 5.0, 3.0, 0.0, 0.0], &[1.0, 1.0], true, false).unwrap();
+        assert!((n[0] - 2f64.sqrt()).abs() < 1e-12);
+        // A signal that is no exact convolution.
+        let g = deconvolve(&[2.0, 5.0, 8.0, 11.0, 14.0, 17.0], &[1.0, 1.0], false, false).unwrap();
+        assert!(close(&g, &[6.5, -1.5, 9.5, 1.5, 12.5]), "{g:?}");
+        let e = deconvolve(&[1.0, 4.0, 2.0, 8.0, 5.0, 7.0, 3.0], &[2.0, 1.0, 0.5], false, false).unwrap();
+        let origin = [0.48968613150007, 1.7543946243054, 3.8115497227443e-4, 3.5612107664375, 0.71929932803818];
+        assert!(close(&e, &origin), "{e:?}");
+        // Circular: the FFT over N points.
+        let c = deconvolve(&[1.0, 4.0, 2.0, 8.0, 5.0, 7.0, 3.0], &[2.0, 1.0, 0.5], false, true).unwrap();
+        let origin = [
+            -0.15575607097438,
+            2.0316114576394,
+            0.023133288923878,
+            3.4805304911282,
+            0.75395143220493,
+            2.2528916611155,
+            0.18506631139103,
+        ];
+        assert!(close(&c, &origin), "{c:?}");
     }
 
     #[test]

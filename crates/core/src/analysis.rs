@@ -3171,11 +3171,16 @@ impl Project {
                         spec.points
                     )));
                 }
+                // Origin 2016's words in the comment (T326, measured with interp1trace method 0 to 2).
                 let word = match spec.method {
-                    TraceMethod::Linear => "linear",
-                    TraceMethod::CubicSpline => "cubic spline",
-                    TraceMethod::CubicBSpline => "cubic B-spline",
+                    TraceMethod::Linear => "Linear",
+                    TraceMethod::CubicSpline => "Spline",
+                    TraceMethod::CubicBSpline => "B-Spline",
                 };
+                // T326: as Origin, InterpolatedX1 (X) and InterpolatedY1 (Y) at the end of the input sheet,
+                // numbered on across inputs and runs; "New sheet" in the window still makes a sheet.
+                let in_sheet = *output == OutputTarget::NextToInput;
+                let mut n = next_label_index(sheet, "InterpolatedX");
                 for inp in &inputs {
                     let (x, y) = calc::trace_interp(inp.xs(), inp.ys(), spec.method, spec.points).ok_or_else(|| {
                         let need = if spec.method == TraceMethod::CubicBSpline { 4 } else { 2 };
@@ -3184,20 +3189,42 @@ impl Project {
                             inp.short
                         ))
                     })?;
+                    let comment = format!("{word} trace interp of {}{}", inp.short, inp.range_note());
+                    if in_sheet {
+                        beside.push(NewColumn {
+                            after: inp.id,
+                            long_name: format!("InterpolatedX{n}"),
+                            units: inp.x_units.clone(),
+                            comments: String::new(),
+                            data: x,
+                        });
+                        at_end.push((Designation::X, None));
+                        beside.push(NewColumn {
+                            after: inp.id,
+                            long_name: format!("InterpolatedY{n}"),
+                            units: inp.units.clone(),
+                            comments: comment,
+                            data: y,
+                        });
+                        at_end.push((Designation::Y, None));
+                        n += 1;
+                        continue;
+                    }
                     on_sheet.push(SheetColumn {
                         designation: Designation::X,
-                        long_name: inp.x_name.clone(),
+                        long_name: format!("InterpolatedX{n}"),
                         units: inp.x_units.clone(),
                         comments: String::new(),
                         data: ColumnData::numeric(x),
                     });
                     on_sheet.push(SheetColumn {
                         designation: Designation::Y,
-                        long_name: format!("{} trace", inp.name),
+                        long_name: format!("InterpolatedY{n}"),
                         units: inp.units.clone(),
-                        comments: format!("{word} trace interpolation of {}{}", inp.short, inp.range_note()),
+                        comments: comment,
                         data: ColumnData::numeric(y),
                     });
+                    n += 1;
                 }
             }
             Tool::Ifft(spec) => {
@@ -5150,7 +5177,7 @@ mod tests {
     }
 
     #[test]
-    fn a_trace_interpolation_goes_to_a_new_sheet_with_its_own_x() {
+    fn a_trace_interpolation_goes_to_the_end_of_the_sheet_with_its_own_x() {
         let mut p = Project::new();
         let book = p.add_workbook("loop");
         let x = [0.0, 2.0, 3.0, 2.0, 0.0, -1.0];
@@ -5161,14 +5188,21 @@ mod tests {
         p.column_mut(yc).unwrap().units = "A".into();
         let spec = TraceInterpSpec { method: TraceMethod::Linear, points: 10 };
         let r = p.analyze(&request(&[yc], Tool::TraceInterp(spec))).unwrap();
-        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
-        assert!(rs.name.starts_with("TraceInterp"), "{}", rs.name);
+        // T326: as Origin's interp1trace, InterpolatedX1 (X) and InterpolatedY1 (Y) at the end of the sheet.
+        assert!(r.new_sheet.is_none());
+        let all = &p.workbook(book).unwrap().sheets[0];
+        let rs = Worksheet { columns: all.columns[2..].to_vec(), ..Worksheet::new("added") };
+        assert_eq!(
+            (rs.columns[0].long_name.as_str(), rs.columns[1].long_name.as_str()),
+            ("InterpolatedX1", "InterpolatedY1")
+        );
+        assert_eq!(rs.columns[0].designation, Designation::X);
         // Origin's numbers for this loop (analysis-tools.md 16): the diamond (1,0) (3,1) (1,2) (-1,1)
         let (ox, oy) = (rs.columns[0].numeric().unwrap(), rs.columns[1].numeric().unwrap());
         assert_eq!((ox.len(), oy.len()), (10, 10));
         assert_eq!((ox[0], oy[0], ox[3], oy[3], ox[9], oy[9]), (1.0, 0.0, 3.0, 1.0, -1.0, 1.0));
         assert_eq!((rs.columns[0].units.as_str(), rs.columns[1].units.as_str()), ("V", "A"));
-        assert_eq!(rs.columns[1].comments, "linear trace interpolation of B");
+        assert_eq!(rs.columns[1].comments, "Linear trace interp of B");
         assert!(r.message.starts_with("Trace interpolation"), "{}", r.message);
         // The B-spline needs four points after merging; the diamond has four.
         let spline = TraceInterpSpec { method: TraceMethod::CubicBSpline, points: 10 };

@@ -643,9 +643,15 @@ V,A
     ]);
     assert!(ok, "stderr: {stderr}");
     assert!(stdout.contains("Trace interpolation"), "{stdout}");
+    // T326: the X and Y go to the end of the input sheet (v, i, InterpolatedX1, InterpolatedY1).
     let rows: Vec<String> = std::fs::read_to_string(&out).unwrap().lines().skip(3).map(str::to_string).collect();
     assert_eq!(rows.len(), 10);
-    assert_eq!((rows[0].as_str(), rows[3].as_str(), rows[9].as_str()), ("1,0", "3,1", "-1,1"));
+    let last_two =
+        |r: &str| r.rsplitn(3, ',').take(2).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join(",");
+    assert_eq!(
+        (last_two(&rows[0]), last_two(&rows[3]), last_two(&rows[9])),
+        ("1,0".into(), "3,1".into(), "-1,1".into())
+    );
     // One point is no trace.
     let (ok, _, stderr) = sheaf(&["analyze", "trace-interp", data.to_str().unwrap(), "--y", "i", "--points", "1"]);
     assert!(!ok && !stderr.is_empty());

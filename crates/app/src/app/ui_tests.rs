@@ -2067,11 +2067,14 @@ fn trace_interpolation_opens_from_mathematics_and_writes_a_sheet_with_its_own_x(
     menu_path(&mut h, &["Analysis", "Mathematics", "Trace Interpolation..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
+    // T326: as Origin's interp1trace, an X and a Y column for each input at the end of the input sheet.
     let b = project(&h).workbooks().next().unwrap();
-    let sheet = b.sheets.iter().find(|s| s.name.starts_with("TraceInterp")).expect("a result sheet");
-    assert_eq!(sheet.columns.len(), 4, "an X and a Y column for each of the two inputs");
-    assert_eq!(sheet.columns[0].numeric().unwrap().len(), 100, "Origin's default number of points");
-    assert!(sheet.columns[1].comments.starts_with("linear trace interpolation of"));
+    let added: Vec<&sheaf_core::Column> =
+        b.sheets[0].columns.iter().filter(|c| c.long_name.starts_with("Interpolated")).collect();
+    assert_eq!(added.len(), 4, "an X and a Y column for each of the two inputs");
+    assert_eq!(added[0].long_name, "InterpolatedX1");
+    assert_eq!(added[0].numeric().unwrap().len(), 100, "Origin's default number of points");
+    assert!(added[1].comments.starts_with("Linear trace interp of"));
     assert_eq!(h.state().doc.undo_label(), Some("Trace interpolation"));
 }
 

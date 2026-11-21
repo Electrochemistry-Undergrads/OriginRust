@@ -1289,12 +1289,16 @@ Origin's printed numbers):
   cleaning (a constant Y column becomes one point), and for the B-spline with fewer than four
   points. Cubic Spline with two points is the line, with three it is the natural spline. A
   non-integer `npts` (5.7) is cut to 5.
-- Not measured: a constant-X (vertical) curve, which Sheaf merges to one point and refuses;
-  whether the tolerance compares with the previous point or the first of a run; and an X range
-  given with a row range.
+- A constant-X (vertical) curve fails in Origin too (measured 2026-11-21, T326); Sheaf merges it to one
+  point and refuses it. Not measured: whether the tolerance compares with the previous point or the
+  first of a run; and an X range given with a row range.
+- Output (measured 2026-11-21, T326, `re-workspace/scratch/t326`): `InterpolatedX1` (X) and
+  `InterpolatedY1` (Y, comment "Linear trace interp of B"; "Spline" and "B-Spline" for the other
+  methods) at the end of the input sheet; each run goes on with 2, 3, ...
 
-Sheaf: `sheaf_calc::trace_interp`, `Tool::TraceInterp(TraceInterpSpec)`: the X and Y of each input
-in a new sheet (`TraceInterp`), the Y labelled "linear trace interpolation of B". Command line:
+Sheaf: `sheaf_calc::trace_interp`, `Tool::TraceInterp(TraceInterpSpec)`: since T326 the X and Y of each
+input go to the end of the input sheet as in Origin (names and comments as above); "New sheet" in the
+window's Output still writes them to a sheet of their own. Command line:
 `sheaf analyze trace-interp FILE --y B [--method linear|spline|bspline] [--points N]`.
 
 ## 17. IIR Filter and FIR Filter (`dfilter`, the FIR Filter app; T55)

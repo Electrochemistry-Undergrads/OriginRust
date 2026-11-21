@@ -362,7 +362,9 @@ pub fn auto_range(kind: ScaleKind, lo: f64, hi: f64, margin_pct: f64) -> Option<
             if b <= a {
                 b = a + 1.0;
             }
-            Some(ScaleRange { from: kind.inverse(a + 5.0), to: kind.inverse(b + 5.0), inc: 1.0 })
+            // Origin stores 3 as a probit axis's increment (as for probability) but draws every
+            // whole probit whatever it is (T263, measured 2026-11-20); the ticks ignore it.
+            Some(ScaleRange { from: kind.inverse(a + 5.0), to: kind.inverse(b + 5.0), inc: 3.0 })
         }
         ScaleKind::Probability | ScaleKind::Logit | ScaleKind::Weibull => {
             let list = kind.tick_list()?;

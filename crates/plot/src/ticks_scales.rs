@@ -42,7 +42,8 @@ pub(crate) fn resolve_other(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAx
         ScaleKind::Reciprocal | ScaleKind::OffsetReciprocal => {
             reciprocal(axis, min, max, fixed_step.unwrap_or(range.inc))
         }
-        ScaleKind::Probit => probit(axis, min, max, fixed_step.unwrap_or(1.0)),
+        // Every whole probit is major, whatever the increment says (T263, measured).
+        ScaleKind::Probit => probit(axis, min, max),
         _ => listed(
             axis,
             min,
@@ -128,12 +129,15 @@ fn reciprocal(axis: &Axis, min: f64, max: f64, step: f64) -> Ticks {
 }
 
 /// Probit axis: ticks at whole probits (normal quantile plus 5), labelled with the probit.
-fn probit(axis: &Axis, min: f64, max: f64, step: f64) -> Ticks {
+/// A probit axis (T263, measured in Origin 2016 on 2026-11-20): a major tick and label at every whole
+/// probit and no minor ticks, with the increment 3, 1 or 2 alike (Origin keeps 3 as the increment
+/// but does not use it).
+fn probit(axis: &Axis, min: f64, max: f64) -> Ticks {
     let kind = ScaleKind::Probit;
     let (pmin, pmax) = (kind.forward(min), kind.forward(max));
-    let (probits, step) = linear_major(pmin, pmax, step, false);
+    let (probits, step) = linear_major(pmin, pmax, 1.0, false);
     let major: Vec<f64> = probits.iter().map(|p| clean(kind.inverse(*p))).collect();
-    let minor = linear_minor(pmin, pmax, step, axis.minor_ticks).into_iter().map(|p| kind.inverse(p)).collect();
+    let minor = Vec::new();
     let labels = linear_labels(axis, &probits, step);
     (major, minor, labels, step)
 }
@@ -275,5 +279,20 @@ mod tests {
         let r = resolve(ScaleKind::Probit, (1.0, 99.0));
         assert_eq!(r.labels, ["2", "3", "4", "5", "6", "7", "8"]);
         assert!((r.major[3] - 50.0).abs() < 1e-9);
+        assert!(r.minor.is_empty(), "no minor ticks on a probit axis");
+    }
+
+    #[test]
+    fn a_probit_axis_ignores_its_increment_as_origin_does() {
+        // Origin 2016: data 0.5..80 gives 0.135..84.13 % with inc 3, labelled 2..6 at every whole
+        // probit; inc 1 and inc 2 draw the same axis.
+        let auto = sheaf_core::scales::auto_range(ScaleKind::Probit, 0.5, 80.0, 8.0).unwrap();
+        assert_eq!(auto.inc, 3.0);
+        for step in [None, Some(1.0), Some(2.0), Some(3.0)] {
+            let mut a = axis_of(ScaleKind::Probit);
+            a.major_step = step;
+            let r = crate::ticks::resolve_axis(&a, Some((0.5, 80.0)));
+            assert_eq!(r.labels, ["2", "3", "4", "5", "6"], "inc {step:?}");
+        }
     }
 }

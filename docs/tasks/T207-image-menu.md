@@ -1,7 +1,7 @@
 # T207: The Image menu on a matrix (B14 slice)
 
 **Status:** done 2026-11-20 (Claude Windows "obj-align"). The formulas are Sheaf's,
-**not measured**.
+**not measured** (Brightness, Gamma, To Binary, Flip and Rotate measured in T278).
 **Size:** M. **Source:** greyed inventory package B14 (Image menu: Adjustments, Arithmetic, Conversion,
 Geometric Transform, Spatial Filters).
 **Spec:** `docs/spec/matrices.md` 7i.

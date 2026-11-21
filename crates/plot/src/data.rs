@@ -560,34 +560,7 @@ pub(crate) fn collect_graph<'a>(project: &'a Project, g: &'a sheaf_core::graph::
             }
         }
     }
-    place_pareto_cumulative(&mut all);
     all
-}
-
-/// Origin's Plot_ParetoRaw option symr (default 1): the symbols of the cumulative percent sit at the right edge of
-/// each bar and the line starts at (0, 0), the left edge of the first bar. The edges are those of the drawn bars of
-/// the layer that counts the same column (its bar width follows the gap), so they follow a change of the gap.
-fn place_pareto_cumulative(all: &mut [LayerData]) {
-    let bars: Vec<(sheaf_core::ColumnId, f64, f64)> = all
-        .iter()
-        .flat_map(|d| d.plots.iter())
-        .filter(|pd| pd.plot.stat == Some(StatPlot::Pareto))
-        .filter_map(|pd| pd.bar.as_ref().map(|b| (pd.plot.y, b.left, b.width)))
-        .collect();
-    for pd in all.iter_mut().flat_map(|d| d.plots.iter_mut()) {
-        if pd.plot.stat != Some(StatPlot::ParetoCumulative) {
-            continue;
-        }
-        let Some(&(_, left, width)) = bars.iter().find(|b| b.0 == pd.plot.y) else { continue };
-        let (Some(x), y) = (pd.x.as_deref(), &pd.y) else { continue };
-        let mut xs = vec![1.0 + left];
-        xs.extend(x.iter().map(|k| k + left + width));
-        let mut ys = vec![0.0];
-        ys.extend(y.iter().copied());
-        pd.end = xs.len();
-        pd.x = Some(Cow::Owned(xs));
-        pd.y = Cow::Owned(ys);
-    }
 }
 
 /// Gives the curves of a colour mapped waterfall layer (graphing spec 13.17) the ends of the colour scale and their

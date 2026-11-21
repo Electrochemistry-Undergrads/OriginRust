@@ -5,8 +5,8 @@ use crate::Rect;
 use crate::fonts::SystemFonts;
 use crate::scene::{LayerScene, Scene};
 use crate::{PlotError, Raster, RasterOptions, raster};
-use sheaf_core::layout_page::LayoutContent;
-use sheaf_core::{Project, WindowId};
+use sheaf_core::layout_page::{LayoutContent, LayoutShape};
+use sheaf_core::{Color, Project, WindowId};
 
 /// The font of layout text (T237 slice 8).
 const TEXT_FAMILY: &str = "Arial";
@@ -45,14 +45,52 @@ pub fn layout_text_svg(text: &str, size: u16) -> (String, (f64, f64)) {
     (crate::svg::write_svg_view(&scene, view, 1.0), (view.w, view.h))
 }
 
-/// The picture of a layout item `pixel_width` pixels wide; `None` when what it shows is gone.
+/// A drawn layout object as an SVG document `size_pt` points large (T237 slice 11): the line is
+/// `width` tenths of a point and stays inside the box (a line ends at its corners).
+pub fn layout_shape_svg(shape: LayoutShape, color: Color, width: u16, size_pt: (f64, f64)) -> String {
+    let (w, h) = (size_pt.0.max(0.1), size_pt.1.max(0.1));
+    let lw = f64::from(width.max(1)) / 10.0;
+    let i = (lw / 2.0).min(w / 2.0).min(h / 2.0);
+    let stroke = format!(
+        "fill=\"none\" stroke=\"rgb({},{},{})\" stroke-opacity=\"{}\" stroke-width=\"{lw}\"",
+        color.r,
+        color.g,
+        color.b,
+        f64::from(color.a) / 255.0
+    );
+    let body = match shape {
+        LayoutShape::Rectangle => {
+            format!("<rect x=\"{i}\" y=\"{i}\" width=\"{}\" height=\"{}\" {stroke}/>", w - 2.0 * i, h - 2.0 * i)
+        }
+        LayoutShape::Ellipse => format!(
+            "<ellipse cx=\"{}\" cy=\"{}\" rx=\"{}\" ry=\"{}\" {stroke}/>",
+            w / 2.0,
+            h / 2.0,
+            w / 2.0 - i,
+            h / 2.0 - i
+        ),
+        LayoutShape::Line => format!("<line x1=\"0\" y1=\"0\" x2=\"{w}\" y2=\"{h}\" {stroke}/>"),
+        LayoutShape::LineUp => format!("<line x1=\"0\" y1=\"{h}\" x2=\"{w}\" y2=\"0\" {stroke}/>"),
+    };
+    format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{w}pt\" height=\"{h}pt\" viewBox=\"0 0 {w} {h}\">{body}</svg>\n"
+    )
+}
+
+/// The picture of a layout item `pixel_width` pixels wide, the item taking `size_pt` points on the
+/// page (drawn objects are drawn at that size, unstretched); `None` when what it shows is gone.
 pub fn render_layout_item(
     project: &Project,
     content: &LayoutContent,
+    size_pt: (f64, f64),
     pixel_width: u32,
 ) -> Option<Result<Raster, PlotError>> {
     let px = f64::from(pixel_width.max(1));
     match content {
+        LayoutContent::Shape { shape, color, width } => {
+            let svg = layout_shape_svg(*shape, *color, *width, size_pt);
+            Some(raster::rasterise(&svg, px / size_pt.0.max(0.1), SystemFonts::shared()))
+        }
         LayoutContent::Graph { graph } => {
             let g = project.graph(*graph)?;
             Some(crate::render_raster(project, *graph, px / g.page.width_pt.max(1.0)))
@@ -83,6 +121,7 @@ pub fn layout_item_aspect(project: &Project, content: &LayoutContent) -> Option<
             let (_, (w, h)) = layout_text_svg(text, *size);
             Some(w / h.max(1.0))
         }
+        LayoutContent::Shape { .. } => Some(1.5),
     }
 }
 
@@ -109,7 +148,8 @@ pub fn render_layout_raster(project: &Project, layout: WindowId, dpi: f64) -> Re
         if iw <= 0 || ih <= 0 {
             continue;
         }
-        let Some(pic) = render_layout_item(project, &item.content, iw as u32) else { continue };
+        let size_pt = (item.w * page.width_pt, item.h * page.height_pt);
+        let Some(pic) = render_layout_item(project, &item.content, size_pt, iw as u32) else { continue };
         let pic = pic?;
         if pic.width == 0 || pic.height == 0 {
             continue;
@@ -173,8 +213,9 @@ pub fn render_layout_emf(project: &Project, layout: WindowId, dpi: f64) -> Resul
 }
 
 /// The vector picture of what a layout item shows; `None` when it is gone.
-fn item_svg(project: &Project, content: &LayoutContent) -> Option<Result<String, PlotError>> {
+fn item_svg(project: &Project, content: &LayoutContent, size_pt: (f64, f64)) -> Option<Result<String, PlotError>> {
     match content {
+        LayoutContent::Shape { shape, color, width } => Some(Ok(layout_shape_svg(*shape, *color, *width, size_pt))),
         LayoutContent::Graph { graph } => {
             project.graph(*graph)?;
             Some(crate::render_svg(project, *graph))
@@ -213,7 +254,7 @@ pub fn render_layout_svg(project: &Project, layout: WindowId) -> Result<String, 
     let _ =
         writeln!(s, "<rect x=\"0\" y=\"0\" width=\"{w}\" height=\"{h}\" fill=\"rgb({},{},{})\"/>", bg.r, bg.g, bg.b);
     for (k, item) in page.items.iter().enumerate() {
-        let Some(inner) = item_svg(project, &item.content) else { continue };
+        let Some(inner) = item_svg(project, &item.content, (item.w * w, item.h * h)) else { continue };
         let inner = inner?;
         // The nested root: its viewBox kept, placed and sized on the page.
         let Some(open) = inner.find("<svg") else { continue };
@@ -322,5 +363,25 @@ mod tests {
         assert!(rich.contains("bold") && !rich.contains("\\b("), "the markup is read: {rich}");
         let (_, (w1, h1)) = layout_text_svg("Bold x2", 24);
         assert!(h2 > 1.8 * h1 - 0.6 * 24.0 && w2 > w1, "two lines are taller: {h1} {h2}");
+        // A red rectangle: its frame is drawn inside its box, its middle stays the page colour.
+        let k = p.layout_mut(id).unwrap().add_shape(LayoutShape::Rectangle);
+        p.layout_mut(id).unwrap().items[k].content =
+            LayoutContent::Shape { shape: LayoutShape::Rectangle, color: Color::RED, width: 40 };
+        let r = render_layout_raster(&p, id, 72.0).unwrap();
+        let at = |x: f64, y: f64| {
+            let k = (((y as u32) * r.width + x as u32) * 4) as usize;
+            [r.rgba[k], r.rgba[k + 1], r.rgba[k + 2]]
+        };
+        let (x0, y0) = (0.35 * 792.0, 0.4 * 612.0);
+        assert_eq!(at(x0 + 1.5, 0.5 * 612.0), [255, 0, 0], "the left side of the frame");
+        assert_eq!(at(0.5 * 792.0, 0.5 * 612.0), [255, 255, 255], "the inside is not filled");
+        assert_eq!(at(x0 + 1.5, y0 - 2.0), [255, 255, 255], "nothing above the box");
+        let svg = render_layout_svg(&p, id).unwrap();
+        assert!(
+            svg.contains(
+                "<rect x=\"2\" y=\"2\" width=\"233.6\" height=\"118.4\" fill=\"none\" stroke=\"rgb(255,0,0)\""
+            ),
+            "{svg}"
+        );
     }
 }

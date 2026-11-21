@@ -16,6 +16,35 @@ pub enum LayoutContent {
     Sheet { book: WindowId, sheet: usize },
     /// Text on the page (T237 slice 8): lines in Arial, black, `size` points.
     Text { text: String, size: u16 },
+    /// A drawn object (T237 slice 11) filling the item's box: its line `color` and `width` in tenths
+    /// of a point.
+    Shape { shape: LayoutShape, color: Color, width: u16 },
+}
+
+/// The drawn objects of a layout page.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LayoutShape {
+    Rectangle,
+    Ellipse,
+    /// From the top left corner of the box to the bottom right.
+    Line,
+    /// From the bottom left corner of the box to the top right.
+    LineUp,
+}
+
+impl LayoutShape {
+    pub const ALL: [LayoutShape; 4] =
+        [LayoutShape::Rectangle, LayoutShape::Ellipse, LayoutShape::Line, LayoutShape::LineUp];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            LayoutShape::Rectangle => "Rectangle",
+            LayoutShape::Ellipse => "Ellipse",
+            LayoutShape::Line => "Line (down)",
+            LayoutShape::LineUp => "Line (up)",
+        }
+    }
 }
 
 impl LayoutContent {
@@ -24,7 +53,7 @@ impl LayoutContent {
         match *self {
             LayoutContent::Graph { graph } => Some(graph),
             LayoutContent::Sheet { book, .. } => Some(book),
-            LayoutContent::Text { .. } => None,
+            LayoutContent::Text { .. } | LayoutContent::Shape { .. } => None,
         }
     }
 }
@@ -106,6 +135,14 @@ impl LayoutPage {
         self.items.len() - 1
     }
 
+    /// Layout > Add Rectangle / Ellipse / Line: a black 1 pt `shape` in the middle of the page, 30 %
+    /// of its width and 20 % of its height.
+    pub fn add_shape(&mut self, shape: LayoutShape) -> usize {
+        let content = LayoutContent::Shape { shape, color: Color::BLACK, width: 10 };
+        self.items.push(LayoutItem { content, x: 0.35, y: 0.4, w: 0.3, h: 0.2 });
+        self.items.len() - 1
+    }
+
     /// Puts `content` in the next free cell of the two-column grid, keeping `aspect`.
     pub fn add(&mut self, content: LayoutContent, aspect: f64) -> usize {
         let k = self.items.len();
@@ -130,7 +167,7 @@ impl LayoutPage {
     pub fn graphs(&self) -> impl Iterator<Item = WindowId> + '_ {
         self.items.iter().filter_map(|i| match i.content {
             LayoutContent::Graph { graph } => Some(graph),
-            LayoutContent::Sheet { .. } | LayoutContent::Text { .. } => None,
+            LayoutContent::Sheet { .. } | LayoutContent::Text { .. } | LayoutContent::Shape { .. } => None,
         })
     }
 
@@ -140,7 +177,7 @@ impl LayoutPage {
             match &mut it.content {
                 LayoutContent::Graph { graph } => *graph = map(*graph),
                 LayoutContent::Sheet { book, .. } => *book = map(*book),
-                LayoutContent::Text { .. } => {}
+                LayoutContent::Text { .. } | LayoutContent::Shape { .. } => {}
             }
         }
     }
@@ -188,6 +225,11 @@ mod tests {
         let t = &l.items[3];
         assert!((t.w - 0.1).abs() < 1e-12 && (t.h - 0.05).abs() < 1e-12 && (t.x - 0.45).abs() < 1e-12, "{t:?}");
         assert_eq!(t.content.window(), None);
+        assert_eq!(l.add_shape(super::LayoutShape::Ellipse), 4);
+        assert_eq!(
+            l.items[4].content,
+            super::LayoutContent::Shape { shape: super::LayoutShape::Ellipse, color: crate::Color::BLACK, width: 10 }
+        );
         l.background = crate::Color::rgb(255, 255, 200);
         assert_eq!(l.graphs().count(), 2);
         let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();

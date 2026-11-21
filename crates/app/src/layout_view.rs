@@ -15,7 +15,7 @@ const GROUND: Color32 = Color32::from_gray(192);
 pub struct LayoutUi {
     /// Graph and worksheet pictures: (document revision, pixel width) they were drawn for, and the
     /// texture.
-    pictures: HashMap<LayoutContent, ((u64, u32), TextureHandle)>,
+    pictures: HashMap<(usize, LayoutContent), ((u64, u32, u32), TextureHandle)>,
     /// The selected item (T237 slice 2).
     pub selected: Option<usize>,
     /// An item being moved or resized: (index, resize, how far the pointer went in page fractions).
@@ -98,12 +98,15 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, id: WindowId, state: &mut LayoutU
     };
     for (k, item) in page.items.iter().enumerate() {
         let r = screen(shown(k, item));
-        let content = item.content.clone();
+        let content = (k, item.content.clone());
         let px = (r.width() * ppp).round().max(1.0) as u32;
-        let key = (doc.revision(), px);
+        let py = (r.height() * ppp).round().max(1.0) as u32;
+        let key = (doc.revision(), px, py);
         let fresh = state.pictures.get(&content).is_some_and(|(k, _)| *k == key);
         if !fresh {
-            match sheaf_plot::render_layout_item(doc.project(), &content, px) {
+            let (_, _, sw, sh) = shown(k, item);
+            let size_pt = (sw * page.width_pt, sh * page.height_pt);
+            match sheaf_plot::render_layout_item(doc.project(), &content.1, size_pt, px) {
                 None => {
                     // What the item showed is gone: an empty frame.
                     state.pictures.remove(&content);
@@ -115,7 +118,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, id: WindowId, state: &mut LayoutU
                         [raster.width as usize, raster.height as usize],
                         &raster.rgba,
                     );
-                    let name = format!("layout-{}-{content:?}", id.0);
+                    let name = format!("layout-{}-{k}", id.0);
                     let tex = ui.ctx().load_texture(name, image, TextureOptions::LINEAR);
                     state.pictures.insert(content.clone(), (key, tex));
                 }
@@ -143,13 +146,17 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, id: WindowId, state: &mut LayoutU
     {
         state.selected = hit(p);
     }
-    // A double-click on text opens it for editing (T237 slice 8).
+    // A double-click on text opens it for editing (T237 slice 8), on a drawn object its
+    // properties (slice 11).
     if response.double_clicked()
         && let Some(p) = response.interact_pointer_pos()
         && let Some(k) = hit(p)
-        && matches!(page.items[k].content, LayoutContent::Text { .. })
     {
-        actions.push(Action::LayoutText { layout: id, index: Some(k) });
+        match page.items[k].content {
+            LayoutContent::Text { .. } => actions.push(Action::LayoutText { layout: id, index: Some(k) }),
+            LayoutContent::Shape { .. } => actions.push(Action::LayoutShape { layout: id, index: k }),
+            _ => {}
+        }
     }
     if response.drag_started()
         && let Some(p) = ui.input(|i| i.pointer.press_origin())

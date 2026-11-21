@@ -1,6 +1,6 @@
 # T237: Layout pages (B14, slice 1)
 
-**Status:** slices 1 to 10 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
+**Status:** slices 1 to 11 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
 **Size:** L (several slices). **Source:** greyed inventory package B14 ("New: Layout",
 "Standard: New Layout").
 **Spec:** `docs/spec/layout-page.md`.
@@ -72,8 +72,15 @@
 - Rich layout text: `layout_text_svg` lays the text out with `text::place_label`, as graph labels
   are, and writes it with `svg::write_svg_view`. Test: `layout_render::tests`.
 
+## Done in slice 11 (2026-11-20)
+
+- Drawn objects: `LayoutContent::Shape { shape, color, width }`, Layout > Add Rectangle / Ellipse
+  / Line, Object Properties on double-click (`dialogs/layout_shape.rs`), `layout_shape_svg` drawn at
+  the item's size. Tests: `layout_page::tests` (core), `layout_render::tests` (plot),
+  `layout_page::a_drawn_rectangle_is_added_and_a_double_click_sets_its_colour`.
+
 ## Left (next slices)
 
 - Other page properties (printer page, theme).
-- Drawn objects (lines, rectangles) on the page; a font/colour toolbar for its text.
+- Fills and arrowheads on drawn objects; a font/colour toolbar for layout text.
 - Writing the page to `.opj`.

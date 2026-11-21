@@ -2378,7 +2378,8 @@ pub enum AnalyzeTool {
         #[arg(long, value_delimiter = ',', allow_hyphen_values = true, value_name = "X1,Y1,X2,Y2", group = "kind")]
         line: Vec<f64>,
     },
-    /// Interpolate each curve onto equally spaced X values; the result goes to a new sheet.
+    /// Interpolate each curve onto equally spaced X values; each result is a column at the end of the
+    /// sheet, its X grid kept as the column's sampling interval (as Origin's interp1xy).
     Interpolate {
         #[command(flatten)]
         target: TargetArgs,

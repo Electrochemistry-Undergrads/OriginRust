@@ -211,6 +211,15 @@ X-Function default is not-a-knot). `interp1xy` interpolates onto `npts` (100) eq
 between `xmin` and `xmax` (the data range): the grid is `xmin + (xmax-xmin) i/(npts-1)`; outside the
 data it continues the end segment.
 
+**Where the results go (T302, measured in Origin 2016 on 2026-11-21, `re-workspace/scratch/t302`).**
+`interp1xy` writes one Y column per input at the end of the input's sheet, long name "Interpolated Y1"
+(then Y2, ... after the highest number already there), comment "Linear interp of B" (methods 0 to 3:
+"Linear", "Spline", "B-Spline", "Akima spline"), and no X column: the even grid is the column's
+sampling interval (`wks.col3.xinit` 0, `xinc` 0.5 for 9 points over 0..4). `interp1` (onto the
+values of a column) writes the same Y column at the end, with no sampling interval. Sheaf writes the
+same since T302 (`interp_method_text`, `next_label_index` in `crates/core/src/analysis.rs`); before,
+it wrote X and Y to a new sheet.
+
 Observed: linear extrapolation is the straight line of the end segment; `miss` gives missing outside
 `[x_first, x_last]`; `repeat` gives the first or last Y. Cubic spline (natural and not-a-knot) matches
 the textbook splines, and outside the data the end cubic continues. Akima: the interior slope at point

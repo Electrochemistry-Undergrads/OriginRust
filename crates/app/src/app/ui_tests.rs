@@ -8802,10 +8802,11 @@ fn interpolate_y_from_x_takes_the_x_values_of_a_column() {
     assert!(h.state().analysis.is_some(), "the Interpolate window opens");
     click(&mut h, "OK");
     let book = project(&h).workbooks().next().unwrap();
-    let sheet = book.sheets.last().unwrap();
-    // B against A: 2.5 4.5 6.5 8.5 at 1 2 3 4, so y = 2x + 0.5, extrapolated outside 1..4.
-    assert_eq!(sheet.columns[0].numeric().unwrap(), [30.5, 20.5, 10.5, 0.5]);
-    assert_eq!(sheet.columns[1].numeric().unwrap(), [61.5, 41.5, 21.5, 1.5]);
+    // B against A: 2.5 4.5 6.5 8.5 at 1 2 3 4, so y = 2x + 0.5, extrapolated outside 1..4; the result
+    // is a Y column at the end of the sheet, as Origin's interp1 writes it (T302).
+    let result = book.sheets[0].columns.last().unwrap();
+    assert_eq!(result.long_name, "Interpolated Y1");
+    assert_eq!(result.numeric().unwrap(), [61.5, 41.5, 21.5, 1.5]);
 }
 
 /// A drag over cells selects the block however the pointer events fall into frames: one jump to the

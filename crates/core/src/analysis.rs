@@ -1561,12 +1561,28 @@ fn normalize_method_text(method: NormalizeMethod) -> String {
 /// The number after the highest long name `Normalized<n>` in the sheet, 1 when there is none: Origin
 /// went on with Normalized3 after a first run made Normalized1 and Normalized2 (T300).
 fn next_normalized_index(sheet: &Worksheet) -> usize {
+    next_label_index(sheet, "Normalized")
+}
+
+/// The number after the highest long name `<prefix><n>` in the sheet, 1 when there is none.
+fn next_label_index(sheet: &Worksheet, prefix: &str) -> usize {
     sheet
         .columns
         .iter()
-        .filter_map(|c| c.long_name.strip_prefix("Normalized")?.parse::<usize>().ok())
+        .filter_map(|c| c.long_name.strip_prefix(prefix)?.parse::<usize>().ok())
         .max()
         .map_or(1, |n| n + 1)
+}
+
+/// Origin 2016's word for an interpolation method in the result's comment (T302, measured with
+/// `interp1xy method:=0..3`).
+fn interp_method_text(method: InterpMethod) -> &'static str {
+    match method {
+        InterpMethod::Linear => "Linear",
+        InterpMethod::CubicSpline => "Spline",
+        InterpMethod::BSpline => "B-Spline",
+        InterpMethod::Akima => "Akima spline",
+    }
 }
 
 /// A column to add next to its source column.
@@ -2377,7 +2393,8 @@ impl Project {
         let mut beside: Vec<NewColumn> = Vec::new();
         // T300: Normalize Columns puts its columns at the end of the sheet, each with the designation of
         // its source, as Origin 2016's rnormalize and normalize do; empty for the other tools.
-        let mut at_end: Vec<Designation> = Vec::new();
+        // T302: Interpolate too, with the even grid kept as the column's sampling interval.
+        let mut at_end: Vec<(Designation, Option<crate::sampling::SamplingInterval>)> = Vec::new();
         let mut on_sheet: Vec<SheetColumn> = Vec::new();
         let mut table: Option<ResultTable> = None;
         let mut notes: Vec<String> = Vec::new();
@@ -3438,7 +3455,7 @@ impl Project {
                         comments: format!("{} of {}{}", normalize_method_text(*method), inp.short, inp.range_note()),
                         data: inp.aligned(&v),
                     });
-                    at_end.push(sheet.column(inp.id).map_or(Designation::Y, |c| c.designation));
+                    at_end.push((sheet.column(inp.id).map_or(Designation::Y, |c| c.designation), None));
                 }
             }
             Tool::SubtractBaseline(spec) => {
@@ -3506,7 +3523,11 @@ impl Project {
                     smoothing: spec.smoothing,
                 };
                 let needed = if spec.method == InterpMethod::BSpline { 4 } else { 2 };
-                for inp in &inputs {
+                // T302, measured in Origin 2016: interp1xy and interp1 write one Y column per input at
+                // the end of the input's sheet, "Interpolated Y1", "Interpolated Y2", ..., with the comment
+                // "Linear interp of B"; the even grid is the column's sampling interval (no X column).
+                let first_index = next_label_index(sheet, "Interpolated Y");
+                for (n, inp) in (first_index..).zip(inputs.iter()) {
                     let valid = inp.xs().iter().zip(inp.ys()).filter(|(a, b)| a.is_finite() && b.is_finite()).count();
                     if valid < needed {
                         return Err(if needed == 2 {
@@ -3526,23 +3547,28 @@ impl Project {
                         Some(at) => (at.clone(), calc::interp1(inp.xs(), inp.ys(), at, &options)),
                         None => calc::interp1xy(inp.xs(), inp.ys(), spec.npts, lo, hi, &options),
                     };
-                    on_sheet.push(SheetColumn {
-                        designation: Designation::X,
-                        long_name: inp.x_name.clone(),
-                        units: inp.x_units.clone(),
-                        comments: String::new(),
-                        data: ColumnData::numeric(gx),
-                    });
-                    on_sheet.push(SheetColumn {
-                        designation: Designation::Y,
-                        long_name: inp.name.clone(),
+                    let sampling = match (&at_values, gx.first(), gx.last()) {
+                        (None, Some(&x0), Some(&x1)) if gx.len() > 1 => Some(crate::sampling::SamplingInterval {
+                            x0,
+                            inc: (x1 - x0) / (gx.len() - 1) as f64,
+                            long_name: String::new(),
+                            units: inp.x_units.clone(),
+                        }),
+                        _ => None,
+                    };
+                    beside.push(NewColumn {
+                        after: inp.id,
+                        long_name: format!("Interpolated Y{n}"),
                         units: inp.units.clone(),
-                        comments: match &at_values {
-                            Some(at) => format!("{} at {} given X values{}", inp.label, at.len(), inp.range_note()),
-                            None => format!("{} interpolated to {} points{}", inp.label, spec.npts, inp.range_note()),
-                        },
-                        data: ColumnData::numeric(gy),
+                        comments: format!(
+                            "{} interp of {}{}",
+                            interp_method_text(spec.method),
+                            inp.short,
+                            inp.range_note()
+                        ),
+                        data: gy,
                     });
+                    at_end.push((Designation::Y, sampling));
                 }
             }
             Tool::FindPeaks(options) => {
@@ -3698,15 +3724,16 @@ impl Project {
             }
             let id = self.new_column_id();
             let ws = &mut self.workbook_mut(book_id).expect("workbook exists").sheets[sheet_index];
-            if let Some(&designation) = at_end.get(k) {
-                // T300: at the end of the sheet, with the source's designation.
+            if let Some((designation, sampling)) = at_end.get(k).cloned() {
+                // T300, T302: at the end of the sheet, with the source's designation.
                 let name = ws.next_short_name();
                 added_names.push(format!("{name} \"{}\"", nc.long_name));
-                let column = Column::new(id, name, designation, ColumnData::numeric(nc.data)).with_labels(
+                let mut column = Column::new(id, name, designation, ColumnData::numeric(nc.data)).with_labels(
                     &nc.long_name,
                     &nc.units,
                     &nc.comments,
                 );
+                column.sampling = sampling;
                 ws.columns.push(column);
                 new_columns.push(id);
                 continue;
@@ -4242,18 +4269,19 @@ mod tests {
         let at = p.add_column(book, 0, Designation::Disregard, ColumnData::numeric(vec![0.5, 2.25, 12.0])).unwrap();
         let spec = InterpSpec { at: Some(at), ..Default::default() };
         let r = p.analyze(&request(&[ramp], Tool::Interpolate(spec))).unwrap();
-        let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
-        assert_eq!(ws.columns[0].numeric().unwrap(), [0.5, 2.25, 12.0], "X is the given column");
-        assert_eq!(ws.columns[1].numeric().unwrap(), [0.5, 2.25, 12.0], "y = x, extrapolated past 10");
-        assert!(ws.columns[1].comments.contains("3 given X values"), "{}", ws.columns[1].comments);
+        // T302: as Origin's interp1, only the Y column, at the end, without a sampling interval.
+        let c = p.column(r.new_columns[0]).unwrap();
+        assert_eq!(c.numeric().unwrap(), [0.5, 2.25, 12.0], "y = x, extrapolated past 10");
+        assert!(c.sampling.is_none());
+        assert_eq!(c.long_name, "Interpolated Y1");
+        let _ = book;
         let missing = InterpSpec { at: Some(ColumnId(9999)), ..Default::default() };
         assert!(p.analyze(&request(&[ramp], Tool::Interpolate(missing))).is_err());
         // Outside the data (X 0..10): missing, or the end value repeated.
         for (extrapolation, want) in [(Extrapolation::Missing, f64::NAN), (Extrapolation::Repeat, 10.0)] {
             let spec = InterpSpec { at: Some(at), extrapolation, ..Default::default() };
             let r = p.analyze(&request(&[ramp], Tool::Interpolate(spec))).unwrap();
-            let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
-            let y = ws.columns[1].numeric().unwrap();
+            let y = p.column(r.new_columns[0]).unwrap().numeric().unwrap().to_vec();
             assert_eq!(&y[..2], [0.5, 2.25], "{extrapolation:?}: inside the data as before");
             assert!(y[2] == want || (want.is_nan() && y[2].is_nan()), "{extrapolation:?}: {}", y[2]);
         }
@@ -4269,13 +4297,14 @@ mod tests {
         assert!(p.numeric(r.new_columns[0]).unwrap().iter().all(|v| v.is_finite()));
         let spec = InterpSpec { method: InterpMethod::BSpline, npts: 21, ..Default::default() };
         let r = p.analyze(&request(&[ramp], Tool::Interpolate(spec))).unwrap();
-        let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
-        assert_eq!(ws.columns.len(), 2);
+        assert_eq!(r.new_columns.len(), 1);
+        assert_eq!(p.column(r.new_columns[0]).unwrap().comments, "B-Spline interp of C");
         // a positive smoothing factor is accepted; a negative one is refused
         let smoothing = InterpSpec { smoothing: 0.5, ..spec };
         let r = p.analyze(&request(&[ramp], Tool::Interpolate(smoothing))).unwrap();
-        let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
-        assert!(ws.columns[1].numeric().unwrap().iter().all(|v| v.is_finite()));
+        assert_eq!(p.column(r.new_columns[0]).unwrap().long_name, "Interpolated Y2", "numbering goes on");
+        assert!(p.numeric(r.new_columns[0]).unwrap().iter().all(|v| v.is_finite()));
+        let _ = book;
         let negative = InterpSpec { smoothing: -0.5, ..spec };
         let err = p.analyze(&request(&[ramp], Tool::Interpolate(negative))).unwrap_err();
         assert!(err.to_string().contains("smoothing factor"), "{err}");
@@ -4284,14 +4313,21 @@ mod tests {
     #[test]
     fn interpolate_peaks_and_statistics_write_a_new_sheet() {
         let (mut p, book, flat, ramp) = sample();
+        // T302: Interpolate writes a Y column at the end of the input's sheet, its even X grid kept as
+        // the column's sampling interval, as Origin 2016's interp1xy does.
         let spec = InterpSpec { npts: 21, ..Default::default() };
         let r = p.analyze(&request(&[ramp], Tool::Interpolate(spec))).unwrap();
-        let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
-        assert_eq!(ws.name, "Interpolate1");
-        assert_eq!(ws.columns[0].designation, Designation::X);
-        assert_eq!(ws.columns[0].numeric().unwrap()[1], 0.5);
-        assert_eq!(ws.columns[1].numeric().unwrap()[1], 0.5);
-        assert_eq!((ws.columns[0].long_name.as_str(), ws.columns[1].units.as_str()), ("Time", "A"));
+        assert!(r.new_sheet.is_none());
+        let c = p.column(r.new_columns[0]).unwrap();
+        assert_eq!(
+            (c.long_name.as_str(), c.comments.as_str(), c.units.as_str()),
+            ("Interpolated Y1", "Linear interp of C", "A")
+        );
+        assert_eq!(c.numeric().unwrap()[1], 0.5);
+        let s = c.sampling.as_ref().unwrap();
+        assert_eq!((s.x0, s.inc), (0.0, 0.5));
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!(ws.columns.last().unwrap().id, r.new_columns[0], "at the end of the sheet");
 
         // A triangle has one peak, at x = 3.
         let tri = p

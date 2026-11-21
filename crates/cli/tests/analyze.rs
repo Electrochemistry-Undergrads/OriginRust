@@ -148,7 +148,9 @@ fn the_fft_filter_and_the_b_spline_can_be_chosen() {
     ]);
     assert!(ok, "stderr: {stderr}");
     let text = std::fs::read_to_string(&out).unwrap();
-    assert!(text.lines().any(|l| l == "2.5,2.5"), "{text}");
+    // T302: the result is a column at the end of the input's sheet (row 2: t 1, flat 2, ramp 1, and the
+    // interpolated value 2.5 at X 2.5 of the 5-point grid).
+    assert!(text.lines().any(|l| l == "1,2,1,2.5"), "{text}");
 
     // A smoothing factor above zero gives a smoothing spline; a negative one is refused.
     let (ok, _, stderr) = sheaf(&[
@@ -168,7 +170,8 @@ fn the_fft_filter_and_the_b_spline_can_be_chosen() {
     ]);
     assert!(ok, "stderr: {stderr}");
     let text = std::fs::read_to_string(&out).unwrap();
-    let middle: f64 = text.lines().nth(4).unwrap().split(',').nth(1).unwrap().parse().unwrap();
+    // Row 2 of the result column (the fourth column, after the names, units and comments lines).
+    let middle: f64 = text.lines().nth(4).unwrap().split(',').nth(3).unwrap().parse().unwrap();
     assert!((middle - 2.5).abs() < 1e-9, "{text}");
     let (ok, _, stderr) = sheaf(&[
         "analyze",

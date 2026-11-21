@@ -109,12 +109,17 @@ fn a_layout_page_is_exported_as_a_picture_file() {
 }
 
 #[test]
-fn page_setup_turns_the_layout_page_to_a4_portrait_in_one_undo_step() {
+fn layout_page_properties_turn_the_page_to_a4_portrait_in_one_undo_step() {
     let mut h = start(vec![]);
     let ctx = h.ctx.clone();
     menu_path(&mut h, &["File", "New", "Layout"]);
     let id = project(&h).layouts().next().unwrap().id;
-    let action = menus::resolve(&menus::Cmd::LayoutPageSetup, &h.state().menu_context()).unwrap();
+    let format = menus::bar(menus::WindowKind::Layout).iter().find(|m| m.label == "F&ormat").unwrap();
+    assert_eq!(format.entries.len(), 1, "Format > Layout Page...");
+    // F2 (the graph's Page Properties key) opens the layout page's window here.
+    let f2 = menus::Cmd::GraphProps(crate::dialogs::graph_props::PropsTab::Page);
+    let action = menus::resolve(&f2, &h.state().menu_context()).unwrap();
+    assert!(matches!(action, Action::LayoutPageSetup { layout } if layout == id), "{action:?}");
     h.state_mut().apply(action, &ctx);
     settle(&mut h);
     let d = h.state_mut().layout_page_setup.as_mut().expect("the Page Setup window is open");
@@ -125,7 +130,7 @@ fn page_setup_turns_the_layout_page_to_a4_portrait_in_one_undo_step() {
     assert!(h.state().layout_page_setup.is_none(), "OK closes the window");
     let l = project(&h).layout(id).unwrap();
     assert_eq!((l.width_pt, l.height_pt), (595.28, 841.89));
-    assert_eq!(h.state().doc.undo_label(), Some("Layout page size"));
+    assert_eq!(h.state().doc.undo_label(), Some("Layout page properties"));
 }
 
 #[test]

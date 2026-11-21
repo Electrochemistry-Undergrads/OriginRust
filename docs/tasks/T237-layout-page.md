@@ -1,6 +1,6 @@
 # T237: Layout pages (B14, slice 1)
 
-**Status:** slices 1 to 5 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
+**Status:** slices 1 to 6 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
 **Size:** L (several slices). **Source:** greyed inventory package B14 ("New: Layout",
 "Standard: New Layout").
 **Spec:** `docs/spec/layout-page.md`.
@@ -30,7 +30,7 @@
 
 ## Done in slice 4 (2026-11-20)
 
-- Layout > Page Setup... (`dialogs/layout_page_setup.rs`): width and height in inches, cm or
+- Layout > Page Setup... (`dialogs/layout_page_setup.rs`; moved to Format in slice 6): width and height in inches, cm or
   points, paper presets, Portrait/Landscape, one undo step. Tests:
   `layout_page_setup::tests::presets_keep_the_orientation_and_units_convert` and
   `layout_page::page_setup_turns_the_layout_page_to_a4_portrait_in_one_undo_step`.
@@ -42,8 +42,14 @@
   (`render_layout_item`, `layout_item_aspect`). Tests: `layout_page::tests` (core),
   `layout_render::tests` (plot), `layout_page::add_worksheet_puts_a_sheet_picture_on_the_layout_page`.
 
+## Done in slice 6 (2026-11-20)
+
+- The page window moved to Format > Layout Page... [F2] (Origin's place) and has a page colour
+  (`LayoutPage::background`, white by default). Test:
+  `layout_page::layout_page_properties_turn_the_page_to_a4_portrait_in_one_undo_step`.
+
 ## Left (next slices)
 
-- Other page properties (background, printer page).
+- Other page properties (printer page, theme).
 - Print, and vector (SVG/PDF/EMF) export of the page.
 - Writing the page to `.opj`.

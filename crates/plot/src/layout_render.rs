@@ -38,7 +38,7 @@ pub fn layout_item_aspect(project: &Project, content: &LayoutContent) -> Option<
     }
 }
 
-/// The layout page `layout` as a raster at `dpi` dots per inch. An item whose graph or sheet is gone
+/// The layout page `layout` as a raster at `dpi` dots per inch, on the page colour. An item whose graph or sheet is gone
 /// is left blank. A picture stretched by a resize is drawn stretched (nearest pixel).
 pub fn render_layout_raster(project: &Project, layout: WindowId, dpi: f64) -> Result<Raster, PlotError> {
     let page = project
@@ -53,7 +53,8 @@ pub fn render_layout_raster(project: &Project, layout: WindowId, dpi: f64) -> Re
     if total > 400_000_000 {
         return Err(PlotError::Image(format!("a {width} x {height} pixel page is too large")));
     }
-    let mut rgba = vec![255u8; (width as usize) * (height as usize) * 4];
+    let bg = page.background;
+    let mut rgba = [bg.r, bg.g, bg.b, 255].repeat((width as usize) * (height as usize));
     for item in &page.items {
         let (x0, y0) = ((item.x * f64::from(width)).round() as i64, (item.y * f64::from(height)).round() as i64);
         let (iw, ih) = ((item.w * f64::from(width)).round() as i64, (item.h * f64::from(height)).round() as i64);

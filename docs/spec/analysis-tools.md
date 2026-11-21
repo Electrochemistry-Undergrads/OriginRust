@@ -173,17 +173,20 @@ sd; `max`, `min`, `mean`, `median`, `sd` (sample), `norm` (Euclidean norm), `mod
 that statistic. `mode` is all missing when no value occurs twice (observed); with ties we take the
 smallest value (unknown). Division by a negative `min` flips the sign (observed).
 
-`ref` and `cell` (T260, from OriginLab's X-Function page; not measured, Origin unusable on
-2026-11-20). `ref` (method 11, variables `refcol` and `type`) "normalize[s] the input data by
+`ref` and `cell` (T260 from OriginLab's X-Function page; measured in Origin 2016 on 2026-11-20, T269,
+`re-workspace/scratch/t269/norm.out.txt`). `ref` (method 11, variables `refcol` and `type`) "normalize[s] the input data by
 matching the statistic specified by the type variable to that of a reference column"; `type` offers
-min, max, mean, median and sum. The page prints no formula; Sheaf scales each column,
-`y * stat(ref) / stat(y)`, so its statistic equals the reference's (a statistic of 0, or none, in the
+min, max, mean, median and sum (`type` 0 to 4, default 0 = min, measured). The page prints no
+formula; Origin scales each column, `y * stat(ref) / stat(y)` (measured: A = 1, 2, 3, 4, 6 against
+B = 2, 4, ..., 10 gives A times 2 for min and median, 10/6 for max, 1.875 for mean and sum), so its
+statistic equals the reference's (a statistic of 0, or none, in the
 reference or in a column is refused), and the new column takes the reference's units. `cell` (method
-12, variable `cell`) divides by one reference cell; an empty, masked or zero cell is refused. The
+12, variable `cell`) divides by one reference cell (measured: A / B[2] = A / 4); an empty, masked or zero cell is refused. The
 reference is read as analysis reads data (masked cells and filter-hidden rows left out). Both are
 in the Normalize window (Method: "Match a statistic of a reference column", "Divide by a reference
 cell", with the reference column, Statistic or Row) and `sheaf analyze normalize --method ref|cell
---ref COLUMN [--stat min|max|mean|median|sum] [--row N]` (same sheet). They do not take part in
+--ref COLUMN [--stat min|max|mean|median|sum] [--row N]` (same sheet); the statistic starts on min, as
+Origin's `type`. They do not take part in
 Recalculate Auto/Manual. Not built: row-wise normalize (Origin's `rnormalize`).
 
 ## 5. Interpolate / extrapolate (`interp1`, `interp1xy`)

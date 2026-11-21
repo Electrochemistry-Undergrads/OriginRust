@@ -4510,6 +4510,34 @@ mod tests {
     }
 
     #[test]
+    fn normalize_ref_and_cell_give_origins_numbers() {
+        // T269, measured in Origin 2016 on 2026-11-20 (re-workspace/scratch/t269/norm.out.txt):
+        // normalize iy:=A method:=ref refcol:=B type:=0..4 and method:=cell cell:=B[2].
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let a = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0, 6.0])).unwrap();
+        let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0, 4.0, 6.0, 8.0, 10.0])).unwrap();
+        let origin: [(NormalizeRef, [f64; 5]); 6] = [
+            (NormalizeRef::Column { column: b, stat: RefStat::Min }, [2.0, 4.0, 6.0, 8.0, 12.0]),
+            (
+                NormalizeRef::Column { column: b, stat: RefStat::Max },
+                [1.6666666666666667, 3.3333333333333335, 5.0, 6.666666666666667, 10.0],
+            ),
+            (NormalizeRef::Column { column: b, stat: RefStat::Mean }, [1.875, 3.75, 5.625, 7.5, 11.25]),
+            (NormalizeRef::Column { column: b, stat: RefStat::Median }, [2.0, 4.0, 6.0, 8.0, 12.0]),
+            (NormalizeRef::Column { column: b, stat: RefStat::Sum }, [1.875, 3.75, 5.625, 7.5, 11.25]),
+            (NormalizeRef::Cell { column: b, row: 1 }, [0.25, 0.5, 0.75, 1.0, 1.5]),
+        ];
+        for (reference, want) in origin {
+            let r = p.analyze(&request(&[a], Tool::NormalizeRef(reference))).unwrap();
+            let got = p.numeric(r.new_columns[0]).unwrap();
+            for (g, w) in got.iter().zip(want) {
+                assert!((g - w).abs() < 1e-12 * w.abs().max(1.0), "{reference:?}: {got:?} vs Origin {want:?}");
+            }
+        }
+    }
+
+    #[test]
     fn normalize_matches_a_reference_statistic_or_divides_by_a_reference_cell() {
         // T260: Origin's normalize methods ref and cell.
         let (mut p, book, _, ramp) = sample();

@@ -341,6 +341,7 @@ pub enum Action {
     LayoutAddShape {
         layout: WindowId,
         shape: sheaf_core::layout_page::LayoutShape,
+        arrow: bool,
     },
     /// A double-click on a drawn layout object (T237 slice 11): its properties window.
     LayoutShape {

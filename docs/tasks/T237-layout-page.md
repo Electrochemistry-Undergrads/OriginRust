@@ -1,6 +1,6 @@
 # T237: Layout pages (B14, slice 1)
 
-**Status:** slices 1 to 11 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
+**Status:** slices 1 to 12 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
 **Size:** L (several slices). **Source:** greyed inventory package B14 ("New: Layout",
 "Standard: New Layout").
 **Spec:** `docs/spec/layout-page.md`.
@@ -79,8 +79,14 @@
   the item's size. Tests: `layout_page::tests` (core), `layout_render::tests` (plot),
   `layout_page::a_drawn_rectangle_is_added_and_a_double_click_sets_its_colour`.
 
+## Done in slice 12 (2026-11-20)
+
+- Fills and end arrowheads on drawn objects, horizontal and vertical lines, Layout > Add Arrow
+  (`layout_shape_svg` now takes the content). Tests: `layout_page::tests`, `layout_render::tests`,
+  `layout_page::a_drawn_rectangle_is_added_and_a_double_click_sets_its_colour`.
+
 ## Left (next slices)
 
 - Other page properties (printer page, theme).
-- Fills and arrowheads on drawn objects; a font/colour toolbar for layout text.
+- Dashes and start arrowheads on drawn objects; a font/colour toolbar for layout text.
 - Writing the page to `.opj`.

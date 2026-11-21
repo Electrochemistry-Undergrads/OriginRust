@@ -45,36 +45,67 @@ pub fn layout_text_svg(text: &str, size: u16) -> (String, (f64, f64)) {
     (crate::svg::write_svg_view(&scene, view, 1.0), (view.w, view.h))
 }
 
-/// A drawn layout object as an SVG document `size_pt` points large (T237 slice 11): the line is
-/// `width` tenths of a point and stays inside the box (a line ends at its corners).
-pub fn layout_shape_svg(shape: LayoutShape, color: Color, width: u16, size_pt: (f64, f64)) -> String {
+/// A drawn layout object as an SVG document `size_pt` points large (T237 slices 11 and 12): the
+/// line is `width` tenths of a point and stays inside the box; a rectangle or an ellipse can be
+/// filled; a line can end in a filled arrowhead (4 line widths long, at least 6 pt, 0.8 of that
+/// wide), kept inside the box. `None` when `content` is not a drawn object.
+pub fn layout_shape_svg(content: &LayoutContent, size_pt: (f64, f64)) -> Option<String> {
+    let LayoutContent::Shape { shape, color, width, fill, arrow } = content else { return None };
     let (w, h) = (size_pt.0.max(0.1), size_pt.1.max(0.1));
-    let lw = f64::from(width.max(1)) / 10.0;
+    let lw = f64::from((*width).max(1)) / 10.0;
+    let paint = |c: &Color| format!("rgb({},{},{})\" {{}}-opacity=\"{}", c.r, c.g, c.b, f64::from(c.a) / 255.0);
+    let stroke = paint(color).replace("{}", "stroke");
+    let stroke = format!("stroke=\"{stroke}\" stroke-width=\"{lw}\"");
     let i = (lw / 2.0).min(w / 2.0).min(h / 2.0);
-    let stroke = format!(
-        "fill=\"none\" stroke=\"rgb({},{},{})\" stroke-opacity=\"{}\" stroke-width=\"{lw}\"",
-        color.r,
-        color.g,
-        color.b,
-        f64::from(color.a) / 255.0
-    );
+    let fill_attr = match fill {
+        Some(f) if shape.closed() => format!("fill=\"{}\"", paint(f).replace("{}", "fill")),
+        _ => "fill=\"none\"".to_string(),
+    };
     let body = match shape {
-        LayoutShape::Rectangle => {
-            format!("<rect x=\"{i}\" y=\"{i}\" width=\"{}\" height=\"{}\" {stroke}/>", w - 2.0 * i, h - 2.0 * i)
-        }
+        LayoutShape::Rectangle => format!(
+            "<rect x=\"{i}\" y=\"{i}\" width=\"{}\" height=\"{}\" {fill_attr} {stroke}/>",
+            w - 2.0 * i,
+            h - 2.0 * i
+        ),
         LayoutShape::Ellipse => format!(
-            "<ellipse cx=\"{}\" cy=\"{}\" rx=\"{}\" ry=\"{}\" {stroke}/>",
+            "<ellipse cx=\"{}\" cy=\"{}\" rx=\"{}\" ry=\"{}\" {fill_attr} {stroke}/>",
             w / 2.0,
             h / 2.0,
             w / 2.0 - i,
             h / 2.0 - i
         ),
-        LayoutShape::Line => format!("<line x1=\"0\" y1=\"0\" x2=\"{w}\" y2=\"{h}\" {stroke}/>"),
-        LayoutShape::LineUp => format!("<line x1=\"0\" y1=\"{h}\" x2=\"{w}\" y2=\"0\" {stroke}/>"),
+        LayoutShape::Line | LayoutShape::LineUp | LayoutShape::HLine | LayoutShape::VLine => {
+            let head = if *arrow { (4.0 * lw).max(6.0) } else { 0.0 };
+            let half = 0.4 * head;
+            // A diagonal line is pulled in from the corners so that its arrowhead fits the box.
+            let m = if *arrow { (half + lw / 2.0).min(w / 2.0).min(h / 2.0) } else { 0.0 };
+            let (x1, y1, x2, y2) = match shape {
+                LayoutShape::Line => (m, m, w - m, h - m),
+                LayoutShape::LineUp => (m, h - m, w - m, m),
+                LayoutShape::HLine => (0.0, h / 2.0, w, h / 2.0),
+                _ => (w / 2.0, 0.0, w / 2.0, h),
+            };
+            let len = (x2 - x1).hypot(y2 - y1).max(1e-9);
+            let (dx, dy) = ((x2 - x1) / len, (y2 - y1) / len);
+            let head = head.min(len);
+            let (bx, by) = (x2 - dx * head, y2 - dy * head);
+            let mut out = format!("<line x1=\"{x1}\" y1=\"{y1}\" x2=\"{bx}\" y2=\"{by}\" fill=\"none\" {stroke}/>");
+            if *arrow {
+                let (lx, ly, rx, ry) = (bx - dy * half, by + dx * half, bx + dy * half, by - dx * half);
+                let _ = std::fmt::Write::write_fmt(
+                    &mut out,
+                    format_args!(
+                        "<polygon points=\"{x2},{y2} {lx},{ly} {rx},{ry}\" fill=\"{}\" stroke=\"none\"/>",
+                        paint(color).replace("{}", "fill")
+                    ),
+                );
+            }
+            out
+        }
     };
-    format!(
+    Some(format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{w}pt\" height=\"{h}pt\" viewBox=\"0 0 {w} {h}\">{body}</svg>\n"
-    )
+    ))
 }
 
 /// The picture of a layout item `pixel_width` pixels wide, the item taking `size_pt` points on the
@@ -87,8 +118,8 @@ pub fn render_layout_item(
 ) -> Option<Result<Raster, PlotError>> {
     let px = f64::from(pixel_width.max(1));
     match content {
-        LayoutContent::Shape { shape, color, width } => {
-            let svg = layout_shape_svg(*shape, *color, *width, size_pt);
+        LayoutContent::Shape { .. } => {
+            let svg = layout_shape_svg(content, size_pt)?;
             Some(raster::rasterise(&svg, px / size_pt.0.max(0.1), SystemFonts::shared()))
         }
         LayoutContent::Graph { graph } => {
@@ -215,7 +246,7 @@ pub fn render_layout_emf(project: &Project, layout: WindowId, dpi: f64) -> Resul
 /// The vector picture of what a layout item shows; `None` when it is gone.
 fn item_svg(project: &Project, content: &LayoutContent, size_pt: (f64, f64)) -> Option<Result<String, PlotError>> {
     match content {
-        LayoutContent::Shape { shape, color, width } => Some(Ok(layout_shape_svg(*shape, *color, *width, size_pt))),
+        LayoutContent::Shape { .. } => layout_shape_svg(content, size_pt).map(Ok),
         LayoutContent::Graph { graph } => {
             project.graph(*graph)?;
             Some(crate::render_svg(project, *graph))
@@ -364,9 +395,14 @@ mod tests {
         let (_, (w1, h1)) = layout_text_svg("Bold x2", 24);
         assert!(h2 > 1.8 * h1 - 0.6 * 24.0 && w2 > w1, "two lines are taller: {h1} {h2}");
         // A red rectangle: its frame is drawn inside its box, its middle stays the page colour.
-        let k = p.layout_mut(id).unwrap().add_shape(LayoutShape::Rectangle);
-        p.layout_mut(id).unwrap().items[k].content =
-            LayoutContent::Shape { shape: LayoutShape::Rectangle, color: Color::RED, width: 40 };
+        let k = p.layout_mut(id).unwrap().add_shape(LayoutShape::Rectangle, false);
+        p.layout_mut(id).unwrap().items[k].content = LayoutContent::Shape {
+            shape: LayoutShape::Rectangle,
+            color: Color::RED,
+            width: 40,
+            fill: None,
+            arrow: false,
+        };
         let r = render_layout_raster(&p, id, 72.0).unwrap();
         let at = |x: f64, y: f64| {
             let k = (((y as u32) * r.width + x as u32) * 4) as usize;
@@ -383,5 +419,22 @@ mod tests {
             ),
             "{svg}"
         );
+        // A fill paints the inside; a horizontal arrow ends in a filled head at the right end.
+        p.layout_mut(id).unwrap().items[k].content = LayoutContent::Shape {
+            shape: LayoutShape::Rectangle,
+            color: Color::RED,
+            width: 40,
+            fill: Some(Color::BLUE),
+            arrow: false,
+        };
+        let r = render_layout_raster(&p, id, 72.0).unwrap();
+        let k2 = (((306u32) * r.width + 396) * 4) as usize;
+        assert_eq!(&r.rgba[k2..k2 + 3], &[0, 0, 255], "the inside is filled");
+        let arrow =
+            LayoutContent::Shape { shape: LayoutShape::HLine, color: Color::BLACK, width: 10, fill: None, arrow: true };
+        let svg = layout_shape_svg(&arrow, (100.0, 20.0)).unwrap();
+        assert!(svg.contains("<line x1=\"0\" y1=\"10\" x2=\"94\" y2=\"10\""), "the line stops at the head: {svg}");
+        assert!(svg.contains("<polygon points=\"100,10 94,12.4 94,7.6\""), "{svg}");
+        assert!(layout_shape_svg(&LayoutContent::Text { text: "x".into(), size: 9 }, (1.0, 1.0)).is_none());
     }
 }

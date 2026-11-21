@@ -229,10 +229,23 @@ fn a_drawn_rectangle_is_added_and_a_double_click_sets_its_colour() {
     let d = h.state_mut().layout_shape.as_mut().expect("the double-click opened the object's properties");
     d.color = sheaf_core::Color::RED;
     d.shape = LayoutShape::Ellipse;
+    d.fill = Some(sheaf_core::Color::WHITE);
+    d.arrow = true;
     settle(&mut h);
     click(&mut h, "OK");
     assert_eq!(h.state().doc.undo_label(), Some("Layout object properties"));
     let after = project(&h).layout(id).unwrap().items[0].content.clone();
-    assert_eq!(after, LayoutContent::Shape { shape: LayoutShape::Ellipse, color: sheaf_core::Color::RED, width: 10 });
+    let want = LayoutContent::Shape {
+        shape: LayoutShape::Ellipse,
+        color: sheaf_core::Color::RED,
+        width: 10,
+        fill: Some(sheaf_core::Color::WHITE),
+        arrow: false,
+    };
+    assert_eq!(after, want, "an ellipse keeps its fill and has no arrowhead");
+    // Layout > Add Arrow: a horizontal line with a head.
+    menu_path(&mut h, &["Layout", "Add Arrow"]);
+    let arrow = project(&h).layout(id).unwrap().items[1].content.clone();
+    assert!(matches!(arrow, LayoutContent::Shape { shape: LayoutShape::HLine, arrow: true, .. }), "{arrow:?}");
     let _ = ctx;
 }

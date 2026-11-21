@@ -203,29 +203,46 @@ fn two_d_fft_and_ifft_round_trip_through_new_matrix_books() {
 }
 
 #[test]
-fn a_binary_2d_array_is_imported_into_a_matrix_book_named_after_the_file() {
-    use sheaf_io::bin2d::{Bin2dOptions, BinType};
+fn a_binary_2d_array_is_imported_with_origins_options_into_the_active_sheet_or_a_new_book() {
+    use crate::dialogs::import_bin2d::{ImportBin2dDialog, import_bin2d};
+    use sheaf_core::matrix_project::MatrixOp;
+    use sheaf_io::bin2d::{Bin2dOptions, Sign};
     let dir = std::env::temp_dir().join(format!("sheaf-bin2d-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("frame.bin");
     let bytes: Vec<u8> = (0..6).flat_map(|k| (k as f32 * 0.5).to_le_bytes()).collect();
     std::fs::write(&path, bytes).unwrap();
     let mut h = start(Vec::new());
-    // The options window guesses 32-bit floats; six of them are one row.
-    let d = crate::dialogs::import_bin2d::ImportBin2dDialog::new(path.clone()).unwrap();
-    assert_eq!((d.options.kind, d.options.cols, d.options.rows), (BinType::F32, 6, 1));
-    let opts = Bin2dOptions { kind: BinType::F32, cols: 3, rows: 2, header: 0, big_endian: false };
-    crate::dialogs::import_bin2d::import_bin2d(&mut h.state_mut().doc, &path, &opts).unwrap();
+    // The options window starts at Origin's defaults.
+    let d = ImportBin2dDialog::new(path.clone(), None).unwrap();
+    assert_eq!(d.options, Bin2dOptions::default());
+    let opts = Bin2dOptions { cols: 3, bytes: 4, sign: Sign::Float, ..Bin2dOptions::default() };
+    // No matrix window: a new book named after the file.
+    import_bin2d(&mut h.state_mut().doc, &path, &opts, None).unwrap();
     settle(&mut h);
     assert_eq!(h.state().doc.undo_label(), Some("Import Binary 2D Array"));
     let book = project(&h).matrix_books().next().expect("a matrix book");
     assert_eq!(book.long_name, "frame");
     let s = &book.sheets[0];
     assert_eq!((s.cols, s.rows, s.value(1, 2)), (3, 2, 2.5));
-    // Too many numbers for the file are refused and add nothing.
-    let big = Bin2dOptions { rows: 3, ..opts };
-    assert!(crate::dialogs::import_bin2d::import_bin2d(&mut h.state_mut().doc, &path, &big).is_err());
-    assert_eq!(project(&h).matrix_books().count(), 1);
+    // Into an existing sheet: its ranges and names stay (measured in Origin).
+    let mut id = sheaf_core::WindowId(0);
+    h.state_mut().doc.apply("Matrix", |p| {
+        id = p.add_matrix_book("keep me");
+        p.apply_matrix_op(id, 0, &MatrixOp::SetDimensions { rows: 4, cols: 5, ranges: Some((5.0, 7.0, -1.0, 1.0)) })
+            .unwrap();
+    });
+    let t = Bin2dOptions { transpose: true, ..opts };
+    let done = import_bin2d(&mut h.state_mut().doc, &path, &t, Some((id, 0))).unwrap();
+    assert!(!done.partial);
+    let b = project(&h).matrix_book(id).unwrap();
+    let s = &b.sheets[0];
+    assert_eq!((b.long_name.as_str(), s.rows, s.cols, s.value(2, 1)), ("keep me", 3, 2, 2.5));
+    assert_eq!((s.x_from, s.x_to, s.y_from, s.y_to), (5.0, 7.0, -1.0, 1.0));
+    // A refused type adds nothing.
+    let bad = Bin2dOptions { bytes: 2, ..opts };
+    assert!(import_bin2d(&mut h.state_mut().doc, &path, &bad, None).is_err());
+    assert_eq!(project(&h).matrix_books().count(), 2);
     let _ = std::fs::remove_dir_all(&dir);
 }
 

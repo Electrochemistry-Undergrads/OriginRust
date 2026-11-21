@@ -164,7 +164,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T207](T207-image-menu.md) | Image menu on a matrix: adjustments, math, binary, rotate/flip, spatial filters (B14 slice) | M | done 2026-11-20 (matrices 7i), not measured |
 | [T204](T204-import-image.md) | File > Import > Image into a matrix book of gray levels (B14 slice) | S | done 2026-11-20 (matrices 7h), not measured |
 | [T201](T201-gray-scale-map.md) | Plot > Contour/Heat Map > Gray Scale Map (B14 slice) | S | done 2026-11-20 (matrices 7g), not measured |
-| [T199](T199-import-binary-2d.md) | File > Import > Binary 2D Array into a matrix (B14 slice) | S | done 2026-11-20 (matrices 7f), not measured |
+| [T199](T199-import-binary-2d.md) | File > Import > Binary 2D Array into a matrix (B14 slice) | S | done 2026-11-20 (matrices 7f), measured by T294 |
 | [T196](T196-matrix-fft2.md) | 2D FFT and 2D IFFT of a matrix (B14 slice) | S | done 2026-11-20 (matrices 7e), not measured |
 | [T193](T193-matrix-inverse.md) | Analysis > Mathematics > Inverse of a matrix (B14 slice) | S | done 2026-11-20 (matrices 7d), measured by T290 |
 | [T192](T192-matrices.md) | Matrix books, heat maps, contour plots, `sheaf matrix` (B14 slice 1, port of the offline originrust-3a branch) | L | slices 1-4 done 2026-11-19 (matrices spec, Origin 2016 measured; app window, New Matrix, Matrix menu, Contour/Heat Map plots, Convert to Matrix); left: options windows, statistics, .opj |
@@ -276,6 +276,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T290](T290-minverse-measure.md) | Measure Matrix Inverse against Origin (pseudoinverse, full-rank test, output book) | S | done 2026-11-21 (matrices 7d) |
 | [T291](T291-axis-title-rotation.md) | Axis title Rotate (deg.) and Offset (pt), turned about its middle as measured in Origin 2016 | S | done 2026-11-21 |
 | [T293](T293-font-underline.md) | Whole-font Underline beside Bold and Italic (drawn, font boxes, .opj as \u(..)) | S | done 2026-11-21 |
+| [T294](T294-bin2d-measure.md) | Measure Binary 2D Array import against Origin (impBin2D options and defaults, rows from size, partial row, target) | S | done 2026-11-21 (matrices 7f) |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |

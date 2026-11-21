@@ -2020,7 +2020,14 @@ impl SheafApp {
             Action::ImportBinary2d => {
                 let picked = rfd::FileDialog::new().set_title("Import Binary 2D Array").pick_file();
                 if let Some(path) = picked {
-                    match crate::dialogs::import_bin2d::ImportBin2dDialog::new(path) {
+                    // Into the active matrix sheet, as Origin's Output; else a new matrix book.
+                    let target = self.active.and_then(|a| {
+                        self.doc
+                            .project()
+                            .matrix_book(a)
+                            .map(|b| (a, b.active_sheet.min(b.sheets.len().saturating_sub(1))))
+                    });
+                    match crate::dialogs::import_bin2d::ImportBin2dDialog::new(path, target) {
                         Ok(d) => self.import_bin2d = Some(d),
                         Err(e) => self.warn(e),
                     }
@@ -6700,9 +6707,14 @@ impl SheafApp {
             match d.show(ctx, &mut self.doc) {
                 Outcome::Open => {}
                 Outcome::Closed => self.import_bin2d = None,
-                Outcome::Done => {
+                Outcome::Done(partial) => {
                     self.import_bin2d = None;
-                    self.say("Imported the binary 2D array into a new matrix book".to_string());
+                    if partial {
+                        // Origin fills the row the same way and reports the import as failed.
+                        self.warn("The file ends inside the last row of the array; that row is left at 0".to_string());
+                    } else {
+                        self.say("Imported the binary 2D array".to_string());
+                    }
                 }
             }
         }

@@ -1130,6 +1130,7 @@ impl Layer {
         let dash0 = Dash::ALL.iter().position(|d| *d == first.line.dash).unwrap_or(0);
         let shape0 = SymbolShape::ALL.iter().position(|s| *s == first.symbol.shape).unwrap_or(0);
         let filled0 = first.symbol.filled;
+        let first_shape = first.symbol.shape;
         let g = self.group_style;
         let n = self.plots.len();
         for (i, p) in self.plots.iter_mut().enumerate() {
@@ -1137,7 +1138,9 @@ impl Layer {
             if g.line_style == Increment::ByOne {
                 p.line.dash = Dash::ALL[(dash0 + line_step) % Dash::ALL.len()];
             }
-            if g.symbol_type == Increment::ByOne {
+            // A shape outside the increment list (Origin's shapes 9-20) stays on the first plot
+            // and the others step from the start of the list.
+            if g.symbol_type == Increment::ByOne && (shape_step > 0 || SymbolShape::ALL.contains(&first_shape)) {
                 p.symbol.shape = SymbolShape::ALL[(shape0 + shape_step) % SymbolShape::ALL.len()];
             }
             if g.symbol_interior == Increment::ByOne {
@@ -3385,6 +3388,12 @@ mod tests {
         layer.palette.mode = PaletteMode::Same;
         layer.apply_group_increments();
         assert!(layer.plots.iter().all(|q| q.line.color == Color::BLACK));
+        // A first shape outside the increment list (Origin's 9-20, T323) is kept; the others
+        // step from the start of the list.
+        layer.plots[0].symbol.shape = SymbolShape::Hexagon;
+        layer.apply_group_increments();
+        let shapes: Vec<SymbolShape> = layer.plots.iter().map(|q| q.symbol.shape).collect();
+        assert_eq!(shapes, [SymbolShape::Hexagon, SymbolShape::ALL[1], SymbolShape::ALL[2]]);
     }
 
     #[test]
@@ -3951,5 +3960,45 @@ mod layer_visibility_tests {
             assert!(!g.layers[added].display.hidden, "{kind:?}");
             assert!(g.layers[0].display.hidden);
         }
+    }
+}
+
+#[cfg(test)]
+mod symbol_code_tests {
+    use super::*;
+
+    #[test]
+    fn origin_numbers_name_every_shape_and_interior_once() {
+        for (code, s) in SymbolShape::ORIGIN {
+            assert_eq!((s.origin_code(), SymbolShape::from_origin_code(code)), (code, Some(s)));
+        }
+        assert_eq!(SymbolShape::from_origin_code(14), None, "the right arrow drew nothing in Origin 2016");
+        for (k, i) in SymbolInterior::ALL.iter().enumerate() {
+            assert_eq!(usize::from(i.origin_code()), k);
+            assert_eq!(SymbolInterior::from_origin_code(k as u8), Some(*i));
+        }
+        assert_eq!(SymbolShape::Number.text_at(9), Some("10".into()));
+        assert_eq!(SymbolShape::CapitalLetter.text_at(11), Some("L".into()), "Origin's row 12");
+        assert_eq!(SymbolShape::Square.text_at(0), None);
+    }
+
+    #[test]
+    fn a_symbol_saved_before_interiors_reads_as_it_was_and_new_fields_are_written_only_when_set() {
+        // A symbol without the two fields, as every file written before T323 holds it.
+        let mut value = serde_json::to_value(
+            crate::template::Template::Scatter.new_graph(WindowId(1), "G").layers[0].default_symbol.clone(),
+        )
+        .unwrap();
+        value["filled"] = serde_json::Value::Bool(false);
+        assert!(value.get("interior").is_none() && value.get("fill_color").is_none());
+        let s: SymbolStyle = serde_json::from_value(value).unwrap();
+        assert_eq!((s.interior, s.fill_color, s.effective_interior()), (None, None, SymbolInterior::Hollow));
+        assert!(!serde_json::to_string(&s).unwrap().contains("interior"));
+        let mut s = s;
+        s.shape = SymbolShape::Hexagon;
+        s.interior = Some(SymbolInterior::HalfLeft);
+        s.fill_color = Some(Color::rgb(1, 2, 3));
+        let back: SymbolStyle = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(back, s);
     }
 }

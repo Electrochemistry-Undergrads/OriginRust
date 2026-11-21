@@ -746,14 +746,14 @@ fn plot_tab_body(
             let plot = &mut graph.layers[l].plots[p];
             grid(ui, "plot_symbol", |ui| {
                 ui.label("Shape");
-                egui::ComboBox::from_id_salt("plot_symbol").selected_text(symbol_name(plot.symbol.shape)).show_ui(
-                    ui,
-                    |ui| {
+                egui::ComboBox::from_id_salt("plot_symbol")
+                    .height(480.0)
+                    .selected_text(symbol_name(plot.symbol.shape))
+                    .show_ui(ui, |ui| {
                         for (_, s) in SymbolShape::ORIGIN {
                             ui.selectable_value(&mut plot.symbol.shape, s, symbol_name(s));
                         }
-                    },
-                );
+                    });
                 ui.end_row();
                 ui.label("Size");
                 ui.add(DragValue::new(&mut plot.symbol.size_pt).range(0.5..=40.0).speed(0.1).suffix(" pt"));

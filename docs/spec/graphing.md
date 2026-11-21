@@ -517,6 +517,28 @@ Also: connect begin and end (closes; off), connect within subset (on for line pl
 ### 5.4 Symbols [W:labtalk list-of-symbol-shapes, pd-dialog-sym-tab]
 Shapes: 0 none, 1 square, 2 circle, 3 up triangle, 4 down triangle, 5 diamond, 6 plus, 7 cross, 8 star(*), 9 h-bar, 10 v-bar, 11 numbers, 12 capital letters, 13 lowercase letters, 14 right arrow, 15 left triangle, 16 right triangle, 17 hexagon, 18 star, 19 pentagon, 20 sphere; 56 data markers, 58 X-position marker lines.
 Interiors: 0 solid, 1 open, 2 dot centre, 3 hollow, 4 + centre, 5 x centre, 6 - centre, 7 | centre, 8 half up, 9 half right, 10 half down, 11 half left. Hollow lets objects beneath show; open hides them unless fill is none.
+
+**Measured in Origin 2016 (T323, 2026-11-21; `tools/origin-ref/symbols.lines.txt`, PNGs exported with `expGraph`,
+plots ungrouped with `layer -gu` because a plot group gives every member the first one's shape and interior).**
+- Shapes 1-20 are drawn as the list says: 9 and 10 are a horizontal and a vertical stroke as wide as the symbol;
+  11 writes the row number (row 11 shows "11"), 12 and 13 the row's capital and small letter (row 12 "L", row 13
+  "m"); 15 and 16 are triangles pointing left and right; 17 a hexagon with a point up; 18 a five-pointed star; 19 a
+  pentagon with a point up; 20 a shaded sphere (a lighter spot to the upper left). **14 (right arrow) drew nothing.**
+  The legend sample of 11 is "1" and of both 12 and 13 "a".
+- Interiors on a circle, square, triangle, diamond and hexagon: Open is filled white and hides a yellow layer behind it,
+  Hollow is not filled. Dot centre is a small dot; + centre and - / | centre reach the edge; x centre reaches the
+  corners of the symbol's square (beyond a circle or diamond). The halves fill that half of the shape (cut through
+  the centre) in the edge colour and the rest white. `set -cf` (fill colour) changed nothing that could be seen.
+- The .opj curve record keeps the shape number at 0x17 and the interior number at 0x18 (opj-format 10.5).
+
+**Sheaf (T323).** `SymbolShape` has the 19 drawn shapes (`SymbolShape::ORIGIN` maps Origin's numbers; 14 is read as a
+square with a note), `SymbolStyle::interior` one of the 12 `SymbolInterior`s (`None` keeps the older `filled`
+switch: solid, or an unfilled outline, so earlier files draw as before) and `SymbolStyle::fill_color` the colour of
+the open part (`None` white). Plot Details > Symbol lists every shape and interior and has Fill Color. A file
+Origin wrote reads every shape and interior; Sheaf writes them back the same way. The sphere's gradient is drawn as
+two lighter discs (the scene has no gradients); the fill colour other than white is Sheaf's reading of the dialog,
+not measured. The Symbol Type increment still steps through the first 8 shapes; a first plot with a shape beyond
+them keeps it.
 Other: size (pt, default 9, shape square, solid), edge thickness (2), colour automatic = line colour, fill colour (global default), size from column with scaling factor and formula (`s`, `s1` min, `s2` max), user bitmap/SVG symbols (P2).
 
 ### 5.5 Error bars (P0)

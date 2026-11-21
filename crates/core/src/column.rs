@@ -233,6 +233,10 @@ pub struct Column {
     /// The "set column values" expression that produced this column, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub formula: Option<String>,
+    /// Set Column Values' Before Formula Scripts (T307): `name = expression` statements whose
+    /// names the formula uses; kept with the formula and used whenever it runs again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before_formula: Option<String>,
     /// Whether and when the formula runs again. Only meaningful with a formula.
     #[serde(default, skip_serializing_if = "is_default")]
     pub recalc: RecalcMode,
@@ -426,6 +430,7 @@ impl Column {
             designation,
             format: NumberFormat::default(),
             formula: None,
+            before_formula: None,
             recalc: RecalcMode::None,
             formula_state: FormulaState::Current,
             formula_rows: None,

@@ -304,6 +304,7 @@ impl Project {
         let col = self.column_mut(column).ok_or(ProjectError::NoSuchColumn(column))?;
         col.data = ColumnData::numeric(kind.values(rows, seed));
         col.formula = None;
+        col.before_formula = None;
         Ok(rows)
     }
 
@@ -363,6 +364,7 @@ impl Project {
         };
         col.data = data;
         col.formula = None;
+        col.before_formula = None;
         Ok(written)
     }
 }

@@ -181,6 +181,25 @@ fn longest_accepted_formulas_run_on_a_small_stack() {
 }
 
 #[test]
+fn before_formula_scripts_define_names_for_the_formula() {
+    // T307: each name stands for its expression, in the formula and in later statements.
+    let host = SimpleHost::from_vars([("x", 3.0)]);
+    let e = Expr::parse_with_script("double k = 2; m = k*10\n// a comment\nint n = m + 1;", "x*k + n").unwrap();
+    assert_eq!(e.eval(&host).unwrap(), 3.0 * 2.0 + 21.0);
+    assert_eq!(e.variables(), ["x"], "only the formula's own free names are left");
+    assert_eq!(e.source(), "x*k + n");
+    // A later statement may redefine a name; comparisons are not assignments.
+    let e = Expr::parse_with_script("k = 1; k = k + 1; t = (k == 2)", "t").unwrap();
+    assert_eq!(e.eval(&host).unwrap(), 1.0);
+    // An empty script is the formula alone.
+    assert_eq!(Expr::parse_with_script("", "x+1").unwrap().eval(&host).unwrap(), 4.0);
+    for bad in ["mean(col(B))", "2k = 3", "k = (1"] {
+        let err = Expr::parse_with_script(bad, "x").unwrap_err();
+        assert!(err.to_string().contains("before-formula script"), "{bad}: {err}");
+    }
+}
+
+#[test]
 fn variables_and_hosts() {
     let host = SimpleHost::from_vars([("A", 2.0), ("t", 4.0)]);
     let e = Expr::parse("A*exp(-x/t) + y0").unwrap();

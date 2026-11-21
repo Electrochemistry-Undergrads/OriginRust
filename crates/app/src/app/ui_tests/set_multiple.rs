@@ -31,6 +31,25 @@ fn type_formula(h: &mut Harness<'static, SheafApp>, text: &str) {
     settle(h);
 }
 
+/// T307: the Before Formula Scripts box defines names the formula uses, kept with the formula.
+#[test]
+fn a_before_formula_script_defines_a_name_for_the_formula() {
+    let mut h = open_book("before-script");
+    click_text(&mut h, "B(Y1)");
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Q);
+    settle(&mut h);
+    assert!(h.state().set_values.is_some(), "Set Column Values opened");
+    type_formula(&mut h, "col(A) - m");
+    h.get_by_label("Before Formula Scripts box").focus();
+    settle(&mut h);
+    type_formula(&mut h, "double m = mean(col(C));");
+    click(&mut h, "OK");
+    assert!(h.state().set_values.is_none(), "{:?}", h.state().status);
+    assert_eq!(column(&h, "B"), [-20.5, -19.5, -18.5, -17.5], "A minus the mean of C (21.5)");
+    let b = sheet(&h).column_by_name("B").unwrap().clone();
+    assert_eq!(b.before_formula.as_deref(), Some("double m = mean(col(C));"));
+}
+
 #[test]
 fn ctrl_shift_q_with_b_to_d_selected_sets_all_three_columns_in_one_undo_step() {
     let mut h = open_book("multi-basic");

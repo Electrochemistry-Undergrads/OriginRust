@@ -4465,10 +4465,18 @@ impl SheafApp {
             }
             return;
         }
-        // A Pareto chart counts the cells of the one selected column, text or numbers.
+        // A Pareto chart counts the cells of the one selected column, text or numbers (Origin's Raw Data); with
+        // two columns selected, the first holds the categories and the second their counts (Binned Data, T319).
         if template == Template::Pareto {
+            if let [data, counts] = columns[..] {
+                match self.doc.edit("Plot columns", |p| p.plot_pareto_binned(data, counts)) {
+                    Ok(_) => self.say("Plotted a Pareto chart of binned data".to_string()),
+                    Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+                }
+                return;
+            }
             let [column] = columns[..] else {
-                self.warn("Select one column whose values are counted for the Pareto chart".to_string());
+                self.warn("Select one column whose values are counted, or a category and a count column, for the Pareto chart".to_string());
                 return;
             };
             match self.doc.edit("Plot columns", |p| p.plot_pareto(column)) {
@@ -6050,6 +6058,8 @@ impl SheafApp {
             .add_filter("Photoshop document", &["psd"])
             .add_filter("PDF", &["pdf"])
             .add_filter("SVG", &["svg"])
+            .add_filter("Encapsulated PostScript", &["eps"])
+            .add_filter("Enhanced Metafile", &["emf"])
             .set_file_name(format!("{stem}_{}.png", sheet.name));
         if let Some(dir) = self.folder() {
             chooser = chooser.set_directory(dir);

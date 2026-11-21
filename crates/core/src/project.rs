@@ -1670,29 +1670,87 @@ impl Project {
             }
         }
         if let Some(g) = self.graph_mut(graph) {
-            for layer in [0, right] {
-                g.layers[layer].apply_palette();
-            }
-            use crate::color::Color;
-            if let Some(p) = g.layers[0].plots.last_mut() {
-                p.auto_color = false;
-                p.symbol.color = Color::rgb(255, 0, 0);
-                p.line.color = Color::BLACK;
-            }
-            if let Some(p) = g.layers[right].plots.last_mut() {
-                let blue = Color::rgb(0, 0, 255);
-                p.auto_color = false;
-                p.line.color = blue;
-                p.line.width_pt = 0.5;
-                p.symbol.color = blue;
-                p.symbol.shape = crate::graph::SymbolShape::Square;
-                p.symbol.filled = true;
-                p.decor.labels.enable = true;
-                p.decor.labels.position = crate::graph::LabelPosition::Above;
-            }
+            style_pareto(g, right);
             if let Some(name) = long_name {
                 g.long_name = name;
             }
+        }
+        Ok(graph)
+    }
+
+    /// Plot > Statistics > Pareto with a category column and a count column selected (Origin 2016's Pareto Chart -
+    /// Binned Data, measured by T319): the categories sorted by count, most first (equal counts in their order in
+    /// the sheet), written to a new sheet "ParetoBinN" of the categories' book with the columns Data, Count and
+    /// Cumulative Frequency (their comments the category column's name), and drawn from it as the raw-data Pareto
+    /// chart is. Rows without a category or a count are left out (Sheaf's choice).
+    pub fn plot_pareto_binned(&mut self, data: ColumnId, counts: ColumnId) -> Result<WindowId, ProjectError> {
+        let dcol = self.column(data).ok_or(ProjectError::NoSuchColumn(data))?;
+        let values = self.numeric(counts).ok_or(ProjectError::ParetoNeedsColumn)?.to_vec();
+        let source = dcol.display_name().to_string();
+        let mut rows: Vec<(String, f64)> = (0..dcol.data.len().min(values.len()))
+            .filter_map(|r| {
+                let v = values[r];
+                crate::indexed::level_text(dcol, r).filter(|_| v.is_finite()).map(|t| (t, v))
+            })
+            .collect();
+        if rows.is_empty() {
+            return Err(ProjectError::ParetoNeedsColumn);
+        }
+        rows.sort_by(|a, b| b.1.total_cmp(&a.1));
+        let total: f64 = rows.iter().map(|r| r.1).sum();
+        let mut running = 0.0;
+        let cumulative: Vec<f64> = rows
+            .iter()
+            .map(|r| {
+                running += r.1;
+                100.0 * running / total
+            })
+            .collect();
+        let (book, long_name) =
+            self.locate(data).map(|(b, _, _)| (b.id, b.title_for_graph())).ok_or(ProjectError::NoSuchColumn(data))?;
+        let wb = self.workbook_mut(book).ok_or(ProjectError::NoSuchWindow(book))?;
+        let name = (1..)
+            .map(|k| format!("ParetoBin{k}"))
+            .find(|n| !wb.sheets.iter().any(|s| s.name.eq_ignore_ascii_case(n)))
+            .expect("unbounded");
+        wb.sheets.push(crate::worksheet::Worksheet::new(&name));
+        let sheet = wb.sheets.len() - 1;
+        let labels: Vec<String> = rows.iter().map(|r| r.0.clone()).collect();
+        let x = self.add_column(book, sheet, Designation::X, ColumnData::text(labels))?;
+        let y =
+            self.add_column(book, sheet, Designation::Y, ColumnData::numeric(rows.iter().map(|r| r.1).collect()))?;
+        let cum = self.add_column(book, sheet, Designation::Y, ColumnData::numeric(cumulative))?;
+        for (id, long) in [(x, "Data"), (y, "Count"), (cum, "Cumulative Frequency")] {
+            if let Some(c) = self.column_mut(id) {
+                c.long_name = long.to_string();
+                c.comments = source.clone();
+            }
+        }
+        let graph = self.add_graph(Template::Pareto);
+        let right = self.add_right_y_layer(graph, 0)?;
+        self.add_plot_xy(graph, 0, Some(x), y, None)?;
+        self.add_plot_xy(graph, right, Some(x), cum, None)?;
+        if let Some(g) = self.graph_mut(graph) {
+            for (layer, title) in [(0, "Count"), (right, "Cumulative Frequency")] {
+                let l = &mut g.layers[layer];
+                if let Some(p) = l.plots.last_mut() {
+                    p.kind =
+                        if layer == 0 { crate::graph::PlotKind::Column } else { crate::graph::PlotKind::LineSymbol };
+                    p.label = Some(title.to_string());
+                }
+                l.y_axis.title = Some(title.to_string());
+                l.y_axis.min = Some(0.0);
+                if layer == 0 {
+                    l.y_axis.max = Some(1.1 * total);
+                    l.x_axis.show_title = false;
+                } else {
+                    l.y_axis.max = Some(110.0);
+                    l.y_axis.major_step = Some(20.0);
+                    l.y_axis.tick_suffix = "%".to_string();
+                }
+            }
+            style_pareto(g, right);
+            g.long_name = long_name;
         }
         Ok(graph)
     }
@@ -2204,6 +2262,31 @@ impl Graph {
         }
         self.move_plot_to_layer(layer, index, to)?;
         Ok((to, self.layers[to].plots.len() - 1))
+    }
+}
+
+/// Origin 2016's Pareto colours (measured, T316): red bars with a black outline; the cumulative percent a thin
+/// blue line with blue squares, each labelled above.
+fn style_pareto(g: &mut crate::graph::Graph, right: usize) {
+    use crate::color::Color;
+    for layer in [0, right] {
+        g.layers[layer].apply_palette();
+    }
+    if let Some(p) = g.layers[0].plots.last_mut() {
+        p.auto_color = false;
+        p.symbol.color = Color::rgb(255, 0, 0);
+        p.line.color = Color::BLACK;
+    }
+    if let Some(p) = g.layers[right].plots.last_mut() {
+        let blue = Color::rgb(0, 0, 255);
+        p.auto_color = false;
+        p.line.color = blue;
+        p.line.width_pt = 0.5;
+        p.symbol.color = blue;
+        p.symbol.shape = crate::graph::SymbolShape::Square;
+        p.symbol.filled = true;
+        p.decor.labels.enable = true;
+        p.decor.labels.position = crate::graph::LabelPosition::Above;
     }
 }
 

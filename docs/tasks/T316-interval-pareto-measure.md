@@ -12,7 +12,7 @@ plot's Y title is "Range".
 
 - The interval plot's two-entry legend ("Mean ± 95% CI" and "Mean").
 - 7 significant digits on the cumulative labels (a data-label option Sheaf lacks).
-- Pareto Chart - Binned Data, drop lines, count table, "Other", groups.
+- Pareto Chart - Binned Data: done by T319. Drop lines, count table, "Other", groups.
 
 ## Tests
 

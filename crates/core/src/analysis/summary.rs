@@ -9,7 +9,7 @@
 //! group's values; their columns are written to the same sheet, behind the report columns.
 
 use super::dist::XyGraph;
-use super::statistics::num;
+use super::statistics::{cell_left_out, num};
 use super::*;
 use crate::graph::{AxisSide, DataLabels, Font, LabelForm, LabelPosition, PlotKind, ScaleKind, TextLabel};
 
@@ -260,6 +260,10 @@ pub(super) fn run(
         let mut keys: Vec<(Vec<GroupKey>, Vec<f64>)> = Vec::new();
         let mut index: std::collections::HashMap<Vec<GroupKey>, usize> = std::collections::HashMap::new();
         for row in first..=last {
+            // A masked or filtered group cell leaves the row out (T255).
+            if group_cols.iter().any(|g| cell_left_out(sheet, g, row)) {
+                continue;
+            }
             let key: Option<Vec<GroupKey>> = group_cols.iter().map(|g| GroupKey::of(g, row)).collect();
             let Some(key) = key else { continue };
             let v = y[row];
@@ -823,5 +827,33 @@ mod tests {
         assert_eq!(r.table.unwrap().rows.len(), 1);
         assert!(r.new_graph.is_none() && r.more_graphs.is_empty());
         assert!(r.notes.iter().any(|n| n.contains("not finite")), "{:?}", r.notes);
+    }
+
+    #[test]
+    fn a_masked_group_cell_leaves_the_row_out() {
+        // T255: as a masked value does.
+        let (mut p, ids) = project();
+        let table = |p: &mut Project| {
+            let spec = GraphSummarySpec { groups: vec![ids[2]], ..Default::default() };
+            // "Missing" (column 1) differs by design: a masked value is missing in its group, a row
+            // whose group is masked belongs to no group (as a blank group cell).
+            let t = run_summary(p, &ids[..1], spec).unwrap().table.unwrap();
+            let rows: Vec<(String, Vec<f64>)> = t
+                .rows
+                .into_iter()
+                .map(|(n, mut v)| {
+                    v.remove(1);
+                    (n, v)
+                })
+                .collect();
+            format!("{rows:?}")
+        };
+        let all = table(&mut p);
+        let mut gone = p.clone();
+        gone.column_mut(ids[0]).unwrap().mask.insert(0);
+        let want = table(&mut gone);
+        assert_ne!(all, want);
+        p.column_mut(ids[2]).unwrap().mask.insert(0);
+        assert_eq!(table(&mut p), want);
     }
 }

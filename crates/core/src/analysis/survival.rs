@@ -8,7 +8,7 @@
 
 use super::dist::{GraphPlot, Output, XyGraph};
 use super::roc::is_positive as cell_equals;
-use super::statistics::num;
+use super::statistics::{cell_left_out, num};
 use super::*;
 use crate::graph::{PlotKind, ScaleKind};
 
@@ -123,6 +123,10 @@ pub(super) fn run(
     let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for row in first..=last {
         let t = times.get(row).copied().unwrap_or(f64::NAN);
+        // A masked or filtered censor or group cell leaves the case out, as a masked time does (T255).
+        if cell_left_out(sheet, censor_col, row) || group_col.is_some_and(|g| cell_left_out(sheet, g, row)) {
+            continue;
+        }
         let Some(is_censored) = cell_equals(censor_col, row, censor, censor_number) else { continue };
         if t.is_nan() {
             continue;
@@ -519,5 +523,23 @@ mod tests {
         assert!(p.analyze(&request(ids[..1].to_vec(), spec.clone())).is_err());
         assert!(p.analyze(&request(ids.clone(), KaplanMeierSpec { censor: " ".into(), ..spec.clone() })).is_err());
         assert!(p.analyze(&request(ids, KaplanMeierSpec { confidence: 100.0, ..spec })).is_err());
+    }
+
+    #[test]
+    fn masked_group_and_censor_cells_leave_the_case_out() {
+        // T255: as a masked time does.
+        let (mut p, ids) = project();
+        let spec = KaplanMeierSpec { log_rank: true, curve: false, ..Default::default() };
+        let table = |p: &mut Project| format!("{:?}", p.analyze(&request(ids.clone(), spec.clone())).unwrap().table);
+        let all = table(&mut p);
+        let mut gone = p.clone();
+        gone.column_mut(ids[0]).unwrap().mask.insert(1);
+        let want = table(&mut gone);
+        assert_ne!(all, want);
+        for col in [ids[1], ids[2]] {
+            let mut q = p.clone();
+            q.column_mut(col).unwrap().mask.insert(1);
+            assert_eq!(table(&mut q), want, "{col:?}");
+        }
     }
 }

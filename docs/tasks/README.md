@@ -239,6 +239,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T254](T254-anova-level-masks.md) | Bug: masked factor/subject cells and filtered rows in the ANOVAs' level columns | S | done 2026-11-20 |
 | [T255](T255-group-masks.md) | Bug: masked group/censor/state cells in Kaplan-Meier, ROC and grouped summary statistics | S | done 2026-11-20 |
 | [T256](T256-fit-masks.md) | Bug: Compare Datasets/Models, Rank Models, global fit, Multiple Linear Regression and the implicit fit counted masked cells | S | done 2026-11-20 |
+| [T257](T257-arrange-icons.md) | Window > Arrange Icons (minimised windows lined up in window order) | S | done 2026-11-20 |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |

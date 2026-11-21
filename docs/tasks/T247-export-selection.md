@@ -15,5 +15,6 @@ options window, semicolon, label rows and full precision exist) and is corrected
 
 ## Left
 
-- Measure Origin's `select` (non-contiguous selections); the `sampinterv`, `parameter` and `addxcol`
+- Origin's `select` with a non-contiguous selection (a block and a whole column measured in T273,
+  matching); the `sampinterv`, `parameter` and `addxcol`
   options; `sheaf export-data` has no selection.

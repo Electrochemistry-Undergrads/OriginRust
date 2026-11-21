@@ -71,7 +71,7 @@ pub mod xyzarea;
 
 pub use anova::{
     Anova, AnovaError, AnovaRow, Comparison, MeansComparison, anova_one_way, compare_means, compare_to_control, ptukey,
-    qtukey,
+    ptukey_upper, qtukey,
 };
 pub use anova2::{TwoWayAnova, TwoWayError, TwoWayRow, anova_two_way};
 pub use anova3::{

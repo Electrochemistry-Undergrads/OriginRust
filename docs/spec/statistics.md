@@ -73,6 +73,19 @@ A pair is marked significant when its p-value is below alpha. The studentized ra
 (`ptukey`, `qtukey`) is our own implementation of the published algorithm; statrs has none. Two groups
 give the same p-value as the pooled two-sample t-test (checked).
 
+**Accuracy of the Tukey p-value (T261, measured 2026-11-20).** The p-value `P(Q > q)` is computed
+directly (`ptukey_upper`), not as `1 - ptukey`: the range's upper tail is written without
+cancellation and the integral over the scale is taken around its peak, so it stays within about 1e-9
+relative of an adaptive high-precision quadrature (k 2 to 20, df 1 to 1000, q 0.5 to 25, p down to
+1e-21) and agrees with SciPy's `studentized_range`. Origin 2016 does not: running both on a one-way
+ANOVA (groups of 6, 7 and 5) and an unbalanced 2x3 two-way ANOVA, the differences, standard errors and
+q agree to 1e-14, but Origin's p-values are off by about 1e-7 absolute (3.6693e-5 against the exact
+3.6787e-5; 1.3305e-6 against 1.3761e-6, 3.4 %), and its critical q at 0.05 (3.67336 for k 3, df 15)
+is 4.4e-6 below the exact 3.6733777, which moves its interval ends by that factor. That is the size of
+error of a fixed-grid algorithm such as AS 190, which NAG's routine is based on. Sheaf keeps the
+exact values; a fixture compared with Origin must allow 1e-7 absolute on Tukey p-values (evidence:
+`re-workspace/scratch/origin-diff/stats-fit/`, `anova::tukey_tail_tests`).
+
 ## 3 Frequency counts and histogram
 
 `freqcounts` counts how many values fall into each bin. What black-box runs showed:

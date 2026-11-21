@@ -634,6 +634,95 @@ pub(super) fn prop_test(spec: &PropTestSpec) -> Result<Output, AnalysisError> {
     Ok(Output { table: None, on_sheet, notes, plots: Vec::new(), comparison_pairs: Vec::new() })
 }
 
+// ----- Poisson rate tests (T267) ---------------------------------------------------------------------
+
+pub(super) fn poisson_test(spec: &PoissonTestSpec) -> Result<Output, AnalysisError> {
+    check_alpha(spec.alpha)?;
+    if !(spec.normal || spec.exact) {
+        return Err(AnalysisError::BadOption("tick at least one of Exact and Normal Approximation".into()));
+    }
+    let levels = check_levels(spec.intervals, &spec.levels)?;
+    let bad = || {
+        AnalysisError::BadOption(
+            "the Poisson rate test needs sample sizes above 0, exposures above 0 and a test rate above 0".into(),
+        )
+    };
+    let tail = spec.tail;
+    let head_level = 1.0 - spec.alpha;
+    let head = |what: &str| format!("{}% {what}", num(head_level * 100.0));
+    let mut on_sheet = Vec::new();
+    let mut notes = Vec::new();
+    let intervals = |on_sheet: &mut Vec<SheetColumn>, f: &dyn Fn(f64) -> (f64, f64)| {
+        if !spec.intervals {
+            return;
+        }
+        let (lo, hi) = f(head_level);
+        on_sheet.push(number_column(&head("LCL"), "", vec![lo]));
+        on_sheet.push(number_column(&head("UCL"), "", vec![hi]));
+        let rows: Vec<(f64, f64)> = levels.iter().map(|l| f(l / 100.0)).collect();
+        on_sheet.push(number_column("Conf. Levels in %", "", levels.clone()));
+        on_sheet.push(number_column("Lower Limits", "", rows.iter().map(|r| r.0).collect()));
+        on_sheet.push(number_column("Upper Limits", "", rows.iter().map(|r| r.1).collect()));
+    };
+    match spec.kind {
+        PoissonTestKind::OneSample { total, size, exposure, rate } => {
+            let r = calc::poisson_one(total, size, exposure, rate, tail).ok_or_else(bad)?;
+            let [null, alt] = hypotheses("Rate", rate, tail);
+            notes.push(null);
+            notes.push(alt);
+            let basics = |on_sheet: &mut Vec<SheetColumn>| {
+                on_sheet.push(number_column("Total Occurrence", "", vec![total as f64]));
+                on_sheet.push(number_column("N", "", vec![size as f64]));
+                on_sheet.push(number_column("Exposure", "", vec![exposure]));
+                on_sheet.push(number_column("Sample Rate", "", vec![r.rate]));
+            };
+            if spec.exact {
+                basics(&mut on_sheet);
+                on_sheet.push(number_column("Exact P", "", vec![r.p_exact]));
+                intervals(&mut on_sheet, &|level| calc::poisson_exact_interval(total, size, exposure, tail, level));
+            }
+            if spec.normal {
+                basics(&mut on_sheet);
+                on_sheet.push(number_column("Z", "", vec![r.z]));
+                on_sheet.push(number_column("P", "", vec![r.p_normal]));
+                intervals(&mut on_sheet, &|level| calc::poisson_normal_interval(total, size, exposure, tail, level));
+            }
+        }
+        PoissonTestKind::TwoSample { first, second, exposures, difference } => {
+            let r = calc::poisson_two(first, second, exposures, difference, spec.pooled, tail).ok_or_else(bad)?;
+            let [null, alt] = hypotheses("Rate1 - Rate2", difference, tail);
+            notes.push(null);
+            notes.push(alt);
+            let summary = |on_sheet: &mut Vec<SheetColumn>| {
+                on_sheet.push(label_column("Sample", vec!["Sample1".into(), "Sample2".into()]));
+                on_sheet.push(number_column("Total Occurrence", "", vec![first.0 as f64, second.0 as f64]));
+                on_sheet.push(number_column("N", "", vec![first.1 as f64, second.1 as f64]));
+                on_sheet.push(number_column("Exposure", "", vec![exposures.0, exposures.1]));
+                on_sheet.push(number_column("Sample Rate", "", vec![r.rates.0, r.rates.1]));
+                on_sheet.push(label_column("Difference", vec!["Rate1 - Rate2".into()]));
+                on_sheet.push(number_column("Estimate for difference", "", vec![r.estimate]));
+            };
+            let wald = |level: f64| calc::poisson_difference_interval(first, second, exposures, tail, level);
+            match (spec.exact, r.p_exact) {
+                (true, Some(p)) => {
+                    summary(&mut on_sheet);
+                    on_sheet.push(number_column("Exact P", "", vec![p]));
+                    intervals(&mut on_sheet, &wald);
+                }
+                (true, None) => notes.push("The exact test is only given for a hypothesized difference of 0.".into()),
+                _ => {}
+            }
+            if spec.normal {
+                summary(&mut on_sheet);
+                on_sheet.push(number_column("Z", "", vec![r.z]));
+                on_sheet.push(number_column("P", "", vec![r.p_normal]));
+                intervals(&mut on_sheet, &wald);
+            }
+        }
+    }
+    Ok(Output { table: None, on_sheet, notes, plots: Vec::new(), comparison_pairs: Vec::new() })
+}
+
 // ----- one-way ANOVA ---------------------------------------------------------------------------------
 
 fn anova(spec: &AnovaSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
@@ -1977,6 +2066,54 @@ mod tests {
         assert!(p.analyze(&request(&ids[..1], Tool::PropTest(none))).is_err());
         let over = PropTestSpec { kind: PropTestKind::OneSample { successes: 11, size: 10, proportion: 0.5 }, ..spec };
         assert!(p.analyze(&request(&ids[..1], Tool::PropTest(over))).is_err());
+    }
+
+    #[test]
+    fn poisson_rate_tests_need_no_data_and_report_both_methods() {
+        let (mut p, _, ids) = project();
+        let spec = PoissonTestSpec {
+            kind: PoissonTestKind::OneSample { total: 12, size: 5, exposure: 2.0, rate: 0.8 },
+            intervals: true,
+            ..Default::default()
+        };
+        let r = run(&mut p, &ids[..1], Tool::PoissonTest(spec.clone()));
+        assert!(r.message.contains("PoissonRate1"), "{}", r.message);
+        assert!((cell(&p, &r, "Exact P")[0] - 0.223_848_002_037_037_17).abs() < 1e-9);
+        assert!((cell(&p, &r, "Z")[0] - 4.0 / 8f64.sqrt()).abs() < 1e-12);
+        assert!((cell(&p, &r, "Sample Rate")[0] - 1.2).abs() < 1e-12);
+        let ws = &p.workbook(r.book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert_eq!(ws.columns.iter().filter(|c| c.long_name == "Lower Limits").count(), 2, "both methods");
+        let two = PoissonTestSpec {
+            kind: PoissonTestKind::TwoSample {
+                first: (20, 10),
+                second: (8, 8),
+                exposures: (1.0, 1.0),
+                difference: 0.0,
+            },
+            tail: Tail::Upper,
+            ..Default::default()
+        };
+        let r = run(&mut p, &ids[..1], Tool::PoissonTest(two.clone()));
+        assert!((cell(&p, &r, "Exact P")[0] - 0.064_850_909_012_253_38).abs() < 1e-9);
+        assert!((cell(&p, &r, "Estimate for difference")[0] - 1.0).abs() < 1e-12);
+        let shifted = PoissonTestSpec {
+            kind: PoissonTestKind::TwoSample {
+                first: (20, 10),
+                second: (8, 8),
+                exposures: (1.0, 1.0),
+                difference: 0.5,
+            },
+            ..two
+        };
+        let r = run(&mut p, &ids[..1], Tool::PoissonTest(shifted));
+        assert!(cell(&p, &r, "Z")[0].is_finite());
+        let none = PoissonTestSpec { normal: false, exact: false, ..spec.clone() };
+        assert!(p.analyze(&request(&ids[..1], Tool::PoissonTest(none))).is_err());
+        let zero = PoissonTestSpec {
+            kind: PoissonTestKind::OneSample { total: 1, size: 0, exposure: 1.0, rate: 1.0 },
+            ..spec
+        };
+        assert!(p.analyze(&request(&ids[..1], Tool::PoissonTest(zero))).is_err());
     }
 
     #[test]

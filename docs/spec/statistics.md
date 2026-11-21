@@ -1683,6 +1683,33 @@ Unmeasured: the reports as drawn (no picture of either), the Raw layout, missing
 subject, the Dunnett and Holm blocks in the two-way run, the Plots and Output tabs' graphs, the rule of the means' standard
 errors, designs with a between-subjects factor (the dialog offers only the all-within design), and Interactions off.
 
+## 27 Poisson rate tests (T267, Origin 2026b Pro; not measured)
+
+Origin 2026b added One-Sample and Two-Sample Poisson Rate Test (Statistics: Hypothesis Testing).
+OriginLab's help describes the dialogs but prints no formulas, and the reference install (Origin 2016)
+has neither test, so Sheaf uses the textbook formulas (`crates/calc/src/poisson.rs`).
+
+- **Input** (Origin's Summarized form): Sample Size `n`, Total Occurrence `x` and Exposure `t` (the
+  length of one observation: time, area, volume, items; default 1) of each sample. Raw and Indexed
+  input are not built.
+- **One sample**: rate `x / (n t)`, null hypothesis Rate = Test Rate `r0` (two-tailed, upper,
+  lower). Exact: Poisson tails of `x` with mean `mu0 = r0 n t` (two-tailed: twice the smaller tail,
+  at most 1); interval from the chi-square quantiles, `chi2(a; 2x) / (2nt)` to `chi2(1-a; 2x+2) /
+  (2nt)` (lower limit 0 when `x = 0`). Normal approximation: `z = (x - mu0) / sqrt(mu0)`; interval
+  `rate +- z sqrt(rate / (n t))`, lower limit at least 0. A one-sided interval has no upper (or a
+  0 lower) limit; a missing limit is blank.
+- **Two samples**: null hypothesis Rate1 - Rate2 = Test Difference `d`. Normal approximation
+  `z = (r1 - r2 - d) / se`, `se = sqrt(r1/T1 + r2/T2)` with `T = n t`, or with "Use pooled p for
+  test" (default on) and `d = 0` the pooled `sqrt(r (1/T1 + 1/T2))`, `r = (x1 + x2) / (T1 + T2)`.
+  Exact (only for `d = 0`): the conditional binomial test of `x1` among `x1 + x2` with
+  `p = T1 / (T1 + T2)`, two-tailed as above. Interval of the difference: `+- z sqrt(r1/T1 + r2/T2)`.
+- **Report** (`PoissonRate<n>` sheet): the hypotheses as notes, then an Exact and a Normal
+  Approximation section, each with Total Occurrence, N, Exposure, Sample Rate (and for two samples
+  the difference), Exact P or Z and P, and with intervals the headline LCL/UCL and the table of
+  confidence levels. CLI: `sheaf analyze poissontest FILE --total X[,X2] --size N[,N2]
+  [--exposure T[,T2]] [--rate R | --difference D] [--tail ...] [--levels 90,95,99] [--no-exact |
+  --no-normal] [--unpooled]`.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

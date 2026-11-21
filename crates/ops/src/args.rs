@@ -2700,6 +2700,46 @@ pub enum AnalyzeTool {
         #[arg(long, default_value_t = 0.05)]
         power_alpha: f64,
     },
+    /// Poisson rate test from counts (Origin 2026b, Summarized input; T267): --total and --size once for
+    /// the one-sample test against --rate, twice (or comma-separated) for the two-sample test of the
+    /// difference of the rates against --difference. The data file only names the workbook that receives
+    /// the result sheet.
+    Poissontest {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Total occurrence (number of events) of each sample.
+        #[arg(long, value_delimiter = ',', required = true)]
+        total: Vec<u64>,
+        /// Sample size (number of observations) of each sample.
+        #[arg(long, value_delimiter = ',', required = true)]
+        size: Vec<u64>,
+        /// Exposure (length of each observation: time, area, ...) of each sample; default 1.
+        #[arg(long, value_delimiter = ',')]
+        exposure: Vec<f64>,
+        /// One-sample test: the test rate.
+        #[arg(long, default_value_t = 1.0)]
+        rate: f64,
+        /// Two-sample test: the hypothesized difference of the rates (first minus second).
+        #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+        difference: f64,
+        #[arg(long, value_enum, default_value_t = TailArg::Two)]
+        tail: TailArg,
+        /// Significance level.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+        /// Leave out the exact test.
+        #[arg(long)]
+        no_exact: bool,
+        /// Leave out the normal approximation.
+        #[arg(long, conflicts_with = "no_exact")]
+        no_normal: bool,
+        /// Two-sample test: the unpooled standard error even for a hypothesized difference of 0.
+        #[arg(long)]
+        unpooled: bool,
+        /// Confidence levels in percent, for example 90,95,99; none means no intervals.
+        #[arg(long, value_delimiter = ',')]
+        levels: Vec<f64>,
+    },
     /// One-way ANOVA: every chosen column is a group. The result (group statistics, ANOVA table,
     /// means comparison of all pairs) goes to a new sheet.
     Anova {

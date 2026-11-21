@@ -291,8 +291,9 @@ pub struct Column {
     pub data: ColumnData,
 }
 
-/// Origin's default column width in characters.
-pub const DEFAULT_WIDTH: u16 = 8;
+/// Origin's default column width in characters: 7, as `wks.col1.width` gives for a new book in
+/// Origin 2016 (T295, measured).
+pub const DEFAULT_WIDTH: u16 = 7;
 
 /// How a column keeps its cells (the data side of Origin's Format list).
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

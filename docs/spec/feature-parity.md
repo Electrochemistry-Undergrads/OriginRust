@@ -120,7 +120,7 @@ Cross-cutting findings:
 |---|---|---|---|---|---|
 | Book, sheet, column containment | workbook model | `core/worksheet.rs`, `column.rs` | ✓ | | P0 |
 | Names and limits | 13-char book, 18-char column | validation of characters only | ✓ |  | P0 |
-| New worksheet default shape | A(X), B(Y), 30 rows | `Project::add_workbook` | ◐ | not compared with Origin's | P0 |
+| New worksheet default shape | A(X), B(Y), 32 rows | `Project::add_workbook`; an empty sheet shows 32 rows, a filled one its data and 30 spare rows; default column width 7 characters | ✓ | measured in Origin 2016 (T295: `newbook` gives 32 rows, 2 columns, A X, B Y, `wks.col1.width` 7) | P0 |
 | Label rows: long name, units, comments | worksheet header | grid rows and properties dialog | ✓ | | P0 |
 | Parameter, user parameter, F(x) rows, show or hide label rows | label rows | F(x)= row with a lock mark and one row per user parameter, shown and edited in place | ◐ | no way to add a new parameter row (the corner menu shows or hides the label rows, T92; the Sampling Interval row is T94) | P0 |
 | Plot designations | Column > Set As | X, Y, Z, yEr, xEr, Label, Disregard | ✓ | no Group or Subject; Y-finds-X is nearest-left only | P0 |

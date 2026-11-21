@@ -631,7 +631,7 @@ mod tests {
         let mut a =
             Column::new(ColumnId(1), "A", Designation::X, ColumnData::numeric((1..=40).map(f64::from).collect()))
                 .with_labels("Index", "n", "");
-        a.width = Some(8);
+        a.width = Some(DEFAULT_WIDTH);
         let b = Column::new(
             ColumnId(2),
             "B",

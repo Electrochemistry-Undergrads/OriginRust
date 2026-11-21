@@ -69,7 +69,7 @@ const CURVE_SHAPE_AT: usize = 0x17;
 const CURVE_SIZE_AT: usize = 0x19;
 /// In a column plot the size field holds the bar width in percent of the X spacing, times 50.
 const CURVE_BAR_WIDTH_PER_PERCENT: f64 = 50.0;
-/// 0 for a solid symbol, 1 and above for an open one.
+/// Origin's symbol interior number: 0 solid, 1 open, 2 to 11 the others (graphing 5.4, T323).
 const CURVE_SYMBOL_FILL_AT: usize = 0x18;
 const CURVE_X_AT: usize = 0x23;
 const CURVE_TYPE_AT: usize = 0x4C;
@@ -746,20 +746,10 @@ fn connect_kind(code: u8, notes: &mut Vec<String>) -> Connect {
 }
 
 fn symbol_shape(code: u8, notes: &mut Vec<String>) -> SymbolShape {
-    match code {
-        1 => SymbolShape::Square,
-        2 => SymbolShape::Circle,
-        3 => SymbolShape::TriangleUp,
-        4 => SymbolShape::TriangleDown,
-        5 => SymbolShape::Diamond,
-        6 => SymbolShape::Plus,
-        7 => SymbolShape::Cross,
-        8 => SymbolShape::Star,
-        _ => {
-            notes.push("some symbol shapes are not known and are drawn as squares".into());
-            SymbolShape::Square
-        }
-    }
+    SymbolShape::from_origin_code(code).unwrap_or_else(|| {
+        notes.push("some symbol shapes are not known and are drawn as squares".into());
+        SymbolShape::Square
+    })
 }
 
 /// Where the curves of a layer are in a plot group while they are read: the group's number and
@@ -889,6 +879,14 @@ fn read_curve(
             size_pt: size,
             color: fill,
             filled: matches!(kind, PlotKind::Column | PlotKind::Area) || u8_at(r, CURVE_SYMBOL_FILL_AT) == 0,
+            // The byte holds Origin's interior number (checked on a file Origin 2016 saved, T323):
+            // solid stays on `filled`, the others (Open is white inside) become an interior.
+            interior: match u8_at(r, CURVE_SYMBOL_FILL_AT) {
+                0 => None,
+                code => SymbolInterior::from_origin_code(code),
+            }
+            .filter(|_| !matches!(kind, PlotKind::Column | PlotKind::Area)),
+            fill_color: None,
             edge_width_pt: 0.75,
             every: 1,
         },

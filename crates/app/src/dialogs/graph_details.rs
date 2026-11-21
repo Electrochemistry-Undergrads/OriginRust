@@ -749,7 +749,7 @@ fn plot_tab_body(
                 egui::ComboBox::from_id_salt("plot_symbol").selected_text(symbol_name(plot.symbol.shape)).show_ui(
                     ui,
                     |ui| {
-                        for s in SymbolShape::ALL {
+                        for (_, s) in SymbolShape::ORIGIN {
                             ui.selectable_value(&mut plot.symbol.shape, s, symbol_name(s));
                         }
                     },
@@ -759,7 +759,29 @@ fn plot_tab_body(
                 ui.add(DragValue::new(&mut plot.symbol.size_pt).range(0.5..=40.0).speed(0.1).suffix(" pt"));
                 ui.end_row();
                 ui.label("Interior");
-                ui.checkbox(&mut plot.symbol.filled, "Filled");
+                // Origin's twelve interiors (graphing 5.4). Solid and Hollow keep the plain
+                // `filled` switch, so files and increments made before stay as they were.
+                let current = plot.symbol.effective_interior();
+                let mut chosen = current;
+                egui::ComboBox::from_id_salt("plot_symbol_interior").selected_text(current.label()).show_ui(ui, |ui| {
+                    for i in SymbolInterior::ALL {
+                        ui.selectable_value(&mut chosen, i, i.label());
+                    }
+                });
+                if chosen != current {
+                    plot.symbol.filled = chosen == SymbolInterior::Solid;
+                    plot.symbol.interior =
+                        (!matches!(chosen, SymbolInterior::Solid | SymbolInterior::Hollow)).then_some(chosen);
+                }
+                ui.end_row();
+                ui.label("Fill Color");
+                let mut fill = plot.symbol.fill_color.unwrap_or(Color::WHITE);
+                ui.add_enabled_ui(!matches!(chosen, SymbolInterior::Solid | SymbolInterior::Hollow), |ui| {
+                    color_button(ui, &mut fill);
+                });
+                if fill != plot.symbol.fill_color.unwrap_or(Color::WHITE) {
+                    plot.symbol.fill_color = Some(fill);
+                }
                 ui.end_row();
                 ui.label("Edge Thickness");
                 ui.add(DragValue::new(&mut plot.symbol.edge_width_pt).range(0.0..=10.0).speed(0.05).suffix(" pt"));

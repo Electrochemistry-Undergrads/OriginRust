@@ -1142,6 +1142,7 @@ impl Layer {
             }
             if g.symbol_interior == Increment::ByOne {
                 p.symbol.filled = if shape_step % 2 == 0 { filled0 } else { !filled0 };
+                p.symbol.interior = None;
             }
         }
         self.recolor_automatic();
@@ -1170,7 +1171,9 @@ impl Layer {
             }
             if g.symbol_interior == Increment::None {
                 q.symbol.filled = src.symbol.filled;
+                q.symbol.interior = src.symbol.interior;
             }
+            q.symbol.fill_color = src.symbol.fill_color;
             q.decor.drop = src.decor.drop.clone();
             q.decor.symbol_line = src.decor.symbol_line;
             q.decor.labels = src.decor.labels.clone();
@@ -1699,10 +1702,28 @@ pub enum SymbolShape {
     Diamond,
     Plus,
     Cross,
+    /// Origin's "star(*)": an asterisk of eight strokes.
     Star,
+    /// Origin 2016's shapes 9 to 20 (graphing 5.4, drawn as measured in T323): a horizontal and a
+    /// vertical bar (strokes as wide as the symbol), the row number, the row's capital and small
+    /// letter (A to Z, then again), a triangle pointing left and one pointing right, a hexagon
+    /// with a point up, a five-pointed star, a pentagon with a point up and a shaded sphere.
+    HBar,
+    VBar,
+    Number,
+    CapitalLetter,
+    SmallLetter,
+    TriangleLeft,
+    TriangleRight,
+    Hexagon,
+    FivePointStar,
+    Pentagon,
+    Sphere,
 }
 
 impl SymbolShape {
+    /// The shapes the Symbol Type increment steps through, in Origin's order (the first 8 of the
+    /// default list; the rest are chosen one by one).
     pub const ALL: [SymbolShape; 8] = [
         SymbolShape::Square,
         SymbolShape::Circle,
@@ -1713,6 +1734,155 @@ impl SymbolShape {
         SymbolShape::Cross,
         SymbolShape::Star,
     ];
+
+    /// Every shape with Origin's number (`set -k`, the Plot Details list and the .opj curve byte
+    /// 0x17), in that order. 14 (right arrow) drew nothing in Origin 2016 and is left out.
+    pub const ORIGIN: [(u8, SymbolShape); 19] = [
+        (1, SymbolShape::Square),
+        (2, SymbolShape::Circle),
+        (3, SymbolShape::TriangleUp),
+        (4, SymbolShape::TriangleDown),
+        (5, SymbolShape::Diamond),
+        (6, SymbolShape::Plus),
+        (7, SymbolShape::Cross),
+        (8, SymbolShape::Star),
+        (9, SymbolShape::HBar),
+        (10, SymbolShape::VBar),
+        (11, SymbolShape::Number),
+        (12, SymbolShape::CapitalLetter),
+        (13, SymbolShape::SmallLetter),
+        (15, SymbolShape::TriangleLeft),
+        (16, SymbolShape::TriangleRight),
+        (17, SymbolShape::Hexagon),
+        (18, SymbolShape::FivePointStar),
+        (19, SymbolShape::Pentagon),
+        (20, SymbolShape::Sphere),
+    ];
+
+    /// Origin's number of the shape.
+    pub fn origin_code(self) -> u8 {
+        Self::ORIGIN.iter().find(|(_, s)| *s == self).map_or(1, |(c, _)| *c)
+    }
+
+    /// The shape of an Origin number, if Sheaf draws it.
+    pub fn from_origin_code(code: u8) -> Option<SymbolShape> {
+        Self::ORIGIN.iter().find(|(c, _)| *c == code).map(|(_, s)| *s)
+    }
+
+    /// The name in the Plot Details list.
+    pub fn label(self) -> &'static str {
+        match self {
+            SymbolShape::Square => "Square",
+            SymbolShape::Circle => "Circle",
+            SymbolShape::TriangleUp => "Up Triangle",
+            SymbolShape::TriangleDown => "Down Triangle",
+            SymbolShape::Diamond => "Diamond",
+            SymbolShape::Plus => "Plus",
+            SymbolShape::Cross => "Cross",
+            SymbolShape::Star => "Star (*)",
+            SymbolShape::HBar => "Horizontal Bar",
+            SymbolShape::VBar => "Vertical Bar",
+            SymbolShape::Number => "Number",
+            SymbolShape::CapitalLetter => "Capital Letter",
+            SymbolShape::SmallLetter => "Small Letter",
+            SymbolShape::TriangleLeft => "Left Triangle",
+            SymbolShape::TriangleRight => "Right Triangle",
+            SymbolShape::Hexagon => "Hexagon",
+            SymbolShape::FivePointStar => "Star",
+            SymbolShape::Pentagon => "Pentagon",
+            SymbolShape::Sphere => "Sphere",
+        }
+    }
+
+    /// Drawn with strokes only (no inside to fill).
+    pub fn is_stroke_only(self) -> bool {
+        matches!(
+            self,
+            SymbolShape::Plus | SymbolShape::Cross | SymbolShape::Star | SymbolShape::HBar | SymbolShape::VBar
+        )
+    }
+
+    /// Drawn as text: the row number or its letter.
+    pub fn is_text(self) -> bool {
+        matches!(self, SymbolShape::Number | SymbolShape::CapitalLetter | SymbolShape::SmallLetter)
+    }
+
+    /// The text of a text shape at source row `row` (0-based): `1`, `A`, `a` for the first row;
+    /// letters start again after Z. `None` for a drawn shape.
+    pub fn text_at(self, row: usize) -> Option<String> {
+        let letter = |base: u8| char::from(base + (row % 26) as u8).to_string();
+        match self {
+            SymbolShape::Number => Some((row + 1).to_string()),
+            SymbolShape::CapitalLetter => Some(letter(b'A')),
+            SymbolShape::SmallLetter => Some(letter(b'a')),
+            _ => None,
+        }
+    }
+}
+
+/// Origin's symbol interiors (`set -kf`, Plot Details > Symbol > Interior), measured in Origin 2016
+/// (T323, graphing 5.4): Open is filled with the fill colour (white by default) and hides what is
+/// under it; Hollow is not filled. The "centre" interiors are Open with a mark in the edge colour
+/// (a dot; a plus or a bar reaching the edge; an x reaching the corners of the symbol's square);
+/// the halves fill that half of the symbol with the edge colour and the rest as Open.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SymbolInterior {
+    Solid,
+    Open,
+    DotCenter,
+    Hollow,
+    PlusCenter,
+    XCenter,
+    MinusCenter,
+    BarCenter,
+    HalfUp,
+    HalfRight,
+    HalfDown,
+    HalfLeft,
+}
+
+impl SymbolInterior {
+    /// In Origin's order: the position is its number.
+    pub const ALL: [SymbolInterior; 12] = [
+        SymbolInterior::Solid,
+        SymbolInterior::Open,
+        SymbolInterior::DotCenter,
+        SymbolInterior::Hollow,
+        SymbolInterior::PlusCenter,
+        SymbolInterior::XCenter,
+        SymbolInterior::MinusCenter,
+        SymbolInterior::BarCenter,
+        SymbolInterior::HalfUp,
+        SymbolInterior::HalfRight,
+        SymbolInterior::HalfDown,
+        SymbolInterior::HalfLeft,
+    ];
+
+    pub fn origin_code(self) -> u8 {
+        Self::ALL.iter().position(|i| *i == self).unwrap_or(0) as u8
+    }
+
+    pub fn from_origin_code(code: u8) -> Option<SymbolInterior> {
+        Self::ALL.get(usize::from(code)).copied()
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            SymbolInterior::Solid => "Solid",
+            SymbolInterior::Open => "Open",
+            SymbolInterior::DotCenter => "Dot Center",
+            SymbolInterior::Hollow => "Hollow",
+            SymbolInterior::PlusCenter => "+ Center",
+            SymbolInterior::XCenter => "x Center",
+            SymbolInterior::MinusCenter => "- Center",
+            SymbolInterior::BarCenter => "| Center",
+            SymbolInterior::HalfUp => "Half Up",
+            SymbolInterior::HalfRight => "Half Right",
+            SymbolInterior::HalfDown => "Half Down",
+            SymbolInterior::HalfLeft => "Half Left",
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1721,8 +1891,16 @@ pub struct SymbolStyle {
     /// Width of the symbol's bounding box.
     pub size_pt: f64,
     pub color: Color,
-    /// Filled with the color, or drawn as an outline.
+    /// Filled with the color, or drawn as an outline (used when `interior` is `None`).
     pub filled: bool,
+    /// One of Origin's interiors; `None` draws by `filled` (solid, or an unfilled outline).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interior: Option<SymbolInterior>,
+    /// Origin's Fill Color: the colour of the open part of an Open, centre or half interior;
+    /// `None` is white (Origin 2016's default; `set -cf` did not change it, so other colours are
+    /// Sheaf's reading of the dialog).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_color: Option<Color>,
     pub edge_width_pt: f64,
     /// Drop Lines > Skip Points: draw point decorations (symbols, drop lines, errors and labels)
     /// on the first of every n source points in the plot range (0 or 1 = every point).
@@ -1732,6 +1910,13 @@ pub struct SymbolStyle {
 
 fn one() -> u32 {
     1
+}
+
+impl SymbolStyle {
+    /// The interior drawn: `interior`, or Solid / Hollow from `filled`.
+    pub fn effective_interior(&self) -> SymbolInterior {
+        self.interior.unwrap_or(if self.filled { SymbolInterior::Solid } else { SymbolInterior::Hollow })
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -3531,6 +3716,8 @@ mod style_tests {
                 size_pt: 5.0,
                 color: Color::BLACK,
                 filled: true,
+                interior: None,
+                fill_color: None,
                 edge_width_pt: 0.5,
                 every: 1,
             },

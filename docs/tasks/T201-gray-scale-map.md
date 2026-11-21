@@ -1,6 +1,7 @@
 # T201: Plot > Contour/Heat Map > Gray Scale Map (B14 slice)
 
-**Status:** done 2026-11-20 (Claude Windows "obj-align"), **not measured**.
+**Status:** done 2026-11-20 (Claude Windows "obj-align"); measured against Origin 2016's CONTGRAY
+template and matched by T297 (2026-11-21): 8 x 6 bands, 32 grays, blue/red out-of-range boxes, upright X labels.
 **Size:** S. **Source:** greyed inventory package B14 ("Contour/Heat Map: Gray Scale Map").
 **Spec:** `docs/spec/matrices.md` 7g.
 
@@ -12,4 +13,4 @@
 
 ## Left
 
-- Measuring Origin's Gray Scale Map (levels, lines, scale) and matching it.
+- Origin's colour scale title.

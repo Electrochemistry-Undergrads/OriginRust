@@ -9,7 +9,9 @@ use crate::matrix::{FlipDirection, MatrixError, MatrixSheet, Rotation};
 /// One Image menu operation.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ImageOp {
-    /// Adjustments > Brightness: adds `amount` to every value.
+    /// Adjustments > Brightness: adds `percent` (-100 to 100) of the sheet's range to every value and
+    /// keeps the results inside the range, as Origin 2016's `imgBrightness a:=` does to the 0..255
+    /// levels of an image (T278, measured: +10 adds 26 levels and saturates at 255).
     Brightness(f64),
     /// Adjustments > Contrast: stretches the values about their mean by `factor` (1 leaves them).
     Contrast(f64),
@@ -18,8 +20,9 @@ pub enum ImageOp {
     Gamma(f64),
     /// Arithmetic Transform > Math: `value op operand`.
     Math(MathOp, f64),
-    /// Conversion > To Binary: 1 where the value is at least the threshold, else 0.
-    ToBinary(f64),
+    /// Conversion > To Binary: 1 where the value is between `low` and `high` (both included), else 0, as
+    /// Origin 2016's `imgBinary t1:= t2:=` (T278, measured: levels outside the band turn black).
+    ToBinary { low: f64, high: f64 },
     /// Geometric Transform > Rotate by a multiple of 90 degrees.
     Rotate(Rotation),
     /// Geometric Transform > Flip.
@@ -57,7 +60,7 @@ impl ImageOp {
             ImageOp::Contrast(_) => "Image Contrast",
             ImageOp::Gamma(_) => "Image Gamma",
             ImageOp::Math(..) => "Image Math",
-            ImageOp::ToBinary(_) => "Image To Binary",
+            ImageOp::ToBinary { .. } => "Image To Binary",
             ImageOp::Rotate(_) => "Image Rotate",
             ImageOp::Flip(_) => "Image Flip",
             ImageOp::Smooth => "Image Smooth",
@@ -78,7 +81,15 @@ impl ImageOp {
             s.values().iter().map(|&x| if x.is_finite() { f(x) } else { f64::NAN }).collect()
         };
         let data = match *self {
-            ImageOp::Brightness(a) => map(&|x| x + a),
+            ImageOp::Brightness(p) => {
+                if !(-100.0..=100.0).contains(&p) {
+                    return Err(MatrixError::Invalid("the brightness is a percentage from -100 to 100".into()));
+                }
+                let lo = finite.iter().copied().fold(f64::INFINITY, f64::min);
+                let hi = finite.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                let delta = p / 100.0 * (hi - lo);
+                map(&|x| (x + delta).clamp(lo, hi))
+            }
             ImageOp::Contrast(k) => {
                 let mean = finite.iter().sum::<f64>() / finite.len().max(1) as f64;
                 map(&|x| mean + k * (x - mean))
@@ -102,7 +113,7 @@ impl ImageOp {
                     MathOp::Divide => x / k,
                 })
             }
-            ImageOp::ToBinary(t) => map(&|x| if x >= t { 1.0 } else { 0.0 }),
+            ImageOp::ToBinary { low, high } => map(&|x| if (low..=high).contains(&x) { 1.0 } else { 0.0 }),
             ImageOp::Rotate(r) => return Ok(s.rotate90(r)),
             ImageOp::Levels { input: (a, b), output: (lo, hi) } => {
                 if !(a.is_finite() && b.is_finite() && b > a) {
@@ -236,13 +247,16 @@ mod tests {
     #[test]
     fn adjustments_arithmetic_and_binary_work_cell_by_cell() {
         let s = sheet(1, 3, &[0.0, 50.0, 100.0]);
-        assert_eq!(ImageOp::Brightness(10.0).apply(&s).unwrap().values(), [10.0, 60.0, 110.0]);
+        assert_eq!(ImageOp::Brightness(10.0).apply(&s).unwrap().values(), [10.0, 60.0, 100.0], "saturates");
+        assert_eq!(ImageOp::Brightness(-20.0).apply(&s).unwrap().values(), [0.0, 30.0, 80.0]);
+        assert!(ImageOp::Brightness(150.0).apply(&s).is_err());
         assert_eq!(ImageOp::Contrast(2.0).apply(&s).unwrap().values(), [-50.0, 50.0, 150.0]);
         let g = ImageOp::Gamma(2.0).apply(&s).unwrap();
         assert!((g.value(0, 1) - 100.0 * 0.5f64.sqrt()).abs() < 1e-12, "{:?}", g.values());
         assert_eq!(ImageOp::Math(MathOp::Divide, 50.0).apply(&s).unwrap().values(), [0.0, 1.0, 2.0]);
         assert!(ImageOp::Math(MathOp::Divide, 0.0).apply(&s).is_err());
-        assert_eq!(ImageOp::ToBinary(50.0).apply(&s).unwrap().values(), [0.0, 1.0, 1.0]);
+        assert_eq!(ImageOp::ToBinary { low: 50.0, high: f64::INFINITY }.apply(&s).unwrap().values(), [0.0, 1.0, 1.0]);
+        assert_eq!(ImageOp::ToBinary { low: 40.0, high: 60.0 }.apply(&s).unwrap().values(), [0.0, 1.0, 0.0], "a band");
         assert!(ImageOp::Gamma(0.0).apply(&s).is_err());
         let missing = sheet(1, 2, &[f64::NAN, 4.0]);
         assert!(ImageOp::Brightness(1.0).apply(&missing).unwrap().value(0, 0).is_nan());

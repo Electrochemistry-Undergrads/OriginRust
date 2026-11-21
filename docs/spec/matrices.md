@@ -341,19 +341,20 @@ each matrix as not written).
   Sheaf keeps the channels as plain matrices, so every matrix tool works on each of them. TIFF and
   other formats are left.
 
-## 7i. The Image menu on a matrix (T207, 2026-11-20, Sheaf's formulas, not measured)
+## 7i. The Image menu on a matrix (T207, 2026-11-20; partly measured against Origin 2016 in T278)
 
 - **Where:** the matrix window's Image menu and the workbook's Image menu. The items work on the
   active matrix sheet, in place, as one undo step each ("Image Brightness", ...). They are disabled
   unless a matrix window is active. Missing cells stay missing.
 - **Adjustments:**
-  - Brightness adds an amount (10 by default).
+  - Brightness adds a percentage of the sheet's range (-100 to 100, 10 by default) and keeps the
+    results inside the range (T278).
   - Contrast stretches the values about their mean by a factor (1.5 by default).
   - Gamma maps each value's place t between the sheet's lowest and highest value to t^(1/gamma)
     (1.5 by default).
 - **Arithmetic Transform > Math:** +, -, * or / by an operand. Division by zero is refused.
-- **Conversion > To Binary:** 1 where the value is at least the threshold, else 0. The threshold
-  starts at the sheet's mean.
+- **Conversion > To Binary:** 1 where the value is between Low and High (both included), else 0
+  (T278). Low starts at the sheet's mean, High at its largest value.
 - **Geometric Transform:** Rotate by 90 CCW, 90 CW or 180 (90 swaps the size), and Flip, horizontal
   or vertical.
 - **Spatial Filters:** these run with no window, on 3 x 3 neighbourhoods. Edge cells repeat
@@ -373,6 +374,25 @@ each matrix as not written).
   - **Color to Gray:** a new book "Gray of MBookN" with the luminance 0.2126 R + 0.7152 G + 0.0722 B.
   - **RGB Split:** three new one-channel books, "Red of MBookN" and so on.
   - Each is one undo step.
+
+- **Measured in Origin 2016 (T278, 2026-11-21;** `re-workspace/scratch/image-measure/`**).** Origin's
+  image tools (`imgBrightness`, `imgContrast`, `imgGamma`, `imgBinary`, `imgSharpen`, `imgFlip`,
+  `imgRotate`, ...) refuse a numeric matrix: it is first converted with `m2img`, which scales the
+  data's range to 8-bit levels 0..255 in a new book, and `img2m` brings the result back as 16-bit
+  numbers (level x 257) in another new book. On a 5 x 5 ramp 0..240:
+  - `imgBrightness a:=10` added 26 levels (10 % of 255) and saturated at 255; `a:=-20` took 50
+    away, stopping at 0. Sheaf now adds the percentage of the range and clamps (one level apart from
+    Origin's rounding).
+  - `imgGamma a:=2` gave `255 (L/255)^(1/2)` (11 to 53, 21 to 73): the formula Sheaf already uses on
+    the range. Origin's default gamma is 1 (Sheaf's window starts at 1.5).
+  - `imgBinary t1:=60 t2:=180`: levels from 60 to 180 white, the rest black. Sheaf's To Binary is now
+    that band.
+  - `imgFlip` (default) mirrors left to right, `imgRotate angle:=90` turns clockwise (the first row
+    becomes the first column read bottom up): Sheaf's Flip Horizontal and Rotate 90 CW already match.
+  - `imgContrast a:=50` scaled the levels by about 1.42 about a level near 53, not the mean, and
+    `imgSharpen s:=100` moved a ramp by a few levels; neither follows a formula Sheaf could confirm
+    (both are LEADTOOLS routines), so Sheaf's Contrast factor and 3 x 3 Sharpen stay its own.
+  - Sheaf keeps the numbers in place (no 8-bit conversion, no new books).
 
 ## 7j. Analysis > Fitting > Nonlinear Surface Fit on a matrix (T221, 2026-11-20, not measured)
 

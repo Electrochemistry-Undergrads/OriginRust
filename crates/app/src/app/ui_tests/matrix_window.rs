@@ -188,7 +188,7 @@ fn two_d_fft_and_ifft_round_trip_through_new_matrix_books() {
     assert_eq!(h.state().doc.undo_label(), Some("2D FFT"));
     let fft = project(&h).matrix_books().nth(1).expect("the FFT book").clone();
     let names: Vec<&str> = fft.sheets.iter().map(|s| s.name.as_str()).collect();
-    assert_eq!(names, ["Real", "Imaginary", "Amplitude", "Phase"]);
+    assert_eq!(names, ["Real", "Imaginary", "Amplitude", "Phase", "Power"]);
     assert_eq!(fft.sheets[0].value(0, 0), 21.0, "the zero frequency is the sum");
     assert!((fft.sheets[2].value(0, 1) - 12f64.sqrt()).abs() < 1e-12, "|-3 + 1.732i|");
     // The inverse of that book gives the data back.

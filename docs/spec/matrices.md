@@ -291,20 +291,27 @@ each matrix as not written).
   and says why on the status bar. Sheaf opens no options window: `minverse` has only its input and
   output.
 
-## 7e. Analysis > Signal Processing > FFT > 2D FFT and 2D IFFT (T196, 2026-11-20, not measured)
+## 7e. Analysis > Signal Processing > FFT > 2D FFT and 2D IFFT (T196, 2026-11-20; measured in T287)
 
 - **Where:** the matrix window's Analysis > Signal Processing > FFT and the workbook and graph
   Analysis menus. The items work on the active matrix window and are disabled otherwise. Each run
   makes a new matrix book ("2D FFT of MBookN" / "2D IFFT of MBookN") as one undo step.
-- **2D FFT:** transforms the active sheet's values into four sheets: Real, Imaginary, Amplitude
-  (|F|) and Phase (atan2, in radians).
+- **2D FFT:** transforms the active sheet's values into five sheets: Real, Imaginary, Amplitude
+  (|F|), Phase (atan2, in radians) and Power (|F|^2).
 - **2D IFFT:** uses the book's sheets named Real and Imaginary when it has both, of one size, so a
   2D FFT book transforms back. Otherwise it uses the active sheet as real values. It writes Real and
   Imaginary.
 - **Conventions:** numpy's `fft2`/`ifft2`. The forward transform is not normalized, and the inverse
   divides by rows x cols, so IFFT(FFT(a)) = a. The output is not shifted: the zero frequency is the
   first cell. Missing values are refused.
-- Origin's own `fft2` options (normalization, shift, amplitude units, windowing) are not measured.
+- **Measured in Origin 2016 (T287, 2026-11-21).** `fft2` with its defaults on a 4 x 4 matrix wrote a
+  book `FFT2result1` with sheets `FFT2_Complex1` (complex cells), `FFT2_Amplitude1`, `FFT2_Phase1`
+  (radians) and `FFT2_Power1` (|F|^2); every value equals numpy's `fft2` (not normalized, not
+  shifted: the sum 125 in the first cell, the same phase signs). `ifft2` on the complex sheet gave
+  the input back exactly (divided by rows x cols) in `IFFT2Result1` / `IFFT2_Complex1`. Sheaf's
+  numbers therefore match; it splits the complex sheet into Real and Imaginary (its cells are real
+  numbers) and now writes Power too. Origin's other `fft2` options (shift, normalization, windows)
+  were not probed.
 
 ## 7f. File > Import > Binary 2D Array (T199, 2026-11-20, from Origin's `impBin2D` documentation, not measured)
 

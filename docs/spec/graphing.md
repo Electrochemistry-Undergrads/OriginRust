@@ -6433,22 +6433,33 @@ standard Smith chart and Origin's documented behaviour. Measure it when automati
 - **To measure:** Origin's grid values and labels, its Z0 setting, its page, its plot type, and whether
   it takes impedance or reflection data.
 
-## 38. 2D kernel density: Plot > Statistics > 2D Kernel Density... (T116, 2026-11-16, **not measured**)
+## 38. 2D kernel density: Plot > Statistics > 2D Kernel Density... (T116, 2026-11-16; measured by T289, 2026-11-21)
 
-Origin 2016 lists the item under Plot > Statistics (seen in the menu on 2026-11-16). The probes could not
-run because Origin's COM class was unregistered (see 36), so this is Sheaf's version, built from Origin's
-documented behaviour. Measure Origin's dialog and plot when automation works again.
+Origin 2016's item runs `plot_kde2`. T289 measured it on 20 points (scratch `re-workspace/scratch/t289`; the
+matrices are in `crates/calc/tests/fixtures/kde2d_origin.rs`).
 
 - **Input:** one Y column with its X column.
-- **Density:** the bivariate Gaussian product-kernel density (`sheaf_calc::kde::density_2d`).
-  - Bandwidths come from Scott's bivariate rule, sd * n^(-1/6) along each axis.
-  - It is evaluated on a 64 x 64 grid that reaches 3 bandwidths beyond the data.
-- **Drawing:** the grid is drawn as cells in Sheaf's shared colour map, from 0 to the highest density.
-  The points are drawn on top as 3 pt black dots (a second, scatter plot). The axes take in the grid.
-  No legend.
+- **Origin's dialog:** Method "Bivariate Kernel Density Estimator" (default) or "Rule of Thumb"; plot type
+  Contour (default) or Image; a number of lowest-density points to display, 0 by default, with an All tick.
+- **Origin's output:** a 32 x 32 density matrix. Each axis runs from min - range / 4 to max + range / 4, both
+  ends included. The density is the Gaussian product kernel `1 / (2 pi n wx wy) * sum exp(-((x - xi) / wx)^2 / 2
+  - ((y - yi) / wy)^2 / 2)`: fitted to Origin's matrix it agrees to 5e-8 relative.
+- **Bandwidths (measured):**
+  - Rule of Thumb: `sd * n^(-1/6) / 2` per axis, with the sample SD (n - 1). Exact: 0.412003 and 0.386052
+    on the test data. Sheaf matches Origin's matrix to 1e-15 of its peak.
+  - Bivariate: data-driven, 0.732066 and 0.662596 on the test data. The rule is not documented. Sheaf uses
+    the published diffusion estimator of Botev, Grotowski and Kroese (2010), with the data scaled over the
+    grid's extent and 256 cosine terms per axis. It gives 0.7493 and 0.6653 (+2.4 % and +0.4 %), and the
+    matrix is within 1.3 % of the peak everywhere. Where the estimator finds no root, Rule of Thumb is used.
+- **Sheaf's density:** `sheaf_calc::kde::density_2d_with` (`Kde2dMethod::Bivariate` by default, or
+  `RuleOfThumb`) on Origin's grid.
+- **Drawing (Sheaf, not yet matched):** Sheaf draws the grid as cells in its shared colour map, from 0 to
+  the highest density, which is closest to Origin's Image type. Origin's default is a contour plot. Sheaf
+  draws all the points on top as 3 pt black dots (a second, scatter plot), where Origin's default shows 0
+  points. The axes take in the grid. No legend. The plot has no method choice yet.
 - **Sheaf internals:** plot kind `kde2d`, template `kde-2d`.
-- **To measure:** Origin's dialog (bandwidth and grid options), its output (matrix, contour or image), its
-  colour map and colour scale, and whether it shows the points.
+- **Not measured:** Origin's contour levels and colours, its colour scale, and its picture (the dialog could
+  not be confirmed from the screenshot tool).
 
 ## 39. Piper diagram: Plot > Specialized > Piper (T117, 2026-11-16, **not measured**)
 

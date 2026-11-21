@@ -77,7 +77,7 @@ mod tests {
         let n = sheaf_calc::kde::GRID_2D;
         let cells = s.layers[0].plots.iter().filter(|it| matches!(it, scene::Item::Rect { stroke: None, .. })).count();
         assert!(cells >= n * n, "{cells}");
-        // The axes take in the grid, which reaches 3 bandwidths beyond the data.
+        // The axes take in the grid, which reaches a quarter of the data range beyond the data (Origin).
         let geom = &layout_geometry(&p, g).unwrap()[0];
         assert!(geom.x.min < 1.0 && geom.x.max > 3.0 && geom.y.min < 1.0 && geom.y.max > 3.0);
     }

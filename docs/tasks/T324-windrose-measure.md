@@ -10,7 +10,7 @@ Sheaf's Raw Data now does the same.
 ## Left
 
 - Origin's WindRose1 output sheet, the Calm count and its note, compass labels on the circle, the legend with the
-  fastest band first, the options window, Binned Data.
+  fastest band first, the options window. Binned Data: measured by T327.
 
 ## Tests
 

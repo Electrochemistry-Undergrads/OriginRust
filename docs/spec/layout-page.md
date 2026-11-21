@@ -42,8 +42,11 @@ unregistered on the reference machine). Everything below is Sheaf's choice unles
 - Layout > Export Page as Image... asks for a file and writes the whole page at 300 dpi as PNG,
   JPEG, TIFF or BMP, by the file's extension (`.png` when there is none). The page is white; each
   graph is drawn at the pixel size it takes on the page and laid at its place, so a stretched item
-  is drawn stretched (nearest pixel). An item whose graph was deleted stays blank. Vector formats
-  (SVG, EMF, PDF) are refused with a message. Code: `sheaf_plot::render_layout_raster` /
+  is drawn stretched (nearest pixel). An item whose graph was deleted stays blank.
+- SVG and PDF (T237 slice 7) are drawings: the page in points on its colour, with each item's own
+  SVG (the graph's, or the worksheet image's) nested at its place, stretched to its rectangle; the
+  ids of every nested picture get an `i<k>-` prefix so clip paths do not meet. The PDF is that SVG
+  converted. EMF is refused with a message (`render_layout_svg`). Code: `sheaf_plot::render_layout_raster` /
   `render_layout_image` (`crates/plot/src/layout_render.rs`), `layout_view::write_layout_image`.
 
 ## Page properties (T237 slices 4 and 6)
@@ -71,4 +74,4 @@ unregistered on the reference machine). Everything below is Sheaf's choice unles
 ## Not yet
 
 - Text and drawn objects on the page, picture holders,
-  the rest of the Layout Page properties (printer page, theme), print, vector export of the page, and `.opj`.
+  the rest of the Layout Page properties (printer page, theme), print, EMF export of the page, and `.opj`.

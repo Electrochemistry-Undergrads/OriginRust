@@ -103,7 +103,9 @@ fn a_layout_page_is_exported_as_a_picture_file() {
     assert!(std::fs::read(&written).unwrap().starts_with(&[0x89, b'P', b'N', b'G']));
     let jpg = crate::layout_view::write_layout_image(&p, id, &dir.join("page.JPG")).unwrap();
     assert!(std::fs::read(jpg).unwrap().starts_with(&[0xff, 0xd8]));
-    assert!(crate::layout_view::write_layout_image(&p, id, &dir.join("page.svg")).is_err());
+    let svg = crate::layout_view::write_layout_image(&p, id, &dir.join("page.svg")).unwrap();
+    assert!(std::fs::read(svg).unwrap().starts_with(b"<svg"));
+    assert!(crate::layout_view::write_layout_image(&p, id, &dir.join("page.emf")).is_err());
     assert!(menus::bar(menus::WindowKind::Layout).iter().any(|m| m.label == "&Layout"));
     let _ = std::fs::remove_dir_all(&dir);
 }

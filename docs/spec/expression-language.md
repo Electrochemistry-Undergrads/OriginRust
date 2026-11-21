@@ -60,7 +60,7 @@ Statistics take one argument that must be a column or a row range: `mean(col(A))
 | Group | Functions |
 |---|---|
 | Whole column in, column out | `cumsum(col(A))` running sum; `diff(col(A))` forward difference (row i holds A[i+1]-A[i], the last row is missing); `shift(col(A), n)` row i holds A[i-n], rows that fall off the ends are missing; `rank(col(A))` ascending rank, ties share the average rank, missing stays missing |
-| Date and time | `date(y,m,d)` (impossible date: missing), `time(h,m,s)` (fraction of a day, not wrapped), `now()`, `today()`, `year`, `month`, `day`, `weekday` (0 = Sunday) of a date number; `hour`, `minute`, `second` of its time of day (T239) |
+| Date and time | `date(y,m,d)` (impossible date: missing), `time(h,m,s)` (fraction of a day, not wrapped), `now()`, `today()`, `year`, `month`, `day`, `weekday` (0 = Sunday) of a date number; `hour`, `minute`, `second` of its time of day (T239); all seven give -1 for a missing input or a number without a date or time (T262, below) |
 | Random | `rnd()` uniform in [0,1), `grnd()` standard normal; a new draw in every row; `Expr::eval_rows_seeded` / `compile_seeded` fix the seed for tests |
 | Lookup | `lookup(x, xcol, ycol)` first exact match of `x` in `xcol`, the value of `ycol` in the same row, else missing; `cell(r, c)` the value at 1-based row `r` and column position `c` (both rounded; outside the sheet: missing) |
 | Other | `distance(x1,y1,x2,y2)` Euclidean; `fact(n)` factorial of the whole part (negative, missing or above 170: missing) |
@@ -75,6 +75,20 @@ and not 17:59:59.999; a time that rounds to midnight is 0:00:00 (of the next day
 56.789; use `int()` for whole seconds). A missing value gives missing.
 
 Measured in Origin (`tools/origin-ref`, probes `re-workspace/scratch/expr-funcs/g1e..g4`): `diff` is the forward difference with the missing value last; `date(2020,1,1)` is 2458849; `weekday` is 0 for Sunday; `time(25,0,0)` is 1.0417; `fact(1.5)` is 1, `fact(171)` and `fact(-1)` are missing, `fact(20)` is 2.43290200817664E18; `lookup` needs an exact match; `cell(1.6,1)` rounds to row 2; `distance` takes four arguments. Origin does not accept `cumsum`, `shift`, `rank` or `sem` as formula functions (the column stays empty), so those four are Sheaf's own and are **not checked against Origin**. `sum` and `count` follow Origin since branch `expr-funcs2` (probes `re-workspace/scratch/expr-funcs2/a1`, `a2`, `a3`, local only). With A = 3 1 4 1 5 (missing) 9 2 6: `sum(col(A))` is the running sum, `3 4 8 9 14 . 23 25 31` (it skips the missing value and leaves its own row missing), so it is the same as `cumsum`; `sum(col(A)[5:7])` is `5 . 14` in rows 1 to 3 (the running sum of the range, from row 1); `total(col(A))` is 31 (the total of the values); `count(col(A))` is 9, **counting the missing cell**, and `count(col(A)[5:7])` is 3, `count(col(A)[0:3])` is 3 (the range is clamped), `count` of an empty range is 0; a column ends at its last value (trailing missing cells are not stored), so with A = . 1 4 1 5 . 9 2 . `count(col(A)[1:20])` is 8. `mean` (3.875), `max` (9), `min` (1) skip missing values as before. Earlier Sheaf versions returned the total for `sum` and the number of values for `count`; the only tests that relied on that were in `crates/expr/src/tests.rs`, and the Set Values dialog's descriptions were corrected. Origin also accepts an expression such as `sum(col(A)*2)` (still the running sum); Sheaf requires a column or a column range inside `sum`.
+
+**Date and time parts without a date (T262, measured in Origin 2016 on 2026-11-20, probes
+`re-workspace/scratch/t262/range*.lines.txt` on a worksheet column).** Dates run from 1757583
+(0099-12-31) to 5373483 (9999-12-31 at midnight); outside that (1757582, 5373483.25, -0.25, 0.999,
+1, 1721426, 4e7 were probed) `year`, `month`, `day` and `weekday` return -1, and so do all seven
+functions for an empty cell. `hour`, `minute` and `second` also work on a time alone (a number below
+1, negative too: -0.25 is 18:00, -2.75 is 06:00, -100 is 00:00), but give -1 from 1 up to the first
+date and after the last. Two Windows-date habits show through: a day before 1899-12-30 (date number
+2415018, day 0 of Windows' date numbers) reads its fraction backwards (2299159.25 is 18:00,
+2415016.9 is 02:24, 1757583.99 is 00:14:24), and a time alone is taken as that time today, so for a
+large negative time the same rules apply after adding today's date number (in November 2026 the
+fraction turns below about -46346 and -1 comes below about -703781; both move with the date).
+Sheaf copies all of this, using the system date (UTC) for "today". Test:
+`date_and_time_parts_follow_origins_range_and_give_minus_one_without_a_date` (`crates/expr`).
 
 `gamma`, `erf`, `erfc`, `j0`, `j1` use short in-house implementations with relative error near 1e-14 for moderate arguments (`gamma` is exact for whole numbers up to 171; gamma at 0 and negative whole numbers is missing).
 

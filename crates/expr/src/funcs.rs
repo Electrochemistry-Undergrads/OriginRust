@@ -648,52 +648,75 @@ fn time_fn(a: &[f64]) -> f64 {
     (a[0] * 3600.0 + a[1] * 60.0 + a[2]) / 86_400.0
 }
 
+/// What `year`, `month`, `day`, `weekday`, `hour`, `minute` and `second` return for a number with no
+/// date (or time) and for a missing input: Origin 2016 writes -1 (measured 2026-11-20, T262).
+const NO_DATE: f64 = -1.0;
+/// The first and the last date number Origin's date parts accept: 0099-12-31 and 9999-12-31 at
+/// midnight (measured, T262: 1757582 and 5373483.25 already give -1).
+const FIRST_DATE: f64 = 1_757_583.0;
+const LAST_DATE: f64 = 5_373_483.0;
+/// 1899-12-30 (day 0 of Windows' date numbers): Origin reads the time of a day before it backwards,
+/// so that 2299159.25 is 18:00 (measured, T262).
+const DATE_ZERO: f64 = 2_415_018.0;
+
 fn civil_of(v: f64) -> Option<(i64, i64, i64)> {
-    if !v.is_finite() || v.abs() > 3.0e7 {
+    if !(FIRST_DATE..=LAST_DATE).contains(&v) {
         return None;
     }
     Some(civil_from_days((v - UNIX_EPOCH_VALUE).floor() as i64))
 }
 
 fn year(v: f64) -> f64 {
-    civil_of(v).map_or(NA, |c| c.0 as f64)
+    civil_of(v).map_or(NO_DATE, |c| c.0 as f64)
 }
 
 fn month(v: f64) -> f64 {
-    civil_of(v).map_or(NA, |c| c.1 as f64)
+    civil_of(v).map_or(NO_DATE, |c| c.1 as f64)
 }
 
 fn day(v: f64) -> f64 {
-    civil_of(v).map_or(NA, |c| c.2 as f64)
+    civil_of(v).map_or(NO_DATE, |c| c.2 as f64)
 }
 
 /// The time of day of a date-time number in milliseconds, rounded to the nearest one so that a
 /// value such as `date(2020,1,1) + 0.75` is 18:00 and not 17:59:59.999... (T239, Sheaf's rule: Origin
 /// was not available to measure). A time that rounds up to midnight is the start of the next day.
+///
+/// Which numbers have a time (measured in Origin 2016, T262): a date in the range of the date
+/// parts, and a time alone (a number below 1, also negative), which Origin reads as that time
+/// today; a number from 1 up to the first date, or past the last, has none. A day before
+/// 1899-12-30 reads its fraction backwards. Because of "today", Origin's answer for a large
+/// negative time (below about -46000 the fraction turns, below about -704000 it is -1, in 2026)
+/// moves with the current date; Sheaf does the same with the system date.
 fn day_millis(v: f64) -> Option<i64> {
-    civil_of(v)?;
-    Some(((v - v.floor()) * 86_400_000.0).round() as i64 % 86_400_000)
+    let x = if v < 1.0 { v + system_now().floor() } else { v };
+    civil_of(x)?;
+    let mut frac = x - x.floor();
+    if x < DATE_ZERO && frac > 0.0 {
+        frac = 1.0 - frac;
+    }
+    Some((frac * 86_400_000.0).round() as i64 % 86_400_000)
 }
 
-/// Hour of the day of a date-time number, 0 to 23 (T239).
+/// Hour of the day of a date-time number, 0 to 23 (T239); -1 when it has no time (T262).
 fn hour(v: f64) -> f64 {
-    day_millis(v).map_or(NA, |ms| (ms / 3_600_000) as f64)
+    day_millis(v).map_or(NO_DATE, |ms| (ms / 3_600_000) as f64)
 }
 
 /// Minute of the hour, 0 to 59 (T239).
 fn minute(v: f64) -> f64 {
-    day_millis(v).map_or(NA, |ms| (ms / 60_000 % 60) as f64)
+    day_millis(v).map_or(NO_DATE, |ms| (ms / 60_000 % 60) as f64)
 }
 
 /// Second of the minute with its fraction, to the millisecond: 0 to 59.999 (T239).
 fn second(v: f64) -> f64 {
-    day_millis(v).map_or(NA, |ms| (ms % 60_000) as f64 / 1000.0)
+    day_millis(v).map_or(NO_DATE, |ms| (ms % 60_000) as f64 / 1000.0)
 }
 
-/// Day of the week, 0 = Sunday (measured in Origin).
+/// Day of the week, 0 = Sunday (measured in Origin); -1 without a date (T262).
 fn weekday(v: f64) -> f64 {
     if civil_of(v).is_none() {
-        return NA;
+        return NO_DATE;
     }
     // 1970-01-01 was a Thursday (4).
     ((v - UNIX_EPOCH_VALUE).floor() as i64 + 4).rem_euclid(7) as f64

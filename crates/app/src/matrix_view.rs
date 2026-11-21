@@ -37,19 +37,30 @@ impl MatrixUi {
 /// after the file, as one undo step, and returns its id.
 pub fn import_image(doc: &mut Document, path: &std::path::Path) -> Result<WindowId, String> {
     let pic = sheaf_io::image_import::read_picture(path)?;
-    let name = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let file = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    // As Origin's impImage (measured, T301): X from 0 to cols - 1 and Y from 0 to rows - 1.
+    let (x, y) = ((0.0, (pic.cols - 1) as f64), (0.0, (pic.rows - 1) as f64));
+    let gray = pic.channels.len() == 1;
     doc.edit("Import Image", |p| {
-        // A colour picture keeps its Red, Green and Blue sheets (T218); a gray one has one sheet.
+        // A colour picture keeps its Red, Green and Blue sheets (T218); a gray one has one sheet,
+        // named after the file as Origin names it.
         let sheets = pic
             .channels
             .iter()
             .map(|(channel, values)| {
-                let mut sheet = sheaf_core::matrix::MatrixSheet::new(channel.clone(), 0, pic.rows, pic.cols);
-                sheet.values_mut().copy_from_slice(values);
-                sheet
+                let name = if gray { sheaf_core::project::clean_window_name(&stem) } else { channel.clone() };
+                sheaf_core::matrix::MatrixSheet::from_values(name, 0, pic.rows, pic.cols, values.clone(), x, y)
+                    .map_err(|e| e.to_string())
             })
-            .collect();
-        Ok::<_, String>(p.adopt_matrix_book(&name, sheets))
+            .collect::<Result<Vec<_>, String>>()?;
+        // The book: short name the file's stem (made free), long name the file's name (measured).
+        let name = p.unique_name_from(&stem);
+        let id = p.adopt_matrix_book(&file, sheets);
+        if let Some(b) = p.matrix_book_mut(id) {
+            b.name = name;
+        }
+        Ok::<_, String>(id)
     })
 }
 

@@ -162,7 +162,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T213](T213-new-function-plot.md) | File > New > Function Plot (B14 slice) | S | done 2026-11-20 (graphing 41), not measured |
 | [T210](T210-image-menu-2.md) | Image menu Levels, Subtract, Crop, Resize (B14 slice) | S | done 2026-11-20 (matrices 7i), not measured |
 | [T207](T207-image-menu.md) | Image menu on a matrix: adjustments, math, binary, rotate/flip, spatial filters (B14 slice) | M | done 2026-11-20 (matrices 7i), not measured |
-| [T204](T204-import-image.md) | File > Import > Image into a matrix book of gray levels (B14 slice) | S | done 2026-11-20 (matrices 7h), not measured |
+| [T204](T204-import-image.md) | File > Import > Image into a matrix book of gray levels (B14 slice) | S | done 2026-11-20 (matrices 7h), measured by T301 |
 | [T201](T201-gray-scale-map.md) | Plot > Contour/Heat Map > Gray Scale Map (B14 slice) | S | done 2026-11-20 (matrices 7g), measured by T297 |
 | [T199](T199-import-binary-2d.md) | File > Import > Binary 2D Array into a matrix (B14 slice) | S | done 2026-11-20 (matrices 7f), measured by T294 |
 | [T196](T196-matrix-fft2.md) | 2D FFT and 2D IFFT of a matrix (B14 slice) | S | done 2026-11-20 (matrices 7e), not measured |
@@ -287,6 +287,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T304](T304-sampling-x.md) | A column's sampling interval is its X in analysis and every plot (T302 follow-up) | S | done 2026-11-21 |
 | [T305](T305-add-columns-count.md) | Add New Columns... / Ctrl+D ask how many columns; the toolbar button adds one | S | done 2026-11-21 |
 | [T306](T306-sheet-tab-drag.md) | Drag a sheet tab onto another to move the sheet (one undo step) | S | done 2026-11-21 |
+| [T301](T301-image-import-measure.md) | Measure File > Import > Image against Origin (book names, ranges 0..n-1, gray values) | S | done 2026-11-21 (matrices 7h) |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |

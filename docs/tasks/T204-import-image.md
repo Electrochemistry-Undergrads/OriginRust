@@ -1,6 +1,7 @@
 # T204: File > Import > Image into a matrix book (B14 slice)
 
-**Status:** done 2026-11-20 (Claude Windows "obj-align"), **not measured**.
+**Status:** done 2026-11-20 (Claude Windows "obj-align"); measured against Origin 2016's `impImage` and
+matched by T301 (2026-11-21): book named after the file (long name with the extension), ranges 0..n-1.
 **Size:** S. **Source:** greyed inventory package B14 ("Import: Image...").
 **Spec:** `docs/spec/matrices.md` 7h.
 

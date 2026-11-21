@@ -24,6 +24,8 @@ pub fn fit_spec(a: &FitArgs) -> FitSpec {
         compare: a.compare.clone(),
         rank: a.rank.clone(),
         no_scale_errors: a.no_scale_errors,
+        covariance_matrix: a.covariance,
+        correlation_matrix: a.correlation,
         global: a.global,
         share: a.share.clone(),
         confidence: a.confidence,

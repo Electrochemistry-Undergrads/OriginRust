@@ -2545,17 +2545,63 @@ impl Project {
                 xy_graph = out.graph;
                 more_xy_graphs = out.more_graphs;
             }
+            Tool::Intersect(spec) if !spec.include_touching && *output == OutputTarget::NextToInput => {
+                // T322, measured in Origin 2016: intersect adds "Intersection X1" (X) and "Intersection
+                // Y1" (Y) at the end of the input sheet, without comments; a second run adds X2 and Y2.
+                let out = curves::run(&request.tool, &inputs)?;
+                notes = out.notes;
+                let n = next_label_index(sheet, "Intersection X");
+                let first = inputs.first().map(|i| i.id).expect("two input columns");
+                for sc in out.on_sheet {
+                    let axis = if sc.designation == Designation::X { "X" } else { "Y" };
+                    beside.push(NewColumn {
+                        after: first,
+                        long_name: format!("Intersection {axis}{n}"),
+                        units: sc.units,
+                        comments: String::new(),
+                        data: match sc.data {
+                            ColumnData::Numeric(v) => std::sync::Arc::unwrap_or_clone(v),
+                            _ => Vec::new(),
+                        },
+                    });
+                    at_end.push((sc.designation, None));
+                }
+            }
             Tool::AverageCurves(_) | Tool::Intersect(_) | Tool::PolygonArea => {
                 let out = curves::run(&request.tool, &inputs)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;
             }
-            Tool::SubtractLine(_)
-            | Tool::ReduceDup(_)
-            | Tool::ReduceX(_)
-            | Tool::Translate(_)
-            | Tool::MedianFilter(_) => {
+            Tool::ReduceDup(_) => {
+                // T321: Origin's reducedup adds its columns at the end of the input sheet (measured,
+                // analysis-tools 12.1), numbered on after the columns of earlier runs.
+                let mut columns = Vec::new();
+                manip::run(&request.tool, &inputs, &mut beside, &mut columns)?;
+                let shift = next_label_index(sheet, "ReduceDupX") - 1;
+                let first = inputs.first().map(|i| i.id);
+                for sc in columns {
+                    let long_name = ["ReduceDupX", "ReduceDupY", "DupXCount", "DupX"]
+                        .iter()
+                        .find_map(|prefix| {
+                            let n: usize = sc.long_name.strip_prefix(prefix)?.parse().ok()?;
+                            Some(format!("{prefix}{}", n + shift))
+                        })
+                        .unwrap_or(sc.long_name);
+                    beside.push(NewColumn {
+                        after: first.expect("an input column"),
+                        long_name,
+                        units: sc.units,
+                        comments: sc.comments,
+                        data: match sc.data {
+                            ColumnData::Numeric(v) => std::sync::Arc::unwrap_or_clone(v),
+                            _ => Vec::new(),
+                        },
+                    });
+                    at_end.push((sc.designation, None));
+                }
+            }
+            Tool::SubtractLine(_) | Tool::ReduceX(_) | Tool::Translate(_) | Tool::MedianFilter(_) => {
                 manip::run(&request.tool, &inputs, &mut beside, &mut on_sheet)?;
             }
             Tool::PeakChain(spec) => {

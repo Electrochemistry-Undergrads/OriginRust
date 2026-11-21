@@ -164,6 +164,13 @@ pub struct FitRequest {
     /// Chi-Sqr)", Origin's default). Without weights Origin always scales, so the switch only
     /// matters for weighted fits.
     pub scale_errors: bool,
+    /// Add Origin's "Covariance Matrix" to the parameter sheet: one column per parameter, named
+    /// after it, with "Covariance" as comment (NLFit's Fit Parameters option, off by default as in
+    /// Origin 2016's report). The matrix is the one the standard errors come from.
+    pub covariance_matrix: bool,
+    /// Add Origin's "Correlation Matrix" the same way (comment "Correlation"), see
+    /// [`sheaf_fit::FitReport::correlation`].
+    pub correlation_matrix: bool,
     /// Iteration algorithm of a nonlinear fit (Origin's "Iteration Algorithm").
     pub algorithm: Algorithm,
     /// A surface fit `z = f(x, y)`: `y` is then the Z column and this names the X and Y columns
@@ -194,6 +201,8 @@ impl FitRequest {
             max_iterations: 400,
             tolerance: 1e-9,
             scale_errors: true,
+            covariance_matrix: false,
+            correlation_matrix: false,
             algorithm: Algorithm::LevenbergMarquardt,
             surface: None,
         }
@@ -395,6 +404,31 @@ fn sheet_column(
     let name = ws.next_short_name();
     ws.columns.push(Column::new(id, name, designation, data).with_labels(long_name, units, ""));
     id
+}
+
+/// Appends the covariance and correlation matrices a request asks for to a parameter sheet: one
+/// column per parameter (long name = the parameter, comment = which matrix), rows in parameter
+/// order, as Origin's report tables "Covariance Matrix" and "Correlation Matrix".
+fn matrix_columns(project: &mut Project, ws: &mut Worksheet, report: &FitReport, request: &FitRequest) {
+    let n = report.params.len();
+    let mut add = |what: &str, m: &[f64]| {
+        if m.len() != n * n {
+            return;
+        }
+        for (j, p) in report.params.iter().enumerate() {
+            let column: Vec<f64> = (0..n).map(|i| m[i * n + j]).collect();
+            let id = sheet_column(project, ws, Designation::Y, &p.name, "", ColumnData::numeric(column));
+            if let Some(c) = ws.column_mut(id) {
+                c.comments = what.to_string();
+            }
+        }
+    };
+    if request.covariance_matrix {
+        add("Covariance", &report.covariance);
+    }
+    if request.correlation_matrix {
+        add("Correlation", &report.correlation());
+    }
 }
 
 /// Rows of the statistics sheet: name, number, text.
@@ -654,6 +688,7 @@ impl Project {
         for (designation, name, data) in param_columns {
             sheet_column(self, &mut param_ws, designation, &name, "", data);
         }
+        matrix_columns(self, &mut param_ws, &report, request);
 
         let rows = stats_rows(&report, &fitted.derived, &source_label, &rows_note);
         sheet_column(
@@ -1739,6 +1774,86 @@ mod tests {
 
     fn value(out: &FitOutcome, name: &str) -> f64 {
         out.report.param(name).unwrap_or_else(|| panic!("no parameter {name}")).value
+    }
+
+    /// Inverse of a small symmetric positive definite matrix (Gauss-Jordan), row-major.
+    fn invert(m: &[f64], n: usize) -> Vec<f64> {
+        let mut a = m.to_vec();
+        let mut inv: Vec<f64> = (0..n * n).map(|k| if k / n == k % n { 1.0 } else { 0.0 }).collect();
+        for c in 0..n {
+            let d = a[c * n + c];
+            for k in 0..n {
+                a[c * n + k] /= d;
+                inv[c * n + k] /= d;
+            }
+            for r in (0..n).filter(|r| *r != c) {
+                let f = a[r * n + c];
+                for k in 0..n {
+                    a[r * n + k] -= f * a[c * n + k];
+                    inv[r * n + k] -= f * inv[c * n + k];
+                }
+            }
+        }
+        inv
+    }
+
+    #[test]
+    fn covariance_and_correlation_matrices_match_origin_2016_and_are_off_by_default() {
+        // Origin 2016, nlbegin iy:=(1,2) func:=Gauss; nlfit; nlend output:=1 (T320): the report has
+        // no matrix tables by default; standard errors and Dependency as below.
+        let mut p = Project::new();
+        let book = p.add_workbook("data");
+        let xs: Vec<f64> = (1..=20).map(|i| f64::from(i) * 0.5).collect();
+        let ys: Vec<f64> = (1..=20)
+            .map(|i| {
+                let (x, d) = (f64::from(i) * 0.5, f64::from(i));
+                1.0 + 3.0 * (-2.0 * ((x - 5.0) / 1.5).powi(2)).exp()
+                    + 0.05 * (37.0 * d).sin()
+                    + 0.04 * (101.3 * d).sin()
+            })
+            .collect();
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(xs)).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(ys)).unwrap();
+        let plain = p.fit(&FitRequest::new(y, FitModel::BuiltIn("gauss".into()))).unwrap();
+        assert_eq!(p.workbook(book).unwrap().sheets[plain.param_sheet].columns.len(), 9, "no matrices by default");
+
+        let mut req = FitRequest::new(y, FitModel::BuiltIn("gauss".into()));
+        (req.covariance_matrix, req.correlation_matrix) = (true, true);
+        let out = p.fit(&req).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[out.param_sheet];
+        assert_eq!(ws.columns.len(), 9 + 8);
+        let names: Vec<&str> = out.report.params.iter().map(|q| q.name.as_str()).collect();
+        assert_eq!(names, ["y0", "xc", "w", "A"]);
+        let block = |from: usize| -> Vec<f64> {
+            let cols: Vec<&[f64]> = (0..4).map(|j| ws.columns[from + j].numeric().unwrap()).collect();
+            (0..16).map(|k| cols[k % 4][k / 4]).collect()
+        };
+        for (j, name) in names.iter().enumerate() {
+            assert_eq!(
+                (ws.columns[9 + j].long_name.as_str(), ws.columns[9 + j].comments.as_str()),
+                (*name, "Covariance")
+            );
+            assert_eq!(ws.columns[13 + j].comments, "Correlation");
+        }
+        let (cov, cor) = (block(9), block(13));
+        let origin_se = [0.006510981167163748, 0.0048768140727527, 0.01076714034450624, 0.04097705561541124];
+        let origin_dep = [0.3960852033978328, 4.440892098500626e-16, 0.45293338864003485, 0.5973900719326806];
+        let cor_inv = invert(&cor, 4);
+        for i in 0..4 {
+            assert!(
+                (cov[i * 4 + i].sqrt() / origin_se[i] - 1.0).abs() < 1e-6,
+                "{}: {}",
+                names[i],
+                cov[i * 4 + i].sqrt()
+            );
+            assert_eq!(cor[i * 4 + i], 1.0);
+            // Origin's Dependency is 1 - 1/(R^-1)_ii, so it checks the off-diagonal terms too.
+            assert!((1.0 - 1.0 / cor_inv[i * 4 + i] - origin_dep[i]).abs() < 1e-6, "{}", names[i]);
+            for j in 0..4 {
+                assert!((cov[i * 4 + j] - cov[j * 4 + i]).abs() < 1e-15);
+                assert!((cor[i * 4 + j] - cov[i * 4 + j] / (cov[i * 4 + i] * cov[j * 4 + j]).sqrt()).abs() < 1e-12);
+            }
+        }
     }
 
     #[test]

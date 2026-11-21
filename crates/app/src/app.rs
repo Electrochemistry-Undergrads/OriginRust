@@ -2450,7 +2450,12 @@ impl SheafApp {
                 }
             }
             Action::AddFunctionGraph { graph, layer } => {
-                self.function_graph = Some(crate::dialogs::function_graph::FunctionGraphDialog::new(graph, layer));
+                // Origin's Auto From/To: the range the layer's X axis shows (T322).
+                let range = sheaf_plot::layout_geometry(self.doc.project(), graph)
+                    .ok()
+                    .and_then(|geoms| geoms.get(layer).map(|g| (g.x.min, g.x.max)));
+                self.function_graph =
+                    Some(crate::dialogs::function_graph::FunctionGraphDialog::over(graph, layer, range));
                 self.function_graph_new = false;
             }
             Action::Profile { book, graph } => {
@@ -3094,12 +3099,14 @@ impl SheafApp {
                 let label = match switch {
                     PageSwitch::ActivateByIconOnly => "Set Active Layer By Layer Icon Only",
                     PageSwitch::IconDoubleClickPlotSetup => "Double click to open Plot Setup",
+                    PageSwitch::ActiveLayerIndicator => "Show Active Layer Indicator",
                 };
                 self.doc.apply(label, |p| {
                     if let Some(g) = p.graph_mut(graph) {
                         match switch {
                             PageSwitch::ActivateByIconOnly => g.page.style.activate_by_icon_only = on,
                             PageSwitch::IconDoubleClickPlotSetup => g.page.style.icon_double_click_plot_setup = on,
+                            PageSwitch::ActiveLayerIndicator => g.page.style.active_layer_indicator = on,
                         }
                     }
                 });
@@ -4465,10 +4472,18 @@ impl SheafApp {
             }
             return;
         }
-        // A Pareto chart counts the cells of the one selected column, text or numbers.
+        // A Pareto chart counts the cells of the one selected column, text or numbers (Origin's Raw Data); with
+        // two columns selected, the first holds the categories and the second their counts (Binned Data, T319).
         if template == Template::Pareto {
+            if let [data, counts] = columns[..] {
+                match self.doc.edit("Plot columns", |p| p.plot_pareto_binned(data, counts)) {
+                    Ok(_) => self.say("Plotted a Pareto chart of binned data".to_string()),
+                    Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+                }
+                return;
+            }
             let [column] = columns[..] else {
-                self.warn("Select one column whose values are counted for the Pareto chart".to_string());
+                self.warn("Select one column whose values are counted, or a category and a count column, for the Pareto chart".to_string());
                 return;
             };
             match self.doc.edit("Plot columns", |p| p.plot_pareto(column)) {
@@ -4771,7 +4786,7 @@ impl SheafApp {
     fn show_function_graph(&mut self, ctx: &egui::Context) {
         use crate::dialogs::function_graph::FunctionOutcome;
         let Some(d) = &mut self.function_graph else { return };
-        let FunctionOutcome::Add { graph, layer, expr, from, to, points } = (match d.show(ctx) {
+        let FunctionOutcome::Add { graph, layer, expr, from, to, points, kind } = (match d.show(ctx) {
             FunctionOutcome::Open => return,
             FunctionOutcome::Closed => {
                 self.function_graph = None;
@@ -4784,9 +4799,15 @@ impl SheafApp {
         };
         let new = std::mem::take(&mut self.function_graph_new);
         let label = if new { "New function plot" } else { "Add function graph" };
-        let made = self.doc.edit(label, |p| {
+        let made = self.doc.edit(label, |p| -> Result<WindowId, sheaf_core::project::ProjectError> {
             let graph = if new { p.add_graph(sheaf_core::template::Template::default()) } else { graph };
-            p.add_function_graph(graph, layer, &expr, (from, to), points).map(|_| graph)
+            p.add_function_graph(graph, layer, &expr, (from, to), points)?;
+            if let Some(plot) =
+                p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)).and_then(|l| l.plots.last_mut())
+            {
+                plot.kind = kind;
+            }
+            Ok(graph)
         });
         match made {
             Ok(graph) => {
@@ -6050,6 +6071,8 @@ impl SheafApp {
             .add_filter("Photoshop document", &["psd"])
             .add_filter("PDF", &["pdf"])
             .add_filter("SVG", &["svg"])
+            .add_filter("Encapsulated PostScript", &["eps"])
+            .add_filter("Enhanced Metafile", &["emf"])
             .set_file_name(format!("{stem}_{}.png", sheet.name));
         if let Some(dir) = self.folder() {
             chooser = chooser.set_directory(dir);
@@ -6159,6 +6182,9 @@ impl SheafApp {
             }),
             view_mode: graph.map(|g| project.view_mode(g)).unwrap_or_default(),
             layer_icons: graph.and_then(|g| project.graph(g)).is_none_or(|g| g.page.style.layer_icons),
+            active_layer_indicator: graph
+                .and_then(|g| project.graph(g))
+                .is_some_and(|g| g.page.style.active_layer_indicator),
             lock_position: graph.and_then(|g| project.graph(g)).map(|g| g.page.style.lock_position).unwrap_or_default(),
             page_breaks: book
                 .and_then(|b| project.workbook(b))

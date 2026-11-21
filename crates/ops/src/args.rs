@@ -253,6 +253,14 @@ pub struct FitArgs {
     /// without weights Origin always scales, so this only matters with --weight).
     #[arg(long)]
     pub no_scale_errors: bool,
+    /// Add the covariance matrix of the parameters to the parameter sheet (Origin's Covariance
+    /// Matrix: one column per parameter).
+    #[arg(long)]
+    pub covariance: bool,
+    /// Add the correlation matrix of the parameters to the parameter sheet (Origin's Correlation
+    /// Matrix).
+    #[arg(long)]
+    pub correlation: bool,
     /// Fit all the --y columns together as one global fit (nonlinear models only); the
     /// parameters named by --share take one value for all columns.
     #[arg(long)]

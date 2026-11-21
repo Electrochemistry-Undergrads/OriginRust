@@ -71,7 +71,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Done 2026-11-15 (unmeasured Sheaf rules, graphing 13.15-13.17): Offset Grouped Data menu with Cumulative, Stacked Histograms, waterfall Y/Z colour mapping |
 | [T63](T63-greyed-items-with-code-2.md) | 3, parallel | M | Existing-feature wiring; F/G/J wired, H, A, B, I and K wired 2026-11-19 (workbook-model 13c, graphing "Step and spline line plots"), C deferred to B8/T14; D and E open (D belongs to B14; E needs Origin measured) |
 | [T65](T65-graph-view-zoom-pan.md) | 4 (B1), P1 | M | Zoom In mode, Zoom Out, Whole Page and Zoom-Panning tool landed 2026-11-15; Standard toolbar zoom combo added 2026-11-18 (Scale In/Out and Zoom All: T69) |
-| [T66](T66-graph-view-modes.md) | 4 (B1), P1 | M | Partly done: the four view modes, Show > Layer Icons, Full Screen and the documented Active Layer Only/Hide Other Layers alias (22.7); eight other Show items and Show Data Info stay grey until measured |
+| [T66](T66-graph-view-modes.md) | 4 (B1), P1 | M | Partly done: four view modes, Layer Icons, Active Layer Only, Labels, Data, Active Layer Indicator and Full Screen (graphing 22). Five Show items and Show Data Info remain |
 | [T67](T67-add-straight-line.md) | 4 (B3), P1 | M | Done 2026-11-15: Add Straight Line (Origin's addline), dialog, CLI --vline/--hline; left: dragging (Moveable) |
 | [T70](T70-axis-center-fit-page-to-printer.md) | 4 (B3), P1 | S | Done 2026-11-15: axis Center, Fit Page To Printer, Format > Fit Page To Layers... opens its window |
 | [T71](T71-point-segments.md) | 4 (B4), P1 | S | Done 2026-11-15: Plot > Line + Symbol > 2 and 3 Point Segment (line connections 2 and 3) |
@@ -81,7 +81,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T82](T82-line-series.md) | 4 (B4), P1 | S | Done 2026-11-16: Line Series (one plot, k-point segments, helper sheet) |
 | [T85](T85-histogram-probabilities.md) | 4 (B4), P1 | S | Histogram + Probabilities; done 2026-11-19 (graphing "Histogram + Probabilities"); left: Results Log summary |
 | [T76](T76-grouped-indexed-plots.md) | Plot > Column/Bar/Pie > Grouped Columns (indexed data), Plot > Statistics > Grouped Box Charts (B4 slice) | M | Done 2026-11-16 (`grouped-indexed`, graphing 14.28, Origin docs only, unmeasured); left: dialog, raw-data statistics, stacking, table tick labels, more than two groups |
-| [T83](T83-interval-and-pareto.md) | Plot > Statistics > Interval Plot and Pareto (B4 slice) | M | Done 2026-11-16 (`interval-pareto`, graphing 14.29, Origin docs only, unmeasured); left: dialogs, binned Pareto, groups, drop lines, count table |
+| [T83](T83-interval-and-pareto.md) | Plot > Statistics > Interval Plot and Pareto (B4 slice) | M | Done 2026-11-16 (`interval-pareto`, graphing 14.29, measured, matched by T316); left: dialogs, binned Pareto, groups, drop lines, count table |
 | [T80](T80-color-and-bubble-scale.md) | 4 (B3), P2 | M | Done 2026-11-16: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (layer scale objects, graphing 27); left: dragging, properties dialog, Map link |
 | [T78](T78-recent-lists.md) | 4 (B10), P1 | S | Done 2026-11-16: Most Recently Used lists in Plot, Worksheet, Analysis, Statistics menus and Recent Exports (File > Export and graph window) |
 | [T74](T74-fill-column-patterns.md) | Fill Column With: A set of Numbers, Date/Time values, Text & Numeric values (Origin patternN/D/T) | M | done 2026-11-16 (workbook-model 13c); left: Origin's window layout, text quoting |
@@ -100,7 +100,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T94](T94-sampling-interval-row.md) | Sampling Interval label row (corner menu switch) | S | done 2026-11-18 (workbook-model 13i), read-only row with automatic visibility and saved per-sheet switch |
 | [T95](T95-find-in-project.md) | Find in Project (F3) | M | done 2026-11-16; worksheet Comments, Within, folder metadata and Folder result column added 2026-11-18 (workbook-model 13j); left: Notes, folder info variables and double-click parity |
 | [T96](T96-wavelets.md) | Wavelets: Decompose, Reconstruction, Denoise, Smooth, Continuous Wavelet (B8 slice) | L | done 2026-11-16 (`wavelets`, Claude Windows); Origin measured (analysis-tools.md 19, fixtures `tools/origin-ref/t96/t96-origin.json`); all five items built; Continuous Wavelet reproduces Origin's `cwt` to 1e-14 (Origin's pseudo-frequency output, coefficient matrix and image plot are not built, no script route); open corners: `sqtwolog` threshold, denoise boundary samples, Smooth for non-power-of-two lengths |
-| [T97](T97-worksheet-as-image.md) | Export > Worksheet as Image... (Origin expWks) | S | done 2026-11-16 (workbook-model13k); raster-format follow-up in progress (13k.1); left: vector types, several sheets, size/overwrite and range-display measurement |
+| [T97](T97-worksheet-as-image.md) | Export > Worksheet as Image... (Origin expWks) | S | active sheet export in PNG, PDF, SVG, JPEG, TIFF, BMP, GIF, TGA, PCX, PSD, EPS and EMF (workbook-model 13k); left: other vector types, multiple sheets, export controls and range-display measurement |
 | [T98](T98-reimport.md) | File > Import > Re-Import Directly, Re-Import... (Origin reimport) | S | done 2026-11-16 (workbook-model 13l); left: stored import options |
 | [T99](T99-batch-plotting.md) | Duplicate (Batch Plotting): With New Sheets/Books, With New Columns | M | done 2026-11-16 (graphing 28); left: Graph Short/Long Name fields |
 | [T100](T100-folder-view-windows.md) | Project Explorer View Windows, Window > Folders, folder Properties | M | done 2026-11-16 (workbook-model 13m); left: title path, folder dates |
@@ -294,11 +294,20 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T309](T309-add-param-row.md) | Sheet corner menu: Add User Parameter Row... | S | done 2026-11-21 |
 | [T310](T310-param-row-edit.md) | Rename and delete a user parameter row from its title | S | done 2026-11-21 |
 | [T314](T314-sig-digits.md) | Significant and Scientific displays measured in Origin 2016 and copied (326 of 328 cells) | S | done 2026-11-21 |
+| [T317](T317-scientific-auto.md) | Scientific with default digits as Origin shows it (NumberFormat::ScientificAuto) | S | done 2026-11-21 |
+| [T321](T321-reducedup-sheet.md) | Reduce Duplicate X Data writes its columns at the end of the input sheet, as Origin's reducedup | S | done 2026-11-21 |
+| [T322](T322-curvemath-measure.md) | Intersect writes into the input sheet as Origin; numbered labels keep their number on recalculation | S | done 2026-11-21 |
+| [T325](T325-avecurves-turning.md) | Average Multiple Curves sorts a turning X and averages equal X, as Origin's avecurves | S | done 2026-11-21 |
 | [T311](T311-qqplot-measure.md) | Measure Q-Q Plot against Origin (expected values, y = x line ends, band) | S | done 2026-11-21 (statistics 16.2a) |
 | [T312](T312-import-nonnum.md) | Text import: text in a numeric column read as text, stop, new sheet or new columns (NonNum), as Origin 2016 | S | done 2026-11-21, measured |
 | [T313](T313-scatter-matrix-measure.md) | Measure Scatter Matrix against Origin (page, grid, tick labels, titles, symbols, tick step) | S | done 2026-11-21 (graphing 35) |
 | [T315](T315-import-two-digit-years.md) | Text import: two-digit years (M/d/yy, dd.MM.yy, dd-MMM-yy) with Origin 2016's 00-44 window | S | done 2026-11-21, measured |
+| [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T318](T318-baseline-als-dataset.md) | Peak Analyzer baselines Use Existing Dataset and Asymmetric Least Squares Smoothing (window, CLI) | M | done 2026-11-21; ALS not measured (Pro) |
+| [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T320](T320-fit-covariance.md) | Fit report: Covariance Matrix and Correlation Matrix options (off as in Origin 2016), checked against Origin's errors and dependencies | S | done 2026-11-21 (fitting 4) |
+| [T322](T322-funcgraph-measure.md) | Measure Graph > Add Function Graph against Origin (Function tab, Auto range, Plot Type) | S | done 2026-11-21 (graphing 41) |
+| [T324](T324-windrose-measure.md) | Measure Wind Rose - Raw Data against Origin (speed bands, counts, colours) | S | done 2026-11-21 (graphing 36) |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |

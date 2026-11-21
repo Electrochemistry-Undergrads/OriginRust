@@ -1,6 +1,8 @@
 # T83: Interval Plot and Pareto (B4 slice)
 
-**Status:** Done 2026-11-16 (Claude macOS, branch `interval-pareto`; graphing 14.29). Built from Origin's documentation on a Origin 2016 measurements recorded 2026-11-16 (Claude Windows, docs only, graphing 14.29): the interval statistic matches; left for a code slice: the two-entry legend and "Range" title, Pareto points at bar centres without (0, 0), point labels, 1.1 x total count axis aligned with a 0..110 percent axis, "Cumulative Frequency", blue line/squares.
+**Status:** Done 2026-11-16 (Claude macOS, branch `interval-pareto`; graphing 14.29). Built from Origin's documentation on a Origin 2016 measurements recorded 2026-11-16 (Claude Windows, docs only, graphing 14.29): the interval statistic matches; left for a code slice: the two-entry legend and "Range" title, Pareto points at bar centres without (0, 0), point labels, 1.1 x total count axis aligned with a 0..110 percent axis, "Cumulative Frequency", blue line/squares. T316 (2026-11-21) copied Origin 2016's measured Pareto
+(colours, axes 0..1.1 x total and 0..110 %, points at the bar centres, labels, titles) and the interval plot's Y
+title "Range".
 machine without Origin: every choice the documentation does not give is Sheaf's and **unmeasured** (14.29).
 **Size:** M. **Branch:** `interval-pareto`.
 **Spec:** [graphing.md 14.29](../spec/graphing.md). **Inventory:** Plot > Statistics > Interval Plot and Pareto (2 greyed

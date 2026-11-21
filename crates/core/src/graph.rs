@@ -1639,11 +1639,11 @@ pub enum Connect {
     StepHorizontal,
     /// Vertical first, then horizontal.
     StepVertical,
-    /// Origin's "Step Horizontal Center" (line connection 13, T252): horizontal to halfway between
-    /// two points, vertical, then horizontal on to the next point.
+    /// Origin's "Step Horizontal Center" (line connection 13, T252, drawing measured in T268):
+    /// horizontal to halfway between two points, vertical, then horizontal on to the next point.
     StepHorizontalCenter,
-    /// "Step Vertical Center" (T252): vertical to halfway between the two values, horizontal, then
-    /// vertical on to the next point. Origin's file code is not documented.
+    /// "Step Vertical Center" (T252; line connection 14, measured in T268): vertical to halfway
+    /// between the two values, horizontal, then vertical on to the next point.
     StepVerticalCenter,
     /// Origin's "2 Point Segment": points 1-2, 3-4, ... are joined, the pairs are not (LabTalk line
     /// connection 2, measured 2026-11-15).

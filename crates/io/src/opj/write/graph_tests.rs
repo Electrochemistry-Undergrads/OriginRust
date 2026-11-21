@@ -220,6 +220,7 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
         Connect::Segment2,
         Connect::Segment3,
         Connect::StepHorizontalCenter,
+        Connect::StepVerticalCenter,
     ]
     .iter()
     .enumerate()
@@ -232,7 +233,7 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
     let (imp, warnings) = round_trip(&p);
     assert!(warnings.is_empty(), "{warnings:?}");
     assert!(imp.warnings.is_empty(), "{:?}", imp.warnings);
-    assert_eq!(imp.graphs.len(), 5 + 8 + 8 + 9);
+    assert_eq!(imp.graphs.len(), 5 + 8 + 8 + 10);
     let by_name = |n: &str| imp.graphs.iter().find(|g| g.name == n).unwrap().layers[0].plots[0].clone();
     for (k, kind) in kinds.iter().enumerate() {
         let got = by_name(&format!("K{k}"));
@@ -271,6 +272,7 @@ fn every_plot_kind_shape_dash_and_connection_comes_back() {
         Connect::Segment2,
         Connect::Segment3,
         Connect::StepHorizontalCenter,
+        Connect::StepVerticalCenter,
     ]
     .iter()
     .enumerate()

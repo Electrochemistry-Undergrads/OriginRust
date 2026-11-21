@@ -5,7 +5,7 @@
 //! `EMR_STROKEPATH`, `EMR_STROKEANDFILLPATH`) or `EMR_RECTANGLE`, pens are geometric pens with
 //! user dashes, text is `EMR_EXTTEXTOUTW` in the graph's own font (Word and PowerPoint draw it
 //! with the installed face), layer clipping is `EMR_INTERSECTCLIPRECT` between `EMR_SAVEDC` and
-//! `EMR_RESTOREDC`. One logical unit is 0.01 mm, which is also what the header's frame uses, so a
+//! `EMR_RESTOREDC`. Pictures are 24-bit `EMR_STRETCHDIBITS` bitmaps (T237 slice 9). One logical unit is 0.01 mm, which is also what the header's frame uses, so a
 //! viewer shows the figure at the size of the page. The format has no transparency, so
 //! translucent colours are blended onto the page background (see [`crate::vector::flatten`]).
 
@@ -44,6 +44,7 @@ const EMR_CLOSEFIGURE: u32 = 61;
 const EMR_FILLPATH: u32 = 62;
 const EMR_STROKEANDFILLPATH: u32 = 63;
 const EMR_STROKEPATH: u32 = 64;
+const EMR_STRETCHDIBITS: u32 = 81;
 const EMR_EXTCREATEFONTINDIRECTW: u32 = 82;
 const EMR_EXTTEXTOUTW: u32 = 84;
 const EMR_EXTCREATEPEN: u32 = 95;
@@ -137,14 +138,59 @@ pub fn write_emf_view(scene: &Scene, scale: f64, measurer: &dyn TextMeasurer, vi
     for hnd in handles {
         e.rec(EMR_DELETEOBJECT, &le(&[hnd]));
     }
-    e.rec(EMR_EOF, &le(&[0, 16, 20]));
+    e.finish()
+}
 
-    // Patch nBytes, nRecords and nHandles into the header.
-    let total = e.buf.len() as u32;
-    e.buf[48..52].copy_from_slice(&total.to_le_bytes());
-    e.buf[52..56].copy_from_slice(&e.records.to_le_bytes());
-    e.buf[56..58].copy_from_slice(&(e.next_handle as u16).to_le_bytes());
-    e.buf
+/// A picture as a metafile of `width_pt` x `height_pt` points: one bitmap filling it (a layout page
+/// printed or exported as EMF, T237 slice 9). Transparent pixels are blended onto white.
+pub(crate) fn write_emf_picture(width_pt: f64, height_pt: f64, picture: &crate::Raster) -> Vec<u8> {
+    let mut e = Emf {
+        buf: Vec::with_capacity(picture.rgba.len() * 3 / 4 + 1024),
+        records: 0,
+        handles: HashMap::new(),
+        next_handle: 1,
+        state: State::default(),
+        saved: Vec::new(),
+        background: Color::WHITE,
+        scale: 1.0,
+        measurer: crate::fonts::SystemFonts::shared(),
+    };
+    let (w, h) = (e.u(width_pt), e.u(height_pt));
+    e.header(w, h);
+    e.rec(EMR_SETMAPMODE, &le(&[1]));
+    e.bitmap(crate::Rect { x: 0.0, y: 0.0, w: width_pt, h: height_pt }, picture.width, picture.height, &picture.rgba);
+    e.finish()
+}
+
+/// Decodes a PNG to 8-bit RGBA.
+fn png_rgba(png: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    let mut d = png::Decoder::new(std::io::Cursor::new(png));
+    d.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut r = d.read_info().ok()?;
+    let mut buf = vec![0; r.output_buffer_size()?];
+    let info = r.next_frame(&mut buf).ok()?;
+    let (w, h) = (info.width as usize, info.height as usize);
+    let channels = match info.color_type {
+        png::ColorType::Grayscale => 1,
+        png::ColorType::GrayscaleAlpha => 2,
+        png::ColorType::Rgb => 3,
+        png::ColorType::Rgba => 4,
+        png::ColorType::Indexed => return None,
+    };
+    let mut out = Vec::with_capacity(w * h * 4);
+    for y in 0..h {
+        let row = &buf[y * info.line_size..];
+        for x in 0..w {
+            let p = &row[x * channels..x * channels + channels];
+            out.extend_from_slice(&match channels {
+                1 => [p[0], p[0], p[0], 255],
+                2 => [p[0], p[0], p[0], p[1]],
+                3 => [p[0], p[1], p[2], 255],
+                _ => [p[0], p[1], p[2], p[3]],
+            });
+        }
+    }
+    Some((info.width, info.height, out))
 }
 
 fn le(v: &[u32]) -> Vec<u8> {
@@ -163,6 +209,54 @@ impl Emf<'_> {
     /// Page points to logical units, with the export scale applied.
     fn u(&self, pt: f64) -> i32 {
         (pt * self.scale * UNITS_PER_PT).round() as i32
+    }
+
+    /// Patches nBytes, nRecords and nHandles into the header after the end record.
+    fn finish(mut self) -> Vec<u8> {
+        self.rec(EMR_EOF, &le(&[0, 16, 20]));
+        let total = self.buf.len() as u32;
+        self.buf[48..52].copy_from_slice(&total.to_le_bytes());
+        self.buf[52..56].copy_from_slice(&self.records.to_le_bytes());
+        self.buf[56..58].copy_from_slice(&(self.next_handle as u16).to_le_bytes());
+        self.buf
+    }
+
+    /// `EMR_STRETCHDIBITS`: an RGBA picture `w` x `h` pixels stretched over `rect` (page points), as
+    /// a bottom-up 24-bit DIB; alpha is blended onto the background (white when that is clear).
+    fn bitmap(&mut self, rect: crate::Rect, w: u32, h: u32, rgba: &[u8]) {
+        if w == 0 || h == 0 || rgba.len() < (w as usize) * (h as usize) * 4 {
+            return;
+        }
+        let bg = if self.background.a == 0 { Color::WHITE } else { self.background };
+        let stride = (w as usize * 3).div_ceil(4) * 4;
+        let mut bits = vec![0u8; stride * h as usize];
+        for y in 0..h as usize {
+            // DIB rows go from the bottom up.
+            let row = &mut bits[(h as usize - 1 - y) * stride..];
+            for x in 0..w as usize {
+                let p = &rgba[(y * w as usize + x) * 4..][..4];
+                let a = u32::from(p[3]);
+                let mix = |c: u8, b: u8| ((u32::from(c) * a + u32::from(b) * (255 - a) + 127) / 255) as u8;
+                row[x * 3] = mix(p[2], bg.b);
+                row[x * 3 + 1] = mix(p[1], bg.g);
+                row[x * 3 + 2] = mix(p[0], bg.r);
+            }
+        }
+        let (l, t) = (self.u(rect.x), self.u(rect.y));
+        let (cw, ch) = (self.u(rect.w).max(1), self.u(rect.h).max(1));
+        let mut p = le_i(&[l, t, l + cw - 1, t + ch - 1]); // rclBounds
+        p.extend(le_i(&[l, t, 0, 0, w as i32, h as i32])); // xDest yDest xSrc ySrc cxSrc cySrc
+        // offBmiSrc, cbBmiSrc, offBitsSrc, cbBitsSrc (from the start of the record), DIB_RGB_COLORS,
+        // SRCCOPY
+        p.extend(le(&[80, 40, 120, bits.len() as u32, 0, 0x00CC_0020]));
+        p.extend(le_i(&[cw, ch])); // cxDest cyDest
+        // BITMAPINFOHEADER: 24 bits, BI_RGB.
+        p.extend(le_i(&[40, w as i32, h as i32]));
+        p.extend_from_slice(&1u16.to_le_bytes());
+        p.extend_from_slice(&24u16.to_le_bytes());
+        p.extend(le(&[0, bits.len() as u32, 0, 0, 0, 0]));
+        p.extend(bits);
+        self.rec(EMR_STRETCHDIBITS, &p);
     }
 
     fn rec(&mut self, ty: u32, payload: &[u8]) {
@@ -268,8 +362,13 @@ impl Emf<'_> {
         let (fill, stroke) = match item {
             Item::Text(t) => return self.text(t),
             Item::Rect { fill, stroke, .. } | Item::Path { fill, stroke, .. } => (*fill, stroke),
-            // Pictures (T216) are not written to EMF yet.
-            Item::Image { .. } => return,
+            // Pictures (T216): bitmaps (T237 slice 9).
+            Item::Image { rect, png } => {
+                if let Some((w, h, rgba)) = png_rgba(png) {
+                    self.bitmap(*rect, w, h, &rgba);
+                }
+                return;
+            }
         };
         let fill = fill.filter(|c| c.a > 0);
         let stroke = stroke.as_ref().filter(|s| s.color.a > 0 && s.width > 0.0);
@@ -452,5 +551,77 @@ impl Emf<'_> {
         p.resize(p.len() + (str_padded - str_bytes), 0);
         p.extend(le(&dx));
         self.rec(EMR_EXTTEXTOUTW, &p);
+    }
+}
+
+#[cfg(test)]
+mod picture_tests {
+    use super::*;
+
+    /// The records of a metafile: (type, offset, size).
+    fn records(emf: &[u8]) -> Vec<(u32, usize, usize)> {
+        let mut out = Vec::new();
+        let mut at = 0;
+        while at + 8 <= emf.len() {
+            let ty = u32::from_le_bytes(emf[at..at + 4].try_into().unwrap());
+            let size = u32::from_le_bytes(emf[at + 4..at + 8].try_into().unwrap()) as usize;
+            out.push((ty, at, size));
+            at += size;
+        }
+        out
+    }
+
+    #[test]
+    fn a_picture_is_a_bottom_up_24_bit_stretchdibits_record() {
+        // 2 x 2 pixels: red, green / blue, half-transparent black.
+        let rgba = vec![255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 0, 0, 0, 128];
+        let emf = write_emf_picture(72.0, 36.0, &crate::Raster { width: 2, height: 2, rgba });
+        let recs = records(&emf);
+        assert_eq!(
+            recs.iter().map(|r| r.0).collect::<Vec<_>>(),
+            [EMR_HEADER, EMR_SETMAPMODE, EMR_STRETCHDIBITS, EMR_EOF]
+        );
+        assert_eq!(u32::from_le_bytes(emf[48..52].try_into().unwrap()) as usize, emf.len(), "nBytes");
+        let (_, at, size) = recs[2];
+        let r = &emf[at..at + size];
+        let i = |o: usize| i32::from_le_bytes(r[o..o + 4].try_into().unwrap());
+        assert_eq!((i(40), i(44)), (2, 2), "cxSrc cySrc");
+        assert_eq!((i(72), i(76)), (2540, 1270), "the picture covers 1 x 0.5 in (0.01 mm units)");
+        assert_eq!((i(48), i(52), i(56)), (80, 40, 120), "the header and the bits follow the fixed part");
+        assert_eq!((i(80), i(84), i(88)), (40, 2, 2), "BITMAPINFOHEADER of 2 x 2");
+        // Rows are padded to 8 bytes, the bottom row first: blue, then grey-on-white; then red, green.
+        let bits = &r[120..];
+        assert_eq!(&bits[..6], &[255, 0, 0, 127, 127, 127], "bottom row (BGR): blue, black at half over white");
+        assert_eq!(&bits[8..14], &[0, 0, 255, 0, 255, 0], "top row (BGR): red, green");
+    }
+
+    #[test]
+    fn a_scene_picture_is_written_to_the_metafile() {
+        let mut png = Vec::new();
+        {
+            let mut enc = png::Encoder::new(&mut png, 1, 1);
+            enc.set_color(png::ColorType::Rgb);
+            enc.set_depth(png::BitDepth::Eight);
+            enc.write_header().unwrap().write_image_data(&[10, 20, 30]).unwrap();
+        }
+        let rect = crate::Rect { x: 10.0, y: 10.0, w: 20.0, h: 20.0 };
+        let mut e = Emf {
+            buf: Vec::new(),
+            records: 0,
+            handles: HashMap::new(),
+            next_handle: 1,
+            state: State::default(),
+            saved: Vec::new(),
+            background: Color::WHITE,
+            scale: 1.0,
+            measurer: crate::fonts::SystemFonts::shared(),
+        };
+        e.header(100, 100);
+        e.item(&Item::Image { rect, png: std::sync::Arc::new(png) });
+        let emf = e.finish();
+        let recs = records(&emf);
+        let (_, at, size) = *recs.iter().find(|r| r.0 == EMR_STRETCHDIBITS).expect("the picture is a bitmap");
+        assert_eq!(&emf[at + 120..at + 123], &[30, 20, 10], "BGR");
+        assert_eq!(size, 124, "one pixel row padded to 4 bytes");
     }
 }

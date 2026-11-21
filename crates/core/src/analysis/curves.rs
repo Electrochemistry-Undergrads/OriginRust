@@ -244,7 +244,7 @@ mod tests {
     }
 
     #[test]
-    fn average_needs_two_curves_and_refuses_a_turning_x() {
+    fn average_needs_two_curves_and_sorts_a_turning_x() {
         let (mut p, _, ys) = scans();
         assert!(p.analyze(&req(&ys[..1], Tool::AverageCurves(rows()))).is_err());
         // Two curves, each with its own X, one of them a full cycle.
@@ -253,8 +253,9 @@ mod tests {
         let a = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.0, 1.0, 2.0])).unwrap();
         p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 0.5, 1.0])).unwrap();
         let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.0, 1.0, 2.0])).unwrap();
-        let e = p.analyze(&req(&[a, b], Tool::AverageCurves(rows()))).unwrap_err();
-        assert!(e.to_string().contains("turn back"), "{e}");
+        // T325: as Origin's avecurves, the turning curve is sorted by X (its two points at X = 0 average
+        // to 1) instead of being refused.
+        assert!(p.analyze(&req(&[a, b], Tool::AverageCurves(rows()))).is_ok());
     }
 
     #[test]

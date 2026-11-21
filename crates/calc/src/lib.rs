@@ -40,6 +40,7 @@ pub mod kde;
 pub mod kmeans;
 pub mod levelcross;
 pub mod manip;
+pub mod minverse;
 pub mod nonparam;
 pub mod normality;
 pub mod normalize;

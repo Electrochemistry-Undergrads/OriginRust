@@ -166,7 +166,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T201](T201-gray-scale-map.md) | Plot > Contour/Heat Map > Gray Scale Map (B14 slice) | S | done 2026-11-20 (matrices 7g), not measured |
 | [T199](T199-import-binary-2d.md) | File > Import > Binary 2D Array into a matrix (B14 slice) | S | done 2026-11-20 (matrices 7f), not measured |
 | [T196](T196-matrix-fft2.md) | 2D FFT and 2D IFFT of a matrix (B14 slice) | S | done 2026-11-20 (matrices 7e), not measured |
-| [T193](T193-matrix-inverse.md) | Analysis > Mathematics > Inverse of a matrix (B14 slice) | S | done 2026-11-20 (matrices 7d), not measured |
+| [T193](T193-matrix-inverse.md) | Analysis > Mathematics > Inverse of a matrix (B14 slice) | S | done 2026-11-20 (matrices 7d), measured by T290 |
 | [T192](T192-matrices.md) | Matrix books, heat maps, contour plots, `sheaf matrix` (B14 slice 1, port of the offline originrust-3a branch) | L | slices 1-4 done 2026-11-19 (matrices spec, Origin 2016 measured; app window, New Matrix, Matrix menu, Contour/Heat Map plots, Convert to Matrix); left: options windows, statistics, .opj |
 | [T178](T178-legend-clipboard.md) | Legend right-click Cut/Copy; `\l(n)` and `%(n)` in free text labels (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured |
 | [T162](T162-object-group.md) | Object Edit Group/Ungroup, dragging a selection or a group (B2 slice) | M | done 2026-11-19 (graphing "Aligning drawn objects and text"), not measured |
@@ -272,6 +272,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T287](T287-fft2-measure.md) | Matrix 2D FFT measured against Origin 2016 fft2 (numpy conventions match); Power sheet added | S | done 2026-11-21, measured |
 | [T288](T288-explorer-search.md) | Project Explorer search box (name, long name, comments; Subfolders) | S | done 2026-11-21 |
 | [T289](T289-kde2d-measure.md) | Measure 2D Kernel Density against Origin (32 x 32 grid, Rule of Thumb, Bivariate) | S | done 2026-11-21 (graphing 38) |
+| [T290](T290-minverse-measure.md) | Measure Matrix Inverse against Origin (pseudoinverse, full-rank test, output book) | S | done 2026-11-21 (matrices 7d) |
 | [T291](T291-axis-title-rotation.md) | Axis title Rotate (deg.) and Offset (pt), turned about its middle as measured in Origin 2016 | S | done 2026-11-21 |
 | [T293](T293-font-underline.md) | Whole-font Underline beside Bold and Italic (drawn, font boxes, .opj as \u(..)) | S | done 2026-11-21 |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |

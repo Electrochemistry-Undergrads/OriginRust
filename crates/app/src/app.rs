@@ -5841,7 +5841,12 @@ impl SheafApp {
             }
             M::Inverse => {
                 match self.doc.edit("Matrix Inverse", |p| p.matrix_inverse(id, sheet)) {
-                    Ok(_) => self.say("Inverted the matrix into a new matrix book".to_string()),
+                    Ok((_, false)) => self.say("Inverted the matrix into a new matrix book".to_string()),
+                    // Origin warns in a message box; Sheaf on the status bar.
+                    Ok((_, true)) => self.warn(
+                        "The matrix is not square or not of full rank: its pseudoinverse is in a new matrix book"
+                            .to_string(),
+                    ),
                     Err(e) => self.warn(e.to_string()),
                 }
                 return;

@@ -1733,6 +1733,23 @@ fn corner_and_titles(
         if sheet.view.row_labels {
             title_text(ui, cell, &row_title(row));
         }
+        // T310: a user parameter row's title has Rename and Delete.
+        if let LabelRow::Param(name) = row {
+            let response = ui.interact(cell, ui.id().with(("param_title", name.as_str())), Sense::CLICK);
+            response.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::WidgetType::Label, true, format!("Parameter row {name}"))
+            });
+            response.context_menu(|ui| {
+                if ui.button("Rename Parameter Row...").clicked() {
+                    actions.push(Action::RenameParamRow { book: book_id, name: name.clone() });
+                    ui.close();
+                }
+                if ui.button("Delete Parameter Row").clicked() {
+                    actions.push(Action::DeleteParamRow { book: book_id, name: name.clone() });
+                    ui.close();
+                }
+            });
+        }
     }
     for i in 0..=label_rows.len() {
         let y = rect.top() + state.layout_cache.as_ref().expect("worksheet layout").value.label_top(i) - 0.5;

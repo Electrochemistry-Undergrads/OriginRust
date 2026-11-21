@@ -4,6 +4,60 @@
 use super::*;
 use sheaf_core::sheet_tab::SheetLabel;
 
+/// T310: a parameter row's title has Rename Parameter Row... and Delete Parameter Row.
+#[test]
+fn a_parameter_row_is_renamed_and_deleted_from_its_title() {
+    let mut h = start(vec![data_file("param-row-edit")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = h.state().books.keys().next().copied().unwrap();
+    h.state_mut().doc.apply("Row", |p| {
+        p.workbook_mut(book).unwrap().sheets[0].add_parameter_row("Dose").unwrap();
+    });
+    settle(&mut h);
+    h.get_by_label("Parameter row Dose").click_secondary();
+    settle(&mut h);
+    click(&mut h, "Rename Parameter Row...");
+    assert_eq!(h.state().param_row.as_ref().map(|p| p.2.as_str()), Some("Dose"), "the window starts on the name");
+    h.state_mut().param_row.as_mut().unwrap().2 = "Amount".into();
+    click(&mut h, "OK");
+    assert_eq!(project(&h).workbook(book).unwrap().sheets[0].parameter_names(), ["Amount"]);
+    assert_eq!(h.state().doc.undo_label(), Some("Rename parameter row"));
+    h.get_by_label("Parameter row Amount").click_secondary();
+    settle(&mut h);
+    click(&mut h, "Delete Parameter Row");
+    assert!(project(&h).workbook(book).unwrap().sheets[0].parameter_names().is_empty());
+    assert_eq!(h.state().doc.undo_label(), Some("Delete parameter row"));
+}
+
+/// T309: the corner menu's Add User Parameter Row... adds an empty row to every column.
+#[test]
+fn a_user_parameter_row_can_be_added_from_the_corner_menu() {
+    assert!(crate::menus::corner_menu(&sheaf_core::Worksheet::new("Sheet1")).iter().any(|e| matches!(e,
+        crate::menus::Entry::Item(i) if i.label == "Add User Parameter Row..."
+            && i.cmd == Some(crate::menus::Cmd::Sheet(SheetOp::AddParamRow)))));
+    let mut h = start(vec![data_file("param-row")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = h.state().books.keys().next().copied().unwrap();
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Sheet { book, op: SheetOp::AddParamRow }, &ctx);
+    settle(&mut h);
+    assert!(h.query_by_label("Name of the row").is_some());
+    h.state_mut().param_row.as_mut().unwrap().2 = "Dose".into();
+    click(&mut h, "OK");
+    assert!(h.state().param_row.is_none(), "the window closes");
+    let sheet = project(&h).workbook(book).unwrap().sheets[0].clone();
+    assert_eq!(sheet.parameter_names(), ["Dose"]);
+    assert!(h.query_by_label("Dose").is_some() || h.query_all_by_value("Dose").next().is_some(), "the row shows");
+    assert_eq!(h.state().doc.undo_label(), Some("Add parameter row"));
+    // A taken name keeps the window open and changes nothing.
+    h.state_mut().apply(Action::Sheet { book, op: SheetOp::AddParamRow }, &ctx);
+    settle(&mut h);
+    h.state_mut().param_row.as_mut().unwrap().2 = "dose".into();
+    click(&mut h, "OK");
+    assert!(h.state().param_row.is_some());
+    assert_eq!(project(&h).workbook(book).unwrap().sheets[0].parameter_names(), ["Dose"]);
+}
+
 /// T306: dragging a sheet tab onto another tab moves the sheet there, in one undo step.
 #[test]
 fn dragging_a_sheet_tab_onto_another_moves_the_sheet() {

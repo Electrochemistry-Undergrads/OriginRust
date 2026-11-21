@@ -1709,6 +1709,13 @@ has neither test, so Sheaf uses the textbook formulas (`crates/calc/src/poisson.
   confidence levels. CLI: `sheaf analyze poissontest FILE --total X[,X2] --size N[,N2]
   [--exposure T[,T2]] [--rate R | --difference D] [--tail ...] [--levels 90,95,99] [--no-exact |
   --no-normal] [--unpooled]`.
+- **Dialogs** (slice 2): Statistics > Hypothesis Testing > One-Sample Poisson Rate Test... and
+  Two-Sample Poisson Rate Test..., after the proportion tests. Like those they read no data (no Input
+  node; the active sheet's book receives the report): Sample Size, Total Occurrence and Exposure of
+  each sample (defaults 10, 10, 1), Test Rate (1) or Test Difference (0), the read-only null
+  hypothesis, the three alternatives, Significance Level, Confidence Interval(s) with their levels,
+  Test Method Exact and Normal Approximation (both on), and for two samples "Use pooled p for
+  test" (on).
 
 ## 5 Where results go (ADR 0005)
 

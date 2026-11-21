@@ -2034,6 +2034,9 @@ fn statistics_menu() -> Vec<Entry> {
                 sep(),
                 item("One-Sample Proportion Test...", Cmd::Analyze(AnalysisKind::PropTestOne)),
                 item("Two-Sample Proportion Test...", Cmd::Analyze(AnalysisKind::PropTestTwo)),
+                sep(),
+                item("One-Sample Poisson Rate Test...", Cmd::Analyze(AnalysisKind::PoissonOne)),
+                item("Two-Sample Poisson Rate Test...", Cmd::Analyze(AnalysisKind::PoissonTwo)),
             ],
         ),
         sub(

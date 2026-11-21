@@ -13,9 +13,9 @@ use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::{
     AnovaSpec, BinSize, CorrelationSpec, CrosstabSpec, DiscSort, DiscreteFreqSpec, FreqOptions, FriedmanSpec,
     GraphArrangement, GraphSummarySpec, HistogramSpec, KruskalWallisSpec, KsTwoSampleSpec, MannWhitneySpec,
-    MeansComparison, MedianTestSpec, NormalitySpec, OutlierSpec, PropPowerSpec, PropTestKind, PropTestSpec,
-    RowStatsSpec, SignTestSpec, SignedRankKind, SignedRankSpec, StatisticsSpec, TTestKind, TTestSpec, Tail,
-    TwoWayAnovaSpec, TwoWayLayout, VarTestKind, VarTestSpec,
+    MeansComparison, MedianTestSpec, NormalitySpec, OutlierSpec, PoissonTestKind, PoissonTestSpec, PropPowerSpec,
+    PropTestKind, PropTestSpec, RowStatsSpec, SignTestSpec, SignedRankKind, SignedRankSpec, StatisticsSpec, TTestKind,
+    TTestSpec, Tail, TwoWayAnovaSpec, TwoWayLayout, VarTestKind, VarTestSpec,
 };
 use sheaf_core::analysis::{
     AreaType, BaselineSpec, Boundary, ColumnMathSpec, ConvolutionSpec, CrossingIndex, CurveMathSpec, CurveOp,
@@ -106,6 +106,10 @@ pub enum AnalysisKind {
     PropTestOne,
     /// Statistics > Hypothesis Testing > Two-Sample Proportion Test.
     PropTestTwo,
+    /// Statistics > Hypothesis Testing > One-Sample Poisson Rate Test (Origin 2026b, T267; counts typed in).
+    PoissonOne,
+    /// Statistics > Hypothesis Testing > Two-Sample Poisson Rate Test (T267).
+    PoissonTwo,
     Anova,
     Histogram,
     /// Statistics > Descriptive Statistics > Discrete Frequency.
@@ -249,6 +253,8 @@ impl AnalysisKind {
             AnalysisKind::VarTestTwo => "Two-Sample Test for Variance...",
             AnalysisKind::PropTestOne => "One-Sample Proportion Test...",
             AnalysisKind::PropTestTwo => "Two-Sample Proportion Test...",
+            AnalysisKind::PoissonOne => "One-Sample Poisson Rate Test...",
+            AnalysisKind::PoissonTwo => "Two-Sample Poisson Rate Test...",
             AnalysisKind::Anova => "One-Way ANOVA...",
             AnalysisKind::Histogram => "Histogram...",
             AnalysisKind::Binning2D => "2D Frequency Counts/Binning...",
@@ -338,6 +344,8 @@ impl AnalysisKind {
             "vartest2" => AnalysisKind::VarTestTwo,
             "proptest1" => AnalysisKind::PropTestOne,
             "proptest2" => AnalysisKind::PropTestTwo,
+            "poissontest1" => AnalysisKind::PoissonOne,
+            "poissontest2" => AnalysisKind::PoissonTwo,
             "anova" => AnalysisKind::Anova,
             "histogram" => AnalysisKind::Histogram,
             "bin2d" => AnalysisKind::Binning2D,
@@ -555,6 +563,16 @@ struct StatsOptions {
     sample_size: [u64; 2],
     prop_hyp: f64,
     prop_diff: f64,
+    /// Poisson rate tests (T267): total occurrence, sample size and exposure of each sample, the test rate
+    /// and difference, and the two methods (Origin: Exact and Normal Approximation).
+    occurrences: [u64; 2],
+    poisson_size: [u64; 2],
+    exposure: [f64; 2],
+    rate_hyp: f64,
+    rate_diff: f64,
+    poisson_exact: bool,
+    poisson_normal: bool,
+    poisson_pooled: bool,
     /// Proportion tests: normal approximation and exact (binomial) test.
     normal_method: bool,
     binomial_method: bool,
@@ -625,6 +643,14 @@ impl Default for StatsOptions {
             sample_size: [10, 10],
             prop_hyp: 0.5,
             prop_diff: 0.0,
+            occurrences: [10, 10],
+            poisson_size: [10, 10],
+            exposure: [1.0, 1.0],
+            rate_hyp: 1.0,
+            rate_diff: 0.0,
+            poisson_exact: true,
+            poisson_normal: true,
+            poisson_pooled: true,
             normal_method: true,
             binomial_method: false,
             pooled_p: false,
@@ -2089,6 +2115,33 @@ impl AnalysisDialog {
                     },
                 })
             }
+            AnalysisKind::PoissonOne | AnalysisKind::PoissonTwo => {
+                let st = &self.stats;
+                Tool::PoissonTest(PoissonTestSpec {
+                    kind: if self.kind == AnalysisKind::PoissonOne {
+                        PoissonTestKind::OneSample {
+                            total: st.occurrences[0],
+                            size: st.poisson_size[0],
+                            exposure: st.exposure[0],
+                            rate: st.rate_hyp,
+                        }
+                    } else {
+                        PoissonTestKind::TwoSample {
+                            first: (st.occurrences[0], st.poisson_size[0]),
+                            second: (st.occurrences[1], st.poisson_size[1]),
+                            exposures: (st.exposure[0], st.exposure[1]),
+                            difference: st.rate_diff,
+                        }
+                    },
+                    tail: st.tail,
+                    alpha: st.alpha,
+                    intervals: st.intervals,
+                    levels: parse_levels(&st.levels_text)?,
+                    normal: st.poisson_normal,
+                    exact: st.poisson_exact,
+                    pooled: st.poisson_pooled,
+                })
+            }
             AnalysisKind::Anova => Tool::Anova(AnovaSpec {
                 alpha: self.stats.alpha,
                 comparison: self.stats.comparison,
@@ -2835,6 +2888,54 @@ impl AnalysisDialog {
                     });
                 });
             }
+            AnalysisKind::PoissonOne | AnalysisKind::PoissonTwo => {
+                let one = self.kind == AnalysisKind::PoissonOne;
+                let st = &mut self.stats;
+                ui.label("Input Data: Summarized");
+                for i in 0..if one { 1 } else { 2 } {
+                    let tag = if one { String::new() } else { format!(" of Sample{}", i + 1) };
+                    ui.horizontal(|ui| {
+                        ui.label(format!("Sample Size{tag}"));
+                        ui.add(DragValue::new(&mut st.poisson_size[i]).range(1..=u64::from(u32::MAX)));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label(format!("Total Occurrence{tag}"));
+                        ui.add(DragValue::new(&mut st.occurrences[i]).range(0..=u64::from(u32::MAX)));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label(format!("Exposure{tag}"));
+                        ui.add(DragValue::new(&mut st.exposure[i]).speed(0.1).range(1e-9..=1e12));
+                    });
+                }
+                ui.label("Poisson Rate Test");
+                let (what, value) = if one {
+                    ui.horizontal(|ui| {
+                        ui.label("Test Rate");
+                        ui.add(DragValue::new(&mut st.rate_hyp).speed(0.01).range(1e-9..=1e12));
+                    });
+                    ("Rate", st.rate_hyp)
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.label("Test Difference");
+                        ui.add(DragValue::new(&mut st.rate_diff).speed(0.01));
+                    });
+                    ("Rate1 - Rate2", st.rate_diff)
+                };
+                let shown = format!("{value}");
+                ui.horizontal(|ui| {
+                    ui.label("Null Hypothesis");
+                    read_only_box(ui, &format!("{what} = {shown}"), 180.0);
+                });
+                alternative_radios(ui, &mut st.tail, what, &shown);
+                significance_and_intervals(ui, st);
+                ui.label("Test Method");
+                ui.checkbox(&mut st.poisson_exact, "Exact");
+                ui.checkbox(&mut st.poisson_normal, "Normal Approximation");
+                if !one {
+                    ui.checkbox(&mut st.poisson_pooled, "Use pooled p for test");
+                }
+                ui.weak("Origin 2026b's test; its formulas are not published, so the textbook ones are used.");
+            }
             AnalysisKind::Anova => {
                 let st = &mut self.stats;
                 ui.label("Every chosen column is a group.");
@@ -3272,6 +3373,8 @@ impl AnalysisDialog {
             AnalysisKind::VarTestTwo => "TwoSampleTestVar",
             AnalysisKind::PropTestOne => "OneSampleProportionTest",
             AnalysisKind::PropTestTwo => "TwoSampleProportionTest",
+            AnalysisKind::PoissonOne => "OneSamplePoissonRateTest",
+            AnalysisKind::PoissonTwo => "TwoSamplePoissonRateTest",
             AnalysisKind::Anova => "anova1",
             AnalysisKind::Histogram => "freqcounts",
             AnalysisKind::Binning2D => "twoDBinning",
@@ -3371,6 +3474,8 @@ impl AnalysisDialog {
             AnalysisKind::VarTestTwo => "Test the ratio of the variances of two samples (F test)",
             AnalysisKind::PropTestOne => "Test a proportion of successes against a value, from counts you type in",
             AnalysisKind::PropTestTwo => "Compare the proportions of two samples, from counts you type in",
+            AnalysisKind::PoissonOne => "Test the rate of a Poisson count against a value, from counts you type in",
+            AnalysisKind::PoissonTwo => "Compare the rates of two Poisson counts, from counts you type in",
             AnalysisKind::Anova => "One-way analysis of variance; every column is a group",
             AnalysisKind::Histogram => "Count the values of the input columns in bins",
             AnalysisKind::Binning2D => "Count the points of two variables in a grid of X and Y bins",
@@ -3474,6 +3579,9 @@ impl AnalysisDialog {
             }
             AnalysisKind::PropTestOne | AnalysisKind::PropTestTwo => {
                 "The z statistic, the p-values of the ticked methods and the intervals, in a new sheet"
+            }
+            AnalysisKind::PoissonOne | AnalysisKind::PoissonTwo => {
+                "The rates, the exact and normal-approximation p-values and the intervals, in a new sheet"
             }
             AnalysisKind::Anova => "Group statistics, the ANOVA table and the comparisons in a new sheet",
             AnalysisKind::Histogram => "Bin centres, counts, cumulative counts and percentages in a new sheet",
@@ -3994,7 +4102,13 @@ impl AnalysisDialog {
                             .max_height(380.0)
                             .auto_shrink([false, true])
                             .show(ui, |ui| {
-                                if !matches!(self.kind, AnalysisKind::PropTestOne | AnalysisKind::PropTestTwo) {
+                                if !matches!(
+                                    self.kind,
+                                    AnalysisKind::PropTestOne
+                                        | AnalysisKind::PropTestTwo
+                                        | AnalysisKind::PoissonOne
+                                        | AnalysisKind::PoissonTwo
+                                ) {
                                     tree_node(ui, "analysis_input", "Input", |ui| self.input_node(ui, doc.project()));
                                 }
                                 let title = self.kind.title();

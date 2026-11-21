@@ -70,9 +70,14 @@ fn golden_heat_map_of_a_matrix() {
 fn golden_gray_scale_map_of_a_matrix() {
     let (p, g) = graph_of(FieldTemplate::GrayScale);
     let svg = svg(&p, g);
-    // Black for the lowest band, white for the highest; no blue or red of the heat map.
+    // Black for the lowest band, white for the highest (Origin's 32 grays); the colour scale has
+    // Origin's blue box for values above it and red for values below.
     assert!(svg.contains("#000000") && svg.contains("#FFFFFF"), "gray ramp");
-    assert!(!svg.contains("#0000FF"), "no heat-map blue");
+    assert!(svg.contains("#0000FF") && svg.contains("#FF0000"), "out-of-range boxes");
+    // 8 major steps of 6 bands, X tick labels upright (measured).
+    let f = p.graph(g).unwrap().layers[0].field.as_ref().unwrap().clone();
+    assert_eq!((f.levels.major, f.levels.minor), (8, 6));
+    assert_eq!(p.graph(g).unwrap().layers[0].x_axis.tick_label_angle_deg, 0.0);
     crate::tests::compare_golden("matrix-grayscale", &svg);
 }
 

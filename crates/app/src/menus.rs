@@ -765,6 +765,8 @@ pub enum Cmd {
     Cascade,
     TileHorizontally,
     TileVertically,
+    /// Window > Arrange Icons (T257).
+    ArrangeIcons,
     WindowProperties,
     About,
 }
@@ -2342,7 +2344,7 @@ fn window_menu(kind: WindowKind) -> Vec<Entry> {
         item("Cas&cade", Cmd::Cascade),
         item("Tile &Horizontally", Cmd::TileHorizontally),
         item("&Tile Vertically", Cmd::TileVertically),
-        grey("Arrange &Icons"),
+        item("Arrange &Icons", Cmd::ArrangeIcons),
         sep(),
         keyed("&Refresh", plain_key(Key::F5), Cmd::Refresh),
         sep(),
@@ -3970,6 +3972,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Cascade => Action::Cascade,
         Cmd::TileHorizontally => Action::TileHorizontally,
         Cmd::TileVertically => Action::TileVertically,
+        Cmd::ArrangeIcons => Action::ArrangeIcons,
         Cmd::WindowProperties => Action::RenameWindow(c.active.ok_or(NEED_WINDOW)?),
         Cmd::About => Action::About,
     })

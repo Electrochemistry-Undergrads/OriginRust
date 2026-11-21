@@ -374,7 +374,7 @@ has no project scope and continues to reject qualified references.
 
 ## 6. Differences from Origin's LabTalk
 
-- Only a single expression; no `before formula` scripts, assignments, session string variables, graph/dataset `%()` substitution, generated expression text or user-defined functions. The supported string-expression and static worksheet-cell substitution subsets are described above.
+- Only a single expression, with Before Formula Scripts limited to `name = expression` statements (T307, below); no other assignments, session string variables, graph/dataset `%()` substitution, generated expression text or user-defined functions. The supported string-expression and static worksheet-cell substitution subsets are described above.
 - No spreadsheet cell notation (`A1`, bare cross-sheet `Sheet!A`), range-variable declarations, or `x`/`y` as built-in column shorthands (a host may supply `x` as a variable). Explicit cross-sheet `col()` references are described above. The `[a:b]` range is accepted only inside statistics. Parameter-row ordering and the supported parameter-name syntax are described above.
 - A single `=` is not a comparison here; use `==`.
 - `e` is the constant 2.718...; a parameter literally named `e` in a fit function cannot be used (rename it).
@@ -382,6 +382,19 @@ has no project scope and continues to reject qualified references.
 - `j` exists only where the host supplies the column position (a worksheet column formula); it is the position in the sheet, not the position within a multi-column selection **[choice, not measured]**. See section 7.
 - Names of variables are case-sensitive; function names are not.
 - Unknown names are errors at evaluation time, not silently zero.
+
+### 6.1 Before Formula Scripts (T307, Sheaf's subset of Origin's LabTalk box)
+
+Set Column Values' Before Formula Scripts box takes statements `name = expression`, one per line or
+separated by `;`; a leading `double`, `int`, `const` or `range` is ignored and a line starting with `//` is
+a comment. Every use of a name in the formula, and in later statements, stands for its expression, as if
+it had been typed in place (`Expr::parse_with_script`): `double m = mean(col(B));` with the formula
+`col(A) - m` gives `col(A) - (mean(col(B)))`, so the column's sources, Auto/Manual recalculation and the
+cycle check see the columns the script reads. A name defined twice takes its last definition. Anything
+else (LabTalk commands, loops, string variables, `if`) is refused with a message naming the line. The
+script is kept with the formula (`Column::before_formula`, saved in `.sheaf`) and runs whenever the
+formula runs; setting the formula without a script drops it. The `.opj` written here does not hold the
+script; the save names such columns. Origin's own script language is far wider; this is not measured.
 
 ## 7. Set Multiple Columns Values (T53)
 

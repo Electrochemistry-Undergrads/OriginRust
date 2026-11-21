@@ -61,6 +61,7 @@ impl Project {
                     }
                 }
                 col.formula = None;
+                col.before_formula = None;
                 col.mask.clear();
             }
         }

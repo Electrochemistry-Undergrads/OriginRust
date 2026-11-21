@@ -389,7 +389,7 @@ fn find_cycle(project: &Project, target: ColumnId, deps: &[ColumnId]) -> Option<
         let Some(c) = project.column(id).filter(|c| c.is_locked()) else {
             continue;
         };
-        let Some(expr) = c.formula.as_deref().and_then(|f| Expr::parse(f).ok()) else {
+        let Some(expr) = c.formula.as_deref().and_then(|_| column_expr(c).ok()) else {
             continue;
         };
         let host = SheetHost::at(project, id)?;
@@ -455,16 +455,13 @@ fn recalc_project(
         .flat_map(|b| &b.sheets)
         .flat_map(|s| &s.columns)
         .filter(|c| c.is_locked())
-        .map(|c| {
-            let source = c.formula.as_deref().unwrap_or_default();
-            match Expr::parse(source) {
-                Err(e) => FormulaNode { id: c.id, deps: Err(format!("the formula is not valid: {e}")), expr: None },
-                Ok(expr) => {
-                    let host = SheetHost::at(project, c.id).expect("column is in the project");
-                    let deps = resolve_deps(&expr, &host, c.id)
-                        .map_err(|r| format!("it reads {r}, which cannot be found in the project"));
-                    FormulaNode { id: c.id, deps, expr: Some(expr) }
-                }
+        .map(|c| match column_expr(c) {
+            Err(e) => FormulaNode { id: c.id, deps: Err(format!("the formula is not valid: {e}")), expr: None },
+            Ok(expr) => {
+                let host = SheetHost::at(project, c.id).expect("column is in the project");
+                let deps = resolve_deps(&expr, &host, c.id)
+                    .map_err(|r| format!("it reads {r}, which cannot be found in the project"));
+                FormulaNode { id: c.id, deps, expr: Some(expr) }
             }
         })
         .collect();
@@ -598,6 +595,11 @@ fn recalc_project(
     problems
 }
 
+/// The formula of a column with its Before Formula Scripts (T307).
+fn column_expr(c: &Column) -> Result<Expr, sheaf_expr::ExprError> {
+    Expr::parse_with_script(c.before_formula.as_deref().unwrap_or(""), c.formula.as_deref().unwrap_or_default())
+}
+
 impl Project {
     /// Fills a column from a formula and remembers the formula on the column. The formula runs
     /// once ([`RecalcMode::None`]); see [`Project::set_column_values_with`] for a column that
@@ -631,7 +633,21 @@ impl Project {
         rows: Option<Range<usize>>,
         mode: RecalcMode,
     ) -> Result<(), FormulaError> {
-        let expr = Expr::parse(formula)?;
+        self.set_column_values_scripted(column, "", formula, rows, mode)
+    }
+
+    /// Like [`Project::set_column_values_with`], with Before Formula Scripts (T307): `script`'s
+    /// `name = expression` statements define names the formula uses (see
+    /// [`sheaf_expr::Expr::parse_with_script`]); the script is kept with the formula.
+    pub fn set_column_values_scripted(
+        &mut self,
+        column: ColumnId,
+        script: &str,
+        formula: &str,
+        rows: Option<Range<usize>>,
+        mode: RecalcMode,
+    ) -> Result<(), FormulaError> {
+        let expr = Expr::parse_with_script(script, formula)?;
         let (_, sheet, target) = self.locate(column).ok_or(FormulaError::NoSuchColumn(column))?;
         let host = SheetHost::at(self, column).expect("located above");
         let deps = resolve_deps(&expr, &host, column);
@@ -677,6 +693,7 @@ impl Project {
         let c = self.column_mut(column).expect("located above");
         c.data = data;
         c.formula = Some(formula.trim().to_string());
+        c.before_formula = Some(script.trim().to_string()).filter(|s| !s.is_empty());
         c.recalc = mode;
         c.formula_state = FormulaState::Current;
         c.formula_rows = if mode == RecalcMode::None { None } else { rows };
@@ -703,6 +720,18 @@ impl Project {
         rows: Option<Range<usize>>,
         mode: RecalcMode,
     ) -> Result<(), FormulaError> {
+        self.set_columns_values_scripted(columns, "", formula, rows, mode)
+    }
+
+    /// Like [`Project::set_columns_values_with`], with Before Formula Scripts (T307).
+    pub fn set_columns_values_scripted(
+        &mut self,
+        columns: &[ColumnId],
+        script: &str,
+        formula: &str,
+        rows: Option<Range<usize>>,
+        mode: RecalcMode,
+    ) -> Result<(), FormulaError> {
         let mut ordered: Vec<(usize, ColumnId)> = Vec::new();
         let mut sheet_at = None;
         for &id in columns {
@@ -721,7 +750,7 @@ impl Project {
         ordered.sort_unstable();
         let before = self.clone();
         for (_, id) in &ordered {
-            if let Err(e) = self.set_column_values_with(*id, formula, rows.clone(), mode) {
+            if let Err(e) = self.set_column_values_scripted(*id, script, formula, rows.clone(), mode) {
                 *self = before;
                 return Err(match e {
                     FormulaError::Expr(e) if ordered.len() > 1 => {
@@ -795,7 +824,7 @@ impl Project {
             for (sheet_index, s) in b.sheets.iter().enumerate() {
                 if layout_changed {
                     for c in s.columns.iter().filter(|c| c.is_locked()) {
-                        if let Ok(expr) = Expr::parse(c.formula.as_deref().unwrap_or_default()) {
+                        if let Ok(expr) = column_expr(c) {
                             let (old_host, host) = (SheetHost::at(before, c.id), SheetHost::at(self, c.id));
                             let previous = old_host.as_ref().and_then(|h| resolve_deps(&expr, h, c.id).ok());
                             let current = host.as_ref().and_then(|h| resolve_deps(&expr, h, c.id).ok());
@@ -916,6 +945,27 @@ mod tests {
         assert_eq!(shown(c, &p), [Some(11.0), Some(24.0), None, Some(56.0), Some(75.0), Some(96.0)]);
         assert_eq!(shown(d, &p), [Some(11.0), Some(24.0), None, Some(56.0), None, Some(96.0)]);
         assert_eq!(shown(e, &p), [Some(10.0), Some(80.0), None, Some(640.0), None, Some(2160.0)]);
+    }
+
+    #[test]
+    fn before_formula_scripts_run_with_the_formula_and_follow_its_inputs() {
+        // T307: m is the mean of B; C = A - m recalculates when B changes (Auto) and keeps the script.
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let a = p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+        let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0, 4.0, 6.0])).unwrap();
+        let c = p.add_column(book, 0, Designation::Y, ColumnData::numeric(Vec::new())).unwrap();
+        p.set_column_values_scripted(c, "double m = mean(col(B));", "col(A) - m", None, RecalcMode::Auto).unwrap();
+        assert_eq!(p.numeric(c).unwrap(), [-3.0, -2.0, -1.0]);
+        assert_eq!(p.column(c).unwrap().before_formula.as_deref(), Some("double m = mean(col(B));"));
+        let mut doc = crate::Document::new(p);
+        doc.apply("Edit B", |p| p.column_mut(b).unwrap().data = ColumnData::numeric(vec![10.0, 20.0, 30.0]));
+        assert_eq!(doc.project().numeric(c).unwrap(), [-19.0, -18.0, -17.0], "Auto follows B through the script");
+        // Setting the formula again without a script drops it.
+        let mut p = doc.project().clone();
+        p.set_column_values(c, "col(A)", None).unwrap();
+        assert_eq!(p.column(c).unwrap().before_formula, None);
+        let _ = a;
     }
 
     #[test]

@@ -1034,10 +1034,15 @@ pub(super) use crate::indexed::level_text;
 /// The level text of a factor cell as the ANOVAs read it (T254): `None` for a masked cell or a row the
 /// worksheet filter hides, as for the data values and in the categorical tools.
 pub(super) fn shown_level(sheet: &Worksheet, c: &Column, row: usize) -> Option<String> {
-    if !sheet.row_shown(row) || c.active_mask().is_some_and(|m| m.contains(&row)) {
+    if cell_left_out(sheet, c, row) {
         return None;
     }
     level_text(c, row)
+}
+
+/// True for a cell analysis leaves out: masked, or in a row the worksheet filter hides (T254, T255).
+pub(super) fn cell_left_out(sheet: &Worksheet, c: &Column, row: usize) -> bool {
+    !sheet.row_shown(row) || c.active_mask().is_some_and(|m| m.contains(&row))
 }
 
 /// The number of a level in `levels`, which grows by the levels in the order they first appear.

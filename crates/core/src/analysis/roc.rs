@@ -5,7 +5,7 @@
 //! takes the last column of the selection as the state). The state column may hold numbers or text.
 
 use super::dist::{GraphPlot, Output, XyGraph};
-use super::statistics::num;
+use super::statistics::{cell_left_out, num};
 use super::*;
 use crate::graph::{PlotKind, ScaleKind};
 
@@ -102,7 +102,10 @@ pub(super) fn run(
         return Err(AnalysisError::Empty(state.short_name.clone()));
     }
     let (first, last) = resolve_rows(rows, &state.short_name, &[], n)?;
-    let flags: Vec<Option<bool>> = (first..=last).map(|r| is_positive(state, r, positive, positive_number)).collect();
+    // A masked or filtered state cell is no state (T255).
+    let flags: Vec<Option<bool>> = (first..=last)
+        .map(|r| if cell_left_out(sheet, state, r) { None } else { is_positive(state, r, positive, positive_number) })
+        .collect();
 
     let mut table = ResultTable::new(&[
         "Positive",
@@ -285,5 +288,21 @@ mod tests {
         );
         assert!(p.analyze(&request(ids[..1].to_vec(), RocSpec::default())).is_err());
         assert!(p.analyze(&request(ids[..2].to_vec(), RocSpec { confidence: 100.0, ..Default::default() })).is_err());
+    }
+
+    #[test]
+    fn a_masked_state_cell_leaves_the_case_out() {
+        // T255: as a masked test value does.
+        let (mut p, ids) = project();
+        let table = |p: &mut Project| {
+            format!("{:?}", p.analyze(&request(ids[..2].to_vec(), RocSpec::default())).unwrap().table)
+        };
+        let all = table(&mut p);
+        let mut gone = p.clone();
+        gone.column_mut(ids[0]).unwrap().mask.insert(0);
+        let want = table(&mut gone);
+        assert_ne!(all, want);
+        p.column_mut(ids[1]).unwrap().mask.insert(0);
+        assert_eq!(table(&mut p), want);
     }
 }

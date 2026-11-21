@@ -1,6 +1,6 @@
 # T237: Layout pages (B14, slice 1)
 
-**Status:** slices 1 to 8 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
+**Status:** slices 1 to 9 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
 **Size:** L (several slices). **Source:** greyed inventory package B14 ("New: Layout",
 "Standard: New Layout").
 **Spec:** `docs/spec/layout-page.md`.
@@ -61,9 +61,14 @@
   `sheaf_plot::layout_text_svg` on screen and in every export. Tests: `layout_page::tests` (core),
   `layout_render::tests` (plot), `layout_page::layout_text_is_added_and_a_double_click_edits_it`.
 
+## Done in slice 9 (2026-11-20)
+
+- EMF pictures: `EMR_STRETCHDIBITS` in `emf.rs` (scene `Item::Image` and `write_emf_picture`);
+  `render_layout_emf`; File > Print... on a layout page. Tests: `emf::picture_tests`,
+  `layout_render::tests`, `layout_page::file_print_takes_the_active_layout_page`.
+
 ## Left (next slices)
 
 - Other page properties (printer page, theme).
-- Print, and EMF export of the page.
 - Rich text and drawn objects (lines, rectangles) on the page.
 - Writing the page to `.opj`.

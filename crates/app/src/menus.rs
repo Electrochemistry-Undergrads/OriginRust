@@ -3507,7 +3507,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             c.imported.then_some(()).ok_or(NOT_IMPORTED)?;
             Action::Reimport { book, choose: *choose }
         }
-        Cmd::Print => Action::Print(c.graph.or(c.book).ok_or(NEED_PRINTABLE)?),
+        Cmd::Print => Action::Print(
+            c.graph.or(c.book).or(c.active.filter(|_| c.kind == WindowKind::Layout)).ok_or(NEED_PRINTABLE)?,
+        ),
         Cmd::PrintPreview => Action::PrintPreview(c.graph.or(c.book).ok_or(NEED_PRINTABLE)?),
         Cmd::PageSetup => Action::PageSetup,
         Cmd::Exit => Action::Quit,

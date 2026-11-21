@@ -46,7 +46,16 @@ unregistered on the reference machine). Everything below is Sheaf's choice unles
 - SVG and PDF (T237 slice 7) are drawings: the page in points on its colour, with each item's own
   SVG (the graph's, or the worksheet image's) nested at its place, stretched to its rectangle; the
   ids of every nested picture get an `i<k>-` prefix so clip paths do not meet. The PDF is that SVG
-  converted. EMF is refused with a message (`render_layout_svg`). Code: `sheaf_plot::render_layout_raster` /
+  converted (`render_layout_svg`).
+- EMF (T237 slice 9) holds the page picture at 300 dpi as one 24-bit `EMR_STRETCHDIBITS` bitmap
+  the size of the page (`render_layout_emf`); text is not text there. The EMF writer draws scene
+  pictures the same way, so pictures in graphs (T216) now reach EMF exports too.
+
+## Print (T237 slice 9)
+
+- File > Print... [Ctrl+P] with a layout page active prints the page: on Windows the print dialog
+  gets that EMF (as for a graph), elsewhere the PDF goes to the default printer. Printing is not
+  run by the tests. Code: `sheaf_plot::render_layout_raster` /
   `render_layout_image` (`crates/plot/src/layout_render.rs`), `layout_view::write_layout_image`.
 
 ## Page properties (T237 slices 4 and 6)
@@ -84,4 +93,4 @@ unregistered on the reference machine). Everything below is Sheaf's choice unles
 ## Not yet
 
 - Rich text, drawn objects on the page, picture holders,
-  the rest of the Layout Page properties (printer page, theme), print, EMF export of the page, and `.opj`.
+  the rest of the Layout Page properties (printer page, theme), and `.opj`.

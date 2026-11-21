@@ -105,7 +105,9 @@ fn a_layout_page_is_exported_as_a_picture_file() {
     assert!(std::fs::read(jpg).unwrap().starts_with(&[0xff, 0xd8]));
     let svg = crate::layout_view::write_layout_image(&p, id, &dir.join("page.svg")).unwrap();
     assert!(std::fs::read(svg).unwrap().starts_with(b"<svg"));
-    assert!(crate::layout_view::write_layout_image(&p, id, &dir.join("page.emf")).is_err());
+    let emf = crate::layout_view::write_layout_image(&p, id, &dir.join("page.emf")).unwrap();
+    assert_eq!(&std::fs::read(emf).unwrap()[40..44], b" EMF");
+    assert!(crate::layout_view::write_layout_image(&p, id, &dir.join("page.eps")).is_err());
     assert!(menus::bar(menus::WindowKind::Layout).iter().any(|m| m.label == "&Layout"));
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -193,4 +195,16 @@ fn layout_text_is_added_and_a_double_click_edits_it() {
     let after = project(&h).layout(id).unwrap().items[0].clone();
     assert_eq!(after.content, LayoutContent::Text { text: "Figure 1".into(), size: 36 });
     assert!(after.w > first.w * 1.5 && (after.x, after.y) == (first.x, first.y), "{first:?} {after:?}");
+}
+
+#[test]
+fn file_print_takes_the_active_layout_page() {
+    let mut h = start(vec![]);
+    menu_path(&mut h, &["File", "New", "Layout"]);
+    let id = project(&h).layouts().next().unwrap().id;
+    let action = menus::resolve(&menus::Cmd::Print, &h.state().menu_context()).unwrap();
+    assert!(matches!(action, Action::Print(w) if w == id), "{action:?}");
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(action, &ctx);
+    settle(&mut h);
 }

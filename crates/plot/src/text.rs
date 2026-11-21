@@ -274,6 +274,8 @@ pub(crate) fn place_segments(
     if runs.is_empty() {
         return;
     }
+    // T293: a font with Underline underlines every run.
+    let underline_all = font.underline;
     let item = |run: &Run, x: f64, y: f64, anchor: Anchor| {
         Item::Text(TextItem {
             x,
@@ -300,7 +302,7 @@ pub(crate) fn place_segments(
     if let Some(run) = single_run {
         // One plain run: let the renderer align it with its own font metrics.
         items.push(item(run, x, y, anchor));
-        if !run.underline && !run.strikeout && matches!(runs, [Segment::Text(_)]) {
+        if !(run.underline || underline_all) && !run.strikeout && matches!(runs, [Segment::Text(_)]) {
             return;
         }
     }
@@ -344,10 +346,12 @@ pub(crate) fn place_segments(
         let font = run_font(font, run);
         let run_size = size * run.scale;
         let width = m.width(&run.text, &font, run_size);
-        for metrics in
-            [run.underline.then(|| m.underline_metrics(&font)), run.strikeout.then(|| m.strikeout_metrics(&font))]
-                .into_iter()
-                .flatten()
+        for metrics in [
+            (run.underline || underline_all).then(|| m.underline_metrics(&font)),
+            run.strikeout.then(|| m.strikeout_metrics(&font)),
+        ]
+        .into_iter()
+        .flatten()
         {
             let offset = metrics.center * run_size;
             items.push(line(

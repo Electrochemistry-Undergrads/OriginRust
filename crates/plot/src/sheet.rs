@@ -62,7 +62,14 @@ fn scene_of(ops: &[PrintOp], size: (f64, f64), offset: (f64, f64), m: &dyn TextM
             PrintOp::Text { x, y, max_w, text, align, bold, size, fmt } => {
                 let family = fmt.family.as_deref().unwrap_or(FAMILY);
                 let color = fmt.color.unwrap_or(Color::BLACK);
-                let font = Font { family: family.into(), size_pt: *size, bold: *bold, italic: fmt.italic, color };
+                let font = Font {
+                    family: family.into(),
+                    size_pt: *size,
+                    bold: *bold,
+                    italic: fmt.italic,
+                    underline: false,
+                    color,
+                };
                 let text = cut(text, *max_w, &font, *size, m);
                 if text.is_empty() {
                     continue;
@@ -305,7 +312,14 @@ mod tests {
 
     #[test]
     fn cut_keeps_the_longest_prefix_that_fits() {
-        let f = Font { family: FAMILY.into(), size_pt: 10.0, bold: false, italic: false, color: Color::BLACK };
+        let f = Font {
+            family: FAMILY.into(),
+            size_pt: 10.0,
+            bold: false,
+            italic: false,
+            underline: false,
+            color: Color::BLACK,
+        };
         let m = crate::fonts::FixedMetrics; // 5.5 pt per char
         assert_eq!(cut("abc", 100.0, &f, 10.0, &m), "abc");
         assert_eq!(cut("abcdefghij", 16.6, &f, 10.0, &m), "abc");

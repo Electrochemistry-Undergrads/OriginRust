@@ -18,4 +18,5 @@ automatic leaf unit are Sheaf's own.
 
 ## Left
 
-- A graph of the display (Origin's app draws the display as a text graph); the CLI and MCP tools.
+- A graph of the display (Origin's app draws the display as a text graph). The CLI and MCP tools were
+  added in T279.

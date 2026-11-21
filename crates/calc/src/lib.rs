@@ -58,6 +58,7 @@ pub mod roc;
 pub mod signal;
 pub mod smooth;
 pub mod stats;
+pub mod stemleaf;
 pub mod stft;
 pub mod sunburst;
 pub mod survival;
@@ -163,6 +164,7 @@ pub use roc::{Roc, RocError, RocOptions, RocPoint, roc};
 pub use signal::{convolve, correlate, deconvolve, hilbert};
 pub use smooth::{Boundary, LocalSpan, SmoothMethod, SmoothOptions, smooth, smooth_xy};
 pub use stats::{RowStats, Stats, mean_confidence_limits, quantile_origin, row_stats, stats};
+pub use stemleaf::{StemLeaf, StemLeafOptions, StemLine, auto_leaf_unit, stem_and_leaf};
 pub use stft::{StftOptions, StftOutput, StftResult, stft};
 pub use survival::{
     KaplanMeier, Quartile, RankResult, RankTest, SurvivalError, SurvivalRow, SurvivalStep, kaplan_meier, rank_test,

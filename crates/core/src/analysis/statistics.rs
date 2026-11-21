@@ -26,6 +26,7 @@ pub(super) fn run(tool: &Tool, inputs: &[Input<'_>]) -> Result<Output, AnalysisE
         Tool::Histogram(spec) => histogram(spec, inputs),
         Tool::Binning2D(spec) => binning_2d(spec, inputs),
         Tool::Normality(spec) => normality(spec, inputs),
+        Tool::StemLeaf(o) => stem_leaf(o, inputs),
         Tool::MannWhitney(spec) => mann_whitney(spec, inputs),
         Tool::SignedRank(spec) => signed_rank(spec, inputs),
         Tool::KruskalWallis(spec) => kruskal_wallis(spec, inputs),
@@ -1060,6 +1061,43 @@ pub(super) fn discrete_frequency(
 }
 
 // ----- normality tests -------------------------------------------------------------------------------
+
+/// Stem-and-leaf display (T275): one block of lines per input column in a result sheet with the
+/// columns Data, Count, Stem and Leaf; the leaf unit of each column is named in the notes.
+fn stem_leaf(o: &calc::StemLeafOptions, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
+    if o.max_leaves == 0 {
+        return Err(AnalysisError::BadOption("the most leaves per stem must be at least 1".into()));
+    }
+    let (mut data, mut count, mut stem, mut leaf) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let mut notes = Vec::new();
+    for inp in inputs {
+        let s = calc::stem_and_leaf(inp.ys(), o).ok_or_else(|| match o.leaf_unit {
+            Some(u) if !(u > 0.0 && u.is_finite()) => {
+                AnalysisError::BadOption(format!("{u} is not a usable leaf unit; give a positive number"))
+            }
+            _ => AnalysisError::Empty(inp.short.clone()),
+        })?;
+        for line in &s.lines {
+            data.push(inp.label.clone());
+            count.push(line.count as f64);
+            stem.push(line.stem.clone());
+            leaf.push(line.leaves.clone());
+        }
+        notes.push(format!(
+            "{}: leaf unit {}{}",
+            inp.label,
+            s.unit,
+            if s.split { ", each stem on two lines (leaves 0-4 and 5-9)" } else { "" }
+        ));
+    }
+    let on_sheet = vec![
+        label_column("Data", data),
+        number_column("Count", "", count),
+        label_column("Stem", stem),
+        label_column("Leaf", leaf),
+    ];
+    Ok(Output { table: None, on_sheet, notes, plots: Vec::new(), comparison_pairs: Vec::new() })
+}
 
 fn normality(spec: &NormalitySpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
     check_alpha(spec.alpha)?;
@@ -2380,6 +2418,27 @@ mod tests {
         assert_eq!(r.notes.len(), 2);
         let tiny = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
         assert!(p.analyze(&request(&[tiny], Tool::Normality(NormalitySpec::default()))).is_err());
+    }
+
+    #[test]
+    fn stem_and_leaf_writes_count_stem_and_leaf_lines_per_column() {
+        // T275: one block of lines per input column; masked values are left out, as in every tool.
+        let mut p = Project::new();
+        let book = p.add_workbook("stems");
+        let a = vec![12.0, 15.0, 23.0, 27.0, 27.0, 41.0, 46.0, 58.0, 99.0];
+        let a = p.add_column(book, 0, Designation::Y, ColumnData::numeric(a)).unwrap();
+        let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.5, 1.2, 1.9])).unwrap();
+        p.column_mut(a).unwrap().mask.insert(8);
+        let r = run(&mut p, &[a, b], Tool::StemLeaf(StemLeafOptions::default()));
+        assert_eq!(cell(&p, &r, "Count"), [2.0, 3.0, 0.0, 2.0, 1.0, 1.0, 2.0]);
+        assert_eq!(text_cells(&p, &r, "Stem"), ["1", "2", "3", "4", "5", "0", "1"]);
+        assert_eq!(text_cells(&p, &r, "Leaf"), ["25", "377", "", "16", "8", "5", "29"]);
+        assert_eq!(text_cells(&p, &r, "Data")[5], text_cells(&p, &r, "Data")[6]);
+        assert!(
+            r.notes.iter().any(|n| n.contains("leaf unit 1")) && r.notes.iter().any(|n| n.contains("leaf unit 0.1"))
+        );
+        let bad = StemLeafOptions { leaf_unit: Some(-1.0), ..Default::default() };
+        assert!(p.analyze(&request(&[a], Tool::StemLeaf(bad))).is_err());
     }
 
     // ----- two-way ANOVA, rank tests and correlation ---------------------------------------------------

@@ -32,7 +32,7 @@ use sheaf_core::analysis::{
     EnvelopeType, FftFilterOptions, FftFilterSpec, FftFilterType, FftSpec, FftWindow, IfftSpec, PowerNorm,
     TraceInterpSpec, TraceMethod, WindowCorrection,
 };
-use sheaf_core::analysis::{NormalizeRef, RefStat};
+use sheaf_core::analysis::{NormalizeRef, RefStat, StemLeafOptions};
 use sheaf_core::column::{Designation, RecalcMode};
 use sheaf_core::{ColumnId, Document, Project, WindowId};
 
@@ -117,6 +117,8 @@ pub enum AnalysisKind {
     /// Statistics > Descriptive Statistics > 2D Frequency Counts/Binning (options in `bin2d_options.rs`).
     Binning2D,
     Normality,
+    /// Statistics > Descriptive Statistics > Stem-and-Leaf Plot (Origin 2026's app, T275).
+    StemLeaf,
     /// Statistics > ANOVA > Two-Way ANOVA.
     Anova2,
     /// Statistics > ANOVA > Three-Way ANOVA (options in `stats3_options.rs`).
@@ -260,6 +262,7 @@ impl AnalysisKind {
             AnalysisKind::Binning2D => "2D Frequency Counts/Binning...",
             AnalysisKind::DiscreteFreq => "Discrete Frequency...",
             AnalysisKind::Normality => "Normality Test...",
+            AnalysisKind::StemLeaf => "Stem-and-Leaf Plot...",
             AnalysisKind::Anova2 => "Two-Way ANOVA...",
             AnalysisKind::Anova3 => "Three-Way ANOVA...",
             AnalysisKind::RmAnova1 => "One-Way Repeated Measures ANOVA...",
@@ -351,6 +354,7 @@ impl AnalysisKind {
             "bin2d" => AnalysisKind::Binning2D,
             "discfreq" => AnalysisKind::DiscreteFreq,
             "normality" => AnalysisKind::Normality,
+            "stemleaf" => AnalysisKind::StemLeaf,
             "anova2" => AnalysisKind::Anova2,
             "anova3" => AnalysisKind::Anova3,
             "rmanova1" => AnalysisKind::RmAnova1,
@@ -629,6 +633,10 @@ struct StatsOptions {
     desc: StatisticsSpec,
     /// Statistics on Rows: which quantities to add.
     rows: RowStatsSpec,
+    /// Stem-and-leaf options (T275); the leaf unit comes from `stem_auto_unit` and `stem_unit`.
+    stem: StemLeafOptions,
+    stem_auto_unit: bool,
+    stem_unit: f64,
 }
 
 impl Default for StatsOptions {
@@ -689,6 +697,9 @@ impl Default for StatsOptions {
             listwise: false,
             desc: StatisticsSpec::default(),
             rows: RowStatsSpec::default(),
+            stem: StemLeafOptions::default(),
+            stem_auto_unit: true,
+            stem_unit: 1.0,
         }
     }
 }
@@ -2176,6 +2187,10 @@ impl AnalysisDialog {
             AnalysisKind::Binning2D => Tool::Binning2D(self.bin2d.options()),
             AnalysisKind::DiscreteFreq => Tool::DiscreteFrequency(self.discfreq),
             AnalysisKind::Normality => Tool::Normality(NormalitySpec { alpha: self.stats.alpha }),
+            AnalysisKind::StemLeaf => Tool::StemLeaf(StemLeafOptions {
+                leaf_unit: (!self.stats.stem_auto_unit).then_some(self.stats.stem_unit),
+                ..self.stats.stem
+            }),
             AnalysisKind::Anova2 => {
                 let layout = if self.stats.two_way_raw {
                     if let Some(i) =
@@ -3302,6 +3317,26 @@ impl AnalysisDialog {
                     ui.add(DragValue::new(&mut st.alpha).speed(0.001).range(0.0001..=0.5));
                 });
             }
+            // T275: the options of Origin's Stem and Leaf Plot app.
+            AnalysisKind::StemLeaf => {
+                let st = &mut self.stats;
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut st.stem_auto_unit, "Auto Leaf Unit")
+                        .on_hover_text("A power of ten one decade below the range of the data");
+                    ui.add_enabled_ui(!st.stem_auto_unit, |ui| {
+                        ui.label("Leaf Unit");
+                        ui.add(DragValue::new(&mut st.stem_unit).speed(0.01).range(1e-12..=1e12));
+                    });
+                });
+                ui.checkbox(&mut st.stem.auto_split, "Auto Split Stem")
+                    .on_hover_text("Two lines per stem (leaves 0-4 and 5-9) when there would be fewer than five lines");
+                ui.horizontal(|ui| {
+                    ui.label("Max Number of Leaves per Stem");
+                    ui.add(DragValue::new(&mut st.stem.max_leaves).range(1..=1000));
+                });
+                ui.checkbox(&mut st.stem.trim_outliers, "Auto Trim Outliers")
+                    .on_hover_text("Values more than 1.5 IQR outside the quartiles go to the Low and High lines");
+            }
         }
     }
 
@@ -3381,6 +3416,7 @@ impl AnalysisDialog {
             AnalysisKind::Binning2D => "twoDBinning",
             AnalysisKind::DiscreteFreq => "discfreqs",
             AnalysisKind::Normality => "normtest",
+            AnalysisKind::StemLeaf => "stemleaf",
             AnalysisKind::Anova2 => "anova2",
             AnalysisKind::Anova3 => "ANOVAThreeWay",
             AnalysisKind::RmAnova1 => "ANOVAOneWayRM",
@@ -3482,6 +3518,7 @@ impl AnalysisDialog {
             AnalysisKind::Binning2D => "Count the points of two variables in a grid of X and Y bins",
             AnalysisKind::DiscreteFreq => "Count how often each distinct value, text or number, occurs",
             AnalysisKind::Normality => "Test whether the input columns come from a normal distribution",
+            AnalysisKind::StemLeaf => "Show the distribution of each input column as stems and leaves",
             AnalysisKind::Anova2 => "Two-way analysis of variance",
             AnalysisKind::Anova3 => "Three-way analysis of variance with type III sums of squares",
             AnalysisKind::RmAnova1 => "One-way analysis of variance of repeated measurements of the same subjects",
@@ -3590,6 +3627,9 @@ impl AnalysisDialog {
             AnalysisKind::DiscreteFreq => "The values and their counts and frequencies in a new sheet",
             AnalysisKind::Normality => {
                 "Shapiro-Wilk, Kolmogorov-Smirnov, Lilliefors, Anderson-Darling and D'Agostino-Pearson in a new sheet"
+            }
+            AnalysisKind::StemLeaf => {
+                "The lines of the display (Count, Stem, Leaf) in a new sheet; the leaf unit in the notes"
             }
             AnalysisKind::Anova2 => {
                 "The tables (statistics, ANOVA, comparisons) in a new sheet; sums of squares are adjusted for the \

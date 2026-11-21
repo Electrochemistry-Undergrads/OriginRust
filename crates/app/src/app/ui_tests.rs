@@ -4588,6 +4588,25 @@ fn the_statistics_menu_makes_a_discrete_frequency() {
     assert_eq!(ws.columns[1].long_name, "Count");
 }
 
+/// Statistics > Stem-and-Leaf Plot... (T275) writes the lines of the display to a new sheet.
+#[test]
+fn the_statistics_menu_makes_a_stem_and_leaf_plot() {
+    let mut h = start(vec![data_file("histogram")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Stem-and-Leaf Plot..."]);
+    for label in ["Auto Leaf Unit", "Auto Split Stem", "Max Number of Leaves per Stem", "Auto Trim Outliers"] {
+        assert!(h.query_by_label(label).is_some(), "{label} is shown");
+    }
+    click(&mut h, "OK");
+    let p = project(&h);
+    let ws = &p.workbooks().next().unwrap().sheets[1];
+    assert!(ws.name.starts_with("StemLeaf"), "{}", ws.name);
+    let names: Vec<&str> = ws.columns.iter().map(|c| c.long_name.as_str()).collect();
+    assert_eq!(names, ["Data", "Count", "Stem", "Leaf"]);
+    assert!(!ws.columns[1].is_empty());
+    assert_eq!(h.state().doc.undo_label(), Some("Stem-and-leaf plot"));
+}
+
 /// Statistics > 2D Frequency Counts/Binning... opens Origin's option groups and writes the grid sheet.
 #[test]
 fn the_statistics_menu_makes_2d_frequency_counts() {

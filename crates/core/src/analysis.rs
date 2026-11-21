@@ -34,7 +34,7 @@ use std::cmp::Ordering;
 
 pub use sheaf_calc::{
     AreaType, Boundary, CurveOp, DiffOptions, Extrapolation, InterpMethod, LocalSpan, NormalizeMethod, PeakDirection,
-    PeakFilter, PeakOptions, RefStat, SmoothMethod, SmoothOptions, SplineBoundary,
+    PeakFilter, PeakOptions, RefStat, SmoothMethod, SmoothOptions, SplineBoundary, StemLeafOptions,
 };
 pub use sheaf_calc::{AxisBins, Bin2dOptions, Bin2dStat, BinSize, DiscSort, FreqOptions, MeansComparison, Tail};
 pub use sheaf_calc::{BaselineStat, ChainBaseline, ChainOptions, CrossingIndex, FindMethod, FindOptions, LimitMode};
@@ -1071,6 +1071,8 @@ pub enum Tool {
     /// Statistics > Descriptive Statistics > Discrete Frequency.
     DiscreteFrequency(DiscreteFreqSpec),
     Normality(NormalitySpec),
+    /// Stem-and-leaf display (Origin 2026's app, T275).
+    StemLeaf(calc::StemLeafOptions),
     Crosstab(CrosstabSpec),
     TwoWayAnova(TwoWayAnovaSpec),
     /// Statistics > ANOVA > Three-Way ANOVA.
@@ -1183,6 +1185,7 @@ impl Tool {
             Tool::Binning2D(_) => "2D frequency counts",
             Tool::DiscreteFrequency(_) => "Discrete frequency",
             Tool::Normality(_) => "Normality test",
+            Tool::StemLeaf(_) => "Stem-and-leaf plot",
             Tool::Crosstab(_) => "Cross tabulation",
             Tool::TwoWayAnova(_) => "Two-way ANOVA",
             Tool::ThreeWayAnova(_) => "Three-way ANOVA",
@@ -1274,6 +1277,7 @@ impl Tool {
             Tool::Binning2D(_) => "Binning2D",
             Tool::DiscreteFrequency(_) => "DiscretFreq",
             Tool::Normality(_) => "Normality",
+            Tool::StemLeaf(_) => "StemLeaf",
             Tool::Crosstab(_) => "Crosstab",
             Tool::TwoWayAnova(_) => "ANOVA2Way",
             Tool::ThreeWayAnova(_) => "ANOVA3Way",
@@ -2400,6 +2404,7 @@ impl Project {
             | Tool::Histogram(_)
             | Tool::Binning2D(_)
             | Tool::Normality(_)
+            | Tool::StemLeaf(_)
             | Tool::MannWhitney(_)
             | Tool::SignedRank(_)
             | Tool::KruskalWallis(_)

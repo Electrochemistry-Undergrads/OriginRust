@@ -6,11 +6,23 @@ use crate::ids::WindowId;
 use serde::{Deserialize, Serialize};
 
 /// What an item of a layout page shows.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum LayoutContent {
     /// A live picture of a graph window: it changes when the graph does.
     Graph { graph: WindowId },
+    /// A live picture of sheet `sheet` (index) of workbook `book` (T237 slice 5).
+    Sheet { book: WindowId, sheet: usize },
+}
+
+impl LayoutContent {
+    /// The window the item shows.
+    pub fn window(&self) -> WindowId {
+        match *self {
+            LayoutContent::Graph { graph } => graph,
+            LayoutContent::Sheet { book, .. } => book,
+        }
+    }
 }
 
 /// One object on the page; the rectangle is in fractions of the page (0,0 the top left).
@@ -54,6 +66,17 @@ impl LayoutPage {
     /// Layout > Add Graph: the picture of `graph` in the next free cell of a two-column grid, each
     /// cell keeping the graph's aspect ratio `aspect` (width / height) inside it.
     pub fn add_graph(&mut self, graph: WindowId, aspect: f64) -> usize {
+        self.add(LayoutContent::Graph { graph }, aspect)
+    }
+
+    /// Layout > Add Worksheet: the picture of a sheet, placed as [`LayoutPage::add_graph`] places a
+    /// graph.
+    pub fn add_sheet(&mut self, book: WindowId, sheet: usize, aspect: f64) -> usize {
+        self.add(LayoutContent::Sheet { book, sheet }, aspect)
+    }
+
+    /// Puts `content` in the next free cell of the two-column grid, keeping `aspect`.
+    pub fn add(&mut self, content: LayoutContent, aspect: f64) -> usize {
         let k = self.items.len();
         let (col, row) = (k % 2, k / 2);
         let margin = 0.04;
@@ -68,20 +91,15 @@ impl LayoutPage {
             h = cell_h;
             w = cell_h * a / page_aspect;
         }
-        self.items.push(LayoutItem {
-            content: LayoutContent::Graph { graph },
-            x: cx + (cell_w - w) / 2.0,
-            y: cy + (cell_h - h) / 2.0,
-            w,
-            h,
-        });
+        self.items.push(LayoutItem { content, x: cx + (cell_w - w) / 2.0, y: cy + (cell_h - h) / 2.0, w, h });
         k
     }
 
     /// The graphs the page shows.
     pub fn graphs(&self) -> impl Iterator<Item = WindowId> + '_ {
-        self.items.iter().map(|i| match i.content {
-            LayoutContent::Graph { graph } => graph,
+        self.items.iter().filter_map(|i| match i.content {
+            LayoutContent::Graph { graph } => Some(graph),
+            LayoutContent::Sheet { .. } => None,
         })
     }
 
@@ -90,6 +108,7 @@ impl LayoutPage {
         for it in &mut self.items {
             match &mut it.content {
                 LayoutContent::Graph { graph } => *graph = map(*graph),
+                LayoutContent::Sheet { book, .. } => *book = map(*book),
             }
         }
     }
@@ -123,5 +142,14 @@ mod tests {
         let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
         assert_eq!(back.layout(id), p.layout(id));
         assert_eq!(back.layout(id).unwrap().graphs().collect::<Vec<_>>(), [g, g]);
+        // A worksheet item goes in the next cell, is saved, and is not one of the graphs.
+        let book = p.add_workbook("Book1");
+        let l = p.layout_mut(id).unwrap();
+        assert_eq!(l.add_sheet(book, 0, 2.0), 2);
+        assert_eq!(l.items[2].content, super::LayoutContent::Sheet { book, sheet: 0 });
+        assert_eq!(l.items[2].content.window(), book);
+        assert_eq!(l.graphs().count(), 2);
+        let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert_eq!(back.layout(id), p.layout(id));
     }
 }

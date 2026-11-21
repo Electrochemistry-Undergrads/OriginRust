@@ -13,8 +13,9 @@ const GROUND: Color32 = Color32::from_gray(192);
 /// What a layout window keeps between frames.
 #[derive(Default)]
 pub struct LayoutUi {
-    /// Graph pictures: (document revision, pixel width) they were drawn for, and the texture.
-    pictures: HashMap<WindowId, ((u64, u32), TextureHandle)>,
+    /// Graph and worksheet pictures: (document revision, pixel width) they were drawn for, and the
+    /// texture.
+    pictures: HashMap<LayoutContent, ((u64, u32), TextureHandle)>,
     /// The selected item (T237 slice 2).
     pub selected: Option<usize>,
     /// An item being moved or resized: (index, resize, how far the pointer went in page fractions).
@@ -95,26 +96,31 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, id: WindowId, state: &mut LayoutU
     };
     for (k, item) in page.items.iter().enumerate() {
         let r = screen(shown(k, item));
-        let LayoutContent::Graph { graph } = item.content;
-        let Some(g) = doc.project().graph(graph) else {
-            painter.rect_stroke(r, 0.0, Stroke::new(1.0_f32, Color32::GRAY), egui::StrokeKind::Inside);
-            continue;
-        };
+        let content = item.content;
         let px = (r.width() * ppp).round().max(1.0) as u32;
         let key = (doc.revision(), px);
-        let fresh = state.pictures.get(&graph).is_some_and(|(k, _)| *k == key);
+        let fresh = state.pictures.get(&content).is_some_and(|(k, _)| *k == key);
         if !fresh {
-            let scale = f64::from(px) / g.page.width_pt.max(1.0);
-            if let Ok(raster) = sheaf_plot::render_raster(doc.project(), graph, scale) {
-                let image = egui::ColorImage::from_rgba_unmultiplied(
-                    [raster.width as usize, raster.height as usize],
-                    &raster.rgba,
-                );
-                let tex = ui.ctx().load_texture(format!("layout-{}-{}", id.0, graph.0), image, TextureOptions::LINEAR);
-                state.pictures.insert(graph, (key, tex));
+            match sheaf_plot::render_layout_item(doc.project(), &content, px) {
+                None => {
+                    // What the item showed is gone: an empty frame.
+                    state.pictures.remove(&content);
+                    painter.rect_stroke(r, 0.0, Stroke::new(1.0_f32, Color32::GRAY), egui::StrokeKind::Inside);
+                    continue;
+                }
+                Some(Ok(raster)) => {
+                    let image = egui::ColorImage::from_rgba_unmultiplied(
+                        [raster.width as usize, raster.height as usize],
+                        &raster.rgba,
+                    );
+                    let name = format!("layout-{}-{content:?}", id.0);
+                    let tex = ui.ctx().load_texture(name, image, TextureOptions::LINEAR);
+                    state.pictures.insert(content, (key, tex));
+                }
+                Some(Err(_)) => {}
             }
         }
-        if let Some((_, tex)) = state.pictures.get(&graph) {
+        if let Some((_, tex)) = state.pictures.get(&content) {
             painter.image(tex.id(), r, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
         }
     }

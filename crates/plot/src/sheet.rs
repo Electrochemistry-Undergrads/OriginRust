@@ -212,6 +212,21 @@ pub fn render_sheet_raster(
 /// without the column heads, the row numbers or grid lines, one picture for the whole sheet. Built from
 /// the printed table (one page holding every row and column) with those parts left out.
 pub fn sheet_image_svg(sheet: &Worksheet) -> Result<String, PlotError> {
+    Ok(svg::write_svg(&sheet_image_scene(sheet)?))
+}
+
+/// The worksheet image as pixels, `pixels_per_point` 1 = 72 dpi (a layout page's worksheet item).
+pub fn sheet_image_raster(sheet: &Worksheet, pixels_per_point: f64) -> Result<Raster, PlotError> {
+    raster::rasterise(&sheet_image_svg(sheet)?, pixels_per_point, SystemFonts::shared())
+}
+
+/// The worksheet image's size in points.
+pub fn sheet_image_size(sheet: &Worksheet) -> Result<(f64, f64), PlotError> {
+    let s = sheet_image_scene(sheet)?;
+    Ok((s.width, s.height))
+}
+
+fn sheet_image_scene(sheet: &Worksheet) -> Result<Scene, PlotError> {
     let fonts = SystemFonts::shared();
     let table = sheet_table(sheet);
     let style = PrintStyle::default();
@@ -240,7 +255,7 @@ pub fn sheet_image_svg(sheet: &Worksheet) -> Result<String, PlotError> {
     }
     let width = w.max(table.column_widths().iter().sum::<f64>()).max(1.0);
     let height = h.max(table.head_height() - dy).max(1.0);
-    Ok(svg::write_svg(&scene_of(&ops, (width, height), (0.0, 0.0), fonts)))
+    Ok(scene_of(&ops, (width, height), (0.0, 0.0), fonts))
 }
 
 /// The worksheet image as PNG at `dpi` (the resolution is recorded in the file).

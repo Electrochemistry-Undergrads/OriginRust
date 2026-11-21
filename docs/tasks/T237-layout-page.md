@@ -1,6 +1,6 @@
 # T237: Layout pages (B14, slice 1)
 
-**Status:** slices 1 to 4 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
+**Status:** slices 1 to 5 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
 **Size:** L (several slices). **Source:** greyed inventory package B14 ("New: Layout",
 "Standard: New Layout").
 **Spec:** `docs/spec/layout-page.md`.
@@ -35,9 +35,15 @@
   `layout_page_setup::tests::presets_keep_the_orientation_and_units_convert` and
   `layout_page::page_setup_turns_the_layout_page_to_a4_portrait_in_one_undo_step`.
 
+## Done in slice 5 (2026-11-20)
+
+- Layout > Add Worksheet...: `LayoutContent::Sheet { book, sheet }`, drawn with the worksheet image
+  (`sheaf_plot::sheet_image_raster`) on screen and in the page export
+  (`render_layout_item`, `layout_item_aspect`). Tests: `layout_page::tests` (core),
+  `layout_render::tests` (plot), `layout_page::add_worksheet_puts_a_sheet_picture_on_the_layout_page`.
+
 ## Left (next slices)
 
-- Add Worksheet....
 - Other page properties (background, printer page).
 - Print, and vector (SVG/PDF/EMF) export of the page.
 - Writing the page to `.opj`.

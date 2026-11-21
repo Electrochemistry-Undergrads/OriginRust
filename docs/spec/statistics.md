@@ -707,9 +707,19 @@ fixture `crates/calc/tests/fixtures/probplot_origin.rs`).
     `n [[trigamma(shape), 1/scale], [1/scale, shape/scale^2]]`.
   The columns are "Lower 95 % X", "Lower percent", "Upper 95 % X" and "Upper percent" (27 rows). The window
   starts with the band on at 95 %; `--band 0.95` turns it on from the command line.
-- **Q-Q orientation:** with "Data on X, quantiles on Y" (the window's start; `--data-on-x`), the ordered data are
-  the X column and the quantiles the Y column. The axis titles swap, and the least-squares line is the same line
-  drawn the other way round (Origin's Q-Q plot not measured).
+- **Q-Q plot (measured by T311, Plot > Statistics > Q-Q Plot):** the same window and remembered choices as the
+  probability plot. Origin plots the ordered data on X against the expected values on Y. The expected values are
+  the fitted quantiles at the scores, with the estimates above ("Expected Normal Value", ...).
+  - **Reference line:** `y = x`, from the lowest to the highest expected value rounded out to the step of 1, 2
+    or 5 times a power of ten nearest a seventh of their range (3.85 gives 0.5: 2 to 6.5; 5.6 gives 1; 11.7
+    gives 2: 0 to 12; 384.6 gives 50). Measured on nine runs (`qq_line_ends`).
+  - **Band:** at 51 even X values, from the line's start plus a 51st of its length to its end. At each value
+    `x` it is the probability plot's band at `p = F(x)`, round `x` itself (`qq_band`; exact, with z through the
+    round trip within 1e-11).
+  - Sheaf: "Data on X, quantiles on Y" (the window's start; `--data-on-x`) is Origin's orientation; without it
+    the columns swap, as Origin's Exchange X-Y Axes would. The columns are "Data (ordered)", "Expected <family>
+    value", "Line X", "Line Y" and, with a band, "Lower 95 % X/Y" and "Upper 95 % X/Y". The table keeps the
+    least-squares slope, intercept and r of the data on the standard quantiles.
 - **Not copied:** Origin's sheet layout (its Percentiles, Reference Line and Additional Table columns), Exchange
   X-Y Axes, and fixed (not estimated) parameters.
 - **Plot menu:** Plot > Statistics > Probability Plot and Q-Q Plot open the same windows as Statistics >
@@ -729,8 +739,8 @@ against scipy's exact algorithm).
 - Whether Origin's Distribution Fit uses the same parameterizations and a free threshold (three-parameter
   lognormal, gamma, Weibull), its list of families (it has many more), and whether it reports AIC, BIC, KS and
   Anderson-Darling the same way (divisor of the normal SD, p-values with estimated parameters).
-- Origin's axis tick percentages and whether its Q-Q plot plots data or quantiles on X (its probability plot's
-  scores, estimates, reference line and band are measured, 16.2a).
+- Origin's axis tick percentages (its probability and Q-Q plots' scores, estimates, reference lines and bands
+  are measured, 16.2a).
 - The window titles, option labels and defaults of the three windows, the sheet and graph names (`DistFit1`,
   `ProbPlot1`, `QQPlot1`), and the menu order of the new entries.
 - Not built: fitting a threshold, censored data, other families, a probability plot of several families on one

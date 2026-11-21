@@ -235,6 +235,8 @@ pub enum Cmd {
     LayoutAddGraph,
     /// Layout > Add Worksheet... on the active layout page (T237 slice 5).
     LayoutAddSheet,
+    /// Layout > Add Text... on the active layout page (T237 slice 8).
+    LayoutAddText,
     /// Layout > Export Page as Image... (T237 slice 3).
     LayoutExport,
     /// Format > Layout Page... [F2] (T237 slices 4 and 6).
@@ -999,6 +1001,7 @@ fn base(kind: WindowKind) -> Vec<Menu> {
                 vec![
                     item("Add &Graph...", Cmd::LayoutAddGraph),
                     item("Add &Worksheet...", Cmd::LayoutAddSheet),
+                    item("Add &Text...", Cmd::LayoutAddText),
                     sep(),
                     item("&Export Page as Image...", Cmd::LayoutExport),
                 ],
@@ -3317,6 +3320,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         },
         Cmd::LayoutAddGraph => match (c.kind, c.active) {
             (WindowKind::Layout, Some(id)) => Action::LayoutAddGraph { layout: id, sheets: false },
+            _ => return Err("Activate a layout page first"),
+        },
+        Cmd::LayoutAddText => match (c.kind, c.active) {
+            (WindowKind::Layout, Some(id)) => Action::LayoutText { layout: id, index: None },
             _ => return Err("Activate a layout page first"),
         },
         Cmd::LayoutAddSheet => match (c.kind, c.active) {

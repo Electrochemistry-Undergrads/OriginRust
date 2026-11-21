@@ -331,6 +331,12 @@ pub enum Action {
         layout: WindowId,
         index: usize,
     },
+    /// Layout > Add Text... (`index` `None`) or a double-click on layout text (T237 slice 8): the
+    /// text window.
+    LayoutText {
+        layout: WindowId,
+        index: Option<usize>,
+    },
     /// Format > Layout Page... [F2] (T237 slices 4 and 6): the window that sets the page size and
     /// colour of `layout`.
     LayoutPageSetup {

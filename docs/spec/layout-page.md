@@ -71,7 +71,17 @@ unregistered on the reference machine). Everything below is Sheaf's choice unles
   Stored as `{"kind": "sheet", "book": <id>, "sheet": <index>}`. Origin's worksheet-on-layout look
   was not measured.
 
+## Text (T237 slice 8)
+
+- Layout > Add Text... asks for the text (several lines) and its size (4 to 200 pt, 18 by
+  default); OK puts it centred at the top of the page in a box of its own size: Arial, black,
+  lines 1.2 sizes apart, a margin of 0.3 size ("Add text to layout"). A double-click on text opens
+  it again; OK changes it and gives the box the new text's size, keeping its top left corner
+  ("Edit layout text"). It moves, resizes (stretches), deletes and exports like the other items.
+  Stored as `{"kind": "text", "text": ..., "size": <pt>}`. Origin adds layout text with its Text
+  tool and rich text; Sheaf has plain text only (not measured).
+
 ## Not yet
 
-- Text and drawn objects on the page, picture holders,
+- Rich text, drawn objects on the page, picture holders,
   the rest of the Layout Page properties (printer page, theme), print, EMF export of the page, and `.opj`.

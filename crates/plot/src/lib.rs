@@ -21,7 +21,8 @@ mod field;
 mod layout_render;
 pub use field::field_cells;
 pub use layout_render::{
-    layout_item_aspect, render_layout_image, render_layout_item, render_layout_raster, render_layout_svg,
+    layout_item_aspect, layout_text_svg, render_layout_image, render_layout_item, render_layout_raster,
+    render_layout_svg,
 };
 mod fill;
 mod fonts;

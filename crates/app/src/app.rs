@@ -185,6 +185,8 @@ pub struct SheafApp {
     layout_add_graph: Option<crate::dialogs::layout_add_graph::LayoutAddGraph>,
     /// Layout > Page Setup's window (T237 slice 4).
     layout_page_setup: Option<crate::dialogs::layout_page_setup::LayoutPageSetup>,
+    /// Layout > Add Text's window (T237 slice 8).
+    layout_text: Option<crate::dialogs::layout_text::LayoutText>,
     import: Option<ImportDialog>,
     import_excel: Option<ExcelImportDialog>,
     import_wizard: Option<ImportWizard>,
@@ -380,6 +382,7 @@ impl SheafApp {
             layouts: HashMap::new(),
             layout_add_graph: None,
             layout_page_setup: None,
+            layout_text: None,
             import: None,
             import_excel: None,
             import_wizard: None,
@@ -974,6 +977,7 @@ impl SheafApp {
         self.matrix_dialog = None;
         self.layout_add_graph = None;
         self.layout_page_setup = None;
+        self.layout_text = None;
         self.import_bin2d = None;
         self.axis3d = None;
         self.label_panels = None;
@@ -2012,6 +2016,13 @@ impl SheafApp {
                 if let Some(id) = new {
                     self.focus(id);
                 }
+            }
+            Action::LayoutText { layout, index } => {
+                use crate::dialogs::layout_text::LayoutText;
+                self.layout_text = match index {
+                    None => Some(LayoutText::new(layout)),
+                    Some(k) => LayoutText::edit(&self.doc, layout, k),
+                };
             }
             Action::LayoutPageSetup { layout } => {
                 self.layout_page_setup = crate::dialogs::layout_page_setup::LayoutPageSetup::new(&self.doc, layout);
@@ -6209,6 +6220,7 @@ impl SheafApp {
             || self.matrix_dialog.is_some()
             || self.layout_add_graph.is_some()
             || self.layout_page_setup.is_some()
+            || self.layout_text.is_some()
             || self.import_bin2d.is_some()
             || self.axis3d.is_some()
             || self.plot_setup.is_some()
@@ -6555,6 +6567,13 @@ impl SheafApp {
                     self.import_bin2d = None;
                     self.say("Imported the binary 2D array into a new matrix book".to_string());
                 }
+            }
+        }
+        if let Some(d) = &mut self.layout_text {
+            use crate::dialogs::layout_text::Outcome;
+            match d.show(ctx, &mut self.doc) {
+                Outcome::Open => {}
+                Outcome::Closed | Outcome::Done => self.layout_text = None,
             }
         }
         if let Some(d) = &mut self.layout_page_setup {

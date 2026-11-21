@@ -18,4 +18,4 @@ Windows list behaviour; not measured against Origin.
 
 ## Left
 
-- Search and filters in the Explorer.
+- Search: done in T288.

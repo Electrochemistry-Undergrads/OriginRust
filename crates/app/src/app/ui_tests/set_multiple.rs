@@ -212,7 +212,11 @@ fn the_range_of_j_can_be_widened_to_columns_that_were_not_selected() {
     ctrl_shift_q(&mut h);
     type_formula(&mut h, "j");
     // The text fields: Row From, Row To, Col (j) From, Col (j) To.
-    h.query_all_by_role(egui::accesskit::Role::TextInput).nth(3).expect("the To field of j").focus();
+    h.query_all_by_role(egui::accesskit::Role::TextInput)
+        .filter(|n| n.accesskit_node().label() != Some("Search windows".into()))
+        .nth(3)
+        .expect("the To field of j")
+        .focus();
     settle(&mut h);
     h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
     h.event(egui::Event::Text("4".into()));

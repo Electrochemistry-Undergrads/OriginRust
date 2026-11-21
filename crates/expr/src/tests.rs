@@ -595,7 +595,49 @@ fn dates_match_origin_numbers() {
     // unrelated number, which we do not copy).
     assert!(ev("date(2021,14,1)").is_nan());
     assert!(ev("date(2021,2,30)").is_nan());
-    assert!(ev("year(na())").is_nan());
+    // T262: a missing input and a number with no date give -1, as Origin 2016 writes.
+    assert_eq!(ev("year(na())"), -1.0);
+}
+
+#[test]
+fn date_and_time_parts_follow_origins_range_and_give_minus_one_without_a_date() {
+    // Measured in Origin 2016 on 2026-11-20 (T262, re-workspace/scratch/t262/range*.out.txt): the
+    // value, then year, month, day, weekday, hour, minute, second.
+    let rows: [(f64, [f64; 7]); 22] = [
+        (-1_000_000.0, [-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0]),
+        (-100.0, [-1.0, -1.0, -1.0, -1.0, 0.0, 0.0, 0.0]),
+        (-0.25, [-1.0, -1.0, -1.0, -1.0, 18.0, 0.0, 0.0]),
+        (-1.25, [-1.0, -1.0, -1.0, -1.0, 18.0, 0.0, 0.0]),
+        (-2.75, [-1.0, -1.0, -1.0, -1.0, 6.0, 0.0, 0.0]),
+        (0.999, [-1.0, -1.0, -1.0, -1.0, 23.0, 58.0, 33.6]),
+        (1.0, [-1.0; 7]),
+        (1_721_426.0, [-1.0; 7]),
+        (1_757_582.0, [-1.0; 7]),
+        (1_757_583.0, [99.0, 12.0, 31.0, 4.0, 0.0, 0.0, 0.0]),
+        (1_757_583.99, [99.0, 12.0, 31.0, 4.0, 0.0, 14.0, 24.0]),
+        (1_757_584.25, [100.0, 1.0, 1.0, 5.0, 18.0, 0.0, 0.0]),
+        (2_299_159.25, [1582.0, 10.0, 14.0, 4.0, 18.0, 0.0, 0.0]),
+        (2_299_160.0, [1582.0, 10.0, 15.0, 5.0, 0.0, 0.0, 0.0]),
+        (2_415_016.9, [1899.0, 12.0, 28.0, 4.0, 2.0, 24.0, 0.0]),
+        (2_415_017.75, [1899.0, 12.0, 29.0, 5.0, 6.0, 0.0, 0.0]),
+        (2_415_018.25, [1899.0, 12.0, 30.0, 6.0, 6.0, 0.0, 0.0]),
+        (2_415_019.5, [1899.0, 12.0, 31.0, 0.0, 12.0, 0.0, 0.0]),
+        (2_000_000.1, [763.0, 9.0, 19.0, 4.0, 21.0, 36.0, 0.0]),
+        (5_373_483.0, [9999.0, 12.0, 31.0, 5.0, 0.0, 0.0, 0.0]),
+        (5_373_483.25, [-1.0; 7]),
+        (40_000_000.0, [-1.0; 7]),
+    ];
+    let names = ["year", "month", "day", "weekday", "hour", "minute", "second"];
+    for (v, want) in rows {
+        for (name, w) in names.iter().zip(want) {
+            let got = ev(&format!("{name}({v})"));
+            assert!((got - w).abs() < 1e-9, "{name}({v}) = {got}, Origin {w}");
+        }
+    }
+    // An empty cell: -1 from all seven.
+    for name in names {
+        assert_eq!(ev(&format!("{name}(na())")), -1.0, "{name}");
+    }
 }
 
 #[test]
@@ -1239,5 +1281,5 @@ fn hour_minute_and_second_of_a_date_time_number() {
     // A hair below midnight rounds to the next day's 0:00:00.
     assert_eq!(ev("hour(date(2020,1,1)+0.999999999999)"), 0.0);
     assert_eq!(ev("second(date(2020,1,1)+0.9999999)"), 59.991);
-    assert!(ev("hour(na())").is_nan() && ev("second(na())").is_nan());
+    assert_eq!((ev("hour(na())"), ev("second(na())")), (-1.0, -1.0), "T262: -1 as Origin");
 }

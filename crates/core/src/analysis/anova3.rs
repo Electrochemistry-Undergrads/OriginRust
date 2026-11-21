@@ -2,7 +2,7 @@
 //! columns and the data column itself (the factors may hold text), lays the report out and leaves the numbers to
 //! `sheaf_calc::anova_three_way`. See `docs/spec/statistics.md`, section 25.
 
-use super::statistics::{Output, check_alpha, label_column, level_text, num, number_column};
+use super::statistics::{Output, check_alpha, label_column, num, number_column, shown_level};
 use super::*;
 use calc::ThreeWayEffect as Effect;
 
@@ -72,7 +72,7 @@ pub(super) fn three_way_anova(
     let mut left_out = 0usize;
     for row in first..=last.min(len - 1) {
         let value = ys.get(row).copied().unwrap_or(f64::NAN);
-        let texts = [level_text(ca, row), level_text(cb, row), level_text(cc, row)];
+        let texts = [shown_level(sheet, ca, row), shown_level(sheet, cb, row), shown_level(sheet, cc, row)];
         if value.is_nan() || texts.iter().any(Option::is_none) {
             // Rows that are empty in all four columns are just the end of a shorter column.
             left_out += usize::from(!(value.is_nan() && texts.iter().all(Option::is_none)));
@@ -438,5 +438,10 @@ mod tests {
         assert_ne!(all, want);
         p.column_mut(ids[3]).unwrap().mask.insert(0);
         assert_eq!(table(&mut p), want);
+        // T254: a masked factor (subject) cell leaves its row out too.
+        let mut level = p.clone();
+        level.column_mut(ids[0]).unwrap().mask.insert(0);
+        level.column_mut(ids[3]).unwrap().mask.clear();
+        assert_eq!(table(&mut level), want, "a masked level cell is left out");
     }
 }

@@ -452,6 +452,8 @@ pub enum Cmd {
     /// A command of a sheet tab's menu, on the active sheet.
     Sheet(SheetOp),
     Plot(Template),
+    /// Plot > Statistics > Grouped Histogram... (T271).
+    GroupedHistogram,
     /// Plot > Statistics > Run Chart... (T270).
     RunChart,
     /// Plot > Line + Symbol > Line Series (T82).
@@ -1631,6 +1633,7 @@ fn plot_menu() -> Vec<Entry> {
                 vec![
                     item("Histogram + Probabilities", Cmd::Plot(Template::HistogramProbabilities)),
                     item("Stacked Histograms", Cmd::Plot(Template::StackedHistograms)),
+                    item("Grouped Histogram...", Cmd::GroupedHistogram),
                 ],
                 vec![item("Pareto", Cmd::Plot(Template::Pareto))],
                 vec![
@@ -3612,6 +3615,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::Sheet(op) => Action::Sheet { book: book?, op: op.clone() },
         Cmd::Plot(template) => Action::PlotColumns { book: book?, columns: c.selected.to_vec(), template: *template },
+        Cmd::GroupedHistogram => Action::GroupedHistogram { book: book?, columns: c.selected.to_vec() },
         Cmd::RunChart => Action::RunChart { book: book?, columns: c.selected.to_vec() },
         Cmd::SetAs(designation) => {
             book?;

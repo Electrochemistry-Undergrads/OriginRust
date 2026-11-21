@@ -9401,3 +9401,28 @@ fn plot_statistics_run_chart_makes_its_workbook_and_graph() {
     assert_eq!(g.layers[0].straight_lines.len(), 1, "the reference line");
     assert!(project(&h).workbooks().any(|b| b.name.starts_with("RunChart")));
 }
+
+/// Plot > Statistics > Grouped Histogram... (T271) opens its window for the active sheet; OK makes the
+/// GroupedHist workbook and a graph with a histogram per group, one undo step.
+#[test]
+fn plot_statistics_grouped_histogram_makes_one_histogram_per_group() {
+    let path = csv_file("grouped-hist", "groups", "value,group\n1,a\n2,b\n3,a\n4,b\n5,a\n6,b\n7,a\n8,b\n");
+    let mut h = start(vec![path]);
+    let ctx = h.ctx.clone();
+    show_window(&mut h, "Book1 - groups.csv");
+    let mut listed = false;
+    for m in menus::bar(menus::WindowKind::Workbook) {
+        menus::walk(&m.entries, &mut |i| listed |= i.cmd == Some(menus::Cmd::GroupedHistogram));
+    }
+    assert!(listed, "Plot > Statistics lists Grouped Histogram...");
+    let action = menus::resolve(&menus::Cmd::GroupedHistogram, &h.state().menu_context()).unwrap();
+    h.state_mut().apply(action, &ctx);
+    settle(&mut h);
+    let d = h.state().grouped_hist.as_ref().expect("the Grouped Histogram window is open");
+    assert_ne!(d.data, d.group);
+    click(&mut h, "OK");
+    assert!(h.state().grouped_hist.is_none());
+    assert_eq!(h.state().doc.undo_label(), Some("Grouped Histogram"));
+    let g = project(&h).graphs().last().unwrap();
+    assert_eq!(g.layers[0].plots.len(), 2, "a histogram per group");
+}

@@ -596,8 +596,25 @@ fn title_tab(ui: &mut egui::Ui, axis: &mut Axis, id: &str) {
                 }
             });
             ui.end_row();
+            // T291: the title's rotation (Origin turns it about its middle) and how far it is moved.
             ui.label("Rotate (deg.)");
-            ui.add_enabled(false, DragValue::new(&mut 0.0));
+            ui.horizontal(|ui| {
+                let mut auto = axis.title_rotation_deg.is_none();
+                if ui.checkbox(&mut auto, "Default").on_hover_text("0 for an X title, 90 for a Y title").changed() {
+                    axis.title_rotation_deg = if auto { None } else { Some(0.0) };
+                }
+                if let Some(a) = &mut axis.title_rotation_deg {
+                    ui.add(DragValue::new(a).speed(1.0).range(-360.0..=360.0).suffix("°"));
+                }
+            });
+            ui.end_row();
+            ui.label("Offset (pt)");
+            ui.horizontal(|ui| {
+                ui.label("Right");
+                ui.add(DragValue::new(&mut axis.title_offset_pt.0).speed(0.5).range(-500.0..=500.0));
+                ui.label("Down");
+                ui.add(DragValue::new(&mut axis.title_offset_pt.1).speed(0.5).range(-500.0..=500.0));
+            });
             ui.end_row();
         });
         ui.weak("Markup: \\+(superscript)  \\-(subscript)  \\g(greek)  \\b(bold)  \\i(italic)");

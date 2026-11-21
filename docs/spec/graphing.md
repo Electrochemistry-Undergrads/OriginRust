@@ -281,6 +281,18 @@ Observed themes: "Ticks All In" sets major=minor=1; "Ticks All Out" 2; "Ticks YL
 ### 3.4 Title tab [W:axesref-title, quick-help/customize-axistitle, options-dialog-axis-tab]
 Default text: the long name of the first plot's X (or Y) column, else its short name, plus the units when the page-level "show units" option is on. The notation is `%(?X)` and `%(?Y)` ("?" = first plot of the layer; `%(1X, @LL)` explicit). Units are written in a style chosen globally: parentheses, brackets, braces, slash, dash, "in", two lines; default Auto (language-dependent). Options: show, color or follow plot, rotation (positive counter-clockwise), offset along axis (begin / middle / end), font, size, same-for-opposite. Origin.ini has commented keys `XTitle`, `YTitle`, `Legend` to redefine defaults; example `%(1Y, @LG)` = long name plus unit.
 
+**Rotation and position (T291, measured in Origin 2016 on 2026-11-21, `re-workspace/scratch/t291`).**
+Origin's titles are text objects `XB`, `YL` (and `XT`, `YR`): `yl.rotate` is 90 and `xb.rotate` 0 by
+default, and a rotation turns the title about its own middle (`yl.rotate = 45` leaves the centre of
+the "B" where the upright title had it). `xb.x`, `xb.y`, `yl.y` place a title in the layer's axis units
+(+3 X units and -10 Y units moved the X title right and down by those amounts on the page) and a
+moved title stays where it was put. Sheaf: the Axis window's Title tab has Rotate (deg.) (Default
+or a number) and Offset (pt) right and down; the title turns about its middle and then moves by the
+offset (`Axis::title_rotation_deg`, `Axis::title_offset_pt`, `turned_title` in
+`crates/plot/src/layout.rs`). The `.opj` reader keeps a title's angle when it is not the default; the
+writer writes the angle and the offset (the moved position as the object's centre). Dragging a title
+with the mouse is not built.
+
 **Tokens inside a title (T246).** A title of Sheaf's own may hold `%(?X)` and `%(?Y)` anywhere, with
 or without options after a comma (`%(?X,@LG)`, letter case ignored); when the graph is drawn each is
 replaced by the title Sheaf builds for that axis from the first plot (the automatic title of the X or

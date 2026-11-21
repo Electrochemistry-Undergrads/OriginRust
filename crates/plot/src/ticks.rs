@@ -880,6 +880,8 @@ mod tests {
             at_position: None,
             arrow_begin: false,
             arrow_end: false,
+            title_rotation_deg: None,
+            title_offset_pt: (0.0, 0.0),
             special_ticks: Vec::new(),
             tick_label_formula: String::new(),
             minor_tick_labels: false,

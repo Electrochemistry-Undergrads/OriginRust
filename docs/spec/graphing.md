@@ -3150,10 +3150,11 @@ menu, PNG exports `re-workspace/scratch/t83-origin/interval.png`, `pareto.png`):
   The cumulative percent is a thin blue line with blue squares at the **bar centres** (no (0, 0) point), each
   labelled with its value to 7 significant digits (35.71429, 64.28571, ..., 100) above it. No legend.
 
-**Differences from what Sheaf does below (for a code slice):** interval plot legend (two summary entries) and Y
-title "Range"; Pareto cumulative points at the bar centres without the (0, 0) start (Origin 2016; the `symr`
-right-edge default documented for later versions does not hold here), point labels, left axis to 1.1 × total
-with the right axis 0..110 in percent labels, title "Cumulative Frequency", blue line and squares.
+**Copied by T316 (2026-11-21):** the interval plot's Y title "Range"; the Pareto chart's red bars with a black
+outline, left axis "Count" from 0 to 1.1 × the total and no X title, and the cumulative percent as a thin blue line
+with blue squares at the bar centres (no (0, 0) start), each labelled above, on a right axis "Cumulative Frequency"
+from 0 to 110 with a tick every 20 labelled 0% to 100%. **Still different:** the interval plot's two-entry legend
+(Sheaf lists one entry per column) and the labels' 7 significant digits (Sheaf writes the full value).
 
 **What Sheaf does** (unmeasured unless listed above):
 
@@ -3173,10 +3174,9 @@ with the right axis 0..110 in percent labels, title "Cumulative Frequency", blue
 - Pareto: select one column (text or numbers); anything else is the status warning "Select one column whose values are
   counted for the Pareto chart". The left layer holds `Column` bars of the count per distinct value, most frequent first
   (ties in the order of first occurrence; empty cells are not counted; numbers compare as text without a trailing ".0");
-  the categories are the tick labels at 1..K, the X title is the column's. The right layer (the usual linked right-Y layer)
-  holds a `LineSymbol` plot of the running percent of the counted cells, Y axis fixed to 0 - 100, titles "Count" and
-  "Cumulative %". The cumulative points are at the bar right edges, with an extra first point (0, 0) at the left edge of the first
-  bar (documented, above). Sheaf adds no drop lines, count table, "Other" merge, binned-data input or groups.
+  the categories are the tick labels at 1..K, with no X title. The right layer (the usual linked right-Y layer)
+  holds a `LineSymbol` plot of the running percent of the counted cells at the bar centres, styled and scaled as
+  Origin 2016's (above). Sheaf adds no drop lines, count table, "Other" merge, binned-data input or groups.
 - Tests: `crates/core/src/template.rs`, `crates/plot/src/grouped_tests.rs` (hand-computed mean, SD, SE, t quantiles and
   Pareto percentages; goldens `interval-plot.svg`, `pareto.svg`), `crates/app/src/app/ui_tests/grouped_indexed.rs`,
   `crates/cli/tests/interval_pareto.rs`, `crates/io/src/opj/write/graph_feature_tests.rs`.

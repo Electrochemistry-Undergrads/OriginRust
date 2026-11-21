@@ -2291,7 +2291,7 @@ mod tests {
         assert_eq!(gr.layers[0].plots[0].stat, Some(StatPlot::Pareto));
         assert_eq!(gr.layers[1].plots[0].stat, Some(StatPlot::ParetoCumulative));
         assert_eq!(gr.layers[1].plots[0].kind, PlotKind::LineSymbol);
-        assert_eq!((gr.layers[1].y_axis.min, gr.layers[1].y_axis.max), (Some(0.0), Some(100.0)));
+        assert_eq!((gr.layers[1].y_axis.min, gr.layers[1].y_axis.max), (Some(0.0), Some(110.0)));
         let blank = p.add_column(b, 0, Designation::X, ColumnData::text(vec![String::new(); 5])).unwrap();
         assert!(p.plot_pareto(blank).is_err());
 

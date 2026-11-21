@@ -3,48 +3,50 @@
 <g id="layer0">
 <clipPath id="clip0"><rect x="138.237" y="68.41" width="526.086" height="424.343"/></clipPath>
 <g class="plots" clip-path="url(#clip0)">
-<rect x="155.773" y="129.03" width="140.29" height="363.722" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
-<rect x="331.135" y="250.271" width="140.29" height="242.482" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
-<rect x="506.497" y="371.512" width="140.29" height="121.241" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
+<rect x="155.773" y="299.87" width="140.29" height="192.883" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
+<rect x="331.135" y="364.164" width="140.29" height="128.589" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
+<rect x="506.497" y="428.459" width="140.29" height="64.294" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
 </g>
 <g class="overlay">
 <path d="M138.237 492.753L664.323 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
 <path d="M138.237 68.41L138.237 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
 <path d="M138.237 68.41L664.323 68.41" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
-<path d="M138.237 492.753L147.237 492.753M138.237 371.512L147.237 371.512M138.237 250.271L147.237 250.271M138.237 129.03L147.237 129.03M138.237 432.133L142.737 432.133M138.237 310.892L142.737 310.892M138.237 189.651L142.737 189.651M138.237 68.41L142.737 68.41" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M138.237 492.753L147.237 492.753M138.237 364.164L147.237 364.164M138.237 235.575L147.237 235.575M138.237 106.987L147.237 106.987M138.237 428.459L142.737 428.459M138.237 299.87L142.737 299.87M138.237 171.281L142.737 171.281" fill="none" stroke="#000000" stroke-width="1.5"/>
 <text x="225.918" y="512.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">scratch</text>
 <text x="401.28" y="512.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">dent</text>
 <text x="576.642" y="512.013" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="middle">crack</text>
 <text x="131.937" y="497.343" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">0</text>
-<text x="131.937" y="376.102" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">1</text>
-<text x="131.937" y="254.861" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">2</text>
-<text x="131.937" y="133.62" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">3</text>
-<text x="401.28" y="544.833" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle">C</text>
+<text x="131.937" y="368.754" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">2</text>
+<text x="131.937" y="240.165" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">4</text>
+<text x="131.937" y="111.577" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000" text-anchor="end">6</text>
 <text x="104.217" y="280.581" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle" transform="rotate(-90 104.217 280.581)">Count</text>
 </g>
 </g>
 <g id="layer1">
 <clipPath id="clip1"><rect x="138.237" y="68.41" width="526.086" height="424.343"/></clipPath>
 <g class="plots" clip-path="url(#clip1)">
-<path d="M155.773 492.753L296.062 280.581L471.424 139.134L646.786 68.41" fill="none" stroke="#0000FF" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M151.273 488.253L160.273 488.253L160.273 497.253L151.273 497.253ZM291.562 276.081L300.562 276.081L300.562 285.081L291.562 285.081ZM466.924 134.634L475.924 134.634L475.924 143.634L466.924 143.634ZM642.286 63.91L651.286 63.91L651.286 72.91L642.286 72.91Z" fill="#0000FF"/>
+<path d="M225.918 299.87L401.28 171.281L576.642 106.987" fill="none" stroke="#0000FF" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M221.418 295.37L230.418 295.37L230.418 304.37L221.418 304.37ZM396.78 166.781L405.78 166.781L405.78 175.781L396.78 175.781ZM572.142 102.487L581.142 102.487L581.142 111.487L572.142 111.487Z" fill="#0000FF"/>
+<text x="225.918" y="294.37" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle">50</text>
+<text x="401.28" y="165.781" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle">83.3333333333333</text>
+<text x="576.642" y="101.487" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle">100</text>
 </g>
 <g class="overlay">
 <path d="M664.323 68.41L664.323 492.753" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="square"/>
-<path d="M664.323 492.753L655.323 492.753M664.323 407.884L655.323 407.884M664.323 323.016L655.323 323.016M664.323 238.147L655.323 238.147M664.323 153.279L655.323 153.279M664.323 68.41L655.323 68.41M664.323 450.319L659.823 450.319M664.323 365.45L659.823 365.45M664.323 280.581L659.823 280.581M664.323 195.713L659.823 195.713M664.323 110.844L659.823 110.844" fill="none" stroke="#000000" stroke-width="1.5"/>
-<text x="670.623" y="497.343" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">0</text>
-<text x="670.623" y="412.474" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">20</text>
-<text x="670.623" y="327.606" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">40</text>
-<text x="670.623" y="242.737" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">60</text>
-<text x="670.623" y="157.869" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">80</text>
-<text x="670.623" y="73" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">100</text>
-<text x="729.363" y="280.581" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle" transform="rotate(-90 729.363 280.581)">Cumulative %</text>
-<rect x="415.523" y="86.01" width="222.2" height="74.8" fill="none" stroke="#000000" stroke-width="0.75"/>
-<rect x="424.323" y="98.11" width="48.4" height="22" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
-<text x="483.723" y="114.72" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Count</text>
-<path d="M424.323 137.71L472.723 137.71" fill="none" stroke="#0000FF" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M444.023 133.21L453.023 133.21L453.023 142.21L444.023 142.21Z" fill="#0000FF"/>
-<text x="483.723" y="143.32" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Cumulative %</text>
+<path d="M664.323 492.753L655.323 492.753M664.323 415.6L655.323 415.6M664.323 338.446L655.323 338.446M664.323 261.293L655.323 261.293M664.323 184.14L655.323 184.14M664.323 106.987L655.323 106.987M664.323 454.176L659.823 454.176M664.323 377.023L659.823 377.023M664.323 299.87L659.823 299.87M664.323 222.717L659.823 222.717M664.323 145.563L659.823 145.563M664.323 68.41L659.823 68.41" fill="none" stroke="#000000" stroke-width="1.5"/>
+<text x="670.623" y="497.343" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">0%</text>
+<text x="670.623" y="420.19" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">20%</text>
+<text x="670.623" y="343.036" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">40%</text>
+<text x="670.623" y="265.883" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">60%</text>
+<text x="670.623" y="188.73" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">80%</text>
+<text x="670.623" y="111.577" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#000000">100%</text>
+<text x="739.263" y="280.581" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000" text-anchor="middle" transform="rotate(-90 739.263 280.581)">Cumulative Frequency</text>
+<rect x="318.723" y="86.01" width="319" height="74.8" fill="none" stroke="#000000" stroke-width="0.75"/>
+<rect x="327.523" y="98.11" width="48.4" height="22" fill="#FF0000" stroke="#000000" stroke-width="0.5"/>
+<text x="386.923" y="114.72" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Count</text>
+<path d="M327.523 137.71L375.923 137.71" fill="none" stroke="#0000FF" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M347.223 133.21L356.223 133.21L356.223 142.21L347.223 142.21Z" fill="#0000FF"/>
+<text x="386.923" y="143.32" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Cumulative Frequency</text>
 </g>
 </g>
 </svg>

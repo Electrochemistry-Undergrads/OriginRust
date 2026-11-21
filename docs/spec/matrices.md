@@ -371,7 +371,10 @@ each matrix as not written).
     neighbour makes a missing cell.
 - **Conversion (T218):** these need a book with Red, Green and Blue sheets of one size; any other
   book is refused with a note.
-  - **Color to Gray:** a new book "Gray of MBookN" with the luminance 0.2126 R + 0.7152 G + 0.0722 B.
+  - **Color to Gray:** a new book "Gray of MBookN" with `(2 R + 5 G + B) / 8`, the weights of Origin
+    2016's `imgC2gray` (T280, measured on a 2 x 2 PNG: red 64, green 159, blue 32, (200, 100, 50)
+    119 of 255; Origin rounds to whole levels, Sheaf keeps the fraction). The image importer's own
+    gray picture (File > Import > Image as gray) still uses Rec. 709 weights (not measured).
   - **RGB Split:** three new one-channel books, "Red of MBookN" and so on.
   - Each is one undo step.
 

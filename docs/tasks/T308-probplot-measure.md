@@ -14,7 +14,7 @@ Origin to 1e-12 (Weibull 1.4e-8, gamma 1e-8).
 
 - Origin's sheet layout (Percentiles, Reference Line and Additional Table columns), Exchange X-Y Axes and
   fixed parameters.
-- Origin's Q-Q plot.
+- Origin's Q-Q plot: done by T311.
 
 ## Tests
 

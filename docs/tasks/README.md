@@ -292,6 +292,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T307](T307-before-formula-scripts.md) | Set Column Values: Before Formula Scripts with name = expression statements | M | done 2026-11-21 |
 | [T308](T308-probplot-measure.md) | Measure Probability Plot against Origin (scores, estimates, reference line, band for every family) | S | done 2026-11-21 (statistics 16.2a) |
 | [T309](T309-add-param-row.md) | Sheet corner menu: Add User Parameter Row... | S | done 2026-11-21 |
+| [T311](T311-qqplot-measure.md) | Measure Q-Q Plot against Origin (expected values, y = x line ends, band) | S | done 2026-11-21 (statistics 16.2a) |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |

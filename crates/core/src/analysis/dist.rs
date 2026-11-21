@@ -386,21 +386,39 @@ pub(super) fn prob_plot(spec: &ProbPlotSpec, inputs: &[Input<'_>]) -> Result<Out
                 ));
             }
             ProbPlotKind::QQ => {
-                let (tmin, tmax) = (pp.theoretical[0], pp.theoretical[n - 1]);
-                let quantile = format!("{} quantile", family.name());
-                let line = [pp.slope * tmin + pp.intercept, pp.slope * tmax + pp.intercept];
+                // Origin 2016's Q-Q plot (measured by T311): the expected values are the fitted
+                // quantiles at the scores, the reference line is y = x between rounded ends, and the
+                // band (when asked for) stands round that line on 51 even points.
+                let params = calc::distfit::prob_plot_params(family, inp.ys()).map_err(bad)?;
+                let expected: Vec<f64> = pp
+                    .positions
+                    .iter()
+                    .map(|&q| calc::distfit::quantile(family, &params, q))
+                    .map(|v| if v.is_finite() { v } else { f64::NAN })
+                    .collect();
+                let (lo, hi) = calc::distfit::qq_line_ends(&expected);
+                let name = format!("Expected {} value", family.name());
+                let line = vec![lo, hi];
                 if spec.data_on_x {
-                    // The same least-squares line, drawn with the data on X.
                     on_sheet.push(with(number_column("Data (ordered)", u, Designation::X, pp.ordered.clone())));
-                    on_sheet.push(with(number_column(&quantile, "", Designation::Y, pp.theoretical.clone())));
-                    on_sheet.push(with(number_column("Line X", u, Designation::X, line.to_vec())));
-                    on_sheet.push(with(number_column("Line Y", "", Designation::Y, vec![tmin, tmax])));
+                    on_sheet.push(with(number_column(&name, u, Designation::Y, expected)));
                 } else {
-                    on_sheet.push(with(number_column(&quantile, "", Designation::X, pp.theoretical.clone())));
+                    on_sheet.push(with(number_column(&name, u, Designation::X, expected)));
                     on_sheet.push(with(number_column("Data (ordered)", u, Designation::Y, pp.ordered.clone())));
-                    on_sheet.push(with(number_column("Line X", "", Designation::X, vec![tmin, tmax])));
-                    on_sheet.push(with(number_column("Line Y", u, Designation::Y, line.to_vec())));
                 }
+                on_sheet.push(with(number_column("Line X", u, Designation::X, line.clone())));
+                on_sheet.push(with(number_column("Line Y", u, Designation::Y, line)));
+                let band = match spec.band {
+                    Some(level) => {
+                        let grid: Vec<f64> = (1..=51).map(|k| lo + (hi - lo) * f64::from(k) / 51.0).collect();
+                        let (lower, upper) = calc::distfit::qq_band(family, &params, inp.ys(), level, &grid)
+                            .ok_or_else(|| {
+                                AnalysisError::BadOption(format!("{level} is not a confidence level between 0 and 1"))
+                            })?;
+                        Some((level, grid, lower, upper))
+                    }
+                    None => None,
+                };
                 table.push_row(
                     inp.label.clone(),
                     vec![n as f64, pp.shape.unwrap_or(f64::NAN), pp.slope, pp.intercept, pp.r],
@@ -417,16 +435,43 @@ pub(super) fn prob_plot(spec: &ProbPlotSpec, inputs: &[Input<'_>]) -> Result<Out
                     x: first + 2,
                     y: first + 3,
                     kind: PlotKind::Line,
-                    label: format!("Line through the points of {}", inp.name),
+                    label: format!("Reference line of {}", inp.name),
                     line_of: Some(plots.len() - 1),
                 });
-                let shape = pp.shape.map_or(String::new(), |s| format!(" with shape {}", num(s)));
+                if let Some((level, grid, lower, upper)) = band {
+                    let points = plots.len() - 2;
+                    for (side, y) in [("Lower", lower), ("Upper", upper)] {
+                        let at = on_sheet.len();
+                        let (bx, by) = if spec.data_on_x { (grid.clone(), y) } else { (y, grid.clone()) };
+                        on_sheet.push(with(number_column(
+                            &format!("{side} {} % X", num(level * 100.0)),
+                            u,
+                            Designation::X,
+                            bx,
+                        )));
+                        on_sheet.push(with(number_column(
+                            &format!("{side} {} % Y", num(level * 100.0)),
+                            u,
+                            Designation::Y,
+                            by,
+                        )));
+                        plots.push(GraphPlot {
+                            x: at,
+                            y: at + 1,
+                            kind: PlotKind::Line,
+                            label: format!("{side} {} % confidence of {}", num(level * 100.0), inp.name),
+                            line_of: Some(points),
+                        });
+                    }
+                }
                 notes.push(format!(
-                    "{}: {} Q-Q plot of {n} values{shape}; line y = {} x + {}, r = {}.",
+                    "{}: {} Q-Q plot of {n} values against the fitted {} ({}); reference line y = x from {} to {}; r = {}.",
                     inp.label,
                     family.name(),
-                    num(pp.slope),
-                    num(pp.intercept),
+                    family.name(),
+                    param_text(family, &params),
+                    num(lo),
+                    num(hi),
                     num(pp.r)
                 ));
             }
@@ -446,7 +491,7 @@ pub(super) fn prob_plot(spec: &ProbPlotSpec, inputs: &[Input<'_>]) -> Result<Out
             look: Look::default(),
         },
         ProbPlotKind::QQ => {
-            let quantile = format!("{} quantile", family.name());
+            let quantile = format!("Expected {} value", family.name());
             let (x_title, y_title) = if spec.data_on_x { (data_title, quantile) } else { (quantile, data_title) };
             XyGraph {
                 plots,
@@ -637,7 +682,7 @@ mod tests {
         assert!(rr > 0.9 && rr <= 1.0 && slope > 0.0);
         assert!((intercept - 10.0).abs() < 1.0);
         assert!(table.rows[0].1[1].is_nan(), "the normal family has no shape");
-        assert_eq!(cell(&p, &r, "Normal quantile").len(), 24, "the first column has 24 numbers");
+        assert_eq!(cell(&p, &r, "Expected Normal value").len(), 24, "the first column has 24 numbers");
     }
 
     #[test]
@@ -663,6 +708,20 @@ mod tests {
         assert_eq!(g.layers[0].x_axis.title.as_deref().map(|t| t.contains("quantile")), Some(false));
         let data = cell(&p, &r, "Data (ordered)");
         assert!(data.windows(2).all(|w| w[0] <= w[1]));
+        // Origin's Q-Q (T311): expected values at the fitted normal, a line y = x, and a band of 51 points.
+        let qq = ProbPlotSpec {
+            kind: ProbPlotKind::QQ,
+            data_on_x: true,
+            scores: calc::PlotScores::Blom,
+            band: Some(0.95),
+            ..Default::default()
+        };
+        let r = run(&mut p, &ids[1..2], Tool::ProbPlot(qq));
+        let (lx, ly) = (cell(&p, &r, "Line X"), cell(&p, &r, "Line Y"));
+        assert_eq!(lx, ly, "the reference line is y = x");
+        let expected = cell(&p, &r, "Expected Normal value");
+        assert!(lx[0] <= expected[0] && lx[1] >= expected[19]);
+        assert_eq!(cell(&p, &r, "Lower 95 % X").len(), 51);
         // Every family has Origin's band (T308).
         for family in [Family::Weibull, Family::Gamma, Family::Exponential, Family::Lognormal] {
             let w = ProbPlotSpec { family, band: Some(0.95), ..Default::default() };

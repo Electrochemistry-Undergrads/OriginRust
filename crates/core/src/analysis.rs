@@ -3994,6 +3994,7 @@ impl Project {
                 c.id = self.new_column_id();
                 c.reorder_rows(&keep, n);
                 c.formula = None;
+                c.before_formula = None;
                 c.recalc = crate::column::RecalcMode::None;
                 c.formula_state = crate::column::FormulaState::Current;
                 c.formula_rows = None;

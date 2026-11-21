@@ -192,6 +192,8 @@ struct Notes {
     sampling_dropped: usize,
     /// Columns with a data range (Set As Begin / Set As End), which the file written here does not hold.
     ranges_dropped: usize,
+    /// Columns whose formula has Before Formula Scripts (T307), which the file written here does not hold.
+    scripts_dropped: usize,
     /// Group and Subject columns, written as unused.
     group_roles_dropped: usize,
     /// Sheets with a worksheet filter: the file written here holds no filter.
@@ -454,6 +456,7 @@ impl Writer {
             self.notes.sampling_dropped +=
                 usize::from(column.sampling.as_ref().is_some_and(|s| !s.long_name.is_empty() || !s.units.is_empty()));
             self.notes.ranges_dropped += usize::from(column.data_range.is_some());
+            self.notes.scripts_dropped += usize::from(column.before_formula.is_some());
             self.notes.widths_dropped += usize::from(column.width.is_some());
             let long = self.label_text(&column.long_name, "long name")?;
             let units = self.label_text(&column.units, "units")?;
@@ -820,6 +823,12 @@ impl Writer {
             warnings.push(format!(
                 "{} column(s) have a display format (decimals, scientific, date or time) that the project file written here does not hold; Origin shows them in its default format.",
                 n.formats_dropped
+            ));
+        }
+        if n.scripts_dropped > 0 {
+            warnings.push(format!(
+                "{} column formula(s) use Before Formula Scripts, which the project file written here does not hold; Origin keeps the values but its formula misses the script's names.",
+                n.scripts_dropped
             ));
         }
         if n.hidden_dropped > 0 {

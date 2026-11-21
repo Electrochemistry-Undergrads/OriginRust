@@ -628,6 +628,10 @@ pub struct ReadOptions {
     /// Delimited text and Excel: line holding the comments (0: none).
     #[arg(long, value_name = "N")]
     pub comments_line: Option<usize>,
+    /// Delimited text: last comments line; the lines from --comments-line to this one are joined with
+    /// line breaks (Origin's Comments From .. To). Default: the end of the detected label lines.
+    #[arg(long, value_name = "N")]
+    pub comments_to: Option<usize>,
     /// Delimited text and Excel: header lines that become named parameter rows (for example the wavelengths
     /// of an ICP-OES export), as a comma-separated list. The first cell of the line is the name.
     #[arg(long, value_name = "N,N", value_delimiter = ',')]

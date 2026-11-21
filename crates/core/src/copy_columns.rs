@@ -124,6 +124,7 @@ impl Project {
             if parts.data {
                 target.data = src.data.clone();
                 target.formula = None;
+                target.before_formula = None;
             }
             if parts.format {
                 target.format = src.format;

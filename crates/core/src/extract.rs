@@ -103,6 +103,7 @@ fn drop_outside_formulas(project: &mut Project, notes: &mut Vec<String>) {
                 col.display_name()
             ));
             col.formula = None;
+            col.before_formula = None;
             col.recalc = RecalcMode::None;
             col.formula_state = FormulaState::Current;
             col.formula_rows = None;

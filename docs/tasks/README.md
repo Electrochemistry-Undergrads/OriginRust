@@ -280,6 +280,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T294](T294-bin2d-measure.md) | Measure Binary 2D Array import against Origin (impBin2D options and defaults, rows from size, partial row, target) | S | done 2026-11-21 (matrices 7f) |
 | [T295](T295-newbook-measure.md) | New workbook measured in Origin 2016: 32 rows shown, default column width 7 | S | done 2026-11-21 |
 | [T298](T298-parity-formula-refs.md) | Stale parity row corrected: formula reference notation (cross-sheet, cell(), label reads exist) | S | done 2026-11-21 (docs only) |
+| [T299](T299-import-comment-lines.md) | Text import: comment lines from .. to joined, 15-line label detection, as Origin 2016 impasc | S | done 2026-11-21, measured |
 | [T297](T297-grayscale-measure.md) | Measure Gray Scale Map against Origin (8 x 6 bands, 32 grays, out-of-range boxes) | S | done 2026-11-21 (matrices 6, 7g) |
 | [T300](T300-rnormalize-measure.md) | Normalize Columns writes what Origin's rnormalize writes (columns at the end, Normalized1.., method comments) | S | done 2026-11-21 |
 | [T302](T302-interp-output.md) | Interpolate writes a Y column at the end of the sheet with the grid as sampling interval, as Origin's interp1xy | S | done 2026-11-21 |
@@ -288,7 +289,9 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T305](T305-add-columns-count.md) | Add New Columns... / Ctrl+D ask how many columns; the toolbar button adds one | S | done 2026-11-21 |
 | [T306](T306-sheet-tab-drag.md) | Drag a sheet tab onto another to move the sheet (one undo step) | S | done 2026-11-21 |
 | [T301](T301-image-import-measure.md) | Measure File > Import > Image against Origin (book names, ranges 0..n-1, gray values) | S | done 2026-11-21 (matrices 7h) |
+| [T307](T307-before-formula-scripts.md) | Set Column Values: Before Formula Scripts with name = expression statements | M | done 2026-11-21 |
 | [T308](T308-probplot-measure.md) | Measure Probability Plot against Origin (scores, estimates, reference line, band for every family) | S | done 2026-11-21 (statistics 16.2a) |
+| [T309](T309-add-param-row.md) | Sheet corner menu: Add User Parameter Row... | S | done 2026-11-21 |
 | [T311](T311-qqplot-measure.md) | Measure Q-Q Plot against Origin (expected values, y = x line ends, band) | S | done 2026-11-21 (statistics 16.2a) |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |

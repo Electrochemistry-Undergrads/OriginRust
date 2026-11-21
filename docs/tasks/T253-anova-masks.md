@@ -15,5 +15,4 @@ the two-way case.
 
 ## Left
 
-- Masked or filtered factor (level) cells: only the data column's mask counts; a masked level cell with
-  data still counts (as the categorical tools, which drop it, do not yet share one rule here).
+- Masked factor cells: done in T254.

@@ -1031,6 +1031,15 @@ fn normality(spec: &NormalitySpec, inputs: &[Input<'_>]) -> Result<Output, Analy
 
 pub(super) use crate::indexed::level_text;
 
+/// The level text of a factor cell as the ANOVAs read it (T254): `None` for a masked cell or a row the
+/// worksheet filter hides, as for the data values and in the categorical tools.
+pub(super) fn shown_level(sheet: &Worksheet, c: &Column, row: usize) -> Option<String> {
+    if !sheet.row_shown(row) || c.active_mask().is_some_and(|m| m.contains(&row)) {
+        return None;
+    }
+    level_text(c, row)
+}
+
 /// The number of a level in `levels`, which grows by the levels in the order they first appear.
 fn level_index(levels: &mut Vec<String>, name: &str) -> usize {
     levels.iter().position(|l| l == name).unwrap_or_else(|| {
@@ -1093,7 +1102,7 @@ pub(super) fn two_way_anova(
             let (first, last) = row_limits(len, &cy.short_name)?;
             for row in first..=last.min(len - 1) {
                 let value = ys.get(row).copied().unwrap_or(f64::NAN);
-                let (la, lb) = (level_text(ca, row), level_text(cb, row));
+                let (la, lb) = (shown_level(sheet, ca, row), shown_level(sheet, cb, row));
                 match (&la, &lb) {
                     (Some(la), Some(lb)) if !value.is_nan() => {
                         a.push(level_index(&mut levels_a, la));
@@ -2310,6 +2319,10 @@ mod tests {
         let mut masked = p.clone();
         masked.column_mut(ids[2]).unwrap().mask.insert(0);
         assert_eq!(table(&mut masked), want, "a masked cell is left out");
+        // T254: a masked factor cell leaves its row out too.
+        let mut level = p.clone();
+        level.column_mut(ids[0]).unwrap().mask.insert(0);
+        assert_eq!(table(&mut level), want, "a masked level cell is left out");
         let book = p.workbooks().next().unwrap().id;
         p.set_row_filter(book, 0, "i > 1").unwrap();
         assert_eq!(table(&mut p), want, "a filtered row is left out");

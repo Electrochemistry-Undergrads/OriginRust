@@ -15,4 +15,4 @@ stays open. Sheaf's window; Origin's User Defined Parameters dialog was not comp
 
 ## Left
 
-- Renaming and deleting a parameter row.
+- Renaming and deleting a parameter row: done in T310.

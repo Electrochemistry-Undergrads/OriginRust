@@ -39,7 +39,8 @@ pub enum ImageForm {
     Contrast(f64),
     Gamma(f64),
     Math(MathOp, f64),
-    ToBinary(f64),
+    /// Low and high level of the band that turns to 1 (T278).
+    ToBinary(f64, f64),
     Rotate(Rotation),
     Flip(FlipDirection),
     /// Levels (T210): input low/high to output low/high.
@@ -71,7 +72,7 @@ impl ImageForm {
             ImageForm::Contrast(k) => ImageOp::Contrast(k),
             ImageForm::Gamma(g) => ImageOp::Gamma(g),
             ImageForm::Math(op, k) => ImageOp::Math(op, k),
-            ImageForm::ToBinary(t) => ImageOp::ToBinary(t),
+            ImageForm::ToBinary(low, high) => ImageOp::ToBinary { low, high },
             ImageForm::Rotate(r) => ImageOp::Rotate(r),
             ImageForm::Flip(d) => ImageOp::Flip(d),
             ImageForm::Levels { input, output } => ImageOp::Levels { input, output },
@@ -110,7 +111,7 @@ impl Form {
                 ImageForm::Contrast(_) => "Contrast",
                 ImageForm::Gamma(_) => "Gamma",
                 ImageForm::Math(..) => "Math",
-                ImageForm::ToBinary(_) => "To Binary",
+                ImageForm::ToBinary(..) => "To Binary",
                 ImageForm::Rotate(_) => "Rotate",
                 ImageForm::Flip(_) => "Flip",
                 ImageForm::Levels { .. } => "Levels",
@@ -278,8 +279,8 @@ impl MatrixOpDialog {
 fn image_controls(ui: &mut egui::Ui, f: &mut ImageForm) {
     match f {
         ImageForm::Brightness(a) => {
-            ui.label("Brightness (added)");
-            ui.add(egui::DragValue::new(a).speed(1.0));
+            ui.label("Brightness (% of the range)");
+            ui.add(egui::DragValue::new(a).speed(1.0).range(-100.0..=100.0));
         }
         ImageForm::Contrast(k) => {
             ui.label("Contrast factor");
@@ -302,9 +303,12 @@ fn image_controls(ui: &mut egui::Ui, f: &mut ImageForm) {
             ui.label("Operand");
             ui.add(egui::DragValue::new(k).speed(0.1));
         }
-        ImageForm::ToBinary(t) => {
-            ui.label("Threshold");
-            ui.add(egui::DragValue::new(t).speed(1.0));
+        ImageForm::ToBinary(low, high) => {
+            ui.label("Low");
+            ui.add(egui::DragValue::new(low).speed(1.0));
+            ui.end_row();
+            ui.label("High");
+            ui.add(egui::DragValue::new(high).speed(1.0));
         }
         ImageForm::Rotate(r) => {
             ui.label("Angle");

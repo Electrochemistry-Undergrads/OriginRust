@@ -5848,12 +5848,13 @@ impl SheafApp {
             let v: Vec<f64> = s.values().iter().copied().filter(|x| x.is_finite()).collect();
             v.iter().sum::<f64>() / v.len().max(1) as f64
         });
+        let max = b.sheets.get(sheet).and_then(|s| s.z_range()).map_or(mean, |r| r.1);
         let form = match cmd {
             I::Brightness => ImageForm::Brightness(10.0),
             I::Contrast => ImageForm::Contrast(1.5),
             I::Gamma => ImageForm::Gamma(1.5),
             I::Math => ImageForm::Math(MathOp::Add, 0.0),
-            I::ToBinary => ImageForm::ToBinary(mean),
+            I::ToBinary => ImageForm::ToBinary(mean, max),
             I::Rotate => ImageForm::Rotate(Rotation::Ccw90),
             I::Flip => ImageForm::Flip(FlipDirection::Horizontal),
             I::Levels => {

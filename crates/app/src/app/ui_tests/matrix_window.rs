@@ -274,16 +274,21 @@ fn the_image_menu_adjusts_and_filters_the_active_matrix_in_place() {
     assert_eq!(h.state().doc.undo_label(), Some("Image Smooth"));
     assert_eq!(project(&h).matrix_sheet(id, 0).unwrap().value(1, 1), 1.0);
     assert_eq!(project(&h).matrix_books().count(), 1, "no new book");
-    // Brightness opens its window; OK adds the amount.
+    // Brightness opens its window; OK adds 10 % of the range: i + j runs 2..6, so 0.4.
+    h.state_mut().doc.apply("ramp", |p| {
+        p.apply_matrix_op(id, 0, &MatrixOp::SetValues("i+j".into())).unwrap();
+    });
     h.state_mut().apply(Action::ImageCmd { id, cmd: menus::ImageCmd::Brightness }, &ctx);
     settle(&mut h);
     click(&mut h, "OK");
     assert_eq!(h.state().doc.undo_label(), Some("Image Brightness"));
-    assert_eq!(project(&h).matrix_sheet(id, 0).unwrap().value(1, 1), 11.0, "the default amount is 10");
+    let v = project(&h).matrix_sheet(id, 0).unwrap().value(1, 1);
+    assert!((v - 4.4).abs() < 1e-12, "the default is 10 % of the range: {v}");
     // The other operations run through the same in-place path.
-    crate::dialogs::matrix_ops::apply_image(&mut h.state_mut().doc, id, 0, &ImageOp::ToBinary(5.0)).unwrap();
+    let band = ImageOp::ToBinary { low: 2.0, high: 7.0 };
+    crate::dialogs::matrix_ops::apply_image(&mut h.state_mut().doc, id, 0, &band).unwrap();
     let s = project(&h).matrix_sheet(id, 0).unwrap().clone();
-    assert!(s.values().iter().all(|v| *v == 1.0), "every cell is at least 5 now: {:?}", s.values());
+    assert!(s.values().iter().all(|v| *v == 1.0), "every cell is in the band: {:?}", s.values());
 }
 
 #[test]

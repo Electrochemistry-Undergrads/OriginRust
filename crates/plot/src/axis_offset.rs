@@ -8,7 +8,9 @@ use sheaf_core::graph::{Axis, AxisSide};
 
 /// The offset in percent that puts `axis` at its "At Position =" value (T243): where `other` (the
 /// other axis of the layer) has that value, measured inward from the axis' own edge, the frame's
-/// height for an X axis and its width for a Y axis. `None` without a value, for a hidden axis, or
+/// height for an X axis and its width for a Y axis (below -100 or above 0 when the value lies
+/// outside the other axis' range: the axis then stands outside the frame, T266). `None` without a
+/// value, for a hidden axis, or
 /// for a value the other axis cannot place (a non-positive value on a log axis, inside a break).
 pub(crate) fn at_position_pct(axis: &Axis, other: &crate::ticks::ResolvedAxis) -> Option<f64> {
     let v = axis.at_position?;
@@ -19,7 +21,9 @@ pub(crate) fn at_position_pct(axis: &Axis, other: &crate::ticks::ResolvedAxis) -
     if !u.is_finite() {
         return None;
     }
-    let u = u.clamp(0.0, 1.0);
+    // Not clamped: a value outside the other axis' range puts the axis outside the frame, where it
+    // would be (measured in Origin 2016, T266: Y = -4.5 on a -4..8 axis draws the X axis below the
+    // frame, Y = 8.5 above it).
     // 0 at the bottom (left) of the frame: the Normal edge for an X (Y) axis, the far one for Opposite.
     let inward = if axis.side == AxisSide::Opposite { 1.0 - u } else { u };
     Some(-inward * 100.0)

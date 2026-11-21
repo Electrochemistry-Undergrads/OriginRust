@@ -309,6 +309,8 @@ pub struct SheafApp {
     sheet_name: Option<SheetNameDialog>,
     /// Add New Columns (T305): the workbook and how many columns to add.
     add_columns: Option<(WindowId, usize)>,
+    /// Add User Parameter Row (T309): the workbook, the sheet and the name typed so far.
+    param_row: Option<(WindowId, usize, String)>,
     /// The text of the last Copy or Cut (the system clipboard has it too).
     copied: String,
     /// The block last copied in Sheaf (columns and rows), for Paste Link (T211).
@@ -485,6 +487,7 @@ impl SheafApp {
             sort: None,
             sheet_name: None,
             add_columns: None,
+            param_row: None,
             copied: String::new(),
             copied_cells: None,
             paste_transposed: false,
@@ -1020,6 +1023,7 @@ impl SheafApp {
         self.sort = None;
         self.sheet_name = None;
         self.add_columns = None;
+        self.param_row = None;
         self.import = None;
         self.import_excel = None;
         self.import_wizard = None;
@@ -4326,6 +4330,7 @@ impl SheafApp {
                     graphs,
                 ));
             }
+            SheetOp::AddParamRow => self.param_row = Some((book, active, String::new())),
             SheetOp::AddNotes => {
                 self.doc.apply("Add Notes as Sheet", |p| {
                     if let Some(b) = p.workbook_mut(book) {
@@ -6456,6 +6461,7 @@ impl SheafApp {
             || self.sort.is_some()
             || self.sheet_name.is_some()
             || self.add_columns.is_some()
+            || self.param_row.is_some()
             || self.about
             || self.message.is_some()
             || self.pending.is_some()
@@ -7465,6 +7471,49 @@ impl SheafApp {
             });
             if done || !open {
                 self.rename = None;
+            }
+        }
+        // T309: Add User Parameter Row asks the name of the new row.
+        if let Some((book, sheet, name)) = &mut self.param_row {
+            let (book, sheet) = (*book, *sheet);
+            let (mut open, mut close, mut add) = (true, false, None);
+            egui::Window::new("Add User Parameter Row").open(&mut open).collapsible(false).resizable(false).show(
+                ctx,
+                |ui| {
+                    ui.horizontal(|ui| {
+                        let label = ui.label("Name of the row");
+                        ui.add(egui::TextEdit::singleline(name).desired_width(160.0)).labelled_by(label.id);
+                    });
+                    ui.horizontal(|ui| {
+                        if ui.button("OK").clicked() {
+                            add = Some(name.clone());
+                        }
+                        if ui.button("Cancel").clicked() {
+                            close = true;
+                        }
+                    });
+                },
+            );
+            if let Some(name) = add {
+                let mut problem = None;
+                self.doc.apply("Add parameter row", |p| {
+                    if let Some(ws) = p.workbook_mut(book).and_then(|b| b.sheets.get_mut(sheet))
+                        && let Err(e) = ws.add_parameter_row(&name)
+                    {
+                        problem = Some(e);
+                    }
+                });
+                match problem {
+                    // The window stays open so that the name can be corrected.
+                    Some(e) => {
+                        self.logs.warn(&e);
+                        self.status = e;
+                    }
+                    None => close = true,
+                }
+            }
+            if close || !open {
+                self.param_row = None;
             }
         }
         // T305: Origin's Add New Columns window, how many columns to add.

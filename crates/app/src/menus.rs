@@ -237,7 +237,7 @@ pub enum Cmd {
     LayoutAddSheet,
     /// Layout > Export Page as Image... (T237 slice 3).
     LayoutExport,
-    /// Layout > Page Setup... (T237 slice 4).
+    /// Format > Layout Page... [F2] (T237 slices 4 and 6).
     LayoutPageSetup,
     /// File > Import > Binary 2D Array... (T199).
     ImportBinary2d,
@@ -1001,10 +1001,9 @@ fn base(kind: WindowKind) -> Vec<Menu> {
                     item("Add &Worksheet...", Cmd::LayoutAddSheet),
                     sep(),
                     item("&Export Page as Image...", Cmd::LayoutExport),
-                    sep(),
-                    item("Page &Setup...", Cmd::LayoutPageSetup),
                 ],
             ),
+            m("F&ormat", vec![keyed("&Layout Page...", plain_key(Key::F2), Cmd::LayoutPageSetup)]),
             m("&Tools", tools_menu()),
             m("&Window", window_menu(kind)),
             m("&Help", help_menu()),
@@ -3759,6 +3758,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
             (None, _) => return Err(NEED_BOOK),
         },
+        // F2 is the page properties of the active window: a layout page's own (T237 slice 6).
+        Cmd::GraphProps(PropsTab::Page) if c.kind == WindowKind::Layout && c.active.is_some() => {
+            Action::LayoutPageSetup { layout: c.active.ok_or(NEED_GRAPH)? }
+        }
         Cmd::GraphProps(tab) => {
             Action::GraphProperties { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer, tab: *tab, plot: None }
         }

@@ -78,7 +78,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, id: WindowId, state: &mut LayoutU
     painter.rect_filled(area, 0.0, GROUND);
     let rect = page_rect(area, page.width_pt, page.height_pt);
     state.page_on_screen = Some(rect);
-    painter.rect_filled(rect, 0.0, Color32::WHITE);
+    let bg = page.background;
+    painter.rect_filled(rect, 0.0, Color32::from_rgb(bg.r, bg.g, bg.b));
     painter.rect_stroke(rect, 0.0, Stroke::new(1.0_f32, Color32::from_gray(96)), egui::StrokeKind::Outside);
     let ppp = ui.ctx().pixels_per_point();
     let screen = |(x, y, w, h): (f64, f64, f64, f64)| {

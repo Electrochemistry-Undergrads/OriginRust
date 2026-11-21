@@ -2,6 +2,7 @@
 //! File > New > Layout makes, for arranging graphs for print. Origin's layout page was not measured;
 //! the page size and the placement of added graphs are Sheaf's choices.
 
+use crate::color::Color;
 use crate::ids::WindowId;
 use serde::{Deserialize, Serialize};
 
@@ -47,6 +48,17 @@ pub struct LayoutPage {
     pub height_pt: f64,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub items: Vec<LayoutItem>,
+    /// The page colour (Format > Layout Page..., T237 slice 6); white by default.
+    #[serde(default = "white", skip_serializing_if = "is_white")]
+    pub background: Color,
+}
+
+fn white() -> Color {
+    Color::WHITE
+}
+
+fn is_white(c: &Color) -> bool {
+    *c == Color::WHITE
 }
 
 impl LayoutPage {
@@ -55,7 +67,15 @@ impl LayoutPage {
 
     pub fn new(id: WindowId, name: impl Into<String>) -> Self {
         let (width_pt, height_pt) = Self::DEFAULT_SIZE_PT;
-        LayoutPage { id, name: name.into(), long_name: String::new(), width_pt, height_pt, items: Vec::new() }
+        LayoutPage {
+            id,
+            name: name.into(),
+            long_name: String::new(),
+            width_pt,
+            height_pt,
+            items: Vec::new(),
+            background: Color::WHITE,
+        }
     }
 
     /// The window title: the short name, with the long name after it when there is one.
@@ -139,7 +159,10 @@ mod tests {
         assert_eq!(p.window(id).unwrap().title(), "Figure");
         let c = p.duplicate_window(id).unwrap();
         assert_eq!(p.layout(c).unwrap().items.len(), 2);
-        let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        let json = serde_json::to_string(&p).unwrap();
+        let page_json = serde_json::to_string(p.layout(id).unwrap()).unwrap();
+        assert!(!page_json.contains("background"), "a white page leaves it out");
+        let back: Project = serde_json::from_str(&json).unwrap();
         assert_eq!(back.layout(id), p.layout(id));
         assert_eq!(back.layout(id).unwrap().graphs().collect::<Vec<_>>(), [g, g]);
         // A worksheet item goes in the next cell, is saved, and is not one of the graphs.
@@ -148,6 +171,7 @@ mod tests {
         assert_eq!(l.add_sheet(book, 0, 2.0), 2);
         assert_eq!(l.items[2].content, super::LayoutContent::Sheet { book, sheet: 0 });
         assert_eq!(l.items[2].content.window(), book);
+        l.background = crate::Color::rgb(255, 255, 200);
         assert_eq!(l.graphs().count(), 2);
         let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
         assert_eq!(back.layout(id), p.layout(id));

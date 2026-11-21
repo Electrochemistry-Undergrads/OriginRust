@@ -1,9 +1,9 @@
-//! Layout > Page Setup... (T237 slice 4): the layout page's width and height, in inches,
-//! centimetres or points, with paper presets and Portrait/Landscape. OK sets the size as one undo
-//! step; the items keep their places as fractions of the page.
+//! Format > Layout Page... [F2] (T237 slices 4 and 6): the layout page's width and height, in
+//! inches, centimetres or points, with paper presets and Portrait/Landscape, and the page colour.
+//! OK sets them as one undo step; the items keep their places as fractions of the page.
 
 use eframe::egui;
-use sheaf_core::{Document, WindowId};
+use sheaf_core::{Color, Document, WindowId};
 
 pub enum Outcome {
     Open,
@@ -47,20 +47,27 @@ pub const PRESETS: [(&str, (f64, f64)); 4] =
 /// The smallest and largest page side, in points (half an inch to 200 inches).
 pub const SIDE_PT: (f64, f64) = (36.0, 14_400.0);
 
-/// Sets the page size of `layout` to `width_pt` x `height_pt` as one undo step.
-pub fn set_page_size(doc: &mut Document, layout: WindowId, width_pt: f64, height_pt: f64) -> Result<(), String> {
+/// Sets the page size of `layout` to `width_pt` x `height_pt` and its colour to `background` as
+/// one undo step.
+pub fn set_page(
+    doc: &mut Document,
+    layout: WindowId,
+    width_pt: f64,
+    height_pt: f64,
+    background: Color,
+) -> Result<(), String> {
     for v in [width_pt, height_pt] {
         if !(v.is_finite() && (SIDE_PT.0..=SIDE_PT.1).contains(&v)) {
             return Err(format!("a page side must be between {} and {} points", SIDE_PT.0, SIDE_PT.1));
         }
     }
     let page = doc.project().layout(layout).ok_or("the layout page is gone")?;
-    if (page.width_pt, page.height_pt) == (width_pt, height_pt) {
+    if (page.width_pt, page.height_pt, page.background) == (width_pt, height_pt, background) {
         return Ok(());
     }
-    doc.edit("Layout page size", |p| {
+    doc.edit("Layout page properties", |p| {
         let l = p.layout_mut(layout).ok_or("the layout page is gone")?;
-        (l.width_pt, l.height_pt) = (width_pt, height_pt);
+        (l.width_pt, l.height_pt, l.background) = (width_pt, height_pt, background);
         Ok::<_, String>(())
     })
 }
@@ -71,6 +78,7 @@ pub struct LayoutPageSetup {
     /// The size being edited, in points.
     pub width_pt: f64,
     pub height_pt: f64,
+    pub background: Color,
     pub error: Option<String>,
 }
 
@@ -82,6 +90,7 @@ impl LayoutPageSetup {
             unit: Unit::Inch,
             width_pt: page.width_pt,
             height_pt: page.height_pt,
+            background: page.background,
             error: None,
         })
     }
@@ -122,7 +131,7 @@ impl LayoutPageSetup {
         }
         let mut open = true;
         let (mut ok, mut cancel) = (false, false);
-        egui::Window::new("Page Setup")
+        egui::Window::new("Layout Page")
             .id(egui::Id::new("layout_page_setup"))
             .open(&mut open)
             .collapsible(false)
@@ -164,6 +173,9 @@ impl LayoutPageSetup {
                         },
                     );
                     ui.end_row();
+                    ui.label("Color");
+                    crate::dialogs::graph_props::color_button(ui, &mut self.background);
+                    ui.end_row();
                     let per = self.unit.points();
                     let speed = if self.unit == Unit::Point { 1.0 } else { 0.05 };
                     for (label, v) in [("Width", &mut self.width_pt), ("Height", &mut self.height_pt)] {
@@ -190,7 +202,7 @@ impl LayoutPageSetup {
             return Outcome::Closed;
         }
         if ok {
-            return match set_page_size(doc, self.layout, self.width_pt, self.height_pt) {
+            return match set_page(doc, self.layout, self.width_pt, self.height_pt, self.background) {
                 Ok(()) => Outcome::Done,
                 Err(e) => {
                     self.error = Some(e);
@@ -221,10 +233,11 @@ mod tests {
         d.width_pt = 500.0;
         assert_eq!(d.preset(), None, "custom");
         assert!((Unit::Cm.points() * 2.54 - 72.0).abs() < 1e-12);
-        assert!(set_page_size(&mut doc, id, 10.0, 600.0).is_err(), "too small");
-        set_page_size(&mut doc, id, 595.28, 841.89).unwrap();
-        assert_eq!(doc.undo_label(), Some("Layout page size"));
+        assert!(set_page(&mut doc, id, 10.0, 600.0, Color::WHITE).is_err(), "too small");
+        let cream = Color::rgb(255, 250, 220);
+        set_page(&mut doc, id, 595.28, 841.89, cream).unwrap();
+        assert_eq!(doc.undo_label(), Some("Layout page properties"));
         let l = doc.project().layout(id).unwrap();
-        assert_eq!((l.width_pt, l.height_pt), (595.28, 841.89));
+        assert_eq!((l.width_pt, l.height_pt, l.background), (595.28, 841.89, cream));
     }
 }

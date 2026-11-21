@@ -14,7 +14,7 @@ pub struct DistOptions {
     graph: bool,
     /// The plotting positions, the probability plot's confidence band (level in percent) and the Q-Q
     /// plot's orientation, with the defaults Origin's `plot_prob` documents: Blom scores, a 95 %
-    /// band, the data on X (T151, not measured).
+    /// band, the data on X (T151; the band and scores measured by T308).
     scores: PlotScores,
     band: bool,
     level: f64,
@@ -102,7 +102,7 @@ impl DistOptions {
                         );
                     })
                     .response
-                    .on_hover_text("Drawn round the fitted line of the normal and lognormal families");
+                    .on_hover_text("Drawn round the fitted line at 27 percents, as Origin draws it");
                 }
                 ui.checkbox(&mut self.graph, "Make a graph");
                 ui.weak(if kind == AnalysisKind::QQPlot {

@@ -364,7 +364,8 @@ impl SetValuesDialog {
             described: None,
             search: None,
             show_scripts: true,
-            scripts: String::new(),
+            // T307: the column's Before Formula Scripts.
+            scripts: project.column(column).and_then(|c| c.before_formula.clone()).unwrap_or_default(),
         })
     }
 
@@ -769,14 +770,17 @@ impl SetValuesDialog {
                     ui.label("Before Formula Scripts");
                 });
                 if self.show_scripts {
-                    // Sheaf runs no scripts, so the box is shown as Origin lays it out but is read-only.
-                    ui.add_enabled(
-                        false,
+                    // T307: statements `name = expression` (one per line or separated by `;`) whose names
+                    // the formula can use, as Origin's LabTalk variables there.
+                    let response = ui.add(
                         egui::TextEdit::multiline(&mut self.scripts)
                             .desired_rows(3)
                             .desired_width(f32::INFINITY)
-                            .hint_text("Scripts that run before the formula are not supported yet"),
+                            .hint_text("e.g.  double m = mean(col(B));   then use m in the formula"),
                     );
+                    response.widget_info(|| {
+                        egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Before Formula Scripts box")
+                    });
                 }
             });
 
@@ -818,11 +822,14 @@ impl SetValuesDialog {
                 }
                 Ok(rows) => {
                     let (id, formula, mode) = (self.column, self.fields.formula.clone(), self.fields.mode);
+                    let script = self.scripts.clone();
                     let targets = if multiple { self.targets(&ids) } else { Ok(Vec::new()) };
                     let result = if multiple {
                         match targets {
                             Ok(targets) => {
-                                let r = doc.set_columns_values(&targets, &formula, rows, mode);
+                                let r = doc.edit("Set multiple columns values", |p| {
+                                    p.set_columns_values_scripted(&targets, &script, &formula, rows, mode)
+                                });
                                 if r.is_ok() {
                                     self.column = targets[0];
                                     self.columns = targets;
@@ -832,8 +839,10 @@ impl SetValuesDialog {
                             Err(e) => Err(e),
                         }
                     } else {
-                        doc.edit("Set column values", move |p| p.set_column_values_with(id, &formula, rows, mode))
-                            .map_err(|e| e.to_string())
+                        doc.edit("Set column values", move |p| {
+                            p.set_column_values_scripted(id, &script, &formula, rows, mode)
+                        })
+                        .map_err(|e| e.to_string())
                     };
                     match result {
                         Ok(()) => {

@@ -1430,5 +1430,6 @@ fn scores_of(s: ScoresArg) -> analysis::PlotScores {
         ScoresArg::Benard => analysis::PlotScores::Benard,
         ScoresArg::Hazen => analysis::PlotScores::Hazen,
         ScoresArg::VanDerWaerden => analysis::PlotScores::VanDerWaerden,
+        ScoresArg::KaplanMeier => analysis::PlotScores::KaplanMeier,
     }
 }

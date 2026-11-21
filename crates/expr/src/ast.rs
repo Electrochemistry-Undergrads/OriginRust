@@ -197,6 +197,33 @@ impl Node {
         }
     }
 
+    /// Replaces each variable named in `vars` by a copy of its expression (T307).
+    fn substitute(&mut self, vars: &[(String, Node)]) {
+        if vars.is_empty() {
+            return;
+        }
+        if let Kind::Var { name, .. } = &self.kind
+            && let Some((_, value)) = vars.iter().find(|(n, _)| n == name)
+        {
+            *self = value.clone();
+            return;
+        }
+        match &mut self.kind {
+            Kind::Unary(_, a) | Kind::Text(a) => a.substitute(vars),
+            Kind::Binary(_, a, b) | Kind::Index { base: a, idx: b } => {
+                a.substitute(vars);
+                b.substitute(vars);
+            }
+            Kind::Cond(a, b, c) | Kind::Range { base: a, from: b, to: c, .. } => {
+                a.substitute(vars);
+                b.substitute(vars);
+                c.substitute(vars);
+            }
+            Kind::Call { args, .. } => args.iter_mut().for_each(|a| a.substitute(vars)),
+            _ => {}
+        }
+    }
+
     fn resolve_parameters(&mut self, host: &dyn crate::Host) {
         crate::eval::grow_stack(|| self.resolve_parameters_inner(host));
     }
@@ -267,6 +294,54 @@ impl Expr {
     pub fn parse(src: &str) -> Result<Expr, ExprError> {
         let root = parser::parse_root(src)?;
         Ok(Expr { source: src.to_string(), root })
+    }
+
+    /// Parses `formula` after Set Column Values' Before Formula Scripts (T307): `script` holds
+    /// statements `name = expression` separated by `;` or new lines (an optional `double`, `int`,
+    /// `const` or `range` in front is ignored, `//` starts a comment line). Every use of a name in
+    /// the formula, and in the later statements, stands for its expression, so the result reads the
+    /// same columns as if the expressions had been typed in place: `m = mean(col(B))` with
+    /// `col(A) - m` is `col(A) - (mean(col(B)))`. An empty script parses the formula alone.
+    pub fn parse_with_script(script: &str, formula: &str) -> Result<Expr, ExprError> {
+        let mut vars: Vec<(String, Node)> = Vec::new();
+        for statement in script.split([';', '\n', '\r']).map(str::trim) {
+            if statement.is_empty() || statement.starts_with("//") {
+                continue;
+            }
+            let body = ["double ", "int ", "const ", "range "]
+                .iter()
+                .find_map(|k| statement.strip_prefix(k))
+                .unwrap_or(statement)
+                .trim();
+            let bytes = body.as_bytes();
+            let at = (0..bytes.len()).find(|&i| {
+                bytes[i] == b'='
+                    && bytes.get(i + 1) != Some(&b'=')
+                    && (i == 0 || !matches!(bytes[i - 1], b'<' | b'>' | b'!' | b'='))
+            });
+            let Some(at) = at else {
+                return Err(ExprError::general(format!(
+                    "the before-formula script line '{statement}' is not of the form name = expression"
+                )));
+            };
+            let name = body[..at].trim();
+            let valid = name.chars().next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+            if !valid {
+                return Err(ExprError::general(format!(
+                    "'{name}' in the before-formula script is not a variable name"
+                )));
+            }
+            let mut value = Expr::parse(&body[at + 1..]).map_err(|e| {
+                ExprError::general(format!("in the before-formula script, {name} = ...: {}", e.message()))
+            })?;
+            value.root.substitute(&vars);
+            vars.retain(|(n, _)| n != name);
+            vars.push((name.to_string(), value.root));
+        }
+        let mut expr = Expr::parse(formula)?;
+        expr.root.substitute(&vars);
+        Ok(expr)
     }
 
     /// The text this expression was parsed from.

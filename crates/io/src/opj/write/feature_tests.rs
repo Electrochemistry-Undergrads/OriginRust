@@ -498,6 +498,18 @@ fn a_tail_that_is_damaged_gives_a_note_and_no_folders() {
 }
 
 #[test]
+fn a_before_formula_script_is_named_in_the_warnings() {
+    // T307: the .opj written here has no place for the script.
+    let mut p = Project::new();
+    p.adopt_named_workbook(abcd("Book1"));
+    let Window::Workbook(b) = &mut p.windows[0] else { unreachable!() };
+    b.sheets[0].columns[2].formula = Some("col(A) - m".into());
+    b.sheets[0].columns[2].before_formula = Some("m = mean(col(B))".into());
+    let all = written(&p).warnings.join(" | ");
+    assert!(all.contains("1 column formula(s) use Before Formula Scripts"), "{all}");
+}
+
+#[test]
 fn a_sampling_interval_is_written_where_origin_keeps_it_and_read_back() {
     // T303: Origin 2016 keeps xinit/xinc in the column record (0x1D2, 0x1DA) and the data-set header
     // (0x25, 0x2D), with the column belonging to no X column.

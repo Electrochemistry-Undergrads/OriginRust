@@ -76,6 +76,13 @@ and not 17:59:59.999; a time that rounds to midnight is 0:00:00 (of the next day
 
 Measured in Origin (`tools/origin-ref`, probes `re-workspace/scratch/expr-funcs/g1e..g4`): `diff` is the forward difference with the missing value last; `date(2020,1,1)` is 2458849; `weekday` is 0 for Sunday; `time(25,0,0)` is 1.0417; `fact(1.5)` is 1, `fact(171)` and `fact(-1)` are missing, `fact(20)` is 2.43290200817664E18; `lookup` needs an exact match; `cell(1.6,1)` rounds to row 2; `distance` takes four arguments. Origin does not accept `cumsum`, `shift`, `rank` or `sem` as formula functions (the column stays empty), so those four are Sheaf's own and are **not checked against Origin**. `sum` and `count` follow Origin since branch `expr-funcs2` (probes `re-workspace/scratch/expr-funcs2/a1`, `a2`, `a3`, local only). With A = 3 1 4 1 5 (missing) 9 2 6: `sum(col(A))` is the running sum, `3 4 8 9 14 . 23 25 31` (it skips the missing value and leaves its own row missing), so it is the same as `cumsum`; `sum(col(A)[5:7])` is `5 . 14` in rows 1 to 3 (the running sum of the range, from row 1); `total(col(A))` is 31 (the total of the values); `count(col(A))` is 9, **counting the missing cell**, and `count(col(A)[5:7])` is 3, `count(col(A)[0:3])` is 3 (the range is clamped), `count` of an empty range is 0; a column ends at its last value (trailing missing cells are not stored), so with A = . 1 4 1 5 . 9 2 . `count(col(A)[1:20])` is 8. `mean` (3.875), `max` (9), `min` (1) skip missing values as before. Earlier Sheaf versions returned the total for `sum` and the number of values for `count`; the only tests that relied on that were in `crates/expr/src/tests.rs`, and the Set Values dialog's descriptions were corrected. Origin also accepts an expression such as `sum(col(A)*2)` (still the running sum); Sheaf requires a column or a column range inside `sum`.
 
+**Masked cells (T264, measured in Origin 2016 on 2026-11-20).** A formula reads a masked cell as a
+missing value: with A = 1, 4, ..., 36 (row 3 masked) and B = 10, ..., 60 (row 5 masked later),
+`col(A)+col(B)` is missing in row 3 (and in row 5 once B's row 5 is masked) and `col(A)*col(B)` too.
+Sheaf does the same for every read of a cell, row by row and in whole-column functions such as
+`mean(col(A))` (the latter not measured). Test: `a_formula_reads_a_masked_cell_as_missing_as_origin`
+(`crates/core/src/formula.rs`).
+
 **Date and time parts without a date (T262, measured in Origin 2016 on 2026-11-20, probes
 `re-workspace/scratch/t262/range*.lines.txt` on a worksheet column).** Dates run from 1757583
 (0099-12-31) to 5373483 (9999-12-31 at midnight); outside that (1757582, 5373483.25, -0.25, 0.999,

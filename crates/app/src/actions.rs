@@ -1011,7 +1011,7 @@ pub enum Action {
         graph: WindowId,
         on: bool,
     },
-    /// A switch of the layer icon menu, saved with the page (T183).
+    /// A graph-window switch saved with its page.
     SetPageSwitch {
         graph: WindowId,
         switch: PageSwitch,
@@ -1397,9 +1397,10 @@ pub enum Action {
     Quit,
 }
 
-/// The page switches of the layer icon menu (T183).
+/// Graph-window switches of the layer icon and View menus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PageSwitch {
     ActivateByIconOnly,
     IconDoubleClickPlotSetup,
+    ActiveLayerIndicator,
 }

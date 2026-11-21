@@ -625,6 +625,7 @@ pub enum Cmd {
     SetViewMode(sheaf_core::project::ViewMode),
     /// View > Show > Layer Icons.
     ToggleLayerIcons,
+    ToggleActiveLayerIndicator,
     /// Data > Lock Position (T186): where the graph's analysis locks are drawn.
     LockPosition(sheaf_core::graph::LockPosition),
     /// The layer icon menu's Set Active Layer By Layer Icon Only (T183).
@@ -920,6 +921,8 @@ pub struct MenuContext<'a> {
     pub view_mode: sheaf_core::project::ViewMode,
     /// The active graph shows its layer icons (the tick of View > Show > Layer Icons).
     pub layer_icons: bool,
+    /// Whether View > Show > Active Layer Indicator is checked for this graph.
+    pub active_layer_indicator: bool,
     /// The active graph's Lock Position (the tick of Data > Lock Position, T186).
     pub lock_position: sheaf_core::graph::LockPosition,
     /// The active sheet shows Page Break Preview Lines (the tick of the View menu's item, T185).
@@ -1444,16 +1447,11 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
             v.push(keyed("Whole Page", ctrl(Key::W), Cmd::WholePage));
             v.push(item("Zoom &All", Cmd::ZoomAll));
             v.push(sep());
-            let mut show = vec![item("Layer Icons", Cmd::ToggleLayerIcons)];
-            show.extend(greys(&[
-                "Active Layer Indicator",
-                "Axis Layer Icons",
-                "-",
-                "Object Grid",
-                "Layer Grid",
-                "-",
-                "Frame",
-            ]));
+            let mut show = vec![
+                item("Layer Icons", Cmd::ToggleLayerIcons),
+                item("Active Layer Indicator", Cmd::ToggleActiveLayerIndicator),
+            ];
+            show.extend(greys(&["Axis Layer Icons", "-", "Object Grid", "Layer Grid", "-", "Frame"]));
             show.push(item("Labels", Cmd::ToggleShowLabels));
             show.push(item("Data", Cmd::ToggleShowData));
             show.push(keyed("Active Layer Only", ctrl_alt(Key::D), Cmd::ToggleActiveLayerOnly));
@@ -3903,6 +3901,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::SetViewMode(mode) => Action::SetViewMode { graph: c.graph.ok_or(NEED_GRAPH)?, mode: *mode },
         Cmd::ToggleLayerIcons => Action::SetLayerIcons { graph: c.graph.ok_or(NEED_GRAPH)?, on: !c.layer_icons },
+        Cmd::ToggleActiveLayerIndicator => Action::SetPageSwitch {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            switch: crate::actions::PageSwitch::ActiveLayerIndicator,
+            on: !c.active_layer_indicator,
+        },
         Cmd::LockPosition(position) => {
             Action::SetLockPosition { graph: c.graph.ok_or(NEED_GRAPH)?, position: *position }
         }
@@ -4227,6 +4230,9 @@ fn show_entries(
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleLayerIcons)) && c.layer_icons {
+                    tick(ui, &response);
+                }
+                if matches!(it.cmd, Some(Cmd::ToggleActiveLayerIndicator)) && c.active_layer_indicator {
                     tick(ui, &response);
                 }
                 if let Some(Cmd::LockPosition(position)) = &it.cmd
@@ -4642,6 +4648,7 @@ mod tests {
             can_ungroup: false,
             view_mode: Default::default(),
             layer_icons: true,
+            active_layer_indicator: false,
             lock_position: Default::default(),
             page_breaks: false,
             activate_by_icon_only: false,

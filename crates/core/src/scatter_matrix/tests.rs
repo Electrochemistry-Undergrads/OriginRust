@@ -24,7 +24,8 @@ fn a_square_matrix_has_a_layer_per_cell_with_column_c_on_x_and_row_r_on_y() {
     let g = p.plot_scatter_matrix(&cols, &ScatterMatrixOptions::default()).unwrap();
     let graph = p.graph(g).unwrap();
     assert_eq!(graph.layers.len(), 9);
-    assert!(close(graph.page.width_pt, graph.page.height_pt), "the page is square");
+    assert!(graph.page.width_pt > graph.page.height_pt, "Origin's usual landscape page");
+    assert_eq!(graph.layers[1].default_symbol.color, crate::Color::rgb(0, 0, 255), "blue squares");
     for r in 0..3 {
         for c in 0..3 {
             let layer = &graph.layers[r * 3 + c];
@@ -39,19 +40,26 @@ fn a_square_matrix_has_a_layer_per_cell_with_column_c_on_x_and_row_r_on_y() {
                 assert_eq!((plot.kind, plot.x, plot.y), (PlotKind::Scatter, Some(cols[c]), cols[r]));
                 assert!(layer.labels.is_empty());
             }
-            // Tick labels on the outer cells only: X along the bottom row, Y down the left column.
-            assert_eq!(layer.x_axis.show_tick_labels, r == 2, "X labels of cell ({r}, {c})");
-            assert_eq!(layer.y_axis.show_tick_labels, c == 0, "Y labels of cell ({r}, {c})");
-            assert!(!layer.x_axis.show_title && !layer.y_axis.show_title);
+            // Origin's "All" (measured): tick labels on every outer side except in the diagonal cells, the
+            // top row and the right column on those sides; names as titles along the bottom and the left.
+            let off = r != c;
+            assert_eq!(layer.x_axis.show_tick_labels, off && (r == 0 || r == 2), "X labels of cell ({r}, {c})");
+            assert_eq!(layer.y_axis.show_tick_labels, off && (c == 0 || c == 2), "Y labels of cell ({r}, {c})");
+            assert_eq!(layer.x_axis.side == AxisSide::Opposite, r == 0);
+            assert_eq!(layer.y_axis.side == AxisSide::Opposite, c == 2);
+            assert_eq!((layer.x_axis.show_title, layer.y_axis.show_title), (r == 2, c == 0));
+            let name = |k: usize| p.column(cols[k]).unwrap().display_name().to_string();
+            assert_eq!(layer.x_axis.title, Some(name(c)));
+            assert_eq!(layer.y_axis.title, Some(name(r)));
         }
     }
     // Gap 0: the cells touch, row by row from the top left, inside the margins.
     let (f0, f1, f3) = (graph.layers[0].frame, graph.layers[1].frame, graph.layers[3].frame);
-    assert!(close(f0.left, 0.14) && close(f0.top, 0.04));
+    assert!(close(f0.left, 0.08) && close(f0.top, 0.05) && close(f0.width, 0.29));
     assert!(close(f0.left + f0.width, f1.left) && close(f0.top, f1.top));
     assert!(close(f0.top + f0.height, f3.top) && close(f0.left, f3.left));
     let last = graph.layers[8].frame;
-    assert!(close(last.left + last.width, 0.96) && close(last.top + last.height, 0.88));
+    assert!(close(last.left + last.width, 0.95) && close(last.top + last.height, 0.92));
 }
 
 #[test]
@@ -72,17 +80,17 @@ fn every_cell_of_a_grid_column_or_row_has_its_variables_limits_and_step() {
 }
 
 #[test]
-fn a_variables_range_is_the_automatic_one_with_at_most_five_steps() {
-    // 0 to 19.5: the automatic range -2..22 by 2 has twelve steps; by 5 it has under five.
+fn a_variables_step_is_a_quarter_of_its_range_to_two_digits() {
+    // Origin's steps (measured): ranges 5.25, 21 and 1.61 give 1.3, 5.3 and 0.4.
+    assert!(close(two_digit_step(5.25 / STEPS), 1.3) && close(two_digit_step(21.0 / STEPS), 5.3));
+    assert!(close(two_digit_step(1.61 / STEPS), 0.4));
     let values: Vec<f64> = (0..40).map(|i| f64::from(i) * 0.5).collect();
-    let (lo, hi, auto) = crate::autorange::linear_range(0.0, 19.5, 8.0);
-    assert!((hi - lo) / auto > MAX_STEPS);
+    let (lo, hi, _) = crate::autorange::linear_range(0.0, 19.5, 8.0);
     let (from, to, step) = variable_range(&values, 8.0).unwrap();
     assert_eq!((from, to), (lo, hi));
-    assert!(close(step, 5.0));
+    assert!(close(step, two_digit_step((hi - lo) / 4.0)));
     assert_eq!(variable_range(&[3.0, 3.0], 8.0), Some((2.0, 4.0, 0.5)));
     assert_eq!(variable_range(&[f64::NAN], 8.0), None);
-    assert!(close(wider_step(0.2), 0.5) && close(wider_step(5.0), 10.0) && close(wider_step(10.0), 20.0));
 }
 
 #[test]
@@ -159,7 +167,7 @@ fn the_template_route_makes_the_default_matrix() {
     let graph = p.graph(g).unwrap();
     assert_eq!(graph.layers.len(), 16);
     // Smaller marks and tick labels for more variables.
-    assert!(graph.layers[1].plots[0].symbol.size_pt < 6.0);
+    assert_eq!(graph.layers[1].plots[0].symbol.size_pt, 9.0, "Origin's size 9 symbols");
     assert!(graph.layers[12].x_axis.tick_font.size_pt <= 18.0);
     let mut fit = Frame { left: 0.0, top: 0.0, width: 0.0, height: 0.0 };
     for l in &graph.layers {
@@ -188,9 +196,9 @@ fn an_upper_matrix_mirrors_the_margins_and_names_fit_their_cells() {
     let graph = p.graph(g).unwrap();
     // The first cell is (0, 0) at the top left, the last (7, 7) at the bottom right.
     let (first, last) = (graph.layers[0].frame, graph.layers.last().unwrap().frame);
-    assert!(close(first.left, 0.04) && close(first.top, 0.12));
-    assert!(close(last.left + last.width, 0.86) && close(last.top + last.height, 0.96));
-    assert_eq!(margins(MatrixDisplay::Lower), (14.0, 4.0, 4.0, 12.0));
+    assert!(close(first.left, 0.05) && close(first.top, 0.08));
+    assert!(close(last.left + last.width, 0.92) && close(last.top + last.height, 0.95));
+    assert_eq!(margins(MatrixDisplay::Lower), (8.0, 5.0, 5.0, 8.0));
     // Eight variables: 9 pt tick labels; a name is 1.25 times that unless it must shrink to fit its cell.
     let page_w = graph.page.width_pt;
     let d = &graph.layers[0];

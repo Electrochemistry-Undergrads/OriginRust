@@ -6330,11 +6330,28 @@ Probed with X = 1..50 and Y = 10 sin(X/5), B selected.
   - **Differences from Origin:** shapes are drawn over the data, so the region hides the curve under it
     (Origin draws the curve on top). The axes keep Sheaf's automatic ranges.
 
-## 35. Scatter matrix: Plot > Statistics > Scatter Matrix (T114, 2026-11-16, Origin's documentation, not measured)
+## 35. Scatter matrix: Plot > Statistics > Scatter Matrix (T114, 2026-11-16; measured by T313, 2026-11-21)
 
-Built on macOS without Origin. The behaviour follows OriginLab's published pages for the menu item and its
-`plot_matrix` X-Function (option names and defaults). Nothing was measured in Origin 2016, which may have had
-the older, simpler `plotmatrix`.
+Built first from OriginLab's pages for `plot_matrix`. T313 measured Origin 2016's own (its window and
+graphs of 2, 3 and 4 variables; probes in `re-workspace/scratch/t313`).
+
+- **Origin's window (measured):** Input, Grouping Range; Matrix Display (Square, Upper Triangular, Lower
+  Triangular); Show in Diagonal Cells (`<None>`, Box Chart, Histogram); Variables in Diagonal Cells (ticked);
+  Show Tick and Label (None, All by default, Alternate, Bottom&Left, Bottom&Right, Top&Left, Top&Right); Gap (in %
+  of Page Dimension), 0; Confidence Ellipse and its level 95; Linear Fit; Pearson's r; Adj. R-Square; Exclude
+  Missing Value Listwise; Graph Templates; Output Results. The graph is named ScatterMatrix1.
+- **Origin's graph (measured; Sheaf does the same for a square matrix):**
+  - The usual landscape page (6432 x 4923). The grid starts 8 % from the left and 5 % from the top, and its cells
+    are 87 / n % wide and tall (29 % for three variables, 21.75 % for four, 43.5 % for two) with no gap.
+  - Show Tick and Label All: every outer side of the grid has tick labels, the top row's at the top and the right
+    column's at the right, except in the diagonal cells. The bottom row and the left column carry the variables'
+    names as axis titles, the diagonal cells too. The names are also written in the middle of the diagonal cells.
+  - Symbols: blue squares of size 9.
+  - Tick step: a quarter of the axis range rounded to two significant digits, the ticks at its multiples (range
+    5.25 gives 1.3 with ticks 2.6, 3.9, 5.2, 6.5; 21 gives 5.3; 1.61 gives 0.4).
+  - Axis limits follow a rule not found (data 2.3..6.2 gives 1.5..6.75, 12..30 gives 10.5..31.5, 0.4..1.6 gives
+    0.23..1.84, 1..10 gives 0..12.25, 0..100 gives -19.5..117, -3..5 gives -4.65..6.2, 100..109 gives 98..110.25,
+    0.001..0.010 gives 0..0.01225). Sheaf keeps its automatic range (below).
 
 - Input:
   - Origin takes two or more selected columns, every one of them a variable whatever its designation.
@@ -6358,23 +6375,19 @@ the older, simpler `plotmatrix`.
     grouping and listwise missing values are not built. The dialog shows the ellipse, the fit and the
     listwise switch disabled.
 - Sheaf's own choices (unmeasured):
-  - **Page and cells:** a square page as tall as the default page (8.205 in). The grid sits inside margins of
-    14 % (left), 4 % (right and top) and 12 % (bottom). An upper matrix mirrors them: 4 % left, 14 % right,
-    12 % top and 4 % bottom.
-  - **Tick labels:** only the outer cells carry tick labels. In a square or lower matrix that is the bottom
-    row (X) and the left column (Y). In an upper matrix it is the top row and the right column, with both
-    axes of every cell moved to those sides. A diagonal histogram never labels its counts.
-  - **Axes and marks:** no axis titles and no legends. Each cell is a closed box with inward ticks and no minor
-    ticks. The symbols are filled black squares.
-  - **Sizes:** symbols (6 pt), tick labels (18 pt) and tick lengths shrink by 2/n from three variables on.
-    Symbols stop at 2.5 pt, labels at 9 pt, and ticks at half length.
+  - **Triangular matrices:** the margins above; an upper matrix mirrors them (5 % left, 8 % right, 8 % top, 5 %
+    bottom). Only the outer cells carry tick labels: the bottom row (X) and the left column (Y) of a lower matrix,
+    the top row and the right column of an upper one, with both axes of every cell moved to those sides. No axis
+    titles. A diagonal histogram never labels its counts.
+  - **Axes and marks:** no legends. Each cell is a closed box with inward ticks and no minor ticks.
+  - **Sizes:** tick labels (18 pt) and tick lengths shrink by 2/n from three variables on, labels to 9 pt at
+    least and ticks to half length. Symbols stay at size 9.
   - **Ranges:** every cell gets its X variable's limits and step on X, and its Y variable's on Y, so a grid
     column or row lines up even with missing values. A diagonal histogram's counts are the exception: they
     start at 0 on an automatic scale.
     - The limits are the automatic range of the variable's finite values (T20's rule, the limits a scatter
       of it gets alone). A constant variable gets one unit either side.
-    - The step is the automatic one, widened along 1, 2, 5, 10 until the range has at most 5 steps, so that
-      the labels of small cells do not run together.
+    - The step is Origin's: a quarter of the range to two significant digits.
   - **Diagonal names:** each is written at 1.25 times the tick-label size. A long name is made smaller so that
     it takes at most 80 % of the cell's width, assuming an average glyph of 0.55 em. It is centred across the
     cell, at mid-height, or 10 % from the top above a histogram, where a tall bar can run under it.

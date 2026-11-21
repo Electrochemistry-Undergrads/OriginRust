@@ -172,3 +172,28 @@ fn sparklines_yes_marks_the_columns_and_shows_the_row() {
     assert!(ok, "{err}");
     assert!(!p.workbooks().next().unwrap().sheets[0].view.sparklines, "no sparklines by default");
 }
+
+/// T299: Comments From .. To, joined with line breaks as Origin 2016's impasc.
+#[test]
+fn comment_lines_from_to_are_joined() {
+    let dir = scratch("comments-to");
+    let text = "E	I
+V	A
+first	c1
+second	c2
+1	2
+2	3
+3	4
+";
+    let (ok, err, p) = import(&dir, "cv.txt", text, &[]);
+    assert!(ok, "{err}");
+    assert_eq!(
+        p.workbooks().next().unwrap().sheets[0].columns[0].comments,
+        "first
+second",
+        "detected 3 to 4"
+    );
+    let (ok, err, p) = import(&dir, "cv.txt", text, &["--comments-line", "3", "--comments-to", "3"]);
+    assert!(ok, "{err}");
+    assert_eq!(p.workbooks().next().unwrap().sheets[0].columns[1].comments, "c1");
+}

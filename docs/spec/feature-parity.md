@@ -33,8 +33,8 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 54 | 202 | 5 | 261 |
-| P0 | 33 | 70 | 0 | 103 |
+| All rows | 58 | 198 | 5 | 261 |
+| P0 | 37 | 66 | 0 | 103 |
 | P1 and P2 together | 21 | 132 | 5 | 158 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 63 are P2.
@@ -97,7 +97,7 @@ Cross-cutting findings:
 |---|---|---|---|---|---|
 | Delimited text engine, CSV | File > Import > ASCII, Ctrl+K | `io/src/ascii.rs`; dialog; CLI | ✓ | | P0 |
 | Data-start detection | auto header lines | `detect()` with preview | ✓ | rule differs slightly from Origin's, not compared by black-box run | P0 |
-| Header, long name, units, comments lines | File Header group | detected and overridable; header lines can become named parameter rows (`--param-lines`) | ◐ | no name+unit splitter, no leading-character rule, no count from bottom, comment lines are not joined, label detection looks at three lines at most | P0 |
+| Header, long name, units, comments lines | File Header group | detected and overridable; header lines can become named parameter rows (`--param-lines`) | ◐ | no name+unit splitter line, no leading-character rule, no count from bottom (none of the three is in Origin 2016's impasc, measured T299; a long name line with no units line is split into name and unit); comment lines from .. to are joined and detected over up to 15 lines (T299) | P0 |
 | Non-numeric text, missing markers | NonNum, LeadingZeros | marker list, Text & Numeric columns keep every text cell (no ratio, as measured in Origin) | ◐ | no choice of treatment (NonNum) | P0 |
 | Date and time detection | DateFormat, TimeFormat | `ascii.rs`: ISO, M/d/yyyy, d/M/yyyy, dd.MM.yyyy, d-Mon-yyyy, clocks with AM or PM; order rule and warning; option to keep text | ◐ | no custom pattern list, no per-column choice, no two-digit years | P0 |
 | Import mode and naming | replace, new columns, rows, books, sheets | `io/src/batch.rs`: new book, new sheet, replace, new columns, new rows; import window; file name in sheet name or comment row | ✓ | no name trimming (FNameToShtFrom/To), no separate first-file mode | P0 |

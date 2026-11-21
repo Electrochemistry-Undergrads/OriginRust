@@ -6558,16 +6558,24 @@ this follows Origin's documented behaviour.
 - **To measure:** Origin's marker look, whether markers are per plot or per layer, and how markers are
   moved (drag or click).
 
-## 41. Add Function Graph: Graph > Add Function Graph... (T119, 2026-11-16, **not measured**)
+## 41. Add Function Graph: Graph > Add Function Graph... (T119, 2026-11-16; partly measured by T322, 2026-11-21)
 
-Origin 2016's Graph menu has Add Function Graph.... It could not be probed (Origin's COM class
-unregistered, see 36), so this follows Origin's documented behaviour.
+**Origin 2016 (measured through its menu, T322):** Graph > Add Function Graph... (in the expanded Graph menu, after
+Add Error Bars) adds a function plot F1 to the active layer and opens Plot Details on its Function tab:
+Points 100; From and To greyed, with **Auto** ticked, so the curve follows the X axis range; Y(x) = (empty); a
+Before Formula Script box; Plot Type Line (or Scatter, Line + Symbol, Column / Bar); a Workbook button that turns
+the function into worksheet data; tabs Line, Function, Drop Lines and Label. Origin keeps the curve as a function
+dataset. What its OK draws was not read back (the collapsible menu moved the item between runs).
+
+**Sheaf:**
 
 - **The window "Add Function Graph":**
   - y(x) = an expression in Sheaf's expression language (`docs/spec/expression-language.md`), with the
     variable `x` (default `sin(x)`).
-  - From and To: the X range (default 0 to 10).
-  - Points: the number of evenly spaced points (default 100, at least 2).
+  - From and To: the X range; from Graph > Add Function Graph the range the layer's X axis shows (as Origin's Auto,
+    but fixed once added), from File > New > Function Plot 0 to 10.
+  - Points: the number of evenly spaced points (default 100 as Origin's, at least 2).
+  - Plot Type: Line (default), Scatter, Line + Symbol or Column / Bar, as Origin's.
 - **OK:** samples the function and adds its curve as a line plot to the active layer, one undo step.
   - An expression error is reported, and the window stays open.
   - A point where the function has no value is missing in the curve.
@@ -6575,8 +6583,8 @@ unregistered, see 36), so this follows Origin's documented behaviour.
   new workbook, `FuncN` (long name "y = <expression>"), with an X column `x` and a Y column whose long name
   is the expression. The curve is therefore an ordinary plot that saves, exports and edits like any other.
 - **Sheaf internals:** `sheaf_core::function_graph::sample`, `Project::add_function_graph`.
-- **To measure:** Origin's window and its defaults, whether the curve follows the X axis range, and its
-  line style.
+- **Left:** a curve that follows the X axis as it changes (Origin's Auto), Before Formula Script, the function as
+  a dataset of its own.
 
 
 - **File > New > Function Plot (T213, not measured):** opens the same window for a graph that does

@@ -31,6 +31,7 @@ fn busy_text_options() -> AsciiOptions {
         param_lines: vec![2, 3],
         param_name_from_first_cell: false,
         blocks: Blocks::Sheets,
+        non_numeric: sheaf_io::ascii::NonNumeric::Stop,
         first_column_x: false,
         skip_rows: 2,
         max_rows: Some(50),

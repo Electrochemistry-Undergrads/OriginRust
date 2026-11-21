@@ -132,6 +132,12 @@ fn flag_settings(r: &ReadOptions) -> ReadSettings {
         no_rename_sheet: r.no_rename_sheet,
         no_rename_book: r.no_rename_book,
         blocks_as_sheets: r.blocks_as_sheets,
+        non_numeric: match r.non_numeric {
+            NonNumericArg::Text => sheaf_io::ascii::NonNumeric::ReadAsText,
+            NonNumericArg::Stop => sheaf_io::ascii::NonNumeric::Stop,
+            NonNumericArg::NewSheet => sheaf_io::ascii::NonNumeric::NewSheet,
+            NonNumericArg::NewColumns => sheaf_io::ascii::NonNumeric::NewColumns,
+        },
         sparklines: match r.sparklines {
             SparklinesArg::No => sheaf_io::ascii::AddSparklines::No,
             SparklinesArg::Yes => sheaf_io::ascii::AddSparklines::Yes,

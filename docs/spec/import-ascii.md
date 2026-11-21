@@ -174,6 +174,25 @@ Missing values:
 - The words "NaN", "NA", "--" and similar strings as numeric values are **[?]**. Safe rule: treat as missing in numeric columns.
 - A text cell in a column typed numeric, with NonNum=1, converts the column to the mixed text-and-numeric format.
 
+**Measured in Origin 2016 (T312, 2026-11-21; `re-workspace/scratch/import-nonnum/`).** `impasc` with
+`options.Miscellaneous.NonNum` on a tab file `x, y` / `1 10`, `2 20`, `3 oops`, `4 40`, `5 50`:
+
+- 1 (the default): every row; `oops` stays a text cell in a Text & Numeric column.
+- 0 (terminate) and 5: only the rows above the bad row (x 1, 2; y 10, 20); 5 does not skip the row.
+- 2 (new worksheet): the book gets sheet `data1` with rows 1, 2 and sheet `data1_` with rows 4, 5; the
+  bad row is left out.
+- 3 (new column): one sheet of four columns, x 1, 2 | y 10, 20 | 4, 5 | 40, 50; the new columns start at
+  row 1 and the bad row is left out.
+- `options.Miscellaneous.LeadingZeros` exists in 2016 (not measured further).
+
+Sheaf (T312, `AsciiOptions::non_numeric`, `NonNumeric`): Read as text (default), Stop (Origin's 0 and
+5), New sheet (2; sheets named after the first with `_` added per cut, `data1_`, `data1__`), New
+columns (3; short names continue C, D, ..., no labels). A column is numeric when its first non-empty,
+non-marker data cell is a number or a date; a bad row is a data row with a text cell (a marker does not
+count) in a numeric column. The header lines stay with the first part; a warning says how many rows
+were cut out. Window: Miscellaneous > "Text in a numeric column"; CLI `--non-numeric
+text|stop|new-sheet|new-columns`. Origin's 4 (new hidden workbook) is not built.
+
 ### What Sheaf implements (crates/io/src/ascii.rs)
 
 Rules 1 and 2 were first written from the documented NonNum=1 behaviour; the measurement in section 15 ("Text & Numeric") replaced the 80 percent rule: a column keeps its text cells (`ColumnData::Mixed`), so nothing is turned into a missing value and no warning is needed for it. Rules 3 and 4 were not checked against a running Origin.

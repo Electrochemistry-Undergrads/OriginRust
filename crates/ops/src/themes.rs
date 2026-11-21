@@ -232,6 +232,8 @@ fn apply_ascii(r: &mut ReadSettings, o: &AsciiOptions) {
     };
     r.blocks_as_sheets = o.blocks == Blocks::Sheets;
     r.sparklines = o.sparklines;
+    r.non_numeric = o.non_numeric;
+    r.comments_to = o.comments_to;
     r.day_first = o.date_order == DateOrder::Dmy;
     r.text_no_flag = no_flag(o.first_column_x, o.param_name_from_first_cell, o.skip_rows, o.max_rows);
 }
@@ -278,6 +280,8 @@ pub fn merge(themed: &ReadSettings, flags: &ReadSettings, explicit: &dyn Fn(&str
         no_rename_book,
         blocks_as_sheets,
         sparklines,
+        non_numeric,
+        comments_to,
         sheets,
     );
     if ["delimiter", "delimiter_chars", "combine_delimiters", "fixed_width"].iter().any(|id| explicit(id)) {

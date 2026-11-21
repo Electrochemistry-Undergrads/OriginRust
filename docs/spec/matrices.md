@@ -362,6 +362,11 @@ each matrix as not written).
   - Smooth: the mean.
   - Sharpen: 5v minus the four neighbours.
   - Edge Detection: the Sobel gradient magnitude.
+  - **Median (T284, measured):** opens a window with the window size (2 by default, as Origin 2016's
+    `imgMedian`). The median of a d x d window with the edge cells repeated outward; an even window
+    reaches one cell further forward (right, down) than back, and the lower of the two middle values is
+    taken. Matches every cell of `imgMedian d:=2`, `d:=3` and `d:=5` on a 5 x 5 image (through
+    `m2img`/`img2m`). Missing cells stay missing and are left out of their neighbours' windows.
 - **T210 additions:**
   - **Levels:** input low/high, which start at the sheet's range, to output low/high (0..255). Values
     outside the input range take the nearest end.

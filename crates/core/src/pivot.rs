@@ -213,11 +213,35 @@ pub fn build(records: &[Record], o: &PivotOptions) -> Table {
         min: f64,
         max: f64,
     }
+    impl Acc {
+        fn add(&mut self, v: f64) {
+            self.n += 1;
+            if !v.is_nan() {
+                self.sum += v;
+                self.min = self.min.min(v);
+                self.max = self.max.max(v);
+            }
+        }
+        fn value(&self, method: Method) -> f64 {
+            match method {
+                Method::Count => self.n as f64,
+                Method::Sum => self.sum,
+                Method::Mean => self.sum / self.n as f64,
+                Method::Min => self.min,
+                Method::Max => self.max,
+            }
+        }
+    }
     let mut row_keys: Vec<Vec<Key>> = Vec::new();
     let mut row_index: HashMap<Vec<Key>, usize> = HashMap::new();
     let mut col_keys: Vec<Key> = Vec::new();
     let mut col_index: HashMap<Key, usize> = HashMap::new();
     let mut acc: HashMap<(usize, usize), Acc> = HashMap::new();
+    // Every record of a row, of a column and of the table, for the totals (T276: Origin applies the
+    // method to them: the Row Total of a Mean table is the mean of the row's records).
+    let mut row_acc: HashMap<usize, Acc> = HashMap::new();
+    let mut col_acc: HashMap<usize, Acc> = HashMap::new();
+    let mut all_acc = Acc { n: 0, sum: 0.0, min: f64::INFINITY, max: f64::NEG_INFINITY };
     for (rk, ck, v) in records {
         if o.method != Method::Count && v.is_nan() {
             continue;
@@ -230,13 +254,13 @@ pub fn build(records: &[Record], o: &PivotOptions) -> Table {
             col_keys.push(ck.clone());
             col_keys.len() - 1
         });
-        let a = acc.entry((r, c)).or_insert(Acc { n: 0, sum: 0.0, min: f64::INFINITY, max: f64::NEG_INFINITY });
-        a.n += 1;
-        if !v.is_nan() {
-            a.sum += v;
-            a.min = a.min.min(*v);
-            a.max = a.max.max(*v);
+        let empty = Acc { n: 0, sum: 0.0, min: f64::INFINITY, max: f64::NEG_INFINITY };
+        for a in
+            [acc.entry((r, c)).or_insert(empty), row_acc.entry(r).or_insert(empty), col_acc.entry(c).or_insert(empty)]
+        {
+            a.add(*v);
         }
+        all_acc.add(*v);
     }
     let missing = if o.zeros { 0.0 } else { f64::NAN };
     let mut cells: Vec<Vec<f64>> = (0..row_keys.len())
@@ -244,20 +268,15 @@ pub fn build(records: &[Record], o: &PivotOptions) -> Table {
             (0..col_keys.len())
                 .map(|c| match acc.get(&(r, c)) {
                     None => missing,
-                    Some(a) => match o.method {
-                        Method::Count => a.n as f64,
-                        Method::Sum => a.sum,
-                        Method::Mean => a.sum / a.n as f64,
-                        Method::Min => a.min,
-                        Method::Max => a.max,
-                    },
+                    Some(a) => a.value(o.method),
                 })
                 .collect()
         })
         .collect();
-    // Sorting by totals uses the totals before normalizing (after it every column totals the same).
-    let raw_row_total: Vec<f64> = cells.iter().map(|row| sum(row.iter().copied())).collect();
-    let raw_col_total: Vec<f64> = (0..col_keys.len()).map(|c| sum(cells.iter().map(|row| row[c]))).collect();
+    // The totals apply the method to every record of the row or column (for Count and Sum the same as
+    // adding the cells); sorting by totals uses them before normalizing.
+    let raw_row_total: Vec<f64> = (0..row_keys.len()).map(|r| row_acc[&r].value(o.method)).collect();
+    let raw_col_total: Vec<f64> = (0..col_keys.len()).map(|c| col_acc[&c].value(o.method)).collect();
     // Normalize each column by its total.
     if o.normalize != Normalize::None {
         let scale = if o.normalize == Normalize::Percent { 100.0 } else { 1.0 };
@@ -270,8 +289,22 @@ pub fn build(records: &[Record], o: &PivotOptions) -> Table {
             }
         }
     }
-    let row_total: Vec<f64> = cells.iter().map(|row| sum(row.iter().copied())).collect();
-    let col_total: Vec<f64> = (0..col_keys.len()).map(|c| sum(cells.iter().map(|row| row[c]))).collect();
+    // The Row Total column is the raw row totals; normalized, it is divided by its own total as the other
+    // columns are (Origin 2016, T276: East 16 of 36 is 44.44 %, not the sum of East's percentages).
+    let row_total: Vec<f64> = if o.normalize == Normalize::None {
+        raw_row_total.clone()
+    } else {
+        let scale = if o.normalize == Normalize::Percent { 100.0 } else { 1.0 };
+        let total = sum(raw_row_total.iter().copied());
+        raw_row_total.iter().map(|t| if total != 0.0 { t / total * scale } else { f64::NAN }).collect()
+    };
+    // Normalized, each column's total is its share (100 % or 1); otherwise the method's total.
+    let col_total: Vec<f64> = if o.normalize == Normalize::None {
+        raw_col_total.clone()
+    } else {
+        (0..col_keys.len()).map(|c| sum(cells.iter().map(|row| row[c]))).collect()
+    };
+    let grand = if o.normalize == Normalize::None { all_acc.value(o.method) } else { sum(row_total.iter().copied()) };
     // Order: stable sorts, so equal totals keep the labels' ascending order.
     let mut row_order: Vec<usize> = (0..row_keys.len()).collect();
     let by_label_r = |a: &usize, b: &usize| row_keys[*a].cmp(&row_keys[*b]);
@@ -308,7 +341,7 @@ pub fn build(records: &[Record], o: &PivotOptions) -> Table {
         rows: row_order.iter().map(|r| row_keys[*r].clone()).collect(),
         columns: col_order.iter().map(|c| col_keys[*c].clone()).collect(),
         cells: row_order.iter().map(|r| col_order.iter().map(|c| cells[*r][*c]).collect()).collect(),
-        grand_total: (o.row_totals && o.column_totals).then(|| sum(row_totals_v.iter().copied())),
+        grand_total: (o.row_totals && o.column_totals).then_some(grand),
         row_totals: o.row_totals.then_some(row_totals_v),
         column_totals: o.column_totals.then(|| col_order.iter().map(|c| col_total[*c]).collect()),
     }
@@ -388,25 +421,41 @@ impl Project {
             ws.columns.iter().find(|c| c.id == id).map(|c| c.display_name().to_string()).unwrap_or_default()
         };
         let row_names: Vec<String> = o.rows.iter().map(|id| name_of(*id)).collect();
-        let base_long = match (o.method, o.data) {
+        // Origin 2016's names (T276, measured): "Count", or "Sum of C", "Mean of C", ... after the data column;
+        // the Row Total column is "Total_<row source>" and the Column Total row "Total_<column source>".
+        let method_label = match (o.method, o.data) {
             (Method::Count, _) | (_, None) => o.method.label().to_string(),
-            (_, Some(id)) => name_of(id),
+            (_, Some(id)) => format!("{} of {}", o.method.label(), name_of(id)),
         };
+        // pos 2 appends "_<key>" to the data column's own Long Name (empty for none).
+        let data_long = o
+            .data
+            .and_then(|id| ws.columns.iter().find(|c| c.id == id))
+            .map(|c| c.long_name.clone())
+            .unwrap_or_default();
+        let row_total_name = format!("Total_{}", row_names.first().map(String::as_str).unwrap_or(""));
+        let column_total_name = format!("Total_{}", name_of(o.column));
         let total_row = table.column_totals.is_some();
         let mut out: Vec<(String, String, String, Designation, ColumnData)> = Vec::new();
         for (i, name) in row_names.iter().enumerate() {
             let mut keys: Vec<Option<Key>> = table.rows.iter().map(|k| Some(k[i].clone())).collect();
             if total_row {
-                keys.push((i == 0).then(|| Key::Text("Column Total".into())));
+                keys.push((i == 0).then(|| Key::Text(column_total_name.clone())));
             }
             let d = if i == 0 { Designation::X } else { Designation::Y };
-            out.push((name.clone(), String::new(), String::new(), d, key_column(keys)));
+            // With the key in Comments the source's name is the Long Name; otherwise it moves to Comments.
+            let (long, comments) = match o.info {
+                InfoPosition::Comments => (name.clone(), String::new()),
+                _ => (String::new(), name.clone()),
+            };
+            out.push((long, String::new(), comments, d, key_column(keys)));
         }
+        // `label` is a column key (or the Row Total name); the method's label takes the other place.
         let labelled = |label: &str| -> (String, String) {
             match o.info {
-                InfoPosition::LongName => (label.to_string(), String::new()),
-                InfoPosition::Comments => (String::new(), label.to_string()),
-                InfoPosition::AppendToLongName => (format!("{base_long} {label}"), String::new()),
+                InfoPosition::LongName => (label.to_string(), method_label.clone()),
+                InfoPosition::Comments => (method_label.clone(), label.to_string()),
+                InfoPosition::AppendToLongName => (format!("{data_long}_{label}"), method_label.clone()),
             }
         };
         for (c, key) in table.columns.iter().enumerate() {
@@ -422,7 +471,7 @@ impl Project {
             if total_row {
                 v.push(table.grand_total.unwrap_or(f64::NAN));
             }
-            let (long, comments) = labelled("Row Total");
+            let (long, comments) = labelled(&row_total_name);
             out.push((long, String::new(), comments, Designation::Y, ColumnData::numeric(v)));
         }
         let columns: Vec<Column> = out
@@ -572,9 +621,11 @@ mod tests {
         // Labels: the row source's name, then the column keys in Comments (wpivot's pos 1).
         assert_eq!(ws.columns[1].comments, "1");
         assert_eq!(ws.columns[2].comments, "2");
-        assert_eq!(ws.columns[3].comments, "Row Total");
+        assert_eq!(ws.columns[3].comments, "Total_A");
+        assert_eq!(ws.columns[1].long_name, "Sum of C");
+        assert_eq!(ws.columns[0].long_name, "A");
         assert_eq!(ws.columns[0].cell_text(0), "East");
-        assert_eq!(ws.columns[0].cell_text(2), "Column Total");
+        assert_eq!(ws.columns[0].cell_text(2), "Total_B");
         // East: 5 (product 1) and 7 (product 2); West: 6; the empty region is left out.
         assert_eq!(ws.columns[1].numeric().unwrap(), &[5.0, 6.0, 11.0]);
         assert_eq!(ws.columns[2].numeric().unwrap(), &[7.0, 0.0, 7.0]);
@@ -584,6 +635,118 @@ mod tests {
         assert!(p.pivot_table(book, 0, &o2).is_err());
         let s2 = p.pivot_table(book, 0, &PivotOptions::new(vec![region], product, None)).unwrap();
         assert_eq!(p.workbook(book).unwrap().sheets[s2].name, "Pivot2");
+    }
+
+    /// Origin 2016's `wpivot` on Region (A), Product (B), Sales (C), measured 2026-11-21 (T276;
+    /// `re-workspace/scratch/pivot-measure/p3.out.txt`).
+    #[test]
+    fn origin_2016_wpivot_cases() {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let text = |v: [&str; 8]| ColumnData::text(v.map(String::from).to_vec());
+        let a = p
+            .add_column(
+                book,
+                0,
+                Designation::X,
+                text(["East", "West", "East", "North", "West", "East", "North", "East"]),
+            )
+            .unwrap();
+        let b = p
+            .add_column(book, 0, Designation::Y, text(["pen", "pen", "ink", "pen", "ink", "pad", "ink", "pen"]))
+            .unwrap();
+        let c = p
+            .add_column(book, 0, Designation::Y, ColumnData::numeric(vec![5.0, 3.0, 2.0, 7.0, 4.0, 1.0, 6.0, 8.0]))
+            .unwrap();
+        let sheet = |p: &Project, s: usize| p.workbook(book).unwrap().sheets[s].clone();
+        let nums = |ws: &Worksheet, k: usize| ws.columns[k].numeric().unwrap().to_vec();
+        // Count, defaults: rows East, North, West (totals 4, 2, 2; ties by label), Long Name "Count".
+        let s = p.pivot_table(book, 0, &PivotOptions::new(vec![a], b, Some(c))).unwrap();
+        let ws = sheet(&p, s);
+        assert_eq!((0..3).map(|r| ws.columns[0].cell_text(r)).collect::<Vec<_>>(), ["East", "North", "West"]);
+        assert_eq!(
+            (1..4).map(|k| (ws.columns[k].long_name.as_str(), ws.columns[k].comments.as_str())).collect::<Vec<_>>(),
+            [("Count", "ink"), ("Count", "pad"), ("Count", "pen")]
+        );
+        assert_eq!(nums(&ws, 3), [2.0, 1.0, 1.0]);
+        // Sum with both totals.
+        let sum = PivotOptions {
+            method: Method::Sum,
+            row_totals: true,
+            column_totals: true,
+            ..PivotOptions::new(vec![a], b, Some(c))
+        };
+        let s = p.pivot_table(book, 0, &sum).unwrap();
+        let ws = sheet(&p, s);
+        assert_eq!(nums(&ws, 4), [16.0, 13.0, 7.0, 36.0]);
+        assert_eq!(nums(&ws, 3), [13.0, 7.0, 3.0, 23.0]);
+        assert_eq!((ws.columns[4].long_name.as_str(), ws.columns[4].comments.as_str()), ("Sum of C", "Total_A"));
+        assert_eq!(ws.columns[0].cell_text(3), "Total_B");
+        // Percent: the Row Total column divided by its own total.
+        let s = p.pivot_table(book, 0, &PivotOptions { normalize: Normalize::Percent, ..sum.clone() }).unwrap();
+        let ws = sheet(&p, s);
+        let close = |a: &[f64], b: &[f64]| a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-9);
+        assert!(close(&nums(&ws, 1), &[16.666_666_666_667, 50.0, 33.333_333_333_333, 100.0]), "{:?}", nums(&ws, 1));
+        assert!(close(&nums(&ws, 4), &[44.444_444_444_444, 36.111_111_111_111, 19.444_444_444_444, 100.0]));
+        // Mean without zeros: rows by the totals of the means (North 13, East 9.5, West 7).
+        let mean = PivotOptions { method: Method::Mean, zeros: false, ..PivotOptions::new(vec![a], b, Some(c)) };
+        let s = p.pivot_table(book, 0, &mean).unwrap();
+        let ws = sheet(&p, s);
+        assert_eq!((0..3).map(|r| ws.columns[0].cell_text(r)).collect::<Vec<_>>(), ["North", "East", "West"]);
+        assert_eq!(nums(&ws, 3), [7.0, 6.5, 3.0]);
+        assert!(nums(&ws, 2)[0].is_nan());
+        assert_eq!(ws.columns[1].long_name, "Mean of C");
+        // Labels descending, columns by descending totals.
+        let s = p
+            .pivot_table(
+                book,
+                0,
+                &PivotOptions {
+                    sort_rows: Sort::LabelsDescending,
+                    sort_columns: Sort::TotalsDescending,
+                    ..sum.clone()
+                },
+            )
+            .unwrap();
+        let ws = sheet(&p, s);
+        assert_eq!(ws.columns[0].cell_text(0), "West");
+        assert_eq!((1..4).map(|k| ws.columns[k].comments.as_str()).collect::<Vec<_>>(), ["pen", "ink", "pad"]);
+        // pos 0: the key is the Long Name, the method in Comments, the source's name in Comments.
+        let s = p
+            .pivot_table(
+                book,
+                0,
+                &PivotOptions {
+                    info: InfoPosition::LongName,
+                    method: Method::Sum,
+                    ..PivotOptions::new(vec![a], b, Some(c))
+                },
+            )
+            .unwrap();
+        let ws = sheet(&p, s);
+        assert_eq!((ws.columns[0].long_name.as_str(), ws.columns[0].comments.as_str()), ("", "A"));
+        assert_eq!((ws.columns[1].long_name.as_str(), ws.columns[1].comments.as_str()), ("ink", "Sum of C"));
+        // pos 2: "_<key>" after the data column's (empty) Long Name.
+        let s = p
+            .pivot_table(
+                book,
+                0,
+                &PivotOptions {
+                    info: InfoPosition::AppendToLongName,
+                    method: Method::Max,
+                    ..PivotOptions::new(vec![a], b, Some(c))
+                },
+            )
+            .unwrap();
+        let ws = sheet(&p, s);
+        assert_eq!((ws.columns[1].long_name.as_str(), ws.columns[1].comments.as_str()), ("_ink", "Max of C"));
+        assert_eq!(nums(&ws, 3), [8.0, 7.0, 3.0], "rows East, North, West: by the max of each row's records");
+        // Totals apply the method to the records: Mean table, North 6.5, ink 4, pen 5.75, grand 4.5.
+        let s = p.pivot_table(book, 0, &PivotOptions { row_totals: true, column_totals: true, ..mean }).unwrap();
+        let ws = sheet(&p, s);
+        assert_eq!(nums(&ws, 4), [6.5, 4.0, 3.5, 4.5]);
+        assert_eq!(nums(&ws, 1), [6.0, 2.0, 4.0, 4.0]);
+        assert_eq!(nums(&ws, 3), [7.0, 6.5, 3.0, 5.75]);
     }
 
     #[test]

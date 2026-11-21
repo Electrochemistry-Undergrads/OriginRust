@@ -21,6 +21,21 @@ fn underline_draws_a_line_in_addition_to_the_glyphs() {
     assert_eq!(items.iter().filter(|i| matches!(i, Item::Path { .. })).count(), 1);
 }
 
+#[test]
+fn an_underlined_font_underlines_every_run() {
+    // T293: Font::underline draws the line under plain text and under each run of styled text.
+    let font = Font { underline: true, ..Font::new("Arial", 20.0) };
+    let lines = |text: &str, font: &Font| {
+        let mut items = Vec::new();
+        crate::text::place(&mut items, &FixedMetrics, text, font, 20.0, (100.0, 60.0), Anchor::Middle, 0.0);
+        items.iter().filter(|i| matches!(i, Item::Path { .. })).count()
+    };
+    assert_eq!(lines("abc", &Font::new("Arial", 20.0)), 0);
+    assert_eq!(lines("abc", &font), 1);
+    assert_eq!(lines(r"a\b(b)c", &font), 3, "one line per run");
+    assert_eq!(lines(r"\u(abc)", &font), 1, "markup underline is not doubled");
+}
+
 fn placed(text: &str, anchor: Anchor, angle: f64) -> Vec<Item> {
     let mut items = Vec::new();
     crate::text::place(&mut items, &FixedMetrics, text, &Font::new("Arial", 20.0), 20.0, (100.0, 60.0), anchor, angle);

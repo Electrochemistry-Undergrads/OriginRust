@@ -1,7 +1,8 @@
 # T193: Analysis > Mathematics > Inverse of a matrix (B14 slice)
 
-**Status:** done 2026-11-20 (Claude Windows "obj-align"). Built from Origin's `minverse`
-documentation, **not measured**.
+**Status:** done 2026-11-20 (Claude Windows "obj-align"); measured against Origin 2016's `minverse` and
+matched by T290 (2026-11-21): new book without a long name, sheet "Inversed1" on default ranges, the
+pseudoinverse with a warning for singular or non-square matrices, missing cells in effect 0.
 **Size:** S. **Source:** greyed inventory package B14 ("Mathematics: Inverse...").
 **Spec:** `docs/spec/matrices.md` 7d.
 
@@ -16,4 +17,3 @@ documentation, **not measured**.
 ## Left
 
 - Special Filter.
-- Measuring Origin's output (the name of the new book).

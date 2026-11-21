@@ -342,54 +342,27 @@ impl MatrixSheet {
         s
     }
 
-    /// The inverse of a square matrix (Origin's `minverse`, Analysis > Mathematics > Inverse, T193):
-    /// Gauss-Jordan elimination with partial pivoting. The result keeps the sheet's size, ranges and
-    /// labels. Refused for a matrix that is not square, has a missing value, or is singular (a pivot
-    /// below 1e-12 of the largest cell).
-    pub fn inverse(&self) -> Result<MatrixSheet, MatrixError> {
-        let n = self.rows;
-        if n == 0 || self.cols != n {
-            return Err(MatrixError::Invalid(format!(
-                "only a square matrix has an inverse; this one has {} rows and {} columns",
-                self.rows, self.cols
-            )));
-        }
-        let a: Vec<f64> = (0..n * n).map(|k| self.value(k / n, k % n)).collect();
-        if a.iter().any(|v| !v.is_finite()) {
-            return Err(MatrixError::Invalid("the matrix has missing values; it has no inverse".into()));
-        }
-        let scale = a.iter().fold(0.0_f64, |m, v| m.max(v.abs()));
-        // Rows of [A | I], reduced to [I | A^-1].
-        let mut m: Vec<Vec<f64>> = (0..n)
-            .map(|r| {
-                let mut row = a[r * n..(r + 1) * n].to_vec();
-                row.extend((0..n).map(|c| if c == r { 1.0 } else { 0.0 }));
-                row
-            })
-            .collect();
-        for col in 0..n {
-            let pivot = (col..n).max_by(|&i, &j| m[i][col].abs().total_cmp(&m[j][col].abs())).unwrap_or(col);
-            // Every cell is finite (checked above), so the pivot compares normally.
-            if m[pivot][col].abs() <= 1e-12 * scale {
-                return Err(MatrixError::Invalid("the matrix is singular; it has no inverse".into()));
-            }
-            m.swap(col, pivot);
-            let p = m[col][col];
-            for v in &mut m[col] {
-                *v /= p;
-            }
-            let pivot_row = m[col].clone();
-            for (r, row) in m.iter_mut().enumerate() {
-                let f = row[col];
-                if r != col && f != 0.0 {
-                    for (v, p) in row.iter_mut().zip(&pivot_row) {
-                        *v -= f * p;
-                    }
-                }
-            }
-        }
-        let out: Vec<f64> = m.iter().flat_map(|row| row[n..].iter().copied()).collect();
-        Ok(self.like(n, n, out))
+    /// The inverse of the matrix as Origin 2016's `minverse` makes it (Analysis > Mathematics > Inverse,
+    /// T193, measured by T290; `sheaf_calc::minverse`): the inverse of a square matrix of full rank, else
+    /// the pseudoinverse (`cols x rows`), with `true` beside it. A missing cell counts as Origin's missing
+    /// number (in effect 0). The result is a fresh sheet named "Inversed1" on the default ranges, 1 to the
+    /// number of columns and 1 to the number of rows, without labels, as Origin's.
+    pub fn inverse(&self) -> Result<(MatrixSheet, bool), MatrixError> {
+        let (rows, cols) = (self.rows, self.cols);
+        let a: Vec<f64> = (0..rows * cols).map(|k| self.value(k / cols, k % cols)).collect();
+        let r = sheaf_calc::minverse::minverse(&a, rows, cols).ok_or_else(|| {
+            MatrixError::Invalid("the matrix is empty or holds an infinite value; it has no inverse".into())
+        })?;
+        let s = MatrixSheet::from_values(
+            "Inversed1",
+            0,
+            r.rows,
+            r.cols,
+            r.values,
+            (1.0, r.cols as f64),
+            (1.0, r.rows as f64),
+        )?;
+        Ok((s, r.pseudo))
     }
 
     /// Mirrors the data (Origin's `mflip`). With `coordinates` the X (horizontal) or Y (vertical)
@@ -612,28 +585,54 @@ mod inverse_tests {
     use super::*;
 
     #[test]
-    fn the_inverse_of_a_square_matrix_and_the_refusals() {
+    fn the_inverse_of_a_matrix_as_origins_minverse() {
         let mut m = MatrixSheet::new("M", 1, 2, 2);
         for (r, c, v) in [(0, 0, 4.0), (0, 1, 7.0), (1, 0, 2.0), (1, 1, 6.0)] {
             m.set_value(r, c, v).unwrap();
         }
-        let inv = m.inverse().unwrap();
+        m.x_from = 10.0;
+        m.x_to = 20.0;
+        let (inv, pseudo) = m.inverse().unwrap();
+        assert!(!pseudo);
         for (r, c, v) in [(0, 0, 0.6), (0, 1, -0.7), (1, 0, -0.2), (1, 1, 0.4)] {
             assert!((inv.value(r, c) - v).abs() < 1e-12, "{r},{c}: {}", inv.value(r, c));
         }
+        // Origin's output sheet: "Inversed1" on the default ranges, whatever the input's.
+        assert_eq!(inv.name, "Inversed1");
+        assert_eq!((inv.x_from, inv.x_to, inv.y_from, inv.y_to), (1.0, 2.0, 1.0, 2.0));
         // A pivot of zero in the first column needs a row swap.
         let mut p = MatrixSheet::new("P", 1, 2, 2);
         for (r, c, v) in [(0, 0, 0.0), (0, 1, 1.0), (1, 0, 1.0), (1, 1, 0.0)] {
             p.set_value(r, c, v).unwrap();
         }
-        let pi = p.inverse().unwrap();
+        let (pi, _) = p.inverse().unwrap();
         assert_eq!((pi.value(0, 1), pi.value(1, 0)), (1.0, 1.0));
+        // Singular: the pseudoinverse (measured in Origin 2016).
         let mut s = MatrixSheet::new("S", 1, 2, 2);
         for (r, c, v) in [(0, 0, 1.0), (0, 1, 2.0), (1, 0, 2.0), (1, 1, 4.0)] {
             s.set_value(r, c, v).unwrap();
         }
-        assert!(s.inverse().unwrap_err().to_string().contains("singular"));
-        assert!(MatrixSheet::new("R", 1, 2, 3).inverse().unwrap_err().to_string().contains("square"));
-        assert!(MatrixSheet::new("N", 1, 2, 2).inverse().unwrap_err().to_string().contains("missing"));
+        let (si, pseudo) = s.inverse().unwrap();
+        assert!(pseudo);
+        assert!((si.value(1, 1) - 0.16).abs() < 1e-13);
+        // Not square: the pseudoinverse is cols x rows, on ranges to match.
+        let mut w = MatrixSheet::new("W", 1, 2, 3);
+        for k in 0..6 {
+            w.set_value(k / 3, k % 3, (k + 1) as f64).unwrap();
+        }
+        let (wi, pseudo) = w.inverse().unwrap();
+        assert!(pseudo);
+        assert_eq!((wi.rows, wi.cols, wi.x_to, wi.y_to), (3, 2, 2.0, 3.0));
+        assert!((wi.value(0, 0) + 17.0 / 18.0).abs() < 1e-12);
+        // A missing cell counts as Origin's missing number, in effect 0 (measured).
+        let mut n = MatrixSheet::new("N", 1, 2, 2);
+        for (r, c, v) in [(0, 0, 1.0), (1, 0, 3.0), (1, 1, 4.0)] {
+            n.set_value(r, c, v).unwrap();
+        }
+        let (ni, pseudo) = n.inverse().unwrap();
+        assert!(!pseudo);
+        for (k, want) in [1.0, 0.0, -0.75, 0.25].into_iter().enumerate() {
+            assert!((ni.value(k / 2, k % 2) - want).abs() < 1e-15, "{k}");
+        }
     }
 }

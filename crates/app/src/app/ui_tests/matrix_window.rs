@@ -162,7 +162,9 @@ fn analysis_mathematics_inverse_writes_the_inverse_to_a_new_matrix_book() {
     h.state_mut().apply(Action::MatrixCmd { id, cmd: menus::MatrixCmd::Inverse }, &ctx);
     settle(&mut h);
     assert_eq!(h.state().doc.undo_label(), Some("Matrix Inverse"));
-    let inv = project(&h).matrix_books().nth(1).expect("a new matrix book").sheets[0].clone();
+    let book = project(&h).matrix_books().nth(1).expect("a new matrix book").clone();
+    assert_eq!((book.long_name.as_str(), book.sheets[0].name.as_str()), ("", "Inversed1"), "as Origin's minverse");
+    let inv = book.sheets[0].clone();
     // [[2, 1], [1, 2]]^-1 = [[2, -1], [-1, 2]] / 3
     for (r, c, v) in [(0, 0, 2.0 / 3.0), (0, 1, -1.0 / 3.0), (1, 0, -1.0 / 3.0), (1, 1, 2.0 / 3.0)] {
         assert!((inv.value(r, c) - v).abs() < 1e-12, "{r},{c}: {}", inv.value(r, c));

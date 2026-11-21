@@ -61,6 +61,33 @@ fn graph_with(p: &mut Project, template: Template, plots: &[(usize, usize)], f: 
 }
 
 #[test]
+fn an_underlined_title_is_written_with_origins_underline_markup() {
+    // T293: as bold is written as \b(..).
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        g.layers[0].x_axis.title = Some("Time".into());
+        g.layers[0].x_axis.title_font.underline = true;
+    });
+    let out = write_named(&p, "g", TIME).unwrap();
+    let pat: &[u8] = br"\u(Time)";
+    assert!(out.bytes.windows(pat.len()).any(|w| w == pat), "the title is underlined");
+}
+
+#[test]
+fn a_turned_title_keeps_its_angle_in_the_opj() {
+    // T291: the title object's rotation is written and read back; the default angle stays default.
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        g.layers[0].y_axis.title_rotation_deg = Some(45.0);
+        g.layers[0].x_axis.title_offset_pt = (10.0, 4.0);
+    });
+    let (imp, _) = round_trip(&p);
+    let layer = &imp.graphs[0].layers[0];
+    assert_eq!(layer.y_axis.title_rotation_deg, Some(45.0));
+    assert_eq!(layer.x_axis.title_rotation_deg, None, "an X title at 0 degrees is the default");
+}
+
+#[test]
 fn window_comments_go_in_the_label_after_the_long_name() {
     // T283: Origin 2016 writes `long name CR LF comments` in a window's label.
     let mut p = source();

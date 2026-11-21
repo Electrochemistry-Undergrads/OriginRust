@@ -308,6 +308,12 @@ fn build_layer(
                 axis.title = if is_only_axis_token(&text) { None } else { Some(clean_markup(&text)) };
                 axis.show_title = true;
                 axis.title_font.size_pt = size_pt;
+                // T291: a title turned away from its default (0 for X, 90 for Y) keeps its angle.
+                let angle = f64::from(u16_at(&a.block1, ANN_ANGLE_AT)) / 10.0;
+                let default = if name.starts_with('X') { 0.0 } else { 90.0 };
+                if (angle - default).abs() > 0.05 && angle < 360.0 {
+                    axis.title_rotation_deg = Some(angle);
+                }
             }
             // Origin draws nothing outside the page: a legend or text moved off it is hidden there
             // (the owner's XRD project keeps its legends right of the page).

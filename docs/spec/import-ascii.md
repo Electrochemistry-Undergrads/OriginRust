@@ -231,11 +231,22 @@ Files were small CSVs we wrote (US regional settings on the test machine). Origi
 
 Setting the column to Date (format 4, subformat 11) afterwards converts text that matches the system pattern: `11/11/2026 1:45:10 PM` became 2461355.5730324076 and `11/12/2026 1:05:00 AM` became 2461356.045138889. The ISO strings turned into missing values. `11-Nov-2026` converted to the wrong date (11 November read as 12 November, and 12-Nov as 12 December), so Origin's conversion of day-month-name strings is not something to copy. The `Dates.*` option names we guessed for `impasc` were rejected; Origin's import wizard has a per-column date format that we did not drive.
 
+**Two-digit years, measured in Origin 2016 (T315, 2026-11-21; `re-workspace/scratch/import-yy/`).**
+`impasc` on tab files of nine dates each, US regional settings:
+
+| Strings | What the default import gave |
+|---|---|
+| `1/2/21`, `3/4/29`, `5/6/30`, `12/31/99`, `1/1/00` (M/d/yy) | Date column (format 4), shown as `1/2/2021` (M/d/yyyy); 00 to 44 became 2000 to 2044, 45 to 99 became 1945 to 1999 (`1/2/44` is 2044, `1/2/45` is 1945; values 2459216 for 1/2/21, 2451544 for 1/1/00) |
+| `13/2/21` (d/M/yy), `13.02.21` (dd.MM.yy), `21-03-05` (yy-MM-dd), `05-Mar-21` (dd-MMM-yy) | text (format 7) |
+
+Whether the 44/45 window moves with the current year was not measured (one machine date).
+
 Decision for Sheaf: recognise more than Origin's automatic pass does, because the owner's instruments write ISO and day-month-name strings. The numbers stored are the ones Origin uses (see `workbook-model.md`).
 
 ### What Sheaf implements (crates/io/src/ascii.rs)
 
 - A column is a date column when every filled cell reads as a date, a time of day, or a date with time of one kind. Recognised: `yyyy-MM-dd` (also with `/` or `.`), a `T` or a space then a clock, `M/d/yyyy` and `d/M/yyyy` (also with `-`), `dd.MM.yyyy` (always day first), `11-Nov-2026`, `11 November 2026`, `13:45`, `13:45:10.250`, and 12-hour clocks with AM or PM. No-value markers (`n.d.`, `--`) and empty cells in the column become missing values.
+- Two-digit years (T315): every year-last form also takes a two-digit year, read with Origin's measured window (00 to 44 are the 2000s, 45 to 99 the 1900s): `1/2/21` and `13/2/21` (the day and month order rule below applies), and with two-digit day and month `13.02.21`, `05-03-21`, `05-Mar-21`. One-digit parts with dots or dashes (`1.2.21`, a version number) and year-first `yy-MM-dd` stay text. The column is shown with four-digit years (`1/2/2021`), as Origin shows it. Set Column Values, Fill and the text-to-date column conversion read the same forms (`sheaf_core::datetime::parse`).
 - Display format: the first date pattern seen and the most precise clock pattern in the column, so the text shown matches the file.
 - Day and month order: when only one order reads every cell (a day above 12 or a month above 12 somewhere), that order is used silently. When both fit, the option `date_order` decides (default month first, like Origin on a US setup) and the import warns that the dates are ambiguous. CLI: `--day-first`.
 - A column with any cell that is not a date, such as a stray word, stays text; the choice `DateImport::AsText` (CLI `--dates-as-text`, import dialog "Keep as text") keeps every date column as text.

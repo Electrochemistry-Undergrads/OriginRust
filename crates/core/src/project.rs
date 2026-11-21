@@ -1575,6 +1575,8 @@ impl Project {
         }
         if let Some(g) = self.graph_mut(graph) {
             g.layers[0].apply_palette();
+            // Origin 2016's Y title (measured, T316).
+            g.layers[0].y_axis.title = Some("Range".to_string());
             if let Some(name) = long_name {
                 g.long_name = name;
             }
@@ -1625,12 +1627,16 @@ impl Project {
 
     /// Creates a Pareto chart ([`Template::Pareto`], T83) of the cells of column `y` (text or numbers): columns of
     /// the count of each distinct value, most frequent first, in the left layer, and the cumulative percent as a
-    /// line with symbols in a right-axis layer fixed to 0 - 100.
+    /// line with symbols in a right-axis layer. As Origin 2016 draws it (measured, T316): red bars with a black
+    /// outline under "Count" from 0 to 1.1 times the total; the cumulative percent a blue line with blue squares
+    /// at the bar centres, each labelled with its value, on a right axis "Cumulative Frequency" from 0 to 110
+    /// with a tick every 20 labelled in percent, so that 100 % stands level with the total count; no X title.
     pub fn plot_pareto(&mut self, y: ColumnId) -> Result<WindowId, ProjectError> {
         let column = self.column(y).ok_or(ProjectError::NoSuchColumn(y))?;
         if crate::indexed::levels(column).is_empty() {
             return Err(ProjectError::ParetoNeedsColumn);
         }
+        let total: usize = crate::indexed::counts_descending(column).iter().map(|(_, n)| *n).sum();
         let long_name = self.locate(y).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(Template::Pareto);
         let right = self.add_right_y_layer(graph, 0)?;
@@ -1646,21 +1652,43 @@ impl Project {
                     p.y_error = None;
                     p.x_error = None;
                     p.stat = Some(if layer == 0 { StatPlot::Pareto } else { StatPlot::ParetoCumulative });
-                    p.label = Some(if layer == 0 { "Count" } else { "Cumulative %" }.to_string());
+                    p.label = Some(if layer == 0 { "Count" } else { "Cumulative Frequency" }.to_string());
                     if layer != 0 {
                         p.kind = crate::graph::PlotKind::LineSymbol;
                     }
                 }
-                l.y_axis.title = Some(if layer == 0 { "Count" } else { "Cumulative %" }.to_string());
-                if layer != 0 {
-                    l.y_axis.min = Some(0.0);
-                    l.y_axis.max = Some(100.0);
+                l.y_axis.title = Some(if layer == 0 { "Count" } else { "Cumulative Frequency" }.to_string());
+                l.y_axis.min = Some(0.0);
+                if layer == 0 {
+                    l.y_axis.max = Some(1.1 * total as f64);
+                    l.x_axis.show_title = false;
+                } else {
+                    l.y_axis.max = Some(110.0);
+                    l.y_axis.major_step = Some(20.0);
+                    l.y_axis.tick_suffix = "%".to_string();
                 }
             }
         }
         if let Some(g) = self.graph_mut(graph) {
             for layer in [0, right] {
                 g.layers[layer].apply_palette();
+            }
+            use crate::color::Color;
+            if let Some(p) = g.layers[0].plots.last_mut() {
+                p.auto_color = false;
+                p.symbol.color = Color::rgb(255, 0, 0);
+                p.line.color = Color::BLACK;
+            }
+            if let Some(p) = g.layers[right].plots.last_mut() {
+                let blue = Color::rgb(0, 0, 255);
+                p.auto_color = false;
+                p.line.color = blue;
+                p.line.width_pt = 0.5;
+                p.symbol.color = blue;
+                p.symbol.shape = crate::graph::SymbolShape::Square;
+                p.symbol.filled = true;
+                p.decor.labels.enable = true;
+                p.decor.labels.position = crate::graph::LabelPosition::Above;
             }
             if let Some(name) = long_name {
                 g.long_name = name;

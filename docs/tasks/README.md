@@ -267,6 +267,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T282](T282-resize-measure.md) | Image Resize: Nearest (Origin 2016 default) or Bilinear; Crop checked | S | done 2026-11-21, measured |
 | [T283](T283-opj-window-comments.md) | Window comments read from and written to .opj (label after the long name), measured in Origin 2016 | S | done 2026-11-21 |
 | [T284](T284-image-median.md) | Image > Spatial Filters > Median as Origin 2016 imgMedian | S | done 2026-11-21, measured |
+| [T285](T285-image-edge.md) | Image Edge Detection as Origin 2016 imgEdge: binary map, Sobel/Prewitt, threshold | S | done 2026-11-21, measured |
 | [T286](T286-explorer-multiselect.md) | Project Explorer: Ctrl+click, Shift+click and Ctrl+A highlight several windows; Delete, Show, Hide and drag act on them | S | done 2026-11-21 |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |

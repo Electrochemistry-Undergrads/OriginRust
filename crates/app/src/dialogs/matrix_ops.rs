@@ -45,6 +45,8 @@ pub enum ImageForm {
     Flip(FlipDirection),
     /// Median (T284): the window size.
     Median(usize),
+    /// Edge Detection (T285): the filter and the threshold in levels of 0..255.
+    Edge(sheaf_core::matrix_image::EdgeFilter, f64),
     /// Levels (T210): input low/high to output low/high.
     Levels {
         input: (f64, f64),
@@ -80,6 +82,7 @@ impl ImageForm {
             ImageForm::Rotate(r) => ImageOp::Rotate(r),
             ImageForm::Flip(d) => ImageOp::Flip(d),
             ImageForm::Median(d) => ImageOp::Median(d),
+            ImageForm::Edge(filter, threshold) => ImageOp::EdgeDetection { filter, threshold },
             ImageForm::Levels { input, output } => ImageOp::Levels { input, output },
             ImageForm::Crop { rows, cols } => ImageOp::Crop {
                 rows: (rows.0.saturating_sub(1), rows.1.saturating_sub(1)),
@@ -120,6 +123,7 @@ impl Form {
                 ImageForm::Rotate(_) => "Rotate",
                 ImageForm::Flip(_) => "Flip",
                 ImageForm::Median(_) => "Median",
+                ImageForm::Edge(..) => "Edge Detection",
                 ImageForm::Levels { .. } => "Levels",
                 ImageForm::Crop { .. } => "Crop",
                 ImageForm::Resize { .. } => "Resize",
@@ -371,6 +375,17 @@ fn image_controls(ui: &mut egui::Ui, f: &mut ImageForm) {
                     ui.selectable_value(pick, k, name);
                 }
             });
+        }
+        ImageForm::Edge(filter, threshold) => {
+            ui.label("Edge Filter");
+            egui::ComboBox::from_id_salt("image_edge_filter").selected_text(filter.label()).show_ui(ui, |ui| {
+                for f in sheaf_core::matrix_image::EdgeFilter::ALL {
+                    ui.selectable_value(filter, f, f.label());
+                }
+            });
+            ui.end_row();
+            ui.label("Threshold (0-255)");
+            ui.add(egui::DragValue::new(threshold).speed(1.0).range(0.0..=255.0));
         }
         ImageForm::Median(d) => {
             ui.label("Window size");

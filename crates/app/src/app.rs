@@ -5927,12 +5927,10 @@ impl SheafApp {
                 });
                 return;
             }
-            I::Smooth | I::Sharpen | I::EdgeDetection => {
-                let op = match cmd {
-                    I::Smooth => ImageOp::Smooth,
-                    I::Sharpen => ImageOp::Sharpen,
-                    _ => ImageOp::EdgeDetection,
-                };
+            // Origin's imgEdge threshold defaults to 0 (T285); its default filter (Laplace) is not built.
+            I::EdgeDetection => ImageForm::Edge(sheaf_core::matrix_image::EdgeFilter::SobelBoth, 0.0),
+            I::Smooth | I::Sharpen => {
+                let op = if cmd == I::Smooth { ImageOp::Smooth } else { ImageOp::Sharpen };
                 if let Err(e) = crate::dialogs::matrix_ops::apply_image(&mut self.doc, id, sheet, &op) {
                     self.warn(e);
                 }

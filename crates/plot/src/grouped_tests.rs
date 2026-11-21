@@ -339,3 +339,28 @@ fn histogram_probabilities_steps_through_the_cumulative_percent_of_the_bins() {
     let t = p.add_column(b, 0, Designation::Y, ColumnData::text(vec!["a".into()])).unwrap();
     assert!(p.plot_columns(Template::HistogramProbabilities, &[t]).is_err());
 }
+
+#[test]
+fn a_binned_pareto_sorts_the_counts_into_a_new_sheet_as_origin() {
+    // T319, measured in Origin 2016: dent 4, scratch 9, crack 2, chip 4, stain 1 gives scratch, dent, chip (the tie
+    // in sheet order), crack, stain with 45, 65, 85, 95, 100 %.
+    let mut p = Project::new();
+    let b = p.add_workbook("defects");
+    let names = ["dent", "scratch", "crack", "chip", "stain"].iter().map(|s| s.to_string()).collect();
+    let d = p.add_column(b, 0, Designation::X, ColumnData::text(names)).unwrap();
+    let c = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![4.0, 9.0, 2.0, 4.0, 1.0])).unwrap();
+    let g = p.plot_pareto_binned(d, c).unwrap();
+    let wb = p.workbook(b).unwrap();
+    assert_eq!(wb.sheets[1].name, "ParetoBin1");
+    let longs: Vec<&str> = wb.sheets[1].columns.iter().map(|c| c.long_name.as_str()).collect();
+    assert_eq!(longs, ["Data", "Count", "Cumulative Frequency"]);
+    let layers = data::collect_graph(&p, p.graph(g).unwrap());
+    assert_vec(&layers[0].plots[0].y, &[9.0, 4.0, 4.0, 2.0, 1.0]);
+    assert_vec(&layers[1].plots[0].y, &[45.0, 65.0, 85.0, 95.0, 100.0]);
+    let gr = p.graph(g).unwrap();
+    assert_eq!((gr.layers[0].y_axis.max, gr.layers[1].y_axis.max), (Some(22.0), Some(110.0)));
+    let t = texts(&doc(&svg_of(&p, g)));
+    for want in ["scratch", "dent", "chip", "crack", "stain", "Count", "Cumulative Frequency", "100%"] {
+        assert!(t.iter().any(|s| s == want), "{want} in {t:?}");
+    }
+}

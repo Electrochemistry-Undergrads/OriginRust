@@ -34,8 +34,9 @@ pub fn dragged(rect: (f64, f64, f64, f64), resize: bool, delta: (f64, f64)) -> (
     if resize { (x, y, (w + delta.0).max(0.02), (h + delta.1).max(0.02)) } else { (x + delta.0, y + delta.1, w, h) }
 }
 
-/// Layout > Export Page as Image (T237 slice 3): writes `layout` to `path` at 300 dpi in the format
-/// of its extension (`.png` when it has none) and returns the path written.
+/// Layout > Export Page as Image (T237 slices 3 and 7): writes `layout` to `path` in the format of
+/// its extension (`.png` when it has none; pictures at 300 dpi, or SVG/PDF drawings) and returns the
+/// path written.
 pub fn write_layout_image(
     project: &sheaf_core::Project,
     layout: WindowId,

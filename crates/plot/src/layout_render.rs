@@ -1,6 +1,7 @@
 //! A layout page as one picture (T237 slice 3, layout-page spec): every graph or worksheet item is
 //! rendered at the pixel size it takes on the page and laid, at its place, on a white page.
 
+use crate::fonts::SystemFonts;
 use crate::{PlotError, Raster, RasterOptions, raster};
 use sheaf_core::layout_page::LayoutContent;
 use sheaf_core::{Project, WindowId};
@@ -99,13 +100,84 @@ pub fn render_layout_raster(project: &Project, layout: WindowId, dpi: f64) -> Re
 /// default options.
 pub fn render_layout_image(project: &Project, layout: WindowId, ext: &str, dpi: f64) -> Result<Vec<u8>, PlotError> {
     let ext = ext.to_ascii_lowercase();
+    match ext.as_str() {
+        "svg" => return Ok(render_layout_svg(project, layout)?.into_bytes()),
+        "pdf" => return raster::to_pdf(&render_layout_svg(project, layout)?, SystemFonts::shared()),
+        _ => {}
+    }
     if !raster::is_raster_ext(&ext) {
         return Err(PlotError::Image(format!(
-            "a layout page is exported as a picture (png, jpg, tif, bmp), not .{ext}"
+            "a layout page is exported as png, jpg, tif, bmp, svg or pdf, not .{ext}"
         )));
     }
     let r = render_layout_raster(project, layout, dpi)?;
     raster::encode_raster(&r, &ext, dpi, &RasterOptions::default())
+}
+
+/// The vector picture of what a layout item shows; `None` when it is gone.
+fn item_svg(project: &Project, content: &LayoutContent) -> Option<Result<String, PlotError>> {
+    match *content {
+        LayoutContent::Graph { graph } => {
+            project.graph(graph)?;
+            Some(crate::render_svg(project, graph))
+        }
+        LayoutContent::Sheet { book, sheet } => {
+            let ws = project.workbook(book)?.sheets.get(sheet)?;
+            Some(crate::sheet_image_svg(ws))
+        }
+    }
+}
+
+/// Makes the ids of a nested picture its own (`k` is the item's index), so two graphs' clip paths
+/// do not meet.
+fn own_ids(svg: &str, k: usize) -> String {
+    svg.replace(" id=\"", &format!(" id=\"i{k}-"))
+        .replace("url(#", &format!("url(#i{k}-"))
+        .replace("href=\"#", &format!("href=\"#i{k}-"))
+}
+
+/// T237 slice 7: the layout page as an SVG document in points, on the page colour, with each item's
+/// own SVG (the graph's or the worksheet image's) nested at its place and stretched to its rectangle.
+/// An item whose graph or sheet is gone is left out.
+pub fn render_layout_svg(project: &Project, layout: WindowId) -> Result<String, PlotError> {
+    use std::fmt::Write as _;
+    let page = project
+        .layout(layout)
+        .ok_or_else(|| PlotError::Image(format!("there is no layout page with id {}", layout.0)))?;
+    let (w, h) = (page.width_pt, page.height_pt);
+    let bg = page.background;
+    let mut s = String::new();
+    let _ = writeln!(
+        s,
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{w}pt\" height=\"{h}pt\" viewBox=\"0 0 {w} {h}\">"
+    );
+    let _ =
+        writeln!(s, "<rect x=\"0\" y=\"0\" width=\"{w}\" height=\"{h}\" fill=\"rgb({},{},{})\"/>", bg.r, bg.g, bg.b);
+    for (k, item) in page.items.iter().enumerate() {
+        let Some(inner) = item_svg(project, &item.content) else { continue };
+        let inner = inner?;
+        // The nested root: its viewBox kept, placed and sized on the page.
+        let Some(open) = inner.find("<svg") else { continue };
+        let Some(close) = inner[open..].find('>').map(|e| open + e) else { continue };
+        let tag = &inner[open..close];
+        let view = tag
+            .find("viewBox=\"")
+            .map(|v| v + "viewBox=\"".len())
+            .and_then(|v| tag[v..].find('"').map(|e| &tag[v..v + e]))
+            .unwrap_or("0 0 1 1");
+        let _ = write!(
+            s,
+            "<svg x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" viewBox=\"{view}\" preserveAspectRatio=\"none\">",
+            item.x * w,
+            item.y * h,
+            item.w * w,
+            item.h * h
+        );
+        s.push_str(&own_ids(&inner[close + 1..], k));
+        s.push('\n');
+    }
+    s.push_str("</svg>\n");
+    Ok(s)
 }
 
 #[cfg(test)]
@@ -140,7 +212,15 @@ mod tests {
         assert!(inked > 100, "the graph picture is drawn: {inked} inked pixels");
         let png = render_layout_image(&p, id, "PNG", 36.0).unwrap();
         assert!(png.starts_with(&[0x89, b'P', b'N', b'G']));
-        assert!(render_layout_image(&p, id, "svg", 36.0).is_err());
+        assert!(render_layout_image(&p, id, "emf", 36.0).is_err());
+        // The vector page: the graph's own SVG nested at its place, its ids made its own.
+        let svg = String::from_utf8(render_layout_image(&p, id, "SVG", 36.0).unwrap()).unwrap();
+        assert!(svg.starts_with("<svg xmlns") && svg.contains("width=\"792pt\""), "{}", &svg[..200]);
+        assert_eq!(svg.matches("<svg").count(), 2, "the page and one graph");
+        assert!(svg.contains("id=\"i0-clip0\"") && svg.contains("url(#i0-clip0)"));
+        assert!(!svg.contains("url(#clip"), "no id left shared");
+        let pdf = render_layout_image(&p, id, "pdf", 36.0).unwrap();
+        assert!(pdf.starts_with(b"%PDF"));
         // A worksheet item is drawn in the second cell; a gone sheet stays blank.
         p.layout_mut(id).unwrap().add_sheet(book, 0, 2.0);
         p.layout_mut(id).unwrap().add_sheet(book, 7, 2.0);
@@ -160,5 +240,8 @@ mod tests {
         let items = p.layout(id).unwrap().items.clone();
         assert!(ink(&items[1]) > 20, "the sheet picture is drawn: {}", ink(&items[1]));
         assert_eq!(ink(&items[2]), 0, "a gone sheet stays blank");
+        let svg = render_layout_svg(&p, id).unwrap();
+        assert_eq!(svg.matches("<svg").count(), 3, "the page, the graph and the sheet; the gone sheet left out");
+        assert!(svg.contains("url(#i0-clip0)"));
     }
 }

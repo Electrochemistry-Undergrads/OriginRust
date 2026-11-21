@@ -1,8 +1,7 @@
 # T57: Deconvolution and STFT
 
 **Status:** done 2026-11-19 (Claude Windows "t30-origin", taking over the 2026-11-15 claim of Claude
-macOS "violin", which had no branch or code). Not measured: Origin's COM class is unregistered on the
-test machine. Left: measure Origin's dialogs, defaults and outputs and match them; write STFT to a
+macOS "violin", which had no branch or code). Not measured then (Origin's COM class was unregistered); measured and corrected in T292. Left: measure Origin's dialogs, defaults and outputs and match them; write STFT to a
 matrix once matrix windows exist.
 **Size:** M. **Source:** the greyed Analysis > Signal Processing > Deconvolution... and STFT...
 (Origin 2016's `deconv` and `stft`; T18 backlog "deconvolution, STFT ... remain").

@@ -1638,7 +1638,7 @@ image plot and the coefficient matrix of `cwt` (no script route; the window's "C
 OK), the pseudo-frequency output, `mdwt`, `dwt2`, `idwt2`, missing values in the `cwt` signal, several signal columns in one `cwt` call, and the open
 rules of 19.4 (boundary samples, `sqtwolog` threshold) and 19.5 (non-power-of-two lengths, `K` at cutoff 0 and 1).
 
-## 20. Deconvolution and STFT (`deconv`, `stft`; T57, 2026-11-19, **not measured**)
+## 20. Deconvolution and STFT (`deconv`, `stft`; T57, 2026-11-19; measured against Origin 2016 in T292)
 
 Origin 2016 has Analysis > Signal Processing > Deconvolution... and STFT.... Neither could be run
 (Origin's COM class was unregistered), so this follows Origin's documented definitions. The numbers
@@ -1649,23 +1649,26 @@ below are Sheaf's choices, checked against numpy, not against Origin.
 - **Inputs:** the signal columns and one Response column (any numeric Y column of the project, the
   signal itself included), as Convolution (section 13). Trailing missing values are dropped; a missing
   value inside is refused.
-- **Method:** the FFT over the signal's `N` points. The response is padded with zeros to `N`, the
-  signal's spectrum is divided by the response's, and the inverse transform gives `N` values
-  (`sheaf_calc::deconvolve`).
-  - This undoes a circular convolution with the same response exactly.
-  - It also undoes a linear one: deconvolving the `n + m - 1` values of a linear convolution of `s`
-    gives `s` followed by `m - 1` zeros.
+- **Method** (`sheaf_calc::deconvolve`; measured in T292, 2026-11-21): the signal's spectrum divided by
+  the response's.
+  - **Linear** (the default, Origin's `circular:=linear`): signal and response padded with zeros to
+    `2N - 1` points; the first `N - m + 1` values are kept. Deconvolving a linear convolution
+    `[1, 3, 5, 3, 0, 0]` by `[1, 1]` gives `[1, 2, 3, 0, 0]`; a signal that is no exact convolution gives
+    Origin's numbers too (`[2, 5, ..., 17]` by `[1, 1]`: `6.5, -1.5, 9.5, 1.5, 12.5`).
+  - **Circular** (`--circular`, the window's Type): the FFT over the signal's `N` points, `N` values; it
+    undoes a circular convolution exactly (Origin's numbers to 1e-12).
 - **Options:**
-  - Normalize divides the response by its Euclidean norm first, as Convolution's `norm`. So a
-    normalized convolution is undone by a normalized deconvolution.
+  - Normalize (on by default in the window, as Origin's `norm:=1`; `--normalize` in the CLI) divides the
+    response by its Euclidean norm first, as Convolution's `norm`: the result is scaled by that norm.
   - Sampling interval: Auto is the X step of the input, as Convolution.
 - **Refused:** a response longer than the signal, and a response whose spectrum has a zero (a value
   at most 1e-12 of its largest), because nothing can be divided by it. A constant response as long
-  as the signal has zeros at every frequency but 0, so it is refused.
-- **Output:** a new sheet "Deconvolution" with X and Y for each input. The Y long name is
-  "<input> deconvolved by <response>" and the comment "<short> deconvolved by <short>[, normalized]".
+  as the signal has zeros at every frequency but 0, so it is refused. (Origin writes missing values
+  there instead.)
+- **Output:** a new sheet "Deconvolution" with X (0, interval, 2 interval, ...) and Y for each input. As
+  Origin 2016, the Y column has no Long Name and the Comments "deconvolution of B, C".
 - **Command line:** `sheaf analyze deconvolution <file> --y <col> --response <col> [--normalize]
-  [--interval d]`. MCP reaches it through the analyze bridge.
+  [--circular] [--interval d]`. MCP reaches it through the analyze bridge.
 
 ### 20.2 STFT
 
@@ -1678,12 +1681,18 @@ below are Sheaf's choices, checked against numpy, not against Origin.
   - Amplitude (the default) is one-sided, `2|X| / sum(w)`, and `|X| / sum(w)` at 0 and at the
     Nyquist frequency. A sine of amplitude A filling a segment shows a peak of about A.
   - dB is `20 log10(amplitude)`, missing where the amplitude is 0.
-- **Defaults (Sheaf's):** Hanning window, Window Length 64, FFT Length 64, Overlap 32, Amplitude,
-  and the sampling interval from the input's X (Auto).
+- **Defaults (Origin 2016's, T292):** Hanning window, Window Length 256, FFT Length 256, Overlap 128,
+  dB, and the sampling interval from the input's X (Auto).
+- **Measured in Origin 2016 (T292).** `stft` on 1024 samples of a unit sine of period 16 gave a 129 x 7
+  matrix (frequencies 0..0.5 by segment centres 127.5..895.5) whose amplitudes are exactly Sheaf's
+  (peak 0.99999653, the DC bin 3.0042e-6 and the Nyquist bin 1.1841e-7 not doubled: the symmetric
+  Hanning with `sum(w)` = 127.5), and dB = 20 log10 of them. `correct:=none` gives `2|X| / N` instead
+  (not offered). Origin pads a short window with zeros on both sides (the amplitudes are the same).
 - **Refused:** a window under 2 points, an overlap not less than the window, an FFT length under the
   window, a signal shorter than the window, and more than 2000 segments.
-- **Output:** Origin writes a matrix and an image plot; Sheaf has no matrix windows, so it writes a
-  new sheet "STFT".
+- **Output:** Origin writes a matrix (rows the frequencies, columns the segments) and an image plot;
+  Sheaf still writes a new sheet "STFT" (a frequency column and a column per segment), with the same
+  numbers.
   - The X column is "Frequency", 0 to the Nyquist frequency in `fft_len / 2 + 1` rows.
   - Then there is one Y column per segment. Its long name is "<input> at <X name> = t", where t is
     the segment's centre: its first X value plus `(start + (window_len - 1) / 2)` samples, times the

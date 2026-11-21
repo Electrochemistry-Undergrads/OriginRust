@@ -258,8 +258,10 @@ pub struct ConvolutionSpec {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DeconvolutionSpec {
     pub response: ColumnId,
-    /// Divide the response by its Euclidean norm first, as Convolution's `norm`.
+    /// Divide the response by its Euclidean norm first, as Convolution's `norm` (Origin's default).
     pub normalize: bool,
+    /// Circular (the FFT over the input's points) rather than Origin's default Linear (T292).
+    pub circular: bool,
     /// Sampling interval of the result's X; `None` is the X step of the input.
     pub interval: Option<f64>,
 }
@@ -2741,7 +2743,7 @@ impl Project {
                         Some(d) => return Err(AnalysisError::BadOption(format!("{d} is not a usable interval"))),
                         None => auto_interval(inp.xs()),
                     };
-                    let v = calc::deconvolve(&y, &response, spec.normalize)
+                    let v = calc::deconvolve(&y, &response, spec.normalize, spec.circular)
                         .map_err(|e| AnalysisError::BadOption(format!("{}: {e}", inp.short)))?;
                     on_sheet.push(SheetColumn {
                         designation: Designation::X,
@@ -2750,15 +2752,12 @@ impl Project {
                         comments: String::new(),
                         data: ColumnData::numeric((0..v.len()).map(|k| k as f64 * step).collect()),
                     });
+                    // Origin 2016 (T292): no Long Name, Comments "deconvolution of B, C".
                     on_sheet.push(SheetColumn {
                         designation: Designation::Y,
-                        long_name: format!("{} deconvolved by {}", inp.name, rcol.display_name()),
+                        long_name: String::new(),
                         units: String::new(),
-                        comments: format!(
-                            "{} deconvolved by {rshort}{}",
-                            inp.short,
-                            if spec.normalize { ", normalized" } else { "" }
-                        ),
+                        comments: format!("deconvolution of {}, {rshort}", inp.short),
                         data: ColumnData::numeric(v),
                     });
                 }
@@ -4931,17 +4930,18 @@ mod tests {
         let conv = Tool::Convolution(ConvolutionSpec { response, circular: true, normalize: false, interval: None });
         let r = p.analyze(&request(&[ramp], conv)).unwrap();
         let convolved = p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()].columns[1].id;
-        let spec = DeconvolutionSpec { response, normalize: false, interval: None };
+        let spec = DeconvolutionSpec { response, normalize: false, circular: true, interval: None };
         let r = p.analyze(&request(&[convolved], Tool::Deconvolution(spec))).unwrap();
         let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
         assert!(rs.name.starts_with("Deconvolution"), "{}", rs.name);
         let back = rs.columns[1].numeric().unwrap();
         assert_eq!(back.len(), 11);
         assert!(back.iter().zip(0..=10).all(|(g, w)| (g - f64::from(w)).abs() < 1e-9), "the ramp again: {back:?}");
-        assert!(rs.columns[1].comments.contains("deconvolved by"), "{}", rs.columns[1].comments);
+        assert!(rs.columns[1].comments.starts_with("deconvolution of "), "{}", rs.columns[1].comments);
         assert!(r.message.starts_with("Deconvolution"), "{}", r.message);
 
-        let options = StftOptions { window_len: 4, fft_len: 8, overlap: 2, ..Default::default() };
+        let options =
+            StftOptions { window_len: 4, fft_len: 8, overlap: 2, output: StftOutput::Amplitude, ..Default::default() };
         let r = p.analyze(&request(&[ramp], Tool::Stft(StftSpec { options, auto_interval: true }))).unwrap();
         let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
         assert!(rs.name.starts_with("STFT"), "{}", rs.name);

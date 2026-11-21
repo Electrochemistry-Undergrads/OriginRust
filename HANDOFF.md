@@ -54,13 +54,7 @@ cell gives a missing result, and `rowstats` of an all-empty row leaves every fie
 Pareto, Stem-and-Leaf and Grouped Histogram charts, `NumExtract()`/`NumBreak()`, Distribution Overview
 and life-data analysis, the 2027 sheet-activation item) are at the end of that file.
 
-**D. Possible gaps for battery and electrochemistry figures**, unverified: a keyword search on
-2026-11-20 found no mention of distribution of relaxation times, dQ/dV (incremental capacity),
-Koutecky-Levich, Coulombic efficiency or capacity retention per cycle, Scherrer crystallite size, or
-Randles and Warburg circuit elements in `crates/` or `docs/spec/`. Check each against the code
-and against what Origin offers before writing a brief; none of this has been confirmed as missing.
-
-**E. Waiting for the owner:** the 20 `N` items in [greyed-items.md](docs/tasks/greyed-items.md)
+**D. Waiting for the owner:** the 20 `N` items in [greyed-items.md](docs/tasks/greyed-items.md)
 (Office linking, online help, menu sets, Fit Layer to Graph) stay grey until asked for.
 
 ## Where the detail lives

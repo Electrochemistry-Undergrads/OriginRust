@@ -115,6 +115,8 @@ pub struct ReadSettings {
     pub long_name_line: Option<usize>,
     pub units_line: Option<usize>,
     pub comments_line: Option<usize>,
+    /// Last comments line (T299): lines from `comments_line` to this one are joined.
+    pub comments_to: Option<usize>,
     pub param_lines: Vec<usize>,
     pub short_name_line: Option<usize>,
     pub no_rename_columns: bool,
@@ -178,6 +180,7 @@ impl Default for ReadSettings {
             long_name_line: None,
             units_line: None,
             comments_line: None,
+            comments_to: None,
             param_lines: Vec::new(),
             short_name_line: None,
             no_rename_columns: false,
@@ -316,6 +319,7 @@ impl ReadSettings {
         o.long_name_line = r.long_name_line;
         o.units_line = r.units_line;
         o.comments_line = r.comments_line;
+        o.comments_to = r.comments_to;
         o.param_lines = r.param_lines.clone();
         if r.blocks_as_sheets {
             o.blocks = sheaf_io::ascii::Blocks::Sheets;

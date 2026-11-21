@@ -125,6 +125,7 @@ fn flag_settings(r: &ReadOptions) -> ReadSettings {
         long_name_line: r.long_name_line,
         units_line: r.units_line,
         comments_line: r.comments_line,
+        comments_to: r.comments_to,
         param_lines: r.param_lines.clone(),
         short_name_line: r.short_name_line,
         no_rename_columns: r.no_rename_columns,

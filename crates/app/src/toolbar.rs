@@ -331,7 +331,7 @@ fn build(bar: Bar) -> Vec<Item> {
             b(PanelRight, "Object Manager", Cmd::Panel(PanelId::Objects), "Object Manager"),
             b(LogLines, "Results Log", Cmd::Panel(PanelId::Results), "Results Log"),
             gap(),
-            b(AddColumns, "Add New Columns", Cmd::AddColumns, "Add New Columns"),
+            b(AddColumns, "Add New Columns", Cmd::AddOneColumn, "Add New Columns"),
             gap(),
             b(Sigma, "Statistics on Columns", Cmd::Analyze(AnalysisKind::Statistics), "Statistics on Columns"),
             b(SortUp, "Sort Worksheet Ascending", Cmd::SortAscending, "Ascending"),
@@ -1297,13 +1297,15 @@ mod tests {
                 assert!(button.menu.is_empty(), "{}: tools have no menu entry", button.tip);
                 continue;
             }
+            // Origin's Add New Columns button adds one column where the menu entry asks how many (T305).
+            let wanted = if *cmd == Cmd::AddOneColumn { &Cmd::AddColumns } else { cmd };
             let mut found = false;
             for kind in [WindowKind::None, WindowKind::Workbook, WindowKind::Graph] {
                 for m in menus::bar(kind) {
                     walk(&m.entries, &mut |item| {
                         let name = menus::plain(&item.label);
                         let name = name.trim_end_matches("...");
-                        if name == button.menu && item.cmd.as_ref() == Some(cmd) {
+                        if name == button.menu && item.cmd.as_ref() == Some(wanted) {
                             found = true;
                         }
                     });

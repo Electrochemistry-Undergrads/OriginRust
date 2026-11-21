@@ -600,6 +600,8 @@ pub enum Action {
     FormatObject(crate::object_format::Request),
     NewWorkbook,
     AddColumn(WindowId),
+    /// Column > Add New Columns...: the window that asks how many columns to add (T305).
+    AddColumnsDialog(WindowId),
     DeleteColumns(Vec<ColumnId>),
     /// Column > Move Columns: these columns go to the first or last position or one step left or right.
     MoveColumns {

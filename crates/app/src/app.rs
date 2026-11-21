@@ -307,6 +307,8 @@ pub struct SheafApp {
     find: Option<FindDialog>,
     sort: Option<SortDialog>,
     sheet_name: Option<SheetNameDialog>,
+    /// Add New Columns (T305): the workbook and how many columns to add.
+    add_columns: Option<(WindowId, usize)>,
     /// The text of the last Copy or Cut (the system clipboard has it too).
     copied: String,
     /// The block last copied in Sheaf (columns and rows), for Paste Link (T211).
@@ -482,6 +484,7 @@ impl SheafApp {
             find: None,
             sort: None,
             sheet_name: None,
+            add_columns: None,
             copied: String::new(),
             copied_cells: None,
             paste_transposed: false,
@@ -1016,6 +1019,7 @@ impl SheafApp {
         self.multi_peak = None;
         self.sort = None;
         self.sheet_name = None;
+        self.add_columns = None;
         self.import = None;
         self.import_excel = None;
         self.import_wizard = None;
@@ -2299,12 +2303,8 @@ impl SheafApp {
                     let _ = p.add_column(book, 0, Designation::Y, ColumnData::default());
                 });
             }
-            Action::AddColumn(book) => {
-                self.doc.apply("Add column", |p| {
-                    let sheet = p.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
-                    let _ = p.add_column(book, sheet, Designation::Y, ColumnData::default());
-                });
-            }
+            Action::AddColumn(book) => self.add_columns(book, 1),
+            Action::AddColumnsDialog(book) => self.add_columns = Some((book, 1)),
             Action::DeleteColumns(columns) => {
                 self.doc.apply("Delete columns", |p| delete_columns(p, &columns));
             }
@@ -4170,6 +4170,17 @@ impl SheafApp {
         if locked > 0 {
             self.warn(format!("{locked} column(s) calculated from a formula were left alone"));
         }
+    }
+
+    /// Adds `count` Y columns at the end of the workbook's active sheet in one undo step (T305).
+    fn add_columns(&mut self, book: WindowId, count: usize) {
+        let label = if count == 1 { "Add column" } else { "Add columns" };
+        self.doc.apply(label, |p| {
+            let sheet = p.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
+            for _ in 0..count {
+                let _ = p.add_column(book, sheet, Designation::Y, ColumnData::default());
+            }
+        });
     }
 
     /// Add, insert, delete, duplicate and rename sheets of a workbook (the sheet tab's menu).
@@ -6425,6 +6436,7 @@ impl SheafApp {
             || self.find.is_some()
             || self.sort.is_some()
             || self.sheet_name.is_some()
+            || self.add_columns.is_some()
             || self.about
             || self.message.is_some()
             || self.pending.is_some()
@@ -7434,6 +7446,32 @@ impl SheafApp {
             });
             if done || !open {
                 self.rename = None;
+            }
+        }
+        // T305: Origin's Add New Columns window, how many columns to add.
+        if let Some((book, count)) = &mut self.add_columns {
+            let (book, mut open, mut add) = (*book, true, None);
+            let mut close = false;
+            egui::Window::new("Add New Columns").open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    let label = ui.label("Number of columns to add");
+                    ui.add(egui::DragValue::new(count).range(1..=1000)).labelled_by(label.id);
+                });
+                ui.horizontal(|ui| {
+                    if ui.button("OK").clicked() {
+                        add = Some(*count);
+                        close = true;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        close = true;
+                    }
+                });
+            });
+            if close || !open {
+                self.add_columns = None;
+            }
+            if let Some(n) = add {
+                self.add_columns(book, n);
             }
         }
         if let Some(d) = &mut self.sheet_name {

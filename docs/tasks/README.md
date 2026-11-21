@@ -285,6 +285,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T302](T302-interp-output.md) | Interpolate writes a Y column at the end of the sheet with the grid as sampling interval, as Origin's interp1xy | S | done 2026-11-21 |
 | [T303](T303-opj-sampling.md) | Sampling intervals read from and written to .opj (column record 0x1D2/0x1DA), measured in Origin 2016 | S | done 2026-11-21 |
 | [T304](T304-sampling-x.md) | A column's sampling interval is its X in analysis and every plot (T302 follow-up) | S | done 2026-11-21 |
+| [T305](T305-add-columns-count.md) | Add New Columns... / Ctrl+D ask how many columns; the toolbar button adds one | S | done 2026-11-21 |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |

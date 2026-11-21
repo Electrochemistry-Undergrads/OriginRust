@@ -254,13 +254,18 @@ fn an_axis_at_a_position_stands_where_the_other_axis_has_that_value() {
         (l.y_axis.min, l.y_axis.max) = (Some(0.0), Some(4.0));
     }
     assert!(near(&ys(&p), f.y + f.h), "{:?}", ys(&p));
-    // A value beyond the range stays on the nearer edge; on the top side it is measured from the top.
+    // A value beyond the range puts the axis outside the frame where it would be (Origin 2016, T266):
+    // Y = 3.5 on -1..3 is an eighth of the height above the top, Y = -1.5 an eighth below the bottom.
     {
         let l = &mut p.graph_mut(g).unwrap().layers[0];
         (l.y_axis.min, l.y_axis.max) = (Some(-1.0), Some(3.0));
-        l.x_axis.at_position = Some(10.0);
+        l.x_axis.at_position = Some(3.5);
     }
-    assert!(near(&ys(&p), f.y), "clamped to the top edge: {:?}", ys(&p));
+    let f = geoms(&p, g)[0].frame;
+    assert!(near(&ys(&p), f.y - 0.125 * f.h), "above the top: {:?} {f:?}", ys(&p));
+    p.graph_mut(g).unwrap().layers[0].x_axis.at_position = Some(-1.5);
+    let f = geoms(&p, g)[0].frame;
+    assert!(near(&ys(&p), f.y + 1.125 * f.h), "below the bottom: {:?} {f:?}", ys(&p));
     {
         let l = &mut p.graph_mut(g).unwrap().layers[0];
         l.x_axis.at_position = Some(2.0);

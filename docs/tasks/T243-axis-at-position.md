@@ -19,5 +19,5 @@ ticks" (tick colour and offset exist).
 
 ## Left
 
-- Measure Origin's drawing for values outside the range, and read/write `posType` for At Position in
-  `.opj`; axis end arrows.
+- Read/write `posType` 2 in `.opj`; axis end arrows. (Measured in T266: outside the range the axis is
+  drawn outside the frame, not clamped; fixed.)

@@ -240,6 +240,26 @@ mod tests {
     }
 
     #[test]
+    fn a_selection_writes_what_origin_writes() {
+        // T273, measured in Origin 2016 on 2026-11-21 (re-workspace/scratch/t273): long names LA, LB,
+        // LC, C's unit uC; `worksheet -s 2 2 3 3` then `expASC type:=csv select:=1 [rowlabel:=1]`.
+        let mut s = Worksheet::new("S");
+        s.columns = vec![
+            column(1, "A", ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0, 5.0]), "LA", "", ""),
+            column(2, "B", ColumnData::numeric(vec![10.0, 20.0, 30.0, 40.0, 50.0]), "LB", "", ""),
+            column(3, "C", ColumnData::numeric(vec![100.0, 200.0, 300.0, 400.0, 500.0]), "LC", "uC", ""),
+        ];
+        let run = |opts: &AsciiExportOptions| {
+            let mut buf = Vec::new();
+            write_selection(&s, &[1, 2], 1..3, &mut buf, opts).unwrap();
+            String::from_utf8(buf).unwrap()
+        };
+        assert_eq!(run(&AsciiExportOptions::csv()), "LB,LC\r\n,uC\r\n20,200\r\n30,300\r\n");
+        let labels = AsciiExportOptions { row_labels: true, ..AsciiExportOptions::csv() };
+        assert_eq!(run(&labels), "Long Name,LB,LC\r\nUnits,,uC\r\n2,20,200\r\n3,30,300\r\n");
+    }
+
+    #[test]
     fn a_selection_writes_its_columns_and_rows_with_the_sheets_row_numbers() {
         // T247: expASC's select.
         let s = origin_sheet();

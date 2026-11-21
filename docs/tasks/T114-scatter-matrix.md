@@ -1,6 +1,9 @@
 # T114: Scatter Matrix
 
-**Status:** done 2026-11-16 (Claude macOS "mac-scatter-matrix", graphing.md 35; Origin's documentation only, unmeasured). Built: `Project::plot_scatter_matrix`, template `scatter-matrix`, the options window (Matrix Display Square/Upper/Lower, Histogram or nothing on the diagonal, names, gap), CLI `--matrix-*`, MCP `matrix_*`. Left: Origin 2016 measurements (page, frames, symbols, tick label placement, diagonal text), Mixed display, box/distribution diagonals, Show Tick and Label modes, confidence ellipse, linear fit and its statistics labels, significance marks, grouping, listwise missing values, recalculation from the dialog.
+**Status:** done 2026-11-16 (Claude macOS "mac-scatter-matrix", graphing.md 35); measured against Origin 2016 and
+matched by T313 (2026-11-21): landscape page, 8 %/5 % margins with 87/n % cells, tick labels on every outer side
+(All), names as axis titles, blue size-9 squares, a range/4 two-digit tick step. Left: Origin's axis-limit rule,
+its triangular layouts, box charts on the diagonal, the other Show Tick and Label modes, ellipse, fit, statistics.
 **Size:** M. **Source:** greyed inventory package B4 (Plot > Statistics > Scatter Matrix).
 **Spec:** `docs/spec/graphing.md` section 35.
 

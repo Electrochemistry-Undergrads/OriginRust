@@ -116,7 +116,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T111](T111-qc-chart.md) | Plot > Statistics: QC (X bar R) Chart | M | done 2026-11-16 (graphing 33); left: hatched band, statistics table, Num Sigma |
 | [T112](T112-zoom-plot.md) | Plot > Specialized > Zoom | M | done 2026-11-16 (graphing 34); left: curve over the region |
 | [T113](T113-wind-rose.md) | Plot > Specialized > Wind Rose (Binned Data, Raw Data) | M | done 2026-11-16 (graphing 36), not measured (Origin COM unregistered); left: measure and match |
-| [T114](T114-scatter-matrix.md) | Plot > Statistics > Scatter Matrix (B4 slice) | M | done 2026-11-16 (`scatter-matrix`, graphing 35, Origin docs only, unmeasured); left: Mixed display, box/distribution diagonals, tick modes, ellipse, linear fit, grouping, listwise missing |
+| [T114](T114-scatter-matrix.md) | Plot > Statistics > Scatter Matrix (B4 slice) | M | done 2026-11-16 (`scatter-matrix`, graphing 35, measured by T313); left: Mixed display, box/distribution diagonals, tick modes, ellipse, linear fit, grouping, listwise missing |
 | [T115](T115-smith-chart.md) | Plot > Specialized > Smith Chart | M | done 2026-11-16 (graphing 37), not measured (Origin COM unregistered); left: measure and match |
 | [T116](T116-kernel-density-2d.md) | Plot > Statistics > 2D Kernel Density | M | done 2026-11-16 (graphing 38); grid and bandwidths measured and matched by T289; left: contour drawing, points shown, method choice |
 | [T117](T117-piper.md) | Plot > Specialized > Piper | M | done 2026-11-16 (graphing 39), not measured (Origin COM unregistered); left: measure and match |
@@ -293,8 +293,10 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T308](T308-probplot-measure.md) | Measure Probability Plot against Origin (scores, estimates, reference line, band for every family) | S | done 2026-11-21 (statistics 16.2a) |
 | [T309](T309-add-param-row.md) | Sheet corner menu: Add User Parameter Row... | S | done 2026-11-21 |
 | [T310](T310-param-row-edit.md) | Rename and delete a user parameter row from its title | S | done 2026-11-21 |
+| [T314](T314-sig-digits.md) | Significant and Scientific displays measured in Origin 2016 and copied (326 of 328 cells) | S | done 2026-11-21 |
 | [T311](T311-qqplot-measure.md) | Measure Q-Q Plot against Origin (expected values, y = x line ends, band) | S | done 2026-11-21 (statistics 16.2a) |
 | [T312](T312-import-nonnum.md) | Text import: text in a numeric column read as text, stop, new sheet or new columns (NonNum), as Origin 2016 | S | done 2026-11-21, measured |
+| [T313](T313-scatter-matrix-measure.md) | Measure Scatter Matrix against Origin (page, grid, tick labels, titles, symbols, tick step) | S | done 2026-11-21 (graphing 35) |
 | [T315](T315-import-two-digit-years.md) | Text import: two-digit years (M/d/yy, dd.MM.yy, dd-MMM-yy) with Origin 2016's 00-44 window | S | done 2026-11-21, measured |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |

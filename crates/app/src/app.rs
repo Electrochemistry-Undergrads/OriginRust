@@ -269,6 +269,10 @@ pub struct SheafApp {
     /// Window > Duplicate (Batch Plotting).
     batch_plot: Option<crate::dialogs::batch_plot::BatchPlotDialog>,
     qc_chart: Option<crate::dialogs::qc_chart::QcDialog>,
+    /// Plot > Statistics > Grouped Histogram's window (T271).
+    grouped_hist: Option<crate::dialogs::grouped_hist::GroupedHistDialog>,
+    /// Plot > Statistics > Run Chart's window (T270).
+    run_chart: Option<crate::dialogs::run_chart::RunChartDialog>,
     function_graph: Option<crate::dialogs::function_graph::FunctionGraphDialog>,
     /// The open function window is File > New > Function Plot's: OK makes the graph (T213).
     function_graph_new: bool,
@@ -451,6 +455,8 @@ impl SheafApp {
             find_spec: Default::default(),
             batch_plot: None,
             qc_chart: None,
+            grouped_hist: None,
+            run_chart: None,
             function_graph: None,
             function_graph_new: false,
             audit_log: false,
@@ -2622,6 +2628,29 @@ impl SheafApp {
                 }
             }
             Action::PlotColumns { book, columns, template } => self.plot_columns(book, columns, template),
+            Action::GroupedHistogram { book, columns } => {
+                match crate::dialogs::grouped_hist::GroupedHistDialog::new(self.doc.project(), book, &columns) {
+                    Some(d) => self.grouped_hist = Some(d),
+                    None => self.warn("A grouped histogram needs a numeric column and a group column".to_string()),
+                }
+            }
+            Action::RunChart { book, columns } => {
+                let project = self.doc.project();
+                let numeric = |id: &ColumnId| project.column(*id).is_some_and(|c| c.data.is_numeric());
+                let column = columns.iter().copied().find(numeric).or_else(|| {
+                    let b = project.workbook(book)?;
+                    b.sheets
+                        .get(b.active_sheet)?
+                        .columns
+                        .iter()
+                        .find(|c| c.designation == sheaf_core::Designation::Y && c.data.is_numeric())
+                        .map(|c| c.id)
+                });
+                match column.and_then(|c| crate::dialogs::run_chart::RunChartDialog::new(project, c)) {
+                    Some(d) => self.run_chart = Some(d),
+                    None => self.warn("Select a numeric column for the run chart".to_string()),
+                }
+            }
             Action::PlotLineSeries { book, columns } => self.plot_line_series(book, columns),
             Action::PlotYError { book, columns, x } => self.plot_y_error(book, columns, x),
             Action::PlotPanels { book, columns, rows, cols } => self.plot_panels(book, columns, rows, cols),
@@ -4712,6 +4741,50 @@ impl SheafApp {
         }
     }
 
+    /// Plot > Statistics > Run Chart's window (T270): OK makes the workbook and graph, one undo step.
+    fn show_run_chart(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::run_chart::RunChartOutcome;
+        let Some(d) = &mut self.run_chart else { return };
+        let (column, size, stat, points) = match d.show(ctx) {
+            RunChartOutcome::Open => return,
+            RunChartOutcome::Closed => {
+                self.run_chart = None;
+                return;
+            }
+            RunChartOutcome::Make { column, size, stat, points } => (column, size, stat, points),
+        };
+        self.run_chart = None;
+        match self.doc.edit("Run Chart", |p| p.plot_run_chart(column, size, stat, points)) {
+            Ok((_, graph)) => {
+                self.focus(graph);
+                self.say(format!("Made a run chart in subgroups of {size}"));
+            }
+            Err(e) => self.warn(e.to_string()),
+        }
+    }
+
+    /// Plot > Statistics > Grouped Histogram's window (T271): OK makes the workbook and graph, one undo step.
+    fn show_grouped_hist(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::grouped_hist::GroupedHistOutcome;
+        let Some(d) = &mut self.grouped_hist else { return };
+        let (data, group, separate) = match d.show(ctx) {
+            GroupedHistOutcome::Open => return,
+            GroupedHistOutcome::Closed => {
+                self.grouped_hist = None;
+                return;
+            }
+            GroupedHistOutcome::Make { data, group, separate } => (data, group, separate),
+        };
+        self.grouped_hist = None;
+        match self.doc.edit("Grouped Histogram", |p| p.plot_grouped_histogram(data, group, separate)) {
+            Ok((_, graph)) => {
+                self.focus(graph);
+                self.say("Made a grouped histogram".to_string());
+            }
+            Err(e) => self.warn(e.to_string()),
+        }
+    }
+
     /// Plot > Statistics > Scatter Matrix's options (T114): OK makes the graph, one undo step.
     fn show_scatter_matrix(&mut self, ctx: &egui::Context) {
         use crate::dialogs::scatter_matrix::ScatterMatrixOutcome;
@@ -5499,7 +5572,10 @@ impl SheafApp {
     fn open_analysis(&mut self, book: WindowId, columns: Vec<ColumnId>, kind: AnalysisKind) {
         let project = self.doc.project();
         // The proportion tests read no data: one column of the sheet only says where the results go.
-        let host_only = matches!(kind, AnalysisKind::PropTestOne | AnalysisKind::PropTestTwo);
+        let host_only = matches!(
+            kind,
+            AnalysisKind::PropTestOne | AnalysisKind::PropTestTwo | AnalysisKind::PoissonOne | AnalysisKind::PoissonTwo
+        );
         let columns: Vec<ColumnId> = if host_only {
             let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
             let all = project.workbook(book).and_then(|b| b.sheets.get(sheet)).map(|s| &s.columns);
@@ -7105,6 +7181,8 @@ impl SheafApp {
         self.show_find_project(ctx);
         self.show_batch_plot(ctx);
         self.show_qc_chart(ctx);
+        self.show_grouped_hist(ctx);
+        self.show_run_chart(ctx);
         self.show_function_graph(ctx);
         self.show_audit_log(ctx);
         self.show_fit_builder(ctx);

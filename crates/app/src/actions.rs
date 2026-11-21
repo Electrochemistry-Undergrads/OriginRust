@@ -845,6 +845,17 @@ pub enum Action {
         columns: Vec<ColumnId>,
         template: Template,
     },
+    /// Plot > Statistics > Grouped Histogram... (T271): its window for the active sheet of `book`.
+    GroupedHistogram {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
+    /// Plot > Statistics > Run Chart... (T270): its window for the selected numeric column (else the
+    /// sheet's first numeric Y column).
+    RunChart {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
     /// Plot > Line + Symbol > Line Series: one plot of the rows of the selected Y columns, k-point segments.
     PlotLineSeries {
         book: WindowId,

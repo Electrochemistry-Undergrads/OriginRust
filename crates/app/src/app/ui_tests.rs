@@ -4535,6 +4535,8 @@ fn the_hypothesis_testing_menu_runs_the_variance_and_proportion_tests() {
         ("Two-Sample Test for Variance...", "VarTest", "F", true),
         ("One-Sample Proportion Test...", "PropTest", "Z", false),
         ("Two-Sample Proportion Test...", "PropTest", "Z", false),
+        ("One-Sample Poisson Rate Test...", "PoissonRate", "Z", false),
+        ("Two-Sample Poisson Rate Test...", "PoissonRate", "Z", false),
     ];
     for (item, sheet, column, has_input) in cases {
         let mut h = start(vec![data_file("vartest-menu")]);
@@ -9370,4 +9372,57 @@ fn window_properties_keep_comments_with_undo() {
     click(&mut h, "Cancel");
     menu(&mut h, "Edit", "Undo Rename window");
     assert_eq!(project(&h).window_comments(book), "");
+}
+
+/// Plot > Statistics > Run Chart... (T270) opens its window for the selected column; OK makes the
+/// RunChart workbook and graph in one undo step.
+#[test]
+fn plot_statistics_run_chart_makes_its_workbook_and_graph() {
+    let mut h = start(vec![data_file("run-chart")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let graphs = project(&h).graphs().count();
+    let mut listed = false;
+    for m in menus::bar(menus::WindowKind::Workbook) {
+        menus::walk(&m.entries, &mut |i| listed |= i.cmd == Some(menus::Cmd::RunChart));
+    }
+    assert!(listed, "Plot > Statistics lists Run Chart...");
+    let ctx = h.ctx.clone();
+    let action = menus::resolve(&menus::Cmd::RunChart, &h.state().menu_context()).unwrap();
+    h.state_mut().apply(action, &ctx);
+    settle(&mut h);
+    let d = h.state_mut().run_chart.as_mut().expect("the Run Chart window is open");
+    d.size = 2;
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().run_chart.is_none());
+    assert_eq!(project(&h).graphs().count(), graphs + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Run Chart"));
+    let g = project(&h).graphs().last().unwrap();
+    assert_eq!(g.layers[0].straight_lines.len(), 1, "the reference line");
+    assert!(project(&h).workbooks().any(|b| b.name.starts_with("RunChart")));
+}
+
+/// Plot > Statistics > Grouped Histogram... (T271) opens its window for the active sheet; OK makes the
+/// GroupedHist workbook and a graph with a histogram per group, one undo step.
+#[test]
+fn plot_statistics_grouped_histogram_makes_one_histogram_per_group() {
+    let path = csv_file("grouped-hist", "groups", "value,group\n1,a\n2,b\n3,a\n4,b\n5,a\n6,b\n7,a\n8,b\n");
+    let mut h = start(vec![path]);
+    let ctx = h.ctx.clone();
+    show_window(&mut h, "Book1 - groups.csv");
+    let mut listed = false;
+    for m in menus::bar(menus::WindowKind::Workbook) {
+        menus::walk(&m.entries, &mut |i| listed |= i.cmd == Some(menus::Cmd::GroupedHistogram));
+    }
+    assert!(listed, "Plot > Statistics lists Grouped Histogram...");
+    let action = menus::resolve(&menus::Cmd::GroupedHistogram, &h.state().menu_context()).unwrap();
+    h.state_mut().apply(action, &ctx);
+    settle(&mut h);
+    let d = h.state().grouped_hist.as_ref().expect("the Grouped Histogram window is open");
+    assert_ne!(d.data, d.group);
+    click(&mut h, "OK");
+    assert!(h.state().grouped_hist.is_none());
+    assert_eq!(h.state().doc.undo_label(), Some("Grouped Histogram"));
+    let g = project(&h).graphs().last().unwrap();
+    assert_eq!(g.layers[0].plots.len(), 2, "a histogram per group");
 }

@@ -3165,6 +3165,48 @@ with the right axis 0..110 in percent labels, title "Cumulative Frequency", blue
 grouped intervals, Scatter Interval, Pareto binned data, groups, drop lines at 80, count table, combine small categories,
 and a measurement of all of it in Origin 2016.
 
+### 14.30 Run chart (T270)
+
+Use: Plot > Statistics > Run Chart... with a numeric column selected (else the sheet's first numeric Y
+column). Origin added it in 2025b (`plot_runchart`, also in 2026's Graph Maker); OriginLab's help page
+[W: docs.originlab.com/origin-help/run-chart] was the source, and Origin 2016 has no run chart, so
+nothing here is measured.
+
+- **Documented:** subgroups of one column by a size (or by a reference column, or each row of several
+  columns: not built); the mean or median of each subgroup as a Line+Scatter plot over the sequence;
+  optional individual data points at their subgroup; a horizontal dashed line at the mean or median of
+  the whole input as the reference. Template Runchart; the statistics table on the graph is not built.
+- **Sheaf's choices** (`crates/core/src/runchart.rs`, window `dialogs/run_chart.rs`): Subgroup Size 1
+  by default (each value is its own subgroup), Connect Mean or Median (Mean), Show Individual Data
+  Points on. Subgroups are consecutive rows; missing values are left out and an empty subgroup has no
+  point; the last subgroup may be shorter. A new workbook `RunChart<n>` gets Subgroup (X), Mean or
+  Median (Y) and, with the points, Point Subgroup (X) and Data (Y); the graph `RunChart<n>` shows the
+  statistic as black squares joined by a black line, the values as small grey circles, X from 0 to
+  the number of subgroups + 1 (a tick per subgroup up to 20), X title "Subgroup", Y title the source
+  column, and a blue dashed straight line at the statistic of all values, labelled
+  "Mean = 5.5" (four significant digits) right of the frame. One undo step ("Run Chart").
+
+### 14.31 Grouped histogram (T271)
+
+Use: Plot > Statistics > Grouped Histogram... on a worksheet. Origin 2026 added it as Plot > Categorical:
+Grouped Histogram (`plot_ghist`); OriginLab's help page [W: docs.originlab.com/origin-help/grouped-histogram]
+was the source, and Origin 2016 has no such plot, so nothing here is measured.
+
+- **Documented:** a Y column (optionally with Y error) and at least one group column; Multiple Data
+  "Overlay on Same Graph", "Separate Layers on Same Graph" or "Separate Graphs"; Split Data by a label
+  row; panels by group columns; Split Pages; Share Y; Share X and Bins; a distribution curve (with
+  Hide Bins); Data Height; the Hist template; output to graphs or a report sheet.
+- **Sheaf's choices** (`crates/core/src/grouped_hist.rs`, window `dialogs/grouped_hist.rs`): one group
+  column; the window offers Data (the first selected numeric column, else the first numeric Y column),
+  Group (the first other selected column, else the first text column, else the first X column) and
+  Overlay on Same Graph (default) or Separate Layers on Same Graph. The group's levels are sorted as for
+  the grouped box charts (numbers numerically, else text order; empty cells and missing values left
+  out). Each level's values go to a column of a new workbook `GroupedHist<n>` whose long name is the
+  level (so the legend names the groups). Overlay is the Histogram graph of those columns in one layer;
+  Separate Layers is their Stacked Histograms graph. The bins are shared (the usual rule for all the
+  values together). One undo step ("Grouped Histogram"). Separate Graphs, panels, pages, distribution
+  curves and data height are not built.
+
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
 Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin. Where the current online help **[W]** and Origin disagree, Origin decides.

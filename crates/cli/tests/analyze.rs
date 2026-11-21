@@ -925,6 +925,13 @@ fn ttest_anova_normality_and_histogram_run_from_the_command_line() {
     assert!(ok, "{err}");
     assert!(out.contains("Shapiro-Wilk W"), "{out}");
 
+    // T279: the stem-and-leaf display, its leaf unit in the notes; a bad unit is refused.
+    let (ok, out, err) = sheaf(&["analyze", "stemleaf", file, "--y", "untreated", "--leaf-unit", "0.1", "--split"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("leaf unit 0.1") && out.contains("StemLeaf"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "stemleaf", file, "--y", "untreated", "--leaf-unit=-1"]);
+    assert!(!ok && err.contains("leaf unit"), "{err}");
+
     let (ok, out, err) = sheaf(&[
         "analyze",
         "histogram",

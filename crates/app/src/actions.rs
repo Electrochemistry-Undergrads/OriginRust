@@ -602,6 +602,15 @@ pub enum Action {
     FormatObject(crate::object_format::Request),
     NewWorkbook,
     AddColumn(WindowId),
+    /// Right-click on a user parameter row's title (T310): rename it (opens the name window) or delete it.
+    RenameParamRow {
+        book: WindowId,
+        name: String,
+    },
+    DeleteParamRow {
+        book: WindowId,
+        name: String,
+    },
     /// A sheet tab dragged onto another tab (T306): sheet `from` moves to position `to`.
     MoveSheet {
         book: WindowId,

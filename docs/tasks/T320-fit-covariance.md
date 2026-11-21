@@ -19,11 +19,11 @@ covariance diagonal against Origin's standard errors and the correlation matrix 
 
 - Origin's report layout (row headers in a report tree) is not copied; the global fit's combined table has no
   matrices.
-- MCP `fit` tool does not take the two switches yet.
 
 ## Tests
 
 - `crates/fit/src/report.rs`: `correlation_divides_by_the_standard_deviations_and_blanks_fixed_parameters`.
 - `crates/core/src/fitting.rs`: `covariance_and_correlation_matrices_match_origin_2016_and_are_off_by_default`.
 - `crates/cli/tests/fit.rs`: `covariance_and_correlation_matrices_go_to_the_parameter_sheet`.
+- `crates/mcp/tests/executor.rs`: `the_fit_tool_adds_the_covariance_and_correlation_matrices_on_request` (MCP `fit` takes `covariance_matrix`, `correlation_matrix`).
 - `crates/app/src/app/ui_tests.rs`: `the_fit_window_offers_direct_weighting_and_the_scale_errors_switch` (the boxes).

@@ -49,7 +49,7 @@ Stepping. `Fitter::new` prepares the fit, `step` makes one iteration of the abov
 - Covariance and correlation matrices (T320): Origin's Fit Parameters options "Covariance Matrix" and "Correlation
   Matrix". Origin 2016's report made by `nlbegin ... nlfit; nlend output:=1` has neither table (measured 2026-11-21 on a
   Gauss fit, `re-workspace/scratch/t320/`), so both are off by default (`FitRequest::covariance_matrix`,
-  `correlation_matrix`; NLFit window Advanced > Quantities; CLI `--covariance`, `--correlation`). When on, the
+  `correlation_matrix`; NLFit window Advanced > Quantities; CLI `--covariance`, `--correlation`; MCP `fit` `covariance_matrix`, `correlation_matrix`). When on, the
   parameter sheet gets one column per parameter for each matrix, after "Fixed": long name = the parameter, comment
   "Covariance" or "Correlation", rows in parameter order. The covariance is the matrix above (scaled as the errors
   are; zero rows and columns for a fixed parameter); correlation `C_ij / sqrt(C_ii C_jj)`, 1 on the diagonal, blank

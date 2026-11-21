@@ -269,6 +269,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T284](T284-image-median.md) | Image > Spatial Filters > Median as Origin 2016 imgMedian | S | done 2026-11-21, measured |
 | [T285](T285-image-edge.md) | Image Edge Detection as Origin 2016 imgEdge: binary map, Sobel/Prewitt, threshold | S | done 2026-11-21, measured |
 | [T286](T286-explorer-multiselect.md) | Project Explorer: Ctrl+click, Shift+click and Ctrl+A highlight several windows; Delete, Show, Hide and drag act on them | S | done 2026-11-21 |
+| [T287](T287-fft2-measure.md) | Matrix 2D FFT measured against Origin 2016 fft2 (numpy conventions match); Power sheet added | S | done 2026-11-21, measured |
 | [T288](T288-explorer-search.md) | Project Explorer search box (name, long name, comments; Subfolders) | S | done 2026-11-21 |
 | [T289](T289-kde2d-measure.md) | Measure 2D Kernel Density against Origin (32 x 32 grid, Rule of Thumb, Bivariate) | S | done 2026-11-21 (graphing 38) |
 | [T291](T291-axis-title-rotation.md) | Axis title Rotate (deg.) and Offset (pt), turned about its middle as measured in Origin 2016 | S | done 2026-11-21 |

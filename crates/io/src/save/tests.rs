@@ -463,17 +463,16 @@ fn a_project_without_data_reloads_with_its_columns_and_no_values_in_both_formats
 }
 
 #[test]
-fn window_comments_need_the_companion() {
-    // T249: an .opj does not keep Window Properties' Comments; the companion does.
+fn window_comments_of_books_go_in_the_opj_itself() {
+    // T283 (was T249's companion): an .opj keeps a workbook's Comments in its label, as Origin does,
+    // so no warning and no companion are needed for them.
     let dir = scratch("window-comments");
     let opj = dir.join("lab.opj");
     let mut p = workbook_project();
     let book = p.windows[0].id();
     p.set_window_comments(book, "calibrated");
     let out = save_project(&p, &opj).unwrap();
-    assert!(out.warnings.iter().any(|w| w.contains("Window comments")), "{:?}", out.warnings);
-    assert!(out.companion.is_some());
+    assert!(!out.warnings.iter().any(|w| w.contains("Window comments")), "{:?}", out.warnings);
     let opened = open_project(&opj).unwrap();
-    assert!(opened.companion_used);
     assert_eq!(opened.project.window_comments(opened.project.windows[0].id()), "calibrated");
 }

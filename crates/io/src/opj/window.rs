@@ -64,6 +64,9 @@ pub(crate) struct Window {
     pub name: String,
     /// First line of the window label (the long name).
     pub label: String,
+    /// The rest of the label after the first CR LF: the window's Comments (Window Properties), as
+    /// Origin 2016 writes them (T283, measured).
+    pub comments: String,
     pub layers: Vec<WinLayer>,
     /// The window header block (rectangle, state).
     pub header: Vec<u8>,
@@ -95,6 +98,7 @@ fn scan_one<R: Read + Seek>(f: &mut Frames<R>) -> FrameResult<Option<Window>> {
     }
     let name = field_text(&header, WIN_NAME_AT, WIN_NAME_WIDTH);
     let label = window_label(&header);
+    let comments = window_comments(&header);
     let mut layers = Vec::new();
     loop {
         let layer_header = f.block()?;
@@ -136,7 +140,7 @@ fn scan_one<R: Read + Seek>(f: &mut Frames<R>) -> FrameResult<Option<Window>> {
         }
         layers.push(WinLayer { name, header: layer_header, annotations, columns, axes });
     }
-    Ok(Some(Window { name, label, layers, header }))
+    Ok(Some(Window { name, label, comments, layers, header }))
 }
 
 /// The long name of a window: the first line of its label, without the storage tail.
@@ -147,6 +151,21 @@ fn window_label(header: &[u8]) -> String {
     let text = field_text(header, WIN_LABEL_AT, header.len() - WIN_LABEL_AT);
     let visible = visible_part(&text);
     visible.split(['\r', '\n']).next().unwrap_or("").to_string()
+}
+
+/// The Comments of a window: its label after the first CR LF (the long name comes before it),
+/// without the storage tail. Measured in Origin 2016 (T283): `Book1\r\nfirst comment` for a book,
+/// `\r\nnote` for a window without a long name; line breaks inside come back as `\n`.
+fn window_comments(header: &[u8]) -> String {
+    if header.len() <= WIN_LABEL_AT {
+        return String::new();
+    }
+    let text = field_text(header, WIN_LABEL_AT, header.len() - WIN_LABEL_AT);
+    let visible = visible_part(&text);
+    match visible.find("\r\n") {
+        Some(at) => visible[at + 2..].replace("\r\n", "\n"),
+        None => String::new(),
+    }
 }
 
 /// Blocks up to this size are kept for graph reading; larger ones (embedded storage of
@@ -306,5 +325,18 @@ mod tests {
         assert_eq!(c.designation, 0);
         assert_eq!(window_label(&[0; 10]), "");
         assert_eq!(window_label(&[]), "");
+        assert_eq!(window_comments(&[]), "");
+    }
+
+    #[test]
+    fn the_label_holds_the_long_name_then_the_comments() {
+        // T283: as Origin 2016 writes them (re-workspace/scratch/t282/wc3.opj).
+        let book = window_header("BKA", "BKA\r\nZQXbookA@${[0|4|Script|119|1137941886]}<OriginStorage>");
+        assert_eq!((window_label(&book), window_comments(&book)), ("BKA".into(), "ZQXbookA".into()));
+        let matrix = window_header("MXA", "\r\nZQXmatrix");
+        assert_eq!((window_label(&matrix), window_comments(&matrix)), (String::new(), "ZQXmatrix".into()));
+        let two = window_header("G", "Long\r\nfirst\r\nsecond");
+        assert_eq!(window_comments(&two), "first\nsecond");
+        assert_eq!(window_comments(&window_header("G", "Only a long name")), "");
     }
 }

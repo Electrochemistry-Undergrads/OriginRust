@@ -50,6 +50,8 @@ pub struct OpjImport {
     pub folders: Vec<OpjFolder>,
     /// Plain-English notes about what was skipped or could not be read.
     pub warnings: Vec<String>,
+    /// The Comments (Window Properties) of the windows, by window name (T283).
+    pub comments: Vec<(String, String)>,
 }
 
 /// A folder of the project explorer as the file lists it.
@@ -121,6 +123,11 @@ impl OpjImport {
             by_name.insert(file_name, id);
         }
         project.root.folders = self.folders.iter().map(|f| f.to_core(&by_name)).collect();
+        for (name, text) in &self.comments {
+            if let Some(id) = by_name.get(name) {
+                project.set_window_comments(*id, text);
+            }
+        }
         project
     }
 }
@@ -243,7 +250,9 @@ pub fn read_opj_from<R: Read + Seek>(reader: R, path: &Path) -> Result<OpjImport
     if workbooks.is_empty() {
         b.warnings.push("The project holds no workbook data (only graphs, matrices or empty workbooks).".to_string());
     }
-    Ok(OpjImport { workbooks, graphs, version, signature, folders, warnings: b.warnings })
+    let comments =
+        windows.iter().filter(|w| !w.comments.is_empty()).map(|w| (w.name.clone(), w.comments.clone())).collect();
+    Ok(OpjImport { workbooks, graphs, version, signature, folders, warnings: b.warnings, comments })
 }
 
 /// The version number stored in the header block, as `9.3`.

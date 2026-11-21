@@ -60,6 +60,26 @@ fn graph_with(p: &mut Project, template: Template, plots: &[(usize, usize)], f: 
     f(p.graph_mut(id).unwrap());
 }
 
+#[test]
+fn window_comments_go_in_the_label_after_the_long_name() {
+    // T283: Origin 2016 writes `long name CR LF comments` in a window's label.
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| g.long_name = "Fig".into());
+    let book = p.workbooks().next().unwrap().id;
+    let graph = p.graphs().next().unwrap().id;
+    p.set_window_comments(book, "raw data\nday 2");
+    p.set_window_comments(graph, "for the paper");
+    let out = write_named(&p, "g", TIME).unwrap();
+    let has = |pat: &[u8]| out.bytes.windows(pat.len()).any(|w| w == pat);
+    assert!(has(b"\r\nraw data\r\nday 2"), "the book's comments, CR LF inside");
+    assert!(has(b"Fig\r\nfor the paper"));
+    assert!(!out.warnings.iter().any(|w| w.contains("omment")), "{:?}", out.warnings);
+    let q = read(&out.bytes).into_project();
+    let (b, g) = (q.workbooks().next().unwrap().id, q.graphs().next().unwrap().id);
+    assert_eq!((q.window_comments(b), q.window_comments(g)), ("raw data\nday 2", "for the paper"));
+    assert_eq!(q.graphs().next().unwrap().long_name, "Fig");
+}
+
 fn read(bytes: &[u8]) -> OpjImport {
     read_opj_from(Cursor::new(bytes.to_vec()), Path::new("g.opj")).unwrap()
 }

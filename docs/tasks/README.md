@@ -265,6 +265,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T280](T280-gray-measure.md) | Color to Gray with Origin 2016's imgC2gray weights (2R+5G+B)/8 | S | done 2026-11-21, measured |
 | [T281](T281-axis-token-options.md) | Axis-title token options (`%(?Y,@LL)` and the others) measured in Origin 2016 and copied | S | done 2026-11-21 |
 | [T282](T282-resize-measure.md) | Image Resize: Nearest (Origin 2016 default) or Bilinear; Crop checked | S | done 2026-11-21, measured |
+| [T283](T283-opj-window-comments.md) | Window comments read from and written to .opj (label after the long name), measured in Origin 2016 | S | done 2026-11-21 |
 | [T284](T284-image-median.md) | Image > Spatial Filters > Median as Origin 2016 imgMedian | S | done 2026-11-21, measured |
 | [T285](T285-image-edge.md) | Image Edge Detection as Origin 2016 imgEdge: binary map, Sobel/Prewitt, threshold | S | done 2026-11-21, measured |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |

@@ -238,6 +238,14 @@ fn build(bytes: &[u8], path: &Path) -> Result<(OpjImport, Summary), IoError> {
          and every window is in the root folder."
             .to_string(),
     );
-    let import = OpjImport { workbooks, graphs: Vec::new(), version, signature, folders: Vec::new(), warnings };
+    let import = OpjImport {
+        workbooks,
+        graphs: Vec::new(),
+        version,
+        signature,
+        folders: Vec::new(),
+        warnings,
+        comments: Vec::new(),
+    };
     Ok((import, summary))
 }

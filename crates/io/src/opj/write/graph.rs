@@ -258,7 +258,7 @@ impl Writer {
             self.notes.graph_notes.push(format!("Graph '{}' has no layer and was not written.", graph.name));
             return Ok(());
         }
-        let label = self.label_text(&graph.long_name, "graph long name")?;
+        let label = self.window_label(&graph.long_name, "graph long name")?;
         let name = graph.name.clone();
         let mut notes: Vec<String> = Vec::new();
         let (pw, ph) = (units(graph.page.width_pt).round(), units(graph.page.height_pt).round());

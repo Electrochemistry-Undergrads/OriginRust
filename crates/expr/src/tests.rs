@@ -1283,3 +1283,32 @@ fn hour_minute_and_second_of_a_date_time_number() {
     assert_eq!(ev("second(date(2020,1,1)+0.9999999)"), 59.991);
     assert_eq!((ev("hour(na())"), ev("second(na())")), (-1.0, -1.0), "T262: -1 as Origin");
 }
+
+/// Text result of a formula.
+fn ev_text(src: &str) -> String {
+    let v = Expr::parse(src).unwrap_or_else(|e| panic!("{src}: {e}")).eval_values(&SimpleHost::new(), 1).unwrap();
+    v.into_iter().next().map(crate::Value::into_text).unwrap_or_default()
+}
+
+#[test]
+fn numextract_and_numbreak_follow_origins_reference() {
+    // T265: OriginLab's NumExtract and NumBreak pages (Origin 2026 SR1), their examples.
+    assert_eq!(ev_text(r#"numextract("1-413-586-2013",2)"#), "413");
+    assert_eq!(ev_text(r#"numextract("1-413-586-2013",0)"#), "2013", "0 is the last run");
+    assert_eq!(ev_text(r#"NumExtract("Jan-12")"#), "12", "a - is not a minus sign");
+    assert_eq!(ev_text(r#"NumExtract("abcd12,343")"#), "12");
+    assert_eq!(ev_text(r#"NumExtract("abcd12,343", 1, 1)"#), "12,343", "decimal 1: the comma joins");
+    assert_eq!(ev_text(r#"numextract("v1.25x")"#), "1.25", "the period between digits joins");
+    assert_eq!(ev_text(r#"numextract("abc", 1)"#), "", "no run: empty text");
+    assert_eq!(ev_text(r#"numextract("a1b2", 3)"#), "");
+    assert_eq!(ev(r#"value(numextract("T=37.5 C"))"#), 37.5);
+    assert_eq!(ev(r#"Numbreak("Jan-12")"#), 5.0);
+    assert_eq!(ev(r#"Numbreak("Club45North")"#), 5.0);
+    assert_eq!(ev(r#"Numbreak("Club45North", 5)"#), 7.0);
+    assert_eq!(ev(r#"Numbreak("Club45North", 3)"#), 5.0);
+    assert_eq!(ev(r#"Numbreak("Club45North", 7)"#), 0.0, "no change to the end");
+    assert_eq!(ev(r#"NumBreak("abcd12,3", 5)"#), 7.0);
+    // The page says -1 here but 0 in its Return section; Sheaf gives 0, as for every other run.
+    assert_eq!(ev(r#"NumBreak("abcd12,343", 5, 1)"#), 0.0);
+    assert_eq!(ev(r#"numbreak("abc", 9)"#), 0.0, "an offset past the end");
+}

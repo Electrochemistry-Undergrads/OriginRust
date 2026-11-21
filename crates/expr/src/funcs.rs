@@ -180,6 +180,8 @@ static TABLE: &[(&str, Func)] = &[
     ("lower", Func::Str(StrFn::Lower)),
     ("trim", Func::Str(StrFn::Trim)),
     ("find", Func::Str(StrFn::Find)),
+    ("numextract", Func::Str(StrFn::NumExtract)),
+    ("numbreak", Func::Str(StrFn::NumBreak)),
     ("search", Func::Str(StrFn::Search)),
     ("replace", Func::Str(StrFn::Replace)),
     ("substitute", Func::Str(StrFn::Substitute)),

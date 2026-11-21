@@ -1833,6 +1833,24 @@ type PlaceTitle<'a> = dyn Fn(&mut Vec<Item>, &str, &Font, (f64, f64), f64) + 'a;
 
 /// X title, centred on the frame, `0.6 * size` beyond the labels' outer edge `labels_edge`.
 #[allow(clippy::too_many_arguments)]
+/// Where a title placed at `pos` (the middle of its baseline) with the default angle `default_deg`
+/// goes, and at which angle, once the axis' rotation and offset are applied (T291): it turns about
+/// its own middle, as Origin turns a title, then moves by the offset.
+pub(crate) fn turned_title(axis: &Axis, pos: (f64, f64), default_deg: f64) -> ((f64, f64), f64) {
+    let angle = axis.title_rotation_deg.filter(|a| a.is_finite()).unwrap_or(default_deg);
+    // From the baseline to the middle of the letters, along "up" of the text (y grows downwards).
+    let half = 0.5 * (ASCENT - DESCENT) * axis.title_font.size_pt;
+    let up = |deg: f64| {
+        let (sin, cos) = deg.to_radians().sin_cos();
+        (-sin, -cos)
+    };
+    let (u0, u1) = (up(default_deg), up(angle));
+    let middle = (pos.0 + half * u0.0, pos.1 + half * u0.1);
+    let (dx, dy) = axis.title_offset_pt;
+    let (dx, dy) = (if dx.is_finite() { dx } else { 0.0 }, if dy.is_finite() { dy } else { 0.0 });
+    ((middle.0 - half * u1.0 + dx, middle.1 - half * u1.1 + dy), angle)
+}
+
 fn draw_x_title(
     out: &mut Vec<Item>,
     project: &Project,
@@ -1854,7 +1872,8 @@ fn draw_x_title(
     } else {
         labels_edge + 0.6 * size + ASCENT * size
     };
-    place(out, &title, font, (f.x + f.w / 2.0, baseline), 0.0);
+    let (pos, angle) = turned_title(axis, (f.x + f.w / 2.0, baseline), 0.0);
+    place(out, &title, font, pos, angle);
 }
 
 /// Y title, rotated 90 degrees counter-clockwise (read from bottom to top) on either side, centred
@@ -1882,7 +1901,8 @@ fn draw_y_title(
         // The text's bottom edge (baseline plus descent) faces the axis.
         labels_edge - 0.6 * size - DESCENT * size
     };
-    place(out, &title, font, (x, f.y + f.h / 2.0), 90.0);
+    let (pos, angle) = turned_title(axis, (x, f.y + f.h / 2.0), 90.0);
+    place(out, &title, font, pos, angle);
 }
 
 /// Title of an X axis moved into the frame (Origin's Scatter Central): rotated 90 degrees like a Y
@@ -1904,7 +1924,8 @@ fn draw_x_title_inward(
     let title = resolved_title(project, axis, pds, false);
     let size = axis.title_font.size_pt;
     let x = f.x - 0.6 * size - DESCENT * size;
-    place(out, &title, font, (x, line_y), 90.0);
+    let (pos, angle) = turned_title(axis, (x, line_y), 90.0);
+    place(out, &title, font, pos, angle);
 }
 
 /// Title of a Y axis moved into the frame (Origin's Scatter Central): horizontal, centred on the axis
@@ -1926,7 +1947,8 @@ fn draw_y_title_inward(
     let title = resolved_title(project, axis, pds, true);
     let size = axis.title_font.size_pt;
     let baseline = f.y - 0.6 * size - DESCENT * size;
-    place(out, &title, font, (line_x, baseline), 0.0);
+    let (pos, angle) = turned_title(axis, (line_x, baseline), 0.0);
+    place(out, &title, font, pos, angle);
 }
 
 // ----- legend --------------------------------------------------------------------------------

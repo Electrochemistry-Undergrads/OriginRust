@@ -1363,6 +1363,15 @@ pub struct Axis {
     pub arrow_begin: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub arrow_end: bool,
+    /// The title's counter-clockwise rotation in degrees (Origin's Rotate of the title object, T291);
+    /// `None` keeps the default (0 for an X title, 90 for a Y title). Origin turns the title about its
+    /// middle (measured in Origin 2016).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title_rotation_deg: Option<f64>,
+    /// How far the title is moved from where Sheaf puts it, in points (right, down) (T291): Origin
+    /// keeps a dragged title where it was put.
+    #[serde(default, skip_serializing_if = "is_zero_pair")]
+    pub title_offset_pt: (f64, f64),
     /// Draw the axis line, its ticks and its tick labels in the color of the layer's first
     /// visible plot instead of `color` and the tick font's color.
     #[serde(default, skip_serializing_if = "is_false")]

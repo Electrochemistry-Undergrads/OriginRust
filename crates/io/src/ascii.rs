@@ -2257,6 +2257,20 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
         assert_eq!(col(&imp, 0).text().unwrap()[1], "1:2");
     }
 
+    /// Origin 2016's impasc reads M/d/yy as a date column (T315, measured): 00-44 are the 2000s.
+    #[test]
+    fn two_digit_years_make_a_date_column() {
+        let imp = parse("d\tv\n1/2/21\t1\n5/6/30\t2\n12/31/99\t3\n1/1/00\t4\n");
+        let c = col(&imp, 0);
+        assert_eq!(c.format, NumberFormat::Date(sheaf_core::datetime::DatePattern::Mdy));
+        assert_eq!(c.numeric().unwrap(), [2_459_216.0, 2_462_627.0, 2_451_543.0, 2_451_544.0]);
+        // Day first when a day is above 12; dotted day-first dates with two-digit years too.
+        let dmy = parse("d\tv\n13/2/21\t1\n25/12/29\t2\n");
+        assert_eq!(col(&dmy, 0).format, NumberFormat::Date(sheaf_core::datetime::DatePattern::Dmy));
+        let dot = parse("d\tv\n13.02.21\t1\n31.01.50\t2\n");
+        assert_eq!(col(&dot, 0).numeric().unwrap()[1], 2_433_312.0);
+    }
+
     #[test]
     fn dates_can_be_kept_as_text() {
         let opts = AsciiOptions { dates: DateImport::AsText, ..AsciiOptions::default() };

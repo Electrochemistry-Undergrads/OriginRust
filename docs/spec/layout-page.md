@@ -55,7 +55,17 @@ unregistered on the reference machine). Everything below is Sheaf's choice unles
   size. Code: `dialogs/layout_page_setup.rs`. Origin takes the size from the printer page; Sheaf
   keeps it per page (not measured).
 
+## Worksheets (T237 slice 5)
+
+- Layout > Add Worksheet... lists every sheet of every workbook as `[Book1]Sheet1`; OK puts the
+  sheet's picture in the next free cell, keeping its shape ("Add worksheet to layout"). The
+  picture is the one File > Export > Worksheet as Image draws (label rows and cells, no column
+  heads, row numbers or grid), live: it follows the sheet. It is moved, resized, deleted and
+  exported like a graph item; an item whose sheet or workbook is gone stays an empty frame.
+  Stored as `{"kind": "sheet", "book": <id>, "sheet": <index>}`. Origin's worksheet-on-layout look
+  was not measured.
+
 ## Not yet
 
-- Add Worksheet..., text and drawn objects on the page, picture holders,
+- Text and drawn objects on the page, picture holders,
   the rest of the Layout Page properties (background, printer page), print, vector export of the page, and `.opj`.

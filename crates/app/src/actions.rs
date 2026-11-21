@@ -342,6 +342,8 @@ pub enum Action {
     /// Layout > Add Graph... (T237): the window that adds a graph's picture to `layout`.
     LayoutAddGraph {
         layout: WindowId,
+        /// Layout > Add Worksheet... (T237 slice 5): a worksheet's picture instead.
+        sheets: bool,
     },
     /// File > Import > Binary 2D Array...: choose a file, then its options window (T199).
     ImportBinary2d,

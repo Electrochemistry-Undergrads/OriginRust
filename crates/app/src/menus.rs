@@ -233,6 +233,8 @@ pub enum Cmd {
     NewLayout,
     /// Layout > Add Graph... on the active layout page (T237).
     LayoutAddGraph,
+    /// Layout > Add Worksheet... on the active layout page (T237 slice 5).
+    LayoutAddSheet,
     /// Layout > Export Page as Image... (T237 slice 3).
     LayoutExport,
     /// Layout > Page Setup... (T237 slice 4).
@@ -996,6 +998,7 @@ fn base(kind: WindowKind) -> Vec<Menu> {
                 "&Layout",
                 vec![
                     item("Add &Graph...", Cmd::LayoutAddGraph),
+                    item("Add &Worksheet...", Cmd::LayoutAddSheet),
                     sep(),
                     item("&Export Page as Image...", Cmd::LayoutExport),
                     sep(),
@@ -3314,7 +3317,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             _ => return Err("Activate a layout page first"),
         },
         Cmd::LayoutAddGraph => match (c.kind, c.active) {
-            (WindowKind::Layout, Some(id)) => Action::LayoutAddGraph { layout: id },
+            (WindowKind::Layout, Some(id)) => Action::LayoutAddGraph { layout: id, sheets: false },
+            _ => return Err("Activate a layout page first"),
+        },
+        Cmd::LayoutAddSheet => match (c.kind, c.active) {
+            (WindowKind::Layout, Some(id)) => Action::LayoutAddGraph { layout: id, sheets: true },
             _ => return Err("Activate a layout page first"),
         },
         Cmd::ImportBinary2d => Action::ImportBinary2d,

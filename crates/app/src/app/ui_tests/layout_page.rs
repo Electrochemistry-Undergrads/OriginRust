@@ -127,3 +127,25 @@ fn page_setup_turns_the_layout_page_to_a4_portrait_in_one_undo_step() {
     assert_eq!((l.width_pt, l.height_pt), (595.28, 841.89));
     assert_eq!(h.state().doc.undo_label(), Some("Layout page size"));
 }
+
+#[test]
+fn add_worksheet_puts_a_sheet_picture_on_the_layout_page() {
+    let mut h = start(vec![data_file("layout-sheet")]);
+    let ctx = h.ctx.clone();
+    let book = project(&h).workbooks().next().unwrap().id;
+    menu_path(&mut h, &["File", "New", "Layout"]);
+    let id = project(&h).layouts().next().unwrap().id;
+    assert!(menus::bar(menus::WindowKind::Layout).iter().any(|m| m.label == "&Layout"));
+    let action = menus::resolve(&menus::Cmd::LayoutAddSheet, &h.state().menu_context()).unwrap();
+    h.state_mut().apply(action, &ctx);
+    settle(&mut h);
+    let d = h.state().layout_add_graph.as_ref().expect("the Add Worksheet window is open");
+    assert!(d.sheets && d.choices[0].1.starts_with('['), "{:?}", d.choices[0].1);
+    click(&mut h, "OK");
+    let page = project(&h).layout(id).unwrap().clone();
+    assert_eq!(page.items.len(), 1);
+    assert_eq!(page.items[0].content, sheaf_core::layout_page::LayoutContent::Sheet { book, sheet: 0 });
+    assert_eq!(h.state().doc.undo_label(), Some("Add worksheet to layout"));
+    settle(&mut h);
+    assert!(h.state().layouts.contains_key(&id), "the layout window was drawn");
+}

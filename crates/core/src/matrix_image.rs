@@ -42,7 +42,14 @@ pub enum ImageOp {
     /// Geometric Transform > Resize (T210): a new size, the ranges kept; nearest neighbour (Origin
     /// 2016's default `interpolate:=normal`, T282) or bilinear resampling end to end.
     Resize { rows: usize, cols: usize, bilinear: bool },
+    /// Spatial Filters > Median (T284): the median of a `d` x `d` window, as Origin 2016's
+    /// `imgMedian d:=` (measured: edge cells repeat outward; an even window reaches one cell further
+    /// forward than back, and the lower of the two middle values is taken).
+    Median(usize),
 }
+
+/// The largest Median window (cells each way).
+pub const MAX_MEDIAN: usize = 31;
 
 /// The operator of Arithmetic Transform > Math.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -70,6 +77,7 @@ impl ImageOp {
             ImageOp::Levels { .. } => "Image Levels",
             ImageOp::Crop { .. } => "Image Crop",
             ImageOp::Resize { .. } => "Image Resize",
+            ImageOp::Median(_) => "Image Median",
         }
     }
 
@@ -173,6 +181,36 @@ impl ImageOp {
                 return Ok(s.like(nr, nc, data));
             }
             ImageOp::Flip(d) => return Ok(s.flip(d, false)),
+            ImageOp::Median(d) => {
+                if !(1..=MAX_MEDIAN).contains(&d) {
+                    return Err(MatrixError::Invalid(format!("the window size is 1 to {MAX_MEDIAN}")));
+                }
+                let back = (d as isize - 1) / 2;
+                let mut out = Vec::with_capacity(rows * cols);
+                let mut window = Vec::with_capacity(d * d);
+                for r in 0..rows {
+                    for c in 0..cols {
+                        if !v(r, c).is_finite() {
+                            out.push(f64::NAN);
+                            continue;
+                        }
+                        window.clear();
+                        for dr in -back..(d as isize - back) {
+                            for dc in -back..(d as isize - back) {
+                                let rr = (r as isize + dr).clamp(0, rows as isize - 1) as usize;
+                                let cc = (c as isize + dc).clamp(0, cols as isize - 1) as usize;
+                                let x = v(rr, cc);
+                                if x.is_finite() {
+                                    window.push(x);
+                                }
+                            }
+                        }
+                        window.sort_by(f64::total_cmp);
+                        out.push(window[(window.len() - 1) / 2]);
+                    }
+                }
+                return Ok(s.like(rows, cols, out));
+            }
             ImageOp::Smooth | ImageOp::Sharpen | ImageOp::EdgeDetection => {
                 // The neighbourhood repeats the edge cells (a cell outside the sheet takes the
                 // value of the nearest one); a missing centre stays missing.
@@ -273,6 +311,36 @@ mod tests {
         assert!(ImageOp::Gamma(0.0).apply(&s).is_err());
         let missing = sheet(1, 2, &[f64::NAN, 4.0]);
         assert!(ImageOp::Brightness(1.0).apply(&missing).unwrap().value(0, 0).is_nan());
+    }
+
+    /// Origin 2016's `imgMedian` on a 5 x 5 image (levels), measured 2026-11-21 (T284).
+    #[test]
+    fn median_matches_origin_2016() {
+        let levels = [
+            125.0, 0.0, 5.0, 11.0, 16.0, 5.0, 11.0, 16.0, 22.0, 27.0, 16.0, 22.0, 255.0, 33.0, 38.0, 27.0, 33.0, 38.0,
+            43.0, 49.0, 38.0, 43.0, 49.0, 54.0, 60.0,
+        ];
+        let s = sheet(5, 5, &levels);
+        let d3 = ImageOp::Median(3).apply(&s).unwrap();
+        assert_eq!(
+            d3.values(),
+            [
+                11.0, 5.0, 11.0, 16.0, 16.0, 16.0, 16.0, 16.0, 22.0, 27.0, 16.0, 22.0, 33.0, 38.0, 38.0, 27.0, 38.0,
+                43.0, 49.0, 49.0, 38.0, 38.0, 43.0, 49.0, 54.0
+            ]
+        );
+        let d2 = ImageOp::Median(2).apply(&s).unwrap();
+        assert_eq!(
+            d2.values(),
+            [
+                5.0, 5.0, 11.0, 16.0, 16.0, 11.0, 16.0, 22.0, 27.0, 27.0, 22.0, 33.0, 38.0, 38.0, 38.0, 33.0, 38.0,
+                43.0, 49.0, 49.0, 38.0, 43.0, 49.0, 54.0, 60.0
+            ]
+        );
+        let d5 = ImageOp::Median(5).apply(&s).unwrap();
+        assert_eq!(&d5.values()[..5], &[16.0, 16.0, 16.0, 16.0, 16.0]);
+        assert_eq!(d5.value(2, 2), 33.0);
+        assert!(ImageOp::Median(0).apply(&s).is_err());
     }
 
     #[test]

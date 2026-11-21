@@ -95,6 +95,7 @@ pub enum ImageCmd {
     Smooth,
     Sharpen,
     EdgeDetection,
+    Median,
     Levels,
     Subtract,
     Crop,
@@ -2117,7 +2118,12 @@ fn image_menu() -> Vec<Entry> {
         ),
         sub(
             "&Spatial Filters",
-            vec![i("Smooth...", Smooth), i("Sharpen...", Sharpen), i("Edge Detection...", EdgeDetection)],
+            vec![
+                i("Smooth...", Smooth),
+                i("Median...", Median),
+                i("Sharpen...", Sharpen),
+                i("Edge Detection...", EdgeDetection),
+            ],
         ),
     ]
 }

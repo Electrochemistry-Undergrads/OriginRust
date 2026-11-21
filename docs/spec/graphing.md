@@ -3156,6 +3156,15 @@ with blue squares at the bar centres (no (0, 0) start), each labelled above, on 
 from 0 to 110 with a tick every 20 labelled 0% to 100%. **Still different:** the interval plot's two-entry legend
 (Sheaf lists one entry per column) and the labels' 7 significant digits (Sheaf writes the full value).
 
+**Pareto Chart - Binned Data (measured 2026-11-21 in Origin 2016, T319):** `plot_paretobin` takes a Data Input Range
+(the categories) and a Count Input Range, with Recalculate (Auto), Combine Smaller Values (off; By Percent or By Count,
+tick label "Other") and Output Data. On dent 4, scratch 9, crack 2, chip 4, stain 1 it writes a sheet ParetoBin1 to the
+book with the columns Data, Count and Cumulative Frequency (comments: the category column's name), sorted by count
+with equal counts in sheet order (scratch 9, dent 4, chip 4, crack 2, stain 1; 45, 65, 85, 95, 100 %), and draws it
+exactly as the raw-data chart (Count 0..22 = 1.1 x the total 20, right axis 0..110 %). Sheaf: Plot > Statistics >
+Pareto with two columns selected (the categories, then the counts) does the same (`Project::plot_pareto_binned`);
+rows without a category or a count are left out; Combine Smaller Values is not built.
+
 **What Sheaf does** (unmeasured unless listed above):
 
 - Pareto counts every cell of the column: row filters and Hide Masked Points are not applied to it (Sheaf's choice; the
@@ -3171,8 +3180,8 @@ from 0 to 110 with a tick every 20 labelled 0% to 100%. **Still different:** the
   statistics 22), or the SD (n - 1) or SE. A column of one number has no bar. Plot Details > Error Bar chooses
   CI/SD/SE and the level for every interval plot of the layer. CLI `--interval-error ci|sd|se`, `--interval-level`.
   Selection: one or more numeric columns, else the status warning "Nothing to plot".
-- Pareto: select one column (text or numbers); anything else is the status warning "Select one column whose values are
-  counted for the Pareto chart". The left layer holds `Column` bars of the count per distinct value, most frequent first
+- Pareto: select one column (text or numbers), or a category and a count column (binned, above); anything else is a
+  status warning. The left layer holds `Column` bars of the count per distinct value, most frequent first
   (ties in the order of first occurrence; empty cells are not counted; numbers compare as text without a trailing ".0");
   the categories are the tick labels at 1..K, with no X title. The right layer (the usual linked right-Y layer)
   holds a `LineSymbol` plot of the running percent of the counted cells at the bar centres, styled and scaled as

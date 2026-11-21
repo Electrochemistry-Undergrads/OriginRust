@@ -1,6 +1,9 @@
 # T97: Export > Worksheet as Image...
 
-**Status:** done 2026-11-16 (Claude Windows "t30-origin", workbook-model.md 13k): `expWks` options and picture measured; Sheaf exports the active sheet as PNG/PDF/SVG in Origin's look (label rows and cells, no heads, numbers or grid). Raster-format follow-up in progress 2026-11-17: JPEG/TIFF/BMP/GIF/TGA/PCX/PSD via existing encoders (13k.1). Left: other vector types, several sheets, size/overwrite controls and measured Begin/End display treatment in exports.
+**Status:** implemented for the active worksheet. The original PNG, PDF and SVG
+exports are joined by JPEG, TIFF, BMP, GIF, TGA, PCX and PSD (13k.1), and by EPS
+and EMF (13k.2). Remaining work covers AI, CGM, DXF and WMF, multiple sheets,
+size and overwrite controls, and the effect of Begin/End on Origin exports.
 **Size:** S. **Source:** greyed inventory package B12 (File > Export > Worksheet as Image... with a workbook
 active).
 **Spec:** `docs/spec/workbook-model.md` (a new section).

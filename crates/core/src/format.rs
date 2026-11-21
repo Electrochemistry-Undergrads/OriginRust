@@ -56,6 +56,9 @@ pub enum NumberFormat {
     Decimal(u8),
     /// Scientific notation with a fixed number of digits after the decimal point.
     Scientific(u8),
+    /// Origin's Scientific display with Default Decimal Digits (T317, measured in T314): up to six
+    /// significant digits with trailing zeros dropped (`1E+02`, `1.2345E+04`, `3.14159E+00`).
+    ScientificAuto,
     /// A fixed number of significant digits.
     Significant(u8),
     /// Origin's Engineering display with this many digits after the point of the mantissa
@@ -103,6 +106,7 @@ impl NumberFormat {
             NumberFormat::General => format_general(v, 9),
             NumberFormat::Decimal(d) => format!("{:.*}", usize::from(d), v),
             NumberFormat::Scientific(d) => format_scientific(v, usize::from(d)),
+            NumberFormat::ScientificAuto => format_scientific_auto(v),
             NumberFormat::Significant(d) => format_significant(v, usize::from(d.max(1))),
             NumberFormat::Engineering(d) | NumberFormat::EngineeringSi(d) => {
                 format_engineering(v, EngineeringDigits::Decimals(usize::from(d)))
@@ -347,6 +351,14 @@ pub fn format_scientific(v: f64, digits: usize) -> String {
         text.push_str(&mantissa[1..]);
     }
     format!("{sign}{text}E{}{:02}", if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+/// Origin's Scientific display with Default Decimal Digits (T317): six significant digits, then the
+/// trailing zeros of the mantissa dropped (`1E+02`, `1.1E+02`, `9.999E+01`).
+pub fn format_scientific_auto(v: f64) -> String {
+    let full = format_scientific(v, 5);
+    let (mantissa, exponent) = full.split_once('E').expect("exponent form");
+    format!("{}E{exponent}", trim_zeros(mantissa))
 }
 
 /// The first `n` significant digits of `x` (finite, positive) and its base-10 exponent, rounding
@@ -809,6 +821,24 @@ mod tests {
             assert_eq!(format.format(v), want, "{format:?} of {v}");
         }
     }
+    #[test]
+    fn scientific_with_default_digits_keeps_six_significant_digits_without_trailing_zeros() {
+        // T317, measured in T314 (Origin 2016, digitMode 0 on a Scientific column).
+        for (v, want) in [
+            (100.0, "1E+02"),
+            (110.0, "1.1E+02"),
+            (99.99, "9.999E+01"),
+            (12345.0, "1.2345E+04"),
+            (123456.0, "1.23456E+05"),
+            (0.0, "0E+00"),
+            (-123.0, "-1.23E+02"),
+            (2.5e-7, "2.5E-07"),
+            (1234.5, "1.2345E+03"),
+        ] {
+            assert_eq!(NumberFormat::ScientificAuto.format(v), want, "{v}");
+        }
+    }
+
     #[test]
     fn fixed_formats() {
         assert_eq!(NumberFormat::Decimal(2).format(7.126), "7.13");

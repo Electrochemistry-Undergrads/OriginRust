@@ -17,4 +17,4 @@ cells match; 0.995 is rounded up by Origin (`1.00`, `1.0E+00`) and not by Sheaf.
 
 ## Left
 
-- Scientific with Default Decimal Digits (up to 6 significant digits, zeros dropped) as a format of its own.
+- Scientific with Default Decimal Digits: done in T317.

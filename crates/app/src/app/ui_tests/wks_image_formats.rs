@@ -1,4 +1,4 @@
-//! T97: file-extension routing for the additional worksheet raster formats.
+//! T97: file-extension routing for worksheet images.
 use super::*;
 
 fn output_dir(tag: &str) -> PathBuf {
@@ -21,6 +21,8 @@ fn worksheet_writer_keeps_requested_format_case_alias_and_filename() {
         ("GiF", &b"GIF"[..]),
         ("PCX", &[10, 5, 1][..]),
         ("PsD", &b"8BPS"[..]),
+        ("EpS", &b"%!PS-Adobe-3.0 EPSF-3.0"[..]),
+        ("EMF", &[1, 0, 0, 0][..]),
     ] {
         let path = dir.join(format!("worksheet-Ω.{ext}"));
         assert_eq!(write_worksheet_image(source, &path).unwrap(), path);
@@ -37,7 +39,7 @@ fn worksheet_export_rejects_unsupported_formats_without_replacing_existing_files
     let h = start(vec![data_file("worksheet-format-errors")]);
     let source = project(&h).workbooks().next().unwrap().sheet();
     let dir = output_dir("errors");
-    for ext in ["ai", "cgm", "dxf", "eps", "emf", "wmf", "invalid"] {
+    for ext in ["ai", "cgm", "dxf", "wmf", "invalid"] {
         let path = dir.join(format!("existing.{ext}"));
         std::fs::write(&path, b"retain previous export").unwrap();
         assert!(write_worksheet_image(source, &path).is_err(), "{ext}");

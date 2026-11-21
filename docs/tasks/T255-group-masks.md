@@ -15,6 +15,6 @@ group (as a blank group cell), so it is not counted as Missing in any group.
 
 ## Left
 
-- The second inputs of the signal tools (curve math reference, convolution response, deconvolution,
-  coherence, wavelet detail and scales, IFFT, column math) read raw numbers; whether masks belong there
-  (a transform needs every sample) is open.
+- The second inputs of the transform tools (convolution response, deconvolution, coherence, wavelet
+  detail and scales, IFFT) read raw numbers; whether masks belong there (a transform needs every
+  sample) is open. Curve math's reference and column math's operand: done in T258.

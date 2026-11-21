@@ -2523,7 +2523,9 @@ impl Project {
                     }
                     CurveOperand::Reference(id) => {
                         let (_, rsheet, rcol) = self.locate(id).ok_or(AnalysisError::NoSuchColumn(id))?;
-                        let ry = rcol.numeric().ok_or_else(|| AnalysisError::NotNumeric(rcol.short_name.clone()))?;
+                        // A masked or filter-hidden reference point is left out of the reference (T258).
+                        let ry =
+                            rsheet.values_of(rcol).ok_or_else(|| AnalysisError::NotNumeric(rcol.short_name.clone()))?;
                         let at = rsheet.column_index(id).expect("the column was located in this sheet");
                         let x_col = rsheet.x_for(at).filter(|x| x.id != id && x.data.is_numeric());
                         let rx: Vec<f64> = match x_col.and_then(Column::numeric) {
@@ -3074,8 +3076,10 @@ impl Project {
                         None
                     }
                     CurveOperand::Reference(id) => {
-                        let (_, _, rcol) = self.locate(id).ok_or(AnalysisError::NoSuchColumn(id))?;
-                        let r = rcol.numeric().ok_or_else(|| AnalysisError::NotNumeric(rcol.short_name.clone()))?;
+                        let (_, rsheet, rcol) = self.locate(id).ok_or(AnalysisError::NoSuchColumn(id))?;
+                        // A masked or filter-hidden operand cell gives a missing result in its row (T258).
+                        let r =
+                            rsheet.values_of(rcol).ok_or_else(|| AnalysisError::NotNumeric(rcol.short_name.clone()))?;
                         Some((rcol.short_name.clone(), rcol.display_name().to_string(), r.to_vec()))
                     }
                 };
@@ -4331,6 +4335,32 @@ mod tests {
         };
         let tool = curve_math(CurveOp::Add, CurveOperand::Reference(far), true);
         assert!(matches!(p.analyze(&request(&[ramp], tool)), Err(AnalysisError::BadOption(_))));
+    }
+
+    #[test]
+    fn masked_reference_and_operand_cells_are_left_out() {
+        // T258: a masked reference point leaves the reference curve; a masked operand cell gives a
+        // missing result in its row.
+        let (mut p, _, _, ramp) = sample();
+        let reference = add_reference(&mut p);
+        // Reference 1, 5, 3 at X 2, 4, 6: with the middle point masked it is the line x / 2 again.
+        p.column_mut(reference).unwrap().numeric_mut().unwrap()[1] = 5.0;
+        let tool = curve_math(CurveOp::Subtract, CurveOperand::Reference(reference), false);
+        let mut q = p.clone();
+        let unmasked = q.analyze(&request(&[ramp], tool.clone())).unwrap();
+        assert!((q.numeric(unmasked.new_columns[0]).unwrap()[4] - 4.0 + 5.0).abs() < 1e-12, "the bump is used");
+        p.column_mut(reference).unwrap().mask.insert(1);
+        let r = p.analyze(&request(&[ramp], tool)).unwrap();
+        for (i, v) in p.numeric(r.new_columns[0]).unwrap().iter().enumerate() {
+            assert!((v - i as f64 / 2.0).abs() < 1e-12, "row {i}: {v}");
+        }
+        // Column math: row 1 of the operand (2) is masked, so row 1 of the result is missing.
+        let tool =
+            Tool::ColumnMath(ColumnMathSpec { op: CurveOp::Subtract, operand: CurveOperand::Reference(reference) });
+        let r = p.analyze(&request(&[ramp], tool)).unwrap();
+        let out = p.numeric(r.new_columns[0]).unwrap();
+        assert!(out[1].is_nan(), "{out:?}");
+        assert_eq!((out[0], out[2]), (-1.0, -1.0));
     }
 
     #[test]

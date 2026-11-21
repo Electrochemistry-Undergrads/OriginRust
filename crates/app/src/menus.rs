@@ -452,6 +452,8 @@ pub enum Cmd {
     /// A command of a sheet tab's menu, on the active sheet.
     Sheet(SheetOp),
     Plot(Template),
+    /// Plot > Statistics > Run Chart... (T270).
+    RunChart,
     /// Plot > Line + Symbol > Line Series (T82).
     PlotLineSeries,
     /// Plot > Symbol > Y Error.
@@ -1636,7 +1638,7 @@ fn plot_menu() -> Vec<Entry> {
                     item("Marginal Box Charts", Cmd::Plot(Template::MarginalBoxCharts)),
                 ],
                 vec![item("2D Kernel Density...", Cmd::Plot(Template::Kde2d))],
-                vec![item("QC (X bar R) Chart", Cmd::Plot(Template::QcXbarR))],
+                vec![item("QC (X bar R) Chart", Cmd::Plot(Template::QcXbarR)), item("&Run Chart...", Cmd::RunChart)],
                 // Every letter of the label was taken; C moves Marginal Box Charts to n.
                 vec![item("S&catter Matrix", Cmd::Plot(Template::ScatterMatrix))],
                 // T151: the same windows as Statistics > Descriptive Statistics.
@@ -3610,6 +3612,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::Sheet(op) => Action::Sheet { book: book?, op: op.clone() },
         Cmd::Plot(template) => Action::PlotColumns { book: book?, columns: c.selected.to_vec(), template: *template },
+        Cmd::RunChart => Action::RunChart { book: book?, columns: c.selected.to_vec() },
         Cmd::SetAs(designation) => {
             book?;
             Action::SetDesignation { columns: some()?, designation: *designation }

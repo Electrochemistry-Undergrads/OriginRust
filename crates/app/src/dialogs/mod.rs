@@ -72,6 +72,7 @@ pub mod recovery;
 pub mod reshape;
 pub mod rm_options;
 pub mod row_filter;
+pub mod run_chart;
 pub mod sample_projects;
 pub mod sampling;
 pub mod scatter_matrix;

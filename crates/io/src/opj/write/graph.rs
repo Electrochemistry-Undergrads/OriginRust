@@ -1040,6 +1040,10 @@ struct FramePt {
 /// Text with the bold and italic of its font as Origin's escapes.
 fn styled(text: &str, font: &Font) -> String {
     let mut t = text.to_string();
+    // T293: Origin's underline markup, as bold and italic are written.
+    if font.underline {
+        t = format!("\\u({t})");
+    }
     if font.italic {
         t = format!("\\i({t})");
     }

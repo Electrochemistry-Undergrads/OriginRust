@@ -81,8 +81,14 @@ pub(crate) fn item_bounds(item: &Item, m: &dyn TextMeasurer) -> Option<Rect> {
         Item::Rect { rect, .. } | Item::Image { rect, .. } => Some(*rect),
         Item::Path { d, .. } => of_points(subpaths(d).into_iter().flatten()),
         Item::Text(t) => {
-            let font =
-                Font { family: t.family.clone(), size_pt: t.size, bold: t.bold, italic: t.italic, color: t.color };
+            let font = Font {
+                family: t.family.clone(),
+                size_pt: t.size,
+                bold: t.bold,
+                italic: t.italic,
+                underline: false,
+                color: t.color,
+            };
             let w = m.width(&t.text, &font, t.size);
             let x0 = match t.anchor {
                 crate::scene::Anchor::Start => 0.0,

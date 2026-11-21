@@ -1289,12 +1289,16 @@ pub struct Font {
     pub bold: bool,
     #[serde(default)]
     pub italic: bool,
+    /// Underline the whole text (Origin's Underline beside Bold and Italic, T293); `\u(..)` markup
+    /// underlines a part.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub underline: bool,
     pub color: Color,
 }
 
 impl Font {
     pub fn new(family: &str, size_pt: f64) -> Self {
-        Font { family: family.to_string(), size_pt, bold: false, italic: false, color: Color::BLACK }
+        Font { family: family.to_string(), size_pt, bold: false, italic: false, underline: false, color: Color::BLACK }
     }
 }
 
@@ -2722,7 +2726,7 @@ impl Layer {
     /// The font a new free text label of this layer starts with: the layer's legend font (the
     /// text size the figure already uses), black and upright.
     pub fn new_label_font(&self) -> Font {
-        Font { bold: false, italic: false, color: Color::BLACK, ..self.legend.font.clone() }
+        Font { bold: false, italic: false, underline: false, color: Color::BLACK, ..self.legend.font.clone() }
     }
 }
 

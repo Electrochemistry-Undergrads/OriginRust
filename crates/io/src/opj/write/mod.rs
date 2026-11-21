@@ -192,7 +192,6 @@ struct Notes {
     sampling_dropped: usize,
     /// Columns with a data range (Set As Begin / Set As End), which the file written here does not hold.
     ranges_dropped: usize,
-    /// Columns with masked cells: the file written here holds no mask.
     /// Group and Subject columns, written as unused.
     group_roles_dropped: usize,
     /// Sheets with a worksheet filter: the file written here holds no filter.

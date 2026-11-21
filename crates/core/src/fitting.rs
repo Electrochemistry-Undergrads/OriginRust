@@ -1807,7 +1807,9 @@ mod tests {
         let ys: Vec<f64> = (1..=20)
             .map(|i| {
                 let (x, d) = (f64::from(i) * 0.5, f64::from(i));
-                1.0 + 3.0 * (-2.0 * ((x - 5.0) / 1.5).powi(2)).exp() + 0.05 * (37.0 * d).sin() + 0.04 * (101.3 * d).sin()
+                1.0 + 3.0 * (-2.0 * ((x - 5.0) / 1.5).powi(2)).exp()
+                    + 0.05 * (37.0 * d).sin()
+                    + 0.04 * (101.3 * d).sin()
             })
             .collect();
         p.add_column(book, 0, Designation::X, ColumnData::numeric(xs)).unwrap();
@@ -1827,7 +1829,10 @@ mod tests {
             (0..16).map(|k| cols[k % 4][k / 4]).collect()
         };
         for (j, name) in names.iter().enumerate() {
-            assert_eq!((ws.columns[9 + j].long_name.as_str(), ws.columns[9 + j].comments.as_str()), (*name, "Covariance"));
+            assert_eq!(
+                (ws.columns[9 + j].long_name.as_str(), ws.columns[9 + j].comments.as_str()),
+                (*name, "Covariance")
+            );
             assert_eq!(ws.columns[13 + j].comments, "Correlation");
         }
         let (cov, cor) = (block(9), block(13));
@@ -1835,7 +1840,12 @@ mod tests {
         let origin_dep = [0.39608520339783282, 4.4408920985006262e-16, 0.45293338864003485, 0.59739007193268057];
         let cor_inv = invert(&cor, 4);
         for i in 0..4 {
-            assert!((cov[i * 4 + i].sqrt() / origin_se[i] - 1.0).abs() < 1e-6, "{}: {}", names[i], cov[i * 4 + i].sqrt());
+            assert!(
+                (cov[i * 4 + i].sqrt() / origin_se[i] - 1.0).abs() < 1e-6,
+                "{}: {}",
+                names[i],
+                cov[i * 4 + i].sqrt()
+            );
             assert_eq!(cor[i * 4 + i], 1.0);
             // Origin's Dependency is 1 - 1/(R^-1)_ii, so it checks the off-diagonal terms too.
             assert!((1.0 - 1.0 / cor_inv[i * 4 + i] - origin_dep[i]).abs() < 1e-6, "{}", names[i]);

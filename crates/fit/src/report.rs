@@ -127,6 +127,30 @@ impl FitReport {
     pub fn param(&self, name: &str) -> Option<&Parameter> {
         self.params.iter().find(|p| p.name == name)
     }
+
+    /// Origin's "Correlation Matrix": `C_ij / sqrt(C_ii * C_jj)` from [`FitReport::covariance`],
+    /// row-major in `params` order. 1 on the diagonal of a free parameter; NaN (blank) in the
+    /// rows and columns of a fixed parameter, whose variance is zero. Empty when the covariance
+    /// has the wrong size.
+    pub fn correlation(&self) -> Vec<f64> {
+        let n = self.params.len();
+        if self.covariance.len() != n * n {
+            return Vec::new();
+        }
+        let c = &self.covariance;
+        let sd: Vec<f64> = (0..n)
+            .map(|i| if self.params[i].fixed || c[i * n + i] <= 0.0 { f64::NAN } else { c[i * n + i].sqrt() })
+            .collect();
+        let mut out = vec![f64::NAN; n * n];
+        for i in 0..n {
+            for j in 0..n {
+                if sd[i].is_finite() && sd[j].is_finite() {
+                    out[i * n + j] = if i == j { 1.0 } else { c[i * n + j] / (sd[i] * sd[j]) };
+                }
+            }
+        }
+        out
+    }
 }
 
 /// Why a fit could not be done.
@@ -142,4 +166,62 @@ pub enum FitError {
     Failed(String),
     #[error("{0}")]
     BadSimulation(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn param(name: &str, fixed: bool) -> Parameter {
+        let nan = f64::NAN;
+        Parameter {
+            name: name.into(),
+            value: 1.0,
+            std_error: 0.0,
+            fixed,
+            t_value: nan,
+            prob_t: nan,
+            lcl: nan,
+            ucl: nan,
+            dependency: nan,
+        }
+    }
+
+    fn report(params: Vec<Parameter>, covariance: Vec<f64>) -> FitReport {
+        FitReport {
+            model: "m".into(),
+            equation: String::new(),
+            params,
+            stats: Statistics {
+                n_points: 3,
+                dof: 1,
+                rss: 0.0,
+                reduced_chi_sqr: 0.0,
+                r_squared: 1.0,
+                adj_r_squared: 1.0,
+                pearson_r: None,
+                iterations: None,
+            },
+            anova: None,
+            covariance,
+            confidence_level: 0.95,
+            fitted: Vec::new(),
+            residuals: Vec::new(),
+            status: FitStatus::Exact,
+            warnings: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn correlation_divides_by_the_standard_deviations_and_blanks_fixed_parameters() {
+        let r = report(
+            vec![param("a", false), param("b", true), param("c", false)],
+            vec![4.0, 0.0, -3.0, 0.0, 0.0, 0.0, -3.0, 0.0, 9.0],
+        );
+        let c = r.correlation();
+        assert_eq!((c[0], c[8]), (1.0, 1.0));
+        assert_eq!((c[2], c[6]), (-0.5, -0.5));
+        assert!(c[1].is_nan() && c[3].is_nan() && c[4].is_nan() && c[5].is_nan() && c[7].is_nan());
+        assert!(report(vec![param("a", false)], vec![]).correlation().is_empty());
+    }
 }

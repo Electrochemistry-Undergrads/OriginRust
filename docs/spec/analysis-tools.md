@@ -1706,6 +1706,30 @@ Not checked: Origin's dialog controls and defaults for both tools, its deconvolu
 wrap-around rules, its STFT window list, scaling, time axis and matrix layout, and missing values.
 Measure with `tools/origin-ref/` once Origin's COM class is registered again.
 
+## 21. CV Charge (T296, Sheaf's own; the owner's cyclic voltammetry work)
+
+Origin 2016 has no cyclic voltammetry tool: the charge of a CV peak is an `integ1` over chosen rows,
+divided by the scan rate by hand. Sheaf's Analysis > Mathematics > CV Charge... (CLI `sheaf analyze
+cv-charge FILE --y COL --scan-rate V [--baseline]`) does both in one step (`sheaf_calc::cv_charge`,
+`Tool::CvCharge`):
+
+- **Input:** X the potential, Y the current, over the chosen rows (choose the rows of a peak for a peak
+  charge). Missing points are skipped.
+- **Sweeps:** the curve is cut at every turn of the potential: a run where the potential rises is an
+  anodic sweep, a falling one cathodic. The turning point belongs to both sweeps; steps where the
+  potential does not change stay in the sweep.
+- **Charge:** `Q = integral of I dt = sum of (I_k + I_k+1) / 2 |E_k+1 - E_k| / v` per sweep, with `v` the
+  scan rate (Scan rate, potential units per second; 0.1 by default). An anodic (oxidation) current
+  gives a positive charge in either sweep, a cathodic one a negative charge. The unit is the current's
+  times seconds (A gives C, mA mC, uA uC).
+- **Baseline:** "Subtract the line through each sweep's ends" removes the straight line through the
+  sweep's first and last point (current against potential) before summing: with the rows of a peak
+  chosen, the peak's charge above a sloping background.
+- **Output:** a results sheet `CVCharge<n>`: one row per sweep (label "<input>, sweep k (anodic)" or
+  "(cathodic)") with First row, Last row, E start, E end and Charge, then the total of all anodic and of
+  all cathodic sweeps; a note gives the scan rate. One undo step ("CV charge").
+- **Not built:** picking the peak's feet on the graph (the parity row's "foot picking").
+
 ## Files
 
 `tools/iir-fir-ref.py` makes the scipy numbers of section 17 (not Origin).

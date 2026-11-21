@@ -153,10 +153,116 @@ fn half_height_width(xs: &[f64], ys: &[f64], k: usize, positive_area: bool) -> f
     xr - xl
 }
 
+/// One sweep of a cyclic voltammogram (T296): the points from one turn of the potential to the next.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CvSegment {
+    /// Indices of the first and last point (the turning point is shared by the two sweeps it joins).
+    pub first: usize,
+    pub last: usize,
+    /// The potential rises (anodic sweep) rather than falls (cathodic sweep).
+    pub anodic: bool,
+    pub e_start: f64,
+    pub e_end: f64,
+    /// The charge passed during the sweep, `integral of I dt = integral of I |dE| / v`: positive for an
+    /// anodic (oxidation) current, negative for a cathodic one, in the current's unit times seconds when
+    /// the scan rate is in potential units per second.
+    pub charge: f64,
+}
+
+/// Splits a cyclic voltammogram (potential `e`, current `i`) into its sweeps at every turn of the
+/// potential and gives each sweep's charge at `scan_rate` (potential units per second, above 0): the
+/// trapezoid sum of `I |dE|` divided by the scan rate (T296). With `end_point_baseline` the straight
+/// line through the sweep's first and last point (current against potential) is subtracted first.
+/// Missing points are skipped; steps where the potential does not change stay in the sweep. `None`
+/// for a bad scan rate or fewer than two usable points.
+pub fn cv_charge(e: &[f64], i: &[f64], scan_rate: f64, end_point_baseline: bool) -> Option<Vec<CvSegment>> {
+    if !(scan_rate.is_finite() && scan_rate > 0.0) {
+        return None;
+    }
+    let pts: Vec<usize> = (0..e.len().min(i.len())).filter(|&k| e[k].is_finite() && i[k].is_finite()).collect();
+    if pts.len() < 2 {
+        return None;
+    }
+    // Runs of points between turns: (index into `pts` of the first and last point, rising).
+    let mut runs: Vec<(usize, usize, bool)> = Vec::new();
+    let (mut start, mut dir): (usize, Option<bool>) = (0, None);
+    for k in 1..pts.len() {
+        let d = e[pts[k]] - e[pts[k - 1]];
+        if d == 0.0 {
+            continue;
+        }
+        let up = d > 0.0;
+        match dir {
+            None => dir = Some(up),
+            Some(was) if was != up => {
+                runs.push((start, k - 1, was));
+                start = k - 1;
+                dir = Some(up);
+            }
+            _ => {}
+        }
+    }
+    runs.push((start, pts.len() - 1, dir.unwrap_or(true)));
+    let segments = runs
+        .into_iter()
+        .filter(|&(a, b, _)| b > a)
+        .map(|(a, b, up)| {
+            let (f, l) = (pts[a], pts[b]);
+            let base = |k: usize| {
+                if end_point_baseline && e[l] != e[f] {
+                    i[f] + (i[l] - i[f]) * (e[k] - e[f]) / (e[l] - e[f])
+                } else {
+                    0.0
+                }
+            };
+            let sum: f64 = (a..b)
+                .map(|k| {
+                    let (p, q) = (pts[k], pts[k + 1]);
+                    0.5 * ((i[p] - base(p)) + (i[q] - base(q))) * (e[q] - e[p]).abs()
+                })
+                .sum();
+            CvSegment { first: f, last: l, anodic: up, e_start: e[f], e_end: e[l], charge: sum / scan_rate }
+        })
+        .collect();
+    Some(segments)
+}
+
 /// Charge from current versus time: the signed trapezoid integral of the current.
 ///
 /// With current in A and time in s the result is in coulomb. Missing points are skipped.
 /// Returns `None` for fewer than two valid points.
 pub fn charge(time: &[f64], current: &[f64], rows: Option<(usize, usize)>) -> Option<f64> {
     integrate(time, current, &IntegrateOptions { rows, ..IntegrateOptions::default() }).map(|r| r.area)
+}
+
+#[cfg(test)]
+mod cv_tests {
+    use super::*;
+
+    #[test]
+    fn a_voltammogram_splits_at_its_turns_and_divides_by_the_scan_rate() {
+        // 0 -> 1 -> 0 V in steps of 0.25 V at 0.1 V/s; 2 A going up, -1 A coming down.
+        let e = [0.0, 0.25, 0.5, 0.75, 1.0, 0.75, 0.5, 0.25, 0.0];
+        let i = [2.0, 2.0, 2.0, 2.0, 2.0, -1.0, -1.0, -1.0, -1.0];
+        let s = cv_charge(&e, &i, 0.1, false).unwrap();
+        assert_eq!(s.len(), 2);
+        assert!(s[0].anodic && !s[1].anodic);
+        assert_eq!((s[0].first, s[0].last, s[1].first, s[1].last), (0, 4, 4, 8), "the turn is shared");
+        // Up: 2 A over 1 V at 0.1 V/s is 10 s, so 20 C. Down: the first step goes from 2 A to -1 A.
+        assert!((s[0].charge - 20.0).abs() < 1e-12, "{}", s[0].charge);
+        let down = (0.5 * (2.0 - 1.0) * 0.25 + 3.0 * -0.25) / 0.1;
+        assert!((s[1].charge - down).abs() < 1e-12, "{} {down}", s[1].charge);
+        // A sloping background through the sweep's ends is taken away.
+        let ramp: Vec<f64> = e.iter().map(|v| 1.0 + v).collect();
+        let b = cv_charge(&e[..5], &ramp[..5], 0.1, true).unwrap();
+        assert!(b[0].charge.abs() < 1e-12, "a straight line has no charge above its ends");
+        // Missing points are skipped; flat steps stay in the sweep.
+        let e2 = [0.0, 0.5, f64::NAN, 0.5, 1.0, 0.5];
+        let i2 = [1.0, 1.0, 5.0, 1.0, 1.0, 1.0];
+        let s2 = cv_charge(&e2, &i2, 1.0, false).unwrap();
+        assert_eq!(s2.len(), 2);
+        assert!((s2[0].charge - 1.0).abs() < 1e-12);
+        assert!(cv_charge(&e, &i, 0.0, false).is_none());
+        assert!(cv_charge(&[1.0], &[1.0], 1.0, false).is_none());
+    }
 }

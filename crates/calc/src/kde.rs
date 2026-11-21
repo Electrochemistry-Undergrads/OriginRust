@@ -261,7 +261,8 @@ mod tests {
     }
 }
 
-/// A bivariate kernel density estimate on a grid (Plot > Statistics > 2D Kernel Density, T116).
+/// A bivariate kernel density estimate on a grid (Plot > Statistics > 2D Kernel Density, T116, measured
+/// against Origin 2016 by T289).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Density2d {
     /// The grid's X and Y positions, ascending.
@@ -274,35 +275,41 @@ pub struct Density2d {
     pub wy: f64,
 }
 
-/// The number of grid points along each axis of [`density_2d`].
-pub const GRID_2D: usize = 64;
+/// How [`density_2d_with`] picks the bandwidths (the Method of Origin's dialog).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum Kde2dMethod {
+    /// "Bivariate Kernel Density Estimator", Origin's default: data-driven bandwidths. Sheaf uses the
+    /// diffusion estimator of Botev, Grotowski and Kroese (2010) as published, which comes within a few
+    /// percent of Origin's (Origin's exact rule is not documented); [`Kde2dMethod::RuleOfThumb`] stands
+    /// in where it finds no solution.
+    #[default]
+    Bivariate,
+    /// "Rule of Thumb": `sd * n^(-1/6) / 2` per axis (measured exact).
+    RuleOfThumb,
+}
 
-/// The Gaussian product-kernel density of the finite `(x, y)` pairs on a [`GRID_2D`] square grid reaching 3
-/// bandwidths beyond the data, with Scott's bivariate bandwidths `sd * n^(-1/6)` per axis; `None` with
-/// fewer than two pairs or no spread along an axis.
+/// The number of grid points along each axis of [`density_2d`] (Origin's 32 x 32 matrix).
+pub const GRID_2D: usize = 32;
+/// How far the grid reaches beyond the data on each side, as a fraction of the data's range (Origin: a quarter).
+const EXTENT_2D: f64 = 0.25;
+/// The number of cosine terms of the diffusion estimator along each axis.
+const BOTEV_TERMS: usize = 256;
+
+/// [`density_2d_with`] with Origin's default method, [`Kde2dMethod::Bivariate`].
 pub fn density_2d(xs: &[f64], ys: &[f64]) -> Option<Density2d> {
+    density_2d_with(xs, ys, Kde2dMethod::Bivariate)
+}
+
+/// The Gaussian product-kernel density of the finite `(x, y)` pairs on a [`GRID_2D`] square grid from
+/// `min - range / 4` to `max + range / 4` along each axis (both ends included), with the bandwidths of
+/// `method`; `None` with fewer than two pairs or no spread along an axis.
+pub fn density_2d_with(xs: &[f64], ys: &[f64], method: Kde2dMethod) -> Option<Density2d> {
     let pts: Vec<(f64, f64)> =
         xs.iter().zip(ys).map(|(x, y)| (*x, *y)).filter(|(x, y)| x.is_finite() && y.is_finite()).collect();
-    let n = pts.len();
-    if n < 2 {
-        return None;
-    }
-    let sd = |v: &dyn Fn(&(f64, f64)) -> f64| {
-        let m = pts.iter().map(v).sum::<f64>() / n as f64;
-        (pts.iter().map(|p| (v(p) - m).powi(2)).sum::<f64>() / (n - 1) as f64).sqrt()
-    };
-    let factor = (n as f64).powf(-1.0 / 6.0);
-    let (wx, wy) = (sd(&|p| p.0) * factor, sd(&|p| p.1) * factor);
-    if !(wx > 0.0 && wy > 0.0) {
-        return None;
-    }
-    let span = |v: &dyn Fn(&(f64, f64)) -> f64, w: f64| {
-        let (lo, hi) = pts.iter().map(v).fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), x| (a.min(x), b.max(x)));
-        let (lo, hi) = (lo - 3.0 * w, hi + 3.0 * w);
-        (0..GRID_2D).map(|k| lo + (hi - lo) * k as f64 / (GRID_2D - 1) as f64).collect::<Vec<f64>>()
-    };
-    let (gx, gy) = (span(&|p| p.0, wx), span(&|p| p.1, wy));
-    let norm = 1.0 / (n as f64 * 2.0 * std::f64::consts::PI * wx * wy);
+    let (px, py): (Vec<f64>, Vec<f64>) = pts.iter().copied().unzip();
+    let (wx, wy) = bandwidths_2d(&px, &py, method)?;
+    let (gx, gy) = (grid_2d(&px), grid_2d(&py));
+    let norm = 1.0 / (pts.len() as f64 * 2.0 * std::f64::consts::PI * wx * wy);
     let mut z = Vec::with_capacity(GRID_2D * GRID_2D);
     for &y in &gy {
         for &x in &gx {
@@ -314,23 +321,203 @@ pub fn density_2d(xs: &[f64], ys: &[f64]) -> Option<Density2d> {
     Some(Density2d { x: gx, y: gy, z, wx, wy })
 }
 
+/// The lowest and highest of `v` widened by [`EXTENT_2D`] of the range on each side.
+fn extent_2d(v: &[f64]) -> (f64, f64) {
+    let (lo, hi) = v.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &x| (a.min(x), b.max(x)));
+    let r = hi - lo;
+    (lo - EXTENT_2D * r, hi + EXTENT_2D * r)
+}
+
+fn grid_2d(v: &[f64]) -> Vec<f64> {
+    let (lo, hi) = extent_2d(v);
+    (0..GRID_2D).map(|k| lo + (hi - lo) * k as f64 / (GRID_2D - 1) as f64).collect()
+}
+
+/// The X and Y bandwidths of `method` for the pairs `(xs[i], ys[i])` (all finite); `None` with fewer
+/// than two pairs or no spread along an axis.
+pub fn bandwidths_2d(xs: &[f64], ys: &[f64], method: Kde2dMethod) -> Option<(f64, f64)> {
+    let n = xs.len().min(ys.len());
+    if n < 2 {
+        return None;
+    }
+    let (xs, ys) = (&xs[..n], &ys[..n]);
+    let sd = |v: &[f64]| {
+        let m = v.iter().sum::<f64>() / n as f64;
+        (v.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (n - 1) as f64).sqrt()
+    };
+    let factor = (n as f64).powf(-1.0 / 6.0) / 2.0;
+    let thumb = (sd(xs) * factor, sd(ys) * factor);
+    if !(thumb.0 > 0.0 && thumb.1 > 0.0 && thumb.0.is_finite() && thumb.1.is_finite()) {
+        return None;
+    }
+    Some(match method {
+        Kde2dMethod::RuleOfThumb => thumb,
+        Kde2dMethod::Bivariate => botev_bandwidths(xs, ys).unwrap_or(thumb),
+    })
+}
+
+/// The 2D diffusion estimator's state: the squared cosine transform of the scaled data.
+struct Diffusion {
+    n: f64,
+    /// `a2[i * BOTEV_TERMS + j]`: the transform at X term `i` and Y term `j`, squared.
+    a2: Vec<f64>,
+    /// `k^2` for each term `k`.
+    sq: Vec<f64>,
+}
+
+impl Diffusion {
+    /// The functional of order `(s0, s1)` at time `t` (the published code's `psi`).
+    fn psi(&self, s0: i32, s1: i32, t: f64) -> f64 {
+        use std::f64::consts::PI;
+        let m = BOTEV_TERMS;
+        let w: Vec<f64> = (0..m).map(|k| (-self.sq[k] * PI * PI * t).exp() * if k == 0 { 1.0 } else { 0.5 }).collect();
+        let v: Vec<f64> = (0..m).map(|j| w[j] * self.sq[j].powi(s0)).collect();
+        let total: f64 = (0..m)
+            .map(|i| {
+                let inner: f64 = self.a2[i * m..(i + 1) * m].iter().zip(&v).map(|(a, v)| a * v).sum();
+                w[i] * self.sq[i].powi(s1) * inner
+            })
+            .sum();
+        let sign = if (s0 + s1) % 2 == 0 { 1.0 } else { -1.0 };
+        sign * total * PI.powi(2 * (s0 + s1))
+    }
+
+    /// The functional of order `s`: orders up to 4 at the time their own plug-in gives from the next
+    /// order, order 5 at `t` (the published code's `func`), memoised over one evaluation.
+    fn func(&self, s: (i32, i32), t: f64, memo: &mut Vec<((i32, i32), f64)>) -> f64 {
+        if let Some((_, v)) = memo.iter().find(|(k, _)| *k == s) {
+            return *v;
+        }
+        let order = s.0 + s.1;
+        let v = if order <= 4 {
+            let sf = self.func((s.0 + 1, s.1), t, memo) + self.func((s.0, s.1 + 1), t, memo);
+            let c = (1.0 + 0.5f64.powi(order + 1)) / 3.0;
+            let time = (-2.0 * c * k_const(s.0) * k_const(s.1) / self.n / sf).powf(1.0 / (2.0 + f64::from(order)));
+            self.psi(s.0, s.1, time)
+        } else {
+            self.psi(s.0, s.1, t)
+        };
+        memo.push((s, v));
+        v
+    }
+
+    /// The second-order functionals `(psi_02, psi_20, psi_11)` at time `t`.
+    fn second_order(&self, t: f64) -> (f64, f64, f64) {
+        let mut memo = Vec::with_capacity(18);
+        (self.func((0, 2), t, &mut memo), self.func((2, 0), t, &mut memo), self.func((1, 1), t, &mut memo))
+    }
+
+    /// `t - (t - t*) / t*` with `t* = (2 pi N S(t))^(-1/3)`, whose root is the diffusion time.
+    fn fixed_point(&self, t: f64) -> f64 {
+        let (p02, p20, p11) = self.second_order(t);
+        let star = (2.0 * std::f64::consts::PI * self.n * (p02 + p20 + 2.0 * p11)).powf(-1.0 / 3.0);
+        t - (t - star) / star
+    }
+}
+
+/// `(-1)^s (2s - 1)!! / sqrt(2 pi)`.
+fn k_const(s: i32) -> f64 {
+    let prod: f64 = (0..s).map(|i| f64::from(2 * i + 1)).product();
+    let sign = if s % 2 == 0 { 1.0 } else { -1.0 };
+    sign * prod / (2.0 * std::f64::consts::PI).sqrt()
+}
+
+/// The diffusion bandwidths of Botev, Grotowski and Kroese (2010, "Kernel density estimation via
+/// diffusion", the published `kde2d` algorithm) for finite pairs with a spread along both axes: the data
+/// scaled to [0, 1] over the grid's extent, an exact cosine transform of [`BOTEV_TERMS`] terms per axis,
+/// and the root of the plug-in equation for the diffusion time. `None` where no root is bracketed.
+fn botev_bandwidths(xs: &[f64], ys: &[f64]) -> Option<(f64, f64)> {
+    use std::f64::consts::PI;
+    let n = xs.len() as f64;
+    let m = BOTEV_TERMS;
+    // cos[k * len + p] = w_k cos(pi k t_p) with t the scaled data, w_0 = 1 and w_k = 2 otherwise.
+    let cosines = |v: &[f64]| -> (Vec<f64>, f64) {
+        let (lo, hi) = extent_2d(v);
+        let width = hi - lo;
+        let mut c = Vec::with_capacity(m * v.len());
+        for k in 0..m {
+            let w = if k == 0 { 1.0 } else { 2.0 };
+            c.extend(v.iter().map(|x| w * (PI * k as f64 * (x - lo) / width).cos()));
+        }
+        (c, width)
+    };
+    let ((cx, sx), (cy, sy)) = (cosines(xs), cosines(ys));
+    let len = xs.len();
+    let mut a2 = vec![0.0; m * m];
+    for i in 0..m {
+        let ci = &cx[i * len..(i + 1) * len];
+        for j in 0..m {
+            let a = ci.iter().zip(&cy[j * len..(j + 1) * len]).map(|(p, q)| p * q).sum::<f64>() / n;
+            a2[i * m + j] = a * a;
+        }
+    }
+    let d = Diffusion { n, a2, sq: (0..m).map(|k| (k * k) as f64).collect() };
+    // The published search: from a small upper end, doubled up to 0.1 until it brackets the root.
+    let mut hi = 1e-12 + 0.01 * (n.clamp(50.0, 1050.0) - 50.0) / 1000.0;
+    let f0 = d.fixed_point(0.0);
+    let mut fhi = d.fixed_point(hi);
+    // Until the ends differ in sign (a NaN never brackets).
+    while (f0 * fhi).partial_cmp(&0.0) != Some(std::cmp::Ordering::Less) {
+        if hi >= 0.1 || !f0.is_finite() {
+            return None;
+        }
+        hi = (hi * 2.0).min(0.1);
+        fhi = d.fixed_point(hi);
+    }
+    let (mut lo, mut flo) = (0.0, f0);
+    for _ in 0..200 {
+        let mid = 0.5 * (lo + hi);
+        if mid <= lo || mid >= hi {
+            break;
+        }
+        let fm = d.fixed_point(mid);
+        if fm == 0.0 {
+            (lo, hi) = (mid, mid);
+            break;
+        }
+        if (fm < 0.0) == (flo < 0.0) {
+            (lo, flo) = (mid, fm);
+        } else {
+            hi = mid;
+        }
+    }
+    let (p02, p20, p11) = d.second_order(0.5 * (lo + hi));
+    let mix = p11 + (p20 * p02).sqrt();
+    let t_y = (p02.powf(0.75) / (4.0 * PI * n * p20.powf(0.75) * mix)).powf(1.0 / 3.0);
+    let t_x = (p20.powf(0.75) / (4.0 * PI * n * p02.powf(0.75) * mix)).powf(1.0 / 3.0);
+    let (wx, wy) = (t_x.sqrt() * sx, t_y.sqrt() * sy);
+    (wx > 0.0 && wy > 0.0 && wx.is_finite() && wy.is_finite()).then_some((wx, wy))
+}
+
 #[cfg(test)]
 mod density_2d_tests {
     use super::*;
 
     #[test]
-    fn the_2d_density_integrates_to_one_and_peaks_at_the_cluster() {
-        let xs = [0.0, 0.1, -0.1, 0.05, 5.0];
-        let ys = [0.0, -0.1, 0.1, 0.0, 5.0];
-        let d = density_2d(&xs, &ys).unwrap();
-        assert_eq!((d.x.len(), d.y.len(), d.z.len()), (GRID_2D, GRID_2D, GRID_2D * GRID_2D));
+    fn the_2d_density_peaks_at_the_cluster_on_origins_grid() {
+        let xs = [0.0, 0.1, -0.1, 0.05, 0.02, -0.04, 0.08, -0.07, 5.0];
+        let ys = [0.0, -0.1, 0.1, 0.0, 0.06, -0.03, -0.05, 0.04, 5.0];
+        for method in [Kde2dMethod::Bivariate, Kde2dMethod::RuleOfThumb] {
+            let d = density_2d_with(&xs, &ys, method).unwrap();
+            assert_eq!((d.x.len(), d.y.len(), d.z.len()), (GRID_2D, GRID_2D, GRID_2D * GRID_2D));
+            assert!((d.x[0] - (-0.1 - 5.1 / 4.0)).abs() < 1e-12, "{}", d.x[0]);
+            assert!((d.x[GRID_2D - 1] - (5.0 + 5.1 / 4.0)).abs() < 1e-12, "{}", d.x[GRID_2D - 1]);
+            let k = d.z.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)).unwrap().0;
+            let (px, py) = (d.x[k % GRID_2D], d.y[k / GRID_2D]);
+            assert!(px.abs() < 1.0 && py.abs() < 1.0, "{method:?}: the peak is at the cluster: {px} {py}");
+        }
+    }
+
+    #[test]
+    fn the_2d_density_integrates_to_about_one_and_rejects_degenerate_data() {
+        let xs: Vec<f64> = (0..30).map(|i| ((i * 7) % 30) as f64).collect();
+        let ys: Vec<f64> = (0..30).map(|i| ((i * 11) % 30) as f64).collect();
+        let d = density_2d_with(&xs, &ys, Kde2dMethod::RuleOfThumb).unwrap();
         let (dx, dy) = (d.x[1] - d.x[0], d.y[1] - d.y[0]);
         let total: f64 = d.z.iter().sum::<f64>() * dx * dy;
-        assert!((total - 1.0).abs() < 0.02, "{total}");
-        let k = d.z.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)).unwrap().0;
-        let (px, py) = (d.x[k % GRID_2D], d.y[k / GRID_2D]);
-        assert!(px.abs() < 1.0 && py.abs() < 1.0, "the peak is at the cluster: {px} {py}");
+        assert!((total - 1.0).abs() < 0.05, "{total}");
         assert!(density_2d(&[1.0], &[1.0]).is_none());
         assert!(density_2d(&[1.0, 1.0], &[1.0, 2.0]).is_none(), "no spread along X");
+        assert!(density_2d(&[1.0, 2.0, f64::NAN], &[1.0, 2.0, 3.0]).is_some(), "the NaN pair is left out");
     }
 }

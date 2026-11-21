@@ -1,6 +1,6 @@
 # T116: Plot > Statistics > 2D Kernel Density
 
-**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 38), **not measured** (Origin COM unregistered): calc `density_2d` (Scott bandwidths, 64 x 64 grid), plot kind kde2d drawing the colour-map cells, the points on top, template kde-2d. Left: measure Origin's dialog, output and colour map and match them; a colour scale.
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 38). T289 (2026-11-21) measured Origin's output and matched its grid (32 x 32, a quarter of the range beyond the data) and its two bandwidth methods (Rule of Thumb exact, Bivariate within 2.4 %). Left: Origin's default contour drawing, its points-shown default (0), a method choice in the UI and a colour scale.
 **Size:** M. **Source:** greyed inventory package B4 (Plot > Statistics > 2D Kernel Density...).
 **Spec:** `docs/spec/graphing.md` (a new section).
 

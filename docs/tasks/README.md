@@ -118,7 +118,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T113](T113-wind-rose.md) | Plot > Specialized > Wind Rose (Binned Data, Raw Data) | M | done 2026-11-16 (graphing 36), not measured (Origin COM unregistered); left: measure and match |
 | [T114](T114-scatter-matrix.md) | Plot > Statistics > Scatter Matrix (B4 slice) | M | done 2026-11-16 (`scatter-matrix`, graphing 35, Origin docs only, unmeasured); left: Mixed display, box/distribution diagonals, tick modes, ellipse, linear fit, grouping, listwise missing |
 | [T115](T115-smith-chart.md) | Plot > Specialized > Smith Chart | M | done 2026-11-16 (graphing 37), not measured (Origin COM unregistered); left: measure and match |
-| [T116](T116-kernel-density-2d.md) | Plot > Statistics > 2D Kernel Density | M | done 2026-11-16 (graphing 38), not measured (Origin COM unregistered); left: measure and match |
+| [T116](T116-kernel-density-2d.md) | Plot > Statistics > 2D Kernel Density | M | done 2026-11-16 (graphing 38); grid and bandwidths measured and matched by T289; left: contour drawing, points shown, method choice |
 | [T117](T117-piper.md) | Plot > Specialized > Piper | M | done 2026-11-16 (graphing 39), not measured (Origin COM unregistered); left: measure and match |
 | [T118](T118-data-markers.md) | Graph Data menu: Set Display Range, Reset to Full Range, Mark Data Range, Clear Data Markers (B3 slice) | M | done 2026-11-16 (graphing 40), not measured (Origin COM unregistered); left: measure and match |
 | [T119](T119-add-function-graph.md) | Graph > Add Function Graph... (B3 slice) | S | done 2026-11-16 (graphing 41), not measured (Origin COM unregistered); left: measure and match |
@@ -270,6 +270,8 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T285](T285-image-edge.md) | Image Edge Detection as Origin 2016 imgEdge: binary map, Sobel/Prewitt, threshold | S | done 2026-11-21, measured |
 | [T286](T286-explorer-multiselect.md) | Project Explorer: Ctrl+click, Shift+click and Ctrl+A highlight several windows; Delete, Show, Hide and drag act on them | S | done 2026-11-21 |
 | [T287](T287-fft2-measure.md) | Matrix 2D FFT measured against Origin 2016 fft2 (numpy conventions match); Power sheet added | S | done 2026-11-21, measured |
+| [T288](T288-explorer-search.md) | Project Explorer search box (name, long name, comments; Subfolders) | S | done 2026-11-21 |
+| [T289](T289-kde2d-measure.md) | Measure 2D Kernel Density against Origin (32 x 32 grid, Rule of Thumb, Bivariate) | S | done 2026-11-21 (graphing 38) |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |

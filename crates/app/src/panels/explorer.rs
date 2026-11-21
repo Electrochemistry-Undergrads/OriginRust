@@ -33,6 +33,11 @@ pub struct ExplorerState {
     /// The highlighted windows (T286): one after a plain click, more with Ctrl+click, Shift+click and
     /// Ctrl+A. `selected` is the last one clicked, where a Shift+click run starts.
     pub picked: Vec<WindowId>,
+    /// The search box over the window list (T288): only windows whose name, long name or comments
+    /// hold this text (any case) are listed; empty lists them all.
+    pub search: String,
+    /// The search also looks in the subfolders of the folder (T288).
+    pub search_subfolders: bool,
     /// The Favorites folder is selected (T130): the list shows the shortcuts of `Project::favorites`.
     pub favorites: bool,
     /// The windows drawn in bold during the last frame (the active one), for the tests.
@@ -48,6 +53,8 @@ impl Default for ExplorerState {
             sort: (0, true),
             focus: false,
             picked: Vec::new(),
+            search: String::new(),
+            search_subfolders: false,
             favorites: false,
             bold: Vec::new(),
         }
@@ -55,6 +62,37 @@ impl Default for ExplorerState {
 }
 
 impl ExplorerState {
+    /// The windows the list shows (T288): those of Favorites or of the folder (and, while searching
+    /// with Subfolders ticked, of its subfolders) whose name, long name or comments hold the search
+    /// text, in any case. Not sorted.
+    pub fn listed(&self, project: &Project) -> Vec<WindowId> {
+        let base = if self.favorites {
+            project.favorites.clone()
+        } else if self.search_subfolders && !self.search.trim().is_empty() {
+            project
+                .windows
+                .iter()
+                .map(Window::id)
+                .filter(|id| home(&project.root, *id).starts_with(&self.folder))
+                .collect()
+        } else {
+            windows_in(project, &self.folder)
+        };
+        let text = self.search.trim().to_lowercase();
+        if text.is_empty() {
+            return base;
+        }
+        base.into_iter()
+            .filter(|id| {
+                project.window(*id).is_some_and(|w| {
+                    [cell(w, 0), cell(w, 1), project.window_comments(*id).to_string()]
+                        .iter()
+                        .any(|t| t.to_lowercase().contains(&text))
+                })
+            })
+            .collect()
+    }
+
     /// Nothing highlighted.
     pub fn clear_selection(&mut self) {
         self.selected = None;
@@ -198,9 +236,9 @@ pub fn handle_keys(ctx: &egui::Context, st: &mut ExplorerState, project: &Projec
             i.consume_key(egui::Modifiers::COMMAND, egui::Key::A),
         )
     });
-    let in_folder = windows_in(project, &st.folder);
     if all {
-        st.picked = if st.favorites { project.favorites.clone() } else { in_folder.clone() };
+        // Every listed window: of the folder or Favorites, as the search leaves them (T288).
+        st.picked = st.listed(project);
         st.selected = st.picked.first().copied();
     }
     if rename {
@@ -455,6 +493,19 @@ fn list(ui: &mut egui::Ui, st: &mut ExplorerState, data: &PanelData, actions: &m
         edges[i + 1] = edges[i] + SHARES[i] * width;
     }
     edges[4] = width;
+    // T288: the search box, and whether it looks in the subfolders too.
+    ui.horizontal(|ui| {
+        let edit = egui::TextEdit::singleline(&mut st.search)
+            .hint_text("Search windows")
+            .desired_width((width - 110.0).max(60.0));
+        let response = ui.add(edit).on_hover_text("Name, long name or comments holding this text (any case)");
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Search windows"));
+        if response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            st.search.clear();
+        }
+        ui.checkbox(&mut st.search_subfolders, "Subfolders")
+            .on_hover_text("Search the folder and every folder below it");
+    });
     // The header row; a click on a name sorts by it.
     let (head, _) = ui.allocate_exact_size(Vec2::new(width, ROW_H), Sense::hover());
     ui.painter().rect_filled(head, 0.0, HEAD_FILL);
@@ -488,11 +539,7 @@ fn list(ui: &mut egui::Ui, st: &mut ExplorerState, data: &PanelData, actions: &m
 
     // Deleted windows leave the selection.
     st.picked.retain(|w| data.project.window(*w).is_some());
-    let ids = if st.favorites {
-        sorted(data.project, data.project.favorites.clone(), st.sort)
-    } else {
-        sorted(data.project, windows_in(data.project, &st.folder), st.sort)
-    };
+    let ids = sorted(data.project, st.listed(data.project), st.sort);
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         for &id in &ids {
             let Some(w) = data.project.window(id) else { continue };
@@ -526,9 +573,16 @@ fn row(
     let (rect, response) = ui.allocate_exact_size(Vec2::new(edges[4], ROW_H), Sense::click_and_drag());
     let title = w.title();
     response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, &title));
-    // T249: the window's Comments as the row's tooltip.
-    let comments = data.project.window_comments(id);
-    let response = if comments.is_empty() { response } else { response.on_hover_text(comments) };
+    // T249: the window's Comments as the row's tooltip; while searching the subfolders, the folder
+    // the window is in (T288).
+    let mut tip = data.project.window_comments(id).to_string();
+    let path = home(&data.project.root, id);
+    if st.search_subfolders && !st.search.trim().is_empty() && path != st.folder {
+        let folder = folder_list(&data.project.root).into_iter().find(|(p, _)| *p == path).map(|(_, n)| n);
+        let line = format!("In {}", folder.unwrap_or_default());
+        tip = if tip.is_empty() { line } else { format!("{tip}\n{line}") };
+    }
+    let response = if tip.is_empty() { response } else { response.on_hover_text(tip) };
     if selected {
         ui.painter().rect_filled(rect, 0.0, Color32::from_rgb(204, 228, 247));
     } else if response.hovered() {
@@ -672,6 +726,27 @@ mod tests {
         assert_eq!(st.picked, [c]);
         st.clear_selection();
         assert!(st.picked.is_empty() && st.selected.is_none());
+    }
+
+    #[test]
+    fn the_search_lists_the_windows_whose_names_or_comments_hold_the_text() {
+        // T288.
+        let (mut p, a, b) = project();
+        let c = p.add_workbook("Gamma run");
+        p.set_window_comments(b, "calibration of the Gamma detector");
+        p.root.folders.push(Folder { name: "Runs".into(), windows: vec![c], ..Folder::default() });
+        let mut st = ExplorerState::default();
+        assert_eq!(st.listed(&p), [a, b], "no search: the root's own windows");
+        st.search = "gamma".into();
+        assert_eq!(st.listed(&p), [b], "the comments hold it; Gamma run is in a subfolder");
+        st.search_subfolders = true;
+        assert_eq!(st.listed(&p), [b, c], "with the subfolders");
+        st.search = "  ALPHA ".into();
+        assert_eq!(st.listed(&p), [a], "long name, any case, spaces trimmed");
+        st.search = "Book3".into();
+        assert_eq!(st.listed(&p), [c], "the short name");
+        st.search = "nothing".into();
+        assert!(st.listed(&p).is_empty());
     }
 
     #[test]

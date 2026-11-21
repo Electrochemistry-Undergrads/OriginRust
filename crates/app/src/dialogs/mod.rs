@@ -42,6 +42,7 @@ pub mod graph_details;
 pub mod graph_props;
 pub mod graph_sheet;
 pub mod graph_themes;
+pub mod grouped_hist;
 pub mod import;
 pub mod import_bin2d;
 pub mod import_excel;

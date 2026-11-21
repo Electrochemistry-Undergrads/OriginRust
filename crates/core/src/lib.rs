@@ -36,6 +36,7 @@ pub mod function_graph;
 pub mod graph;
 pub mod graph_data;
 pub mod graph_style;
+pub mod grouped_hist;
 pub mod history;
 pub mod ids;
 pub mod indexed;

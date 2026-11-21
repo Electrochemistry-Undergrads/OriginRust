@@ -269,6 +269,8 @@ pub struct SheafApp {
     /// Window > Duplicate (Batch Plotting).
     batch_plot: Option<crate::dialogs::batch_plot::BatchPlotDialog>,
     qc_chart: Option<crate::dialogs::qc_chart::QcDialog>,
+    /// Plot > Statistics > Grouped Histogram's window (T271).
+    grouped_hist: Option<crate::dialogs::grouped_hist::GroupedHistDialog>,
     /// Plot > Statistics > Run Chart's window (T270).
     run_chart: Option<crate::dialogs::run_chart::RunChartDialog>,
     function_graph: Option<crate::dialogs::function_graph::FunctionGraphDialog>,
@@ -453,6 +455,7 @@ impl SheafApp {
             find_spec: Default::default(),
             batch_plot: None,
             qc_chart: None,
+            grouped_hist: None,
             run_chart: None,
             function_graph: None,
             function_graph_new: false,
@@ -2625,6 +2628,12 @@ impl SheafApp {
                 }
             }
             Action::PlotColumns { book, columns, template } => self.plot_columns(book, columns, template),
+            Action::GroupedHistogram { book, columns } => {
+                match crate::dialogs::grouped_hist::GroupedHistDialog::new(self.doc.project(), book, &columns) {
+                    Some(d) => self.grouped_hist = Some(d),
+                    None => self.warn("A grouped histogram needs a numeric column and a group column".to_string()),
+                }
+            }
             Action::RunChart { book, columns } => {
                 let project = self.doc.project();
                 let numeric = |id: &ColumnId| project.column(*id).is_some_and(|c| c.data.is_numeric());
@@ -4749,6 +4758,28 @@ impl SheafApp {
             Ok((_, graph)) => {
                 self.focus(graph);
                 self.say(format!("Made a run chart in subgroups of {size}"));
+            }
+            Err(e) => self.warn(e.to_string()),
+        }
+    }
+
+    /// Plot > Statistics > Grouped Histogram's window (T271): OK makes the workbook and graph, one undo step.
+    fn show_grouped_hist(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::grouped_hist::GroupedHistOutcome;
+        let Some(d) = &mut self.grouped_hist else { return };
+        let (data, group, separate) = match d.show(ctx) {
+            GroupedHistOutcome::Open => return,
+            GroupedHistOutcome::Closed => {
+                self.grouped_hist = None;
+                return;
+            }
+            GroupedHistOutcome::Make { data, group, separate } => (data, group, separate),
+        };
+        self.grouped_hist = None;
+        match self.doc.edit("Grouped Histogram", |p| p.plot_grouped_histogram(data, group, separate)) {
+            Ok((_, graph)) => {
+                self.focus(graph);
+                self.say("Made a grouped histogram".to_string());
             }
             Err(e) => self.warn(e.to_string()),
         }
@@ -7150,6 +7181,7 @@ impl SheafApp {
         self.show_find_project(ctx);
         self.show_batch_plot(ctx);
         self.show_qc_chart(ctx);
+        self.show_grouped_hist(ctx);
         self.show_run_chart(ctx);
         self.show_function_graph(ctx);
         self.show_audit_log(ctx);

@@ -252,6 +252,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T267](T267-poisson-rate.md) | One- and two-sample Poisson rate tests (Origin 2026b): calc, analysis, CLI, dialogs | M | done 2026-11-20, not measured; left: Raw/Indexed input, plots, power |
 | [T268](T268-step-measure.md) | Centred steps measured in Origin: codes 13 and 14 match T252; .opj reads/writes 14 | S | done 2026-11-20 |
 | [T270](T270-run-chart.md) | Plot > Statistics > Run Chart (Origin 2025b/2026) | S | done 2026-11-21, not measured |
+| [T271](T271-grouped-histogram.md) | Plot > Statistics > Grouped Histogram (Origin 2026) | S | done 2026-11-21, not measured |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |

@@ -7,27 +7,30 @@ use crate::ids::WindowId;
 use serde::{Deserialize, Serialize};
 
 /// What an item of a layout page shows.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum LayoutContent {
     /// A live picture of a graph window: it changes when the graph does.
     Graph { graph: WindowId },
     /// A live picture of sheet `sheet` (index) of workbook `book` (T237 slice 5).
     Sheet { book: WindowId, sheet: usize },
+    /// Text on the page (T237 slice 8): lines in Arial, black, `size` points.
+    Text { text: String, size: u16 },
 }
 
 impl LayoutContent {
-    /// The window the item shows.
-    pub fn window(&self) -> WindowId {
+    /// The window the item shows; `None` for text.
+    pub fn window(&self) -> Option<WindowId> {
         match *self {
-            LayoutContent::Graph { graph } => graph,
-            LayoutContent::Sheet { book, .. } => book,
+            LayoutContent::Graph { graph } => Some(graph),
+            LayoutContent::Sheet { book, .. } => Some(book),
+            LayoutContent::Text { .. } => None,
         }
     }
 }
 
 /// One object on the page; the rectangle is in fractions of the page (0,0 the top left).
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct LayoutItem {
     pub content: LayoutContent,
     pub x: f64,
@@ -95,6 +98,14 @@ impl LayoutPage {
         self.add(LayoutContent::Sheet { book, sheet }, aspect)
     }
 
+    /// Layout > Add Text: `text` at its own size (`size_pt` = its box in points), centred at the top
+    /// of the page.
+    pub fn add_text(&mut self, text: String, size: u16, size_pt: (f64, f64)) -> usize {
+        let (w, h) = ((size_pt.0 / self.width_pt).min(1.0), (size_pt.1 / self.height_pt).min(1.0));
+        self.items.push(LayoutItem { content: LayoutContent::Text { text, size }, x: (1.0 - w) / 2.0, y: 0.04, w, h });
+        self.items.len() - 1
+    }
+
     /// Puts `content` in the next free cell of the two-column grid, keeping `aspect`.
     pub fn add(&mut self, content: LayoutContent, aspect: f64) -> usize {
         let k = self.items.len();
@@ -119,7 +130,7 @@ impl LayoutPage {
     pub fn graphs(&self) -> impl Iterator<Item = WindowId> + '_ {
         self.items.iter().filter_map(|i| match i.content {
             LayoutContent::Graph { graph } => Some(graph),
-            LayoutContent::Sheet { .. } => None,
+            LayoutContent::Sheet { .. } | LayoutContent::Text { .. } => None,
         })
     }
 
@@ -129,6 +140,7 @@ impl LayoutPage {
             match &mut it.content {
                 LayoutContent::Graph { graph } => *graph = map(*graph),
                 LayoutContent::Sheet { book, .. } => *book = map(*book),
+                LayoutContent::Text { .. } => {}
             }
         }
     }
@@ -148,7 +160,7 @@ mod tests {
         let l = p.layout_mut(id).unwrap();
         assert_eq!(l.add_graph(g, 4.0 / 3.0), 0);
         assert_eq!(l.add_graph(g, 4.0 / 3.0), 1);
-        let (a, b) = (l.items[0], l.items[1]);
+        let (a, b) = (l.items[0].clone(), l.items[1].clone());
         assert!(a.x < b.x && (a.y - b.y).abs() < 1e-12, "side by side: {a:?} {b:?}");
         for it in &l.items {
             assert!(it.x >= 0.0 && it.y >= 0.0 && it.x + it.w <= 1.0 && it.y + it.h <= 1.0, "{it:?}");
@@ -170,7 +182,12 @@ mod tests {
         let l = p.layout_mut(id).unwrap();
         assert_eq!(l.add_sheet(book, 0, 2.0), 2);
         assert_eq!(l.items[2].content, super::LayoutContent::Sheet { book, sheet: 0 });
-        assert_eq!(l.items[2].content.window(), book);
+        assert_eq!(l.items[2].content.window(), Some(book));
+        // Text sits at its own size, centred at the top.
+        assert_eq!(l.add_text("Figure 1".into(), 12, (79.2, 30.6)), 3);
+        let t = &l.items[3];
+        assert!((t.w - 0.1).abs() < 1e-12 && (t.h - 0.05).abs() < 1e-12 && (t.x - 0.45).abs() < 1e-12, "{t:?}");
+        assert_eq!(t.content.window(), None);
         l.background = crate::Color::rgb(255, 255, 200);
         assert_eq!(l.graphs().count(), 2);
         let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();

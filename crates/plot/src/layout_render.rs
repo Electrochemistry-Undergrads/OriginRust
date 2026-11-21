@@ -6,6 +6,38 @@ use crate::{PlotError, Raster, RasterOptions, raster};
 use sheaf_core::layout_page::LayoutContent;
 use sheaf_core::{Project, WindowId};
 
+/// The font of layout text (T237 slice 8).
+const TEXT_FAMILY: &str = "Arial";
+
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
+/// Layout text as an SVG document and its natural size in points: the lines in Arial at `size`
+/// points, 1.2 sizes apart, with a margin of 0.3 size all round.
+pub fn layout_text_svg(text: &str, size: u16) -> (String, (f64, f64)) {
+    use std::fmt::Write as _;
+    let s = f64::from(size.max(1));
+    let font = sheaf_core::graph::Font::new(TEXT_FAMILY, s);
+    let m = SystemFonts::shared();
+    let lines: Vec<&str> = if text.is_empty() { vec![""] } else { text.lines().collect() };
+    let pad = 0.3 * s;
+    let widest = lines.iter().map(|l| crate::fonts::TextMeasurer::width(m, l, &font, s)).fold(0.0, f64::max);
+    let (w, h) = (widest.max(s) + 2.0 * pad, 1.2 * s * lines.len() as f64 + 2.0 * pad);
+    let mut out = String::new();
+    let _ = write!(
+        out,
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{w}pt\" height=\"{h}pt\" viewBox=\"0 0 {w} {h}\">\
+         <text font-family=\"{TEXT_FAMILY}\" font-size=\"{s}\" fill=\"rgb(0,0,0)\">"
+    );
+    for (k, line) in lines.iter().enumerate() {
+        let y = pad + 1.2 * s * k as f64 + 0.95 * s;
+        let _ = write!(out, "<tspan x=\"{pad}\" y=\"{y}\">{}</tspan>", xml_escape(line));
+    }
+    out.push_str("</text></svg>\n");
+    (out, (w, h))
+}
+
 /// The picture of a layout item `pixel_width` pixels wide; `None` when what it shows is gone.
 pub fn render_layout_item(
     project: &Project,
@@ -13,28 +45,36 @@ pub fn render_layout_item(
     pixel_width: u32,
 ) -> Option<Result<Raster, PlotError>> {
     let px = f64::from(pixel_width.max(1));
-    match *content {
+    match content {
         LayoutContent::Graph { graph } => {
-            let g = project.graph(graph)?;
-            Some(crate::render_raster(project, graph, px / g.page.width_pt.max(1.0)))
+            let g = project.graph(*graph)?;
+            Some(crate::render_raster(project, *graph, px / g.page.width_pt.max(1.0)))
         }
         LayoutContent::Sheet { book, sheet } => {
-            let ws = project.workbook(book)?.sheets.get(sheet)?;
+            let ws = project.workbook(*book)?.sheets.get(*sheet)?;
             Some(crate::sheet_image_size(ws).and_then(|(w, _)| crate::sheet_image_raster(ws, px / w.max(1.0))))
+        }
+        LayoutContent::Text { text, size } => {
+            let (svg, (w, _)) = layout_text_svg(text, *size);
+            Some(raster::rasterise(&svg, px / w.max(1.0), SystemFonts::shared()))
         }
     }
 }
 
 /// The width / height of what a layout item shows, for placing a new one; `None` when it is gone.
 pub fn layout_item_aspect(project: &Project, content: &LayoutContent) -> Option<f64> {
-    match *content {
+    match content {
         LayoutContent::Graph { graph } => {
-            let g = project.graph(graph)?;
+            let g = project.graph(*graph)?;
             Some(g.page.width_pt / g.page.height_pt.max(1.0))
         }
         LayoutContent::Sheet { book, sheet } => {
-            let ws = project.workbook(book)?.sheets.get(sheet)?;
+            let ws = project.workbook(*book)?.sheets.get(*sheet)?;
             crate::sheet_image_size(ws).ok().map(|(w, h)| w / h.max(1.0))
+        }
+        LayoutContent::Text { text, size } => {
+            let (_, (w, h)) = layout_text_svg(text, *size);
+            Some(w / h.max(1.0))
         }
     }
 }
@@ -116,15 +156,16 @@ pub fn render_layout_image(project: &Project, layout: WindowId, ext: &str, dpi: 
 
 /// The vector picture of what a layout item shows; `None` when it is gone.
 fn item_svg(project: &Project, content: &LayoutContent) -> Option<Result<String, PlotError>> {
-    match *content {
+    match content {
         LayoutContent::Graph { graph } => {
-            project.graph(graph)?;
-            Some(crate::render_svg(project, graph))
+            project.graph(*graph)?;
+            Some(crate::render_svg(project, *graph))
         }
         LayoutContent::Sheet { book, sheet } => {
-            let ws = project.workbook(book)?.sheets.get(sheet)?;
+            let ws = project.workbook(*book)?.sheets.get(*sheet)?;
             Some(crate::sheet_image_svg(ws))
         }
+        LayoutContent::Text { text, size } => Some(Ok(layout_text_svg(text, *size).0)),
     }
 }
 
@@ -204,7 +245,7 @@ mod tests {
         };
         assert_eq!(px(r.width - 2, r.height - 2), [255, 255, 255], "the empty cell stays white");
         // Something other than white is drawn inside the first cell (axes, curve, text).
-        let item = p.layout(id).unwrap().items[0];
+        let item = p.layout(id).unwrap().items[0].clone();
         let (x0, y0) = ((item.x * 396.0) as u32, (item.y * 306.0) as u32);
         let (x1, y1) = (((item.x + item.w) * 396.0) as u32, ((item.y + item.h) * 306.0) as u32);
         let inked =
@@ -243,5 +284,17 @@ mod tests {
         let svg = render_layout_svg(&p, id).unwrap();
         assert_eq!(svg.matches("<svg").count(), 3, "the page, the graph and the sheet; the gone sheet left out");
         assert!(svg.contains("url(#i0-clip0)"));
+        // Text: drawn in its box, written as SVG text (escaped).
+        let (_, size) = layout_text_svg("A < B", 24);
+        p.layout_mut(id).unwrap().add_text("A < B".into(), 24, size);
+        let r = render_layout_raster(&p, id, 72.0).unwrap();
+        let t = p.layout(id).unwrap().items[3].clone();
+        let (x0, y0) = ((t.x * 792.0) as u32, (t.y * 612.0) as u32);
+        let (x1, y1) = (((t.x + t.w) * 792.0) as u32, ((t.y + t.h) * 612.0) as u32);
+        let k = |x: u32, y: u32| ((y * r.width + x) * 4) as usize;
+        let dark = (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y))).filter(|&(x, y)| r.rgba[k(x, y)] < 128).count();
+        assert!(dark > 30, "the text is drawn: {dark} dark pixels");
+        let svg = render_layout_svg(&p, id).unwrap();
+        assert!(svg.contains(">A &lt; B</tspan>"), "escaped text");
     }
 }

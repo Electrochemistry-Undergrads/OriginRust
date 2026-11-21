@@ -23,8 +23,8 @@ pub struct LayoutAddGraph {
 pub fn add_item(doc: &mut Document, layout: WindowId, content: LayoutContent) -> Result<(), String> {
     let aspect = sheaf_plot::layout_item_aspect(doc.project(), &content).ok_or("the window is gone")?;
     let label = match content {
-        LayoutContent::Graph { .. } => "Add graph to layout",
         LayoutContent::Sheet { .. } => "Add worksheet to layout",
+        _ => "Add graph to layout",
     };
     doc.edit(label, |p| {
         p.layout_mut(layout).ok_or("the layout page is gone")?.add(content, aspect);
@@ -83,7 +83,7 @@ impl LayoutAddGraph {
             return Outcome::Closed;
         }
         if ok && let Some((content, _)) = self.choices.get(self.pick) {
-            return match add_item(doc, self.layout, *content) {
+            return match add_item(doc, self.layout, content.clone()) {
                 Ok(()) => Outcome::Done,
                 Err(_) => Outcome::Closed,
             };

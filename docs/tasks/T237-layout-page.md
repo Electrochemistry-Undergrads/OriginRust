@@ -1,6 +1,6 @@
 # T237: Layout pages (B14, slice 1)
 
-**Status:** slices 1 to 7 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
+**Status:** slices 1 to 8 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
 **Size:** L (several slices). **Source:** greyed inventory package B14 ("New: Layout",
 "Standard: New Layout").
 **Spec:** `docs/spec/layout-page.md`.
@@ -54,8 +54,16 @@
   SVGs with their ids prefixed). Tests: `layout_render::tests` and
   `layout_page::a_layout_page_is_exported_as_a_picture_file`.
 
+## Done in slice 8 (2026-11-20)
+
+- Text items: `LayoutContent::Text { text, size }` (`LayoutItem` is no longer `Copy`), Layout > Add
+  Text... and double-click editing (`dialogs/layout_text.rs`), drawn from
+  `sheaf_plot::layout_text_svg` on screen and in every export. Tests: `layout_page::tests` (core),
+  `layout_render::tests` (plot), `layout_page::layout_text_is_added_and_a_double_click_edits_it`.
+
 ## Left (next slices)
 
 - Other page properties (printer page, theme).
 - Print, and EMF export of the page.
+- Rich text and drawn objects (lines, rectangles) on the page.
 - Writing the page to `.opj`.

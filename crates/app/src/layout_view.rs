@@ -98,7 +98,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, id: WindowId, state: &mut LayoutU
     };
     for (k, item) in page.items.iter().enumerate() {
         let r = screen(shown(k, item));
-        let content = item.content;
+        let content = item.content.clone();
         let px = (r.width() * ppp).round().max(1.0) as u32;
         let key = (doc.revision(), px);
         let fresh = state.pictures.get(&content).is_some_and(|(k, _)| *k == key);
@@ -117,7 +117,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, id: WindowId, state: &mut LayoutU
                     );
                     let name = format!("layout-{}-{content:?}", id.0);
                     let tex = ui.ctx().load_texture(name, image, TextureOptions::LINEAR);
-                    state.pictures.insert(content, (key, tex));
+                    state.pictures.insert(content.clone(), (key, tex));
                 }
                 Some(Err(_)) => {}
             }
@@ -142,6 +142,14 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, id: WindowId, state: &mut LayoutU
         && let Some(p) = response.interact_pointer_pos()
     {
         state.selected = hit(p);
+    }
+    // A double-click on text opens it for editing (T237 slice 8).
+    if response.double_clicked()
+        && let Some(p) = response.interact_pointer_pos()
+        && let Some(k) = hit(p)
+        && matches!(page.items[k].content, LayoutContent::Text { .. })
+    {
+        actions.push(Action::LayoutText { layout: id, index: Some(k) });
     }
     if response.drag_started()
         && let Some(p) = ui.input(|i| i.pointer.press_origin())

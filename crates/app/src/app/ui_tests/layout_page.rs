@@ -60,7 +60,7 @@ fn layout_items_are_moved_resized_and_deleted_with_the_mouse() {
     h.state_mut().focus(id);
     settle(&mut h);
     let page = h.state().layouts.get(&id).and_then(|l| l.page_on_screen).expect("the page was drawn");
-    let item = |h: &Harness<'static, SheafApp>| project(h).layout(id).unwrap().items[0];
+    let item = |h: &Harness<'static, SheafApp>| project(h).layout(id).unwrap().items[0].clone();
     let at = |r: egui::Rect, fx: f64, fy: f64| {
         egui::pos2(r.left() + fx as f32 * r.width(), r.top() + fy as f32 * r.height())
     };
@@ -155,4 +155,42 @@ fn add_worksheet_puts_a_sheet_picture_on_the_layout_page() {
     assert_eq!(h.state().doc.undo_label(), Some("Add worksheet to layout"));
     settle(&mut h);
     assert!(h.state().layouts.contains_key(&id), "the layout window was drawn");
+}
+
+#[test]
+fn layout_text_is_added_and_a_double_click_edits_it() {
+    use sheaf_core::layout_page::LayoutContent;
+    let mut h = start(vec![]);
+    let ctx = h.ctx.clone();
+    menu_path(&mut h, &["File", "New", "Layout"]);
+    let id = project(&h).layouts().next().unwrap().id;
+    let action = menus::resolve(&menus::Cmd::LayoutAddText, &h.state().menu_context()).unwrap();
+    h.state_mut().apply(action, &ctx);
+    settle(&mut h);
+    h.state_mut().layout_text.as_mut().expect("the Add Text window is open").text = "Figure 1".into();
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().layout_text.is_none());
+    assert_eq!(h.state().doc.undo_label(), Some("Add text to layout"));
+    let first = project(&h).layout(id).unwrap().items[0].clone();
+    assert_eq!(first.content, LayoutContent::Text { text: "Figure 1".into(), size: 18 });
+    // A double-click on it opens it again; a bigger size makes its box bigger, the corner stays.
+    settle(&mut h);
+    let page = h.state().layouts[&id].page_on_screen.expect("the page was drawn");
+    let at = page.min
+        + egui::vec2(
+            ((first.x + first.w / 2.0) as f32) * page.width(),
+            ((first.y + first.h / 2.0) as f32) * page.height(),
+        );
+    double_click_at(&mut h, at);
+    settle(&mut h);
+    let d = h.state_mut().layout_text.as_mut().expect("the double-click opened the text");
+    assert_eq!((d.index, d.text.as_str()), (Some(0), "Figure 1"));
+    d.size = 36;
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Edit layout text"));
+    let after = project(&h).layout(id).unwrap().items[0].clone();
+    assert_eq!(after.content, LayoutContent::Text { text: "Figure 1".into(), size: 36 });
+    assert!(after.w > first.w * 1.5 && (after.x, after.y) == (first.x, first.y), "{first:?} {after:?}");
 }

@@ -142,16 +142,27 @@ pub fn render_layout_image(project: &Project, layout: WindowId, ext: &str, dpi: 
     let ext = ext.to_ascii_lowercase();
     match ext.as_str() {
         "svg" => return Ok(render_layout_svg(project, layout)?.into_bytes()),
+        "emf" => return render_layout_emf(project, layout, dpi),
         "pdf" => return raster::to_pdf(&render_layout_svg(project, layout)?, SystemFonts::shared()),
         _ => {}
     }
     if !raster::is_raster_ext(&ext) {
         return Err(PlotError::Image(format!(
-            "a layout page is exported as png, jpg, tif, bmp, svg or pdf, not .{ext}"
+            "a layout page is exported as png, jpg, tif, bmp, svg, pdf or emf, not .{ext}"
         )));
     }
     let r = render_layout_raster(project, layout, dpi)?;
     raster::encode_raster(&r, &ext, dpi, &RasterOptions::default())
+}
+
+/// The layout page as an Enhanced Metafile (T237 slice 9): the page picture at `dpi` as one bitmap
+/// the size of the page, for printing on Windows and for EMF export.
+pub fn render_layout_emf(project: &Project, layout: WindowId, dpi: f64) -> Result<Vec<u8>, PlotError> {
+    let page = project
+        .layout(layout)
+        .ok_or_else(|| PlotError::Image(format!("there is no layout page with id {}", layout.0)))?;
+    let r = render_layout_raster(project, layout, dpi)?;
+    Ok(crate::emf::write_emf_picture(page.width_pt, page.height_pt, &r))
 }
 
 /// The vector picture of what a layout item shows; `None` when it is gone.
@@ -253,7 +264,10 @@ mod tests {
         assert!(inked > 100, "the graph picture is drawn: {inked} inked pixels");
         let png = render_layout_image(&p, id, "PNG", 36.0).unwrap();
         assert!(png.starts_with(&[0x89, b'P', b'N', b'G']));
-        assert!(render_layout_image(&p, id, "emf", 36.0).is_err());
+        assert!(render_layout_image(&p, id, "eps", 36.0).is_err());
+        let emf = render_layout_image(&p, id, "emf", 36.0).unwrap();
+        assert_eq!(&emf[40..44], b" EMF", "an Enhanced Metafile");
+        assert!(emf.len() > 396 * 306 * 3, "the page bitmap is in it");
         // The vector page: the graph's own SVG nested at its place, its ids made its own.
         let svg = String::from_utf8(render_layout_image(&p, id, "SVG", 36.0).unwrap()).unwrap();
         assert!(svg.starts_with("<svg xmlns") && svg.contains("width=\"792pt\""), "{}", &svg[..200]);

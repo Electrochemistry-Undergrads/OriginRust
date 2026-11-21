@@ -1320,6 +1320,8 @@ impl SheafApp {
         // (title, page size in points, the pages as metafiles, the same as one PDF)
         let (title, page, what) = if let Some(g) = project.graph(window) {
             (g.name.clone(), (g.page.width_pt, g.page.height_pt), "graph")
+        } else if let Some(l) = project.layout(window) {
+            (l.name.clone(), (l.width_pt, l.height_pt), "layout page")
         } else if let Some(b) = project.workbook(window) {
             // A sheet's orientation follows the paper (Automatic means portrait, as in Print
             // Preview), never the printed area, which can be wider than tall.
@@ -1339,6 +1341,8 @@ impl SheafApp {
         {
             let pages = if is_graph {
                 sheaf_plot::render_emf(project, window).map(|e| vec![e])
+            } else if what == "layout page" {
+                sheaf_plot::render_layout_emf(project, window, 300.0).map(|e| vec![e])
             } else {
                 project
                     .workbook(window)
@@ -1369,6 +1373,8 @@ impl SheafApp {
         {
             let pdf = if is_graph {
                 sheaf_plot::render_pdf(project, window)
+            } else if what == "layout page" {
+                sheaf_plot::render_layout_image(project, window, "pdf", 300.0)
             } else {
                 project.workbook(window).map_or(Ok(Vec::new()), |b| sheaf_plot::render_sheet_pdf(b.sheet(), &setup))
             };
@@ -2037,6 +2043,7 @@ impl SheafApp {
                     .add_filter("Windows bitmap", &["bmp"])
                     .add_filter("SVG drawing", &["svg"])
                     .add_filter("PDF document", &["pdf"])
+                    .add_filter("Enhanced Metafile", &["emf"])
                     .set_file_name(format!("{name}.png"))
                     .save_file();
                 if let Some(path) = picked {

@@ -3938,7 +3938,8 @@ at the clicked point, 96 pixels to the inch (0.75 point a pixel), made smaller w
 to fit two thirds of the page; one undo step ("Insert Image"). A file that is not a readable PNG is
 refused. Like the other drawn objects it is selected, moved, resized, aligned, grouped, cut, copied,
 pasted and deleted; it has no border unless its line width is set. It is drawn on screen and into SVG,
-PNG/TIFF/JPEG/BMP and PDF exports (an SVG `<image>` with a data URL); EMF and EPS exports leave it out,
+PNG/TIFF/JPEG/BMP and PDF exports (an SVG `<image>` with a data URL) and into EMF as a 24-bit
+`EMR_STRETCHDIBITS` bitmap, transparency blended onto the page colour (T237 slice 9); EPS leaves it out,
 and an `.opj` written here leaves it out with the other drawn objects (the `.opj.sheaf` companion keeps
 it). Only PNG files; Origin's link-to-file and other formats were not measured.
 

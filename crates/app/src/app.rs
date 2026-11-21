@@ -5886,6 +5886,8 @@ impl SheafApp {
             I::ToBinary => ImageForm::ToBinary(mean, max),
             I::Rotate => ImageForm::Rotate(Rotation::Ccw90),
             I::Flip => ImageForm::Flip(FlipDirection::Horizontal),
+            // Origin 2016's imgMedian default window is 2 (T284).
+            I::Median => ImageForm::Median(2),
             I::Levels => {
                 let (lo, hi) = b.sheets.get(sheet).and_then(|s| s.z_range()).unwrap_or((0.0, 255.0));
                 ImageForm::Levels { input: (lo, hi), output: (0.0, 255.0) }

@@ -43,6 +43,8 @@ pub enum ImageForm {
     ToBinary(f64, f64),
     Rotate(Rotation),
     Flip(FlipDirection),
+    /// Median (T284): the window size.
+    Median(usize),
     /// Levels (T210): input low/high to output low/high.
     Levels {
         input: (f64, f64),
@@ -77,6 +79,7 @@ impl ImageForm {
             ImageForm::ToBinary(low, high) => ImageOp::ToBinary { low, high },
             ImageForm::Rotate(r) => ImageOp::Rotate(r),
             ImageForm::Flip(d) => ImageOp::Flip(d),
+            ImageForm::Median(d) => ImageOp::Median(d),
             ImageForm::Levels { input, output } => ImageOp::Levels { input, output },
             ImageForm::Crop { rows, cols } => ImageOp::Crop {
                 rows: (rows.0.saturating_sub(1), rows.1.saturating_sub(1)),
@@ -116,6 +119,7 @@ impl Form {
                 ImageForm::ToBinary(..) => "To Binary",
                 ImageForm::Rotate(_) => "Rotate",
                 ImageForm::Flip(_) => "Flip",
+                ImageForm::Median(_) => "Median",
                 ImageForm::Levels { .. } => "Levels",
                 ImageForm::Crop { .. } => "Crop",
                 ImageForm::Resize { .. } => "Resize",
@@ -367,6 +371,10 @@ fn image_controls(ui: &mut egui::Ui, f: &mut ImageForm) {
                     ui.selectable_value(pick, k, name);
                 }
             });
+        }
+        ImageForm::Median(d) => {
+            ui.label("Window size");
+            ui.add(egui::DragValue::new(d).range(1..=sheaf_core::matrix_image::MAX_MEDIAN));
         }
         ImageForm::Flip(d) => {
             ui.label("Direction");

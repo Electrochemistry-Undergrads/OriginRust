@@ -39,8 +39,9 @@ pub enum ImageOp {
     /// Geometric Transform > Crop (T210): the 0-based rows `rows.0..=rows.1` and columns
     /// `cols.0..=cols.1`, with the X and Y ranges of the cells kept.
     Crop { rows: (usize, usize), cols: (usize, usize) },
-    /// Geometric Transform > Resize (T210): a new size by bilinear resampling, the ranges kept.
-    Resize { rows: usize, cols: usize },
+    /// Geometric Transform > Resize (T210): a new size, the ranges kept; nearest neighbour (Origin
+    /// 2016's default `interpolate:=normal`, T282) or bilinear resampling end to end.
+    Resize { rows: usize, cols: usize, bilinear: bool },
 }
 
 /// The operator of Arithmetic Transform > Math.
@@ -134,11 +135,23 @@ impl ImageOp {
                 (out.y_from, out.y_to) = (s.y_at(r0), s.y_at(r1));
                 return Ok(out);
             }
-            ImageOp::Resize { rows: nr, cols: nc } => {
+            ImageOp::Resize { rows: nr, cols: nc, bilinear } => {
                 if nr == 0 || nc == 0 {
                     return Err(MatrixError::Invalid("the new size needs at least one row and column".into()));
                 }
                 crate::matrix::check_cells(nr, nc)?;
+                if !bilinear {
+                    // Origin 2016's `imgResize interpolate:=normal` (measured, T282): cell k of the new
+                    // size takes old cell floor(k * old / new), so 3 to 5 repeats cells 0 0 1 1 2.
+                    let src = |k: usize, n_new: usize, n_old: usize| (k * n_old / n_new).min(n_old - 1);
+                    let mut data = Vec::with_capacity(nr * nc);
+                    for r in 0..nr {
+                        for c in 0..nc {
+                            data.push(v(src(r, nr, rows), src(c, nc, cols)));
+                        }
+                    }
+                    return Ok(s.like(nr, nc, data));
+                }
                 // Cell centres map onto the old grid end to end; a missing neighbour makes a missing cell.
                 let at = |i: usize, n_new: usize, n_old: usize| {
                     if n_new == 1 || n_old == 1 { 0.0 } else { i as f64 * (n_old - 1) as f64 / (n_new - 1) as f64 }
@@ -289,11 +302,16 @@ mod tests {
         assert_eq!((c.rows, c.cols, c.values().to_vec()), (1, 2, vec![200.0, 250.0]));
         assert_eq!((c.x_from, c.x_to, c.y_from, c.y_to), (10.0, 20.0, 10.0, 10.0));
         assert!(ImageOp::Crop { rows: (0, 2), cols: (0, 0) }.apply(&s).is_err());
-        let r = ImageOp::Resize { rows: 3, cols: 5 }.apply(&s).unwrap();
+        let r = ImageOp::Resize { rows: 3, cols: 5, bilinear: true }.apply(&s).unwrap();
         assert_eq!((r.rows, r.cols), (3, 5));
         assert_eq!(r.value(0, 0), 0.0);
         assert_eq!(r.value(2, 4), 250.0);
         assert_eq!(r.value(1, 2), 125.0, "the middle of the four central cells");
+        // Nearest, as Origin 2016's default: a 3 x 3 sheet to 5 x 5 repeats cells 0 0 1 1 2 each way.
+        let three = sheet(3, 3, &[0.0, 32.0, 64.0, 96.0, 128.0, 159.0, 191.0, 223.0, 255.0]);
+        let n = ImageOp::Resize { rows: 5, cols: 5, bilinear: false }.apply(&three).unwrap();
+        assert_eq!(&n.values()[..5], &[0.0, 0.0, 32.0, 32.0, 64.0]);
+        assert_eq!(&n.values()[20..], &[191.0, 191.0, 223.0, 223.0, 255.0]);
         let d = subtract(&s, &s).unwrap();
         assert!(d.values().iter().all(|v| *v == 0.0));
         assert!(subtract(&s, &r).is_err());

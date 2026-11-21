@@ -57,6 +57,8 @@ pub enum ImageForm {
     Resize {
         rows: usize,
         cols: usize,
+        /// Bilinear rather than Origin's default nearest neighbour (T282).
+        bilinear: bool,
     },
     /// Subtract (T210): another matrix book (its active sheet), from `choices`.
     Subtract {
@@ -80,7 +82,7 @@ impl ImageForm {
                 rows: (rows.0.saturating_sub(1), rows.1.saturating_sub(1)),
                 cols: (cols.0.saturating_sub(1), cols.1.saturating_sub(1)),
             },
-            ImageForm::Resize { rows, cols } => ImageOp::Resize { rows, cols },
+            ImageForm::Resize { rows, cols, bilinear } => ImageOp::Resize { rows, cols, bilinear },
             ImageForm::Subtract { .. } => unreachable!("Subtract runs through subtract_image"),
         }
     }
@@ -344,12 +346,18 @@ fn image_controls(ui: &mut egui::Ui, f: &mut ImageForm) {
                 ui.add(egui::DragValue::new(&mut cols.1).range(1..=1_000_000));
             });
         }
-        ImageForm::Resize { rows, cols } => {
+        ImageForm::Resize { rows, cols, bilinear } => {
             ui.label("Columns");
             ui.add(egui::DragValue::new(cols).range(1..=100_000));
             ui.end_row();
             ui.label("Rows");
             ui.add(egui::DragValue::new(rows).range(1..=100_000));
+            ui.end_row();
+            ui.label("Interpolation");
+            ui.horizontal(|ui| {
+                ui.radio_value(bilinear, false, "Nearest");
+                ui.radio_value(bilinear, true, "Bilinear");
+            });
         }
         ImageForm::Subtract { choices, pick } => {
             ui.label("Subtract");

@@ -367,8 +367,15 @@ each matrix as not written).
     outside the input range take the nearest end.
   - **Subtract:** the active sheet of another matrix book of the same size, cell by cell.
   - **Crop:** 1-based first and last row and column, with the cells' X and Y coordinates kept.
-  - **Resize:** a new size by bilinear resampling, end to end, with the ranges kept. A missing
-    neighbour makes a missing cell.
+  - **Resize:** a new size with the ranges kept. Interpolation Nearest (the default, as Origin
+    2016's `imgResize interpolate:=normal`, T282: new cell k takes old cell floor(k old / new), so
+    3 to 5 repeats 0 0 1 1 2 and 3 to 6 doubles every cell) or Bilinear (end to end; a missing
+    neighbour makes a missing cell). Origin's `resample` and `bicubic` are LEADTOOLS filters whose
+    numbers fit no plain bilinear or bicubic formula (3 to 5 resample gave levels 0 32 48 64 64 for
+    0 32 64), so Sheaf does not copy them.
+  - **Crop** (T282): Origin's `imgCrop x:=1 y:=0 w:=2 h:=2` kept columns 2 and 3 of rows 1 and 2
+    (x and y count from 0 at the top left); Sheaf's 1-based first and last row and column select the
+    same cells.
 - **Conversion (T218):** these need a book with Red, Green and Blue sheets of one size; any other
   book is refused with a note.
   - **Color to Gray:** a new book "Gray of MBookN" with `(2 R + 5 G + B) / 8`, the weights of Origin

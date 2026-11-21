@@ -153,7 +153,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T152](T152-legend-order.md) | Legend Bring to front/back, front/back of data (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured; left: legend Cut/Copy |
 | [T153](T153-title-order.md) | Axis title Bring to the front / Push to the back (B2 slice) | S | done 2026-11-19 (graphing "Legend order"), not measured |
 | [T154](T154-notes-window.md) | Notes windows: File > New > Notes, New Notes (B14 slice) | M | done 2026-11-19 (notes-window spec), not measured; left: Add Notes as Sheet, .opj |
-| [T237](T237-layout-page.md) | Layout pages: File > New > Layout, New Layout, Add Graph (B14 slice 1) | L | slices 1-3 done 2026-11-20 (layout-page spec), not measured; left: worksheets, page properties, print, vector export |
+| [T237](T237-layout-page.md) | Layout pages: File > New > Layout, New Layout, Add Graph (B14 slice 1) | L | slices 1-4 done 2026-11-20 (layout-page spec), not measured; left: worksheets, page background, print, vector export |
 | [T234](T234-matrix-profiles.md) | Plot > Profile: Contour and Image Profiles as row/column cuts (B14 slice) | S | done 2026-11-20 (matrices 7l), not measured |
 | [T226](T226-ternary-contour.md) | Plot > Contour/Heat Map > Ternary Contour (B14 slice) | S | done 2026-11-20 (matrices 7k), not measured |
 | [T225](T225-polar-contour.md) | Plot > Contour/Heat Map > Polar Contour theta(X) r(Y), r(X) theta(Y) (B14 slice) | S | done 2026-11-20 (matrices 7k), not measured |

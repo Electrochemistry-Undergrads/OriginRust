@@ -171,8 +171,20 @@ Methods (all observed; statistics over valid points; missing stays missing): `sp
 value; `range` `(y-min)/(max-min)`; `range100` the same times 100; `snd` `(y-mean)/sd` with the sample
 sd; `max`, `min`, `mean`, `median`, `sd` (sample), `norm` (Euclidean norm), `mode`, `sum`: divide by
 that statistic. `mode` is all missing when no value occurs twice (observed); with ties we take the
-smallest value (unknown). Division by a negative `min` flips the sign (observed). Not implemented:
-`ref` (reference column) and `cell`.
+smallest value (unknown). Division by a negative `min` flips the sign (observed).
+
+`ref` and `cell` (T260, from OriginLab's X-Function page; not measured, Origin unusable on
+2026-11-20). `ref` (method 11, variables `refcol` and `type`) "normalize[s] the input data by
+matching the statistic specified by the type variable to that of a reference column"; `type` offers
+min, max, mean, median and sum. The page prints no formula; Sheaf scales each column,
+`y * stat(ref) / stat(y)`, so its statistic equals the reference's (a statistic of 0, or none, in the
+reference or in a column is refused), and the new column takes the reference's units. `cell` (method
+12, variable `cell`) divides by one reference cell; an empty, masked or zero cell is refused. The
+reference is read as analysis reads data (masked cells and filter-hidden rows left out). Both are
+in the Normalize window (Method: "Match a statistic of a reference column", "Divide by a reference
+cell", with the reference column, Statistic or Row) and `sheaf analyze normalize --method ref|cell
+--ref COLUMN [--stat min|max|mean|median|sum] [--row N]` (same sheet). They do not take part in
+Recalculate Auto/Manual. Not built: row-wise normalize (Origin's `rnormalize`).
 
 ## 5. Interpolate / extrapolate (`interp1`, `interp1xy`)
 

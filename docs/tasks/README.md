@@ -296,6 +296,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T314](T314-sig-digits.md) | Significant and Scientific displays measured in Origin 2016 and copied (326 of 328 cells) | S | done 2026-11-21 |
 | [T317](T317-scientific-auto.md) | Scientific with default digits as Origin shows it (NumberFormat::ScientificAuto) | S | done 2026-11-21 |
 | [T321](T321-reducedup-sheet.md) | Reduce Duplicate X Data writes its columns at the end of the input sheet, as Origin's reducedup | S | done 2026-11-21 |
+| [T322](T322-curvemath-measure.md) | Intersect writes into the input sheet as Origin; numbered labels keep their number on recalculation | S | done 2026-11-21 |
 | [T311](T311-qqplot-measure.md) | Measure Q-Q Plot against Origin (expected values, y = x line ends, band) | S | done 2026-11-21 (statistics 16.2a) |
 | [T312](T312-import-nonnum.md) | Text import: text in a numeric column read as text, stop, new sheet or new columns (NonNum), as Origin 2016 | S | done 2026-11-21, measured |
 | [T313](T313-scatter-matrix-measure.md) | Measure Scatter Matrix against Origin (page, grid, tick labels, titles, symbols, tick step) | S | done 2026-11-21 (graphing 35) |

@@ -5896,7 +5896,7 @@ impl SheafApp {
             }
             I::Resize => {
                 let (rows, cols) = b.sheets.get(sheet).map_or((1, 1), |s| (s.rows.max(1), s.cols.max(1)));
-                ImageForm::Resize { rows, cols }
+                ImageForm::Resize { rows, cols, bilinear: false }
             }
             I::Subtract => {
                 let choices: Vec<(WindowId, String)> =

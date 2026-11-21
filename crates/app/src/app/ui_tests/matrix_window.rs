@@ -315,7 +315,7 @@ fn image_levels_crop_resize_and_subtract_change_the_active_matrix() {
     assert!(project(&h).matrix_sheet(a, 0).unwrap().values().iter().all(|v| *v == 0.0));
     subtract_image(&mut h.state_mut().doc, b, 0, b).unwrap();
     let doc = &mut h.state_mut().doc;
-    apply_image(doc, b, 0, &ImageOp::Resize { rows: 4, cols: 4 }).unwrap();
+    apply_image(doc, b, 0, &ImageOp::Resize { rows: 4, cols: 4, bilinear: true }).unwrap();
     apply_image(doc, b, 0, &ImageOp::Crop { rows: (0, 1), cols: (2, 3) }).unwrap();
     apply_image(doc, b, 0, &ImageOp::Levels { input: (-1.0, 1.0), output: (0.0, 10.0) }).unwrap();
     let s = project(&h).matrix_sheet(b, 0).unwrap().clone();

@@ -3723,6 +3723,10 @@ impl SheafApp {
             Action::Cascade => self.workspace.cascade(),
             Action::TileHorizontally => self.workspace.tile_horizontally(),
             Action::TileVertically => self.workspace.tile_vertically(),
+            Action::ArrangeIcons => match self.workspace.arrange_icons() {
+                0 => self.say("Arrange Icons: no window is minimised"),
+                n => self.say(format!("Arrange Icons: {n} minimised window(s) lined up along the bottom")),
+            },
             Action::About => self.about = true,
             Action::Toolbars => self.toolbars.dialog = true,
             Action::Options => {

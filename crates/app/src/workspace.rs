@@ -260,6 +260,19 @@ impl Workspace {
         }
     }
 
+    /// Window > Arrange Icons (T257): the bars of the minimised windows, which stand in a row along
+    /// the bottom of the workspace in stacking order, are lined up again in window order (the order
+    /// the windows were made). The other windows keep their places and their stacking order.
+    /// Returns how many windows are minimised.
+    pub fn arrange_icons(&mut self) -> usize {
+        let minimised = |id: &WindowId| self.wins.get(id).is_some_and(|s| s.visible && s.mode == Mode::Minimised);
+        let mut bars: Vec<WindowId> = self.z.iter().copied().filter(minimised).collect();
+        bars.sort_by_key(|id| id.0);
+        let rest: Vec<WindowId> = self.z.iter().copied().filter(|id| !bars.contains(id)).collect();
+        self.z = bars.iter().copied().chain(rest).collect();
+        bars.len()
+    }
+
     /// Where every window that has a place is, bottom of the stack first, for saving in the
     /// project. Windows that were never shown have no place yet and are left out.
     pub fn places(&self) -> Vec<WindowPlace> {
@@ -676,6 +689,25 @@ mod tests {
         assert_eq!(w.active(), None);
         w.activate(WindowId(1));
         assert_eq!(w.mode(WindowId(1)), Some(Mode::Normal));
+    }
+
+    #[test]
+    fn arrange_icons_lines_the_minimised_windows_up_in_window_order() {
+        // T257: minimised in the order 3, 1, the bars come back as 1, 3; the open windows keep
+        // their stacking order.
+        let mut w = Workspace::default();
+        for k in 1..=4 {
+            w.add(WindowId(k), false, true);
+        }
+        w.minimise(WindowId(3));
+        w.minimise(WindowId(1));
+        let open_before: Vec<WindowId> = w.z.iter().copied().filter(|id| ![1, 3].contains(&id.0)).collect();
+        assert_eq!(w.arrange_icons(), 2);
+        let bars: Vec<WindowId> = w.z.iter().copied().filter(|id| w.mode(*id) == Some(Mode::Minimised)).collect();
+        assert_eq!(bars, [WindowId(1), WindowId(3)]);
+        let open_after: Vec<WindowId> = w.z.iter().copied().filter(|id| ![1, 3].contains(&id.0)).collect();
+        assert_eq!(open_after, open_before);
+        assert_eq!(w.mode(WindowId(1)), Some(Mode::Minimised), "still minimised");
     }
 
     #[test]

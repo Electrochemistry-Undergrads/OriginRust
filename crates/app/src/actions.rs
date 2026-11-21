@@ -1333,6 +1333,8 @@ pub enum Action {
     Cascade,
     TileHorizontally,
     TileVertically,
+    /// Window > Arrange Icons (T257).
+    ArrangeIcons,
     About,
     /// Open the window of View > Toolbars.
     Toolbars,

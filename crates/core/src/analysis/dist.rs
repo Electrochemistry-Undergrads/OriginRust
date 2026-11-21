@@ -251,8 +251,8 @@ pub struct ProbPlotSpec {
     /// How the plotting positions are estimated (T151): Filliben's by default, as scipy; Origin's
     /// `plot_prob` documents Blom's as its default.
     pub scores: calc::PlotScores,
-    /// Probability plot of the normal or lognormal family: a confidence band of this level (0.95 for
-    /// 95 %) round the fitted line (T151).
+    /// Probability plot: a confidence band of this level (0.95 for 95 %) round the fitted line, Origin
+    /// 2016's for every family (T151, measured by T308; `sheaf_calc::distfit::confidence_band`).
     pub band: Option<f64>,
     /// Q-Q plot: the ordered data on X and the quantiles on Y, as Origin's guide describes (T151);
     /// scipy's order (quantiles on X) without it.
@@ -270,36 +270,6 @@ impl Default for ProbPlotSpec {
             data_on_x: false,
         }
     }
-}
-
-/// The confidence band of a normal or lognormal probability plot (T151, Sheaf's method; Origin's is
-/// not measured): at each percent of `percents`, the fitted quantile `mu + z sigma` plus and minus
-/// `k sqrt(sigma^2 (1 + z^2 / 2) / n)`, the large-sample error of the maximum likelihood quantile, with
-/// `k` the normal quantile of `(1 + level) / 2`. A lognormal band is made on the log scale and
-/// returned as data. `None` for a level outside (0, 1).
-fn confidence_band(
-    family: Family,
-    params: &[f64],
-    n: usize,
-    level: f64,
-    percents: &[f64],
-) -> Option<(Vec<f64>, Vec<f64>)> {
-    if !(level > 0.0 && level < 1.0) || params.len() < 2 || n == 0 {
-        return None;
-    }
-    let (mu, sigma) = (params[0], params[1]);
-    let z_of = |p: f64| calc::standard_quantile(Family::Normal, 1.0, p);
-    let k = z_of((1.0 + level) / 2.0);
-    let back = |v: f64| if family == Family::Lognormal { v.exp() } else { v };
-    let (mut lower, mut upper) = (Vec::new(), Vec::new());
-    for &pct in percents {
-        let z = z_of(pct / 100.0);
-        let x = mu + z * sigma;
-        let se = (sigma * sigma * (1.0 + z * z / 2.0) / n as f64).sqrt();
-        lower.push(back(x - k * se));
-        upper.push(back(x + k * se));
-    }
-    Some((lower, upper))
 }
 
 /// The scale of the percent axis that straightens the distribution function of the family.
@@ -335,45 +305,42 @@ pub(super) fn prob_plot(spec: &ProbPlotSpec, inputs: &[Input<'_>]) -> Result<Out
         };
         match kind {
             ProbPlotKind::Probability => {
-                let fit = calc::dist_fit(family, inp.ys()).map_err(bad)?;
+                // Origin's estimates (T308): maximum likelihood, the normal SDs dividing by n - 1.
+                let params = calc::distfit::prob_plot_params(family, inp.ys()).map_err(bad)?;
                 let percent: Vec<f64> = pp.positions.iter().map(|p| p * 100.0).collect();
-                // The fitted distribution function over the range of the data, where its percent stays
-                // inside what the probability axes can show.
-                let (lo, hi) = (pp.ordered[0], pp.ordered[n - 1]);
+                // The fitted quantiles between Origin's reference-line ends: half the first point's
+                // percent and 100 minus that (measured). Origin joins the two ends with a straight line,
+                // which is the fit on the family's own axes; Sheaf samples the quantile between them so
+                // that a gamma fit, curved on a probability axis, is drawn as it is.
+                let p_lo = pp.positions[0] / 2.0;
+                let (z_lo, z_hi) = (
+                    calc::standard_quantile(Family::Normal, 1.0, p_lo),
+                    calc::standard_quantile(Family::Normal, 1.0, 1.0 - p_lo),
+                );
                 let (mut rx, mut ry) = (Vec::new(), Vec::new());
                 for i in 0..=100 {
-                    let t = f64::from(i) / 100.0;
-                    let x = if log_x && lo > 0.0 { lo * (hi / lo).powf(t) } else { lo + (hi - lo) * t };
-                    let p = calc::dist_cdf(family, &fit.params, x) * 100.0;
-                    if (0.01..=99.99).contains(&p) {
-                        rx.push(x);
-                        ry.push(p);
-                    }
+                    let z = z_lo + (z_hi - z_lo) * f64::from(i) / 100.0;
+                    let p = calc::dist_cdf(Family::Normal, &[0.0, 1.0], z).clamp(p_lo, 1.0 - p_lo);
+                    rx.push(calc::distfit::quantile(family, &params, p));
+                    ry.push(p * 100.0);
                 }
-                let band = match (spec.band, family) {
-                    (Some(level), Family::Normal | Family::Lognormal) => {
-                        Some(confidence_band(family, &fit.params, n, level, &ry).ok_or_else(|| {
+                let band = match spec.band {
+                    Some(level) => {
+                        Some(calc::distfit::confidence_band(family, &params, inp.ys(), level).ok_or_else(|| {
                             AnalysisError::BadOption(format!("{level} is not a confidence level between 0 and 1"))
                         })?)
                     }
-                    (Some(_), _) => {
-                        notes.push(format!(
-                            "{}: the confidence band is drawn for the normal and lognormal families only.",
-                            inp.label
-                        ));
-                        None
-                    }
-                    (None, _) => None,
+                    None => None,
                 };
                 on_sheet.push(with(number_column("Data (ordered)", u, Designation::X, pp.ordered.clone())));
                 on_sheet.push(with(number_column("Percent", "%", Designation::Y, percent)));
                 on_sheet.push(with(number_column("Fit X", u, Designation::X, rx)));
                 on_sheet.push(with(number_column("Fit percent", "%", Designation::Y, ry.clone())));
                 let units = param_units(family, u);
-                let p2 = fit.params.get(1).copied().unwrap_or(f64::NAN);
+                let p2 = params.get(1).copied().unwrap_or(f64::NAN);
                 table.push_row(
                     inp.label.clone(),
-                    vec![n as f64, fit.params[0], p2, pp.r],
+                    vec![n as f64, params[0], p2, pp.r],
                     vec![String::new(), units[0].clone(), units[1].clone(), String::new()],
                 );
                 plots.push(GraphPlot {
@@ -396,7 +363,12 @@ pub(super) fn prob_plot(spec: &ProbPlotSpec, inputs: &[Input<'_>]) -> Result<Out
                     for (name, x) in [("Lower", lower), ("Upper", upper)] {
                         let at = on_sheet.len();
                         on_sheet.push(with(number_column(&format!("{name} {} % X", num(level)), u, Designation::X, x)));
-                        on_sheet.push(with(number_column(&format!("{name} percent"), "%", Designation::Y, ry.clone())));
+                        on_sheet.push(with(number_column(
+                            &format!("{name} percent"),
+                            "%",
+                            Designation::Y,
+                            calc::distfit::BAND_PERCENTS.to_vec(),
+                        )));
                         plots.push(GraphPlot {
                             x: at,
                             y: at + 1,
@@ -410,7 +382,7 @@ pub(super) fn prob_plot(spec: &ProbPlotSpec, inputs: &[Input<'_>]) -> Result<Out
                     "{}: {} probability plot of {n} values, fitted {}.",
                     inp.label,
                     family.name(),
-                    param_text(family, &fit.params)
+                    param_text(family, &params)
                 ));
             }
             ProbPlotKind::QQ => {
@@ -676,9 +648,12 @@ mod tests {
         let percent = cell(&p, &r, "Percent");
         let blom = calc::PlotScores::Blom.positions(20);
         assert!(percent.iter().zip(&blom).all(|(a, b)| (a - b * 100.0).abs() < 1e-9), "Blom positions");
-        let (lo, hi, fit) = (cell(&p, &r, "Lower 95 % X"), cell(&p, &r, "Upper 95 % X"), cell(&p, &r, "Fit X"));
-        assert_eq!(lo.len(), fit.len());
-        assert!(lo.iter().zip(&hi).zip(&fit).all(|((l, h), f)| l < f && f < h), "the band holds the fit line");
+        let (lo, hi) = (cell(&p, &r, "Lower 95 % X"), cell(&p, &r, "Upper 95 % X"));
+        assert_eq!((lo.len(), cell(&p, &r, "Lower percent")), (27, calc::distfit::BAND_PERCENTS.to_vec()));
+        assert!(lo.iter().zip(&hi).all(|(l, h)| l < h), "a band at Origin's 27 percents");
+        // The fit line runs between Origin's ends: half the first Blom percent and 100 minus that.
+        let fit_pct = cell(&p, &r, "Fit percent");
+        assert!((fit_pct[0] - blom[0] * 50.0).abs() < 1e-9 && (fit_pct[100] - (100.0 - blom[0] * 50.0)).abs() < 1e-9);
         let g = p.graph(r.new_graph.unwrap()).unwrap();
         assert_eq!(g.layers[0].plots.len(), 4, "points, fit and the two band lines");
         // Q-Q with the data on X: the columns swap, the line stays the same least-squares line.
@@ -688,10 +663,12 @@ mod tests {
         assert_eq!(g.layers[0].x_axis.title.as_deref().map(|t| t.contains("quantile")), Some(false));
         let data = cell(&p, &r, "Data (ordered)");
         assert!(data.windows(2).all(|w| w[0] <= w[1]));
-        // A band for another family is left out with a note.
-        let w = ProbPlotSpec { family: Family::Weibull, band: Some(0.95), ..Default::default() };
-        let r = run(&mut p, &ids[..1], Tool::ProbPlot(w));
-        assert!(r.notes.iter().any(|n| n.contains("normal and lognormal families only")), "{:?}", r.notes);
+        // Every family has Origin's band (T308).
+        for family in [Family::Weibull, Family::Gamma, Family::Exponential, Family::Lognormal] {
+            let w = ProbPlotSpec { family, band: Some(0.95), ..Default::default() };
+            let r = run(&mut p, &ids[..1], Tool::ProbPlot(w));
+            assert_eq!(cell(&p, &r, "Upper 95 % X").len(), 27, "{family:?}");
+        }
     }
 
     #[test]

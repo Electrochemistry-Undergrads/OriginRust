@@ -3125,6 +3125,7 @@ pub fn corner_menu(sheet: &sheaf_core::Worksheet) -> Vec<Entry> {
         switch(V::Units),
         switch(V::Comments),
         grey("Parameters"),
+        item("Add User Parameter Row...", Cmd::Sheet(SheetOp::AddParamRow)),
         switch(V::SamplingInterval),
         switch(V::Sparklines),
         grey("Filter"),

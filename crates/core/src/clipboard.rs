@@ -189,6 +189,26 @@ impl Worksheet {
 
     /// The names of the user parameters (extra label rows) that any column of the sheet has, in
     /// alphabetical order.
+    /// Adds an empty user parameter row named `name` to every column of the sheet (T309), so that
+    /// the row shows and its cells can be typed into. Refuses an empty name and one the sheet
+    /// already has (any case); the error says why.
+    pub fn add_parameter_row(&mut self, name: &str) -> Result<(), String> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("a parameter row needs a name".into());
+        }
+        if self.parameter_names().iter().any(|n| n.eq_ignore_ascii_case(name)) {
+            return Err(format!("the sheet already has a parameter row named {name}"));
+        }
+        if self.columns.is_empty() {
+            return Err("the sheet has no column to hold the row".into());
+        }
+        for c in &mut self.columns {
+            c.params.insert(name.to_string(), String::new());
+        }
+        Ok(())
+    }
+
     pub fn parameter_names(&self) -> Vec<String> {
         let mut names: Vec<String> = self.columns.iter().flat_map(|c| c.params.keys().cloned()).collect();
         names.sort();
@@ -510,6 +530,26 @@ fn paste_column(column: &mut Column, block: &Range<usize>, cells: &[&str]) -> us
 mod tests {
     use super::*;
     use crate::history::Document;
+
+    #[test]
+    fn a_new_parameter_row_reaches_every_column_and_names_are_unique() {
+        // T309.
+        let mut ws = Worksheet::new("Sheet1");
+        for (i, n) in ["A", "B"].iter().enumerate() {
+            ws.columns.push(Column::new(
+                crate::ColumnId(i as u64 + 1),
+                *n,
+                Designation::Y,
+                ColumnData::numeric(vec![1.0]),
+            ));
+        }
+        assert!(ws.add_parameter_row(" Dose ").is_ok());
+        assert_eq!(ws.parameter_names(), ["Dose"]);
+        assert!(ws.columns.iter().all(|c| c.params.get("Dose").is_some_and(String::is_empty)));
+        assert!(ws.add_parameter_row("dose").unwrap_err().contains("already"));
+        assert!(ws.add_parameter_row("  ").is_err());
+        assert!(Worksheet::new("Empty").add_parameter_row("X").is_err());
+    }
 
     fn book_with(columns: Vec<ColumnData>) -> (Project, WindowId) {
         let mut p = Project::new();

@@ -102,6 +102,8 @@ pub enum SheetOp {
     AddNotes,
     /// Add Graph as Sheet...: the window that picks the graph (T190).
     AddGraph,
+    /// The corner menu's Add User Parameter Row...: the window that asks its name (T309).
+    AddParamRow,
     /// Activate this sheet in every workbook of the book's Explorer folder that has a sheet of the
     /// same name (Origin 2027, T277).
     ActivateInFolder,

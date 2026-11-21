@@ -98,7 +98,7 @@ Found by a web search of the release notes (search summaries, not a page-by-page
 | Poisson rate tests | 2026b | Done (T267: calc, analysis, CLI, dialogs; Summarized input only). Rate tests for Poisson counts. Sheaf mentions Poisson in some files; check whether the rate tests exist. | [2026b][o26b] |
 | Mixture designs with several totals | 2026b | Design of experiments: mixture designs accept more than one total; factor names accept more characters. | [2026b notes](https://www.originlab.com/ReleaseNotes/index.aspx?c=1) |
 | Reliability and Survival Analysis app; DMD, RPC3 and Ivium connectors | 2026 | An app for reliability and survival work, and import connectors for those three instrument formats. | [2026][o26] |
-| Same sheet across several workbooks in a folder | 2027 | Activate the same sheet in all workbooks of a folder at once; new system variables control rich text and dynamic merge in the long name and comments label rows. | [2027 notes](https://www.originlab.com/releasenotes/index.aspx?c=2) |
+| Same sheet across several workbooks in a folder | 2027 | Sheet activation done (T277: sheet tab > Activate This Sheet in All Books in Folder, by name); the label-row system variables are left. Activate the same sheet in all workbooks of a folder at once; new system variables control rich text and dynamic merge in the long name and comments label rows. | [2027 notes](https://www.originlab.com/releasenotes/index.aspx?c=2) |
 | Faster project save | 2026 | OriginLab reports about 40% faster saving of large mixed-series projects. A performance target for Sheaf's `.sheaf` save, not a feature. | [2026][o26] |
 
 [o16]: https://www.originlab.com/2016

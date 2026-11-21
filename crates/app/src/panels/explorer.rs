@@ -5,7 +5,6 @@
 
 use super::PanelData;
 use crate::actions::Action;
-use crate::menus::NOT_YET;
 use crate::theme;
 use crate::workspace;
 use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, Vec2};
@@ -31,8 +30,9 @@ pub struct ExplorerState {
     sort: (usize, bool),
     /// True after a click in the explorer, until a click elsewhere: it has the keyboard.
     pub focus: bool,
-    /// Every window of the folder is highlighted (Ctrl+A).
-    pub all: bool,
+    /// The highlighted windows (T286): one after a plain click, more with Ctrl+click, Shift+click and
+    /// Ctrl+A. `selected` is the last one clicked, where a Shift+click run starts.
+    pub picked: Vec<WindowId>,
     /// The Favorites folder is selected (T130): the list shows the shortcuts of `Project::favorites`.
     pub favorites: bool,
     /// The windows drawn in bold during the last frame (the active one), for the tests.
@@ -47,10 +47,61 @@ impl Default for ExplorerState {
             selected: None,
             sort: (0, true),
             focus: false,
-            all: false,
+            picked: Vec::new(),
             favorites: false,
             bold: Vec::new(),
         }
+    }
+}
+
+impl ExplorerState {
+    /// Nothing highlighted.
+    pub fn clear_selection(&mut self) {
+        self.selected = None;
+        self.picked.clear();
+    }
+
+    /// Whether the window's row is highlighted.
+    pub fn is_picked(&self, id: WindowId) -> bool {
+        self.picked.contains(&id)
+    }
+
+    /// The windows an action on `id`'s row acts on: every highlighted window when the row is one
+    /// of them, else that window alone (T286).
+    pub fn targets(&self, id: WindowId) -> Vec<WindowId> {
+        if self.is_picked(id) { self.picked.clone() } else { vec![id] }
+    }
+
+    /// A click on the row of `id` with these modifiers, `shown` being the rows in their shown order
+    /// (T286, as in Windows lists): a plain click highlights the row alone, Ctrl+click adds or removes
+    /// it, Shift+click highlights the run from the last clicked row to it.
+    pub fn click(&mut self, id: WindowId, ctrl: bool, shift: bool, shown: &[WindowId]) {
+        let anchor = self.selected.and_then(|a| shown.iter().position(|w| *w == a));
+        match (shift, anchor, shown.iter().position(|w| *w == id)) {
+            (true, Some(a), Some(b)) => {
+                let run = shown[a.min(b)..=a.max(b)].to_vec();
+                if ctrl {
+                    for w in run {
+                        if !self.picked.contains(&w) {
+                            self.picked.push(w);
+                        }
+                    }
+                } else {
+                    self.picked = run;
+                }
+                // The run's start stays where it was, as in Windows lists.
+                return;
+            }
+            _ if ctrl => {
+                if let Some(i) = self.picked.iter().position(|w| *w == id) {
+                    self.picked.remove(i);
+                } else {
+                    self.picked.push(id);
+                }
+            }
+            _ => self.picked = vec![id],
+        }
+        self.selected = Some(id);
     }
 }
 
@@ -133,7 +184,7 @@ pub fn subtree_windows(f: &Folder) -> Vec<WindowId> {
     out
 }
 
-/// What the keys of the explorer ask for: F2 renames the highlighted window, Delete deletes the
+/// What the keys of the explorer ask for: F2 renames the last clicked window, Delete deletes the
 /// highlighted windows, Ctrl+A highlights every window of the folder. Only while the explorer
 /// has the keyboard focus (the last click was in it).
 pub fn handle_keys(ctx: &egui::Context, st: &mut ExplorerState, project: &Project, actions: &mut Vec<Action>) {
@@ -149,8 +200,8 @@ pub fn handle_keys(ctx: &egui::Context, st: &mut ExplorerState, project: &Projec
     });
     let in_folder = windows_in(project, &st.folder);
     if all {
-        st.all = true;
-        st.selected = in_folder.first().copied();
+        st.picked = if st.favorites { project.favorites.clone() } else { in_folder.clone() };
+        st.selected = st.picked.first().copied();
     }
     if rename {
         match st.selected {
@@ -160,13 +211,12 @@ pub fn handle_keys(ctx: &egui::Context, st: &mut ExplorerState, project: &Projec
         }
     }
     if delete {
-        if st.all {
-            actions.extend(in_folder.into_iter().map(Action::DeleteWindow));
-            st.all = false;
+        if !st.picked.is_empty() {
+            actions.extend(st.picked.iter().copied().map(Action::DeleteWindow));
         } else if let Some(id) = st.selected {
             actions.push(Action::DeleteWindow(id));
         }
-        st.selected = None;
+        st.clear_selection();
     }
 }
 
@@ -314,11 +364,13 @@ fn tree(
         if response.clicked() {
             st.folder = path.clone();
             st.favorites = false;
-            st.selected = None;
-            st.all = false;
+            st.clear_selection();
         }
         if let Some(window) = response.dnd_release_payload::<WindowId>() {
-            actions.push(Action::MoveWindow { window: *window, folder: path.clone() });
+            // T286: dragging a highlighted row moves every highlighted window.
+            for window in st.targets(*window) {
+                actions.push(Action::MoveWindow { window, folder: path.clone() });
+            }
         }
         response.context_menu(|ui| {
             st.folder = path.clone();
@@ -380,8 +432,7 @@ fn favorites_row(ui: &mut egui::Ui, st: &mut ExplorerState) {
         ui.painter().galley(at, galley, Color32::BLACK);
         if response.clicked() {
             st.favorites = true;
-            st.selected = None;
-            st.all = false;
+            st.clear_selection();
         }
     });
 }
@@ -435,15 +486,17 @@ fn list(ui: &mut egui::Ui, st: &mut ExplorerState, data: &PanelData, actions: &m
     }
     ui.painter().hline(head.x_range(), head.bottom(), Stroke::new(1.0_f32, GRID));
 
+    // Deleted windows leave the selection.
+    st.picked.retain(|w| data.project.window(*w).is_some());
     let ids = if st.favorites {
         sorted(data.project, data.project.favorites.clone(), st.sort)
     } else {
         sorted(data.project, windows_in(data.project, &st.folder), st.sort)
     };
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-        for id in ids {
+        for &id in &ids {
             let Some(w) = data.project.window(id) else { continue };
-            row(ui, st, data, w, &edges, actions);
+            row(ui, st, data, w, &edges, &ids, actions);
         }
     });
 }
@@ -463,12 +516,13 @@ fn row(
     data: &PanelData,
     w: &Window,
     edges: &[f32; 5],
+    shown: &[WindowId],
     actions: &mut Vec<Action>,
 ) {
     let id = w.id();
     let graph = matches!(w, Window::Graph(_));
     let active = data.active == Some(id);
-    let selected = st.selected == Some(id) || st.all;
+    let selected = st.is_picked(id);
     let (rect, response) = ui.allocate_exact_size(Vec2::new(edges[4], ROW_H), Sense::click_and_drag());
     let title = w.title();
     response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, &title));
@@ -513,41 +567,42 @@ fn row(
     if response.dragged() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
     }
-    if response.clicked() || response.secondary_clicked() || response.drag_started() {
-        st.selected = Some(id);
-        st.all = false;
+    if response.clicked() {
+        let m = crate::grid::click_modifiers(ui);
+        st.click(id, m.command, m.shift, shown);
+    } else if (response.secondary_clicked() || response.drag_started()) && !st.is_picked(id) {
+        // A right-click or a drag on a row that is not highlighted takes it alone; on a highlighted
+        // row it keeps the selection, so the menu and the drop act on all of it.
+        st.click(id, false, false, shown);
     }
     if response.double_clicked() {
         actions.push(Action::Focus(id));
     }
+    // T286: Show, Hide and Delete act on every highlighted window.
+    let targets = st.targets(id);
+    let favorites = st.favorites;
     response.context_menu(|ui| {
-        let mut item = |ui: &mut egui::Ui, label: &str, action: Option<Action>| {
-            match action {
-                Some(a) => {
-                    if ui.button(label).clicked() {
-                        actions.push(a);
-                        ui.close();
-                    }
-                }
-                None => {
-                    ui.add_enabled(false, egui::Button::new(label)).on_disabled_hover_text(NOT_YET);
-                }
-            };
+        let mut item = |ui: &mut egui::Ui, label: &str, chosen: Vec<Action>| {
+            if ui.button(label).clicked() {
+                actions.extend(chosen);
+                ui.close();
+            }
         };
-        item(ui, "Show", Some(Action::Focus(id)));
-        item(ui, "Hide", Some(Action::HideWindow(id)));
-        item(ui, "Rename...", Some(Action::RenameWindow(id)));
-        item(ui, "Delete", Some(Action::DeleteWindow(id)));
-        item(ui, "Duplicate", Some(Action::DuplicateWindow(id)));
-        if st.favorites {
-            item(ui, "Remove from Favorites", Some(Action::RemoveFavorite(id)));
+        let each = |make: fn(WindowId) -> Action| targets.iter().copied().map(make).collect::<Vec<_>>();
+        item(ui, "Show", each(Action::Focus));
+        item(ui, "Hide", each(Action::HideWindow));
+        item(ui, "Rename...", vec![Action::RenameWindow(id)]);
+        item(ui, "Delete", each(Action::DeleteWindow));
+        item(ui, "Duplicate", vec![Action::DuplicateWindow(id)]);
+        if favorites {
+            item(ui, "Remove from Favorites", vec![Action::RemoveFavorite(id)]);
         } else {
-            item(ui, "Add Shortcut to Favorites", Some(Action::AddFavorite(id)));
+            item(ui, "Add Shortcut to Favorites", vec![Action::AddFavorite(id)]);
         }
         ui.separator();
-        item(ui, "Export...", Some(if graph { Action::ExportGraph(id) } else { Action::ExportData(id) }));
+        item(ui, "Export...", vec![if graph { Action::ExportGraph(id) } else { Action::ExportData(id) }]);
         ui.separator();
-        item(ui, "Properties...", Some(Action::RenameWindow(id)));
+        item(ui, "Properties...", vec![Action::RenameWindow(id)]);
     });
 }
 
@@ -590,6 +645,33 @@ mod tests {
         assert!(folder_at(&p.root, &[0, 1]).is_none());
         unlist(&mut p.root, a);
         assert_eq!(windows_in(&p, &[]), [a]);
+    }
+
+    #[test]
+    fn ctrl_and_shift_clicks_pick_windows_as_windows_lists_do() {
+        // T286.
+        let (mut p, a, b) = project();
+        let c = p.add_workbook("gamma");
+        let d = p.add_workbook("delta");
+        let shown = [a, b, c, d];
+        let mut st = ExplorerState::default();
+        st.click(b, false, false, &shown);
+        assert_eq!(st.picked, [b]);
+        st.click(d, false, true, &shown);
+        assert_eq!(st.picked, [b, c, d], "Shift+click: the run from the last click");
+        assert_eq!(st.selected, Some(b), "the run keeps its start");
+        st.click(a, false, true, &shown);
+        assert_eq!(st.picked, [a, b], "a new run from the same start replaces the old");
+        st.click(d, true, false, &shown);
+        assert_eq!(st.picked, [a, b, d], "Ctrl+click adds");
+        st.click(a, true, false, &shown);
+        assert_eq!(st.picked, [b, d], "Ctrl+click removes");
+        assert_eq!(st.targets(b), [b, d], "an action on a highlighted row takes them all");
+        assert_eq!(st.targets(c), [c], "on another row only that one");
+        st.click(c, false, false, &shown);
+        assert_eq!(st.picked, [c]);
+        st.clear_selection();
+        assert!(st.picked.is_empty() && st.selected.is_none());
     }
 
     #[test]

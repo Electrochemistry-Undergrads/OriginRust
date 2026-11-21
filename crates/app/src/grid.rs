@@ -2052,7 +2052,7 @@ fn lock_mark(ui: &mut egui::Ui, rect: Rect, column: &Column, state: FormulaState
 
 /// The modifier keys held during this frame's mouse click: the keys now, and the keys that the
 /// click event itself carries (a test harness, or a system that reports them only there).
-fn click_modifiers(ui: &egui::Ui) -> egui::Modifiers {
+pub(crate) fn click_modifiers(ui: &egui::Ui) -> egui::Modifiers {
     ui.input(|i| {
         let mut m = i.modifiers;
         for event in &i.events {

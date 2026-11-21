@@ -1379,7 +1379,7 @@ impl AnalysisDialog {
                 columns.iter().filter_map(|id| sheet_columns.iter().position(|(c, _)| c == id)).collect();
             super::rm_options::RmState::new(kind == AnalysisKind::RmAnova2, &chosen, sheet_columns.len())
         };
-        Some(AnalysisDialog {
+        let mut dialog = AnalysisDialog {
             peak_themes: None,
             theme_name: String::new(),
             theme_note: None,
@@ -1488,7 +1488,12 @@ impl AnalysisDialog {
             applied_report: None,
             failed_key: None,
             undo_token: next_undo_token(),
-        })
+        };
+        // Origin 2016's deconv normalizes the response by default (T292, measured).
+        if kind == AnalysisKind::Deconvolution {
+            dialog.signal_normalize = true;
+        }
+        Some(dialog)
     }
 
     /// The peak search controls of Find Peaks and of the Peak Analyzer's Find Peaks page.
@@ -1945,6 +1950,7 @@ impl AnalysisDialog {
                     Tool::Deconvolution(DeconvolutionSpec {
                         response: other,
                         normalize,
+                        circular,
                         interval: self.signal_interval,
                     })
                 } else if self.kind == AnalysisKind::Convolution {
@@ -2441,17 +2447,16 @@ impl AnalysisDialog {
             }
             AnalysisKind::Convolution | AnalysisKind::Deconvolution | AnalysisKind::SignalCorrelation => {
                 self.reference_options(ui);
+                ui.horizontal(|ui| {
+                    ui.label("Type");
+                    ui.radio_value(&mut self.signal_circular, false, "Linear");
+                    ui.radio_value(&mut self.signal_circular, true, "Circular");
+                });
                 if self.kind == AnalysisKind::Deconvolution {
                     ui.weak(
-                        "Divides the spectrum of each input by the response's (FFT over the input's points), so it \
-                         undoes a circular convolution, and a linear one followed by zeros.",
+                        "Divides the spectrum of each input by the response's. Linear pads both to 2N - 1 points \
+                         and keeps N - m + 1 values (Origin's default); Circular uses the input's N points.",
                     );
-                } else {
-                    ui.horizontal(|ui| {
-                        ui.label("Type");
-                        ui.radio_value(&mut self.signal_circular, false, "Linear");
-                        ui.radio_value(&mut self.signal_circular, true, "Circular");
-                    });
                 }
                 ui.checkbox(&mut self.signal_normalize, "Normalize");
                 ui.horizontal(|ui| {

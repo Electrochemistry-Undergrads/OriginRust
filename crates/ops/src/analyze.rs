@@ -97,6 +97,7 @@ pub enum Job {
     Deconvolution {
         response: String,
         normalize: bool,
+        circular: bool,
         interval: Option<f64>,
     },
     /// Inverse FFT; the imaginary column is looked up once the project is loaded.
@@ -310,9 +311,9 @@ pub fn run_job_to(project: &mut Project, target: &Target, job: Job, output: &ana
                 Tool::SignalCorrelation(analysis::SignalCorrelationSpec { other, circular, normalize, interval })
             }
         }
-        Job::Deconvolution { response, normalize, interval } => {
+        Job::Deconvolution { response, normalize, circular, interval } => {
             let response = named_columns(project, book, sheet, std::slice::from_ref(&response))?[0];
-            Tool::Deconvolution(analysis::DeconvolutionSpec { response, normalize, interval })
+            Tool::Deconvolution(analysis::DeconvolutionSpec { response, normalize, circular, interval })
         }
         Job::GraphSummary { groups, level, arrangement } => {
             let groups = if groups.is_empty() { Vec::new() } else { named_columns(project, book, sheet, &groups)? };

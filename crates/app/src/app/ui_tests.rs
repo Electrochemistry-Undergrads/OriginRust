@@ -1784,20 +1784,23 @@ fn deconvolution_and_stft_open_from_signal_processing_and_write_a_new_sheet() {
     show_window(&mut h, "Book1 - sample.csv");
     menu_path(&mut h, &["Analysis", "Signal Processing", "Deconvolution..."]);
     assert!(h.state().analysis.is_some(), "the Deconvolution window is open");
-    // The response is the first Y column, so that one comes back as an impulse.
+    // The response is the first Y column. Origin's defaults (T292): Linear keeps N - m + 1 values (one,
+    // the signals being as long as the response) and Normalize scales by the response's norm.
     click(&mut h, "OK");
     let b = project(&h).workbooks().next().unwrap();
     let sheet = b.sheets.iter().find(|s| s.name.starts_with("Deconvolution")).expect("a result sheet");
     assert_eq!(sheet.columns.len(), 4, "X and Y for each of the two inputs");
     let impulse = sheet.columns[1].numeric().unwrap();
-    assert!(impulse.iter().zip([1.0, 0.0, 0.0, 0.0]).all(|(g, w)| (g - w).abs() < 1e-9), "{impulse:?}");
+    let norm = (2.5f64 * 2.5 + 4.5 * 4.5 + 6.5 * 6.5 + 8.5 * 8.5).sqrt();
+    assert!(impulse.len() == 1 && (impulse[0] - norm).abs() < 1e-9, "{impulse:?}");
 
-    // STFT's default window has 64 points: 100 samples give segments at 0 and 32.
+    // STFT's default window has 256 points and overlap 128 (Origin's): 600 samples give segments at 0, 128
+    // and 256, each with 129 frequencies.
     let dir = std::env::temp_dir().join(format!("sheaf-app-ui-stft-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("long.csv");
-    let text: String = (0..100)
+    let text: String = (0..600)
         .map(|i| {
             format!(
                 "{i},{}
@@ -1821,8 +1824,8 @@ fn deconvolution_and_stft_open_from_signal_processing_and_write_a_new_sheet() {
     click(&mut h, "OK");
     let b = project(&h).workbooks().next().unwrap();
     let sheet = b.sheets.iter().find(|s| s.name.starts_with("STFT")).expect("a result sheet");
-    assert_eq!(sheet.columns.len(), 3, "frequency and two segments");
-    assert_eq!(sheet.columns[0].numeric().unwrap().len(), 33);
+    assert_eq!(sheet.columns.len(), 4, "frequency and three segments");
+    assert_eq!(sheet.columns[0].numeric().unwrap().len(), 129);
     assert_eq!(h.state().doc.undo_label(), Some("STFT"));
 }
 

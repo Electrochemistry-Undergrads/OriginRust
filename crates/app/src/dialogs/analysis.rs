@@ -19,9 +19,10 @@ use sheaf_core::analysis::{
 };
 use sheaf_core::analysis::{
     AreaType, BaselineSpec, Boundary, ColumnMathSpec, ConvolutionSpec, CrossingIndex, CurveMathSpec, CurveOp,
-    CurveOperand, DeconvolutionSpec, DiffOptions, IntegrateRangesSpec, IntegrateSpec, InterpMethod, InterpSpec,
-    LevelCrossingSpec, LocalSpan, NormalizeMethod, OutputTarget, PeakDirection, PeakFilter, PeakOptions, Report,
-    Request, RowRange, SignalCorrelationSpec, SmoothMethod, SmoothOptions, SplineBoundary, StftOutput, StftSpec, Tool,
+    CurveOperand, CvChargeSpec, DeconvolutionSpec, DiffOptions, IntegrateRangesSpec, IntegrateSpec, InterpMethod,
+    InterpSpec, LevelCrossingSpec, LocalSpan, NormalizeMethod, OutputTarget, PeakDirection, PeakFilter, PeakOptions,
+    Report, Request, RowRange, SignalCorrelationSpec, SmoothMethod, SmoothOptions, SplineBoundary, StftOutput,
+    StftSpec, Tool,
 };
 use sheaf_core::analysis::{
     BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakBaselineSpec,
@@ -40,6 +41,8 @@ use sheaf_core::{ColumnId, Document, Project, WindowId};
 pub enum AnalysisKind {
     Integrate,
     /// Integrate several X ranges into one table.
+    /// Analysis > Mathematics > CV Charge... (T296).
+    CvCharge,
     IntegrateRanges,
     Differentiate,
     Smooth,
@@ -178,9 +181,10 @@ pub enum AnalysisKind {
 }
 
 impl AnalysisKind {
-    pub const ALL: [AnalysisKind; 33] = [
+    pub const ALL: [AnalysisKind; 34] = [
         AnalysisKind::Integrate,
         AnalysisKind::IntegrateRanges,
+        AnalysisKind::CvCharge,
         AnalysisKind::Differentiate,
         AnalysisKind::Smooth,
         AnalysisKind::Normalize,
@@ -219,6 +223,7 @@ impl AnalysisKind {
         match self {
             AnalysisKind::Integrate => "Integrate...",
             AnalysisKind::IntegrateRanges => "Integrate Ranges...",
+            AnalysisKind::CvCharge => "CV Charge...",
             AnalysisKind::Differentiate => "Differentiate...",
             AnalysisKind::Smooth => "Smooth...",
             AnalysisKind::Normalize => "Normalize...",
@@ -311,6 +316,7 @@ impl AnalysisKind {
         Some(match name {
             "integrate" => AnalysisKind::Integrate,
             "integrate-ranges" => AnalysisKind::IntegrateRanges,
+            "cv-charge" => AnalysisKind::CvCharge,
             "differentiate" => AnalysisKind::Differentiate,
             "smooth" => AnalysisKind::Smooth,
             "normalize" => AnalysisKind::Normalize,
@@ -787,6 +793,8 @@ pub struct AnalysisDialog {
     x_from: f64,
     x_to: f64,
     integrate: IntegrateSpec,
+    /// CV Charge's options (T296).
+    cv: CvChargeSpec,
     diff: DiffOptions,
     smooth_kind: SmoothKind,
     smooth_points: usize,
@@ -1419,6 +1427,7 @@ impl AnalysisDialog {
             x_from: x_lo,
             x_to: x_hi,
             integrate: IntegrateSpec::default(),
+            cv: CvChargeSpec::default(),
             diff: DiffOptions::default(),
             smooth_kind: SmoothKind::SavitzkyGolay,
             smooth_points: 5,
@@ -1869,6 +1878,7 @@ impl AnalysisDialog {
     fn tool(&self) -> Result<Tool, String> {
         Ok(match self.kind {
             AnalysisKind::Integrate => Tool::Integrate(self.integrate),
+            AnalysisKind::CvCharge => Tool::CvCharge(self.cv),
             AnalysisKind::IntegrateRanges => Tool::IntegrateRanges(IntegrateRangesSpec {
                 ranges: self.ranges.iter().map(|&(a, b)| RowRange::XBetween(a, b)).collect(),
                 end_point_baseline: self.integrate.end_point_baseline,
@@ -2338,6 +2348,17 @@ impl AnalysisDialog {
 
     fn options(&mut self, ui: &mut egui::Ui, filter_fs: Option<f64>) {
         match self.kind {
+            AnalysisKind::CvCharge => {
+                ui.weak(
+                    "X is the potential, Y the current. Each sweep (between turns of the potential) gets its charge.",
+                );
+                ui.horizontal(|ui| {
+                    ui.label("Scan rate (potential units per second)");
+                    ui.add(DragValue::new(&mut self.cv.scan_rate).speed(0.001).range(1e-9..=1e9).max_decimals(6));
+                });
+                ui.checkbox(&mut self.cv.end_point_baseline, "Subtract the line through each sweep's ends")
+                    .on_hover_text("Choose the rows of the peak first so that the sweep's ends lie on the background.");
+            }
             AnalysisKind::IntegrateRanges => {
                 let mut remove = None;
                 for (i, (from, to)) in self.ranges.iter_mut().enumerate() {
@@ -3378,7 +3399,7 @@ impl AnalysisDialog {
     /// window is titled with the tool's name alone.
     fn xf_name(&self) -> &'static str {
         match self.kind {
-            AnalysisKind::Integrate | AnalysisKind::IntegrateRanges => "integ1",
+            AnalysisKind::Integrate | AnalysisKind::IntegrateRanges | AnalysisKind::CvCharge => "integ1",
             AnalysisKind::Differentiate => "differentiate",
             AnalysisKind::Smooth => "smooth",
             AnalysisKind::Normalize => "normalize",
@@ -3474,6 +3495,7 @@ impl AnalysisDialog {
         match self.kind {
             AnalysisKind::Integrate => "Integrate the input curves by the trapezoidal rule",
             AnalysisKind::IntegrateRanges => "Integrate the input curves over several X ranges",
+            AnalysisKind::CvCharge => "Charge of each anodic and cathodic sweep of a cyclic voltammogram",
             AnalysisKind::Differentiate => "Differentiate the input curves",
             AnalysisKind::Smooth => "Smooth the input curves",
             AnalysisKind::Normalize => "Normalize the input columns",
@@ -3579,6 +3601,9 @@ impl AnalysisDialog {
             AnalysisKind::Integrate => "Area, peak position, height and width in a new sheet",
             AnalysisKind::IntegrateRanges => {
                 "One row per range and column (area, absolute area, peak, width) in a new sheet"
+            }
+            AnalysisKind::CvCharge => {
+                "One row per sweep (rows, potentials, charge) and the anodic and cathodic totals in a new sheet"
             }
             AnalysisKind::Differentiate
             | AnalysisKind::Normalize

@@ -1894,6 +1894,8 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Integrate...", Cmd::Analyze(AnalysisKind::Integrate)),
                 // Sheaf's own: integrate several ranges in one go.
                 item("Integrate Ranges...", Cmd::Analyze(AnalysisKind::IntegrateRanges)),
+                // Sheaf's own (T296): the charge of each sweep of a cyclic voltammogram.
+                item("CV Charge...", Cmd::Analyze(AnalysisKind::CvCharge)),
                 sep(),
                 item("Interpolate/Extrapolate...", Cmd::Analyze(AnalysisKind::Interpolate)),
                 item("Interpolate/Extrapolate Y from X...", Cmd::InterpolateFromColumn),

@@ -280,16 +280,31 @@ each matrix as not written).
   random/sparse gridding methods are not built.
 - Each conversion is one undo step ("Convert to Matrix"). Extract stays grey.
 
-## 7d. Analysis > Mathematics > Inverse (T193, 2026-11-20, from Origin's `minverse` documentation, not measured)
+## 7d. Analysis > Mathematics > Inverse (T193, 2026-11-20; measured by T290, 2026-11-21)
 
-- The matrix window's Analysis > Mathematics > Inverse..., and the same item in the workbook and
-  graph Analysis menus, invert the active square matrix sheet. The item is disabled unless a matrix
-  window is active. The inverse goes to a new matrix book named "Inverse of MBookN", which keeps the
-  sheet's ranges and labels. It is one undo step ("Matrix Inverse").
-- The method is Gauss-Jordan elimination with partial pivoting. It refuses a matrix that is not
-  square, that has a missing value, or that is singular (a pivot below 1e-12 of the largest cell),
-  and says why on the status bar. Sheaf opens no options window: `minverse` has only its input and
-  output.
+Measured against Origin 2016's `minverse` (inputs `im`, `om` = new; probes in `re-workspace/scratch/t290`).
+
+- **Where:** the matrix window's Analysis > Mathematics > Inverse..., and the same item in the workbook
+  and graph Analysis menus. The item is disabled unless a matrix window is active. One undo step
+  ("Matrix Inverse"). Sheaf opens no options window: `minverse` has only its input and output.
+- **Output (measured):** a new matrix book with the next free MBookN name and no long name. It holds one
+  sheet named "Inversed1" on the default ranges: X from 1 to the number of columns, Y from 1 to the number
+  of rows. The input's ranges are not kept.
+- **Full rank, square:** the inverse (Sheaf: Gauss-Jordan with partial pivoting; Origin's values agree to
+  1e-14). Badly scaled matrices of full rank are inverted as they are: `diag(1e-17, 1)` gives `diag(1e17, 1)`.
+- **Otherwise (singular, or not square, measured):** Origin computes the Moore-Penrose pseudoinverse,
+  `cols x rows`, and warns that the matrix is not full rank in a message box. Every non-square matrix gets
+  the warning, even one of full column rank. Singular values at or below `max(rows, cols) * eps * s_max`
+  count as zero. Sheaf warns on the status bar.
+- **Full-rank test:** not documented. Sheaf's rule reproduces all 25 measured cases. Rows, then columns,
+  are scaled to a largest entry of 1, and a row or column whose largest entry squares to 0 (below about
+  1.5e-162) fails. Then LU with partial pivoting fails at a pivot no larger than `n * eps`.
+  `[[1, 2], [2, 4 + 1e-15]]`, `[[1, 2, 3], [4, 5, 6], [7, 8, 9]]` and `diag(1e-200, 1)` fail;
+  `[[1, 1], [1, 1 + 1e-10]]` and `diag(1e-160, 1)` pass.
+- **Missing cells (measured):** they are not refused. A missing cell takes part as Origin's internal
+  missing number, -1.23456789e-300, so in effect as 0: `[[1, --], [3, 4]]` gives `[[1, ~0], [-0.75, 0.25]]`.
+  Origin's ~0 cell is 3.086e-301 (the number's trace); Sheaf's elimination order gives 0.
+- **Sheaf internals:** `sheaf_calc::minverse::minverse`, `MatrixSheet::inverse`, `Project::matrix_inverse`.
 
 ## 7e. Analysis > Signal Processing > FFT > 2D FFT and 2D IFFT (T196, 2026-11-20, not measured)
 

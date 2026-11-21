@@ -228,12 +228,13 @@ impl Project {
         id
     }
 
-    /// Analysis > Mathematics > Inverse (T193): the inverse of a square matrix sheet as a new matrix
-    /// book, whose long name says what it is. Returns the new book's id.
-    pub fn matrix_inverse(&mut self, book: WindowId, sheet: usize) -> Result<WindowId, ProjectError> {
-        let inv = self.matrix_sheet(book, sheet)?.inverse()?;
-        let name = self.matrix_book(book).map(|b| b.name.clone()).unwrap_or_default();
-        Ok(self.adopt_matrix_book(&format!("Inverse of {name}"), vec![inv]))
+    /// Analysis > Mathematics > Inverse (T193, measured by T290): the inverse of a matrix sheet as a new
+    /// matrix book without a long name, as Origin's `minverse` (see [`MatrixSheet::inverse`]). Returns the
+    /// new book's id and whether the result is the pseudoinverse (the matrix not square or not of full
+    /// rank), which Origin warns about.
+    pub fn matrix_inverse(&mut self, book: WindowId, sheet: usize) -> Result<(WindowId, bool), ProjectError> {
+        let (inv, pseudo) = self.matrix_sheet(book, sheet)?.inverse()?;
+        Ok((self.adopt_matrix_book("", vec![inv]), pseudo))
     }
 
     /// Analysis > Signal Processing > FFT > 2D FFT and 2D IFFT (T196): a new matrix book with the

@@ -2024,6 +2024,8 @@ impl SheafApp {
                     .add_filter("JPEG image", &["jpg", "jpeg"])
                     .add_filter("TIFF image", &["tif", "tiff"])
                     .add_filter("Windows bitmap", &["bmp"])
+                    .add_filter("SVG drawing", &["svg"])
+                    .add_filter("PDF document", &["pdf"])
                     .set_file_name(format!("{name}.png"))
                     .save_file();
                 if let Some(path) = picked {

@@ -1,6 +1,6 @@
 # T237: Layout pages (B14, slice 1)
 
-**Status:** slices 1 to 6 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
+**Status:** slices 1 to 7 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
 **Size:** L (several slices). **Source:** greyed inventory package B14 ("New: Layout",
 "Standard: New Layout").
 **Spec:** `docs/spec/layout-page.md`.
@@ -48,8 +48,14 @@
   (`LayoutPage::background`, white by default). Test:
   `layout_page::layout_page_properties_turn_the_page_to_a4_portrait_in_one_undo_step`.
 
+## Done in slice 7 (2026-11-20)
+
+- Export Page as Image... also writes SVG and PDF (`sheaf_plot::render_layout_svg`: nested item
+  SVGs with their ids prefixed). Tests: `layout_render::tests` and
+  `layout_page::a_layout_page_is_exported_as_a_picture_file`.
+
 ## Left (next slices)
 
 - Other page properties (printer page, theme).
-- Print, and vector (SVG/PDF/EMF) export of the page.
+- Print, and EMF export of the page.
 - Writing the page to `.opj`.

@@ -1392,7 +1392,8 @@ impl AnalysisDialog {
             boundary: Boundary::None,
             normalize: 0,
             divisor: 1.0,
-            normalize_stat: RefStat::Mean,
+            // Origin's `type` default is min (measured, T269).
+            normalize_stat: RefStat::Min,
             normalize_row: 1,
             baseline: BaselineKind::Minimum,
             level: 0.0,

@@ -2341,8 +2341,8 @@ pub enum AnalyzeTool {
         /// The reference column for --method ref or cell (short or long name, same sheet).
         #[arg(long = "ref", value_name = "COLUMN")]
         reference: Option<String>,
-        /// The statistic --method ref matches.
-        #[arg(long, value_enum, default_value_t = RefStatArg::Mean)]
+        /// The statistic --method ref matches (Origin's default: min).
+        #[arg(long, value_enum, default_value_t = RefStatArg::Min)]
         stat: RefStatArg,
         /// The row of the reference cell for --method cell, counted from 1.
         #[arg(long, default_value_t = 1)]

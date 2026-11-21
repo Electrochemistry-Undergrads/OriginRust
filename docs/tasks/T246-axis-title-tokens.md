@@ -13,4 +13,4 @@ title of that axis; the `.opj` reader keeps text around a token instead of dropp
 
 ## Left
 
-- Origin's token options (`@LG`, `@LL` and the others); title rotation and offset.
+- Title rotation and offset. The token options were measured and copied in T281.

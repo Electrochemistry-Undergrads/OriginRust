@@ -343,9 +343,56 @@ fn axis_arrows_point_out_of_the_chosen_ends_in_the_line_colour() {
 }
 
 #[test]
+fn axis_token_options_give_what_origin_2016_draws() {
+    // T281: measured with yl.text$ = "[%(?Y,option)]" on column B of Book1 (re-workspace/scratch/t281).
+    use sheaf_core::{ColumnData, Project, column::Designation};
+    let mut p = Project::new();
+    let book = p.add_workbook("Book1");
+    let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();
+    let labels = |p: &mut Project, long: &str, units: &str, comments: &str| {
+        let c = p.column_mut(b).unwrap();
+        (c.long_name, c.units, c.comments) = (long.into(), units.into(), comments.into());
+    };
+    let show = |p: &Project, option: &str| layout::token_option_text(p, p.column(b).unwrap(), option);
+    let short = p.column(b).unwrap().short_name.clone();
+    // Long name Volt, units mV, comments cmt.
+    labels(&mut p, "Volt", "mV", "cmt");
+    for (option, want) in [
+        ("", "Volt (mV)"),
+        ("@LG", "Volt (mV)"),
+        ("@U", "Volt (mV)"),
+        ("@LL", "Volt"),
+        ("@L", "Volt"),
+        ("@LU", "mV"),
+        ("@LC", "cmt"),
+        ("@LA", "Volt"),
+        ("@LN", "cmt (mV)"),
+        ("@WS", "Sheet1"),
+        ("@W", "Book1"),
+        ("@LP", ""),
+        ("@X", "###"),
+    ] {
+        assert_eq!(show(&p, option), want, "{option}");
+    }
+    assert_eq!(show(&p, "@LS"), short);
+    assert_eq!(show(&p, "@C"), short);
+    assert_eq!(show(&p, "@D"), format!("Book1_{short}"));
+    // No labels: the short name where Origin falls back to it, nothing where it does not.
+    labels(&mut p, "", "", "");
+    for (option, want) in
+        [("", &short[..]), ("@LG", &short), ("@LL", ""), ("@LU", ""), ("@LA", &short), ("@LN", &short)]
+    {
+        assert_eq!(show(&p, option), want, "no labels, {option}");
+    }
+    // Comments only: @LN shows them, @LA does not.
+    labels(&mut p, "", "", "cmt");
+    assert_eq!((show(&p, "@LN"), show(&p, "@LA"), show(&p, "")), ("cmt".into(), short.clone(), short.clone()));
+}
+
+#[test]
 fn axis_title_tokens_are_replaced_by_the_built_titles() {
     // T246: Origin's %(?X) and %(?Y) inside a title.
-    let built = |y: bool| if y { "Current (mA)".to_string() } else { "Potential (V)".to_string() };
+    let built = |y: bool, _: &str| if y { "Current (mA)".to_string() } else { "Potential (V)".to_string() };
     let sub = |t: &str| layout::substitute_axis_tokens(t, built);
     assert_eq!(sub("%(?X)"), "Potential (V)");
     assert_eq!(sub("%(?Y,@LG) per cycle"), "Current (mA) per cycle");

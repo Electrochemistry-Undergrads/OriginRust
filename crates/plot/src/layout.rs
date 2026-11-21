@@ -1706,13 +1706,45 @@ fn draw_y_labels(
 pub(crate) fn resolved_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -> String {
     match &axis.title {
         None => first_title(project, axis, pds, y_axis),
-        Some(text) => substitute_axis_tokens(text, |y| first_title(project, axis, pds, y)),
+        Some(text) => substitute_axis_tokens(text, |y, option| match title_source(project, axis, pds, y) {
+            TitleSource::Column(c) => token_option_text(project, c, option),
+            TitleSource::Text(s) => s,
+        }),
     }
 }
 
-/// Replaces each `%(?X...)` and `%(?Y...)` of `text` (letter case ignored) by `built(is_y)`; other
-/// text, and a `%(?` not followed by X or Y and a closing parenthesis, stay as they are.
-pub(crate) fn substitute_axis_tokens(text: &str, mut built: impl FnMut(bool) -> String) -> String {
+/// What `%(?X,option)` / `%(?Y,option)` shows for the column that names the axis, as Origin 2016
+/// draws it (T281, measured with `yl.text$` and exported pictures, `re-workspace/scratch/t281`):
+/// no option, `@LG` and `@U` the built title (long name, else short name, then ` (units)`); `@LL`
+/// and `@L` the long name; `@LU` the units; `@LC` the comments; `@LS` and `@C` the short name; `@LA`
+/// the long name, else the short name; `@LN` the comments, else the long name, else the short name,
+/// then ` (units)`; `@D` `Book_Column`; `@W` the book's short name, `@WL` its long name, `@WS` the
+/// sheet's name; `@LP` (a parameter row Sheaf has not) nothing; any other option `###`.
+pub(crate) fn token_option_text(project: &Project, c: &sheaf_core::Column, option: &str) -> String {
+    let units = |name: &str| if c.units.is_empty() { name.to_string() } else { format!("{name} ({})", c.units) };
+    let first = |names: &[&str]| names.iter().find(|n| !n.is_empty()).map(|n| n.to_string()).unwrap_or_default();
+    let place = project.locate(c.id);
+    match option.trim().to_ascii_uppercase().as_str() {
+        "" | "@LG" | "@U" => c.axis_title(),
+        "@LL" | "@L" => c.long_name.clone(),
+        "@LU" => c.units.clone(),
+        "@LC" => c.comments.clone(),
+        "@LS" | "@C" => c.short_name.clone(),
+        "@LA" => first(&[&c.long_name, &c.short_name]),
+        "@LN" => units(&first(&[&c.comments, &c.long_name, &c.short_name])),
+        "@D" => place.map(|(b, _, _)| format!("{}_{}", b.name, c.short_name)).unwrap_or_default(),
+        "@W" => place.map(|(b, _, _)| b.name.clone()).unwrap_or_default(),
+        "@WL" => place.map(|(b, _, _)| b.long_name.clone()).unwrap_or_default(),
+        "@WS" => place.map(|(_, s, _)| s.name.clone()).unwrap_or_default(),
+        "@LP" => String::new(),
+        _ => "###".to_string(),
+    }
+}
+
+/// Replaces each `%(?X...)` and `%(?Y...)` of `text` (letter case ignored) by `built(is_y, option)`,
+/// `option` being the text after the comma (empty without one); other text, and a `%(?` not followed
+/// by X or Y and a closing parenthesis, stay as they are.
+pub(crate) fn substitute_axis_tokens(text: &str, mut built: impl FnMut(bool, &str) -> String) -> String {
     let mut out = String::new();
     let mut rest = text;
     while let Some(at) = rest.find("%(?") {
@@ -1721,7 +1753,8 @@ pub(crate) fn substitute_axis_tokens(text: &str, mut built: impl FnMut(bool) -> 
         let which = after.chars().next().map(|c| c.to_ascii_uppercase());
         match (which, after.find(')')) {
             (Some(w @ ('X' | 'Y')), Some(close)) if after[1..close].is_empty() || after[1..close].starts_with(',') => {
-                out.push_str(&built(w == 'Y'));
+                let option = after[1..close].strip_prefix(',').unwrap_or("");
+                out.push_str(&built(w == 'Y', option));
                 rest = &after[close + 1..];
             }
             _ => {
@@ -1735,50 +1768,64 @@ pub(crate) fn substitute_axis_tokens(text: &str, mut built: impl FnMut(bool) -> 
 }
 
 pub(crate) fn first_title(project: &Project, axis: &Axis, pds: &[PlotData], y_axis: bool) -> String {
-    let Some(pd) = pds.first() else { return String::new() };
+    match title_source(project, axis, pds, y_axis) {
+        TitleSource::Column(c) => c.axis_title(),
+        TitleSource::Text(s) => s,
+    }
+}
+
+/// What names an axis: a column (its labels make the title) or a fixed text.
+pub(crate) enum TitleSource<'a> {
+    Column(&'a sheaf_core::Column),
+    Text(String),
+}
+
+pub(crate) fn title_source<'a>(
+    project: &'a Project,
+    axis: &Axis,
+    pds: &[PlotData<'a>],
+    y_axis: bool,
+) -> TitleSource<'a> {
+    let column = |id| project.column(id).map_or(TitleSource::Text(String::new()), TitleSource::Column);
+    let text = |s: &str| TitleSource::Text(s.to_string());
+    let Some(pd) = pds.first() else { return text("") };
     if pd.plot.kind == PlotKind::Histogram {
         // The counts up the page, the binned column along it.
-        return if y_axis {
-            "Count".to_string()
-        } else {
-            project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default()
-        };
+        return if y_axis { text("Count") } else { column(pd.plot.y) };
     }
     if !y_axis && let Some(ix) = &pd.plot.indexed {
         // Indexed data: the X axis is named by the main group column.
-        return project.column(ix.group).map(|c| c.axis_title()).unwrap_or_default();
+        return column(ix.group);
     }
     if (pd.boxed.is_some() || pd.column_at.is_some()) && !y_axis {
-        return String::new();
+        return text("");
     }
     match (&pd.plot.stat, y_axis) {
-        (Some(StatPlot::Interval { .. }), false) => return String::new(),
-        (Some(StatPlot::Pareto | StatPlot::ParetoCumulative), false) => {
-            return project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default();
-        }
+        (Some(StatPlot::Interval { .. }), false) => return text(""),
+        (Some(StatPlot::Pareto | StatPlot::ParetoCumulative), false) => return column(pd.plot.y),
         _ => {}
     }
     if pd.column_at.is_some() {
-        return "Range".to_string();
+        return text("Range");
     }
     if pd.ridge.is_some() {
         // The columns name the baselines; the values along X have no column of their own.
-        return if y_axis { String::new() } else { "Value".to_string() };
+        return if y_axis { text("") } else { text("Value") };
     }
     // Horizontal bars show their values on the X axis and their positions on the Y axis.
     if y_axis != pd.transposed() {
-        return project.column(pd.plot.y).map(|c| c.axis_title()).unwrap_or_default();
+        return column(pd.plot.y);
     }
     let x = pd.plot.x.and_then(|id| project.column(id));
     if x.is_none()
         && let Some(s) = project.column(pd.plot.y).and_then(|c| c.sampling.as_ref())
     {
         // A sampling interval names the X axis by its long name and units (T84).
-        return s.title();
+        return TitleSource::Text(s.title());
     }
     match x.or_else(|| data::label_column(project, axis, Dim::X, Some(pd))) {
-        Some(c) => c.axis_title(),
-        None => "Row".to_string(),
+        Some(c) => TitleSource::Column(c),
+        None => text("Row"),
     }
 }
 

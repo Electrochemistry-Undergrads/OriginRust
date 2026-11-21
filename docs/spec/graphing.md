@@ -287,8 +287,16 @@ replaced by the title Sheaf builds for that axis from the first plot (the automa
 Y axis), so `%(?Y) per cycle` shows `Current (mA) per cycle`. Other `%(?...)` forms and an unclosed
 token are drawn as typed. The title editor shows the text with the tokens. The `.opj` reader takes a
 title that is only one token as the automatic title (as before) and now keeps a title with text
-around the token instead of dropping that text. Origin's options after the comma (`@LG` and others)
-are not interpreted. Tests: `axis_title_tokens_are_replaced_by_the_built_titles`
+around the token instead of dropping that text. **Options (T281, measured in Origin 2016 on 2026-11-21
+with `yl.text$ = "[%(?Y,option)]"` and exported pictures, `re-workspace/scratch/t281`):** for a
+column with long name Volt, units mV and comments cmt, Origin draws: no option, `@LG` and `@U`
+`Volt (mV)` (the built title); `@LL` and `@L` `Volt`; `@LU` `mV`; `@LC` `cmt`; `@LS` and `@C` the
+short name `B`; `@LA` `Volt`; `@LN` `cmt (mV)`; `@D` `Book1_B`; `@W` `Book1`; `@WS` `Sheet1`; `@WL`
+and `@LP` nothing (the book had no long name); an unknown option (`@X`) `###`. Without labels, `@LL`,
+`@L`, `@LU` and `@LC` give nothing while the built title, `@LG`, `@LA` and `@LN` fall back to the
+short name; with comments only `@LN` gives them and `@LA` the short name. Sheaf draws the same
+(`token_option_text`); a title not named by a column (Count, Row, a sampling interval) shows its
+built text for every option. Tests: `axis_title_tokens_are_replaced_by_the_built_titles`, `axis_token_options_give_what_origin_2016_draws`
 (`crates/plot/src/offset_axis_tests.rs`), `only_a_lone_axis_token_is_the_automatic_title`
 (`crates/io/src/opj/graph.rs`).
 

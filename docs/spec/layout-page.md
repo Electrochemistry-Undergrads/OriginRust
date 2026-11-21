@@ -92,7 +92,18 @@ unregistered on the reference machine). Everything below is Sheaf's choice unles
   Stored as `{"kind": "text", "text": ..., "size": <pt>}`. Origin adds layout text with its Text
   tool; font, colour and size come from markup only here (not measured).
 
+## Drawn objects (T237 slice 11)
+
+- Layout > Add Rectangle, Add Ellipse and Add Line put a black 1 pt object in the middle of the
+  page, 30 % of its width and 20 % of its height ("Add drawing to layout"). It fills its box: the
+  line stays inside it; a line runs from the top left to the bottom right corner, or from the
+  bottom left to the top right ("Line (up)"). Unlike pictures it is drawn at its box's size, so a
+  resize changes its shape, not its line width. A double-click opens Object Properties: the kind,
+  the line colour and width (0.1 to 20 pt); OK is one undo step ("Layout object properties"). The
+  whole box takes the clicks. Stored as `{"kind": "shape", "shape": "rectangle", "color": ...,
+  "width": <tenths of a point>}`. Origin draws these with its Tools toolbar (not measured).
+
 ## Not yet
 
-- A font/colour toolbar for layout text, drawn objects on the page, picture holders,
+- A font/colour toolbar for layout text, fills and arrowheads on drawn objects on the page, picture holders,
   the rest of the Layout Page properties (printer page, theme), and `.opj`.

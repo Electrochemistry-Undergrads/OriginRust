@@ -237,6 +237,8 @@ pub enum Cmd {
     LayoutAddSheet,
     /// Layout > Add Text... on the active layout page (T237 slice 8).
     LayoutAddText,
+    /// Layout > Add Rectangle / Ellipse / Line (T237 slice 11).
+    LayoutAddShape(sheaf_core::layout_page::LayoutShape),
     /// Layout > Export Page as Image... (T237 slice 3).
     LayoutExport,
     /// Format > Layout Page... [F2] (T237 slices 4 and 6).
@@ -1004,6 +1006,9 @@ fn base(kind: WindowKind) -> Vec<Menu> {
                     item("Add &Graph...", Cmd::LayoutAddGraph),
                     item("Add &Worksheet...", Cmd::LayoutAddSheet),
                     item("Add &Text...", Cmd::LayoutAddText),
+                    item("Add &Rectangle", Cmd::LayoutAddShape(sheaf_core::layout_page::LayoutShape::Rectangle)),
+                    item("Add &Ellipse", Cmd::LayoutAddShape(sheaf_core::layout_page::LayoutShape::Ellipse)),
+                    item("Add &Line", Cmd::LayoutAddShape(sheaf_core::layout_page::LayoutShape::Line)),
                     sep(),
                     item("&Export Page as Image...", Cmd::LayoutExport),
                 ],
@@ -3322,6 +3327,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         },
         Cmd::LayoutAddGraph => match (c.kind, c.active) {
             (WindowKind::Layout, Some(id)) => Action::LayoutAddGraph { layout: id, sheets: false },
+            _ => return Err("Activate a layout page first"),
+        },
+        Cmd::LayoutAddShape(shape) => match (c.kind, c.active) {
+            (WindowKind::Layout, Some(id)) => Action::LayoutAddShape { layout: id, shape: *shape },
             _ => return Err("Activate a layout page first"),
         },
         Cmd::LayoutAddText => match (c.kind, c.active) {

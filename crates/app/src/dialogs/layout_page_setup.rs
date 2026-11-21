@@ -224,8 +224,11 @@ mod tests {
         let id = p.add_layout();
         let mut doc = Document::new(p);
         let mut d = LayoutPageSetup::new(&doc, id).unwrap();
-        assert_eq!(d.preset(), Some("Letter"), "11 x 8.5 in landscape is Letter");
+        assert_eq!(d.preset(), None, "Origin's default 10.667 x 8 in is no paper size");
         assert!(d.landscape());
+        d.pick_preset("Letter");
+        assert_eq!(d.preset(), Some("Letter"));
+        assert_eq!((d.width_pt, d.height_pt), (792.0, 612.0), "Letter, kept landscape");
         d.pick_preset("A4");
         assert_eq!((d.width_pt, d.height_pt), (841.89, 595.28), "A4 turned landscape");
         d.set_landscape(false);

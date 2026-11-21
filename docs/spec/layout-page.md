@@ -7,7 +7,10 @@ unregistered on the reference machine). Everything below is Sheaf's choice unles
 ## Model (`crates/core/src/layout_page.rs`)
 
 - `Window::Layout(LayoutPage)`: an id, a short name (`Layout1`, `Layout2`, ...), a long name, the
-  page size in points (US Letter landscape, 792 x 612, by default), and items.
+  page size in points (768 x 576, 10.667 x 8 in, by default: Origin 2016's new layout page reports
+  `page.width` 6400 and `page.height` 4800 at 600 dpi, measured 2026-11-21, T274; its graph page is a
+  different 6432 x 4923), and items. Where Origin puts an added graph was not measured: no LabTalk command
+  adds one (`layout`, `layout -g`, `-t`, `-a` all fail), so the placement stays Sheaf's.
 - An item (`LayoutItem`) is a rectangle in fractions of the page (0,0 at the top left) with its
   content. Slice 1 has one kind, `LayoutContent::Graph { graph }`: a live picture of a graph
   window that follows the graph's changes.

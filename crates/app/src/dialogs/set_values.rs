@@ -173,6 +173,18 @@ pub const FUNCTIONS: &[(&str, &[FuncInfo])] = &[
                 "compare(col(A)$, \"1\")",
             ),
             f("exact", "s, t", "1 when the texts are equal with case, else 0.", "exact(col(A)$, \"1\")"),
+            f(
+                "numextract",
+                "s, count, decimal",
+                "The count-th number in a text (0 the last); decimal 1 reads a comma as the decimal point.",
+                "numextract(col(A)$)",
+            ),
+            f(
+                "numbreak",
+                "s, offset, decimal",
+                "Position where number and text first change from offset; 0 when they do not.",
+                "numbreak(col(A)$)",
+            ),
         ],
     ),
     (

@@ -51,6 +51,10 @@ pub(crate) enum StrFn {
     Text,
     Format,
     Value,
+    /// `NumExtract(s[, count, decimal])` (Origin 2026 SR1, T265): the count-th run of a number in `s`.
+    NumExtract,
+    /// `NumBreak(s[, offset, decimal])` (Origin 2026 SR1, T265): where number and text first change.
+    NumBreak,
     /// Internal lowering of %([Book]Sheet,column,row[,format]); evaluated against the host.
     WorksheetCell,
 }
@@ -66,6 +70,7 @@ impl StrFn {
             StrFn::Substitute => (3, 4),
             StrFn::Text | StrFn::Format => (1, 2),
             StrFn::WorksheetCell => (2, 3),
+            StrFn::NumExtract | StrFn::NumBreak => (1, 3),
         }
     }
 }
@@ -75,7 +80,14 @@ impl StrFn {
     pub(crate) fn returns_text(self) -> bool {
         !matches!(
             self,
-            StrFn::Len | StrFn::Find | StrFn::Search | StrFn::Compare | StrFn::Exact | StrFn::Value | StrFn::Code
+            StrFn::Len
+                | StrFn::Find
+                | StrFn::Search
+                | StrFn::Compare
+                | StrFn::Exact
+                | StrFn::Value
+                | StrFn::Code
+                | StrFn::NumBreak
         )
     }
 
@@ -89,6 +101,7 @@ impl StrFn {
             StrFn::Replace => i == 0 || i == 3,
             StrFn::Substitute => i < 3,
             StrFn::Find | StrFn::Search | StrFn::Compare => i <= 1,
+            StrFn::NumExtract | StrFn::NumBreak => i == 0,
             _ => true,
         }
     }
@@ -106,6 +119,55 @@ fn chars_of(n: f64) -> usize {
 /// A 1-based start position; anything below 1 counts as 1 (Origin: `mid(s,0,3)` is `mid(s,1,3)`).
 fn start_of(n: f64) -> usize {
     if n.is_nan() { 1 } else { n.round().clamp(1.0, 1.0e9) as usize }
+}
+
+/// Which characters of `s` belong to a number (T265): the digits, and the decimal separator when it
+/// stands between two digits. The separator is the period, or the comma when `comma` is set (Origin's
+/// `decimal` argument: the separator opposite to the system's, which is the period for Sheaf).
+fn numeric_mask(s: &[char], comma: bool) -> Vec<bool> {
+    let sep = if comma { ',' } else { '.' };
+    (0..s.len())
+        .map(|i| {
+            s[i].is_ascii_digit()
+                || (s[i] == sep && i > 0 && i + 1 < s.len() && s[i - 1].is_ascii_digit() && s[i + 1].is_ascii_digit())
+        })
+        .collect()
+}
+
+/// `NumExtract(s, count, decimal)`: the `count`-th run of number characters (1 the first, the
+/// default; 0 the last), as text; empty text when there is no such run. A `-` is not a sign.
+fn num_extract(s: &str, count: f64, comma: bool) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    let mask = numeric_mask(&chars, comma);
+    let mut runs: Vec<(usize, usize)> = Vec::new();
+    for (i, &m) in mask.iter().enumerate() {
+        if m {
+            match runs.last_mut() {
+                Some(r) if r.1 == i => r.1 = i + 1,
+                _ => runs.push((i, i + 1)),
+            }
+        }
+    }
+    let pick = if count.is_nan() { 1.0 } else { count.round() };
+    let run = if pick == 0.0 {
+        runs.last()
+    } else if pick >= 1.0 && pick <= runs.len() as f64 {
+        runs.get(pick as usize - 1)
+    } else {
+        None
+    };
+    run.map_or_else(String::new, |&(a, b)| chars[a..b].iter().collect())
+}
+
+/// `NumBreak(s, offset, decimal)`: from the 1-based `offset` (default 1), the 1-based position of
+/// the first character whose kind (number or not) differs from the character at `offset`; 0 when
+/// the kind does not change before the end, or when `offset` is past the end.
+fn num_break(s: &str, offset: f64, comma: bool) -> f64 {
+    let chars: Vec<char> = s.chars().collect();
+    let mask = numeric_mask(&chars, comma);
+    let start = start_of(offset) - 1;
+    let Some(&kind) = mask.get(start) else { return 0.0 };
+    mask[start..].iter().position(|&m| m != kind).map_or(0.0, |k| (start + k + 1) as f64)
 }
 
 /// Applies a string function to already evaluated arguments.
@@ -216,6 +278,12 @@ pub(crate) fn apply(f: StrFn, args: Vec<Value>) -> Value {
                     Value::Num(f64::from(if case { s == other } else { s.to_lowercase() == other.to_lowercase() }))
                 }
                 StrFn::Exact => Value::Num(f64::from(s == text_arg(0))),
+                StrFn::NumExtract => {
+                    Value::Text(num_extract(&s, rest.first().map_or(1.0, Value::number), flag(rest.get(1), false)))
+                }
+                StrFn::NumBreak => {
+                    Value::Num(num_break(&s, rest.first().map_or(1.0, Value::number), flag(rest.get(1), false)))
+                }
                 StrFn::Text | StrFn::Format | StrFn::Value | StrFn::Char | StrFn::WorksheetCell => {
                     unreachable!("handled above or by the worksheet evaluator")
                 }

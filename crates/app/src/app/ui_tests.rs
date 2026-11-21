@@ -5001,9 +5001,14 @@ fn csv_file(tag: &str, name: &str, text: &str) -> PathBuf {
 
 /// The result sheet that the last tool added to the first workbook: its name and the numbers of a column.
 fn result_column(h: &Harness<'static, SheafApp>, column: &str) -> (String, Vec<f64>) {
+    // The last sheet that has the column: a result sheet, or the input sheet for tools that write there.
     let b = project(h).workbooks().next().unwrap();
-    let ws = b.sheets.last().unwrap();
-    let c = ws.columns.iter().find(|c| c.long_name == column).unwrap_or_else(|| panic!("no column {column}"));
+    let (ws, c) = b
+        .sheets
+        .iter()
+        .rev()
+        .find_map(|ws| ws.columns.iter().find(|c| c.long_name == column).map(|c| (ws, c)))
+        .unwrap_or_else(|| panic!("no column {column}"));
     (ws.name.clone(), c.numeric().unwrap().to_vec())
 }
 
@@ -5908,8 +5913,9 @@ fn the_mathematics_menu_finds_the_intersection_of_two_curves() {
     assert!(has_label(&h, "Also list the points where the curves touch without crossing"));
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none());
+    // T322: at the end of the input sheet, as Origin's intersect writes it.
     let (sheet, x) = result_column(&h, "Intersection X1");
-    assert!(sheet.starts_with("Intersect"), "{sheet}");
+    assert_eq!(sheet, project(&h).workbooks().next().unwrap().sheets[0].name, "the input sheet");
     assert_eq!(x.len(), 1);
     assert!((x[0] - 10.0 / 3.0).abs() < 1e-9, "{x:?}");
     assert_eq!(h.state().doc.undo_label(), Some("Intersect"));

@@ -112,6 +112,14 @@ pub struct PlotLock {
     pub pending: bool,
 }
 
+/// Whether two long names are the same label with a different number at the end
+/// (`Intersection X1` and `Intersection X2`).
+fn same_numbered_label(old: &str, new: &str) -> bool {
+    let stem = |s: &str| s.trim_end_matches(|c: char| c.is_ascii_digit()).len();
+    let (a, b) = (stem(old), stem(new));
+    a < old.len() && b < new.len() && old[..a] == new[..b]
+}
+
 impl Project {
     /// The lock of `layer` (T186): its first visible plot whose Y column is read by an Auto or Manual
     /// analysis link. Pending when a result column of such a link is not current.
@@ -226,7 +234,11 @@ impl Project {
             };
             let c = self.column_mut(*old).expect("checked above");
             c.data = data;
-            c.long_name = long_name;
+            // A numbered label (Normalized1, Intersection X1, ...) keeps its number: the run counted the
+            // old column itself and gave the next one (T322).
+            if !same_numbered_label(&c.long_name, &long_name) {
+                c.long_name = long_name;
+            }
             c.units = units;
             c.comments = comments;
             c.designation = designation;
@@ -421,6 +433,16 @@ impl Project {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_numbered_label_keeps_its_number_when_the_run_is_replaced() {
+        // T322: a run that sees its own old column counts on (Intersection X2); the old name stays.
+        assert!(same_numbered_label("Intersection X1", "Intersection X2"));
+        assert!(same_numbered_label("Normalized3", "Normalized4"));
+        assert!(!same_numbered_label("Normalized B", "Normalized C"));
+        assert!(!same_numbered_label("Intersection X1", "Intersection Y2"));
+        assert!(!same_numbered_label("Area", "Area"));
+    }
     use crate::{ColumnData, Designation};
     use sheaf_calc::{Boundary, SmoothMethod};
 

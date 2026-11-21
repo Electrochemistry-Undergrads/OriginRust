@@ -60,7 +60,9 @@ fn intersect_needs_two_curves_and_lists_the_point() {
         sheaf(&["analyze", "intersect", data.to_str().unwrap(), "-y", "up,down", "--export", export.to_str().unwrap()]);
     assert!(ok, "stderr: {stderr}");
     assert!(stdout.contains("1 point"), "{stdout}");
-    assert!(std::fs::read_to_string(&export).unwrap().lines().any(|r| r.starts_with("2,2")));
+    // T322: the columns go to the end of the input sheet: row 1 is x, up, down, third, then 2, 2.
+    let text = std::fs::read_to_string(&export).unwrap();
+    assert!(text.lines().any(|r| r.ends_with(",2,2")), "{text}");
 }
 
 #[test]

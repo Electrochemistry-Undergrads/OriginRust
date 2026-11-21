@@ -1,5 +1,9 @@
 # T66: Graph view modes, Show toggles, Show Data Info, Full Screen (B1, slice 2)
 
+**Active Layer Indicator (2026-11-21):** View > Show toggles a per-page highlight
+of the active layer's primary Cartesian axes. The setting starts off and is saved
+in Sheaf projects (graphing 22.9). Six disabled entries remain.
+
 **T177 (2026-11-19):** View > Show > Labels and Data are live as page-wide switches of every layer
 (LabTalk `layer.showLabels` / `layer.showData`, a documentation contract, graphing 22.8); seven items
 remain grey.
@@ -24,8 +28,8 @@ show-all and one-step Undo match saved complete graphs; restored PNG pixels matc
 exactly. The one owned app and guard close0. Graph-view/grid source differs only
 by one inert context default each; their engines and all other owners remain fixed.
 
-**Size:** M. **Inventory:** 9 remaining locations: Active Layer Indicator, Axis Layer Icons,
-Object Grid, Layer Grid, Frame, Labels, Data, Master Items on Screen and Show Data Info.
+**Size:** M. **Inventory:** six remaining locations, Axis Layer Icons, Object Grid,
+Layer Grid, Frame, Master Items on Screen and Show Data Info.
 The original17-location baseline also included the now-published view modes,
 Layer Icons, Active Layer Only and Full Screen entries.
 

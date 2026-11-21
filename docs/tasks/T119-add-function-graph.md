@@ -1,6 +1,6 @@
 # T119: Graph > Add Function Graph...
 
-**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 41), **not measured** (Origin COM unregistered): the Add Function Graph window (y(x), From, To, Points), the points in a new FuncN workbook, a line plot in the active layer. Left: measure Origin's window and defaults and match them; a curve that follows the X axis range.
+**Status:** done 2026-11-16 (Claude Windows "t30-origin", graphing.md 41), **not measured** (Origin COM unregistered): the Add Function Graph window (y(x), From, To, Points), the points in a new FuncN workbook, a line plot in the active layer. Left: measure Origin's window and defaults and match them; a curve that follows the X axis range. T322 (2026-11-21) measured Origin 2016's window (Plot Details, Function tab: 100 points, Auto range from the X axis, Plot Type) and copied the range start and the Plot Type.
 **Size:** S. **Source:** greyed inventory package B3 (Graph > Add Function Graph...).
 **Spec:** `docs/spec/graphing.md` (a new section).
 

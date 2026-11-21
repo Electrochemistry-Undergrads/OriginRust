@@ -987,6 +987,10 @@ fn the_fit_window_offers_direct_weighting_and_the_scale_errors_switch() {
     click(&mut h, "Advanced");
     click(&mut h, "Scale Error with sqrt(Reduced Chi-Sqr)");
     assert!(!request(&h).scale_errors, "the box was ticked and is now off");
+    assert!(!request(&h).covariance_matrix && !request(&h).correlation_matrix, "off as in Origin");
+    click(&mut h, "Covariance Matrix");
+    click(&mut h, "Correlation Matrix");
+    assert!(request(&h).covariance_matrix && request(&h).correlation_matrix);
     // The weight column w is chosen and the fit runs with the weights from it.
     let w = project(&h).workbooks().next().unwrap().sheets[0].column_by_name("w").unwrap().id;
     h.state_mut().fit.as_mut().unwrap().weight_column_for_test(w);

@@ -13,7 +13,7 @@ use sheaf_fit::{FitError, nlsf};
 
 use super::{
     BandChoice, FitData, FitModel, FitOutcome, FitRequest, FitRequestError, FitWeighting, FunctionInfo, Project,
-    apply_settings, linspace, scale_errors, sheet_column, stats_rows, weighting,
+    apply_settings, linspace, matrix_columns, scale_errors, sheet_column, stats_rows, weighting,
 };
 use crate::analysis::{AnalysisError, RowRange, column_label, free_sheet_name, resolve_rows};
 use crate::column::{Column, ColumnData, Designation};
@@ -316,6 +316,7 @@ impl Project {
         for (designation, name, data) in param_columns {
             sheet_column(self, &mut param_ws, designation, &name, "", data);
         }
+        matrix_columns(self, &mut param_ws, &report, request);
         let rows = stats_rows(&report, &derived, &source_label, &rows_note);
         sheet_column(
             self,

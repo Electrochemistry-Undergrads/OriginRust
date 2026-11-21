@@ -725,10 +725,23 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
 
     // A soft shadow and the page itself.
     let painter = ui.painter_at(rect);
+    let to_screen = |(x, y): (f64, f64)| image_rect.min + egui::vec2(x as f32 * fit, y as f32 * fit);
     painter.rect_filled(image_rect.translate(egui::vec2(3.0, 3.0)), 0.0, Color32::from_black_alpha(40));
     if let Some(t) = &state.texture {
         let uv = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
         painter.image(t.texture.id(), image_rect, uv, Color32::WHITE);
+        if graph.page.style.active_layer_indicator
+            && let Some(geometry) = t.geometry.get(state.active_layer)
+        {
+            view_modes::draw_active_axes(
+                &painter,
+                &t.scene,
+                state.active_layer,
+                geometry,
+                &to_screen,
+                ui.visuals().selection.bg_fill,
+            );
+        }
     }
     painter.rect_stroke(image_rect, 0.0, Stroke::new(1.0_f32, Color32::from_gray(120)), egui::StrokeKind::Outside);
     paint_scroll_bars(&painter, rect, page_size, state.zoom);
@@ -745,7 +758,6 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         return;
     };
     let to_page = |p: Pos2| (f64::from((p.x - image_rect.left()) / fit), f64::from((p.y - image_rect.top()) / fit));
-    let to_screen = |(x, y): (f64, f64)| image_rect.min + egui::vec2(x as f32 * fit, y as f32 * fit);
     // (a straight line that is not Selectable has no hit object, so clicks pass through it)
     let pick = |p: Pos2| hit_test(&t.scene, to_page(p), f64::from(PICK_TOLERANCE / fit));
 
@@ -1632,6 +1644,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         can_ungroup: false,
         view_mode: Default::default(),
         layer_icons: true,
+        active_layer_indicator: false,
         lock_position: Default::default(),
         page_breaks: false,
         activate_by_icon_only: false,

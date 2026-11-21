@@ -82,11 +82,43 @@ fn layer_icons_in_the_show_menu_hides_and_shows_the_icons() {
 fn the_show_items_that_are_not_measured_stay_grey() {
     let mut h = start(vec![data_file("vm-grey")]);
     menu_path(&mut h, &["View", "Show"]);
-    for label in ["Active Layer Indicator", "Object Grid", "Frame", "Master Items on Screen"] {
+    for label in ["Object Grid", "Frame", "Master Items on Screen"] {
         assert!(h.get_by_label(label).accesskit_node().is_disabled(), "{label} is not built yet");
     }
     // T177: Labels (and Data, which shares its name with the Data menu) are live (graphing 22.8).
     assert!(!h.get_by_label("Labels").accesskit_node().is_disabled());
+}
+
+#[test]
+fn active_layer_indicator_is_a_saved_page_switch_with_undo_and_identical_graph_output() {
+    let mut h = start(vec![data_file("view-active-indicator")]);
+    let first = graph(&h).id;
+    let other = h.state_mut().doc.apply("Second graph", |p| p.add_graph(sheaf_core::template::Template::Line));
+    show_window(&mut h, "Graph1 - sample");
+    assert!(!h.state().menu_context().active_layer_indicator);
+    let picture = sheaf_plot::graph_scene(project(&h), first).unwrap();
+    let before = project(&h).clone();
+
+    menu_path(&mut h, &["View", "Show", "Active Layer Indicator"]);
+    let mut expected = before.clone();
+    expected.graph_mut(first).unwrap().page.style.active_layer_indicator = true;
+    assert_eq!(project(&h), &expected);
+    assert!(h.state().menu_context().active_layer_indicator);
+    assert!(!project(&h).graph(other).unwrap().page.style.active_layer_indicator);
+    assert_eq!(sheaf_plot::graph_scene(project(&h), first).unwrap(), picture);
+    assert_eq!(h.state().doc.undo_label(), Some("Show Active Layer Indicator"));
+
+    let path = save_dir("view-active-indicator").join("indicator.sheaf");
+    sheaf_io::save::save_project(project(&h), &path).unwrap();
+    let reopened = sheaf_io::open_project(&path).unwrap().project;
+    assert!(reopened.graph(first).unwrap().page.style.active_layer_indicator);
+    assert!(!reopened.graph(other).unwrap().page.style.active_layer_indicator);
+
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+    assert!(!h.state().menu_context().active_layer_indicator);
+    menu(&mut h, "Edit", "Redo");
+    assert_eq!(project(&h), &expected);
 }
 
 #[test]

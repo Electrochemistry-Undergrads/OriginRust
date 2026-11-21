@@ -46,6 +46,19 @@ Stepping. `Fitter::new` prepares the fit, `step` makes one iteration of the abov
 - ANOVA: model df = free parameters, model SS = uncorrected total minus error SS, error row = residual, corrected total df `n-1`, uncorrected total `sum w y^2`; `F` = model MS / error MS; `Prob>F`.
 - Fixed parameters: the error is 0 (and the dependency 0 in nonlinear fits), as in Origin's report sheet, which stores 0 for both; t, Prob>|t| and the limits are blank (NaN).
 - Warnings: a parameter at a bound, iteration limit reached, singular covariance matrix, dependency above 0.9999, points dropped.
+- Covariance and correlation matrices (T320): Origin's Fit Parameters options "Covariance Matrix" and "Correlation
+  Matrix". Origin 2016's report made by `nlbegin ... nlfit; nlend output:=1` has neither table (measured 2026-11-21 on a
+  Gauss fit, `re-workspace/scratch/t320/`), so both are off by default (`FitRequest::covariance_matrix`,
+  `correlation_matrix`; NLFit window Advanced > Quantities; CLI `--covariance`, `--correlation`; MCP `fit` `covariance_matrix`, `correlation_matrix`). When on, the
+  parameter sheet gets one column per parameter for each matrix, after "Fixed": long name = the parameter, comment
+  "Covariance" or "Correlation", rows in parameter order. The covariance is the matrix above (scaled as the errors
+  are; zero rows and columns for a fixed parameter); correlation `C_ij / sqrt(C_ii C_jj)`, 1 on the diagonal, blank
+  for a fixed parameter. Origin's nltree holds no matrix (only the values, errors and dependencies) and the old NLSF
+  object opened a dialog, so the off-diagonal terms are checked through Origin's Dependency instead, which is
+  `1 - 1/(R^-1)_ii` of the correlation matrix R: on that Gauss fit the square roots of the diagonal give Origin's four
+  standard errors and the matrix gives its four dependencies to 1e-6 (`crates/core/src/fitting.rs`,
+  `covariance_and_correlation_matrices_match_origin_2016_and_are_off_by_default`). Origin's own table layout (a
+  separate report branch with the parameter names as row headers) is not copied: Sheaf's report is flat sheets.
 
 ## 5. Library, starting values, FDF import, user functions
 

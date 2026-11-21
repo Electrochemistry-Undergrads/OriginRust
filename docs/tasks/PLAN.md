@@ -1,7 +1,7 @@
 # Plan: closing the "Not available in Sheaf yet" list
 
 Written 2026-11-15 at the owner's request, against `main` at `dec7374` (documentation recovery baseline). This is the order in which
-agents work through the 73 greyed items of [greyed-items.md](greyed-items.md) and the other open
+agents work through the 72 greyed items of [greyed-items.md](greyed-items.md) and the other open
 work. Read [HANDOFF.md](../../HANDOFF.md) first, then this file, then **one** brief.
 
 ## The owner's priorities
@@ -95,7 +95,7 @@ Backlog packages: write the brief first (step 3 above).
 | ✓ | Package | What | Size | Greyed items |
 |---|---|---|---|---|
 | [x] | [T65](T65-graph-view-zoom-pan.md) | Graph view zoom and pan (B1 slice 1): Zoom In mode, Zoom Out, Whole Page, Pan | M | 0 |
-| [ ] | [T66](T66-graph-view-modes.md) | Graph view modes (Print, Page, Window, Draft), Show > Layer Icons, Active Layer Only and Full Screen done; eight other Show items and Show Data Info wait for measurement (B1 slice 2) | M | 7 |
+| [ ] | [T66](T66-graph-view-modes.md) | Graph view modes, layer icons, active layer indicator, active layer only, labels, data and full screen. Five Show items and Show Data Info remain (B1 slice 2) | M | 6 |
 | [x] | [T69](T69-zoom-all-scale-tools.md) | Graph view, the rest of B1: View > Zoom All and the Tools-bar Scale In / Scale Out (measured in graphing 23) | S | 0 |
 | [ ] | [T72](T72-copy-paste-format.md) | Copy Format and Paste Format on graph, axis and legend (B2 slice 1) | M | 4 |
 | [x] | [T125](T125-drawn-shape-clipboard.md) | Drawn-shape Cut/Copy/Paste (B2 slice; done 2026-11-19, graphing 17.8) | M | 0 |

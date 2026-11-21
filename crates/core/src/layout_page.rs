@@ -16,6 +16,62 @@ pub enum LayoutContent {
     Sheet { book: WindowId, sheet: usize },
     /// Text on the page (T237 slice 8): lines in Arial, black, `size` points.
     Text { text: String, size: u16 },
+    /// A drawn object (T237 slice 11) filling the item's box: its line `color` and `width` in tenths
+    /// of a point; a `fill` inside a rectangle or ellipse and an arrowhead at a line's end
+    /// (slice 12).
+    Shape {
+        shape: LayoutShape,
+        color: Color,
+        width: u16,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fill: Option<Color>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        arrow: bool,
+    },
+}
+
+/// The drawn objects of a layout page.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LayoutShape {
+    Rectangle,
+    Ellipse,
+    /// From the top left corner of the box to the bottom right.
+    Line,
+    /// From the bottom left corner of the box to the top right.
+    LineUp,
+    /// Across the middle of the box, left to right (T237 slice 12).
+    HLine,
+    /// Down the middle of the box, top to bottom (T237 slice 12).
+    VLine,
+}
+
+impl LayoutShape {
+    pub const ALL: [LayoutShape; 6] = [
+        LayoutShape::Rectangle,
+        LayoutShape::Ellipse,
+        LayoutShape::HLine,
+        LayoutShape::VLine,
+        LayoutShape::Line,
+        LayoutShape::LineUp,
+    ];
+
+    /// A rectangle or an ellipse, which can be filled; the others are lines, which can have an
+    /// arrowhead.
+    pub fn closed(self) -> bool {
+        matches!(self, LayoutShape::Rectangle | LayoutShape::Ellipse)
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            LayoutShape::Rectangle => "Rectangle",
+            LayoutShape::Ellipse => "Ellipse",
+            LayoutShape::Line => "Line (down)",
+            LayoutShape::LineUp => "Line (up)",
+            LayoutShape::HLine => "Line (horizontal)",
+            LayoutShape::VLine => "Line (vertical)",
+        }
+    }
 }
 
 impl LayoutContent {
@@ -24,7 +80,7 @@ impl LayoutContent {
         match *self {
             LayoutContent::Graph { graph } => Some(graph),
             LayoutContent::Sheet { book, .. } => Some(book),
-            LayoutContent::Text { .. } => None,
+            LayoutContent::Text { .. } | LayoutContent::Shape { .. } => None,
         }
     }
 }
@@ -106,6 +162,14 @@ impl LayoutPage {
         self.items.len() - 1
     }
 
+    /// Layout > Add Rectangle / Ellipse / Line / Arrow: a black 1 pt `shape` (with an arrowhead when
+    /// `arrow`) in the middle of the page, 30 % of its width and 20 % of its height.
+    pub fn add_shape(&mut self, shape: LayoutShape, arrow: bool) -> usize {
+        let content = LayoutContent::Shape { shape, color: Color::BLACK, width: 10, fill: None, arrow };
+        self.items.push(LayoutItem { content, x: 0.35, y: 0.4, w: 0.3, h: 0.2 });
+        self.items.len() - 1
+    }
+
     /// Puts `content` in the next free cell of the two-column grid, keeping `aspect`.
     pub fn add(&mut self, content: LayoutContent, aspect: f64) -> usize {
         let k = self.items.len();
@@ -130,7 +194,7 @@ impl LayoutPage {
     pub fn graphs(&self) -> impl Iterator<Item = WindowId> + '_ {
         self.items.iter().filter_map(|i| match i.content {
             LayoutContent::Graph { graph } => Some(graph),
-            LayoutContent::Sheet { .. } | LayoutContent::Text { .. } => None,
+            LayoutContent::Sheet { .. } | LayoutContent::Text { .. } | LayoutContent::Shape { .. } => None,
         })
     }
 
@@ -140,7 +204,7 @@ impl LayoutPage {
             match &mut it.content {
                 LayoutContent::Graph { graph } => *graph = map(*graph),
                 LayoutContent::Sheet { book, .. } => *book = map(*book),
-                LayoutContent::Text { .. } => {}
+                LayoutContent::Text { .. } | LayoutContent::Shape { .. } => {}
             }
         }
     }
@@ -188,6 +252,21 @@ mod tests {
         let t = &l.items[3];
         assert!((t.w - 0.1).abs() < 1e-12 && (t.h - 0.05).abs() < 1e-12 && (t.x - 0.45).abs() < 1e-12, "{t:?}");
         assert_eq!(t.content.window(), None);
+        assert_eq!(l.add_shape(super::LayoutShape::Ellipse, false), 4);
+        assert_eq!(
+            l.items[4].content,
+            super::LayoutContent::Shape {
+                shape: super::LayoutShape::Ellipse,
+                color: crate::Color::BLACK,
+                width: 10,
+                fill: None,
+                arrow: false
+            }
+        );
+        // A drawn object saved before fills and arrows (slice 11) still loads.
+        let old = r##"{"kind":"shape","shape":"line","color":"#000000","width":10}"##;
+        let back: super::LayoutContent = serde_json::from_str(old).unwrap();
+        assert!(matches!(back, super::LayoutContent::Shape { fill: None, arrow: false, .. }), "{back:?}");
         l.background = crate::Color::rgb(255, 255, 200);
         assert_eq!(l.graphs().count(), 2);
         let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();

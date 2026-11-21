@@ -1,51 +1,127 @@
 //! A layout page as one picture (T237 slice 3, layout-page spec): every graph or worksheet item is
 //! rendered at the pixel size it takes on the page and laid, at its place, on a white page.
 
+use crate::Rect;
 use crate::fonts::SystemFonts;
+use crate::scene::{LayerScene, Scene};
 use crate::{PlotError, Raster, RasterOptions, raster};
-use sheaf_core::layout_page::LayoutContent;
-use sheaf_core::{Project, WindowId};
+use sheaf_core::layout_page::{LayoutContent, LayoutShape};
+use sheaf_core::{Color, Project, WindowId};
 
 /// The font of layout text (T237 slice 8).
 const TEXT_FAMILY: &str = "Arial";
 
-fn xml_escape(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
-}
-
-/// Layout text as an SVG document and its natural size in points: the lines in Arial at `size`
-/// points, 1.2 sizes apart, with a margin of 0.3 size all round.
+/// Layout text as an SVG document and its natural size in points (T237 slices 8 and 10): laid out
+/// as a graph's free text label is, in Arial, black, at `size` points, so Origin's markup works
+/// (`\b()`, `\i()`, `\u()`, `\+()`, `\-()`, `\f:Font()`, `\c()` ...) and lines are 1.3 sizes
+/// apart; the box is the text's bounds with a margin of 0.3 size all round.
 pub fn layout_text_svg(text: &str, size: u16) -> (String, (f64, f64)) {
-    use std::fmt::Write as _;
     let s = f64::from(size.max(1));
     let font = sheaf_core::graph::Font::new(TEXT_FAMILY, s);
     let m = SystemFonts::shared();
-    let lines: Vec<&str> = if text.is_empty() { vec![""] } else { text.lines().collect() };
+    let mut items = Vec::new();
+    crate::text::place_label(&mut items, m, text, &font, (0.0, 0.0), 0.0, &|_| None);
+    let bounds = items
+        .iter()
+        .filter_map(|it| crate::hit::item_bounds(it, m))
+        .reduce(crate::hit::union)
+        .unwrap_or(Rect { x: 0.0, y: -0.8 * s, w: s, h: s });
     let pad = 0.3 * s;
-    let widest = lines.iter().map(|l| crate::fonts::TextMeasurer::width(m, l, &font, s)).fold(0.0, f64::max);
-    let (w, h) = (widest.max(s) + 2.0 * pad, 1.2 * s * lines.len() as f64 + 2.0 * pad);
-    let mut out = String::new();
-    let _ = write!(
-        out,
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{w}pt\" height=\"{h}pt\" viewBox=\"0 0 {w} {h}\">\
-         <text font-family=\"{TEXT_FAMILY}\" font-size=\"{s}\" fill=\"rgb(0,0,0)\">"
-    );
-    for (k, line) in lines.iter().enumerate() {
-        let y = pad + 1.2 * s * k as f64 + 0.95 * s;
-        let _ = write!(out, "<tspan x=\"{pad}\" y=\"{y}\">{}</tspan>", xml_escape(line));
-    }
-    out.push_str("</text></svg>\n");
-    (out, (w, h))
+    let view = Rect { x: bounds.x - pad, y: bounds.y - pad, w: bounds.w.max(s) + 2.0 * pad, h: bounds.h + 2.0 * pad };
+    let scene = Scene {
+        width: view.w,
+        height: view.h,
+        background: sheaf_core::Color::TRANSPARENT,
+        layers: vec![LayerScene {
+            clip: view,
+            grid: Vec::new(),
+            plots: Vec::new(),
+            overlay: items,
+            underlay_len: 0,
+            data_on_top: false,
+            objects: Vec::new(),
+        }],
+    };
+    (crate::svg::write_svg_view(&scene, view, 1.0), (view.w, view.h))
 }
 
-/// The picture of a layout item `pixel_width` pixels wide; `None` when what it shows is gone.
+/// A drawn layout object as an SVG document `size_pt` points large (T237 slices 11 and 12): the
+/// line is `width` tenths of a point and stays inside the box; a rectangle or an ellipse can be
+/// filled; a line can end in a filled arrowhead (4 line widths long, at least 6 pt, 0.8 of that
+/// wide), kept inside the box. `None` when `content` is not a drawn object.
+pub fn layout_shape_svg(content: &LayoutContent, size_pt: (f64, f64)) -> Option<String> {
+    let LayoutContent::Shape { shape, color, width, fill, arrow } = content else { return None };
+    let (w, h) = (size_pt.0.max(0.1), size_pt.1.max(0.1));
+    let lw = f64::from((*width).max(1)) / 10.0;
+    let paint = |c: &Color| format!("rgb({},{},{})\" {{}}-opacity=\"{}", c.r, c.g, c.b, f64::from(c.a) / 255.0);
+    let stroke = paint(color).replace("{}", "stroke");
+    let stroke = format!("stroke=\"{stroke}\" stroke-width=\"{lw}\"");
+    let i = (lw / 2.0).min(w / 2.0).min(h / 2.0);
+    let fill_attr = match fill {
+        Some(f) if shape.closed() => format!("fill=\"{}\"", paint(f).replace("{}", "fill")),
+        _ => "fill=\"none\"".to_string(),
+    };
+    let body = match shape {
+        LayoutShape::Rectangle => format!(
+            "<rect x=\"{i}\" y=\"{i}\" width=\"{}\" height=\"{}\" {fill_attr} {stroke}/>",
+            w - 2.0 * i,
+            h - 2.0 * i
+        ),
+        LayoutShape::Ellipse => format!(
+            "<ellipse cx=\"{}\" cy=\"{}\" rx=\"{}\" ry=\"{}\" {fill_attr} {stroke}/>",
+            w / 2.0,
+            h / 2.0,
+            w / 2.0 - i,
+            h / 2.0 - i
+        ),
+        LayoutShape::Line | LayoutShape::LineUp | LayoutShape::HLine | LayoutShape::VLine => {
+            let head = if *arrow { (4.0 * lw).max(6.0) } else { 0.0 };
+            let half = 0.4 * head;
+            // A diagonal line is pulled in from the corners so that its arrowhead fits the box.
+            let m = if *arrow { (half + lw / 2.0).min(w / 2.0).min(h / 2.0) } else { 0.0 };
+            let (x1, y1, x2, y2) = match shape {
+                LayoutShape::Line => (m, m, w - m, h - m),
+                LayoutShape::LineUp => (m, h - m, w - m, m),
+                LayoutShape::HLine => (0.0, h / 2.0, w, h / 2.0),
+                _ => (w / 2.0, 0.0, w / 2.0, h),
+            };
+            let len = (x2 - x1).hypot(y2 - y1).max(1e-9);
+            let (dx, dy) = ((x2 - x1) / len, (y2 - y1) / len);
+            let head = head.min(len);
+            let (bx, by) = (x2 - dx * head, y2 - dy * head);
+            let mut out = format!("<line x1=\"{x1}\" y1=\"{y1}\" x2=\"{bx}\" y2=\"{by}\" fill=\"none\" {stroke}/>");
+            if *arrow {
+                let (lx, ly, rx, ry) = (bx - dy * half, by + dx * half, bx + dy * half, by - dx * half);
+                let _ = std::fmt::Write::write_fmt(
+                    &mut out,
+                    format_args!(
+                        "<polygon points=\"{x2},{y2} {lx},{ly} {rx},{ry}\" fill=\"{}\" stroke=\"none\"/>",
+                        paint(color).replace("{}", "fill")
+                    ),
+                );
+            }
+            out
+        }
+    };
+    Some(format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{w}pt\" height=\"{h}pt\" viewBox=\"0 0 {w} {h}\">{body}</svg>\n"
+    ))
+}
+
+/// The picture of a layout item `pixel_width` pixels wide, the item taking `size_pt` points on the
+/// page (drawn objects are drawn at that size, unstretched); `None` when what it shows is gone.
 pub fn render_layout_item(
     project: &Project,
     content: &LayoutContent,
+    size_pt: (f64, f64),
     pixel_width: u32,
 ) -> Option<Result<Raster, PlotError>> {
     let px = f64::from(pixel_width.max(1));
     match content {
+        LayoutContent::Shape { .. } => {
+            let svg = layout_shape_svg(content, size_pt)?;
+            Some(raster::rasterise(&svg, px / size_pt.0.max(0.1), SystemFonts::shared()))
+        }
         LayoutContent::Graph { graph } => {
             let g = project.graph(*graph)?;
             Some(crate::render_raster(project, *graph, px / g.page.width_pt.max(1.0)))
@@ -76,6 +152,7 @@ pub fn layout_item_aspect(project: &Project, content: &LayoutContent) -> Option<
             let (_, (w, h)) = layout_text_svg(text, *size);
             Some(w / h.max(1.0))
         }
+        LayoutContent::Shape { .. } => Some(1.5),
     }
 }
 
@@ -102,7 +179,8 @@ pub fn render_layout_raster(project: &Project, layout: WindowId, dpi: f64) -> Re
         if iw <= 0 || ih <= 0 {
             continue;
         }
-        let Some(pic) = render_layout_item(project, &item.content, iw as u32) else { continue };
+        let size_pt = (item.w * page.width_pt, item.h * page.height_pt);
+        let Some(pic) = render_layout_item(project, &item.content, size_pt, iw as u32) else { continue };
         let pic = pic?;
         if pic.width == 0 || pic.height == 0 {
             continue;
@@ -166,8 +244,9 @@ pub fn render_layout_emf(project: &Project, layout: WindowId, dpi: f64) -> Resul
 }
 
 /// The vector picture of what a layout item shows; `None` when it is gone.
-fn item_svg(project: &Project, content: &LayoutContent) -> Option<Result<String, PlotError>> {
+fn item_svg(project: &Project, content: &LayoutContent, size_pt: (f64, f64)) -> Option<Result<String, PlotError>> {
     match content {
+        LayoutContent::Shape { .. } => layout_shape_svg(content, size_pt).map(Ok),
         LayoutContent::Graph { graph } => {
             project.graph(*graph)?;
             Some(crate::render_svg(project, *graph))
@@ -206,7 +285,7 @@ pub fn render_layout_svg(project: &Project, layout: WindowId) -> Result<String, 
     let _ =
         writeln!(s, "<rect x=\"0\" y=\"0\" width=\"{w}\" height=\"{h}\" fill=\"rgb({},{},{})\"/>", bg.r, bg.g, bg.b);
     for (k, item) in page.items.iter().enumerate() {
-        let Some(inner) = item_svg(project, &item.content) else { continue };
+        let Some(inner) = item_svg(project, &item.content, (item.w * w, item.h * h)) else { continue };
         let inner = inner?;
         // The nested root: its viewBox kept, placed and sized on the page.
         let Some(open) = inner.find("<svg") else { continue };
@@ -309,6 +388,53 @@ mod tests {
         let dark = (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y))).filter(|&(x, y)| r.rgba[k(x, y)] < 128).count();
         assert!(dark > 30, "the text is drawn: {dark} dark pixels");
         let svg = render_layout_svg(&p, id).unwrap();
-        assert!(svg.contains(">A &lt; B</tspan>"), "escaped text");
+        assert!(svg.contains("A &lt; B"), "escaped text");
+        // Origin's markup: a bold run and a superscript, on two lines.
+        let (rich, (w2, h2)) = layout_text_svg("\\b(Bold) x\\+(2)\nsecond line", 24);
+        assert!(rich.contains("bold") && !rich.contains("\\b("), "the markup is read: {rich}");
+        let (_, (w1, h1)) = layout_text_svg("Bold x2", 24);
+        assert!(h2 > 1.8 * h1 - 0.6 * 24.0 && w2 > w1, "two lines are taller: {h1} {h2}");
+        // A red rectangle: its frame is drawn inside its box, its middle stays the page colour.
+        let k = p.layout_mut(id).unwrap().add_shape(LayoutShape::Rectangle, false);
+        p.layout_mut(id).unwrap().items[k].content = LayoutContent::Shape {
+            shape: LayoutShape::Rectangle,
+            color: Color::RED,
+            width: 40,
+            fill: None,
+            arrow: false,
+        };
+        let r = render_layout_raster(&p, id, 72.0).unwrap();
+        let at = |x: f64, y: f64| {
+            let k = (((y as u32) * r.width + x as u32) * 4) as usize;
+            [r.rgba[k], r.rgba[k + 1], r.rgba[k + 2]]
+        };
+        let (x0, y0) = (0.35 * 792.0, 0.4 * 612.0);
+        assert_eq!(at(x0 + 1.5, 0.5 * 612.0), [255, 0, 0], "the left side of the frame");
+        assert_eq!(at(0.5 * 792.0, 0.5 * 612.0), [255, 255, 255], "the inside is not filled");
+        assert_eq!(at(x0 + 1.5, y0 - 2.0), [255, 255, 255], "nothing above the box");
+        let svg = render_layout_svg(&p, id).unwrap();
+        assert!(
+            svg.contains(
+                "<rect x=\"2\" y=\"2\" width=\"233.6\" height=\"118.4\" fill=\"none\" stroke=\"rgb(255,0,0)\""
+            ),
+            "{svg}"
+        );
+        // A fill paints the inside; a horizontal arrow ends in a filled head at the right end.
+        p.layout_mut(id).unwrap().items[k].content = LayoutContent::Shape {
+            shape: LayoutShape::Rectangle,
+            color: Color::RED,
+            width: 40,
+            fill: Some(Color::BLUE),
+            arrow: false,
+        };
+        let r = render_layout_raster(&p, id, 72.0).unwrap();
+        let k2 = (((306u32) * r.width + 396) * 4) as usize;
+        assert_eq!(&r.rgba[k2..k2 + 3], &[0, 0, 255], "the inside is filled");
+        let arrow =
+            LayoutContent::Shape { shape: LayoutShape::HLine, color: Color::BLACK, width: 10, fill: None, arrow: true };
+        let svg = layout_shape_svg(&arrow, (100.0, 20.0)).unwrap();
+        assert!(svg.contains("<line x1=\"0\" y1=\"10\" x2=\"94\" y2=\"10\""), "the line stops at the head: {svg}");
+        assert!(svg.contains("<polygon points=\"100,10 94,12.4 94,7.6\""), "{svg}");
+        assert!(layout_shape_svg(&LayoutContent::Text { text: "x".into(), size: 9 }, (1.0, 1.0)).is_none());
     }
 }

@@ -208,3 +208,44 @@ fn file_print_takes_the_active_layout_page() {
     h.state_mut().apply(action, &ctx);
     settle(&mut h);
 }
+
+#[test]
+fn a_drawn_rectangle_is_added_and_a_double_click_sets_its_colour() {
+    use sheaf_core::layout_page::{LayoutContent, LayoutShape};
+    let mut h = start(vec![]);
+    let ctx = h.ctx.clone();
+    menu_path(&mut h, &["File", "New", "Layout"]);
+    let id = project(&h).layouts().next().unwrap().id;
+    menu_path(&mut h, &["Layout", "Add Rectangle"]);
+    assert_eq!(h.state().doc.undo_label(), Some("Add drawing to layout"));
+    let it = project(&h).layout(id).unwrap().items[0].clone();
+    assert!(matches!(it.content, LayoutContent::Shape { shape: LayoutShape::Rectangle, .. }), "{it:?}");
+    settle(&mut h);
+    let page = h.state().layouts[&id].page_on_screen.expect("the page was drawn");
+    // The frame's left edge (the inside is empty but the whole box takes the clicks).
+    let at = page.min + egui::vec2(((it.x + 0.01) as f32) * page.width(), ((it.y + it.h / 2.0) as f32) * page.height());
+    double_click_at(&mut h, at);
+    settle(&mut h);
+    let d = h.state_mut().layout_shape.as_mut().expect("the double-click opened the object's properties");
+    d.color = sheaf_core::Color::RED;
+    d.shape = LayoutShape::Ellipse;
+    d.fill = Some(sheaf_core::Color::WHITE);
+    d.arrow = true;
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.undo_label(), Some("Layout object properties"));
+    let after = project(&h).layout(id).unwrap().items[0].content.clone();
+    let want = LayoutContent::Shape {
+        shape: LayoutShape::Ellipse,
+        color: sheaf_core::Color::RED,
+        width: 10,
+        fill: Some(sheaf_core::Color::WHITE),
+        arrow: false,
+    };
+    assert_eq!(after, want, "an ellipse keeps its fill and has no arrowhead");
+    // Layout > Add Arrow: a horizontal line with a head.
+    menu_path(&mut h, &["Layout", "Add Arrow"]);
+    let arrow = project(&h).layout(id).unwrap().items[1].content.clone();
+    assert!(matches!(arrow, LayoutContent::Shape { shape: LayoutShape::HLine, arrow: true, .. }), "{arrow:?}");
+    let _ = ctx;
+}

@@ -337,6 +337,17 @@ pub enum Action {
         layout: WindowId,
         index: Option<usize>,
     },
+    /// Layout > Add Rectangle / Ellipse / Line (T237 slice 11): one undo step.
+    LayoutAddShape {
+        layout: WindowId,
+        shape: sheaf_core::layout_page::LayoutShape,
+        arrow: bool,
+    },
+    /// A double-click on a drawn layout object (T237 slice 11): its properties window.
+    LayoutShape {
+        layout: WindowId,
+        index: usize,
+    },
     /// Format > Layout Page... [F2] (T237 slices 4 and 6): the window that sets the page size and
     /// colour of `layout`.
     LayoutPageSetup {

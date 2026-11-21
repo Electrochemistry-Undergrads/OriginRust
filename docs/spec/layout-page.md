@@ -83,14 +83,31 @@ unregistered on the reference machine). Everything below is Sheaf's choice unles
 ## Text (T237 slice 8)
 
 - Layout > Add Text... asks for the text (several lines) and its size (4 to 200 pt, 18 by
-  default); OK puts it centred at the top of the page in a box of its own size: Arial, black,
-  lines 1.2 sizes apart, a margin of 0.3 size ("Add text to layout"). A double-click on text opens
+  default); OK puts it centred at the top of the page in a box of its own size ("Add text to
+  layout"). Since slice 10 the text is laid out as a graph's free text label: Arial, black, lines
+  1.3 sizes apart, and Origin's markup (`\b()`, `\i()`, `\u()`, `\+()`, `\-()`, `\f:Font()`, `\c()`
+  and the rest the graph labels read); the box is the text's bounds with a margin of 0.3 size. A double-click on text opens
   it again; OK changes it and gives the box the new text's size, keeping its top left corner
   ("Edit layout text"). It moves, resizes (stretches), deletes and exports like the other items.
   Stored as `{"kind": "text", "text": ..., "size": <pt>}`. Origin adds layout text with its Text
-  tool and rich text; Sheaf has plain text only (not measured).
+  tool; font, colour and size come from markup only here (not measured).
+
+## Drawn objects (T237 slice 11)
+
+- Layout > Add Rectangle, Add Ellipse, Add Line and Add Arrow put a black 1 pt object in the
+  middle of the page, 30 % of its width and 20 % of its height ("Add drawing to layout"). It fills
+  its box: the line stays inside it. A line runs across the middle of the box ("Line
+  (horizontal)", what Add Line and Add Arrow make), down its middle ("Line (vertical)"), or
+  corner to corner ("Line (down)", "Line (up)"). Unlike pictures it is drawn at its box's size, so a
+  resize changes its shape, not its line width. A double-click opens Object Properties: the kind,
+  the line colour and width (0.1 to 20 pt), a fill colour for a rectangle or ellipse, and an
+  arrowhead at the end of a line (slice 12: filled, 4 line widths long and at least 6 pt, 0.8 of
+  that wide, kept inside the box, so a corner-to-corner line is pulled in a little); OK is one undo step ("Layout object properties"). The
+  whole box takes the clicks. Stored as `{"kind": "shape", "shape": "rectangle", "color": ...,
+  "width": <tenths of a point>, "fill": ..., "arrow": true}` (fill and arrow left out when unset,
+  so pages saved before slice 12 load unchanged). Origin draws these with its Tools toolbar (not measured).
 
 ## Not yet
 
-- Rich text, drawn objects on the page, picture holders,
+- A font/colour toolbar for layout text, arrowheads at the start, dashes on the page, picture holders,
   the rest of the Layout Page properties (printer page, theme), and `.opj`.

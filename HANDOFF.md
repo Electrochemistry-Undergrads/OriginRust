@@ -37,7 +37,7 @@ Not yet claimed. Pick one, write its brief with the next free `T` number, claim 
 3. **Missing input to date functions**: LabTalk returns -1 for `hour`, `minute`, `second` and the date
    parts of an empty cell; Sheaf gives a missing value. Confirm on a worksheet column (not only scalar
    LabTalk) before changing.
-4. **Probit axis increment** (`auto_range` in `crates/core/src/scales.rs`): Origin's `layer.y.inc` is 3
+4. **Done (T263): Origin ignores the increment on a probit axis (pictures with inc 3, 1, 2 are the same).** **Probit axis increment** (`auto_range` in `crates/core/src/scales.rs`): Origin's `layer.y.inc` is 3
    on two inputs, Sheaf returns 1.0. The spec says "1 sd"; check the unit on a visible probit axis first.
 
 **B. Measure the "unmeasured" features.** 52 briefs and 32 parity rows say unmeasured (built from

@@ -111,6 +111,9 @@ pub fn comparison_plot_request(tool: &AnalyzeTool) -> Result<Option<crate::analy
 
 pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
     Ok(match tool {
+        AnalyzeTool::CvCharge { target, scan_rate, baseline } => {
+            (target, Job::Tool(Tool::CvCharge(analysis::CvChargeSpec { scan_rate, end_point_baseline: baseline })))
+        }
         AnalyzeTool::Integrate { target, baseline, absolute, no_cumulative, ranges, row_ranges } => {
             if ranges.is_empty() && row_ranges.is_empty() {
                 (

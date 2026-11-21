@@ -264,7 +264,7 @@ impl BookUi {
 
     /// Edit > Go to: selects one cell and scrolls it into view.
     pub fn go_to(&mut self, sheet: &Worksheet, column: usize, row: usize) {
-        let to = visible_cell(sheet, (column, row), (column, row), row.max(sheet.row_count() + SPARE_ROWS - 1));
+        let to = visible_cell(sheet, (column, row), (column, row), row.max(shown_rows(sheet) - 1));
         self.select_cells(sheet, to, to);
         self.reveal = 4;
         self.focus_grid = true;
@@ -302,7 +302,7 @@ impl BookUi {
     }
 
     pub fn row_capacity(&self, sheet: &Worksheet) -> usize {
-        sheet.row_count().saturating_add(SPARE_ROWS)
+        shown_rows(sheet)
     }
 
     /// Selects a block of cells and records which columns it touches.
@@ -427,7 +427,7 @@ impl BookUi {
             if let (Some(c), Some(r)) = (col, row) {
                 self.active = Some((c, r));
             } else {
-                let to = visible_cell(sheet, anchor, anchor, sheet.row_count() + SPARE_ROWS - 1);
+                let to = visible_cell(sheet, anchor, anchor, shown_rows(sheet) - 1);
                 self.select_cells(sheet, to, to);
             }
             self.reveal = 4;
@@ -521,6 +521,13 @@ fn row_header_width(sheet: &Worksheet) -> f32 {
 }
 /// Empty rows shown below the data so that new values can be typed in.
 const SPARE_ROWS: usize = 30;
+/// The rows a new (empty) sheet shows: Origin 2016's `newbook` has 32 (`wks.nrows`, T295).
+const NEW_SHEET_ROWS: usize = 32;
+
+/// How many rows the grid shows: the data and the spare rows, and at least a new sheet's 32.
+fn shown_rows(sheet: &Worksheet) -> usize {
+    sheet.row_count().saturating_add(SPARE_ROWS).max(NEW_SHEET_ROWS)
+}
 const TAB_BAR_HEIGHT: f32 = 20.0;
 
 const HEADER_GREY: Color32 = Color32::from_rgb(222, 222, 222);
@@ -968,7 +975,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         return;
     }
 
-    let rows = sheet.row_count() + SPARE_ROWS;
+    let rows = shown_rows(sheet);
     // With an active filter the grid shows only the rows that pass, with their own numbers.
     let shown: Option<Vec<usize>> = sheet.shown_rows(rows);
     let rows_drawn = shown.as_ref().map_or(rows, Vec::len);
@@ -1980,7 +1987,7 @@ fn move_label(state: &mut BookUi, sheet: &Worksheet, column: ColumnId, row: &Lab
     let c = skip_hidden(sheet, position, position.saturating_add_signed(dx).min(sheet.columns.len() - 1));
     let r = r.saturating_add_signed(dy);
     if r >= rows.len() {
-        let row = skip_filtered(sheet, 0, 0, sheet.row_count() + SPARE_ROWS - 1);
+        let row = skip_filtered(sheet, 0, 0, shown_rows(sheet) - 1);
         state.select_cells(sheet, (c, row), (c, row));
         state.reveal = 4;
     } else {
@@ -2725,9 +2732,9 @@ fn edit_cell(ui: &mut egui::Ui, state: &mut BookUi, sheet: &Worksheet, book_id: 
                 (position, row),
                 (
                     position.saturating_add_signed(dx).min(last_col),
-                    row.saturating_add_signed(dy).min(sheet.row_count() + SPARE_ROWS - 1),
+                    row.saturating_add_signed(dy).min(shown_rows(sheet) - 1),
                 ),
-                sheet.row_count() + SPARE_ROWS - 1,
+                shown_rows(sheet) - 1,
             );
             state.select_cells(sheet, to, to);
             state.reveal = 4;
@@ -2934,7 +2941,7 @@ pub fn handle_keys(
         }
         return prev || next;
     }
-    let max_row = sheet.row_count() + SPARE_ROWS - 1;
+    let max_row = shown_rows(sheet) - 1;
     let lens: Vec<usize> = sheet.columns.iter().map(Column::len).collect();
     let events = ctx.input(|i| i.events.clone());
     let mut taken = false;
@@ -3487,6 +3494,22 @@ mod tests {
         assert_eq!(ui.selected.len(), 2);
         ui.repair(&Worksheet::new("empty"));
         assert_eq!(ui.sel, Sel::None);
+    }
+
+    #[test]
+    fn a_new_sheet_shows_origins_32_rows_and_a_filled_one_its_spare_rows() {
+        // T295: Origin 2016's newbook has 32 rows (wks.nrows).
+        let empty = Worksheet::new("Sheet1");
+        assert_eq!(shown_rows(&empty), 32);
+        let mut filled = Worksheet::new("Sheet1");
+        filled.columns.push(sheaf_core::Column::new(
+            sheaf_core::ColumnId(1),
+            "A",
+            sheaf_core::Designation::X,
+            sheaf_core::ColumnData::numeric(vec![1.0; 10]),
+        ));
+        assert_eq!(shown_rows(&filled), 10 + SPARE_ROWS);
+        assert_eq!(sheaf_core::column::DEFAULT_WIDTH, 7, "wks.col1.width of a new book");
     }
 
     #[test]

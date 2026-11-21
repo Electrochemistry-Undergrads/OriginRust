@@ -2041,3 +2041,32 @@ fn baseline_goal_subtract_writes_origins_columns() {
         sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--baseline-goal", "create", "--integrate"]);
     assert!(!ok && stderr.contains("only makes the baseline"), "{stderr}");
 }
+
+/// T296: the charge of each sweep of a cyclic voltammogram.
+#[test]
+fn cv_charge_splits_the_sweeps() {
+    let dir = scratch("cv-charge");
+    let data = dir.join("cv.csv");
+    std::fs::write(
+        &data,
+        "E,I
+0,2
+0.25,2
+0.5,2
+0.75,2
+1,2
+0.75,-1
+0.5,-1
+0.25,-1
+0,-1
+",
+    )
+    .unwrap();
+    let d = data.to_str().unwrap();
+    let (ok, stdout, stderr) = sheaf(&["analyze", "cv-charge", d, "--y", "I", "--scan-rate", "0.1"]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("anodic") && stdout.contains("cathodic"), "{stdout}");
+    assert!(stdout.contains("20"), "2 A over 1 V at 0.1 V/s: {stdout}");
+    let (ok, _, stderr) = sheaf(&["analyze", "cv-charge", d, "--y", "I", "--scan-rate", "0"]);
+    assert!(!ok && stderr.contains("scan rate"), "{stderr}");
+}

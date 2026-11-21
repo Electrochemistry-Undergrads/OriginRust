@@ -117,7 +117,7 @@ pub use iir::{
     FilterError, FilterResponse, FreqUnit, IirFilter, IirMethod, IirSpec, MAX_ORDER as IIR_MAX_ORDER, iir_filter,
     iir_order, sosfilt, sosfiltfilt,
 };
-pub use integrate::{AreaType, IntegrateOptions, IntegrateResult, charge, integrate};
+pub use integrate::{AreaType, CvSegment, IntegrateOptions, IntegrateResult, charge, cv_charge, integrate};
 pub use interp::{Extrapolation, InterpMethod, InterpOptions, SplineBoundary, automatic_smoothing, interp1, interp1xy};
 pub use kde::{Bandwidth, Density, GRID_POINTS, bandwidth, density_at, kernel_density};
 pub use kmeans::{Cluster, Kmeans, KmeansError, KmeansOptions, VariableAnova, kmeans};

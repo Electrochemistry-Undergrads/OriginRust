@@ -271,12 +271,15 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T286](T286-explorer-multiselect.md) | Project Explorer: Ctrl+click, Shift+click and Ctrl+A highlight several windows; Delete, Show, Hide and drag act on them | S | done 2026-11-21 |
 | [T287](T287-fft2-measure.md) | Matrix 2D FFT measured against Origin 2016 fft2 (numpy conventions match); Power sheet added | S | done 2026-11-21, measured |
 | [T292](T292-deconv-stft-measure.md) | Deconvolution (Linear 2N-1 padding, Normalize default) and STFT defaults as Origin 2016 | S | done 2026-11-21, measured |
+| [T296](T296-cv-charge.md) | CV Charge: anodic/cathodic sweeps, charge = integral I dE / scan rate (parity P0 gaps) | S | done 2026-11-21 |
 | [T288](T288-explorer-search.md) | Project Explorer search box (name, long name, comments; Subfolders) | S | done 2026-11-21 |
 | [T289](T289-kde2d-measure.md) | Measure 2D Kernel Density against Origin (32 x 32 grid, Rule of Thumb, Bivariate) | S | done 2026-11-21 (graphing 38) |
 | [T290](T290-minverse-measure.md) | Measure Matrix Inverse against Origin (pseudoinverse, full-rank test, output book) | S | done 2026-11-21 (matrices 7d) |
 | [T291](T291-axis-title-rotation.md) | Axis title Rotate (deg.) and Offset (pt), turned about its middle as measured in Origin 2016 | S | done 2026-11-21 |
 | [T293](T293-font-underline.md) | Whole-font Underline beside Bold and Italic (drawn, font boxes, .opj as \u(..)) | S | done 2026-11-21 |
 | [T294](T294-bin2d-measure.md) | Measure Binary 2D Array import against Origin (impBin2D options and defaults, rows from size, partial row, target) | S | done 2026-11-21 (matrices 7f) |
+| [T295](T295-newbook-measure.md) | New workbook measured in Origin 2016: 32 rows shown, default column width 7 | S | done 2026-11-21 |
+| [T298](T298-parity-formula-refs.md) | Stale parity row corrected: formula reference notation (cross-sheet, cell(), label reads exist) | S | done 2026-11-21 (docs only) |
 | [T297](T297-grayscale-measure.md) | Measure Gray Scale Map against Origin (8 x 6 bands, 32 grays, out-of-range boxes) | S | done 2026-11-21 (matrices 6, 7g) |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |

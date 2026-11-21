@@ -100,7 +100,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T94](T94-sampling-interval-row.md) | Sampling Interval label row (corner menu switch) | S | done 2026-11-18 (workbook-model 13i), read-only row with automatic visibility and saved per-sheet switch |
 | [T95](T95-find-in-project.md) | Find in Project (F3) | M | done 2026-11-16; worksheet Comments, Within, folder metadata and Folder result column added 2026-11-18 (workbook-model 13j); left: Notes, folder info variables and double-click parity |
 | [T96](T96-wavelets.md) | Wavelets: Decompose, Reconstruction, Denoise, Smooth, Continuous Wavelet (B8 slice) | L | done 2026-11-16 (`wavelets`, Claude Windows); Origin measured (analysis-tools.md 19, fixtures `tools/origin-ref/t96/t96-origin.json`); all five items built; Continuous Wavelet reproduces Origin's `cwt` to 1e-14 (Origin's pseudo-frequency output, coefficient matrix and image plot are not built, no script route); open corners: `sqtwolog` threshold, denoise boundary samples, Smooth for non-power-of-two lengths |
-| [T97](T97-worksheet-as-image.md) | Export > Worksheet as Image... (Origin expWks) | S | done 2026-11-16 (workbook-model13k); raster-format follow-up in progress (13k.1); left: vector types, several sheets, size/overwrite and range-display measurement |
+| [T97](T97-worksheet-as-image.md) | Export > Worksheet as Image... (Origin expWks) | S | active sheet export in PNG, PDF, SVG, JPEG, TIFF, BMP, GIF, TGA, PCX, PSD, EPS and EMF (workbook-model 13k); left: other vector types, multiple sheets, export controls and range-display measurement |
 | [T98](T98-reimport.md) | File > Import > Re-Import Directly, Re-Import... (Origin reimport) | S | done 2026-11-16 (workbook-model 13l); left: stored import options |
 | [T99](T99-batch-plotting.md) | Duplicate (Batch Plotting): With New Sheets/Books, With New Columns | M | done 2026-11-16 (graphing 28); left: Graph Short/Long Name fields |
 | [T100](T100-folder-view-windows.md) | Project Explorer View Windows, Window > Folders, folder Properties | M | done 2026-11-16 (workbook-model 13m); left: title path, folder dates |
@@ -294,6 +294,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T309](T309-add-param-row.md) | Sheet corner menu: Add User Parameter Row... | S | done 2026-11-21 |
 | [T310](T310-param-row-edit.md) | Rename and delete a user parameter row from its title | S | done 2026-11-21 |
 | [T314](T314-sig-digits.md) | Significant and Scientific displays measured in Origin 2016 and copied (326 of 328 cells) | S | done 2026-11-21 |
+| [T317](T317-scientific-auto.md) | Scientific with default digits as Origin shows it (NumberFormat::ScientificAuto) | S | done 2026-11-21 |
 | [T311](T311-qqplot-measure.md) | Measure Q-Q Plot against Origin (expected values, y = x line ends, band) | S | done 2026-11-21 (statistics 16.2a) |
 | [T312](T312-import-nonnum.md) | Text import: text in a numeric column read as text, stop, new sheet or new columns (NonNum), as Origin 2016 | S | done 2026-11-21, measured |
 | [T313](T313-scatter-matrix-measure.md) | Measure Scatter Matrix against Origin (page, grid, tick labels, titles, symbols, tick step) | S | done 2026-11-21 (graphing 35) |

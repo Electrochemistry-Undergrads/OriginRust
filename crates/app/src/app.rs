@@ -6058,6 +6058,8 @@ impl SheafApp {
             .add_filter("Photoshop document", &["psd"])
             .add_filter("PDF", &["pdf"])
             .add_filter("SVG", &["svg"])
+            .add_filter("Encapsulated PostScript", &["eps"])
+            .add_filter("Enhanced Metafile", &["emf"])
             .set_file_name(format!("{stem}_{}.png", sheet.name));
         if let Some(dir) = self.folder() {
             chooser = chooser.set_directory(dir);

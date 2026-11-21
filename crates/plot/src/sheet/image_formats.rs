@@ -1,14 +1,17 @@
-//! Worksheet image formats share the graph raster encoders; sheet layout stays in the parent.
-use crate::{PlotError, RasterOptions, SystemFonts, psd, raster};
+//! Worksheet export uses the same raster and vector writers as graph export.
+use crate::{PlotError, RasterOptions, SystemFonts, emf, eps, psd, raster};
 use sheaf_core::Worksheet;
 
 /// The worksheet picture in a lowercase extension (without a dot), at `dpi` for raster formats.
-/// PNG/PDF/SVG keep their existing paths. Other rasters use the graph encoder defaults.
+/// EPS and EMF use the worksheet scene at its original size. Additional rasters use
+/// the graph encoder defaults.
 pub fn sheet_image_bytes(sheet: &Worksheet, ext: &str, dpi: f64) -> Result<Vec<u8>, PlotError> {
     match ext {
         "png" => super::sheet_image_png(sheet, dpi),
         "pdf" => super::sheet_image_pdf(sheet),
         "svg" => super::sheet_image_svg(sheet).map(String::into_bytes),
+        "eps" => Ok(eps::write_eps(&super::sheet_image_scene(sheet)?, 1.0).bytes),
+        "emf" => Ok(emf::write_emf(&super::sheet_image_scene(sheet)?, 1.0, SystemFonts::shared())),
         e if raster::is_raster_ext(e) => {
             let max_side = match e {
                 "psd" => Some(psd::MAX_DIMENSION),
@@ -22,7 +25,7 @@ pub fn sheet_image_bytes(sheet: &Worksheet, ext: &str, dpi: f64) -> Result<Vec<u
             raster::encode_raster(&image, e, dpi, &RasterOptions::default())
         }
         _ => Err(PlotError::Image(format!(
-            "worksheet pictures support PNG, PDF, SVG, JPEG, TIFF, BMP, GIF, TGA, PCX or PSD, not .{ext}"
+            "worksheet pictures support PNG, PDF, SVG, EPS, EMF, JPEG, TIFF, BMP, GIF, TGA, PCX or PSD, not .{ext}"
         ))),
     }
 }
@@ -40,6 +43,32 @@ mod tests {
         c.units = "mA".into();
         sheet.columns.push(c);
         sheet
+    }
+
+    #[test]
+    fn eps_and_emf_contain_worksheet_text_at_the_original_extent() {
+        let sheet = sheet();
+        let (width, height) = super::super::sheet_image_size(&sheet).unwrap();
+        let eps = String::from_utf8(sheet_image_bytes(&sheet, "eps", 300.0).unwrap()).unwrap();
+        assert!(eps.starts_with("%!PS-Adobe-3.0 EPSF-3.0\n"));
+        assert!(eps.contains(&format!("%%BoundingBox: 0 0 {} {}", width.ceil(), height.ceil())));
+        for text in ["Current", "mA", "2.5", "4.5"] {
+            assert!(eps.contains(&format!("({text})")), "{text}");
+        }
+        assert!(!eps.contains("(A\\(Y\\))"));
+
+        let emf = sheet_image_bytes(&sheet, "emf", 300.0).unwrap();
+        let word = |offset| u32::from_le_bytes(emf[offset..offset + 4].try_into().unwrap());
+        assert_eq!(word(0), 1, "EMR_HEADER");
+        assert_eq!(&emf[40..44], b" EMF");
+        assert_eq!(word(48) as usize, emf.len());
+        let hundredths_mm = |points: f64| (points * 2540.0 / 72.0).round() as u32;
+        assert_eq!((word(32), word(36)), (hundredths_mm(width), hundredths_mm(height)));
+        for text in ["Current", "mA", "2.5", "4.5"] {
+            let utf16: Vec<_> = text.encode_utf16().flat_map(u16::to_le_bytes).collect();
+            assert!(emf.windows(utf16.len()).any(|window| window == utf16), "{text}");
+        }
+        assert_eq!(emf, sheet_image_bytes(&sheet, "emf", 96.0).unwrap(), "vector size is independent of DPI");
     }
 
     #[test]
@@ -95,7 +124,7 @@ mod tests {
     #[test]
     fn unsupported_types_and_bad_or_excessive_raster_sizes_fail_before_encoding() {
         let sheet = sheet();
-        for ext in ["eps", "emf", "wmf", "ai", "dxf", "cgm", "unknown"] {
+        for ext in ["wmf", "ai", "dxf", "cgm", "unknown"] {
             assert!(sheet_image_bytes(&sheet, ext, 96.).is_err(), "{ext}");
         }
         for ext in ["png", "jpg", "tif", "bmp", "gif", "tga", "pcx", "psd"] {

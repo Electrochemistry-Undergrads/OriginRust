@@ -165,7 +165,8 @@ Runs went through `tools/origin-ref` (`run-labtalk-lines.ps1`) on inputs we made
     just below the tie). Sheaf's `NumberFormat::Significant` and `Scientific` copy this
     (`format_significant`, `format_scientific`); not matched: 0.995, which Origin rounds up (`1.00` with
     2 significant digits, `1.0E+00` in Scientific with 1 decimal) although it is stored below the tie.
-    Scientific with Default Decimal Digits has no Sheaf format of its own yet.
+    Scientific with Default Decimal Digits is `NumberFormat::ScientificAuto` (T317), "Scientific (default digits)"
+    in Column Properties.
   Sheaf: `NumberFormat::EngineeringSi(d)` (and the older `Engineering(d)`, which now means the same), `EngineeringSig(n)` and `EngineeringAuto`; the Display list of Sheaf's dialog folds Origin's two lists into one. The scaling power of ten is parsed from its decimal representation, rather than computed with `powi`, so a value such as `1e-24` normalizes to exactly `1` and keeps the requested significant digits (`1e-24` with one digit, `1.0e-24` with two).
 - Switching Format between Numeric, Text and Text & Numeric converts the cells (`Column::convert_storage`): numbers become the text they show, text is read as numbers where it can be.
 - Column short name (measured in Origin 2026-11-13, Column Properties box and `wks.col1.name$` alike): at most 18 characters, a longer name is **cut to 18 without a message** (`abcdefghijklmnopqrstuvwxyz` becomes `abcdefghijklmnopqr`); letters, digits and dots stay and every other character (space, underscore, hyphen, slash, brackets, `%`, `#`, `$`, `@`, `*`, `,`, `:`) is dropped (`a b_c-d.e` becomes `abcd.e`); a first digit is allowed; a name that another column of the sheet has (any case) is refused and the column keeps its name. Sheaf: `column::clean_short_name`, used by the Column Properties dialog (it shows the cleaned name, and still says so when the name is empty or taken). The importer's rules for header cells are in import-ascii.md section 3. Book short names (measured in Origin 2016 on 2026-11-15 with `win -r`, `re-workspace/scratch/bookname`): only ASCII
@@ -1170,7 +1171,7 @@ Sheaf: one picture of the active sheet (its data rows, not empty spare rows), dr
 (`sheaf_core::sheet_print`) with the heads, row numbers and grid left out (`sheaf_plot::sheet_image_svg`).
 The save window offers PNG (300 dpi), PDF and SVG; the name defaults to `<book long name or name>_<sheet>.png`
 in the project's folder (Sheaf's choice). The raster-format follow-up below adds JPEG, TIFF, BMP, GIF,
-TGA, PCX and PSD. Other vector types, several sheets at once, size and overwrite options remain open.
+TGA, PCX and PSD. Section 13k.2 adds EPS and EMF.
 
 ### 13k.1 Additional worksheet raster formats (2026-11-17)
 
@@ -1195,8 +1196,17 @@ Original worksheet layout, labels/styles, file-name/folder default and overwrite
 behavior remain. The existing whole-sheet picture still includes retained source
 values outside a column's Begin/End display range; whether Origin expWks renders
 those values is unmeasured. This format slice does not change that rendering policy.
-AI/CGM/DXF/EMF/EPS/WMF, multi-sheet export and additional size/depth/quality/compression/
-overwrite controls remain open.
+### 13k.2 EPS and EMF worksheet export (2026-11-21)
+
+The worksheet image save dialog also offers Encapsulated PostScript and Enhanced
+Metafile. Both writers receive the same worksheet scene used by SVG, with its
+labels, cells and original size in points. EPS uses the existing PostScript font
+mapping, which substitutes unsupported characters. EMF stores text in UTF-16.
+The list and layout of the original images were measured in 13k. This follow-up
+implements the two file types documented by [Origin's expWks reference](https://docs.originlab.com/x-function/ref/expwks/).
+
+Remaining export types are AI, CGM, DXF and WMF. Multi-sheet export and size,
+depth, quality, compression and overwrite controls are also open.
 
 ## 13l. Re-Import (T98, measured 2026-11-16, Origin 2016)
 

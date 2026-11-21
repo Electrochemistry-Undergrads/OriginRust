@@ -296,6 +296,8 @@ fn column_format(col: &Column) -> (Option<Format>, Option<f64>) {
         NumberFormat::Decimal(n) => (num(decimals(n)), None),
         NumberFormat::DecimalGrouped(n) => (num(format!("#,##{}", decimals(n))), None),
         NumberFormat::Scientific(n) => (num(format!("{}E+00", decimals(n))), None),
+        // T317: up to five decimals of the mantissa, trailing zeros dropped.
+        NumberFormat::ScientificAuto => (num("0.#####E+00".to_string()), None),
         _ => (None, None),
     }
 }

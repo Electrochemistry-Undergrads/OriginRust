@@ -606,7 +606,7 @@ Extract Worksheet Data, Select Data Set, Delete Confirmation.
 | Ctrl+Shift+T | Region of Interest tools (matrix) |
 | Ctrl+Alt+B | Button edit mode |
 | Ctrl+B, I, U, G, +, =, -, <, > | Text object formatting: bold, italic, underline, Greek, superscript, subscript, super-subscript, font up/down (in-place text edit) |
-| Ctrl+A | Select all windows (Project Explorer) |
+| Ctrl+A | Select all windows (Project Explorer); Ctrl+click adds or removes one and Shift+click selects the run from the last click (T286) |
 | Del, Shift+Del | Delete / delete without prompt (project explorer) |
 
 ---

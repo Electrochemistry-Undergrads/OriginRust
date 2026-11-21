@@ -7093,13 +7093,56 @@ fn the_explorer_keys_f2_delete_and_ctrl_a_work_on_the_highlighted_window() {
     h.state_mut().rename = None;
     h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
     settle(&mut h);
-    assert!(h.state().panels.explorer.all, "Ctrl+A highlights every window");
+    assert_eq!(h.state().panels.explorer.picked.len(), 2, "Ctrl+A highlights every window");
     h.key_press(egui::Key::Delete);
     settle(&mut h);
     assert_eq!(project(&h).windows.len(), 0, "Delete removed them all");
     h.state_mut().doc.undo();
     h.state_mut().doc.undo();
     assert_eq!(project(&h).windows.len(), 2, "each deletion can be undone");
+}
+
+/// T286: Ctrl+click and Shift+click in the explorer's list highlight several windows; Delete
+/// removes them all.
+#[test]
+fn ctrl_and_shift_clicks_in_the_explorer_pick_several_windows() {
+    let mut h = start(vec![data_file("explorer-multi")]);
+    h.state_mut().doc.apply("Books", |p| {
+        p.add_workbook("second");
+        p.add_workbook("third");
+    });
+    settle(&mut h);
+    let at = |h: &Harness<'static, SheafApp>, t: &str| h.get_by_label(t).rect().center();
+    // The rows from the top of the list down.
+    let mut rows: Vec<String> = project(&h).windows.iter().map(|w| w.title()).collect();
+    rows.sort_by(|a, b| at(&h, a).y.total_cmp(&at(&h, b).y));
+    let before = rows.len();
+    assert!(before >= 3);
+    let modified_click = |h: &mut Harness<'static, SheafApp>, pos: egui::Pos2, m: egui::Modifiers| {
+        pause(h);
+        h.event(egui::Event::PointerMoved(pos));
+        h.step();
+        for pressed in [true, false] {
+            h.input_mut().modifiers = m;
+            h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: m });
+            h.step();
+        }
+        h.input_mut().modifiers = egui::Modifiers::NONE;
+        settle(h);
+    };
+    h.get_by_label(&rows[0]).click();
+    settle(&mut h);
+    let third = at(&h, &rows[2]);
+    modified_click(&mut h, third, egui::Modifiers::SHIFT);
+    assert_eq!(h.state().panels.explorer.picked.len(), 3, "Shift+click: the run of three rows");
+    let second = at(&h, &rows[1]);
+    modified_click(&mut h, second, egui::Modifiers::COMMAND);
+    assert_eq!(h.state().panels.explorer.picked.len(), 2, "Ctrl+click took the middle row out");
+    h.key_press(egui::Key::Delete);
+    settle(&mut h);
+    let left: Vec<String> = project(&h).windows.iter().map(|w| w.title()).collect();
+    assert_eq!(left.len(), before - 2, "Delete removed the two highlighted windows");
+    assert!(left.contains(&rows[1]) && !left.contains(&rows[0]) && !left.contains(&rows[2]), "{left:?}");
 }
 
 #[test]

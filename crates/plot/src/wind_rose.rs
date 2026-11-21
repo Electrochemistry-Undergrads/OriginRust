@@ -55,7 +55,13 @@ impl WindRoseData {
                 (angles, values)
             }
         };
-        let width = 360.0 / angles.len().max(1) as f64;
+        // Origin 2016 draws Binned Data wedges 22.5 degrees wide whatever the number of rows (measured on 8
+        // directions 45 degrees apart, T327); more than 16 rows share the circle evenly (Sheaf's choice).
+        let width = if spec.speed.is_some() {
+            360.0 / angles.len().max(1) as f64
+        } else {
+            (360.0 / angles.len().max(1) as f64).min(22.5)
+        };
         let base = vec![0.0; values.len()];
         WindRoseData { angles, values, base, width }
     }

@@ -7145,6 +7145,32 @@ fn ctrl_and_shift_clicks_in_the_explorer_pick_several_windows() {
     assert!(left.contains(&rows[1]) && !left.contains(&rows[0]) && !left.contains(&rows[2]), "{left:?}");
 }
 
+/// T288: the explorer's search box narrows the list; Ctrl+A then takes only what is listed.
+#[test]
+fn the_explorer_search_box_narrows_the_window_list() {
+    let mut h = start(vec![data_file("explorer-search")]);
+    h.state_mut().doc.apply("Books", |p| {
+        p.add_workbook("spectra");
+    });
+    settle(&mut h);
+    let titles: Vec<String> = project(&h).windows.iter().map(|w| w.title()).collect();
+    let spectra = titles.iter().find(|t| t.contains("spectra")).unwrap().clone();
+    assert!(h.query_by_label("Search windows").is_some(), "the box is shown");
+    h.get_by_label("Search windows").click();
+    settle(&mut h);
+    h.get_by_label("Search windows").type_text("SPEC");
+    settle(&mut h);
+    assert_eq!(h.state().panels.explorer.search, "SPEC");
+    for t in &titles {
+        assert_eq!(h.query_by_label(t).is_some(), *t == spectra, "{t} listed only when it matches");
+    }
+    h.get_by_label(&spectra).click();
+    settle(&mut h);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    settle(&mut h);
+    assert_eq!(h.state().panels.explorer.picked.len(), 1, "Ctrl+A takes the listed windows");
+}
+
 #[test]
 fn a_folder_can_be_renamed_and_deleted_with_its_windows() {
     let mut h = start(vec![data_file("folders")]);

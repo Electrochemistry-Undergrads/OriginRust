@@ -2304,6 +2304,25 @@ impl SheafApp {
                 });
             }
             Action::AddColumn(book) => self.add_columns(book, 1),
+            Action::MoveSheet { book, from, to } => {
+                // T306: the dragged sheet goes where the tab was dropped and stays the active one.
+                let Some(n) = self.doc.project().workbook(book).map(|b| b.sheets.len()) else { return };
+                if from >= n || to >= n || from == to {
+                    return;
+                }
+                let mut order: Vec<usize> = (0..n).filter(|&i| i != from).collect();
+                order.insert(to, from);
+                self.doc.apply("Move worksheet", |p| {
+                    p.workbook_mut(book).is_some_and(|w| {
+                        let moved = w.reorder_sheets(&order);
+                        w.active_sheet = to;
+                        moved
+                    })
+                });
+                if let Some(state) = self.books.get_mut(&book) {
+                    state.clear_selection();
+                }
+            }
             Action::AddColumnsDialog(book) => self.add_columns = Some((book, 1)),
             Action::DeleteColumns(columns) => {
                 self.doc.apply("Delete columns", |p| delete_columns(p, &columns));

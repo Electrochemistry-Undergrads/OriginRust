@@ -4,6 +4,57 @@
 use super::*;
 use sheaf_core::sheet_tab::SheetLabel;
 
+/// T306: dragging a sheet tab onto another tab moves the sheet there, in one undo step.
+#[test]
+fn dragging_a_sheet_tab_onto_another_moves_the_sheet() {
+    let mut h = start(vec![data_file("sheet-drag")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = h.state().books.keys().next().copied().unwrap();
+    let ctx = h.ctx.clone();
+    for _ in 0..2 {
+        h.state_mut().apply(Action::Sheet { book, op: SheetOp::Add }, &ctx);
+    }
+    settle(&mut h);
+    let names = |h: &Harness<'static, SheafApp>| -> Vec<String> {
+        project(h).workbook(book).unwrap().sheets.iter().map(|s| s.name.clone()).collect()
+    };
+    let before = names(&h);
+    assert_eq!(before.len(), 3);
+    let from = h.get_by_label(&before[0]).rect().center();
+    let to = h.get_by_label(&before[2]).rect().center();
+    pause(&mut h);
+    h.event(egui::Event::PointerMoved(from));
+    h.step();
+    h.event(egui::Event::PointerButton {
+        pos: from,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: egui::Modifiers::NONE,
+    });
+    h.step();
+    for k in 1..=8 {
+        let t = k as f32 / 8.0;
+        h.event(egui::Event::PointerMoved(from + (to - from) * t));
+        h.step();
+    }
+    h.event(egui::Event::PointerButton {
+        pos: to,
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: egui::Modifiers::NONE,
+    });
+    h.step();
+    settle(&mut h);
+    let after = names(&h);
+    assert_eq!(
+        after,
+        [before[1].clone(), before[2].clone(), before[0].clone()],
+        "the first sheet went to the third place"
+    );
+    assert_eq!(project(&h).workbook(book).unwrap().active_sheet, 2, "the moved sheet is active");
+    assert_eq!(h.state().doc.undo_label(), Some("Move worksheet"));
+}
+
 /// T277: the sheet tab's Activate This Sheet in All Books in Folder.
 #[test]
 fn a_sheet_becomes_active_in_the_other_books_of_the_folder() {

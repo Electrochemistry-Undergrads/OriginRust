@@ -2397,7 +2397,7 @@ impl SheafApp {
             Action::GoToFolder(path) => {
                 if explorer::folder_at(&self.doc.project().root, &path).is_some() {
                     self.panels.explorer.folder = path;
-                    self.panels.explorer.selected = None;
+                    self.panels.explorer.clear_selection();
                     self.follow_folder();
                 }
             }

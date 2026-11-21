@@ -4,6 +4,39 @@
 use super::*;
 use sheaf_core::sheet_tab::SheetLabel;
 
+/// T277: the sheet tab's Activate This Sheet in All Books in Folder.
+#[test]
+fn a_sheet_becomes_active_in_the_other_books_of_the_folder() {
+    let mut h = start(vec![data_file("sheet-tab")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = h.state().books.keys().next().copied().unwrap();
+    let mut others = Vec::new();
+    h.state_mut().doc.apply("Books", |p| {
+        for name in ["Book2", "Book3"] {
+            let b = p.add_workbook(name);
+            p.workbook_mut(b).unwrap().sheets.push(sheaf_core::Worksheet::new(if name == "Book2" {
+                "Fit"
+            } else {
+                "Other"
+            }));
+            others.push(b);
+        }
+        let wb = p.workbook_mut(book).unwrap();
+        wb.sheets.push(sheaf_core::Worksheet::new("Fit"));
+        wb.active_sheet = 1;
+    });
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Sheet { book, op: SheetOp::ActivateInFolder }, &ctx);
+    settle(&mut h);
+    let p = project(&h);
+    assert_eq!(p.workbook(others[0]).unwrap().active_sheet, 1, "Book2's Fit sheet is active");
+    assert_eq!(p.workbook(others[1]).unwrap().active_sheet, 0, "Book3 has no Fit sheet");
+    let entries = crate::menus::sheet_tab_menu(&p.workbook(book).unwrap().sheets[1]);
+    assert!(entries.iter().any(|e| matches!(e, crate::menus::Entry::Item(i)
+        if i.label == "Activate This Sheet in All Books in Folder"
+            && i.cmd == Some(crate::menus::Cmd::Sheet(SheetOp::ActivateInFolder)))));
+}
+
 #[test]
 fn duplicate_without_data_and_the_long_name_on_the_tab() {
     let mut h = start(vec![data_file("sheet-tab")]);

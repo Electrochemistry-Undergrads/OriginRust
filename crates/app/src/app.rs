@@ -4232,6 +4232,35 @@ impl SheafApp {
                     Err(e) => self.warn(e.to_string()),
                 }
             }
+            SheetOp::ActivateInFolder => {
+                // T277: the books of the folder the book is in (not its subfolders), the book too.
+                let project = self.doc.project();
+                let folder = crate::panels::explorer::home(&project.root, book);
+                let books: Vec<WindowId> = crate::panels::explorer::windows_in(project, &folder)
+                    .into_iter()
+                    .filter(|id| project.workbook(*id).is_some())
+                    .collect();
+                let name = b.sheets[active].name.clone();
+                let mut changed = Vec::new();
+                self.doc.adjust_view(|p| changed = p.activate_sheet_named(&books, &name));
+                for id in &changed {
+                    if let Some(state) = self.books.get_mut(id) {
+                        state.clear_selection();
+                    }
+                }
+                let without = books.iter().filter(|id| {
+                    self.doc
+                        .project()
+                        .workbook(**id)
+                        .is_some_and(|b| !b.sheets.iter().any(|s| s.name.eq_ignore_ascii_case(&name)))
+                });
+                let without = without.count();
+                let mut msg = format!("Sheet {name} is active in {} more workbook(s) of the folder", changed.len());
+                if without > 0 {
+                    msg.push_str(&format!("; {without} workbook(s) have no sheet of that name"));
+                }
+                self.say(msg);
+            }
             SheetOp::Navigate => {
                 self.sheet_navigate = Some(crate::dialogs::sheet_navigate::SheetNavigateDialog::new(book, active));
             }

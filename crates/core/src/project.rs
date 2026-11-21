@@ -711,6 +711,23 @@ impl Project {
         })
     }
 
+    /// Makes the sheet called `name` (any case, as Origin's sheet names) the active sheet of each of
+    /// `books` that has one (Origin 2027's same sheet across the workbooks of a folder, T277); books
+    /// without such a sheet are left as they are. Returns the books whose active sheet changed.
+    pub fn activate_sheet_named(&mut self, books: &[WindowId], name: &str) -> Vec<WindowId> {
+        let mut changed = Vec::new();
+        for &id in books {
+            if let Some(b) = self.workbook_mut(id)
+                && let Some(i) = b.sheets.iter().position(|s| s.name.eq_ignore_ascii_case(name))
+                && b.active_sheet != i
+            {
+                b.active_sheet = i;
+                changed.push(id);
+            }
+        }
+        changed
+    }
+
     pub fn graph(&self, id: WindowId) -> Option<&Graph> {
         self.graphs().find(|g| g.id == id)
     }
@@ -2152,6 +2169,26 @@ impl Graph {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_sheet_of_one_name_becomes_active_in_every_book_that_has_it() {
+        // T277: by name, in any case; a book without the sheet keeps its active sheet.
+        use crate::Worksheet;
+        let mut p = super::Project::new();
+        let books: Vec<_> = (0..3).map(|i| p.add_workbook(&format!("Book{i}"))).collect();
+        for (k, &b) in books.iter().enumerate() {
+            let wb = p.workbook_mut(b).unwrap();
+            wb.sheets.push(Worksheet::new(if k == 1 { "results" } else { "Results" }));
+            if k == 2 {
+                wb.sheets[1].name = "Other".into();
+            }
+        }
+        let changed = p.activate_sheet_named(&books, "Results");
+        assert_eq!(changed, [books[0], books[1]]);
+        let active: Vec<usize> = books.iter().map(|b| p.workbook(*b).unwrap().active_sheet).collect();
+        assert_eq!(active, [1, 1, 0]);
+        assert!(p.activate_sheet_named(&books, "Results").is_empty(), "already active");
+    }
+
     use super::*;
 
     #[test]

@@ -2649,6 +2649,7 @@ pub fn sheet_tab_menu(sheet: &sheaf_core::Worksheet) -> Vec<Entry> {
         item("Name and Comments...", Cmd::Sheet(SheetOp::RenameDialog)),
         sep(),
         item("Navigate...", Cmd::Sheet(SheetOp::Navigate)),
+        item("Activate This Sheet in All Books in Folder", Cmd::Sheet(SheetOp::ActivateInFolder)),
     ];
     if !sheet.view.column_header || !sheet.view.row_header {
         use sheaf_core::sheet_view::ViewSwitch as V;

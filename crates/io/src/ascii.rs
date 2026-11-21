@@ -112,6 +112,24 @@ pub enum Blocks {
     Sheets,
 }
 
+/// What a text cell in a numeric column does (Origin's impASC `options.Miscellaneous.NonNum`, T312,
+/// measured in Origin 2016). A column is numeric when its first non-empty data cell is a number or a
+/// date; a "bad" row is a data row with a text cell (not a missing marker) in a numeric column.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum NonNumeric {
+    /// Read the cell as text (Origin's default 1): the column becomes Text & Numeric.
+    #[default]
+    ReadAsText,
+    /// Stop at the first bad row: the rows above it are imported (Origin's 0 "terminate", and 5).
+    Stop,
+    /// The rows after each bad row go to a new sheet, named after the first with `_` added
+    /// (`data1`, `data1_`, ...); the bad row is left out (Origin's 2).
+    NewSheet,
+    /// The rows after each bad row continue in new columns to the right, from row 1; the bad row is
+    /// left out (Origin's 3).
+    NewColumns,
+}
+
 /// Import Options > Add Sparklines of Origin's impASC window (T231): whether the imported columns get
 /// sparklines and the sheet shows its Sparklines row (workbook-model T175).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
@@ -124,6 +142,22 @@ pub enum AddSparklines {
     Yes,
     /// Every imported column when the sheet has fewer than 50 columns (Origin's default).
     Auto,
+}
+
+impl NonNumeric {
+    /// Every choice, in the order of the window's list.
+    pub const ALL: [NonNumeric; 4] =
+        [NonNumeric::ReadAsText, NonNumeric::Stop, NonNumeric::NewSheet, NonNumeric::NewColumns];
+
+    /// The text of the window's list.
+    pub fn label(self) -> &'static str {
+        match self {
+            NonNumeric::ReadAsText => "Read as text",
+            NonNumeric::Stop => "Stop the import",
+            NonNumeric::NewSheet => "Rows after it in a new sheet",
+            NonNumeric::NewColumns => "Rows after it in new columns",
+        }
+    }
 }
 
 impl AddSparklines {
@@ -237,6 +271,8 @@ pub struct AsciiOptions {
     pub param_name_from_first_cell: bool,
     /// What to do with a file that holds several blocks of data separated by blank lines.
     pub blocks: Blocks,
+    /// A text cell in a numeric column (T312).
+    pub non_numeric: NonNumeric,
     /// The first column is X and the others Y (otherwise all are Y).
     pub first_column_x: bool,
     /// Data rows to skip at the start.
@@ -276,6 +312,7 @@ impl Default for AsciiOptions {
             param_lines: Vec::new(),
             param_name_from_first_cell: true,
             blocks: Blocks::One,
+            non_numeric: NonNumeric::ReadAsText,
             first_column_x: true,
             skip_rows: 0,
             max_rows: None,
@@ -1116,13 +1153,110 @@ pub fn parse_ascii(text: &str, file_stem: &str, opts: &AsciiOptions) -> Result<A
         }
         _ => {}
     }
-    let mut r = if opts.blocks == Blocks::Sheets {
+    let mut r = if opts.non_numeric != NonNumeric::ReadAsText
+        && let Some(r) = parse_non_numeric(text, file_stem, opts)
+    {
+        r
+    } else if opts.blocks == Blocks::Sheets {
         parse_blocks(text, file_stem, opts)
     } else {
         parse_block(text, file_stem, opts)
     }?;
     opts.sparklines.apply(&mut r.workbook);
     Ok(r)
+}
+
+/// [`NonNumeric`] other than reading as text: the text cut at the bad rows into the part above the first
+/// one and the parts between them, each read on its own and put together as Origin 2016 does. `None`
+/// when there is no bad row (the file is read as usual).
+fn parse_non_numeric(text: &str, file_stem: &str, opts: &AsciiOptions) -> Option<Result<AsciiImport, IoError>> {
+    let a = analyze(text, opts);
+    let ncols = a.rows.iter().map(Vec::len).max().unwrap_or(0);
+    let numeric: Vec<bool> = (0..ncols)
+        .map(|j| {
+            a.rows
+                .iter()
+                .filter_map(|r| r.get(j))
+                .map(|c| classify(c, a.ns))
+                .find(|c| !matches!(c, Cell::Empty | Cell::Marker))
+                .is_some_and(|c| matches!(c, Cell::Number | Cell::Date))
+        })
+        .collect();
+    let bad: Vec<usize> = a
+        .rows
+        .iter()
+        .zip(&a.row_lines)
+        .filter(|(r, _)| {
+            r.iter().enumerate().any(|(j, c)| numeric.get(j) == Some(&true) && classify(c, a.ns) == Cell::Text)
+        })
+        .map(|(_, line)| *line)
+        .collect();
+    let first = *bad.first()?;
+    let lines: Vec<&str> = split_records(text, &opts.delimiter);
+    let head = lines[..first.min(lines.len())].join("\n");
+    // The parts after each bad row, without a header.
+    let mut parts: Vec<String> = Vec::new();
+    for (k, &b) in bad.iter().enumerate() {
+        let end = bad.get(k + 1).copied().unwrap_or(lines.len()).min(lines.len());
+        let part: Vec<&str> = lines[(b + 1).min(end)..end].iter().copied().filter(|l| !l.trim().is_empty()).collect();
+        if !part.is_empty() {
+            parts.push(part.join("\n"));
+        }
+    }
+    let mut fixed = opts.clone();
+    fixed.delimiter = a.detected.delimiter.clone();
+    fixed.non_numeric = NonNumeric::ReadAsText;
+    let head_opts = AsciiOptions { header_lines: Some(a.detected.header_lines), ..fixed.clone() };
+    let tail_opts = AsciiOptions {
+        header_lines: Some(0),
+        long_name_line: Some(0),
+        units_line: Some(0),
+        comments_line: Some(0),
+        short_name_line: 0,
+        param_lines: Vec::new(),
+        skip_rows: 0,
+        ..fixed
+    };
+    Some((|| {
+        let mut result = parse_block(&head, file_stem, &head_opts)?;
+        let mut warnings = vec![format!(
+            "{} row{} with text in a numeric column {} the import ({})",
+            bad.len(),
+            if bad.len() == 1 { "" } else { "s" },
+            if bad.len() == 1 { "was cut out of" } else { "were cut out of" },
+            match opts.non_numeric {
+                NonNumeric::Stop => "the import stopped at the first",
+                NonNumeric::NewSheet => "the rows after each went to a new sheet",
+                _ => "the rows after each went to new columns",
+            }
+        )];
+        if opts.non_numeric == NonNumeric::Stop {
+            result.warnings.append(&mut warnings);
+            return Ok(result);
+        }
+        let base = result.workbook.sheets[0].name.clone();
+        for (k, part) in parts.iter().enumerate() {
+            let mut p = parse_block(part, file_stem, &tail_opts)?;
+            let mut sheet = p.workbook.sheets.remove(0);
+            match opts.non_numeric {
+                NonNumeric::NewSheet => {
+                    sheet.name = format!("{base}{}", "_".repeat(k + 1));
+                    result.workbook.sheets.push(sheet);
+                }
+                _ => {
+                    let target = &mut result.workbook.sheets[0];
+                    let next_id = target.columns.iter().map(|c| c.id.0).max().unwrap_or(0) + 1;
+                    for (i, mut col) in sheet.columns.into_iter().enumerate() {
+                        col.id = ColumnId(next_id + i as u64);
+                        col.short_name = default_short_name(target.columns.len());
+                        target.columns.push(col);
+                    }
+                }
+            }
+        }
+        result.warnings.append(&mut warnings);
+        Ok(result)
+    })())
 }
 
 /// Splits the text at blank lines into blocks that each hold data. A block of text without any
@@ -1846,6 +1980,43 @@ Sample A,12.40,0.045,<LOD,2026-05-04 09:22:16\n";
         assert!(c[0].params.is_empty());
         assert_eq!(c[1].params.get("Wavelength").map(String::as_str), Some("10"));
         assert_eq!(c[2].params.get("Purpose").map(String::as_str), Some("y"));
+    }
+
+    /// Origin 2016's impasc `options.Miscellaneous.NonNum` (T312, measured 2026-11-21) on
+    /// x/y = 1..5 / 10, 20, oops, 40, 50.
+    #[test]
+    fn non_numeric_cells_are_treated_as_origin_does() {
+        let text = "x\ty\n1\t10\n2\t20\n3\toops\n4\t40\n5\t50\n";
+        let read =
+            |nn| parse_ascii(text, "data1", &AsciiOptions { non_numeric: nn, ..AsciiOptions::default() }).unwrap();
+        let nums = |c: &Column| c.numeric().map(|v| v.to_vec()).unwrap_or_default();
+        // Read as text (the default): every row, the text kept.
+        let t = read(NonNumeric::ReadAsText);
+        assert_eq!(t.workbook.sheets[0].columns[1].cell_text(2), "oops");
+        // Stop: the rows above the bad one.
+        let s = read(NonNumeric::Stop);
+        assert_eq!(nums(&s.workbook.sheets[0].columns[1]), [10.0, 20.0]);
+        assert_eq!(s.workbook.sheets[0].columns[1].long_name, "y", "the header is kept");
+        // New sheet: data1 with 1, 2 and data1_ with 4, 5.
+        let n = read(NonNumeric::NewSheet);
+        let names: Vec<&str> = n.workbook.sheets.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["data1", "data1_"]);
+        assert_eq!(nums(&n.workbook.sheets[1].columns[0]), [4.0, 5.0]);
+        // New columns: x, y, then 4, 5 and 40, 50 in columns C and D from row 1.
+        let c = read(NonNumeric::NewColumns);
+        let cols = &c.workbook.sheets[0].columns;
+        assert_eq!(cols.len(), 4);
+        assert_eq!((cols[2].short_name.as_str(), nums(&cols[2])), ("C", vec![4.0, 5.0]));
+        assert_eq!(nums(&cols[3]), [40.0, 50.0]);
+        assert!(!c.warnings.is_empty());
+        // No bad row: read as usual.
+        let plain = parse_ascii(
+            "x\ty\n1\t2\n3\t4\n5\t6\n",
+            "p",
+            &AsciiOptions { non_numeric: NonNumeric::Stop, ..AsciiOptions::default() },
+        )
+        .unwrap();
+        assert_eq!(plain.workbook.sheets[0].columns[0].numeric().unwrap().len(), 3);
     }
 
     #[test]

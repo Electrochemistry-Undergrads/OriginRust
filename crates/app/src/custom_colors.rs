@@ -30,10 +30,26 @@ pub fn initialize(file: Option<PathBuf>) {
     STORE.with(|s| *s.borrow_mut() = Store { colors, file, failed: false });
 }
 
+/// How long `load` and `save` keep trying while Windows refuses the file with "access denied": a reader can
+/// meet the moment another thread renames a new file over the old one (T272, as T236 for the format clipboard).
+const BUSY_RETRY: std::time::Duration = std::time::Duration::from_secs(1);
+
+fn retry_busy<T>(mut op: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+    let start = std::time::Instant::now();
+    loop {
+        match op() {
+            Err(e) if e.kind() == io::ErrorKind::PermissionDenied && start.elapsed() < BUSY_RETRY => {
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            r => return r,
+        }
+    }
+}
+
 fn load(path: &Path) -> Vec<Color> {
     let parse = || -> Option<Vec<Color>> {
         let mut bytes = Vec::new();
-        File::open(path).ok()?.take(MAX_BYTES + 1).read_to_end(&mut bytes).ok()?;
+        retry_busy(|| File::open(path)).ok()?.take(MAX_BYTES + 1).read_to_end(&mut bytes).ok()?;
         if bytes.len() as u64 > MAX_BYTES {
             return None;
         }
@@ -73,7 +89,7 @@ fn save(path: &Path, colors: &[Color]) -> io::Result<()> {
             file.write_all(&bytes)?;
             file.sync_all()?;
             drop(file);
-            fs::rename(&tmp, path)
+            retry_busy(|| fs::rename(&tmp, path))
         })();
         if result.is_err() {
             let _ = fs::remove_file(&tmp);

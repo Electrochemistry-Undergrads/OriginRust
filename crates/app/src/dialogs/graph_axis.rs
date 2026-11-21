@@ -610,9 +610,9 @@ fn title_tab(ui: &mut egui::Ui, axis: &mut Axis, id: &str) {
             ui.end_row();
             ui.label("Offset (pt)");
             ui.horizontal(|ui| {
-                ui.label("Right");
+                ui.label("Move right");
                 ui.add(DragValue::new(&mut axis.title_offset_pt.0).speed(0.5).range(-500.0..=500.0));
-                ui.label("Down");
+                ui.label("Move down");
                 ui.add(DragValue::new(&mut axis.title_offset_pt.1).speed(0.5).range(-500.0..=500.0));
             });
             ui.end_row();

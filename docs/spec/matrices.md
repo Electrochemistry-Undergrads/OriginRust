@@ -361,7 +361,16 @@ each matrix as not written).
   outward.
   - Smooth: the mean.
   - Sharpen: 5v minus the four neighbours.
-  - Edge Detection: the Sobel gradient magnitude.
+  - Edge Detection (T285, measured): opens a window with Edge Filter (Sobel or Prewitt, Horizontal,
+    Vertical or both; Sobel Horizontal/Vertical by default) and Threshold (0 by default). A cell is 1
+    where the filter's response, in levels of 0..255 over the sheet's range, is above the threshold,
+    else 0 (Origin writes 255 and 0). The response is the weighted difference across the cell divided
+    by the kernel's weight (4 for Sobel, 3 for Prewitt), so a step of k levels gives k: Origin 2016's
+    `imgEdge` marked steps of 10, 20, 40 and 80 levels while `t:=` was below the step (5, 10, 30, 60)
+    and not at it, with Sobel and Prewitt alike. Horizontal finds horizontal edges (change from row to
+    row), Vertical vertical ones; both take the larger. Origin's default filter, Laplace horizontal, and
+    its other Laplace and compass gradient filters are not built (the Laplace scale could not be pinned
+    down: between 1/4 and 1/8 of the step).
   - **Median (T284, measured):** opens a window with the window size (2 by default, as Origin 2016's
     `imgMedian`). The median of a d x d window with the edge cells repeated outward; an even window
     reaches one cell further forward (right, down) than back, and the lower of the two middle values is

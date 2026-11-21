@@ -31,8 +31,10 @@ pub enum ImageOp {
     Smooth,
     /// Spatial Filters > Sharpen: `5 v - (the four neighbours)`.
     Sharpen,
-    /// Spatial Filters > Edge Detection: the Sobel gradient magnitude.
-    EdgeDetection,
+    /// Spatial Filters > Edge Detection (T285): 1 where the filter's response, in levels of 0..255 over
+    /// the sheet's range, is above `threshold`, else 0, as Origin 2016's `imgEdge t:= f:=` (measured:
+    /// a step of k levels gives Sobel and Prewitt responses of exactly k).
+    EdgeDetection { filter: EdgeFilter, threshold: f64 },
     /// Adjustments > Levels (T210): values from `input.0` to `input.1` are spread linearly over
     /// `output.0` to `output.1`; values outside the input range take the nearest end.
     Levels { input: (f64, f64), output: (f64, f64) },
@@ -46,6 +48,40 @@ pub enum ImageOp {
     /// `imgMedian d:=` (measured: edge cells repeat outward; an even window reaches one cell further
     /// forward than back, and the lower of the two middle values is taken).
     Median(usize),
+}
+
+/// The edge filters of Edge Detection (Origin's `f:=` sh, sv, shv, ph, pv, phv). Horizontal finds
+/// horizontal edges (a change from one row to the next), Vertical finds vertical ones.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EdgeFilter {
+    SobelHorizontal,
+    SobelVertical,
+    SobelBoth,
+    PrewittHorizontal,
+    PrewittVertical,
+    PrewittBoth,
+}
+
+impl EdgeFilter {
+    pub const ALL: [EdgeFilter; 6] = [
+        EdgeFilter::SobelBoth,
+        EdgeFilter::SobelHorizontal,
+        EdgeFilter::SobelVertical,
+        EdgeFilter::PrewittBoth,
+        EdgeFilter::PrewittHorizontal,
+        EdgeFilter::PrewittVertical,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            EdgeFilter::SobelHorizontal => "Sobel Horizontal",
+            EdgeFilter::SobelVertical => "Sobel Vertical",
+            EdgeFilter::SobelBoth => "Sobel Horizontal/Vertical",
+            EdgeFilter::PrewittHorizontal => "Prewitt Horizontal",
+            EdgeFilter::PrewittVertical => "Prewitt Vertical",
+            EdgeFilter::PrewittBoth => "Prewitt Horizontal/Vertical",
+        }
+    }
 }
 
 /// The largest Median window (cells each way).
@@ -73,7 +109,7 @@ impl ImageOp {
             ImageOp::Flip(_) => "Image Flip",
             ImageOp::Smooth => "Image Smooth",
             ImageOp::Sharpen => "Image Sharpen",
-            ImageOp::EdgeDetection => "Image Edge Detection",
+            ImageOp::EdgeDetection { .. } => "Image Edge Detection",
             ImageOp::Levels { .. } => "Image Levels",
             ImageOp::Crop { .. } => "Image Crop",
             ImageOp::Resize { .. } => "Image Resize",
@@ -211,7 +247,11 @@ impl ImageOp {
                 }
                 return Ok(s.like(rows, cols, out));
             }
-            ImageOp::Smooth | ImageOp::Sharpen | ImageOp::EdgeDetection => {
+            ImageOp::Smooth | ImageOp::Sharpen | ImageOp::EdgeDetection { .. } => {
+                // Edge Detection compares responses in levels of 0..255 over the sheet's range.
+                let lo = finite.iter().copied().fold(f64::INFINITY, f64::min);
+                let hi = finite.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                let per_level = if hi > lo { (hi - lo) / 255.0 } else { f64::INFINITY };
                 // The neighbourhood repeats the edge cells (a cell outside the sheet takes the
                 // value of the nearest one); a missing centre stays missing.
                 let at = |r: isize, c: isize| {
@@ -238,11 +278,27 @@ impl ImageOp {
                                 sum / 9.0
                             }
                             ImageOp::Sharpen => 5.0 * n(0, 0) - n(-1, 0) - n(1, 0) - n(0, -1) - n(0, 1),
-                            _ => {
-                                let gx = (n(-1, 1) + 2.0 * n(0, 1) + n(1, 1)) - (n(-1, -1) + 2.0 * n(0, -1) + n(1, -1));
-                                let gy = (n(1, -1) + 2.0 * n(1, 0) + n(1, 1)) - (n(-1, -1) + 2.0 * n(-1, 0) + n(-1, 1));
-                                gx.hypot(gy)
+                            ImageOp::EdgeDetection { filter, threshold } => {
+                                use EdgeFilter as F;
+                                let (side, sum) = match filter {
+                                    F::SobelHorizontal | F::SobelVertical | F::SobelBoth => (2.0, 4.0),
+                                    _ => (1.0, 3.0),
+                                };
+                                // A step of k gives k: the weighted difference over the kernel's weight.
+                                let gx = ((n(-1, 1) + side * n(0, 1) + n(1, 1))
+                                    - (n(-1, -1) + side * n(0, -1) + n(1, -1)))
+                                    / sum;
+                                let gy = ((n(1, -1) + side * n(1, 0) + n(1, 1))
+                                    - (n(-1, -1) + side * n(-1, 0) + n(-1, 1)))
+                                    / sum;
+                                let response = match filter {
+                                    F::SobelHorizontal | F::PrewittHorizontal => gy.abs(),
+                                    F::SobelVertical | F::PrewittVertical => gx.abs(),
+                                    _ => gx.abs().max(gy.abs()),
+                                };
+                                if response / per_level > threshold { 1.0 } else { 0.0 }
                             }
+                            _ => unreachable!("the other operations are handled above"),
                         };
                     }
                 }
@@ -351,11 +407,35 @@ mod tests {
         assert_eq!(smooth.value(1, 1), 1.0);
         assert_eq!(smooth.value(0, 0), 1.0, "the corner sees the centre once");
         assert_eq!(ImageOp::Sharpen.apply(&s).unwrap().value(1, 1), 45.0);
-        let edges = ImageOp::EdgeDetection.apply(&s).unwrap();
+        let edge = |filter, threshold| ImageOp::EdgeDetection { filter, threshold };
+        let edges = edge(EdgeFilter::SobelBoth, 0.0).apply(&s).unwrap();
         assert_eq!(edges.value(1, 1), 0.0, "flat around the centre's own position");
-        assert!(edges.value(1, 0) > 0.0, "an edge next to the bright cell");
+        assert_eq!(edges.value(1, 0), 1.0, "an edge next to the bright cell");
         let flat = sheet(2, 2, &[3.0; 4]);
-        assert!(ImageOp::EdgeDetection.apply(&flat).unwrap().values().iter().all(|v| *v == 0.0));
+        assert!(edge(EdgeFilter::SobelBoth, 0.0).apply(&flat).unwrap().values().iter().all(|v| *v == 0.0));
+    }
+
+    /// Origin 2016's `imgEdge` on steps of 10, 20, 40 and 80 levels (T285, measured 2026-11-21): the
+    /// step cells are edges while the threshold is below the step, for Sobel and Prewitt alike.
+    #[test]
+    fn edge_detection_thresholds_match_origin_2016() {
+        // Rows of 0 0 0 k k k on a 0..255 sheet.
+        for (k, edge_below) in [(10.0, 5.0), (20.0, 10.0), (40.0, 30.0), (80.0, 60.0)] {
+            let mut v = vec![];
+            for _ in 0..3 {
+                v.extend([0.0, 0.0, 0.0, k, k, k]);
+            }
+            v.extend([0.0, 0.0, 0.0, 0.0, 0.0, 255.0]);
+            let s = sheet(4, 6, &v);
+            for filter in [EdgeFilter::SobelVertical, EdgeFilter::PrewittBoth] {
+                let below = ImageOp::EdgeDetection { filter, threshold: edge_below }.apply(&s).unwrap();
+                assert_eq!((below.value(1, 2), below.value(1, 3)), (1.0, 1.0), "{filter:?} k {k}");
+                let at = ImageOp::EdgeDetection { filter, threshold: k }.apply(&s).unwrap();
+                assert_eq!((at.value(1, 2), at.value(1, 3)), (0.0, 0.0), "{filter:?} k {k}: not above k");
+            }
+            let h = ImageOp::EdgeDetection { filter: EdgeFilter::SobelHorizontal, threshold: 0.0 }.apply(&s).unwrap();
+            assert_eq!(h.value(1, 3), 0.0, "a vertical step is no horizontal edge");
+        }
     }
 
     #[test]

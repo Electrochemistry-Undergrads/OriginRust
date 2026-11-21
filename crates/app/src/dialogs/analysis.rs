@@ -11,6 +11,10 @@ use super::frame::{
 };
 use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::{
+    AlsOptions, BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode,
+    PeakBaselineSpec, PeakChainSpec, PeakFitSpec, PeakShape,
+};
+use sheaf_core::analysis::{
     AnovaSpec, BinSize, CorrelationSpec, CrosstabSpec, DiscSort, DiscreteFreqSpec, FreqOptions, FriedmanSpec,
     GraphArrangement, GraphSummarySpec, HistogramSpec, KruskalWallisSpec, KsTwoSampleSpec, MannWhitneySpec,
     MeansComparison, MedianTestSpec, NormalitySpec, OutlierSpec, PoissonTestKind, PoissonTestSpec, PropPowerSpec,
@@ -23,10 +27,6 @@ use sheaf_core::analysis::{
     InterpSpec, LevelCrossingSpec, LocalSpan, NormalizeMethod, OutputTarget, PeakDirection, PeakFilter, PeakOptions,
     Report, Request, RowRange, SignalCorrelationSpec, SmoothMethod, SmoothOptions, SplineBoundary, StftOutput,
     StftSpec, Tool,
-};
-use sheaf_core::analysis::{
-    BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode, PeakBaselineSpec,
-    PeakChainSpec, PeakFitSpec, PeakShape,
 };
 use sheaf_core::analysis::{
     CoherenceOptions, CoherenceSpec, CoherenceWindow, DecimateFilter, DecimateSpec, EnvelopeOptions, EnvelopeSpec,
@@ -442,6 +442,11 @@ enum ChainBaselineKind {
     Minima,
     /// User Defined with Origin's 2nd Derivative anchor finding (Origin's default method).
     SecondDerivative,
+    /// Use Existing Dataset (a mode of the peak goals, an anchor finding method of User Defined in
+    /// the baseline goals, T318): the anchors are the points of a chosen column against its X.
+    Dataset,
+    /// Asymmetric Least Squares Smoothing (T318).
+    Als,
 }
 
 /// The Goal page of Origin's Peak Analyzer.
@@ -832,6 +837,12 @@ pub struct AnalysisDialog {
     /// Constant baseline: a value of the data, or `None` for the custom number.
     chain_const: Option<BaselineStat>,
     chain_custom_y: f64,
+    /// Asymmetric Least Squares Smoothing's settings (T318).
+    chain_als: AlsOptions,
+    /// Use Existing Dataset: the index of the column in `reference_choices`, and that column's
+    /// points against its X, read in `show` when the choice changes.
+    chain_dataset: usize,
+    chain_dataset_points: Option<(ColumnId, Vec<(f64, f64)>)>,
     find_method: usize,
     chain_half_height: bool,
     chain_goal: ChainGoal,
@@ -1258,7 +1269,58 @@ fn reference_choices(project: &Project, exclude: &[ColumnId]) -> Vec<(ColumnId, 
     out
 }
 
+/// Use Existing Dataset's column list (the Y columns of the project, T318).
+fn dataset_combo(ui: &mut egui::Ui, choices: &[(ColumnId, String)], chosen: &mut usize) {
+    ui.horizontal(|ui| {
+        ui.label("Dataset");
+        if choices.is_empty() {
+            ui.weak("no other Y column in the project");
+            return;
+        }
+        *chosen = (*chosen).min(choices.len() - 1);
+        egui::ComboBox::from_id_salt("pa_dataset").selected_text(choices[*chosen].1.as_str()).width(260.0).show_ui(
+            ui,
+            |ui| {
+                for (i, (_, name)) in choices.iter().enumerate() {
+                    ui.selectable_value(chosen, i, name.as_str());
+                }
+            },
+        );
+    });
+}
+
+/// The points of a Y column against its X column (the row number without one), numbers only.
+fn column_points(project: &Project, id: ColumnId) -> Vec<(f64, f64)> {
+    let Some((_, sheet, col)) = project.locate(id) else {
+        return Vec::new();
+    };
+    let Some(ys) = col.numeric() else {
+        return Vec::new();
+    };
+    let index = sheet.columns.iter().position(|c| c.id == id).unwrap_or(0);
+    let xs = sheet.x_for(index).and_then(|c| c.numeric());
+    ys.iter()
+        .enumerate()
+        .map(|(i, &y)| (xs.map_or((i + 1) as f64, |x| x.get(i).copied().unwrap_or(f64::NAN)), y))
+        .filter(|(x, y)| x.is_finite() && y.is_finite())
+        .collect()
+}
+
 impl AnalysisDialog {
+    /// Reads Use Existing Dataset's column when the choice changed (T318).
+    fn load_dataset_points(&mut self, project: &Project) {
+        if self.kind != AnalysisKind::PeakChain || self.chain_baseline != ChainBaselineKind::Dataset {
+            return;
+        }
+        let Some(&(id, _)) = self.reference_choices.get(self.chain_dataset) else {
+            self.chain_dataset_points = None;
+            return;
+        };
+        if self.chain_dataset_points.as_ref().is_none_or(|(c, _)| *c != id) {
+            self.chain_dataset_points = Some((id, column_points(project, id)));
+        }
+    }
+
     /// Which tool the window runs (tests).
     #[cfg(test)]
     pub fn kind(&self) -> AnalysisKind {
@@ -1458,6 +1520,9 @@ impl AnalysisDialog {
             chain_interp: InterpMethod::Linear,
             chain_const: Some(BaselineStat::Minimum),
             chain_custom_y: 0.0,
+            chain_als: AlsOptions::default(),
+            chain_dataset: 0,
+            chain_dataset_points: None,
             find_method: 0,
             chain_half_height: false,
             chain_goal: ChainGoal::Integrate,
@@ -1652,23 +1717,24 @@ impl AnalysisDialog {
                     ("User Defined", Some(ChainBaselineKind::SecondDerivative)),
                     ("XPS", None),
                     ("End Points Weighted", None),
-                    ("Asymmetric Least Squares Smoothing", None),
+                    ("Asymmetric Least Squares Smoothing", Some(ChainBaselineKind::Als)),
                 ];
                 const MODES: [(&str, Option<ChainBaselineKind>); 8] = [
                     ("Constant", Some(ChainBaselineKind::Constant)),
                     ("User Defined", Some(ChainBaselineKind::SecondDerivative)),
-                    ("Use Existing Dataset", None),
+                    ("Use Existing Dataset", Some(ChainBaselineKind::Dataset)),
                     ("XPS", None),
                     ("None (Y=0)", Some(ChainBaselineKind::None)),
                     ("End Points Weighted", None),
                     ("Straight Line", Some(ChainBaselineKind::EndPoints)),
-                    ("Asymmetric Least Squares Smoothing", None),
+                    ("Asymmetric Least Squares Smoothing", Some(ChainBaselineKind::Als)),
                 ];
                 let modes: &[(&str, Option<ChainBaselineKind>)] =
                     if baseline_goal { &BASELINE_GOAL_MODES } else { &MODES };
                 // Both ways of finding anchors are Origin's User Defined.
                 let shown = match self.chain_baseline {
                     ChainBaselineKind::Minima => ChainBaselineKind::SecondDerivative,
+                    ChainBaselineKind::Dataset if baseline_goal => ChainBaselineKind::SecondDerivative,
                     k => k,
                 };
                 let name = modes.iter().find(|m| m.1 == Some(shown)).map_or("", |m| m.0);
@@ -1706,7 +1772,29 @@ impl AnalysisDialog {
                             );
                         });
                     }
-                    ChainBaselineKind::Minima | ChainBaselineKind::SecondDerivative => {
+                    ChainBaselineKind::Dataset if !baseline_goal => {
+                        dataset_combo(ui, &self.reference_choices, &mut self.chain_dataset);
+                    }
+                    ChainBaselineKind::Als => {
+                        // Origin's ALS page (Origin Pro in 2016, so not measured).
+                        let o = &mut self.chain_als;
+                        grid_rows(ui, "pa_als", |ui| {
+                            ui.label("Asymmetric Factor [0-1]");
+                            ui.add(DragValue::new(&mut o.asymmetric).speed(0.001).range(0.000001..=0.999999));
+                            ui.end_row();
+                            ui.label("Threshold");
+                            ui.add(DragValue::new(&mut o.threshold).speed(0.01).range(0.0..=0.99));
+                            ui.end_row();
+                            ui.label("Smoothing Factor");
+                            ui.add(DragValue::new(&mut o.smoothing).speed(0.1).range(0.1..=15.0));
+                            ui.end_row();
+                            ui.label("Number of Iterations");
+                            ui.add(DragValue::new(&mut o.iterations).range(1..=1000));
+                            ui.end_row();
+                        });
+                        ui.weak("Close to 0 for positive peaks, close to 1 for negative ones; larger smoothing gives a stiffer baseline.");
+                    }
+                    ChainBaselineKind::Minima | ChainBaselineKind::SecondDerivative | ChainBaselineKind::Dataset => {
                         ui.label(egui::RichText::new("Anchor Points Finding").strong());
                         ui.horizontal_top(|ui| {
                             ui.label("Method");
@@ -1716,13 +1804,14 @@ impl AnalysisDialog {
                                     ChainBaselineKind::SecondDerivative,
                                     "2nd Derivative",
                                 );
-                                for greyed in [
-                                    "1st Derivative and 2nd Derivative",
-                                    "Use Script to Search",
-                                    "Use Existing Dataset",
-                                ] {
+                                for greyed in ["1st Derivative and 2nd Derivative", "Use Script to Search"] {
                                     ui.add_enabled(false, egui::RadioButton::new(false, greyed));
                                 }
+                                ui.radio_value(
+                                    &mut self.chain_baseline,
+                                    ChainBaselineKind::Dataset,
+                                    "Use Existing Dataset",
+                                );
                                 ui.radio_value(
                                     &mut self.chain_baseline,
                                     ChainBaselineKind::Minima,
@@ -1742,6 +1831,8 @@ impl AnalysisDialog {
                                 ui.add(DragValue::new(&mut self.chain_points).range(2..=1000));
                                 ui.end_row();
                             });
+                        } else if self.chain_baseline == ChainBaselineKind::Dataset {
+                            dataset_combo(ui, &self.reference_choices, &mut self.chain_dataset);
                         } else {
                             ui.horizontal(|ui| {
                                 ui.label("Anchor points: the lowest point of each of");
@@ -1853,6 +1944,15 @@ impl AnalysisDialog {
             ChainBaselineKind::None => ChainBaseline::None,
             ChainBaselineKind::EndPoints => ChainBaseline::EndPoints,
             ChainBaselineKind::Minima => ChainBaseline::AutoMinima(self.chain_minima),
+            ChainBaselineKind::Als => ChainBaseline::Als(self.chain_als),
+            ChainBaselineKind::Dataset => {
+                let method = match self.chain_goal {
+                    ChainGoal::CreateBaseline | ChainGoal::SubtractBaseline => self.chain_interp,
+                    _ => InterpMethod::Linear,
+                };
+                let points = self.chain_dataset_points.as_ref().map(|(_, p)| p.clone()).unwrap_or_default();
+                ChainBaseline::Anchors(points, method)
+            }
             ChainBaselineKind::SecondDerivative => {
                 // The baseline goals join the anchors with the Create Baseline page's method; the
                 // peak goals with straight lines.
@@ -1876,6 +1976,15 @@ impl AnalysisDialog {
     }
 
     fn tool(&self) -> Result<Tool, String> {
+        if self.kind == AnalysisKind::PeakChain {
+            match self.chain_baseline {
+                ChainBaselineKind::Als => self.chain_als.check()?,
+                ChainBaselineKind::Dataset if self.chain_dataset_points.as_ref().is_none_or(|(_, p)| p.len() < 2) => {
+                    return Err("Use Existing Dataset needs a column with at least two points".to_string());
+                }
+                _ => {}
+            }
+        }
         Ok(match self.kind {
             AnalysisKind::Integrate => Tool::Integrate(self.integrate),
             AnalysisKind::CvCharge => Tool::CvCharge(self.cv),
@@ -4123,6 +4232,7 @@ impl AnalysisDialog {
         if self.columns.iter().any(|c| doc.project().column(*c).is_none()) {
             return AnalysisOutcome::Closed;
         }
+        self.load_dataset_points(doc.project());
         let mut open = true;
         let mut pressed: Option<DialogButton> = None;
         let mut preview_now = false;
@@ -4484,5 +4594,41 @@ mod filter_fs_tests {
         assert!((d.auto_sample_frequency(&p).unwrap() - 100.0).abs() < 1e-9);
         let other = AnalysisDialog::new(&p, AnalysisKind::Smooth, vec![y]).unwrap();
         assert_eq!(other.auto_sample_frequency(&p), None);
+    }
+}
+
+#[cfg(test)]
+mod baseline_mode_tests {
+    use super::*;
+    use sheaf_core::{ColumnData, Designation};
+
+    /// T318: Use Existing Dataset takes the chosen column's points as anchors; ALS passes its settings.
+    #[test]
+    fn existing_dataset_and_als_baselines_are_built() {
+        let mut p = Project::new();
+        let book = p.add_workbook("Book1");
+        let x: Vec<f64> = (0..21).map(f64::from).collect();
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(x.clone())).unwrap();
+        let y =
+            p.add_column(book, 0, Designation::Y, ColumnData::numeric(x.iter().map(|v| v * 2.0).collect())).unwrap();
+        let base = p
+            .add_column(book, 0, Designation::Y, ColumnData::numeric(x.iter().map(|v| 0.5 + v * 0.1).collect()))
+            .unwrap();
+        let mut d = AnalysisDialog::new(&p, AnalysisKind::PeakChain, vec![y]).unwrap();
+        d.chain_goal = ChainGoal::CreateBaseline;
+        d.chain_baseline = ChainBaselineKind::Dataset;
+        assert!(d.tool().is_err(), "no points read yet");
+        d.chain_dataset = d.reference_choices.iter().position(|(c, _)| *c == base).unwrap();
+        d.load_dataset_points(&p);
+        let Ok(Tool::PeakBaseline(spec)) = d.tool() else { panic!("a baseline tool") };
+        let ChainBaseline::Anchors(points, _) = spec.baseline else { panic!("anchors") };
+        assert_eq!(points.len(), 21);
+        assert_eq!(points[3], (3.0, 0.8));
+        d.chain_baseline = ChainBaselineKind::Als;
+        d.chain_als.iterations = 4;
+        let Ok(Tool::PeakBaseline(spec)) = d.tool() else { panic!("a baseline tool") };
+        assert_eq!(spec.baseline, ChainBaseline::Als(AlsOptions { iterations: 4, ..AlsOptions::default() }));
+        d.chain_als.asymmetric = 1.5;
+        assert!(d.tool().is_err());
     }
 }

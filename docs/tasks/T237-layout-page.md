@@ -1,6 +1,6 @@
 # T237: Layout pages (B14, slice 1)
 
-**Status:** slices 1 to 12 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
+**Status:** slices 1 to 12 done 2026-11-20 (Claude Windows "claude:2"), **not measured** (the default page size was measured in T274).
 **Size:** L (several slices). **Source:** greyed inventory package B14 ("New: Layout",
 "Standard: New Layout").
 **Spec:** `docs/spec/layout-page.md`.

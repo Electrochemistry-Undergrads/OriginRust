@@ -568,6 +568,14 @@ pub fn defs() -> Vec<Def> {
                     ("max_iterations", t("integer", "Iteration limit (default 400).")),
                     ("tolerance", n("Convergence tolerance (default 1e-9).")),
                     ("scale_errors", b("Scale parameter errors with the reduced chi-square (default true).")),
+                    (
+                        "covariance_matrix",
+                        b("Add the parameters' covariance matrix to the parameter sheet (default false)."),
+                    ),
+                    (
+                        "correlation_matrix",
+                        b("Add the parameters' correlation matrix to the parameter sheet (default false)."),
+                    ),
                     ("compare_with", s("Compare model with this model (F-test, AIC, BIC).")),
                     ("rank", strs("Rank these built-in functions on the data.")),
                     ("global", obj(vec![("share", strs("Parameters shared by all columns."))], &[])),

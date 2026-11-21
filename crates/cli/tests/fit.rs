@@ -345,3 +345,34 @@ fn a_surface_fit_takes_z_and_a_surface_function() {
     let (ok, _, stderr) = sheaf(&["fit", d, "--x", "x", "--y", "z"]);
     assert!(!ok && stderr.contains("--z"), "{stderr}");
 }
+
+#[test]
+fn covariance_and_correlation_matrices_go_to_the_parameter_sheet() {
+    let dir = scratch("matrices");
+    let data = data_file(&dir);
+    let export = dir.join("params.csv");
+    let (ok, _, stderr) = sheaf(&[
+        "fit",
+        data.to_str().unwrap(),
+        "--y",
+        "noisy",
+        "--covariance",
+        "--correlation",
+        "--export",
+        export.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    let params = std::fs::read_to_string(&export).unwrap();
+    let header = params.lines().next().unwrap();
+    assert!(header.ends_with("Intercept,Slope,Intercept,Slope"), "{params}");
+    let cells = |name: &str| -> Vec<f64> {
+        let line = params.lines().find(|l| l.starts_with(&format!("{name},"))).unwrap();
+        line.split(',').rev().take(4).map(|c| c.parse().unwrap()).collect::<Vec<f64>>().into_iter().rev().collect()
+    };
+    let (i, s) = (cells("Intercept"), cells("Slope"));
+    assert_eq!((i[2], s[3]), (1.0, 1.0), "{params}");
+    assert!(
+        (i[1] - s[0]).abs() < 1e-15 && i[3] < 0.0 && (i[3] - i[1] / (i[0] * s[1]).sqrt()).abs() < 1e-12,
+        "{params}"
+    );
+}

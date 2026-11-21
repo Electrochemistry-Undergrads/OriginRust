@@ -246,7 +246,7 @@ Cross-cutting findings:
 | Linear regression | Linear Fit | `fit/linear.rs`; dialog; CLI | ✓ | | P0 |
 | Polynomial regression | Polynomial Fit | `fit_polynomial` | ✓ | | P0 |
 | Nonlinear fit engine | Levenberg-Marquardt, bounds, fixed, weights | `fit/nlsf.rs`; verified against Origin on 21 cases | ✓ | | P0 |
-| Fit report | parameters, errors, t, p, limits, chi-square, R-square, ANOVA | `fit/report.rs`; separate sheets | ✓ | covariance and correlation matrices not written | P0 |
+| Fit report | parameters, errors, t, p, limits, chi-square, R-square, ANOVA | `fit/report.rs`; separate sheets; Covariance and Correlation Matrix as options (T320, off as in Origin 2016, columns of the parameter sheet; NLFit window, CLI `--covariance`/`--correlation`) | ✓ | Origin's report tree layout not copied (flat sheets) | P0 |
 | Core function set | Gauss, Lorentz, Voigt, exponentials, Boltzmann, Hill | `functions.json`, categorised list | ✓ | | P0 |
 | Automatic initial guess | nlfn | own guesses for 53 functions: peaks, exponentials, sigmoids, power laws, hyperbolas, polynomials to order 5 | ◐ | the rest of the 206 start from fixed values; no toggle | P0 |
 | Fitted curve and residual output | NLFit Output | curve sheet, plot to graph | ✓ | number of points, X range and legend update are on the Fitted Curves page; Origin's output sheet choices and plot types are not | P1 |

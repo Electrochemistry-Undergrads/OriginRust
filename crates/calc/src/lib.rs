@@ -49,6 +49,7 @@ pub mod partcorr;
 pub mod pca;
 pub mod peakchain;
 pub mod peaks;
+pub mod poisson;
 pub mod power;
 pub mod qc;
 pub mod risetime;
@@ -146,6 +147,10 @@ pub use peakchain::{
     second_derivative_anchors,
 };
 pub use peaks::{PeakDirection, PeakFilter, PeakOptions, PeakResult, find_peaks};
+pub use poisson::{
+    OnePoisson, TwoPoisson, poisson_difference_interval, poisson_exact_interval, poisson_normal_interval, poisson_one,
+    poisson_two,
+};
 pub use power::{
     PowerError, PowerTest, SampleSizes, anova_power, anova_powers, anova_sample_sizes, pnf, pnt, t_power, t_powers,
     t_sample_sizes,

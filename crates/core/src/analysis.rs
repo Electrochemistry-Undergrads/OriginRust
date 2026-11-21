@@ -517,6 +517,51 @@ impl Default for PropTestSpec {
     }
 }
 
+/// Which Poisson rate test [`PoissonTestSpec`] runs (T267). The counts are typed in (Origin's
+/// "Summarized" input): the total occurrence over `size` observations of `exposure` each.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PoissonTestKind {
+    /// The rate `total / (size exposure)` against `rate`.
+    OneSample { total: u64, size: u64, exposure: f64, rate: f64 },
+    /// `(total occurrence, sample size)` and the exposure of each sample; the difference of the rates
+    /// (first minus second) against `difference`.
+    TwoSample { first: (u64, u64), second: (u64, u64), exposures: (f64, f64), difference: f64 },
+}
+
+/// What [`Tool::PoissonTest`] does (Origin 2026b's One-Sample and Two-Sample Poisson Rate Test, T267; the
+/// formulas are the textbook ones, see `sheaf_calc::poisson`). It reads no data: the chosen column only
+/// says which workbook the result sheet goes to.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PoissonTestSpec {
+    pub kind: PoissonTestKind,
+    pub tail: Tail,
+    pub alpha: f64,
+    /// Report confidence intervals of `levels` percent.
+    pub intervals: bool,
+    pub levels: Vec<f64>,
+    /// Normal approximation (Origin: always computed; default on).
+    pub normal: bool,
+    /// Exact test (default on).
+    pub exact: bool,
+    /// Two samples: the standard error from the pooled rate when the hypothesized difference is 0.
+    pub pooled: bool,
+}
+
+impl Default for PoissonTestSpec {
+    fn default() -> Self {
+        PoissonTestSpec {
+            kind: PoissonTestKind::OneSample { total: 0, size: 1, exposure: 1.0, rate: 1.0 },
+            tail: Tail::Two,
+            alpha: 0.05,
+            intervals: false,
+            levels: vec![90.0, 95.0, 99.0],
+            normal: true,
+            exact: true,
+            pooled: true,
+        }
+    }
+}
+
 /// What [`Tool::Anova`] does: one-way ANOVA with each chosen column as a group.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AnovaSpec {
@@ -1015,6 +1060,8 @@ pub enum Tool {
     TTest(TTestSpec),
     VarTest(VarTestSpec),
     PropTest(PropTestSpec),
+    /// One- and two-sample Poisson rate tests (T267).
+    PoissonTest(PoissonTestSpec),
     Anova(AnovaSpec),
     Histogram(HistogramSpec),
     /// Statistics > Descriptive Statistics > 2D Frequency Counts/Binning (Origin's `twoDBinning`): the
@@ -1164,6 +1211,10 @@ impl Tool {
                 PropTestKind::OneSample { .. } => "One-sample proportion test",
                 PropTestKind::TwoSample { .. } => "Two-sample proportion test",
             },
+            Tool::PoissonTest(spec) => match spec.kind {
+                PoissonTestKind::OneSample { .. } => "One-sample Poisson rate test",
+                PoissonTestKind::TwoSample { .. } => "Two-sample Poisson rate test",
+            },
             Tool::DistFit(_) => "Distribution fit",
             Tool::ProbPlot(spec) => match spec.kind {
                 ProbPlotKind::Probability => "Probability plot",
@@ -1217,6 +1268,7 @@ impl Tool {
             Tool::TTest(_) => "TTest",
             Tool::VarTest(_) => "VarTest",
             Tool::PropTest(_) => "PropTest",
+            Tool::PoissonTest(_) => "PoissonRate",
             Tool::Anova(_) => "ANOVA",
             Tool::Histogram(_) => "Histogram",
             Tool::Binning2D(_) => "Binning2D",
@@ -2221,6 +2273,7 @@ impl Project {
                 | Tool::Crosstab(_)
                 | Tool::DiscreteFrequency(_)
                 | Tool::PropTest(_)
+                | Tool::PoissonTest(_)
                 | Tool::Roc(_)
                 | Tool::KaplanMeier(_)
                 | Tool::GraphSummary(_)
@@ -2315,6 +2368,12 @@ impl Project {
             }
             Tool::PropTest(spec) => {
                 let out = statistics::prop_test(spec)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
+            Tool::PoissonTest(spec) => {
+                let out = statistics::poisson_test(spec)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;

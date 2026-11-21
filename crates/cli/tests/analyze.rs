@@ -873,6 +873,18 @@ fn variance_and_proportion_tests_run_from_the_command_line() {
     assert!(!ok && err.contains("no more successes"), "{err}");
     let (ok, _, err) = sheaf(&["analyze", "proptest", file, "--successes", "1,2,3", "--size", "10,10,10"]);
     assert!(!ok && err.contains("one --successes"), "{err}");
+
+    // T267: Poisson rate tests from counts.
+    let (ok, out, err) =
+        sheaf(&["analyze", "poissontest", file, "--total", "12", "--size", "5", "--exposure", "2", "--rate", "0.8"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("One-sample Poisson rate test") && out.contains("Null Hypothesis: Rate = 0.8"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "poissontest", file, "--total", "20,8", "--size", "10,8", "--levels", "95"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Two-sample Poisson rate test") && out.contains("Rate1 - Rate2"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "poissontest", file, "--total", "3", "--size", "0"]);
+    assert!(!ok && err.contains("sample sizes above 0"), "{err}");
 }
 
 #[test]

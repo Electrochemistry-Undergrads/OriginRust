@@ -249,6 +249,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T264](T264-formula-masks.md) | Formulas read masked cells as missing (Origin measured); fixtures for masked and empty rows in statistics | S | done 2026-11-20 |
 | [T265](T265-numextract.md) | NumExtract() and NumBreak() string functions (Origin 2026 SR1) | S | done 2026-11-20, not measured |
 | [T266](T266-axis-measure.md) | Axis At Position = measured in Origin (posType 2): outside the range the axis is drawn outside the frame (fixed); arrows not scriptable | S | done 2026-11-20 |
+| [T267](T267-poisson-rate.md) | One- and two-sample Poisson rate tests (Origin 2026b): calc, analysis, CLI (slice 1) | M | slice 1 done 2026-11-20, not measured; left: dialogs |
 | [T268](T268-step-measure.md) | Centred steps measured in Origin: codes 13 and 14 match T252; .opj reads/writes 14 | S | done 2026-11-20 |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |

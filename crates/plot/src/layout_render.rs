@@ -1,12 +1,45 @@
-//! A layout page as one picture (T237 slice 3, layout-page spec): every graph item is rendered at
-//! the pixel size it takes on the page and laid, at its place, on a white page.
+//! A layout page as one picture (T237 slice 3, layout-page spec): every graph or worksheet item is
+//! rendered at the pixel size it takes on the page and laid, at its place, on a white page.
 
 use crate::{PlotError, Raster, RasterOptions, raster};
 use sheaf_core::layout_page::LayoutContent;
 use sheaf_core::{Project, WindowId};
 
-/// The layout page `layout` as a raster at `dpi` dots per inch. An item whose graph is gone is left
-/// blank. A picture stretched by a resize is drawn stretched (nearest pixel).
+/// The picture of a layout item `pixel_width` pixels wide; `None` when what it shows is gone.
+pub fn render_layout_item(
+    project: &Project,
+    content: &LayoutContent,
+    pixel_width: u32,
+) -> Option<Result<Raster, PlotError>> {
+    let px = f64::from(pixel_width.max(1));
+    match *content {
+        LayoutContent::Graph { graph } => {
+            let g = project.graph(graph)?;
+            Some(crate::render_raster(project, graph, px / g.page.width_pt.max(1.0)))
+        }
+        LayoutContent::Sheet { book, sheet } => {
+            let ws = project.workbook(book)?.sheets.get(sheet)?;
+            Some(crate::sheet_image_size(ws).and_then(|(w, _)| crate::sheet_image_raster(ws, px / w.max(1.0))))
+        }
+    }
+}
+
+/// The width / height of what a layout item shows, for placing a new one; `None` when it is gone.
+pub fn layout_item_aspect(project: &Project, content: &LayoutContent) -> Option<f64> {
+    match *content {
+        LayoutContent::Graph { graph } => {
+            let g = project.graph(graph)?;
+            Some(g.page.width_pt / g.page.height_pt.max(1.0))
+        }
+        LayoutContent::Sheet { book, sheet } => {
+            let ws = project.workbook(book)?.sheets.get(sheet)?;
+            crate::sheet_image_size(ws).ok().map(|(w, h)| w / h.max(1.0))
+        }
+    }
+}
+
+/// The layout page `layout` as a raster at `dpi` dots per inch. An item whose graph or sheet is gone
+/// is left blank. A picture stretched by a resize is drawn stretched (nearest pixel).
 pub fn render_layout_raster(project: &Project, layout: WindowId, dpi: f64) -> Result<Raster, PlotError> {
     let page = project
         .layout(layout)
@@ -22,14 +55,13 @@ pub fn render_layout_raster(project: &Project, layout: WindowId, dpi: f64) -> Re
     }
     let mut rgba = vec![255u8; (width as usize) * (height as usize) * 4];
     for item in &page.items {
-        let LayoutContent::Graph { graph } = item.content;
-        let Some(g) = project.graph(graph) else { continue };
         let (x0, y0) = ((item.x * f64::from(width)).round() as i64, (item.y * f64::from(height)).round() as i64);
         let (iw, ih) = ((item.w * f64::from(width)).round() as i64, (item.h * f64::from(height)).round() as i64);
         if iw <= 0 || ih <= 0 {
             continue;
         }
-        let pic = crate::render_raster(project, graph, iw as f64 / g.page.width_pt.max(1.0))?;
+        let Some(pic) = render_layout_item(project, &item.content, iw as u32) else { continue };
+        let pic = pic?;
         if pic.width == 0 || pic.height == 0 {
             continue;
         }
@@ -108,5 +140,24 @@ mod tests {
         let png = render_layout_image(&p, id, "PNG", 36.0).unwrap();
         assert!(png.starts_with(&[0x89, b'P', b'N', b'G']));
         assert!(render_layout_image(&p, id, "svg", 36.0).is_err());
+        // A worksheet item is drawn in the second cell; a gone sheet stays blank.
+        p.layout_mut(id).unwrap().add_sheet(book, 0, 2.0);
+        p.layout_mut(id).unwrap().add_sheet(book, 7, 2.0);
+        let aspect = layout_item_aspect(&p, &LayoutContent::Sheet { book, sheet: 0 }).unwrap();
+        assert!(aspect > 0.0, "{aspect}");
+        assert!(layout_item_aspect(&p, &LayoutContent::Sheet { book, sheet: 7 }).is_none());
+        let r = render_layout_raster(&p, id, 36.0).unwrap();
+        let px = |x: u32, y: u32| {
+            let k = ((y * r.width + x) * 4) as usize;
+            [r.rgba[k], r.rgba[k + 1], r.rgba[k + 2]]
+        };
+        let ink = |it: &sheaf_core::layout_page::LayoutItem| {
+            let (x0, y0) = ((it.x * 396.0) as u32, (it.y * 306.0) as u32);
+            let (x1, y1) = (((it.x + it.w) * 396.0) as u32, ((it.y + it.h) * 306.0) as u32);
+            (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y))).filter(|&(x, y)| px(x, y) != [255, 255, 255]).count()
+        };
+        let items = p.layout(id).unwrap().items.clone();
+        assert!(ink(&items[1]) > 20, "the sheet picture is drawn: {}", ink(&items[1]));
+        assert_eq!(ink(&items[2]), 0, "a gone sheet stays blank");
     }
 }

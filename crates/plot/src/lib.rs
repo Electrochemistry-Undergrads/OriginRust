@@ -20,7 +20,7 @@ mod eps;
 mod field;
 mod layout_render;
 pub use field::field_cells;
-pub use layout_render::{render_layout_image, render_layout_raster};
+pub use layout_render::{layout_item_aspect, render_layout_image, render_layout_item, render_layout_raster};
 mod fill;
 mod fonts;
 mod hexbin;
@@ -179,7 +179,7 @@ pub use margin::{DEFAULT_BORDER_PT, ExportLayout, Margin, drawn_bounds};
 pub use raster::{ColorDepth, RasterOptions, TiffCompression};
 pub use sheet::{
     SheetPages, render_sheet_emf_pages, render_sheet_pdf, render_sheet_raster, sheet_image_bytes, sheet_image_pdf,
-    sheet_image_png, sheet_image_svg, sheet_page_breaks, sheet_pages,
+    sheet_image_png, sheet_image_raster, sheet_image_size, sheet_image_svg, sheet_page_breaks, sheet_pages,
 };
 
 use sheaf_core::graph::ScaleKind;

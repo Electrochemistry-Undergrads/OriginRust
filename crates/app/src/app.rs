@@ -2050,9 +2050,10 @@ impl SheafApp {
                     }
                 });
             }
-            Action::LayoutAddGraph { layout } => {
-                match crate::dialogs::layout_add_graph::LayoutAddGraph::new(&self.doc, layout) {
+            Action::LayoutAddGraph { layout, sheets } => {
+                match crate::dialogs::layout_add_graph::LayoutAddGraph::new(&self.doc, layout, sheets) {
                     Some(d) => self.layout_add_graph = Some(d),
+                    None if sheets => self.warn("The project has no worksheet to add"),
                     None => self.warn("The project has no graph to add"),
                 }
             }

@@ -402,12 +402,17 @@ file name; Origin adds the extension of the type (`.csv`, `.dat`, `.txt`) when t
   `overwrite` (a second call on the same path appended), `addxcol`.
 
 Sheaf (`crates/io/src/export.rs`, `write_delimited`, Export window `dialogs/export_sheet.rs`) follows these.
-**Selected cells only (T247, `select`, not measured).** The Export window's **Range** row has
+**Selected cells only (T247, `select`; measured in Origin 2016 on 2026-11-21, T273: `worksheet -s 2 2 3 3`
+then `expASC type:=csv select:=1 [rowlabel:=1]`, `re-workspace/scratch/t273`).** The Export window's **Range** row has
 **Selected cells only**, enabled when the active sheet had a selection as the window opened (cells,
 whole rows, whole columns or the whole sheet). It writes the selected columns in sheet order and the
 selected rows (`write_selection`): the label rows are those of the selected columns, and with row
 labels each data line starts with its row number in the sheet (not 1, 2, ...). A selected row past
-the end of a column gives an empty field, as in a whole-sheet export. Origin's handling of a
+the end of a column gives an empty field, as in a whole-sheet export. Measured: with long names LA,
+LB, LC and C's unit uC, the block B2:C3 gives `LB,LC` / `,uC` / `20,200` / `30,300`, and with row
+labels `Long Name,LB,LC` / `Units,,uC` / `2,20,200` / `3,30,300` (the sheet's row numbers); Sheaf
+writes the same bytes. Origin quirk not copied: for a whole selected column its Long Name line ends
+with one more empty field than the data lines. Origin's handling of a
 non-contiguous selection is not copied (Sheaf's selection is one block or a set of whole columns). Known
 differences: user-parameter rows are written in alphabetical order (Sheaf does not keep creation order); a text
 cell that is empty between values is written as `--`; numbers 15 digits long do not read back to the last bit.

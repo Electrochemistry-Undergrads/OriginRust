@@ -2543,6 +2543,28 @@ impl Project {
                 xy_graph = out.graph;
                 more_xy_graphs = out.more_graphs;
             }
+            Tool::Intersect(spec) if !spec.include_touching && *output == OutputTarget::NextToInput => {
+                // T322, measured in Origin 2016: intersect adds "Intersection X1" (X) and "Intersection
+                // Y1" (Y) at the end of the input sheet, without comments; a second run adds X2 and Y2.
+                let out = curves::run(&request.tool, &inputs)?;
+                notes = out.notes;
+                let n = next_label_index(sheet, "Intersection X");
+                let first = inputs.first().map(|i| i.id).expect("two input columns");
+                for sc in out.on_sheet {
+                    let axis = if sc.designation == Designation::X { "X" } else { "Y" };
+                    beside.push(NewColumn {
+                        after: first,
+                        long_name: format!("Intersection {axis}{n}"),
+                        units: sc.units,
+                        comments: String::new(),
+                        data: match sc.data {
+                            ColumnData::Numeric(v) => std::sync::Arc::unwrap_or_clone(v),
+                            _ => Vec::new(),
+                        },
+                    });
+                    at_end.push((sc.designation, None));
+                }
+            }
             Tool::AverageCurves(_) | Tool::Intersect(_) | Tool::PolygonArea => {
                 let out = curves::run(&request.tool, &inputs)?;
                 table = out.table;

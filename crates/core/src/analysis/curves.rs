@@ -265,10 +265,18 @@ mod tests {
         let a = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.0, 4.0])).unwrap();
         p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 4.0])).unwrap();
         let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![4.0, 0.0])).unwrap();
+        // T322: Origin's intersect adds Intersection X1 (X) and Y1 (Y) at the end of the input sheet,
+        // without comments; a second run adds X2 and Y2.
         let r = p.analyze(&req(&[a, b], Tool::Intersect(IntersectSpec::default()))).unwrap();
-        let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
-        assert_eq!(ws.columns[0].numeric().unwrap(), [2.0]);
-        assert_eq!(ws.columns[1].numeric().unwrap(), [2.0]);
+        assert!(r.new_sheet.is_none());
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        let added = &ws.columns[4..];
+        assert_eq!(added[0].numeric().unwrap(), [2.0]);
+        assert_eq!(added[1].numeric().unwrap(), [2.0]);
+        assert_eq!((added[0].long_name.as_str(), added[1].long_name.as_str()), ("Intersection X1", "Intersection Y1"));
+        assert_eq!((added[0].designation, added[0].comments.as_str()), (Designation::X, ""));
+        p.analyze(&req(&[a, b], Tool::Intersect(IntersectSpec::default()))).unwrap();
+        assert_eq!(p.workbook(book).unwrap().sheets[0].columns[6].long_name, "Intersection X2");
         assert!(r.notes[0].contains("1 point"));
         // Three curves are refused.
         assert!(p.analyze(&req(&[a, b, a], Tool::Intersect(IntersectSpec::default()))).is_err());

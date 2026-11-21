@@ -121,7 +121,13 @@ Intersect (`intersect`, Method Linear, Sampling Points 1000):
   0..4 against y = 2 gave nothing, against y = 0 gave only its two ends (0, 0) and (4, 0) and not the valley
   at X = 2. Sheaf reports no touching point unless asked, so it gives nothing in the first case and nothing
   in the second (Origin's two end points are not copied).
-- Output columns "Intersection X1" and "Intersection Y1" (Sheaf writes them on a new sheet).
+- Output columns "Intersection X1" (X) and "Intersection Y1" (Y) at the end of the input sheet, without
+  comments; a second run adds "Intersection X2" and "Intersection Y2" (measured again on 2026-11-21, T322,
+  `re-workspace/scratch/t322`). Sheaf writes them there since T322 for the default output (Next to Input);
+  "New sheet" in the window's Output and the touching-points option (which adds a text Type column) still
+  write a new sheet.
+- `polyarea` writes nothing to the sheet: its result is a number (`polyarea.area` read 12 for the 4 x 3
+  rectangle). Sheaf's table of area, centroid and perimeter on a result sheet is its own addition.
 
 Polygon Area (`polyarea`, Area Type Mathematical Area or Absolute Area (default)):
 

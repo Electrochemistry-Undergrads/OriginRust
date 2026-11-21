@@ -1217,7 +1217,7 @@ Window > Folders lists the folders as Origin. A folder's Properties... edits its
 Comments (`Folder::comments`) and shows Type, Contains and Location, one undo step. Not done: the main
 title's folder path, Size/Created/Modified, Previous/Next, User Tree, Restricted in Viewer.
 
-## 13n. Pivot Table (T124, 2026-11-17, not measured)
+## 13n. Pivot Table (T124, 2026-11-17; measured against Origin 2016 in T276, 2026-11-21)
 
 Origin facts (X-Function `wpivot`, docs.originlab.com/x-function/ref/wpivot, Origin 2015 SR0 and
 later; Origin COM was unavailable on the Windows machine on 2026-11-17, so nothing was measured):
@@ -1253,6 +1253,27 @@ Sheaf (`crates/core/src/pivot.rs`, `crates/app/src/dialogs/pivot.rs`), choices *
   is the grand total.
 - **Left out** (shown disabled): Combine Direction/Others, extra row and column values, the user
   parameter position.
+
+**Measured in Origin 2016 (T276, 2026-11-21)**, `wpivot` on Region (A: East, West, East, North, West,
+East, North, East), Product (B: pen, pen, ink, pen, ink, pad, ink, pen) and Sales (C: 5, 3, 2, 7, 4, 1, 6,
+8), read cell by cell (`re-workspace/scratch/pivot-measure/`); Sheaf now matches every item:
+
+- The sheet is `Pivot1`, `Pivot2`, ... of the input book; counts, sums, means, maxima and missing
+  combinations (0, or `--` with `zero:=0`) as above.
+- **Names.** The value columns' method label is `Count`, or `Sum of C`, `Mean of C`, `Max of C`,
+  `Min of C` (the data column's name). pos 1 (default): label column Long Name = the row source's name;
+  value columns Long Name = the method label, Comments = the key. pos 0: the label column's name moves to
+  Comments (Long Name empty); value columns Long Name = the key, Comments = the method label. pos 2:
+  label column as pos 0; value columns Long Name = the data column's own Long Name + `_` + the key
+  (`_ink` when it has none), Comments = the method label.
+- **Totals.** The row-total column is named `Total_<row source>` (`Total_A`) in the key's place, with
+  the method label in the other; the column-total row's label is `Total_<column source>` (`Total_B`).
+  Every total applies the method to all records of its row, column or the table: a Mean table's North
+  total is the mean of North's records (6.5), not the sum of its cells, and the grand total is the mean
+  of all values (4.5); for Count and Sum this is the same as adding the cells.
+- **Sorting by totals** uses those totals: a Max table puts East (8) above North (7).
+- **Normalize** (percent, with totals): each column, the row-total column included, is divided by its
+  own total (East's total 16 of 36 is 44.44 %), and the column-total row is 100.
 
 ## 13o. User workbook templates: Save Template As on a workbook (T160, 2026-11-19, not measured)
 

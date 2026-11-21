@@ -449,10 +449,10 @@ fn pivot_table_counts_into_a_new_sheet_as_one_undo_step() {
     let p = &b.sheets[1];
     assert_eq!(p.name, "Pivot1");
     assert_eq!(b.active_sheet, 1, "the new sheet is shown");
-    // Label column, four value columns (2.5, 4.5, 6.5, 8.5 in Comments), Row Total.
+    // Label column, four value columns (2.5, 4.5, 6.5, 8.5 in Comments), the row total.
     assert_eq!(p.columns.len(), 6);
     assert_eq!(p.columns[1].comments, "2.5");
-    assert_eq!(p.columns[5].comments, "Row Total");
+    assert_eq!(p.columns[5].comments, "Total_t", "Origin 2016 names it Total_<row source> (T276)");
     assert_eq!(p.columns[5].numeric().unwrap(), &[1.0, 1.0, 1.0, 1.0]);
     h.state_mut().doc.undo();
     assert_eq!(project(&h).workbooks().next().unwrap().sheets.len(), 1);

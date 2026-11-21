@@ -309,25 +309,30 @@ mod tests {
     }
 
     #[test]
-    fn reduce_duplicates_writes_origins_columns_on_a_new_sheet() {
+    fn reduce_duplicates_writes_origins_columns_at_the_end_of_the_sheet() {
         let mut p = Project::new();
         let book = p.add_workbook("Book1");
         p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![3.0, 1.0, 2.0, 3.0, 2.0])).unwrap();
         let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0, 5.0])).unwrap();
         // reducedup4/5 in Origin: X 1 2 3, Mean 2 4 2.5, SD 2 1.414 2.121 (a lone point keeps its Y).
+        // T321: two columns at the end of the input sheet, X and Y, as Origin's reducedup.
         let r = p.analyze(&req(y, Tool::ReduceDup(ReduceDupSpec::default()))).unwrap();
-        let sheet = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(r.new_sheet.is_none());
+        let all = &p.workbook(book).unwrap().sheets[0];
+        let sheet = Worksheet { columns: all.columns[2..].to_vec(), ..Worksheet::new("added") };
         assert_eq!(sheet.columns.len(), 2);
+        assert_eq!(sheet.columns[0].designation, Designation::X);
         assert_eq!(sheet.columns[0].numeric().unwrap(), [1.0, 2.0, 3.0]);
         assert_eq!(sheet.columns[1].numeric().unwrap(), [2.0, 4.0, 2.5]);
         assert_eq!(sheet.columns[0].long_name, "ReduceDupX1");
         assert_eq!(sheet.columns[1].long_name, "ReduceDupY1");
         assert_eq!(sheet.columns[1].comments, "Duplicates replaced with Mean of B");
         let spec = ReduceDupSpec { method: DupMethod::Sd, count: true, ..ReduceDupSpec::default() };
-        let r = p.analyze(&req(y, Tool::ReduceDup(spec))).unwrap();
-        let sheet = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        p.analyze(&req(y, Tool::ReduceDup(spec))).unwrap();
+        let all = &p.workbook(book).unwrap().sheets[0];
+        let sheet = Worksheet { columns: all.columns[4..].to_vec(), ..Worksheet::new("added") };
         let names: Vec<&str> = sheet.columns.iter().map(|c| c.long_name.as_str()).collect();
-        assert_eq!(names, ["ReduceDupX1", "ReduceDupY1", "DupX1", "DupXCount1"]);
+        assert_eq!(names, ["ReduceDupX2", "ReduceDupY2", "DupX2", "DupXCount2"], "the number counts up with each run");
         let sd = sheet.columns[1].numeric().unwrap();
         assert_eq!(sd[0], 2.0);
         assert!(

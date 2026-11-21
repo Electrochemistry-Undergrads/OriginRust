@@ -193,6 +193,9 @@ pub struct FitDialog {
     has_error_column: bool,
     /// Scale Error with sqrt(Reduced Chi-Sqr) (Advanced > Fit Control).
     scale_errors: bool,
+    /// Quantities > Fit Parameters > Covariance Matrix and Correlation Matrix (off, as in Origin).
+    covariance_matrix: bool,
+    correlation_matrix: bool,
     /// Every numeric column of the sheet, for the weight column of direct weighting.
     weight_choices: Vec<(ColumnId, String)>,
     weight_col: Option<ColumnId>,
@@ -341,6 +344,8 @@ impl FitDialog {
             weighting: FitWeighting::None,
             has_error_column: false,
             scale_errors: true,
+            covariance_matrix: false,
+            correlation_matrix: false,
             weight_choices,
             weight_col,
             dataset_choices,
@@ -658,6 +663,8 @@ impl FitDialog {
             r.y_error = self.weight_col;
         }
         r.scale_errors = self.scale_errors;
+        r.covariance_matrix = self.covariance_matrix;
+        r.correlation_matrix = self.correlation_matrix;
         r.confidence_level = self.confidence / 100.0;
         r.bands = self.bands;
         r.band_level = self.band_level / 100.0;
@@ -1145,6 +1152,12 @@ impl FitDialog {
             ui.label("Confidence level");
             ui.add(DragValue::new(&mut self.confidence).range(50.0..=99.99).speed(0.1).suffix(" %"));
         });
+        ui.checkbox(&mut self.covariance_matrix, "Covariance Matrix").on_hover_text(
+            "Adds the covariance matrix of the parameters to the parameter sheet, one column per parameter.",
+        );
+        ui.checkbox(&mut self.correlation_matrix, "Correlation Matrix").on_hover_text(
+            "Adds the correlation matrix of the parameters to the parameter sheet, one column per parameter.",
+        );
         ui.weak("Parameters and statistics go to new sheets.");
     }
 

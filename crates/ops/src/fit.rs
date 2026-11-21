@@ -65,6 +65,10 @@ pub struct FitSpec {
     /// Rank these built-in functions.
     pub rank: Vec<String>,
     pub no_scale_errors: bool,
+    /// Add Origin's Covariance Matrix to the parameter sheet.
+    pub covariance_matrix: bool,
+    /// Add Origin's Correlation Matrix to the parameter sheet.
+    pub correlation_matrix: bool,
     pub global: bool,
     pub share: Vec<String>,
     pub confidence: f64,
@@ -101,6 +105,8 @@ impl Default for FitSpec {
             compare: None,
             rank: Vec::new(),
             no_scale_errors: false,
+            covariance_matrix: false,
+            correlation_matrix: false,
             global: false,
             share: Vec::new(),
             confidence: 0.95,
@@ -353,6 +359,8 @@ pub fn run(project: &mut Project, a: &FitSpec, prepared: &Prepared) -> Result<Fi
         request.max_iterations = a.max_iterations;
         request.tolerance = a.tolerance;
         request.scale_errors = !a.no_scale_errors;
+        request.covariance_matrix = a.covariance_matrix;
+        request.correlation_matrix = a.correlation_matrix;
         request.x_error = x_error;
         requests.push(request);
     }
@@ -425,6 +433,8 @@ fn run_surface(project: &mut Project, a: &FitSpec, prepared: &Prepared) -> Resul
     request.max_iterations = a.max_iterations;
     request.tolerance = a.tolerance;
     request.scale_errors = !a.no_scale_errors;
+    request.covariance_matrix = a.covariance_matrix;
+    request.correlation_matrix = a.correlation_matrix;
     let outcome = project.fit(&request)?;
     Ok(FitResult { book, run: FitRun::Fits { summary: None, outcomes: vec![outcome], columns: vec![z] } })
 }

@@ -295,12 +295,14 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T310](T310-param-row-edit.md) | Rename and delete a user parameter row from its title | S | done 2026-11-21 |
 | [T314](T314-sig-digits.md) | Significant and Scientific displays measured in Origin 2016 and copied (326 of 328 cells) | S | done 2026-11-21 |
 | [T317](T317-scientific-auto.md) | Scientific with default digits as Origin shows it (NumberFormat::ScientificAuto) | S | done 2026-11-21 |
+| [T321](T321-reducedup-sheet.md) | Reduce Duplicate X Data writes its columns at the end of the input sheet, as Origin's reducedup | S | done 2026-11-21 |
 | [T311](T311-qqplot-measure.md) | Measure Q-Q Plot against Origin (expected values, y = x line ends, band) | S | done 2026-11-21 (statistics 16.2a) |
 | [T312](T312-import-nonnum.md) | Text import: text in a numeric column read as text, stop, new sheet or new columns (NonNum), as Origin 2016 | S | done 2026-11-21, measured |
 | [T313](T313-scatter-matrix-measure.md) | Measure Scatter Matrix against Origin (page, grid, tick labels, titles, symbols, tick step) | S | done 2026-11-21 (graphing 35) |
 | [T315](T315-import-two-digit-years.md) | Text import: two-digit years (M/d/yy, dd.MM.yy, dd-MMM-yy) with Origin 2016's 00-44 window | S | done 2026-11-21, measured |
 | [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T320](T320-fit-covariance.md) | Fit report: Covariance Matrix and Correlation Matrix options (off as in Origin 2016), checked against Origin's errors and dependencies | S | done 2026-11-21 (fitting 4) |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |

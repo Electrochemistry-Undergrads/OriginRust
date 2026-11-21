@@ -857,8 +857,8 @@ Analysis > Data Manipulation > Reduce Duplicate X Data is Origin's X-Function `r
   `DupX1` (the X of each group of two or more points) and `DupXCount1` (its count), no comments.
 
 Sheaf (`Tool::ReduceDup`, undo step "Reduce duplicate X data", `calc::reduce_duplicates`) copies
-all of this, except that the columns go to a new sheet named "ReduceDup" (the analysis framework
-adds X and Y pairs only as a result sheet). The window offers the method, the tolerance and "Output
+all of this; since T321 the columns go to the end of the input sheet as in Origin, numbered on after the
+`ReduceDupX<n>` columns already there (before, they went to a new sheet named "ReduceDup"). The window offers the method, the tolerance and "Output
 the duplicate X values and their counts". Recalculate works as for the other tools of this section.
 
 ### 12.2 Reduce to Evenly Spaced X (measured in Origin)

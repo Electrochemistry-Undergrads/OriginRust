@@ -852,13 +852,8 @@ impl Writer {
                 Connect::StepHorizontal => 11,
                 Connect::StepVertical => 12,
                 Connect::StepHorizontalCenter => 13,
-                Connect::StepVerticalCenter => {
-                    notes.push(
-                        "a Step Vertical Center line was written as Step Vertical (its .opj code is not documented)"
-                            .into(),
-                    );
-                    12
-                }
+                // Measured in Origin 2016 (T268): line connection 14 is the vertical step at the middle.
+                Connect::StepVerticalCenter => 14,
                 Connect::Segment2 => 2,
                 Connect::Segment3 => 3,
                 Connect::Segments(_) => {

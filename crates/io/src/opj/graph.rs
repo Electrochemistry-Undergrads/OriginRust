@@ -718,7 +718,7 @@ fn color_code(b: &[u8], at: usize) -> Option<Color> {
 }
 
 /// The line connection: 1 straight, 5 to 10 smooth curves (8 is read as a B-spline), 15 Bezier, 11 and 12 steps,
-/// 13 the horizontal step at the middle (spec 10.5, graphing 2.x).
+/// 13 and 14 the horizontal and vertical steps at the middle (spec 10.5, graphing 2.x; T268).
 fn connect_kind(code: u8, notes: &mut Vec<String>) -> Connect {
     match code {
         8 => Connect::BSpline,
@@ -727,6 +727,7 @@ fn connect_kind(code: u8, notes: &mut Vec<String>) -> Connect {
         11 => Connect::StepHorizontal,
         12 => Connect::StepVertical,
         13 => Connect::StepHorizontalCenter,
+        14 => Connect::StepVerticalCenter,
         // LabTalk's line connection codes 2 and 3 (measured); the file field uses the same codes
         2 => Connect::Segment2,
         3 => Connect::Segment3,

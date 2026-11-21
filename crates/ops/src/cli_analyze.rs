@@ -864,6 +864,49 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             };
             (target, Job::Tool(Tool::PropTest(spec)))
         }
+        AnalyzeTool::Poissontest {
+            target,
+            total,
+            size,
+            exposure,
+            rate,
+            difference,
+            tail,
+            alpha,
+            no_exact,
+            no_normal,
+            unpooled,
+            levels,
+        } => {
+            if total.len() != size.len() || !(1..=2).contains(&total.len()) {
+                bail!("give one --total and one --size for the one-sample test, two of each for the two-sample test");
+            }
+            if exposure.len() > total.len() {
+                bail!("give at most one --exposure per sample");
+            }
+            let exposure_of = |i: usize| exposure.get(i).or(exposure.first()).copied().unwrap_or(1.0);
+            let kind = if total.len() == 1 {
+                analysis::PoissonTestKind::OneSample { total: total[0], size: size[0], exposure: exposure_of(0), rate }
+            } else {
+                analysis::PoissonTestKind::TwoSample {
+                    first: (total[0], size[0]),
+                    second: (total[1], size[1]),
+                    exposures: (exposure_of(0), exposure_of(1)),
+                    difference,
+                }
+            };
+            let spec = analysis::PoissonTestSpec {
+                kind,
+                tail: tail_of(tail),
+                alpha,
+                intervals: !levels.is_empty(),
+                levels,
+                normal: !no_normal,
+                exact: !no_exact,
+                pooled: !unpooled,
+            };
+            (target, Job::Tool(Tool::PoissonTest(spec)))
+        }
         AnalyzeTool::Anova { target, comparison, control, alpha, .. } => {
             if control == 0 {
                 bail!("--control counts the groups from 1");

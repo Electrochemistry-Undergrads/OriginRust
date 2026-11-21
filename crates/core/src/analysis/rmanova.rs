@@ -2,7 +2,7 @@
 //! Measures ANOVA): reads the level, data and subject columns itself (levels and subjects may be text), lays the
 //! report out and leaves the numbers to `sheaf_calc::rm_anova`. See `docs/spec/statistics.md`, section 26.
 
-use super::statistics::{Output, check_alpha, label_column, level_text, num, number_column};
+use super::statistics::{Output, check_alpha, label_column, num, number_column, shown_level};
 use super::*;
 use calc::RmTerm;
 
@@ -79,7 +79,7 @@ pub(super) fn rm_anova(
     for row in first..=last.min(len - 1) {
         let value = ys.get(row).copied().unwrap_or(f64::NAN);
         let texts: Vec<Option<String>> =
-            level_cols.iter().map(|c| level_text(c, row)).chain([level_text(cs, row)]).collect();
+            level_cols.iter().map(|c| shown_level(sheet, c, row)).chain([shown_level(sheet, cs, row)]).collect();
         if value.is_nan() || texts.iter().any(Option::is_none) {
             left_out += usize::from(!(value.is_nan() && texts.iter().all(Option::is_none)));
             continue;
@@ -523,5 +523,10 @@ mod tests {
         assert_ne!(all, want);
         p.column_mut(data).unwrap().mask.insert(0);
         assert_eq!(table(&mut p), want);
+        // T254: a masked factor (subject) cell leaves its row out too.
+        let mut level = p.clone();
+        level.column_mut(ids[ids.len() - 1]).unwrap().mask.insert(0);
+        level.column_mut(data).unwrap().mask.clear();
+        assert_eq!(table(&mut level), want, "a masked level cell is left out");
     }
 }

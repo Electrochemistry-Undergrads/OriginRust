@@ -896,6 +896,12 @@ Measured in Origin 2016 by right-clicking a sheet tab (`tools/origin-ref/origin-
 - The `.opj` writer reports sheet names, tab display choices and comments it cannot represent.
   The `.opj.sheaf` companion preserves them. Native `.sheaf` files store the comments directly.
   Older files without this field load with empty comments.
+- **Activate This Sheet in All Books in Folder** (T277, Origin 2027's "activate the same sheet in all
+  workbooks of a folder"; the release note gives no more, so the rule is Sheaf's): in every workbook of
+  the book's Explorer folder (not its subfolders) that has a sheet of the clicked sheet's name, in any
+  case, that sheet becomes the active one. Books without such a sheet are left alone, and the status bar
+  says how many changed and how many have no sheet of that name. Like clicking a tab, it is a view change,
+  not an undo step.
 - **Navigate...** (T93) opens "Navigate Worksheets - Book1" in Origin 2016: a table of the sheets (Index,
   Creation Index, Name with the short name, Columns, Size(KB), Comments, Type "Flat Sheet", Source), the
   active sheet selected, an Actions menu and Apply Reorder (greyed), OK and Close. Sheaf's window has Index,

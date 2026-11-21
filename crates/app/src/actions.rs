@@ -102,6 +102,9 @@ pub enum SheetOp {
     AddNotes,
     /// Add Graph as Sheet...: the window that picks the graph (T190).
     AddGraph,
+    /// Activate this sheet in every workbook of the book's Explorer folder that has a sheet of the
+    /// same name (Origin 2027, T277).
+    ActivateInFolder,
 }
 
 /// An edit of one object of a graph, from the graph window (Origin's right-click menus).

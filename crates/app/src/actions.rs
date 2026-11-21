@@ -600,6 +600,12 @@ pub enum Action {
     FormatObject(crate::object_format::Request),
     NewWorkbook,
     AddColumn(WindowId),
+    /// A sheet tab dragged onto another tab (T306): sheet `from` moves to position `to`.
+    MoveSheet {
+        book: WindowId,
+        from: usize,
+        to: usize,
+    },
     /// Column > Add New Columns...: the window that asks how many columns to add (T305).
     AddColumnsDialog(WindowId),
     DeleteColumns(Vec<ColumnId>),

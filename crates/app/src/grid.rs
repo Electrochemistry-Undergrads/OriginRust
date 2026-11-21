@@ -1564,6 +1564,13 @@ impl BookUi {
 
 // ----- sheet tabs and the horizontal scroll bar --------------------------------------------
 
+/// What a dragged sheet tab carries (T306).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct TabDrag {
+    book: WindowId,
+    sheet: usize,
+}
+
 fn sheet_tabs(
     ui: &mut egui::Ui,
     book: &sheaf_core::Workbook,
@@ -1603,7 +1610,15 @@ fn sheet_tabs(
             let shown = sheet.tab_text();
             let text = if is_active { RichText::new(shown).strong() } else { RichText::new(shown) };
             ui.add_space(8.0);
-            let response = ui.add(egui::Label::new(text).sense(Sense::CLICK));
+            // T306: a tab can be dragged onto another tab to move its sheet there.
+            let response = ui.add(egui::Label::new(text).sense(Sense::click_and_drag()));
+            response.dnd_set_drag_payload(TabDrag { book: book_id, sheet: i });
+            if let Some(from) = response.dnd_release_payload::<TabDrag>()
+                && from.book == book_id
+                && from.sheet != i
+            {
+                actions.push(Action::MoveSheet { book: book_id, from: from.sheet, to: i });
+            }
             ui.add_space(12.0);
             // For screen readers (and tests): a tab is a selectable item with the sheet's name.
             response.widget_info(|| {

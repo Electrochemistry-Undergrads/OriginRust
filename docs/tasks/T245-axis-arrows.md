@@ -16,4 +16,5 @@ keeps them.
 
 ## Left
 
-- Measure Origin's arrow shapes, sizes and options; write them to `.opj`.
+- Measure Origin's arrow shapes, sizes and options (not reachable from LabTalk in Origin 2016, T266;
+  needs a screenshot of the Axis window); write them to `.opj`.

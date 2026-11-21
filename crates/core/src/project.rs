@@ -2265,6 +2265,31 @@ impl Graph {
     }
 }
 
+/// Origin 2016's Pareto colours (measured, T316): red bars with a black outline; the cumulative percent a thin
+/// blue line with blue squares, each labelled above.
+fn style_pareto(g: &mut crate::graph::Graph, right: usize) {
+    use crate::color::Color;
+    for layer in [0, right] {
+        g.layers[layer].apply_palette();
+    }
+    if let Some(p) = g.layers[0].plots.last_mut() {
+        p.auto_color = false;
+        p.symbol.color = Color::rgb(255, 0, 0);
+        p.line.color = Color::BLACK;
+    }
+    if let Some(p) = g.layers[right].plots.last_mut() {
+        let blue = Color::rgb(0, 0, 255);
+        p.auto_color = false;
+        p.line.color = blue;
+        p.line.width_pt = 0.5;
+        p.symbol.color = blue;
+        p.symbol.shape = crate::graph::SymbolShape::Square;
+        p.symbol.filled = true;
+        p.decor.labels.enable = true;
+        p.decor.labels.position = crate::graph::LabelPosition::Above;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -3072,30 +3097,5 @@ mod tests {
         assert_eq!(l.x_axis.rug_opposite.plot, None, "an unset rug choice stays unset");
         assert_eq!(data(l.slopes[0].plot), want(0), "a slope annotation follows its plot's column");
         assert_eq!(data(l.slopes[0].x.unwrap()), want(1), "and its plot's X column");
-    }
-}
-
-/// Origin 2016's Pareto colours (measured, T316): red bars with a black outline; the cumulative percent a thin
-/// blue line with blue squares, each labelled above.
-fn style_pareto(g: &mut crate::graph::Graph, right: usize) {
-    use crate::color::Color;
-    for layer in [0, right] {
-        g.layers[layer].apply_palette();
-    }
-    if let Some(p) = g.layers[0].plots.last_mut() {
-        p.auto_color = false;
-        p.symbol.color = Color::rgb(255, 0, 0);
-        p.line.color = Color::BLACK;
-    }
-    if let Some(p) = g.layers[right].plots.last_mut() {
-        let blue = Color::rgb(0, 0, 255);
-        p.auto_color = false;
-        p.line.color = blue;
-        p.line.width_pt = 0.5;
-        p.symbol.color = blue;
-        p.symbol.shape = crate::graph::SymbolShape::Square;
-        p.symbol.filled = true;
-        p.decor.labels.enable = true;
-        p.decor.labels.position = crate::graph::LabelPosition::Above;
     }
 }

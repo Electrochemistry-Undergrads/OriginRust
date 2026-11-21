@@ -128,10 +128,13 @@ fn interval_plot_and_pareto_plot_from_a_selection_and_warn_on_a_wrong_one() {
     assert_eq!(g.layers[0].plots[0].stat, Some(StatPlot::Pareto));
     assert_eq!(project(&h).graphs().count(), before + 2);
 
-    // Wrong selections: a Pareto of two columns, an interval plot of a text column.
+    // Two columns: categories and counts, a binned Pareto chart (T319) from a new ParetoBin sheet.
     plot(&mut h, &["Electrolyte", "Current"], Template::Pareto);
+    assert_eq!(project(&h).graphs().count(), before + 3);
+    // Wrong selections: a Pareto of three columns, an interval plot of a text column.
+    plot(&mut h, &["Electrolyte", "Scan", "Current"], Template::Pareto);
     assert!(h.state().status.contains("Select one column"));
     plot(&mut h, &["Electrolyte"], Template::IntervalPlot);
-    assert_eq!(project(&h).graphs().count(), before + 2);
+    assert_eq!(project(&h).graphs().count(), before + 3);
     assert!(h.state().status.contains("Nothing to plot"));
 }

@@ -220,7 +220,7 @@ windows have no such data sets. Which windows are graphs is decided from the lay
 | `0x1B` | 4 x i16 | window rectangle (left, top, right, bottom) [pub] |
 | `0x32` | u8 | state bits: 1 minimised, 2 maximised [pub] |
 | `0x45` | up to 20 bytes | template name (`ORIGIN` for workbooks) [obs] |
-| `0xC3` | to end | label: the long name. Plain text up to the first `@${`, which starts storage data. May hold several lines (a comment after the long name); the reader keeps the first line [obs] |
+| `0xC3` | to end | label: the long name. Plain text up to the first `@${`, which starts storage data. The long name, then, when the window has Comments (Window Properties), CR LF and the comments, with CR LF between their lines: `BKA\r\nZQXbookA` for a book, `\r\nZQXmatrix` for a matrix with no long name, `GLong\r\nZQXg2` for a graph (measured in Origin 2016, T283, `re-workspace/scratch/t282`). The reader takes the first line as the long name and the rest as the window's comments; the writer writes both [obs] |
 
 For header sizes of 195 and less the label is absent.
 

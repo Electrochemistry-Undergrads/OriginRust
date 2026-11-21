@@ -269,6 +269,8 @@ pub struct SheafApp {
     /// Window > Duplicate (Batch Plotting).
     batch_plot: Option<crate::dialogs::batch_plot::BatchPlotDialog>,
     qc_chart: Option<crate::dialogs::qc_chart::QcDialog>,
+    /// Plot > Statistics > Run Chart's window (T270).
+    run_chart: Option<crate::dialogs::run_chart::RunChartDialog>,
     function_graph: Option<crate::dialogs::function_graph::FunctionGraphDialog>,
     /// The open function window is File > New > Function Plot's: OK makes the graph (T213).
     function_graph_new: bool,
@@ -451,6 +453,7 @@ impl SheafApp {
             find_spec: Default::default(),
             batch_plot: None,
             qc_chart: None,
+            run_chart: None,
             function_graph: None,
             function_graph_new: false,
             audit_log: false,
@@ -2622,6 +2625,23 @@ impl SheafApp {
                 }
             }
             Action::PlotColumns { book, columns, template } => self.plot_columns(book, columns, template),
+            Action::RunChart { book, columns } => {
+                let project = self.doc.project();
+                let numeric = |id: &ColumnId| project.column(*id).is_some_and(|c| c.data.is_numeric());
+                let column = columns.iter().copied().find(numeric).or_else(|| {
+                    let b = project.workbook(book)?;
+                    b.sheets
+                        .get(b.active_sheet)?
+                        .columns
+                        .iter()
+                        .find(|c| c.designation == sheaf_core::Designation::Y && c.data.is_numeric())
+                        .map(|c| c.id)
+                });
+                match column.and_then(|c| crate::dialogs::run_chart::RunChartDialog::new(project, c)) {
+                    Some(d) => self.run_chart = Some(d),
+                    None => self.warn("Select a numeric column for the run chart".to_string()),
+                }
+            }
             Action::PlotLineSeries { book, columns } => self.plot_line_series(book, columns),
             Action::PlotYError { book, columns, x } => self.plot_y_error(book, columns, x),
             Action::PlotPanels { book, columns, rows, cols } => self.plot_panels(book, columns, rows, cols),
@@ -4707,6 +4727,28 @@ impl SheafApp {
             Ok((_, graph)) => {
                 self.focus(graph);
                 self.say(format!("Made an X bar R chart in subgroups of {size}"));
+            }
+            Err(e) => self.warn(e.to_string()),
+        }
+    }
+
+    /// Plot > Statistics > Run Chart's window (T270): OK makes the workbook and graph, one undo step.
+    fn show_run_chart(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::run_chart::RunChartOutcome;
+        let Some(d) = &mut self.run_chart else { return };
+        let (column, size, stat, points) = match d.show(ctx) {
+            RunChartOutcome::Open => return,
+            RunChartOutcome::Closed => {
+                self.run_chart = None;
+                return;
+            }
+            RunChartOutcome::Make { column, size, stat, points } => (column, size, stat, points),
+        };
+        self.run_chart = None;
+        match self.doc.edit("Run Chart", |p| p.plot_run_chart(column, size, stat, points)) {
+            Ok((_, graph)) => {
+                self.focus(graph);
+                self.say(format!("Made a run chart in subgroups of {size}"));
             }
             Err(e) => self.warn(e.to_string()),
         }
@@ -7108,6 +7150,7 @@ impl SheafApp {
         self.show_find_project(ctx);
         self.show_batch_plot(ctx);
         self.show_qc_chart(ctx);
+        self.show_run_chart(ctx);
         self.show_function_graph(ctx);
         self.show_audit_log(ctx);
         self.show_fit_builder(ctx);

@@ -9373,3 +9373,31 @@ fn window_properties_keep_comments_with_undo() {
     menu(&mut h, "Edit", "Undo Rename window");
     assert_eq!(project(&h).window_comments(book), "");
 }
+
+/// Plot > Statistics > Run Chart... (T270) opens its window for the selected column; OK makes the
+/// RunChart workbook and graph in one undo step.
+#[test]
+fn plot_statistics_run_chart_makes_its_workbook_and_graph() {
+    let mut h = start(vec![data_file("run-chart")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let graphs = project(&h).graphs().count();
+    let mut listed = false;
+    for m in menus::bar(menus::WindowKind::Workbook) {
+        menus::walk(&m.entries, &mut |i| listed |= i.cmd == Some(menus::Cmd::RunChart));
+    }
+    assert!(listed, "Plot > Statistics lists Run Chart...");
+    let ctx = h.ctx.clone();
+    let action = menus::resolve(&menus::Cmd::RunChart, &h.state().menu_context()).unwrap();
+    h.state_mut().apply(action, &ctx);
+    settle(&mut h);
+    let d = h.state_mut().run_chart.as_mut().expect("the Run Chart window is open");
+    d.size = 2;
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().run_chart.is_none());
+    assert_eq!(project(&h).graphs().count(), graphs + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Run Chart"));
+    let g = project(&h).graphs().last().unwrap();
+    assert_eq!(g.layers[0].straight_lines.len(), 1, "the reference line");
+    assert!(project(&h).workbooks().any(|b| b.name.starts_with("RunChart")));
+}

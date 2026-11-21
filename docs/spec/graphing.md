@@ -5720,8 +5720,25 @@ ticked on a new graph). Sheaf reads them as page-wide switches of every layer:
 - Each is ticked when every layer shows its labels (or data), and each click is one undo step
   ("Show Labels", "Show Data"). Older files read `show_labels` as on; the `.opj` written here does
   not hold it (its save warns that the layer's Display tab was not written).
-- Active Layer Indicator, Axis Layer Icons, Object Grid, Layer Grid, Frame, Master Items on Screen and
-  Show Data Info stay grey (22.7).
+- At the end of T177, seven items were still grey. The Active Layer Indicator follows in 22.9.
+
+### 22.9 View > Show > Active Layer Indicator (T66, 2026-11-21)
+
+Origin's guide describes a per-graph highlight of the active layer's axes. The
+original Origin 2016 menu inspection in 22.3 found the control unchecked in a
+new graph. A synthetic OriginPro 2016 probe returned an undefined value for
+`page.ali`, a setting listed in current LabTalk documentation. Live activation
+of the 2016 menu item and its persistence remain unverified.
+[Origin layer guide](https://docs.originlab.com/origin-help/customize-layer-element/) ·
+[LabTalk page reference](https://docs.originlab.com/labtalk/ref/page-obj/)
+
+Sheaf stores the graph-window setting in its project and toggles it as one undo
+step. The graph view highlights the active layer's rendered primary Cartesian
+axis positions with the app's selection color. Hidden axes and hidden layers
+produce no highlight, and gaps at axis breaks stay open. The overlay follows
+layer activation, axis placement, pan and zoom. It belongs to the graph editor,
+so exports and printed output use the same graph scene. Indicators for
+non-Cartesian axes and for opposite axes are outside this implementation.
 
 ## 23. View > Zoom All and the Tools-bar Scale In / Scale Out (T69, measured 2026-11-15, Origin 2016)
 

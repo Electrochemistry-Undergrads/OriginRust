@@ -20,6 +20,49 @@ or stacked bars/areas. The gap is editing/combining finished graphs and the rema
 T58 owns the shared Format toolbar dispatch; T59 adds the worksheet target after that lands.
 T60 owns arranging/merging layers; T61 owns adding/deleting them. Coordinate edits to shared files.
 
+## Next candidates (added 2026-11-20, after the T58–T63 waves landed)
+
+Not yet claimed. Pick one, write its brief with the next free `T` number, claim it as usual.
+
+**A. Differences from Origin found by running both on 2026-11-20** (evidence is in the local folder
+`re-workspace/scratch/origin-diff/<area>/REPORT.md`; copy the numbers into a fixture when fixing):
+1. **Tukey p-values and interval ends** (`ptukey`, `qtukey` in `crates/calc/src/anova.rs`). One-way
+   ANOVA, groups of 6, 7 and 5, pair G3 - G2: Origin p = 3.6693e-5, Sheaf 3.6787e-5 (0.26% off); the
+   differences, SEs and q agree to 14 digits, so only the studentized-range tail is off. Two-way
+   ANOVA (unbalanced 2x3) table matches to 1e-11 but its Tukey p-values are off by up to 3.4% on a p
+   near 1e-6. Fix to within 1e-9 if the algorithm allows and record the accuracy reached.
+2. **Date parts of numbers with no date** (`civil_of` in `crates/expr/src/funcs.rs`): for -0.25 and
+   0.999 Origin's `year`, `month`, `day` and `weekday` return -1; Sheaf returns 4713 BC dates. Find
+   Origin's lower bound with more probes first.
+3. **Missing input to date functions**: LabTalk returns -1 for `hour`, `minute`, `second` and the date
+   parts of an empty cell; Sheaf gives a missing value. Confirm on a worksheet column (not only scalar
+   LabTalk) before changing.
+4. **Probit axis increment** (`auto_range` in `crates/core/src/scales.rs`): Origin's `layer.y.inc` is 3
+   on two inputs, Sheaf returns 1.0. The spec says "1 sd"; check the unit on a visible probit axis first.
+
+**B. Measure the "unmeasured" features.** 52 briefs and 32 parity rows say unmeasured (built from
+Origin's documentation, Origin not run). Origin now runs from `tools/origin-ref/` (the install lives
+in `D:\OriginLab\Origin2016`; `C:\Program Files\OriginLab\Origin2016` is a junction to it and the COM
+server was registered again on 2026-11-20). Origin cannot script these, so use screenshots
+(`origin-screenshot.ps1`) or skip them: Compare Datasets, Simulate Curve, masking from a script,
+the error-bar source dialog, spline and axis-break positions. Measured on 2026-11-20 and not yet a
+fixture: masked rows are left out of `stats` (n 5 of 6, sum 82), a formula that reads a masked
+cell gives a missing result, and `rowstats` of an all-empty row leaves every field blank (n too).
+
+**C. Origin 2026, 2026b and 2027 features** that are not in Sheaf yet are in
+[origin-2026-2027-gaps.md](docs/tasks/origin-2026-2027-gaps.md); the 2026-11-20 additions (Run,
+Pareto, Stem-and-Leaf and Grouped Histogram charts, `NumExtract()`/`NumBreak()`, Distribution Overview
+and life-data analysis, the 2027 sheet-activation item) are at the end of that file.
+
+**D. Possible gaps for battery and electrochemistry figures**, unverified: a keyword search on
+2026-11-20 found no mention of distribution of relaxation times, dQ/dV (incremental capacity),
+Koutecky-Levich, Coulombic efficiency or capacity retention per cycle, Scherrer crystallite size, or
+Randles and Warburg circuit elements in `crates/` or `docs/spec/`. Check each against the code
+and against what Origin offers before writing a brief; none of this has been confirmed as missing.
+
+**E. Waiting for the owner:** the 20 `N` items in [greyed-items.md](docs/tasks/greyed-items.md)
+(Office linking, online help, menu sets, Fit Layer to Graph) stay grey until asked for.
+
 ## Where the detail lives
 
 - [PLAN](docs/tasks/PLAN.md): wave order, dependencies, ownership boundaries and agent loop.

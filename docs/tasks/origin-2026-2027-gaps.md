@@ -86,6 +86,21 @@ outputs or UI behavior.
 | Quality improvement additions | 2027 Pro Apps | Analyze rare events with G/T control charts, assess nonnormal process capability, run two-level split-plot experiments and model between-batch variation in stability studies. | [2027][o27] |
 | FIR filter design and application | 2027 Pro App | Design and apply a finite impulse response filter to sampled signals. | [2027][o27] · [FIR Filter][fir] |
 
+## Added 2026-11-20 from the 2026, 2026b and 2027 release notes
+
+Found by a web search of the release notes (search summaries, not a page-by-page read). Checked against Sheaf's code and specs by keyword on 2026-11-20; confirm each row against the release page and the code before writing its brief.
+
+| Feature | Release | Functionality to add | Source |
+|---|---|---|---|
+| Graph Maker additions: Run chart, Pareto chart, Stem-and-Leaf plot, Grouped Histogram | 2026 | The rebuilt Graph Maker gained these chart types. No Run chart or Grouped Histogram in Sheaf's code or specs; a Pareto mention exists in HANDOFF, so check what is built before starting. | [2026][o26] · [2026 notes](https://www.originlab.com/ReleaseNotes/index.aspx?v=2026) |
+| Text-to-number functions `NumExtract()` and `NumBreak()` | 2026 SR1 | Extract numbers from mixed text and split number runs, to help move Excel formulas. Not in Sheaf's expression engine. | [2026 notes](https://www.originlab.com/ReleaseNotes/index.aspx?v=2026) |
+| Distribution Overview plot, arbitrary censoring and life-data regression | 2026b | A Distribution Overview plot for right-censored data (Statistics menu), distribution analysis with arbitrary censoring, an optional frequency input, regression with life data. Sheaf has Kaplan-Meier but none of these. | [2026b][o26b] · [2026b notes](https://www.originlab.com/ReleaseNotes/index.aspx?c=1) |
+| Poisson rate tests | 2026b | Rate tests for Poisson counts. Sheaf mentions Poisson in some files; check whether the rate tests exist. | [2026b][o26b] |
+| Mixture designs with several totals | 2026b | Design of experiments: mixture designs accept more than one total; factor names accept more characters. | [2026b notes](https://www.originlab.com/ReleaseNotes/index.aspx?c=1) |
+| Reliability and Survival Analysis app; DMD, RPC3 and Ivium connectors | 2026 | An app for reliability and survival work, and import connectors for those three instrument formats. | [2026][o26] |
+| Same sheet across several workbooks in a folder | 2027 | Activate the same sheet in all workbooks of a folder at once; new system variables control rich text and dynamic merge in the long name and comments label rows. | [2027 notes](https://www.originlab.com/releasenotes/index.aspx?c=2) |
+| Faster project save | 2026 | OriginLab reports about 40% faster saving of large mixed-series projects. A performance target for Sheaf's `.sheaf` save, not a feature. | [2026][o26] |
+
 [o16]: https://www.originlab.com/2016
 [history]: https://www.originlab.com/index.aspx?go=SUPPORT&pid=3325
 [release27]: https://www.originlab.com/index.aspx?go=COMPANY%2FNEWSANDEVENTS%2FPRESSROOM&pid=5497

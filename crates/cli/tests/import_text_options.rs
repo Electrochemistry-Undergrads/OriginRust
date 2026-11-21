@@ -197,3 +197,20 @@ second",
     assert!(ok, "{err}");
     assert_eq!(p.workbooks().next().unwrap().sheets[0].columns[1].comments, "c1");
 }
+
+/// `--non-numeric` (Origin 2016's NonNum, T312): a text cell in a numeric column.
+#[test]
+fn non_numeric_choices_cut_at_the_text_row() {
+    let dir = scratch("non-numeric");
+    let text = "x\ty\n1\t10\n2\t20\n3\toops\n4\t40\n5\t50\n";
+    let (ok, err, p) = import(&dir, "data1.txt", text, &["--non-numeric", "stop"]);
+    assert!(ok, "{err}");
+    assert_eq!(p.workbooks().next().unwrap().sheets[0].columns[1].numeric().unwrap(), [10.0, 20.0]);
+    let (ok, err, p) = import(&dir, "data1.txt", text, &["--non-numeric", "new-sheet"]);
+    assert!(ok, "{err}");
+    let names: Vec<String> = p.workbooks().next().unwrap().sheets.iter().map(|s| s.name.clone()).collect();
+    assert_eq!(names, ["data1", "data1_"]);
+    let (ok, err, p) = import(&dir, "data1.txt", text, &["--non-numeric", "new-columns"]);
+    assert!(ok, "{err}");
+    assert_eq!(p.workbooks().next().unwrap().sheets[0].columns.len(), 4);
+}

@@ -749,6 +749,17 @@ impl ImportDialog {
                     }
                 });
                 ui.end_row();
+                // Origin's Miscellaneous > Non-numeric (NonNum, T312).
+                ui.label("Text in a numeric column");
+                egui::ComboBox::from_id_salt("ascii_non_numeric").selected_text(o.non_numeric.label()).show_ui(
+                    ui,
+                    |ui| {
+                        for n in sheaf_io::ascii::NonNumeric::ALL {
+                            ui.selectable_value(&mut o.non_numeric, n, n.label());
+                        }
+                    },
+                );
+                ui.end_row();
                 ui.label("Dates and times");
                 let mut as_text = o.dates == sheaf_io::ascii::DateImport::AsText;
                 if ui.checkbox(&mut as_text, "Keep as text").changed() {

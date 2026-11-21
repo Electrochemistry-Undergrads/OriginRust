@@ -652,6 +652,11 @@ pub struct ReadOptions {
     /// Delimited text: a file with several blocks of data separated by blank lines gets one sheet per block.
     #[arg(long)]
     pub blocks_as_sheets: bool,
+    /// Delimited text: what a text cell in a numeric column does (Origin's NonNum): keep it as text,
+    /// stop the import there, or put the rows after it in a new sheet or in new columns (the row
+    /// itself left out).
+    #[arg(long, value_enum, default_value_t = NonNumericArg::Text)]
+    pub non_numeric: NonNumericArg,
     /// Delimited text: Add Sparklines (Origin's import option): the imported columns get sparklines
     /// and the sheet shows its Sparklines row; auto only when the sheet has fewer than 50 columns
     /// (Origin's default; Sheaf's is no).
@@ -749,6 +754,19 @@ pub enum ImportLayout {
     Columns,
     /// One sheet; the rows of the files one under the other.
     Rows,
+}
+
+/// A text cell in a numeric column of delimited text (`sheaf import --non-numeric`, T312).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum NonNumericArg {
+    /// Keep the cell as text (Origin's default).
+    Text,
+    /// Import the rows above it only.
+    Stop,
+    /// The rows after it go to a new sheet.
+    NewSheet,
+    /// The rows after it go to new columns.
+    NewColumns,
 }
 
 /// Add Sparklines of delimited text (`sheaf import --sparklines`, T231).

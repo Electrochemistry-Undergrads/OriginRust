@@ -33,6 +33,7 @@ fn busy_ascii() -> AsciiOptions {
         param_lines: vec![6, 7],
         param_name_from_first_cell: false,
         blocks: Blocks::Sheets,
+        non_numeric: crate::ascii::NonNumeric::Stop,
         first_column_x: false,
         skip_rows: 2,
         max_rows: Some(100),

@@ -17,4 +17,4 @@ segments exist) and "Exponential, Sigmoidal, Single Peak shortcuts" (the menu en
 
 ## Left
 
-- Measure both centred steps in Origin (ends, the vertical one's file code).
+- Measured in T268: both drawings match; the vertical one is line connection 14 (now read and written).

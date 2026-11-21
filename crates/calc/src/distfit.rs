@@ -689,6 +689,42 @@ pub fn quantile(family: Family, params: &[f64], p: f64) -> f64 {
 ///
 /// `None` for a level outside (0, 1) or data the family cannot take.
 pub fn confidence_band(family: Family, params: &[f64], data: &[f64], level: f64) -> Option<(Vec<f64>, Vec<f64>)> {
+    let half = band_half_width(family, params, data, level)?;
+    let (mut lower, mut upper) = (Vec::new(), Vec::new());
+    for pct in BAND_PERCENTS {
+        let p = pct / 100.0;
+        let (lo, hi) = around(family, quantile(family, params, p), half(p));
+        lower.push(lo);
+        upper.push(hi);
+    }
+    lower.iter().chain(&upper).all(|v| v.is_finite()).then_some((lower, upper))
+}
+
+/// `q -+ h`, on the log scale for all families but the normal.
+fn around(family: Family, q: f64, h: f64) -> (f64, f64) {
+    if family == Family::Normal { (q - h, q + h) } else { ((q.ln() - h).exp(), (q.ln() + h).exp()) }
+}
+
+/// The band of Origin 2016's Q-Q plot (measured by T311): round the line `y = x` at each of `xs`, the
+/// band of [`confidence_band`] at the probability `p = F(x)` of the fitted distribution, so that a point
+/// on the line is the quantile it is compared with. Values the family cannot reach (`F(x)` 0 or 1) give
+/// NaN.
+pub fn qq_band(family: Family, params: &[f64], data: &[f64], level: f64, xs: &[f64]) -> Option<(Vec<f64>, Vec<f64>)> {
+    let half = band_half_width(family, params, data, level)?;
+    Some(
+        xs.iter()
+            .map(|&x| {
+                let p = cdf(family, params, x);
+                if p > 0.0 && p < 1.0 { around(family, x, half(p)) } else { (f64::NAN, f64::NAN) }
+            })
+            .unzip(),
+    )
+}
+
+/// The half-width of Origin's band at probability `p` (see [`confidence_band`]), on the log scale for
+/// all families but the normal.
+#[allow(clippy::type_complexity)]
+fn band_half_width(family: Family, params: &[f64], data: &[f64], level: f64) -> Option<Box<dyn Fn(f64) -> f64>> {
     if !(level > 0.0 && level < 1.0) {
         return None;
     }
@@ -742,20 +778,34 @@ pub fn confidence_band(family: Family, params: &[f64], data: &[f64], level: f64)
             })
         }
     };
-    let (mut lower, mut upper) = (Vec::new(), Vec::new());
-    for pct in BAND_PERCENTS {
-        let p = pct / 100.0;
-        let q = quantile(family, params, p);
-        let h = half(p);
-        if family == Family::Normal {
-            lower.push(q - h);
-            upper.push(q + h);
-        } else {
-            lower.push((q.ln() - h).exp());
-            upper.push((q.ln() + h).exp());
-        }
+    Some(half)
+}
+
+/// The ends of Origin 2016's Q-Q reference line `y = x` (measured by T311): the lowest and highest
+/// expected value rounded out to the step of 1, 2 or 5 times a power of ten nearest a seventh of their
+/// range (3.85 gives 0.5, 5.6 gives 1, 11.7 gives 2, 384.6 gives 50).
+pub fn qq_line_ends(expected: &[f64]) -> (f64, f64) {
+    let (lo, hi) = expected
+        .iter()
+        .filter(|v| v.is_finite())
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &v| (a.min(v), b.max(v)));
+    let raw = (hi - lo) / 7.0;
+    if !(raw.is_finite() && raw > 0.0) {
+        return (lo, hi);
     }
-    lower.iter().chain(&upper).all(|v| v.is_finite()).then_some((lower, upper))
+    let pow = 10f64.powf(raw.log10().floor());
+    let step = [1.0, 2.0, 5.0, 10.0]
+        .iter()
+        .map(|m| m * pow)
+        .min_by(|a, b| (a / raw).ln().abs().total_cmp(&(b / raw).ln().abs()))
+        .unwrap_or(pow);
+    // A small tolerance keeps an end that is already a multiple from moving a step.
+    let snap = |v: f64, up: bool| {
+        let r = v / step;
+        let k = if up { (r - 1e-9).ceil() } else { (r + 1e-9).floor() };
+        k * step
+    };
+    (snap(lo, false), snap(hi, true))
 }
 
 #[cfg(test)]

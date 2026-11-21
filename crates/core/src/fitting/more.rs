@@ -89,7 +89,9 @@ impl Project {
         let (book, sheet, column) = self.locate(id).ok_or(AnalysisError::NoSuchColumn(id))?;
         let book_id = book.id;
         let sheet_index = book.sheets.iter().position(|s| s.column(id).is_some()).expect("located here");
-        let y_all = column.numeric().ok_or_else(|| AnalysisError::NotNumeric(column.short_name.clone()))?.to_vec();
+        // Masked cells and filter-hidden rows are missing values, in Y and in every X (T256).
+        let y_all =
+            sheet.values_of(column).ok_or_else(|| AnalysisError::NotNumeric(column.short_name.clone()))?.to_vec();
         if y_all.is_empty() {
             return Err(AnalysisError::Empty(column.short_name.clone()).into());
         }
@@ -100,8 +102,8 @@ impl Project {
         let mut xs_all: Vec<Vec<f64>> = Vec::new();
         let mut names: Vec<String> = Vec::new();
         for &xid in &request.x {
-            let (_, _, c) = self.locate(xid).ok_or(AnalysisError::NoSuchColumn(xid))?;
-            let v = c.numeric().ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))?;
+            let (_, x_sheet, c) = self.locate(xid).ok_or(AnalysisError::NoSuchColumn(xid))?;
+            let v = x_sheet.values_of(c).ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))?;
             xs_all.push((0..n_rows).map(|i| v.get(i).copied().unwrap_or(f64::NAN)).collect());
             names.push(c.display_name().to_string());
         }
@@ -536,5 +538,43 @@ mod tests {
         let mut with_id = req.clone();
         with_id.x_error = Some(ex);
         assert!(p.fit(&with_id).is_ok());
+    }
+
+    #[test]
+    fn masked_cells_are_left_out_of_regression_ranking_and_comparisons() {
+        // T256: as in the main fit, a masked cell is a missing value.
+        let (p, cx, c2, cy, cd) = project();
+        let nan_at = |p: &Project, id: ColumnId| {
+            let mut q = p.clone();
+            q.column_mut(id).unwrap().numeric_mut().unwrap()[3] = f64::NAN;
+            q
+        };
+        let masked_at = |p: &Project, id: ColumnId| {
+            let mut q = p.clone();
+            q.column_mut(id).unwrap().mask.insert(3);
+            q
+        };
+        // Multiple linear regression: a masked Y or X cell leaves the row out.
+        let mlr = |mut q: Project| {
+            let out = q.fit_multiple_regression(&MultiRegRequest::new(cy, vec![cx, c2])).unwrap();
+            format!("{:?}", out.report.params.iter().map(|r| r.value).collect::<Vec<_>>())
+        };
+        let want = mlr(nan_at(&p, cy));
+        assert_ne!(mlr(p.clone()), want);
+        assert_eq!(mlr(masked_at(&p, cy)), want);
+        assert_eq!(mlr(masked_at(&p, c2)), want, "a masked X cell too");
+        // Rank Models and Compare Models gather their data like the main fit.
+        let rank = |mut q: Project| {
+            let out = q
+                .rank_models(&FitRequest::new(cd, FitModel::Linear), &["ExpDec1".to_string(), "Gauss".to_string()])
+                .unwrap();
+            format!(
+                "{:?}",
+                out.ranking.iter().map(|r| r.summary.name.clone() + &format!("{:?}", r.summary)).collect::<Vec<_>>()
+            )
+        };
+        let want = rank(nan_at(&p, cd));
+        assert_ne!(rank(p.clone()), want);
+        assert_eq!(rank(masked_at(&p, cd)), want);
     }
 }

@@ -509,7 +509,15 @@ impl Writer {
                     (frame_pt.left + frame_pt.width + tick * 3.4 + h / 2.0, frame_pt.top + frame_pt.height / 2.0, 900)
                 }
             };
-            let (rw, rh) = if angle == 0 { (w, h) } else { (h, w) };
+            // T291: the title's own rotation and offset.
+            let angle = match axis.title_rotation_deg.filter(|a| a.is_finite()) {
+                Some(a) => ((a % 360.0 + 360.0) % 360.0 * 10.0).round() as u16 % 3600,
+                None => angle,
+            };
+            let (dx, dy) = axis.title_offset_pt;
+            let (cx, cy) = (cx + if dx.is_finite() { dx } else { 0.0 }, cy + if dy.is_finite() { dy } else { 0.0 });
+            let rotated = (450..1350).contains(&angle) || (2250..3150).contains(&angle);
+            let (rw, rh) = if rotated { (h, w) } else { (w, h) };
             let name = match (kind == AnnKind::XTitle, opposite) {
                 (true, false) => "XB",
                 (true, true) => "XT",

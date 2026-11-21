@@ -390,6 +390,46 @@ fn axis_token_options_give_what_origin_2016_draws() {
 }
 
 #[test]
+fn a_turned_title_keeps_its_middle_and_moves_by_its_offset() {
+    // T291: Origin turns a title about its middle (measured in Origin 2016: yl.rotate = 45 leaves
+    // the title's centre where it was).
+    let (x, shape) = super::tests::golden_data();
+    let (p, g) = super::tests::project(Template::Scatter, x, vec![shape(1.0)]);
+    let mut axis = p.graph(g).unwrap().layers[0].y_axis.clone();
+    let half = 0.5 * (crate::text::ASCENT - crate::text::DESCENT) * axis.title_font.size_pt;
+    let middle = |pos: (f64, f64), deg: f64| {
+        let (sin, cos) = f64::to_radians(deg).sin_cos();
+        (pos.0 - half * sin, pos.1 - half * cos)
+    };
+    let at = (40.0, 200.0);
+    assert_eq!(layout::turned_title(&axis, at, 90.0), (at, 90.0), "the default changes nothing");
+    for turn in [0.0, 45.0, 180.0, -30.0] {
+        axis.title_rotation_deg = Some(turn);
+        let (pos, angle) = layout::turned_title(&axis, at, 90.0);
+        assert_eq!(angle, turn);
+        let (m, m0) = (middle(pos, turn), middle(at, 90.0));
+        assert!((m.0 - m0.0).abs() < 1e-9 && (m.1 - m0.1).abs() < 1e-9, "{turn}: {m:?} {m0:?}");
+    }
+    axis.title_rotation_deg = None;
+    axis.title_offset_pt = (5.0, -12.0);
+    assert_eq!(layout::turned_title(&axis, at, 90.0), ((45.0, 188.0), 90.0));
+    // Drawn: the Y title's text item takes the angle.
+    let (mut p, g) = super::tests::project(Template::Scatter, super::tests::golden_data().0, vec![shape(1.0)]);
+    p.graph_mut(g).unwrap().layers[0].y_axis.title = Some("Turned".into());
+    p.graph_mut(g).unwrap().layers[0].y_axis.title_rotation_deg = Some(30.0);
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let angles: Vec<f64> = scene.layers[0]
+        .overlay
+        .iter()
+        .filter_map(|i| match i {
+            scene::Item::Text(t) if t.text.contains("Turned") => Some(t.rotate_ccw),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(angles, [30.0], "{angles:?}");
+}
+
+#[test]
 fn axis_title_tokens_are_replaced_by_the_built_titles() {
     // T246: Origin's %(?X) and %(?Y) inside a title.
     let built = |y: bool, _: &str| if y { "Current (mA)".to_string() } else { "Potential (V)".to_string() };

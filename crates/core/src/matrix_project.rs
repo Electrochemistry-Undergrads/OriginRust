@@ -239,7 +239,8 @@ impl Project {
 
     /// Analysis > Signal Processing > FFT > 2D FFT and 2D IFFT (T196): a new matrix book with the
     /// transform of a sheet, numpy's `fft2`/`ifft2` conventions (`sheaf_calc::fft2`). The forward
-    /// transform of the sheet's values gives the sheets Real, Imaginary, Amplitude and Phase (radians).
+    /// transform of the sheet's values gives the sheets Real, Imaginary, Amplitude, Phase (radians) and
+    /// Power (|F|^2), the outputs of Origin 2016's `fft2` (measured in T287: its defaults are numpy's).
     /// The inverse reads the book's sheets named Real and Imaginary when it has both, else the sheet
     /// as real values, and gives Real and Imaginary. Missing values are refused.
     pub fn matrix_fft2(&mut self, book: WindowId, sheet: usize, inverse: bool) -> Result<WindowId, ProjectError> {
@@ -269,10 +270,12 @@ impl Project {
         if !inverse {
             let amp = out_re.iter().zip(&out_im).map(|(a, b)| a.hypot(*b)).collect();
             let phase = out_re.iter().zip(&out_im).map(|(a, b)| b.atan2(*a)).collect();
+            let power = out_re.iter().zip(&out_im).map(|(a, b)| a * a + b * b).collect();
             sheets.push(named_like("Real", out_re));
             sheets.push(named_like("Imaginary", out_im));
             sheets.push(named_like("Amplitude", amp));
             sheets.push(named_like("Phase", phase));
+            sheets.push(named_like("Power", power));
         } else {
             sheets.push(named_like("Real", out_re));
             sheets.push(named_like("Imaginary", out_im));

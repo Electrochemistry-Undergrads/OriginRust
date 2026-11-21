@@ -2368,11 +2368,16 @@ impl Project {
             if y.is_empty() {
                 return Err(AnalysisError::Empty(c.short_name.clone()));
             }
-            let x_col = sheet.x_for(index).filter(|x| x.id != c.id && x.data.is_numeric());
-            let x: Vec<f64> = match x_col.and_then(Column::numeric) {
-                Some(v) => (0..y.len()).map(|i| v.get(i).copied().unwrap_or(f64::NAN)).collect(),
-                None => (1..=y.len()).map(|i| i as f64).collect(),
+            // T304: a column with a sampling interval is analysed at its interval, not at the sheet's X
+            // column (Origin writes it as belonging to no X column, T303).
+            let x_col = sheet.x_for(index).filter(|x| x.id != c.id && x.data.is_numeric() && c.sampling.is_none());
+            let x: Vec<f64> = match (&c.sampling, x_col.and_then(Column::numeric)) {
+                (Some(s), _) => s.values(y.len()),
+                (None, Some(v)) => (0..y.len()).map(|i| v.get(i).copied().unwrap_or(f64::NAN)).collect(),
+                (None, None) => (1..=y.len()).map(|i| i as f64).collect(),
             };
+            let sampled_name =
+                c.sampling.as_ref().map(|s| if s.long_name.is_empty() { "X".to_string() } else { s.long_name.clone() });
             let (first, last) = resolve_rows(request.rows, &c.short_name, &x, y.len())?;
             inputs.push(Input {
                 id: c.id,
@@ -2380,9 +2385,15 @@ impl Project {
                 label: column_label(c),
                 name: c.display_name().to_string(),
                 units: c.units.clone(),
-                x_name: x_col.map_or_else(|| "Row".to_string(), |x| x.display_name().to_string()),
-                x_short: x_col.map_or_else(|| "Row".to_string(), |x| x.short_name.clone()),
-                x_units: x_col.map_or_else(String::new, |x| x.units.clone()),
+                x_name: sampled_name
+                    .clone()
+                    .unwrap_or_else(|| x_col.map_or_else(|| "Row".to_string(), |x| x.display_name().to_string())),
+                x_short: sampled_name
+                    .unwrap_or_else(|| x_col.map_or_else(|| "Row".to_string(), |x| x.short_name.clone())),
+                x_units: match &c.sampling {
+                    Some(s) => s.units.clone(),
+                    None => x_col.map_or_else(String::new, |x| x.units.clone()),
+                },
                 x,
                 y,
                 first,
@@ -4163,6 +4174,21 @@ mod tests {
         // Into a new sheet an empty result is fine: the source is untouched.
         let (kept, _) = p.filter_sheet(book, 0, "col(A) > 100", true).unwrap();
         assert_eq!(kept, 0);
+    }
+
+    #[test]
+    fn a_sampling_interval_is_the_x_of_its_column_even_beside_an_x_column() {
+        // T304: y = x on 0..10 is analysed at its interval (0, 0.5, ..., 5) rather than at A = 0..10,
+        // as Origin treats a column with an interval as belonging to no X column (T303).
+        let (mut p, _, _, ramp) = sample();
+        p.column_mut(ramp).unwrap().sampling = Some(crate::sampling::SamplingInterval {
+            x0: 0.0,
+            inc: 0.5,
+            long_name: String::new(),
+            units: String::new(),
+        });
+        let r = p.analyze(&request(&[ramp], Tool::Integrate(IntegrateSpec::default()))).unwrap();
+        assert_eq!(r.table.as_ref().unwrap().rows[0].1[0], 25.0, "half of the area over 0..10");
     }
 
     #[test]

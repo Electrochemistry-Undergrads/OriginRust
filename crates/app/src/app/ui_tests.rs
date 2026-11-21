@@ -5546,7 +5546,13 @@ fn the_analysis_menu_on_a_graph_works_on_its_data_plot() {
 /// what it holds.
 fn type_into_box(h: &mut Harness<'static, SheafApp>, n: usize, text: &str) {
     h.query_all_by_role(egui::accesskit::Role::TextInput)
-        .filter(|node| !node.accesskit_node().label().is_some_and(|label| label.contains(" toolbar: ")))
+        .filter(|node| {
+            // Not the toolbars' boxes, nor the Project Explorer's search box (T288).
+            !node
+                .accesskit_node()
+                .label()
+                .is_some_and(|label| label.contains(" toolbar: ") || label == "Search windows")
+        })
         .nth(n)
         .expect("the dialog text box exists")
         .focus();

@@ -1813,6 +1813,18 @@ pub enum PeakFitBaselineKind {
 
 #[derive(Subcommand, Debug)]
 pub enum AnalyzeTool {
+    /// Charge of each sweep of a cyclic voltammogram (X potential, Y current): the sweeps between turns
+    /// of the potential, anodic and cathodic, each with integral I dE / scan rate, and the totals.
+    CvCharge {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Scan rate in potential units per second (V/s for a potential in V).
+        #[arg(long)]
+        scan_rate: f64,
+        /// Subtract the straight line through each sweep's first and last point first.
+        #[arg(long)]
+        baseline: bool,
+    },
     /// Area under each curve, with peak position, height and width; adds the running integral.
     Integrate {
         #[command(flatten)]

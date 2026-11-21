@@ -210,6 +210,22 @@ pub struct IntegrateRangesSpec {
     pub end_point_baseline: bool,
 }
 
+/// What [`Tool::CvCharge`] does (T296): a cyclic voltammogram (X the potential, Y the current) split
+/// into its anodic and cathodic sweeps, and the charge of each, `integral of I |dE| / scan rate`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CvChargeSpec {
+    /// Potential units per second (V/s for a potential in V).
+    pub scan_rate: f64,
+    /// Subtract the line through each sweep's first and last point first.
+    pub end_point_baseline: bool,
+}
+
+impl Default for CvChargeSpec {
+    fn default() -> Self {
+        CvChargeSpec { scan_rate: 0.1, end_point_baseline: false }
+    }
+}
+
 /// The second operand of [`Tool::CurveMath`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CurveOperand {
@@ -1004,6 +1020,8 @@ impl Default for CorrelationSpec {
 pub enum Tool {
     Integrate(IntegrateSpec),
     IntegrateRanges(IntegrateRangesSpec),
+    /// Charge of each sweep of a cyclic voltammogram (T296).
+    CvCharge(CvChargeSpec),
     CurveMath(CurveMathSpec),
     ColumnMath(ColumnMathSpec),
     Convolution(ConvolutionSpec),
@@ -1129,6 +1147,7 @@ impl Tool {
         match self {
             Tool::Integrate(_) => "Integrate",
             Tool::IntegrateRanges(_) => "Integrate ranges",
+            Tool::CvCharge(_) => "CV charge",
             Tool::CurveMath(spec) => match (spec.operand, spec.op) {
                 (CurveOperand::Reference(_), CurveOp::Subtract) => "Subtract reference",
                 _ => "Curve math",
@@ -1242,6 +1261,7 @@ impl Tool {
     fn sheet_prefix(&self) -> &'static str {
         match self {
             Tool::Integrate(_) | Tool::IntegrateRanges(_) => "Integrate",
+            Tool::CvCharge(_) => "CVCharge",
             Tool::CurveMath(_) | Tool::ColumnMath(_) => "Math",
             Tool::Convolution(_) => "Convolution",
             Tool::Deconvolution(_) => "Deconvolution",
@@ -2585,6 +2605,55 @@ impl Project {
                         );
                     }
                 }
+                table = Some(t);
+            }
+            Tool::CvCharge(spec) => {
+                let mut t = ResultTable::new(&["First row", "Last row", "E start", "E end", "Charge"]);
+                for inp in &inputs {
+                    let segments = calc::cv_charge(inp.xs(), inp.ys(), spec.scan_rate, spec.end_point_baseline)
+                        .ok_or_else(|| {
+                            if spec.scan_rate.is_finite() && spec.scan_rate > 0.0 {
+                                AnalysisError::TooFewPoints(inp.short.clone())
+                            } else {
+                                AnalysisError::BadOption("the scan rate must be a number above 0".into())
+                            }
+                        })?;
+                    let q_unit = unit_product(&inp.units, "s");
+                    let xu = &inp.x_units;
+                    let units = || vec![String::new(), String::new(), xu.clone(), xu.clone(), q_unit.clone()];
+                    let (mut anodic, mut cathodic) = (0.0, 0.0);
+                    for (k, s) in segments.iter().enumerate() {
+                        if s.anodic {
+                            anodic += s.charge;
+                        } else {
+                            cathodic += s.charge;
+                        }
+                        let dir = if s.anodic { "anodic" } else { "cathodic" };
+                        t.push_row(
+                            format!("{}, sweep {} ({dir})", inp.label, k + 1),
+                            vec![
+                                (inp.first + s.first + 1) as f64,
+                                (inp.first + s.last + 1) as f64,
+                                s.e_start,
+                                s.e_end,
+                                s.charge,
+                            ],
+                            units(),
+                        );
+                    }
+                    for (what, q) in [("anodic", anodic), ("cathodic", cathodic)] {
+                        t.push_row(
+                            format!("{}, all {what} sweeps", inp.label),
+                            vec![f64::NAN, f64::NAN, f64::NAN, f64::NAN, q],
+                            units(),
+                        );
+                    }
+                }
+                notes.push(format!(
+                    "Charge = integral of I dE / scan rate, scan rate {}{}",
+                    statistics::num(spec.scan_rate),
+                    if spec.end_point_baseline { "; the line through each sweep's ends subtracted" } else { "" }
+                ));
                 table = Some(t);
             }
             Tool::CurveMath(spec) => {
@@ -5036,6 +5105,34 @@ mod tests {
             ranges: list.iter().map(|&(a, b)| RowRange::XBetween(a, b)).collect(),
             end_point_baseline,
         })
+    }
+
+    #[test]
+    fn cv_charge_gives_each_sweep_and_the_totals() {
+        let mut p = Project::new();
+        let book = p.add_workbook("cv");
+        let e = vec![0.0, 0.25, 0.5, 0.75, 1.0, 0.75, 0.5, 0.25, 0.0];
+        let i = vec![2.0, 2.0, 2.0, 2.0, 2.0, -1.0, -1.0, -1.0, -1.0];
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(e)).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(i)).unwrap();
+        if let Some(c) = p.column_mut(y) {
+            c.units = "A".into();
+        }
+        let spec = CvChargeSpec { scan_rate: 0.1, end_point_baseline: false };
+        let r = p.analyze(&request(&[y], Tool::CvCharge(spec))).unwrap();
+        let t = r.table.as_ref().unwrap();
+        assert_eq!(t.rows.len(), 4, "two sweeps and two totals");
+        assert!(t.rows[0].0.ends_with("sweep 1 (anodic)"), "{}", t.rows[0].0);
+        assert!(t.rows[1].0.ends_with("sweep 2 (cathodic)"), "{}", t.rows[1].0);
+        let col = |name: &str| t.headers.iter().position(|h| h == name).unwrap();
+        assert!((t.rows[0].1[col("Charge")] - 20.0).abs() < 1e-12);
+        assert_eq!((t.rows[0].1[col("First row")], t.rows[0].1[col("Last row")]), (1.0, 5.0));
+        assert_eq!(t.unit(0, col("Charge")), "C");
+        assert!((t.rows[2].1[col("Charge")] - 20.0).abs() < 1e-12, "all anodic sweeps");
+        let bad = CvChargeSpec { scan_rate: 0.0, end_point_baseline: false };
+        assert!(p.analyze(&request(&[y], Tool::CvCharge(bad))).is_err());
+        let rs = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        assert!(rs.name.starts_with("CVCharge"), "{}", rs.name);
     }
 
     #[test]

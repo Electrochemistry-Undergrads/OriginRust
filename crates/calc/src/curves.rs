@@ -140,22 +140,32 @@ fn finite_points(x: &[f64], y: &[f64]) -> Vec<(f64, f64)> {
     x.iter().zip(y).filter(|(a, b)| a.is_finite() && b.is_finite()).map(|(&a, &b)| (a, b)).collect()
 }
 
-/// Makes the points of one curve increasing in X. Equal neighbouring X values become their mean.
-/// Decreasing curves are reversed. A curve that turns back is an error.
+/// Makes the points of one curve increasing in X. Equal X values become their mean. Decreasing
+/// curves are reversed; a curve whose X turns back is sorted by X, as Origin's avecurves does
+/// (measured in Origin 2016, T325: X 0, 1, 2, 3, 2, 1, 0 with Y 0 to 6 averages to 3 at every X).
 fn monotonic_increasing(points: &[(f64, f64)], curve: usize) -> Result<Vec<(f64, f64)>, CurveError> {
     let mut direction = 0.0_f64;
-    for (i, w) in points.windows(2).enumerate() {
+    let mut turns = false;
+    for w in points.windows(2) {
         let d = w[1].0 - w[0].0;
         if d != 0.0 {
             if direction == 0.0 {
                 direction = d.signum();
             } else if d.signum() != direction {
-                return Err(CurveError::NotMonotonic { curve, row: i + 2 });
+                turns = true;
+                break;
             }
         }
     }
-    let mut ordered: Vec<(f64, f64)> =
-        if direction < 0.0 { points.iter().rev().copied().collect() } else { points.to_vec() };
+    let mut ordered: Vec<(f64, f64)> = if turns {
+        let mut sorted = points.to_vec();
+        sorted.sort_by(|a, b| a.0.total_cmp(&b.0));
+        sorted
+    } else if direction < 0.0 {
+        points.iter().rev().copied().collect()
+    } else {
+        points.to_vec()
+    };
     // Merge repeats of an X value.
     let mut out: Vec<(f64, f64)> = Vec::with_capacity(ordered.len());
     let mut count = 0.0;
@@ -199,10 +209,9 @@ fn linear_at(pts: &[(f64, f64)], x: f64) -> f64 {
 ///
 /// `curves` are `(x, y)` slice pairs, one per curve. Each curve is interpolated at the common X
 /// values (never extrapolated; see [`XRange`]). Unless all curves have identical X values with
-/// [`CommonX::Points`], every curve must be monotonic in X: increasing or decreasing all the way
-/// (decreasing curves are reversed; repeated X values are merged into their mean). A curve whose X
-/// turns back, such as both sweeps of a cyclic voltammogram in one column, is refused with
-/// [`CurveError::NotMonotonic`]; give it one sweep at a time.
+/// [`CommonX::Points`], each curve is made increasing in X: decreasing curves are reversed, a curve
+/// whose X turns back (both sweeps of a cyclic voltammogram in one column) is sorted by X as Origin
+/// does, and repeated X values are merged into their mean (T325).
 pub fn average_curves(curves: &[(&[f64], &[f64])], options: &AverageOptions) -> Result<AverageResult, CurveError> {
     if curves.len() < 2 {
         return Err(CurveError::TooFewCurves);
@@ -1063,12 +1072,15 @@ mod tests {
     }
 
     #[test]
-    fn turning_curve_is_refused_unless_x_is_shared() {
-        let (xa, ya) = ([0.0, 1.0, 0.0], [0.0, 1.0, 2.0]);
-        let (xb, yb) = ([0.0, 0.5, 1.0], [0.0, 1.0, 2.0]);
-        let e = average_curves(&[(&xa, &ya), (&xb, &yb)], &sheaf_points()).unwrap_err();
-        assert_eq!(e, CurveError::NotMonotonic { curve: 0, row: 3 });
-        assert!(e.to_string().contains("curve 1"));
+    fn a_turning_curve_is_sorted_by_x_and_equal_x_averaged_as_origin() {
+        // T325, measured in Origin 2016 (re-workspace/scratch/t322/av.lines.txt): X 0 1 2 3 2 1 0 with
+        // Y 0..6 against a flat 1 on X 0..3, four points: the mean is 2 at X 0, 1, 2 and 3.
+        let (xa, ya) = ([0.0, 1.0, 2.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        let (xb, yb) = ([0.0, 1.0, 2.0, 3.0], [1.0; 4]);
+        let options = AverageOptions { x: CommonX::Evenly(4), range: XRange::Full, ..Default::default() };
+        let r = average_curves(&[(&xa, &ya), (&xb, &yb)], &options).unwrap();
+        assert_eq!(r.x, [0.0, 1.0, 2.0, 3.0]);
+        assert_eq!(r.mean, [2.0, 2.0, 2.0, 2.0]);
     }
 
     #[test]
@@ -1171,12 +1183,9 @@ mod tests {
         let r = average_curves(&[(&x, &a2), (&x, &b)], &sheaf_points()).unwrap();
         assert_eq!(r.n, [2, 1, 2, 2, 1]);
         assert_eq!(r.mean[1], 4.0);
-        // Different X values on a turning curve are still refused.
+        // A turning curve with other X values is sorted by X (T325).
         let x2 = [0.0, 1.0, 2.0, 1.5, 0.0];
-        assert!(matches!(
-            average_curves(&[(&x, &a), (&x2, &b)], &sheaf_points()),
-            Err(CurveError::NotMonotonic { .. })
-        ));
+        assert!(average_curves(&[(&x, &a), (&x2, &b)], &sheaf_points()).is_ok());
     }
 
     #[test]

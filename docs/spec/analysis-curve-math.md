@@ -46,9 +46,11 @@ each row the curves that have that row must agree on X. A curve with a missing Y
 ends early, does not hide the shared X; it just has no value at that row, so the count there is lower. Rows
 where no curve has an X or a Y are left out.
 
-Otherwise each curve's X must be monotonic: increasing, or decreasing (reversed internally). Neighbouring equal
-X values become their mean. A curve whose X goes up and then down is refused with a message that names the
-curve and the point where it turns back; the user chooses the rows of one sweep. Fewer than two curves, a curve
+Otherwise each curve is made increasing in X: a decreasing curve is reversed, and a curve whose X goes up and
+then down is sorted by X, as Origin does (measured in Origin 2016 on 2026-11-21, T325,
+`re-workspace/scratch/t322/av.lines.txt`: X 0, 1, 2, 3, 2, 1, 0 with Y 0 to 6 against a flat 1 gave the mean
+2 at X 0, 1, 2, 3, so the turning curve counted 3 at each X, the mean of its points there). Equal X values
+then become their mean. (Before T325 such a curve was refused.) Fewer than two curves, a curve
 with fewer than two different X values, curves with no common X (intersection range), a missing reference
 curve and fewer than two points are refused with a message.
 
@@ -141,8 +143,7 @@ Polygon Area (`polyarea`, Area Type Mathematical Area or Absolute Area (default)
 Each item is what Origin has to be asked; Sheaf's current choice is stated above.
 
 1-6. Average: measured, see section 4. Still open: spline interpolation next to a curve's end, Origin's
-   Custom X choice and Follow Curve Trace, its handling of an X that turns back (Origin sorts X ascending by
-   default; Sheaf refuses), and what Same as Source X does with X values that are not shared.
+   Custom X choice and Follow Curve Trace (an X that turns back is sorted, measured in T325), and what Same as Source X does with X values that are not shared.
 7. Intersect: more or fewer than two input curves (Origin may accept a reference curve or a range of several);
    the order of the output points; whether touching points and coincident stretches are reported at all, and
    how (we report the two ends of a stretch); the treatment of a point that is a vertex of both curves.

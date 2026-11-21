@@ -26,7 +26,7 @@ Not yet claimed. Pick one, write its brief with the next free `T` number, claim 
 
 **A. Differences from Origin found by running both on 2026-11-20** (evidence is in the local folder
 `re-workspace/scratch/origin-diff/<area>/REPORT.md`; copy the numbers into a fixture when fixing):
-1. **Tukey p-values and interval ends** (`ptukey`, `qtukey` in `crates/calc/src/anova.rs`). One-way
+1. **Done (T261): Origin is the inaccurate one; Sheaf keeps the exact values.** **Tukey p-values and interval ends** (`ptukey`, `qtukey` in `crates/calc/src/anova.rs`). One-way
    ANOVA, groups of 6, 7 and 5, pair G3 - G2: Origin p = 3.6693e-5, Sheaf 3.6787e-5 (0.26% off); the
    differences, SEs and q agree to 14 digits, so only the studentized-range tail is off. Two-way
    ANOVA (unbalanced 2x3) table matches to 1e-11 but its Tukey p-values are off by up to 3.4% on a p

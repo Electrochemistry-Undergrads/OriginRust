@@ -419,8 +419,20 @@ impl Writer {
             if self.columns >= MAX_COLUMNS {
                 return fail(format!("a project file holds at most {MAX_COLUMNS} columns"));
             }
-            let (block, used) =
-                self.dataset(&dataset_name, column, roles[i], rows, parent_of(&roles, i, first_dataset))?;
+            // T303: a column with a sampling interval belongs to no X column, as Origin writes it.
+            let sampling = column
+                .sampling
+                .as_ref()
+                .filter(|s| roles[i] != Designation::X && s.x0.is_finite() && s.inc.is_finite() && s.inc != 0.0);
+            let parent = if sampling.is_some() { 0 } else { parent_of(&roles, i, first_dataset) };
+            let (block, used) = self.dataset(
+                &dataset_name,
+                column,
+                roles[i],
+                rows,
+                parent,
+                sampling.map_or((1.0, 1.0), |s| (s.x0, s.inc)),
+            )?;
             self.datasets.extend(block);
             let spec = ColumnSpec {
                 dataset: (self.columns + 1) as u16,
@@ -429,15 +441,18 @@ impl Writer {
                 type_code: type_code(roles[i]),
                 first: used.0,
                 last: used.1,
-                parent: parent_of(&roles, i, first_dataset),
+                parent,
                 index: i,
                 object_id: formulas.object_ids[i],
+                sampling: sampling.map(|s| (s.x0, s.inc, parent_of(&roles, i, first_dataset) != 0)),
             };
             records.extend(framed(&layout::column_record(&spec)));
             self.notes.params_dropped += usize::from(!column.params.is_empty());
             self.notes.formats_dropped += usize::from(column.format != sheaf_core::format::NumberFormat::General);
             self.notes.hidden_dropped += usize::from(column.hidden);
-            self.notes.sampling_dropped += usize::from(column.sampling.is_some());
+            // T303: the interval is written; only its X name and units are not.
+            self.notes.sampling_dropped +=
+                usize::from(column.sampling.as_ref().is_some_and(|s| !s.long_name.is_empty() || !s.units.is_empty()));
             self.notes.ranges_dropped += usize::from(column.data_range.is_some());
             self.notes.widths_dropped += usize::from(column.width.is_some());
             let long = self.label_text(&column.long_name, "long name")?;
@@ -462,6 +477,7 @@ impl Writer {
         role: Designation,
         rows: usize,
         parent: u16,
+        sampling: (f64, f64),
     ) -> Result<(Vec<u8>, (u32, u32)), IoError> {
         // Every cell is a number, a text or missing. A Text & Numeric column holds all three.
         let number_at = |row: usize| -> Option<f64> {
@@ -528,6 +544,7 @@ impl Writer {
             first,
             last,
             parent: if role == Designation::Disregard { 0 } else { parent.min(255) as u8 },
+            sampling,
         };
         let mut block = framed(&layout::dataset_header(&spec));
         block.extend(framed(&data));
@@ -813,7 +830,7 @@ impl Writer {
         }
         if n.sampling_dropped > 0 {
             warnings.push(format!(
-                "{} column(s) have a sampling interval, which the project file written here does not hold; Origin plots them against their X column or the row number (Column > Show X Column writes the X as a column first).",
+                "{} column(s) have a sampling interval with an X long name or units, which the project file written here does not hold (the start and the step are written).",
                 n.sampling_dropped
             ));
         }

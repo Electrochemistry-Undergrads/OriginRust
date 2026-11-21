@@ -1816,13 +1816,12 @@ pub(crate) fn title_source<'a>(
     if y_axis != pd.transposed() {
         return column(pd.plot.y);
     }
-    let x = pd.plot.x.and_then(|id| project.column(id));
-    if x.is_none()
-        && let Some(s) = project.column(pd.plot.y).and_then(|c| c.sampling.as_ref())
-    {
-        // A sampling interval names the X axis by its long name and units (T84).
+    if let Some(s) = project.column(pd.plot.y).and_then(|c| c.sampling.as_ref()) {
+        // A sampling interval names the X axis by its long name and units (T84), even beside an X
+        // column (T304).
         return TitleSource::Text(s.title());
     }
+    let x = pd.plot.x.and_then(|id| project.column(id));
     match x.or_else(|| data::label_column(project, axis, Dim::X, Some(pd))) {
         Some(c) => TitleSource::Column(c),
         None => text("Row"),

@@ -2889,11 +2889,13 @@ fn origins_keys_run_the_commands_they_belong_to() {
     assert!(h.state().set_values.is_some());
     h.get_all_by_label("Cancel").last().unwrap().click();
     settle(&mut h);
-    // ... Ctrl+D adds a column ...
+    // ... Ctrl+D opens Add New Columns, whose OK adds one column (T305) ...
     let columns = |h: &Harness<'static, SheafApp>| project(h).workbooks().next().unwrap().sheet().columns.len();
     let before = columns(&h);
     h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::D);
     settle(&mut h);
+    assert!(h.state().add_columns.is_some(), "the window asks how many");
+    click(&mut h, "OK");
     assert_eq!(columns(&h), before + 1);
     // ... and Ctrl+Y is Origin's key for Nonlinear Curve Fit, not redo.
     h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Y);
@@ -3300,6 +3302,7 @@ fn clicking_headers_selects_columns_rows_and_everything_and_dragging_selects_a_b
     assert_eq!((target.columns, target.rows, target.top_left), (vec![1, 2], 0..2, (1, 0)));
     // Showing another sheet or deleting the columns leaves nothing stale behind.
     menu(&mut h, "Column", "Add New Columns...");
+    click(&mut h, "OK");
     menu(&mut h, "Edit", "Undo Add column");
     assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (1, 0), end: (2, 1) });
 }
@@ -3638,9 +3641,10 @@ fn the_column_header_menu_has_origins_items_in_origins_order_and_runs_them() {
     assert!(column(&h, "C").is_empty());
     ctrl(&mut h, egui::Key::Z);
     assert_eq!(column(&h, "C"), [30.5, 20.5, 10.5, 0.5]);
-    // Add New Columns adds one.
+    // Add New Columns asks how many and adds them (T305).
     right_click_text(&mut h, "C(Y1)");
     click_containing(&mut h, "Add New Columns...");
+    click(&mut h, "OK");
     assert_eq!(sheet(&h).columns.len(), 4);
     // Normalize opens its window for the selected column; Statistics on Columns too.
     right_click_text(&mut h, "C(Y1)");
@@ -8802,10 +8806,11 @@ fn interpolate_y_from_x_takes_the_x_values_of_a_column() {
     assert!(h.state().analysis.is_some(), "the Interpolate window opens");
     click(&mut h, "OK");
     let book = project(&h).workbooks().next().unwrap();
-    let sheet = book.sheets.last().unwrap();
-    // B against A: 2.5 4.5 6.5 8.5 at 1 2 3 4, so y = 2x + 0.5, extrapolated outside 1..4.
-    assert_eq!(sheet.columns[0].numeric().unwrap(), [30.5, 20.5, 10.5, 0.5]);
-    assert_eq!(sheet.columns[1].numeric().unwrap(), [61.5, 41.5, 21.5, 1.5]);
+    // B against A: 2.5 4.5 6.5 8.5 at 1 2 3 4, so y = 2x + 0.5, extrapolated outside 1..4; the result
+    // is a Y column at the end of the sheet, as Origin's interp1 writes it (T302).
+    let result = book.sheets[0].columns.last().unwrap();
+    assert_eq!(result.long_name, "Interpolated Y1");
+    assert_eq!(result.numeric().unwrap(), [61.5, 41.5, 21.5, 1.5]);
 }
 
 /// A drag over cells selects the block however the pointer events fall into frames: one jump to the
@@ -8873,6 +8878,28 @@ fn type_into_number(h: &mut Harness<'static, SheafApp>, nth: usize, text: &str) 
     h.event(egui::Event::Text(text.to_string()));
     settle(h);
     key(h, egui::Key::Enter);
+}
+
+/// T305: Add New Columns asks how many columns to add; the toolbar button adds one at once.
+#[test]
+fn add_new_columns_asks_how_many_and_the_toolbar_adds_one() {
+    let mut h = start(vec![data_file("add-columns")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let columns = |h: &Harness<'static, SheafApp>| project(h).workbooks().next().unwrap().sheet().columns.len();
+    let before = columns(&h);
+    menu_path(&mut h, &["Column", "Add New Columns..."]);
+    assert!(h.query_by_label("Number of columns to add").is_some());
+    h.state_mut().add_columns.as_mut().unwrap().1 = 3;
+    click(&mut h, "OK");
+    assert_eq!(columns(&h), before + 3, "three Y columns at the end");
+    assert!(h.state().add_columns.is_none(), "the window closes");
+    assert_eq!(h.state().doc.undo_label(), Some("Add columns"), "one undo step");
+    let sheet = project(&h).workbooks().next().unwrap().sheet().clone();
+    assert!(sheet.columns[before..].iter().all(|c| c.designation == sheaf_core::Designation::Y));
+    bar_button!(h, "Standard", "Add New Columns").click();
+    settle(&mut h);
+    assert_eq!(columns(&h), before + 4, "the toolbar button adds one without asking");
+    assert!(h.state().add_columns.is_none());
 }
 
 #[test]

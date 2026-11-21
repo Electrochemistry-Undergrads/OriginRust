@@ -3635,7 +3635,7 @@ impl AnalysisDialog {
             AnalysisKind::Coherence => "The coherence of each input against the frequency in a new sheet",
             AnalysisKind::TraceInterp => "The interpolated X and Y of each input in a new sheet",
             AnalysisKind::Ifft => "Time, real, imaginary, amplitude and phase in a new sheet",
-            AnalysisKind::Interpolate => "The interpolated curves in a new sheet",
+            AnalysisKind::Interpolate => "A column at the end of the sheet for each curve (Interpolated Y1, ...)",
             AnalysisKind::Peaks => "Peak positions and heights in a new sheet",
             AnalysisKind::PeakChain => "Peaks, areas and fit results in a new sheet; the baseline beside the data",
             AnalysisKind::Statistics => {

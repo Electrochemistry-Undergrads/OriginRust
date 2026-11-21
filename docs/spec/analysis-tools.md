@@ -187,7 +187,21 @@ in the Normalize window (Method: "Match a statistic of a reference column", "Div
 cell", with the reference column, Statistic or Row) and `sheaf analyze normalize --method ref|cell
 --ref COLUMN [--stat min|max|mean|median|sum] [--row N]` (same sheet); the statistic starts on min, as
 Origin's `type`. They do not take part in
-Recalculate Auto/Manual. Not built: row-wise normalize (Origin's `rnormalize`).
+Recalculate Auto/Manual.
+
+**Where the results go (T300, measured in Origin 2016 on 2026-11-21, `re-workspace/scratch/t299`).**
+Origin's Normalize Columns (`rnormalize`) normalizes each column of the range (not each row): with
+A = 1 2 3 4 (X), B = 2 4 6 0, C = 5 1 9 2 the default method ([0, 1], method 1) gives 0 1/3 2/3 1,
+1/3 2/3 1 0 and 0.5 0 1 0.125. It appends the results at the end of the sheet, named Normalized1,
+Normalized2, ... (a second run goes on after the highest number: Normalized3), each with the
+designation of its source (the column from A is an X column) and the comment "<method> of <short
+name>": method 0 "Divided by 1" (the value), 1 "Normalize to [0, 1]", 2 "Transfer to N(0, 1)", 3 to 10
+"Divided by Max", "Min", "Mean", "Median", "SD", "Norm", "Mode", "Sum"; methods 11 and 12 failed in the
+script. A constant column under [0, 1] gives an empty column; a column without a mode gives an empty
+one. Origin's single-curve `normalize` also appends its column at the end, named "Normalized Y1". Sheaf's
+Normalize Columns (and the graph's Normalize) writes as `rnormalize` does (`normalize_method_text`,
+`next_normalized_index` in `crates/core/src/analysis.rs`); the reference and cell methods still write
+beside their source.
 
 ## 5. Interpolate / extrapolate (`interp1`, `interp1xy`)
 
@@ -196,6 +210,15 @@ Recalculate Auto/Manual. Not built: row-wise normalize (Origin's `rnormalize`).
 X-Function default is not-a-knot). `interp1xy` interpolates onto `npts` (100) equally spaced points
 between `xmin` and `xmax` (the data range): the grid is `xmin + (xmax-xmin) i/(npts-1)`; outside the
 data it continues the end segment.
+
+**Where the results go (T302, measured in Origin 2016 on 2026-11-21, `re-workspace/scratch/t302`).**
+`interp1xy` writes one Y column per input at the end of the input's sheet, long name "Interpolated Y1"
+(then Y2, ... after the highest number already there), comment "Linear interp of B" (methods 0 to 3:
+"Linear", "Spline", "B-Spline", "Akima spline"), and no X column: the even grid is the column's
+sampling interval (`wks.col3.xinit` 0, `xinc` 0.5 for 9 points over 0..4). `interp1` (onto the
+values of a column) writes the same Y column at the end, with no sampling interval. Sheaf writes the
+same since T302 (`interp_method_text`, `next_label_index` in `crates/core/src/analysis.rs`); before,
+it wrote X and Y to a new sheet.
 
 Observed: linear extrapolation is the straight line of the end segment; `miss` gives missing outside
 `[x_first, x_last]`; `repeat` gives the first or last Y. Cubic spline (natural and not-a-knot) matches

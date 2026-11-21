@@ -740,9 +740,14 @@ Name) and `colshowx` (Clear Sampling Interval, default off). Measured from LabTa
   X Column has the one check box. OK changes every selected column, one undo step each ("Set sampling
   interval", "Show X column").
 - **Files**: the interval is saved with the column in `.sheaf` (`"sampling": {"x0", "inc", "long_name",
-  "units"}`). The `.opj` written here does not hold it: the save warning says "N column(s) have a sampling
-  interval ...", and the companion keeps it for Sheaf. Not read from Origin's `.opj` files yet. Sheaf's
-  analysis tools (fits, statistics) still take the X column or the row number, not the interval.
+  "units"}`). Since T303 the `.opj` reader and writer keep the first X and the step where Origin does (the
+  column record's `0x1D2`/`0x1DA`, opj-format 4.3); only the interval's X long name and units are not in
+  the `.opj` written (the save warning names them, the companion keeps them).
+- **Analysis and every plot (T304)**: analysis tools take a column with an interval at its interval, not
+  at the sheet's X column or the row number (Integrate of y = x on 0..10 with x0 = 0, inc = 0.5 gives 25);
+  a plot whose Y column has an interval draws it there even when the plot names an X column (as plots
+  made by analysis tools or Add Plot can), with the interval's title on the X axis. Origin writes such a
+  column as belonging to no X column (T303).
 - **From X Column** (T228, Sheaf's button, **not measured**; Origin's `vinc` / `vinc_check` X-Functions
   are for internal use): when the first selected column has an X column, Set Sampling Interval has a
   "From X Column" button. It checks the X values (up to the last number) the way `vinc` does: the mean

@@ -651,12 +651,15 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         // A Pareto chart counts the cells of any column, text included.
         let counted = matches!(plot.stat, Some(StatPlot::Pareto | StatPlot::ParetoCumulative));
         let Some(y) = project.numeric(plot.y).or_else(|| counted.then_some(&[][..])) else { continue };
-        // Without an X column, a Y column with a sampling interval stands at its own X (T84).
-        let x: Option<Cow<'_, [f64]>> = match plot.x {
-            Some(id) => project.numeric(id).map(Cow::Borrowed),
-            None => project.column(plot.y).and_then(|c| c.sampling.as_ref()).map(|s| Cow::Owned(s.values(y.len()))),
+        // A Y column with a sampling interval stands at its own X (T84), even beside an X column:
+        // Origin writes such a column as belonging to no X column (T303, T304).
+        let sampled = project.column(plot.y).and_then(|c| c.sampling.as_ref());
+        let x: Option<Cow<'_, [f64]>> = match (sampled, plot.x) {
+            (Some(s), _) => Some(Cow::Owned(s.values(y.len()))),
+            (None, Some(id)) => project.numeric(id).map(Cow::Borrowed),
+            (None, None) => None,
         };
-        let x_format = plot.x.and_then(|id| project.column(id)).map(|c| c.format);
+        let x_format = plot.x.filter(|_| sampled.is_none()).and_then(|id| project.column(id)).map(|c| c.format);
         let err = plot.y_error.and_then(|id| project.numeric(id));
         let xerr = plot.x_error.and_then(|id| project.numeric(id));
         let base = plot.y_base.and_then(|id| project.numeric(id));

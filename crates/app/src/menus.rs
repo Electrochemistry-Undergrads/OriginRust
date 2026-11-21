@@ -490,7 +490,10 @@ pub enum Cmd {
     /// Column > Set Multiple Columns Values... (Ctrl+Shift+Q): two or more selected columns.
     SetMultipleColumnsValues,
     Recalculate,
+    /// Column > Add New Columns... (Ctrl+D): the window that asks how many (T305).
     AddColumns,
+    /// The Standard toolbar's Add New Columns: one column at once, as Origin's button (T305).
+    AddOneColumn,
     ColumnProperties,
     SortAscending,
     SortDescending,
@@ -3646,7 +3649,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             book?;
             Action::Recalculate(some()?)
         }
-        Cmd::AddColumns => Action::AddColumn(book?),
+        Cmd::AddColumns => Action::AddColumnsDialog(book?),
+        Cmd::AddOneColumn => Action::AddColumn(book?),
         Cmd::ColumnProperties => {
             book?;
             Action::ColumnProperties(one()?)

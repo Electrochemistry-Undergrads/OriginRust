@@ -88,6 +88,8 @@ pub(super) struct DatasetSpec<'a> {
     /// 1-based position of the column this one belongs to (its X, or for error, Z and label columns
     /// its Y); 0 for none.
     pub parent: u8,
+    /// The first X and the step of a sampling interval (T303); Origin's default is 1 and 1.
+    pub sampling: (f64, f64),
 }
 
 const DATASET_FIELDS: Fields = &[(0x02, &[0x01]), (0x06, &[0xfa]), (0x0a, &[0xa0, 0x0f, 0x01]), (0x71, &[0xca, 0x10])];
@@ -101,8 +103,8 @@ pub(super) fn dataset_header(s: &DatasetSpec) -> Vec<u8> {
     put(&mut h, 0x19, &s.rows.to_le_bytes());
     put(&mut h, 0x1d, &s.first.to_le_bytes());
     put(&mut h, 0x21, &s.last.to_le_bytes());
-    put(&mut h, 0x25, &1.0f64.to_le_bytes());
-    put(&mut h, 0x2d, &1.0f64.to_le_bytes());
+    put(&mut h, 0x25, &s.sampling.0.to_le_bytes());
+    put(&mut h, 0x2d, &s.sampling.1.to_le_bytes());
     h[0x3d] = s.cell_size;
     h[0x3e] = 0x14;
     h[0x52] = s.parent;
@@ -259,6 +261,9 @@ pub(super) struct ColumnSpec<'a> {
     /// The number that ties the column to the recalculation records (0 for a column that takes
     /// no part in one; spec section 13.10).
     pub object_id: u16,
+    /// A sampling interval (first X, step) and whether the sheet has an X column it would else
+    /// belong to (T303: Origin then writes 0xFFFF at `0x33`).
+    pub sampling: Option<(f64, f64, bool)>,
 }
 
 const COLUMN_FIELDS: Fields =
@@ -284,8 +289,12 @@ pub(super) fn column_record(c: &ColumnSpec) -> Vec<u8> {
     if c.index < 2 {
         h[0x4a] = 0x43;
     }
-    put(&mut h, 0x1d2, &1.0f64.to_le_bytes());
-    put(&mut h, 0x1da, &1.0f64.to_le_bytes());
+    let (x0, inc) = c.sampling.map_or((1.0, 1.0), |(x0, inc, _)| (x0, inc));
+    put(&mut h, 0x1d2, &x0.to_le_bytes());
+    put(&mut h, 0x1da, &inc.to_le_bytes());
+    if c.sampling.is_some_and(|(_, _, beside_x)| beside_x) {
+        put(&mut h, 0x33, &0xFFFFu16.to_le_bytes());
+    }
     put(&mut h, 0x1e2, &c.object_id.to_le_bytes());
     h
 }

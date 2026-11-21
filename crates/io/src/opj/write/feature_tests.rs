@@ -498,6 +498,28 @@ fn a_tail_that_is_damaged_gives_a_note_and_no_folders() {
 }
 
 #[test]
+fn a_sampling_interval_is_written_where_origin_keeps_it_and_read_back() {
+    // T303: Origin 2016 keeps xinit/xinc in the column record (0x1D2, 0x1DA) and the data-set header
+    // (0x25, 0x2D), with the column belonging to no X column.
+    let mut p = Project::new();
+    p.adopt_named_workbook(abcd("Book1"));
+    let Window::Workbook(b) = &mut p.windows[0] else { unreachable!() };
+    b.sheets[0].columns[2].sampling = Some(sheaf_core::sampling::SamplingInterval {
+        x0: 3.5,
+        inc: 0.125,
+        long_name: String::new(),
+        units: String::new(),
+    });
+    let out = written(&p);
+    assert!(!out.warnings.iter().any(|w| w.contains("sampling")), "{:?}", out.warnings);
+    let back = read_back(&out.bytes).into_project();
+    let Window::Workbook(b) = &back.windows[0] else { unreachable!() };
+    let s = b.sheets[0].columns[2].sampling.as_ref().expect("the interval comes back");
+    assert_eq!((s.x0, s.inc), (3.5, 0.125));
+    assert!(b.sheets[0].columns[1].sampling.is_none() && b.sheets[0].columns[3].sampling.is_none());
+}
+
+#[test]
 fn hidden_columns_and_column_widths_are_named_in_the_warnings() {
     let mut p = Project::new();
     p.adopt_named_workbook(abcd("Book1"));

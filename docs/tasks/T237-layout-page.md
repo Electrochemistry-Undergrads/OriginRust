@@ -1,6 +1,6 @@
 # T237: Layout pages (B14, slice 1)
 
-**Status:** slices 1 to 9 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
+**Status:** slices 1 to 10 done 2026-11-20 (Claude Windows "claude:2"), **not measured**.
 **Size:** L (several slices). **Source:** greyed inventory package B14 ("New: Layout",
 "Standard: New Layout").
 **Spec:** `docs/spec/layout-page.md`.
@@ -67,8 +67,13 @@
   `render_layout_emf`; File > Print... on a layout page. Tests: `emf::picture_tests`,
   `layout_render::tests`, `layout_page::file_print_takes_the_active_layout_page`.
 
+## Done in slice 10 (2026-11-20)
+
+- Rich layout text: `layout_text_svg` lays the text out with `text::place_label`, as graph labels
+  are, and writes it with `svg::write_svg_view`. Test: `layout_render::tests`.
+
 ## Left (next slices)
 
 - Other page properties (printer page, theme).
-- Rich text and drawn objects (lines, rectangles) on the page.
+- Drawn objects (lines, rectangles) on the page; a font/colour toolbar for its text.
 - Writing the page to `.opj`.

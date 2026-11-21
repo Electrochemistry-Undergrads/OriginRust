@@ -1,7 +1,9 @@
 //! A layout page as one picture (T237 slice 3, layout-page spec): every graph or worksheet item is
 //! rendered at the pixel size it takes on the page and laid, at its place, on a white page.
 
+use crate::Rect;
 use crate::fonts::SystemFonts;
+use crate::scene::{LayerScene, Scene};
 use crate::{PlotError, Raster, RasterOptions, raster};
 use sheaf_core::layout_page::LayoutContent;
 use sheaf_core::{Project, WindowId};
@@ -9,33 +11,38 @@ use sheaf_core::{Project, WindowId};
 /// The font of layout text (T237 slice 8).
 const TEXT_FAMILY: &str = "Arial";
 
-fn xml_escape(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
-}
-
-/// Layout text as an SVG document and its natural size in points: the lines in Arial at `size`
-/// points, 1.2 sizes apart, with a margin of 0.3 size all round.
+/// Layout text as an SVG document and its natural size in points (T237 slices 8 and 10): laid out
+/// as a graph's free text label is, in Arial, black, at `size` points, so Origin's markup works
+/// (`\b()`, `\i()`, `\u()`, `\+()`, `\-()`, `\f:Font()`, `\c()` ...) and lines are 1.3 sizes
+/// apart; the box is the text's bounds with a margin of 0.3 size all round.
 pub fn layout_text_svg(text: &str, size: u16) -> (String, (f64, f64)) {
-    use std::fmt::Write as _;
     let s = f64::from(size.max(1));
     let font = sheaf_core::graph::Font::new(TEXT_FAMILY, s);
     let m = SystemFonts::shared();
-    let lines: Vec<&str> = if text.is_empty() { vec![""] } else { text.lines().collect() };
+    let mut items = Vec::new();
+    crate::text::place_label(&mut items, m, text, &font, (0.0, 0.0), 0.0, &|_| None);
+    let bounds = items
+        .iter()
+        .filter_map(|it| crate::hit::item_bounds(it, m))
+        .reduce(crate::hit::union)
+        .unwrap_or(Rect { x: 0.0, y: -0.8 * s, w: s, h: s });
     let pad = 0.3 * s;
-    let widest = lines.iter().map(|l| crate::fonts::TextMeasurer::width(m, l, &font, s)).fold(0.0, f64::max);
-    let (w, h) = (widest.max(s) + 2.0 * pad, 1.2 * s * lines.len() as f64 + 2.0 * pad);
-    let mut out = String::new();
-    let _ = write!(
-        out,
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{w}pt\" height=\"{h}pt\" viewBox=\"0 0 {w} {h}\">\
-         <text font-family=\"{TEXT_FAMILY}\" font-size=\"{s}\" fill=\"rgb(0,0,0)\">"
-    );
-    for (k, line) in lines.iter().enumerate() {
-        let y = pad + 1.2 * s * k as f64 + 0.95 * s;
-        let _ = write!(out, "<tspan x=\"{pad}\" y=\"{y}\">{}</tspan>", xml_escape(line));
-    }
-    out.push_str("</text></svg>\n");
-    (out, (w, h))
+    let view = Rect { x: bounds.x - pad, y: bounds.y - pad, w: bounds.w.max(s) + 2.0 * pad, h: bounds.h + 2.0 * pad };
+    let scene = Scene {
+        width: view.w,
+        height: view.h,
+        background: sheaf_core::Color::TRANSPARENT,
+        layers: vec![LayerScene {
+            clip: view,
+            grid: Vec::new(),
+            plots: Vec::new(),
+            overlay: items,
+            underlay_len: 0,
+            data_on_top: false,
+            objects: Vec::new(),
+        }],
+    };
+    (crate::svg::write_svg_view(&scene, view, 1.0), (view.w, view.h))
 }
 
 /// The picture of a layout item `pixel_width` pixels wide; `None` when what it shows is gone.
@@ -309,6 +316,11 @@ mod tests {
         let dark = (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y))).filter(|&(x, y)| r.rgba[k(x, y)] < 128).count();
         assert!(dark > 30, "the text is drawn: {dark} dark pixels");
         let svg = render_layout_svg(&p, id).unwrap();
-        assert!(svg.contains(">A &lt; B</tspan>"), "escaped text");
+        assert!(svg.contains("A &lt; B"), "escaped text");
+        // Origin's markup: a bold run and a superscript, on two lines.
+        let (rich, (w2, h2)) = layout_text_svg("\\b(Bold) x\\+(2)\nsecond line", 24);
+        assert!(rich.contains("bold") && !rich.contains("\\b("), "the markup is read: {rich}");
+        let (_, (w1, h1)) = layout_text_svg("Bold x2", 24);
+        assert!(h2 > 1.8 * h1 - 0.6 * 24.0 && w2 > w1, "two lines are taller: {h1} {h2}");
     }
 }

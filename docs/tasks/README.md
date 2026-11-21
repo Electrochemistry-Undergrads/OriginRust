@@ -261,6 +261,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T276](T276-pivot-measure.md) | Pivot Table measured against Origin 2016 wpivot: names, totals, sorting, normalize fixed | S | done 2026-11-21, measured |
 | [T277](T277-same-sheet-in-folder.md) | Sheet tab: Activate This Sheet in All Books in Folder (Origin 2027), by sheet name | S | done 2026-11-21 |
 | [T278](T278-image-measure.md) | Image menu measured against Origin 2016 (8-bit img* tools): Brightness as % of range, To Binary band | S | done 2026-11-21, partly measured |
+| [T280](T280-gray-measure.md) | Color to Gray with Origin 2016's imgC2gray weights (2R+5G+B)/8 | S | done 2026-11-21, measured |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |

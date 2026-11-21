@@ -222,13 +222,13 @@ pub fn rgb_sheets(sheets: &[MatrixSheet]) -> Option<[&MatrixSheet; 3]> {
     ((r.rows, r.cols) == (g.rows, g.cols) && (r.rows, r.cols) == (b.rows, b.cols)).then_some([r, g, b])
 }
 
-/// Conversion > Color to Gray (T218): the luminance `0.2126 R + 0.7152 G + 0.0722 B` (Rec. 709, as
-/// the importer's gray) as one sheet named Gray.
+/// Conversion > Color to Gray (T218): `(2 R + 5 G + B) / 8` as one sheet named Gray, the weights of
+/// Origin 2016's `imgC2gray` (T280, measured: pure red, green and blue gave 64, 159 and 32 of 255, and
+/// (200, 100, 50) gave 119; Origin rounds to whole levels, Sheaf keeps the fraction).
 pub fn color_to_gray(rgb: [&MatrixSheet; 3]) -> MatrixSheet {
     let [r, g, b] = rgb;
-    let data = (0..r.rows * r.cols)
-        .map(|k| 0.2126 * r.values()[k] + 0.7152 * g.values()[k] + 0.0722 * b.values()[k])
-        .collect();
+    let data =
+        (0..r.rows * r.cols).map(|k| (2.0 * r.values()[k] + 5.0 * g.values()[k] + b.values()[k]) / 8.0).collect();
     let mut out = r.like(r.rows, r.cols, data);
     out.name = "Gray".into();
     out
@@ -311,5 +311,8 @@ mod tests {
         assert_eq!(gray.name, "Gray");
         assert!((gray.value(0, 1) - 100.0).abs() < 1e-9);
         assert!(rgb_sheets(&sheets[..2]).is_none());
+        // Origin 2016's imgC2gray on (200, 100, 50): 118.75, shown as 119.
+        let colour = vec![mk("Red", 200.0), mk("Green", 100.0), mk("Blue", 50.0)];
+        assert_eq!(color_to_gray(rgb_sheets(&colour).unwrap()).value(0, 0), 118.75);
     }
 }

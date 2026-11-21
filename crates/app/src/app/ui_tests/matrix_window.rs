@@ -345,7 +345,7 @@ fn a_colour_picture_imports_as_rgb_sheets_that_turn_gray_or_split() {
     settle(&mut h);
     assert_eq!(h.state().doc.undo_label(), Some("Color to Gray"));
     let gray = project(&h).matrix_books().nth(1).expect("a gray book").sheets[0].clone();
-    assert!((gray.value(0, 0) - 0.2126 * 255.0).abs() < 1e-9 && (gray.value(0, 1) - 0.7152 * 255.0).abs() < 1e-9);
+    assert!((gray.value(0, 0) - 2.0 / 8.0 * 255.0).abs() < 1e-9 && (gray.value(0, 1) - 5.0 / 8.0 * 255.0).abs() < 1e-9);
     h.state_mut().apply(Action::ImageCmd { id: book.id, cmd: menus::ImageCmd::RgbSplit }, &ctx);
     settle(&mut h);
     assert_eq!(project(&h).matrix_books().count(), 5, "three one-channel books more");

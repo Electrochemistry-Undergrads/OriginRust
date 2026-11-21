@@ -1655,6 +1655,7 @@ pub enum ScoresArg {
     Benard,
     Hazen,
     VanDerWaerden,
+    KaplanMeier,
 }
 
 /// FFT window (Origin's names).
@@ -3230,7 +3231,7 @@ pub enum AnalyzeTool {
         /// Plotting positions (Origin documents Blom as its default; scipy uses Filliben).
         #[arg(long, value_enum, default_value_t = ScoresArg::Filliben)]
         scores: ScoresArg,
-        /// A confidence band of this level (0.95 for 95 %) round the fitted line (normal, lognormal).
+        /// A confidence band of this level (0.95 for 95 %) round the fitted line, Origin's for every family.
         #[arg(long)]
         band: Option<f64>,
     },

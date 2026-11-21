@@ -521,8 +521,8 @@ fn gamma_quantile(shape: f64, p: f64) -> f64 {
 }
 
 /// How the plotting positions (the cumulative probability of the i-th of n ordered values) are
-/// estimated. Origin's `plot_prob` documents Blom, Benard, Hazen and Van der Waerden scores, Blom by
-/// default (T151, not measured); `scipy.stats.probplot` uses Filliben's.
+/// estimated. Origin 2016's `plot_prob` offers Blom (its default), Benard, Hazen, Van der Waerden and
+/// Kaplan-Meier, with these formulas (measured by T308); `scipy.stats.probplot` uses Filliben's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Scores {
     /// Filliben's medians of the uniform order statistics ([`plotting_positions`]).
@@ -536,10 +536,13 @@ pub enum Scores {
     Hazen,
     /// `i / (n + 1)`.
     VanDerWaerden,
+    /// `i / n` (the last value is at 100 %, off a probability axis).
+    KaplanMeier,
 }
 
 impl Scores {
-    pub const ALL: [Scores; 5] = [Scores::Filliben, Scores::Blom, Scores::Benard, Scores::Hazen, Scores::VanDerWaerden];
+    pub const ALL: [Scores; 6] =
+        [Scores::Filliben, Scores::Blom, Scores::Benard, Scores::Hazen, Scores::VanDerWaerden, Scores::KaplanMeier];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -548,6 +551,7 @@ impl Scores {
             Scores::Benard => "Benard",
             Scores::Hazen => "Hazen",
             Scores::VanDerWaerden => "Van der Waerden",
+            Scores::KaplanMeier => "Kaplan-Meier",
         }
     }
 
@@ -561,6 +565,7 @@ impl Scores {
             Scores::Benard => at(0.3, 0.4),
             Scores::Hazen => at(0.5, 0.0),
             Scores::VanDerWaerden => at(0.0, 1.0),
+            Scores::KaplanMeier => at(0.0, 0.0),
         }
     }
 }
@@ -621,10 +626,13 @@ pub fn probplot_with(family: Family, data: &[f64], shape: Option<f64>, scores: S
     let n = ordered.len();
     let positions = scores.positions(n);
     let theoretical: Vec<f64> = positions.iter().map(|&p| standard_quantile(family, shape.unwrap_or(1.0), p)).collect();
-    let (mx, my) = (mean(&theoretical), mean(&ordered));
-    let sxx: f64 = theoretical.iter().map(|a| (a - mx).powi(2)).sum();
-    let syy: f64 = ordered.iter().map(|b| (b - my).powi(2)).sum();
-    let sxy: f64 = theoretical.iter().zip(&ordered).map(|(a, b)| (a - mx) * (b - my)).sum();
+    // The line goes through the points with a finite quantile (Kaplan-Meier puts the last at 100 %).
+    let (tx, ty): (Vec<f64>, Vec<f64>) =
+        theoretical.iter().zip(&ordered).filter(|(a, _)| a.is_finite()).map(|(a, b)| (*a, *b)).unzip();
+    let (mx, my) = (mean(&tx), mean(&ty));
+    let sxx: f64 = tx.iter().map(|a| (a - mx).powi(2)).sum();
+    let syy: f64 = ty.iter().map(|b| (b - my).powi(2)).sum();
+    let sxy: f64 = tx.iter().zip(&ty).map(|(a, b)| (a - mx) * (b - my)).sum();
     let slope = sxy / sxx;
     Ok(ProbPlot {
         family,
@@ -636,6 +644,118 @@ pub fn probplot_with(family: Family, data: &[f64], shape: Option<f64>, scores: S
         intercept: my - slope * mx,
         r: if syy > 0.0 { sxy / (sxx * syy).sqrt() } else { f64::NAN },
     })
+}
+
+// ----- Origin's probability plot (T308) -----------------------------------------------------------------
+
+/// The percents at which Origin 2016's `plot_prob` gives its confidence band (measured).
+pub const BAND_PERCENTS: [f64; 27] = [
+    1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 91.0, 92.0,
+    93.0, 94.0, 95.0, 96.0, 97.0, 98.0, 99.0,
+];
+
+/// The estimates Origin 2016's probability plot uses (measured by T308): the maximum likelihood ones
+/// of [`estimate`], except that the SD of the normal and the log SD of the lognormal divide by `n - 1`.
+pub fn prob_plot_params(family: Family, data: &[f64]) -> Result<Vec<f64>, FitError> {
+    let mut p = estimate(family, data)?;
+    if matches!(family, Family::Normal | Family::Lognormal) {
+        let n = prepared(family, data)?.len() as f64;
+        p[1] *= (n / (n - 1.0)).sqrt();
+    }
+    Ok(p)
+}
+
+/// The quantile of `family` with `params` (in the order of [`DistFit::params`]) at probability `p`.
+pub fn quantile(family: Family, params: &[f64], p: f64) -> f64 {
+    match family {
+        Family::Normal => params[0] + params[1] * standard_quantile(Family::Normal, 1.0, p),
+        Family::Lognormal => (params[0] + params[1] * standard_quantile(Family::Normal, 1.0, p)).exp(),
+        Family::Exponential => params[0] * standard_quantile(family, 1.0, p),
+        Family::Gamma | Family::Weibull => params[1] * standard_quantile(family, params[0], p),
+    }
+}
+
+/// Origin 2016's confidence band of a probability plot (measured exactly by T308): the lower and upper
+/// quantile at each of [`BAND_PERCENTS`], for `params` from [`prob_plot_params`] of `data`, with `k` the
+/// normal quantile of `(1 + level) / 2` and `z` that of the percent:
+///
+/// - normal: `mu + z sigma -+ k sigma sqrt(1 / n + z^2 / (2 n - 3))`; lognormal the same on the log scale;
+/// - exponential: the quantile times `exp(-+ k / sqrt(n))`;
+/// - Weibull: on the log scale, `ln q -+ k sqrt(Var(ln q))`, the variance of `ln(scale) + w / shape`
+///   (`w = ln(-ln(1 - p))`) from the inverse of the observed information of the log-likelihood in
+///   `ln(scale)` and `1 / shape`;
+/// - gamma: on the log scale, the variance of `ln q` by the delta method from the inverse of the expected
+///   (Fisher) information `n [[trigamma(shape), 1 / scale], [1 / scale, shape / scale^2]]`.
+///
+/// `None` for a level outside (0, 1) or data the family cannot take.
+pub fn confidence_band(family: Family, params: &[f64], data: &[f64], level: f64) -> Option<(Vec<f64>, Vec<f64>)> {
+    if !(level > 0.0 && level < 1.0) {
+        return None;
+    }
+    let x = prepared(family, data).ok()?;
+    let n = x.len() as f64;
+    let z_of = |p: f64| standard_quantile(Family::Normal, 1.0, p);
+    let k = z_of((1.0 + level) / 2.0);
+    // The half-width of the band on the scale of the quantile (the log scale for all but the normal).
+    let half: Box<dyn Fn(f64) -> f64> = match family {
+        Family::Normal | Family::Lognormal => {
+            let sigma = params[1];
+            Box::new(move |p| {
+                let z = z_of(p);
+                k * sigma * (1.0 / n + z * z / (2.0 * n - 3.0)).sqrt()
+            })
+        }
+        Family::Exponential => Box::new(move |_| k / n.sqrt()),
+        Family::Weibull => {
+            let (u, b) = (params[1].ln(), 1.0 / params[0]);
+            let (mut juu, mut jub, mut jbb) = (0.0, 0.0, 0.0);
+            for v in &x {
+                let e = (v.ln() - u) / b;
+                let t = e.exp();
+                juu += t;
+                jub += t - 1.0 + t * e;
+                jbb -= 1.0 + 2.0 * e - 2.0 * e * t - e * e * t;
+            }
+            let (juu, jub, jbb) = (juu / (b * b), jub / (b * b), jbb / (b * b));
+            let det = juu * jbb - jub * jub;
+            let (vuu, vub, vbb) = (jbb / det, -jub / det, juu / det);
+            Box::new(move |p| {
+                let w = (-(-p).ln_1p()).ln();
+                k * (vuu + 2.0 * w * vub + w * w * vbb).sqrt()
+            })
+        }
+        Family::Gamma => {
+            let (a, theta) = (params[0], params[1]);
+            // The inverse of n [[trigamma(a), 1/theta], [1/theta, a/theta^2]].
+            let (i11, i12, i22) = (n * trigamma(a), n / theta, n * a / (theta * theta));
+            let det = i11 * i22 - i12 * i12;
+            let (v11, v12, v22) = (i22 / det, -i12 / det, i11 / det);
+            Box::new(move |p| {
+                // d ln q / d a at a fixed p: -(dF/da) / (f(q) q), on the standard form (scale 1).
+                let q = gamma_quantile(a, p);
+                let h = 1e-5 * a.max(1e-3);
+                let dfda = (gamma_cdf_sf(a + h, 1.0, q).0 - gamma_cdf_sf(a - h, 1.0, q).0) / (2.0 * h);
+                let density_times_q = (a * q.ln() - q - ln_gamma(a)).exp();
+                let ga = -dfda / density_times_q;
+                let gt = 1.0 / theta;
+                k * (ga * ga * v11 + 2.0 * ga * gt * v12 + gt * gt * v22).sqrt()
+            })
+        }
+    };
+    let (mut lower, mut upper) = (Vec::new(), Vec::new());
+    for pct in BAND_PERCENTS {
+        let p = pct / 100.0;
+        let q = quantile(family, params, p);
+        let h = half(p);
+        if family == Family::Normal {
+            lower.push(q - h);
+            upper.push(q + h);
+        } else {
+            lower.push((q.ln() - h).exp());
+            upper.push((q.ln() + h).exp());
+        }
+    }
+    lower.iter().chain(&upper).all(|v| v.is_finite()).then_some((lower, upper))
 }
 
 #[cfg(test)]

@@ -673,29 +673,45 @@ intercept, r). One undo step removes sheet and graph.
 Auto Apply is not offered for these two windows (the checkbox is disabled): each run makes a new sheet and a new
 graph, so running at every option change would pile them up; they run on OK and Apply.
 
-### 16.2a Origin's documented options (T151, 2026-11-19, **not measured**)
+### 16.2a Origin's probability plot (T151, 2026-11-19; measured by T308, 2026-11-21)
 
-Origin's `plot_prob` reference documents Blom scores and a checked 95 % confidence band as the defaults
-of its probability plot. Its plot guide puts the observed values on X and the distribution quantiles on
-Y in a Q-Q plot. Sheaf now has these as options. Its windows start with Origin's documented choices,
-while the core and the command line keep scipy's, so the checked numbers above do not move.
+Measured against Origin 2016's `plot_prob` (Plot > Statistics > Probability Plot), run through its window on
+10 and 20 numbers of our own for all five families (probes in `re-workspace/scratch/t308`; the numbers are the
+fixture `crates/calc/tests/fixtures/probplot_origin.rs`).
 
-- **Scores** (plotting positions of the i-th of n ordered values):
-  - Filliben (scipy, above), Blom `(i - 3/8) / (n + 1/4)`, Benard `(i - 0.3) / (n + 0.4)`, Hazen
-    `(i - 1/2) / n`, and Van der Waerden `i / (n + 1)`.
-  - The windows start on Blom. `sheaf analyze probplot|qqplot --scores` starts on Filliben.
-- **Confidence band** (probability plot, normal and lognormal families):
-  - Two more lines round the fitted line, at the fit's percents. They are the fitted quantile
-    `mu + z sigma` plus and minus `k sqrt(sigma^2 (1 + z^2/2) / n)`, the large-sample error of the
-    maximum likelihood quantile, with `k` the normal quantile of `(1 + level) / 2`. Lognormal works on
-    the log scale.
-  - The columns are "Lower 95 % X", "Lower percent", "Upper 95 % X" and "Upper percent".
-  - Other families get a note instead. The window starts with the band on at 95 %; `--band 0.95` turns
-    it on from the command line.
-  - This is Sheaf's method; Origin's band formula is not documented in what was read.
-- **Q-Q orientation:** with "Data on X, quantiles on Y" (the window's start; `--data-on-x`), the
-  ordered data are the X column and the quantiles the Y column. The axis titles swap, and the
-  least-squares line is the same line drawn the other way round.
+- **Origin's window:** Input Data; Distribution (Normal, Lognormal, Exponential, Weibull, Gamma) with
+  Estimate from Data ticked and the estimates shown; Score Method (Blom, Benard, Hazen, Van der Waerden,
+  Kaplan-Meier; Blom by default); Confidence Band (ticked) at Confidence Level 95 %; Exchange X-Y Axes; Output
+  Range. Origin remembers the last choices. It writes a sheet (Normal1, Lognormal1, ...) into the input book and a
+  graph with the percent axis on a probability scale from 0.1 to 99.9.
+- **Scores** (the percent of the i-th of n ordered values, measured):
+  - Blom `(i - 3/8) / (n + 1/4)`, Benard `(i - 0.3) / (n + 0.4)`, Hazen `(i - 1/2) / n`, Van der Waerden
+    `i / (n + 1)`, Kaplan-Meier `i / n`. Kaplan-Meier puts the last value at 100 %, off the axis.
+  - Sheaf also offers Filliben (scipy's). The windows start on Blom; `sheaf analyze probplot|qqplot --scores`
+    starts on Filliben and takes `kaplan-meier` too.
+- **Estimates (measured):** maximum likelihood, except that the SD of the normal and the log SD of the lognormal
+  divide by `n - 1`. The exponential's scale is the mean. Sheaf's probability plot uses the same estimates
+  (`prob_plot_params`); Distribution Fit keeps the maximum likelihood SD.
+- **Reference line (measured):** two points, the fitted quantiles at half the first point's percent and at 100
+  minus that (Blom on 10 values: 3.0488 % and 96.9512 %). Sheaf samples the fitted quantile between the same two
+  percents ("Fit X", "Fit percent", 101 points). That is the same straight line on the normal, lognormal,
+  Weibull and exponential axes, and the true curve for the gamma, where Origin draws the chord.
+- **Confidence band (measured exactly; `confidence_band`):** at 27 percents, 1 to 10, 20 to 90 by 10, and 91
+  to 99, with `k` the normal quantile of `(1 + level) / 2` and `z` that of the percent:
+  - normal: `mu + z sigma -+ k sigma sqrt(1/n + z^2 / (2n - 3))`; lognormal the same on the log scale;
+  - exponential: the quantile times `exp(-+ k / sqrt(n))`;
+  - Weibull: `ln q -+ k sqrt(Var(ln q))`, with `ln q = ln(scale) + w / shape`, `w = ln(-ln(1 - p))`, and the
+    variance from the inverse of the observed information of the log-likelihood in `ln(scale)` and
+    `1 / shape` (Origin's numbers are within 1.4e-8);
+  - gamma: `ln q -+ k sqrt(Var(ln q))`, by the delta method from the inverse of the expected information
+    `n [[trigamma(shape), 1/scale], [1/scale, shape/scale^2]]`.
+  The columns are "Lower 95 % X", "Lower percent", "Upper 95 % X" and "Upper percent" (27 rows). The window
+  starts with the band on at 95 %; `--band 0.95` turns it on from the command line.
+- **Q-Q orientation:** with "Data on X, quantiles on Y" (the window's start; `--data-on-x`), the ordered data are
+  the X column and the quantiles the Y column. The axis titles swap, and the least-squares line is the same line
+  drawn the other way round (Origin's Q-Q plot not measured).
+- **Not copied:** Origin's sheet layout (its Percentiles, Reference Line and Additional Table columns), Exchange
+  X-Y Axes, and fixed (not estimated) parameters.
 - **Plot menu:** Plot > Statistics > Probability Plot and Q-Q Plot open the same windows as Statistics >
   Descriptive Statistics. The Alt letters are y and P, since Q, -, l, o and t are taken in that submenu.
 
@@ -713,8 +729,8 @@ against scipy's exact algorithm).
 - Whether Origin's Distribution Fit uses the same parameterizations and a free threshold (three-parameter
   lognormal, gamma, Weibull), its list of families (it has many more), and whether it reports AIC, BIC, KS and
   Anderson-Darling the same way (divisor of the normal SD, p-values with estimated parameters).
-- Origin's plotting positions for its probability plot, its axis scales and tick percentages, whether its Q-Q plot
-  plots data or quantiles on X, and its reference line (through the quartiles or a fit).
+- Origin's axis tick percentages and whether its Q-Q plot plots data or quantiles on X (its probability plot's
+  scores, estimates, reference line and band are measured, 16.2a).
 - The window titles, option labels and defaults of the three windows, the sheet and graph names (`DistFit1`,
   `ProbPlot1`, `QQPlot1`), and the menu order of the new entries.
 - Not built: fitting a threshold, censored data, other families, a probability plot of several families on one

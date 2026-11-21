@@ -262,14 +262,20 @@ fn an_imported_picture_becomes_a_matrix_of_gray_levels() {
     settle(&mut h);
     assert_eq!(h.state().doc.undo_label(), Some("Import Image"));
     let book = project(&h).matrix_books().next().expect("a matrix book");
-    assert_eq!(book.long_name, "photo");
+    // Origin's impImage (measured): short name the stem, long name the file name, sheet the stem,
+    // X 0..cols-1 and Y 0..rows-1.
+    assert_eq!((book.name.as_str(), book.long_name.as_str()), ("photo", "photo.png"));
     let s = &book.sheets[0];
-    assert_eq!((s.cols, s.rows), (3, 2));
+    assert_eq!((s.cols, s.rows, s.name.as_str()), (3, 2, "photo"));
+    assert_eq!((s.x_from, s.x_to, s.y_from, s.y_to), (0.0, 2.0, 0.0, 1.0));
     assert_eq!((s.value(0, 0), s.value(0, 1), s.value(0, 2), s.value(1, 0)), (0.0, 100.0, 200.0, 255.0));
+    // The same file again: the next free name, as Origin's photo1.
+    crate::matrix_view::import_image(&mut h.state_mut().doc, &path).unwrap();
+    assert_eq!(project(&h).matrix_books().nth(1).unwrap().name, "photo1");
     let not_a_picture = dir.join("notes.png");
     std::fs::write(&not_a_picture, b"hello").unwrap();
     assert!(crate::matrix_view::import_image(&mut h.state_mut().doc, &not_a_picture).is_err());
-    assert_eq!(project(&h).matrix_books().count(), 1);
+    assert_eq!(project(&h).matrix_books().count(), 2);
     let _ = std::fs::remove_dir_all(&dir);
 }
 

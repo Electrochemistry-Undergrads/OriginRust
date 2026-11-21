@@ -4535,6 +4535,8 @@ fn the_hypothesis_testing_menu_runs_the_variance_and_proportion_tests() {
         ("Two-Sample Test for Variance...", "VarTest", "F", true),
         ("One-Sample Proportion Test...", "PropTest", "Z", false),
         ("Two-Sample Proportion Test...", "PropTest", "Z", false),
+        ("One-Sample Poisson Rate Test...", "PoissonRate", "Z", false),
+        ("Two-Sample Poisson Rate Test...", "PoissonRate", "Z", false),
     ];
     for (item, sheet, column, has_input) in cases {
         let mut h = start(vec![data_file("vartest-menu")]);

@@ -5499,7 +5499,10 @@ impl SheafApp {
     fn open_analysis(&mut self, book: WindowId, columns: Vec<ColumnId>, kind: AnalysisKind) {
         let project = self.doc.project();
         // The proportion tests read no data: one column of the sheet only says where the results go.
-        let host_only = matches!(kind, AnalysisKind::PropTestOne | AnalysisKind::PropTestTwo);
+        let host_only = matches!(
+            kind,
+            AnalysisKind::PropTestOne | AnalysisKind::PropTestTwo | AnalysisKind::PoissonOne | AnalysisKind::PoissonTwo
+        );
         let columns: Vec<ColumnId> = if host_only {
             let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);
             let all = project.workbook(book).and_then(|b| b.sheets.get(sheet)).map(|s| &s.columns);

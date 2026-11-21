@@ -1717,6 +1717,32 @@ has neither test, so Sheaf uses the textbook formulas (`crates/calc/src/poisson.
   Test Method Exact and Normal Approximation (both on), and for two samples "Use pooled p for
   test" (on).
 
+## 28 Stem-and-leaf plot (T275, Origin 2026 app; not measured)
+
+Statistics > Descriptive Statistics > Stem-and-Leaf Plot... (Origin 2026's free "Stem and Leaf Plot"
+app, which OriginLab's app page describes only by its options). Each value is cut, toward zero, to a
+whole number of leaf units; its last digit is the leaf and the digits before it the stem. Options, as on
+the app page:
+
+- **Leaf Unit**: Auto, or a positive number. Auto is Sheaf's rule (the page does not give Origin's):
+  the power of ten one decade below the range of the data, so 12 to 87 has leaf unit 1 (stems are tens)
+  and 0.5 to 4.9 has 0.1.
+- **Auto Split Stem**: when the display would have fewer than 5 lines, each stem gets two, leaves 0-4
+  then 5-9 (the 5 and the rule for "fewer" are Sheaf's reading of the page's "split at 5").
+- **Max Number of Leaves per Stem** (50): more leaves on a line are counted and written as `+N`.
+- **Auto Trim Outliers**: values below Q1 - 1.5 IQR or above Q3 + 1.5 IQR (Origin's quartiles,
+  `quantile_origin`) leave the stems and are listed on a `Low` line before them and a `High` line after.
+
+Negative values have stems with a minus sign, `-0` for those above -10 units; their lines run from the
+most negative upward, so the 5-9 half of a split negative stem comes before its 0-4 half. Every stem
+between the first and the last line with data gets a line, empty ones too. Masked values and rows the
+worksheet filter hides are left out; text and empty cells are skipped.
+
+The result sheet (Sheaf's layout, Origin's report is not described) has one block of lines per input
+column: **Data** (the input's label), **Count**, **Stem** and **Leaf**; the notes give each column's
+leaf unit and whether its stems were split. Code: `crates/calc/src/stemleaf.rs`,
+`Tool::StemLeaf` in `crates/core/src/analysis/statistics.rs`.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

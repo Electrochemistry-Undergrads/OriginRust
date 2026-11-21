@@ -2009,6 +2009,7 @@ fn statistics_menu() -> Vec<Entry> {
                 item("Statistics on &Rows...", Cmd::Analyze(AnalysisKind::RowStatistics)),
                 sep(),
                 item("Graphical Summary...", Cmd::Analyze(AnalysisKind::GraphSummary)),
+                item("Stem-and-Leaf Plot...", Cmd::Analyze(AnalysisKind::StemLeaf)),
                 sep(),
                 item("Cross Tabulation...", Cmd::Analyze(AnalysisKind::Crosstab)),
                 sep(),

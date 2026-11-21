@@ -544,6 +544,7 @@ impl ExcelImportDialog {
                     long_name_line: &mut o.long_name_line,
                     units_line: &mut o.units_line,
                     comments_line: &mut o.comments_line,
+                    comments_to: None,
                     short_name_line: &mut o.short_name_line,
                 },
                 detected,

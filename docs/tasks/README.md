@@ -280,6 +280,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T294](T294-bin2d-measure.md) | Measure Binary 2D Array import against Origin (impBin2D options and defaults, rows from size, partial row, target) | S | done 2026-11-21 (matrices 7f) |
 | [T295](T295-newbook-measure.md) | New workbook measured in Origin 2016: 32 rows shown, default column width 7 | S | done 2026-11-21 |
 | [T298](T298-parity-formula-refs.md) | Stale parity row corrected: formula reference notation (cross-sheet, cell(), label reads exist) | S | done 2026-11-21 (docs only) |
+| [T299](T299-import-comment-lines.md) | Text import: comment lines from .. to joined, 15-line label detection, as Origin 2016 impasc | S | done 2026-11-21, measured |
 | [T297](T297-grayscale-measure.md) | Measure Gray Scale Map against Origin (8 x 6 bands, 32 grays, out-of-range boxes) | S | done 2026-11-21 (matrices 6, 7g) |
 | [T300](T300-rnormalize-measure.md) | Normalize Columns writes what Origin's rnormalize writes (columns at the end, Normalized1.., method comments) | S | done 2026-11-21 |
 | [T302](T302-interp-output.md) | Interpolate writes a Y column at the end of the sheet with the grid as sampling interval, as Origin's interp1xy | S | done 2026-11-21 |

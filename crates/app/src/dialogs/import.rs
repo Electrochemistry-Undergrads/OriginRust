@@ -696,6 +696,7 @@ impl ImportDialog {
                         long_name_line: &mut o.long_name_line,
                         units_line: &mut o.units_line,
                         comments_line: &mut o.comments_line,
+                        comments_to: Some((&mut o.comments_to, detected.as_ref().map(|d| d.comments_to))),
                         short_name_line: &mut o.short_name_line,
                     },
                     detected.as_ref().map(|d| [d.header_lines, d.long_name_line, d.units_line, d.comments_line]),
@@ -829,6 +830,8 @@ pub(super) struct HeaderLines<'a> {
     pub long_name_line: &'a mut Option<usize>,
     pub units_line: &'a mut Option<usize>,
     pub comments_line: &'a mut Option<usize>,
+    /// The last comments line and what detection found (T299; the text import only).
+    pub comments_to: Option<(&'a mut Option<usize>, Option<usize>)>,
     pub short_name_line: &'a mut usize,
 }
 
@@ -849,6 +852,11 @@ pub(super) fn header_line_rows(ui: &mut egui::Ui, o: HeaderLines<'_>, detected: 
     ui.label("Line with comments");
     optional_line(ui, o.comments_line, found(3), "none");
     ui.end_row();
+    if let Some((to, found_to)) = o.comments_to {
+        ui.label("Last line of comments");
+        optional_line(ui, to, found_to, "none");
+        ui.end_row();
+    }
     ui.label("Line with the short names");
     let mut line = *o.short_name_line;
     if ui

@@ -199,6 +199,11 @@ pub struct AsciiOptions {
     pub units_line: Option<usize>,
     /// 1-based line number holding the comments.
     pub comments_line: Option<usize>,
+    /// Last 1-based line of the comments (Origin's Comments From .. To, T299): the lines from
+    /// `comments_line` to this one are joined with line breaks into each column's comment. `None`
+    /// takes the end of the detected label block when the comments line is detected, else the
+    /// comments line alone.
+    pub comments_to: Option<usize>,
     /// Header lines fill the long name, units and comments of the columns (Origin's "rename
     /// columns" in Data Import Options). When false the columns keep empty labels; the header
     /// lines are still skipped.
@@ -259,6 +264,7 @@ impl Default for AsciiOptions {
             long_name_line: None,
             units_line: None,
             comments_line: None,
+            comments_to: None,
             rename_columns: true,
             short_name_line: 0,
             rename_sheet: true,
@@ -306,6 +312,8 @@ pub struct Detected {
     pub long_name_line: usize,
     pub units_line: usize,
     pub comments_line: usize,
+    /// Last line of the comments (equal to `comments_line` for a single line; 0 with none).
+    pub comments_to: usize,
     /// Number of columns the sheet will have.
     pub columns: usize,
     /// Numbers are read with a decimal comma (chosen, or implied by the thousands separator).
@@ -848,14 +856,18 @@ fn extend_back(rows: &[(usize, Vec<String>)], start: usize, ns: NumStyle) -> usi
 }
 
 /// Detects the long-name, units and comments lines (1-based, 0 = none).
-fn detect_labels(rows: &[(usize, Vec<String>)], header_lines: usize, ncols: usize) -> (usize, usize, usize) {
+/// The label lines of the header: the run of up to 15 consecutive lines just above the data with one
+/// cell per column (Origin's sub-header block; its defaults read the long names from its first line,
+/// the units from the second and the comments from the third to the fifteenth, T299). Returns the
+/// long name, units, first and last comments line (1-based; 0 for none).
+fn detect_labels(rows: &[(usize, Vec<String>)], header_lines: usize, ncols: usize) -> (usize, usize, usize, usize) {
     let header: Vec<&(usize, Vec<String>)> = rows.iter().take_while(|(i, _)| *i < header_lines).collect();
     let Some(last) = header.iter().rposition(|(_, f)| f.len() == ncols) else {
-        return (0, 0, 0);
+        return (0, 0, 0, 0);
     };
     let mut block = vec![header[last].0];
     let mut k = last;
-    while block.len() < 3 && k > 0 {
+    while block.len() < 15 && k > 0 {
         let (prev_line, prev_fields) = header[k - 1];
         if prev_fields.len() == ncols && prev_line + 1 == header[k].0 {
             block.push(*prev_line);
@@ -866,7 +878,7 @@ fn detect_labels(rows: &[(usize, Vec<String>)], header_lines: usize, ncols: usiz
     }
     block.reverse();
     let line = |i: usize| block.get(i).map_or(0, |l| l + 1);
-    (line(0), line(1), line(2))
+    (line(0), line(1), line(2), if block.len() > 2 { line(block.len() - 1) } else { 0 })
 }
 
 impl Analysis {
@@ -888,6 +900,7 @@ impl Analysis {
                 long_name_line: layout.long_name_line,
                 units_line: layout.units_line,
                 comments_line: layout.comments_line,
+                comments_to: layout.comments_to,
                 columns: source_columns.len(),
                 decimal_comma: false,
                 thousands: Thousands::Off,
@@ -909,6 +922,7 @@ pub(crate) struct Layout {
     pub(crate) long_name_line: usize,
     pub(crate) units_line: usize,
     pub(crate) comments_line: usize,
+    pub(crate) comments_to: usize,
 }
 
 /// Finds the data start (unless `opts.header_lines` says) and the label lines (unless the options
@@ -922,13 +936,21 @@ pub(crate) fn find_layout(all: &[(usize, Vec<String>)], ns: NumStyle, opts: &Asc
         },
     };
     let columns = start.map_or(0, |s| all[s].1.len());
-    let (dl, du, dc) = detect_labels(all, header_lines, columns);
+    let (dl, du, dc, dc_to) = detect_labels(all, header_lines, columns);
+    let comments_line = opts.comments_line.unwrap_or(dc);
+    let comments_to = match (opts.comments_to, opts.comments_line) {
+        _ if comments_line == 0 => 0,
+        (Some(to), _) => to.max(comments_line),
+        (None, None) => dc_to.max(comments_line),
+        (None, Some(_)) => comments_line,
+    };
     Layout {
         header_lines,
         start,
         long_name_line: opts.long_name_line.unwrap_or(dl),
         units_line: opts.units_line.unwrap_or(du),
-        comments_line: opts.comments_line.unwrap_or(dc),
+        comments_line,
+        comments_to,
     }
 }
 
@@ -994,6 +1016,7 @@ fn analyze(text: &str, opts: &AsciiOptions) -> Analysis {
             long_name_line: layout.long_name_line,
             units_line: layout.units_line,
             comments_line: layout.comments_line,
+            comments_to: layout.comments_to,
             columns,
             decimal_comma,
             thousands,
@@ -1263,7 +1286,19 @@ pub(crate) fn assemble(
     let label_line = |n: usize| if opts.rename_columns { n } else { 0 };
     let mut long_names = label_row(label_line(d.long_name_line));
     let mut units = label_row(label_line(d.units_line));
-    let comments = label_row(label_line(d.comments_line));
+    // Comments From .. To: the lines joined with line breaks, empty cells left out (T299, as Origin 2016).
+    let comments: Vec<String> = {
+        let from = label_line(d.comments_line);
+        let rows: Vec<Vec<String>> =
+            if from == 0 { Vec::new() } else { (from..=d.comments_to.max(from)).map(label_row).collect() };
+        (0..ncols)
+            .map(|j| {
+                let parts: Vec<&str> =
+                    rows.iter().filter_map(|r| r.get(j)).map(|c| c.as_str()).filter(|c| !c.trim().is_empty()).collect();
+                parts.join("\n")
+            })
+            .collect()
+    };
     let short_names = short_names_from(&label_row(opts.short_name_line), ncols);
     if d.long_name_line > 0 && d.units_line == 0 {
         for (name, unit) in long_names.iter_mut().zip(units.iter_mut()) {
@@ -1300,8 +1335,14 @@ pub(crate) fn assemble(
             }
         })
         .collect();
-    let used: Vec<usize> = [d.long_name_line, d.units_line, d.comments_line]
+    let comment_lines: Vec<usize> = if d.comments_line == 0 {
+        Vec::new()
+    } else {
+        (d.comments_line..=d.comments_to.max(d.comments_line)).collect()
+    };
+    let used: Vec<usize> = [d.long_name_line, d.units_line]
         .into_iter()
+        .chain(comment_lines)
         .chain(opts.param_lines.iter().copied())
         .chain([opts.short_name_line])
         .filter(|n| *n > 0)
@@ -1533,6 +1574,33 @@ mod tests {
         assert_eq!(imp.warnings, vec!["1 header line was not imported".to_string()]);
         assert_eq!(imp.workbook.sheets[0].name, "file");
         assert_eq!(col(&imp, 1).short_name, "B");
+    }
+
+    /// Origin 2016's impasc (T299, measured): sub-header lines from the third on are joined into the
+    /// comment with line breaks, by default and as Comments From .. To.
+    #[test]
+    fn comment_lines_are_joined_as_origin_does() {
+        let text = "Potential (V)\tCurrent [A]\nunit a\tunit b\nfirst a\tfirst b\nsecond a\t\n1\t2\n3\t4\n5\t6\n";
+        let imp = parse(text);
+        let d = &imp.detected;
+        assert_eq!((d.long_name_line, d.units_line, d.comments_line, d.comments_to), (1, 2, 3, 4));
+        assert_eq!(col(&imp, 0).comments, "first a\nsecond a");
+        assert_eq!(col(&imp, 1).comments, "first b", "an empty cell adds nothing");
+        assert!(imp.warnings.is_empty(), "{:?}", imp.warnings);
+        // Long names from line 1, no units, comments from 2 to 4 (the measured LNames 1, CommsFrom 2, CommsTo 3).
+        let opts = AsciiOptions {
+            long_name_line: Some(1),
+            units_line: Some(0),
+            comments_line: Some(2),
+            comments_to: Some(3),
+            ..AsciiOptions::default()
+        };
+        let imp = parse_with(text, &opts);
+        assert_eq!(col(&imp, 0).comments, "unit a\nfirst a");
+        assert_eq!(imp.warnings.len(), 1, "line 4 is not used: {:?}", imp.warnings);
+        // A comments line given alone stays one line.
+        let one = AsciiOptions { comments_line: Some(3), ..AsciiOptions::default() };
+        assert_eq!(col(&parse_with(text, &one), 0).comments, "first a");
     }
 
     #[test]

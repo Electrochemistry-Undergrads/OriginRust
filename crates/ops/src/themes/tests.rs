@@ -18,6 +18,7 @@ fn busy_text_options() -> AsciiOptions {
         long_name_line: Some(1),
         units_line: Some(2),
         comments_line: Some(3),
+        comments_to: None,
         rename_columns: false,
         short_name_line: 2,
         rename_sheet: false,

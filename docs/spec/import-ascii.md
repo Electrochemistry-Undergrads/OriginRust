@@ -92,6 +92,24 @@ Header and naming options in Sheaf (`AsciiOptions`; the window nodes are describ
 
 **Short names from a header line, measured in Origin (2026-11-13, `impasc ... options.Hdr.SNames:=n`, files `tools/origin-ref/import-inputs/shortn*.txt`).** The option of the Header Lines group is `SNames` (dialog label "Short Names", default `<none>`; `LNames` is the long-name line). For each cell: every character that is not a letter, digit or dot is dropped (`my_name_1` gives `myname1`, `Second Col` gives `SecondCol`, `3rd-col` gives `3rdcol`, `(paren)` gives `paren`); a first character that is a digit or a dot becomes `A` (`3rd-col` gives `Ardcol`, `9lives` `Alives`, `12x` `A2x`, `1.5` `A.5`, `.5x` `A5x`, `..a` `A.a`); the result is cut to **18 characters** (a 26-letter cell gives its first 18, so the limit is confirmed); an empty cell, a cell with nothing left and a name that another column has already (letters compared without regard to case: `Q1` then `q1`; after the cut too: a 19-letter cell whose first 18 letters repeat an earlier name) get the automatic name of their column (`F`, `G`, `O`, ...). A cell that equals the automatic name of another column (`B` in the 16th column) is accepted when no column has it. Typing a name in the Column Properties box or setting `wks.col1.name$` gives the same drops and the same cut to 18 (a longer name is cut without a message) but allows a first digit (`9abc` stays), and a name that another column of the sheet has is not taken: the name stays as it was.
 
+**Measured in Origin 2016 (T299, 2026-11-21; `re-workspace/scratch/import-header/`).** A tab file with
+three sub-header lines (`Potential (V)` ..., then two comment lines) through `impasc`:
+
+- With the defaults (auto sub-header), line 1 became the long name, line 2 the units and line 3 the
+  comment (the documented LongName 1, Unit 2, CommentFrom 3).
+- `options.Hdr.AutoSubHdr:=0 SubHdrLns:=3 LNames:=1 Units:=0 CommsFrom:=2 CommsTo:=3` put lines 2 and 3
+  into the comment **joined with a line break** (`first comment a` / `second comment a`), no units.
+- `options.Hdr.ByBottom`, `options.Hdr.OneLine` and `options.Hdr.NameUnitLine` are refused by Origin
+  2016's `impasc` (the command fails): counting the lines from the bottom and the one-line name+unit
+  splitter of the documentation are later versions' options.
+
+Sheaf (T299): the label lines detected above the data are a run of up to 15 lines (Origin's
+CommentTo 15; the detection looked at three before); the comments are the lines from the comments
+line to the last comments line, joined with line breaks (empty cells left out). `comments_to`
+(window "Last line of comments", CLI `--comments-to N`) sets the last line; by default it is the end of
+the detected label lines, or the comments line alone when that was given. The Excel import uses the
+same detection (its window keeps one comments line).
+
 Where the header text goes in the workbook:
 
 | Header concept | Destination |

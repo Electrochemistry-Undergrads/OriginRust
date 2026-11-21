@@ -399,6 +399,7 @@ fn number_display(ui: &mut egui::Ui, format: &mut NumberFormat) {
         NumberFormat::Engineering(d) | NumberFormat::EngineeringSi(d) => (5, d),
         NumberFormat::EngineeringSig(n) => (6, n),
         NumberFormat::DecimalGrouped(d) => (7, d),
+        NumberFormat::ScientificAuto => (8, 3),
         _ => (0, 3),
     };
     // Origin's Display list is Decimal:1000, Scientific:1E3, Engineering:1K, Decimal:1,000 and its
@@ -413,6 +414,7 @@ fn number_display(ui: &mut egui::Ui, format: &mut NumberFormat) {
         "Engineering:1K (decimal places)",
         "Engineering:1K (significant digits)",
         "Decimal:1,000",
+        "Scientific (default digits)",
     ];
     let mut d = digits;
     ui.horizontal(|ui| {
@@ -421,7 +423,7 @@ fn number_display(ui: &mut egui::Ui, format: &mut NumberFormat) {
                 ui.selectable_value(&mut style, i, *n);
             }
         });
-        if style != 0 && style != 4 {
+        if style != 0 && style != 4 && style != 8 {
             ui.add(DragValue::new(&mut d).range(0..=15));
         }
     });
@@ -433,6 +435,7 @@ fn number_display(ui: &mut egui::Ui, format: &mut NumberFormat) {
         5 => NumberFormat::EngineeringSi(d),
         6 => NumberFormat::EngineeringSig(d.max(1)),
         7 => NumberFormat::DecimalGrouped(d),
+        8 => NumberFormat::ScientificAuto,
         _ => NumberFormat::General,
     };
 }

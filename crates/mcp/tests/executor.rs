@@ -199,6 +199,19 @@ fn a_fit_whose_plot_cannot_be_written_leaves_no_fit_behind() {
 }
 
 #[test]
+fn the_fit_tool_adds_the_covariance_and_correlation_matrices_on_request() {
+    let d = Dirs::new("covar");
+    write_csv(&d, "a.csv");
+    let mut s = Server::new(d.roots());
+    ok(&headless(&mut s, "import_files", json!({"files": ["a.csv"]})));
+    let fit = json!({"model": "linear", "y": ["B"], "covariance_matrix": true, "correlation_matrix": true});
+    ok(&headless(&mut s, "fit", fit));
+    ok(&headless(&mut s, "export_data", json!({"path": "p.csv", "sheet": "FitLinear1"})));
+    let csv = std::fs::read_to_string(d.root.join("p.csv")).unwrap();
+    assert!(csv.lines().next().unwrap().ends_with("Intercept,Slope,Intercept,Slope"), "{csv}");
+}
+
+#[test]
 fn results_name_the_book_and_the_sheet() {
     let d = Dirs::new("names");
     write_csv(&d, "a.csv");

@@ -987,6 +987,10 @@ fn the_fit_window_offers_direct_weighting_and_the_scale_errors_switch() {
     click(&mut h, "Advanced");
     click(&mut h, "Scale Error with sqrt(Reduced Chi-Sqr)");
     assert!(!request(&h).scale_errors, "the box was ticked and is now off");
+    assert!(!request(&h).covariance_matrix && !request(&h).correlation_matrix, "off as in Origin");
+    click(&mut h, "Covariance Matrix");
+    click(&mut h, "Correlation Matrix");
+    assert!(request(&h).covariance_matrix && request(&h).correlation_matrix);
     // The weight column w is chosen and the fit runs with the weights from it.
     let w = project(&h).workbooks().next().unwrap().sheets[0].column_by_name("w").unwrap().id;
     h.state_mut().fit.as_mut().unwrap().weight_column_for_test(w);
@@ -8604,11 +8608,13 @@ fn reduce_duplicate_x_data_runs_from_the_menu_into_origins_columns() {
     assert!(h.state().analysis.is_some(), "the item opens its window");
     click(&mut h, "OK");
     assert_eq!(h.state().doc.undo_label(), Some("Reduce duplicate X data"));
+    // T321: as Origin's reducedup, the two columns go to the end of the input sheet.
     let sheets = &project(&h).workbooks().next().unwrap().sheets;
-    assert_eq!(sheets.len(), sheets_before + 1);
-    let cols = &sheets.last().unwrap().columns;
+    assert_eq!(sheets.len(), sheets_before, "no new sheet");
+    // The input columns up and down give two pairs after A, B, C.
+    let cols = &sheets[0].columns[3..];
     let names: Vec<&str> = cols.iter().map(|c| c.long_name.as_str()).collect();
-    assert_eq!(names[..2], ["ReduceDupX1", "ReduceDupY1"]);
+    assert_eq!(names, ["ReduceDupX1", "ReduceDupY1", "ReduceDupX2", "ReduceDupY2"]);
     // t = 1..4 has no duplicates, so the curve comes back unchanged.
     assert_eq!(cols[0].numeric().unwrap(), [1.0, 2.0, 3.0, 4.0]);
     assert_eq!(cols[1].numeric().unwrap(), [2.5, 4.5, 6.5, 8.5]);

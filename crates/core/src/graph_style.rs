@@ -343,6 +343,9 @@ pub struct PageStyle {
     /// The small layer number buttons at the top left of the graph window.
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub layer_icons: bool,
+    /// Highlight the active layer's axes in the graph window.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub active_layer_indicator: bool,
     /// Data > Lock Position (T186).
     #[serde(default, skip_serializing_if = "is_default")]
     pub lock_position: LockPosition,
@@ -378,6 +381,7 @@ impl Default for PageStyle {
         PageStyle {
             border: None,
             layer_icons: true,
+            active_layer_indicator: false,
             lock_position: LockPosition::LayerIcon,
             title_display: TitleDisplay::Both,
             comments: String::new(),
@@ -423,6 +427,7 @@ mod tests {
         let page = PageStyle {
             border: Some(BorderStyle::solid(Color::BLACK, 0.5)),
             layer_icons: false,
+            active_layer_indicator: true,
             lock_position: LockPosition::LastPoint,
             title_display: TitleDisplay::LongName,
             comments: "notes".into(),

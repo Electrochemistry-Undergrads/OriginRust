@@ -12,6 +12,50 @@ use crate::graph_zoom::MARGIN;
 use eframe::egui::{self, Color32, Key, Rect, TextureHandle, TextureOptions, Vec2, vec2};
 use sheaf_core::project::ViewMode;
 use sheaf_core::{Project, WindowId};
+use sheaf_plot::scene::{ObjectKind, Scene};
+use sheaf_plot::ticks::ResolvedAxis;
+
+fn primary_axis_lines(scene: &Scene, layer: usize) -> impl Iterator<Item = sheaf_plot::Rect> + '_ {
+    scene.layers.iter().flat_map(|drawn| &drawn.objects).filter(move |object| object.layer == layer).flat_map(
+        |object| {
+            object.boxes.iter().copied().filter(|bounds| match object.kind {
+                // The layout stores the primary Cartesian axis strokes as zero-height and
+                // zero-width picking boxes at their rendered positions.
+                ObjectKind::XAxis => bounds.h == 0.0 && bounds.w > 0.0,
+                ObjectKind::YAxis => bounds.w == 0.0 && bounds.h > 0.0,
+                _ => false,
+            })
+        },
+    )
+}
+
+fn axis_segments(line: sheaf_plot::Rect, axis: &ResolvedAxis) -> Vec<[(f64, f64); 2]> {
+    let mut gaps: Vec<_> = axis.gaps.iter().map(|gap| gap.span(axis.reversed)).collect();
+    gaps.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
+    // Like the resolved Y scale, the vertical line runs from the bottom to the top.
+    let at = |u| (line.x + u * line.w, line.y + (1.0 - u) * line.h);
+    let starts = std::iter::once(0.0).chain(gaps.iter().map(|&(_, hi)| hi));
+    let ends = gaps.iter().map(|&(lo, _)| lo).chain(std::iter::once(1.0));
+    starts.zip(ends).map(|(lo, hi)| [at(lo), at(hi)]).collect()
+}
+
+/// Draw the indicator as a graph-window overlay, using the cached scene's axis positions.
+pub(crate) fn draw_active_axes(
+    painter: &egui::Painter,
+    scene: &Scene,
+    layer: usize,
+    geometry: &sheaf_plot::LayerGeometry,
+    to_screen: &impl Fn((f64, f64)) -> egui::Pos2,
+    colour: Color32,
+) {
+    let stroke = egui::Stroke::new(3.0_f32, colour.linear_multiply(0.75));
+    for line in primary_axis_lines(scene, layer) {
+        let axis = if line.h == 0.0 { &geometry.x } else { &geometry.y };
+        for segment in axis_segments(line, axis) {
+            painter.line_segment(segment.map(to_screen), stroke);
+        }
+    }
+}
 
 /// The rectangle the zoom layout works in. In Window and Draft View it is the window grown by the
 /// layout's margin, so that the page fills the window with no grey border.
@@ -287,5 +331,61 @@ mod tests {
         assert_eq!(p.view_modes.len(), 1);
         p.set_view_mode(g, ViewMode::Page);
         assert!(p.view_modes.is_empty());
+    }
+
+    #[test]
+    fn indicator_uses_rendered_primary_axes_of_the_selected_layer() {
+        let mut project = Project::new();
+        let id = project.add_graph(sheaf_core::template::Template::Line);
+        let graph = project.graph_mut(id).unwrap();
+        graph.add_layer(sheaf_core::layers::NewLayerKind::InsetWithData, 0).unwrap();
+
+        let scene = sheaf_plot::graph_scene(&project, id).unwrap();
+        let outer: Vec<_> = primary_axis_lines(&scene, 0).collect();
+        let inset: Vec<_> = primary_axis_lines(&scene, 1).collect();
+        assert_eq!((outer.len(), inset.len()), (2, 2));
+        assert_ne!(outer, inset, "the indicator follows the active inset's axes");
+
+        let graph = project.graph_mut(id).unwrap();
+        graph.layers[1].display.show_x_axes = false;
+        graph.layers[1].y_axis.offset_pct = 15.0;
+        let scene = sheaf_plot::graph_scene(&project, id).unwrap();
+        let lines: Vec<_> = primary_axis_lines(&scene, 1).collect();
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].w, 0.0);
+        let old_y = inset.iter().find(|line| line.w == 0.0).unwrap();
+        assert!(lines[0].x < old_y.x, "the indicator follows the displaced Y axis");
+
+        project.graph_mut(id).unwrap().layers[1].display.hidden = true;
+        let scene = sheaf_plot::graph_scene(&project, id).unwrap();
+        assert_eq!(primary_axis_lines(&scene, 1).count(), 0);
+        assert_eq!(primary_axis_lines(&scene, 9).count(), 0);
+    }
+
+    #[test]
+    fn indicator_leaves_axis_breaks_open() {
+        use sheaf_core::graph::AxisBreak;
+        use sheaf_core::template::Template;
+
+        let mut project = Project::new();
+        let id = project.add_graph(Template::Line);
+        let axis = &mut project.graph_mut(id).unwrap().layers[0].y_axis;
+        axis.min = Some(10.0);
+        axis.max = Some(0.0);
+        let mut gap = AxisBreak::new(2.0, 4.0);
+        gap.auto_position = false;
+        gap.position_pct = 30.0;
+        axis.axis_breaks.push(gap);
+        let scene = sheaf_plot::graph_scene(&project, id).unwrap();
+        let line = primary_axis_lines(&scene, 0).find(|line| line.w == 0.0).unwrap();
+        let geometry = sheaf_plot::layout_geometry(&project, id).unwrap();
+        let segments = axis_segments(line, &geometry[0].y);
+        let [[bottom, before_gap], [after_gap, top]] = segments.as_slice() else {
+            panic!("expected two segments around the axis break, got {segments:?}");
+        };
+        assert_eq!(*bottom, (line.x, line.y + line.h));
+        assert!(before_gap.1 < bottom.1 && before_gap.1 > after_gap.1);
+        assert!((before_gap.1 + after_gap.1) * 0.5 < line.y + line.h * 0.5);
+        assert_eq!(*top, (line.x, line.y));
     }
 }

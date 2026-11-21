@@ -1747,6 +1747,8 @@ struct FitArgs {
     max_iterations: Option<usize>,
     tolerance: Option<f64>,
     scale_errors: Option<bool>,
+    covariance_matrix: Option<bool>,
+    correlation_matrix: Option<bool>,
     compare_with: Option<String>,
     rank: Vec<String>,
     global: Option<GlobalArgs>,
@@ -1794,6 +1796,8 @@ fn fit_spec(a: &FitArgs, project: &Project, fdf: Option<PathBuf>) -> Result<FitS
     spec.compare = a.compare_with.clone();
     spec.rank = a.rank.clone();
     spec.no_scale_errors = a.scale_errors == Some(false);
+    spec.covariance_matrix = a.covariance_matrix == Some(true);
+    spec.correlation_matrix = a.correlation_matrix == Some(true);
     if let Some(g) = &a.global {
         spec.global = true;
         spec.share = g.share.clone();

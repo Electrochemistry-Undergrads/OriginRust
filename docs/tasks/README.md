@@ -71,7 +71,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Done 2026-11-15 (unmeasured Sheaf rules, graphing 13.15-13.17): Offset Grouped Data menu with Cumulative, Stacked Histograms, waterfall Y/Z colour mapping |
 | [T63](T63-greyed-items-with-code-2.md) | 3, parallel | M | Existing-feature wiring; F/G/J wired, H, A, B, I and K wired 2026-11-19 (workbook-model 13c, graphing "Step and spline line plots"), C deferred to B8/T14; D and E open (D belongs to B14; E needs Origin measured) |
 | [T65](T65-graph-view-zoom-pan.md) | 4 (B1), P1 | M | Zoom In mode, Zoom Out, Whole Page and Zoom-Panning tool landed 2026-11-15; Standard toolbar zoom combo added 2026-11-18 (Scale In/Out and Zoom All: T69) |
-| [T66](T66-graph-view-modes.md) | 4 (B1), P1 | M | Partly done: the four view modes, Show > Layer Icons, Full Screen and the documented Active Layer Only/Hide Other Layers alias (22.7); eight other Show items and Show Data Info stay grey until measured |
+| [T66](T66-graph-view-modes.md) | 4 (B1), P1 | M | Partly done: four view modes, Layer Icons, Active Layer Only, Labels, Data, Active Layer Indicator and Full Screen (graphing 22). Five Show items and Show Data Info remain |
 | [T67](T67-add-straight-line.md) | 4 (B3), P1 | M | Done 2026-11-15: Add Straight Line (Origin's addline), dialog, CLI --vline/--hline; left: dragging (Moveable) |
 | [T70](T70-axis-center-fit-page-to-printer.md) | 4 (B3), P1 | S | Done 2026-11-15: axis Center, Fit Page To Printer, Format > Fit Page To Layers... opens its window |
 | [T71](T71-point-segments.md) | 4 (B4), P1 | S | Done 2026-11-15: Plot > Line + Symbol > 2 and 3 Point Segment (line connections 2 and 3) |
@@ -295,12 +295,14 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T310](T310-param-row-edit.md) | Rename and delete a user parameter row from its title | S | done 2026-11-21 |
 | [T314](T314-sig-digits.md) | Significant and Scientific displays measured in Origin 2016 and copied (326 of 328 cells) | S | done 2026-11-21 |
 | [T317](T317-scientific-auto.md) | Scientific with default digits as Origin shows it (NumberFormat::ScientificAuto) | S | done 2026-11-21 |
+| [T321](T321-reducedup-sheet.md) | Reduce Duplicate X Data writes its columns at the end of the input sheet, as Origin's reducedup | S | done 2026-11-21 |
 | [T311](T311-qqplot-measure.md) | Measure Q-Q Plot against Origin (expected values, y = x line ends, band) | S | done 2026-11-21 (statistics 16.2a) |
 | [T312](T312-import-nonnum.md) | Text import: text in a numeric column read as text, stop, new sheet or new columns (NonNum), as Origin 2016 | S | done 2026-11-21, measured |
 | [T313](T313-scatter-matrix-measure.md) | Measure Scatter Matrix against Origin (page, grid, tick labels, titles, symbols, tick step) | S | done 2026-11-21 (graphing 35) |
 | [T315](T315-import-two-digit-years.md) | Text import: two-digit years (M/d/yy, dd.MM.yy, dd-MMM-yy) with Origin 2016's 00-44 window | S | done 2026-11-21, measured |
 | [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T320](T320-fit-covariance.md) | Fit report: Covariance Matrix and Correlation Matrix options (off as in Origin 2016), checked against Origin's errors and dependencies | S | done 2026-11-21 (fitting 4) |
 | [T322](T322-funcgraph-measure.md) | Measure Graph > Add Function Graph against Origin (Function tab, Auto range, Plot Type) | S | done 2026-11-21 (graphing 41) |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |

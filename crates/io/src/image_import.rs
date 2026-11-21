@@ -1,6 +1,7 @@
-//! File > Import > Image (T204, matrices spec 7h): a picture file read into one matrix sheet of gray
-//! levels. Origin imports pictures into matrix books too; it keeps the colours, while Sheaf keeps the
-//! luminance (0 black to 255 white), the first matrix row being the picture's top row.
+//! File > Import > Image (T204, matrices spec 7h, measured by T301): a picture file read into a matrix
+//! book. Origin keeps a colour picture as one RGB image (its values as data are round((2R + 5G + B) / 8));
+//! Sheaf keeps the Red, Green and Blue channels as sheets (T218), and a gray picture as its levels
+//! (0 black to 255 white), the first matrix row being the picture's top row, as Origin's.
 
 use std::path::Path;
 

@@ -380,17 +380,25 @@ Measured on Origin 2016's picture of its CONTGRAY template (`worksheet -p 226 co
 - **Not measured:** Origin's colour scale title ("Color Scale Title" in the picture; Sheaf draws none, as
   for the other templates) and the gray for 32 bands or fewer.
 
-## 7h. File > Import > Image (T204, 2026-11-20, not measured)
+## 7h. File > Import > Image (T204, 2026-11-20; measured by T301, 2026-11-21)
 
-- File > Import > Image... reads a PNG, JPEG, GIF or BMP picture into a new matrix book named after
-  the file, as one undo step ("Import Image"). It works with no window open or with a workbook.
-- Each pixel becomes its luminance, 0 (black) to 255 (white), from the `image` crate's Rec. 709
-  weights. The first matrix row is the picture's top row. The X and Y ranges are the default 1..cols
-  and 1..rows.
-- **Colour (T218):** a picture with any coloured pixel gets three sheets, Red, Green and Blue, each
-  0 to 255. A gray picture gets one sheet named Gray. Origin keeps colour pictures as one RGB image;
-  Sheaf keeps the channels as plain matrices, so every matrix tool works on each of them. TIFF and
-  other formats are left.
+Measured against Origin 2016's `impImage` on PNG, BMP, GIF and JPEG pictures of 3 x 2 pixels (probes in
+`re-workspace/scratch/t301`).
+
+- File > Import > Image... reads a PNG, JPEG, GIF or BMP picture into a **new** matrix book, as one undo
+  step ("Import Image"). Origin makes a new book whatever window is active, a matrix too (measured); so
+  does Sheaf.
+- **Names (measured):** the book's short name is the file's stem, cleaned by the window-name rule and
+  numbered when taken (`gray`, then `gray1`, `gray2`). Its long name is the file's name with the extension
+  (`gray.png`). The sheet of a gray picture is named after the stem too.
+- **Ranges (measured):** X from 0 to cols - 1 and Y from 0 to rows - 1, not the default 1 to 10. The first
+  matrix row is the picture's top row.
+- **Values:** a gray picture gives its levels, 0 (black) to 255 (white), as Origin's image converted to
+  data (`img2m type:=byte`) does (measured). Origin keeps a colour picture as one RGB image; converted to
+  data its values are round((2R + 5G + B) / 8), the Color to Gray weights (measured: red 64, green 159,
+  blue 32). Sheaf keeps the channels instead (T218): three sheets, Red, Green and Blue, each 0 to 255, so
+  every matrix tool works on each of them; Image > Conversion > Color to Gray gives Origin's gray values.
+- TIFF and other formats are left.
 
 ## 7i. The Image menu on a matrix (T207, 2026-11-20; partly measured against Origin 2016 in T278)
 

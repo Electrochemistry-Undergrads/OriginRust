@@ -609,6 +609,18 @@ impl Project {
             .expect("the name sequence is unbounded")
     }
 
+    /// A free window name made from `wanted` (a file's name, for example): `wanted` cleaned by Origin's
+    /// rule ([`clean_window_name`]), followed by the smallest free number when another window has it
+    /// (Origin's File > Import > Image names books `gray`, `gray1`, `gray2`, measured).
+    pub fn unique_name_from(&self, wanted: &str) -> String {
+        let base = clean_window_name(wanted);
+        let taken = |name: &str| self.windows.iter().any(|w| w.name().eq_ignore_ascii_case(name));
+        if !taken(&base) {
+            return base;
+        }
+        (1..).map(|n| format!("{base}{n}")).find(|name| !taken(name)).expect("the name sequence is unbounded")
+    }
+
     // ----- windows -------------------------------------------------------
 
     pub fn window(&self, id: WindowId) -> Option<&Window> {
@@ -2383,6 +2395,12 @@ mod tests {
         assert_eq!(clean_window_name("123"), "A123");
         assert_eq!(clean_window_name("12345678901234"), "A123456789012");
         assert_eq!(clean_window_name("___"), "A");
+        // A file's name as a window name: cleaned, then numbered when taken (Origin's gray, gray1).
+        let mut p = Project::new();
+        assert_eq!(p.unique_name_from("my photo"), "myphoto");
+        let a = p.add_workbook("");
+        p.rename_window(a, "myphoto").unwrap();
+        assert_eq!(p.unique_name_from("my photo"), "myphoto1");
         let mut p = Project::new();
         let a = p.add_workbook("Data");
         let b = p.add_workbook("Other");

@@ -4177,6 +4177,51 @@ mod tests {
     }
 
     #[test]
+    fn masked_rows_and_empty_rows_give_origins_statistics() {
+        // T264, measured in Origin 2016 on 2026-11-20 (re-workspace/scratch/origin-diff/
+        // worksheet-formulas/mask.out.txt and rowedge*.out.txt).
+        // stats of A = 1, 4, ..., 36 with row 3 masked: n 5, sum 82.
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let a = p.add_column(book, 0, Designation::Y, ColumnData::numeric((1..=6).map(|i| f64::from(i * i)).collect()));
+        let a = a.unwrap();
+        p.column_mut(a).unwrap().mask.insert(2);
+        let spec = StatisticsSpec { n: true, sum: true, ..StatisticsSpec::default() };
+        let t = p.analyze(&request(&[a], Tool::Statistics(spec))).unwrap().table.unwrap();
+        let at = |name: &str| t.rows[0].1[t.headers.iter().position(|h| h == name).unwrap()];
+        assert_eq!((at("N"), at("Sum")), (5.0, 82.0));
+        // rowstats over A, B, C with rows (5, 5, 5), (-, 2, 3), (-, -, -), (7, -, -).
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let n = f64::NAN;
+        let cols: Vec<ColumnId> = [vec![5.0, n, n, 7.0], vec![5.0, 2.0, n, n], vec![5.0, 3.0, n, n]]
+            .into_iter()
+            .map(|v| p.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap())
+            .collect();
+        let spec = RowStatsSpec { mean: true, sd: true, sem: true, min: true, max: true, n: true, sum: true };
+        p.analyze(&request(&cols, Tool::RowStatistics(spec))).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        let col = |name: &str| ws.columns.iter().find(|c| c.long_name == name).unwrap().numeric().unwrap().to_vec();
+        let blank = f64::NAN;
+        let want: [(&str, [f64; 4]); 7] = [
+            ("Mean", [5.0, 2.5, blank, 7.0]),
+            ("Standard Deviation", [0.0, std::f64::consts::FRAC_1_SQRT_2, blank, blank]),
+            ("SE of Mean", [0.0, 0.5, blank, blank]),
+            ("Minimum", [5.0, 2.0, blank, 7.0]),
+            ("Maximum", [5.0, 3.0, blank, 7.0]),
+            ("Number of Points", [3.0, 2.0, blank, 1.0]),
+            ("Sum", [15.0, 5.0, blank, 7.0]),
+        ];
+        for (name, rows) in want {
+            let got = col(name);
+            for (r, w) in rows.iter().enumerate() {
+                let ok = if w.is_nan() { got.get(r).is_none_or(|g| g.is_nan()) } else { (got[r] - w).abs() < 1e-12 };
+                assert!(ok, "{name} row {}: {:?}, Origin {w}", r + 1, got.get(r));
+            }
+        }
+    }
+
+    #[test]
     fn statistics_on_rows_add_columns_behind_the_last_chosen_column() {
         let mut p = Project::new();
         let book = p.add_workbook("");

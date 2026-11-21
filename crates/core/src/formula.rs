@@ -185,6 +185,11 @@ impl Host for SheetHost<'_> {
 
     fn cell(&self, col: &ColumnRef, row: usize) -> Option<f64> {
         let c = self.find(col)?;
+        // A masked cell reads as missing (measured in Origin 2016, T264: col(A)+col(B) is missing in
+        // the masked rows).
+        if c.active_mask().is_some_and(|m| m.contains(&row)) {
+            return (row < c.len()).then_some(f64::NAN);
+        }
         match c.numeric() {
             Some(v) => v.get(row).copied(),
             None => (row < c.len()).then_some(f64::NAN),
@@ -196,7 +201,13 @@ impl Host for SheetHost<'_> {
     }
 
     fn column_data(&self, col: &ColumnRef) -> Option<&[f64]> {
-        self.find(col)?.numeric()
+        // A column with masked cells goes through `cell` value by value, which reads them as
+        // missing (T264); the slice is only the fast path.
+        let c = self.find(col)?;
+        if c.active_mask().is_some() {
+            return None;
+        }
+        c.numeric()
     }
 
     fn column_len(&self, col: &ColumnRef) -> usize {
@@ -880,6 +891,31 @@ mod tests {
         let c = p.add_column(book, 0, Designation::Y, ColumnData::numeric(Vec::new())).unwrap();
         p.column_mut(b).unwrap().long_name = "Current".into();
         (p, a, b, c)
+    }
+
+    #[test]
+    fn a_formula_reads_a_masked_cell_as_missing_as_origin() {
+        // T264, measured in Origin 2016 on 2026-11-20 (re-workspace/scratch/origin-diff/
+        // worksheet-formulas/mask.out.txt): A = 1, 4, ..., 36, B = 10, ..., 60; A row 3 masked,
+        // C = A + B; then B row 5 masked, D = A + B and E = A * B.
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let col = |p: &mut Project, v: Vec<f64>| p.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap();
+        let a = col(&mut p, (1..=6).map(|i| f64::from(i * i)).collect());
+        let b = col(&mut p, (1..=6).map(|i| f64::from(10 * i)).collect());
+        let (c, d, e) = (col(&mut p, vec![]), col(&mut p, vec![]), col(&mut p, vec![]));
+        p.column_mut(a).unwrap().mask.insert(2);
+        p.set_column_values(c, "col(A)+col(B)", None).unwrap();
+        p.column_mut(b).unwrap().mask.insert(4);
+        p.set_column_values(d, "col(A)+col(B)", None).unwrap();
+        p.set_column_values(e, "col(A)*col(B)", None).unwrap();
+        let shown = |id: ColumnId, p: &Project| -> Vec<Option<f64>> {
+            p.numeric(id).unwrap().iter().map(|v| (!v.is_nan()).then_some(*v)).collect()
+        };
+        // Origin: C = 11, 24, --, 56, 75, 96; D = 11, 24, --, 56, --, 96; E = 10, 80, --, 640, --, 2160.
+        assert_eq!(shown(c, &p), [Some(11.0), Some(24.0), None, Some(56.0), Some(75.0), Some(96.0)]);
+        assert_eq!(shown(d, &p), [Some(11.0), Some(24.0), None, Some(56.0), None, Some(96.0)]);
+        assert_eq!(shown(e, &p), [Some(10.0), Some(80.0), None, Some(640.0), None, Some(2160.0)]);
     }
 
     #[test]

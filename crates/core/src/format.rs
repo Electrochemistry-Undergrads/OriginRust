@@ -103,7 +103,7 @@ impl NumberFormat {
             NumberFormat::General => format_general(v, 9),
             NumberFormat::Decimal(d) => format!("{:.*}", usize::from(d), v),
             NumberFormat::Scientific(d) => format_scientific(v, usize::from(d)),
-            NumberFormat::Significant(d) => format_general(v, usize::from(d.max(1))),
+            NumberFormat::Significant(d) => format_significant(v, usize::from(d.max(1))),
             NumberFormat::Engineering(d) | NumberFormat::EngineeringSi(d) => {
                 format_engineering(v, EngineeringDigits::Decimals(usize::from(d)))
             }
@@ -334,11 +334,74 @@ pub fn format_full_precision(v: f64) -> String {
 }
 
 /// Scientific notation with `digits` decimals, written like `1.50E-5`.
+/// Origin's Scientific display (measured in Origin 2016, T314): the mantissa with `digits` digits
+/// after the point and the exponent with a sign and at least two digits (`1.23E+02`, `5.0E-01`,
+/// `0E+00`), rounding the exact value with ties away from zero (125 with one decimal is `1.3E+02`).
 pub fn format_scientific(v: f64, digits: usize) -> String {
-    let s = format!("{v:.digits$e}");
-    match s.split_once('e') {
-        Some((m, e)) => format!("{m}E{e}"),
-        None => s,
+    let sign = if v.is_sign_negative() && v != 0.0 { "-" } else { "" };
+    let x = v.abs();
+    let (mantissa, e) = if x == 0.0 { ("0".repeat(digits + 1), 0) } else { round_significant(x, digits + 1) };
+    let mut text = mantissa[..1].to_string();
+    if digits > 0 {
+        text.push('.');
+        text.push_str(&mantissa[1..]);
+    }
+    format!("{sign}{text}E{}{:02}", if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+/// The first `n` significant digits of `x` (finite, positive) and its base-10 exponent, rounding
+/// the exact binary value with ties away from zero (T314).
+fn round_significant(x: f64, n: usize) -> (String, i32) {
+    // Ninety digits after the point show every double that matters here exactly enough that a tie is a tie.
+    let exact = format!("{x:.90e}");
+    let (m, e) = exact.split_once('e').expect("exponent form");
+    let mut exp: i32 = e.parse().expect("exponent");
+    let mut digits: Vec<u8> = m.bytes().filter(u8::is_ascii_digit).map(|b| b - b'0').collect();
+    let up = digits.get(n).is_some_and(|&d| d >= 5);
+    digits.truncate(n);
+    if up {
+        let mut i = n;
+        loop {
+            if i == 0 {
+                digits.insert(0, 1);
+                digits.truncate(n);
+                exp += 1;
+                break;
+            }
+            i -= 1;
+            if digits[i] == 9 {
+                digits[i] = 0;
+            } else {
+                digits[i] += 1;
+                break;
+            }
+        }
+    }
+    (digits.iter().map(|d| char::from(b'0' + d)).collect(), exp)
+}
+
+/// Origin's plain display with "Significant Digits=" n (measured in Origin 2016, T314): with `e`
+/// the exponent of the value, plain text with `n - 1 - e` decimals (zeros kept: 15 with 3 digits is
+/// `15.0`, 0.0999 with 1 is `0.10`) while `-3 <= e < n`; a power of ten with `e == n` stays plain
+/// (100 with 2 digits is `100`); otherwise the Scientific form with `n` significant digits
+/// (`1.10E+03`, `1.23E-04`). Rounding is that of [`format_scientific`].
+pub fn format_significant(v: f64, n: usize) -> String {
+    let n = n.max(1);
+    let sign = if v.is_sign_negative() && v != 0.0 { "-" } else { "" };
+    let x = v.abs();
+    if x == 0.0 {
+        return fixed_half_up(0.0, n - 1);
+    }
+    let shortest = format!("{x:e}");
+    let e: i32 = shortest.split_once('e').and_then(|(_, e)| e.parse().ok()).expect("exponent form");
+    let decimals = n as i32 - 1 - e;
+    let power_of_ten = shortest.starts_with("1e");
+    if e >= -3 && decimals >= 0 {
+        format!("{sign}{}", fixed_half_up(x, decimals as usize))
+    } else if decimals == -1 && power_of_ten {
+        format!("{sign}{}", fixed_half_up(x, 0))
+    } else {
+        format_scientific(v, n - 1)
     }
 }
 
@@ -407,10 +470,350 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)] // 3.14159 is a value of the measurement, not pi
+    fn significant_and_scientific_give_what_origin_2016_shows() {
+        // T314: Origin 2016's cell text (cell(r,c)$) for a plain Decimal:1000 column with Significant Digits=
+        // and for Scientific with Set Decimal Places= (re-workspace/scratch/t314/sig.out.txt). Not matched and
+        // left out: 0.995 with 2 significant digits (Origin 1.00, Sheaf 0.99) and in Scientific with 1 decimal
+        // (Origin 1.0E+00, Sheaf 9.9E-01); 0.995 is stored just below the tie.
+        use NumberFormat::{Scientific, Significant};
+        let cases = [
+            (Significant(1), 100.0, "1E+02"),
+            (Significant(1), 110.0, "1E+02"),
+            (Significant(1), 123.0, "1E+02"),
+            (Significant(1), 125.0, "1E+02"),
+            (Significant(1), 150.0, "2E+02"),
+            (Significant(1), 999.0, "1E+03"),
+            (Significant(1), 101.0, "1E+02"),
+            (Significant(1), 99.99, "1E+02"),
+            (Significant(1), 9.99, "10"),
+            (Significant(1), 9.5, "10"),
+            (Significant(1), 10.0, "10"),
+            (Significant(1), 15.0, "2E+01"),
+            (Significant(1), 19.0, "2E+01"),
+            (Significant(1), 95.0, "1E+02"),
+            (Significant(1), 99.0, "1E+02"),
+            (Significant(1), 0.5, "0.5"),
+            (Significant(1), 0.95, "0.9"),
+            (Significant(1), 1.5, "2"),
+            (Significant(1), 12.5, "1E+01"),
+            (Significant(1), 1000.0, "1E+03"),
+            (Significant(1), 1100.0, "1E+03"),
+            (Significant(1), 999.4, "1E+03"),
+            (Significant(1), 995.0, "1E+03"),
+            (Significant(1), -123.0, "-1E+02"),
+            (Significant(1), -100.0, "-1E+02"),
+            (Significant(1), 0.0, "0"),
+            (Significant(1), 0.1, "0.1"),
+            (Significant(1), 0.01, "0.01"),
+            (Significant(1), 0.00123, "0.001"),
+            (Significant(1), 0.000123, "1E-04"),
+            (Significant(1), 1.23e-05, "1E-05"),
+            (Significant(1), 0.0999, "0.10"),
+            (Significant(1), 0.995, "1.0"),
+            (Significant(1), 12345.0, "1E+04"),
+            (Significant(1), 123456.0, "1E+05"),
+            (Significant(1), 1500000.0, "2E+06"),
+            (Significant(1), 2.5e-07, "2E-07"),
+            (Significant(1), 0.001, "0.001"),
+            (Significant(1), 1234.5, "1E+03"),
+            (Significant(1), 7.0, "7"),
+            (Significant(1), 3.14159, "3"),
+            (Significant(2), 100.0, "100"),
+            (Significant(2), 110.0, "1.1E+02"),
+            (Significant(2), 123.0, "1.2E+02"),
+            (Significant(2), 125.0, "1.3E+02"),
+            (Significant(2), 150.0, "1.5E+02"),
+            (Significant(2), 999.0, "1.0E+03"),
+            (Significant(2), 101.0, "1.0E+02"),
+            (Significant(2), 99.99, "100"),
+            (Significant(2), 9.99, "10.0"),
+            (Significant(2), 9.5, "9.5"),
+            (Significant(2), 10.0, "10"),
+            (Significant(2), 15.0, "15"),
+            (Significant(2), 19.0, "19"),
+            (Significant(2), 95.0, "95"),
+            (Significant(2), 99.0, "99"),
+            (Significant(2), 0.5, "0.50"),
+            (Significant(2), 0.95, "0.95"),
+            (Significant(2), 1.5, "1.5"),
+            (Significant(2), 12.5, "13"),
+            (Significant(2), 1000.0, "1.0E+03"),
+            (Significant(2), 1100.0, "1.1E+03"),
+            (Significant(2), 999.4, "1.0E+03"),
+            (Significant(2), 995.0, "1.0E+03"),
+            (Significant(2), -123.0, "-1.2E+02"),
+            (Significant(2), -100.0, "-100"),
+            (Significant(2), 0.0, "0.0"),
+            (Significant(2), 0.1, "0.10"),
+            (Significant(2), 0.01, "0.010"),
+            (Significant(2), 0.00123, "0.0012"),
+            (Significant(2), 0.000123, "1.2E-04"),
+            (Significant(2), 1.23e-05, "1.2E-05"),
+            (Significant(2), 0.0999, "0.100"),
+            (Significant(2), 12345.0, "1.2E+04"),
+            (Significant(2), 123456.0, "1.2E+05"),
+            (Significant(2), 1500000.0, "1.5E+06"),
+            (Significant(2), 2.5e-07, "2.5E-07"),
+            (Significant(2), 0.001, "0.0010"),
+            (Significant(2), 1234.5, "1.2E+03"),
+            (Significant(2), 7.0, "7.0"),
+            (Significant(2), 3.14159, "3.1"),
+            (Significant(3), 100.0, "100"),
+            (Significant(3), 110.0, "110"),
+            (Significant(3), 123.0, "123"),
+            (Significant(3), 125.0, "125"),
+            (Significant(3), 150.0, "150"),
+            (Significant(3), 999.0, "999"),
+            (Significant(3), 101.0, "101"),
+            (Significant(3), 99.99, "100.0"),
+            (Significant(3), 9.99, "9.99"),
+            (Significant(3), 9.5, "9.50"),
+            (Significant(3), 10.0, "10.0"),
+            (Significant(3), 15.0, "15.0"),
+            (Significant(3), 19.0, "19.0"),
+            (Significant(3), 95.0, "95.0"),
+            (Significant(3), 99.0, "99.0"),
+            (Significant(3), 0.5, "0.500"),
+            (Significant(3), 0.95, "0.950"),
+            (Significant(3), 1.5, "1.50"),
+            (Significant(3), 12.5, "12.5"),
+            (Significant(3), 1000.0, "1000"),
+            (Significant(3), 1100.0, "1.10E+03"),
+            (Significant(3), 999.4, "999"),
+            (Significant(3), 995.0, "995"),
+            (Significant(3), -123.0, "-123"),
+            (Significant(3), -100.0, "-100"),
+            (Significant(3), 0.0, "0.00"),
+            (Significant(3), 0.1, "0.100"),
+            (Significant(3), 0.01, "0.0100"),
+            (Significant(3), 0.00123, "0.00123"),
+            (Significant(3), 0.000123, "1.23E-04"),
+            (Significant(3), 1.23e-05, "1.23E-05"),
+            (Significant(3), 0.0999, "0.0999"),
+            (Significant(3), 0.995, "0.995"),
+            (Significant(3), 12345.0, "1.23E+04"),
+            (Significant(3), 123456.0, "1.23E+05"),
+            (Significant(3), 1500000.0, "1.50E+06"),
+            (Significant(3), 2.5e-07, "2.50E-07"),
+            (Significant(3), 0.001, "0.00100"),
+            (Significant(3), 1234.5, "1.23E+03"),
+            (Significant(3), 7.0, "7.00"),
+            (Significant(3), 3.14159, "3.14"),
+            (Significant(4), 100.0, "100.0"),
+            (Significant(4), 110.0, "110.0"),
+            (Significant(4), 123.0, "123.0"),
+            (Significant(4), 125.0, "125.0"),
+            (Significant(4), 150.0, "150.0"),
+            (Significant(4), 999.0, "999.0"),
+            (Significant(4), 101.0, "101.0"),
+            (Significant(4), 99.99, "99.99"),
+            (Significant(4), 9.99, "9.990"),
+            (Significant(4), 9.5, "9.500"),
+            (Significant(4), 10.0, "10.00"),
+            (Significant(4), 15.0, "15.00"),
+            (Significant(4), 19.0, "19.00"),
+            (Significant(4), 95.0, "95.00"),
+            (Significant(4), 99.0, "99.00"),
+            (Significant(4), 0.5, "0.5000"),
+            (Significant(4), 0.95, "0.9500"),
+            (Significant(4), 1.5, "1.500"),
+            (Significant(4), 12.5, "12.50"),
+            (Significant(4), 1000.0, "1000"),
+            (Significant(4), 1100.0, "1100"),
+            (Significant(4), 999.4, "999.4"),
+            (Significant(4), 995.0, "995.0"),
+            (Significant(4), -123.0, "-123.0"),
+            (Significant(4), -100.0, "-100.0"),
+            (Significant(4), 0.0, "0.000"),
+            (Significant(4), 0.1, "0.1000"),
+            (Significant(4), 0.01, "0.01000"),
+            (Significant(4), 0.00123, "0.001230"),
+            (Significant(4), 0.000123, "1.230E-04"),
+            (Significant(4), 1.23e-05, "1.230E-05"),
+            (Significant(4), 0.0999, "0.09990"),
+            (Significant(4), 0.995, "0.9950"),
+            (Significant(4), 12345.0, "1.235E+04"),
+            (Significant(4), 123456.0, "1.235E+05"),
+            (Significant(4), 1500000.0, "1.500E+06"),
+            (Significant(4), 2.5e-07, "2.500E-07"),
+            (Significant(4), 0.001, "0.001000"),
+            (Significant(4), 1234.5, "1235"),
+            (Significant(4), 7.0, "7.000"),
+            (Significant(4), 3.14159, "3.142"),
+            (Scientific(0), 100.0, "1E+02"),
+            (Scientific(0), 110.0, "1E+02"),
+            (Scientific(0), 123.0, "1E+02"),
+            (Scientific(0), 125.0, "1E+02"),
+            (Scientific(0), 150.0, "2E+02"),
+            (Scientific(0), 999.0, "1E+03"),
+            (Scientific(0), 101.0, "1E+02"),
+            (Scientific(0), 99.99, "1E+02"),
+            (Scientific(0), 9.99, "1E+01"),
+            (Scientific(0), 9.5, "1E+01"),
+            (Scientific(0), 10.0, "1E+01"),
+            (Scientific(0), 15.0, "2E+01"),
+            (Scientific(0), 19.0, "2E+01"),
+            (Scientific(0), 95.0, "1E+02"),
+            (Scientific(0), 99.0, "1E+02"),
+            (Scientific(0), 0.5, "5E-01"),
+            (Scientific(0), 0.95, "9E-01"),
+            (Scientific(0), 1.5, "2E+00"),
+            (Scientific(0), 12.5, "1E+01"),
+            (Scientific(0), 1000.0, "1E+03"),
+            (Scientific(0), 1100.0, "1E+03"),
+            (Scientific(0), 999.4, "1E+03"),
+            (Scientific(0), 995.0, "1E+03"),
+            (Scientific(0), -123.0, "-1E+02"),
+            (Scientific(0), -100.0, "-1E+02"),
+            (Scientific(0), 0.0, "0E+00"),
+            (Scientific(0), 0.1, "1E-01"),
+            (Scientific(0), 0.01, "1E-02"),
+            (Scientific(0), 0.00123, "1E-03"),
+            (Scientific(0), 0.000123, "1E-04"),
+            (Scientific(0), 1.23e-05, "1E-05"),
+            (Scientific(0), 0.0999, "1E-01"),
+            (Scientific(0), 0.995, "1E+00"),
+            (Scientific(0), 12345.0, "1E+04"),
+            (Scientific(0), 123456.0, "1E+05"),
+            (Scientific(0), 1500000.0, "2E+06"),
+            (Scientific(0), 2.5e-07, "2E-07"),
+            (Scientific(0), 0.001, "1E-03"),
+            (Scientific(0), 1234.5, "1E+03"),
+            (Scientific(0), 7.0, "7E+00"),
+            (Scientific(0), 3.14159, "3E+00"),
+            (Scientific(1), 100.0, "1.0E+02"),
+            (Scientific(1), 110.0, "1.1E+02"),
+            (Scientific(1), 123.0, "1.2E+02"),
+            (Scientific(1), 125.0, "1.3E+02"),
+            (Scientific(1), 150.0, "1.5E+02"),
+            (Scientific(1), 999.0, "1.0E+03"),
+            (Scientific(1), 101.0, "1.0E+02"),
+            (Scientific(1), 99.99, "1.0E+02"),
+            (Scientific(1), 9.99, "1.0E+01"),
+            (Scientific(1), 9.5, "9.5E+00"),
+            (Scientific(1), 10.0, "1.0E+01"),
+            (Scientific(1), 15.0, "1.5E+01"),
+            (Scientific(1), 19.0, "1.9E+01"),
+            (Scientific(1), 95.0, "9.5E+01"),
+            (Scientific(1), 99.0, "9.9E+01"),
+            (Scientific(1), 0.5, "5.0E-01"),
+            (Scientific(1), 0.95, "9.5E-01"),
+            (Scientific(1), 1.5, "1.5E+00"),
+            (Scientific(1), 12.5, "1.3E+01"),
+            (Scientific(1), 1000.0, "1.0E+03"),
+            (Scientific(1), 1100.0, "1.1E+03"),
+            (Scientific(1), 999.4, "1.0E+03"),
+            (Scientific(1), 995.0, "1.0E+03"),
+            (Scientific(1), -123.0, "-1.2E+02"),
+            (Scientific(1), -100.0, "-1.0E+02"),
+            (Scientific(1), 0.0, "0.0E+00"),
+            (Scientific(1), 0.1, "1.0E-01"),
+            (Scientific(1), 0.01, "1.0E-02"),
+            (Scientific(1), 0.00123, "1.2E-03"),
+            (Scientific(1), 0.000123, "1.2E-04"),
+            (Scientific(1), 1.23e-05, "1.2E-05"),
+            (Scientific(1), 0.0999, "1.0E-01"),
+            (Scientific(1), 12345.0, "1.2E+04"),
+            (Scientific(1), 123456.0, "1.2E+05"),
+            (Scientific(1), 1500000.0, "1.5E+06"),
+            (Scientific(1), 2.5e-07, "2.5E-07"),
+            (Scientific(1), 0.001, "1.0E-03"),
+            (Scientific(1), 1234.5, "1.2E+03"),
+            (Scientific(1), 7.0, "7.0E+00"),
+            (Scientific(1), 3.14159, "3.1E+00"),
+            (Scientific(2), 100.0, "1.00E+02"),
+            (Scientific(2), 110.0, "1.10E+02"),
+            (Scientific(2), 123.0, "1.23E+02"),
+            (Scientific(2), 125.0, "1.25E+02"),
+            (Scientific(2), 150.0, "1.50E+02"),
+            (Scientific(2), 999.0, "9.99E+02"),
+            (Scientific(2), 101.0, "1.01E+02"),
+            (Scientific(2), 99.99, "1.00E+02"),
+            (Scientific(2), 9.99, "9.99E+00"),
+            (Scientific(2), 9.5, "9.50E+00"),
+            (Scientific(2), 10.0, "1.00E+01"),
+            (Scientific(2), 15.0, "1.50E+01"),
+            (Scientific(2), 19.0, "1.90E+01"),
+            (Scientific(2), 95.0, "9.50E+01"),
+            (Scientific(2), 99.0, "9.90E+01"),
+            (Scientific(2), 0.5, "5.00E-01"),
+            (Scientific(2), 0.95, "9.50E-01"),
+            (Scientific(2), 1.5, "1.50E+00"),
+            (Scientific(2), 12.5, "1.25E+01"),
+            (Scientific(2), 1000.0, "1.00E+03"),
+            (Scientific(2), 1100.0, "1.10E+03"),
+            (Scientific(2), 999.4, "9.99E+02"),
+            (Scientific(2), 995.0, "9.95E+02"),
+            (Scientific(2), -123.0, "-1.23E+02"),
+            (Scientific(2), -100.0, "-1.00E+02"),
+            (Scientific(2), 0.0, "0.00E+00"),
+            (Scientific(2), 0.1, "1.00E-01"),
+            (Scientific(2), 0.01, "1.00E-02"),
+            (Scientific(2), 0.00123, "1.23E-03"),
+            (Scientific(2), 0.000123, "1.23E-04"),
+            (Scientific(2), 1.23e-05, "1.23E-05"),
+            (Scientific(2), 0.0999, "9.99E-02"),
+            (Scientific(2), 0.995, "9.95E-01"),
+            (Scientific(2), 12345.0, "1.23E+04"),
+            (Scientific(2), 123456.0, "1.23E+05"),
+            (Scientific(2), 1500000.0, "1.50E+06"),
+            (Scientific(2), 2.5e-07, "2.50E-07"),
+            (Scientific(2), 0.001, "1.00E-03"),
+            (Scientific(2), 1234.5, "1.23E+03"),
+            (Scientific(2), 7.0, "7.00E+00"),
+            (Scientific(2), 3.14159, "3.14E+00"),
+            (Scientific(3), 100.0, "1.000E+02"),
+            (Scientific(3), 110.0, "1.100E+02"),
+            (Scientific(3), 123.0, "1.230E+02"),
+            (Scientific(3), 125.0, "1.250E+02"),
+            (Scientific(3), 150.0, "1.500E+02"),
+            (Scientific(3), 999.0, "9.990E+02"),
+            (Scientific(3), 101.0, "1.010E+02"),
+            (Scientific(3), 99.99, "9.999E+01"),
+            (Scientific(3), 9.99, "9.990E+00"),
+            (Scientific(3), 9.5, "9.500E+00"),
+            (Scientific(3), 10.0, "1.000E+01"),
+            (Scientific(3), 15.0, "1.500E+01"),
+            (Scientific(3), 19.0, "1.900E+01"),
+            (Scientific(3), 95.0, "9.500E+01"),
+            (Scientific(3), 99.0, "9.900E+01"),
+            (Scientific(3), 0.5, "5.000E-01"),
+            (Scientific(3), 0.95, "9.500E-01"),
+            (Scientific(3), 1.5, "1.500E+00"),
+            (Scientific(3), 12.5, "1.250E+01"),
+            (Scientific(3), 1000.0, "1.000E+03"),
+            (Scientific(3), 1100.0, "1.100E+03"),
+            (Scientific(3), 999.4, "9.994E+02"),
+            (Scientific(3), 995.0, "9.950E+02"),
+            (Scientific(3), -123.0, "-1.230E+02"),
+            (Scientific(3), -100.0, "-1.000E+02"),
+            (Scientific(3), 0.0, "0.000E+00"),
+            (Scientific(3), 0.1, "1.000E-01"),
+            (Scientific(3), 0.01, "1.000E-02"),
+            (Scientific(3), 0.00123, "1.230E-03"),
+            (Scientific(3), 0.000123, "1.230E-04"),
+            (Scientific(3), 1.23e-05, "1.230E-05"),
+            (Scientific(3), 0.0999, "9.990E-02"),
+            (Scientific(3), 0.995, "9.950E-01"),
+            (Scientific(3), 12345.0, "1.235E+04"),
+            (Scientific(3), 123456.0, "1.235E+05"),
+            (Scientific(3), 1500000.0, "1.500E+06"),
+            (Scientific(3), 2.5e-07, "2.500E-07"),
+            (Scientific(3), 0.001, "1.000E-03"),
+            (Scientific(3), 1234.5, "1.235E+03"),
+            (Scientific(3), 7.0, "7.000E+00"),
+            (Scientific(3), 3.14159, "3.142E+00"),
+        ];
+        for (format, v, want) in cases {
+            assert_eq!(format.format(v), want, "{format:?} of {v}");
+        }
+    }
+    #[test]
     fn fixed_formats() {
         assert_eq!(NumberFormat::Decimal(2).format(7.126), "7.13");
-        assert_eq!(NumberFormat::Scientific(2).format(0.000015), "1.50E-5");
-        assert_eq!(NumberFormat::Significant(3).format(1234.5), "1.23E3");
+        assert_eq!(NumberFormat::Scientific(2).format(0.000015), "1.50E-05");
+        assert_eq!(NumberFormat::Significant(3).format(1234.5), "1.23E+03");
         assert_eq!(NumberFormat::General.format(f64::NAN), "--");
     }
 

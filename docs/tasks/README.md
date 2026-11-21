@@ -243,6 +243,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T258](T258-operand-masks.md) | Bug: masked reference/operand cells in Simple Curve Math and Simple Column Math | S | done 2026-11-20 |
 | [T259](T259-mask-docs.md) | Parity 'Masking' row corrected (.opj masks are read and written since T10) | S | done 2026-11-20, docs only |
 | [T260](T260-normalize-ref.md) | Normalize: match a statistic of a reference column, divide by a reference cell (Origin's ref, cell), window and CLI | M | done 2026-11-20, not measured |
+| [T262](T262-date-parts.md) | year/month/day/weekday/hour/minute/second as Origin: -1 without a date or for an empty cell, Origin's date range and time rules (measured) | S | done 2026-11-20 |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |

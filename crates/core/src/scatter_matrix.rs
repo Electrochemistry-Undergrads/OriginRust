@@ -10,10 +10,12 @@
 //!   Cells (on by default) writes the column's name in its diagonal cell. Gap is a percentage of the page between
 //!   neighbouring cells (0 by default).
 //!
-//! Sheaf's own choices (unmeasured): a square page; tick labels only on the outer cells (the bottom row and left
-//! column, or for an upper matrix the top row and right column with the axes on those sides); no axis titles or
-//! legends; inward ticks and a closed frame in every cell; tick labels, symbols and names shrinking with the number of variables; every
-//! cell keeps its variables' automatic ranges (with at most five steps) as fixed limits, so the grid lines up.
+//! Measured in Origin 2016 (T313, graphing 35) and copied for a square matrix: the usual landscape page, the grid
+//! 8 % from the left and 5 % from the top with cells 87 / n % in size; tick labels on every outer side except in the
+//! diagonal cells; the names as axis titles along the bottom and the left; blue squares of size 9; a tick step of a
+//! quarter of the range to two significant digits. Sheaf's own choices: the triangular layouts, the automatic axis
+//! limits (Origin's rule was not found), inward ticks and a closed frame in every cell, tick labels and names
+//! shrinking with the number of variables.
 
 use crate::autorange::linear_range;
 use crate::graph::{AxisSide, Frame, HistogramStyle, PlotKind, TextLabel, TickDirection};
@@ -130,9 +132,10 @@ impl Default for ScatterMatrixOptions {
 /// The largest gap between cells, in percent of the page.
 pub const MAX_GAP_PCT: f64 = 10.0;
 
-/// The page margins around the grid, in percent of the page: left, right, top, bottom (Sheaf's choice; the
-/// tick labels are left and below). An upper matrix, labelled right and above, mirrors them.
-const MARGINS: (f64, f64, f64, f64) = (14.0, 4.0, 4.0, 12.0);
+/// The page margins around the grid, in percent of the page: left, right, top, bottom. Origin 2016 puts the
+/// grid of a square matrix 8 % from the left and 5 % from the top of its usual landscape page, the cells
+/// together 87 % wide and tall (measured on 2, 3 and 4 variables, T313). An upper matrix mirrors them.
+const MARGINS: (f64, f64, f64, f64) = (8.0, 5.0, 5.0, 8.0);
 
 /// The margins of a matrix shown as `display`: left, right, top, bottom in percent of the page.
 pub fn margins(display: MatrixDisplay) -> (f64, f64, f64, f64) {
@@ -187,7 +190,6 @@ impl Project {
         let mut g = Template::ScatterMatrix.new_graph(WindowId(0), "");
         let mut base = g.layers[0].clone();
         let scale = (2.0 / n as f64).min(1.0);
-        base.default_symbol.size_pt = (base.default_symbol.size_pt * scale).max(2.5);
         for axis in [&mut base.x_axis, &mut base.y_axis] {
             axis.tick_font.size_pt = (axis.tick_font.size_pt * scale).max(9.0);
             axis.major_tick_len_pt *= scale.max(0.5);
@@ -205,6 +207,7 @@ impl Project {
         }
         let labels_x = |r: usize| if upper { r == 0 } else { r == n - 1 };
         let labels_y = |c: usize| if upper { c == n - 1 } else { c == 0 };
+        let square = options.display == MatrixDisplay::Square;
         g.layers = cells
             .iter()
             .map(|&(r, c)| {
@@ -212,6 +215,21 @@ impl Project {
                 l.frame = frames[r * n + c];
                 l.x_axis.show_tick_labels = labels_x(r);
                 l.y_axis.show_tick_labels = labels_y(c) && !(r == c && options.diagonal == MatrixDiagonal::Histogram);
+                if square {
+                    // Origin's Show Tick and Label "All" (measured): every outer side of the grid carries tick
+                    // labels, the top row and right column on those sides, except in the diagonal cells; the
+                    // bottom row and the left column carry the variables' names as axis titles, the diagonal
+                    // cells too.
+                    let off = r != c;
+                    l.x_axis.show_tick_labels = off && (r == 0 || r == n - 1);
+                    l.x_axis.side = if r == 0 { AxisSide::Opposite } else { AxisSide::Normal };
+                    l.y_axis.show_tick_labels = off && (c == 0 || c == n - 1);
+                    l.y_axis.side = if c == n - 1 { AxisSide::Opposite } else { AxisSide::Normal };
+                    l.x_axis.title = Some(variables[c].0.clone());
+                    l.x_axis.show_title = r == n - 1;
+                    l.y_axis.title = Some(variables[r].0.clone());
+                    l.y_axis.show_title = c == 0;
+                }
                 // Every cell of a grid column has its variable's limits and step on X, every cell of a grid row its
                 // variable's on Y, so the cells line up; a diagonal histogram counts from 0 on an automatic Y.
                 let histogram = r == c && options.diagonal == MatrixDiagonal::Histogram;
@@ -258,38 +276,27 @@ impl Project {
     }
 }
 
-/// The most major steps across one cell: the automatic step is widened (1, 2, 5, 10, ...) until the variable's
-/// range has at most this many, so that the tick labels of a small cell do not run into each other.
-pub const MAX_STEPS: f64 = 5.0;
+/// The number of steps a variable's range is cut into for its tick step (Origin 2016, measured by T313).
+pub const STEPS: f64 = 4.0;
 
 /// The limits and major step of a variable's axes: the automatic linear range of its finite values (the limits a
-/// scatter of them gets) with the step widened to at most [`MAX_STEPS`] steps, or `None` when it has no finite
-/// value. A constant variable gets one unit either side.
+/// scatter of them gets; Origin's own limits follow a rule not found, see graphing 35), and Origin's step: a
+/// quarter of the range rounded to two significant digits (5.25 gives 1.3, 21 gives 5.3, 1.61 gives 0.4), the ticks
+/// at its multiples. `None` when the variable has no finite value; a constant variable gets one unit either side.
 pub fn variable_range(values: &[f64], margin_pct: f64) -> Option<(f64, f64, f64)> {
     let finite = values.iter().copied().filter(|v| v.is_finite());
     let (lo, hi) = finite.fold(None, |acc: Option<(f64, f64)>, v| match acc {
         None => Some((v, v)),
         Some((lo, hi)) => Some((lo.min(v), hi.max(v))),
     })?;
-    let (from, to, mut step) = if hi > lo { linear_range(lo, hi, margin_pct) } else { (lo - 1.0, hi + 1.0, 0.5) };
-    while (to - from) / step > MAX_STEPS + 1e-9 {
-        step = wider_step(step);
-    }
-    Some((from, to, step))
+    let (from, to, _) = if hi > lo { linear_range(lo, hi, margin_pct) } else { (lo - 1.0, hi + 1.0, 0.5) };
+    Some((from, to, two_digit_step((to - from) / STEPS)))
 }
 
-/// The next step of the 1, 2, 5, 10 series above `step`.
-fn wider_step(step: f64) -> f64 {
-    let p = 10f64.powf(step.log10().floor());
-    let m = step / p;
-    let next = if m < 1.5 {
-        2.0
-    } else if m < 3.5 {
-        5.0
-    } else {
-        10.0
-    };
-    next * p
+/// `v` rounded to two significant digits.
+fn two_digit_step(v: f64) -> f64 {
+    let p = 10f64.powf(v.log10().floor() - 1.0);
+    (v / p).round() * p
 }
 
 /// The variable's name in its diagonal cell: centred (in the middle, or near the top above a histogram), in a
@@ -307,11 +314,9 @@ fn name_label(layer: &crate::graph::Layer, name: &str, page_w: f64, diagonal: Ma
     TextLabel::new(name, ((1.0 - width) / 2.0).max(0.0), y, font)
 }
 
-/// The template's one layer: Origin's default scatter symbol (a black square) in a box with inward ticks, no
-/// titles and no legend, on a square page (Sheaf's choice).
+/// The template's one layer: Origin's scatter-matrix symbol (a blue square of size 9, measured) in a box with
+/// inward ticks, no titles and no legend, on the usual landscape page (Origin's, measured).
 pub(crate) fn template_layer(g: &mut crate::graph::Graph) {
-    let side = g.page.height_pt;
-    g.page.width_pt = side;
     let layer = &mut g.layers[0];
     let (left, right, top, bottom) = MARGINS;
     layer.frame = Frame {
@@ -321,7 +326,8 @@ pub(crate) fn template_layer(g: &mut crate::graph::Graph) {
         height: (100.0 - top - bottom) / 100.0,
     };
     layer.legend.visible = false;
-    layer.default_symbol.size_pt = 6.0;
+    layer.default_symbol.size_pt = 9.0;
+    layer.default_symbol.color = crate::Color::rgb(0, 0, 255);
     for axis in [&mut layer.x_axis, &mut layer.y_axis] {
         axis.side = AxisSide::Normal;
         axis.show_title = false;

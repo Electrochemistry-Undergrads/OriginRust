@@ -328,20 +328,35 @@ Measured against Origin 2016's `minverse` (inputs `im`, `om` = new; probes in `r
   numbers) and now writes Power too. Origin's other `fft2` options (shift, normalization, windows)
   were not probed.
 
-## 7f. File > Import > Binary 2D Array (T199, 2026-11-20, from Origin's `impBin2D` documentation, not measured)
+## 7f. File > Import > Binary 2D Array (T199, 2026-11-20; measured by T294, 2026-11-21)
 
-- File > Import > Binary 2D Array... asks for a file, then opens the options window:
-  - **Data Type:** 8/16/32-bit signed or unsigned integers, or 32/64-bit floats.
-  - **Columns** and **Rows.**
-  - **Header Bytes** to skip.
-  - **Byte Order:** little or big endian.
-- The numbers are read row by row into a new matrix book whose long name is the file's name. The
-  import is one undo step ("Import Binary 2D Array"). Bytes after the array are ignored, and NaN or
-  infinite floats become missing values.
-- Sheaf's starting guess: 32-bit floats, square when their count is a square number, else one row.
-  Changing the type guesses the size again. A file too short for the options is refused, and the
-  window says why and stays open.
-- Not built: Origin's import filters and templates for binary files, and several frames from one file.
+Measured against Origin 2016's `impBin2D` (its window and LabTalk runs; probes in `re-workspace/scratch/t294`).
+
+- File > Import > Binary 2D Array... asks for a file. Origin's file window offers *.img, *.b2d and all
+  files; Sheaf's lists all files. Then the options window opens with Origin's fields and defaults:
+  - **Number of Columns:** 128.
+  - **Byte Length:** 1, 2, 4, 8 or 16; 2 by default.
+  - **Signed/Unsigned:** Unsigned (default), Signed or Floating Point.
+  - **Big-Endian:** off.
+  - **Header Bytes:** 0.
+  - **Transpose after import:** off.
+  - **Output:** the active matrix sheet.
+  Sheaf also shows the number of rows the options give.
+- **Rows (measured):** the file's numbers after the header, rounded up to whole rows; there is no Rows
+  option. When the file ends inside a row, Origin adds that row as all zeros, leaves out the numbers that
+  are there, and reports the import as failed. Sheaf does the same and warns on the status bar. Bytes past
+  the last whole row do not add one.
+- **Types (measured):** integers are 1, 2 or 4 bytes long, signed or unsigned. Floating point numbers are
+  4 or 8 bytes long, or 16, of which Origin reads the first 8 bytes as a double. Origin refuses 8- and
+  16-byte integers, 1- and 2-byte floats, 0 columns and a header that is not inside the file, and leaves
+  the matrix as it was. A NaN float is a missing value; infinite floats stay infinite.
+- **Transpose:** the rows become columns after the import.
+- **Output (measured):** into the active matrix sheet, whose X and Y ranges, sheet name and book long name
+  stay. Sheaf does the same when a matrix window is active. With a workbook active Origin writes the
+  numbers into its worksheet; Sheaf instead makes a new matrix book whose long name is the file's name.
+  The import is one undo step ("Import Binary 2D Array").
+- Not built: Origin's import filters and templates for binary files, Results Log Output, and several
+  frames from one file.
 
 ## 7g. Plot > Contour/Heat Map > Gray Scale Map (T201, 2026-11-20, not measured)
 

@@ -557,6 +557,21 @@ fn month_from_name(s: &str) -> Option<u32> {
         .map(|i| i as u32 + 1)
 }
 
+/// A year written with four digits, or with two read as Origin 2016's import does (T315, measured
+/// 2026-11-21): 00 to 44 are 2000 to 2044, 45 to 99 are 1945 to 1999. Whether Origin's window moves
+/// with the current year was not measured.
+fn year_of(field: &str) -> Option<i64> {
+    if !field.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let y: i64 = field.parse().ok()?;
+    match field.len() {
+        4 => Some(y),
+        2 => Some(if y <= 44 { 2000 + y } else { 1900 + y }),
+        _ => None,
+    }
+}
+
 /// The date part: returns the value, the pattern and the ambiguity flag.
 fn parse_date_part(s: &str, order: DateOrder) -> Option<(f64, DatePattern, bool)> {
     let sep = s.chars().find(|c| matches!(c, '/' | '-' | '.' | ' '))?;
@@ -565,12 +580,16 @@ fn parse_date_part(s: &str, order: DateOrder) -> Option<(f64, DatePattern, bool)
         return None;
     }
     let digits = |f: &str, max: usize| f.len() <= max && f.bytes().all(|b| b.is_ascii_digit());
-    // Month written as a name: d-Mon-yyyy or d Mon yyyy.
+    // Month written as a name: d-Mon-yyyy or d Mon yyyy (also dd-Mon-yy).
     if let Some(m) = month_from_name(fields[1]) {
-        if !digits(fields[0], 2) || !(digits(fields[2], 4) && fields[2].len() == 4) {
+        if !digits(fields[0], 2) {
             return None;
         }
-        let v = date_value(fields[2].parse().ok()?, m, fields[0].parse().ok()?)?;
+        let year = year_of(fields[2])?;
+        if fields[2].len() == 2 && (sep == ' ' || fields[0].len() != 2) {
+            return None;
+        }
+        let v = date_value(year, m, fields[0].parse().ok()?)?;
         return Some((v, DatePattern::DMonY, false));
     }
     if sep == ' ' {
@@ -584,12 +603,17 @@ fn parse_date_part(s: &str, order: DateOrder) -> Option<(f64, DatePattern, bool)
         let v = date_value(fields[0].parse().ok()?, fields[1].parse().ok()?, fields[2].parse().ok()?)?;
         return Some((v, DatePattern::Iso, false));
     }
-    // Year last: the first two numbers are day and month in some order.
-    if !(fields[2].len() == 4 && digits(fields[2], 4)) || !digits(fields[0], 2) || !digits(fields[1], 2) {
+    // Year last: the first two numbers are day and month in some order. A two-digit year is read
+    // after `/` (Origin's M/d/yy), and after `.` or `-` only with two-digit day and month
+    // (`13.02.21`, `05-03-21`), so that version numbers such as 1.2.21 stay text.
+    if !digits(fields[0], 2) || !digits(fields[1], 2) {
+        return None;
+    }
+    let year = year_of(fields[2])?;
+    if fields[2].len() == 2 && sep != '/' && (fields[0].len() != 2 || fields[1].len() != 2) {
         return None;
     }
     let (a, b): (u32, u32) = (fields[0].parse().ok()?, fields[1].parse().ok()?);
-    let year: i64 = fields[2].parse().ok()?;
     let day_first = sep == '.' || order == DateOrder::Dmy;
     let (day, month) = if day_first { (a, b) } else { (b, a) };
     let v = date_value(year, month, day)?;
@@ -606,7 +630,9 @@ fn parse_date_part(s: &str, order: DateOrder) -> Option<(f64, DatePattern, bool)
 
 /// Reads a date, a time of day or both from text. Recognised: `2026-11-11`,
 /// `2026-11-11 13:45:10`, `2026-11-11T13:45:10.5`, `11/11/2026`, `11/11/2026 1:45:10 PM`,
-/// `11.11.2026`, `11-Nov-2026`, `11 November 2026`, `13:45`, `13:45:10.250`, `1:45 PM`.
+/// `11.11.2026`, `11-Nov-2026`, `11 November 2026`, `13:45`, `13:45:10.250`, `1:45 PM`, and the
+/// year-last forms with a two-digit year (`11/11/26`, `11.11.26`, `11-11-26`, `11-Nov-26`; 00 to 29
+/// are 2000 to 2044, 45 to 99 the 1900s, as Origin 2016 reads M/d/yy).
 /// `order` decides `a/b/yyyy` and `a-b-yyyy`.
 pub fn parse(text: &str, order: DateOrder) -> Option<Parsed> {
     let s = text.trim();
@@ -647,6 +673,29 @@ pub fn parse(text: &str, order: DateOrder) -> Option<Parsed> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Origin 2016's impasc on M/d/yy (T315, measured 2026-11-21): the numbers it stored.
+    #[test]
+    fn two_digit_years_use_origins_window() {
+        let v = |s: &str| parse(s, DateOrder::Mdy).map(|p| p.value);
+        assert_eq!(v("1/2/21"), Some(2_459_216.0));
+        assert_eq!(v("3/4/29"), Some(2_462_199.0));
+        assert_eq!(v("5/6/30"), Some(2_462_627.0));
+        assert_eq!(v("1/2/44"), date_value(2044, 1, 2));
+        assert_eq!(v("1/2/45"), date_value(1945, 1, 2));
+        assert_eq!(v("7/8/49"), Some(2_433_105.0));
+        assert_eq!(v("12/31/99"), Some(2_451_543.0));
+        assert_eq!(v("1/1/00"), Some(2_451_544.0));
+        assert_eq!(parse("1/2/21", DateOrder::Mdy).unwrap().format, NumberFormat::Date(DatePattern::Mdy));
+        // The other year-last forms, day first.
+        assert_eq!(v("13.02.21"), date_value(2021, 2, 13));
+        assert_eq!(parse("13-02-21", DateOrder::Dmy).map(|p| p.value), date_value(2021, 2, 13));
+        assert_eq!(v("05-Mar-21"), date_value(2021, 3, 5));
+        // Not dates: one-digit parts with dots or dashes, three-digit years, year first.
+        for s in ["1.2.21", "1-2-21", "5-Mar-21", "1/2/021"] {
+            assert_eq!(v(s), None, "{s}");
+        }
+    }
 
     #[test]
     fn epoch_matches_origin_numbers() {

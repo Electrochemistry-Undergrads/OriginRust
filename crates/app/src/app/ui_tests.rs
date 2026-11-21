@@ -5996,8 +5996,9 @@ fn from_a_graph_the_curve_tools_start_with_the_plots_of_the_layer() {
     assert!(h.state().analysis.is_some());
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none(), "it ran with the two plots");
+    // T322: Intersect writes into the input sheet, as Origin's intersect.
     let (sheet, x) = result_column(&h, "Intersection X1");
-    assert!(sheet.starts_with("Intersect"), "{sheet}");
+    assert_eq!(sheet, project(&h).workbooks().next().unwrap().sheets[0].name);
     assert!((x[0] - 10.0 / 3.0).abs() < 1e-9, "{x:?}");
 }
 

@@ -331,6 +331,10 @@ pub enum Action {
         layout: WindowId,
         index: usize,
     },
+    /// Layout > Page Setup... (T237 slice 4): the window that sets the page size of `layout`.
+    LayoutPageSetup {
+        layout: WindowId,
+    },
     /// Layout > Export Page as Image... (T237 slice 3): asks for a file and writes the page.
     LayoutExport {
         layout: WindowId,

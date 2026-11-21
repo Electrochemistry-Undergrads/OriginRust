@@ -2027,10 +2027,10 @@ impl SheafApp {
                     self.focus(id);
                 }
             }
-            Action::LayoutAddShape { layout, shape } => {
+            Action::LayoutAddShape { layout, shape, arrow } => {
                 self.doc.apply("Add drawing to layout", |p| {
                     if let Some(l) = p.layout_mut(layout) {
-                        l.add_shape(shape);
+                        l.add_shape(shape, arrow);
                     }
                 });
             }

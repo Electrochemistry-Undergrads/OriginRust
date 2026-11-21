@@ -123,6 +123,8 @@ pub struct ReadSettings {
     pub no_rename_sheet: bool,
     pub no_rename_book: bool,
     pub blocks_as_sheets: bool,
+    /// Delimited text: a text cell in a numeric column (T312).
+    pub non_numeric: sheaf_io::ascii::NonNumeric,
     /// Delimited text: Add Sparklines (T231).
     pub sparklines: sheaf_io::ascii::AddSparklines,
     /// Excel: the sheets to read, as names or 1-based positions (empty: every sheet).
@@ -187,6 +189,7 @@ impl Default for ReadSettings {
             no_rename_sheet: false,
             no_rename_book: false,
             blocks_as_sheets: false,
+            non_numeric: sheaf_io::ascii::NonNumeric::ReadAsText,
             sparklines: sheaf_io::ascii::AddSparklines::No,
             sheets: Vec::new(),
             hidden_sheets: false,
@@ -325,6 +328,7 @@ impl ReadSettings {
             o.blocks = sheaf_io::ascii::Blocks::Sheets;
         }
         o.sparklines = r.sparklines;
+        o.non_numeric = r.non_numeric;
         if r.dates_as_text {
             o.dates = sheaf_io::ascii::DateImport::AsText;
         }

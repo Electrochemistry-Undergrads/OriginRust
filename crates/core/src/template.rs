@@ -2393,8 +2393,9 @@ pub enum FieldTemplate {
     /// Heat map: a block per matrix cell, blue to white to red, 5 major steps of 6 bands (Origin's
     /// "Heat Map").
     HeatMap,
-    /// Gray Scale Map (T201): heat-map cells from black (lowest) to white (highest), with a colour
-    /// scale. Sheaf's reading of Origin's "Gray Scale Map"; not measured.
+    /// Gray Scale Map (T201, measured by T297 on Origin 2016's CONTGRAY template): a block per matrix
+    /// cell in 32 grays from black (lowest) to white (highest), 8 major steps of 6 bands, with a colour
+    /// scale; X tick labels upright.
     GrayScale,
 }
 
@@ -2476,9 +2477,9 @@ impl FieldTemplate {
             FieldTemplate::ContourFill => (true, true, false, FieldPalette::Rainbow, 8, 5),
             FieldTemplate::ContourLines => (false, true, true, FieldPalette::Rainbow, 10, 1),
             FieldTemplate::HeatMap => (true, false, false, FieldPalette::BlueWhiteRed, 5, 6),
-            FieldTemplate::GrayScale => (true, false, false, FieldPalette::Gray, 5, 6),
+            FieldTemplate::GrayScale => (true, false, false, FieldPalette::Gray, 8, 6),
         };
-        if matches!(self, FieldTemplate::HeatMap | FieldTemplate::GrayScale) {
+        if *self == FieldTemplate::HeatMap {
             layer.x_axis.tick_label_angle_deg = 90.0;
         }
         layer.field = Some(FieldPlot {

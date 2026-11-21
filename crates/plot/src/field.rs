@@ -279,8 +279,16 @@ fn lerp_color(a: (f64, f64, f64), b: (f64, f64, f64), t: f64) -> (f64, f64, f64)
     (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t, a.2 + (b.2 - a.2) * t)
 }
 
-/// The colour of band `k` of `n` (0 = lowest): the palette read at `k / (n - 1)`.
+/// The colour of band `k` of `n` (0 = lowest): the palette read at `k / (n - 1)`. Gray is Origin's
+/// palette of 32 grays, black to white: band `k` takes gray `i = min(floor(32 k / (n - 1)), 31)`, whose
+/// level is the 5-bit `i` widened to 8 bits, `(i << 3) | (i >> 2)` (measured exactly on a Gray Scale Map
+/// of 48 bands).
 pub(crate) fn band_color(palette: FieldPalette, k: usize, n: usize) -> Color {
+    if palette == FieldPalette::Gray {
+        let i = if n > 1 { (k * 32 / (n - 1)).min(31) } else { 16 } as u8;
+        let g = (i << 3) | (i >> 2);
+        return Color::rgb(g, g, g);
+    }
     let t = if n > 1 { k as f64 / (n - 1) as f64 } else { 0.5 };
     let stops: &[(f64, f64, f64)] = match palette {
         FieldPalette::Rainbow => {
@@ -295,10 +303,12 @@ pub(crate) fn band_color(palette: FieldPalette, k: usize, n: usize) -> Color {
     Color::rgb(c.0.round() as u8, c.1.round() as u8, c.2.round() as u8)
 }
 
-/// The colour of values below and above the scale.
+/// The colour of values below and above the scale (gray: blue above and red below, measured).
 fn out_of_range_color(palette: FieldPalette, above: bool) -> Color {
     match (palette, above) {
         (FieldPalette::Rainbow, false) => Color::BLACK,
+        (FieldPalette::Gray, true) => Color::rgb(0, 0, 255),
+        (FieldPalette::Gray, false) => Color::rgb(255, 0, 0),
         _ => Color::WHITE,
     }
 }
@@ -794,6 +804,47 @@ mod tests {
         let c = band_color(FieldPalette::Rainbow, 24, 48);
         assert!(c.g > 245 && c.b < 40 && c.r < 40, "{c:?}");
         // The heat map: blue, white in the middle (measured (247, 247, 255) and (255, 247, 247)), red.
+        // Origin's Gray Scale Map, 48 bands, from the bottom of its colour scale (measured; each gray
+        // covers 2 or 1 bands).
+        let origin: [(u8, usize); 32] = [
+            (0, 2),
+            (8, 1),
+            (16, 2),
+            (24, 1),
+            (33, 2),
+            (41, 1),
+            (49, 2),
+            (57, 1),
+            (66, 2),
+            (74, 1),
+            (82, 2),
+            (90, 1),
+            (99, 2),
+            (107, 1),
+            (115, 2),
+            (123, 1),
+            (132, 1),
+            (140, 2),
+            (148, 1),
+            (156, 2),
+            (165, 1),
+            (173, 2),
+            (181, 1),
+            (189, 2),
+            (198, 1),
+            (206, 2),
+            (214, 1),
+            (222, 2),
+            (231, 1),
+            (239, 2),
+            (247, 1),
+            (255, 2),
+        ];
+        let want: Vec<u8> = origin.iter().flat_map(|&(g, n)| std::iter::repeat_n(g, n)).collect();
+        let grays: Vec<u8> = (0..48).map(|k| band_color(FieldPalette::Gray, k, 48).r).collect();
+        assert_eq!(grays, want);
+        assert_eq!(out_of_range_color(FieldPalette::Gray, true), Color::rgb(0, 0, 255));
+        assert_eq!(out_of_range_color(FieldPalette::Gray, false), Color::rgb(255, 0, 0));
         assert_eq!(band_color(FieldPalette::BlueWhiteRed, 0, 30), Color::rgb(0, 0, 255));
         assert_eq!(band_color(FieldPalette::BlueWhiteRed, 29, 30), Color::rgb(255, 0, 0));
         let c = band_color(FieldPalette::BlueWhiteRed, 14, 30);

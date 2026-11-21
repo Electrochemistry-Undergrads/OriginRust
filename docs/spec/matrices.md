@@ -145,6 +145,7 @@ page).
 | `contour` (Origin: Contour - Color Fill) | contour | yes | at the 7 inner major levels, 0.5 pt black, no labels | no | Rainbow | 8 x 5 = 48 bands | yes |
 | `contour-lines` (Contour - Lines) | contour | no | at the 9 inner levels (10 steps), with labels | yes | - | 10 x 1 | no |
 | `heatmap` (Heat Map) | cells | yes | no | no | Blue-white-red | 5 x 6 = 30 bands | yes |
+| `grayscale` (Gray Scale Map, Origin's CONTGRAY; T297) | cells | yes | no | no | Gray (32 levels) | 8 x 6 = 48 bands | yes |
 
 Frame of the first two with a colour scale: left 0.14, top 0.113, width 0.5725, height 0.733 of the page; without
 a scale (contour lines): left 0.179, width 0.6835. Axes end exactly at the first and last column and row
@@ -177,7 +178,11 @@ of a heat map's X axis are written rotated by 90 degrees. Ticks: the step neares
 The colour of band `k` of `n` is the palette read at `k / (n - 1)`: Rainbow runs linearly through blue (0,0,255),
 cyan, green, yellow and red (255,0,0) (measured 48 bands; Origin's channel values are quantised and differ from
 the linear ones by at most 6 of 255); blue-white-red runs from (0,0,255) through white (255,255,255) to
-(255,0,0) (measured 30 bands, linear to within 2). Gray runs black to white (ours).
+(255,0,0) (measured 30 bands, linear to within 2). Gray is a palette of 32 grays, black to white: band `k` of `n`
+takes gray `i = min(floor(32 k / (n - 1)), 31)`, whose level is `(i << 3) | (i >> 2)` (the 5-bit value widened to
+8 bits; measured exactly on Origin's Gray Scale Map, 48 bands, where the grays cover 2 and 1 bands in turn, and
+the two middle grays 1 band each). Values outside a gray scale are blue (0,0,255) above and red (255,0,0) below,
+as the boxes at the ends of Origin's colour scale show.
 
 ### Contour fill and lines
 
@@ -358,13 +363,22 @@ Measured against Origin 2016's `impBin2D` (its window and LabTalk runs; probes i
 - Not built: Origin's import filters and templates for binary files, Results Log Output, and several
   frames from one file.
 
-## 7g. Plot > Contour/Heat Map > Gray Scale Map (T201, 2026-11-20, not measured)
+## 7g. Plot > Contour/Heat Map > Gray Scale Map (T201, 2026-11-20; measured by T297, 2026-11-21)
 
-- A heat map of the matrix (or of XYZ columns on a regular grid) whose cells go from black at the
-  lowest band to white at the highest. It has the heat map's levels (5 major steps of 6 bands), frame
-  and colour scale (section 6) and no level lines. Template `grayscale` (`FieldTemplate::GrayScale`),
-  also `sheaf matrix plot --template grayscale`.
-- This is Sheaf's reading of Origin's Gray Scale Map; Origin's own levels and layout are not measured.
+Measured on Origin 2016's picture of its CONTGRAY template (`worksheet -p 226 contgray` on a 41 x 41 matrix,
+`re-workspace/scratch/matrix/o_contgray.png`).
+
+- **Drawing:** a block per matrix cell, as the heat map draws it, in the contour templates' frame. The axes
+  reach half a cell beyond the first and last column and row. X tick labels are upright, unlike the heat
+  map's. No level lines.
+- **Levels:** the usual range rule (section 6), split into 8 major steps of 6 bands (48 bands). The test
+  matrix gave -5 to 9.95 with labels -5.000, -3.131, ..., 8.081, 9.950.
+- **Colours:** Origin's 32 grays from black (lowest) to white (highest), each covering 2 or 1 of the 48 bands
+  (section 6, Colours). The colour scale has a blue box above it and a red one below it, the colours of
+  values outside the scale.
+- Template `grayscale` (`FieldTemplate::GrayScale`), also `sheaf matrix plot --template grayscale`.
+- **Not measured:** Origin's colour scale title ("Color Scale Title" in the picture; Sheaf draws none, as
+  for the other templates) and the gray for 32 bands or fewer.
 
 ## 7h. File > Import > Image (T204, 2026-11-20, not measured)
 

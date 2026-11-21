@@ -125,8 +125,19 @@ pub fn save_project(project: &Project, path: &Path) -> Result<SaveOutcome, IoErr
         }
         Err(e) => return Err(e),
     };
-    if !project.window_comments.is_empty() {
-        written.warnings.push("Window comments (Window Properties) are not stored in an .opj file.".to_string());
+    // T283: the comments of workbooks and graphs go in their .opj labels; the other windows are not
+    // written to the .opj, so their comments need the companion.
+    let unwritten = project.window_comments.iter().filter(|c| {
+        !matches!(
+            project.window(c.window),
+            Some(sheaf_core::project::Window::Workbook(_) | sheaf_core::project::Window::Graph(_))
+        )
+    });
+    if unwritten.count() > 0 {
+        written.warnings.push(
+            "Window comments (Window Properties) of notes, layout and matrix windows are not stored in an .opj file."
+                .to_string(),
+        );
     }
     if project.page_setup != sheaf_core::page_setup::PageSetup::default() {
         written.warnings.push("Page Setup (paper, orientation and margins) is not stored in an .opj file.".to_string());

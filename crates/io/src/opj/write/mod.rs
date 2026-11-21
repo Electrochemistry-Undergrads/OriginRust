@@ -249,6 +249,8 @@ struct Writer {
     tree: FolderOut,
     /// Where the window being written stood in the workspace, if the project knows.
     place: Option<sheaf_core::project::WindowPlace>,
+    /// The Comments of the window being written (T283).
+    comments: String,
 }
 
 impl Writer {
@@ -267,6 +269,7 @@ impl Writer {
             next_object: OBJECT_NUMBER_START,
             tree: FolderOut::default(),
             place: None,
+            comments: String::new(),
         }
     }
 
@@ -290,6 +293,7 @@ impl Writer {
                 return fail(format!("two windows are named '{}'; Origin needs distinct window names", window.name()));
             }
             self.place = project.window_places.iter().find(|p| p.window == window.id()).copied();
+            self.comments = project.window_comments(window.id()).to_string();
             self.window(project, window, &sets)?;
         }
         Ok(())
@@ -323,7 +327,7 @@ impl Writer {
 
     fn workbook(&mut self, book: &Workbook) -> Result<(), IoError> {
         self.check_name("workbook name", &book.name, MAX_DATASET_NAME)?;
-        let label = self.label_text(&book.long_name, "workbook long name")?;
+        let label = self.window_label(&book.long_name, "workbook long name")?;
         let spec = WindowSpec {
             name: &book.name,
             label: &label,
@@ -710,6 +714,20 @@ impl Writer {
         }
         self.count_lossy(&out);
         Ok(out)
+    }
+
+    /// The label of a window: its long name, then CR LF and its Comments when it has any, as Origin
+    /// 2016 writes them (T283, measured).
+    fn window_label(&mut self, long_name: &str, what: &str) -> Result<String, IoError> {
+        let mut label = self.label_text(long_name, what)?;
+        if !self.comments.is_empty() {
+            let comments = std::mem::take(&mut self.comments);
+            let text = self.comment_text(&comments)?;
+            label.push_str("\r\n");
+            label.push_str(&text);
+            self.comments = comments;
+        }
+        Ok(label)
     }
 
     /// Text for comments: line breaks stay (Origin writes them as CR LF).

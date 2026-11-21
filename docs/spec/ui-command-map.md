@@ -479,8 +479,10 @@ workbooks that hold its analysis results or cells linked to it) and, for a graph
 Sheaf (T249, not measured): the same window has **Comments**, a few lines of text for any window
 kind, kept in the project (`Project::window_comments`, set with the long and short names in the
 "Rename window" undo step); the Project Explorer shows them as the window row's tooltip. A window
-deleted takes its comments along. An `.opj` does not keep them: the save names them and writes the
-`.opj.sheaf` companion. Origin's own layout of the comments box (and its Window Title options) is
+deleted takes its comments along. An `.opj` keeps the comments of workbooks and graphs in the window
+label after the long name, as Origin 2016 does (T283, measured; opj-format.md section 4), and the
+reader brings them back; only the comments of notes, layout and matrix windows, which the `.opj`
+writer does not write, need the `.opj.sheaf` companion (the save names them). Origin's own layout of the comments box (and its Window Title options) is
 not copied.
 
 ### D6. Import (see B2) (P0)

@@ -21,6 +21,7 @@ fn into_project_keeps_window_names_and_drops_trailing_missing_cells() {
         version: "9.3".into(),
         signature: String::new(),
         warnings: Vec::new(),
+        comments: Vec::new(),
     };
     let project = import.into_project();
     let b = project.workbooks().next().unwrap();
@@ -304,6 +305,28 @@ fn collect(dir: &Path, recurse: bool, out: &mut Vec<std::path::PathBuf>) {
     }
 }
 
+/// Origin 2016's own file with window comments (T283; made by `opj-make-from-lines.ps1` from
+/// `re-workspace/scratch/t282/probe3.lines.txt`, local only).
+#[test]
+fn local_origin_file_gives_the_window_comments() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../re-workspace/scratch/t282/wc3.opj");
+    if !path.exists() {
+        eprintln!("opj: {} not found; skipping", path.display());
+        return;
+    }
+    let project = read_opj(&path).unwrap().into_project();
+    let comments = |name: &str| {
+        let w = project.windows.iter().find(|w| w.name() == name).unwrap_or_else(|| panic!("no window {name}"));
+        project.window_comments(w.id()).to_string()
+    };
+    assert_eq!(comments("BKA"), "ZQXbookA");
+    assert_eq!(comments("BKB"), "ZQXbookB");
+    assert_eq!(comments("BKC"), "ZQXbookC line1");
+    assert_eq!(comments("GY"), "ZQXg1");
+    assert_eq!(comments("GX"), "ZQXg2");
+    assert_eq!(comments("GSrc"), "");
+}
+
 /// The owner's figure project (git-ignored, only on his machine): its one graph is a column plot
 /// with error bars whose data come from the workbook next to it.
 #[test]
@@ -450,6 +473,7 @@ fn into_project_renumbers_the_stack_offsets_with_the_columns() {
         version: "9.3".into(),
         signature: String::new(),
         warnings: Vec::new(),
+        comments: Vec::new(),
     };
     let project = import.into_project();
     let layer = &project.graphs().next().unwrap().layers[0];

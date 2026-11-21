@@ -1061,7 +1061,13 @@ mod tests {
             ],
             axes: vec![axis_blocks(24, false, 0xE0, true), axis_blocks(21, true, 0x50, false), Vec::new()],
         };
-        Window { name: "Graph7".into(), label: "My figure".into(), layers: vec![layer], header: window_header() }
+        Window {
+            name: "Graph7".into(),
+            label: "My figure".into(),
+            comments: String::new(),
+            layers: vec![layer],
+            header: window_header(),
+        }
     }
 
     fn ids() -> HashMap<usize, ColumnId> {

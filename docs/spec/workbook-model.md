@@ -1171,7 +1171,7 @@ Sheaf: one picture of the active sheet (its data rows, not empty spare rows), dr
 (`sheaf_core::sheet_print`) with the heads, row numbers and grid left out (`sheaf_plot::sheet_image_svg`).
 The save window offers PNG (300 dpi), PDF and SVG; the name defaults to `<book long name or name>_<sheet>.png`
 in the project's folder (Sheaf's choice). The raster-format follow-up below adds JPEG, TIFF, BMP, GIF,
-TGA, PCX and PSD. Other vector types, several sheets at once, size and overwrite options remain open.
+TGA, PCX and PSD. Section 13k.2 adds EPS and EMF.
 
 ### 13k.1 Additional worksheet raster formats (2026-11-17)
 
@@ -1196,8 +1196,17 @@ Original worksheet layout, labels/styles, file-name/folder default and overwrite
 behavior remain. The existing whole-sheet picture still includes retained source
 values outside a column's Begin/End display range; whether Origin expWks renders
 those values is unmeasured. This format slice does not change that rendering policy.
-AI/CGM/DXF/EMF/EPS/WMF, multi-sheet export and additional size/depth/quality/compression/
-overwrite controls remain open.
+### 13k.2 EPS and EMF worksheet export (2026-11-21)
+
+The worksheet image save dialog also offers Encapsulated PostScript and Enhanced
+Metafile. Both writers receive the same worksheet scene used by SVG, with its
+labels, cells and original size in points. EPS uses the existing PostScript font
+mapping, which substitutes unsupported characters. EMF stores text in UTF-16.
+The list and layout of the original images were measured in 13k. This follow-up
+implements the two file types documented by [Origin's expWks reference](https://docs.originlab.com/x-function/ref/expwks/).
+
+Remaining export types are AI, CGM, DXF and WMF. Multi-sheet export and size,
+depth, quality, compression and overwrite controls are also open.
 
 ## 13l. Re-Import (T98, measured 2026-11-16, Origin 2016)
 

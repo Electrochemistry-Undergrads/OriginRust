@@ -1537,6 +1537,38 @@ fn local_span_text(span: calc::LocalSpan, npts: usize) -> String {
     }
 }
 
+/// The words Origin 2016 writes for a normalize method in the result's comments (T300, measured with
+/// `rnormalize method:=0..10`): "Divided by 1", "Normalize to [0, 1]", "Transfer to N(0, 1)",
+/// "Divided by Max", ... The [0, 100] wording is Sheaf's (that method was not in the probe).
+fn normalize_method_text(method: NormalizeMethod) -> String {
+    match method {
+        NormalizeMethod::Divide(v) => format!("Divided by {v}"),
+        NormalizeMethod::ZeroToOne => "Normalize to [0, 1]".into(),
+        NormalizeMethod::ZeroToHundred => "Normalize to [0, 100]".into(),
+        NormalizeMethod::ZScore => "Transfer to N(0, 1)".into(),
+        NormalizeMethod::Max => "Divided by Max".into(),
+        NormalizeMethod::Min => "Divided by Min".into(),
+        NormalizeMethod::Mean => "Divided by Mean".into(),
+        NormalizeMethod::Median => "Divided by Median".into(),
+        NormalizeMethod::Sd => "Divided by SD".into(),
+        NormalizeMethod::Norm => "Divided by Norm".into(),
+        NormalizeMethod::Mode => "Divided by Mode".into(),
+        NormalizeMethod::Sum => "Divided by Sum".into(),
+        NormalizeMethod::MatchStat { stat, .. } => format!("Matched {} of a reference", stat.label()),
+    }
+}
+
+/// The number after the highest long name `Normalized<n>` in the sheet, 1 when there is none: Origin
+/// went on with Normalized3 after a first run made Normalized1 and Normalized2 (T300).
+fn next_normalized_index(sheet: &Worksheet) -> usize {
+    sheet
+        .columns
+        .iter()
+        .filter_map(|c| c.long_name.strip_prefix("Normalized")?.parse::<usize>().ok())
+        .max()
+        .map_or(1, |n| n + 1)
+}
+
 /// A column to add next to its source column.
 struct NewColumn {
     after: ColumnId,
@@ -2343,6 +2375,9 @@ impl Project {
         }
 
         let mut beside: Vec<NewColumn> = Vec::new();
+        // T300: Normalize Columns puts its columns at the end of the sheet, each with the designation of
+        // its source, as Origin 2016's rnormalize and normalize do; empty for the other tools.
+        let mut at_end: Vec<Designation> = Vec::new();
         let mut on_sheet: Vec<SheetColumn> = Vec::new();
         let mut table: Option<ResultTable> = None;
         let mut notes: Vec<String> = Vec::new();
@@ -3390,17 +3425,20 @@ impl Project {
                         "cannot divide by {d}; give a finite value other than 0"
                     )));
                 }
-                for inp in &inputs {
+                // T300, measured in Origin 2016: long names Normalized1, Normalized2, ... after the highest
+                // such name already in the sheet, comments "<method> of <column>".
+                for (next, inp) in (next_normalized_index(sheet)..).zip(inputs.iter()) {
                     let v = calc::normalize(inp.ys(), *method);
                     let units =
                         if matches!(method, NormalizeMethod::Divide(_)) { inp.units.clone() } else { String::new() };
                     beside.push(NewColumn {
                         after: inp.id,
-                        long_name: format!("Normalized {}", inp.name),
+                        long_name: format!("Normalized{next}"),
                         units,
-                        comments: format!("{} normalized{}", inp.short, inp.range_note()),
+                        comments: format!("{} of {}{}", normalize_method_text(*method), inp.short, inp.range_note()),
                         data: inp.aligned(&v),
                     });
+                    at_end.push(sheet.column(inp.id).map_or(Designation::Y, |c| c.designation));
                 }
             }
             Tool::SubtractBaseline(spec) => {
@@ -3660,6 +3698,19 @@ impl Project {
             }
             let id = self.new_column_id();
             let ws = &mut self.workbook_mut(book_id).expect("workbook exists").sheets[sheet_index];
+            if let Some(&designation) = at_end.get(k) {
+                // T300: at the end of the sheet, with the source's designation.
+                let name = ws.next_short_name();
+                added_names.push(format!("{name} \"{}\"", nc.long_name));
+                let column = Column::new(id, name, designation, ColumnData::numeric(nc.data)).with_labels(
+                    &nc.long_name,
+                    &nc.units,
+                    &nc.comments,
+                );
+                ws.columns.push(column);
+                new_columns.push(id);
+                continue;
+            }
             let source = ws.column_index(nc.after).expect("source column exists");
             // Stay behind the error and label columns that belong to the source column, and behind
             // result columns added for it earlier in this run.
@@ -4417,13 +4468,43 @@ mod tests {
     }
 
     #[test]
+    fn normalize_columns_writes_what_origins_rnormalize_writes() {
+        // T300, measured in Origin 2016 (re-workspace/scratch/t299): A = 1 2 3 4 (X), B = 2 4 6 0,
+        // C = 5 1 9 2; rnormalize of A:C appends Normalized1..3 at the end, each with its source's
+        // designation and the comment "Normalize to [0, 1] of A"; a second run goes on with 4.
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let a = p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0])).unwrap();
+        let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0, 4.0, 6.0, 0.0])).unwrap();
+        let c = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![5.0, 1.0, 9.0, 2.0])).unwrap();
+        p.analyze(&request(&[a, b, c], Tool::Normalize(NormalizeMethod::ZeroToOne))).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        let names: Vec<&str> = ws.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names, ["", "", "", "Normalized1", "Normalized2", "Normalized3"]);
+        assert_eq!(ws.columns[3].designation, Designation::X, "the source's designation");
+        assert_eq!(ws.columns[3].comments, "Normalize to [0, 1] of A");
+        let near = |got: &[f64], want: &[f64]| got.iter().zip(want).all(|(g, w)| (g - w).abs() < 1e-12);
+        assert!(near(ws.columns[3].numeric().unwrap(), &[0.0, 1.0 / 3.0, 2.0 / 3.0, 1.0]));
+        assert!(near(ws.columns[4].numeric().unwrap(), &[1.0 / 3.0, 2.0 / 3.0, 1.0, 0.0]));
+        assert!(near(ws.columns[5].numeric().unwrap(), &[0.5, 0.0, 1.0, 0.125]));
+        p.analyze(&request(&[b], Tool::Normalize(NormalizeMethod::Max))).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[0];
+        assert_eq!(ws.columns[6].long_name, "Normalized4");
+        assert_eq!(ws.columns[6].comments, "Divided by Max of B");
+        assert_eq!(normalize_method_text(NormalizeMethod::ZScore), "Transfer to N(0, 1)");
+        assert_eq!(normalize_method_text(NormalizeMethod::Divide(1.0)), "Divided by 1");
+    }
+
+    #[test]
     fn result_columns_stay_behind_the_error_column_of_their_source() {
         let (mut p, book, flat, _) = sample();
         // Give B an error column directly after it: A(X) B err C.
         let err = p.new_column_id();
         let ws = &mut p.workbook_mut(book).unwrap().sheets[0];
         ws.columns.insert(2, Column::new(err, "E", Designation::YError, ColumnData::numeric(vec![0.1; 11])));
-        let r = p.analyze(&request(&[flat], Tool::Normalize(NormalizeMethod::Max))).unwrap();
+        // A tool that writes beside its source (Normalize goes to the end of the sheet since T300).
+        let cumulative = Tool::Integrate(IntegrateSpec { cumulative: true, ..Default::default() });
+        let r = p.analyze(&request(&[flat], cumulative)).unwrap();
         let ws = &p.workbook(book).unwrap().sheets[0];
         assert_eq!(ws.column_index(r.new_columns[0]), Some(3));
         assert_eq!(ws.y_error_for(1).map(|c| c.id), Some(err), "B keeps its error column");

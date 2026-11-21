@@ -19,6 +19,6 @@ ref|cell --ref COLUMN [--stat ...] [--row N]`.
 
 ## Left
 
-- Measure `ref` in Origin (scaling or shifting; the `type` default); row-wise normalize (`rnormalize`);
+- Row-wise normalize (`rnormalize`); (measured in T269: `ref` scales, `type` defaults to min, now copied);
   Recalculate links; MCP access; the method list's two new entries sit at the end of a long popup
   (a test picks them through `choose_normalize_reference`).

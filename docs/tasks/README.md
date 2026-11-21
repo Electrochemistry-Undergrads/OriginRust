@@ -251,6 +251,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T266](T266-axis-measure.md) | Axis At Position = measured in Origin (posType 2): outside the range the axis is drawn outside the frame (fixed); arrows not scriptable | S | done 2026-11-20 |
 | [T267](T267-poisson-rate.md) | One- and two-sample Poisson rate tests (Origin 2026b): calc, analysis, CLI, dialogs | M | done 2026-11-20, not measured; left: Raw/Indexed input, plots, power |
 | [T268](T268-step-measure.md) | Centred steps measured in Origin: codes 13 and 14 match T252; .opj reads/writes 14 | S | done 2026-11-20 |
+| [T269](T269-normalize-measure.md) | Normalize ref/cell measured in Origin: scaling as built, type default min (now the default) | S | done 2026-11-20 |
 | [T270](T270-run-chart.md) | Plot > Statistics > Run Chart (Origin 2025b/2026) | S | done 2026-11-21, not measured |
 | [T271](T271-grouped-histogram.md) | Plot > Statistics > Grouped Histogram (Origin 2026) | S | done 2026-11-21, not measured |
 | [T272](T272-custom-colors-race.md) | Custom colours file: retry while Windows says access denied (flaky test) | S | done 2026-11-21 |

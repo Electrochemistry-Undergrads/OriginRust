@@ -182,7 +182,7 @@ Cross-cutting findings:
 | Differentiate | order 1 to 9, smoothing | `calc/differentiate.rs` | ✓ | higher orders with smoothing not checked against Origin | P0 |
 | Subtract straight line | subtract_line | Subtract Baseline: Line, End points | ◐ | typed coordinates, no on-graph pick | P0 |
 | Subtract reference curve | subtract_ref | Subtract Reference Data window, `analyze subtract-ref` | ✓ | linear interpolation, common range option, checked against Origin (spec section 9) | P0 |
-| Normalize | 12 methods | `calc/normalize.rs`, checked | ◐ | no row normalize; the ref and cell methods (T260) are not measured | P0 |
+| Normalize | 12 methods | `calc/normalize.rs`, checked | ◐ | no row normalize (the ref and cell methods, T260, measured in T269) | P0 |
 | Interpolate and resample | interp1xy | linear, spline, Akima, B-spline | ◐ | extrapolation option not exposed; new sheet only (B-spline default factor matches Origin since 2026-11-14, analysis-tools 5) | P0 |
 | Interpolate onto given X, trace | interp1, interp1trace | Mathematics > Interpolate/Extrapolate Y from X: Interpolate at the X values of a chosen column (linear, spline, Akima, B-spline; outside the data extrapolate, missing or repeat the end value, as Origin's option); Mathematics > Trace Interpolation window, `analyze trace-interp`, `Tool::TraceInterp`: linear, cubic spline, cubic B-spline along the path of a curve with non-monotonic X (analysis-tools 16) | ◐ | a constant-X (vertical) curve is refused; whether the tolerance compares with the previous point or the first of a run is not measured | P1 |
 | Translate X or Y | cxt, vshift | Curve Translate X and Y (Data Manipulation, T23) | ◐ | Origin's in-place/copy choice not measured | P1 |

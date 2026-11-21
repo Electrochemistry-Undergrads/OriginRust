@@ -88,9 +88,10 @@ type Row = (String, f64, f64, String);
 
 impl Project {
     fn numeric_values(&self, id: ColumnId) -> Result<(String, Vec<f64>), FitRequestError> {
-        let (_, _, c) = self.locate(id).ok_or(AnalysisError::NoSuchColumn(id))?;
-        let v = c.numeric().ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))?;
-        Ok((c.short_name.clone(), v.to_vec()))
+        let (_, sheet, c) = self.locate(id).ok_or(AnalysisError::NoSuchColumn(id))?;
+        // Masked cells and filter-hidden rows are missing values (T256).
+        let v = sheet.values_of(c).ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))?;
+        Ok((c.short_name.clone(), v.into_owned()))
     }
 
     /// Fits a circle or ellipse to the points of two columns by orthogonal distance regression and places the
@@ -394,5 +395,35 @@ impl Project {
             options.names[0], options.names[1], c.f, c.prob
         );
         Ok(CompareDatasetsOutcome { reports: vec![ra, rb, rs], comparison, book: book_id, sheet, message })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::column::{ColumnData, Designation};
+
+    #[test]
+    fn the_implicit_fit_leaves_masked_cells_out() {
+        // T256: a masked cell is a missing value, as in the main fit.
+        let mut p = Project::new();
+        let book = p.add_workbook("circle");
+        let t: Vec<f64> = (0..24).map(|i| f64::from(i) * std::f64::consts::TAU / 24.0).collect();
+        let xs: Vec<f64> =
+            t.iter().enumerate().map(|(i, a)| 2.0 + 3.0 * a.cos() + 0.02 * ((i * 7 % 5) as f64 - 2.0)).collect();
+        let ys: Vec<f64> = t.iter().map(|a| -1.0 + 3.0 * a.sin()).collect();
+        let cx = p.add_column(book, 0, Designation::X, ColumnData::numeric(xs)).unwrap();
+        let cy = p.add_column(book, 0, Designation::Y, ColumnData::numeric(ys)).unwrap();
+        let circle = |mut q: Project| {
+            let out = q.fit_implicit(&ImplicitRequest::new(cx, cy, "Circle")).unwrap();
+            format!("{:?}", out.report.params.iter().map(|r| r.value).collect::<Vec<_>>())
+        };
+        let mut gone = p.clone();
+        gone.column_mut(cy).unwrap().numeric_mut().unwrap()[5] = f64::NAN;
+        let want = circle(gone);
+        assert_ne!(circle(p.clone()), want);
+        let mut masked = p.clone();
+        masked.column_mut(cy).unwrap().mask.insert(5);
+        assert_eq!(circle(masked), want);
     }
 }

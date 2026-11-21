@@ -869,7 +869,8 @@ impl Project {
         let id = request.y;
         let (_, sheet, column) = self.locate(id).ok_or(AnalysisError::NoSuchColumn(id))?;
         let index = sheet.column_index(id).expect("located here");
-        let y_all = column.numeric().ok_or_else(|| AnalysisError::NotNumeric(column.short_name.clone()))?;
+        // Masked cells and filter-hidden rows are missing values, as in fit_with (T256).
+        let y_all = sheet.values_of(column).ok_or_else(|| AnalysisError::NotNumeric(column.short_name.clone()))?;
         if y_all.is_empty() {
             return Err(AnalysisError::Empty(column.short_name.clone()).into());
         }

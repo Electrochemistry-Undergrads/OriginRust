@@ -3173,6 +3173,24 @@ pub enum AnalyzeTool {
         #[arg(long, default_value_t = 0.05)]
         alpha: f64,
     },
+    /// Stem-and-leaf display of each column (Origin 2026's Stem and Leaf Plot app, T279): a new sheet with
+    /// one line per stem (Data, Count, Stem, Leaf); the leaf unit is in the notes.
+    Stemleaf {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The value of one leaf digit; chosen from the range when left out.
+        #[arg(long)]
+        leaf_unit: Option<f64>,
+        /// Two lines per stem (leaves 0-4 and 5-9) when there would be fewer than five lines.
+        #[arg(long)]
+        split: bool,
+        /// The most leaves written on a line; more are counted as +N.
+        #[arg(long, default_value_t = 50)]
+        max_leaves: usize,
+        /// Put values more than 1.5 IQR outside the quartiles on Low and High lines.
+        #[arg(long)]
+        trim_outliers: bool,
+    },
     /// Fit normal, lognormal, exponential, gamma and Weibull distributions to each column by maximum
     /// likelihood: parameters, log-likelihood, AIC, BIC, Kolmogorov-Smirnov and Anderson-Darling statistics.
     Distfit {

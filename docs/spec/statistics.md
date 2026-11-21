@@ -12,7 +12,7 @@ the raw output of the runs (`stats2-*.out.txt`, `stats2-*.cases.json`).
 
 The numerics are in `crates/calc` (`hypothesis`, `anova`, `anova2`, `nonparam`, `correlation`, `freq`,
 `normality`), the operations in `crates/core/src/analysis.rs` and its `statistics` submodule, the command line
-is `sheaf analyze ttest | vartest | proptest | anova | anova2 | mannwhitney | signrank | kruskal | corr | histogram | normality | crosstab | bin2d`, and
+is `sheaf analyze ttest | vartest | proptest | anova | anova2 | mannwhitney | signrank | kruskal | corr | histogram | normality | stemleaf | crosstab | bin2d`, and
 the app has a Statistics menu with one window.
 
 ## 1 t-tests
@@ -1741,7 +1741,9 @@ worksheet filter hides are left out; text and empty cells are skipped.
 The result sheet (Sheaf's layout, Origin's report is not described) has one block of lines per input
 column: **Data** (the input's label), **Count**, **Stem** and **Leaf**; the notes give each column's
 leaf unit and whether its stems were split. Code: `crates/calc/src/stemleaf.rs`,
-`Tool::StemLeaf` in `crates/core/src/analysis/statistics.rs`.
+`Tool::StemLeaf` in `crates/core/src/analysis/statistics.rs`. Command line (T279): `sheaf analyze stemleaf
+FILE --y B [--leaf-unit U] [--split] [--max-leaves N] [--trim-outliers]`; the MCP `analyze` tool reaches it as
+`stemleaf` with the same options.
 
 ## 5 Where results go (ADR 0005)
 

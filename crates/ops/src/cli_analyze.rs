@@ -1180,6 +1180,15 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             let stat = analysis::Bin2dStat::from_code(&stat).expect("clap checks the value");
             (target, Job::Tool(Tool::Binning2D(analysis::Bin2dOptions { x, y, stat })))
         }
+        AnalyzeTool::Stemleaf { target, leaf_unit, split, max_leaves, trim_outliers } => (
+            target,
+            Job::Tool(Tool::StemLeaf(analysis::StemLeafOptions {
+                leaf_unit,
+                auto_split: split,
+                max_leaves,
+                trim_outliers,
+            })),
+        ),
         AnalyzeTool::Normality { target, alpha } => {
             (target, Job::Tool(Tool::Normality(analysis::NormalitySpec { alpha })))
         }

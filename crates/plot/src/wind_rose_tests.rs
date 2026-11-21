@@ -33,3 +33,18 @@ fn raw_data_piles_the_counts_of_the_bands_in_each_sector() {
     let wedges = s.layers[0].plots.iter().filter(|it| matches!(it, scene::Item::Path { fill: Some(_), .. })).count();
     assert_eq!(wedges, 2 + 2 + 2, "north 2 bands, east 2, south 2");
 }
+
+#[test]
+fn binned_data_wedges_are_a_sixteenth_of_the_circle_as_origin() {
+    // T327, measured in Origin 2016: eight directions 45 degrees apart still get 22.5 degree wedges.
+    let mut p = Project::new();
+    let b = p.add_workbook("");
+    let dirs: Vec<f64> = (0..8).map(|k| f64::from(k) * 45.0).collect();
+    p.add_column(b, 0, Designation::X, ColumnData::numeric(dirs)).unwrap();
+    let f =
+        p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![3.0, 1.0, 2.0, 0.0, 4.0, 1.0, 2.0, 1.0])).unwrap();
+    let g = p.plot_columns(Template::WindRoseBinned, &[f]).unwrap();
+    let ld = data::collect(&p, &p.graph(g).unwrap().layers[0]);
+    let rose = ld.plots[0].wind_rose.as_ref().unwrap();
+    assert_eq!((rose.angles.len(), rose.width), (8, 22.5));
+}

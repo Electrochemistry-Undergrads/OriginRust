@@ -6456,11 +6456,14 @@ probes in `re-workspace/scratch/t324`):**
 - **Plots:** one plot per speed band, so the legend lists the bands with filled swatches. In each direction
   sector a band is a wedge, piled on the bands plotted before it in the same layer.
 - **Colours:** bands are black, yellow, red, blue, green and cyan (Origin's), with black 0.5 pt edges.
-- **Binned Data** (not measured):
+- **Binned Data** (measured by T327: Origin 2016 opens no window and plots the selection at once; eight
+  directions 45 degrees apart with three frequency columns gave wedges 22.5 degrees wide, piled in column order,
+  coloured black, yellow, red, the radius axis 0 to 6.5 for a pile of 6, compass labels, the legend last column
+  first):
   - The X column holds the sector directions in degrees. A text X column, such as N, NNE, ..., spreads
     its rows evenly round the circle.
   - Each selected Y column is one band's frequencies, piled in selection order.
-  - Sectors are 360 / rows wide.
+  - Wedges are 22.5 degrees wide as Origin's (360 / rows when there are more than 16 rows, Sheaf's choice).
 - **Raw Data:** the X column holds directions in degrees; the one selected Y column holds the speeds. 16
   sectors and Origin's speed bands (above, `windrose::raw_bands`); a wedge is the count of the rows in its
   sector and band.
@@ -6468,7 +6471,7 @@ probes in `re-workspace/scratch/t324`):**
   templates `wind-rose-binned` and `wind-rose-raw`. The .opj writer saves the columns as scatter plots,
   with a warning.
 - **Left:** Origin's WindRose1 sheet, the Calm count and note, compass labels on the circle, the legend order
-  (fastest first), the options window (sectors, Percent Frequency, Blowing To), and Binned Data.
+  (fastest first), and the options window (sectors, Percent Frequency, Blowing To).
 
 ## 37. Smith chart: Plot > Specialized > Smith Chart (T115, 2026-11-16, **not measured**)
 

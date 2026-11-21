@@ -305,6 +305,27 @@ fn collect(dir: &Path, recurse: bool, out: &mut Vec<std::path::PathBuf>) {
     }
 }
 
+/// Origin 2016's own files with sampling intervals (T303; `re-workspace/scratch/t303`, local only):
+/// s1 sets B's interval to 3.5 / 0.125 beside the X column A, s2 sets 0 / 2 on B of a sheet without X.
+#[test]
+fn local_origin_files_give_the_sampling_intervals() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../re-workspace/scratch/t303");
+    let interval = |file: &str, book: &str, column: &str| {
+        let project = read_opj(&dir.join(file)).unwrap().into_project();
+        let b = project.workbooks().find(|b| b.name == book).unwrap();
+        b.sheets[0].column_by_name(column).unwrap().sampling.as_ref().map(|s| (s.x0, s.inc))
+    };
+    if !dir.join("s1.opj").exists() || !dir.join("s2.opj").exists() {
+        eprintln!("opj: {} not found; skipping", dir.display());
+        return;
+    }
+    assert_eq!(interval("s1.opj", "SA", "B"), Some((3.5, 0.125)));
+    assert_eq!(interval("s1.opj", "SA", "A"), None, "the X column");
+    assert_eq!(interval("s2.opj", "SB", "B"), Some((0.0, 2.0)));
+    assert_eq!(interval("s2.opj", "SB", "A"), None, "1 and 1 is no interval");
+    assert_eq!(interval("s0.opj", "SA", "B"), None);
+}
+
 /// Origin 2016's own file with window comments (T283; made by `opj-make-from-lines.ps1` from
 /// `re-workspace/scratch/t282/probe3.lines.txt`, local only).
 #[test]

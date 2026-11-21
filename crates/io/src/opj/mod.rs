@@ -144,6 +144,27 @@ impl OpjFolder {
     }
 }
 
+/// A column's sampling interval from its column record (T303, measured in Origin 2016 with
+/// `wks.colN.xinit` / `xinc`): the first X at `0x1D2` and the step at `0x1DA` (f64), the column that
+/// "belongs to" no X column (`0x23` is 0). Origin keeps 1 and 1 there for a column without an
+/// interval; a column that has one beside an X column also gets 0xFFFF at `0x33`.
+fn column_sampling(record: &[u8]) -> Option<sheaf_core::sampling::SamplingInterval> {
+    let f64_at = |at: usize| record.get(at..at + 8).map(|b| f64::from_le_bytes(b.try_into().expect("8 bytes")));
+    let u16_at = |at: usize| record.get(at..at + 2).map(|b| u16::from_le_bytes([b[0], b[1]]));
+    if u16_at(0x23)? != 0 {
+        return None;
+    }
+    let (x0, inc) = (f64_at(0x1D2)?, f64_at(0x1DA)?);
+    let marked = u16_at(0x33) == Some(0xFFFF);
+    let usable = x0.is_finite() && inc.is_finite() && inc != 0.0;
+    (usable && (marked || (x0, inc) != (1.0, 1.0))).then(|| sheaf_core::sampling::SamplingInterval {
+        x0,
+        inc,
+        long_name: String::new(),
+        units: String::new(),
+    })
+}
+
 fn trim_trailing_missing(column: &mut sheaf_core::Column) {
     let keep = match &column.data {
         sheaf_core::ColumnData::Numeric(v) => v.iter().rposition(|x| !x.is_nan()).map_or(0, |i| i + 1),
@@ -368,6 +389,9 @@ impl<R: Read + Seek> Builder<R> {
                     col.long_name = long;
                     col.units = units;
                     col.comments = comments;
+                    if designation != Designation::X {
+                        col.sampling = column_sampling(&rec.record);
+                    }
                     self.apply_formula(&mut col, layer, rec, &short);
                     if is_time_type(rec.value_type) {
                         self.counts.time_columns += 1;

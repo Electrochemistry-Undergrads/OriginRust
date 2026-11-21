@@ -1476,6 +1476,20 @@ pub enum NormalizeKind {
     Sum,
     /// Divide by the number given with --value.
     Divide,
+    /// Scale each column so that its --stat matches that of the --ref column (Origin's ref).
+    Ref,
+    /// Divide by the cell of the --ref column at --row (Origin's cell).
+    Cell,
+}
+
+/// The statistic `--method ref` matches (Origin's `type`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum RefStatArg {
+    Min,
+    Max,
+    Mean,
+    Median,
+    Sum,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -2324,6 +2338,15 @@ pub enum AnalyzeTool {
         /// The divisor for --method divide.
         #[arg(long, allow_hyphen_values = true)]
         value: Option<f64>,
+        /// The reference column for --method ref or cell (short or long name, same sheet).
+        #[arg(long = "ref", value_name = "COLUMN")]
+        reference: Option<String>,
+        /// The statistic --method ref matches.
+        #[arg(long, value_enum, default_value_t = RefStatArg::Mean)]
+        stat: RefStatArg,
+        /// The row of the reference cell for --method cell, counted from 1.
+        #[arg(long, default_value_t = 1)]
+        row: usize,
     },
     /// Subtract a baseline from each curve (default: its smallest value).
     Baseline {

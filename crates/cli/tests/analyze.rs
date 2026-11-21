@@ -84,6 +84,32 @@ fn a_row_range_with_baseline_and_a_saved_project() {
 }
 
 #[test]
+fn normalize_matches_a_reference_column_or_divides_by_a_reference_cell() {
+    // T260: Origin's normalize methods ref and cell.
+    let dir = scratch("normalize-ref");
+    let data = data_file(&dir);
+    let d = data.to_str().unwrap();
+    let normalized = |extra: &[&str], tag: &str| -> Vec<f64> {
+        let project = dir.join(format!("{tag}.sheaf"));
+        let mut args = vec!["analyze", "normalize", d, "--y", "ramp"];
+        args.extend_from_slice(extra);
+        args.extend_from_slice(&["--save", project.to_str().unwrap()]);
+        let (ok, _, stderr) = sheaf(&args);
+        assert!(ok, "{args:?}: {stderr}");
+        let p = sheaf_io::project_file::load(&project).unwrap();
+        let c =
+            p.workbooks().next().unwrap().sheets[0].columns.iter().find(|c| c.long_name == "Normalized ramp").unwrap();
+        c.numeric().unwrap().to_vec()
+    };
+    // The ramp's maximum (10) is made flat's maximum (2): times 0.2.
+    let v = normalized(&["--method", "ref", "--ref", "flat", "--stat", "max"], "ref");
+    assert!(v.iter().enumerate().all(|(i, x)| (x - 0.2 * i as f64).abs() < 1e-12), "{v:?}");
+    // Divided by flat's third cell (2).
+    let v = normalized(&["--method", "cell", "--ref", "flat", "--row", "3"], "cell");
+    assert_eq!(v[8], 4.0);
+}
+
+#[test]
 fn the_fft_filter_and_the_b_spline_can_be_chosen() {
     let dir = scratch("fft-bspline");
     let data = data_file(&dir);
@@ -222,6 +248,8 @@ fn mistakes_give_a_message_and_a_failure_code() {
         (vec!["analyze", "integrate", d, "--y", "nope"], "column 'nope' was not found"),
         (vec!["analyze", "differentiate", d, "--order", "0"], "between 1 and 9"),
         (vec!["analyze", "normalize", d, "--method", "divide"], "--value"),
+        (vec!["analyze", "normalize", d, "--method", "ref"], "--ref COLUMN"),
+        (vec!["analyze", "normalize", d, "--method", "cell", "--ref", "flat", "--row", "0"], "counts from 1"),
         (vec!["analyze", "baseline", d, "--line", "1,2,3"], "four numbers"),
         (vec!["analyze", "filter", d, "--where", "col(zzz) > 1"], "zzz"),
         (vec!["analyze", "interpolate", d, "--x-min", "1"], "both --x-min and --x-max"),

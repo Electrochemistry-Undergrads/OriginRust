@@ -32,6 +32,7 @@ use sheaf_core::analysis::{
     EnvelopeType, FftFilterOptions, FftFilterSpec, FftFilterType, FftSpec, FftWindow, IfftSpec, PowerNorm,
     TraceInterpSpec, TraceMethod, WindowCorrection,
 };
+use sheaf_core::analysis::{NormalizeRef, RefStat};
 use sheaf_core::column::{Designation, RecalcMode};
 use sheaf_core::{ColumnId, Document, Project, WindowId};
 
@@ -494,6 +495,11 @@ const NORMALIZE_CHOICES: [(&str, NormalizeMethod); 12] = [
     ("Divide by a value", NormalizeMethod::Divide(1.0)),
 ];
 
+/// The Normalize choices after [`NORMALIZE_CHOICES`] that need a reference column (T260): Origin's
+/// `ref` at this index and `cell` right after it.
+const NORMALIZE_MATCH: usize = NORMALIZE_CHOICES.len();
+const NORMALIZE_REF_LABELS: [&str; 2] = ["Match a statistic of a reference column", "Divide by a reference cell"];
+
 /// Confidence levels in percent typed as numbers separated by spaces or commas.
 fn parse_levels(text: &str) -> Result<Vec<f64>, String> {
     text.split(|c: char| c.is_whitespace() || c == ',')
@@ -756,6 +762,9 @@ pub struct AnalysisDialog {
     boundary: Boundary,
     normalize: usize,
     divisor: f64,
+    /// T260: the statistic matched to the reference column's, and the reference cell's row (from 1).
+    normalize_stat: RefStat,
+    normalize_row: usize,
     baseline: BaselineKind,
     level: f64,
     line: [f64; 4],
@@ -1383,6 +1392,8 @@ impl AnalysisDialog {
             boundary: Boundary::None,
             normalize: 0,
             divisor: 1.0,
+            normalize_stat: RefStat::Mean,
+            normalize_row: 1,
             baseline: BaselineKind::Minimum,
             level: 0.0,
             line: [x_lo, 0.0, x_hi, 0.0],
@@ -1802,6 +1813,16 @@ impl AnalysisDialog {
         }
     }
 
+    /// Chooses Normalize's reference methods (T260): the statistic match, or the cell when `stat` is
+    /// `None`. Tests use it; the window has the Method list.
+    #[cfg(test)]
+    pub fn choose_normalize_reference(&mut self, stat: Option<RefStat>, row: usize) {
+        match stat {
+            Some(s) => (self.normalize, self.normalize_stat) = (NORMALIZE_MATCH, s),
+            None => (self.normalize, self.normalize_row) = (NORMALIZE_MATCH + 1, row),
+        }
+    }
+
     fn tool(&self) -> Result<Tool, String> {
         Ok(match self.kind {
             AnalysisKind::Integrate => Tool::Integrate(self.integrate),
@@ -1940,6 +1961,18 @@ impl AnalysisDialog {
                 npts: self.smooth_points,
                 boundary: self.boundary,
             }),
+            AnalysisKind::Normalize if self.normalize >= NORMALIZE_MATCH => {
+                let column = self
+                    .reference_choices
+                    .get(self.reference)
+                    .map(|(id, _)| *id)
+                    .ok_or_else(|| "there is no other column with numbers to use as the reference".to_string())?;
+                Tool::NormalizeRef(if self.normalize == NORMALIZE_MATCH {
+                    NormalizeRef::Column { column, stat: self.normalize_stat }
+                } else {
+                    NormalizeRef::Cell { column, row: self.normalize_row.saturating_sub(1) }
+                })
+            }
             AnalysisKind::Normalize => Tool::Normalize(match NORMALIZE_CHOICES[self.normalize].1 {
                 NormalizeMethod::Divide(_) => NormalizeMethod::Divide(self.divisor),
                 other => other,
@@ -2211,7 +2244,8 @@ impl AnalysisDialog {
         }
         if matches!(
             self.kind,
-            AnalysisKind::Convolution
+            AnalysisKind::Normalize
+                | AnalysisKind::Convolution
                 | AnalysisKind::Deconvolution
                 | AnalysisKind::SignalCorrelation
                 | AnalysisKind::Ifft
@@ -2499,16 +2533,44 @@ impl AnalysisDialog {
             AnalysisKind::Normalize => {
                 ui.horizontal(|ui| {
                     ui.label("Method");
-                    egui::ComboBox::from_id_salt("normalize_method")
-                        .selected_text(NORMALIZE_CHOICES[self.normalize].0)
-                        .width(260.0)
-                        .show_ui(ui, |ui| {
+                    let shown = NORMALIZE_CHOICES
+                        .get(self.normalize)
+                        .map(|c| c.0)
+                        .unwrap_or_else(|| NORMALIZE_REF_LABELS[self.normalize - NORMALIZE_MATCH]);
+                    egui::ComboBox::from_id_salt("normalize_method").selected_text(shown).width(260.0).show_ui(
+                        ui,
+                        |ui| {
                             for (i, (label, _)) in NORMALIZE_CHOICES.iter().enumerate() {
                                 ui.selectable_value(&mut self.normalize, i, *label);
                             }
-                        });
+                            for (k, label) in NORMALIZE_REF_LABELS.iter().enumerate() {
+                                ui.selectable_value(&mut self.normalize, NORMALIZE_MATCH + k, *label);
+                            }
+                        },
+                    );
                 });
-                if matches!(NORMALIZE_CHOICES[self.normalize].1, NormalizeMethod::Divide(_)) {
+                // T260: Origin's ref and cell methods.
+                if self.normalize >= NORMALIZE_MATCH {
+                    self.reference_options(ui);
+                    if self.normalize == NORMALIZE_MATCH {
+                        ui.horizontal(|ui| {
+                            ui.label("Statistic");
+                            egui::ComboBox::from_id_salt("normalize_stat")
+                                .selected_text(self.normalize_stat.label())
+                                .show_ui(ui, |ui| {
+                                    for s in RefStat::ALL {
+                                        ui.selectable_value(&mut self.normalize_stat, s, s.label());
+                                    }
+                                });
+                        });
+                        ui.weak("Each column is scaled so that this statistic equals the reference column's.");
+                    } else {
+                        ui.horizontal(|ui| {
+                            ui.label("Row");
+                            ui.add(DragValue::new(&mut self.normalize_row).range(1..=usize::MAX).speed(1.0));
+                        });
+                    }
+                } else if matches!(NORMALIZE_CHOICES[self.normalize].1, NormalizeMethod::Divide(_)) {
                     ui.horizontal(|ui| {
                         ui.label("Value");
                         ui.add(DragValue::new(&mut self.divisor).speed(0.1));

@@ -470,7 +470,30 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             };
             (target, Job::Tool(Tool::Smooth(analysis::SmoothOptions { method, npts: points, boundary })))
         }
-        AnalyzeTool::Normalize { target, method, value } => {
+        AnalyzeTool::Normalize {
+            target,
+            method: kind @ (NormalizeKind::Ref | NormalizeKind::Cell),
+            reference,
+            stat,
+            row,
+            ..
+        } => {
+            // T260: Origin's ref and cell methods.
+            let reference =
+                reference.ok_or_else(|| anyhow!("--method ref and cell need the reference column: --ref COLUMN"))?;
+            if row == 0 {
+                bail!("--row counts from 1");
+            }
+            let stat = (kind == NormalizeKind::Ref).then_some(match stat {
+                RefStatArg::Min => analysis::RefStat::Min,
+                RefStatArg::Max => analysis::RefStat::Max,
+                RefStatArg::Mean => analysis::RefStat::Mean,
+                RefStatArg::Median => analysis::RefStat::Median,
+                RefStatArg::Sum => analysis::RefStat::Sum,
+            });
+            (target, Job::NormalizeRef { reference, stat, row: row - 1 })
+        }
+        AnalyzeTool::Normalize { target, method, value, .. } => {
             use analysis::NormalizeMethod as M;
             let method = match method {
                 NormalizeKind::Max => M::Max,
@@ -487,6 +510,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 NormalizeKind::Divide => {
                     M::Divide(value.ok_or_else(|| anyhow!("--method divide needs the divisor: --value NUMBER"))?)
                 }
+                NormalizeKind::Ref | NormalizeKind::Cell => unreachable!("handled above"),
             };
             (target, Job::Tool(Tool::Normalize(method)))
         }

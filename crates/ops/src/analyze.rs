@@ -71,6 +71,13 @@ pub enum Job {
         wavelet: sheaf_core::analysis::CwtWavelet,
         param: f64,
     },
+    /// Normalize with a reference column (T260); the column is looked up once the project is
+    /// loaded. `stat` is the statistic matched (Origin's ref), `None` the cell at `row` (0-based).
+    NormalizeRef {
+        reference: String,
+        stat: Option<analysis::RefStat>,
+        row: usize,
+    },
     /// Curve math; the reference column is looked up once the project is loaded.
     Math {
         op: analysis::CurveOp,
@@ -267,6 +274,13 @@ pub fn run_job_to(project: &mut Project, target: &Target, job: Job, output: &ana
         Job::Tool(tool) => tool,
         Job::Math { op, operand, column } => {
             math_tool(project, book, sheet, op, &operand, column, &target.read, &mut run)?
+        }
+        Job::NormalizeRef { reference, stat, row } => {
+            let column = named_columns(project, book, sheet, std::slice::from_ref(&reference))?[0];
+            Tool::NormalizeRef(match stat {
+                Some(stat) => analysis::NormalizeRef::Column { column, stat },
+                None => analysis::NormalizeRef::Cell { column, row },
+            })
         }
         Job::Coherence { other, options } => {
             let other = named_columns(project, book, sheet, std::slice::from_ref(&other))?[0];

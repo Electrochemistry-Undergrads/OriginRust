@@ -6095,6 +6095,28 @@ fn the_analysis_window_options_change_the_result() {
 }
 
 #[test]
+fn normalize_can_match_a_reference_columns_mean() {
+    // T260: Origin's normalize method ref: B scaled so that its mean is C's.
+    let mut h = start(vec![data_file("frame-normalize-ref")]);
+    open_analysis_on(&mut h, AnalysisKind::Normalize, &["B"]);
+    h.state_mut().analysis.as_mut().unwrap().choose_normalize_reference(Some(sheaf_core::analysis::RefStat::Mean), 1);
+    settle(&mut h);
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Match a statistic of a reference column"));
+    h.get_by_value("Statistic");
+    click(&mut h, "OK");
+    let b = project(&h).workbooks().next().unwrap();
+    let mean = |v: &[f64]| {
+        let ok: Vec<f64> = v.iter().copied().filter(|x| x.is_finite()).collect();
+        ok.iter().sum::<f64>() / ok.len() as f64
+    };
+    let c = b.sheet().column_by_name("C").unwrap().numeric().unwrap().to_vec();
+    let added: Vec<&sheaf_core::Column> =
+        b.sheet().columns.iter().filter(|c| !["A", "B", "C"].contains(&c.short_name.as_str())).collect();
+    assert_eq!(added.len(), 1, "one normalized column for B");
+    assert!((mean(added[0].numeric().unwrap()) - mean(&c)).abs() < 1e-9);
+}
+
+#[test]
 fn a_preview_is_computed_on_request_and_writes_nothing() {
     let mut h = start(vec![data_file("frame-preview")]);
     open_analysis(&mut h, AnalysisKind::Smooth);

@@ -34,7 +34,7 @@ use std::cmp::Ordering;
 
 pub use sheaf_calc::{
     AreaType, Boundary, CurveOp, DiffOptions, Extrapolation, InterpMethod, LocalSpan, NormalizeMethod, PeakDirection,
-    PeakFilter, PeakOptions, SmoothMethod, SmoothOptions, SplineBoundary,
+    PeakFilter, PeakOptions, RefStat, SmoothMethod, SmoothOptions, SplineBoundary,
 };
 pub use sheaf_calc::{AxisBins, Bin2dOptions, Bin2dStat, BinSize, DiscSort, FreqOptions, MeansComparison, Tail};
 pub use sheaf_calc::{BaselineStat, ChainBaseline, ChainOptions, CrossingIndex, FindMethod, FindOptions, LimitMode};
@@ -1003,6 +1003,8 @@ pub enum Tool {
     Differentiate(DiffOptions),
     Smooth(SmoothOptions),
     Normalize(NormalizeMethod),
+    /// Origin's `normalize` with a reference (T260): `ref` (match a statistic of a column) or `cell`.
+    NormalizeRef(NormalizeRef),
     SubtractBaseline(BaselineSpec),
     Interpolate(InterpSpec),
     FindPeaks(PeakOptions),
@@ -1111,7 +1113,7 @@ impl Tool {
             Tool::MedianFilter(_) => "Median filter",
             Tool::Differentiate(_) => "Differentiate",
             Tool::Smooth(_) => "Smooth",
-            Tool::Normalize(_) => "Normalize",
+            Tool::Normalize(_) | Tool::NormalizeRef(_) => "Normalize",
             Tool::SubtractBaseline(_) => "Subtract baseline",
             Tool::Interpolate(_) => "Interpolate",
             Tool::FindPeaks(_) => "Find peaks",
@@ -1269,6 +1271,15 @@ pub enum OutputTarget {
     /// Existing columns of the input sheet, one per result column in order; their values and
     /// labels are replaced.
     Existing(Vec<ColumnId>),
+}
+
+/// What Origin's `normalize` methods `ref` and `cell` refer to (T260).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum NormalizeRef {
+    /// Scale each column so that its statistic equals that of `column` (Origin's `ref` with `type`).
+    Column { column: ColumnId, stat: RefStat },
+    /// Divide each column by the value of `column` at `row` (0-based; Origin's `cell`).
+    Cell { column: ColumnId, row: usize },
 }
 
 /// One run of a tool: the Y columns to work on (all in one sheet), the rows
@@ -3182,6 +3193,63 @@ impl Project {
                     });
                 }
             }
+            Tool::NormalizeRef(reference) => {
+                // T260: the reference is read as analysis reads data (masked and filtered cells left out).
+                let column = match *reference {
+                    NormalizeRef::Column { column, .. } | NormalizeRef::Cell { column, .. } => column,
+                };
+                let (_, rsheet, rcol) = self.locate(column).ok_or(AnalysisError::NoSuchColumn(column))?;
+                let values =
+                    rsheet.values_of(rcol).ok_or_else(|| AnalysisError::NotNumeric(rcol.short_name.clone()))?;
+                let rshort = rcol.short_name.clone();
+                let usable = |v: f64| v.is_finite() && v != 0.0;
+                let (method, describe, units) = match *reference {
+                    NormalizeRef::Column { stat, .. } => {
+                        let target = calc::ref_stat(&values, stat);
+                        if !usable(target) {
+                            return Err(AnalysisError::BadOption(format!(
+                                "the {} of the reference column {rshort} is {target}; it cannot be matched",
+                                stat.label()
+                            )));
+                        }
+                        (
+                            NormalizeMethod::MatchStat { stat, target },
+                            format!("its {} matched to that of {rshort}", stat.label()),
+                            Some(rcol.units.clone()),
+                        )
+                    }
+                    NormalizeRef::Cell { row, .. } => {
+                        let v = values.get(row).copied().unwrap_or(f64::NAN);
+                        if !usable(v) {
+                            return Err(AnalysisError::BadOption(format!(
+                                "the reference cell {rshort}[{}] holds no number other than 0 (or is masked)",
+                                row + 1
+                            )));
+                        }
+                        (NormalizeMethod::Divide(v), format!("divided by {rshort}[{}] = {v}", row + 1), None)
+                    }
+                };
+                for inp in &inputs {
+                    if let NormalizeMethod::MatchStat { stat, .. } = method {
+                        let own = calc::ref_stat(inp.ys(), stat);
+                        if !usable(own) {
+                            return Err(AnalysisError::BadOption(format!(
+                                "the {} of {} is {own}; it cannot be scaled to the reference",
+                                stat.label(),
+                                inp.short
+                            )));
+                        }
+                    }
+                    let v = calc::normalize(inp.ys(), method);
+                    beside.push(NewColumn {
+                        after: inp.id,
+                        long_name: format!("Normalized {}", inp.name),
+                        units: units.clone().unwrap_or_default(),
+                        comments: format!("{} normalized, {describe}{}", inp.short, inp.range_note()),
+                        data: inp.aligned(&v),
+                    });
+                }
+            }
             Tool::Normalize(method) => {
                 if let NormalizeMethod::Divide(d) = method
                     && (*d == 0.0 || !d.is_finite())
@@ -4335,6 +4403,36 @@ mod tests {
         };
         let tool = curve_math(CurveOp::Add, CurveOperand::Reference(far), true);
         assert!(matches!(p.analyze(&request(&[ramp], tool)), Err(AnalysisError::BadOption(_))));
+    }
+
+    #[test]
+    fn normalize_matches_a_reference_statistic_or_divides_by_a_reference_cell() {
+        // T260: Origin's normalize methods ref and cell.
+        let (mut p, book, _, ramp) = sample();
+        let reference = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0, 4.0, 6.0])).unwrap();
+        p.column_mut(reference).unwrap().units = "mA".into();
+        // The mean of the ramp 0..10 (5) is made the reference's mean (4): times 0.8.
+        let tool = Tool::NormalizeRef(NormalizeRef::Column { column: reference, stat: RefStat::Mean });
+        let r = p.analyze(&request(&[ramp], tool)).unwrap();
+        let out = p.numeric(r.new_columns[0]).unwrap();
+        for (i, v) in out.iter().enumerate() {
+            assert!((v - 0.8 * i as f64).abs() < 1e-12, "row {i}: {v}");
+        }
+        let c = p.column(r.new_columns[0]).unwrap();
+        assert_eq!(c.units, "mA", "the values are now in the reference's terms");
+        assert!(c.comments.contains("mean matched to that of D"), "{}", c.comments);
+        // Divide by the reference cell D[2] = 4.
+        let tool = Tool::NormalizeRef(NormalizeRef::Cell { column: reference, row: 1 });
+        let r = p.analyze(&request(&[ramp], tool)).unwrap();
+        assert_eq!(p.numeric(r.new_columns[0]).unwrap()[8], 2.0);
+        // A masked or empty reference cell, and a statistic of 0, are refused.
+        p.column_mut(reference).unwrap().mask.insert(1);
+        let bad = Tool::NormalizeRef(NormalizeRef::Cell { column: reference, row: 1 });
+        assert!(p.analyze(&request(&[ramp], bad)).is_err());
+        let past = Tool::NormalizeRef(NormalizeRef::Cell { column: reference, row: 9 });
+        assert!(p.analyze(&request(&[ramp], past)).is_err());
+        let min = Tool::NormalizeRef(NormalizeRef::Column { column: reference, stat: RefStat::Min });
+        assert!(p.analyze(&request(&[ramp], min)).is_err(), "the ramp's minimum is 0");
     }
 
     #[test]

@@ -132,7 +132,7 @@ pub use normality::{
     DAgostino, KS_EXACT_MAX_N, TestResult, anderson_darling, dagostino, kolmogorov_cdf, kolmogorov_smirnov,
     ks_distance, lilliefors, shapiro_wilk,
 };
-pub use normalize::{NormalizeMethod, normalize};
+pub use normalize::{NormalizeMethod, RefStat, normalize, ref_stat};
 pub use nptests::{
     Friedman, FriedmanError, FriedmanGroup, KS2_EXACT_MAX_PAIRS, KsTwoSample, MedianGroup, MedianTest,
     SIGN_EXACT_MAX_N, SignTest, friedman, ks_two_sample, median_test, sign_test,

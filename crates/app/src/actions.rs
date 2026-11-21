@@ -331,7 +331,8 @@ pub enum Action {
         layout: WindowId,
         index: usize,
     },
-    /// Layout > Page Setup... (T237 slice 4): the window that sets the page size of `layout`.
+    /// Format > Layout Page... [F2] (T237 slices 4 and 6): the window that sets the page size and
+    /// colour of `layout`.
     LayoutPageSetup {
         layout: WindowId,
     },

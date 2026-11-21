@@ -46,11 +46,14 @@ unregistered on the reference machine). Everything below is Sheaf's choice unles
   (SVG, EMF, PDF) are refused with a message. Code: `sheaf_plot::render_layout_raster` /
   `render_layout_image` (`crates/plot/src/layout_render.rs`), `layout_view::write_layout_image`.
 
-## Page size (T237 slice 4)
+## Page properties (T237 slices 4 and 6)
 
-- Layout > Page Setup... sets the page's width and height, typed in inches, centimetres or points
+- Format > Layout Page... [F2] (Origin's place for it; F2 is the graph's Page Properties key, and
+  on a layout page it opens this window) sets the page's width and height, typed in inches, centimetres or points
   (half an inch to 200 inches a side), with Letter, Legal, A4 and A3 presets (either way round) and
-  Portrait/Landscape, which swaps the sides. OK makes it one undo step ("Layout page size"). Items
+  Portrait/Landscape, which swaps the sides. A Color button sets the page colour (white by
+  default; drawn on screen and in the export, and saved only when it is not white). OK makes it
+  one undo step ("Layout page properties"). Items
   keep their places as fractions of the page, so they stretch with it; the export follows the new
   size. Code: `dialogs/layout_page_setup.rs`. Origin takes the size from the printer page; Sheaf
   keeps it per page (not measured).
@@ -68,4 +71,4 @@ unregistered on the reference machine). Everything below is Sheaf's choice unles
 ## Not yet
 
 - Text and drawn objects on the page, picture holders,
-  the rest of the Layout Page properties (background, printer page), print, vector export of the page, and `.opj`.
+  the rest of the Layout Page properties (printer page, theme), print, vector export of the page, and `.opj`.

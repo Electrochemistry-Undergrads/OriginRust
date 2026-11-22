@@ -1741,6 +1741,33 @@ pub(crate) fn token_option_text(project: &Project, c: &sheaf_core::Column, optio
     }
 }
 
+/// What `%(n)` or `%(n, option)` shows in a legend for plot `plot`, as Origin 2016 substitutes it in a
+/// graph (T339, measured with `string s$ = "%(1,@LL)"` on a graph window, `re-workspace/scratch/t338`):
+/// without an option the plot's name ([`Project::plot_label`]: the comment's first line, else the long
+/// name, else the short name); `@LM` the same from the column alone; `@R` the plotted range,
+/// `[Book1]Sheet1!Col("Volt")[1:5]` (the long name quoted, else the short name); every other option as
+/// in an axis title ([`token_option_text`]: `@LL`, `@LU`, `@LC`, `@LS`, `@LG`, `@LA`, `@LN`, `@L`, `@U`,
+/// `@C`, `@D`, `@W`, `@WS`, `@WL`, `@LP`; unknown ones `###`).
+pub(crate) fn legend_name(project: &Project, plot: &sheaf_core::graph::Plot, option: &str) -> String {
+    let option = option.trim();
+    if option.is_empty() {
+        return project.plot_label(plot);
+    }
+    let Some(c) = project.column(plot.y) else { return project.plot_label(plot) };
+    match option.to_ascii_uppercase().as_str() {
+        "@LM" => c.comments.lines().next().filter(|l| !l.is_empty()).unwrap_or(c.display_name()).to_string(),
+        "@R" => {
+            let name = if c.long_name.is_empty() { c.short_name.clone() } else { format!("\"{}\"", c.long_name) };
+            let (from, to) = plot.rows.map_or((1, c.len()), |(a, b)| (a + 1, b.min(c.len())));
+            match project.locate(c.id) {
+                Some((b, s, _)) => format!("[{}]{}!Col({name})[{from}:{to}]", b.name, s.name),
+                None => format!("Col({name})[{from}:{to}]"),
+            }
+        }
+        _ => token_option_text(project, c, option),
+    }
+}
+
 /// Replaces each `%(?X...)` and `%(?Y...)` of `text` (letter case ignored) by `built(is_y, option)`,
 /// `option` being the text after the comma (empty without one); other text, and a `%(?` not followed
 /// by X or Y and a closing parenthesis, stay as they are.
@@ -2078,9 +2105,9 @@ fn draw_legend(
         for part in legend::parse_line(&line) {
             match part {
                 legend::Part::Text(t) => pending.push_str(t),
-                legend::Part::Name(id) => {
+                legend::Part::Name(id, option) => {
                     if let Some(k) = legend::resolve(ids, id) {
-                        pending.push_str(&project.plot_label(entries[k].plot));
+                        pending.push_str(&legend_name(project, entries[k].plot, option));
                     }
                 }
                 legend::Part::Symbol(id) => {

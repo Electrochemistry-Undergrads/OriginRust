@@ -304,6 +304,63 @@ fn two_roots_of_one_source_keep_their_relative_places() {
 }
 
 #[test]
+fn separate_panels_keep_source_order_and_links_and_use_independent_scales() {
+    use crate::layers::NewLayerKind;
+
+    let (mut p, sources, _) = project(2);
+    let source = p.graph_mut(sources[0]).unwrap();
+    source.add_layer(NewLayerKind::Normal, 0).unwrap();
+    source.add_layer(NewLayerKind::RightY, 0).unwrap();
+    let saved = source.clone();
+    let options = MergeOptions {
+        group_sources: false,
+        add_extra_layers: true,
+        common_x_spans: Some(vec![10.0, 20.0, 40.0]),
+        common_y_spans: Some(vec![30.0, 50.0, 20.0]),
+        panel_labels: ['A', 'B'].into_iter().map(|c| MergePanelLabel { text: c.to_string(), width_pt: 20.0 }).collect(),
+        ..opts(&sources)
+    };
+    let id = p.merge_graphs(&options).unwrap();
+    let merged = p.graph(id).unwrap();
+    let layers = &merged.layers;
+    assert_eq!(layers.len(), 5);
+    assert_pct(&layers[0].frame, 15.0, 9.992, 11.67, 30.0);
+    assert_pct(&layers[1].frame, 66.67, 9.992, 23.33, 50.0);
+    assert_eq!(layers[2].link, saved.layers[2].link);
+    assert_eq!(layers[2].frame, saved.layers[2].frame);
+    assert_pct(&layers[3].frame, 15.0, 65.01, 46.67, 20.0);
+    assert_pct(&layers[4].frame, 66.67, 65.01, 23.33, 20.0);
+    assert!(layers[4].plots.is_empty() && layers[4].link.is_none());
+    let labels: Vec<_> = layers.iter().map(|layer| layer.labels.first().map(|label| label.text.as_str())).collect();
+    assert_eq!(labels, [Some("A"), None, None, Some("B"), None]);
+    assert_eq!(p.graph(sources[0]), Some(&saved));
+
+    let linked = p.merge_graphs(&MergeOptions { link: true, ..options }).unwrap();
+    let linked = p.graph(linked).unwrap();
+    assert_eq!(linked.link_parent(1), Some(0));
+    assert_eq!(linked.link_parent(2), Some(0));
+    assert_eq!(linked.link_parent(3), Some(0));
+    assert_pct(&linked.layers[1].frame.within(linked.layers[0].frame), 66.67, 9.992, 23.33, 50.0);
+}
+
+#[test]
+fn a_manual_grid_must_fit_every_separate_panel_only_when_rearranging() {
+    use crate::layers::NewLayerKind;
+
+    let (mut p, sources, _) = project(2);
+    let source = p.graph_mut(sources[0]).unwrap();
+    source.add_layer(NewLayerKind::Normal, 0).unwrap();
+    let options = MergeOptions { rows: Some(1), cols: Some(2), group_sources: false, ..opts(&sources) };
+    let before = p.clone();
+    assert_eq!(p.merge_graphs(&options), Err(MergeError::TooManyPanels { rows: 1, cols: 2, panels: 3 }));
+    assert_eq!(p, before);
+    let id = p.merge_graphs(&MergeOptions { rearrange: false, ..options }).unwrap();
+    let merged = p.graph(id).unwrap();
+    let source_frames = p.graph(sources[0]).unwrap().layers.iter().map(|layer| layer.frame);
+    assert!(merged.layers.iter().zip(source_frames).all(|(layer, source)| layer.frame == source));
+}
+
+#[test]
 fn keeping_the_aspect_ratio_puts_the_layer_at_the_top_left_of_its_cell() {
     let (mut p, gs, _) = project(3);
     let src = p.graph(gs[0]).unwrap().layers[0].frame;

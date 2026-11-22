@@ -6,6 +6,7 @@ use eframe::egui;
 use sheaf_core::column::default_short_name;
 use sheaf_core::merge::{
     MERGE_PAGE_IN, MergeError, MergeLabelPosition, MergeOptions, MergePanelLabel, MergeTextScale, auto_grid,
+    source_panel_roots,
 };
 use sheaf_core::{Document, Project, WindowId};
 use sheaf_plot::{SystemFonts, TextMeasurer};
@@ -178,17 +179,21 @@ impl MergeDraft {
         // This runs when rendering a preview or creating the graph, not on every dialog frame.
         for &id in &options.sources {
             let graph = project.graph(id).ok_or(MergeError::NotAGraph(id))?;
+            if graph.layers.is_empty() {
+                return Err(MergeError::Empty(graph.name.clone()));
+            }
             let geometry = sheaf_plot::layout_geometry(project, id).map_err(|_| MergeError::CommonScale)?;
-            let axes = geometry.first().ok_or_else(|| MergeError::Empty(graph.name.clone()))?;
-            let width = axes.x.max - axes.x.min;
-            // A source's first layer can share the merged root's X scale if it has no children.
-            let width = if options.share_x && !graph.has_children(0) {
-                widths.first().copied().unwrap_or(width)
-            } else {
-                width
-            };
-            widths.push(width);
-            heights.push(axes.y.max - axes.y.min);
+            for root in source_panel_roots(graph, options.group_sources) {
+                let axes = &geometry[root];
+                let width = axes.x.max - axes.x.min;
+                let width = if options.share_x && !graph.has_children(root) {
+                    widths.first().copied().unwrap_or(width)
+                } else {
+                    width
+                };
+                widths.push(width);
+                heights.push(axes.y.max - axes.y.min);
+            }
         }
         options.common_x_spans = self.common_width.then_some(widths);
         options.common_y_spans = self.common_height.then_some(heights);
@@ -208,6 +213,7 @@ pub struct MergeGraphsDialog {
     cols: Option<usize>,
     add_extra_layers: bool,
     keep_aspect: bool,
+    group_sources: bool,
     common_width: bool,
     common_height: bool,
     link: bool,
@@ -245,6 +251,7 @@ impl MergeGraphsDialog {
             cols: None,
             add_extra_layers: false,
             keep_aspect: false,
+            group_sources: true,
             common_width: false,
             common_height: false,
             link: false,
@@ -285,7 +292,6 @@ impl MergeGraphsDialog {
 
     fn draft(&self, project: &Project, workspace: &Workspace) -> MergeDraft {
         let sources = self.chosen(project, workspace);
-        let (rows, cols) = auto_grid(sources.len(), self.rows, self.cols);
         let page = (self.page_in[0], self.page_in[1]);
         let default_page = !self.portrait && page == MERGE_PAGE_IN;
         let font = MergePanelLabel::font();
@@ -299,9 +305,10 @@ impl MergeGraphsDialog {
         let options = MergeOptions {
             sources,
             allow_single_source: self.source.allows_single_source(),
-            rows: Some(rows),
-            cols: Some(cols),
+            rows: self.rows,
+            cols: self.cols,
             add_extra_layers: self.add_extra_layers,
+            group_sources: self.group_sources,
             common_x_spans: None,
             common_y_spans: None,
             h_gap: self.h_gap,
@@ -455,7 +462,12 @@ impl MergeGraphsDialog {
         ui.checkbox(&mut self.keep_sources, "Keep Source Graphs");
         ui.checkbox(&mut self.rearrange, "Rearrange Layout");
         ui.add_enabled_ui(self.rearrange, |ui| {
-            self.arrange(ui, chosen.len());
+            let panels = chosen
+                .iter()
+                .filter_map(|&id| project.graph(id))
+                .map(|graph| source_panel_roots(graph, self.group_sources).count())
+                .sum();
+            self.arrange(ui, panels);
             self.spacing(ui);
         });
         self.page_setup(ui);
@@ -496,10 +508,10 @@ impl MergeGraphsDialog {
         });
     }
 
-    fn arrange(&mut self, ui: &mut egui::Ui, sources: usize) {
+    fn arrange(&mut self, ui: &mut egui::Ui, panels: usize) {
         egui::CollapsingHeader::new("Arrange Settings").default_open(true).show(ui, |ui| {
             // Until the user edits them the numbers follow the selection.
-            let (rows, cols) = auto_grid(sources, self.rows, self.cols);
+            let (rows, cols) = auto_grid(panels, self.rows, self.cols);
             let (mut r, mut c) = (rows, cols);
             egui::Grid::new("merge_arrange").num_columns(2).show(ui, |ui| {
                 let label = ui.label("Number of Rows");
@@ -518,7 +530,7 @@ impl MergeGraphsDialog {
                 !(self.common_width || self.common_height),
                 egui::Checkbox::new(&mut self.keep_aspect, "Keep Layer Aspect Ratio"),
             );
-            ui.add_enabled(false, egui::Checkbox::new(&mut true, "Treat Each Source Graph as a Unit"));
+            ui.checkbox(&mut self.group_sources, "Treat Each Source Graph as a Unit");
             ui.checkbox(&mut self.link, "Link Source Graphs");
             ui.horizontal(|ui| {
                 ui.add_space(18.0);

@@ -94,6 +94,14 @@ Origin 2016 uses `resizewidthbyscale` and `resizeheightbysale`. The measured
 rectangles and interactions with aspect, linked layers and empty tracks are
 in graphing 15.7c. The Sheaf controls apply to both previews and OK.
 
+**Source grouping (2026-11-22).** When Treat Each Source Graph as a Unit is
+off, each unlinked layer gets a cell and linked layers follow their original
+parent. Origin 2016's `groupgraph:=0` matched that arrangement even with the linked right Y
+layer later in the source layer list. One panel label still belongs to each
+source graph. The automatic grid, Common Scale and Add Extra Layer(s) for Grid
+follow the resulting panel count. Sheaf refuses grids with too few cells to
+prevent overlap. The measured grouped behavior and geometry are in graphing 15.7c.
+
 **Branch:** `merge-graphs`. **Priority:** P0, wave 2, owner's stacked-figure priority.
 **Spec:** [graphing](../spec/graphing.md) 15 (add Merge Graph Windows and Layer Management
 subsections); ADR 0009. **Inventory:** 0 locations tagged `T60`.

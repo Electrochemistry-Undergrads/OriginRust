@@ -64,6 +64,9 @@ pub struct ArrangeOptions {
     pub cols: usize,
     /// Keep the width to height ratio of each layer (inside its cell, at the cell's top left).
     pub keep_aspect: bool,
+    /// Resolved data-unit spans, indexed by layer. A group uses its root layer's span.
+    pub common_x_spans: Option<Vec<f64>>,
+    pub common_y_spans: Option<Vec<f64>>,
     /// A layer and the layers linked to it count as one unit.
     pub group_linked: bool,
     /// Link the other units to the first one, for position only (no scale is shared).
@@ -89,6 +92,8 @@ impl Default for ArrangeOptions {
             rows: 1,
             cols: 1,
             keep_aspect: false,
+            common_x_spans: None,
+            common_y_spans: None,
             group_linked: false,
             link: false,
             hide_inner: false,
@@ -274,7 +279,7 @@ impl Graph {
             return Err(LayerError::NoLayers);
         }
         let layout = opts.layout();
-        let cells = layout.frames()?;
+        let mut cells = layout.frames()?;
         let sel =
             if selection.is_empty() { (0..self.layers.len()).collect() } else { self.checked_selection(selection)? };
         let mut units: Vec<Vec<usize>> = Vec::new();
@@ -304,13 +309,24 @@ impl Graph {
                 });
             }
         }
+        let selected_spans = |axis: &Option<Vec<f64>>| -> Result<_, PanelError> {
+            let Some(axis) = axis else { return Ok(None) };
+            if axis.len() != self.layers.len() {
+                return Err(PanelError::CommonScale);
+            }
+            Ok(Some(units.iter().map(|unit| axis[unit[0]]).collect::<Vec<_>>()))
+        };
+        let x = selected_spans(&opts.common_x_spans)?;
+        let y = selected_spans(&opts.common_y_spans)?;
+        let keep_aspect = opts.keep_aspect && x.is_none() && y.is_none();
+        layout.apply_common_scale(&mut cells, x.as_deref(), y.as_deref())?;
         self.atomic(|g| {
             let targets: Vec<(usize, Frame)> = units
                 .iter()
                 .zip(&cells)
                 .map(|(u, &cell)| {
                     let cur = now[u[0]];
-                    let target = if opts.keep_aspect && cur.width > 0.0 && cur.height > 0.0 {
+                    let target = if keep_aspect && cur.width > 0.0 && cur.height > 0.0 {
                         let ratio = cur.width / cur.height;
                         let width = cell.width.min(cell.height * ratio);
                         Frame { left: cell.left, top: cell.top, width, height: width / ratio }

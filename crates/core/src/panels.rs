@@ -67,6 +67,8 @@ pub enum PanelError {
     Margin,
     #[error("the margins and gaps leave no room for the panels")]
     NoRoom,
+    #[error("Common Scale needs a usable axis range for each arranged panel")]
+    CommonScale,
     #[error("there is nothing to put in the panels")]
     NoGroups,
     #[error("the layout has {cells} cell(s) but the graph has {panels} panels")]
@@ -213,6 +215,81 @@ impl PanelLayout {
                 }
             })
             .collect())
+    }
+
+    /// Sizes an existing set of validated cells proportionally on either axis. The input spans
+    /// follow panel order and cover the occupied cells. Unoccupied cells fill their tracks.
+    pub(crate) fn apply_common_scale(
+        &self,
+        frames: &mut [Frame],
+        x: Option<&[f64]>,
+        y: Option<&[f64]>,
+    ) -> Result<(), PanelError> {
+        let widths = x.map(|spans| self.common_axis_frames(spans, frames[0].width, true)).transpose()?;
+        let heights = y.map(|spans| self.common_axis_frames(spans, frames[0].height, false)).transpose()?;
+        if let Some(widths) = widths {
+            for (frame, (left, width)) in frames.iter_mut().zip(widths) {
+                frame.left = left;
+                frame.width = width;
+            }
+        }
+        if let Some(heights) = heights {
+            for (frame, (top, height)) in frames.iter_mut().zip(heights) {
+                frame.top = top;
+                frame.height = height;
+            }
+        }
+        Ok(())
+    }
+
+    /// Track starts follow their widest or tallest panel. A vacant track takes the mean track size.
+    fn common_axis_frames(
+        &self,
+        spans: &[f64],
+        equal_size: f64,
+        horizontal: bool,
+    ) -> Result<Vec<(f64, f64)>, PanelError> {
+        if spans.is_empty() || spans.len() > self.cells() || spans.iter().any(|&span| !span.is_finite() || span <= 0.0)
+        {
+            return Err(PanelError::CommonScale);
+        }
+        let (tracks, start, gap) = if horizontal {
+            (self.cols, self.margin_left / 100.0, self.h_gap / 100.0)
+        } else {
+            (self.rows, self.margin_top / 100.0, self.v_gap / 100.0)
+        };
+        let largest = spans.iter().copied().fold(0.0, f64::max);
+        let track_of = |k| {
+            let (row, col) = self.cell(k);
+            if horizontal { col } else { row }
+        };
+        let mut weights = vec![0.0_f64; tracks];
+        for (cell, span) in spans.iter().enumerate() {
+            let track = track_of(cell);
+            weights[track] = weights[track].max(span / largest);
+        }
+        let mean = weights.iter().sum::<f64>() / weights.iter().filter(|&&weight| weight > 0.0).count() as f64;
+        for weight in &mut weights {
+            if *weight == 0.0 {
+                *weight = mean;
+            }
+        }
+        let unit = equal_size * tracks as f64 / weights.iter().sum::<f64>();
+        let mut starts = Vec::with_capacity(tracks);
+        let mut next = start;
+        for weight in &weights {
+            starts.push(next);
+            next += unit * weight + gap;
+        }
+        (0..self.cells())
+            .map(|cell| {
+                let track = track_of(cell);
+                let start = starts[track];
+                let weight = spans.get(cell).map_or(weights[track], |span| span / largest);
+                let size = unit * weight;
+                if start + size > start { Ok((start, size)) } else { Err(PanelError::CommonScale) }
+            })
+            .collect()
     }
 
     /// Sets the label settings of panels that touch, for the first `count` panels of a graph whose

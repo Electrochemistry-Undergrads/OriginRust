@@ -3785,7 +3785,7 @@ layers; Arrange, Size/Position and Link are built and work on a copy shown as nu
 page-shaped preview; Undo takes back the last Apply; OK writes the copy in one undo step; Cancel and
 Escape discard it. Display > Color > Background Color is implemented as described below. Add (T61)
 and Axes are shown disabled, as are Add Extra Layer(s) for Grid
-(Sheaf leaves surplus cells empty), the Common Scale ticks, the Align/Custom links, the Units combo of
+(Sheaf leaves surplus cells empty), the Align/Custom links, the Units combo of
 Link and the reposition-parent tick. Arrange with no selection takes every layer; "Treat Linked
 Layers as a group" places a layer with the layers linked to it as one unit; Link Layers links the
 later units to the first in position only. Sheaf choices (not measured): Move in "% of Reference
@@ -3793,6 +3793,21 @@ Layer" counts from the reference layer's top left corner, a pixel is 1/96 in, th
 starts at layer 1, and a reference layer that follows a selected layer is refused (it would move
 with it). The Link tab shows the first selected layer's link; Swap with Reorder refuses an order that
 puts a parent after its child.
+
+**Arrange by Common Scale** (T60, 2026-11-22). The width and height choices
+use the displayed X and Y axis spans of each selected layer. With Treat
+Linked Layers as a group selected, a group uses its root's axes and relative
+frame positions. The calculation follows the chosen Arrange Order and the
+Common Scale grid rules in 15.7c. Selecting either axis takes priority over
+Keep Layer Aspect Ratio. Apply resolves the axes of the current preview,
+including scale links applied on the Link tab. Undo rolls back that Apply
+and OK commits the preview as one document history entry.
+
+Origin documents proportional widths and heights in the Arrange tab. Its
+Origin 2016 `layarrange` command exposes only uniform sizing, and attempts
+to drive the affected dialog did not produce a fresh geometry measurement.
+Sheaf uses the sizing rules measured for Merge Graph Windows.
+[Origin Arrange tab](https://docs.originlab.com/origin-help/laymanage-arrangetab/)
 
 **Display > Color > Background Color** (T60 follow-up, measured in Origin 2016 on
 2026-11-16): the stock layer starts at None (`layer.color=0`). The palette has None,

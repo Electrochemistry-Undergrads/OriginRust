@@ -348,37 +348,7 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
     if [common_x, common_y].into_iter().flatten().any(|spans| spans.len() != panel_count) {
         return Err(MergeError::CommonScale);
     }
-    let first_frame = cells[0];
-    if let Some(spans) = common_x {
-        let widths = common_axis_frames(
-            spans,
-            cells.len(),
-            layout.cols,
-            1,
-            first_frame.left,
-            first_frame.width,
-            layout.h_gap / 100.0,
-        )?;
-        for (cell, (left, width)) in cells.iter_mut().zip(widths) {
-            cell.left = left;
-            cell.width = width;
-        }
-    }
-    if let Some(spans) = common_y {
-        let heights = common_axis_frames(
-            spans,
-            cells.len(),
-            layout.rows,
-            layout.cols,
-            first_frame.top,
-            first_frame.height,
-            layout.v_gap / 100.0,
-        )?;
-        for (cell, (top, height)) in cells.iter_mut().zip(heights) {
-            cell.top = top;
-            cell.height = height;
-        }
-    }
+    layout.apply_common_scale(&mut cells, common_x, common_y).map_err(|_| MergeError::CommonScale)?;
     let (page_w, page_h) = opts.page_pt()?;
     let first = sources[0];
     let mut g = Graph {
@@ -475,51 +445,6 @@ fn fit_panel(cell: Frame, bbox: Frame, opts: &MergeOptions, common_scale: bool) 
     } else {
         cell
     }
-}
-
-/// One page fraction per data unit, shared by all occupied cells on this axis. Track
-/// starts follow their widest or tallest panel. A vacant track takes the mean track size.
-fn common_axis_frames(
-    spans: &[f64],
-    cells: usize,
-    tracks: usize,
-    stride: usize,
-    start: f64,
-    equal_size: f64,
-    gap: f64,
-) -> Result<Vec<(f64, f64)>, MergeError> {
-    if spans.iter().any(|&span| !span.is_finite() || span <= 0.0) {
-        return Err(MergeError::CommonScale);
-    }
-    let largest = spans.iter().copied().fold(0.0, f64::max);
-    let track_of = |cell| cell / stride % tracks;
-    let mut weights = vec![0.0_f64; tracks];
-    for (cell, span) in spans.iter().enumerate() {
-        let track = track_of(cell);
-        weights[track] = weights[track].max(span / largest);
-    }
-    let mean = weights.iter().sum::<f64>() / weights.iter().filter(|&&weight| weight > 0.0).count() as f64;
-    for weight in &mut weights {
-        if *weight == 0.0 {
-            *weight = mean;
-        }
-    }
-    let unit = equal_size * tracks as f64 / weights.iter().sum::<f64>();
-    let mut starts = Vec::with_capacity(tracks);
-    let mut next = start;
-    for weight in &weights {
-        starts.push(next);
-        next += unit * weight + gap;
-    }
-    (0..cells)
-        .map(|cell| {
-            let track = track_of(cell);
-            let start = starts[track];
-            let weight = spans.get(cell).map_or(weights[track], |span| span / largest);
-            let size = unit * weight;
-            if start + size > start { Ok((start, size)) } else { Err(MergeError::CommonScale) }
-        })
-        .collect()
 }
 
 /// Origin's "Show Axes Frame": in a grid without a vertical gap, the layers of a cell with a filled

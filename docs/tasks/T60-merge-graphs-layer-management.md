@@ -102,6 +102,13 @@ source graph. The automatic grid, Common Scale and Add Extra Layer(s) for Grid
 follow the resulting panel count. Sheaf refuses grids with too few cells to
 prevent overlap. The measured grouped behavior and geometry are in graphing 15.7c.
 
+**Layer Management Common Scale (2026-11-22).** Arrange supports width by X
+span and height by Y span for the selected layers or linked groups. Apply
+uses the displayed ranges in the current preview. The arrangement shares
+the proportional grid rules from Merge Graph Windows. The Origin Arrange
+tab documents both options. Fresh Origin 2016 dialog geometry remains
+unverified. See graphing 15.7d.
+
 **Branch:** `merge-graphs`. **Priority:** P0, wave 2, owner's stacked-figure priority.
 **Spec:** [graphing](../spec/graphing.md) 15 (add Merge Graph Windows and Layer Management
 subsections); ADR 0009. **Inventory:** 0 locations tagged `T60`.

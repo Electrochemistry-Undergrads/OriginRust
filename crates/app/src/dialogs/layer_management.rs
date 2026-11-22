@@ -65,6 +65,8 @@ pub struct LayerManagementDialog {
     selected: BTreeSet<usize>,
     tab: Tab,
     arrange: ArrangeOptions,
+    common_width: bool,
+    common_height: bool,
     mode: SizeMode,
     unit: SizeUnit,
     reference: usize,
@@ -101,6 +103,8 @@ impl LayerManagementDialog {
             selected,
             tab: Tab::Arrange,
             arrange: ArrangeOptions::default(),
+            common_width: false,
+            common_height: false,
             mode: SizeMode::Resize,
             unit: SizeUnit::ReferencePercent,
             reference: 0,
@@ -183,7 +187,7 @@ impl LayerManagementDialog {
                         });
                         ui.separator();
                         match self.tab {
-                            Tab::Arrange => self.arrange_tab(ui),
+                            Tab::Arrange => self.arrange_tab(ui, doc.project()),
                             Tab::SizePosition => self.size_tab(ui),
                             Tab::Link => self.link_tab(ui),
                             Tab::Display => self.display_tab(ui),
@@ -263,7 +267,7 @@ impl LayerManagementDialog {
         });
     }
 
-    fn arrange_tab(&mut self, ui: &mut egui::Ui) {
+    fn arrange_tab(&mut self, ui: &mut egui::Ui, project: &Project) {
         let o = &mut self.arrange;
         ui.group(|ui| {
             ui.strong("Arrange Selected Layers");
@@ -289,11 +293,14 @@ impl LayerManagementDialog {
                 ui.end_row();
             });
             ui.add_enabled(false, egui::Checkbox::new(&mut false, "Add Extra Layer(s) for Grid"));
-            ui.checkbox(&mut o.keep_aspect, "Keep Layer Aspect Ratio");
+            ui.add_enabled(
+                !(self.common_width || self.common_height),
+                egui::Checkbox::new(&mut o.keep_aspect, "Keep Layer Aspect Ratio"),
+            );
             ui.checkbox(&mut o.group_linked, "Treat Linked Layers as a group");
             ui.checkbox(&mut o.link, "Link Layers");
-            ui.add_enabled(false, egui::Checkbox::new(&mut false, "Set Layer Width by Common Scale"));
-            ui.add_enabled(false, egui::Checkbox::new(&mut false, "Set Layer Height by Common Scale"));
+            ui.checkbox(&mut self.common_width, "Set Layer Width by Common Scale");
+            ui.checkbox(&mut self.common_height, "Set Layer Height by Common Scale");
             ui.checkbox(&mut o.hide_inner, "Show Axes Frame");
             ui.label("Overlapping axes/ticks are hidden");
         });
@@ -309,9 +316,32 @@ impl LayerManagementDialog {
             });
         });
         if ui.button("Apply").clicked() {
-            let (sel, opts) = (self.selection(), self.arrange.clone());
-            self.apply(|g| g.arrange_layers(&sel, &opts));
+            self.apply_arrangement(project);
         }
+    }
+
+    fn apply_arrangement(&mut self, project: &Project) {
+        let mut opts = self.arrange.clone();
+        if self.common_width || self.common_height {
+            // Link edits already applied to the preview can change the effective axis ranges.
+            let mut draft = project.clone();
+            *draft.graph_mut(self.graph).expect("the managed graph exists") = self.work.clone();
+            let geometry = match sheaf_plot::layout_geometry(&draft, self.graph) {
+                Ok(geometry) => geometry,
+                Err(e) => {
+                    self.problem = Some(e.to_string());
+                    return;
+                }
+            };
+            if self.common_width {
+                opts.common_x_spans = Some(geometry.iter().map(|layer| layer.x.max - layer.x.min).collect());
+            }
+            if self.common_height {
+                opts.common_y_spans = Some(geometry.iter().map(|layer| layer.y.max - layer.y.min).collect());
+            }
+        }
+        let sel = self.selection();
+        self.apply(|g| g.arrange_layers(&sel, &opts));
     }
 
     fn size_tab(&mut self, ui: &mut egui::Ui) {

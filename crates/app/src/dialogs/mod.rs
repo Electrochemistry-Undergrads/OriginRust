@@ -28,6 +28,7 @@ pub mod fill_pattern;
 pub mod filter_manager;
 pub mod filter_options;
 pub mod find;
+pub mod find_files;
 pub mod find_project;
 pub mod fit;
 pub mod fit_builder;

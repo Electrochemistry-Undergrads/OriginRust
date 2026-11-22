@@ -334,6 +334,8 @@ pub enum Cmd {
     FindInSheets,
     /// Edit > Find in Project (F3, T95).
     FindInProject,
+    /// Edit > Find in Project Files... (T361).
+    FindInProjectFiles,
     /// File > Export > Worksheet as Image... (T97).
     ExportWorksheetImage,
     /// File > Import > Re-Import Directly (false) and Re-Import... (true, choose the file) (T98).
@@ -1376,6 +1378,7 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         v.push(item("Reset to Full Range", Cmd::ResetFullRange));
         v.push(sep());
         v.push(keyed("Find in Project...", plain_key(Key::F3), Cmd::FindInProject));
+        v.push(item("Find in Project Files...", Cmd::FindInProjectFiles));
         v.push(keyed("Find in Sheets...", ctrl(Key::F), Cmd::FindInSheets));
         v.push(keyed("R&eplace...", ctrl(Key::H), Cmd::ReplaceInSheets));
         v.push(keyed("Go to...", ctrl(Key::G), Cmd::GoToCell));
@@ -3538,6 +3541,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Power(kind) => Action::Power(*kind),
         Cmd::FindInSheets => Action::FindInSheets(book?),
         Cmd::FindInProject => Action::FindInProject,
+        Cmd::FindInProjectFiles => Action::FindInProjectFiles,
         Cmd::ReplaceInSheets => Action::ReplaceInSheets(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::SendGraphsToPowerPoint => Action::SendGraphsToPowerPoint(c.graph.ok_or(NEED_GRAPH)?),

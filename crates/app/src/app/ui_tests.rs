@@ -5607,6 +5607,51 @@ fn the_statistics_menu_runs_a_quantile_regression() {
     assert_eq!(h.state().doc.undo_label(), Some("Quantile regression"));
 }
 
+/// Edit > Find in Project Files... (T361): the projects of a folder are searched and Open opens the chosen one.
+#[test]
+fn find_in_project_files_lists_the_matching_projects_and_opens_one() {
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-findfiles-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for (name, long) in [("one.sheaf", "Cyclic voltammetry run"), ("two.sheaf", "Impedance run")] {
+        let mut p = sheaf_core::Project::new();
+        let b = p.add_workbook(long);
+        p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();
+        sheaf_io::project_file::save(&p, &dir.join(name)).unwrap();
+    }
+    // An empty project (nothing to save, so Open does not ask); without a window there is no Edit menu, so the
+    // window is opened by its action, the one the menu item sends.
+    let mut h = start(vec![]);
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::FindInProjectFiles, &ctx);
+    settle(&mut h);
+    assert!(h.state().find_files.is_some() && has_label(&h, "Include Subfolders"));
+    {
+        let d = h.state_mut().find_files.as_mut().unwrap();
+        d.folder = dir.display().to_string();
+        d.spec.text = "voltammetry".into();
+    }
+    settle(&mut h);
+    click(&mut h, "Find All");
+    let found: Vec<String> = h
+        .state()
+        .find_files
+        .as_ref()
+        .unwrap()
+        .results
+        .as_ref()
+        .unwrap()
+        .iter()
+        .map(|f| f.path.file_name().unwrap().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(found, ["one.sheaf"]);
+    click(&mut h, "Open");
+    assert!(h.state().find_files.is_none());
+    let books: Vec<String> = project(&h).workbooks().map(|b| b.long_name.clone()).collect();
+    assert_eq!(books, ["Cyclic voltammetry run"], "the found project is open");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Analysis > Repeat Last Analysis (T360): nothing before a tool ran from its window; afterwards the same tool and
 /// options run again on the columns now chosen, as one undo step.
 #[test]

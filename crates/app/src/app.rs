@@ -7184,6 +7184,13 @@ impl SheafApp {
                     self.panels.reveal(PanelId::Results);
                     self.say(o.message);
                 }
+                FitMoreOutcome::BestSubset(o) => {
+                    self.fit_more = None;
+                    self.show_sheet(o.book, o.sheet);
+                    self.logs.result(o.message.clone(), Vec::new());
+                    self.panels.reveal(PanelId::Results);
+                    self.say(o.message);
+                }
                 FitMoreOutcome::Rank(o) => {
                     self.fit_more = None;
                     self.show_sheet(o.book, o.sheet);

@@ -6,6 +6,7 @@
 
 use sheaf_fit::compare::{Comparison, F_TEST_ALPHA, ModelSummary, Ranked, Verdict, compare, rank};
 use sheaf_fit::multi::{MultiOptions, fit_multiple};
+use sheaf_fit::subset::{SubsetResult, best_subsets};
 
 use super::{FitModel, FitReport, FitRequest, FitRequestError, Project, run_engine, sheet_column, stats_rows};
 use crate::analysis::{AnalysisError, RowRange, column_label, free_sheet_name, resolve_rows};
@@ -441,6 +442,105 @@ impl Project {
             if skipped.is_empty() { String::new() } else { format!(" ({} skipped)", skipped.len()) },
         );
         Ok(RankOutcome { ranking, skipped, book: book_id, sheet, message })
+    }
+}
+
+/// Best subset selection (T347): every subset of the candidate X columns, regressed with an intercept.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BestSubsetRequest {
+    pub y: ColumnId,
+    /// The candidate predictors (at most [`sheaf_fit::subset::MAX_CANDIDATES`]).
+    pub x: Vec<ColumnId>,
+    /// Rows counted from 1, as the worksheet shows them.
+    pub rows: RowRange,
+}
+
+/// What [`Project::best_subsets`] did.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BestSubsetOutcome {
+    pub result: SubsetResult,
+    /// The candidates' names, in request order (the indices of `result` point here).
+    pub names: Vec<String>,
+    pub book: WindowId,
+    pub sheet: usize,
+    pub message: String,
+}
+
+impl Project {
+    /// Fits every subset of the candidates and writes the table to a new sheet `BestSubsets<n>` of
+    /// the Y column's book: one row per subset by size and R-square, and which subset each criterion
+    /// prefers (`docs/spec/fitting.md` 12a).
+    pub fn best_subsets(&mut self, request: &BestSubsetRequest) -> Result<BestSubsetOutcome, FitRequestError> {
+        if request.x.is_empty() {
+            return Err(FitRequestError::BadOption("choose at least one candidate predictor".into()));
+        }
+        let id = request.y;
+        let (book, sheet, column) = self.locate(id).ok_or(AnalysisError::NoSuchColumn(id))?;
+        let book_id = book.id;
+        let y_all =
+            sheet.values_of(column).ok_or_else(|| AnalysisError::NotNumeric(column.short_name.clone()))?.to_vec();
+        if y_all.is_empty() {
+            return Err(AnalysisError::Empty(column.short_name.clone()).into());
+        }
+        let n_rows = y_all.len();
+        let source_label = column_label(column);
+        let source_name = column.display_name().to_string();
+        let mut xs_all: Vec<Vec<f64>> = Vec::new();
+        let mut names: Vec<String> = Vec::new();
+        for &xid in &request.x {
+            let (_, x_sheet, c) = self.locate(xid).ok_or(AnalysisError::NoSuchColumn(xid))?;
+            let v = x_sheet.values_of(c).ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))?;
+            xs_all.push((0..n_rows).map(|i| v.get(i).copied().unwrap_or(f64::NAN)).collect());
+            names.push(c.display_name().to_string());
+        }
+        let index: Vec<f64> = (1..=n_rows).map(|i| i as f64).collect();
+        let (first, last) = resolve_rows(request.rows, &source_name, &index, n_rows)?;
+        let xs: Vec<Vec<f64>> = xs_all.iter().map(|v| v[first..=last].to_vec()).collect();
+        let result = best_subsets(&xs, &y_all[first..=last])?;
+
+        let sheets = &self.workbook(book_id).expect("workbook exists").sheets;
+        let mut ws = Worksheet::new(free_sheet_name(sheets, "BestSubsets"));
+        let name = ws.name.clone();
+        let m = &result.models;
+        let num = |f: &dyn Fn(&sheaf_fit::subset::SubsetModel) -> f64| ColumnData::numeric(m.iter().map(f).collect());
+        let labels: Vec<String> =
+            m.iter().map(|s| s.vars.iter().map(|&j| names[j].clone()).collect::<Vec<_>>().join(", ")).collect();
+        let best: Vec<String> = (0..m.len())
+            .map(|i| {
+                let mut t = Vec::new();
+                for (b, label) in [
+                    (result.best_adj_r2, "Adj. R-Square"),
+                    (result.best_cp, "Cp"),
+                    (result.best_aic, "AIC"),
+                    (result.best_bic, "BIC"),
+                ] {
+                    if b == i {
+                        t.push(label);
+                    }
+                }
+                t.join(", ")
+            })
+            .collect();
+        sheet_column(self, &mut ws, Designation::Label, "Predictors", "", ColumnData::text(labels.clone()));
+        sheet_column(self, &mut ws, Designation::Y, "Number of Predictors", "", num(&|s| s.vars.len() as f64));
+        sheet_column(self, &mut ws, Designation::Y, "R-Square", "", num(&|s| s.r_squared));
+        sheet_column(self, &mut ws, Designation::Y, "Adj. R-Square", "", num(&|s| s.adj_r_squared));
+        sheet_column(self, &mut ws, Designation::Y, "Mallows Cp", "", num(&|s| s.cp));
+        sheet_column(self, &mut ws, Designation::Y, "AIC", "", num(&|s| s.aic));
+        sheet_column(self, &mut ws, Designation::Y, "BIC", "", num(&|s| s.bic));
+        sheet_column(self, &mut ws, Designation::Y, "Residual Sum of Squares", "", num(&|s| s.rss));
+        sheet_column(self, &mut ws, Designation::Label, "Best by", "", ColumnData::text(best));
+        let b = self.workbook_mut(book_id).expect("workbook exists");
+        b.sheets.push(ws);
+        let sheet = b.sheets.len() - 1;
+        let message = format!(
+            "Best subsets of {} predictors for {source_label} ({} rows): best by BIC {}, by adjusted R-square {}; table in sheet {name}",
+            names.len(),
+            result.n,
+            labels[result.best_bic],
+            labels[result.best_adj_r2],
+        );
+        Ok(BestSubsetOutcome { result, names, book: book_id, sheet, message })
     }
 }
 

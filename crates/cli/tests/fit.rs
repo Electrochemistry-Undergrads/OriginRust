@@ -391,3 +391,25 @@ fn auto_parameter_initialization_can_be_turned_off() {
         sheaf(&["fit", d, "--y", "decay", "-m", "ExpDec1", "--no-auto-init", "--max-iterations", "1"]);
     assert!(ok || stderr.contains("iteration"), "{stderr}");
 }
+
+/// `fit --regress ... --best-subsets` (T347): the table of every subset with the preferred ones.
+#[test]
+fn best_subsets_ranks_every_subset_of_the_regressors() {
+    let dir = scratch("best-subsets");
+    let mut text = String::from("a,b,c,y\n");
+    for i in 0..30 {
+        let (a, b, c) = (f64::from(i) / 3.0, (f64::from(i) * 1.7).sin(), (f64::from(i) * 0.4).cos() * 2.0);
+        text.push_str(&format!("{a},{b},{c},{}\n", 3.0 + 1.5 * a + 0.8 * c + 0.02 * (f64::from(i) * 5.1).sin()));
+    }
+    let data = dir.join("mr.csv");
+    std::fs::write(&data, text).unwrap();
+    let (ok, stdout, stderr) =
+        sheaf(&["fit", data.to_str().unwrap(), "--y", "y", "--regress", "a,b,c", "--best-subsets"]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Adj. R^2") && stdout.contains("BestSubsets"), "{stdout}");
+    let line =
+        stdout.lines().find(|l| l.contains("BIC") && l.starts_with('a') && l.contains(", c")).unwrap_or_default();
+    assert!(!line.is_empty(), "the a, c subset is marked best by BIC: {stdout}");
+    let (ok, _, stderr) = sheaf(&["fit", data.to_str().unwrap(), "--y", "y", "--best-subsets"]);
+    assert!(!ok && stderr.contains("regress"), "{stderr}");
+}

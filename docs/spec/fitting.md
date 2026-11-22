@@ -192,6 +192,25 @@ Linear Fit with X Error (`FitModel::LinearXError`). Origin's routine could not b
 
 Storage: these tools only create ordinary worksheets and columns (no analysis-link or other new object), so the `.opj` writer needs no new warning.
 
+## 12a. Best Subset Selection (T347, Sheaf's own)
+
+Origin's Best Subset Selection is a 2025b Pro app (not in Origin 2016, not run), so the definitions are
+the textbook ones (`sheaf_fit::subset`). Analysis > Fitting > Best Subset Selection... (the Multiple
+Linear Regression window's column picker), CLI `sheaf fit FILE --y Y --regress A,B,C --best-subsets`,
+MCP `fit` with the same options.
+
+- Every non-empty subset of the candidates (at most 15, so at most 32767 subsets) is fitted by ordinary
+  least squares with an intercept, on the rows where Y and every candidate are numbers (the same rows
+  for all subsets). The row range of the request applies first.
+- Criteria, with `n` rows, `k` predictors in the subset and `p` candidates: R-square `1 - RSS/TSS`;
+  adjusted R-square `1 - (RSS/(n-k-1)) / (TSS/(n-1))`; Mallows' Cp `RSS / s^2 - n + 2 (k+1)` with `s^2`
+  the full model's mean square error (the full model has Cp = p + 1); AIC `n ln(RSS/n) + 2 (k+1)`; BIC
+  `n ln(RSS/n) + (k+1) ln n`. A single-predictor subset's R-square equals the straight line fit's.
+- Output: a sheet `BestSubsets<n>` in the Y column's book: Predictors (names joined by commas), Number
+  of Predictors, R-Square, Adj. R-Square, Mallows Cp, AIC, BIC, Residual Sum of Squares and Best by
+  (which of Adj. R-Square (largest), Cp, AIC, BIC (smallest) prefers the row); rows by size, then by
+  R-square. One undo step. Needs at least p + 2 complete rows.
+
 ## 13. Simulate Curve
 
 Analysis > Fitting > Simulate Curve (Origin's `simcurve` X-Function) makes the curve of a fit function for parameter values that are typed instead of fitted. Task T47. Simulate Surface (two independent variables) waits for matrices and stays grey.

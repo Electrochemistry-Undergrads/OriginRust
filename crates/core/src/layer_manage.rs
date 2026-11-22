@@ -9,6 +9,7 @@
 
 use crate::graph::{Frame, Graph, ScaleLink, TickDirection};
 use crate::panels::{PanelError, PanelLayout, PanelOrder, PanelPage};
+use crate::template::Template;
 
 /// The smallest and largest size of a layer, as fractions of the page.
 const SIZE_RANGE: (f64, f64) = (0.001, 10.0);
@@ -62,6 +63,8 @@ pub struct ArrangeOptions {
     pub order: ArrangeOrder,
     pub rows: usize,
     pub cols: usize,
+    /// Fill unused cells with independent empty layers.
+    pub add_extra_layers: bool,
     /// Keep the width to height ratio of each layer (inside its cell, at the cell's top left).
     pub keep_aspect: bool,
     /// Resolved data-unit spans, indexed by layer. A group uses its root layer's span.
@@ -91,6 +94,7 @@ impl Default for ArrangeOptions {
             order: ArrangeOrder::LayerIndex,
             rows: 1,
             cols: 1,
+            add_extra_layers: false,
             keep_aspect: false,
             common_x_spans: None,
             common_y_spans: None,
@@ -272,8 +276,8 @@ impl Graph {
     /// in the cells of a grid, in layer order or in order of their position on the page. With
     /// `group_linked` a layer and the layers linked to it are one unit that takes one cell (its root
     /// gets the cell and the linked layers follow); without it every layer is a unit, and a linked
-    /// layer gets the cell as fractions of its parent's frame. Surplus cells stay empty; more units
-    /// than cells are refused.
+    /// layer gets the cell as fractions of its parent's frame. With `add_extra_layers`, each surplus
+    /// cell gets an independent empty Line layer. More units than cells are refused.
     pub fn arrange_layers(&mut self, selection: &[usize], opts: &ArrangeOptions) -> Result<(), LayerError> {
         if self.layers.is_empty() {
             return Err(LayerError::NoLayers);
@@ -342,6 +346,14 @@ impl Graph {
             }
             if opts.link {
                 g.link_units(&units)?;
+            }
+            if opts.add_extra_layers && units.len() < cells.len() {
+                let blank = Template::Line.new_graph(g.id, "");
+                g.layers.extend(cells[units.len()..].iter().map(|&frame| {
+                    let mut layer = blank.layers[0].clone();
+                    layer.frame = frame;
+                    layer
+                }));
             }
             Ok(())
         })

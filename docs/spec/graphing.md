@@ -3793,8 +3793,7 @@ page right-click and layer icon menu, the icon's layer selected): the layer list
 layers; Arrange, Size/Position and Link are built and work on a copy shown as numbered frames on a
 page-shaped preview; Undo takes back the last Apply; OK writes the copy in one undo step; Cancel and
 Escape discard it. Display > Color > Background Color is implemented as described below. Add (T61)
-and Axes are shown disabled, as are Add Extra Layer(s) for Grid
-(Sheaf leaves surplus cells empty), the Align/Custom links, the Units combo of
+and Axes are shown disabled, as are the Align/Custom links, the Units combo of
 Link and the reposition-parent tick. Arrange with no selection takes every layer; "Treat Linked
 Layers as a group" places a layer with the layers linked to it as one unit; Link Layers links the
 later units to the first in position only. Sheaf choices (not measured): Move in "% of Reference
@@ -3802,6 +3801,21 @@ Layer" counts from the reference layer's top left corner, a pixel is 1/96 in, th
 starts at layer 1, and a reference layer that follows a selected layer is refused (it would move
 with it). The Link tab shows the first selected layer's link; Swap with Reorder refuses an order that
 puts a parent after its child.
+
+**Add Extra Layer(s) for Grid** (T60, 2026-11-22). Apply creates an independent,
+empty Line layer in each cell left by the arranged layers or groups. The
+numbered preview shows each addition in its cell. Common Scale supplies the
+cell frames when selected. The new layers have automatic axes and stay
+independent when Link Layers is selected.
+When arranging a selection, the new layers join the preview selection so a
+second Apply can include them. Undo removes layers created by the last Apply,
+and OK commits the whole preview in one document edit. Sheaf starts with the
+checkbox off to preserve the existing arrangement workflow.
+
+The Origin Arrange tab documents filling the unused cells. Origin 2016's
+checkbox started on in the captured dialog. The applied Origin 2016 geometry
+remains unverified.
+[Origin Arrange tab](https://docs.originlab.com/origin-help/laymanage-arrangetab/)
 
 **Arrange by Common Scale** (T60, 2026-11-22). The width and height choices
 use the displayed X and Y axis spans of each selected layer. With Treat

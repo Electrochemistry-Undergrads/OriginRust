@@ -181,6 +181,31 @@ fn grouped_linked_layers_count_as_one_unit_and_follow_their_root() {
 }
 
 #[test]
+fn filling_a_grid_counts_linked_groups_and_places_independent_empty_layers() {
+    let mut g = linked_graph();
+    let opts = ArrangeOptions {
+        rows: 2,
+        cols: 2,
+        group_linked: true,
+        link: true,
+        add_extra_layers: true,
+        common_x_spans: Some(vec![10.0, 20.0, 80.0, 100.0]),
+        ..Default::default()
+    };
+    g.arrange_layers(&[], &opts).unwrap();
+    assert_eq!(g.layers.len(), 6);
+    assert_eq!(g.link_parent(1), Some(0));
+    assert_eq!(g.link_parent(2), Some(0));
+    assert_eq!(g.link_parent(3), Some(0));
+    assert_frame(g.layers[4].frame, 0.15, 0.50, 0.70 / 3.0, 0.35);
+    assert_frame(g.layers[5].frame, 0.20 + 0.70 / 3.0, 0.50, 1.40 / 3.0, 0.35);
+    for layer in &g.layers[4..] {
+        assert!(layer.link.is_none() && layer.plots.is_empty());
+        assert!(layer.x_axis.min.is_none() && layer.y_axis.max.is_none());
+    }
+}
+
+#[test]
 fn a_double_y_graph_arranged_as_a_group_keeps_its_right_axis_over_the_left() {
     let mut g = double_y();
     g.arrange_layers(&[], &ArrangeOptions { group_linked: true, ..rows(1) }).unwrap();

@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
 use sheaf_calc::{FirSpec, IirSpec, PeakOptions, ReduceOptions, SmoothOptions};
 
 use crate::analysis::{
-    AnalysisError, AverageSpec, IntegrateSpec, IntersectSpec, MedianFilterSpec, OutputTarget, ReduceDupSpec, Report,
-    Request, RowRange, SimulateCurveSpec, SubtractLineSpec, Tool, TranslateSpec,
+    AnalysisError, AverageSpec, FsdOptions, IntegrateSpec, IntersectSpec, MedianFilterSpec, OutputTarget,
+    ReduceDupSpec, Report, Request, RowRange, SimulateCurveSpec, SubtractLineSpec, Tool, TranslateSpec,
 };
 use crate::column::{AnalysisMark, FormulaState, RecalcMode};
 use crate::{ColumnId, Project};
@@ -35,6 +35,7 @@ pub enum LinkTool {
     ReduceDup(ReduceDupSpec),
     Translate(TranslateSpec),
     MedianFilter(MedianFilterSpec),
+    Fsd(FsdOptions),
     SimulateCurve(SimulateCurveSpec),
     IirFilter(IirSpec),
     FirFilter(FirSpec),
@@ -54,6 +55,7 @@ impl LinkTool {
             Tool::ReduceDup(s) => Some(LinkTool::ReduceDup(*s)),
             Tool::Translate(s) => Some(LinkTool::Translate(*s)),
             Tool::MedianFilter(s) => Some(LinkTool::MedianFilter(*s)),
+            Tool::Fsd(s) => Some(LinkTool::Fsd(*s)),
             // The graph of the first run stays; a repeated run does not draw another.
             Tool::SimulateCurve(s) => Some(LinkTool::SimulateCurve(SimulateCurveSpec { plot: false, ..s.clone() })),
             Tool::IirFilter(s) => Some(LinkTool::IirFilter(*s)),
@@ -75,6 +77,7 @@ impl LinkTool {
             LinkTool::ReduceDup(s) => Tool::ReduceDup(*s),
             LinkTool::Translate(s) => Tool::Translate(*s),
             LinkTool::MedianFilter(s) => Tool::MedianFilter(*s),
+            LinkTool::Fsd(s) => Tool::Fsd(*s),
             LinkTool::SimulateCurve(s) => Tool::SimulateCurve(s.clone()),
             LinkTool::IirFilter(s) => Tool::IirFilter(*s),
             LinkTool::FirFilter(s) => Tool::FirFilter(*s),

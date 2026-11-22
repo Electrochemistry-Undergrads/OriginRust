@@ -33,7 +33,8 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 
 pub use sheaf_calc::{
-    AlsOptions, BaselineStat, ChainBaseline, ChainOptions, CrossingIndex, FindMethod, FindOptions, LimitMode,
+    AlsOptions, Apodization, BaselineStat, ChainBaseline, ChainOptions, CrossingIndex, FindMethod, FindOptions,
+    FsdOptions, LimitMode,
 };
 pub use sheaf_calc::{
     AreaType, Boundary, CurveOp, DiffOptions, Extrapolation, InterpMethod, LocalSpan, NormalizeMethod, PeakDirection,
@@ -1067,6 +1068,8 @@ pub enum Tool {
     Translate(TranslateSpec),
     /// Mathematics: running median.
     MedianFilter(MedianFilterSpec),
+    /// Fourier self-deconvolution: narrower bands beside each curve (T341, Sheaf's own).
+    Fsd(FsdOptions),
     Differentiate(DiffOptions),
     Smooth(SmoothOptions),
     Normalize(NormalizeMethod),
@@ -1183,6 +1186,7 @@ impl Tool {
                 TranslateAxis::Y => "Translate Y",
             },
             Tool::MedianFilter(_) => "Median filter",
+            Tool::Fsd(_) => "Fourier self-deconvolution",
             Tool::Differentiate(_) => "Differentiate",
             Tool::Smooth(_) => "Smooth",
             Tool::Normalize(_) | Tool::NormalizeRef(_) => "Normalize",
@@ -2601,7 +2605,7 @@ impl Project {
                     at_end.push((sc.designation, None));
                 }
             }
-            Tool::SubtractLine(_) | Tool::ReduceX(_) | Tool::Translate(_) | Tool::MedianFilter(_) => {
+            Tool::SubtractLine(_) | Tool::ReduceX(_) | Tool::Translate(_) | Tool::MedianFilter(_) | Tool::Fsd(_) => {
                 manip::run(&request.tool, &inputs, &mut beside, &mut on_sheet)?;
             }
             Tool::PeakChain(spec) => {

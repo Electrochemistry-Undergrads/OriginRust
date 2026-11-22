@@ -1856,6 +1856,29 @@ cv-charge FILE --y COL --scan-rate V [--baseline]`) does both in one step (`shea
   all cathodic sweeps; a note gives the scan rate. One undo step ("CV charge").
 - **Not built:** picking the peak's feet on the graph (the parity row's "foot picking").
 
+## 22. Fourier Self-Deconvolution (T341, Sheaf's own)
+
+Origin added FSD for peak detection in 2018b; Origin 2016 has none and OriginLab's pages do not
+describe Origin's settings, so this follows the method of Kauppinen, Moffatt, Mantsch and Cameron
+(Appl. Spectrosc. 35, 271, 1981). Analysis > Peaks and Baseline > Fourier Self-Deconvolution... (CLI
+`sheaf analyze fsd FILE --fwhm W [--k K] [--apodization boxcar|triangle|triangle-squared]`;
+`sheaf_calc::fourier_self_deconvolution`, `Tool::Fsd(FsdOptions)`):
+
+- **Input:** evenly spaced X (otherwise refused: use Reduce to Evenly Spaced X or Interpolate first),
+  at least 8 points, no missing values.
+- **Method:** the straight line through the first and last point is removed; the rest is zero-padded to
+  a power of two at least twice its length and Fourier transformed; each point at interferogram time
+  `t` is multiplied by `exp(2 pi g |t|)` (undoing a Lorentzian band of half width `g` = FWHM/2) and by
+  the apodization `A(|t|/L)`; the inverse transform plus the removed line is the result. `L = c K /
+  FWHM`, with `c` the apodization's own line width times its length (found numerically: about 1.21
+  boxcar, 1.77 triangle, 2.2 triangle squared), so a Lorentzian band of the given FWHM comes out about
+  `FWHM / K` wide with its area kept (the zero-frequency point is unchanged).
+- **Settings:** Band width (FWHM, X units; 1 by default), Enhancement factor K (2; above 1, at most 20),
+  Apodization (Triangle squared by default, the usual FSD choice; Triangle; Boxcar, the narrowest lines
+  with the largest side lobes).
+- **Output:** a column "FSD of <input>" beside each input (comment with the settings); with Recalculate
+  it follows the input. Noise grows with K (the method's nature): smooth first or lower K.
+
 ## Files
 
 `tools/iir-fir-ref.py` makes the scipy numbers of section 17 (not Origin).

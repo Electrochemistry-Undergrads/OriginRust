@@ -248,6 +248,8 @@ struct Writer {
     tree: FolderOut,
     /// Where the window being written stood in the workspace, if the project knows.
     place: Option<sheaf_core::project::WindowPlace>,
+    /// The data set being written is a Numeric-format column (8-byte cells, T337).
+    numeric_cells: bool,
     /// The Comments of the window being written (T283).
     comments: String,
 }
@@ -268,6 +270,7 @@ impl Writer {
             next_object: OBJECT_NUMBER_START,
             tree: FolderOut::default(),
             place: None,
+            numeric_cells: false,
             comments: String::new(),
         }
     }
@@ -420,6 +423,12 @@ impl Writer {
                 .as_ref()
                 .filter(|s| roles[i] != Designation::X && s.x0.is_finite() && s.inc.is_finite() && s.inc != 0.0);
             let parent = if sampling.is_some() { 0 } else { parent_of(&roles, i, first_dataset) };
+            // T337: an X or Y column of numbers with a numeric display is written as Origin's Numeric
+            // format (8-byte cells, type word ..01) with the display in its column record.
+            let display = numeric_display(column.format)
+                .filter(|_| matches!(roles[i], Designation::X | Designation::Y))
+                .filter(|_| matches!(column.data, ColumnData::Numeric(_)));
+            self.numeric_cells = display.is_some();
             let (block, used) = self.dataset(
                 &dataset_name,
                 column,
@@ -433,18 +442,24 @@ impl Writer {
                 dataset: (self.columns + 1) as u16,
                 designation: designation_code(roles[i]),
                 short_name: &column.short_name,
-                type_code: type_code(roles[i]),
+                type_code: if display.is_some() {
+                    (type_code(roles[i]) & 0xF000) | 0x0001
+                } else {
+                    type_code(roles[i])
+                },
                 first: used.0,
                 last: used.1,
                 parent,
                 index: i,
                 width: column.width,
+                display,
                 object_id: formulas.object_ids[i],
                 sampling: sampling.map(|s| (s.x0, s.inc, parent_of(&roles, i, first_dataset) != 0)),
             };
             records.extend(framed(&layout::column_record(&spec)));
             self.notes.params_dropped += usize::from(!column.params.is_empty());
-            self.notes.formats_dropped += usize::from(column.format != sheaf_core::format::NumberFormat::General);
+            self.notes.formats_dropped +=
+                usize::from(column.format != sheaf_core::format::NumberFormat::General && display.is_none());
             self.notes.hidden_dropped += usize::from(column.hidden);
             // T303: the interval is written; only its X name and units are not.
             self.notes.sampling_dropped +=
@@ -484,6 +499,33 @@ impl Writer {
                 ColumnData::Text(_) => None,
             }
         };
+        if self.numeric_cells {
+            // T337: Origin's Numeric format: one 8-byte double per row, the missing value for an empty cell.
+            let mut data = Vec::with_capacity(rows * 8);
+            let mut used: Option<(usize, usize)> = None;
+            for row in 0..rows {
+                let x = number_at(row);
+                if x.is_some() {
+                    used = Some(used.map_or((row, row + 1), |(f, _)| (f, row + 1)));
+                }
+                data.extend_from_slice(&x.unwrap_or(MISSING).to_le_bytes());
+            }
+            let (first, last) = used.map_or((0, 0), |(f, l)| (f as u32, l as u32));
+            let spec = DatasetSpec {
+                name,
+                type_code: (type_code(role) & 0xF000) | 0x0001,
+                cell_size: 8,
+                rows: rows as u32,
+                first,
+                last,
+                parent: if role == Designation::Disregard { 0 } else { parent.min(255) as u8 },
+                sampling,
+            };
+            let mut block = framed(&layout::dataset_header(&spec));
+            block.extend(framed(&data));
+            block.extend(framed(&mask_block(column, rows)));
+            return Ok((block, (first, last)));
+        }
         let mut encoded: Vec<Option<Vec<u8>>> = Vec::with_capacity(rows);
         for row in 0..rows {
             // A number written over a text wins, as in the worksheet.
@@ -907,6 +949,26 @@ impl Writer {
 }
 
 /// The role code of a column (spec section 4.3).
+/// The value-type byte (`0x1E`: display in the high nibble, 0 = Numeric format in the low one) and the
+/// digits byte (`0x1F`: decimal places + 3, `0x80 | n` significant digits, 0 default) of a numeric
+/// display, as Origin 2016 writes them (T337, measured); `None` for the default display.
+fn numeric_display(f: sheaf_core::format::NumberFormat) -> Option<(u8, u8)> {
+    use sheaf_core::format::NumberFormat as F;
+    let places = |d: u8| d.min(15) + 3;
+    let sig = |n: u8| 0x80 | n.clamp(1, 15);
+    Some(match f {
+        F::Decimal(d) => (0x00, places(d)),
+        F::Significant(n) => (0x00, sig(n)),
+        F::Scientific(d) => (0x10, places(d)),
+        F::ScientificAuto => (0x10, 0),
+        F::Engineering(d) | F::EngineeringSi(d) => (0x20, places(d)),
+        F::EngineeringSig(n) => (0x20, sig(n)),
+        F::EngineeringAuto => (0x20, 0),
+        F::DecimalGrouped(d) => (0x30, places(d)),
+        _ => return None,
+    })
+}
+
 fn designation_code(d: Designation) -> u8 {
     match d {
         Designation::X => 3,

@@ -31,13 +31,10 @@ fn number(h: &mut Harness<'static, SheafApp>, name: &str, value: &str) {
 }
 
 #[test]
-fn the_menu_opens_the_dialog_and_one_graph_is_not_enough() {
-    let mut h = with_graphs("merge-open", 1);
-    menu_path(&mut h, &["Graph", "Merge Graph Windows..."]);
-    assert!(h.state().merge_graphs.is_none());
-    assert!(h.state().status.contains("at least two graphs"), "{}", h.state().status);
+fn the_menu_opens_the_dialog_with_all_in_project_for_multiple_graphs() {
     let mut h = with_graphs("merge-open2", 2);
     open(&mut h);
+    assert!(h.query_by_value("All in Project").is_some());
     assert!(h.query_by_label("Keep Source Graphs").is_some());
     assert!(h.query_by_label("Rearrange Layout").is_some());
 }

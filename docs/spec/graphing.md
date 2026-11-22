@@ -5471,7 +5471,7 @@ Everything here was measured in OriginPro 2016 on our own synthetic data (21 row
 
 **Toolbar.** The vertical Graph toolbar has six layer buttons, top to bottom, with these tooltips: "Add Bottom-X Left-Y Layer" (tooltip text "Add a new layer (X axis at the bottom and Y axis on the left)"), "Add Top-X Layer", "Add Right-Y Layer", "Add Top-X Right-Y Layer", "Add Inset Graph" ("Add a linked inset layer to the active layer") and "Add Inset Graph With Data" ("Add a linked inset layer and include the data from the active layer"). They add the layers of menu items 1, 2, 3, 5, 7 and 8 (the same result in the picture; Bottom-X Right-Y, Left-Y and No Axes have no button). Left-Y and Bottom-X Right-Y exist only in the menu and in `layadd`.
 
-**LabTalk.** `layadd type:=NAME;` with `NAME` = `normal`, `topx`, `righty`, `lefty`, `txry`, `bxry`, `inset`, `insetdata`, `noxy`. The layer is appended as the last layer, becomes the active layer (`page.active` = new index) and is named by `layer.name$` as in the table. `layadd userdef:=1 bottom:=B left:=L top:=T right:=R linkto:=P xaxis:=none|straight|custom yaxis:=none|straight|custom;` makes any combination (measured: `bottom:=1 left:=0 top:=1 right:=1 linkto:=1 xaxis:=straight yaxis:=custom` gave link 1, x.link 1, y.link 2 = custom, both X sides shown (`x.showAxes` 3) and the right Y side (`y.showAxes` 2); `layadd`'s `offset` and `activate` options were not measured).
+**LabTalk.** `layadd type:=NAME;` with `NAME` = `normal`, `topx`, `righty`, `lefty`, `txry`, `bxry`, `inset`, `insetdata`, `noxy`. The layer is appended as the last layer, becomes the active layer (`page.active` = new index) and is named by `layer.name$` as in the table. `layadd userdef:=1 bottom:=B left:=L top:=T right:=R linkto:=P xaxis:=none|straight|custom yaxis:=none|straight|custom;` makes any combination. A probe with `bottom:=1 left:=0 top:=1 right:=1 linkto:=1 xaxis:=straight yaxis:=custom` gave link 1, x.link 1, y.link 2 = custom, both X sides shown (`x.showAxes` 3) and the right Y side (`y.showAxes` 2). The preset offset measurements are in 21.15.
 
 **Parent.** The parent of the new linked layer is the **active layer** (`layer.link` = its number): with three layers and layer 2 active, `type:=righty` gave link 2; `righty` then `topx` gave the top-X layer link 2. A linked layer's `unit` is 7 (% of linked layer) and its frame is the parent's, `0 0 100 100`.
 
@@ -5818,11 +5818,41 @@ and focuses that graph; Cancel, Escape and closing the dialog make no edit. Any 
 project revision or replacement closes a stale draft instead of applying it. Source capture,
 conservative stale rejection, this compact layout and post-confirmation focus are Sheaf choices.
 
-User Defined and Auto Offset Overlapped Axes remain disabled with reasons. Arbitrary axis-side
-combinations, custom scale expressions and choosing another input graph within the dialog are
-not implemented by this preset facade. No model, layer-helper, renderer, file or CLI/MCP
-contract changes. The existing preset links, geometry, inset-data copying and native/companion
-save behavior are reused. The developer capture route is `--show add-layer`.
+User Defined remains disabled. Custom scale expressions and choosing another input graph
+inside the dialog remain open. The developer capture route is `--show add-layer`.
+
+**Auto Offset Overlapped Axes (Origin 2016, 2026-11-22).** Four private LabTalk runs read
+`layer.x.position`, `layer.x2.position`, `layer.y.position` and `layer.y2.position` after
+`layadd offset:=1`. Twelve colored EMFs compare the same additions with the option off and on.
+For the default frame (68.16% of page width and 71.83% of height), three added left Y axes
+read 2%, 4% and 6%. Three right Y axes read 0%, 2% and 4%, and three top X axes read 0%, 3%
+and 6%. Bottom-X Right-Y added to the default frame put the bottom axis at 3% and the right
+axis at 0%. A right axis already at 8% allowed the next right axis at the free edge, then
+moved the following one to 10%. Across the measured frame sizes, the gap rounded to whole
+percentages of the width for Y and of the height for X. At roughly 45% frame width and
+height, the respective increments were 3% and 5%. The native linked frames and earlier
+axis positions stayed fixed. [Origin layer-axis position properties](https://docs.originlab.com/labtalk/ref/layer-axis-obj/)
+
+Sheaf enables the option for the five linked presets that use the full parent frame and have
+axes. It starts unchecked. A coincident visible axis on the same model frame triggers an
+outward offset for that side of the new layer. The step is the nearest whole percent of the
+frame dimension (at least 1%), using nominal spacing of 1.5% of page width for Y and 2.03% of
+page height for X. This fit reproduces the measured 20–90% frame-size controls. Sheaf counts
+saved edge and percent-offset axes and omits axes positioned by a scale value. Linked frames,
+scale links and earlier axes stay in place. Undo removes the added layer and its offset
+together. The existing axis-position field carries the result into `.sheaf` projects and
+Origin project companions. Inset and no-axis presets keep the control disabled.
+
+For the unlinked Bottom-X Left-Y preset, two more Origin 2016 runs compared 42 additions
+with `offset:=0` and 45 with `offset:=1`. Both settings gave zero X and Y axis positions,
+including two coincident frames (to the readback precision) in an enabled sequence. Both
+settings placed a stock-sized frame (about 68.16% by 71.83% of the page) near the stock frame
+origin, with roughly equal horizontal and vertical displacements of 105–198 internal page
+units in any of the four sign combinations. Resizing the source layer or changing the active
+layer preserved that stock placement, and doubling either page dimension approximately halved
+its percent displacement. The varying placement accounts for the differences between the
+paired exports. Sheaf keeps the checkbox disabled for this preset and uses its deterministic
+placement from 21.9.
 
 ---
 

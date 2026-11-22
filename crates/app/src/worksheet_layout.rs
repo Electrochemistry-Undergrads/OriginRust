@@ -29,7 +29,9 @@ impl Layout {
         labels: &[LabelRow],
         shown: Option<&[usize]>,
     ) -> Self {
-        let rows = RowHeights::new(sheet, index, 16.0, |f| height(ctx, f));
+        let row_header_height =
+            if sheet.view.row_header { height(ctx, sheet.font_defaults.row_header.style()) } else { 16.0 };
+        let rows = RowHeights::new(sheet, index, row_header_height, |f| height(ctx, f));
         let rows = shown.map_or_else(|| rows.clone(), |s| rows.shown(s));
         let labels = labels
             .iter()
@@ -45,7 +47,9 @@ impl Layout {
                     LabelRow::Param(n) => LabelKind::Param(n.clone()),
                 };
                 // The Sparklines row (T175) is twice as tall as a text row, Sheaf's choice.
-                let least = if matches!(l, LabelRow::Sparklines) { 32.0 } else { 16.0 };
+                let least: f64 = if matches!(l, LabelRow::Sparklines) { 32.0 } else { 16.0 };
+                let least =
+                    if sheet.view.row_header && sheet.view.row_labels { least.max(row_header_height) } else { least };
                 sheet
                     .columns
                     .iter()
@@ -54,8 +58,13 @@ impl Layout {
                     .fold(least, f64::max) as f32
             })
             .collect();
-        let column_header_height = if sheet.view.column_header { crate::grid::ROW_HEIGHT } else { 0.0 };
+        let column_header_height =
+            if sheet.view.column_header { height(ctx, sheet.font_defaults.column_header.style()) as f32 } else { 0.0 };
         Self { rows, labels, column_header_height }
+    }
+
+    pub fn column_header_height(&self) -> f32 {
+        self.column_header_height
     }
 
     pub fn label_top(&self, row: usize) -> f32 {

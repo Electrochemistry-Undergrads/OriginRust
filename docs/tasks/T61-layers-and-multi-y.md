@@ -1,6 +1,13 @@
 # T61: Layers, insets and three/four Y axes
 
-**Status:** in progress; recovered and refined 2026-11-15. Step 0 (Origin measurements, graphing 21) and slice 1 (add/delete layers, inset, icon Delete and Layer Properties) are done; slice 2 (axis offsets, Move to Layer) and slice 3 (3Ys/4Ys templates, Multiple Y Axes, CLI/MCP names, .sheaf/.opj handling) are done. Open: User Defined/Auto Offset/custom scales in Open Dialog..., Show Active Layer Only and Set Active Layer By Layer Icon Only (unmeasured), Double click to open Plot Setup. Hide Layer is a reversible whole-layer toggle (graphing 21.13); Hide Other Layers isolates/shows all whole layers from the published contract (21.14), with live 2016 behavior still unmeasured; Open Dialog... and the unsupported icon-menu items stay grey. **Size:** L, three slices.
+**Status:** in progress. Layer creation, deletion, insets, layer properties, axis offsets,
+Move to Layer, multi-Y templates and the Multiple Y Axes dialog are implemented. Graphing
+21.13–21.17 records layer visibility, the New Layer (Axes) dialog, icon switches and Layer
+Management Add. Auto Offset Overlapped Axes works for the five linked full-frame presets
+(21.15). Origin 2016 leaves the unlinked Bottom-X Left-Y axis positions at zero with either
+offset setting, so Sheaf keeps that preset's control disabled. User Defined and custom scales
+remain open.
+**Size:** L, three slices.
 Legend-anchor follow-up (`codex/multi-y-template-legends`): the four stock templates use
 measured top-left positions above the frame, Arial 22 pt (YY-YY: 20 pt), and no frame or background.
 A compatible top-left position variant keeps the left edge fixed when labels grow; existing

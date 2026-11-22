@@ -2010,6 +2010,32 @@ the data, Trend, Seasonal and Residual columns; three new graphs per series draw
 part and the residuals. Checked against numpy (`tools/decompose-ref.py`, `crates/calc/tests/decompose_reference.rs`)
 to 1e-10. STL (loess) decomposition, trend extrapolation to the ends and stationarity tests are not built.
 
+## 41 Stationarity tests, ADF and KPSS (T372, Origin 2024b Time Series Analysis app; not measured)
+
+Origin's Time Series Analysis app (2024b Pro) is not part of Origin 2016, so this is Sheaf's own, with the conventions
+of statsmodels' `adfuller` and `kpss` (nlags "legacy"). Statistics > Stationarity Tests (ADF, KPSS)...
+(`Tool::Stationarity`, `sheaf analyze stationarity --y COL[,COL..] [--adf-terms constant|trend|none] [--adf-lags P]
+[--kpss-null level|trend] [--kpss-lags L]`): every chosen column is a series of its own, in row order, complete in the
+chosen rows.
+
+- **ADF**: the least-squares regression of `dy_t` on `y_{t-1}`, `p` lagged differences and the chosen deterministic
+  terms (a constant; a constant and time counted from 1 in the regression sample; or neither); the statistic is the t
+  value of the `y_{t-1}` coefficient. Without `--adf-lags`, the orders `0..=maxlag` (`maxlag = ceil(12 (n/100)^(1/4))`,
+  at most `n/2 - k - 1`) are fitted on one common sample and the smallest AIC (`-2 lnL + 2k`) wins; the chosen order is
+  then fitted on all the points it allows. Critical values at 1, 5 and 10 % are MacKinnon's (2010) asymptotic ones:
+  -3.43035, -2.86154, -2.56677 (constant); -3.95877, -3.41049, -3.12705 (trend); -2.56574, -1.94100, -1.61682
+  (none). No p-value is computed.
+- **KPSS**: the residuals of `y` on a constant (level) or a constant and time (trend), `eta = sum S_t^2 / (n^2 s^2)`
+  with partial sums `S_t` and the Bartlett-weighted long-run variance on `l = ceil(12 (n/100)^(1/4))` lags unless
+  given. The probability is interpolated linearly in Kwiatkowski et al.'s (1992) table (level 0.347, 0.463, 0.574,
+  0.739; trend 0.119, 0.146, 0.176, 0.216 at 10, 5, 2.5, 1 %) and held at 0.1 and 0.01 beyond it.
+
+The result sheet `StationarityN` has an ADF and a KPSS row per column (Statistic, Lags, Points, Critical 1%, 5%, 10%,
+Prob); the notes give the 5 % decisions. The statistics, lag choices and table probabilities are checked against numpy
+(`tools/stationarity-ref.py`, `crates/calc/tests/stationarity_reference.rs`) to 1e-9; the published critical values
+are quoted, not checked here (neither statsmodels nor the tables are available locally). ADF p-values (MacKinnon's
+response surfaces), finite-sample critical values, the Phillips-Perron test and automatic KPSS bandwidths are not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

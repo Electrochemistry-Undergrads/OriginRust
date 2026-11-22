@@ -5840,6 +5840,29 @@ fn the_statistics_menu_makes_a_rare_event_chart() {
     assert_eq!(h.state().doc.undo_label(), Some("Rare event chart"));
 }
 
+/// Statistics > Stationarity Tests (ADF, KPSS)... (T372): an ADF and a KPSS row in a new sheet, one undo step.
+#[test]
+fn the_statistics_menu_runs_stationarity_tests() {
+    let mut text = String::from("t,walk\n");
+    let (mut st, mut y) = (7u64, 0.0);
+    for i in 0..150 {
+        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        y += (st >> 11) as f64 / (1u64 << 53) as f64 - 0.5;
+        text.push_str(&format!("{i},{y}\n"));
+    }
+    let data = csv_file("stationarity", "ts", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - ts.csv");
+    menu_path(&mut h, &["Statistics", "Stationarity Tests (ADF, KPSS)..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "KPSS null hypothesis"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
+    let (sheet, crit) = result_column(&h, "Critical 5%");
+    assert!(sheet.starts_with("Stationarity"), "{sheet}");
+    assert_eq!(crit, [-2.86154, 0.463]);
+    assert_eq!(h.state().doc.undo_label(), Some("Stationarity tests"));
+}
+
 /// Statistics > Seasonal Decomposition... (T370): the seasonal indices, three graphs, one undo step.
 #[test]
 fn the_statistics_menu_decomposes_a_series() {

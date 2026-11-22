@@ -69,6 +69,7 @@ pub mod roc;
 pub mod signal;
 pub mod smooth;
 pub mod stability;
+pub mod stationarity;
 pub mod stats;
 pub mod stemleaf;
 pub mod stft;

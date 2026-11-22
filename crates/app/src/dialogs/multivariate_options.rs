@@ -6,7 +6,7 @@ use eframe::egui;
 use sheaf_core::analysis::{
     AcfSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty, ChangePointSpec, GLimits,
     KaplanMeierSpec, KmeansSpec, LifeDist, LifeDistSpec, ManhattanSpec, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec,
-    RareChartKind, RareChartSpec, RocSpec, TDistribution, TimePivotSpec, Tool,
+    RareChartKind, RareChartSpec, RocSpec, StabilitySpec, TDistribution, TimePivotSpec, Tool,
 };
 
 /// What the windows keep between frames.
@@ -22,6 +22,7 @@ pub struct MultiOptions {
     acf: AcfSpec,
     rare: RareChartSpec,
     capability: CapabilitySpec,
+    stability: StabilitySpec,
     life: LifeDistSpec,
     /// The value of the Manual penalty while another penalty is chosen.
     manual_penalty: Option<f64>,
@@ -76,6 +77,13 @@ impl MultiOptions {
                     return Err("give the censoring value".to_string());
                 }
                 Ok(Tool::LifeDist(self.life.clone()))
+            }
+            AnalysisKind::Stability => {
+                let s = &self.stability;
+                if s.lower.is_none() && s.upper.is_none() {
+                    return Err("give a lower or an upper specification limit".to_string());
+                }
+                Ok(Tool::Stability(*s))
             }
             AnalysisKind::Capability => {
                 let c = &self.capability;
@@ -225,6 +233,36 @@ impl MultiOptions {
                     }
                 });
                 ui.checkbox(&mut s.graph, "Probability, density, survival and hazard graphs");
+            }
+            AnalysisKind::Stability => {
+                ui.label("The chosen columns are the time, the response and, optionally, the batch.");
+                let s = &mut self.stability;
+                for (name, limit, start) in [
+                    ("Lower specification limit", &mut s.lower, 95.0),
+                    ("Upper specification limit", &mut s.upper, 105.0),
+                ] {
+                    ui.horizontal(|ui| {
+                        let mut on = limit.is_some();
+                        if ui.checkbox(&mut on, name).changed() {
+                            *limit = on.then_some(start);
+                        }
+                        if let Some(v) = limit {
+                            ui.add(egui::DragValue::new(v).speed(0.01));
+                        }
+                    });
+                }
+                ui.horizontal(|ui| {
+                    ui.label("Confidence level of the bounds");
+                    let mut pct = s.confidence * 100.0;
+                    if ui.add(egui::DragValue::new(&mut pct).speed(0.1).range(50.0..=99.99).suffix(" %")).changed() {
+                        s.confidence = pct / 100.0;
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Poolability significance level");
+                    ui.add(egui::DragValue::new(&mut s.alpha).speed(0.01).range(0.01..=0.5));
+                });
+                ui.checkbox(&mut s.graph, "Graph of the batches, fits, bounds and limits");
             }
             AnalysisKind::Capability => {
                 ui.label("Every chosen column is a process of its own, in row order; missing values are left out.");

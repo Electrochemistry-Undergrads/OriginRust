@@ -3447,6 +3447,27 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Stability study (ICH Q1E): --y TIME,RESPONSE[,BATCH]; per-batch lines, poolability tests and the shelf life
+    /// where a confidence bound of the mean meets a specification limit, with a graph.
+    Stability {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Lower specification limit.
+        #[arg(long)]
+        lsl: Option<f64>,
+        /// Upper specification limit.
+        #[arg(long)]
+        usl: Option<f64>,
+        /// Confidence level of the bounds, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        confidence: f64,
+        /// Significance level of the poolability tests.
+        #[arg(long, default_value_t = 0.25)]
+        alpha: f64,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Process capability: Cp, Cpk, Pp, Ppk and parts per million outside the limits of each --y column, normal
     /// or nonnormal (lognormal or Weibull, percentile method), with a histogram and the fitted curve.
     Capability {

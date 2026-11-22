@@ -2131,6 +2131,7 @@ fn statistics_menu() -> Vec<Entry> {
         item("Au&tocorrelation...", Cmd::Analyze(AnalysisKind::Acf)),
         item("Rar&e Event Chart (G/T)...", Cmd::Analyze(AnalysisKind::RareChart)),
         item("Process Capabilit&y...", Cmd::Analyze(AnalysisKind::Capability)),
+        item("Sta&bility Study...", Cmd::Analyze(AnalysisKind::Stability)),
         sep(),
         mru_submenu("Most Recently Used Items", MruMenu::Statistics),
     ]

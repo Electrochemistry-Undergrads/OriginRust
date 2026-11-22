@@ -97,7 +97,9 @@ pub struct MergeOptions {
     pub cols: Option<usize>,
     /// Put an independent empty layer in each unused cell of the rearranged grid.
     pub add_extra_layers: bool,
-    /// Resolved data-unit axis spans, one per source's first layer, in source order.
+    /// Give each source graph one cell. Off, each independent layer and its linked layers get a cell.
+    pub group_sources: bool,
+    /// Resolved data-unit axis spans, one per panel, in cell order.
     /// `None` leaves widths or heights uniform. Ignored when Rearrange Layout is off.
     pub common_x_spans: Option<Vec<f64>>,
     pub common_y_spans: Option<Vec<f64>>,
@@ -146,6 +148,7 @@ impl Default for MergeOptions {
             rows: None,
             cols: None,
             add_extra_layers: false,
+            group_sources: true,
             common_x_spans: None,
             common_y_spans: None,
             h_gap: 5.0,
@@ -184,6 +187,8 @@ pub enum MergeError {
     Empty(String),
     #[error("{rows} x {cols} cells cannot hold {graphs} graphs")]
     TooManyGraphs { rows: usize, cols: usize, graphs: usize },
+    #[error("{rows} x {cols} cells cannot hold {panels} panels")]
+    TooManyPanels { rows: usize, cols: usize, panels: usize },
     #[error("the text factor must be a number from 0.05 to 20")]
     Factor,
     #[error("the page must be from 0.5 to 200 inches on each side")]
@@ -272,6 +277,14 @@ impl MergeOptions {
     }
 }
 
+/// The layer whose axes represent each panel when a source is placed in the merge grid.
+/// With grouping on only the first layer represents the source. Otherwise each independent
+/// layer represents its own panel and any layers that follow it.
+pub fn source_panel_roots(graph: &Graph, grouped: bool) -> impl Iterator<Item = usize> + '_ {
+    let layers = if grouped { graph.layers.len().min(1) } else { graph.layers.len() };
+    (0..layers).filter(move |&index| graph.link_parent(index).is_none())
+}
+
 /// The smallest frame holding every frame of `frames`.
 fn bounds(frames: &[Frame]) -> Frame {
     let left = frames.iter().map(|f| f.left).fold(f64::INFINITY, f64::min);
@@ -313,26 +326,37 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
     {
         return Err(MergeError::Factor);
     }
-    let layout = opts.layout(sources.len());
+    let grouped = opts.group_sources || !opts.rearrange;
+    let panel_count =
+        if grouped { sources.len() } else { sources.iter().map(|src| source_panel_roots(src, false).count()).sum() };
+    let layout = opts.layout(panel_count);
     let mut cells = layout.frames()?;
-    if opts.rearrange && sources.len() > cells.len() {
-        return Err(MergeError::TooManyGraphs { rows: layout.rows, cols: layout.cols, graphs: sources.len() });
+    if opts.rearrange && panel_count > cells.len() {
+        let (rows, cols) = (layout.rows, layout.cols);
+        return Err(if grouped {
+            MergeError::TooManyGraphs { rows, cols, graphs: panel_count }
+        } else {
+            MergeError::TooManyPanels { rows, cols, panels: panel_count }
+        });
+    }
+    if let Some(src) = sources.iter().find(|s| s.layers.is_empty()) {
+        return Err(MergeError::Empty(src.name.clone()));
     }
     let common_x = opts.common_x_spans.as_deref().filter(|_| opts.rearrange);
     let common_y = opts.common_y_spans.as_deref().filter(|_| opts.rearrange);
     let common_scale = common_x.is_some() || common_y.is_some();
-    if [common_x, common_y].into_iter().flatten().any(|spans| spans.len() != sources.len()) {
+    if [common_x, common_y].into_iter().flatten().any(|spans| spans.len() != panel_count) {
         return Err(MergeError::CommonScale);
     }
-    let first_cell = cells[0];
+    let first_frame = cells[0];
     if let Some(spans) = common_x {
         let widths = common_axis_frames(
             spans,
             cells.len(),
             layout.cols,
             1,
-            first_cell.left,
-            first_cell.width,
+            first_frame.left,
+            first_frame.width,
             layout.h_gap / 100.0,
         )?;
         for (cell, (left, width)) in cells.iter_mut().zip(widths) {
@@ -346,8 +370,8 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
             cells.len(),
             layout.rows,
             layout.cols,
-            first_cell.top,
-            first_cell.height,
+            first_frame.top,
+            first_frame.height,
             layout.v_gap / 100.0,
         )?;
         for (cell, (top, height)) in cells.iter_mut().zip(heights) {
@@ -366,31 +390,28 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
     };
     // linking belongs to the rearranged layout (Origin's dialog puts it under Arrange Settings)
     let link = opts.rearrange && (opts.link || opts.share_x);
+    let mut first_cell = 0;
     for (k, src) in sources.iter().enumerate() {
-        let cell = cells.get(k).copied().unwrap_or(Frame::WHOLE);
-        if src.layers.is_empty() {
-            return Err(MergeError::Empty(src.name.clone()));
-        }
         let base = g.layers.len();
         // Layers standing on the page (roots, and layers whose link is not valid) are placed by
-        // their part of the source's bounding box; a validly linked layer keeps its frame, which is
-        // fractions of its parent's.
-        let roots: Vec<usize> = (0..src.layers.len()).filter(|&i| src.link_parent(i).is_none()).collect();
-        let bbox = bounds(&roots.iter().map(|&i| src.layers[i].frame).collect::<Vec<_>>());
-        let target = if !opts.rearrange {
-            bbox
-        } else if opts.keep_aspect && !common_scale && bbox.width > 0.0 && bbox.height > 0.0 {
-            // the ratio is kept in percent of each page, as Origin does
-            let ratio = bbox.width / bbox.height;
-            let width = cell.width.min(cell.height * ratio);
-            Frame { left: cell.left, top: cell.top, width, height: width / ratio }
-        } else {
-            cell
-        };
-        // the automatic factor follows the frame the source gets (with Keep Layer Aspect Ratio the
-        // shrunk frame: a 3 x 1 merge gave 0.28 for 20.57 x 21.68); without rearranging it is 1
-        let factor = opts.text_scale.factor(target, opts.rearrange);
+        // their part of the panel's bounding box. A linked layer keeps its parent-relative frame.
+        let roots: Vec<usize> = source_panel_roots(src, false).collect();
+        let root_frames: Vec<_> = roots.iter().map(|&i| src.layers[i].frame).collect();
+        let panel_bounds = if grouped { vec![bounds(&root_frames)] } else { root_frames };
+        let targets: Vec<_> = panel_bounds
+            .iter()
+            .enumerate()
+            .map(|(index, &bbox)| {
+                let cell = cells.get(first_cell + index).copied().unwrap_or(Frame::WHOLE);
+                let target = fit_panel(cell, bbox, opts, common_scale);
+                (target, opts.text_scale.factor(target, opts.rearrange))
+            })
+            .collect();
         for (i, layer) in src.layers.iter().enumerate() {
+            let panel =
+                if grouped { 0 } else { roots.binary_search(&src.root_of(i)).expect("each root occupies a panel") };
+            let bbox = panel_bounds[panel];
+            let (target, factor) = targets[panel];
             let mut l = layer.clone();
             match src.link_parent(i) {
                 Some(p) => {
@@ -408,16 +429,19 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
                 }
             }
             scale_text(&mut l, factor);
+            if opts.hide_inner && opts.rearrange {
+                hide_inner_axes(&mut l, &layout, first_cell + panel, panel_count);
+            }
             g.layers.push(l);
         }
         if let Some(label) = opts.panel_labels.get(k) {
-            label.add(&mut g.layers[base], opts.label_position, factor, (page_w, page_h));
+            label.add(&mut g.layers[base], opts.label_position, targets[0].1, (page_w, page_h));
         }
-        // Link Source Graphs: the roots of the later sources follow the first merged layer. A root
+        // Link Source Graphs: the roots of later panels follow the first merged layer. A root
         // that other layers follow (the left layer of a double-Y source) stays on the page, since
         // a linked layer cannot have layers linked to it.
-        if link && k > 0 {
-            for i in base..g.layers.len() {
+        if link && (k > 0 || !grouped) {
+            for i in base.max(1)..g.layers.len() {
                 if g.layers[i].link.is_none() && !g.has_children(i) {
                     let frame = g.layers[i].frame.relative_to(g.layers[0].frame);
                     let x = if opts.share_x { ScaleLink::Straight } else { ScaleLink::None };
@@ -426,13 +450,11 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
                 }
             }
         }
+        first_cell += panel_bounds.len();
     }
-    if opts.hide_inner && opts.rearrange {
-        hide_inner_axes(&mut g, &layout, sources);
-    }
-    if opts.rearrange && opts.add_extra_layers && cells.len() > sources.len() {
+    if opts.rearrange && opts.add_extra_layers && cells.len() > panel_count {
         let empty = Template::Line.new_graph(WindowId(0), "");
-        for &frame in &cells[sources.len()..] {
+        for &frame in &cells[panel_count..] {
             let mut layer = empty.layers[0].clone();
             layer.frame = frame;
             scale_text(&mut layer, opts.text_scale.factor(frame, true));
@@ -440,6 +462,19 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
         }
     }
     Ok(g)
+}
+
+fn fit_panel(cell: Frame, bbox: Frame, opts: &MergeOptions, common_scale: bool) -> Frame {
+    if !opts.rearrange {
+        bbox
+    } else if opts.keep_aspect && !common_scale && bbox.width > 0.0 && bbox.height > 0.0 {
+        // Keep the ratio in percent of each page, as Origin does.
+        let ratio = bbox.width / bbox.height;
+        let width = cell.width.min(cell.height * ratio);
+        Frame { left: cell.left, top: cell.top, width, height: width / ratio }
+    } else {
+        cell
+    }
 }
 
 /// One page fraction per data unit, shared by all occupied cells on this axis. Track
@@ -490,38 +525,29 @@ fn common_axis_frames(
 /// Origin's "Show Axes Frame": in a grid without a vertical gap, the layers of a cell with a filled
 /// cell right below it get no X tick labels, title or ticks; without a horizontal gap, a cell with a
 /// filled cell on its left gets no Y ones (Origin was measured for the rows only).
-fn hide_inner_axes(g: &mut Graph, layout: &PanelLayout, sources: &[&Graph]) {
-    let n = sources.len();
-    let filled = |r: usize, c: usize| r < layout.rows && c < layout.cols && r * layout.cols + c < n;
-    let mut start = 0;
-    for (k, src) in sources.iter().enumerate() {
-        let (r, c) = layout.cell(k);
-        let below = layout.v_gap == 0.0 && filled(r + 1, c);
-        let left = layout.h_gap == 0.0 && c > 0 && filled(r, c - 1);
-        for layer in &mut g.layers[start..start + src.layers.len()] {
-            if below {
-                let x = &mut layer.x_axis;
-                x.show_tick_labels = false;
-                x.show_title = false;
-                x.major_tick = TickDirection::None;
-                x.minor_tick = TickDirection::None;
-            }
-            if left {
-                let y = &mut layer.y_axis;
-                y.show_tick_labels = false;
-                y.show_title = false;
-                y.major_tick = TickDirection::None;
-                y.minor_tick = TickDirection::None;
-            }
-        }
-        start += src.layers.len();
+fn hide_inner_axes(layer: &mut Layer, layout: &PanelLayout, panel: usize, panels: usize) {
+    let filled = |r: usize, c: usize| r < layout.rows && c < layout.cols && r * layout.cols + c < panels;
+    let (r, c) = layout.cell(panel);
+    if layout.v_gap == 0.0 && filled(r + 1, c) {
+        let x = &mut layer.x_axis;
+        x.show_tick_labels = false;
+        x.show_title = false;
+        x.major_tick = TickDirection::None;
+        x.minor_tick = TickDirection::None;
+    }
+    if layout.h_gap == 0.0 && c > 0 && filled(r, c - 1) {
+        let y = &mut layer.y_axis;
+        y.show_tick_labels = false;
+        y.show_title = false;
+        y.major_tick = TickDirection::None;
+        y.minor_tick = TickDirection::None;
     }
 }
 
 impl Project {
-    /// Graph > Merge Graph Windows: a new graph made of copies of the graphs `opts.sources`, one per
-    /// cell. The copies plot the same columns. The sources are deleted when `opts.keep_sources` is
-    /// false. Returns the new graph's id.
+    /// Graph > Merge Graph Windows copies the source layers to a new graph. The copies plot the
+    /// same columns. Deletes the source windows when `opts.keep_sources` is false and returns
+    /// the new graph's id.
     pub fn merge_graphs(&mut self, opts: &MergeOptions) -> Result<WindowId, MergeError> {
         let mut seen = std::collections::HashSet::new();
         for &id in &opts.sources {

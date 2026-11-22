@@ -77,6 +77,7 @@ pub use sheaf_fit::simulate::Spacing as SimulateSpacing;
 pub use simsurface::SimulateSurfaceSpec;
 pub use simulate::{SimulateCurveSpec, SimulateX};
 pub use stability::StabilitySpec;
+pub use stationarity::{AdfTerms, KpssNull, StationaritySpec};
 pub use summary::{GraphArrangement, GraphSummarySpec};
 pub use survival::KaplanMeierSpec;
 pub use timepivot::{PivotPeriod, PivotStat, TimePivotSpec};
@@ -1181,6 +1182,9 @@ pub enum Tool {
     /// Statistics > Seasonal Decomposition (T370, `docs/spec/statistics.md` section 40): trend, seasonal and
     /// residual of every chosen column.
     Decompose(DecomposeSpec),
+    /// Statistics > Stationarity Tests (T372, `docs/spec/statistics.md` section 41): ADF and KPSS of every chosen
+    /// column.
+    Stationarity(StationaritySpec),
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
     /// censor and, optionally, group columns.
     KaplanMeier(KaplanMeierSpec),
@@ -1318,6 +1322,7 @@ impl Tool {
             Tool::LifeDist(_) => "Distribution overview",
             Tool::Stability(_) => "Stability study",
             Tool::Decompose(_) => "Seasonal decomposition",
+            Tool::Stationarity(_) => "Stationarity tests",
             Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
             Tool::GraphSummary(_) => "Graphical summary",
             Tool::AverageCurves(_) => "Average multiple curves",
@@ -1406,6 +1411,7 @@ impl Tool {
             Tool::LifeDist(_) => "LifeDist",
             Tool::Stability(_) => "Stability",
             Tool::Decompose(_) => "Decompose",
+            Tool::Stationarity(_) => "Stationarity",
             Tool::KaplanMeier(_) => "KaplanMeier",
             Tool::GraphSummary(_) => "GraphSummary",
             Tool::AverageCurves(_) => "AverageResult",
@@ -2341,6 +2347,7 @@ mod roc;
 mod simsurface;
 mod simulate;
 mod stability;
+mod stationarity;
 mod statistics;
 mod summary;
 mod survival;
@@ -2766,6 +2773,12 @@ impl Project {
                 notes = out.notes;
                 xy_graph = out.graph;
                 more_xy_graphs = out.more_graphs;
+            }
+            Tool::Stationarity(spec) => {
+                let out = stationarity::run(spec, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
             }
             Tool::Decompose(spec) => {
                 let out = decompose::run(spec, &inputs)?;

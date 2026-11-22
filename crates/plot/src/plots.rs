@@ -6,6 +6,7 @@ use crate::data::PlotData;
 use crate::fill::{fill_polygon, fill_rect};
 use crate::fonts::TextMeasurer;
 use crate::scene::{Anchor, Cap, Item, Join, Stroke, TextItem, line_to, move_to, push_num};
+use crate::{markup, text};
 use sheaf_core::graph::{
     Connect, DataLabels, DropColorMode, DropTarget, ErrorDirection, FillUnderMode, LabelForm, LabelFrame,
     LabelPosition, LineStyle, PLUS_MINUS_NEGATIVE, PLUS_MINUS_POSITIVE, PlotKind, ScaleKind, SymbolInterior,
@@ -50,6 +51,7 @@ pub(crate) fn draw_plot(
     geom: &LayerGeometry,
     next: Option<&PlotData>,
     m: &dyn TextMeasurer,
+    label_plot_color: &impl Fn(usize) -> Option<sheaf_core::Color>,
 ) {
     let plot = pd.plot;
     if let Some(markers) = plot.decor.markers
@@ -163,7 +165,7 @@ pub(crate) fn draw_plot(
         draw_masked(out, pd, geom);
     }
     if decor.labels.enable && !plot.kind.is_distribution() {
-        draw_data_labels(out, pd, geom, m);
+        draw_data_labels(out, pd, geom, m, label_plot_color);
     }
 }
 
@@ -316,7 +318,13 @@ fn label_number(v: f64) -> String {
 
 /// Data labels (Origin's Label tab): the label form's text next to each point, a quarter of the
 /// font size away on the chosen side.
-fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, m: &dyn TextMeasurer) {
+fn draw_data_labels(
+    out: &mut Vec<Item>,
+    pd: &PlotData,
+    geom: &LayerGeometry,
+    m: &dyn TextMeasurer,
+    plot_color: &impl Fn(usize) -> Option<sheaf_core::Color>,
+) {
     let labels = &pd.plot.decor.labels;
     let size = labels.font.size_pt;
     let gap = size * 0.25;
@@ -347,6 +355,11 @@ fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, m:
         if text.is_empty() {
             continue;
         }
+        let runs = (matches!(labels.form, LabelForm::Column { .. }) && text.contains('\\'))
+            .then(|| markup::plot_segments(&text, &|name| m.expand_inline_family(name), plot_color));
+        if runs.as_ref().is_some_and(Vec::is_empty) {
+            continue;
+        }
         let (x, y, anchor) = match labels.position {
             LabelPosition::Right => (px + gap, py + mid, Anchor::Start),
             LabelPosition::Left => (px - gap, py + mid, Anchor::End),
@@ -367,13 +380,20 @@ fn draw_data_labels(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, m:
             rotate_ccw: labels.rotate_deg,
         };
         if labels.white_out || !labels.frame.is_none() {
-            let width = m.width(&item.text, &labels.font, size);
+            let width = match &runs {
+                Some(runs) => text::segments_width(m, runs, &labels.font, size),
+                None => m.width(&item.text, &labels.font, size),
+            };
             draw_label_frame(out, &item, width, labels);
             if labels.white_out {
                 draw_label_background(out, &item, width);
             }
         }
-        out.push(Item::Text(item));
+        if let Some(runs) = runs {
+            text::place_segments(out, m, &runs, &labels.font, size, (item.x, item.y), anchor, item.rotate_ccw);
+        } else {
+            out.push(Item::Text(item));
+        }
     }
 }
 

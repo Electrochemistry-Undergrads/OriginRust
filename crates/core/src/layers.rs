@@ -85,6 +85,11 @@ impl NewLayerKind {
     fn is_inset(self) -> bool {
         matches!(self, NewLayerKind::Inset | NewLayerKind::InsetWithData)
     }
+
+    /// Presets that draw axes around the full frame of their linked parent.
+    pub fn supports_auto_offset(self) -> bool {
+        matches!(self, Self::TopX | Self::RightY | Self::LeftY | Self::TopXRightY | Self::BottomXRightY)
+    }
 }
 
 /// The undo text of Origin after adding a layer.
@@ -203,6 +208,55 @@ impl Graph {
         Some(self.layers.len() - 1)
     }
 
+    /// Add a preset and separate its axes from coincident axes on the same frame.
+    pub fn add_layer_with_auto_offset(&mut self, kind: NewLayerKind, active: usize) -> Option<usize> {
+        let index = self.add_layer(kind, active)?;
+        if kind.supports_auto_offset() {
+            let frame = self.absolute_frame(index)?;
+            let layer = &self.layers[index];
+            let x = self.new_axis_offset(index, frame, layer.x_axis.side, true);
+            let y = self.new_axis_offset(index, frame, layer.y_axis.side, false);
+            let layer = &mut self.layers[index];
+            layer.x_axis.at_position = None;
+            layer.y_axis.at_position = None;
+            layer.x_axis.offset_pct = x;
+            layer.y_axis.offset_pct = y;
+        }
+        Some(index)
+    }
+
+    fn new_axis_offset(&self, index: usize, frame: Frame, side: AxisSide, is_x: bool) -> f64 {
+        if side == AxisSide::Hidden {
+            return 0.0;
+        }
+        // Nominal page spacing fitted to Origin 2016's integer position readbacks (graphing 21.15).
+        let (page_spacing, extent) = if is_x { (2.03, frame.height) } else { (1.5, frame.width) };
+        if !extent.is_finite() || extent <= 0.0 {
+            return 0.0;
+        }
+        let step = (page_spacing / extent).round().max(1.0);
+        let mut on_edge = false;
+        let mut outermost: f64 = 0.0;
+        for (i, layer) in self.layers[..index].iter().enumerate() {
+            let (show, axis) = if is_x {
+                (layer.display.show_x_axes, &layer.x_axis)
+            } else {
+                (layer.display.show_y_axes, &layer.y_axis)
+            };
+            if !show || layer.display.hidden || axis.side == AxisSide::Hidden || self.absolute_frame(i) != Some(frame) {
+                continue;
+            }
+            if axis.side == side && axis.at_position.is_none() && axis.offset_pct.is_finite() {
+                on_edge |= axis.offset_pct == 0.0;
+                outermost = outermost.max(axis.offset_pct);
+            } else if axis.side != side && (axis.show_opposite || axis.opposite_ticks) {
+                on_edge = true;
+            }
+        }
+        let offset = outermost + step;
+        if on_edge && offset.is_finite() { offset } else { 0.0 }
+    }
+
     /// Gives the layers that follow layer `index` on a straight link their range as it is drawn now
     /// (`ranges[i]` is layer i's X and Y as (min, max, step)), so that they keep it when `index` goes
     /// away (graphing spec 21.4: x.from and x.to stay). Call before [`Graph::delete_layer`].
@@ -291,6 +345,67 @@ mod tests {
         g.add_layer(NewLayerKind::RightY, 0).unwrap();
         let l = &g.layers[1];
         assert_eq!((l.x_axis.offset_pct, l.y_axis.offset_pct), (0.0, 0.0));
+    }
+
+    #[test]
+    fn new_layer_offsets_match_origin_readbacks_at_several_frame_sizes() {
+        // Origin 2016: two Bottom-X Right-Y layers, the second added with offset:=1.
+        for (w, h, x, y) in [
+            (19.99, 20.01, 10.0, 8.0),
+            (25.0, 25.01, 8.0, 6.0),
+            (30.01, 30.0, 7.0, 5.0),
+            (40.0, 40.0, 5.0, 4.0),
+            (50.0, 50.01, 4.0, 3.0),
+            (60.0, 60.0, 3.0, 3.0),
+            (80.01, 79.99, 3.0, 2.0),
+            (90.0, 90.01, 2.0, 2.0),
+        ] {
+            let mut g = graph();
+            g.layers[0].frame.width = w / 100.0;
+            g.layers[0].frame.height = h / 100.0;
+            g.add_layer(NewLayerKind::BottomXRightY, 0).unwrap();
+            let before = g.layers.clone();
+            let new = g.add_layer_with_auto_offset(NewLayerKind::BottomXRightY, 0).unwrap();
+            let layer = &g.layers[new];
+            assert_eq!((layer.x_axis.offset_pct, layer.y_axis.offset_pct), (x, y), "{w} × {h}");
+            assert_eq!(g.layers[..new], before);
+            assert_eq!(g.absolute_frame(new), Some(before[0].frame));
+            assert_eq!(layer.link.unwrap().parent, 0);
+        }
+    }
+
+    #[test]
+    fn auto_offset_reuses_a_free_edge_then_moves_past_the_outermost_axis() {
+        let mut g = graph();
+        g.layers[0].frame.width = 0.6816;
+        g.layers[0].y_axis.show_opposite = false;
+        let far = g.add_layer(NewLayerKind::RightY, 0).unwrap();
+        g.layers[far].y_axis.offset_pct = 8.0;
+
+        let edge = g.add_layer_with_auto_offset(NewLayerKind::RightY, 0).unwrap();
+        assert_eq!(g.layers[edge].y_axis.offset_pct, 0.0);
+        let outer = g.add_layer_with_auto_offset(NewLayerKind::RightY, 0).unwrap();
+        assert_eq!(g.layers[outer].y_axis.offset_pct, 10.0);
+        assert_eq!(g.layers[far].y_axis.offset_pct, 8.0);
+        assert_eq!(g.layers[edge].y_axis.offset_pct, 0.0);
+    }
+
+    #[test]
+    fn auto_offset_counts_only_visible_axes_on_the_matching_frame() {
+        let mut g = graph();
+        g.layers[0].frame.height = 0.4499;
+        g.layers[0].x_axis.show_opposite = false;
+        let hidden = g.add_layer(NewLayerKind::TopX, 0).unwrap();
+        g.layers[hidden].display.hidden = true;
+        let separated = g.add_layer(NewLayerKind::TopX, 0).unwrap();
+        g.layers[separated].frame.top = 0.1;
+        let off = g.add_layer(NewLayerKind::TopX, 0).unwrap();
+        g.layers[off].display.show_x_axes = false;
+
+        let edge = g.add_layer_with_auto_offset(NewLayerKind::TopX, 0).unwrap();
+        let outer = g.add_layer_with_auto_offset(NewLayerKind::TopX, 0).unwrap();
+        assert_eq!(g.layers[edge].x_axis.offset_pct, 0.0);
+        assert_eq!(g.layers[outer].x_axis.offset_pct, 5.0);
     }
 
     #[test]

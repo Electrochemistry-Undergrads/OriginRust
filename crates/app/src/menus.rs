@@ -2134,6 +2134,8 @@ fn statistics_menu() -> Vec<Entry> {
         item("Au&tocorrelation...", Cmd::Analyze(AnalysisKind::Acf)),
         item("Seasonal Decomposit&ion...", Cmd::Analyze(AnalysisKind::Decompose)),
         item("Stationarity Tests (ADF, &KPSS)...", Cmd::Analyze(AnalysisKind::Stationarity)),
+        item("E&xponential Smoothing Forecast...", Cmd::Analyze(AnalysisKind::ExpSmooth)),
+        item("ARIMA &Forecast...", Cmd::Analyze(AnalysisKind::Arima)),
         item("Rar&e Event Chart (G/T)...", Cmd::Analyze(AnalysisKind::RareChart)),
         item("Process Capabilit&y...", Cmd::Analyze(AnalysisKind::Capability)),
         item("Sta&bility Study...", Cmd::Analyze(AnalysisKind::Stability)),

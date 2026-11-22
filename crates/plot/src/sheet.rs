@@ -137,12 +137,14 @@ fn check(setup: &PageSetup) -> Result<(f64, f64), PlotError> {
     Ok(area)
 }
 
+fn worksheet_line_height(style: sheaf_core::cellformat::ResolvedStyle<'_>, size: f64) -> f64 {
+    let em =
+        crate::worksheet_font(style.font.unwrap_or(FAMILY), style.bold, style.italic).map_or(1.2, |f| f.line_height_em);
+    size * em + 2.0
+}
+
 fn sheet_table(sheet: &Worksheet) -> SheetTable<'_> {
-    SheetTable::with_metrics(sheet, PrintStyle::default(), &|style, size| {
-        let em = crate::worksheet_font(style.font.unwrap_or(FAMILY), style.bold, style.italic)
-            .map_or(1.2, |f| f.line_height_em);
-        size * em + 2.0
-    })
+    SheetTable::with_metrics(sheet, PrintStyle::default(), &worksheet_line_height)
 }
 
 /// Where the sheet's printed pages break on the paper of `setup` (Page Break Preview Lines, T185).
@@ -235,8 +237,8 @@ pub fn sheet_image_size(sheet: &Worksheet) -> Result<(f64, f64), PlotError> {
 
 fn sheet_image_scene(sheet: &Worksheet) -> Result<Scene, PlotError> {
     let fonts = SystemFonts::shared();
-    let table = sheet_table(sheet);
     let style = PrintStyle::default();
+    let table = SheetTable::with_image_metrics(sheet, style, &worksheet_line_height);
     let pages = table.pages(1.0e9, 1.0e9);
     let slot = pages.first().ok_or_else(|| PlotError::Size("the sheet has nothing to draw".into()))?;
     let (dx, dy) = (style.rownum_w, style.row_h);
@@ -294,6 +296,10 @@ mod tests {
         ws.columns.push(Column::new(ColumnId(1), "A", Designation::X, ColumnData::numeric(vec![7.0, 8.0])));
         ws.columns.push(b);
         let svg = sheet_image_svg(&ws).unwrap();
+        let font = sheaf_core::sheet_fonts::ColumnLabelFont { family: String::new(), size_pt: Some(24.0) };
+        ws.set_column_header_font(font.clone());
+        ws.set_row_header_font(font);
+        assert_eq!(sheet_image_svg(&ws).unwrap(), svg, "headings and their geometry are omitted from images");
         for want in [">Bee<", ">mA<", ">10<", ">20<", ">7<"] {
             assert!(svg.contains(want), "{want} missing");
         }

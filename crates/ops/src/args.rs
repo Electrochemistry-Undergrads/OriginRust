@@ -3453,6 +3453,54 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// ARIMA forecast: ARIMA(p, d, q) of each --y column by conditional least squares, forecasts with confidence
+    /// bands, with a graph.
+    Arima {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Autoregressive order.
+        #[arg(long, default_value_t = 1)]
+        p: usize,
+        /// Differences.
+        #[arg(long, default_value_t = 0)]
+        d: usize,
+        /// Moving-average order.
+        #[arg(long, default_value_t = 0)]
+        q: usize,
+        /// Leave out the constant (the mean of the differenced series).
+        #[arg(long)]
+        no_constant: bool,
+        /// Steps to forecast.
+        #[arg(long, default_value_t = 10)]
+        horizon: usize,
+        /// Confidence level of the forecast bands, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        confidence: f64,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// Exponential smoothing forecast: simple, Holt or Holt-Winters smoothing of each --y column with fitted or
+    /// given constants, and forecasts after the last value, with a graph.
+    Forecast {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// simple, holt, additive (Holt-Winters) or multiplicative (Holt-Winters).
+        #[arg(long, default_value = "holt")]
+        model: String,
+        /// Points per season (Holt-Winters).
+        #[arg(long, default_value_t = 12)]
+        period: usize,
+        /// Fixed smoothing constants alpha[,beta[,gamma]] (default: fitted by least squares).
+        #[arg(long)]
+        constants: Option<String>,
+        /// Steps to forecast.
+        #[arg(long, default_value_t = 10)]
+        horizon: usize,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Stationarity tests: the augmented Dickey-Fuller statistic (MacKinnon asymptotic critical values) and the KPSS
     /// statistic with its table probability, for each --y column.
     Stationarity {

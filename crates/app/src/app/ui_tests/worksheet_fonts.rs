@@ -193,6 +193,43 @@ fn category(h: &mut Harness<'static, SheafApp>, current: &str, next: &str) {
     settle(h);
 }
 
+#[test]
+fn worksheet_header_fonts_reach_titles_and_row_numbers_with_one_undo() {
+    let mut h = start_sheet("worksheet-header-fonts");
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Seed label", |p| {
+        p.workbook_mut(book).unwrap().sheet_mut().columns[0].long_name = "Alpha".into();
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    let heading = sheaf_core::sheet_print::head_name(sheet(&h), 0);
+    let before_heading = painted_size(&h, &heading);
+    let before_caption = painted_size(&h, "Long Name");
+    let before_row = painted_size(&h, "2");
+    let before_data = painted_size(&h, "4.5");
+
+    open(&mut h);
+    category(&mut h, "Data", "Column Header");
+    size(&mut h, "18");
+    category(&mut h, "Column Header", "Row Header");
+    size(&mut h, "12");
+    assert_eq!(project(&h), &before);
+    click(&mut h, "OK");
+
+    assert_eq!(painted_size(&h, &heading), [24.0]);
+    // Project Explorer also paints a column called Long Name.
+    assert!(painted_size(&h, "Long Name").contains(&16.0));
+    assert!(painted_size(&h, "2").contains(&16.0));
+    assert_eq!(painted_size(&h, "4.5"), before_data);
+    assert!(sheet(&h).format_index().is_empty());
+    assert_eq!(h.state().doc.undo_label(), Some("Worksheet font"));
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+    assert_eq!(painted_size(&h, &heading), before_heading);
+    assert_eq!(painted_size(&h, "Long Name"), before_caption);
+    assert_eq!(painted_size(&h, "2"), before_row);
+}
+
 fn label_family_fixture() -> String {
     let names: Vec<_> = sheaf_plot::SystemFonts::shared()
         .database()

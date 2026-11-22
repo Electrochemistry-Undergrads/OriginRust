@@ -1608,13 +1608,16 @@ impl SheafApp {
     }
 
     /// Graph > New Layer(Axes): one undo step; the new layer becomes the active layer.
-    fn add_layer(&mut self, graph: WindowId, active: usize, kind: sheaf_core::layers::NewLayerKind) {
+    fn add_layer(&mut self, graph: WindowId, active: usize, kind: sheaf_core::layers::NewLayerKind, auto_offset: bool) {
         let Some(g) = self.doc.project().graph(graph) else { return };
         if active >= g.layers.len() {
             return;
         }
         self.doc.apply(sheaf_core::layers::ADD_LAYER_UNDO, |p| {
-            graph_view::apply_op(p, graph, GraphOp::AddLayer { layer: active, kind }, None)
+            if let Some(g) = p.graph_mut(graph) {
+                let _ =
+                    if auto_offset { g.add_layer_with_auto_offset(kind, active) } else { g.add_layer(kind, active) };
+            }
         });
         let count = self.doc.project().graph(graph).map_or(0, |g| g.layers.len());
         let state = self.graphs.entry(graph).or_default();
@@ -1729,7 +1732,7 @@ impl SheafApp {
             GraphOp::HidePlot { .. } | GraphOp::SetStack { .. } => unreachable!("handled above"),
         };
         if let GraphOp::AddLayer { layer, kind } = op {
-            self.add_layer(graph, layer, kind);
+            self.add_layer(graph, layer, kind, false);
             return;
         }
         if let GraphOp::DeleteLayer { layer } = op {
@@ -7393,9 +7396,9 @@ impl SheafApp {
                     self.add_layer_dialog = None;
                     self.warn("The project changed. Open New Layer (Axes) again.");
                 }
-                Outcome::Add { graph, layer, kind, activate } => {
+                Outcome::Add { graph, layer, kind, activate, auto_offset } => {
                     self.add_layer_dialog = None;
-                    self.add_layer(graph, layer, kind);
+                    self.add_layer(graph, layer, kind, auto_offset);
                     self.focus(graph);
                     if !activate && let Some(state) = self.graphs.get_mut(&graph) {
                         state.active_layer = layer;

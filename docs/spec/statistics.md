@@ -2036,6 +2036,52 @@ Prob); the notes give the 5 % decisions. The statistics, lag choices and table p
 are quoted, not checked here (neither statsmodels nor the tables are available locally). ADF p-values (MacKinnon's
 response surfaces), finite-sample critical values, the Phillips-Perron test and automatic KPSS bandwidths are not built.
 
+## 42 Exponential smoothing forecast (T374, Origin 2024b Time Series Analysis app; not measured)
+
+Origin's Time Series Analysis app (2024b Pro) is not part of Origin 2016, so this is Sheaf's own, with the classical
+recursions and statsmodels' "legacy-heuristic" initial states. Statistics > Exponential Smoothing Forecast...
+(`Tool::ExpSmooth`, `sheaf analyze forecast --y COL[,COL..] [--model simple|holt|additive|multiplicative] [--period
+12] [--constants a[,b[,g]]] [--horizon 10] [--no-graph]`): every chosen column is a series of its own, in row order,
+complete in the chosen rows (simple needs 2 values, Holt 3, Holt-Winters two periods; multiplicative needs values
+above 0).
+
+- Initial states, taken as the states before the first value: level `y_0` (simple, Holt) or the mean of the first
+  period; trend `y_1 - y_0` (Holt) or the mean of `(y_{m+j} - y_j) / m`; seasonals `y_j - l_0` or `y_j / l_0`.
+- The one-step forecast of `y_t` is `l + b + s` (or `(l + b) s`) from the states before it; then `l' = a (y - s) + (1 -
+  a)(l + b)` (or `a y / s + ...`; simple `a y + (1 - a) l`, Holt `a y + (1 - a)(l + b)`), `b' = beta (l' - l) + (1 -
+  beta) b`, `s' = gamma (y - l - b) + (1 - gamma) s` (or `gamma y / (l + b) + ...`).
+- The forecast `h` steps on is `l + h b (+ s)` (or `(l + h b) s`) with the season of that step.
+- Without `--constants` the constants are fitted on `[0, 1]` by least squares of the one-step errors (Nelder-Mead
+  kept inside the box, from a grid of starts and once more from the best).
+
+The result sheet `ForecastN` has one row per column (Alpha, Beta, Gamma, SSE, RMSE, Final level, Final trend) and,
+per column, the X, the data, the one-step forecasts, the residuals, the forecast X (the last X step continued) and the
+forecasts; a new graph per column draws the data, the one-step forecasts and the forecasts. At fixed constants the
+fitted values, SSE, final states and forecasts are checked against numpy, and the fitted SSE against scipy's best
+(L-BFGS-B from many starts and Powell), in `tools/expsmooth-ref.py` and `crates/calc/tests/expsmooth_reference.rs`.
+Prediction intervals, damped trends, the ETS state-space likelihood and ARIMA are not built.
+
+## 43 ARIMA forecast (T376, Origin 2024b Time Series Analysis app; not measured)
+
+Origin's Time Series Analysis app (2024b Pro) is not part of Origin 2016, so this is Sheaf's own. Statistics > ARIMA
+Forecast... (`Tool::Arima`, `sheaf analyze arima --y COL[,COL..] [--p 1] [--d 0] [--q 0] [--no-constant] [--horizon
+10] [--confidence 95] [--no-graph]`): every chosen column is a series of its own, in row order, complete in the chosen
+rows. The series is differenced `d` times to `w`; with mean `mu` (the constant; a drift when `d = 1`) the model is
+`w_t - mu = sum phi_i (w_{t-i} - mu) + e_t + sum theta_j e_{t-j}`. The conditional sum of squares (errors before `t =
+p` taken as 0, summed from `t = p`) is minimized by Nelder-Mead from `mu = mean(w)`, `phi = theta = 0`, restarted from
+its best point until it stops improving; stationarity and invertibility are not imposed. `sigma^2 = SS / m` over the `m`
+summed errors and `AIC = m ln(2 pi sigma^2) + m + 2 (k + 1)`. The one-step prediction of `y_t` is `y_t - e` (empty for
+the first `d + p` rows). Forecasts set future errors to 0 and undo the differences; the bands are `forecast -+ z sigma
+sqrt(sum_{j<h} psi_j^2)` with the psi weights of `phi(B) (1 - B)^d y = theta(B) e`.
+
+The result sheet `ARIMAN` has one row per coefficient (Mean or Constant (drift), AR i, MA j) and the sum of squares,
+sigma^2 and AIC per column, then per column the X, data, one-step predictions, residuals, forecast X (the last X step
+continued), forecasts and lower and upper band; a new graph per column draws the data, predictions, forecasts and
+bands. At given parameters the errors, forecasts and standard errors are checked against numpy, and the fitted sum
+of squares against scipy's minimum (Nelder-Mead, BFGS), in `tools/arima-ref.py` and `crates/calc/tests/arima_reference.rs`.
+Exact (Kalman) maximum likelihood, coefficient standard errors, seasonal ARIMA and automatic order choice are not
+built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

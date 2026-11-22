@@ -1139,7 +1139,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                                         vec2(rect.width(), row_heights.height(i) as f32),
                                     );
                                     cell_scope(ui, cell, ("frozen_rowhead", *r), |ui| {
-                                        row_header_cell(ui, *r, false, book_id, state, actions)
+                                        row_header_cell(ui, sheet, *r, false, book_id, state, actions)
                                     });
                                 }
                             });
@@ -1177,7 +1177,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                                     return;
                                 }
                                 let rect = ui.max_rect();
-                                let top = Rect::from_min_size(rect.min, vec2(rect.width(), ROW_HEIGHT));
+                                let top =
+                                    Rect::from_min_size(rect.min, vec2(rect.width(), layout.column_header_height()));
                                 ui.painter().rect_filled(top, 0.0, HEADER_GREY);
                                 let response = ui
                                     .interact(top, ui.id().with("add_column"), Sense::CLICK)
@@ -1205,7 +1206,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                                 } else {
                                     row.col(|ui| {
                                         if sheet.view.row_header {
-                                            row_header_cell(ui, r, false, book_id, state, actions);
+                                            row_header_cell(ui, sheet, r, false, book_id, state, actions);
                                         }
                                     });
                                 }
@@ -1412,7 +1413,7 @@ fn frozen_overlay(
                     vec2(fv.row_header_width, fv.heights.height(i) as f32),
                 );
                 cell_scope(ui, cell, ("frozen_rowhead", *r), |ui| {
-                    row_header_cell(ui, *r, true, book_id, state, actions)
+                    row_header_cell(ui, sheet, *r, true, book_id, state, actions)
                 });
             }
         }
@@ -1446,7 +1447,7 @@ fn frozen_overlay(
                 if sheet.view.row_header {
                     let cell = Rect::from_min_size(Pos2::new(left, y), vec2(fv.row_header_width, height));
                     cell_scope(ui, cell, ("frozen_rowhead", r), |ui| {
-                        row_header_cell(ui, r, true, book_id, state, actions)
+                        row_header_cell(ui, sheet, r, true, book_id, state, actions)
                     });
                 }
                 let mut x = left + fv.row_header_width;
@@ -1714,7 +1715,7 @@ fn corner_and_titles(
     ui.painter().rect_filled(rect, 0.0, HEADER_GREY);
     let line = Stroke::new(1.0_f32, LINE_HEADER);
     if sheet.view.column_header {
-        let corner = Rect::from_min_size(rect.min, vec2(rect.width(), ROW_HEIGHT));
+        let corner = Rect::from_min_size(rect.min, vec2(rect.width(), column_header_height(state)));
         let response = ui.interact(corner, ui.id().with("corner"), Sense::CLICK);
         if response.clicked() {
             state.select_all(sheet);
@@ -1733,7 +1734,7 @@ fn corner_and_titles(
         );
         // Row Labels for Column Label Rows off: the titles are left out (T92).
         if sheet.view.row_labels {
-            title_text(ui, cell, &row_title(row));
+            title_text(ui, cell, &row_title(row), &sheet.font_defaults.row_header.style());
         }
         // T310: a user parameter row's title has Rename and Delete.
         if let LabelRow::Param(name) = row {
@@ -1760,11 +1761,15 @@ fn corner_and_titles(
     ui.painter().vline(rect.right() - 0.5, rect.y_range(), line);
 }
 
+fn column_header_height(state: &BookUi) -> f32 {
+    state.layout_cache.as_ref().expect("worksheet layout").value.column_header_height()
+}
+
 /// Right-aligned text in a grey title cell.
-fn title_text(ui: &mut egui::Ui, cell: Rect, text: &str) {
+fn title_text(ui: &mut egui::Ui, cell: Rect, text: &str, style: &ResolvedStyle<'_>) {
     let inner = cell.shrink2(vec2(4.0, 0.0));
     ui.scope_builder(UiBuilder::new().max_rect(inner).layout(Layout::right_to_left(Align::Center)), |ui| {
-        ui.label(RichText::new(text).color(TEXT));
+        header_text(ui, text, TEXT, style);
     });
 }
 
@@ -1793,7 +1798,7 @@ fn column_head(
 
     if sheet.view.column_header {
         // The grey row with the name.
-        let head = Rect::from_min_size(rect.min, vec2(rect.width(), ROW_HEIGHT));
+        let head = Rect::from_min_size(rect.min, vec2(rect.width(), column_header_height(state)));
         let head_fill = if selected {
             HEADER_DARK
         } else if frozen {
@@ -1806,7 +1811,7 @@ fn column_head(
         ui.scope_builder(
             UiBuilder::new().max_rect(head).layout(Layout::centered_and_justified(egui::Direction::LeftToRight)),
             |ui| {
-                ui.label(RichText::new(head_name(sheet, position)).color(text_color));
+                header_text(ui, &head_name(sheet, position), text_color, &sheet.font_defaults.column_header.style());
             },
         );
         if head_response.clicked() {
@@ -2200,6 +2205,7 @@ pub fn grid_id(book: WindowId) -> egui::Id {
 
 fn row_header_cell(
     ui: &mut egui::Ui,
+    sheet: &Worksheet,
     r: usize,
     overlay: bool,
     book_id: WindowId,
@@ -2247,7 +2253,7 @@ fn row_header_cell(
     }
     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
         ui.add_space(5.0);
-        ui.label(RichText::new((r + 1).to_string()).color(TEXT));
+        header_text(ui, &(r + 1).to_string(), TEXT, &sheet.font_defaults.row_header.style());
     });
     if response.clicked() {
         let shift = click_modifiers(ui).shift;
@@ -2580,6 +2586,14 @@ fn rich_cell_text(ui: &mut egui::Ui, text: &str, color: Color32, f: &ResolvedSty
         job.append(&run.text, 0.0, format);
     }
     ui.label(job);
+}
+
+fn header_text(ui: &mut egui::Ui, text: &str, color: Color32, style: &ResolvedStyle<'_>) {
+    if style.font.is_some() || style.size_pt.is_some() {
+        formatted_text(ui, text, color, style);
+    } else {
+        ui.label(RichText::new(text).color(color));
+    }
 }
 
 fn formatted_text(ui: &mut egui::Ui, text: &str, color: Color32, f: &ResolvedStyle<'_>) {

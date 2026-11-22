@@ -65,6 +65,7 @@ pub use curves::{AverageSpec, IntersectSpec};
 pub use decompose::{DecomposeModel, DecomposeSpec};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
 pub use expsmooth::{ExpSmoothSpec, SmoothModel};
+pub use forest::{ForestTask, RandomForestSpec};
 pub use lifedist::{LifeDist, LifeDistSpec};
 pub use manhattan::ManhattanSpec;
 pub use multivariate::{KmeansSpec, PcaSpec};
@@ -1193,6 +1194,9 @@ pub enum Tool {
     /// Statistics > ARIMA Forecast (T376, `docs/spec/statistics.md` section 43): ARIMA(p, d, q) by conditional least
     /// squares and forecasts of every chosen column.
     Arima(ArimaSpec),
+    /// Statistics > Random Forest (T377, `docs/spec/statistics.md` section 44): predictor columns, then the
+    /// response.
+    RandomForest(RandomForestSpec),
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
     /// censor and, optionally, group columns.
     KaplanMeier(KaplanMeierSpec),
@@ -1333,6 +1337,7 @@ impl Tool {
             Tool::Stationarity(_) => "Stationarity tests",
             Tool::ExpSmooth(_) => "Exponential smoothing forecast",
             Tool::Arima(_) => "ARIMA forecast",
+            Tool::RandomForest(_) => "Random forest",
             Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
             Tool::GraphSummary(_) => "Graphical summary",
             Tool::AverageCurves(_) => "Average multiple curves",
@@ -1424,6 +1429,7 @@ impl Tool {
             Tool::Stationarity(_) => "Stationarity",
             Tool::ExpSmooth(_) => "Forecast",
             Tool::Arima(_) => "ARIMA",
+            Tool::RandomForest(_) => "RandomForest",
             Tool::KaplanMeier(_) => "KaplanMeier",
             Tool::GraphSummary(_) => "GraphSummary",
             Tool::AverageCurves(_) => "AverageResult",
@@ -2348,6 +2354,7 @@ mod decompose;
 mod dist;
 mod expsmooth;
 mod filters;
+mod forest;
 mod lifedist;
 mod manhattan;
 mod manip;
@@ -2538,6 +2545,7 @@ impl Project {
                 | Tool::KaplanMeier(_)
                 | Tool::LifeDist(_)
                 | Tool::Stability(_)
+                | Tool::RandomForest(_)
                 | Tool::GraphSummary(_)
                 | Tool::SimulateCurve(_)
                 | Tool::XyzArea
@@ -2718,6 +2726,13 @@ impl Project {
             }
             Tool::Roc(spec) => {
                 let out = roc::run(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::RandomForest(spec) => {
+                let out = forest::run(spec, sheet, &request.columns, request.rows)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;

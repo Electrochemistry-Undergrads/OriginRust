@@ -56,6 +56,7 @@ pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 pub use curves::{AverageSpec, IntersectSpec};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
 pub use multivariate::{KmeansSpec, PcaSpec};
+pub use quantreg::QuantRegSpec;
 pub use roc::RocSpec;
 pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::PlotScores;
@@ -1124,6 +1125,9 @@ pub enum Tool {
     Kmeans(KmeansSpec),
     /// Statistics > ROC Curve (T29, `docs/spec/statistics.md` section 19): test variables, then the state column.
     Roc(RocSpec),
+    /// Statistics > Regression > Quantile Regression (T342, `docs/spec/statistics.md` section 25): the
+    /// independent columns, then the dependent column.
+    QuantReg(QuantRegSpec),
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
     /// censor and, optionally, group columns.
     KaplanMeier(KaplanMeierSpec),
@@ -1249,6 +1253,7 @@ impl Tool {
             Tool::Pca(_) => "Principal component analysis",
             Tool::Kmeans(_) => "K-means cluster analysis",
             Tool::Roc(_) => "ROC curve",
+            Tool::QuantReg(_) => "Quantile regression",
             Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
             Tool::GraphSummary(_) => "Graphical summary",
             Tool::AverageCurves(_) => "Average multiple curves",
@@ -1326,6 +1331,7 @@ impl Tool {
             Tool::Pca(_) => "PCA",
             Tool::Kmeans(_) => "KMeans",
             Tool::Roc(_) => "ROC",
+            Tool::QuantReg(_) => "QuantReg",
             Tool::KaplanMeier(_) => "KaplanMeier",
             Tool::GraphSummary(_) => "GraphSummary",
             Tool::AverageCurves(_) => "AverageResult",
@@ -2178,6 +2184,7 @@ mod manip;
 mod multivariate;
 mod partcorr;
 mod power;
+mod quantreg;
 mod rmanova;
 mod roc;
 mod simsurface;
@@ -2351,6 +2358,7 @@ impl Project {
                 | Tool::PropTest(_)
                 | Tool::PoissonTest(_)
                 | Tool::Roc(_)
+                | Tool::QuantReg(_)
                 | Tool::KaplanMeier(_)
                 | Tool::GraphSummary(_)
                 | Tool::SimulateCurve(_)
@@ -2511,6 +2519,13 @@ impl Project {
             }
             Tool::DistFit(_) | Tool::ProbPlot(_) => {
                 let out = dist::run(&request.tool, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::QuantReg(spec) => {
+                let out = quantreg::run(spec, sheet, &request.columns, request.rows)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;

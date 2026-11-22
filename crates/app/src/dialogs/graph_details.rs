@@ -1435,18 +1435,17 @@ fn layer_tab(
             ui.horizontal(|ui| {
                 ui.checkbox(&mut layer.display.show_x_axes, "X Axes");
                 ui.checkbox(&mut layer.display.show_y_axes, "Y Axes");
-                // Labels: the tick labels of both axes; Frame: the lines on the opposite edges.
+                // Labels controls the tick labels of both axes.
                 let mut labels = layer.x_axis.show_tick_labels && layer.y_axis.show_tick_labels;
                 if ui.checkbox(&mut labels, "Labels").changed() {
                     layer.x_axis.show_tick_labels = labels;
                     layer.y_axis.show_tick_labels = labels;
                 }
                 ui.checkbox(&mut layer.display.show_data, "Data");
-                let mut frame = layer.x_axis.show_opposite && layer.y_axis.show_opposite;
-                if ui.checkbox(&mut frame, "Frame").changed() {
-                    layer.x_axis.show_opposite = frame;
-                    layer.y_axis.show_opposite = frame;
-                }
+                ui.add_enabled(
+                    layer.coords.is_cartesian(),
+                    egui::Checkbox::new(&mut layer.display.show_frame, "Frame"),
+                );
             });
             section(ui, "Data Drawing Options");
             ui.checkbox(&mut layer.display.clip_data, "Clip Data to Frame");

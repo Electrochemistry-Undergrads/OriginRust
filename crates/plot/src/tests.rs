@@ -3979,6 +3979,31 @@ fn a_layer_background_fills_the_frame_behind_the_grid() {
 }
 
 #[test]
+fn the_layer_frame_draws_with_hidden_axes_and_uses_the_plot_rectangle() {
+    let (mut p, g) = decor_graph();
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    layer.display.show_x_axes = false;
+    layer.display.show_y_axes = false;
+    layer.display.clip_data = false;
+    let before = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let f = layout_geometry(&p, g).unwrap()[0].frame;
+    p.graph_mut(g).unwrap().layers[0].display.show_frame = true;
+    let after = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    assert_eq!(before.layers[0].clip, after.layers[0].clip);
+    assert_eq!(before.layers[0].plots, after.layers[0].plots);
+    let outline = scene::Item::Rect { rect: f, fill: None, stroke: Some(scene::Stroke::solid(Color::BLACK, 0.5)) };
+    assert!(!before.layers[0].overlay.contains(&outline));
+    assert!(after.layers[0].overlay.contains(&outline));
+    let svg = svg_of(&p, g);
+    assert!(doc(&svg).descendants().any(|n| {
+        n.has_tag_name("rect") && n.attribute("stroke") == Some("#000000") && n.attribute("stroke-width") == Some("0.5")
+    }));
+    p.graph_mut(g).unwrap().layers[0].display.hidden = true;
+    let hidden = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    assert!(hidden.layers.iter().all(|l| !l.overlay.contains(&outline)));
+}
+
+#[test]
 fn the_display_tab_hides_data_unclips_it_and_puts_the_grid_on_top() {
     let (mut p, g) = decor_graph();
     p.graph_mut(g).unwrap().layers[0].y_axis.major_grid =

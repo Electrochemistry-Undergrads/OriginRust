@@ -1362,6 +1362,14 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
+        AnalyzeTool::Decompose { target, period, model, no_graph } => {
+            let model = match model.to_ascii_lowercase().as_str() {
+                "additive" => analysis::DecomposeModel::Additive,
+                "multiplicative" => analysis::DecomposeModel::Multiplicative,
+                other => bail!("--model takes additive or multiplicative, not {other:?}"),
+            };
+            (target, Job::Tool(Tool::Decompose(analysis::DecomposeSpec { period, model, graph: !no_graph })))
+        }
         AnalyzeTool::Acf { target, lags, confidence, no_graph } => (
             target,
             Job::Tool(Tool::Acf(analysis::AcfSpec {

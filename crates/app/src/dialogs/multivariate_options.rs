@@ -4,9 +4,10 @@
 use super::analysis::AnalysisKind;
 use eframe::egui;
 use sheaf_core::analysis::{
-    AcfSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty, ChangePointSpec, GLimits,
-    KaplanMeierSpec, KmeansSpec, LifeDist, LifeDistSpec, ManhattanSpec, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec,
-    RareChartKind, RareChartSpec, RocSpec, StabilitySpec, TDistribution, TimePivotSpec, Tool,
+    AcfSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty, ChangePointSpec,
+    DecomposeModel, DecomposeSpec, GLimits, KaplanMeierSpec, KmeansSpec, LifeDist, LifeDistSpec, ManhattanSpec,
+    PcaSpec, PivotPeriod, PivotStat, QuantRegSpec, RareChartKind, RareChartSpec, RocSpec, StabilitySpec, TDistribution,
+    TimePivotSpec, Tool,
 };
 
 /// What the windows keep between frames.
@@ -20,6 +21,7 @@ pub struct MultiOptions {
     timepivot: TimePivotSpec,
     manhattan: ManhattanSpec,
     acf: AcfSpec,
+    decompose: DecomposeSpec,
     rare: RareChartSpec,
     capability: CapabilitySpec,
     stability: StabilitySpec,
@@ -33,6 +35,12 @@ pub struct MultiOptions {
 }
 
 impl MultiOptions {
+    /// Sets the Seasonal Decomposition period (for tests).
+    #[cfg(test)]
+    pub fn set_decompose_period(&mut self, period: usize) {
+        self.decompose.period = period;
+    }
+
     /// The quantiles as the window shows them.
     fn quantiles_text(&self) -> String {
         self.quantiles
@@ -97,6 +105,12 @@ impl MultiOptions {
                     return Err("the number of sigmas must be above 0".to_string());
                 }
                 Ok(Tool::RareChart(self.rare))
+            }
+            AnalysisKind::Decompose => {
+                if self.decompose.period < 2 {
+                    return Err("the period must be at least 2".to_string());
+                }
+                Ok(Tool::Decompose(self.decompose))
             }
             AnalysisKind::Acf => {
                 if !(self.acf.confidence > 0.0 && self.acf.confidence < 1.0) {
@@ -322,6 +336,20 @@ impl MultiOptions {
                     ui.add(egui::DragValue::new(&mut s.sigma).speed(0.05).range(0.5..=6.0));
                 });
                 ui.checkbox(&mut s.graph, "Control chart per column");
+            }
+            AnalysisKind::Decompose => {
+                ui.label("Every chosen column is a series of its own, in row order; it must have no missing values.");
+                let s = &mut self.decompose;
+                ui.horizontal(|ui| {
+                    ui.label("Period (points per season)");
+                    ui.add(egui::DragValue::new(&mut s.period).range(2..=10_000));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Model");
+                    ui.radio_value(&mut s.model, DecomposeModel::Additive, "Additive");
+                    ui.radio_value(&mut s.model, DecomposeModel::Multiplicative, "Multiplicative");
+                });
+                ui.checkbox(&mut s.graph, "Data with trend, seasonal and residual graphs");
             }
             AnalysisKind::Acf => {
                 ui.label("Every chosen column is a series of its own, in row order; missing values are left out.");

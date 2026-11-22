@@ -5840,6 +5840,32 @@ fn the_statistics_menu_makes_a_rare_event_chart() {
     assert_eq!(h.state().doc.undo_label(), Some("Rare event chart"));
 }
 
+/// Statistics > Seasonal Decomposition... (T370): the seasonal indices, three graphs, one undo step.
+#[test]
+fn the_statistics_menu_decomposes_a_series() {
+    let pattern = [1.0, -2.0, 0.5, 0.5];
+    let mut text = String::from("t,v\n");
+    for i in 0..16 {
+        text.push_str(&format!("{i},{}\n", 3.0 + 0.5 * f64::from(i) + pattern[i as usize % 4]));
+    }
+    let data = csv_file("decompose", "ts", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - ts.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Seasonal Decomposition..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Period (points per season)"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_some(), "16 points are too few for the default period 12");
+    h.state_mut().analysis.as_mut().unwrap().set_decompose_period(4);
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
+    let (sheet, idx) = result_column(&h, "Seasonal index");
+    assert!(sheet.starts_with("Decompose"), "{sheet}");
+    assert!((idx[1] + 2.0).abs() < 1e-12, "{idx:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 3);
+    assert_eq!(h.state().doc.undo_label(), Some("Seasonal decomposition"));
+}
+
 /// Statistics > Autocorrelation... (T363): one row per lag in a new sheet, the ACF and PACF graphs, one undo step.
 #[test]
 fn the_statistics_menu_computes_the_autocorrelation() {

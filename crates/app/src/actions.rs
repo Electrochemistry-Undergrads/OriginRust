@@ -1041,6 +1041,12 @@ pub enum Action {
         graph: WindowId,
         on: bool,
     },
+    /// View > Show > Frame on the active Cartesian layer.
+    SetLayerFrame {
+        graph: WindowId,
+        layer: usize,
+        on: bool,
+    },
     /// A graph-window switch saved with its page.
     SetPageSwitch {
         graph: WindowId,

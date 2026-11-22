@@ -82,7 +82,7 @@ fn layer_icons_in_the_show_menu_hides_and_shows_the_icons() {
 fn the_show_items_that_are_not_measured_stay_grey() {
     let mut h = start(vec![data_file("vm-grey")]);
     menu_path(&mut h, &["View", "Show"]);
-    for label in ["Object Grid", "Frame", "Master Items on Screen"] {
+    for label in ["Object Grid", "Master Items on Screen"] {
         assert!(h.get_by_label(label).accesskit_node().is_disabled(), "{label} is not built yet");
     }
     // T177: Labels (and Data, which shares its name with the Data menu) are live (graphing 22.8).
@@ -109,6 +109,60 @@ fn plot_details_frame_is_independent_of_opposite_axis_lines() {
     assert!(layer.x_axis.show_opposite && layer.y_axis.show_opposite);
     menu(&mut h, "Edit", "Undo Change graph settings");
     assert!(!graph(&h).layers[0].display.show_frame);
+}
+
+#[test]
+fn the_frame_check_follows_the_active_layer_and_toggles_only_its_outline() {
+    let mut h = start(vec![data_file("vm-show-frame")]);
+    let id = graph(&h).id;
+    h.state_mut().doc.apply("Two panels", |p| {
+        let g = p.graph_mut(id).unwrap();
+        let mut second = g.layers[0].clone();
+        g.layers[0].frame.width *= 0.5;
+        second.frame.left += g.layers[0].frame.width + 0.05;
+        second.frame.width = g.layers[0].frame.width;
+        second.x_axis.offset_pct = -25.0;
+        second.y_axis.show_opposite = true;
+        second.display.show_x_axes = false;
+        second.display.show_y_axes = false;
+        g.layers.push(second);
+    });
+    h.state_mut().graphs.get_mut(&id).unwrap().active_layer = 1;
+    settle(&mut h);
+    let before = project(&h).clone();
+    let picture = sheaf_plot::graph_scene(&before, id).unwrap();
+    assert_eq!(h.state().menu_context().show_frame, Some(false));
+
+    menu_path(&mut h, &["View", "Show", "Frame"]);
+    let mut expected = before.clone();
+    expected.graph_mut(id).unwrap().layers[1].display.show_frame = true;
+    assert_eq!(project(&h), &expected);
+    assert_ne!(sheaf_plot::graph_scene(project(&h), id).unwrap(), picture);
+    assert_eq!(h.state().doc.undo_label(), Some("Show Frame"));
+    assert_eq!(h.state().menu_context().show_frame, Some(true));
+
+    h.state_mut().graphs.get_mut(&id).unwrap().active_layer = 0;
+    settle(&mut h);
+    assert_eq!(h.state().menu_context().show_frame, Some(false));
+    h.state_mut().graphs.get_mut(&id).unwrap().active_layer = 1;
+    settle(&mut h);
+    menu_path(&mut h, &["View", "Show", "Frame"]);
+    assert_eq!(project(&h), &before);
+
+    menu(&mut h, "Edit", "Undo Show Frame");
+    assert_eq!(project(&h), &expected);
+    menu(&mut h, "Edit", "Undo Show Frame");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn the_frame_command_is_disabled_for_a_polar_layer() {
+    let mut h = start(vec![data_file("vm-polar-frame")]);
+    let graph = h.state_mut().doc.apply("Polar graph", |p| p.add_graph(Template::Polar));
+    h.state_mut().focus(graph);
+    settle(&mut h);
+    menu_path(&mut h, &["View", "Show"]);
+    assert!(h.get_by_label("Frame").accesskit_node().is_disabled());
 }
 
 #[test]

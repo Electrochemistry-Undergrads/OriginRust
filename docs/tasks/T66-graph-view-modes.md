@@ -1,9 +1,9 @@
 # T66: Graph view modes, Show toggles, Show Data Info, Full Screen (B1, slice 2)
 
 **Frame (2026-11-22).** Origin 2016's View > Show > Frame toggles only the
-active layer's thin black outline. Sheaf's Plot Details > Display exposes the
-independent layer frame and saves it in `.sheaf` and `.opj` files. The direct
-View menu command remains pending (graphing 22.10).
+active layer's thin black outline. Sheaf supports the same toggle for
+Cartesian layers in the View menu. It shares the Plot Details > Display
+setting and saves it in `.sheaf` and `.opj` files (graphing 22.10).
 
 **Active Layer Indicator (2026-11-21):** View > Show toggles a per-page highlight
 of the active layer's primary Cartesian axes. The setting starts off and is saved

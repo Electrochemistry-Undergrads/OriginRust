@@ -104,6 +104,32 @@ fn current_position_order_sorts_top_to_bottom_then_left_to_right() {
 }
 
 #[test]
+fn common_scale_follows_position_order_and_uses_the_root_of_a_selected_group() {
+    let mut g = linked_graph();
+    g.layers[0].frame.top = 0.7;
+    g.layers[1].frame.top = 0.1;
+    let before = g.clone();
+    let options = ArrangeOptions {
+        order: ArrangeOrder::CurrentPosition,
+        group_linked: true,
+        keep_aspect: true,
+        common_x_spans: Some(vec![10.0, 30.0, 900.0, 900.0]),
+        common_y_spans: Some(vec![20.0, 60.0, 900.0, 900.0]),
+        ..rows(2)
+    };
+    g.arrange_layers(&[1, 3], &options).unwrap();
+    assert_frame(g.page_frame(1), 0.15, 0.10, 0.75, 0.525);
+    assert_frame(g.page_frame(0), 0.15, 0.675, 0.25, 0.175);
+    assert_eq!(g.layers[3].frame, before.layers[3].frame);
+    assert_eq!(g.layers[3].link, before.layers[3].link);
+
+    let before = g.clone();
+    let invalid = ArrangeOptions { common_x_spans: Some(vec![0.0, 30.0, 900.0, 900.0]), ..options };
+    assert_eq!(g.arrange_layers(&[1, 3], &invalid), Err(LayerError::Panel(PanelError::CommonScale)));
+    assert_eq!(g, before);
+}
+
+#[test]
 fn more_layers_than_cells_are_refused_and_nothing_changes() {
     let mut g = graph(3);
     let before = g.clone();

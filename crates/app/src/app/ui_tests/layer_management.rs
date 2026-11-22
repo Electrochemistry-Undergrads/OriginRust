@@ -95,6 +95,42 @@ fn arranging_two_layers_in_two_rows_and_ok_is_one_undo_step() {
 }
 
 #[test]
+fn common_scale_arranges_only_the_selected_layers_and_applies_in_one_undo_step() {
+    let mut h = with_layers("lm-common-scale", 3);
+    let id = graph(&h).id;
+    h.state_mut().doc.apply("Set axis ranges", |p| {
+        let graph = p.graph_mut(id).unwrap();
+        for (layer, (x, y)) in graph.layers.iter_mut().zip([(10.0, 30.0), (20.0, 20.0), (40.0, 10.0)]) {
+            layer.x_axis.min = Some(0.0);
+            layer.y_axis.min = Some(0.0);
+            layer.x_axis.max = Some(x);
+            layer.y_axis.max = Some(y);
+        }
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    open(&mut h);
+    click(&mut h, "Layer1");
+    click(&mut h, "Layer3");
+    number(&mut h, "Number of Rows", "2");
+    click(&mut h, "Set Layer Width by Common Scale");
+    click(&mut h, "Set Layer Height by Common Scale");
+    click(&mut h, "Apply");
+    assert_eq!(project(&h), &before);
+    click(&mut h, "Undo");
+    assert!(h.get_by_label("Undo").accesskit_node().is_disabled());
+    click(&mut h, "Apply");
+    click(&mut h, "OK");
+    let frames = frames(&h);
+    assert_eq!(frames[1], before.graph(id).unwrap().layers[1].frame);
+    assert!((frames[0].width * 4.0 - frames[2].width).abs() < 1e-9);
+    assert!((frames[0].height - frames[2].height * 3.0).abs() < 1e-9);
+    assert!((frames[2].top - frames[0].top - frames[0].height - 0.05).abs() < 1e-9);
+    menu(&mut h, "Edit", "Undo Layer Management");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
 fn undo_in_the_window_takes_back_the_last_apply_of_the_preview() {
     let mut h = with_layers("lm-undo", 2);
     let before = frames(&h);

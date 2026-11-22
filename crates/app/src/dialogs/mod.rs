@@ -17,6 +17,7 @@ pub mod comparison_plot;
 pub mod cond_format;
 pub mod cond_manager;
 pub mod copy_columns;
+pub mod cv_pick;
 pub mod details_look;
 pub mod dist_options;
 pub mod error_bars;

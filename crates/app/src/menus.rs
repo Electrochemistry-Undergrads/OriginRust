@@ -3760,6 +3760,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         },
         Cmd::Analyze(kind) => match (c.book, c.curve) {
             (Some(book), _) => Action::Analyze { book, columns: c.selected.to_vec(), kind: *kind },
+            // On a graph the feet of a CV peak are picked there (T349).
+            (None, Some((_, y))) if c.kind == WindowKind::Graph && *kind == AnalysisKind::CvCharge => match c.graph {
+                Some(graph) => Action::CvChargePick { graph, y, layer: c.layer },
+                None => return Err(ANALYSIS_ON_BOOK),
+            },
             // On a graph Subtract Straight Line is Origin's interactive tool: the points are picked there (T348).
             (None, Some((_, y))) if c.kind == WindowKind::Graph && *kind == AnalysisKind::SubtractLine => {
                 match c.graph {

@@ -1967,6 +1967,23 @@ fitted line and bound(s) and the limits. Checked against numpy/scipy (`tools/sta
 `crates/calc/tests/stability_reference.rs`, all three models) to 1e-9 (shelf lives 1e-8). Random-batch (mixed model)
 estimates, transformed responses and extrapolation rules are not built.
 
+## 39 Seasonal decomposition (T370, Origin 2024b Time Series Analysis app; not measured)
+
+Origin's Time Series Analysis app (2024b Pro) is not part of Origin 2016, so this is Sheaf's own, with the classical
+method (statsmodels' `seasonal_decompose` without trend extrapolation). Statistics > Seasonal Decomposition...
+(`Tool::Decompose`, `sheaf analyze decompose --y COL[,COL..] [--period 12] [--model additive|multiplicative]
+[--no-graph]`): every chosen column is a series of its own, in row order, complete in the chosen rows (a missing value
+is refused), with at least two full periods; the multiplicative model needs values above 0. With period `m` the trend
+is the centred moving average of `m` points (odd `m`) or of `m + 1` points with half weights at the ends (even `m`),
+empty for the first and last `floor(m / 2)` rows. The detrended values `y - trend` (or `y / trend`) are averaged per
+position in the period, and the indices adjusted to sum to 0 (or to average 1); position 1 is the first chosen row.
+The residual is `y - trend - seasonal` (or `y / (trend seasonal)`).
+
+The result sheet `DecomposeN` has one row per series and position (Position, Seasonal index) and, per series, the X,
+the data, Trend, Seasonal and Residual columns; three new graphs per series draw the data with the trend, the seasonal
+part and the residuals. Checked against numpy (`tools/decompose-ref.py`, `crates/calc/tests/decompose_reference.rs`)
+to 1e-10. STL (loess) decomposition, trend extrapolation to the ends and stationarity tests are not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

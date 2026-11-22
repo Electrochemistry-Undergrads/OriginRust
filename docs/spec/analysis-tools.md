@@ -1860,7 +1860,13 @@ cv-charge FILE --y COL --scan-rate V [--baseline]`) does both in one step (`shea
 - **Output:** a results sheet `CVCharge<n>`: one row per sweep (label "<input>, sweep k (anodic)" or
   "(cathodic)") with First row, Last row, E start, E end and Charge, then the total of all anodic and of
   all cathodic sweeps; a note gives the scan rate. One undo step ("CV charge").
-- **Not built:** picking the peak's feet on the graph (the parity row's "foot picking").
+- **Feet picked on the graph (T349):** with a graph active the menu item does not open the window: the Data
+  Reader goes on and a "CV Charge" window lists the picked feet; a double-click on a data point of the active
+  plot (outside the window) or Enter picks a foot (as Multiple Peak Fit's Get Points), Remove Last takes one
+  back, the scan rate is set there, and Calculate runs CV Charge over the rows from one foot to the other with
+  the end-point baseline, so the straight line through the two feet is the peak's sloped baseline (feet on
+  either side of a turn give each sweep its own line through its ends). The results sheet is the same; one
+  undo step ("CV charge"). From a workbook the typed window stays.
 
 ## 22. Fourier Self-Deconvolution (T341, Sheaf's own)
 

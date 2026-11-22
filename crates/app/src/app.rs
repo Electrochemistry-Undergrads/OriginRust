@@ -14,6 +14,7 @@ use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::comparison_plot::{ComparisonPlotDialog, Outcome as ComparisonPlotOutcome};
 use crate::dialogs::cond_format::CondFormatDialog;
 use crate::dialogs::cond_manager::{CondManagerDialog, ManagerOutcome};
+use crate::dialogs::cv_pick::{CvPickDialog, CvPickOutcome};
 use crate::dialogs::error_bars::{ErrorBarsDialog, Outcome as ErrorBarsOutcome};
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
 use crate::dialogs::export_excel::ExcelExportDialog;
@@ -236,6 +237,7 @@ pub struct SheafApp {
     pivot: Option<PivotDialog>,
     multi_peak: Option<MultiPeakDialog>,
     subtract_pick: Option<SubtractPickDialog>,
+    cv_pick: Option<CvPickDialog>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
     export_excel: Option<ExcelExportDialog>,
@@ -441,6 +443,7 @@ impl SheafApp {
             pivot: None,
             multi_peak: None,
             subtract_pick: None,
+            cv_pick: None,
             export: None,
             export_sheet: None,
             export_excel: None,
@@ -1025,6 +1028,7 @@ impl SheafApp {
         self.pivot = None;
         self.multi_peak = None;
         self.subtract_pick = None;
+        self.cv_pick = None;
         self.sort = None;
         self.sheet_name = None;
         self.add_columns = None;
@@ -2804,6 +2808,16 @@ impl SheafApp {
                     if self.multi_peak.is_none() {
                         self.warn("The graph has no plot of that column");
                     }
+                }
+            }
+            Action::CvChargePick { graph, y, layer } => {
+                let rate = sheaf_core::analysis::CvChargeSpec::default().scan_rate;
+                self.cv_pick = CvPickDialog::new(self.doc.project(), graph, y, layer, rate);
+                if self.cv_pick.is_none() {
+                    self.warn("The graph has no plot of that column");
+                } else {
+                    self.graphs.entry(graph).or_default().reader = true;
+                    self.focus(graph);
                 }
             }
             Action::SubtractLinePick { graph, y, layer } => {
@@ -5859,6 +5873,39 @@ impl SheafApp {
         }
     }
 
+    /// CV Charge on a graph (T349): the Data Reader is on and its pinned point becomes a foot of the peak on a
+    /// double-click (outside the window) or Enter.
+    fn cv_pick_frame(&mut self, ctx: &egui::Context) {
+        let Some(d) = &mut self.cv_pick else { return };
+        let (enter, double) = ctx.input(|i| {
+            let double = i.pointer.button_double_clicked(egui::PointerButton::Primary)
+                && i.pointer.interact_pos().is_some_and(|p| !d.window_rect.is_some_and(|r| r.contains(p)));
+            (i.key_pressed(egui::Key::Enter), double)
+        });
+        let state = self.graphs.entry(d.graph).or_default();
+        state.reader = true;
+        if (enter || double)
+            && let Some(point) = state.reader_point
+        {
+            d.pick(self.doc.project(), point);
+        }
+        let graph = d.graph;
+        let outcome = d.show(ctx, &mut self.doc);
+        if !matches!(outcome, CvPickOutcome::Open) {
+            self.cv_pick = None;
+            if let Some(s) = self.graphs.get_mut(&graph) {
+                s.reader = false;
+                s.reader_point = None;
+            }
+        }
+        if let CvPickOutcome::Done(report) = outcome {
+            self.focus(graph);
+            self.logs.result(report.message.clone(), report.notes.clone());
+            self.panels.reveal(PanelId::Results);
+            self.say(report.message);
+        }
+    }
+
     fn show_sheet(&mut self, book: WindowId, sheet: usize) {
         self.doc.adjust_view(|p| {
             if let Some(b) = p.workbook_mut(book) {
@@ -6530,6 +6577,7 @@ impl SheafApp {
             || self.pivot.is_some()
             || self.multi_peak.is_some()
             || self.subtract_pick.is_some()
+            || self.cv_pick.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
             || self.export_excel.is_some()
@@ -7148,6 +7196,7 @@ impl SheafApp {
         }
         self.multi_peak_frame(ctx);
         self.subtract_pick_frame(ctx);
+        self.cv_pick_frame(ctx);
         if let Some(d) = &mut self.pivot {
             let book = d.book;
             match d.show(ctx, &mut self.doc) {

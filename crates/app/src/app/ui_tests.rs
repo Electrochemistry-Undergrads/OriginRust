@@ -5745,6 +5745,50 @@ fn subtract_straight_line_on_a_graph_picks_the_two_points() {
     assert_eq!(project(&h).graph(gid).unwrap().layers[0].plots.len(), 1);
 }
 
+/// CV Charge on a graph (T349): the feet of an anodic peak are picked with the Data Reader; the charge between
+/// them above the line through them goes to a results sheet, one undo step.
+#[test]
+fn cv_charge_on_a_graph_picks_the_feet_of_the_peak() {
+    // An anodic sweep 0..1 V: a sloped background 0.2 + 0.5 E with a Gauss peak at 0.5 V.
+    let current = |e: f64| 0.2 + 0.5 * e + 2.0 * (-(e - 0.5).powi(2) / (2.0 * 0.05 * 0.05)).exp();
+    let mut text = String::from("E,I\n");
+    for k in 0..=20 {
+        let e = f64::from(k) * 0.05;
+        text.push_str(&format!("{e},{}\n", current(e)));
+    }
+    let data = csv_file("cvfeet", "cv", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Graph1 - cv");
+    let gid = project(&h).graphs().next().unwrap().id;
+    menu_path(&mut h, &["Analysis", "Mathematics", "CV Charge..."]);
+    assert!(h.state().analysis.is_none() && h.state().cv_pick.is_some(), "the feet are picked on the graph");
+    assert!(h.state().graphs[&gid].reader);
+    for row in [16, 4] {
+        h.state_mut().graphs.get_mut(&gid).unwrap().reader_point =
+            Some(crate::reader::Point { layer: 0, plot: 0, row });
+        h.key_press(egui::Key::Enter);
+        settle(&mut h);
+    }
+    assert_eq!(h.state().cv_pick.as_ref().unwrap().feet.len(), 2);
+    click(&mut h, "Calculate");
+    assert!(h.state().cv_pick.is_none() && !h.state().graphs[&gid].reader);
+    assert_eq!(h.state().doc.undo_label(), Some("CV charge"));
+    // The trapezoid sum of the peak above the line through the feet (0.2 V and 0.8 V), over 0.1 V/s.
+    let line = |e: f64| current(0.2) + (current(0.8) - current(0.2)) * (e - 0.2) / 0.6;
+    let want: f64 = (4..16)
+        .map(|k| {
+            let (a, b) = (f64::from(k) * 0.05, f64::from(k + 1) * 0.05);
+            0.5 * ((current(a) - line(a)) + (current(b) - line(b))) * 0.05
+        })
+        .sum::<f64>()
+        / 0.1;
+    let (sheet, charge) = result_column(&h, "Charge");
+    assert!(sheet.starts_with("CVCharge"), "{sheet}");
+    assert!((charge[0] - want).abs() < 1e-9, "{charge:?} vs {want}");
+    let (_, first) = result_column(&h, "First row");
+    assert_eq!(first[0], 5.0, "from the foot at row 5");
+}
+
 // ----- the dialogs in Origin's layout: Column Properties, the analysis frame, the Import Wizard ----
 
 /// Types into the n-th text box of the window that is open (in the order they are drawn), replacing

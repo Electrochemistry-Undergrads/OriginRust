@@ -7,8 +7,9 @@
 use std::collections::BTreeSet;
 
 use eframe::egui::{self, Color32, Sense, Stroke};
-use sheaf_core::graph::{Graph, Layer, ScaleLink};
-use sheaf_core::layer_manage::{AlignEdge, ArrangeOptions, ArrangeOrder, SizeUnit};
+use sheaf_core::graph::{Graph, Layer, ScaleKind, ScaleLink};
+use sheaf_core::layer_manage::{AlignEdge, ArrangeOptions, ArrangeOrder, LayerError, SizeUnit};
+use sheaf_core::layers::NewLayerKind;
 use sheaf_core::{Document, Project, WindowId};
 
 mod background;
@@ -64,6 +65,10 @@ pub struct LayerManagementDialog {
     history: Vec<Vec<Layer>>,
     selected: BTreeSet<usize>,
     tab: Tab,
+    add_kind: NewLayerKind,
+    add_parent: Option<usize>,
+    add_x: ScaleKind,
+    add_y: ScaleKind,
     arrange: ArrangeOptions,
     common_width: bool,
     common_height: bool,
@@ -95,6 +100,7 @@ impl LayerManagementDialog {
             return None;
         }
         let selected = layer.filter(|&l| l < work.layers.len()).into_iter().collect();
+        let add_parent = layer.filter(|&i| i < work.layers.len()).map(|i| work.root_of(i));
         Some(Self {
             graph,
             source_layers: work.layers.clone(),
@@ -102,6 +108,10 @@ impl LayerManagementDialog {
             history: Vec::new(),
             selected,
             tab: Tab::Arrange,
+            add_kind: NewLayerKind::Normal,
+            add_parent,
+            add_x: ScaleKind::Linear,
+            add_y: ScaleKind::Linear,
             arrange: ArrangeOptions::default(),
             common_width: false,
             common_height: false,
@@ -130,7 +140,7 @@ impl LayerManagementDialog {
     }
 
     /// Runs one Apply on the preview; a refused one leaves the preview as it was.
-    fn apply(&mut self, change: impl FnOnce(&mut Graph) -> Result<(), sheaf_core::layer_manage::LayerError>) {
+    fn apply(&mut self, change: impl FnOnce(&mut Graph) -> Result<(), LayerError>) {
         let before = self.work.layers.clone();
         match change(&mut self.work) {
             Ok(()) => {
@@ -188,11 +198,12 @@ impl LayerManagementDialog {
                         });
                         ui.separator();
                         match self.tab {
+                            Tab::Add => self.add_tab(ui),
                             Tab::Arrange => self.arrange_tab(ui, doc.project()),
                             Tab::SizePosition => self.size_tab(ui),
                             Tab::Link => self.link_tab(ui),
                             Tab::Display => self.display_tab(ui),
-                            Tab::Add | Tab::Axes => unavailable(ui),
+                            Tab::Axes => unavailable(ui),
                         }
                     });
                     ui.vertical(|ui| self.preview(ui));
@@ -266,6 +277,80 @@ impl LayerManagementDialog {
                 ui.end_row();
             }
         });
+    }
+
+    fn add_tab(&mut self, ui: &mut egui::Ui) {
+        ui.strong("Add Layer");
+        let parents: Vec<usize> =
+            self.work.layers.iter().enumerate().filter_map(|(i, layer)| layer.link.is_none().then_some(i)).collect();
+        if !self.add_parent.is_some_and(|i| parents.contains(&i)) {
+            self.add_parent = parents.first().copied();
+        }
+        egui::Grid::new("lm_add").num_columns(2).show(ui, |ui| {
+            let label = ui.label("Type");
+            egui::ComboBox::from_id_salt("lm_add_kind")
+                .width(250.0)
+                .selected_text(self.add_kind.menu_label())
+                .show_ui(ui, |ui| {
+                    for kind in NewLayerKind::ALL {
+                        ui.selectable_value(&mut self.add_kind, kind, kind.menu_label());
+                    }
+                })
+                .response
+                .labelled_by(label.id);
+            ui.end_row();
+
+            let parent = self.add_parent.filter(|_| self.add_kind != NewLayerKind::Normal);
+            let label = ui.label("Link To");
+            ui.add_enabled_ui(self.add_kind != NewLayerKind::Normal, |ui| {
+                egui::ComboBox::from_id_salt("lm_add_parent")
+                    .selected_text(parent.map_or_else(|| "None".into(), |i| (i + 1).to_string()))
+                    .show_ui(ui, |ui| {
+                        for i in parents {
+                            ui.selectable_value(&mut self.add_parent, Some(i), (i + 1).to_string());
+                        }
+                    })
+                    .response
+                    .labelled_by(label.id);
+            });
+            ui.end_row();
+
+            let source = parent.map(|i| &self.work.layers[i]);
+            let x_linked = matches!(self.add_kind, NewLayerKind::RightY | NewLayerKind::LeftY | NewLayerKind::NoAxes);
+            let y_linked = matches!(self.add_kind, NewLayerKind::TopX | NewLayerKind::NoAxes);
+            add_scale_combo(ui, "X Scale", &mut self.add_x, source.filter(|_| x_linked).map(|l| l.x_axis.scale));
+            add_scale_combo(ui, "Y Scale", &mut self.add_y, source.filter(|_| y_linked).map(|l| l.y_axis.scale));
+        });
+        let kind = self.add_kind;
+        let anchor =
+            if kind == NewLayerKind::Normal { self.selected.first().copied().or(Some(0)) } else { self.add_parent };
+        if ui.add_enabled(anchor.is_some(), egui::Button::new("Apply")).clicked()
+            && let Some(anchor) = anchor
+        {
+            let (x_scale, y_scale) = (self.add_x, self.add_y);
+            self.apply(|graph| {
+                let index = graph.add_layer(kind, anchor).ok_or(LayerError::NoSuchLayer(anchor))?;
+                if kind == NewLayerKind::InsetWithData {
+                    let plots = graph.layers[anchor].plots.clone();
+                    graph.layers[index].plots = plots;
+                }
+                let layer = &mut graph.layers[index];
+                for (axis, scale, linked) in [
+                    (&mut layer.x_axis, x_scale, layer.link.is_some_and(|link| link.x == ScaleLink::Straight)),
+                    (&mut layer.y_axis, y_scale, layer.link.is_some_and(|link| link.y == ScaleLink::Straight)),
+                ] {
+                    if !linked {
+                        axis.scale = scale;
+                    }
+                    if kind == NewLayerKind::InsetWithData {
+                        axis.min = None;
+                        axis.max = None;
+                        axis.major_step = None;
+                    }
+                }
+                Ok(())
+            });
+        }
     }
 
     fn arrange_tab(&mut self, ui: &mut egui::Ui, project: &Project) {
@@ -538,6 +623,22 @@ fn unavailable(ui: &mut egui::Ui) {
     ui.add_enabled_ui(false, |ui| {
         ui.checkbox(&mut false, "Options");
     });
+}
+
+fn add_scale_combo(ui: &mut egui::Ui, name: &str, scale: &mut ScaleKind, linked: Option<ScaleKind>) {
+    let label = ui.label(name);
+    ui.add_enabled_ui(linked.is_none(), |ui| {
+        egui::ComboBox::from_id_salt(name)
+            .selected_text(linked.unwrap_or(*scale).label())
+            .show_ui(ui, |ui| {
+                for option in ScaleKind::ALL {
+                    ui.selectable_value(scale, option, option.label());
+                }
+            })
+            .response
+            .labelled_by(label.id);
+    });
+    ui.end_row();
 }
 
 fn number(ui: &mut egui::Ui, name: &str, value: &mut f64, max: f64) {

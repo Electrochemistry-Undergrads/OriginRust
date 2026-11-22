@@ -40,6 +40,11 @@ helpers, links, geometry, history and saves are reused. Input graph/parent captu
 revision/generation rejection are explicit Sheaf policies. User Defined, automatic overlap
 offsets and custom scale expressions remain disabled; no model/backend/IO contract changes.
 
+Layer Management Add follow-up (2026-11-22, graphing 21.17): the nine presets can be applied to
+the preview with a parent layer and independent X and Y scale choices. Inset With Data copies every
+source plot and uses automatic ranges, as in the two-curve Origin 2016 `layadd` probe. Apply and
+dialog Undo work on the preview. OK commits one document Undo step and Cancel discards the preview.
+
 **Branch:** `layers-multi-y`. **Priority:** P0, wave 2.
 **Spec:** [graphing](../spec/graphing.md) 1.3 and 12; ADR 0009.
 **Inventory:** 5 locations tagged `T61`. **Ownership:** layer creation/deletion, icon actions,

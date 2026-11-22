@@ -1,5 +1,5 @@
 use super::*;
-use sheaf_core::graph::Frame;
+use sheaf_core::graph::{AxisSide, Frame, ScaleKind, ScaleLink};
 
 /// The sample project with Graph1 made of `layers` independent layers (copies of its first one).
 fn with_layers(tag: &str, layers: usize) -> Harness<'static, SheafApp> {
@@ -69,6 +69,82 @@ fn the_layer_icon_menu_offers_it_and_selects_that_layer() {
     h.state_mut().apply(Action::LayerManagement { graph, layer: Some(1) }, &egui::Context::default());
     settle(&mut h);
     assert!(h.state().layer_management.is_some());
+}
+
+#[test]
+fn add_tab_uses_the_chosen_parent_and_scale_in_both_undo_paths() {
+    let mut h = with_layers("lm-add-linked", 2);
+    let id = graph(&h).id;
+    h.state_mut().doc.apply("Set second layer scale", |p| {
+        p.graph_mut(id).unwrap().layers[1].x_axis.scale = ScaleKind::Ln;
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    open(&mut h);
+    click(&mut h, "Add");
+    assert!(h.get_by_label("Link To").accesskit_node().is_disabled());
+    let _ = h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Bottom-X Left-Y"));
+    click(&mut h, "Type");
+    click(&mut h, "Right-Y (Linked X Scale and Dimension)");
+    click(&mut h, "Link To");
+    h.get_all_by_label("2").last().unwrap().click();
+    settle(&mut h);
+    assert!(h.get_by_label("X Scale").accesskit_node().is_disabled());
+    let _ = h.get(By::new().role(egui::accesskit::Role::ComboBox).value("Ln"));
+    click(&mut h, "Y Scale");
+    click(&mut h, "Log10");
+    click(&mut h, "Apply");
+    assert!(h.query_by_label("Layer3").is_some());
+    assert_eq!(project(&h), &before);
+    click(&mut h, "Undo");
+    assert!(h.query_by_label("Layer3").is_none());
+    click(&mut h, "Apply");
+    click(&mut h, "OK");
+    let added = &graph(&h).layers[2];
+    let link = added.link.unwrap();
+    assert_eq!((link.parent, link.x, link.y), (1, ScaleLink::Straight, ScaleLink::None));
+    assert_eq!((added.x_axis.scale, added.y_axis.scale), (ScaleKind::Ln, ScaleKind::Log10));
+    assert_eq!((added.x_axis.side, added.y_axis.side), (AxisSide::Hidden, AxisSide::Opposite));
+    assert!(added.plots.is_empty());
+    assert_eq!(graph(&h).page_frame(2), graph(&h).page_frame(1));
+    menu(&mut h, "Edit", "Undo Layer Management");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn add_tab_inset_with_data_copies_all_plots_and_cancel_discards_it() {
+    let mut h = with_layers("lm-add-inset", 1);
+    let id = graph(&h).id;
+    h.state_mut().doc.apply("Add another curve", |p| {
+        let parent = &mut p.graph_mut(id).unwrap().layers[0];
+        parent.y_axis.min = Some(1.0);
+        parent.y_axis.max = Some(22.0);
+        parent.y_axis.major_step = Some(5.0);
+        let plots = &mut parent.plots;
+        let mut second = plots[0].clone();
+        second.visible = false;
+        plots.push(second);
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    for button in ["Cancel", "OK"] {
+        open(&mut h);
+        click(&mut h, "Add");
+        click(&mut h, "Type");
+        click(&mut h, "Inset With Data (Linked Dimension)");
+        click(&mut h, "Apply");
+        assert!(h.query_by_label("Layer2").is_some());
+        assert_eq!(project(&h), &before);
+        click(&mut h, button);
+        assert!(h.state().layer_management.is_none());
+    }
+    let layers = &graph(&h).layers;
+    assert_eq!(layers.len(), 2);
+    assert_eq!(layers[1].plots, layers[0].plots);
+    let y = &layers[1].y_axis;
+    assert_eq!((y.min, y.max, y.major_step), (None, None, None));
+    assert_eq!(graph(&h).link_parent(1), Some(0));
+    assert!(layers[1].frame.width < layers[0].frame.width);
 }
 
 #[test]
@@ -249,17 +325,11 @@ fn linking_layer_2_to_layer_1_keeps_its_place_and_shows_in_the_grid() {
 }
 
 #[test]
-fn the_tabs_that_are_not_built_are_disabled() {
+fn the_axes_tab_is_disabled() {
     let mut h = with_layers("lm-tabs", 2);
     open(&mut h);
-    for tab in ["Add", "Axes"] {
-        click(&mut h, tab);
-        assert!(
-            h.query_by_label("Not available in Sheaf yet").is_some()
-                || h.query_by_label_contains("Not available in Sheaf yet").is_some(),
-            "{tab}"
-        );
-    }
+    click(&mut h, "Axes");
+    assert!(h.query_by_label("Not available in Sheaf yet").is_some());
 }
 
 fn background_choice(h: &mut Harness<'static, SheafApp>, name: &str) {

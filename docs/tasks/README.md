@@ -312,6 +312,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T318](T318-baseline-als-dataset.md) | Peak Analyzer baselines Use Existing Dataset and Asymmetric Least Squares Smoothing (window, CLI) | M | done 2026-11-21; ALS not measured (Pro) |
 | [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T353](T353-integrate-range-pick.md) | Integrate Ranges on a graph: each peak's limits picked with the Data Reader | S | done 2026-11-22 (analysis-tools 10) |
 | [T351](T351-pa-anchor-pick.md) | Peak Analyzer: User Defined anchors picked on the graph with the Data Reader | S | done 2026-11-21 (analysis-tools 11.6a) |
 | [T349](T349-cv-feet.md) | CV Charge on a graph: pick the peak's feet with the Data Reader, sloped baseline through them | S | done 2026-11-21 (analysis-tools 21) |
 | [T348](T348-subtract-line-pick.md) | Subtract Straight Line on a graph: pick the two points with the Data Reader, the result drawn | S | done 2026-11-21 (analysis-tools 12) |

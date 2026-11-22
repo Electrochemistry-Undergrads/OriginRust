@@ -5834,6 +5834,39 @@ fn cv_charge_on_a_graph_picks_the_feet_of_the_peak() {
     assert_eq!(first[0], 5.0, "from the foot at row 5");
 }
 
+/// Integrate Ranges on a graph (T353): each range's two limits are picked with the Data Reader; the areas of the
+/// picked ranges go to the result table, one undo step.
+#[test]
+fn integrate_ranges_on_a_graph_picks_the_limits() {
+    // y = x on 0..10 in steps of 0.5: the area from 1 to 3 is 4, from 5 to 9 is 28.
+    let mut text = String::from("x,y\n");
+    for k in 0..=20 {
+        let x = f64::from(k) * 0.5;
+        text.push_str(&format!("{x},{x}\n"));
+    }
+    let data = csv_file("rangepick", "ramp", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Graph1 - ramp");
+    let gid = project(&h).graphs().next().unwrap().id;
+    menu_path(&mut h, &["Analysis", "Mathematics", "Integrate Ranges..."]);
+    assert!(h.state().analysis.is_none() && h.state().range_pick.is_some(), "the limits are picked on the graph");
+    assert!(h.state().graphs[&gid].reader);
+    for row in [6, 2, 10, 18] {
+        h.state_mut().graphs.get_mut(&gid).unwrap().reader_point =
+            Some(crate::reader::Point { layer: 0, plot: 0, row });
+        h.key_press(egui::Key::Enter);
+        settle(&mut h);
+    }
+    assert_eq!(h.state().range_pick.as_ref().unwrap().ranges(), [(2, 6), (10, 18)]);
+    click(&mut h, "Integrate");
+    assert!(h.state().range_pick.is_none() && !h.state().graphs[&gid].reader);
+    assert_eq!(h.state().doc.undo_label(), Some("Integrate ranges"));
+    let (sheet, areas) = result_column(&h, "Area");
+    assert!(sheet.starts_with("Integrate"), "{sheet}");
+    assert_eq!(areas.len(), 2, "{areas:?}");
+    assert!((areas[0] - 4.0).abs() < 1e-12 && (areas[1] - 28.0).abs() < 1e-12, "{areas:?}");
+}
+
 // ----- the dialogs in Origin's layout: Column Properties, the analysis frame, the Import Wizard ----
 
 /// Types into the n-th text box of the window that is open (in the order they are drawn), replacing

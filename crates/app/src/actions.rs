@@ -820,6 +820,13 @@ pub enum Action {
         y: ColumnId,
         layer: usize,
     },
+    /// Analysis > Mathematics > Integrate Ranges on the active data plot of `graph`: pick the limits of each
+    /// range on the graph (T353).
+    IntegrateRangesPick {
+        graph: WindowId,
+        y: ColumnId,
+        layer: usize,
+    },
     /// Worksheet > Pivot Table: open the window; the table goes to a new sheet.
     PivotTable {
         book: WindowId,

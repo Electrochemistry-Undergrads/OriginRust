@@ -55,6 +55,7 @@ pub use sheaf_calc::{StftOptions, StftOutput};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use acf::AcfSpec;
+pub use arima::ArimaSpec;
 pub use binscatter::BinScatterSpec;
 pub use calc::binscatter::BinRule;
 pub use calc::changepoint::{ChangeKind, Penalty as ChangePenalty};
@@ -1189,6 +1190,9 @@ pub enum Tool {
     /// Statistics > Exponential Smoothing Forecast (T374, `docs/spec/statistics.md` section 42): simple, Holt or
     /// Holt-Winters smoothing and forecasts of every chosen column.
     ExpSmooth(ExpSmoothSpec),
+    /// Statistics > ARIMA Forecast (T376, `docs/spec/statistics.md` section 43): ARIMA(p, d, q) by conditional least
+    /// squares and forecasts of every chosen column.
+    Arima(ArimaSpec),
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
     /// censor and, optionally, group columns.
     KaplanMeier(KaplanMeierSpec),
@@ -1328,6 +1332,7 @@ impl Tool {
             Tool::Decompose(_) => "Seasonal decomposition",
             Tool::Stationarity(_) => "Stationarity tests",
             Tool::ExpSmooth(_) => "Exponential smoothing forecast",
+            Tool::Arima(_) => "ARIMA forecast",
             Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
             Tool::GraphSummary(_) => "Graphical summary",
             Tool::AverageCurves(_) => "Average multiple curves",
@@ -1418,6 +1423,7 @@ impl Tool {
             Tool::Decompose(_) => "Decompose",
             Tool::Stationarity(_) => "Stationarity",
             Tool::ExpSmooth(_) => "Forecast",
+            Tool::Arima(_) => "ARIMA",
             Tool::KaplanMeier(_) => "KaplanMeier",
             Tool::GraphSummary(_) => "GraphSummary",
             Tool::AverageCurves(_) => "AverageResult",
@@ -2332,6 +2338,7 @@ fn run_peak_chain(
 mod acceptance;
 mod acf;
 mod anova3;
+mod arima;
 mod binscatter;
 mod capability;
 mod categorical;
@@ -2775,6 +2782,14 @@ impl Project {
             }
             Tool::RareChart(spec) => {
                 let out = rarechart::run(spec, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+                more_xy_graphs = out.more_graphs;
+            }
+            Tool::Arima(spec) => {
+                let out = arima::run(spec, &inputs)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;

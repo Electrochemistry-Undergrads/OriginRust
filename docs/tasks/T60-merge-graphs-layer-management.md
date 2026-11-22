@@ -116,6 +116,13 @@ the proportional grid rules from Merge Graph Windows. The Origin Arrange
 tab documents both options. Fresh Origin 2016 dialog geometry remains
 unverified. See graphing 15.7d.
 
+**Layer Management empty grid cells (2026-11-22).** The Arrange tab can fill
+vacant cells with independent blank layers. Counts follow the selection and
+linked groups, and Common Scale supplies the cell frames when enabled. The
+preview supports Apply and Undo before OK creates one history entry. Sheaf
+starts with the option off. Origin's documented control and the comparison
+with the 2016 dialog are recorded in graphing 15.7d.
+
 **Branch:** `merge-graphs`. **Priority:** P0, wave 2, owner's stacked-figure priority.
 **Spec:** [graphing](../spec/graphing.md) 15 (add Merge Graph Windows and Layer Management
 subsections); ADR 0009. **Inventory:** 0 locations tagged `T60`.

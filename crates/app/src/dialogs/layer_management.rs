@@ -144,6 +144,7 @@ impl LayerManagementDialog {
     fn undo(&mut self) {
         if let Some(layers) = self.history.pop() {
             self.work.layers = layers;
+            self.selected.retain(|&index| index < self.work.layers.len());
             self.background.invalidate();
             self.problem = None;
         }
@@ -292,7 +293,7 @@ impl LayerManagementDialog {
                 ui.add(egui::DragValue::new(&mut o.cols).range(1..=64)).labelled_by(label.id);
                 ui.end_row();
             });
-            ui.add_enabled(false, egui::Checkbox::new(&mut false, "Add Extra Layer(s) for Grid"));
+            ui.checkbox(&mut o.add_extra_layers, "Add Extra Layer(s) for Grid");
             ui.add_enabled(
                 !(self.common_width || self.common_height),
                 egui::Checkbox::new(&mut o.keep_aspect, "Keep Layer Aspect Ratio"),
@@ -341,7 +342,12 @@ impl LayerManagementDialog {
             }
         }
         let sel = self.selection();
+        let previous_count = self.work.layers.len();
         self.apply(|g| g.arrange_layers(&sel, &opts));
+        if !sel.is_empty() {
+            // Keep new cells in an explicit selection for the next Apply.
+            self.selected.extend(previous_count..self.work.layers.len());
+        }
     }
 
     fn size_tab(&mut self, ui: &mut egui::Ui) {

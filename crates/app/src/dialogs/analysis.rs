@@ -685,6 +685,8 @@ struct StatsOptions {
     listwise: bool,
     /// Statistics on Columns: which quantities to write.
     desc: StatisticsSpec,
+    /// Statistics on Columns: the Percentiles (%) box, numbers separated by spaces or commas (T244).
+    percentiles: String,
     /// Statistics on Rows: which quantities to add.
     rows: RowStatsSpec,
     /// Stem-and-leaf options (T275); the leaf unit comes from `stem_auto_unit` and `stem_unit`.
@@ -750,6 +752,7 @@ impl Default for StatsOptions {
             kendall: false,
             listwise: false,
             desc: StatisticsSpec::default(),
+            percentiles: String::new(),
             rows: RowStatsSpec::default(),
             stem: StemLeafOptions::default(),
             stem_auto_unit: true,
@@ -2395,7 +2398,11 @@ impl AnalysisDialog {
                     peak_curves: false,
                 }),
             }),
-            AnalysisKind::Statistics => Tool::Statistics(self.stats.desc),
+            AnalysisKind::Statistics => {
+                let mut spec = self.stats.desc.clone();
+                spec.percentiles = parse_percentiles(&self.stats.percentiles)?;
+                Tool::Statistics(spec)
+            }
             AnalysisKind::TTest => Tool::TTest(TTestSpec {
                 kind: match self.stats.ttest {
                     0 => TTestKind::OneSample { mean: self.stats.mean },
@@ -3123,6 +3130,13 @@ impl AnalysisDialog {
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut d.confidence_limits, "Confidence limits of the mean, level");
                     ui.add_enabled(d.confidence_limits, DragValue::new(&mut d.level).speed(0.001).range(0.5..=0.9999));
+                });
+                // T244: any percentiles, one result column each.
+                ui.horizontal(|ui| {
+                    let name = ui.label("Percentiles (%)");
+                    ui.add(egui::TextEdit::singleline(&mut self.stats.percentiles).desired_width(160.0))
+                        .labelled_by(name.id)
+                        .on_hover_text("For example 5 95 or 2.5, 97.5; empty for none");
                 });
             }
             AnalysisKind::TTest => {
@@ -4916,5 +4930,28 @@ mod region_text_tests {
         assert_eq!(parse_regions("1:2; 3:4").unwrap(), [(1.0, 2.0), (3.0, 4.0)]);
         assert!(parse_regions("2-8").unwrap_err().contains("FROM:TO"));
         assert!(parse_regions("a:3").unwrap_err().contains("not a number"));
+    }
+}
+
+/// The Percentiles (%) box of Statistics on Columns (T244): numbers from 0 to 100 separated by spaces,
+/// commas or semicolons; empty for none.
+pub(crate) fn parse_percentiles(text: &str) -> Result<Vec<f64>, String> {
+    text.split(|c: char| c.is_whitespace() || c == ',' || c == ';')
+        .filter(|t| !t.is_empty())
+        .map(|t| match t.parse::<f64>() {
+            Ok(p) if (0.0..=100.0).contains(&p) => Ok(p),
+            _ => Err(format!("Percentiles: {t:?} is not a number from 0 to 100")),
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod percentile_tests {
+    #[test]
+    fn the_percentiles_box_takes_spaces_commas_and_semicolons() {
+        assert_eq!(super::parse_percentiles(" 5, 95;97.5 "), Ok(vec![5.0, 95.0, 97.5]));
+        assert_eq!(super::parse_percentiles(""), Ok(vec![]));
+        assert!(super::parse_percentiles("5 x").is_err());
+        assert!(super::parse_percentiles("120").is_err());
     }
 }

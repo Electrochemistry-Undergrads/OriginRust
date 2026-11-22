@@ -2405,3 +2405,15 @@ fn piecewise_regions_are_analysed_on_their_own() {
     let (ok, _, stderr) = sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--regions", "0-9"]);
     assert!(!ok && stderr.contains("region"), "{stderr}");
 }
+
+#[test]
+fn stats_percentiles_add_one_column_each() {
+    let dir = scratch("stats-percentiles");
+    let data = groups_file(&dir);
+    let file = data.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "stats", file, "--y", "untreated", "--percentiles", "5,97.5"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("P5") && out.contains("P97.5"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "stats", file, "--y", "untreated", "--percentiles", "101"]);
+    assert!(!ok && err.contains("between 0 and 100"), "{err}");
+}

@@ -222,6 +222,7 @@ pub fn registry() -> Vec<ToolDesc> {
             flag("all", false, "Every quantity."),
             maybe("add", "[string]", "Further quantities: iqr, variance, skewness, kurtosis, cv, limits."),
             num("level", 0.95, "Confidence level of the limits of the mean."),
+            maybe("percentiles", "[number]", "Percentiles in percent (0 to 100), one column each: P5, P95, ..."),
         ],
         None,
     );
@@ -822,6 +823,7 @@ pub fn build(name: &str, options: &Map<String, Value>) -> Result<Job> {
                 }
             }
             spec.level = o.num("level", 0.95)?;
+            spec.percentiles = o.numbers("percentiles")?;
             Job::Tool(Tool::Statistics(spec))
         }
         "fft" => {

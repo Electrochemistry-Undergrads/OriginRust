@@ -222,6 +222,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T239](T239-hour-minute-second.md) | Formula functions hour, minute, second of a date-time number | S | done 2026-11-20 (expression-language 7), not measured (Origin not installed) |
 | [T240](T240-mcp-link-test-flakes.md) | MCP link tests wait for a queued call or a logged job instead of sleeping (load flakes) | S | done 2026-11-20, tests only |
 | [T242](T242-send-graphs-to-word.md) | Send Graphs window's Word choice and sheaf export -o .docx: a graph per page | S | done 2026-11-20 (graphing 17.11), not measured |
+| [T244](T244-statistics-percentiles.md) | Statistics on Columns: Percentiles (%) list, one column per p | S | done 2026-11-22 (analysis-tools), not measured |
 | [T233](T233-batch-summary.md) | File > Batch Processing: Summary Sheet, Dataset Identifier, Delete Intermediate Books (a Batch Summary book stacking one sheet of every book) | S | done 2026-11-20 (workbook-model 13p), not measured; left: Origin's layout and identifier choices |
 | [T235](T235-batch-cli.md) | sheaf batch: Batch Processing without a window (template, summary, --summary-csv), core Project::batch_process shared with the window | S | done 2026-11-20 (workbook-model 13p); MCP: T238 |
 | [T238](T238-batch-mcp.md) | MCP batch_process: the shared batch run (books, summary, delete) on the session project, one undo step attached | S | done 2026-11-20 (mcp.md 5.1); left: read options |

@@ -165,6 +165,8 @@ pub enum AnalysisKind {
     BinScatter,
     /// Worksheet > Time Series Pivot (T358; options in `multivariate_options.rs`).
     TimePivot,
+    /// Statistics > Manhattan Plot (T362; options in `multivariate_options.rs`).
+    Manhattan,
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (options in `multivariate_options.rs`).
     KaplanMeier,
     /// Statistics > Multivariate Analysis > K-Means Cluster Analysis (options in `multivariate_options.rs`).
@@ -304,6 +306,7 @@ impl AnalysisKind {
             AnalysisKind::ChangePoint => "Change Point Analysis...",
             AnalysisKind::BinScatter => "Binned Scatter...",
             AnalysisKind::TimePivot => "Time Series Pivot...",
+            AnalysisKind::Manhattan => "Manhattan Plot...",
             AnalysisKind::KaplanMeier => "Kaplan-Meier Estimator...",
             AnalysisKind::Kmeans => "K-Means Cluster Analysis...",
             AnalysisKind::Crosstab => "Cross Tabulation...",
@@ -402,6 +405,7 @@ impl AnalysisKind {
             "changepoint" => AnalysisKind::ChangePoint,
             "binscatter" => AnalysisKind::BinScatter,
             "timepivot" => AnalysisKind::TimePivot,
+            "manhattan" => AnalysisKind::Manhattan,
             "kaplanmeier" => AnalysisKind::KaplanMeier,
             "kmeans" => AnalysisKind::Kmeans,
             "crosstab" => AnalysisKind::Crosstab,
@@ -2278,6 +2282,7 @@ impl AnalysisDialog {
             | AnalysisKind::ChangePoint
             | AnalysisKind::BinScatter
             | AnalysisKind::TimePivot
+            | AnalysisKind::Manhattan
             | AnalysisKind::KaplanMeier
             | AnalysisKind::Kmeans => self.multi.tool(self.kind)?,
             AnalysisKind::AverageCurves => self.curves.average_tool(),
@@ -3584,6 +3589,7 @@ impl AnalysisDialog {
             | AnalysisKind::ChangePoint
             | AnalysisKind::BinScatter
             | AnalysisKind::TimePivot
+            | AnalysisKind::Manhattan
             | AnalysisKind::KaplanMeier
             | AnalysisKind::Kmeans => self.multi.options(ui, self.kind),
             AnalysisKind::DiscreteFreq => {
@@ -3766,6 +3772,7 @@ impl AnalysisDialog {
             | AnalysisKind::ChangePoint
             | AnalysisKind::BinScatter
             | AnalysisKind::TimePivot
+            | AnalysisKind::Manhattan
             | AnalysisKind::SubtractLine
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
@@ -3878,6 +3885,7 @@ impl AnalysisDialog {
             AnalysisKind::TimePivot => {
                 "Summarize values per hour, day, week, month, quarter or year of their date-time"
             }
+            AnalysisKind::Manhattan => "Show p-values along grouped positions, such as chromosomes, as -log10 p",
             AnalysisKind::Pca => "Describe the variation of several columns by uncorrelated components",
             AnalysisKind::Crosstab => {
                 "Count the cases of every combination of two categorical variables and test their independence"
@@ -4005,6 +4013,9 @@ impl AnalysisDialog {
             }
             AnalysisKind::Roc => {
                 "Area under the curve with its standard error, the curve points and the best cut-off in a new sheet, and a graph"
+            }
+            AnalysisKind::Manhattan => {
+                "One row per group (count, offset, smallest p, points above the line) in a new sheet, and the Manhattan graph"
             }
             AnalysisKind::TimePivot => {
                 "One row per period with its start and the statistic and count of every column in a new sheet"

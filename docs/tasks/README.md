@@ -308,11 +308,13 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T318](T318-baseline-als-dataset.md) | Peak Analyzer baselines Use Existing Dataset and Asymmetric Least Squares Smoothing (window, CLI) | M | done 2026-11-21; ALS not measured (Pro) |
 | [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T323](T323-symbol-shapes.md) | Symbols: Origin 2016's shapes 9-20, twelve interiors and a fill colour, measured and drawn; .opj bytes 0x17/0x18 | M | done 2026-11-21 (graphing 5.4) |
 | [T320](T320-fit-covariance.md) | Fit report: Covariance Matrix and Correlation Matrix options (off as in Origin 2016), checked against Origin's errors and dependencies | S | done 2026-11-21 (fitting 4) |
 | [T322](T322-funcgraph-measure.md) | Measure Graph > Add Function Graph against Origin (Function tab, Auto range, Plot Type) | S | done 2026-11-21 (graphing 41) |
 | [T324](T324-windrose-measure.md) | Measure Wind Rose - Raw Data against Origin (speed bands, counts, colours) | S | done 2026-11-21 (graphing 36) |
 | [T327](T327-windrose-binned.md) | Measure Wind Rose - Binned Data against Origin (22.5 degree wedges, colours, no window) | S | done 2026-11-21 (graphing 36) |
 | [T328](T328-epw-measure.md) | Measure Peak Analyzer End Points Weighted (stretch rows on smooth data; anchor rule on noisy data not found) | S | measured 2026-11-21 (docs only) |
+| [T331](T331-fit-auto-init.md) | Nonlinear fit: Auto Parameter Initialization on and off (window tick, `fit --no-auto-init`) | S | done 2026-11-21 |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
 | [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |

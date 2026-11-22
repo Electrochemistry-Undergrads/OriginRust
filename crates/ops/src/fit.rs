@@ -77,6 +77,8 @@ pub struct FitSpec {
     pub level: f64,
     pub max_iterations: usize,
     pub tolerance: f64,
+    /// Auto Parameter Initialization off (T331).
+    pub no_auto_init: bool,
     pub y: Vec<String>,
     pub book: Option<String>,
     pub sheet: Option<String>,
@@ -114,6 +116,7 @@ impl Default for FitSpec {
             level: 95.0,
             max_iterations: 400,
             tolerance: 1e-9,
+            no_auto_init: false,
             y: Vec::new(),
             book: None,
             sheet: None,
@@ -358,6 +361,7 @@ pub fn run(project: &mut Project, a: &FitSpec, prepared: &Prepared) -> Result<Fi
         request.band_level = a.level / 100.0;
         request.max_iterations = a.max_iterations;
         request.tolerance = a.tolerance;
+        request.auto_init = !a.no_auto_init;
         request.scale_errors = !a.no_scale_errors;
         request.covariance_matrix = a.covariance_matrix;
         request.correlation_matrix = a.correlation_matrix;
@@ -432,6 +436,7 @@ fn run_surface(project: &mut Project, a: &FitSpec, prepared: &Prepared) -> Resul
     request.confidence_level = a.confidence;
     request.max_iterations = a.max_iterations;
     request.tolerance = a.tolerance;
+    request.auto_init = !a.no_auto_init;
     request.scale_errors = !a.no_scale_errors;
     request.covariance_matrix = a.covariance_matrix;
     request.correlation_matrix = a.correlation_matrix;

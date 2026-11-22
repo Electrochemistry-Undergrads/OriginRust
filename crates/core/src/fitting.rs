@@ -173,6 +173,10 @@ pub struct FitRequest {
     pub correlation_matrix: bool,
     /// Iteration algorithm of a nonlinear fit (Origin's "Iteration Algorithm").
     pub algorithm: Algorithm,
+    /// Start a nonlinear fit from the function's guess from the data (Origin's "Auto Parameter
+    /// Initialization", on by default, T331). Off, the parameters start from the values given in
+    /// `params`, else the function's own starting values (1 for most library functions).
+    pub auto_init: bool,
     /// A surface fit `z = f(x, y)`: `y` is then the Z column and this names the X and Y columns
     /// (`docs/spec/fitting.md` section 15). `None` is a curve fit.
     pub surface: Option<SurfaceColumns>,
@@ -204,6 +208,7 @@ impl FitRequest {
             covariance_matrix: false,
             correlation_matrix: false,
             algorithm: Algorithm::LevenbergMarquardt,
+            auto_init: true,
             surface: None,
         }
     }
@@ -236,6 +241,8 @@ pub struct FitData {
     /// See [`FitRequest::scale_errors`].
     pub scale_errors: bool,
     pub algorithm: Algorithm,
+    /// See [`FitRequest::auto_init`].
+    pub auto_init: bool,
 }
 
 /// Computes the bands of a fitted model at the given x values and confidence level.
@@ -560,6 +567,7 @@ impl Project {
             tolerance: request.tolerance,
             scale_errors: request.scale_errors,
             algorithm: request.algorithm,
+            auto_init: request.auto_init,
         };
         let source_label = column_label(column);
         let source_name = column.display_name().to_string();
@@ -941,6 +949,7 @@ impl Project {
             tolerance: request.tolerance,
             scale_errors: request.scale_errors,
             algorithm: request.algorithm,
+            auto_init: request.auto_init,
         })
     }
 
@@ -1402,7 +1411,10 @@ fn run_engine(model: &FitModel, settings: &[ParamSetting], d: &FitData) -> Resul
             })
         }
         FitModel::BuiltIn(_) | FitModel::Formula { .. } | FitModel::Fdf(_) => {
-            let (func, library_name) = nl_function(model, settings)?;
+            let (mut func, library_name) = nl_function(model, settings)?;
+            if !d.auto_init {
+                func.init = None;
+            }
             let opts = nlsf::FitOptions {
                 weighting: w,
                 confidence_level: d.confidence_level,
@@ -1543,6 +1555,7 @@ mod tests {
             tolerance: 1e-9,
             scale_errors: true,
             algorithm: Algorithm::LevenbergMarquardt,
+            auto_init: true,
         };
         let m = run_engine(&FitModel::Polynomial { order: 5 }, &[], &d).unwrap();
         let worst = x.iter().zip(&m.report.fitted).map(|(x, f)| ((m.curve)(*x) - f).abs()).fold(0.0, f64::max);
@@ -2070,6 +2083,30 @@ mod tests {
         assert_eq!(p.graph(g).unwrap().layers[0].plots.len(), 2);
     }
 
+    /// T331: Auto Parameter Initialization off starts from the function's own values (1 for
+    /// ExpDec1) or the typed ones; on (the default) from the guess.
+    #[test]
+    fn auto_parameter_initialization_can_be_turned_off() {
+        let (mut p, y) = sheet_with(|x| 2.0 + 3.0 * (-x / 6.0).exp());
+        let mut req = FitRequest::new(y, FitModel::BuiltIn("ExpDec1".into()));
+        req.max_iterations = 0;
+        let starts = |p: &mut Project, r: &FitRequest| -> Vec<f64> {
+            p.fit(r).unwrap().report.params.iter().map(|q| q.value).collect()
+        };
+        let guessed = starts(&mut p, &req);
+        assert!(guessed.iter().any(|v| (v - 1.0).abs() > 1e-6), "{guessed:?}");
+        req.auto_init = false;
+        assert_eq!(starts(&mut p, &req), [1.0, 1.0, 1.0]);
+        req.params = vec![ParamSetting { name: "t1".into(), initial: Some(4.0), ..Default::default() }];
+        assert_eq!(starts(&mut p, &req), [1.0, 1.0, 4.0]);
+        // Off, the fit still converges from those starts.
+        req.max_iterations = 400;
+        req.params.clear();
+        let o = p.fit(&req).unwrap();
+        assert_eq!(o.report.status, FitStatus::Converged);
+        assert!((o.report.params[2].value - 6.0).abs() < 1e-4, "{:?}", o.report.params);
+    }
+
     #[test]
     fn nonlinear_fits_give_bands_and_obey_the_iteration_controls() {
         let (mut p, y) = sheet_with(|x| 2.0 + 3.0 * (-x / 6.0).exp() + 0.01 * (5.0 * x).sin());
@@ -2149,6 +2186,7 @@ mod tests {
             tolerance: 1e-9,
             scale_errors: scale,
             algorithm: Algorithm::LevenbergMarquardt,
+            auto_init: true,
         }
     }
 

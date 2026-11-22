@@ -14,7 +14,7 @@ use crate::fill;
 use crate::fonts::TextMeasurer;
 use crate::hit;
 use crate::legend;
-use crate::plots::{draw_plot, line_stroke, symbol_item, symbol_path};
+use crate::plots::{draw_plot, line_stroke, push_symbols};
 use crate::polar;
 use crate::scene::{
     Anchor, Cap, Item, ItemList, Join, LayerScene, ObjectKind, Scene, SceneObject, Stroke, line_to, move_to,
@@ -2199,9 +2199,13 @@ fn draw_legend(
                         }
                     }
                     if plot.kind.has_symbols() {
-                        let mut d = String::new();
-                        symbol_path(&mut d, plot.symbol.shape, (sx0 + sx1) / 2.0, cy, plot.symbol.size_pt);
-                        out.push(symbol_item(d, &plot.symbol));
+                        // Origin 2016's legend shows "1" for Number and "a" for both letter shapes
+                        // (measured, T323).
+                        let mut sym = plot.symbol.clone();
+                        if sym.shape == sheaf_core::graph::SymbolShape::CapitalLetter {
+                            sym.shape = sheaf_core::graph::SymbolShape::SmallLetter;
+                        }
+                        push_symbols(out, &sym, &[((sx0 + sx1) / 2.0, cy)], &[0]);
                     }
                     out.extend(front_line);
                     if matches!(plot.kind, PlotKind::Histogram | PlotKind::Box) {

@@ -8,7 +8,8 @@ use crate::fonts::TextMeasurer;
 use crate::scene::{Anchor, Cap, Item, Join, Stroke, TextItem, line_to, move_to, push_num};
 use sheaf_core::graph::{
     Connect, DataLabels, DropColorMode, DropTarget, ErrorDirection, FillUnderMode, LabelForm, LabelFrame,
-    LabelPosition, LineStyle, PLUS_MINUS_NEGATIVE, PLUS_MINUS_POSITIVE, PlotKind, ScaleKind, SymbolShape, SymbolStyle,
+    LabelPosition, LineStyle, PLUS_MINUS_NEGATIVE, PLUS_MINUS_POSITIVE, PlotKind, ScaleKind, SymbolInterior,
+    SymbolShape, SymbolStyle,
 };
 
 /// Points closer than this (in pt) to the last kept point are dropped.
@@ -1290,8 +1291,16 @@ fn draw_one_box(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, b: &cr
             symbol_path(&mut crosses, SymbolShape::Cross, p.0, p.1, BOX_CROSS_PT);
         }
     }
-    let style =
-        |shape, size| SymbolStyle { shape, size_pt: size, color, filled: false, edge_width_pt: width, every: 1 };
+    let style = |shape, size| SymbolStyle {
+        shape,
+        size_pt: size,
+        color,
+        filled: false,
+        interior: None,
+        fill_color: None,
+        edge_width_pt: width,
+        every: 1,
+    };
     if !crosses.is_empty() {
         out.push(symbol_item(crosses, &style(SymbolShape::Cross, BOX_CROSS_PT)));
     }
@@ -1424,9 +1433,7 @@ fn draw_varied_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry)
         if !near_frame(geom, p, style.size_pt + style.edge_width_pt) {
             continue;
         }
-        let mut d = String::new();
-        symbol_path(&mut d, style.shape, p.0, p.1, style.size_pt);
-        out.push(symbol_item(d, &style));
+        push_symbols(out, &style, &[p], &[i]);
     }
 }
 
@@ -1442,6 +1449,11 @@ fn draw_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
     let end = pd.end - usize::from(pd.closing.is_some());
     let thin = (end - pd.start) / every > SYMBOL_THIN_ABOVE;
     let mut taken: std::collections::HashSet<(i64, i64)> = std::collections::HashSet::new();
+    let plain = !sym.shape.is_text()
+        && sym.shape != SymbolShape::Sphere
+        && (sym.shape.is_stroke_only()
+            || matches!(sym.effective_interior(), SymbolInterior::Solid | SymbolInterior::Hollow));
+    let (mut centres, mut rows) = (Vec::new(), Vec::new());
     for i in pd.point_rows() {
         let Some(p) = geom.checked_data_to_page(pd.x_at(i), pd.y_at(i)) else { continue };
         if !near_frame(geom, p, sym.size_pt + sym.edge_width_pt) {
@@ -1450,7 +1462,15 @@ fn draw_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
         if thin && !taken.insert(((p.0 / SYMBOL_CELL_PT).floor() as i64, (p.1 / SYMBOL_CELL_PT).floor() as i64)) {
             continue;
         }
-        symbol_path(&mut d, sym.shape, p.0, p.1, sym.size_pt);
+        if plain {
+            symbol_path(&mut d, sym.shape, p.0, p.1, sym.size_pt);
+        } else {
+            centres.push(p);
+            rows.push(i);
+        }
+    }
+    if !plain {
+        return push_symbols(out, sym, &centres, &rows);
     }
     if d.is_empty() {
         return;
@@ -1460,14 +1480,202 @@ fn draw_symbols(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry) {
 
 /// The scene item for symbol path data written by [`symbol_path`].
 pub(crate) fn symbol_item(d: String, sym: &SymbolStyle) -> Item {
-    let stroke_only = matches!(sym.shape, SymbolShape::Plus | SymbolShape::Cross | SymbolShape::Star);
-    let stroke =
-        Stroke { color: sym.color, width: sym.edge_width_pt, dash: Vec::new(), cap: Cap::Butt, join: Join::Miter };
-    if sym.filled && !stroke_only {
+    let stroke_only = sym.shape.is_stroke_only();
+    let stroke = symbol_stroke(sym);
+    if sym.effective_interior() == SymbolInterior::Solid && !stroke_only {
         Item::Path { d, fill: Some(sym.color), stroke: None }
     } else {
         Item::Path { d, fill: None, stroke: Some(stroke) }
     }
+}
+
+fn symbol_stroke(sym: &SymbolStyle) -> Stroke {
+    Stroke { color: sym.color, width: sym.edge_width_pt, dash: Vec::new(), cap: Cap::Butt, join: Join::Miter }
+}
+
+/// Draws the symbols of `sym` at the page points `centres` (graphing 5.4): the outline of
+/// [`symbol_path`] with Origin's interior (Open filled with the fill colour, white by default; a
+/// centre mark; a half in the edge colour), the sphere's shading, or (for the text shapes) the
+/// row number or letter of `rows[k]`, the source row of `centres[k]`.
+pub(crate) fn push_symbols(out: &mut Vec<Item>, sym: &SymbolStyle, centres: &[(f64, f64)], rows: &[usize]) {
+    if centres.is_empty() {
+        return;
+    }
+    let size = sym.size_pt;
+    if sym.shape.is_text() {
+        for (k, &(cx, cy)) in centres.iter().enumerate() {
+            let row = rows.get(k).copied().unwrap_or(0);
+            let text = sym.shape.text_at(row).unwrap_or_default();
+            out.push(Item::Text(TextItem {
+                x: cx,
+                y: cy + 0.36 * size,
+                text,
+                family: "Arial".into(),
+                size,
+                bold: false,
+                italic: false,
+                color: sym.color,
+                anchor: Anchor::Middle,
+                rotate_ccw: 0.0,
+            }));
+        }
+        return;
+    }
+    let mut d = String::new();
+    for &(cx, cy) in centres {
+        symbol_path(&mut d, sym.shape, cx, cy, size);
+    }
+    if sym.shape == SymbolShape::Sphere {
+        // Origin shades the sphere with a light spot to the upper left; drawn here as two lighter
+        // discs over the coloured one (no gradients in the scene).
+        out.push(Item::Path { d, fill: Some(sym.color), stroke: None });
+        let r = size / 2.0;
+        for (f, rr) in [(0.45, 0.42), (0.8, 0.18)] {
+            let mut h = String::new();
+            for &(cx, cy) in centres {
+                symbol_path(&mut h, SymbolShape::Circle, cx - 0.32 * r, cy - 0.32 * r, 2.0 * rr * r);
+            }
+            out.push(Item::Path { d: h, fill: Some(mix_white(sym.color, f)), stroke: None });
+        }
+        return;
+    }
+    let interior = sym.effective_interior();
+    if sym.shape.is_stroke_only() || matches!(interior, SymbolInterior::Solid | SymbolInterior::Hollow) {
+        out.push(symbol_item(d, sym));
+        return;
+    }
+    let fill = sym.fill_color.unwrap_or(sheaf_core::Color::WHITE);
+    out.push(Item::Path { d: d.clone(), fill: Some(fill), stroke: None });
+    let r = size / 2.0;
+    let mut marks = String::new();
+    let mut solid = String::new();
+    for &(cx, cy) in centres {
+        match interior {
+            SymbolInterior::DotCenter => {
+                symbol_path(&mut solid, SymbolShape::Circle, cx, cy, 2.0 * sym.edge_width_pt.max(size * 0.025))
+            }
+            SymbolInterior::PlusCenter => plus(&mut marks, cx, cy, r),
+            SymbolInterior::XCenter => cross(&mut marks, cx, cy, r),
+            SymbolInterior::MinusCenter => {
+                move_to(&mut marks, cx - r, cy);
+                line_to(&mut marks, cx + r, cy);
+            }
+            SymbolInterior::BarCenter => {
+                move_to(&mut marks, cx, cy - r);
+                line_to(&mut marks, cx, cy + r);
+            }
+            SymbolInterior::HalfUp
+            | SymbolInterior::HalfDown
+            | SymbolInterior::HalfLeft
+            | SymbolInterior::HalfRight => half_path(&mut solid, sym.shape, interior, cx, cy, size),
+            _ => {}
+        }
+    }
+    if !solid.is_empty() {
+        out.push(Item::Path { d: solid, fill: Some(sym.color), stroke: None });
+    }
+    if !marks.is_empty() {
+        out.push(Item::Path { d: marks, fill: None, stroke: Some(symbol_stroke(sym)) });
+    }
+    out.push(Item::Path { d, fill: None, stroke: Some(symbol_stroke(sym)) });
+}
+
+/// `c` moved the fraction `f` of the way to white.
+fn mix_white(c: sheaf_core::Color, f: f64) -> sheaf_core::Color {
+    let m = |v: u8| (f64::from(v) + (255.0 - f64::from(v)) * f).round() as u8;
+    sheaf_core::Color { r: m(c.r), g: m(c.g), b: m(c.b), ..c }
+}
+
+/// The corners of a polygon shape, or `None` for a circle, a stroke or a text shape.
+fn shape_polygon(shape: SymbolShape, cx: f64, cy: f64, size: f64) -> Option<Vec<(f64, f64)>> {
+    let r = size / 2.0;
+    let h = size * 0.866;
+    let regular = |n: usize, radius: f64| -> Vec<(f64, f64)> {
+        (0..n)
+            .map(|k| {
+                let a = (-90.0 + 360.0 * k as f64 / n as f64).to_radians();
+                (cx + radius * a.cos(), cy + radius * a.sin())
+            })
+            .collect()
+    };
+    Some(match shape {
+        SymbolShape::Square => vec![(cx - r, cy - r), (cx + r, cy - r), (cx + r, cy + r), (cx - r, cy + r)],
+        SymbolShape::TriangleUp => vec![(cx, cy - 2.0 * h / 3.0), (cx + r, cy + h / 3.0), (cx - r, cy + h / 3.0)],
+        SymbolShape::TriangleDown => vec![(cx, cy + 2.0 * h / 3.0), (cx + r, cy - h / 3.0), (cx - r, cy - h / 3.0)],
+        SymbolShape::TriangleLeft => vec![(cx - 2.0 * h / 3.0, cy), (cx + h / 3.0, cy - r), (cx + h / 3.0, cy + r)],
+        SymbolShape::TriangleRight => vec![(cx + 2.0 * h / 3.0, cy), (cx - h / 3.0, cy + r), (cx - h / 3.0, cy - r)],
+        SymbolShape::Diamond => vec![(cx, cy - r), (cx + r, cy), (cx, cy + r), (cx - r, cy)],
+        SymbolShape::Hexagon => regular(6, r),
+        SymbolShape::Pentagon => regular(5, r),
+        SymbolShape::FivePointStar => {
+            let outer = regular(5, r);
+            let inner: Vec<(f64, f64)> = (0..5)
+                .map(|k| {
+                    let a = (-90.0 + 36.0 + 72.0 * k as f64).to_radians();
+                    (cx + 0.382 * r * a.cos(), cy + 0.382 * r * a.sin())
+                })
+                .collect();
+            outer.into_iter().zip(inner).flat_map(|(o, i)| [o, i]).collect()
+        }
+        _ => return None,
+    })
+}
+
+fn polygon_path(d: &mut String, pts: &[(f64, f64)]) {
+    if let Some((first, rest)) = pts.split_first() {
+        move_to(d, first.0, first.1);
+        for p in rest {
+            line_to(d, p.0, p.1);
+        }
+        d.push('Z');
+    }
+}
+
+/// The half of a symbol that a half interior fills, cut along the line through its centre.
+fn half_path(d: &mut String, shape: SymbolShape, half: SymbolInterior, cx: f64, cy: f64, size: f64) {
+    // keep(p) says whether the point is on the filled side; the cut is x = cx or y = cy.
+    let (vertical_cut, keep_low) = match half {
+        SymbolInterior::HalfUp => (false, true),
+        SymbolInterior::HalfDown => (false, false),
+        SymbolInterior::HalfLeft => (true, true),
+        _ => (true, false),
+    };
+    let coord = |p: (f64, f64)| if vertical_cut { p.0 - cx } else { p.1 - cy };
+    let inside = |p: (f64, f64)| if keep_low { coord(p) <= 0.0 } else { coord(p) >= 0.0 };
+    if let Some(poly) = shape_polygon(shape, cx, cy, size) {
+        // Sutherland-Hodgman against one half plane.
+        let mut out = Vec::new();
+        for k in 0..poly.len() {
+            let (a, b) = (poly[k], poly[(k + 1) % poly.len()]);
+            if inside(a) {
+                out.push(a);
+            }
+            if inside(a) != inside(b) {
+                let t = coord(a) / (coord(a) - coord(b));
+                out.push((a.0 + t * (b.0 - a.0), a.1 + t * (b.1 - a.1)));
+            }
+        }
+        polygon_path(d, &out);
+        return;
+    }
+    // A circle: a half disc.
+    let r = size / 2.0;
+    let (start, end, sweep) = match half {
+        SymbolInterior::HalfUp => ((cx - r, cy), (cx + r, cy), 1),
+        SymbolInterior::HalfDown => ((cx - r, cy), (cx + r, cy), 0),
+        SymbolInterior::HalfLeft => ((cx, cy - r), (cx, cy + r), 0),
+        _ => ((cx, cy - r), (cx, cy + r), 1),
+    };
+    move_to(d, start.0, start.1);
+    d.push('A');
+    push_num(d, r);
+    d.push(' ');
+    push_num(d, r);
+    d.push_str(&format!(" 0 0 {sweep} "));
+    push_num(d, end.0);
+    d.push(' ');
+    push_num(d, end.1);
+    d.push('Z');
 }
 
 /// Appends the outline of one symbol, centred on `(cx, cy)`, `size` wide.
@@ -1517,6 +1725,26 @@ pub(crate) fn symbol_path(d: &mut String, shape: SymbolShape, cx: f64, cy: f64, 
         SymbolShape::Star => {
             plus(d, cx, cy, r);
             cross(d, cx, cy, r);
+        }
+        SymbolShape::HBar => {
+            move_to(d, cx - r, cy);
+            line_to(d, cx + r, cy);
+        }
+        SymbolShape::VBar => {
+            move_to(d, cx, cy - r);
+            line_to(d, cx, cy + r);
+        }
+        SymbolShape::Sphere => symbol_path(d, SymbolShape::Circle, cx, cy, size),
+        // Drawn as text by `push_symbols`; nothing to outline.
+        SymbolShape::Number | SymbolShape::CapitalLetter | SymbolShape::SmallLetter => {}
+        SymbolShape::TriangleLeft
+        | SymbolShape::TriangleRight
+        | SymbolShape::Hexagon
+        | SymbolShape::FivePointStar
+        | SymbolShape::Pentagon => {
+            if let Some(pts) = shape_polygon(shape, cx, cy, size) {
+                polygon_path(d, &pts);
+            }
         }
     }
 }

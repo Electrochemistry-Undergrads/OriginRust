@@ -882,7 +882,7 @@ impl Writer {
                 connect,
                 shape: symbol_code(p.symbol.shape),
                 size: (p.symbol.size_pt * 500.0).round().clamp(1.0, f64::from(u16::MAX)) as u16,
-                open_symbol: !p.symbol.filled,
+                interior: p.symbol.interior.map_or(u8::from(!p.symbol.filled), |i| i.origin_code()),
                 symbol: code_of(p.symbol.color),
                 fill: code_of(p.symbol.color),
                 bar_width_pct: 100.0 - layer.bars.gap_pct,
@@ -956,7 +956,7 @@ impl Writer {
             connect: 0,
             shape: 0,
             size: 0,
-            open_symbol: false,
+            interior: 0,
             symbol: Code::AUTO,
             fill: Code::AUTO,
             bar_width_pct: 0.0,
@@ -1062,16 +1062,7 @@ fn text_size(text: &str, size_pt: f64) -> (f64, f64) {
 }
 
 fn symbol_code(s: SymbolShape) -> u8 {
-    match s {
-        SymbolShape::Square => 1,
-        SymbolShape::Circle => 2,
-        SymbolShape::TriangleUp => 3,
-        SymbolShape::TriangleDown => 4,
-        SymbolShape::Diamond => 5,
-        SymbolShape::Plus => 6,
-        SymbolShape::Cross => 7,
-        SymbolShape::Star => 8,
-    }
+    s.origin_code()
 }
 
 /// Smallest and largest value of the data of the plots, X and Y.

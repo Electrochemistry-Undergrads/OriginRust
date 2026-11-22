@@ -173,3 +173,11 @@ fixture that `crates/core/tests/matrix_origin.rs` compares with.
 (`worksheet -p 226 contour|contline|HeatMap`) and export PNGs into the folder OUT (keep it in `re-workspace/`,
 the pictures are not committed). The range rule of the colour scale in `docs/spec/matrices.md` was read from the
 labels of the `matrix-gen-levels.py` pictures. `matrix-probe*.lines.txt` are the first exploratory runs.
+
+## Symbol shapes and interiors (T323)
+
+`symbols.lines.txt` (run with `run-labtalk-lines.ps1`) plots shapes 1-20, the twelve interiors on a circle and a mix of
+shapes, interiors and `set -cf` over a yellow layer, and exports `shapes.png`, `interiors.png` and `fills.png` to
+`C:\temp\sheaf-symbols` (make the folder first; a path ending in a backslash makes `expGraph` fail). The plots are
+ungrouped with `layer -gu`: in a plot group every member takes the first one's shape and interior. What the pictures
+showed is in `docs/spec/graphing.md` 5.4.

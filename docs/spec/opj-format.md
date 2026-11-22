@@ -519,7 +519,8 @@ The column records of a graph layer are its curves (515 bytes, the same size as 
 | `0x11` | u8 | line connection: 0 none, 1 and above a line (values 1 to 8 all drew straight lines through 8 points; the other kinds were not told apart) |
 | `0x12` | u8 | line style: 0 solid, 1 dash, 2 dot, 3 dash dot, 4 dash dot dot, 5 short dash, 6 short dot, 7 short dash dot (the `set -d` values, modulo 8) |
 | `0x15` | u16 | line width in 1/500 point (`set -w 1000` is 2 points) |
-| `0x17` | u8 | symbol shape: 0 none, 1 square (the default); the others are guessed: 2 circle, 3 up triangle, 4 down triangle, 5 diamond |
+| `0x17` | u8 | symbol shape: Origin's number, 0 none, 1 square (the default) to 20 sphere as in graphing 5.4 (checked on a project Origin 2016 saved with shapes 1-20, T323) |
+| `0x18` | u8 | symbol interior: Origin's number, 0 solid, 1 open, 2 dot centre ... 11 half left (graphing 5.4; checked the same way with interiors 0-11) |
 | `0x19` | u16 | symbol size in 1/500 point (`set -z 12` is 6000). In a column plot (203) it is the bar width in percent of the X spacing times 50, that is (100 - gap) × 50: 4000 for Origin's default gap of 20, 3000 for 40, 2250 for 55 (`set -vg`); a copy is at `0x11A` (graphing.md 14.7) |
 | `0x23` | u16 | position of the X data set (0 for none). For an error plot it holds the position of the Y data set of the plot the errors belong to |
 | `0x4C` | u16 | plot type: 200 line, 201 scatter, 202 line and symbol, 203 column; 487 (`0x1E7`) is a Y error plot |
@@ -534,8 +535,8 @@ on. The reader gives each automatic plot the list colour of its position in the 
 `set -c 1 -w 1000` (several options in one call) is silently ignored by Origin; each option
 needs its own `set` call.
 
-I could not make `set -k` change the drawn symbol shape in a hidden instance (the record changed, the
-picture did not), so shapes other than the default square are not confirmed against a picture.
+`set -k` did not seem to change the drawn shape because the plots were in a plot group, which gives every
+member the first one's shape; after `layer -gu` every shape and interior is drawn (T323, graphing 5.4).
 
 ### 10.6 Colour list
 
@@ -930,7 +931,7 @@ compared byte for byte with Origin's. Other types are read as line + symbol with
 (a 515-byte record whose `0x04` is the data set of the error column and `0x23` the Y data set of the curve).
 Data-set numbers at `0x04` (Y) and `0x23` (X, 0 for row numbers), first and after-last used row at `0x07`
 and `0x0B`. Line colour at `0x0F` and `0x16A`, dash at `0x12`, connection at `0x11` (1 straight, 5 spline,
-11 and 12 steps), width at `0x15` in 1/500 point, symbol shape at `0x17`, open flag at `0x18`, size at
+11 and 12 steps), width at `0x15` in 1/500 point, symbol shape at `0x17`, interior at `0x18`, size at
 `0x19` in 1/500 point, symbol colour at `0x132`, column fill colour at `0xC2`. Byte `0x06` is 9 so
 that no curve is in a plot group (a group gives every curve the colour of the first one [obs]).
 Origin counts the objects of a project with a running number that is kept at `0x1E2`.

@@ -15,5 +15,4 @@ Self-Deconvolution..., CLI `analyze fsd --fwhm W --k K --apodization ...`, resul
 
 ## Left
 
-- FSD inside the Peak Analyzer's Find Peaks (search on the deconvolved curve, integrate on the data);
-  a band width guess from the data.
+- Done in T344: FSD inside the Peak Analyzer's Find Peaks. Left: a band width guess from the data.

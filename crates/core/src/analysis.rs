@@ -1981,6 +1981,7 @@ fn run_peak_baseline(
             calc::ChainError::UnsortedX => {
                 AnalysisError::BadOption(format!("column {}: X is not sorted; sort the rows along X first", inp.short))
             }
+            calc::ChainError::Fsd(why) => AnalysisError::BadOption(format!("column {}: {why}", inp.short)),
         })?;
         if spec.subtract {
             beside.push(NewColumn {
@@ -2045,6 +2046,7 @@ fn run_peak_chain(
                 "column {}: X is not sorted; sort the rows along X before analysing peaks",
                 inp.short
             )),
+            calc::ChainError::Fsd(why) => AnalysisError::BadOption(format!("column {}: {why}", inp.short)),
         })?;
         if result.peaks.is_empty() {
             return Err(AnalysisError::BadOption(format!(

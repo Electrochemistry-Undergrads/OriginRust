@@ -276,6 +276,8 @@ pub struct SheafApp {
     multi_peak: Option<MultiPeakDialog>,
     subtract_pick: Option<SubtractPickDialog>,
     cv_pick: Option<CvPickDialog>,
+    /// File > Find in Project Files... (T361).
+    pub(crate) find_files: Option<crate::dialogs::find_files::FindFilesDialog>,
     /// The last analysis run from its window, with its menu label, for Repeat Last Analysis (T360).
     last_analysis: Option<(sheaf_core::analysis::Tool, &'static str)>,
     /// Column > Add Column to All Sheets... (T359).
@@ -491,6 +493,7 @@ impl SheafApp {
             multi_peak: None,
             subtract_pick: None,
             cv_pick: None,
+            find_files: None,
             last_analysis: None,
             column_across: None,
             gadget_prefs: None,
@@ -2575,6 +2578,10 @@ impl SheafApp {
                     Some(d) => self.batch_plot = Some(d),
                     None => self.warn("The graph plots no worksheet column"),
                 }
+            }
+            Action::FindInProjectFiles => {
+                let folder = self.path.as_deref().and_then(|p| p.parent()).map(std::path::Path::to_path_buf);
+                self.find_files = Some(crate::dialogs::find_files::FindFilesDialog::new(folder.as_deref()));
             }
             Action::FindInProject => {
                 self.find_project = Some(crate::dialogs::find_project::FindProjectDialog::new(self.find_spec.clone()));
@@ -6285,6 +6292,19 @@ impl SheafApp {
         }
     }
 
+    /// File > Find in Project Files... (T361): Open closes the window and opens the chosen project.
+    fn find_files_frame(&mut self, ctx: &egui::Context) {
+        let Some(d) = &mut self.find_files else { return };
+        match d.show(ctx) {
+            crate::dialogs::find_files::FindFilesOutcome::Open => {}
+            crate::dialogs::find_files::FindFilesOutcome::Closed => self.find_files = None,
+            crate::dialogs::find_files::FindFilesOutcome::OpenFile(path) => {
+                self.find_files = None;
+                self.open_picked(path);
+            }
+        }
+    }
+
     fn show_sheet(&mut self, book: WindowId, sheet: usize) {
         self.doc.adjust_view(|p| {
             if let Some(b) = p.workbook_mut(book) {
@@ -7588,6 +7608,7 @@ impl SheafApp {
         self.multi_peak_frame(ctx);
         self.subtract_pick_frame(ctx);
         self.cv_pick_frame(ctx);
+        self.find_files_frame(ctx);
         self.column_across_frame(ctx);
         self.gadget_prefs_frame(ctx);
         self.range_pick_frame(ctx);

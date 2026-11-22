@@ -334,6 +334,8 @@ pub enum Cmd {
     FindInSheets,
     /// Edit > Find in Project (F3, T95).
     FindInProject,
+    /// File > Find in Project Files... (T361).
+    FindInProjectFiles,
     /// File > Export > Worksheet as Image... (T97).
     ExportWorksheetImage,
     /// File > Import > Re-Import Directly (false) and Re-Import... (true, choose the file) (T98).
@@ -1329,7 +1331,13 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
     if kind == WindowKind::Graph {
         v.push(recent_submenu("Recent Graphs", RecentKind::Graphs));
     }
-    v.extend([recent_submenu("Recent Projects", RecentKind::Projects), sep(), item("Exi&t", Cmd::Exit)]);
+    v.extend([
+        recent_submenu("Recent Projects", RecentKind::Projects),
+        // Origin 2026's search of saved projects (T361); with any window type, also with no window open.
+        item("Find in Project Files...", Cmd::FindInProjectFiles),
+        sep(),
+        item("Exi&t", Cmd::Exit),
+    ]);
     v
 }
 
@@ -3538,6 +3546,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Power(kind) => Action::Power(*kind),
         Cmd::FindInSheets => Action::FindInSheets(book?),
         Cmd::FindInProject => Action::FindInProject,
+        Cmd::FindInProjectFiles => Action::FindInProjectFiles,
         Cmd::ReplaceInSheets => Action::ReplaceInSheets(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
         Cmd::SendGraphsToPowerPoint => Action::SendGraphsToPowerPoint(c.graph.ok_or(NEED_GRAPH)?),

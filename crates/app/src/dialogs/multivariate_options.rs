@@ -5,7 +5,7 @@ use super::analysis::AnalysisKind;
 use eframe::egui;
 use sheaf_core::analysis::{
     BinRule, BinScatterSpec, ChangeKind, ChangePenalty, ChangePointSpec, KaplanMeierSpec, KmeansSpec, PcaSpec,
-    QuantRegSpec, RocSpec, Tool,
+    PivotPeriod, PivotStat, QuantRegSpec, RocSpec, TimePivotSpec, Tool,
 };
 
 /// What the windows keep between frames.
@@ -16,6 +16,7 @@ pub struct MultiOptions {
     quantreg: QuantRegSpec,
     changepoint: ChangePointSpec,
     binscatter: BinScatterSpec,
+    timepivot: TimePivotSpec,
     /// The value of the Manual penalty while another penalty is chosen.
     manual_penalty: Option<f64>,
     /// The quantiles as typed (comma separated), read when the tool runs.
@@ -63,6 +64,7 @@ impl MultiOptions {
                 }
                 Ok(Tool::QuantReg(QuantRegSpec { quantiles, ..self.quantreg.clone() }))
             }
+            AnalysisKind::TimePivot => Ok(Tool::TimePivot(self.timepivot)),
             AnalysisKind::BinScatter => {
                 let (BinRule::EqualWidth(n) | BinRule::EqualCount(n)) = self.binscatter.rule;
                 if n == 0 {
@@ -165,6 +167,27 @@ impl MultiOptions {
                 ui.weak(
                     "The exact solution of each quantile (the sum of check losses is as small as it can be); no standard errors.",
                 );
+            }
+            AnalysisKind::TimePivot => {
+                ui.label(
+                    "Every chosen column is summarized per period of its X column, which holds dates or date-times.",
+                );
+                let s = &mut self.timepivot;
+                ui.horizontal(|ui| {
+                    ui.label("Period");
+                    egui::ComboBox::from_id_salt("timepivot_period").selected_text(s.period.name()).show_ui(ui, |ui| {
+                        for p in PivotPeriod::ALL {
+                            ui.selectable_value(&mut s.period, p, p.name());
+                        }
+                    });
+                    ui.label("Statistic");
+                    egui::ComboBox::from_id_salt("timepivot_stat").selected_text(s.stat.name()).show_ui(ui, |ui| {
+                        for st in PivotStat::ALL {
+                            ui.selectable_value(&mut s.stat, st, st.name());
+                        }
+                    });
+                });
+                ui.weak("Weeks start on Monday; periods without a value are left out.");
             }
             AnalysisKind::BinScatter => {
                 ui.label("Every chosen column is binned against its X column (or the row number).");

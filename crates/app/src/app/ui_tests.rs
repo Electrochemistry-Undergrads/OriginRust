@@ -5607,6 +5607,26 @@ fn the_statistics_menu_runs_a_quantile_regression() {
     assert_eq!(h.state().doc.undo_label(), Some("Quantile regression"));
 }
 
+/// Worksheet > Time Series Pivot... (T358): the values per day of their date-time X, one undo step.
+#[test]
+fn the_worksheet_menu_makes_a_time_series_pivot() {
+    let data = csv_file(
+        "timepivot",
+        "tp",
+        "t,v\n2026-01-05 09:00,1\n2026-01-05 17:00,3\n2026-01-06 08:00,10\n2026-02-01 12:00,7\n",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - tp.csv");
+    menu_path(&mut h, &["Worksheet", "Time Series Pivot..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Period"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, means) = result_column(&h, "Mean of v");
+    assert!(sheet.starts_with("TimePivot"), "{sheet}");
+    assert_eq!(means, [2.0, 10.0, 7.0], "one row per day");
+    assert_eq!(h.state().doc.undo_label(), Some("Time series pivot"));
+}
+
 /// Statistics > Descriptive Statistics > Binned Scatter... (T356): the bins of a column, a sheet and a graph.
 #[test]
 fn the_descriptive_menu_makes_a_binned_scatter() {

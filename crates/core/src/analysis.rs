@@ -72,6 +72,7 @@ pub use simsurface::SimulateSurfaceSpec;
 pub use simulate::{SimulateCurveSpec, SimulateX};
 pub use summary::{GraphArrangement, GraphSummarySpec};
 pub use survival::KaplanMeierSpec;
+pub use timepivot::{PivotPeriod, PivotStat, TimePivotSpec};
 pub use wavelet::{
     CwtSpec, WaveletDecomposeSpec, WaveletDenoiseSpec, WaveletReconstructSpec, WaveletSmoothSpec, WaveletThresholdKind,
 };
@@ -1145,6 +1146,9 @@ pub enum Tool {
     /// Statistics > Descriptive Statistics > Binned Scatter (T356, `docs/spec/statistics.md` section 31): X cut
     /// into bins, the mean Y of each.
     BinScatter(BinScatterSpec),
+    /// Worksheet > Time Series Pivot (T358, `docs/spec/statistics.md` section 32): the Y columns summarized per
+    /// calendar period of their date-time X.
+    TimePivot(TimePivotSpec),
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
     /// censor and, optionally, group columns.
     KaplanMeier(KaplanMeierSpec),
@@ -1274,6 +1278,7 @@ impl Tool {
             Tool::QuantReg(_) => "Quantile regression",
             Tool::ChangePoint(_) => "Change point analysis",
             Tool::BinScatter(_) => "Binned scatter",
+            Tool::TimePivot(_) => "Time series pivot",
             Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
             Tool::GraphSummary(_) => "Graphical summary",
             Tool::AverageCurves(_) => "Average multiple curves",
@@ -1354,6 +1359,7 @@ impl Tool {
             Tool::QuantReg(_) => "QuantReg",
             Tool::ChangePoint(_) => "ChangePoint",
             Tool::BinScatter(_) => "BinScatter",
+            Tool::TimePivot(_) => "TimePivot",
             Tool::KaplanMeier(_) => "KaplanMeier",
             Tool::GraphSummary(_) => "GraphSummary",
             Tool::AverageCurves(_) => "AverageResult",
@@ -2271,6 +2277,7 @@ mod simulate;
 mod statistics;
 mod summary;
 mod survival;
+mod timepivot;
 mod wavelet;
 mod xyzarea;
 pub use manip::{
@@ -2630,6 +2637,12 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 summary_graphs = out.graphs;
+            }
+            Tool::TimePivot(spec) => {
+                let out = timepivot::run(spec, &inputs)?;
+                table = Some(out.table);
+                on_sheet = out.on_sheet;
+                notes = out.notes;
             }
             Tool::BinScatter(spec) => {
                 let out = binscatter::run(spec, &inputs)?;

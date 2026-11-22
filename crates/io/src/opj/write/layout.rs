@@ -258,6 +258,8 @@ pub(super) struct ColumnSpec<'a> {
     pub parent: u16,
     /// Position of the column in its sheet; the first two get the default width.
     pub index: usize,
+    /// The column's own width in characters (T334), written in tenths at `0x4A`.
+    pub width: Option<u16>,
     /// The number that ties the column to the recalculation records (0 for a column that takes
     /// no part in one; spec section 13.10).
     pub object_id: u16,
@@ -288,6 +290,10 @@ pub(super) fn column_record(c: &ColumnSpec) -> Vec<u8> {
     put(&mut h, 0x25, &c.type_code.to_le_bytes());
     if c.index < 2 {
         h[0x4a] = 0x43;
+    }
+    // T334, measured in Origin 2016: wks.col2.width=14 stored 140 here.
+    if let Some(w) = c.width {
+        put(&mut h, 0x4a, &w.saturating_mul(10).to_le_bytes());
     }
     let (x0, inc) = c.sampling.map_or((1.0, 1.0), |(x0, inc, _)| (x0, inc));
     put(&mut h, 0x1d2, &x0.to_le_bytes());

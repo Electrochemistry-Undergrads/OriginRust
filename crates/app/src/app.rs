@@ -2800,6 +2800,7 @@ impl SheafApp {
                 self.sort = SortDialog::nested_in_rows(self.doc.project(), book, columns, rows);
             }
             Action::PivotTable { book, columns } => self.pivot = PivotDialog::new(&self.doc, book, columns),
+            Action::ExtractRegion { graph, layer, shape } => self.extract_region(graph, layer, shape),
             Action::MultiPeakFit { graph, y, layer } => {
                 let graph = match graph {
                     Some(g) => Some(g),
@@ -5995,6 +5996,70 @@ impl SheafApp {
             self.logs.result(report.message.clone(), report.notes.clone());
             self.panels.reveal(PanelId::Results);
             self.say(report.message);
+        }
+    }
+
+    /// Extract Data in Region (T355): the data points of the layer inside the drawn rectangle or ellipse go to a
+    /// new workbook, three columns per plot with points inside (X, Y and the source row), as one undo step.
+    fn extract_region(&mut self, graph: WindowId, layer: usize, shape: usize) {
+        let found = match sheaf_plot::region::points_in_shape(self.doc.project(), graph, layer, shape) {
+            Ok(Some(found)) => found,
+            Ok(None) => return self.warn("Only a rectangle or an ellipse marks a region"),
+            Err(e) => return self.warn(e.to_string()),
+        };
+        if found.is_empty() {
+            return self.say("No data points inside the object");
+        }
+        let project = self.doc.project();
+        let Some(l) = project.graph(graph).and_then(|g| g.layers.get(layer)) else { return };
+        let names: Vec<(String, String, String, String)> = found
+            .iter()
+            .map(|f| {
+                let plot = &l.plots[f.plot];
+                let y = project.column(plot.y);
+                let x = plot.x.and_then(|x| project.column(x));
+                (
+                    x.map_or("Row".to_string(), |c| c.display_name().to_string()),
+                    x.map_or(String::new(), |c| c.units.clone()),
+                    y.map_or(String::new(), |c| c.display_name().to_string()),
+                    y.map_or(String::new(), |c| c.units.clone()),
+                )
+            })
+            .collect();
+        let labels: Vec<String> = found.iter().map(|f| project.plot_label(&l.plots[f.plot])).collect();
+        let total: usize = found.iter().map(|f| f.rows.len()).sum();
+        let made = self.doc.edit("Extract data in region", |p| {
+            let book = p.add_workbook("Extracted from region");
+            for ((f, (xn, xu, yn, yu)), label) in found.iter().zip(&names).zip(&labels) {
+                let comment = format!("in the region of {label}");
+                let columns = [
+                    (Designation::X, xn.clone(), xu.clone(), f.x.clone()),
+                    (Designation::Y, yn.clone(), yu.clone(), f.y.clone()),
+                    (
+                        Designation::Disregard,
+                        "Source row".to_string(),
+                        String::new(),
+                        f.rows.iter().map(|r| (r + 1) as f64).collect(),
+                    ),
+                ];
+                for (designation, name, units, values) in columns {
+                    let id =
+                        p.add_column(book, 0, designation, ColumnData::numeric(values)).map_err(|e| e.to_string())?;
+                    if let Some(c) = p.column_mut(id) {
+                        c.long_name = name;
+                        c.units = units;
+                        c.comments = comment.clone();
+                    }
+                }
+            }
+            Ok::<_, String>(book)
+        });
+        match made {
+            Ok(book) => {
+                self.focus(book);
+                self.say(format!("{total} data point(s) in the region copied to a new workbook"));
+            }
+            Err(e) => self.warn(e),
         }
     }
 

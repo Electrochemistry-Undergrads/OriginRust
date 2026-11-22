@@ -4142,6 +4142,18 @@ page break before each graph but the first. The page menu keeps Origin's one ite
 Word" (later versions) was not compared. `sheaf export project -o graphs.docx` does the same (`--graph` repeated
 or `--all-graphs`). Checked by opening the file in Word (Microsoft 365, through COM: 2 pages, 2 inline pictures
 468 pt wide, the captions Graph1 and Graph2).
+### 17.12 Extract Data in Region (T355, Origin 2024b feature, not measured)
+
+Origin 2024b copies the data inside rectangular, oval or freeform regions drawn on a graph to a worksheet; Origin 2016
+has no such tool, so this is Sheaf's own. The right-click menu of a drawn rectangle or ellipse has Extract Data in
+Region (lines, arrows and pictures do not): every plot of the object's layer is searched over the rows it shows, and a
+point is inside when its place on the page, through the layer's axis scales (log, reciprocal, reversed limits), lies
+inside the rectangle or the ellipse inscribed in it (`sheaf_plot::region::points_in_shape`); rows with a missing X or Y
+are left out and the offsets of stacked plots are not applied. The points go to a new workbook "Extracted from
+region": per plot with points inside, an X column (the plot's X name, "Row" without one), a Y column (its Y name) and a
+Disregard column "Source row" (1-based), each commented "in the region of <plot>". One undo step ("Extract data in
+region"). Freeform regions and several regions at once are not built.
+
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 
 Measured on 2026-11-13 by opening Origin's Plot Details on a line plot (`tools/origin-ref/origin-dialog.ps1`,

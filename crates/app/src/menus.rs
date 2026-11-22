@@ -664,6 +664,11 @@ pub enum Cmd {
         layer: usize,
         shape: usize,
     },
+    /// The data points inside a drawn rectangle or ellipse, copied to a new workbook (T355).
+    ExtractRegion {
+        layer: usize,
+        shape: usize,
+    },
     /// Add Text...: a new text label in the active layer.
     AddText,
     /// Properties of a text label (its text window).
@@ -2894,8 +2899,8 @@ pub fn graph_label_menu(layer: usize, label: usize) -> Vec<Entry> {
 }
 
 /// The menu of a drawn line, arrow, rectangle or ellipse.
-pub fn graph_shape_menu(layer: usize, shape: usize) -> Vec<Entry> {
-    vec![
+pub fn graph_shape_menu(layer: usize, shape: usize, region: bool) -> Vec<Entry> {
+    let mut entries = vec![
         keyed("Cut", ctrl(Key::X), Cmd::CutShape { layer, shape }),
         keyed("Copy", ctrl(Key::C), Cmd::CopyShape { layer, shape }),
         keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteShape { layer, shape })),
@@ -2903,8 +2908,14 @@ pub fn graph_shape_menu(layer: usize, shape: usize) -> Vec<Entry> {
         item("Bring to the front", Cmd::GraphEdit(GraphOp::OrderShape { layer, shape, front: true })),
         item("Push to the back", Cmd::GraphEdit(GraphOp::OrderShape { layer, shape, front: false })),
         sep(),
-        item("Properties...", Cmd::EditShape { layer, shape }),
-    ]
+    ];
+    // A rectangle or an ellipse marks a region whose data points can be copied out (T355).
+    if region {
+        entries.push(item("Extract Data in Region", Cmd::ExtractRegion { layer, shape }));
+        entries.push(sep());
+    }
+    entries.push(item("Properties...", Cmd::EditShape { layer, shape }));
+    entries
 }
 
 /// The menu of a slope annotation.
@@ -3959,6 +3970,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::EditShape { layer, shape } => {
             Action::EditShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape }
+        }
+        Cmd::ExtractRegion { layer, shape } => {
+            Action::ExtractRegion { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape }
         }
         Cmd::AddText => Action::AddText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: Some(c.layer), at: None },
         Cmd::EditText { layer, label } => {

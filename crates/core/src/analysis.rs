@@ -54,6 +54,7 @@ pub use sheaf_calc::{RmTerm, ThreeWayEffect, ThreeWayTerms};
 pub use sheaf_calc::{StftOptions, StftOutput};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
+pub use acf::AcfSpec;
 pub use binscatter::BinScatterSpec;
 pub use calc::binscatter::BinRule;
 pub use calc::changepoint::{ChangeKind, Penalty as ChangePenalty};
@@ -1152,6 +1153,9 @@ pub enum Tool {
     TimePivot(TimePivotSpec),
     /// Statistics > Manhattan Plot (T362, `docs/spec/statistics.md` section 33): group, position and p-value columns.
     Manhattan(ManhattanSpec),
+    /// Statistics > Autocorrelation (T363, `docs/spec/statistics.md` section 34): ACF, PACF and Ljung-Box of every
+    /// chosen column.
+    Acf(AcfSpec),
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
     /// censor and, optionally, group columns.
     KaplanMeier(KaplanMeierSpec),
@@ -1283,6 +1287,7 @@ impl Tool {
             Tool::BinScatter(_) => "Binned scatter",
             Tool::TimePivot(_) => "Time series pivot",
             Tool::Manhattan(_) => "Manhattan plot",
+            Tool::Acf(_) => "Autocorrelation",
             Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
             Tool::GraphSummary(_) => "Graphical summary",
             Tool::AverageCurves(_) => "Average multiple curves",
@@ -1365,6 +1370,7 @@ impl Tool {
             Tool::BinScatter(_) => "BinScatter",
             Tool::TimePivot(_) => "TimePivot",
             Tool::Manhattan(_) => "Manhattan",
+            Tool::Acf(_) => "ACF",
             Tool::KaplanMeier(_) => "KaplanMeier",
             Tool::GraphSummary(_) => "GraphSummary",
             Tool::AverageCurves(_) => "AverageResult",
@@ -2263,6 +2269,7 @@ fn run_peak_chain(
     Ok(t)
 }
 
+mod acf;
 mod anova3;
 mod binscatter;
 mod categorical;
@@ -2671,6 +2678,14 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 xy_graph = out.graph;
+            }
+            Tool::Acf(spec) => {
+                let out = acf::run(spec, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+                more_xy_graphs = out.more_graphs;
             }
             Tool::Pca(_) | Tool::Kmeans(_) => {
                 let out = multivariate::run(&request.tool, &inputs)?;

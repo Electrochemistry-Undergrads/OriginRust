@@ -2,16 +2,20 @@
 use super::frame::{DialogButton, ok_cancel_apply};
 use eframe::egui;
 use sheaf_core::cellformat::LabelKind;
-use sheaf_core::sheet_fonts::WorksheetFont;
+use sheaf_core::sheet_fonts::{ColumnLabelFont, WorksheetFont};
 use sheaf_core::{Document, WindowId};
+
+const DATA: usize = 0;
+const BULK: usize = 4;
+const CATEGORIES: [&str; 5] = ["Data", "Long Name", "Units", "Comments", "Column Labels"];
 
 pub struct WorksheetFontsDialog {
     book: WindowId,
     sheet: usize,
     generation: u64,
     revision: u64,
-    base: [WorksheetFont; 4],
-    shown: [WorksheetFont; 4],
+    base: [ColumnLabelFont; CATEGORIES.len()],
+    shown: [ColumnLabelFont; CATEGORIES.len()],
     category: usize,
     fonts: Vec<String>,
     font_search: String,
@@ -22,20 +26,22 @@ impl WorksheetFontsDialog {
         let b = doc.project().workbook(book)?;
         let sheet = b.active_sheet.min(b.sheets.len().checked_sub(1)?);
         let defaults = &b.sheets[sheet].font_defaults;
+        let data = defaults.data.clone().unwrap_or_default();
         let base = [
-            defaults.data.clone().unwrap_or_default(),
-            WorksheetFont {
+            ColumnLabelFont { family: data.family, size_pt: Some(data.size_pt) },
+            ColumnLabelFont {
                 family: defaults.long_name_family.clone().unwrap_or_default(),
-                size_pt: defaults.long_name_size_pt.unwrap_or(9.0),
+                size_pt: defaults.long_name_size_pt,
             },
-            WorksheetFont {
+            ColumnLabelFont {
                 family: defaults.units_family.clone().unwrap_or_default(),
-                size_pt: defaults.units_size_pt.unwrap_or(9.0),
+                size_pt: defaults.units_size_pt,
             },
-            WorksheetFont {
+            ColumnLabelFont {
                 family: defaults.comments_family.clone().unwrap_or_default(),
-                size_pt: defaults.comments_size_pt.unwrap_or(9.0),
+                size_pt: defaults.comments_size_pt,
             },
+            defaults.column_labels.clone(),
         ];
         let mut fonts: Vec<_> = sheaf_plot::SystemFonts::shared()
             .database()
@@ -51,7 +57,7 @@ impl WorksheetFontsDialog {
             revision: doc.revision(),
             shown: base.clone(),
             base,
-            category: 0,
+            category: DATA,
             fonts,
             font_search: String::new(),
         })
@@ -72,12 +78,17 @@ impl WorksheetFontsDialog {
         }
         doc.apply("Worksheet font", |p| {
             let sheet = &mut p.workbook_mut(self.book).unwrap().sheets[self.sheet];
-            if self.shown[0] != self.base[0] {
-                sheet.set_data_font(self.shown[0].clone());
+            if self.shown[DATA] != self.base[DATA] {
+                let data = &self.shown[DATA];
+                sheet
+                    .set_data_font(WorksheetFont { family: data.family.clone(), size_pt: data.size_pt.unwrap_or(9.0) });
+            }
+            if self.shown[BULK] != self.base[BULK] {
+                sheet.set_column_labels_font(self.shown[BULK].clone());
             }
             for (i, kind) in [LabelKind::LongName, LabelKind::Units, LabelKind::Comments].iter().enumerate() {
                 if self.shown[i + 1].size_pt != self.base[i + 1].size_pt {
-                    sheet.set_label_font_size(kind, self.shown[i + 1].size_pt);
+                    sheet.set_label_font_size_override(kind, self.shown[i + 1].size_pt);
                 }
                 if self.shown[i + 1].family != self.base[i + 1].family {
                     sheet.set_label_font_family(kind, &self.shown[i + 1].family);
@@ -105,7 +116,6 @@ impl WorksheetFontsDialog {
                 ui.label("Format");
                 egui::Grid::new("worksheet_fonts_grid").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
                     ui.label("Apply To");
-                    const CATEGORIES: [&str; 4] = ["Data", "Long Name", "Units", "Comments"];
                     egui::ComboBox::from_id_salt("worksheet_font_category")
                         .selected_text(CATEGORIES[self.category])
                         .show_ui(ui, |ui| {
@@ -113,7 +123,7 @@ impl WorksheetFontsDialog {
                                 ui.selectable_value(&mut self.category, i, *name);
                             }
                             ui.add_enabled_ui(false, |ui| {
-                                for name in ["Standard", "Column Labels", "Column Header", "Row Header", "F(x)="] {
+                                for name in ["Standard", "Column Header", "Row Header", "F(x)="] {
                                     let _ =
                                         ui.selectable_label(false, name).on_hover_text("Not available in Sheaf yet");
                                 }
@@ -150,13 +160,30 @@ impl WorksheetFontsDialog {
                     });
                     ui.end_row();
                     ui.label("Size (pt)");
-                    ui.add(egui::DragValue::new(&mut shown.size_pt).range(4.0..=96.0).speed(0.25)).widget_info(|| {
+                    let mut size = shown.size_pt.unwrap_or(0.0);
+                    let value = egui::DragValue::new(&mut size).speed(0.25);
+                    let value = if self.category == DATA {
+                        value.range(4.0..=96.0)
+                    } else {
+                        value
+                            .range(0.0..=96.0)
+                            .custom_formatter(|v, _| if v == 0.0 { "Default".into() } else { format!("{v:.1}") })
+                            .custom_parser(|s| {
+                                let s = s.trim();
+                                if s.eq_ignore_ascii_case("default") { Some(0.0) } else { s.parse::<f64>().ok() }
+                            })
+                    };
+                    let response = ui.add(value);
+                    response.widget_info(|| {
                         egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, "Worksheet font size")
                     });
+                    if response.changed() {
+                        shown.size_pt = (size > 0.0).then_some(size.max(4.0));
+                    }
                     ui.end_row();
                 });
                 ui.add_space(6.0);
-                ui.label("Manual cell fonts and sizes take precedence.");
+                ui.label("Manual cell formats take precedence over category defaults.");
                 ui.allocate_ui_with_layout(
                     egui::vec2(340.0, ui.spacing().interact_size.y),
                     egui::Layout::right_to_left(egui::Align::Center),

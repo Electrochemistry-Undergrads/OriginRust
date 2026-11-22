@@ -811,12 +811,27 @@ The compact layout, draft policy and manual-label precedence are Sheaf choices; 
 priority remains unverified against Native. Existing derived label heights remain in use.
 Family-only edits keep point-size overrides absent. Automatic clears only the category family,
 using the existing Arial fallback; manual names/sizes and other category drafts stay independent.
-The native Font apply-mask checkbox is omitted. Standard, headers, bulk Column
-Labels and F(x)= controls remain disabled; further mutation/precedence rules need measurement.
-Other worksheet tabs and color/
-text-control defaults remain unavailable. The [official Format tab reference](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
+The native Font apply-mask checkbox is omitted. Standard, headers, and the individual
+F(x)= category remain disabled. Other worksheet tabs and category color and text controls
+remain open. The [official Format tab reference](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
 and [wproperties reference](https://docs.originlab.com/x-function/ref/wproperties/) describe the
 current interface; the 2016 observations above come from the local synthetic probes.
+
+**Column Labels font defaults (T59, 2026-11-21).** In a private Origin 2016 workbook,
+setting the Column Labels point size to 20 enlarged the Long Name, Units, Comments,
+system parameter, user parameter and F(x)= cell text. The data, row captions and
+column headings kept their original size. Setting Long Name separately to 24
+affected that label row, and a newly added column inherited 24 for its Long Name
+and 20 for Units and Comments. The category kept Origin's fixed row heights.
+The family choice is documented. The live probe measured point sizes.
+[Worksheet Properties Format tab](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
+
+Sheaf's Column Labels category sets family and size for those same label cells.
+Manual properties take precedence, followed by the individual Long Name, Units or
+Comments setting and then Column Labels. The category's Automatic family and
+Default size restore inheritance for that property. Type 0 to select Default size.
+The dialog retains drafts when switching categories and commits them together.
+Sheaf continues to derive row heights from the effective text.
 
 Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
 The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,

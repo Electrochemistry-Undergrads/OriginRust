@@ -96,6 +96,11 @@ passed, including the six new family tests. The desktop review showed the catego
 existing and new columns. An independent XLSX reader confirmed the effective font styles and
 preserved numeric values, and the SVG retained the label text.
 
+Column Labels follow-up (2026-11-21). F4 sets a common family and size for Long
+Name, Units, Comments, formula and parameter label cells. Individual label and
+manual properties take precedence. Origin 2016 size coverage and the documented
+family control are recorded in GUI 3. Standard and header defaults remain open.
+
 **Size:** L. **Branch:** `cell-format` (model/dialog), `codex/t59-format-toolbar` (toolbar/font geometry), `codex/t59-worksheet-controls` (underline/fill/keys), `codex/t59-worksheet-dialog` (dialog measurements/More entry), `codex/t59-custom-colors` (one-off RGB chooser), `codex/t59-classic-colors` (24 Classic worksheet presets), `codex/t59-xlsx-formats` (Excel cell styles). **Priority:** P0, wave 1.
 **Spec:** [workbook model](../spec/workbook-model.md), new Cell formats section;
 [GUI](../spec/gui-look.md) 3. **Inventory:** the worksheet-wide `T59` menu location now opens the bounded Data-font dialog; the three unsupported text-control choices are B5.

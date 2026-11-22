@@ -1485,6 +1485,36 @@ fn manhattan_plot_runs_from_the_command_line() {
     assert!(ok && out.contains("3 groups"), "the group from the X column: {err} {out}");
 }
 
+/// Rare event charts (spec `statistics.md` section 35, T364).
+#[test]
+fn rare_event_charts_run_from_the_command_line() {
+    let dir = scratch("rarechart");
+    let path = dir.join("rare.csv");
+    std::fs::write(&path, "n,g,t\n1,10,2\n2,25,4\n3,3,6\n4,40,8\n5,18,3\n6,300,5\n7,12,7\n").unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "rarechart", file, "--y", "g", "--limits", "sigma"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("G chart of 7 values") && out.contains("point(s) 6 beyond") && out.contains("RareChart1"),
+        "{out}"
+    );
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "rarechart",
+        file,
+        "--y",
+        "t",
+        "--chart",
+        "t",
+        "--distribution",
+        "exponential",
+        "--no-graph",
+    ]);
+    assert!(ok && out.contains("T chart of 7 values (exponential mean 5)"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "rarechart", file, "--y", "g", "--chart", "x"]);
+    assert!(!ok && err.contains("--chart"), "{err}");
+}
+
 /// Autocorrelation (spec `statistics.md` section 34, T363).
 #[test]
 fn autocorrelation_runs_from_the_command_line() {

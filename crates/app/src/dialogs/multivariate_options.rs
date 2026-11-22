@@ -4,8 +4,8 @@
 use super::analysis::AnalysisKind;
 use eframe::egui;
 use sheaf_core::analysis::{
-    BinRule, BinScatterSpec, ChangeKind, ChangePenalty, ChangePointSpec, KaplanMeierSpec, KmeansSpec, ManhattanSpec,
-    PcaSpec, PivotPeriod, PivotStat, QuantRegSpec, RocSpec, TimePivotSpec, Tool,
+    AcfSpec, BinRule, BinScatterSpec, ChangeKind, ChangePenalty, ChangePointSpec, KaplanMeierSpec, KmeansSpec,
+    ManhattanSpec, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec, RocSpec, TimePivotSpec, Tool,
 };
 
 /// What the windows keep between frames.
@@ -18,6 +18,7 @@ pub struct MultiOptions {
     binscatter: BinScatterSpec,
     timepivot: TimePivotSpec,
     manhattan: ManhattanSpec,
+    acf: AcfSpec,
     /// The value of the Manual penalty while another penalty is chosen.
     manual_penalty: Option<f64>,
     /// The quantiles as typed (comma separated), read when the tool runs.
@@ -66,6 +67,12 @@ impl MultiOptions {
                 Ok(Tool::QuantReg(QuantRegSpec { quantiles, ..self.quantreg.clone() }))
             }
             AnalysisKind::TimePivot => Ok(Tool::TimePivot(self.timepivot)),
+            AnalysisKind::Acf => {
+                if !(self.acf.confidence > 0.0 && self.acf.confidence < 1.0) {
+                    return Err("the confidence level must lie between 0 and 1".to_string());
+                }
+                Ok(Tool::Acf(self.acf))
+            }
             AnalysisKind::Manhattan => {
                 if !(self.manhattan.threshold > 0.0 && self.manhattan.threshold < 1.0) {
                     return Err("the significance level must lie between 0 and 1".to_string());
@@ -174,6 +181,28 @@ impl MultiOptions {
                 ui.weak(
                     "The exact solution of each quantile (the sum of check losses is as small as it can be); no standard errors.",
                 );
+            }
+            AnalysisKind::Acf => {
+                ui.label("Every chosen column is a series of its own, in row order; missing values are left out.");
+                let s = &mut self.acf;
+                ui.horizontal(|ui| {
+                    let mut auto = s.lags == 0;
+                    if ui.checkbox(&mut auto, "Lags chosen from the length (10 log10 n)").changed() {
+                        s.lags = if auto { 0 } else { 20 };
+                    }
+                    if !auto {
+                        ui.label("Largest lag");
+                        ui.add(egui::DragValue::new(&mut s.lags).range(1..=10_000));
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Confidence level of the bounds");
+                    let mut pct = s.confidence * 100.0;
+                    if ui.add(egui::DragValue::new(&mut pct).speed(0.1).range(50.0..=99.99).suffix(" %")).changed() {
+                        s.confidence = pct / 100.0;
+                    }
+                });
+                ui.checkbox(&mut s.graph, "ACF and PACF graphs");
             }
             AnalysisKind::Manhattan => {
                 ui.label("The chosen columns are the group (chromosome), the position and the p-value, in that order.");

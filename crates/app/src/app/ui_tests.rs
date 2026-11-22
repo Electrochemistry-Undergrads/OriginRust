@@ -5742,6 +5742,30 @@ fn the_statistics_menu_makes_a_manhattan_plot() {
     assert_eq!(h.state().doc.undo_label(), Some("Manhattan plot"));
 }
 
+/// Statistics > Autocorrelation... (T363): one row per lag in a new sheet, the ACF and PACF graphs, one undo step.
+#[test]
+fn the_statistics_menu_computes_the_autocorrelation() {
+    let mut text = String::from("t,v\n");
+    for i in 0..40 {
+        text.push_str(&format!("{i},{}\n", if i % 2 == 0 { 1.0 } else { -1.0 }));
+    }
+    let data = csv_file("acf", "ts", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - ts.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Autocorrelation..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "ACF and PACF graphs"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
+    let (sheet, lags) = result_column(&h, "Lag");
+    assert!(sheet.starts_with("ACF"), "{sheet}");
+    assert_eq!(lags.len(), 16, "floor(10 log10 40) lags");
+    let (_, acf) = result_column(&h, "ACF");
+    assert!((acf[0] + 0.975).abs() < 1e-12, "{acf:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 2);
+    assert_eq!(h.state().doc.undo_label(), Some("Autocorrelation"));
+}
+
 /// Worksheet > Time Series Pivot... (T358): the values per day of their date-time X, one undo step.
 #[test]
 fn the_worksheet_menu_makes_a_time_series_pivot() {

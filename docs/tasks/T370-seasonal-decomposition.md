@@ -1,10 +1,10 @@
 # T370: Seasonal decomposition
 
-**Status:** done 2026-11-22 (Claude Windows "claude:gmail", statistics 39). HANDOFF C (Origin 2024b Pro Time Series
+**Status:** done 2026-11-22 (Claude Windows "claude:gmail", statistics 40). HANDOFF C (Origin 2024b Pro Time Series
 Analysis app, "separate trend and seasonality"): Statistics > Seasonal Decomposition... and `sheaf analyze decompose`
 split each series into a centred moving-average trend, seasonal indices and a residual (additive or multiplicative),
 write the indices and the three parts and draw three graphs. Not measured in Origin.
-**Size:** S. **Spec:** statistics 39.
+**Size:** S. **Spec:** statistics 40.
 
 ## Left
 

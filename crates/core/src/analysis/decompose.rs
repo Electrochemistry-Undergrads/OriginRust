@@ -1,6 +1,6 @@
 //! Statistics > Seasonal Decomposition as a tool of `Project::analyze` (T370; Origin 2024b's Time Series Analysis
 //! app, not in Origin 2016, so the layout is Sheaf's own). The numerics are in `sheaf_calc::decompose`;
-//! `docs/spec/statistics.md` section 39 says what is computed and written.
+//! `docs/spec/statistics.md` section 40 says what is computed and written.
 //!
 //! Every chosen column is a series of its own, in row order; it must be complete in the chosen rows.
 

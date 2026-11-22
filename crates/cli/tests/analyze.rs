@@ -1582,7 +1582,7 @@ fn rare_event_charts_run_from_the_command_line() {
     assert!(!ok && err.contains("--chart"), "{err}");
 }
 
-/// Seasonal decomposition (spec `statistics.md` section 39, T370).
+/// Seasonal decomposition (spec `statistics.md` section 40, T370).
 #[test]
 fn seasonal_decomposition_runs_from_the_command_line() {
     let dir = scratch("decompose");
@@ -2469,4 +2469,21 @@ fn stats_percentiles_add_one_column_each() {
     assert!(out.contains("P5") && out.contains("P97.5"), "{out}");
     let (ok, _, err) = sheaf(&["analyze", "stats", file, "--y", "untreated", "--percentiles", "101"]);
     assert!(!ok && err.contains("between 0 and 100"), "{err}");
+}
+
+#[test]
+fn acceptance_sampling_designs_and_evaluates_plans_without_a_data_file() {
+    // scipy (tools/acceptance-ref.py): AQL 1 %, LTPD 5 %, risks 5 % and 10 % give n 132, c 3.
+    let (ok, out, err) = sheaf(&["analyze", "acceptance", "--aql", "0.01", "--ltpd", "0.05"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Sample size n") && out.contains("132"), "{out}");
+    let dir = scratch("acceptance");
+    let csv = dir.join("oc.csv");
+    let (ok, out, err) =
+        sheaf(&["analyze", "acceptance", "--n", "50", "--c", "1", "--lot", "1000", "--export", csv.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(out.contains("AOQL") && out.contains("0.0158626"), "{out}");
+    assert!(std::fs::read_to_string(&csv).unwrap().lines().count() > 100);
+    let (ok, _, err) = sheaf(&["analyze", "acceptance", "--aql", "0.1", "--ltpd", "0.05"]);
+    assert!(!ok && err.contains("below LTPD"), "{err}");
 }

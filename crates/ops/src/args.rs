@@ -2907,6 +2907,38 @@ pub enum AnalyzeTool {
         #[arg(long)]
         export: Option<std::path::PathBuf>,
     },
+    /// Acceptance sampling by attributes (T369): the single sampling plan with the smallest sample that
+    /// meets both risks at the AQL and LTPD, or a plan given with --n and --c, with its OC curve; with --lot
+    /// also AOQ, AOQL and ATI. Needs no data file. Fractions defective are given as fractions (0.01 is 1 %).
+    Acceptance {
+        /// Acceptable quality level.
+        #[arg(long, default_value_t = 0.01)]
+        aql: f64,
+        /// Lot tolerance percent defective, as a fraction.
+        #[arg(long, default_value_t = 0.05)]
+        ltpd: f64,
+        /// Producer's risk.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+        /// Consumer's risk.
+        #[arg(long, default_value_t = 0.10)]
+        beta: f64,
+        /// Evaluate this sample size (with --c) instead of designing a plan.
+        #[arg(long, requires = "c")]
+        n: Option<u64>,
+        /// The acceptance number of the plan given with --n.
+        #[arg(long, requires = "n")]
+        c: Option<u64>,
+        /// Lot size, for AOQ, AOQL and ATI.
+        #[arg(long)]
+        lot: Option<u64>,
+        /// Write the OC curve table to this file (CSV or text, by extension).
+        #[arg(long)]
+        export: Option<std::path::PathBuf>,
+        /// Save the project (the Acceptance Sampling book and its OC graph) to this file.
+        #[arg(long)]
+        save: Option<std::path::PathBuf>,
+    },
     /// Two-way ANOVA. Indexed data (default): --y FACTOR_A,FACTOR_B,DATA names three columns, the first two
     /// holding the levels (text or numbers) of each row. With --raw every --y column is one cell of the
     /// design and --levels-a / --levels-b give its levels. Sums of squares are Origin's (type III for

@@ -8,6 +8,7 @@
 //!
 //! Row numbers in options and results are 1-based, as in a worksheet.
 
+pub mod acceptance;
 pub mod acf;
 pub mod anova;
 pub mod anova2;

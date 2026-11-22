@@ -1,5 +1,5 @@
 //! Classical seasonal decomposition (Origin 2024b's Time Series Analysis app, "separate trend and seasonality"; not
-//! in Origin 2016, so nothing here is measured in Origin; `docs/spec/statistics.md` section 39).
+//! in Origin 2016, so nothing here is measured in Origin; `docs/spec/statistics.md` section 40).
 //!
 //! With period `m`: the trend is the centred moving average of `m` points (odd `m`) or of `m + 1` points with half
 //! weights at both ends (even `m`), missing for the first and last `floor(m / 2)` points. The detrended series is

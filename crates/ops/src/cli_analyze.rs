@@ -975,7 +975,9 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
-        AnalyzeTool::Power { .. } => unreachable!("handled before the data file is read"),
+        AnalyzeTool::Power { .. } | AnalyzeTool::Acceptance { .. } => {
+            unreachable!("handled before the data file is read")
+        }
         AnalyzeTool::Anova2 { target, raw, levels_a, levels_b, no_interaction, comparison, alpha } => {
             no_x_range(&target, "the two-way ANOVA")?;
             let layout = if raw {

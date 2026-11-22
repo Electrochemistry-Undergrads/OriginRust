@@ -1178,7 +1178,7 @@ pub enum Tool {
     /// Statistics > Stability Study (T368, `docs/spec/statistics.md` section 38): time, response and, optionally,
     /// batch columns.
     Stability(StabilitySpec),
-    /// Statistics > Seasonal Decomposition (T370, `docs/spec/statistics.md` section 39): trend, seasonal and
+    /// Statistics > Seasonal Decomposition (T370, `docs/spec/statistics.md` section 40): trend, seasonal and
     /// residual of every chosen column.
     Decompose(DecomposeSpec),
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
@@ -2317,6 +2317,7 @@ fn run_peak_chain(
     Ok(t)
 }
 
+mod acceptance;
 mod acf;
 mod anova3;
 mod binscatter;
@@ -2346,6 +2347,7 @@ mod survival;
 mod timepivot;
 mod wavelet;
 mod xyzarea;
+pub use acceptance::{AcceptanceOutput, AcceptanceSpec, acceptance_sampling};
 pub use manip::{
     MedianFilterSpec, ReduceDupSpec, Shift, SubtractLineSpec, TranslateAxis, TranslateSpec, dup_method_name,
 };

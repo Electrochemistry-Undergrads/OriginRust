@@ -3449,6 +3449,21 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Seasonal decomposition: trend (centred moving average), seasonal indices and residual of each --y column,
+    /// additive or multiplicative, with graphs.
+    Decompose {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Points per season (12 for monthly data with a yearly pattern).
+        #[arg(long, default_value_t = 12)]
+        period: usize,
+        /// additive or multiplicative.
+        #[arg(long, default_value = "additive")]
+        model: String,
+        /// Do not make the graphs.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Autocorrelation: ACF (Bartlett bounds), PACF and Ljung-Box Q per lag of each --y column, with ACF and PACF
     /// graphs.
     Acf {

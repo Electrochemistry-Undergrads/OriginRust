@@ -254,6 +254,19 @@ fn one_layer(f: impl FnOnce(&mut Layer)) -> Project {
 }
 
 #[test]
+fn the_display_frame_round_trips_independently_of_opposite_axis_lines() {
+    let (imp, out) = round_trip(&one_layer(|l| {
+        l.display.show_frame = true;
+        l.x_axis.show_opposite = true;
+    }));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    let layer = &imp.graphs[0].layers[0];
+    assert!(layer.display.show_frame);
+    assert!(layer.x_axis.show_opposite);
+    assert!(!layer.y_axis.show_opposite);
+}
+
+#[test]
 fn axes_on_the_opposite_side_or_hidden_come_back() {
     let (imp, out) = round_trip(&one_layer(|l| {
         l.x_axis.side = AxisSide::Opposite;

@@ -90,6 +90,28 @@ fn the_show_items_that_are_not_measured_stay_grey() {
 }
 
 #[test]
+fn plot_details_frame_is_independent_of_opposite_axis_lines() {
+    let mut h = start(vec![data_file("vm-display-frame")]);
+    let id = graph(&h).id;
+    h.state_mut().doc.apply("Fixture", |p| {
+        let layer = &mut p.graph_mut(id).unwrap().layers[0];
+        layer.x_axis.show_opposite = true;
+        layer.y_axis.show_opposite = true;
+    });
+    assert!(!graph(&h).layers[0].display.show_frame);
+    open_props(&mut h, 0, PropsTab::Plots, None);
+    click(&mut h, "Layer 1");
+    click(&mut h, "Display");
+    click(&mut h, "Frame");
+    click(&mut h, "OK");
+    let layer = &graph(&h).layers[0];
+    assert!(layer.display.show_frame);
+    assert!(layer.x_axis.show_opposite && layer.y_axis.show_opposite);
+    menu(&mut h, "Edit", "Undo Change graph settings");
+    assert!(!graph(&h).layers[0].display.show_frame);
+}
+
+#[test]
 fn active_layer_indicator_is_a_saved_page_switch_with_undo_and_identical_graph_output() {
     let mut h = start(vec![data_file("view-active-indicator")]);
     let first = graph(&h).id;

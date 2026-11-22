@@ -570,6 +570,9 @@ pub struct LayerDisplay {
     /// labels, its legend and its drawn objects.
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub show_labels: bool,
+    /// Show Elements: Frame, the outline of the Cartesian plotting rectangle.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub show_frame: bool,
 }
 
 fn is_true(v: &bool) -> bool {
@@ -587,6 +590,7 @@ impl Default for LayerDisplay {
             show_x_axes: true,
             show_y_axes: true,
             show_labels: true,
+            show_frame: false,
         }
     }
 }

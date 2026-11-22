@@ -36,6 +36,9 @@ const Y_STEP_AT: usize = 0x4A;
 const Y_MINOR_AT: usize = 0x62;
 const Y_SCALE_AT: usize = 0x63;
 const RECT_AT: usize = 0x71;
+/// The Show Frame bit in the layer header (opj-format.md 10.2).
+pub(super) const SHOW_FRAME_AT: usize = 0x8A;
+pub(super) const SHOW_FRAME_BIT: u8 = 0x08;
 // Axis blocks (groups x, y, z of six blocks each).
 const AXIS_LABELS: usize = 2;
 const AXIS_LINE: usize = 3;
@@ -203,6 +206,7 @@ fn build_layer(
     out.palette =
         Palette { colors: (0..PALETTE.len()).map(palette_color).collect(), mode: PaletteMode::Cycle, list: None };
     let h = &layer.header;
+    out.display.show_frame = u8_at(h, SHOW_FRAME_AT) & SHOW_FRAME_BIT != 0;
 
     // Frame.
     let (l, t, r, b) = (

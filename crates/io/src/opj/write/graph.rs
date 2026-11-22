@@ -338,7 +338,8 @@ impl Writer {
         if !layer.group_style.is_default() {
             notes.push("the Group tab of a layer (edit mode, increments, subgroups) was not written".into());
         }
-        if !layer.display.is_default() {
+        let unwritten_display = LayerDisplay { show_frame: false, ..layer.display };
+        if !unwritten_display.is_default() {
             notes.push("the Display tab of a layer (data hidden, not clipped, grid on top) was not written".into());
         }
         if layer.display.hidden {
@@ -475,6 +476,7 @@ impl Writer {
             page,
             x: x_scale,
             y: y_scale,
+            show_frame: layer.coords.is_cartesian() && layer.display.show_frame,
             link,
             offsets,
             x_offsets,

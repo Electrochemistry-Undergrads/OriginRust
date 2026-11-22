@@ -936,6 +936,9 @@ fn layer_scene(
     let out = &mut scene.overlay;
     let f = geom.frame;
     fill::draw_border(out, &layer.background_style, f);
+    if layer.coords.is_cartesian() && layer.display.show_frame {
+        out.push(Item::Rect { rect: f, fill: None, stroke: Some(Stroke::solid(Color::BLACK, 0.5)) });
+    }
     // Display tab: X Axes or Y Axes off draws nothing of that axis (line, ticks, labels, title).
     let (hidden_x, hidden_y);
     let hide = |a: &Axis| Axis { side: AxisSide::Hidden, show_opposite: false, opposite_ticks: false, ..a.clone() };

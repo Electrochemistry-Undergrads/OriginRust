@@ -527,7 +527,7 @@ fn tick_direction(code: u8) -> TickDirection {
     }
 }
 
-fn annotation_name(a: &WinAnnotation) -> String {
+pub(crate) fn annotation_name(a: &WinAnnotation) -> String {
     match a.header.get(ANN_NAME_AT..) {
         Some(rest) => decode_cp1252(c_bytes(&rest[..rest.len().min(24)])),
         None => String::new(),

@@ -305,6 +305,20 @@ fn collect(dir: &Path, recurse: bool, out: &mut Vec<std::path::PathBuf>) {
     }
 }
 
+/// Origin 2016's own file with a sheet long name (T343; `re-workspace/scratch/t339/s.opj`, local only).
+#[test]
+fn local_origin_file_gives_the_sheet_long_name() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../re-workspace/scratch/t339/s.opj");
+    if !path.exists() {
+        eprintln!("opj: {} not found; skipping", path.display());
+        return;
+    }
+    let project = read_opj(&path).unwrap().into_project();
+    let b = project.workbooks().find(|b| b.sheets.iter().any(|s| s.name == "Short1")).expect("the book");
+    let s = b.sheets.iter().find(|s| s.name == "Short1").unwrap();
+    assert_eq!(s.long_name, "QZLongSheet");
+}
+
 /// Origin 2016's own file with numeric displays (T337; `re-workspace/scratch/t337/f.opj`, local only).
 #[test]
 fn local_origin_file_gives_the_numeric_displays() {

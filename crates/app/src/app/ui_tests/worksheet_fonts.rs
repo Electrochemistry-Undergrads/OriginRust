@@ -217,7 +217,8 @@ fn worksheet_header_fonts_reach_titles_and_row_numbers_with_one_undo() {
     click(&mut h, "OK");
 
     assert_eq!(painted_size(&h, &heading), [24.0]);
-    assert_eq!(painted_size(&h, "Long Name"), [16.0]);
+    // Project Explorer also paints a column called Long Name.
+    assert!(painted_size(&h, "Long Name").contains(&16.0));
     assert!(painted_size(&h, "2").contains(&16.0));
     assert_eq!(painted_size(&h, "4.5"), before_data);
     assert!(sheet(&h).format_index().is_empty());

@@ -568,6 +568,9 @@ fn designation_of(code: u8) -> Designation {
         2 => Designation::YError,
         6 => Designation::XError,
         4 => Designation::Label,
+        // T330, measured in Origin 2016: LabTalk wks.col.type 8 (Group) and 9 (Subject) are stored as 7 and 8.
+        7 => Designation::Group,
+        8 => Designation::Subject,
         _ => Designation::Disregard,
     }
 }

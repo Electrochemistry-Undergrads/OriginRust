@@ -283,6 +283,10 @@ pub struct FitArgs {
     /// Convergence tolerance of a nonlinear fit.
     #[arg(long, default_value_t = 1e-9)]
     pub tolerance: f64,
+    /// Turn off Auto Parameter Initialization: a nonlinear fit starts from the --param values,
+    /// else the function's own starting values (1 for most), not from a guess from the data.
+    #[arg(long)]
+    pub no_auto_init: bool,
     /// Y columns to fit, comma-separated short or long names; each is fitted on its own
     /// (default: the columns a plot of the sheet would show).
     #[arg(short, long, value_delimiter = ',')]

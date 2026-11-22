@@ -265,8 +265,8 @@ fn a_column_after_a_gap_remembers_where_its_values_start() {
 #[test]
 fn the_roles_of_columns_map_to_the_codes_origin_uses() {
     let codes: Vec<u8> = Designation::ALL.iter().map(|&d| designation_code(d)).collect();
-    // Group and Subject have no code in the written file: they are stored as unused (1).
-    assert_eq!(codes, [3, 0, 5, 2, 6, 4, 1, 1, 1]);
+    // Group 7 and Subject 8, as Origin 2016 stores LabTalk types 8 and 9 (T330).
+    assert_eq!(codes, [3, 0, 5, 2, 6, 4, 7, 8, 1]);
 }
 
 #[test]

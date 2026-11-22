@@ -809,10 +809,9 @@ The three supported label categories expose installed family and point size and 
 independently. Switching categories retains drafts; Apply/OK writes all changed drafts together.
 The compact layout, draft policy and manual-label precedence are Sheaf choices; manual-label
 priority remains unverified against Native. Existing derived label heights remain in use.
-Family-only edits keep point-size overrides absent. Automatic clears only the category family,
-using the existing Arial fallback; manual names/sizes and other category drafts stay independent.
-The native Font apply-mask checkbox is omitted. Standard and the individual
-F(x)= category remain disabled. Other worksheet tabs and category color and text controls
+Family-only edits keep point-size overrides absent. Automatic clears only the category family.
+The value then comes from the next category or the existing Arial fallback.
+The native Font apply-mask checkbox is omitted. The individual F(x)= category remains disabled. Other worksheet tabs and category color and text controls
 remain open. The [official Format tab reference](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
 and [wproperties reference](https://docs.originlab.com/x-function/ref/wproperties/) describe the
 current interface; the 2016 observations above come from the local synthetic probes.
@@ -849,6 +848,26 @@ panes, using the same policy as worksheet cells. Print uses the heading fonts.
 Worksheet images contain only label and data cells. Native project files and
 OPJ companions preserve both categories. Excel uses its own row and column
 headings, so the export reports that it omits these fonts.
+
+**Standard worksheet font (T59).** In Origin 2016, setting `wks.fsize = 18`
+enlarged data, column headings, row numbers, label-row captions and label cells
+in a fresh workbook. Changing Standard from 9 to 18 pt doubled the worksheet's
+default cell widths and heights. Applying Data at 12 pt afterwards changed the
+data text within the larger cells. Column Header at 12 pt and Row Header at
+14 pt, set before Standard, kept those sizes. Setting Standard to Courier New
+changed their inherited family. Column Labels at 11 pt then changed label-cell
+size with the Standard family retained. The `wproperties` tree's Standard size
+assignment produced identical worksheet pixels in both runs. The confirmed
+mutation used the documented worksheet properties.
+[LabTalk Wks object](https://docs.originlab.com/labtalk/ref/wks-obj/)
+
+In Sheaf, F4 > Standard sets the base family and point size for data, headings
+and label text. Each specific category or manual cell property can override
+either part. Set the size to 0 or Default to restore inheritance, including in
+Data. Grid widths and base row heights scale by the Standard point size divided
+by 9. Taller effective text can grow its row further. Print and worksheet
+images apply the same relative sizing to their own base geometry. The image
+contains only label and data cells.
 
 Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
 The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,

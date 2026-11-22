@@ -50,7 +50,9 @@ impl ColumnLabelFont {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct WorksheetFonts {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub data: Option<WorksheetFont>,
+    pub data: Option<ColumnLabelFont>,
+    #[serde(default, skip_serializing_if = "ColumnLabelFont::is_empty")]
+    pub standard: ColumnLabelFont,
     #[serde(default, skip_serializing_if = "ColumnLabelFont::is_empty")]
     pub column_labels: ColumnLabelFont,
     #[serde(default, skip_serializing_if = "ColumnLabelFont::is_empty")]
@@ -76,8 +78,12 @@ impl WorksheetFonts {
         !self.has_cell_fonts() && self.column_header.is_empty() && self.row_header.is_empty()
     }
 
+    pub fn has_data_fonts(&self) -> bool {
+        self.data.is_some() || !self.standard.is_empty()
+    }
+
     pub fn has_cell_fonts(&self) -> bool {
-        self.data.is_some()
+        self.has_data_fonts()
             || !self.column_labels.is_empty()
             || self.long_name_size_pt.is_some()
             || self.units_size_pt.is_some()
@@ -85,6 +91,19 @@ impl WorksheetFonts {
             || self.long_name_family.is_some()
             || self.units_family.is_some()
             || self.comments_family.is_some()
+    }
+
+    /// The Standard point size sets the sheet's base row height and character width.
+    pub fn size_scale(&self) -> f32 {
+        self.standard.style().size_pt.unwrap_or_else(default_size) / default_size()
+    }
+
+    pub fn column_header_style(&self) -> ResolvedStyle<'_> {
+        inherit_font(self.column_header.style(), self.standard.style())
+    }
+
+    pub fn row_header_style(&self) -> ResolvedStyle<'_> {
+        inherit_font(self.row_header.style(), self.standard.style())
     }
 
     pub fn label_size(&self, kind: &LabelKind) -> Option<f32> {
@@ -95,6 +114,7 @@ impl WorksheetFonts {
             _ => None,
         }
         .or_else(|| self.column_labels_for(kind).and_then(|font| font.size_pt))
+        .or_else(|| self.standard_for_label(kind).and_then(|font| font.size_pt))
     }
 
     pub fn label_family(&self, kind: &LabelKind) -> Option<&str> {
@@ -105,7 +125,12 @@ impl WorksheetFonts {
             _ => None,
         }
         .filter(|name| !name.is_empty())
-        .or_else(|| self.column_labels_for(kind).map(|font| font.family.as_str()).filter(|name| !name.is_empty()))
+        .or_else(|| self.column_labels_for(kind).and_then(|font| font.style().font))
+        .or_else(|| self.standard_for_label(kind).and_then(|font| font.style().font))
+    }
+
+    fn standard_for_label(&self, kind: &LabelKind) -> Option<&ColumnLabelFont> {
+        (!matches!(kind, LabelKind::Sparklines)).then_some(&self.standard)
     }
 
     fn column_labels_for(&self, kind: &LabelKind) -> Option<&ColumnLabelFont> {
@@ -128,21 +153,23 @@ impl WorksheetFonts {
         manual
     }
 
-    pub(crate) fn data_style<'a>(&'a self, mut manual: ResolvedStyle<'a>) -> ResolvedStyle<'a> {
-        if let Some(font) = &self.data {
-            if manual.font.is_none() && !font.family.is_empty() {
-                manual.font = Some(&font.family);
-            }
-            if manual.size_pt.is_none() {
-                let size = if font.size_pt.is_finite() && font.size_pt > 0.0 { font.size_pt } else { default_size() };
-                manual.size_pt = Some(clamp_cell_pt(size));
-            }
-        }
-        manual
+    pub(crate) fn data_style<'a>(&'a self, manual: ResolvedStyle<'a>) -> ResolvedStyle<'a> {
+        let data = self.data.as_ref().map(ColumnLabelFont::style).unwrap_or_default();
+        inherit_font(inherit_font(manual, data), self.standard.style())
     }
 }
 
+fn inherit_font<'a>(mut style: ResolvedStyle<'a>, fallback: ResolvedStyle<'a>) -> ResolvedStyle<'a> {
+    style.font = style.font.or(fallback.font);
+    style.size_pt = style.size_pt.or(fallback.size_pt);
+    style
+}
+
 impl Worksheet {
+    pub fn set_standard_font(&mut self, font: ColumnLabelFont) -> bool {
+        set_category_font(&mut self.font_defaults.standard, font)
+    }
+
     /// Changes the common font under the independent column-label categories.
     pub fn set_column_labels_font(&mut self, font: ColumnLabelFont) -> bool {
         set_category_font(&mut self.font_defaults.column_labels, font)
@@ -200,26 +227,33 @@ impl Worksheet {
 
     /// Changes the Data font of this sheet, including rows/columns subsequently added.
     /// Per-cell/range fonts remain above this layer; this does not create per-row records.
-    pub fn set_data_font(&mut self, mut font: WorksheetFont) -> bool {
-        if !font.size_pt.is_finite() || font.size_pt <= 0.0 {
+    pub fn set_data_font(&mut self, font: WorksheetFont) -> bool {
+        self.set_data_font_override(ColumnLabelFont { family: font.family, size_pt: Some(font.size_pt) })
+    }
+
+    /// Properties left empty inherit Standard independently.
+    pub fn set_data_font_override(&mut self, font: ColumnLabelFont) -> bool {
+        let Some(font) = normalized_font(font) else { return false };
+        let next = (!font.is_empty()).then_some(font);
+        if self.font_defaults.data == next {
             return false;
         }
-        font.family = font.family.trim().to_owned();
-        font.size_pt = clamp_cell_pt(font.size_pt);
-        if self.font_defaults.data.as_ref() == Some(&font) {
-            return false;
-        }
-        self.font_defaults.data = Some(font);
+        self.font_defaults.data = next;
         true
     }
 }
 
-fn set_category_font(slot: &mut ColumnLabelFont, mut font: ColumnLabelFont) -> bool {
+fn normalized_font(mut font: ColumnLabelFont) -> Option<ColumnLabelFont> {
     if font.size_pt.is_some_and(|size| !size.is_finite() || size <= 0.0) {
-        return false;
+        return None;
     }
     font.family = font.family.trim().to_owned();
     font.size_pt = font.size_pt.map(clamp_cell_pt);
+    Some(font)
+}
+
+fn set_category_font(slot: &mut ColumnLabelFont, font: ColumnLabelFont) -> bool {
+    let Some(font) = normalized_font(font) else { return false };
     if *slot == font {
         return false;
     }
@@ -251,6 +285,45 @@ mod tests {
         assert_eq!(serde_json::to_value(&back).unwrap(), value);
         assert!(back.format_index().is_empty());
         assert!(back.cell_format_at(ColumnId(1), 0).is_default());
+    }
+
+    #[test]
+    fn standard_font_is_inherited_property_by_property_and_sets_base_geometry() {
+        use crate::sheet_print::{PrintStyle, SheetTable};
+        let mut s = sheet();
+        s.columns[0].long_name = "Alpha".into();
+        let before = SheetTable::new(&s, PrintStyle::default()).column_widths();
+        let bold = CellFormat { bold: Some(true), size_pt: Some(10.0), ..Default::default() };
+        s.apply_cell_format(FormatTarget::cells(vec![ColumnId(1)], 0, Some(0)), bold);
+        assert!(s.set_column_header_font(ColumnLabelFont { family: String::new(), size_pt: Some(12.0) }));
+        assert!(s.set_standard_font(ColumnLabelFont { family: "Courier New".into(), size_pt: Some(18.0) }));
+        assert!(s.set_column_labels_font(ColumnLabelFont { family: String::new(), size_pt: Some(11.0) }));
+        assert!(s.set_data_font_override(ColumnLabelFont { family: "Arial".into(), size_pt: None }));
+        s.columns.push(Column::new(ColumnId(2), "B", Designation::Y, ColumnData::default()));
+
+        let saved = serde_json::to_value(&s).unwrap();
+        assert!(saved["font_defaults"]["data"].get("size_pt").is_none());
+        let back: Worksheet = serde_json::from_value(saved).unwrap();
+        assert_eq!(back.font_defaults, s.font_defaults);
+
+        let manual = s.cell_format_at(ColumnId(1), 0);
+        assert_eq!((manual.font, manual.size_pt, manual.bold), (Some("Arial"), Some(10.0), true));
+        let future = s.cell_format_at(ColumnId(2), 999_999);
+        assert_eq!((future.font, future.size_pt), (Some("Arial"), Some(18.0)));
+        let label = s.format_index().resolve_label(&s, ColumnId(2), &LabelKind::LongName);
+        assert_eq!((label.font, label.size_pt), (Some("Courier New"), Some(11.0)));
+        let header = s.font_defaults.column_header_style();
+        assert_eq!((header.font, header.size_pt), (Some("Courier New"), Some(12.0)));
+        let rows = s.font_defaults.row_header_style();
+        assert_eq!((rows.font, rows.size_pt), (Some("Courier New"), Some(18.0)));
+        assert_eq!(s.font_defaults.size_scale(), 2.0);
+        let table = SheetTable::new(&s, PrintStyle::default());
+        assert_eq!(table.column_widths(), [before[0] * 2.0; 2]);
+
+        assert!(s.set_standard_font(ColumnLabelFont::default()));
+        assert_eq!(s.cell_format_at(ColumnId(2), 1).size_pt, None);
+        assert_eq!(s.font_defaults.column_header_style().size_pt, Some(12.0));
+        assert_eq!(s.font_defaults.size_scale(), 1.0);
     }
 
     #[test]

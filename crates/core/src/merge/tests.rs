@@ -80,6 +80,63 @@ fn the_text_factor_matches_origins_measured_merges() {
 }
 
 #[test]
+fn common_scale_uses_each_row_and_column_maximum_for_the_panel_positions() {
+    let (mut p, sources, _) = project(4);
+    let options = MergeOptions {
+        rows: Some(2),
+        cols: Some(2),
+        keep_aspect: true,
+        common_x_spans: Some(vec![50.0, 30.0, 20.0, 60.0]),
+        common_y_spans: Some(vec![30.0, 80.0, 60.0, 20.0]),
+        ..opts(&sources)
+    };
+    let id = p.merge_graphs(&options).unwrap();
+    let layers = &p.graph(id).unwrap().layers;
+    // Origin 2016, with the widest and tallest panels on different rows and columns.
+    let expected = [
+        (15.0, 9.992, 31.81, 15.01),
+        (51.81, 9.992, 19.09, 40.01),
+        (15.0, 55.0, 12.72, 30.0),
+        (51.81, 55.0, 38.18, 9.992),
+    ];
+    for (layer, (left, top, width, height)) in layers.iter().zip(expected) {
+        assert_pct(&layer.frame, left, top, width, height);
+    }
+
+    let x_only = p.merge_graphs(&MergeOptions { common_y_spans: None, ..options.clone() }).unwrap();
+    let x_only = &p.graph(x_only).unwrap().layers;
+    assert_pct(&x_only[2].frame, 15.0, 50.0, 12.72, 34.99);
+    let original = p.graph(sources[0]).unwrap().layers[0].frame;
+    let off = p.merge_graphs(&MergeOptions { rearrange: false, ..options }).unwrap();
+    assert_eq!(p.graph(off).unwrap().layers[0].frame, original);
+}
+
+#[test]
+fn common_scale_reserves_average_space_for_an_unoccupied_row_or_column() {
+    let (mut p, sources, _) = project(4);
+    let options = MergeOptions {
+        rows: Some(2),
+        cols: Some(5),
+        add_extra_layers: true,
+        common_x_spans: Some(vec![50.0, 30.0, 20.0, 60.0]),
+        common_y_spans: Some(vec![30.0, 80.0, 60.0, 20.0]),
+        ..opts(&sources)
+    };
+    let id = p.merge_graphs(&options).unwrap();
+    let layers = &p.graph(id).unwrap().layers;
+    assert_eq!(layers.len(), 10);
+    assert_pct(&layers[0].frame, 15.0, 10.0, 13.75, 13.125);
+    assert_pct(&layers[4].frame, 79.0, 10.0, 11.0, 35.0);
+    assert_pct(&layers[5].frame, 15.0, 50.0, 13.75, 35.0);
+    assert!(layers[4..].iter().all(|layer| layer.plots.is_empty() && layer.link.is_none()));
+
+    let before = p.clone();
+    let invalid = MergeOptions { common_y_spans: Some(vec![30.0, f64::NAN, 60.0, 20.0]), ..options };
+    assert_eq!(p.merge_graphs(&invalid), Err(MergeError::CommonScale));
+    assert_eq!(p, before);
+}
+
+#[test]
 fn three_graphs_in_three_rows_take_origins_rectangles_and_keep_their_text() {
     let (mut p, gs, _) = project(3);
     let before: Vec<Graph> = gs.iter().map(|&g| p.graph(g).unwrap().clone()).collect();
@@ -136,6 +193,32 @@ fn panel_labels_are_scaled_and_placed_once_per_source_graph() {
         }
     }
     assert_eq!(p, original);
+}
+
+#[test]
+fn extra_layers_fill_unused_cells_without_counting_linked_layers_as_sources() {
+    let (mut p, sources, _) = project(3);
+    p.graph_mut(sources[1]).unwrap().add_layer(crate::layers::NewLayerKind::RightY, 0).unwrap();
+    let source_graphs = sources.iter().map(|&id| p.graph(id).unwrap()).collect::<Vec<_>>();
+    let options = MergeOptions { rows: Some(2), cols: Some(3), link: true, ..opts(&sources) };
+    let without = merge_graphs(&source_graphs, &options).unwrap();
+    let with = MergeOptions { add_extra_layers: true, ..options };
+    let merged = merge_graphs(&source_graphs, &with).unwrap();
+    assert_eq!(without.layers.len(), 4);
+    assert_eq!(merged.layers[..4], without.layers);
+    assert_eq!(merged.layers.len(), 7);
+    let frames = with.layout(sources.len()).frames().unwrap();
+    for (layer, frame) in merged.layers[4..].iter().zip(&frames[3..]) {
+        assert_eq!(&layer.frame, frame);
+        assert!(layer.link.is_none() && layer.plots.is_empty() && layer.labels.is_empty());
+        assert!(layer.x_axis.min.is_none() && layer.x_axis.max.is_none());
+        assert!(layer.y_axis.min.is_none() && layer.y_axis.max.is_none());
+        assert!(close(layer.x_axis.tick_font.size_pt, 18.0 * 0.36, 1e-9));
+    }
+    let no_arrange = MergeOptions { rearrange: false, ..with.clone() };
+    assert_eq!(merge_graphs(&source_graphs, &no_arrange).unwrap().layers.len(), 4);
+    let full = MergeOptions { rows: Some(3), cols: Some(1), ..with };
+    assert_eq!(merge_graphs(&source_graphs, &full).unwrap().layers.len(), 4);
 }
 
 #[test]

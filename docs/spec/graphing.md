@@ -3587,8 +3587,36 @@ checklist with Up and Down, and the source choices below. All in Project is the
 Sheaf default for projects with multiple graphs. Duplicate, missing or non-graph
 sources, too few sources or cells, a factor outside 0.05 to 20 and a page side
 outside 0.5 to 200 in are refused without changing the project.
-Add Extra Layer(s) for Grid, Set Layer Width/Height by Common Scale and turning
-off Treat Each Source Graph as a Unit remain open.
+Turning off Treat Each Source Graph as a Unit remains open.
+
+**Common Scale** (Origin 2016 measured 2026-11-22). The width and height
+checkboxes independently size each panel in proportion to the displayed X or Y
+axis span on the source's first layer. Origin measures the absolute difference
+between the two endpoints in data units. A reversed axis gives the same
+length, and a log axis uses the endpoint difference. A linked second Y axis
+does not contribute to the panel height. Each column starts after the widest
+panel and gap in the preceding column. Each row starts after the tallest
+panel and gap in the preceding row. A wholly vacant track takes the mean
+size of occupied tracks. The existing margins and gaps leave the space
+allocated to the tracks. In a 2 × 2 grid of X spans 50, 30, 20, 60 and Y
+spans 30, 80, 60, 20, the widest panels in the two columns are 31.81% and
+38.18% of page width. The tallest panels in the rows are 40.01% and 30% of
+page height. Selecting either common scale supersedes Keep Layer Aspect Ratio.
+[Origin Merge Graph dialog](https://docs.originlab.com/origin-help/graphref-mergegraph/)
+
+Sheaf resolves source axes through the plot renderer during preview and
+merge, including automatic limits. With Share X on, a source whose first
+layer follows the merged root is sized using the shared X span. The chosen
+frames also determine automatic text scaling. These controls apply only
+with Rearrange Layout on.
+
+**Add Extra Layer(s) for Grid** puts an independent empty Line layer in each
+unused cell when Rearrange Layout is on. The layers have automatic axes and
+use the selected text scale. With Common Scale they fill their row and column
+slots. Origin 2016's scripted merge appended the same
+number of layers at the default page position, which overlapped the source
+panels in its PNG output. The [T60 brief](../tasks/T60-merge-graphs-layer-management.md)
+records the measurements.
 
 **Panel labels** (T60, Origin 2016 measured 2026-11-22). Three source graphs
 arranged in a 2 × 2 grid received one editable text object per source on its
@@ -3875,7 +3903,7 @@ The `.opj` reader reads the layers of a panel graph as independent layers with t
 - Owner choices: the page size of stacks with many panels (Origin keeps the page; a 6-panel stack on the upright Line page has panels of about 61 pt), one Y title by default instead of one per panel, panel labels such as (a) and (b) (Merge Graph can add them; not measured), and one colour per panel across the graph instead of Origin's colours per layer (with the cyclic voltammetry palette, every one-curve panel gets the first light blue).
 - Merge Graph's automatic rows and columns were seen only for 2 to 5 graphs.
 - Not tested in Origin: the column assignment of PAN2VERT and PAN4 with several X columns and horizontal stacks. The Layer Management Arrange defaults were measured on 2026-11-15 (15.7d).
-- Merge Graph Windows: Origin's own text-factor formula (15.7c fits it), where it places several unlinked layers of one source, what "Treat Each Source Graph as a Unit" off and the Common Scale options change, and its panel labels.
+- Merge Graph Windows: Origin's own text-factor formula (15.7c fits it), where it places several unlinked layers of one source, what "Treat Each Source Graph as a Unit" off changes, and the unmeasured custom label substitutions.
 
 ## 16. Free text labels (P0, GP-TXT-01)
 

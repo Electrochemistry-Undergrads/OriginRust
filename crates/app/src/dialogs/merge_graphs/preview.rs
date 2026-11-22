@@ -1,6 +1,6 @@
 //! Render a draft merge without allocating IDs or history in the real document.
+use super::MergeDraft;
 use eframe::egui;
-use sheaf_core::merge::MergeOptions;
 use sheaf_core::{Document, Project};
 use sheaf_plot::Raster;
 
@@ -8,7 +8,7 @@ use sheaf_plot::Raster;
 struct Key {
     generation: u64,
     revision: u64,
-    options: MergeOptions,
+    draft: MergeDraft,
     valid_folder: bool,
     pixels_per_point: f32,
 }
@@ -22,15 +22,15 @@ pub(super) struct Preview {
     error: Option<String>,
 }
 
-fn render(project: &Project, options: &MergeOptions, pixels_per_point: f32) -> Result<(Raster, usize), String> {
-    let mut draft = project.clone();
-    let id = draft.merge_graphs(options).map_err(|e| e.to_string())?;
-    let graph = draft.graph(id).unwrap();
+fn render(project: &Project, draft: &MergeDraft, pixels_per_point: f32) -> Result<(Raster, usize), String> {
+    let mut project = project.clone();
+    let id = draft.merge(&mut project).map_err(|e| e.to_string())?;
+    let graph = project.graph(id).unwrap();
     // Fit the whole page, including its margins. Bound raster allocation even for a 200-inch page.
     let scale =
         (640.0 / graph.page.width_pt).min(480.0 / graph.page.height_pt) * f64::from(pixels_per_point.clamp(1.0, 2.0));
     let layers = graph.layers.len();
-    let raster = sheaf_plot::render_raster(&draft, id, scale).map_err(|e| e.to_string())?;
+    let raster = sheaf_plot::render_raster(&project, id, scale).map_err(|e| e.to_string())?;
     Ok((raster, layers))
 }
 
@@ -39,11 +39,11 @@ impl Preview {
         self.error.as_deref()
     }
 
-    pub(super) fn show(&mut self, ui: &mut egui::Ui, doc: &Document, options: MergeOptions, valid_folder: bool) {
+    pub(super) fn show(&mut self, ui: &mut egui::Ui, doc: &Document, draft: MergeDraft, valid_folder: bool) {
         let key = Key {
             generation: doc.generation(),
             revision: doc.revision(),
-            options,
+            draft,
             valid_folder,
             pixels_per_point: ui.ctx().pixels_per_point(),
         };
@@ -66,7 +66,7 @@ impl Preview {
             self.texture = None;
             self.layers = None;
             self.error = None;
-            match render(doc.project(), &key.options, key.pixels_per_point) {
+            match render(doc.project(), &key.draft, key.pixels_per_point) {
                 Ok((raster, layers)) => {
                     let image = egui::ColorImage::from_rgba_unmultiplied(
                         [raster.width as usize, raster.height as usize],
@@ -96,7 +96,7 @@ impl Preview {
             }
         });
         if let Some(layers) = self.layers {
-            let count = key.options.sources.len();
+            let count = key.draft.options.sources.len();
             let source = if count == 1 { "source graph" } else { "source graphs" };
             let layer = if layers == 1 { "layer" } else { "layers" };
             ui.label(format!("{count} {source}, {layers} {layer}"));
@@ -109,6 +109,7 @@ impl Preview {
 mod tests {
     use super::*;
     use sheaf_core::graph::{Font, LayerLink, ScaleLink, TextLabel};
+    use sheaf_core::merge::MergeOptions;
     use sheaf_core::template::Template;
 
     #[test]
@@ -130,7 +131,8 @@ mod tests {
             cols: Some(1),
             ..Default::default()
         };
-        let (raster, layers) = render(&source, &options, 1.0).unwrap();
+        let draft = MergeDraft { options: options.clone(), ..Default::default() };
+        let (raster, layers) = render(&source, &draft, 1.0).unwrap();
         assert_eq!(source, before);
         assert_eq!(layers, 3);
         let mut committed = source.clone();
@@ -153,11 +155,15 @@ mod tests {
         let a = source.add_graph(Template::Line);
         let b = source.add_graph(Template::Line);
         let before = source.clone();
-        assert!(render(&source, &MergeOptions { sources: vec![a], ..Default::default() }, 1.0).is_err());
+        let failed =
+            MergeDraft { options: MergeOptions { sources: vec![a], ..Default::default() }, ..Default::default() };
+        assert!(render(&source, &failed, 1.0).is_err());
         for page in [(200.0, 0.5), (0.5, 200.0), (200.0, 200.0)] {
-            let (raster, _) =
-                render(&source, &MergeOptions { sources: vec![a, b], page_in: Some(page), ..Default::default() }, 2.0)
-                    .unwrap();
+            let draft = MergeDraft {
+                options: MergeOptions { sources: vec![a, b], page_in: Some(page), ..Default::default() },
+                ..Default::default()
+            };
+            let (raster, _) = render(&source, &draft, 2.0).unwrap();
             assert!(raster.width <= 1280 && raster.height <= 960);
             assert!(raster.width > 0 && raster.height > 0);
         }

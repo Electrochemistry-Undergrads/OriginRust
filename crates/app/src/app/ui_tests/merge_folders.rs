@@ -61,6 +61,29 @@ fn source(h: &mut Harness<'static, SheafApp>, current: &str, next: &str) {
 }
 
 #[test]
+fn extra_grid_layers_are_included_in_preview_and_in_the_undoable_merge() {
+    let (mut h, _) = fixture("merge-empty-grid-cells");
+    let before = project(&h).clone();
+    open(&mut h);
+    click(&mut h, "Preview");
+    assert!(h.query_by_label("8 source graphs, 8 layers").is_some());
+    click(&mut h, "Add Extra Layer(s) for Grid");
+    assert!(h.query_by_label("8 source graphs, 8 layers").is_none());
+    click(&mut h, "Preview");
+    assert!(h.query_by_label("8 source graphs, 9 layers").is_some());
+    assert_eq!(project(&h), &before);
+    click(&mut h, "OK");
+    let merged = project(&h).graphs().last().unwrap();
+    assert_eq!(merged.layers.len(), 9);
+    let empty = &merged.layers[8];
+    assert!(empty.plots.is_empty() && empty.link.is_none());
+    assert!(empty.frame.left > merged.layers[7].frame.left);
+    assert_eq!(empty.frame.top, merged.layers[7].frame.top);
+    menu(&mut h, "Edit", "Undo Merge Graph Windows");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
 fn merge_panel_labels_follow_source_order_and_the_dialog_draft() {
     use sheaf_core::layers::NewLayerKind;
     let (mut h, ids) = fixture("merge-panel-labels");
@@ -88,6 +111,47 @@ fn merge_panel_labels_follow_source_order_and_the_dialog_draft() {
     assert!(merged.layers[0].labels[0].x > 0.5 && merged.layers[0].labels[0].y > 0.0);
     let svg = sheaf_plot::render_svg(project(&h), merged.id).unwrap();
     assert!(svg.contains("Graph01") && svg.contains("Graph02"));
+    menu(&mut h, "Edit", "Undo Merge Graph Windows");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn common_scale_preview_and_merge_use_the_sources_displayed_axis_ranges() {
+    let (mut h, ids) = fixture("merge-common-scale");
+    let (first, second) = (ids[2], ids[3]);
+    h.state_mut().doc.apply("Set X limits", |p| {
+        for (id, from, to) in [(first, 100.0, 1.0), (second, 1.0, 10.0)] {
+            let axis = &mut p.graph_mut(id).unwrap().layers[0].x_axis;
+            axis.scale = sheaf_core::graph::ScaleKind::Log10;
+            axis.min = Some(from);
+            axis.max = Some(to);
+        }
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    let resolved_y = [first, second].map(|id| {
+        let axis = &sheaf_plot::layout_geometry(&before, id).unwrap()[0].y;
+        axis.max - axis.min
+    });
+    assert_ne!(resolved_y[0], resolved_y[1]);
+    open(&mut h);
+    source(&mut h, "All in Project", "All in Active Folder");
+    click(&mut h, "Preview");
+    assert!(h.query_by_label("2 source graphs, 2 layers").is_some());
+    click(&mut h, "Set Layer Width by Common Scale");
+    click(&mut h, "Set Layer Height by Common Scale");
+    assert!(h.query_by_label("2 source graphs, 2 layers").is_none());
+    click(&mut h, "Preview");
+    assert!(h.query_by_label("2 source graphs, 2 layers").is_some());
+    assert_eq!(project(&h), &before);
+    click(&mut h, "OK");
+    let layers = &project(&h).graphs().last().unwrap().layers;
+    assert_eq!(layers[0].legend.text.as_deref(), Some("LocalZ"));
+    assert_eq!(layers[1].legend.text.as_deref(), Some("LocalA"));
+    let (a, b) = (layers[0].frame, layers[1].frame);
+    assert!((a.width / 99.0 - b.width / 9.0).abs() < 1e-9);
+    assert!((a.height / resolved_y[0] - b.height / resolved_y[1]).abs() < 1e-9);
+    assert!((b.top - a.top - a.height - 0.05).abs() < 1e-9);
     menu(&mut h, "Edit", "Undo Merge Graph Windows");
     assert_eq!(project(&h), &before);
 }

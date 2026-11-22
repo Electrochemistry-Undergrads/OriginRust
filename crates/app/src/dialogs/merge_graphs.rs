@@ -4,7 +4,9 @@
 use crate::workspace::{Mode, Workspace};
 use eframe::egui;
 use sheaf_core::column::default_short_name;
-use sheaf_core::merge::{MERGE_PAGE_IN, MergeLabelPosition, MergeOptions, MergePanelLabel, MergeTextScale, auto_grid};
+use sheaf_core::merge::{
+    MERGE_PAGE_IN, MergeError, MergeLabelPosition, MergeOptions, MergePanelLabel, MergeTextScale, auto_grid,
+};
 use sheaf_core::{Document, Project, WindowId};
 use sheaf_plot::{SystemFonts, TextMeasurer};
 
@@ -157,6 +159,43 @@ impl Unit {
     }
 }
 
+#[derive(Clone, Default, PartialEq)]
+struct MergeDraft {
+    options: MergeOptions,
+    common_width: bool,
+    common_height: bool,
+}
+
+impl MergeDraft {
+    fn merge(&self, project: &mut Project) -> Result<WindowId, MergeError> {
+        if !self.options.rearrange || !(self.common_width || self.common_height) {
+            return project.merge_graphs(&self.options);
+        }
+        let mut options = self.options.clone();
+        let mut widths = Vec::with_capacity(options.sources.len());
+        let mut heights = Vec::with_capacity(options.sources.len());
+        // Resolve the same axes the source graphs display, including automatic limits.
+        // This runs when rendering a preview or creating the graph, not on every dialog frame.
+        for &id in &options.sources {
+            let graph = project.graph(id).ok_or(MergeError::NotAGraph(id))?;
+            let geometry = sheaf_plot::layout_geometry(project, id).map_err(|_| MergeError::CommonScale)?;
+            let axes = geometry.first().ok_or_else(|| MergeError::Empty(graph.name.clone()))?;
+            let width = axes.x.max - axes.x.min;
+            // A source's first layer can share the merged root's X scale if it has no children.
+            let width = if options.share_x && !graph.has_children(0) {
+                widths.first().copied().unwrap_or(width)
+            } else {
+                width
+            };
+            widths.push(width);
+            heights.push(axes.y.max - axes.y.min);
+        }
+        options.common_x_spans = self.common_width.then_some(widths);
+        options.common_y_spans = self.common_height.then_some(heights);
+        project.merge_graphs(&options)
+    }
+}
+
 pub struct MergeGraphsDialog {
     source: Source,
     active_page: Option<WindowId>,
@@ -167,7 +206,10 @@ pub struct MergeGraphsDialog {
     rearrange: bool,
     rows: Option<usize>,
     cols: Option<usize>,
+    add_extra_layers: bool,
     keep_aspect: bool,
+    common_width: bool,
+    common_height: bool,
     link: bool,
     share_x: bool,
     hide_inner: bool,
@@ -201,7 +243,10 @@ impl MergeGraphsDialog {
             rearrange: true,
             rows: None,
             cols: None,
+            add_extra_layers: false,
             keep_aspect: false,
+            common_width: false,
+            common_height: false,
             link: false,
             share_x: false,
             hide_inner: false,
@@ -238,7 +283,7 @@ impl MergeGraphsDialog {
         }
     }
 
-    fn options(&self, project: &Project, workspace: &Workspace) -> MergeOptions {
+    fn draft(&self, project: &Project, workspace: &Workspace) -> MergeDraft {
         let sources = self.chosen(project, workspace);
         let (rows, cols) = auto_grid(sources.len(), self.rows, self.cols);
         let page = (self.page_in[0], self.page_in[1]);
@@ -251,11 +296,14 @@ impl MergeGraphsDialog {
                 MergePanelLabel { text, width_pt }
             })
             .collect();
-        MergeOptions {
+        let options = MergeOptions {
             sources,
             allow_single_source: self.source.allows_single_source(),
             rows: Some(rows),
             cols: Some(cols),
+            add_extra_layers: self.add_extra_layers,
+            common_x_spans: None,
+            common_y_spans: None,
             h_gap: self.h_gap,
             v_gap: self.v_gap,
             margin_left: self.margins[0],
@@ -278,7 +326,8 @@ impl MergeGraphsDialog {
             },
             panel_labels,
             label_position: self.label_position,
-        }
+        };
+        MergeDraft { common_width: self.common_width, common_height: self.common_height, options }
     }
 
     fn set_orientation(&mut self, portrait: bool) {
@@ -325,9 +374,9 @@ impl MergeGraphsDialog {
                         egui::vec2(preview_width, 0.0),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| {
-                            let options = self.options(doc.project(), workspace);
+                            let draft = self.draft(doc.project(), workspace);
                             let valid_folder = !self.source.is_folder() || self.folder.valid(doc.project());
-                            self.preview.show(ui, doc, options, valid_folder);
+                            self.preview.show(ui, doc, draft, valid_folder);
                         },
                     );
                 });
@@ -342,8 +391,8 @@ impl MergeGraphsDialog {
                         if self.source.is_folder() && !self.folder.valid(doc.project()) {
                             self.problem = Some("Source folder tree changed. Reopen Merge Graph Windows.".into());
                         } else {
-                            let opts = self.options(doc.project(), workspace);
-                            match doc.edit("Merge Graph Windows", |p| p.merge_graphs(&opts)) {
+                            let draft = self.draft(doc.project(), workspace);
+                            match doc.edit("Merge Graph Windows", |p| draft.merge(p)) {
                                 Ok(id) => result = Outcome::Created(id),
                                 Err(e) => self.problem = Some(e.to_string()),
                             }
@@ -464,16 +513,19 @@ impl MergeGraphsDialog {
                 }
                 ui.end_row();
             });
-            ui.add_enabled(false, egui::Checkbox::new(&mut false, "Add Extra Layer(s) for Grid"));
-            ui.checkbox(&mut self.keep_aspect, "Keep Layer Aspect Ratio");
+            ui.checkbox(&mut self.add_extra_layers, "Add Extra Layer(s) for Grid");
+            ui.add_enabled(
+                !(self.common_width || self.common_height),
+                egui::Checkbox::new(&mut self.keep_aspect, "Keep Layer Aspect Ratio"),
+            );
             ui.add_enabled(false, egui::Checkbox::new(&mut true, "Treat Each Source Graph as a Unit"));
             ui.checkbox(&mut self.link, "Link Source Graphs");
             ui.horizontal(|ui| {
                 ui.add_space(18.0);
                 ui.add_enabled(self.link, egui::Checkbox::new(&mut self.share_x, "Share X scale (Sheaf)"));
             });
-            ui.add_enabled(false, egui::Checkbox::new(&mut false, "Set Layer Width by Common Scale"));
-            ui.add_enabled(false, egui::Checkbox::new(&mut false, "Set Layer Height by Common Scale"));
+            ui.checkbox(&mut self.common_width, "Set Layer Width by Common Scale");
+            ui.checkbox(&mut self.common_height, "Set Layer Height by Common Scale");
             ui.checkbox(&mut self.hide_inner, "Show Axes Frame");
             ui.label("Overlapping axes/ticks are hidden");
         });

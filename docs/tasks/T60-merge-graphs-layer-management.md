@@ -4,8 +4,7 @@
 15.7c, 15.7d; probes `tools/origin-ref/merge-graph-*.lines.txt`, `fit-page-to-layers.lines.txt`):
 Merge Graph Windows (core `merge.rs`, dialog, `sheaf merge-graphs`), Layer Management (Arrange,
 Size/Position, Link; core `layer_manage.rs`), Fit Page to Layers (dialog and Format item). Fit Layer to
-Graph did nothing measurable in Origin and is tagged `N`. Left: Merge's extra layers
-for empty cells and Common Scale options; Layer Management's Add
+Graph did nothing measurable in Origin and is tagged `N`. Remaining work includes Layer Management's Add
 (T61), Axes and remaining Display controls; MCP tool for merging. **Size:** L, merge then management.
 Background-colour follow-up (`codex/t60-layer-display`, 2026-11-16): Display > Color >
 Background Color supports selected layers, None, basic presets and opaque RGB. Native two-layer
@@ -70,6 +69,30 @@ four corner positions. The shared Preview and OK operation adds one editable
 label per source graph. Custom supports plain text, runs of hashes and `$(i)`.
 The Origin 2016 measurements and remaining substitution codes are in graphing
 15.7c.
+
+**Add Extra Layer(s) for Grid (2026-11-22).** Origin 2016's `merge_graph`
+command with `newlayer:=1` appended one blank layer for three sources in a
+2 × 2 grid and three for a 2 × 3 grid. A linked layer within one source
+did not count as a separate graph. The blank layers used the
+default page rectangle, so the PNG showed their axes over the source panels.
+Their axes ran from 0 to 10 with major step 2. They had no panel labels,
+and Link Source Graphs left them independent. A full grid or Rearrange Layout
+off produced no extra layers. The interactive dialog result remains unmeasured.
+[Origin merge command](https://docs.originlab.com/x-function/ref/merge_graph/)
+
+Sheaf fills the unused cells of the rearranged grid, using its ordinary
+empty Line layer with automatic axes and the selected text scale. The layers
+remain independent and take no source labels. Preview and OK share the layout,
+and Undo removes the merged graph and its empty layers in one step.
+
+**Common Scale (2026-11-22).** Both sizing controls use the displayed X and Y
+ranges of the first source layer, including automatic limits. With more than
+one panel in a row or column, Origin 2016's command aligns starts by the
+largest panel in the preceding track. A reversed axis has the same size,
+and a logarithmic axis uses the difference of its original numeric endpoints.
+Origin 2016 uses `resizewidthbyscale` and `resizeheightbysale`. The measured
+rectangles and interactions with aspect, linked layers and empty tracks are
+in graphing 15.7c. The Sheaf controls apply to both previews and OK.
 
 **Branch:** `merge-graphs`. **Priority:** P0, wave 2, owner's stacked-figure priority.
 **Spec:** [graphing](../spec/graphing.md) 15 (add Merge Graph Windows and Layer Management

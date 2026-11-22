@@ -14,6 +14,7 @@ use crate::graph::{Font, Frame, Graph, Layer, LayerLink, Page, ScaleLink, TextLa
 use crate::ids::WindowId;
 use crate::panels::{PanelError, PanelLayout, PanelOrder, PanelPage};
 use crate::project::{Project, Window};
+use crate::template::Template;
 
 /// Origin's merged page: 11.41 x 7.973 in (6846 x 4784 dots at 600 dpi), landscape.
 pub const MERGE_PAGE_IN: (f64, f64) = (11.41, 7.973);
@@ -73,6 +74,16 @@ pub enum MergeTextScale {
     Keep,
 }
 
+impl MergeTextScale {
+    fn factor(self, frame: Frame, rearrange: bool) -> f64 {
+        match self {
+            Self::Auto if rearrange => auto_text_factor((100.0 * frame.width, 100.0 * frame.height)),
+            Self::Auto | Self::Keep => 1.0,
+            Self::Fixed(factor) => factor,
+        }
+    }
+}
+
 /// The options of Merge Graph Windows. Lengths are percent of the page, as in [`PanelLayout`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct MergeOptions {
@@ -84,6 +95,12 @@ pub struct MergeOptions {
     /// automatic choice, see [`auto_grid`]).
     pub rows: Option<usize>,
     pub cols: Option<usize>,
+    /// Put an independent empty layer in each unused cell of the rearranged grid.
+    pub add_extra_layers: bool,
+    /// Resolved data-unit axis spans, one per source's first layer, in source order.
+    /// `None` leaves widths or heights uniform. Ignored when Rearrange Layout is off.
+    pub common_x_spans: Option<Vec<f64>>,
+    pub common_y_spans: Option<Vec<f64>>,
     pub h_gap: f64,
     pub v_gap: f64,
     pub margin_left: f64,
@@ -128,6 +145,9 @@ impl Default for MergeOptions {
             allow_single_source: false,
             rows: None,
             cols: None,
+            add_extra_layers: false,
+            common_x_spans: None,
+            common_y_spans: None,
             h_gap: 5.0,
             v_gap: 5.0,
             margin_left: 15.0,
@@ -168,6 +188,8 @@ pub enum MergeError {
     Factor,
     #[error("the page must be from 0.5 to 200 inches on each side")]
     Page,
+    #[error("Common Scale needs a usable axis range for each source graph")]
+    CommonScale,
     #[error(transparent)]
     Layout(#[from] PanelError),
 }
@@ -292,9 +314,46 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
         return Err(MergeError::Factor);
     }
     let layout = opts.layout(sources.len());
-    let cells = layout.frames()?;
+    let mut cells = layout.frames()?;
     if opts.rearrange && sources.len() > cells.len() {
         return Err(MergeError::TooManyGraphs { rows: layout.rows, cols: layout.cols, graphs: sources.len() });
+    }
+    let common_x = opts.common_x_spans.as_deref().filter(|_| opts.rearrange);
+    let common_y = opts.common_y_spans.as_deref().filter(|_| opts.rearrange);
+    let common_scale = common_x.is_some() || common_y.is_some();
+    if [common_x, common_y].into_iter().flatten().any(|spans| spans.len() != sources.len()) {
+        return Err(MergeError::CommonScale);
+    }
+    let first_cell = cells[0];
+    if let Some(spans) = common_x {
+        let widths = common_axis_frames(
+            spans,
+            cells.len(),
+            layout.cols,
+            1,
+            first_cell.left,
+            first_cell.width,
+            layout.h_gap / 100.0,
+        )?;
+        for (cell, (left, width)) in cells.iter_mut().zip(widths) {
+            cell.left = left;
+            cell.width = width;
+        }
+    }
+    if let Some(spans) = common_y {
+        let heights = common_axis_frames(
+            spans,
+            cells.len(),
+            layout.rows,
+            layout.cols,
+            first_cell.top,
+            first_cell.height,
+            layout.v_gap / 100.0,
+        )?;
+        for (cell, (top, height)) in cells.iter_mut().zip(heights) {
+            cell.top = top;
+            cell.height = height;
+        }
     }
     let (page_w, page_h) = opts.page_pt()?;
     let first = sources[0];
@@ -320,7 +379,7 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
         let bbox = bounds(&roots.iter().map(|&i| src.layers[i].frame).collect::<Vec<_>>());
         let target = if !opts.rearrange {
             bbox
-        } else if opts.keep_aspect && bbox.width > 0.0 && bbox.height > 0.0 {
+        } else if opts.keep_aspect && !common_scale && bbox.width > 0.0 && bbox.height > 0.0 {
             // the ratio is kept in percent of each page, as Origin does
             let ratio = bbox.width / bbox.height;
             let width = cell.width.min(cell.height * ratio);
@@ -330,12 +389,7 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
         };
         // the automatic factor follows the frame the source gets (with Keep Layer Aspect Ratio the
         // shrunk frame: a 3 x 1 merge gave 0.28 for 20.57 x 21.68); without rearranging it is 1
-        let factor = match opts.text_scale {
-            MergeTextScale::Auto if !opts.rearrange => 1.0,
-            MergeTextScale::Auto => auto_text_factor((100.0 * target.width, 100.0 * target.height)),
-            MergeTextScale::Fixed(f) => f,
-            MergeTextScale::Keep => 1.0,
-        };
+        let factor = opts.text_scale.factor(target, opts.rearrange);
         for (i, layer) in src.layers.iter().enumerate() {
             let mut l = layer.clone();
             match src.link_parent(i) {
@@ -376,7 +430,61 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
     if opts.hide_inner && opts.rearrange {
         hide_inner_axes(&mut g, &layout, sources);
     }
+    if opts.rearrange && opts.add_extra_layers && cells.len() > sources.len() {
+        let empty = Template::Line.new_graph(WindowId(0), "");
+        for &frame in &cells[sources.len()..] {
+            let mut layer = empty.layers[0].clone();
+            layer.frame = frame;
+            scale_text(&mut layer, opts.text_scale.factor(frame, true));
+            g.layers.push(layer);
+        }
+    }
     Ok(g)
+}
+
+/// One page fraction per data unit, shared by all occupied cells on this axis. Track
+/// starts follow their widest or tallest panel. A vacant track takes the mean track size.
+fn common_axis_frames(
+    spans: &[f64],
+    cells: usize,
+    tracks: usize,
+    stride: usize,
+    start: f64,
+    equal_size: f64,
+    gap: f64,
+) -> Result<Vec<(f64, f64)>, MergeError> {
+    if spans.iter().any(|&span| !span.is_finite() || span <= 0.0) {
+        return Err(MergeError::CommonScale);
+    }
+    let largest = spans.iter().copied().fold(0.0, f64::max);
+    let track_of = |cell| cell / stride % tracks;
+    let mut weights = vec![0.0_f64; tracks];
+    for (cell, span) in spans.iter().enumerate() {
+        let track = track_of(cell);
+        weights[track] = weights[track].max(span / largest);
+    }
+    let mean = weights.iter().sum::<f64>() / weights.iter().filter(|&&weight| weight > 0.0).count() as f64;
+    for weight in &mut weights {
+        if *weight == 0.0 {
+            *weight = mean;
+        }
+    }
+    let unit = equal_size * tracks as f64 / weights.iter().sum::<f64>();
+    let mut starts = Vec::with_capacity(tracks);
+    let mut next = start;
+    for weight in &weights {
+        starts.push(next);
+        next += unit * weight + gap;
+    }
+    (0..cells)
+        .map(|cell| {
+            let track = track_of(cell);
+            let start = starts[track];
+            let weight = spans.get(cell).map_or(weights[track], |span| span / largest);
+            let size = unit * weight;
+            if start + size > start { Ok((start, size)) } else { Err(MergeError::CommonScale) }
+        })
+        .collect()
 }
 
 /// Origin's "Show Axes Frame": in a grid without a vertical gap, the layers of a cell with a filled

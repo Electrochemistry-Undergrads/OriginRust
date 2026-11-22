@@ -1,5 +1,5 @@
 //! The data points inside a drawn rectangle or ellipse of a graph (T355; Origin 2024b's "extract data from regions
-//! on a graph", not in Origin 2016, so the rules are Sheaf's own; graphing spec 17.9).
+//! on a graph", not in Origin 2016, so the rules are Sheaf's own; graphing spec 17.12).
 //!
 //! A drawn object's corners are fractions of its layer's frame. A plot's point is inside when its place on the page
 //! (through the layer's axis scales, so log and reciprocal axes and reversed limits count) falls inside the

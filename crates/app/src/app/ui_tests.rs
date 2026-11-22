@@ -4782,6 +4782,51 @@ fn double_clicks_on_the_graph_open_the_settings_of_what_was_clicked() {
     }
 }
 
+/// Extract Data in Region (T355): a drawn rectangle's menu copies the data points inside it to a new workbook, one
+/// undo step; a line has no such entry.
+#[test]
+fn a_drawn_rectangle_extracts_the_data_points_inside_it() {
+    let mut text = String::from("x,y\n");
+    for k in 0..=10 {
+        text.push_str(&format!("{k},{k}\n"));
+    }
+    let data = csv_file("region", "diag", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Graph1 - diag");
+    let gid = graph(&h).id;
+    h.state_mut().doc.apply("Region", |p| {
+        let l = &mut p.graph_mut(gid).unwrap().layers[0];
+        (l.x_axis.min, l.x_axis.max, l.y_axis.min, l.y_axis.max) = (Some(0.0), Some(10.0), Some(0.0), Some(10.0));
+        l.legend.visible = false;
+        // Data 2.5..6.5 by 2..7: the points 3, 4, 5 and 6.
+        let mut r = sheaf_core::shape::Shape::new(sheaf_core::shape::ShapeKind::Rectangle, (0.25, 0.3), (0.65, 0.8));
+        r.fill = Some(sheaf_core::Color::rgb(200, 220, 255));
+        l.shapes.push(r);
+        l.shapes.push(sheaf_core::shape::Shape::new(sheaf_core::shape::ShapeKind::Line, (0.8, 0.1), (0.95, 0.2)));
+    });
+    settle(&mut h);
+    let books = project(&h).workbooks().count();
+    let at = on(&h, 0, ObjectKind::Shape(1));
+    right_click_at(&mut h, at);
+    assert!(h.query_by_label("Properties...").is_some() && h.query_by_label("Extract Data in Region").is_none());
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    pause(&mut h);
+    let at = on(&h, 0, ObjectKind::Shape(0));
+    right_click_at(&mut h, at);
+    click(&mut h, "Extract Data in Region");
+    assert_eq!(project(&h).workbooks().count(), books + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Extract data in region"));
+    let book = project(&h).workbooks().last().unwrap();
+    let cols = &book.sheet().columns;
+    assert_eq!(cols.len(), 3);
+    assert_eq!(cols[0].numeric().unwrap(), [3.0, 4.0, 5.0, 6.0]);
+    assert_eq!(cols[1].numeric().unwrap(), [3.0, 4.0, 5.0, 6.0]);
+    assert_eq!(cols[2].long_name, "Source row");
+    assert_eq!(cols[2].numeric().unwrap(), [4.0, 5.0, 6.0, 7.0]);
+    assert_eq!(cols[1].long_name, "y");
+}
+
 #[test]
 fn a_click_selects_a_plot_and_its_menu_changes_the_plot_type_in_one_undo_step() {
     let mut h = start(vec![data_file("gplot")]);

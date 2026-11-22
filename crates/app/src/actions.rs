@@ -1184,6 +1184,12 @@ pub enum Action {
         layer: usize,
         shape: usize,
     },
+    /// Copies the data points inside a drawn rectangle or ellipse to a new workbook (T355).
+    ExtractRegion {
+        graph: WindowId,
+        layer: usize,
+        shape: usize,
+    },
     /// Moves the legend to a new centre (fractions of the layer frame): it becomes manually
     /// placed; one undo step.
     MoveLegend {

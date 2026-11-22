@@ -1,6 +1,6 @@
 # T72: Copy Format and Paste Format on graphs (B2, slice 1)
 
-**Status:** partly done (step 1 2026-11-16: Origin measured, spec graphing 26; step 2: core `format_clip.rs`, `format_clip_ui.rs`, menus and Apply Formats window built with the measured items enabled, see graphing 26.8). Open: the unmeasured choices listed in greyed-items.md as T72, including legend Dimensions and All, graph/axis crossing and live cross-instance sharing.
+**Status:** partly done (step 1 2026-11-16: Origin measured, spec graphing 26; step 2: core `format_clip.rs`, `format_clip_ui.rs`, menus and Apply Formats window built with the measured items enabled, see graphing 26.8). Legend Dimensions and All shipped in [T179](T179-legend-format-all.md). Open: the remaining entries tagged T72, graph/axis crossing, live cross-instance sharing and the native field mapping for legend format modes.
 **Size:** M. **Priority:** wave 4 (B2). **Spec:** graphing 26. **Inventory:** the Edit menu's Copy
 Format (nine choices) and Paste Format... [Graph]; Graph axis, legend and page > Copy Format.
 Not in this slice (stay `B2`): object cut/copy/paste, align, same size, group, order across kinds,
@@ -140,7 +140,7 @@ undo step named "Apply Theme", UI tests, inventory and counts updated, graphing 
 
 ## Unmeasured (measure before building, or choose and say so)
 
-Symbol, Line and Fill and Text choices; Page Background and Legend Translation Mode; legend paste
-(and its Copy Format effect); second-level submenus of Paste Format To; the layer-area context menu's
+Symbol, Line and Fill and Text choices; Page Background and Legend Translation Mode; Origin's legend
+Copy Format and Paste Format field mapping; second-level submenus of Paste Format To; the layer-area context menu's
 Copy Format; graph clipboard on an axis target and the reverse; which layer or plot gets what on
 mismatched layers and plots; the Apply Formats grid and scope list; the pencil button's menu.

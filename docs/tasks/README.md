@@ -198,7 +198,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T171](T171-axis-paste-groups.md) | Axis Paste Format To: Tick Direction, Ticks, Line, Tick Labels, Title Styles, Colors, Thickness, Title Text (T72 slice) | S | done 2026-11-19 (graphing 26.13), not measured; left: Title Dimensions |
 | [T174](T174-page-axis-paste.md) | Page Paste Format To > Bottom Axes / All X Axes / All Axes with an axis format (T72 slice) | S | done 2026-11-19 (graphing 26.14), not measured; left: first-level All |
 | [T176](T176-copy-format-groups.md) | Copy Format: Symbol/Line/Fill, Text (Edit menu), Page Background (page menu) (T72 slice) | S | done 2026-11-19 (graphing 26.15), not measured; left: Legend Translation Mode |
-| [T179](T179-legend-format-all.md) | Legend Copy Format / Paste Format To: Dimensions and All (T72 slice) | S | done 2026-11-19 (graphing 26.16), not measured |
+| [T179](T179-legend-format-all.md) | Legend Copy Format / Paste Format To: Dimensions and All (T72 slice) | S | Shipped 2026-11-19. Origin 2016 format API measured 2026-11-21 (graphing 26.16). Live menu fields remain open. |
 | [T182](T182-export-no-graph.md) | File > Export > Graphs / Graph as Image / Multi-Page PDF from a workbook or no window (T63 group E) | S | done 2026-11-19 (graphing 9.7a), not measured |
 | [T183](T183-layer-icon-switches.md) | Layer icon menu: Show Active Layer Only, Set Active Layer By Layer Icon Only, Double click to open Plot Setup (T61 leftovers) | S | done 2026-11-19 (graphing 21.16), not measured |
 | [T185](T185-page-break-lines.md) | Worksheet Page Break Preview Lines (View menu, corner menu) (B6 slice) | S | done 2026-11-19 (workbook-model 13i), not measured |
@@ -326,9 +326,10 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T333](T333-peak-results-measure.md) | Measure Peak Analyzer Integrate Peaks output sheets and limits (local minima; left-edge rule open) | S | measured 2026-11-21 (docs only) |
 | [T338](T338-formula-shorthand.md) | Bare column names, A1 and x/y in Set Column Values measured (none in Origin 2016); the error points to col(A) | S | done 2026-11-21, measured |
 | [T341](T341-fourier-self-deconvolution.md) | Fourier Self-Deconvolution (Kauppinen): narrower bands to separate overlapping peaks (window, CLI) | M | done 2026-11-21 (Sheaf's own) |
+| [T344](T344-fsd-peak-search.md) | Peak Analyzer Find Peaks on the Fourier self-deconvolved curve (hidden peaks), window and CLI | S | done 2026-11-21 (Sheaf's own) |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
-| [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |
+| [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Partly done: graph and axis formats, legend Styles/Dimensions/All (T179, graphing 26.16), Apply Formats and private clipboard restart persistence. The spec records measured behavior, Sheaf field mappings and the remaining choices. |
 
 ## Index
 
@@ -397,7 +398,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T64](T64-significance-plot.md) | Multiple comparisons plot with significance brackets | M | done 2026-11-15 (statistics 23, `significance-plot`, macOS); left: two-way ANOVA, paired and one-sample, Origin measurements, editable brackets |
 | [T77](T77-new-graph-and-project-without-data.md) | File > New > Graph and Standard New Graph (empty graph from the default template), Save Project without Data... and Duplicate Project without Data (B12 slice) | M | done 2026-11-16 (`new-graph-nodata`, graphing.md 25, project-file-format.md); Origin behaviour of the two project items unmeasured |
 | [T125](T125-drawn-shape-clipboard.md) | Drawn-shape Cut/Copy/Paste (B2 slice) | M | done 2026-11-19 (graphing 17.8): right-click Cut/Copy and page Paste at the clicked point, not measured; left: Edit menu/keyboard routes, several objects |
-| [T72](T72-copy-paste-format.md) | Graph formats, axis Scales/Styles and legend Styles through Copy Format and Paste Format To (B2 slice 1) | M | open; see graphing 26 for measurements and field mappings. Legend Dimensions and All still pending. |
+| [T72](T72-copy-paste-format.md) | Graph, axis and legend Copy Format and Paste Format To (B2 slice 1) | M | Partly done. Legend Styles, Dimensions and All are available. See graphing 26 for measurements and field mappings. |
 | [T81](T81-partial-correlation-anova3-rmanova.md) | Partial Correlation Coefficient, Three-Way ANOVA, One-Way and Two-Way Repeated Measures ANOVA (B8 slice) | L | done 2026-11-16 (`partial-corr`, `anova3`, `rmanova`, statistics.md 24-26, Origin 2016 runs reproduced); left: Raw layout, missing values, two-way means comparisons, mean/plot graphs |
 
 For every active claim (including matrices/contour/heatmaps), read the current

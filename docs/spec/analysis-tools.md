@@ -1878,6 +1878,13 @@ describe Origin's settings, so this follows the method of Kauppinen, Moffatt, Ma
   with the largest side lobes).
 - **Output:** a column "FSD of <input>" beside each input (comment with the settings); with Recalculate
   it follows the input. Noise grows with K (the method's nature): smooth first or lower K.
+- **In the peak search (T344, Origin 2018b's "FSD peak detection"):** the Peak Analyzer's Find Peaks page
+  has "Search on the Fourier self-deconvolved curve (hidden peaks)" with the same three settings
+  (`FindOptions::fsd`; CLI `analyze peaks --fsd-fwhm W [--fsd-k K]`). The chosen method searches the
+  narrowed corrected curve (after any smoothing), so bands hidden as shoulders become maxima; the height
+  filter applies to the narrowed curve; centres, heights, widths, limits and areas are measured on the
+  corrected data as before. Two Lorentzians of FWHM 2, 1.0 apart, are one peak without it and two with
+  FWHM 2, K 3. Uneven X is refused with the column named.
 
 ## Files
 

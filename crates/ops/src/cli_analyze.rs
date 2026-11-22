@@ -658,6 +658,8 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             baseline_points,
             baseline_goal,
             anchors,
+            fsd_fwhm,
+            fsd_k,
             als_asymmetric,
             als_threshold,
             als_smoothing,
@@ -692,6 +694,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 || min_width > 0.0
                 || baseline.is_some()
                 || anchors.is_some()
+                || fsd_fwhm.is_some()
                 || limits.is_some();
             if !chain {
                 (
@@ -782,6 +785,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     direction,
                     filter,
                     min_fwhm: min_width,
+                    fsd: fsd_fwhm.map(|fwhm| analysis::FsdOptions { fwhm, enhancement: fsd_k, ..Default::default() }),
                 };
                 if let Some(goal) = baseline_goal {
                     if integrate || fit.is_some() {

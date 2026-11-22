@@ -814,6 +814,8 @@ pub struct AnalysisDialog {
     cv: CvChargeSpec,
     /// Fourier Self-Deconvolution's settings (T341).
     fsd: FsdOptions,
+    /// Peak Analyzer, Find Peaks: search on the FSD-narrowed curve with `fsd`'s settings (T344).
+    chain_fsd: bool,
     diff: DiffOptions,
     smooth_kind: SmoothKind,
     smooth_points: usize,
@@ -1525,6 +1527,7 @@ impl AnalysisDialog {
             integrate: IntegrateSpec::default(),
             cv: CvChargeSpec::default(),
             fsd: FsdOptions::default(),
+            chain_fsd: false,
             diff: DiffOptions::default(),
             smooth_kind: SmoothKind::SavitzkyGolay,
             smooth_points: 5,
@@ -1639,6 +1642,13 @@ impl AnalysisDialog {
             ui.add_enabled(self.peak_keep == PeakKeep::Count, DragValue::new(&mut self.peak_count).range(1..=10_000));
         });
         ui.radio_value(&mut self.peak_keep, PeakKeep::All, "Keep every local extremum");
+        if chain {
+            // Origin 2018b's FSD peak detection (T344): the search runs on the narrowed bands.
+            ui.checkbox(&mut self.chain_fsd, "Search on the Fourier self-deconvolved curve (hidden peaks)");
+            if self.chain_fsd {
+                fsd_options(ui, &mut self.fsd);
+            }
+        }
     }
 
     /// Origin's Peak Analyzer as a wizard: the page list of the goal, Prev and Next, and the page
@@ -2221,6 +2231,7 @@ impl AnalysisDialog {
                             PeakKeep::Count => PeakFilter::Number(self.peak_count),
                             PeakKeep::All => PeakFilter::None,
                         },
+                        fsd: self.chain_fsd.then_some(self.fsd),
                         ..FindOptions::default()
                     },
                     limits: if self.chain_half_height { LimitMode::HalfHeight } else { LimitMode::Baseline },

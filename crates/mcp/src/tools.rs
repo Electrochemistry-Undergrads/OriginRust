@@ -1927,6 +1927,13 @@ fn fit(s: &mut Ctx, a_raw: &Value) -> Res {
         FitRun::Comparison(o) => json!({
             "compare": {"message": o.message, "warnings": o.comparison.warnings, "table": sheet_table(project, o.book, o.sheet)}
         }),
+        FitRun::BestSubsets(o) => json!({
+            "best_subsets": {
+                "message": o.message,
+                "rows": o.result.n,
+                "table": sheet_table(project, o.book, o.sheet),
+            }
+        }),
         FitRun::Ranking(o) => json!({
             "rank": {
                 "message": o.message,

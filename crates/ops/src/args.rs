@@ -242,6 +242,11 @@ pub struct FitArgs {
     /// (comma-separated columns); --fix Intercept=VALUE holds the intercept.
     #[arg(long, value_delimiter = ',', value_name = "COLUMNS", conflicts_with_all = ["compare", "rank", "global"])]
     pub regress: Vec<String>,
+    /// With --regress: best subset selection instead of one regression. Every subset of the --regress
+    /// columns (at most 15) is fitted with an intercept and scored by R-square, adjusted R-square,
+    /// Mallows Cp, AIC and BIC; the table goes to a new sheet BestSubsets<n>.
+    #[arg(long, requires = "regress")]
+    pub best_subsets: bool,
     /// Compare --model with this model (a model as for --model) on the first Y column: AICc,
     /// Akaike weights, BIC and the F-test.
     #[arg(long, value_name = "MODEL", conflicts_with_all = ["rank", "global"])]

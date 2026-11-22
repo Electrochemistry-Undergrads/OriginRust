@@ -1936,6 +1936,7 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Fit Linear with X Error...", Cmd::Fit(FitKind::LinearXError)),
                 item("Polynomial Fit...", Cmd::Fit(FitKind::Polynomial)),
                 item("Multiple Linear Regression...", Cmd::FitMore(FitMoreKind::Multiple)),
+                item("Best Subset Selection...", Cmd::FitMore(FitMoreKind::BestSubset)),
                 sep(),
                 keyed("Nonlinear Curve Fit...", ctrl(Key::Y), Cmd::Fit(FitKind::BuiltIn)),
                 item("Nonlinear Implicit Curve Fit...", Cmd::FitMore(FitMoreKind::Implicit)),

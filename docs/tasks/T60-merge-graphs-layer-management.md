@@ -4,8 +4,9 @@
 15.7c, 15.7d; probes `tools/origin-ref/merge-graph-*.lines.txt`, `fit-page-to-layers.lines.txt`):
 Merge Graph Windows (core `merge.rs`, dialog, `sheaf merge-graphs`), Layer Management (Arrange,
 Size/Position, Link; core `layer_manage.rs`), Fit Page to Layers (dialog and Format item). Fit Layer to
-Graph did nothing measurable in Origin and is tagged `N`. Remaining work includes Layer Management's Add
-(T61), Axes and remaining Display controls; MCP tool for merging. **Size:** L, merge then management.
+Graph did nothing measurable in Origin and is tagged `N`. Remaining work includes Layer Management's
+Axes and remaining Display controls and an MCP tool for merging. See T61 for Layer Management Add.
+**Size:** L, merge then management.
 Background-colour follow-up (`codex/t60-layer-display`, 2026-11-16): Display > Color >
 Background Color supports selected layers, None, basic presets and opaque RGB. Native two-layer
 Apply/Cancel/OK/mixed/None measurements are recorded in graphing 15.7d. Preview/history/no-op

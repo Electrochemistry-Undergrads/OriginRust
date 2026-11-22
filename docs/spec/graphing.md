@@ -3773,6 +3773,8 @@ not measured Origin behavior. No model, renderer, file-format, CLI or MCP behavi
 grid (#, Name, Link to) on the left; tabs Add, Arrange, Size/Position, Link, Axes and Display; a
 preview on the right; the note "Use the Apply buttons on each tab to update your preview graph. Use
 the OK button to apply the changes in preview graph to source graph."; Undo, OK and Cancel.
+- Add: Type (the nine presets in 21.1), Link To, X Scale and Y Scale. The Origin 2016 capture
+  starts at Bottom-X Left-Y, None, Linear and Linear. See 21.17 for plot and scale readback.
 - Arrange: Arrange Order (Layer Index Order, Current Position Order), Number of Rows and Columns
   (1, 1), Add Extra Layer(s) for Grid (on), Keep Layer Aspect Ratio, Treat Linked Layers as a
   group, Link Layers, Set Layer Width/Height by Common Scale, Show Axes Frame; spacing gaps 5 and
@@ -3790,10 +3792,9 @@ the OK button to apply the changes in preview graph to source graph."; Undo, OK 
 
 **Sheaf's Layer Management** (`sheaf_core::layer_manage`, `dialogs/layer_management.rs`; Graph menu,
 page right-click and layer icon menu, the icon's layer selected): the layer list allows several
-layers; Arrange, Size/Position and Link are built and work on a copy shown as numbered frames on a
-page-shaped preview; Undo takes back the last Apply; OK writes the copy in one undo step; Cancel and
-Escape discard it. Display > Color > Background Color is implemented as described below. Add (T61)
-and Axes are shown disabled, as are the Align/Custom links, the Units combo of
+layers. Add, Arrange, Size/Position, Link and Display Background Color work on a copy shown as
+numbered frames on a page-shaped preview. Undo takes back the last Apply. OK writes the copy in one
+undo step. Cancel and Escape discard it. Axes is shown disabled, as are the Align/Custom links, the Units combo of
 Link and the reposition-parent tick. Arrange with no selection takes every layer; "Treat Linked
 Layers as a group" places a layer with the layers linked to it as one unit; Link Layers links the
 later units to the first in position only. Sheaf choices (not measured): Move in "% of Reference
@@ -5810,6 +5811,25 @@ click on a layer icon open Plot Setup for that layer instead of Plot Details. Bo
 in the `.sheaf` file (`PageStyle::activate_by_icon_only`, `icon_double_click_plot_setup`; off by default,
 not written when off), one undo step each, not written to `.opj`. Origin's exact scope and saving were not
 measured.
+
+### 21.17 Layer Management Add tab (T61, 2026-11-22)
+
+Add offers the nine layer presets and X and Y scale choices. Bottom-X Left-Y creates an independent
+layer. The linked presets accept an independent layer from the preview as their parent, defaulting
+to the opening layer's root or the first eligible layer. A straight-linked scale displays the
+parent's type. Independent scales start at Linear and offer the ten types supported by Sheaf.
+Custom Formula and Discrete appeared in the Origin 2016 capture, with no corresponding Sheaf
+scale type. Apply adds a layer to the numbered preview. Undo, OK and Cancel follow 15.7d.
+
+Inset With Data copies all plots from the chosen parent and uses automatic independent ranges.
+The [Origin Add tab](https://docs.originlab.com/origin-help/laymanage-addtab/) documents copying
+all plots. In an Origin 2016 `layadd type:=insetdata linkto:=lay1` probe, `layer -c` returned
+the same two datasets in the inset and the parent. The inset was dimension-linked with independent
+Linear axes even though the source X was Log10. The source Y range was 1–22 with step 5, and the
+inset had 1.5–8.5 with step 1. In the same graph, `layadd type:=righty linkto:=lay1` created an empty
+layer with a straight Log10 X link and an independent Linear Y. The dialog's individual scale
+edits were covered by Sheaf UI tests. The Origin live readback used `layadd`.
+
 ## 22. Graph view modes, Show toggles and Full Screen (T66, measured 2026-11-15, Origin 2016)
 
 Measured in OriginPro 2016 on our own synthetic data (a workbook with X = 1 to 10, Y = 2X+1 and 20-X, a Line + Symbol graph, once with an extra right-Y layer), a 1024x768 Origin window, menus and keys driven through `tools/origin-ref/origin-dialog.ps1 -NoDialog` with `-AfterFile` (`@CLICK`, `@KEY`, `@SHOT`) and `page.viewmode` read through LabTalk. Pictures and raw outputs are local (`re-workspace/scratch/t66/`). Anything not listed is **unmeasured**.

@@ -36,6 +36,7 @@ fn gadgets_skip_filtered_and_masked_rows_and_the_reader_keeps_its_rows() {
         y1: 0.0,
         end_point_baseline: false,
         circle: false,
+        absolute: false,
     };
     assert_eq!(stats.stats(&gx, &gy).unwrap().n, all_x.len() - 2);
 }

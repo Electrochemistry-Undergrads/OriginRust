@@ -492,6 +492,8 @@ pub enum Cmd {
     Recalculate,
     /// Column > Add New Columns... (Ctrl+D): the window that asks how many (T305).
     AddColumns,
+    /// Column > Add Column to All Sheets... (T359).
+    AddColumnAcross,
     /// The Standard toolbar's Add New Columns: one column at once, as Origin's button (T305).
     AddOneColumn,
     ColumnProperties,
@@ -661,6 +663,11 @@ pub enum Cmd {
     ShapeTool(sheaf_core::shape::ShapeKind),
     /// Properties of a drawn object.
     EditShape {
+        layer: usize,
+        shape: usize,
+    },
+    /// The data points inside a drawn rectangle or ellipse, copied to a new workbook (T355).
+    ExtractRegion {
         layer: usize,
         shape: usize,
     },
@@ -1775,6 +1782,7 @@ fn column_menu() -> Vec<Entry> {
         item("Show X Column...", Cmd::ShowXColumn),
         sep(),
         keyed("Add &New Columns...", ctrl(Key::D), Cmd::AddColumns),
+        item("Add Column to All Sheets...", Cmd::AddColumnAcross),
         hide_menu(),
         sep(),
         filter_menu(),
@@ -1863,6 +1871,7 @@ fn worksheet_menu() -> Vec<Entry> {
         item("Clear Worksheet...", Cmd::ClearWorksheet),
         item("Split Columns...", Cmd::Reshape(ReshapeKind::Split)),
         item("Pivot Table...", Cmd::PivotTable),
+        item("Time Series Pivot...", Cmd::Analyze(AnalysisKind::TimePivot)),
         item("Reduce Rows...", Cmd::Reshape(ReshapeKind::Reduce)),
         item("Transpose...", Cmd::Reshape(ReshapeKind::Transpose)),
         item("Stack Columns...", Cmd::Reshape(ReshapeKind::Stack)),
@@ -2022,6 +2031,7 @@ fn statistics_menu() -> Vec<Entry> {
                 item("Discrete Frequency...", Cmd::Analyze(AnalysisKind::DiscreteFreq)),
                 item("Frequency Counts...", Cmd::Analyze(AnalysisKind::Histogram)),
                 item("2D Frequency Counts/Binning...", Cmd::Analyze(AnalysisKind::Binning2D)),
+                item("Binned Scatter...", Cmd::Analyze(AnalysisKind::BinScatter)),
                 sep(),
                 item("Distribution Fit...", Cmd::Analyze(AnalysisKind::DistFit)),
                 item("Probability Plot...", Cmd::Analyze(AnalysisKind::ProbPlot)),
@@ -2281,6 +2291,7 @@ pub fn integrate_gadget_menu(end_point_baseline: bool) -> Vec<Entry> {
     vec![
         item(baseline, Cmd::Gadget(GadgetOp::ToggleBaseline)),
         item("New Output", Cmd::Gadget(GadgetOp::NewOutput)),
+        item("Preferences...", Cmd::Gadget(GadgetOp::Preferences)),
         sep(),
         keyed("Delete", plain_key(Key::Escape), Cmd::Gadget(GadgetOp::Close)),
     ]
@@ -2894,8 +2905,8 @@ pub fn graph_label_menu(layer: usize, label: usize) -> Vec<Entry> {
 }
 
 /// The menu of a drawn line, arrow, rectangle or ellipse.
-pub fn graph_shape_menu(layer: usize, shape: usize) -> Vec<Entry> {
-    vec![
+pub fn graph_shape_menu(layer: usize, shape: usize, region: bool) -> Vec<Entry> {
+    let mut entries = vec![
         keyed("Cut", ctrl(Key::X), Cmd::CutShape { layer, shape }),
         keyed("Copy", ctrl(Key::C), Cmd::CopyShape { layer, shape }),
         keyed("Delete", plain_key(Key::Delete), Cmd::GraphEdit(GraphOp::DeleteShape { layer, shape })),
@@ -2903,8 +2914,14 @@ pub fn graph_shape_menu(layer: usize, shape: usize) -> Vec<Entry> {
         item("Bring to the front", Cmd::GraphEdit(GraphOp::OrderShape { layer, shape, front: true })),
         item("Push to the back", Cmd::GraphEdit(GraphOp::OrderShape { layer, shape, front: false })),
         sep(),
-        item("Properties...", Cmd::EditShape { layer, shape }),
-    ]
+    ];
+    // A rectangle or an ellipse marks a region whose data points can be copied out (T355).
+    if region {
+        entries.push(item("Extract Data in Region", Cmd::ExtractRegion { layer, shape }));
+        entries.push(sep());
+    }
+    entries.push(item("Properties...", Cmd::EditShape { layer, shape }));
+    entries
 }
 
 /// The menu of a slope annotation.
@@ -3653,6 +3670,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::Recalculate(some()?)
         }
         Cmd::AddColumns => Action::AddColumnsDialog(book?),
+        Cmd::AddColumnAcross => Action::AddColumnAcross(book?),
         Cmd::AddOneColumn => Action::AddColumn(book?),
         Cmd::ColumnProperties => {
             book?;
@@ -3959,6 +3977,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::EditShape { layer, shape } => {
             Action::EditShape { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape }
+        }
+        Cmd::ExtractRegion { layer, shape } => {
+            Action::ExtractRegion { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape }
         }
         Cmd::AddText => Action::AddText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: Some(c.layer), at: None },
         Cmd::EditText { layer, label } => {

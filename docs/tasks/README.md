@@ -312,6 +312,11 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T318](T318-baseline-als-dataset.md) | Peak Analyzer baselines Use Existing Dataset and Asymmetric Least Squares Smoothing (window, CLI) | M | done 2026-11-21; ALS not measured (Pro) |
 | [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T359](T359-column-across-sheets.md) | Column > Add Column to All Sheets: a matching column and formula in every sheet (Origin 2026b) | S | done 2026-11-22 (workbook-model 13q) |
+| [T358](T358-time-series-pivot.md) | Time Series Pivot (Origin 2025): values per calendar period of their date-time X | S | done 2026-11-22 (statistics 32) |
+| [T357](T357-integrate-gadget-prefs.md) | Integrate gadget Preferences: typed range, baseline, Mathematical/Absolute area | S | done 2026-11-22 (graphing gadgets) |
+| [T356](T356-binned-scatter.md) | Binned scatter (Origin 2027): mean Y per bin of X, equal counts or equal width, sheet and graph | S | done 2026-11-22 (statistics 31) |
+| [T355](T355-region-extract.md) | Extract Data in Region: the data inside a drawn rectangle or ellipse to a new workbook (Origin 2024b) | S | done 2026-11-22 (graphing 17.12) |
 | [T353](T353-integrate-range-pick.md) | Integrate Ranges on a graph: each peak's limits picked with the Data Reader | S | done 2026-11-22 (analysis-tools 10) |
 | [T351](T351-pa-anchor-pick.md) | Peak Analyzer: User Defined anchors picked on the graph with the Data Reader | S | done 2026-11-21 (analysis-tools 11.6a) |
 | [T349](T349-cv-feet.md) | CV Charge on a graph: pick the peak's feet with the Data Reader, sloped baseline through them | S | done 2026-11-21 (analysis-tools 21) |

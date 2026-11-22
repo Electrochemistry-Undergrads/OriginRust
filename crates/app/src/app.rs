@@ -15,6 +15,43 @@ use crate::dialogs::comparison_plot::{ComparisonPlotDialog, Outcome as Compariso
 use crate::dialogs::cond_format::CondFormatDialog;
 use crate::dialogs::cond_manager::{CondManagerDialog, ManagerOutcome};
 use crate::dialogs::cv_pick::{CvPickDialog, CvPickOutcome};
+
+/// What Column > Add Column to All Sheets... edits (T359).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ColumnAcross {
+    pub book: WindowId,
+    pub long_name: String,
+    pub units: String,
+    pub formula: String,
+    pub recalc: sheaf_core::column::RecalcMode,
+    /// Every workbook of the project instead of this one.
+    pub project: bool,
+    pub problem: Option<String>,
+}
+
+impl ColumnAcross {
+    fn new(book: WindowId) -> Self {
+        ColumnAcross {
+            book,
+            long_name: String::new(),
+            units: String::new(),
+            formula: String::new(),
+            recalc: sheaf_core::column::RecalcMode::None,
+            project: false,
+            problem: None,
+        }
+    }
+}
+
+/// What the Integrate gadget's Preferences window edits (T357).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct GadgetPrefs {
+    pub graph: WindowId,
+    pub from: f64,
+    pub to: f64,
+    pub baseline: bool,
+    pub absolute: bool,
+}
 use crate::dialogs::error_bars::{ErrorBarsDialog, Outcome as ErrorBarsOutcome};
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
 use crate::dialogs::export_excel::ExcelExportDialog;
@@ -239,6 +276,10 @@ pub struct SheafApp {
     multi_peak: Option<MultiPeakDialog>,
     subtract_pick: Option<SubtractPickDialog>,
     cv_pick: Option<CvPickDialog>,
+    /// Column > Add Column to All Sheets... (T359).
+    pub(crate) column_across: Option<ColumnAcross>,
+    /// The Integrate gadget's Preferences window (T357).
+    pub(crate) gadget_prefs: Option<GadgetPrefs>,
     range_pick: Option<RangePickDialog>,
     /// The graph whose Data Reader the Peak Analyzer's anchor picking turned on (T351).
     anchor_graph: Option<WindowId>,
@@ -448,6 +489,8 @@ impl SheafApp {
             multi_peak: None,
             subtract_pick: None,
             cv_pick: None,
+            column_across: None,
+            gadget_prefs: None,
             range_pick: None,
             anchor_graph: None,
             export: None,
@@ -1453,6 +1496,7 @@ impl SheafApp {
                 y1,
                 end_point_baseline: false,
                 circle: false,
+                absolute: false,
             });
             self.focus(graph);
             return;
@@ -1492,6 +1536,7 @@ impl SheafApp {
             y1,
             end_point_baseline: false,
             circle: false,
+            absolute: false,
         });
         self.focus(graph);
     }
@@ -1504,6 +1549,11 @@ impl SheafApp {
         let Some(g) = &mut state.gadget else { return };
         match op {
             GadgetOp::ToggleBaseline => g.end_point_baseline = !g.end_point_baseline,
+            GadgetOp::Preferences => {
+                let (from, to) = (g.x0.min(g.x1), g.x0.max(g.x1));
+                self.gadget_prefs =
+                    Some(GadgetPrefs { graph, from, to, baseline: g.end_point_baseline, absolute: g.absolute });
+            }
             GadgetOp::SetRegion(circle) => g.circle = circle,
             GadgetOp::Close => state.gadget = None,
             // 2D Integrate (T198): a row of the results table.
@@ -1531,7 +1581,11 @@ impl SheafApp {
                     columns: vec![column],
                     rows: sheaf_core::analysis::RowRange::XBetween(g.x0, g.x1),
                     tool: sheaf_core::analysis::Tool::Integrate(sheaf_core::analysis::IntegrateSpec {
-                        area_type: Default::default(),
+                        area_type: if g.absolute {
+                            sheaf_core::analysis::AreaType::Absolute
+                        } else {
+                            sheaf_core::analysis::AreaType::Mathematical
+                        },
                         end_point_baseline: g.end_point_baseline,
                         cumulative: false,
                     }),
@@ -2356,6 +2410,7 @@ impl SheafApp {
                 }
             }
             Action::AddColumnsDialog(book) => self.add_columns = Some((book, 1)),
+            Action::AddColumnAcross(book) => self.column_across = Some(ColumnAcross::new(book)),
             Action::DeleteColumns(columns) => {
                 self.doc.apply("Delete columns", |p| delete_columns(p, &columns));
             }
@@ -2800,6 +2855,7 @@ impl SheafApp {
                 self.sort = SortDialog::nested_in_rows(self.doc.project(), book, columns, rows);
             }
             Action::PivotTable { book, columns } => self.pivot = PivotDialog::new(&self.doc, book, columns),
+            Action::ExtractRegion { graph, layer, shape } => self.extract_region(graph, layer, shape),
             Action::MultiPeakFit { graph, y, layer } => {
                 let graph = match graph {
                     Some(g) => Some(g),
@@ -5998,6 +6054,200 @@ impl SheafApp {
         }
     }
 
+    /// Extract Data in Region (T355): the data points of the layer inside the drawn rectangle or ellipse go to a
+    /// new workbook, three columns per plot with points inside (X, Y and the source row), as one undo step.
+    fn extract_region(&mut self, graph: WindowId, layer: usize, shape: usize) {
+        let found = match sheaf_plot::region::points_in_shape(self.doc.project(), graph, layer, shape) {
+            Ok(Some(found)) => found,
+            Ok(None) => return self.warn("Only a rectangle or an ellipse marks a region"),
+            Err(e) => return self.warn(e.to_string()),
+        };
+        if found.is_empty() {
+            return self.say("No data points inside the object");
+        }
+        let project = self.doc.project();
+        let Some(l) = project.graph(graph).and_then(|g| g.layers.get(layer)) else { return };
+        let names: Vec<(String, String, String, String)> = found
+            .iter()
+            .map(|f| {
+                let plot = &l.plots[f.plot];
+                let y = project.column(plot.y);
+                let x = plot.x.and_then(|x| project.column(x));
+                (
+                    x.map_or("Row".to_string(), |c| c.display_name().to_string()),
+                    x.map_or(String::new(), |c| c.units.clone()),
+                    y.map_or(String::new(), |c| c.display_name().to_string()),
+                    y.map_or(String::new(), |c| c.units.clone()),
+                )
+            })
+            .collect();
+        let labels: Vec<String> = found.iter().map(|f| project.plot_label(&l.plots[f.plot])).collect();
+        let total: usize = found.iter().map(|f| f.rows.len()).sum();
+        let made = self.doc.edit("Extract data in region", |p| {
+            let book = p.add_workbook("Extracted from region");
+            for ((f, (xn, xu, yn, yu)), label) in found.iter().zip(&names).zip(&labels) {
+                let comment = format!("in the region of {label}");
+                let columns = [
+                    (Designation::X, xn.clone(), xu.clone(), f.x.clone()),
+                    (Designation::Y, yn.clone(), yu.clone(), f.y.clone()),
+                    (
+                        Designation::Disregard,
+                        "Source row".to_string(),
+                        String::new(),
+                        f.rows.iter().map(|r| (r + 1) as f64).collect(),
+                    ),
+                ];
+                for (designation, name, units, values) in columns {
+                    let id =
+                        p.add_column(book, 0, designation, ColumnData::numeric(values)).map_err(|e| e.to_string())?;
+                    if let Some(c) = p.column_mut(id) {
+                        c.long_name = name;
+                        c.units = units;
+                        c.comments = comment.clone();
+                    }
+                }
+            }
+            Ok::<_, String>(book)
+        });
+        match made {
+            Ok(book) => {
+                self.focus(book);
+                self.say(format!("{total} data point(s) in the region copied to a new workbook"));
+            }
+            Err(e) => self.warn(e),
+        }
+    }
+
+    /// The Integrate gadget's Preferences window (T357): X From and To, the baseline and the area type; OK applies
+    /// them to the gadget (a view setting, not an undo step).
+    fn gadget_prefs_frame(&mut self, ctx: &egui::Context) {
+        let Some(p) = &mut self.gadget_prefs else { return };
+        let mut open = true;
+        let mut done = None;
+        egui::Window::new("Integrate Gadget Preferences")
+            .id(egui::Id::new("integrate_gadget_prefs"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                egui::Grid::new("integrate_gadget_prefs_grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+                    ui.label("X From");
+                    ui.add(egui::DragValue::new(&mut p.from).speed(0.01));
+                    ui.end_row();
+                    ui.label("X To");
+                    ui.add(egui::DragValue::new(&mut p.to).speed(0.01));
+                    ui.end_row();
+                    ui.label("Baseline");
+                    ui.vertical(|ui| {
+                        ui.radio_value(&mut p.baseline, false, "Zero (Y = 0)");
+                        ui.radio_value(&mut p.baseline, true, "Straight line through the end points");
+                    });
+                    ui.end_row();
+                    ui.label("Area Type");
+                    ui.vertical(|ui| {
+                        ui.radio_value(&mut p.absolute, false, "Mathematical Area");
+                        ui.radio_value(&mut p.absolute, true, "Absolute Area");
+                    });
+                    ui.end_row();
+                });
+                ui.add_space(6.0);
+                done = crate::dialogs::frame::button_row(ui, false);
+            });
+        let p = *p;
+        match done {
+            Some(crate::dialogs::frame::DialogButton::Ok)
+                if p.from != p.to && p.from.is_finite() && p.to.is_finite() =>
+            {
+                if let Some(g) = self.graphs.get_mut(&p.graph).and_then(|s| s.gadget.as_mut()) {
+                    (g.x0, g.x1, g.end_point_baseline, g.absolute) = (p.from, p.to, p.baseline, p.absolute);
+                }
+                self.gadget_prefs = None;
+            }
+            Some(crate::dialogs::frame::DialogButton::Ok) => self.warn("X From and X To must differ"),
+            Some(crate::dialogs::frame::DialogButton::Cancel) => self.gadget_prefs = None,
+            _ if !open => self.gadget_prefs = None,
+            _ => {}
+        }
+    }
+
+    /// Column > Add Column to All Sheets... (T359): one column, with an optional formula, at the end of every sheet
+    /// of the workbook (or of every workbook), as one undo step.
+    fn column_across_frame(&mut self, ctx: &egui::Context) {
+        let Some(d) = &mut self.column_across else { return };
+        let mut open = true;
+        let mut pressed = None;
+        egui::Window::new("Add Column to All Sheets")
+            .id(egui::Id::new("column_across"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                egui::Grid::new("column_across_grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+                    ui.label("Long Name");
+                    ui.text_edit_singleline(&mut d.long_name);
+                    ui.end_row();
+                    ui.label("Units");
+                    ui.text_edit_singleline(&mut d.units);
+                    ui.end_row();
+                    ui.label("Formula");
+                    ui.text_edit_singleline(&mut d.formula).on_hover_text(
+                        "Optional Set Column Values formula, run in each sheet against that sheet's columns, for example col(B)*2",
+                    );
+                    ui.end_row();
+                    ui.label("Recalculate");
+                    ui.horizontal(|ui| {
+                        use sheaf_core::column::RecalcMode;
+                        ui.radio_value(&mut d.recalc, RecalcMode::None, "None");
+                        ui.radio_value(&mut d.recalc, RecalcMode::Auto, "Auto");
+                        ui.radio_value(&mut d.recalc, RecalcMode::Manual, "Manual");
+                    });
+                    ui.end_row();
+                    ui.label("Sheets");
+                    ui.vertical(|ui| {
+                        ui.radio_value(&mut d.project, false, "Every sheet of this workbook");
+                        ui.radio_value(&mut d.project, true, "Every sheet of every workbook");
+                    });
+                    ui.end_row();
+                });
+                if let Some(p) = &d.problem {
+                    ui.colored_label(egui::Color32::from_rgb(170, 30, 30), p);
+                }
+                ui.add_space(6.0);
+                pressed = crate::dialogs::frame::button_row(ui, false);
+            });
+        match pressed {
+            Some(crate::dialogs::frame::DialogButton::Ok) => {
+                let d = d.clone();
+                let spec = sheaf_core::across::AcrossColumn {
+                    long_name: d.long_name.trim().to_string(),
+                    units: d.units.trim().to_string(),
+                    formula: Some(d.formula.trim().to_string()).filter(|f| !f.is_empty()),
+                    recalc: d.recalc,
+                    ..Default::default()
+                };
+                let scope = if d.project {
+                    sheaf_core::across::AcrossScope::Project
+                } else {
+                    sheaf_core::across::AcrossScope::Workbook(d.book)
+                };
+                match self.doc.edit("Add column to all sheets", |p| p.add_column_across_sheets(scope, &spec)) {
+                    Ok(made) => {
+                        self.column_across = None;
+                        self.say(format!("A column was added to {} sheet(s)", made.len()));
+                    }
+                    Err(e) => {
+                        if let Some(d) = &mut self.column_across {
+                            d.problem = Some(e.to_string());
+                        }
+                    }
+                }
+            }
+            Some(crate::dialogs::frame::DialogButton::Cancel) => self.column_across = None,
+            _ if !open => self.column_across = None,
+            _ => {}
+        }
+    }
+
     fn show_sheet(&mut self, book: WindowId, sheet: usize) {
         self.doc.adjust_view(|p| {
             if let Some(b) = p.workbook_mut(book) {
@@ -7297,6 +7547,8 @@ impl SheafApp {
         self.multi_peak_frame(ctx);
         self.subtract_pick_frame(ctx);
         self.cv_pick_frame(ctx);
+        self.column_across_frame(ctx);
+        self.gadget_prefs_frame(ctx);
         self.range_pick_frame(ctx);
         self.anchor_pick_frame(ctx);
         if let Some(d) = &mut self.pivot {

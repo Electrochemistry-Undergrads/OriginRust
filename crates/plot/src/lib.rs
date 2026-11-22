@@ -41,6 +41,7 @@ mod plots;
 mod polar;
 mod psd;
 mod raster;
+pub mod region;
 mod ridgeline;
 mod rug;
 pub mod scene;

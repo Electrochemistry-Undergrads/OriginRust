@@ -1301,6 +1301,33 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 curve: !no_graph,
             })),
         ),
+        AnalyzeTool::Timepivot { target, period, stat } => {
+            let period = match analysis::PivotPeriod::ALL
+                .into_iter()
+                .find(|p| p.name().eq_ignore_ascii_case(period.trim()))
+            {
+                Some(p) => p,
+                None => bail!("--period must be minute, hour, day, week, month, quarter or year (got \"{period}\")"),
+            };
+            let stat = match stat.trim().to_ascii_lowercase().as_str() {
+                "sum" => analysis::PivotStat::Sum,
+                "mean" => analysis::PivotStat::Mean,
+                "count" => analysis::PivotStat::Count,
+                "min" | "minimum" => analysis::PivotStat::Min,
+                "max" | "maximum" => analysis::PivotStat::Max,
+                "median" => analysis::PivotStat::Median,
+                other => bail!("--stat must be sum, mean, count, min, max or median (got \"{other}\")"),
+            };
+            (target, Job::Tool(Tool::TimePivot(analysis::TimePivotSpec { period, stat })))
+        }
+        AnalyzeTool::Binscatter { target, bins, equal_width, no_graph } => {
+            if bins == 0 {
+                bail!("--bins must be at least 1");
+            }
+            let rule =
+                if equal_width { analysis::BinRule::EqualWidth(bins) } else { analysis::BinRule::EqualCount(bins) };
+            (target, Job::Tool(Tool::BinScatter(analysis::BinScatterSpec { rule, graph: !no_graph })))
+        }
         AnalyzeTool::Changepoint { target, change, penalty, min_segment, no_graph } => {
             let kind = match change.trim().to_ascii_lowercase().as_str() {
                 "mean" => analysis::ChangeKind::Mean,

@@ -21,7 +21,7 @@ outputs or UI behavior.
 | Named cells and ranges | 2022 | Assign a reusable name to a cell or selected range and reference it in calculations. | [2022][o22] |
 | Cell notes | 2022 | Done (T36). Attach a comment to an individual data cell, show an indicator and read the note in place. | [2022][o22] |
 | Worksheet frozen panes | 2023 | Done (T34). Keep selected data rows or columns visible while scrolling the data area. | [2023][o23] |
-| Time Series Pivot | 2025 | Aggregate timestamped records by calendar intervals and a second period grouping, including fiscal calendars and custom intervals. | [2025][o25] |
+| Time Series Pivot | 2025 | Calendar periods done (T358: Worksheet > Time Series Pivot, minute to year, six statistics); fiscal calendars, custom intervals and a second grouping remain. Aggregate timestamped records by calendar intervals and a second period grouping, including fiscal calendars and custom intervals. | [2025][o25] |
 | Project Browser | 2025b | Search a project-wide list of sheets, columns, graphs and folders, preview matches and apply metadata edits to multiple selections. | [2025b][o25b] |
 | Window Switcher | 2025b | Done (T42). Cycle through open child windows with keyboard shortcuts and previews. | [2025b][o25b] |
 | Interactive formula references | 2025b | Insert a cell, column or range into the formula being edited by clicking or dragging in the sheet. | [2025b][o25b] |
@@ -30,7 +30,7 @@ outputs or UI behavior.
 | Find in Project Files | 2026 / 2026b | Search a collection of saved projects for text in metadata, graph labels, notes and data cells, then open the matching project. | [2026][o26] · [2026b][o26b] |
 | Repeat Last Action and Duplicate Operation | 2026 | Repeat the last plotting action on another selection, reopen the last tool dialog and apply a configured analysis to other sheets. | [2026][o26] |
 | Mirror Columns and sheets | 2026b | Create a live reference to source data elsewhere in a project with a single stored copy. Inspect the source and destination relationships. | [2026b][o26b] |
-| Insert columns across sheets | 2026b | Add or insert a matching column and its formula in multiple related sheets across a workbook, folder or project. | [2026b][o26b] |
+| Insert columns across sheets | 2026b | Workbook and project scope done (T359: Column > Add Column to All Sheets..., with a formula); folder scope and insertion at a position remain. Add or insert a matching column and its formula in multiple related sheets across a workbook, folder or project. | [2026b][o26b] |
 | Sticky Notes | 2027 | Add searchable, collapsible notes to graph windows, workbooks and individual sheets with indicators and color choices. | [2027][o27] |
 | Workbook operation tree | 2027 | Group analysis operations with their result sheets in Object Manager. Navigate to inputs or outputs, edit operation parameters and change recalculation mode from the tree. | [2027][o27] |
 
@@ -60,13 +60,13 @@ outputs or UI behavior.
 | Plot-only X sorting | 2023 | Done (T39). Sort points by X for line connections while preserving worksheet row order. | [2023][o23] |
 | Built-in equation rendering | 2023b | Render LaTeX equations in graph labels and worksheet metadata, carry metadata equations into legends and axis titles, and retain vector output on export. | [2023b][o23b] |
 | Time Series Explorer | 2024b | View the full series and a detail panel for a chosen interval. Step or play through successive intervals. | [2024b][o24b] |
-| Extract data from regions on a graph | 2024b | Draw one or more rectangular, oval or freeform regions and output the enclosed observations to a worksheet. | [2024b][o24b] |
+| Extract data from regions on a graph | 2024b | Rectangle and ellipse done (T355: a drawn object's menu, Extract Data in Region; freeform and several regions remain). Draw one or more rectangular, oval or freeform regions and output the enclosed observations to a worksheet. | [2024b][o24b] |
 | Graph Slicer | 2025 / 2025b | Filter plots from a common source sheet at page, layer or plot scope and extract the selected subset. | [2025][o25] · [2025b][o25b] |
 | Treemap | 2025b | Done (T50). Show hierarchical magnitudes as nested rectangles sized by values. | [2025b][o25b] |
 | On-graph trendlines | 2025b | Done (T43). Add a fitted trend or moving average directly to a plot with its own editable label and curve settings. | [2025b][o25b] |
 | Cause-and-effect and nested frequency charts | 2026 | Draw a fishbone diagram or summarize frequency counts as columns, bars, pie or doughnut sections, including nested categories. | [2026][o26] |
 | Slope Annotation | 2026b | Done (T52). Mark a slope directly on a graph with a data-linked annotation. | [2026b][o26b] |
-| Hexbin, binned scatter and UpSet plots | 2027 | Hexbin done (T45); binned scatter and UpSet remain. Summarize dense XY data in hexagonal bins or binned scatter points. Visualize sizes of set intersections. | [2027][o27] |
+| Hexbin, binned scatter and UpSet plots | 2027 | Hexbin done (T45); binned scatter done (T356, Statistics > Descriptive Statistics > Binned Scatter); UpSet remains. Summarize dense XY data in hexagonal bins or binned scatter points. Visualize sizes of set intersections. | [2027][o27] |
 
 ## Analysis and statistics
 

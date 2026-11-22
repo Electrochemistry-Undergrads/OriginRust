@@ -4782,6 +4782,51 @@ fn double_clicks_on_the_graph_open_the_settings_of_what_was_clicked() {
     }
 }
 
+/// Extract Data in Region (T355): a drawn rectangle's menu copies the data points inside it to a new workbook, one
+/// undo step; a line has no such entry.
+#[test]
+fn a_drawn_rectangle_extracts_the_data_points_inside_it() {
+    let mut text = String::from("x,y\n");
+    for k in 0..=10 {
+        text.push_str(&format!("{k},{k}\n"));
+    }
+    let data = csv_file("region", "diag", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Graph1 - diag");
+    let gid = graph(&h).id;
+    h.state_mut().doc.apply("Region", |p| {
+        let l = &mut p.graph_mut(gid).unwrap().layers[0];
+        (l.x_axis.min, l.x_axis.max, l.y_axis.min, l.y_axis.max) = (Some(0.0), Some(10.0), Some(0.0), Some(10.0));
+        l.legend.visible = false;
+        // Data 2.5..6.5 by 2..7: the points 3, 4, 5 and 6.
+        let mut r = sheaf_core::shape::Shape::new(sheaf_core::shape::ShapeKind::Rectangle, (0.25, 0.3), (0.65, 0.8));
+        r.fill = Some(sheaf_core::Color::rgb(200, 220, 255));
+        l.shapes.push(r);
+        l.shapes.push(sheaf_core::shape::Shape::new(sheaf_core::shape::ShapeKind::Line, (0.8, 0.1), (0.95, 0.2)));
+    });
+    settle(&mut h);
+    let books = project(&h).workbooks().count();
+    let at = on(&h, 0, ObjectKind::Shape(1));
+    right_click_at(&mut h, at);
+    assert!(h.query_by_label("Properties...").is_some() && h.query_by_label("Extract Data in Region").is_none());
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    pause(&mut h);
+    let at = on(&h, 0, ObjectKind::Shape(0));
+    right_click_at(&mut h, at);
+    click(&mut h, "Extract Data in Region");
+    assert_eq!(project(&h).workbooks().count(), books + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Extract data in region"));
+    let book = project(&h).workbooks().last().unwrap();
+    let cols = &book.sheet().columns;
+    assert_eq!(cols.len(), 3);
+    assert_eq!(cols[0].numeric().unwrap(), [3.0, 4.0, 5.0, 6.0]);
+    assert_eq!(cols[1].numeric().unwrap(), [3.0, 4.0, 5.0, 6.0]);
+    assert_eq!(cols[2].long_name, "Source row");
+    assert_eq!(cols[2].numeric().unwrap(), [4.0, 5.0, 6.0, 7.0]);
+    assert_eq!(cols[1].long_name, "y");
+}
+
 #[test]
 fn a_click_selects_a_plot_and_its_menu_changes_the_plot_type_in_one_undo_step() {
     let mut h = start(vec![data_file("gplot")]);
@@ -5075,6 +5120,40 @@ fn the_integrate_gadget_shows_a_range_and_new_output_writes_the_area_to_a_sheet(
     h.key_press(egui::Key::Escape);
     settle(&mut h);
     assert!(graph_ui(&h).gadget.is_none());
+}
+
+/// The Integrate gadget's Preferences... (T357): typed X From/To, the baseline and the Absolute area type.
+#[test]
+fn the_integrate_gadget_preferences_set_the_range_baseline_and_area_type() {
+    // y = x - 5 on 0..10: the signed area is 0, the absolute area 25.
+    let mut text = String::from("x,y\n");
+    for k in 0..=20 {
+        let x = f64::from(k) * 0.5;
+        text.push_str(&format!("{x},{}\n", x - 5.0));
+    }
+    let data = csv_file("gadgetprefs", "cross", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Graph1 - cross");
+    menu(&mut h, "Gadgets", "Integrate...");
+    let range = graph_ui(&h).gadget_rect.expect("the gadget is drawn");
+    right_click_at(&mut h, range.center());
+    click(&mut h, "Preferences...");
+    assert!(h.state().gadget_prefs.is_some() && has_label(&h, "Absolute Area"), "the Preferences window");
+    {
+        let p = h.state_mut().gadget_prefs.as_mut().unwrap();
+        (p.from, p.to, p.absolute) = (0.0, 10.0, true);
+    }
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().gadget_prefs.is_none());
+    let g = graph_ui(&h).gadget.unwrap();
+    assert_eq!((g.x0, g.x1, g.absolute, g.end_point_baseline), (0.0, 10.0, true, false));
+    let (x, y) = crate::gadget::plot_xy(project(&h), graph(&h).id, 0, 0).unwrap();
+    assert!((g.result(&x, &y).unwrap().area - 25.0).abs() < 1e-12);
+    // Back to the mathematical area: the halves cancel.
+    let mut signed = g;
+    signed.absolute = false;
+    assert!(signed.result(&x, &y).unwrap().area.abs() < 1e-12);
 }
 
 #[test]
@@ -5526,6 +5605,81 @@ fn the_statistics_menu_runs_a_quantile_regression() {
     assert!((intercept[2] - 1.0).abs() < 1e-9, "{intercept:?}");
     assert_eq!(project(&h).graphs().count(), graphs_before + 1);
     assert_eq!(h.state().doc.undo_label(), Some("Quantile regression"));
+}
+
+/// Column > Add Column to All Sheets... (T359): the column and its formula land in every sheet of the workbook,
+/// computed from each sheet's own data, as one undo step.
+#[test]
+fn add_column_to_all_sheets_reaches_every_sheet_of_the_workbook() {
+    let data = csv_file("across", "ab", "x,y\n1,1\n2,2\n3,3\n");
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - ab.csv");
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Second sheet", |p| {
+        p.workbook_mut(book).unwrap().sheets.push(sheaf_core::worksheet::Worksheet::new("Second"));
+        p.add_column(book, 1, Designation::X, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+        p.add_column(book, 1, Designation::Y, ColumnData::numeric(vec![10.0, 20.0])).unwrap();
+    });
+    settle(&mut h);
+    menu_path(&mut h, &["Column", "Add Column to All Sheets..."]);
+    assert!(h.state().column_across.is_some() && has_label(&h, "Every sheet of every workbook"));
+    {
+        let d = h.state_mut().column_across.as_mut().unwrap();
+        d.long_name = "Twice".into();
+        d.formula = "col(B)*2".into();
+    }
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().column_across.is_none());
+    assert_eq!(h.state().doc.undo_label(), Some("Add column to all sheets"));
+    let b = project(&h).workbook(book).unwrap();
+    let last = |s: usize| b.sheets[s].columns.last().unwrap().clone();
+    assert_eq!((last(0).long_name.as_str(), last(0).numeric().unwrap()), ("Twice", &[2.0, 4.0, 6.0][..]));
+    assert_eq!(last(1).numeric().unwrap(), [20.0, 40.0]);
+}
+
+/// Worksheet > Time Series Pivot... (T358): the values per day of their date-time X, one undo step.
+#[test]
+fn the_worksheet_menu_makes_a_time_series_pivot() {
+    let data = csv_file(
+        "timepivot",
+        "tp",
+        "t,v\n2026-01-05 09:00,1\n2026-01-05 17:00,3\n2026-01-06 08:00,10\n2026-02-01 12:00,7\n",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - tp.csv");
+    menu_path(&mut h, &["Worksheet", "Time Series Pivot..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Period"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, means) = result_column(&h, "Mean of v");
+    assert!(sheet.starts_with("TimePivot"), "{sheet}");
+    assert_eq!(means, [2.0, 10.0, 7.0], "one row per day");
+    assert_eq!(h.state().doc.undo_label(), Some("Time series pivot"));
+}
+
+/// Statistics > Descriptive Statistics > Binned Scatter... (T356): the bins of a column, a sheet and a graph.
+#[test]
+fn the_descriptive_menu_makes_a_binned_scatter() {
+    let mut text = String::from("t,v\n");
+    for i in 0..40 {
+        text.push_str(&format!("{i},{}\n", i % 4));
+    }
+    let data = csv_file("binscatter", "bs", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - bs.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Binned Scatter..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Number of bins"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, n) = result_column(&h, "N");
+    assert!(sheet.starts_with("BinScatter"), "{sheet}");
+    assert_eq!(n, [4.0; 10], "ten bins of four points");
+    let (_, means) = result_column(&h, "Y mean");
+    assert!(means.iter().all(|m| *m == 1.5), "{means:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Binned scatter"));
 }
 
 /// Statistics > Change Point Analysis... (T346): the segments of a series with one mean shift, and a graph;

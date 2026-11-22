@@ -1821,6 +1821,32 @@ row, Start X, End X (the column's X, else the row number), N, Mean, Standard dev
 data and the segment means as a step line (a new graph shows both). A notes line per column lists where the new
 segments start and the penalty used.
 
+## 31 Binned scatter (T356, Origin 2027 feature; not measured)
+
+Origin 2027 adds binned scatter plots; Origin 2016 has none, so this is Sheaf's own. Statistics > Descriptive
+Statistics > Binned Scatter... (`Tool::BinScatter`, `sheaf analyze binscatter --y COL [--bins N] [--equal-width]
+[--no-graph]`, `sheaf_calc::binned_scatter`): every chosen column is binned against its X column (or the row
+number); rows with a missing X or Y are left out. Bins of equal counts (default, 10 bins): the points in X order are
+cut into N groups whose sizes differ by at most one, the first `count % N` holding one more; a bin's X range is its
+smallest and largest X. Bins of equal width: N intervals from the smallest to the largest X (the last includes its
+right edge), empty bins left out. Each bin gives X from, X to, X mean, N, Y mean, Y SD (n - 1; blank for one point)
+and Y SE (`SD / sqrt N`). The result sheet `BinScatterN` has one row per bin ("<column>, bin k"), then, with the
+graph, the data and the bin means; a new graph shows the data as symbols and the bin means as line and symbols at
+the bins' mean X. Error bars on the means are not drawn.
+
+## 32 Time series pivot (T358, Origin 2025 feature; not measured)
+
+Origin 2025 adds a Time Series Pivot (aggregation of timestamped records by calendar intervals, with fiscal
+calendars and custom intervals); Origin 2016 has none, so this is Sheaf's own. Worksheet > Time Series Pivot...
+(`Tool::TimePivot`, `sheaf analyze timepivot --y COL [--period minute|hour|day|week|month|quarter|year] [--stat
+sum|mean|count|min|max|median]`): the X column holds date or date-time numbers (`crate::datetime`); every chosen Y
+column is summarized per calendar period (default: the mean per day). A period starts at the minute, the hour,
+midnight, the Monday of the week, the first of the month, of the quarter (January, April, July, October) or of the
+year. Rows whose X is not a date or whose Y is missing are left out, and so are periods without a value. The result
+sheet `TimePivotN` has a Period label ("2026-11-22", "Week of 2026-11-16", "2026-11", "2026 Q4", "2026", or the date
+and time for minutes and hours), the period start as a number (X), and per column "<Stat> of <column>" and
+"N of <column>". Fiscal calendars, custom intervals and a second grouping are not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

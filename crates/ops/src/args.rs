@@ -3402,6 +3402,32 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Time series pivot: each --y column summarized per calendar period of its date-time X column.
+    Timepivot {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// minute, hour, day, week (from Monday), month, quarter or year.
+        #[arg(long, default_value = "day")]
+        period: String,
+        /// sum, mean, count, min, max or median.
+        #[arg(long, default_value = "mean")]
+        stat: String,
+    },
+    /// Binned scatter: X cut into bins of equal width or equal counts; the mean, SD, SE and count of each --y
+    /// column's Y per bin; makes a graph of the data with the bin means.
+    Binscatter {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The number of bins.
+        #[arg(long, default_value_t = 10)]
+        bins: usize,
+        /// Bins of equal width instead of equal counts.
+        #[arg(long)]
+        equal_width: bool,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Change point analysis: each --y column is a series of its own (in row order); finds where its mean, its
     /// variance or both change (exact optimum of normal costs plus a penalty per change) and lists the segments;
     /// makes a graph of the data with the segment means.

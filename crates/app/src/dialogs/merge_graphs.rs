@@ -96,22 +96,40 @@ impl LabelText {
             Self::None => None,
             Self::Uppercase => Some(default_short_name(index)),
             Self::Lowercase => Some(default_short_name(index).to_ascii_lowercase()),
-            Self::Custom => Some(numbered_label(custom, index + 1)),
+            Self::Custom => Some(custom_panel_label(custom, index)),
         }
     }
 }
 
-/// Each run of # pads the number to its length. The other numbered form is `$(i)`.
-fn numbered_label(pattern: &str, number: usize) -> String {
-    let pattern = pattern.replace("$(i)", &number.to_string());
+/// Expands the measured enumeration codes and pads the index to the length of each hash run.
+fn custom_panel_label(pattern: &str, index: usize) -> String {
+    let number = index + 1;
     let mut formatted = String::with_capacity(pattern.len());
-    let mut rest = pattern.as_str();
-    while let Some((prefix, suffix)) = rest.split_once('#') {
-        formatted.push_str(prefix);
-        let following_hashes = suffix.bytes().take_while(|&b| b == b'#').count();
-        let width = following_hashes + 1;
-        formatted.push_str(&format!("{number:0width$}"));
-        rest = &suffix[following_hashes..];
+    let mut rest = pattern;
+    while let Some(start) = rest.find(['#', '$', '%']) {
+        formatted.push_str(&rest[..start]);
+        rest = &rest[start..];
+        if rest.starts_with('#') {
+            let width = rest.bytes().take_while(|&b| b == b'#').count();
+            formatted.push_str(&format!("{number:0width$}"));
+            rest = &rest[width..];
+        } else if let Some(suffix) = rest.strip_prefix("$(i)") {
+            formatted.push_str(&number.to_string());
+            rest = suffix;
+        } else if let Some(suffix) = rest.strip_prefix("%(u$)") {
+            formatted.push_str(&default_short_name(index));
+            rest = suffix;
+        } else if let Some(suffix) = rest.strip_prefix("%(v$)") {
+            formatted.push_str(&default_short_name(index).to_ascii_lowercase());
+            rest = suffix;
+        } else if let Some(suffix) = rest.strip_prefix("%(p$)") {
+            formatted.push('#');
+            rest = suffix;
+        } else {
+            // All the token starts are ASCII. Preserve an unrecognized token as typed.
+            formatted.push(rest.as_bytes()[0] as char);
+            rest = &rest[1..];
+        }
     }
     formatted.push_str(rest);
     formatted
@@ -489,7 +507,9 @@ impl MergeGraphsDialog {
                     let label = ui.label("Custom");
                     ui.text_edit_singleline(&mut self.custom_label)
                         .labelled_by(label.id)
-                        .on_hover_text("Use # for the source number, ## for 01, 02, …, or $(i) for 1, 2, …");
+                        .on_hover_text(
+                            "Use %(u$) or %(v$) for letters, # or $(i) for 1, 2, …, ## for 01, 02, …, and %(p$) for a literal #.",
+                        );
                     ui.end_row();
                 }
                 ui.add_enabled_ui(self.label_text != LabelText::None, |ui| {
@@ -642,12 +662,19 @@ fn number(ui: &mut egui::Ui, name: &str, value: &mut f64, max: f64) {
 
 #[cfg(test)]
 mod label_tests {
-    use super::numbered_label;
+    use super::custom_panel_label;
 
     #[test]
     fn each_panel_number_expands_with_its_own_padding() {
-        assert_eq!(numbered_label("Panel $(i) / ##", 3), "Panel 3 / 03");
-        assert_eq!(numbered_label("Graph##", 123), "Graph123");
-        assert_eq!(numbered_label("Section (a$)", 1), "Section (a$)");
+        assert_eq!(custom_panel_label("Panel $(i) / ##", 2), "Panel 3 / 03");
+        assert_eq!(custom_panel_label("Graph##", 122), "Graph123");
+        assert_eq!(custom_panel_label("Section (a$)", 0), "Section (a$)");
+    }
+
+    #[test]
+    fn enumeration_respects_literal_hashes_and_unrecognized_text() {
+        assert_eq!(custom_panel_label("Panel %(u$) / %(v$) / ## / $(i) / %(p$)", 2), "Panel C / c / 03 / 3 / #");
+        assert_eq!(custom_panel_label("%(p$)##", 0), "#01");
+        assert_eq!(custom_panel_label("α (%(u$),%(v$)) %H %(r$) $", 26), "α (AA,aa) %H %(r$) $");
     }
 }

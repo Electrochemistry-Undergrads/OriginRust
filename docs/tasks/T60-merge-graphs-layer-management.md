@@ -70,6 +70,13 @@ label per source graph. Custom supports plain text, runs of hashes and `$(i)`.
 The Origin 2016 measurements and remaining substitution codes are in graphing
 15.7c.
 
+Custom enumeration follow-up (2026-11-22). `%(u$)` and `%(v$)` give upper
+and lowercase letters in source order. `%(p$)` inserts a literal hash. The
+three codes can be combined with `$(i)` and padded numbers. Origin 2016 was
+checked with literal `labelcustom` arguments, and the PNG showed the
+combined labels on the right layers. See graphing 15.7c for the remaining
+source-name and Roman options.
+
 **Add Extra Layer(s) for Grid (2026-11-22).** Origin 2016's `merge_graph`
 command with `newlayer:=1` appended one blank layer for three sources in a
 2 × 2 grid and three for a 2 × 3 grid. A linked layer within one source

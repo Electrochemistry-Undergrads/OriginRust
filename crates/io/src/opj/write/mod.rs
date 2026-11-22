@@ -186,7 +186,6 @@ struct Notes {
     formats_dropped: usize,
     /// Hidden columns and columns with their own width: the file written here holds neither.
     hidden_dropped: usize,
-    widths_dropped: usize,
     /// Columns with a sampling interval (Set Sampling Interval), which the file written here does
     /// not hold: Origin plots them against their X column or the row number.
     sampling_dropped: usize,
@@ -439,6 +438,7 @@ impl Writer {
                 last: used.1,
                 parent,
                 index: i,
+                width: column.width,
                 object_id: formulas.object_ids[i],
                 sampling: sampling.map(|s| (s.x0, s.inc, parent_of(&roles, i, first_dataset) != 0)),
             };
@@ -451,7 +451,6 @@ impl Writer {
                 usize::from(column.sampling.as_ref().is_some_and(|s| !s.long_name.is_empty() || !s.units.is_empty()));
             self.notes.ranges_dropped += usize::from(column.data_range.is_some());
             self.notes.scripts_dropped += usize::from(column.before_formula.is_some());
-            self.notes.widths_dropped += usize::from(column.width.is_some());
             let long = self.label_text(&column.long_name, "long name")?;
             let units = self.label_text(&column.units, "units")?;
             let comments = self.comment_text(&column.comments)?;
@@ -895,12 +894,6 @@ impl Writer {
             warnings.push(format!(
                 "{} cell note(s) are not written: the project file written here does not hold them, so Origin shows none.",
                 n.cell_notes_dropped
-            ));
-        }
-        if n.widths_dropped > 0 {
-            warnings.push(format!(
-                "{} column(s) have their own width, which the project file written here does not hold; Origin shows them at its default width.",
-                n.widths_dropped
             ));
         }
         if n.analysis_links_dropped > 0 {

@@ -498,6 +498,20 @@ fn a_tail_that_is_damaged_gives_a_note_and_no_folders() {
 }
 
 #[test]
+fn a_column_width_is_written_where_origin_keeps_it_and_read_back() {
+    // T334: Origin 2016 keeps the width in tenths of a character at 0x4A of the column record.
+    let mut p = Project::new();
+    p.adopt_named_workbook(abcd("Book1"));
+    let Window::Workbook(b) = &mut p.windows[0] else { unreachable!() };
+    b.sheets[0].columns[1].width = Some(14);
+    let back = read_back(&written(&p).bytes).into_project();
+    let Window::Workbook(b) = &back.windows[0] else { unreachable!() };
+    assert_eq!(b.sheets[0].columns[1].width, Some(14));
+    assert_eq!(b.sheets[0].columns[0].width, None, "the default width stays the default");
+    assert_eq!(b.sheets[0].columns[2].width, None);
+}
+
+#[test]
 fn group_and_subject_columns_keep_their_roles_in_the_opj() {
     // T330: Origin 2016 stores Group (LabTalk type 8) as role 7 and Subject (9) as 8; Origin read
     // both back from a file written here (re-workspace/scratch/t330/sheaf-gs.opj).
@@ -583,7 +597,7 @@ fn hidden_columns_and_column_widths_are_named_in_the_warnings() {
     assert!(all.contains("1 sheet(s) hide label rows"), "{all}");
     assert!(all.contains("1 sheet(s) have conditional formatting"), "{all}");
     assert!(all.contains("1 hidden column(s)"), "{all}");
-    assert!(all.contains("1 column(s) have their own width"), "{all}");
+    assert!(!all.contains("their own width"), "widths are written now (T334): {all}");
     assert!(all.contains("1 column(s) have a sampling interval"), "{all}");
     assert!(all.contains("1 column(s) have a data range"), "{all}");
     assert!(!all.contains("masked cells"), "masks are written now: {all}");

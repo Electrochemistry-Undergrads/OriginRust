@@ -874,6 +874,11 @@ pub struct StyleArgs {
     /// #RRGGBB or basic names.
     #[arg(long, value_delimiter = ',', value_name = "COLORS")]
     pub colors: Vec<String>,
+    /// One of Origin's named colour lists for the curve colours: Default, Q01 Black and RGB, Q02 Basic,
+    /// Q03 Rainbow7, ... S01 Gray Scale ... D05 Blue-Greens, System Color List (the code, for example
+    /// Q03, is enough). --colors still sets single curves.
+    #[arg(long, value_name = "NAME")]
+    pub color_list: Option<String>,
     /// Legend labels in legend order (left axis first, then right axis), comma-separated.
     #[arg(long, value_delimiter = ',', value_name = "LABELS")]
     pub labels: Vec<String>,

@@ -1230,7 +1230,7 @@ fn group_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, labels: &
         ui.radio_value(&mut layer.group_style.dependent, false, "Independent");
         ui.radio_value(&mut layer.group_style.dependent, true, "Dependent");
     });
-    let before = (layer.palette.mode, layer.group_style);
+    let before = (layer.palette.mode, layer.group_style, layer.palette.list.clone());
     let has_symbols = layer.plots.iter().any(|q| q.kind.has_symbols());
     egui::Grid::new("group_increments").num_columns(3).striped(true).spacing([12.0, 4.0]).show(ui, |ui| {
         ui.label("");
@@ -1250,6 +1250,22 @@ fn group_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, labels: &
                 ui.selectable_value(&mut layer.palette.mode, PaletteMode::Spread, "Stretch");
             });
         ui.horizontal(|ui| {
+            // Origin's named colour lists (graphing 1.5, T332); editing a colour makes the list
+            // the layer's own.
+            let shown = layer.palette.list.clone().unwrap_or_else(|| "Default".into());
+            egui::ComboBox::from_id_salt("inc_color_list").height(480.0).selected_text(&shown).show_ui(ui, |ui| {
+                let names =
+                    std::iter::once("Default").chain(sheaf_core::template::ORIGIN_COLOR_LISTS.iter().map(|(n, _)| *n));
+                for name in names {
+                    if ui.selectable_label(shown == name, name).clicked()
+                        && let Some((n, colors)) = sheaf_core::template::color_list(name)
+                    {
+                        layer.palette.colors = colors;
+                        layer.palette.list = (n != "Default").then(|| n.to_string());
+                    }
+                }
+            });
+            let before = layer.palette.colors.clone();
             for c in &mut layer.palette.colors {
                 color_button(ui, c);
             }
@@ -1258,6 +1274,9 @@ fn group_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, labels: &
             }
             if layer.palette.colors.len() > 1 && ui.small_button("-").clicked() {
                 layer.palette.colors.pop();
+            }
+            if layer.palette.colors != before {
+                layer.palette.list = None;
             }
         });
         ui.end_row();
@@ -1279,7 +1298,9 @@ fn group_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, labels: &
         }
     });
     look::subgrouping_ui(ui, &mut layer.group_style);
-    if (layer.palette.mode, layer.group_style) != before || ui.button("Recolor plots").clicked() {
+    if (layer.palette.mode, layer.group_style, layer.palette.list.clone()) != before
+        || ui.button("Recolor plots").clicked()
+    {
         layer.apply_palette();
         layer.apply_group_increments();
     }

@@ -3364,6 +3364,22 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Linear quantile regression: the --y columns are the independent variables followed, last, by the
+    /// dependent variable. One row of coefficients per quantile (exact solution), the sum of check losses and
+    /// the pseudo R-square; with one independent variable a graph of the data and the fitted lines.
+    Quantreg {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The quantiles, each between 0 and 1.
+        #[arg(long, value_delimiter = ',', default_value = "0.1,0.25,0.5,0.75,0.9")]
+        quantiles: Vec<f64>,
+        /// Fit without an intercept.
+        #[arg(long)]
+        no_intercept: bool,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// K-means cluster analysis of the --y columns (the variables): cluster centres, sizes and distances, analysis
     /// of variance by variable and the cluster of every row; makes a scatter graph of the first two variables.
     Kmeans {

@@ -157,6 +157,8 @@ pub enum AnalysisKind {
     /// Statistics > Multivariate Analysis and ROC Curve (options in `multivariate_options.rs`).
     Pca,
     Roc,
+    /// Statistics > Regression > Quantile Regression (T342; options in `multivariate_options.rs`).
+    QuantReg,
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (options in `multivariate_options.rs`).
     KaplanMeier,
     /// Statistics > Multivariate Analysis > K-Means Cluster Analysis (options in `multivariate_options.rs`).
@@ -290,6 +292,7 @@ impl AnalysisKind {
             AnalysisKind::QQPlot => "Q-Q Plot...",
             AnalysisKind::Pca => "Principal Component Analysis...",
             AnalysisKind::Roc => "ROC Curve...",
+            AnalysisKind::QuantReg => "Quantile Regression...",
             AnalysisKind::KaplanMeier => "Kaplan-Meier Estimator...",
             AnalysisKind::Kmeans => "K-Means Cluster Analysis...",
             AnalysisKind::Crosstab => "Cross Tabulation...",
@@ -383,6 +386,7 @@ impl AnalysisKind {
             "qqplot" => AnalysisKind::QQPlot,
             "pca" => AnalysisKind::Pca,
             "roc" => AnalysisKind::Roc,
+            "quantreg" => AnalysisKind::QuantReg,
             "kaplanmeier" => AnalysisKind::KaplanMeier,
             "kmeans" => AnalysisKind::Kmeans,
             "crosstab" => AnalysisKind::Crosstab,
@@ -2103,9 +2107,11 @@ impl AnalysisDialog {
             | AnalysisKind::MedianFilter => self.manip.tool(self.kind),
             AnalysisKind::Differentiate => Tool::Differentiate(self.diff),
             AnalysisKind::DistFit | AnalysisKind::ProbPlot | AnalysisKind::QQPlot => self.dist.tool(self.kind)?,
-            AnalysisKind::Pca | AnalysisKind::Roc | AnalysisKind::KaplanMeier | AnalysisKind::Kmeans => {
-                self.multi.tool(self.kind)?
-            }
+            AnalysisKind::Pca
+            | AnalysisKind::Roc
+            | AnalysisKind::QuantReg
+            | AnalysisKind::KaplanMeier
+            | AnalysisKind::Kmeans => self.multi.tool(self.kind)?,
             AnalysisKind::AverageCurves => self.curves.average_tool(),
             AnalysisKind::Intersect => self.curves.intersect_tool(),
             AnalysisKind::PolygonArea => Tool::PolygonArea,
@@ -3401,9 +3407,11 @@ impl AnalysisDialog {
                 ui.checkbox(&mut st.graph, "Make a graph with a column plot of the counts");
             }
             AnalysisKind::DistFit | AnalysisKind::ProbPlot | AnalysisKind::QQPlot => self.dist.options(ui, self.kind),
-            AnalysisKind::Pca | AnalysisKind::Roc | AnalysisKind::KaplanMeier | AnalysisKind::Kmeans => {
-                self.multi.options(ui, self.kind)
-            }
+            AnalysisKind::Pca
+            | AnalysisKind::Roc
+            | AnalysisKind::QuantReg
+            | AnalysisKind::KaplanMeier
+            | AnalysisKind::Kmeans => self.multi.options(ui, self.kind),
             AnalysisKind::DiscreteFreq => {
                 let d = &mut self.discfreq;
                 egui::CollapsingHeader::new("Quantities to Compute").default_open(true).show(ui, |ui| {
@@ -3580,6 +3588,7 @@ impl AnalysisDialog {
             | AnalysisKind::GraphSummary
             | AnalysisKind::Pca
             | AnalysisKind::Roc
+            | AnalysisKind::QuantReg
             | AnalysisKind::SubtractLine
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
@@ -3683,6 +3692,9 @@ impl AnalysisDialog {
             }
             AnalysisKind::Kmeans => "Group the rows into a chosen number of clusters of similar values",
             AnalysisKind::Roc => "Judge how well a test variable separates the two states of a state column",
+            AnalysisKind::QuantReg => {
+                "Fit straight lines to chosen quantiles of the dependent variable instead of its mean"
+            }
             AnalysisKind::Pca => "Describe the variation of several columns by uncorrelated components",
             AnalysisKind::Crosstab => {
                 "Count the cases of every combination of two categorical variables and test their independence"
@@ -3809,6 +3821,9 @@ impl AnalysisDialog {
             }
             AnalysisKind::Roc => {
                 "Area under the curve with its standard error, the curve points and the best cut-off in a new sheet, and a graph"
+            }
+            AnalysisKind::QuantReg => {
+                "One row of coefficients per quantile with the sum of check losses and the pseudo R-square in a new sheet, and with one independent column a graph of the data and the lines"
             }
             AnalysisKind::Pca => {
                 "Eigenvalues, percent of variance, loadings and scores in a new sheet, and a scree plot"

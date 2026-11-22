@@ -3,18 +3,28 @@
 
 use super::analysis::AnalysisKind;
 use eframe::egui;
-use sheaf_core::analysis::{KaplanMeierSpec, KmeansSpec, PcaSpec, RocSpec, Tool};
+use sheaf_core::analysis::{KaplanMeierSpec, KmeansSpec, PcaSpec, QuantRegSpec, RocSpec, Tool};
 
 /// What the windows keep between frames.
 #[derive(Default)]
 pub struct MultiOptions {
     pca: PcaSpec,
     roc: RocSpec,
+    quantreg: QuantRegSpec,
+    /// The quantiles as typed (comma separated), read when the tool runs.
+    quantiles: Option<String>,
     km: KaplanMeierSpec,
     kmeans: KmeansSpec,
 }
 
 impl MultiOptions {
+    /// The quantiles as the window shows them.
+    fn quantiles_text(&self) -> String {
+        self.quantiles
+            .clone()
+            .unwrap_or_else(|| self.quantreg.quantiles.iter().map(|q| q.to_string()).collect::<Vec<_>>().join(", "))
+    }
+
     /// The tool the window runs.
     pub fn tool(&self, kind: AnalysisKind) -> Result<Tool, String> {
         match kind {
@@ -29,6 +39,22 @@ impl MultiOptions {
                     return Err("give the value of the state column that is the positive state".to_string());
                 }
                 Ok(Tool::Roc(self.roc.clone()))
+            }
+            AnalysisKind::QuantReg => {
+                let text = self.quantiles_text();
+                let quantiles: Vec<f64> = text
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|t| !t.is_empty())
+                    .map(|t| t.parse::<f64>().map_err(|_| format!("\"{t}\" is not a number")))
+                    .collect::<Result<_, _>>()?;
+                if quantiles.is_empty() {
+                    return Err("give at least one quantile".to_string());
+                }
+                if let Some(bad) = quantiles.iter().find(|t| !(**t > 0.0 && **t < 1.0)) {
+                    return Err(format!("a quantile must lie between 0 and 1 (got {bad})"));
+                }
+                Ok(Tool::QuantReg(QuantRegSpec { quantiles, ..self.quantreg.clone() }))
             }
             AnalysisKind::Kmeans => {
                 if self.kmeans.clusters < 2 {
@@ -101,6 +127,22 @@ impl MultiOptions {
                 ui.checkbox(&mut s.curve, "ROC curve (new graph, with the diagonal)");
                 ui.weak(
                     "The area under the curve with Origin's standard error and confidence interval, the                      curve points with their cut-offs, and the cut-off with the largest sensitivity + specificity - 1.",
+                );
+            }
+            AnalysisKind::QuantReg => {
+                ui.label("The chosen columns are the independent variables; the last one is the dependent variable.");
+                let mut text = self.quantiles_text();
+                ui.horizontal(|ui| {
+                    ui.label("Quantiles");
+                    ui.add(egui::TextEdit::singleline(&mut text).desired_width(200.0))
+                        .on_hover_text("Comma separated, each between 0 and 1");
+                });
+                self.quantiles = Some(text);
+                let s = &mut self.quantreg;
+                ui.checkbox(&mut s.intercept, "Fit an intercept");
+                ui.checkbox(&mut s.graph, "Graph of the data and the fitted lines (one independent column)");
+                ui.weak(
+                    "The exact solution of each quantile (the sum of check losses is as small as it can be); no standard errors.",
                 );
             }
             AnalysisKind::Kmeans => {

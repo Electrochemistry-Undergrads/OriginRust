@@ -1,6 +1,6 @@
 //! Statistics > Regression > Quantile Regression as a tool of `Project::analyze` (T342; Origin's Quantile
 //! Regression app of Origin 2019b, not in Origin 2016, so the layout is Sheaf's own). The numerics are in
-//! `sheaf_calc::quantreg`; `docs/spec/statistics.md` section 25 says what is computed and written.
+//! `sheaf_calc::quantreg`; `docs/spec/statistics.md` section 29 says what is computed and written.
 //!
 //! The chosen columns are the independent variables followed, as the last one, by the dependent variable
 //! (as the ROC curve takes its state column last).

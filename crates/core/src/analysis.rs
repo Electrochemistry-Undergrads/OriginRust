@@ -1125,7 +1125,7 @@ pub enum Tool {
     Kmeans(KmeansSpec),
     /// Statistics > ROC Curve (T29, `docs/spec/statistics.md` section 19): test variables, then the state column.
     Roc(RocSpec),
-    /// Statistics > Regression > Quantile Regression (T342, `docs/spec/statistics.md` section 25): the
+    /// Statistics > Regression > Quantile Regression (T342, `docs/spec/statistics.md` section 29): the
     /// independent columns, then the dependent column.
     QuantReg(QuantRegSpec),
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,

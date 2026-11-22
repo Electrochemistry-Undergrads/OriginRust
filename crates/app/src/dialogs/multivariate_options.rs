@@ -70,7 +70,7 @@ impl MultiOptions {
             }
             AnalysisKind::TimePivot => Ok(Tool::TimePivot(self.timepivot)),
             AnalysisKind::RareChart => {
-                if !(self.rare.sigma > 0.0) {
+                if self.rare.sigma.is_nan() || self.rare.sigma <= 0.0 {
                     return Err("the number of sigmas must be above 0".to_string());
                 }
                 Ok(Tool::RareChart(self.rare))

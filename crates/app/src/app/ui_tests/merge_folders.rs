@@ -100,6 +100,13 @@ fn merge_panel_labels_follow_source_order_and_the_dialog_draft() {
     source(&mut h, "None", "Custom");
     click(&mut h, "Preview");
     assert!(h.query_by_label("2 source graphs, 3 layers").is_some());
+    h.get(By::new().role(egui::accesskit::Role::TextInput).value("Graph##")).click();
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.event(egui::Event::Text("(%(u$))/%(v$) ##%(p$)".into()));
+    settle(&mut h);
+    assert!(h.query_by_label("2 source graphs, 3 layers").is_none());
+    click(&mut h, "Preview");
+    assert!(h.query_by_label("2 source graphs, 3 layers").is_some());
     source(&mut h, "Top Left Outside", "Top Right Inside");
     assert!(h.query_by_label("2 source graphs, 3 layers").is_none());
     assert_eq!(project(&h), &before);
@@ -107,10 +114,10 @@ fn merge_panel_labels_follow_source_order_and_the_dialog_draft() {
 
     let merged = project(&h).graphs().last().unwrap();
     let titles: Vec<_> = merged.layers.iter().map(|l| l.labels.first().map(|label| label.text.as_str())).collect();
-    assert_eq!(titles, [Some("Graph01"), Some("Graph02"), None]);
+    assert_eq!(titles, [Some("(A)/a 01#"), Some("(B)/b 02#"), None]);
     assert!(merged.layers[0].labels[0].x > 0.5 && merged.layers[0].labels[0].y > 0.0);
     let svg = sheaf_plot::render_svg(project(&h), merged.id).unwrap();
-    assert!(svg.contains("Graph01") && svg.contains("Graph02"));
+    assert!(svg.contains("(A)/a 01#") && svg.contains("(B)/b 02#"));
     menu(&mut h, "Edit", "Undo Merge Graph Windows");
     assert_eq!(project(&h), &before);
 }

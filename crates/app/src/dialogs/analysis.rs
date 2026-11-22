@@ -2135,6 +2135,11 @@ impl AnalysisDialog {
         }
     }
 
+    /// The tool as the window is set, with the window's menu label, for Repeat Last Analysis (T360).
+    pub fn repeat_tool(&self) -> Option<(Tool, &'static str)> {
+        self.tool().ok().map(|t| (t, self.kind.menu_label()))
+    }
+
     fn tool(&self) -> Result<Tool, String> {
         if self.kind == AnalysisKind::PeakChain {
             match self.chain_baseline {

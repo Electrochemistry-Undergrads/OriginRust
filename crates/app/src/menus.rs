@@ -494,6 +494,8 @@ pub enum Cmd {
     AddColumns,
     /// Column > Add Column to All Sheets... (T359).
     AddColumnAcross,
+    /// Analysis > Repeat Last Analysis (T360): the last tool run from its window, on the current selection.
+    RepeatAnalysis,
     /// The Standard toolbar's Add New Columns: one column at once, as Origin's button (T305).
     AddOneColumn,
     ColumnProperties,
@@ -2011,6 +2013,7 @@ fn analysis_menu() -> Vec<Entry> {
             ],
         ),
         sep(),
+        item("Repeat Last Analysis", Cmd::RepeatAnalysis),
         mru_submenu("Most Recently Used Items", MruMenu::Analysis),
     ]
 }
@@ -3671,6 +3674,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::AddColumns => Action::AddColumnsDialog(book?),
         Cmd::AddColumnAcross => Action::AddColumnAcross(book?),
+        Cmd::RepeatAnalysis => match (c.book, c.curve) {
+            (Some(book), _) => Action::RepeatAnalysis { book, columns: c.selected.to_vec() },
+            (None, Some((book, y))) if c.kind == WindowKind::Graph => Action::RepeatAnalysis { book, columns: vec![y] },
+            (None, _) if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
+            (None, _) => return Err(NEED_BOOK),
+        },
         Cmd::AddOneColumn => Action::AddColumn(book?),
         Cmd::ColumnProperties => {
             book?;

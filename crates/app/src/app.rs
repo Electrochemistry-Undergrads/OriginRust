@@ -276,6 +276,8 @@ pub struct SheafApp {
     multi_peak: Option<MultiPeakDialog>,
     subtract_pick: Option<SubtractPickDialog>,
     cv_pick: Option<CvPickDialog>,
+    /// The last analysis run from its window, with its menu label, for Repeat Last Analysis (T360).
+    last_analysis: Option<(sheaf_core::analysis::Tool, &'static str)>,
     /// Column > Add Column to All Sheets... (T359).
     pub(crate) column_across: Option<ColumnAcross>,
     /// The Integrate gadget's Preferences window (T357).
@@ -489,6 +491,7 @@ impl SheafApp {
             multi_peak: None,
             subtract_pick: None,
             cv_pick: None,
+            last_analysis: None,
             column_across: None,
             gadget_prefs: None,
             range_pick: None,
@@ -2411,6 +2414,7 @@ impl SheafApp {
             }
             Action::AddColumnsDialog(book) => self.add_columns = Some((book, 1)),
             Action::AddColumnAcross(book) => self.column_across = Some(ColumnAcross::new(book)),
+            Action::RepeatAnalysis { book, columns } => self.repeat_analysis(book, columns),
             Action::DeleteColumns(columns) => {
                 self.doc.apply("Delete columns", |p| delete_columns(p, &columns));
             }
@@ -6248,6 +6252,39 @@ impl SheafApp {
         }
     }
 
+    /// Analysis > Repeat Last Analysis (T360): the last tool run from its window, with the same options, on the
+    /// chosen columns (the active sheet's Y columns when none is chosen), as one undo step named after the tool.
+    fn repeat_analysis(&mut self, book: WindowId, columns: Vec<ColumnId>) {
+        let Some((tool, label)) = self.last_analysis.clone() else {
+            return self.say("No analysis to repeat yet: run one from its window first");
+        };
+        let columns = if columns.is_empty() {
+            let Some(sheet) = self.doc.project().workbook(book).map(|b| b.sheet()) else { return };
+            sheet.columns.iter().filter(|c| c.designation == Designation::Y).map(|c| c.id).collect()
+        } else {
+            columns
+        };
+        if columns.is_empty() {
+            return self.warn("Choose the columns to repeat the analysis on");
+        }
+        let request =
+            sheaf_core::analysis::Request { columns, rows: sheaf_core::analysis::RowRange::All, tool: tool.clone() };
+        match self.doc.edit(tool.name(), |p| p.analyze(&request)) {
+            Ok(report) => {
+                if let Some(sheet) = report.new_sheet {
+                    self.show_sheet(report.book, sheet);
+                }
+                if let Some(graph) = report.new_graph {
+                    self.focus(graph);
+                }
+                self.logs.result(report.message.clone(), report.notes.clone());
+                self.panels.reveal(PanelId::Results);
+                self.say(format!("{} repeated: {}", label.trim_end_matches("..."), report.message));
+            }
+            Err(e) => self.warn(format!("Could not repeat {}: {e}", label.trim_end_matches("..."))),
+        }
+    }
+
     fn show_sheet(&mut self, book: WindowId, sheet: usize) {
         self.doc.adjust_view(|p| {
             if let Some(b) = p.workbook_mut(book) {
@@ -7430,7 +7467,11 @@ impl SheafApp {
         }
         if let Some(d) = &mut self.analysis {
             // OK closes the window; Apply leaves it open for the next run.
-            let (report, close) = match d.show(ctx, &mut self.doc) {
+            let outcome = d.show(ctx, &mut self.doc);
+            if matches!(outcome, AnalysisOutcome::Done(_) | AnalysisOutcome::Applied(_)) {
+                self.last_analysis = d.repeat_tool();
+            }
+            let (report, close) = match outcome {
                 AnalysisOutcome::Open => (None, false),
                 AnalysisOutcome::Closed => (None, true),
                 AnalysisOutcome::Done(report) => (Some(report), true),

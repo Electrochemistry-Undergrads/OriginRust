@@ -71,7 +71,7 @@ impl RangePickDialog {
 
     /// The finished ranges as rows (0-based, inclusive, lower first).
     pub fn ranges(&self) -> Vec<(usize, usize)> {
-        self.limits.chunks_exact(2).map(|c| (c[0].0.min(c[1].0), c[0].0.max(c[1].0))).collect()
+        self.limits.as_chunks::<2>().0.iter().map(|[a, b]| (a.0.min(b.0), a.0.max(b.0))).collect()
     }
 
     fn request(&self) -> Request {

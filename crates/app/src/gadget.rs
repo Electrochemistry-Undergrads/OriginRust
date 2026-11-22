@@ -37,7 +37,7 @@
 use crate::actions::Action;
 use crate::menus::{self, MenuContext};
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke};
-use sheaf_calc::integrate::{IntegrateOptions, IntegrateResult, integrate};
+use sheaf_calc::integrate::{AreaType, IntegrateOptions, IntegrateResult, integrate};
 use sheaf_core::{Project, WindowId};
 use sheaf_plot::LayerGeometry;
 
@@ -392,6 +392,9 @@ pub struct Integrator {
     pub end_point_baseline: bool,
     /// 2D Integrate only (T201): the region is the ellipse that fills the rectangle.
     pub circle: bool,
+    /// Integrate only (T357): the area of the absolute value of the curve (Origin's Absolute area type)
+    /// instead of the signed area.
+    pub absolute: bool,
 }
 
 /// What the gadget asks the app to do.
@@ -403,6 +406,8 @@ pub enum GadgetOp {
     SetRegion(bool),
     /// Write the result into a sheet.
     NewOutput,
+    /// Integrate only (T357): open the Preferences window (range, baseline, area type).
+    Preferences,
     Close,
 }
 
@@ -632,7 +637,11 @@ impl Integrator {
         integrate(
             x,
             y,
-            &IntegrateOptions { end_point_baseline: self.end_point_baseline, rows: Some(rows), ..Default::default() },
+            &IntegrateOptions {
+                end_point_baseline: self.end_point_baseline,
+                rows: Some(rows),
+                area_type: if self.absolute { AreaType::Absolute } else { AreaType::Mathematical },
+            },
         )
     }
 
@@ -1128,6 +1137,7 @@ mod tests {
             y1: 0.0,
             end_point_baseline: false,
             circle: false,
+            absolute: false,
         };
         assert!((g.result(&x, &y).unwrap().area - 8.0).abs() < 1e-12, "from 2 to 4 under x + 1");
         g.end_point_baseline = true;

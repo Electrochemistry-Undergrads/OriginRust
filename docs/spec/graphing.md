@@ -6804,6 +6804,15 @@ labels of a layer are drawn in list order, so the last one is drawn on top.
   across kinds the drawing order stays legend, labels, then shapes. Origin's order across object kinds is
   not measured.
 
+## Integrate gadget Preferences (T357, 2026-11-22, **not measured**)
+
+Origin's Integrate gadget has a Preferences dialog (its ROI box, integration and output pages; Origin's help, not
+measured: the gadget needs Origin's GUI). Sheaf's gadget menu has Preferences..., a small window with X From and X
+To (typed range ends; they must differ), Baseline (Zero, or the straight line through the end points, as the menu's
+toggle) and Area Type (Mathematical, the signed area as before, or Absolute, the area of `|y - baseline|`, Origin's
+`integ1 type:=abs`). OK applies them to the open gadget: the live value, the shading's area and New Output (which
+passes the area type to Analysis > Integrate) follow; Cancel changes nothing. It is a view setting, not an undo step.
+
 ## Rise Time gadget: Gadgets > Rise Time... (T138, 2026-11-18, **not measured**)
 
 Origin 2016's Gadgets menu has Rise Time.... It could not be probed (Origin's COM class was unregistered),

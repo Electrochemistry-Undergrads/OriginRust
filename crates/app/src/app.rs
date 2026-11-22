@@ -15,6 +15,16 @@ use crate::dialogs::comparison_plot::{ComparisonPlotDialog, Outcome as Compariso
 use crate::dialogs::cond_format::CondFormatDialog;
 use crate::dialogs::cond_manager::{CondManagerDialog, ManagerOutcome};
 use crate::dialogs::cv_pick::{CvPickDialog, CvPickOutcome};
+
+/// What the Integrate gadget's Preferences window edits (T357).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct GadgetPrefs {
+    pub graph: WindowId,
+    pub from: f64,
+    pub to: f64,
+    pub baseline: bool,
+    pub absolute: bool,
+}
 use crate::dialogs::error_bars::{ErrorBarsDialog, Outcome as ErrorBarsOutcome};
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
 use crate::dialogs::export_excel::ExcelExportDialog;
@@ -239,6 +249,8 @@ pub struct SheafApp {
     multi_peak: Option<MultiPeakDialog>,
     subtract_pick: Option<SubtractPickDialog>,
     cv_pick: Option<CvPickDialog>,
+    /// The Integrate gadget's Preferences window (T357).
+    pub(crate) gadget_prefs: Option<GadgetPrefs>,
     range_pick: Option<RangePickDialog>,
     /// The graph whose Data Reader the Peak Analyzer's anchor picking turned on (T351).
     anchor_graph: Option<WindowId>,
@@ -448,6 +460,7 @@ impl SheafApp {
             multi_peak: None,
             subtract_pick: None,
             cv_pick: None,
+            gadget_prefs: None,
             range_pick: None,
             anchor_graph: None,
             export: None,
@@ -1453,6 +1466,7 @@ impl SheafApp {
                 y1,
                 end_point_baseline: false,
                 circle: false,
+                absolute: false,
             });
             self.focus(graph);
             return;
@@ -1492,6 +1506,7 @@ impl SheafApp {
             y1,
             end_point_baseline: false,
             circle: false,
+            absolute: false,
         });
         self.focus(graph);
     }
@@ -1504,6 +1519,11 @@ impl SheafApp {
         let Some(g) = &mut state.gadget else { return };
         match op {
             GadgetOp::ToggleBaseline => g.end_point_baseline = !g.end_point_baseline,
+            GadgetOp::Preferences => {
+                let (from, to) = (g.x0.min(g.x1), g.x0.max(g.x1));
+                self.gadget_prefs =
+                    Some(GadgetPrefs { graph, from, to, baseline: g.end_point_baseline, absolute: g.absolute });
+            }
             GadgetOp::SetRegion(circle) => g.circle = circle,
             GadgetOp::Close => state.gadget = None,
             // 2D Integrate (T198): a row of the results table.
@@ -1531,7 +1551,11 @@ impl SheafApp {
                     columns: vec![column],
                     rows: sheaf_core::analysis::RowRange::XBetween(g.x0, g.x1),
                     tool: sheaf_core::analysis::Tool::Integrate(sheaf_core::analysis::IntegrateSpec {
-                        area_type: Default::default(),
+                        area_type: if g.absolute {
+                            sheaf_core::analysis::AreaType::Absolute
+                        } else {
+                            sheaf_core::analysis::AreaType::Mathematical
+                        },
                         end_point_baseline: g.end_point_baseline,
                         cumulative: false,
                     }),
@@ -6063,6 +6087,58 @@ impl SheafApp {
         }
     }
 
+    /// The Integrate gadget's Preferences window (T357): X From and To, the baseline and the area type; OK applies
+    /// them to the gadget (a view setting, not an undo step).
+    fn gadget_prefs_frame(&mut self, ctx: &egui::Context) {
+        let Some(p) = &mut self.gadget_prefs else { return };
+        let mut open = true;
+        let mut done = None;
+        egui::Window::new("Integrate Gadget Preferences")
+            .id(egui::Id::new("integrate_gadget_prefs"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                egui::Grid::new("integrate_gadget_prefs_grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+                    ui.label("X From");
+                    ui.add(egui::DragValue::new(&mut p.from).speed(0.01));
+                    ui.end_row();
+                    ui.label("X To");
+                    ui.add(egui::DragValue::new(&mut p.to).speed(0.01));
+                    ui.end_row();
+                    ui.label("Baseline");
+                    ui.vertical(|ui| {
+                        ui.radio_value(&mut p.baseline, false, "Zero (Y = 0)");
+                        ui.radio_value(&mut p.baseline, true, "Straight line through the end points");
+                    });
+                    ui.end_row();
+                    ui.label("Area Type");
+                    ui.vertical(|ui| {
+                        ui.radio_value(&mut p.absolute, false, "Mathematical Area");
+                        ui.radio_value(&mut p.absolute, true, "Absolute Area");
+                    });
+                    ui.end_row();
+                });
+                ui.add_space(6.0);
+                done = crate::dialogs::frame::button_row(ui, false);
+            });
+        let p = *p;
+        match done {
+            Some(crate::dialogs::frame::DialogButton::Ok)
+                if p.from != p.to && p.from.is_finite() && p.to.is_finite() =>
+            {
+                if let Some(g) = self.graphs.get_mut(&p.graph).and_then(|s| s.gadget.as_mut()) {
+                    (g.x0, g.x1, g.end_point_baseline, g.absolute) = (p.from, p.to, p.baseline, p.absolute);
+                }
+                self.gadget_prefs = None;
+            }
+            Some(crate::dialogs::frame::DialogButton::Ok) => self.warn("X From and X To must differ"),
+            Some(crate::dialogs::frame::DialogButton::Cancel) => self.gadget_prefs = None,
+            _ if !open => self.gadget_prefs = None,
+            _ => {}
+        }
+    }
+
     fn show_sheet(&mut self, book: WindowId, sheet: usize) {
         self.doc.adjust_view(|p| {
             if let Some(b) = p.workbook_mut(book) {
@@ -7362,6 +7438,7 @@ impl SheafApp {
         self.multi_peak_frame(ctx);
         self.subtract_pick_frame(ctx);
         self.cv_pick_frame(ctx);
+        self.gadget_prefs_frame(ctx);
         self.range_pick_frame(ctx);
         self.anchor_pick_frame(ctx);
         if let Some(d) = &mut self.pivot {

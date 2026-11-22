@@ -1024,6 +1024,8 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
                 size_pt: 9.0,
                 color: Color::BLACK,
                 filled: true,
+                interior: None,
+                fill_color: None,
                 edge_width_pt: 0.5,
                 every: 1,
             },
@@ -1167,6 +1169,8 @@ fn cyclic_voltammetry(id: WindowId, name: &str) -> Graph {
         size_pt: 5.0,
         color: Color::BLACK,
         filled: true,
+        interior: None,
+        fill_color: None,
         edge_width_pt: 0.75,
         every: 1,
     };

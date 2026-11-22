@@ -21,6 +21,7 @@ pub fn fit_spec(a: &FitArgs) -> FitSpec {
         yerr: a.yerr.clone(),
         xerr: a.xerr.clone(),
         regress: a.regress.clone(),
+        best_subsets: a.best_subsets,
         compare: a.compare.clone(),
         rank: a.rank.clone(),
         no_scale_errors: a.no_scale_errors,

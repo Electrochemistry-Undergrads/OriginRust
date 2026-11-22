@@ -6,8 +6,9 @@ use super::frame::{DialogButton, button_row};
 use eframe::egui;
 use sheaf_core::analysis::RowRange;
 use sheaf_core::fitting::{
-    CompareDatasetsOptions, CompareDatasetsOutcome, CompareOutcome, FitModel, FitRequest, FitRequestError,
-    ImplicitOutcome, ImplicitRequest, MultiRegOutcome, MultiRegRequest, RankOutcome, builtin_functions,
+    BestSubsetOutcome, BestSubsetRequest, CompareDatasetsOptions, CompareDatasetsOutcome, CompareOutcome, FitModel,
+    FitRequest, FitRequestError, ImplicitOutcome, ImplicitRequest, MultiRegOutcome, MultiRegRequest, RankOutcome,
+    builtin_functions,
 };
 use sheaf_core::{ColumnId, Designation, Document, Project, WindowId};
 
@@ -20,6 +21,8 @@ pub enum FitMoreKind {
     CompareDatasets,
     /// Analysis > Fitting > Nonlinear Implicit Curve Fit (T91).
     Implicit,
+    /// Analysis > Fitting > Best Subset Selection (T347).
+    BestSubset,
 }
 
 impl FitMoreKind {
@@ -30,6 +33,7 @@ impl FitMoreKind {
             FitMoreKind::Rank => "Rank Models",
             FitMoreKind::CompareDatasets => "Compare Datasets",
             FitMoreKind::Implicit => "Nonlinear Implicit Curve Fit",
+            FitMoreKind::BestSubset => "Best Subset Selection",
         }
     }
 
@@ -41,6 +45,7 @@ impl FitMoreKind {
             "rank" => FitMoreKind::Rank,
             "compare-datasets" | "datasets" => FitMoreKind::CompareDatasets,
             "implicit" => FitMoreKind::Implicit,
+            "best-subset" | "subsets" => FitMoreKind::BestSubset,
             _ => return None,
         })
     }
@@ -54,6 +59,7 @@ pub enum FitMoreOutcome {
     Rank(Box<RankOutcome>),
     CompareDatasets(Box<CompareDatasetsOutcome>),
     Implicit(Box<ImplicitOutcome>),
+    BestSubset(Box<BestSubsetOutcome>),
 }
 
 /// A model that Compare Models offers: the closed-form fits and every built-in function.
@@ -227,6 +233,12 @@ impl FitMoreDialog {
                 doc.edit("Multiple Linear Regression", |p| p.fit_multiple_regression(&req))
                     .map(|o| FitMoreOutcome::Multiple(Box::new(o)))
             }
+            FitMoreKind::BestSubset => {
+                let x: Vec<ColumnId> = self.x_choices.iter().filter(|c| c.2 && c.0 != self.y).map(|c| c.0).collect();
+                let req = BestSubsetRequest { y: self.y, x, rows: RowRange::All };
+                doc.edit("Best Subset Selection", |p| p.best_subsets(&req))
+                    .map(|o| FitMoreOutcome::BestSubset(Box::new(o)))
+            }
             FitMoreKind::Compare => {
                 let (mut a, mut b) = (self.base_request(), self.base_request());
                 a.model = self.models[self.model_a].1.clone();
@@ -283,7 +295,7 @@ impl FitMoreDialog {
             .show(ctx, |ui| {
                 egui::Grid::new("fit_more_grid").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
                     ui.label(match self.kind {
-                        FitMoreKind::Multiple => "Dependent (Y)",
+                        FitMoreKind::Multiple | FitMoreKind::BestSubset => "Dependent (Y)",
                         FitMoreKind::CompareDatasets => "1st dataset (Y)",
                         FitMoreKind::Implicit => "Y of the points",
                         _ => "Y data",
@@ -327,6 +339,20 @@ impl FitMoreDialog {
                 });
                 ui.separator();
                 match self.kind {
+                    FitMoreKind::BestSubset => {
+                        ui.label("Candidate predictors (X), at most 15");
+                        egui::ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
+                            for (id, text, on) in self.x_choices.iter_mut() {
+                                if *id != self.y {
+                                    ui.checkbox(on, text.as_str());
+                                }
+                            }
+                        });
+                        ui.weak(
+                            "Every subset is fitted with an intercept and scored by R-square, adjusted \
+                             R-square, Mallows Cp, AIC and BIC (table in a new sheet).",
+                        );
+                    }
                     FitMoreKind::Multiple => {
                         ui.label("Independent variables (X)");
                         egui::ScrollArea::vertical().max_height(160.0).show(ui, |ui| {

@@ -312,6 +312,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T318](T318-baseline-als-dataset.md) | Peak Analyzer baselines Use Existing Dataset and Asymmetric Least Squares Smoothing (window, CLI) | M | done 2026-11-21; ALS not measured (Pro) |
 | [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T365](T365-process-capability.md) | Process capability, normal and nonnormal (Origin 2027 Quality app) | S | done 2026-11-22 (statistics 36) |
 | [T364](T364-rare-event-charts.md) | G and T control charts for rare events (Origin 2027 Quality app) | S | done 2026-11-22 (statistics 35) |
 | [T363](T363-autocorrelation.md) | Autocorrelation (Origin 2024b Time Series app): ACF, PACF and Ljung-Box per lag with graphs | S | done 2026-11-22 (statistics 34) |
 | [T362](T362-manhattan-plot.md) | Manhattan plot (Origin 2017 app): -log10 p along grouped positions with a significance line | S | done 2026-11-22 (statistics 33) |

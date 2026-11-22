@@ -4314,6 +4314,33 @@ fn plot_details_drop_lines_label_and_fill_tabs_change_the_plot() {
 }
 
 #[test]
+fn plot_details_symbol_tab_offers_origins_shapes_interiors_and_fill_colour() {
+    let mut h = start(vec![data_file("pd-symbol")]);
+    let (_, graph) = window_ids(&h);
+    h.state_mut().doc.apply("Scatter", |p| {
+        let layer = &mut p.graph_mut(graph).unwrap().layers[0];
+        layer.group_style.dependent = false;
+        layer.plots[0].kind = sheaf_core::graph::PlotKind::Scatter;
+    });
+    h.state_mut().panels.set_pinned(PanelId::Objects, true);
+    settle(&mut h);
+    let plots = project(&h).graph(graph).unwrap().layers[0].plots.clone();
+    let at = in_right_panel(&h, &project(&h).plot_label(&plots[0]));
+    double_click_at(&mut h, at);
+    assert!(h.state().graph_props.is_some(), "Plot Details is open");
+    click(&mut h, "Symbol");
+    assert!(has_label(&h, "Fill Color"));
+    let shape = project(&h).graph(graph).unwrap().layers[0].plots[0].symbol.shape.label();
+    choose_recalc(&mut h, shape, "Hexagon");
+    let interior = project(&h).graph(graph).unwrap().layers[0].plots[0].symbol.effective_interior().label();
+    choose_recalc(&mut h, interior, "Half Up");
+    click(&mut h, "OK");
+    let sym = &project(&h).graph(graph).unwrap().layers[0].plots[0].symbol;
+    assert_eq!(sym.interior, Some(sheaf_core::graph::SymbolInterior::HalfUp));
+    assert_eq!(sym.shape, sheaf_core::graph::SymbolShape::Hexagon);
+}
+
+#[test]
 fn a_dependent_group_shares_a_change_and_an_independent_one_does_not() {
     let mut h = start(vec![data_file("pd-group")]);
     let (_, graph) = window_ids(&h);

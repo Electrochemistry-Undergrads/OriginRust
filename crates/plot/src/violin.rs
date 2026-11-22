@@ -194,6 +194,8 @@ pub(crate) fn draw_violin(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeomet
                     size_pt: VIOLIN_POINT_PT,
                     color,
                     filled: true,
+                    interior: None,
+                    fill_color: None,
                     edge_width_pt: 0.5,
                     every: 1,
                 };

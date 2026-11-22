@@ -307,6 +307,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T318](T318-baseline-als-dataset.md) | Peak Analyzer baselines Use Existing Dataset and Asymmetric Least Squares Smoothing (window, CLI) | M | done 2026-11-21; ALS not measured (Pro) |
 | [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T323](T323-symbol-shapes.md) | Symbols: Origin 2016's shapes 9-20, twelve interiors and a fill colour, measured and drawn; .opj bytes 0x17/0x18 | M | done 2026-11-21 (graphing 5.4) |
 | [T320](T320-fit-covariance.md) | Fit report: Covariance Matrix and Correlation Matrix options (off as in Origin 2016), checked against Origin's errors and dependencies | S | done 2026-11-21 (fitting 4) |
 | [T322](T322-funcgraph-measure.md) | Measure Graph > Add Function Graph against Origin (Function tab, Auto range, Plot Type) | S | done 2026-11-21 (graphing 41) |
 | [T324](T324-windrose-measure.md) | Measure Wind Rose - Raw Data against Origin (speed bands, counts, colours) | S | done 2026-11-21 (graphing 36) |

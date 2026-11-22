@@ -677,3 +677,35 @@ fn write_tick_lengths_for_origin() {
     });
     std::fs::write(Path::new(&dir).join("sheaf-ticks.opj"), write_named(&p, "g", TIME).unwrap().bytes).unwrap();
 }
+
+#[test]
+fn every_origin_symbol_shape_and_interior_comes_back() {
+    // Shape byte 0x17 and interior byte 0x18 hold Origin's numbers, as read from a project Origin
+    // 2016 saved with shapes 1-20 and interiors 0-11 (T323).
+    let mut p = source();
+    for (code, s) in SymbolShape::ORIGIN {
+        graph_with(&mut p, Template::Scatter, &[(0, 1)], |g| {
+            g.name = format!("S{code}");
+            g.layers[0].plots[0].kind = PlotKind::Scatter;
+            g.layers[0].plots[0].symbol.shape = s;
+        });
+    }
+    for i in SymbolInterior::ALL {
+        graph_with(&mut p, Template::Scatter, &[(0, 1)], |g| {
+            g.name = format!("I{}", i.origin_code());
+            g.layers[0].plots[0].kind = PlotKind::Scatter;
+            g.layers[0].plots[0].symbol.filled = i == SymbolInterior::Solid;
+            g.layers[0].plots[0].symbol.interior = (i != SymbolInterior::Solid).then_some(i);
+        });
+    }
+    let (imp, warnings) = round_trip(&p);
+    assert!(warnings.is_empty() && imp.warnings.is_empty(), "{warnings:?} {:?}", imp.warnings);
+    let by_name = |n: &str| imp.graphs.iter().find(|g| g.name == n).unwrap().layers[0].plots[0].symbol.clone();
+    for (code, s) in SymbolShape::ORIGIN {
+        assert_eq!(by_name(&format!("S{code}")).shape, s);
+    }
+    for i in SymbolInterior::ALL {
+        let got = by_name(&format!("I{}", i.origin_code()));
+        assert_eq!(got.effective_interior(), i, "{i:?}");
+    }
+}

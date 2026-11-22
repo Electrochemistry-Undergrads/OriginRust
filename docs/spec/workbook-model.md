@@ -607,8 +607,8 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   Origin 2016 has no Default data-style command; Rich Text/Wrap Text/Float remain separate,
   unsupported text controls (B5). Its Worksheet Properties Format tab instead has category
   defaults (Data > Standard, plus headers and label categories). F4 now opens a separate
-  category-font dialog with Data family/size and Long Name/Units/Comments sizes (GUI 3,
-  measurements 2026-11-16). Other categories remain disabled.
+  category-font dialog with Data, Column Labels and Long Name/Units/Comments family
+  and size controls (GUI 3).
 - **Data font defaults.** Optional `Worksheet.font_defaults.data` holds a family/point size;
   old files omit the empty field. Resolution fills missing manual family/size from that default,
   preserving every other manual/conditional property and keeping labels independent. One sparse
@@ -633,7 +633,7 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   Project and OPJ-companion saves preserve the fields; unsupported native OPJ formatting warns.
   Excel writes effective sizes only for exported label rows, reports omitted category styles,
   and leaves data blanks unstyled when only label defaults exist. Future Excel label inheritance
-  is not preserved. Bulk/Standard/header defaults remain disabled.
+  is not preserved. Standard and header defaults remain disabled.
 - **Label family defaults (documented contract).** Optional `long_name_family`, `units_family`
   and `comments_family` strings extend the existing `font_defaults` object without changing
   its point-size fields. A missing family uses the existing automatic Arial face. Family-only
@@ -646,8 +646,17 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   search and retained category drafts. The official Format-tab manual supports the control
   contract (GUI3); Native family mutation/future inheritance/manual/Automatic parity remains
   unverified after excluded ineffective attempts and a later COM registration refusal. These
-  inheritance/reset rules are Sheaf policies. Data, unsupported categories and T27 extents stay
-  unchanged.
+  inheritance/reset rules are Sheaf policies.
+- **Column Labels font defaults (T59, 2026-11-21).** The sparse
+  `font_defaults.column_labels` entry supplies family and point size independently
+  for Long Name, Units, Comments, formula and parameter label cells, including
+  future columns. Each manual property wins over the corresponding specific
+  category property, which wins over the bulk property. Starting from Automatic
+  family or Default size inherits the next level. Project files and OPJ companions
+  preserve the entry. Excel writes the resolved fonts for the three supported
+  metadata rows and warns when styled label rows are omitted, including formula
+  or parameter rows. Grid, print and image export use the worksheet style resolver.
+  See GUI 3 for the Origin 2016 size probe and the documented family control.
 - **Vertical alignment.** The 2016 selected-A1 Format Cells and Worksheet Properties Data
   Format/Size probes (GUI 3, 2026-11-16) found no vertical text-alignment control in those
   inspected routes. Other routes and mutation semantics remain unestablished; this probe

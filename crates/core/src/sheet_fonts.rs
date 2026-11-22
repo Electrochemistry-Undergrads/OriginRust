@@ -22,10 +22,27 @@ impl Default for WorksheetFont {
     }
 }
 
+/// A column-label font whose family and point size can inherit independently.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ColumnLabelFont {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub family: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_pt: Option<f32>,
+}
+
+impl ColumnLabelFont {
+    pub fn is_empty(&self) -> bool {
+        self.family.is_empty() && self.size_pt.is_none()
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct WorksheetFonts {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<WorksheetFont>,
+    #[serde(default, skip_serializing_if = "ColumnLabelFont::is_empty")]
+    pub column_labels: ColumnLabelFont,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub long_name_size_pt: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -43,6 +60,7 @@ pub struct WorksheetFonts {
 impl WorksheetFonts {
     pub fn is_empty(&self) -> bool {
         self.data.is_none()
+            && self.column_labels.is_empty()
             && self.long_name_size_pt.is_none()
             && self.units_size_pt.is_none()
             && self.comments_size_pt.is_none()
@@ -58,6 +76,7 @@ impl WorksheetFonts {
             LabelKind::Comments => self.comments_size_pt,
             _ => None,
         }
+        .or_else(|| self.column_labels_for(kind).and_then(|font| font.size_pt))
     }
 
     pub fn label_family(&self, kind: &LabelKind) -> Option<&str> {
@@ -68,6 +87,15 @@ impl WorksheetFonts {
             _ => None,
         }
         .filter(|name| !name.is_empty())
+        .or_else(|| self.column_labels_for(kind).map(|font| font.family.as_str()).filter(|name| !name.is_empty()))
+    }
+
+    fn column_labels_for(&self, kind: &LabelKind) -> Option<&ColumnLabelFont> {
+        matches!(
+            kind,
+            LabelKind::LongName | LabelKind::Units | LabelKind::Comments | LabelKind::Formula | LabelKind::Param(_)
+        )
+        .then_some(&self.column_labels)
     }
 
     pub(crate) fn label_style<'a>(&'a self, kind: &LabelKind, mut manual: ResolvedStyle<'a>) -> ResolvedStyle<'a> {
@@ -97,6 +125,21 @@ impl WorksheetFonts {
 }
 
 impl Worksheet {
+    /// Changes the common font under the independent column-label categories.
+    pub fn set_column_labels_font(&mut self, mut font: ColumnLabelFont) -> bool {
+        if font.size_pt.is_some_and(|size| !size.is_finite() || size <= 0.0) {
+            return false;
+        }
+        font.family = font.family.trim().to_owned();
+        font.size_pt = font.size_pt.map(clamp_cell_pt);
+        let slot = &mut self.font_defaults.column_labels;
+        if *slot == font {
+            return false;
+        }
+        *slot = font;
+        true
+    }
+
     /// Changes one label category's family. Empty names restore the automatic face;
     /// point sizes and manual properties remain independent.
     pub fn set_label_font_family(&mut self, kind: &LabelKind, family: &str) -> bool {
@@ -117,7 +160,12 @@ impl Worksheet {
 
     /// Changes only one supported label category's point size, including future columns.
     pub fn set_label_font_size(&mut self, kind: &LabelKind, size_pt: f32) -> bool {
-        if !size_pt.is_finite() || size_pt <= 0.0 {
+        self.set_label_font_size_override(kind, Some(size_pt))
+    }
+
+    /// `None` makes the category inherit the shared Column Labels size again.
+    pub fn set_label_font_size_override(&mut self, kind: &LabelKind, size_pt: Option<f32>) -> bool {
+        if size_pt.is_some_and(|size| !size.is_finite() || size <= 0.0) {
             return false;
         }
         let slot = match kind {
@@ -126,11 +174,11 @@ impl Worksheet {
             LabelKind::Comments => &mut self.font_defaults.comments_size_pt,
             _ => return false,
         };
-        let size = clamp_cell_pt(size_pt);
-        if *slot == Some(size) {
+        let size = size_pt.map(clamp_cell_pt);
+        if *slot == size {
             return false;
         }
-        *slot = Some(size);
+        *slot = size;
         true
     }
 
@@ -270,6 +318,44 @@ mod tests {
             assert!(ops.iter().any(|op| matches!(op, PrintOp::Text { text, size, fmt, .. }
                 if text == value && *size == pt * 8.0 / 9.0 && fmt.family.as_deref() == Some("Times New Roman"))));
         }
+    }
+
+    #[test]
+    fn bulk_label_fonts_cascade_below_specific_and_manual_formats_and_roundtrip() {
+        let mut s = sheet();
+        let a = ColumnId(1);
+        let b = ColumnId(9);
+        assert!(s.set_label_font_size(&LabelKind::LongName, 24.0));
+        assert!(s.set_label_font_family(&LabelKind::Units, "Courier New"));
+        let common = ColumnLabelFont { family: "Times New Roman".into(), size_pt: Some(20.0) };
+        assert!(s.set_column_labels_font(common.clone()));
+        assert!(!s.set_column_labels_font(common));
+        s.apply_cell_format(
+            FormatTarget::label_rows(vec![a], vec![LabelKind::LongName]),
+            CellFormat { size_pt: Some(12.0), bold: Some(true), ..Default::default() },
+        );
+        s.columns.push(Column::new(b, "B", Designation::Y, ColumnData::default()));
+        let mut back: Worksheet = serde_json::from_slice(&serde_json::to_vec(&s).unwrap()).unwrap();
+        assert_eq!(back.font_defaults, s.font_defaults);
+        let index = back.format_index();
+        let manual = index.resolve_label(&back, a, &LabelKind::LongName);
+        assert_eq!((manual.size_pt, manual.font, manual.bold), (Some(12.0), Some("Times New Roman"), true));
+        let specific = index.resolve_label(&back, b, &LabelKind::LongName);
+        assert_eq!((specific.size_pt, specific.font), (Some(24.0), Some("Times New Roman")));
+        let units = index.resolve_label(&back, b, &LabelKind::Units);
+        assert_eq!((units.size_pt, units.font), (Some(20.0), Some("Courier New")));
+        for kind in [LabelKind::Comments, LabelKind::Formula, LabelKind::Param("Sample".into())] {
+            let inherited = index.resolve_label(&back, b, &kind);
+            assert_eq!((inherited.size_pt, inherited.font), (Some(20.0), Some("Times New Roman")));
+        }
+        assert!(index.resolve(&back, b, 0).is_default());
+        assert!(index.resolve_label(&back, b, &LabelKind::Sparklines).is_default());
+
+        assert!(back.set_label_font_size_override(&LabelKind::LongName, None));
+        assert_eq!(back.font_defaults.label_size(&LabelKind::LongName), Some(20.0));
+        assert!(back.set_column_labels_font(ColumnLabelFont::default()));
+        assert_eq!(back.font_defaults.label_size(&LabelKind::LongName), None);
+        assert_eq!(back.font_defaults.label_family(&LabelKind::Units), Some("Courier New"));
     }
 
     #[test]

@@ -31,10 +31,10 @@ Not yet claimed. Pick one, write its brief with the next free `T` number, claim 
    differences, SEs and q agree to 14 digits, so only the studentized-range tail is off. Two-way
    ANOVA (unbalanced 2x3) table matches to 1e-11 but its Tukey p-values are off by up to 3.4% on a p
    near 1e-6. Fix to within 1e-9 if the algorithm allows and record the accuracy reached.
-2. **Date parts of numbers with no date** (`civil_of` in `crates/expr/src/funcs.rs`): for -0.25 and
+2. **Done (T262; bounds re-checked by T367).** **Date parts of numbers with no date** (`civil_of` in `crates/expr/src/funcs.rs`): for -0.25 and
    0.999 Origin's `year`, `month`, `day` and `weekday` return -1; Sheaf returns 4713 BC dates. Find
    Origin's lower bound with more probes first.
-3. **Missing input to date functions**: LabTalk returns -1 for `hour`, `minute`, `second` and the date
+3. **Done (T262, on a worksheet column).** **Missing input to date functions**: LabTalk returns -1 for `hour`, `minute`, `second` and the date
    parts of an empty cell; Sheaf gives a missing value. Confirm on a worksheet column (not only scalar
    LabTalk) before changing.
 4. **Done (T263): Origin ignores the increment on a probit axis (pictures with inc 3, 1, 2 are the same).** **Probit axis increment** (`auto_range` in `crates/core/src/scales.rs`): Origin's `layer.y.inc` is 3

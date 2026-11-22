@@ -239,7 +239,7 @@ workbooks. For graph layers public documentation lists axis ranges and ticks at 
 | offset | size | meaning |
 |---|---|---|
 | `0x04` | u16 | position (1-based) of the column's data set in the data-set list |
-| `0x11` | u8 | role: 0 = Y, 3 = X, 5 = Z, 6 = X error, 2 = Y error, 4 = label; 1 and other values = disregard [pub][obs]. Value 1 occurs often and was mapped to "disregard" without a second source [inf]. Value 96 appears in graph curves, never in workbooks |
+| `0x11` | u8 | role: 0 = Y, 3 = X, 5 = Z, 6 = X error, 2 = Y error, 4 = label, 7 = Group, 8 = Subject (LabTalk `wks.col.type` 8 and 9; measured in Origin 2016 on 2026-11-21, T330, which also writes the Y type word 0x6121 for them and makes them belong to the X column; Origin read both back from a file Sheaf wrote); 1 and other values = disregard [pub][obs]. Value 1 occurs often and was mapped to "disregard" without a second source [inf]. Value 96 appears in graph curves, never in workbooks |
 | `0x12` | 12 bytes | short name, NUL padded. Cut at 11 characters in some files (`Independent1` appeared as `Independent`); the data-set name is the full name and is preferred |
 | `0x1E` | u8 | value type (9 plain numeric, 0, 0x10, 0x08 numeric, `0x02` time, `0x03`/`0x33` date, `0x31` text, ...) [pub][obs] |
 | `0x1F` | u8 | display precision: `>= 0x80` significant digits, else decimals offset by 3 [pub]; not used |

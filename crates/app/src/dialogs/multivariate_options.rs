@@ -5,8 +5,8 @@ use super::analysis::AnalysisKind;
 use eframe::egui;
 use sheaf_core::analysis::{
     AcfSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty, ChangePointSpec, GLimits,
-    KaplanMeierSpec, KmeansSpec, ManhattanSpec, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec, RareChartKind,
-    RareChartSpec, RocSpec, TDistribution, TimePivotSpec, Tool,
+    KaplanMeierSpec, KmeansSpec, LifeDist, LifeDistSpec, ManhattanSpec, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec,
+    RareChartKind, RareChartSpec, RocSpec, TDistribution, TimePivotSpec, Tool,
 };
 
 /// What the windows keep between frames.
@@ -22,6 +22,7 @@ pub struct MultiOptions {
     acf: AcfSpec,
     rare: RareChartSpec,
     capability: CapabilitySpec,
+    life: LifeDistSpec,
     /// The value of the Manual penalty while another penalty is chosen.
     manual_penalty: Option<f64>,
     /// The quantiles as typed (comma separated), read when the tool runs.
@@ -70,6 +71,12 @@ impl MultiOptions {
                 Ok(Tool::QuantReg(QuantRegSpec { quantiles, ..self.quantreg.clone() }))
             }
             AnalysisKind::TimePivot => Ok(Tool::TimePivot(self.timepivot)),
+            AnalysisKind::LifeDist => {
+                if self.life.censor.trim().is_empty() {
+                    return Err("give the censoring value".to_string());
+                }
+                Ok(Tool::LifeDist(self.life.clone()))
+            }
             AnalysisKind::Capability => {
                 let c = &self.capability;
                 if c.lsl.is_none() && c.usl.is_none() {
@@ -197,6 +204,27 @@ impl MultiOptions {
                 ui.weak(
                     "The exact solution of each quantile (the sum of check losses is as small as it can be); no standard errors.",
                 );
+            }
+            AnalysisKind::LifeDist => {
+                let s = &mut self.life;
+                ui.label("The chosen columns are the time and the censor column.");
+                ui.horizontal(|ui| {
+                    ui.label("Censoring value");
+                    ui.add(egui::TextEdit::singleline(&mut s.censor).desired_width(80.0));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Distribution");
+                    for d in [LifeDist::Weibull, LifeDist::Lognormal, LifeDist::Exponential, LifeDist::Normal] {
+                        let name = match d {
+                            LifeDist::Weibull => "Weibull",
+                            LifeDist::Lognormal => "Lognormal",
+                            LifeDist::Exponential => "Exponential",
+                            LifeDist::Normal => "Normal",
+                        };
+                        ui.radio_value(&mut s.dist, d, name);
+                    }
+                });
+                ui.checkbox(&mut s.graph, "Probability, density, survival and hazard graphs");
             }
             AnalysisKind::Capability => {
                 ui.label("Every chosen column is a process of its own, in row order; missing values are left out.");

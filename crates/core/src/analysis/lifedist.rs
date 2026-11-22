@@ -141,12 +141,12 @@ pub(super) fn run(
         let lo_t = t.iter().copied().fold(f64::INFINITY, f64::min);
         let hi_t = t.iter().copied().fold(f64::NEG_INFINITY, f64::max);
         let normal = spec.dist == LifeDist::Normal;
-        // Curve times: from near 0 (or below the data for the normal) to past the largest time.
+        // Curve times: from half the smallest time (or below the data for the normal) to past the largest.
         let (a, b) = if normal {
             let pad = 0.1 * (hi_t - lo_t).max(fit.params[1]);
             (lo_t - pad, hi_t + pad)
         } else {
-            (hi_t * 0.005, hi_t * 1.1)
+            (lo_t * 0.5, hi_t * 1.1)
         };
         let curve: Vec<f64> = (0..=200)
             .map(|i| {
@@ -154,9 +154,9 @@ pub(super) fn run(
                 if normal { a + (b - a) * f } else { a * (b / a).powf(f) }
             })
             .collect();
-        let mut add_curve = |name: &str, ys: Vec<f64>, extra: Option<(Vec<f64>, Vec<f64>)>| -> Vec<GraphPlot> {
+        let mut add_curve = |name: &str, xs: Vec<f64>, ys: Vec<f64>, extra: Option<(Vec<f64>, Vec<f64>)>| {
             let x = on_sheet.len();
-            on_sheet.push(column_of("Time", &comment, Designation::X, curve.clone()));
+            on_sheet.push(column_of("Time", &comment, Designation::X, xs));
             on_sheet.push(column_of(name, &comment, Designation::Y, ys));
             let mut plots = Vec::new();
             if let Some((px, py)) = extra {
@@ -180,10 +180,10 @@ pub(super) fn run(
             });
             plots
         };
-        // Probability plot: percent on the distribution's own probability axis.
-        let in_range = |p: f64| (0.001..=99.999).contains(&p);
-        let fitted_pct: Vec<f64> =
-            curve.iter().map(|t| 100.0 * fit.cdf(*t)).map(|p| if in_range(p) { p } else { f64::NAN }).collect();
+        // Probability plot: percent on the distribution's own probability axis, the fitted line kept to the part of
+        // it the axis can show (a probability axis has no 0 or 100).
+        let (fit_x, fit_pct): (Vec<f64>, Vec<f64>) =
+            curve.iter().map(|t| (*t, 100.0 * fit.cdf(*t))).filter(|(_, p)| (0.001..=99.999).contains(p)).unzip();
         let pts: (Vec<f64>, Vec<f64>) = positions.iter().map(|(t, f)| (*t, 100.0 * f)).unzip();
         let (x_scale, y_scale) = match spec.dist {
             LifeDist::Weibull | LifeDist::Exponential => (ScaleKind::Log10, ScaleKind::Weibull),
@@ -199,15 +199,19 @@ pub(super) fn run(
             y_title: y_title.into(),
             look: Default::default(),
         };
-        let plots = add_curve("Percent failed", fitted_pct, Some(pts));
+        let plots = add_curve("Percent failed", fit_x, fit_pct, Some(pts));
         graphs.push(graph(plots, x_scale, y_scale, "Percent"));
-        let plots = add_curve("Probability density", curve.iter().map(|t| fit.pdf(*t)).collect(), None);
+        let plots = add_curve("Probability density", curve.clone(), curve.iter().map(|t| fit.pdf(*t)).collect(), None);
         graphs.push(graph(plots, ScaleKind::Linear, ScaleKind::Linear, "Probability density"));
         let surv: (Vec<f64>, Vec<f64>) = positions.iter().map(|(t, f)| (*t, 100.0 * (1.0 - f))).unzip();
-        let plots =
-            add_curve("Percent surviving", curve.iter().map(|t| 100.0 * fit.survival(*t)).collect(), Some(surv));
+        let plots = add_curve(
+            "Percent surviving",
+            curve.clone(),
+            curve.iter().map(|t| 100.0 * fit.survival(*t)).collect(),
+            Some(surv),
+        );
         graphs.push(graph(plots, ScaleKind::Linear, ScaleKind::Linear, "Percent surviving"));
-        let plots = add_curve("Hazard rate", curve.iter().map(|t| fit.hazard(*t)).collect(), None);
+        let plots = add_curve("Hazard rate", curve.clone(), curve.iter().map(|t| fit.hazard(*t)).collect(), None);
         graphs.push(graph(plots, ScaleKind::Linear, ScaleKind::Linear, "Hazard rate"));
     }
     let mut sheet_cols = vec![SheetColumn {
@@ -220,6 +224,7 @@ pub(super) fn run(
     for (i, h) in table.headers.iter().enumerate() {
         sheet_cols.push(column_of(h, "", Designation::Y, table.rows.iter().map(|(_, v)| v[i]).collect()));
     }
+    let shift = sheet_cols.len();
     sheet_cols.extend(on_sheet);
     let (graph, more_graphs) = if graphs.is_empty() {
         (None, Vec::new())
@@ -227,7 +232,7 @@ pub(super) fn run(
         let first = graphs.remove(0);
         (Some(first), graphs)
     };
-    Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph, more_graphs })
+    Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph, more_graphs }.shift_graphs(shift))
 }
 
 #[cfg(test)]
@@ -253,6 +258,11 @@ mod tests {
         assert!((row[3] - 29.0 / 3.0).abs() < 1e-12 && row[4].is_nan());
         assert!(out.new_graph.is_some());
         assert_eq!(out.more_graphs.len(), 3);
+        let cols = super::super::dist::plot_columns(&p, out.new_graph.unwrap());
+        assert_eq!(cols[0], ("Failure time".to_string(), "Percent failed (Kaplan-Meier)".to_string()), "{cols:?}");
+        assert_eq!(cols[1], ("Time".to_string(), "Percent failed".to_string()));
+        let cols = super::super::dist::plot_columns(&p, out.more_graphs[2]);
+        assert_eq!(cols[0].1, "Hazard rate");
 
         let out = p.analyze(&request(vec![t, c], LifeDistSpec { graph: false, ..Default::default() })).unwrap();
         assert!(out.new_graph.is_none() && out.notes[0].contains("Weibull fit to 5 cases"), "{:?}", out.notes);

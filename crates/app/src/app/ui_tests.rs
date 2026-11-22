@@ -5742,6 +5742,28 @@ fn the_statistics_menu_makes_a_manhattan_plot() {
     assert_eq!(h.state().doc.undo_label(), Some("Manhattan plot"));
 }
 
+/// Statistics > Survival Analysis > Distribution Overview Plot... (T366): time and censor columns give the fit and
+/// four graphs; one undo step.
+#[test]
+fn the_survival_menu_makes_a_distribution_overview() {
+    let data = csv_file("lifedist", "life", "id,t,c\n1,2,0\n2,4,0\n3,6,1\n4,8,0\n5,9,1\n");
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - life.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Survival Analysis", "Distribution Overview Plot..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Censoring value"));
+    click(&mut h, "Exponential");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
+    let (sheet, theta) = result_column(&h, "Parameter 1");
+    assert!(sheet.starts_with("LifeDist"), "{sheet}");
+    assert!((theta[0] - 29.0 / 3.0).abs() < 1e-12, "{theta:?}");
+    let (_, failures) = result_column(&h, "Failures");
+    assert_eq!(failures, [3.0]);
+    assert_eq!(project(&h).graphs().count(), graphs_before + 4);
+    assert_eq!(h.state().doc.undo_label(), Some("Distribution overview"));
+}
+
 /// Statistics > Process Capability... (T365): an upper limit only gives CPU = Cpk and no Cp; one undo step, a graph.
 #[test]
 fn the_statistics_menu_computes_process_capability() {

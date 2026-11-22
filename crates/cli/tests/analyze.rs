@@ -1485,6 +1485,26 @@ fn manhattan_plot_runs_from_the_command_line() {
     assert!(ok && out.contains("3 groups"), "the group from the X column: {err} {out}");
 }
 
+/// Distribution overview of right-censored data (spec `statistics.md` section 37, T366).
+#[test]
+fn distribution_overview_runs_from_the_command_line() {
+    let dir = scratch("lifedist");
+    let path = dir.join("life.csv");
+    std::fs::write(&path, "id,t,c\n1,2,0\n2,4,0\n3,6,1\n4,8,0\n5,9,1\n").unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "lifedist", file, "--y", "t,c"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("Weibull fit to 5 cases (3 failures, 2 right-censored)") && out.contains("LifeDist1"),
+        "{out}"
+    );
+    let (ok, out, err) =
+        sheaf(&["analyze", "lifedist", file, "--y", "t,c", "--distribution", "exponential", "--no-graph"]);
+    assert!(ok && out.contains("Mean (theta) 9.66"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "lifedist", file, "--y", "t,c", "--distribution", "gamma"]);
+    assert!(!ok && err.contains("--distribution"), "{err}");
+}
+
 /// Process capability (spec `statistics.md` section 36, T365).
 #[test]
 fn process_capability_runs_from_the_command_line() {

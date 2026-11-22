@@ -299,6 +299,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T322](T322-curvemath-measure.md) | Intersect writes into the input sheet as Origin; numbered labels keep their number on recalculation | S | done 2026-11-21 |
 | [T325](T325-avecurves-turning.md) | Average Multiple Curves sorts a turning X and averages equal X, as Origin's avecurves | S | done 2026-11-21 |
 | [T326](T326-trace-output.md) | Trace Interpolation writes InterpolatedX1/Y1 at the end of the input sheet, as Origin's interp1trace | S | done 2026-11-21 |
+| [T329](T329-adr5-origin-placement.md) | ADR 0005 addendum: tools that write at the end of the sheet as Origin; owner decision on Smooth/Differentiate | S | done 2026-11-21 (docs only) |
 | [T311](T311-qqplot-measure.md) | Measure Q-Q Plot against Origin (expected values, y = x line ends, band) | S | done 2026-11-21 (statistics 16.2a) |
 | [T312](T312-import-nonnum.md) | Text import: text in a numeric column read as text, stop, new sheet or new columns (NonNum), as Origin 2016 | S | done 2026-11-21, measured |
 | [T313](T313-scatter-matrix-measure.md) | Measure Scatter Matrix against Origin (page, grid, tick labels, titles, symbols, tick step) | S | done 2026-11-21 (graphing 35) |

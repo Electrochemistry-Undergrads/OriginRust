@@ -621,6 +621,11 @@ pub enum Action {
     AddColumnsDialog(WindowId),
     /// Column > Add Column to All Sheets... of this workbook's window (T359).
     AddColumnAcross(WindowId),
+    /// Analysis > Repeat Last Analysis (T360) on these columns of `book` (none: the sheet's Y columns).
+    RepeatAnalysis {
+        book: WindowId,
+        columns: Vec<ColumnId>,
+    },
     DeleteColumns(Vec<ColumnId>),
     /// Column > Move Columns: these columns go to the first or last position or one step left or right.
     MoveColumns {

@@ -858,6 +858,12 @@ Next to Find Peaks, Finish.
   peak; with a sloping background the corrected curve never returns to the baseline there. On the rising
   ramp left of the first peak Origin stops at x = 1.1, 0.3 and 0.075 (rows 11, 6 and 3 at 201, 401 and
   801 rows), where the corrected curve is about 1.1 h^2 (h the X step); that rule is not understood.
+- On the rippled data of the `origin_peakchain` test (0.05 + 0.01 x, peaks at 4, 9 and 10.2, ripple
+  0.004 sin(37 x) + 0.003 cos(91 x); `setup-rip.labtalk.txt`, T336) Origin finds four peaks (centres 4,
+  9.05, 9.75 (a ripple top on the valley's shoulder, area 0.0697) and 10.05) with limits 0.65 .. 5.55,
+  5.55 .. 9.7, 9.7 .. 9.8, 9.8 .. 11.85 (constant baseline 0.046037). So the left limit of the first peak
+  runs through the flat rippled stretch to 0.65 while the right limit of the last stops at a ripple
+  minimum (11.85): no single "first local minimum" rule gives both, and the rule is still open.
 - Sheaf's Integrate goal on the same data (`analyze peaks --integrate --baseline minimum`): the same
   centres, heights, FWHM and valley, but limits 0 .. 7.8 and 7.8 .. 20 (Sheaf walks until the corrected
   curve reaches the baseline), so peak 2's area is 2.647 instead of 1.951; one sheet PeakAnalysis1 with

@@ -238,6 +238,8 @@ pub struct SheafApp {
     multi_peak: Option<MultiPeakDialog>,
     subtract_pick: Option<SubtractPickDialog>,
     cv_pick: Option<CvPickDialog>,
+    /// The graph whose Data Reader the Peak Analyzer's anchor picking turned on (T351).
+    anchor_graph: Option<WindowId>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
     export_excel: Option<ExcelExportDialog>,
@@ -444,6 +446,7 @@ impl SheafApp {
             multi_peak: None,
             subtract_pick: None,
             cv_pick: None,
+            anchor_graph: None,
             export: None,
             export_sheet: None,
             export_excel: None,
@@ -5906,6 +5909,49 @@ impl SheafApp {
         }
     }
 
+    /// The Peak Analyzer's "Pick on the graph" anchors (T351): while the window picks, the Data Reader of a graph
+    /// that plots the input is on and its pinned point becomes an anchor on a double-click (outside the window)
+    /// or Enter; the reader goes off again when the picking stops or the window closes.
+    fn anchor_pick_frame(&mut self, ctx: &egui::Context) {
+        let picking = self.analysis.as_ref().and_then(|d| d.anchor_column().filter(|_| d.anchor_picking));
+        let Some(y) = picking else {
+            if let Some(g) = self.anchor_graph.take()
+                && let Some(s) = self.graphs.get_mut(&g)
+            {
+                s.reader = false;
+                s.reader_point = None;
+            }
+            return;
+        };
+        let project = self.doc.project();
+        let shows = |g: &sheaf_core::graph::Graph| {
+            g.layers.iter().enumerate().find_map(|(l, layer)| layer.plots.iter().position(|p| p.y == y).map(|i| (l, i)))
+        };
+        let target = self
+            .anchor_graph
+            .and_then(|id| project.graph(id))
+            .or_else(|| project.graphs().find(|g| shows(g).is_some()))
+            .and_then(|g| shows(g).map(|(l, i)| (g.id, l, i)));
+        let Some((graph, layer, plot)) = target else { return };
+        self.anchor_graph = Some(graph);
+        let rect = self.analysis.as_ref().and_then(|d| d.window_rect);
+        let (enter, double) = ctx.input(|i| {
+            let double = i.pointer.button_double_clicked(egui::PointerButton::Primary)
+                && i.pointer.interact_pos().is_some_and(|p| !rect.is_some_and(|r| r.contains(p)));
+            (i.key_pressed(egui::Key::Enter), double)
+        });
+        let state = self.graphs.entry(graph).or_default();
+        state.reader = true;
+        if (enter || double)
+            && let Some(point) = state.reader_point.filter(|p| p.layer == layer && p.plot == plot)
+            && let Some((xs, ys)) = crate::gadget::plot_xy(project, graph, layer, plot)
+            && let (Some(&x), Some(&v)) = (xs.get(point.row), ys.get(point.row))
+            && let Some(d) = &mut self.analysis
+        {
+            d.pick_anchor(x, v);
+        }
+    }
+
     fn show_sheet(&mut self, book: WindowId, sheet: usize) {
         self.doc.adjust_view(|p| {
             if let Some(b) = p.workbook_mut(book) {
@@ -7204,6 +7250,7 @@ impl SheafApp {
         self.multi_peak_frame(ctx);
         self.subtract_pick_frame(ctx);
         self.cv_pick_frame(ctx);
+        self.anchor_pick_frame(ctx);
         if let Some(d) = &mut self.pivot {
             let book = d.book;
             match d.show(ctx, &mut self.doc) {

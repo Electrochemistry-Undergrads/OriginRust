@@ -811,6 +811,17 @@ finding method of User Defined in the baseline goals, as in Origin. Command line
 [--als-asymmetric F --als-threshold T --als-smoothing S --als-iterations N]`; a dataset is given there as
 `--anchors X1:Y1,...`.
 
+### 11.6a Anchor points picked on the graph (T351, Sheaf's own)
+
+Origin's User Defined baseline lets the user modify and add anchor points on the graph after they are found
+(Origin's help; not measured, it needs the GUI). Sheaf adds a fourth anchor-finding method on the Baseline Mode
+page, "Pick on the graph (Sheaf's own)": Pick on Graph turns on the Data Reader of a graph that plots the
+input (the first input column); a double-click on one of its data points (outside the window) or Enter adds that
+point as an anchor (a second point at the same X is left out); Remove Last, Clear and Stop Picking work on the
+list, and the reader goes off when the picking stops or the window closes. The anchors, sorted by X, are joined as
+the other anchors are (straight lines for the peak goals, the Create Baseline page's method for the baseline
+goals: `ChainBaseline::Anchors`). At least two anchors are needed.
+
 ### 11.7 End Points Weighted, measured but not built (T328)
 
 Measured in Origin 2016 (2026-11-21, `re-workspace/scratch/baseline-als/run-epw.sh NAME STEP FORMULA

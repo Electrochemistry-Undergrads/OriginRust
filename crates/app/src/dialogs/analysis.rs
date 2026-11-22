@@ -457,6 +457,9 @@ enum ChainBaselineKind {
     /// Use Existing Dataset (a mode of the peak goals, an anchor finding method of User Defined in
     /// the baseline goals, T318): the anchors are the points of a chosen column against its X.
     Dataset,
+    /// User Defined with the anchor points picked on a graph of the input with the Data Reader (Sheaf's own way
+    /// of Origin's "Modify/Add" anchors; T351).
+    Picked,
     /// Asymmetric Least Squares Smoothing (T318).
     Als,
 }
@@ -850,6 +853,13 @@ pub struct AnalysisDialog {
     chain_minima: usize,
     /// User Defined, 2nd Derivative: Origin's Number of Points to Find (8).
     chain_points: usize,
+    /// The anchor points picked on the graph (T351), in picking order.
+    chain_picked: Vec<(f64, f64)>,
+    /// True while the anchors are picked on the graph: the application turns the graph's Data Reader on and hands
+    /// the picked points to [`AnalysisDialog::pick_anchor`].
+    pub anchor_picking: bool,
+    /// Where the window was drawn last, so a double-click on it does not pick an anchor.
+    pub window_rect: Option<egui::Rect>,
     /// Create Baseline page: Origin's Interpolation Method (Line, Spline, BSpline).
     chain_interp: InterpMethod,
     /// Constant baseline: a value of the data, or `None` for the custom number.
@@ -1571,6 +1581,9 @@ impl AnalysisDialog {
             chain_baseline: ChainBaselineKind::Constant,
             chain_minima: 5,
             chain_points: 8,
+            chain_picked: Vec::new(),
+            anchor_picking: false,
+            window_rect: None,
             chain_interp: InterpMethod::Linear,
             chain_const: Some(BaselineStat::Minimum),
             chain_custom_y: 0.0,
@@ -1808,6 +1821,7 @@ impl AnalysisDialog {
                 let shown = match self.chain_baseline {
                     ChainBaselineKind::Minima => ChainBaselineKind::SecondDerivative,
                     ChainBaselineKind::Dataset if baseline_goal => ChainBaselineKind::SecondDerivative,
+                    ChainBaselineKind::Picked => ChainBaselineKind::SecondDerivative,
                     k => k,
                 };
                 let name = modes.iter().find(|m| m.1 == Some(shown)).map_or("", |m| m.0);
@@ -1867,7 +1881,10 @@ impl AnalysisDialog {
                         });
                         ui.weak("Close to 0 for positive peaks, close to 1 for negative ones; larger smoothing gives a stiffer baseline.");
                     }
-                    ChainBaselineKind::Minima | ChainBaselineKind::SecondDerivative | ChainBaselineKind::Dataset => {
+                    ChainBaselineKind::Minima
+                    | ChainBaselineKind::SecondDerivative
+                    | ChainBaselineKind::Dataset
+                    | ChainBaselineKind::Picked => {
                         ui.label(egui::RichText::new("Anchor Points Finding").strong());
                         ui.horizontal_top(|ui| {
                             ui.label("Method");
@@ -1890,6 +1907,11 @@ impl AnalysisDialog {
                                     ChainBaselineKind::Minima,
                                     "Lowest point of each stretch (Sheaf's own)",
                                 );
+                                ui.radio_value(
+                                    &mut self.chain_baseline,
+                                    ChainBaselineKind::Picked,
+                                    "Pick on the graph (Sheaf's own)",
+                                );
                             });
                         });
                         if self.chain_baseline == ChainBaselineKind::SecondDerivative {
@@ -1906,6 +1928,26 @@ impl AnalysisDialog {
                             });
                         } else if self.chain_baseline == ChainBaselineKind::Dataset {
                             dataset_combo(ui, &self.reference_choices, &mut self.chain_dataset);
+                        } else if self.chain_baseline == ChainBaselineKind::Picked {
+                            ui.label(format!("Anchor points picked: {}", self.chain_picked.len()));
+                            ui.horizontal(|ui| {
+                                let label = if self.anchor_picking { "Stop Picking" } else { "Pick on Graph" };
+                                if ui.button(label).clicked() {
+                                    self.anchor_picking = !self.anchor_picking;
+                                }
+                                if ui
+                                    .add_enabled(!self.chain_picked.is_empty(), egui::Button::new("Remove Last"))
+                                    .clicked()
+                                {
+                                    self.chain_picked.pop();
+                                }
+                                if ui.add_enabled(!self.chain_picked.is_empty(), egui::Button::new("Clear")).clicked() {
+                                    self.chain_picked.clear();
+                                }
+                            });
+                            if self.anchor_picking {
+                                ui.weak("On a graph of the input: click a data point, then double-click it or press Enter to add an anchor.");
+                            }
                         } else {
                             ui.horizontal(|ui| {
                                 ui.label("Anchor points: the lowest point of each of");
@@ -2026,6 +2068,15 @@ impl AnalysisDialog {
                 let points = self.chain_dataset_points.as_ref().map(|(_, p)| p.clone()).unwrap_or_default();
                 ChainBaseline::Anchors(points, method)
             }
+            ChainBaselineKind::Picked => {
+                let method = match self.chain_goal {
+                    ChainGoal::CreateBaseline | ChainGoal::SubtractBaseline => self.chain_interp,
+                    _ => InterpMethod::Linear,
+                };
+                let mut points = self.chain_picked.clone();
+                points.sort_by(|a, b| a.0.total_cmp(&b.0));
+                ChainBaseline::Anchors(points, method)
+            }
             ChainBaselineKind::SecondDerivative => {
                 // The baseline goals join the anchors with the Create Baseline page's method; the
                 // peak goals with straight lines.
@@ -2036,6 +2087,34 @@ impl AnalysisDialog {
                 ChainBaseline::SecondDerivative { points: self.chain_points, method }
             }
         }
+    }
+
+    /// The Y column the anchors are picked for: the first input.
+    pub fn anchor_column(&self) -> Option<ColumnId> {
+        (self.kind == AnalysisKind::PeakChain && self.chain_baseline == ChainBaselineKind::Picked)
+            .then(|| self.columns.first().copied())
+            .flatten()
+    }
+
+    /// Adds a point picked on the graph as an anchor (T351); a point at an X already picked is left out.
+    pub fn pick_anchor(&mut self, x: f64, y: f64) -> bool {
+        if !(x.is_finite() && y.is_finite()) || self.chain_picked.iter().any(|p| p.0 == x) {
+            return false;
+        }
+        self.chain_picked.push((x, y));
+        true
+    }
+
+    /// The anchors picked so far (for tests).
+    #[cfg(test)]
+    pub fn picked_anchors(&self) -> &[(f64, f64)] {
+        &self.chain_picked
+    }
+
+    /// Chooses the Peak Analyzer's "Pick on the graph" anchors (for tests).
+    #[cfg(test)]
+    pub fn choose_picked_anchors(&mut self) {
+        self.chain_baseline = ChainBaselineKind::Picked;
     }
 
     /// Chooses Normalize's reference methods (T260): the statistic match, or the cell when `stat` is
@@ -2052,6 +2131,9 @@ impl AnalysisDialog {
         if self.kind == AnalysisKind::PeakChain {
             match self.chain_baseline {
                 ChainBaselineKind::Als => self.chain_als.check()?,
+                ChainBaselineKind::Picked if self.chain_picked.len() < 2 => {
+                    return Err("pick at least two anchor points on the graph".to_string());
+                }
                 ChainBaselineKind::Dataset if self.chain_dataset_points.as_ref().is_none_or(|(_, p)| p.len() < 2) => {
                     return Err("Use Existing Dataset needs a column with at least two points".to_string());
                 }
@@ -4340,7 +4422,7 @@ impl AnalysisDialog {
         let pos = (avail.center() - egui::vec2(width, 520.0) / 2.0).max(avail.min);
         let title = self.window_title();
         let filter_fs = self.auto_sample_frequency(doc.project());
-        egui::Window::new(title)
+        let window = egui::Window::new(title)
             .id(egui::Id::new("analysis"))
             .open(&mut open)
             .default_pos(pos)
@@ -4432,6 +4514,7 @@ impl AnalysisDialog {
                     );
                 });
             });
+        self.window_rect = window.map(|r| r.response.rect);
         self.picker_window(ctx, doc.project());
 
         // The preview follows the options while Auto Preview is ticked, or when Preview is pressed.

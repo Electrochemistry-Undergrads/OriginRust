@@ -3449,6 +3449,24 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Stationarity tests: the augmented Dickey-Fuller statistic (MacKinnon asymptotic critical values) and the KPSS
+    /// statistic with its table probability, for each --y column.
+    Stationarity {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// ADF deterministic terms: constant, trend or none.
+        #[arg(long, default_value = "constant")]
+        adf_terms: String,
+        /// ADF lagged differences (default: chosen by AIC).
+        #[arg(long)]
+        adf_lags: Option<usize>,
+        /// KPSS null hypothesis: level or trend.
+        #[arg(long, default_value = "level")]
+        kpss_null: String,
+        /// KPSS autocovariance lags (default ceil(12 (n/100)^(1/4))).
+        #[arg(long)]
+        kpss_lags: Option<usize>,
+    },
     /// Seasonal decomposition: trend (centred moving average), seasonal indices and residual of each --y column,
     /// additive or multiplicative, with graphs.
     Decompose {

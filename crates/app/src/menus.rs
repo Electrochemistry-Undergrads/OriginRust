@@ -2132,6 +2132,7 @@ fn statistics_menu() -> Vec<Entry> {
         item("M&anhattan Plot...", Cmd::Analyze(AnalysisKind::Manhattan)),
         item("Au&tocorrelation...", Cmd::Analyze(AnalysisKind::Acf)),
         item("Seasonal Decomposit&ion...", Cmd::Analyze(AnalysisKind::Decompose)),
+        item("Stationarity Tests (ADF, &KPSS)...", Cmd::Analyze(AnalysisKind::Stationarity)),
         item("Rar&e Event Chart (G/T)...", Cmd::Analyze(AnalysisKind::RareChart)),
         item("Process Capabilit&y...", Cmd::Analyze(AnalysisKind::Capability)),
         item("Sta&bility Study...", Cmd::Analyze(AnalysisKind::Stability)),

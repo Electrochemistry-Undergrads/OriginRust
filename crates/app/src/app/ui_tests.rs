@@ -4341,6 +4341,26 @@ fn plot_details_symbol_tab_offers_origins_shapes_interiors_and_fill_colour() {
 }
 
 #[test]
+fn the_group_tab_chooses_one_of_origins_named_colour_lists() {
+    let mut h = start(vec![data_file("pd-colorlist")]);
+    let (_, graph) = window_ids(&h);
+    h.state_mut().panels.set_pinned(PanelId::Objects, true);
+    settle(&mut h);
+    let plots = project(&h).graph(graph).unwrap().layers[0].plots.clone();
+    let at = in_right_panel(&h, &project(&h).plot_label(&plots[0]));
+    double_click_at(&mut h, at);
+    assert!(h.state().graph_props.is_some(), "Plot Details is open");
+    click(&mut h, "Group");
+    choose_recalc(&mut h, "Default", "Q03 Rainbow7");
+    click(&mut h, "OK");
+    let layer = &project(&h).graph(graph).unwrap().layers[0];
+    assert_eq!(layer.palette.list.as_deref(), Some("Q03 Rainbow7"));
+    let colors: Vec<sheaf_core::Color> = layer.plots.iter().map(|q| q.line.color).collect();
+    let want = sheaf_core::template::color_list("Q03").unwrap().1;
+    assert_eq!(colors, want[..colors.len()], "the plots take the list's colours in order");
+}
+
+#[test]
 fn a_dependent_group_shares_a_change_and_an_independent_one_does_not() {
     let mut h = start(vec![data_file("pd-group")]);
     let (_, graph) = window_ids(&h);

@@ -2923,6 +2923,11 @@ impl Layer {
 pub struct Palette {
     pub colors: Vec<Color>,
     pub mode: PaletteMode,
+    /// The named colour list `colors` was taken from (Origin's Details of the Line Color increment,
+    /// for example `Q03 Rainbow7`; see [`crate::template::color_list`]); `None` for the default
+    /// list or colours chosen one by one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub list: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -3044,7 +3049,11 @@ mod tests {
     }
 
     fn pal(mode: PaletteMode) -> Palette {
-        Palette { colors: vec![Color::rgb(0, 0, 0), Color::rgb(100, 100, 100), Color::rgb(200, 200, 200)], mode }
+        Palette {
+            colors: vec![Color::rgb(0, 0, 0), Color::rgb(100, 100, 100), Color::rgb(200, 200, 200)],
+            mode,
+            list: None,
+        }
     }
 
     #[test]
@@ -3291,7 +3300,7 @@ mod tests {
     #[test]
     fn an_automatic_color_fills_a_column_plot_and_leaves_its_outline() {
         let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
-        layer.palette = Palette { colors: vec![Color::BLACK, Color::RED], mode: PaletteMode::Cycle };
+        layer.palette = Palette { colors: vec![Color::BLACK, Color::RED], mode: PaletteMode::Cycle, list: None };
         let plot = |kind: PlotKind| Plot {
             x: None,
             y: ColumnId(1),
@@ -3338,7 +3347,8 @@ mod tests {
     #[test]
     fn group_increments_run_from_the_first_plot_and_dependent_edits_reach_every_plot() {
         let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
-        layer.palette = Palette { colors: vec![Color::BLACK, Color::RED, Color::BLUE], mode: PaletteMode::Cycle };
+        layer.palette =
+            Palette { colors: vec![Color::BLACK, Color::RED, Color::BLUE], mode: PaletteMode::Cycle, list: None };
         let plot = Plot {
             x: None,
             y: ColumnId(1),
@@ -3753,8 +3763,11 @@ mod style_tests {
 
     fn layer_of(n: u64) -> Layer {
         let mut layer = Template::Line.new_graph(WindowId(1), "G").layers.remove(0);
-        layer.palette =
-            Palette { colors: vec![Color::BLACK, Color::RED, Color::BLUE, Color::WHITE], mode: PaletteMode::Cycle };
+        layer.palette = Palette {
+            colors: vec![Color::BLACK, Color::RED, Color::BLUE, Color::WHITE],
+            mode: PaletteMode::Cycle,
+            list: None,
+        };
         layer.plots = (1..=n).map(plot).collect();
         layer
     }

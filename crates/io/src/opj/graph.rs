@@ -200,7 +200,8 @@ fn build_layer(
     notes: &mut Vec<String>,
 ) -> Layer {
     let mut out = template.clone();
-    out.palette = Palette { colors: (0..PALETTE.len()).map(palette_color).collect(), mode: PaletteMode::Cycle };
+    out.palette =
+        Palette { colors: (0..PALETTE.len()).map(palette_color).collect(), mode: PaletteMode::Cycle, list: None };
     let h = &layer.header;
 
     // Frame.

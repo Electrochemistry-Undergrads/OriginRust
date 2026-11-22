@@ -5607,6 +5607,37 @@ fn the_statistics_menu_runs_a_quantile_regression() {
     assert_eq!(h.state().doc.undo_label(), Some("Quantile regression"));
 }
 
+/// Column > Add Column to All Sheets... (T359): the column and its formula land in every sheet of the workbook,
+/// computed from each sheet's own data, as one undo step.
+#[test]
+fn add_column_to_all_sheets_reaches_every_sheet_of_the_workbook() {
+    let data = csv_file("across", "ab", "x,y\n1,1\n2,2\n3,3\n");
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - ab.csv");
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Second sheet", |p| {
+        p.workbook_mut(book).unwrap().sheets.push(sheaf_core::worksheet::Worksheet::new("Second"));
+        p.add_column(book, 1, Designation::X, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+        p.add_column(book, 1, Designation::Y, ColumnData::numeric(vec![10.0, 20.0])).unwrap();
+    });
+    settle(&mut h);
+    menu_path(&mut h, &["Column", "Add Column to All Sheets..."]);
+    assert!(h.state().column_across.is_some() && has_label(&h, "Every sheet of every workbook"));
+    {
+        let d = h.state_mut().column_across.as_mut().unwrap();
+        d.long_name = "Twice".into();
+        d.formula = "col(B)*2".into();
+    }
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().column_across.is_none());
+    assert_eq!(h.state().doc.undo_label(), Some("Add column to all sheets"));
+    let b = project(&h).workbook(book).unwrap();
+    let last = |s: usize| b.sheets[s].columns.last().unwrap().clone();
+    assert_eq!((last(0).long_name.as_str(), last(0).numeric().unwrap()), ("Twice", &[2.0, 4.0, 6.0][..]));
+    assert_eq!(last(1).numeric().unwrap(), [20.0, 40.0]);
+}
+
 /// Worksheet > Time Series Pivot... (T358): the values per day of their date-time X, one undo step.
 #[test]
 fn the_worksheet_menu_makes_a_time_series_pivot() {

@@ -7,6 +7,7 @@
 //! Lengths in the graph model are in points (1 pt = 1/72 inch) unless a field
 //! name says otherwise.
 
+pub mod across;
 pub mod analysis;
 pub mod analysis_link;
 pub mod audit;

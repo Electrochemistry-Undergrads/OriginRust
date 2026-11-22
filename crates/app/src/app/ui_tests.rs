@@ -2067,11 +2067,14 @@ fn trace_interpolation_opens_from_mathematics_and_writes_a_sheet_with_its_own_x(
     menu_path(&mut h, &["Analysis", "Mathematics", "Trace Interpolation..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
+    // T326: as Origin's interp1trace, an X and a Y column for each input at the end of the input sheet.
     let b = project(&h).workbooks().next().unwrap();
-    let sheet = b.sheets.iter().find(|s| s.name.starts_with("TraceInterp")).expect("a result sheet");
-    assert_eq!(sheet.columns.len(), 4, "an X and a Y column for each of the two inputs");
-    assert_eq!(sheet.columns[0].numeric().unwrap().len(), 100, "Origin's default number of points");
-    assert!(sheet.columns[1].comments.starts_with("linear trace interpolation of"));
+    let added: Vec<&sheaf_core::Column> =
+        b.sheets[0].columns.iter().filter(|c| c.long_name.starts_with("Interpolated")).collect();
+    assert_eq!(added.len(), 4, "an X and a Y column for each of the two inputs");
+    assert_eq!(added[0].long_name, "InterpolatedX1");
+    assert_eq!(added[0].numeric().unwrap().len(), 100, "Origin's default number of points");
+    assert!(added[1].comments.starts_with("Linear trace interp of"));
     assert_eq!(h.state().doc.undo_label(), Some("Trace interpolation"));
 }
 
@@ -5032,9 +5035,14 @@ fn csv_file(tag: &str, name: &str, text: &str) -> PathBuf {
 
 /// The result sheet that the last tool added to the first workbook: its name and the numbers of a column.
 fn result_column(h: &Harness<'static, SheafApp>, column: &str) -> (String, Vec<f64>) {
+    // The last sheet that has the column: a result sheet, or the input sheet for tools that write there.
     let b = project(h).workbooks().next().unwrap();
-    let ws = b.sheets.last().unwrap();
-    let c = ws.columns.iter().find(|c| c.long_name == column).unwrap_or_else(|| panic!("no column {column}"));
+    let (ws, c) = b
+        .sheets
+        .iter()
+        .rev()
+        .find_map(|ws| ws.columns.iter().find(|c| c.long_name == column).map(|c| (ws, c)))
+        .unwrap_or_else(|| panic!("no column {column}"));
     (ws.name.clone(), c.numeric().unwrap().to_vec())
 }
 
@@ -5939,8 +5947,9 @@ fn the_mathematics_menu_finds_the_intersection_of_two_curves() {
     assert!(has_label(&h, "Also list the points where the curves touch without crossing"));
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none());
+    // T322: at the end of the input sheet, as Origin's intersect writes it.
     let (sheet, x) = result_column(&h, "Intersection X1");
-    assert!(sheet.starts_with("Intersect"), "{sheet}");
+    assert_eq!(sheet, project(&h).workbooks().next().unwrap().sheets[0].name, "the input sheet");
     assert_eq!(x.len(), 1);
     assert!((x[0] - 10.0 / 3.0).abs() < 1e-9, "{x:?}");
     assert_eq!(h.state().doc.undo_label(), Some("Intersect"));
@@ -6017,8 +6026,9 @@ fn from_a_graph_the_curve_tools_start_with_the_plots_of_the_layer() {
     assert!(h.state().analysis.is_some());
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none(), "it ran with the two plots");
+    // T322: Intersect writes into the input sheet, as Origin's intersect.
     let (sheet, x) = result_column(&h, "Intersection X1");
-    assert!(sheet.starts_with("Intersect"), "{sheet}");
+    assert_eq!(sheet, project(&h).workbooks().next().unwrap().sheets[0].name);
     assert!((x[0] - 10.0 / 3.0).abs() < 1e-9, "{x:?}");
 }
 

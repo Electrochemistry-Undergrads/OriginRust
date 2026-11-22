@@ -5742,8 +5742,25 @@ ticked on a new graph). Sheaf reads them as page-wide switches of every layer:
 - Each is ticked when every layer shows its labels (or data), and each click is one undo step
   ("Show Labels", "Show Data"). Older files read `show_labels` as on; the `.opj` written here does
   not hold it (its save warns that the layer's Display tab was not written).
-- Active Layer Indicator, Axis Layer Icons, Object Grid, Layer Grid, Frame, Master Items on Screen and
-  Show Data Info stay grey (22.7).
+- At the end of T177, seven items were still grey. The Active Layer Indicator follows in 22.9.
+
+### 22.9 View > Show > Active Layer Indicator (T66, 2026-11-21)
+
+Origin's guide describes a per-graph highlight of the active layer's axes. The
+original Origin 2016 menu inspection in 22.3 found the control unchecked in a
+new graph. A synthetic OriginPro 2016 probe returned an undefined value for
+`page.ali`, a setting listed in current LabTalk documentation. Live activation
+of the 2016 menu item and its persistence remain unverified.
+[Origin layer guide](https://docs.originlab.com/origin-help/customize-layer-element/) ·
+[LabTalk page reference](https://docs.originlab.com/labtalk/ref/page-obj/)
+
+Sheaf stores the graph-window setting in its project and toggles it as one undo
+step. The graph view highlights the active layer's rendered primary Cartesian
+axis positions with the app's selection color. Hidden axes and hidden layers
+produce no highlight, and gaps at axis breaks stay open. The overlay follows
+layer activation, axis placement, pan and zoom. It belongs to the graph editor,
+so exports and printed output use the same graph scene. Indicators for
+non-Cartesian axes and for opposite axes are outside this implementation.
 
 ## 23. View > Zoom All and the Tools-bar Scale In / Scale Out (T69, measured 2026-11-15, Origin 2016)
 
@@ -6434,39 +6451,51 @@ graphs of 2, 3 and 4 variables; probes in `re-workspace/scratch/t313`).
   - The graph is ordinary scatter, histogram and empty layers with text labels, so `.sheaf` and `.opj` save it
     with no new fields.
 
-## 36. Wind rose: Plot > Specialized > Wind Rose - Binned Data, Wind Rose - Raw Data (T113, 2026-11-16, **not measured**)
+## 36. Wind rose: Plot > Specialized > Wind Rose - Binned Data, Wind Rose - Raw Data (T113, 2026-11-16; Raw Data measured by T324, 2026-11-21)
 
-Origin 2016 lists both items under Plot > Specialized (seen in the menu on 2026-11-16). The probes could
-not run: Origin's COM class was unregistered on the test machine (REGDB_E_CLASSNOTREG). This section
-therefore describes Sheaf's version, built from Origin's documented behaviour. Measure it when
-automation works again.
+**Origin 2016, Wind Rose - Raw Data (`plot_windrose`, measured through its menu on 20 rows, speeds also x3 and x0.1;
+probes in `re-workspace/scratch/t324`):**
+
+- Options and defaults: From Minimum 0, To Maximum 337.5, Number of Direction Sectors 16 (4, 8 or 16), Direction
+  Labels N-NNE-NE... (16), speeds automatic (Step by Increment or Intervals), Orientation Direction (Blowing
+  From), Quantity to Compute **Count** (or Percent Frequency), Subtotal Count off, Output Worksheet new.
+- It writes a sheet WindRose1 into the book: Bin Centers of the direction column (0, 22.5, ..., 337.5), one Count
+  column per speed band (its comment the band, "0 - 2"), and Calm.
+- Sectors are centred on 0, 22.5, ...; a direction on a boundary goes to the next sector (11.25 counts under
+  22.5).
+- Speed bands: the step is the 1-2-5 value nearest a fifth of the top speed (8.5 gives 2, 25.5 gives 5, 0.85
+  gives 0.2). The bands run [k s, (k + 1) s) up to the first multiple above the top speed, then an open band
+  ">= that" (8.5: 0 - 2, ..., 8 - 10, >= 10; 25.5: 0 - 5, ..., 25 - 30, >= 30).
+- The wedges are counts, piled from the slowest band out. Band colours black, yellow, red, blue, green, cyan,
+  with black edges. The legend lists the fastest band first. The circle is labelled N, NNE, ... clockwise
+  from north. The radius axis runs 0 to 4.5 for a pile of 4, drawn left of the circle. The page also has
+  "Calms: 0" and the direction column's name at the bottom left.
+
+**Sheaf** (Raw Data copies the measured bands, counts and colours):
 
 - **Layer:** a wind rose is a polar layer on the polar page (graphing 14.18). North (0 degrees) points up,
   the angles run clockwise in degrees, and the radius is the frequency.
 - **Plots:** one plot per speed band, so the legend lists the bands with filled swatches. In each direction
   sector a band is a wedge, piled on the bands plotted before it in the same layer.
-- **Colours:** bands are blue, cyan, green, yellow, orange and red, with black 0.5 pt edges.
-- **Binned Data:**
+- **Colours:** bands are black, yellow, red, blue, green and cyan (Origin's), with black 0.5 pt edges.
+- **Binned Data** (measured by T327: Origin 2016 opens no window and plots the selection at once; eight
+  directions 45 degrees apart with three frequency columns gave wedges 22.5 degrees wide, piled in column order,
+  coloured black, yellow, red, the radius axis 0 to 6.5 for a pile of 6, compass labels, the legend last column
+  first):
   - The X column holds the sector directions in degrees. A text X column, such as N, NNE, ..., spreads
     its rows evenly round the circle.
   - Each selected Y column is one band's frequencies, piled in selection order.
-  - Sectors are 360 / rows wide.
-- **Raw Data:**
-  - The X column holds directions in degrees; the one selected Y column holds the speeds.
-  - There are 16 sectors of 22.5 degrees, centred on 0, 22.5, ... (a direction goes to the nearest
-    centre).
-  - The bands are 0 to s, s to 2s, ..., up to 6 of them. s is the smallest 1-2-5 step of which 6 cover the
-    top speed, and only as many bands as the top speed needs are made. The top band includes its upper
-    edge.
-  - A wedge is the percentage of all rows (with a direction and a speed) that fall in its sector and band.
+  - Wedges are 22.5 degrees wide as Origin's (360 / rows when there are more than 16 rows, Sheaf's choice).
+- **Raw Data:** the X column holds directions in degrees; the one selected Y column holds the speeds. 16
+  sectors and Origin's speed bands (above, `windrose::raw_bands`); a wedge is the count of the rows in its
+  sector and band.
 - **Sheaf internals:** plot kind `wind_rose` with `PlotDecor::wind_rose` (sectors, the band's speed range);
   templates `wind-rose-binned` and `wind-rose-raw`. The .opj writer saves the columns as scatter plots,
   with a warning.
-- **To measure:**
-  - Origin's dialogs, if any.
-  - Its default sector count and speed bins.
-  - Its colours, and whether it shows percent or counts.
-  - Its angle labels: degrees or compass names.
+- **Legend:** the fastest band (the last plot) first, as Origin's: the legend text is `\l(n) %(n)` down to
+  `\l(1) %(1)`.
+- **Left:** Origin's WindRose1 sheet, the Calm count and note, compass labels on the circle, and the options
+  window (sectors, Percent Frequency, Blowing To).
 
 ## 37. Smith chart: Plot > Specialized > Smith Chart (T115, 2026-11-16, **not measured**)
 
@@ -6563,16 +6592,24 @@ this follows Origin's documented behaviour.
 - **To measure:** Origin's marker look, whether markers are per plot or per layer, and how markers are
   moved (drag or click).
 
-## 41. Add Function Graph: Graph > Add Function Graph... (T119, 2026-11-16, **not measured**)
+## 41. Add Function Graph: Graph > Add Function Graph... (T119, 2026-11-16; partly measured by T322, 2026-11-21)
 
-Origin 2016's Graph menu has Add Function Graph.... It could not be probed (Origin's COM class
-unregistered, see 36), so this follows Origin's documented behaviour.
+**Origin 2016 (measured through its menu, T322):** Graph > Add Function Graph... (in the expanded Graph menu, after
+Add Error Bars) adds a function plot F1 to the active layer and opens Plot Details on its Function tab:
+Points 100; From and To greyed, with **Auto** ticked, so the curve follows the X axis range; Y(x) = (empty); a
+Before Formula Script box; Plot Type Line (or Scatter, Line + Symbol, Column / Bar); a Workbook button that turns
+the function into worksheet data; tabs Line, Function, Drop Lines and Label. Origin keeps the curve as a function
+dataset. What its OK draws was not read back (the collapsible menu moved the item between runs).
+
+**Sheaf:**
 
 - **The window "Add Function Graph":**
   - y(x) = an expression in Sheaf's expression language (`docs/spec/expression-language.md`), with the
     variable `x` (default `sin(x)`).
-  - From and To: the X range (default 0 to 10).
-  - Points: the number of evenly spaced points (default 100, at least 2).
+  - From and To: the X range; from Graph > Add Function Graph the range the layer's X axis shows (as Origin's Auto,
+    but fixed once added), from File > New > Function Plot 0 to 10.
+  - Points: the number of evenly spaced points (default 100 as Origin's, at least 2).
+  - Plot Type: Line (default), Scatter, Line + Symbol or Column / Bar, as Origin's.
 - **OK:** samples the function and adds its curve as a line plot to the active layer, one undo step.
   - An expression error is reported, and the window stays open.
   - A point where the function has no value is missing in the curve.
@@ -6580,8 +6617,8 @@ unregistered, see 36), so this follows Origin's documented behaviour.
   new workbook, `FuncN` (long name "y = <expression>"), with an X column `x` and a Y column whose long name
   is the expression. The curve is therefore an ordinary plot that saves, exports and edits like any other.
 - **Sheaf internals:** `sheaf_core::function_graph::sample`, `Project::add_function_graph`.
-- **To measure:** Origin's window and its defaults, whether the curve follows the X axis range, and its
-  line style.
+- **Left:** a curve that follows the X axis as it changes (Origin's Auto), Before Formula Script, the function as
+  a dataset of its own.
 
 
 - **File > New > Function Plot (T213, not measured):** opens the same window for a graph that does

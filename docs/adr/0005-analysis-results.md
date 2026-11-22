@@ -79,3 +79,29 @@ write a table always use a new sheet.
 replaces the columns of its own earlier run (`analyze_linked_into`); all runs of one window are one undo step
 (`Document::apply_merging` with a token per window). Auto Apply runs the tool whenever the request, the output
 or the Recalculate choice differs from the last run; OK after an unchanged Auto Apply run just closes.
+
+## Addendum 2026-11-21: tools that write where Origin writes (T300, T302, T321, T322, T326)
+
+The owner's standing rule is to copy Origin when unsure. Measurements in Origin 2016 showed that
+several tools put their results at the **end of the input sheet** with numbered long names, and
+Sheaf now does the same for them, departing from points 3 and 5 above:
+
+- Normalize Columns (`rnormalize`, T300): `Normalized1`, `Normalized2`, ..., each with its source's
+  designation, comment "<method> of <column>".
+- Interpolate (`interp1xy`, `interp1`, T302): one Y column per input, `Interpolated Y1`, the even X grid
+  kept as the column's sampling interval (no X column).
+- Reduce Duplicate X Data (`reducedup`, T321): `ReduceDupX1` (X) and `ReduceDupY1` (Y).
+- Intersect (`intersect`, T322): `Intersection X1` (X) and `Intersection Y1` (Y), for the default output.
+- Trace Interpolation (`interp1trace`, T326): `InterpolatedX1` (X) and `InterpolatedY1` (Y), for the
+  default output.
+
+The numbers go on after the highest one already in the sheet. A column with a sampling interval is
+analysed and drawn at its interval (T304). When a linked result is run again, a numbered label keeps
+its number (T322). The window's "New sheet" output still writes a sheet for Intersect and Trace
+Interpolation.
+
+**Not changed (owner to decide, T329):** Origin's smooth, differentiate and integ1 also write at the
+end of the sheet (`Smoothed Y1` "3 pts AAv smooth of B", `Derivative Y1` "1st derivative of B",
+`Integrated X1`/`Integrated Y1`), and write an X copy first (`Smoothed X1`) when the nearest X column
+to the left would not be the input's X. Sheaf's one-value-per-row tools still insert beside their
+source as point 3 says. See `docs/tasks/T329-adr5-origin-placement.md`.

@@ -60,7 +60,9 @@ fn intersect_needs_two_curves_and_lists_the_point() {
         sheaf(&["analyze", "intersect", data.to_str().unwrap(), "-y", "up,down", "--export", export.to_str().unwrap()]);
     assert!(ok, "stderr: {stderr}");
     assert!(stdout.contains("1 point"), "{stdout}");
-    assert!(std::fs::read_to_string(&export).unwrap().lines().any(|r| r.starts_with("2,2")));
+    // T322: the columns go to the end of the input sheet: row 1 is x, up, down, third, then 2, 2.
+    let text = std::fs::read_to_string(&export).unwrap();
+    assert!(text.lines().any(|r| r.ends_with(",2,2")), "{text}");
 }
 
 #[test]
@@ -104,12 +106,12 @@ fn xyz_area_prints_the_surface_area_of_the_x_y_z_columns() {
 }
 
 #[test]
-fn average_on_a_cycle_is_refused_unless_the_curves_share_their_x() {
+fn average_on_a_cycle_is_sorted_by_x_or_averaged_row_by_row_on_a_shared_x() {
     let dir = scratch("cycle");
-    // Two scans with their own, turning X: refused with a hint to choose the rows of one sweep.
+    // Two scans with their own, turning X: the turning one is sorted by X, as Origin's avecurves (T325).
     let data = file(&dir, "x1,a,x2,b\n,,,\n0,0,0,0\n1,1,0.5,1\n0,2,1,2\n");
     let (ok, _, stderr) = sheaf(&["analyze", "average", data.to_str().unwrap(), "-y", "a,b"]);
-    assert!(!ok && stderr.contains("turn back"), "{stderr}");
+    assert!(ok, "{stderr}");
     // The same scans on a shared X are averaged row by row, turning included.
     let shared = file(&dir, "x,a,b\n,,\n0,0,2\n1,1,3\n0,2,4\n");
     let (ok, stdout, stderr) = sheaf(&["analyze", "average", shared.to_str().unwrap(), "--x", "same"]);

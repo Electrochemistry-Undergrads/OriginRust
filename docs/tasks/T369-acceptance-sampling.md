@@ -19,4 +19,4 @@ workbook and an OC graph. Checked against scipy, not measured in Origin.
 ## Left
 
 - Double, multiple, sequential and variables plans; hypergeometric (type A) curves; ISO 2859 / MIL-STD-105E
-  tables; an MCP tool; Origin's own layout.
+  tables; Origin's own layout. (MCP: `analyze` with tool `acceptance` puts the book and graph in the session project.)

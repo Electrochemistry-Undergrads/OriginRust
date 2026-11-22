@@ -1447,6 +1447,30 @@ fn quantile_regression_runs_from_the_command_line() {
     assert!(!ok && err.contains("between 0 and 1"), "{err}");
 }
 
+/// Change point analysis (spec `statistics.md` section 30, T346): each --y column is a series.
+#[test]
+fn change_point_analysis_runs_from_the_command_line() {
+    let dir = scratch("changepoint");
+    let path = dir.join("cp.csv");
+    let mut text = String::from("t,v\n");
+    for i in 0..60 {
+        let level = if i < 25 { 1.0 } else { 6.0 };
+        text.push_str(&format!("{i},{}\n", level + 0.2 * (f64::from(i * i) * 0.77).sin()));
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "changepoint", file, "--y", "v"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("1 change point(s)") && out.contains("= 25") && out.contains("ChangePoint1"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "changepoint", file, "--y", "v", "--change", "meanvar", "--penalty", "30", "--no-graph"]);
+    assert!(ok && out.contains("penalty 30 per change"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "changepoint", file, "--y", "v", "--penalty", "huge"]);
+    assert!(!ok && err.contains("--penalty"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "changepoint", file, "--y", "v", "--change", "slope"]);
+    assert!(!ok && err.contains("--change"), "{err}");
+}
+
 /// ROC curve (spec `statistics.md` section 19): the --y columns are the test variables, the state column last.
 #[test]
 fn roc_curve_runs_from_the_command_line() {

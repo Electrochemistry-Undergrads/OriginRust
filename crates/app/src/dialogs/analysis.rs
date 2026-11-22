@@ -173,6 +173,8 @@ pub enum AnalysisKind {
     Decompose,
     /// Statistics > Stationarity Tests (T372; options in `multivariate_options.rs`).
     Stationarity,
+    /// Statistics > Exponential Smoothing Forecast (T374; options in `multivariate_options.rs`).
+    ExpSmooth,
     /// Statistics > Rare Event Chart (G/T) (T364; options in `multivariate_options.rs`).
     RareChart,
     /// Statistics > Process Capability (T365; options in `multivariate_options.rs`).
@@ -324,6 +326,7 @@ impl AnalysisKind {
             AnalysisKind::Acf => "Autocorrelation...",
             AnalysisKind::Decompose => "Seasonal Decomposition...",
             AnalysisKind::Stationarity => "Stationarity Tests (ADF, KPSS)...",
+            AnalysisKind::ExpSmooth => "Exponential Smoothing Forecast...",
             AnalysisKind::RareChart => "Rare Event Chart (G/T)...",
             AnalysisKind::Capability => "Process Capability...",
             AnalysisKind::Stability => "Stability Study...",
@@ -430,6 +433,7 @@ impl AnalysisKind {
             "acf" => AnalysisKind::Acf,
             "decompose" => AnalysisKind::Decompose,
             "stationarity" => AnalysisKind::Stationarity,
+            "forecast" => AnalysisKind::ExpSmooth,
             "rarechart" => AnalysisKind::RareChart,
             "capability" => AnalysisKind::Capability,
             "stability" => AnalysisKind::Stability,
@@ -2317,6 +2321,7 @@ impl AnalysisDialog {
             | AnalysisKind::Acf
             | AnalysisKind::Decompose
             | AnalysisKind::Stationarity
+            | AnalysisKind::ExpSmooth
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
             | AnalysisKind::Stability
@@ -3642,6 +3647,7 @@ impl AnalysisDialog {
             | AnalysisKind::Acf
             | AnalysisKind::Decompose
             | AnalysisKind::Stationarity
+            | AnalysisKind::ExpSmooth
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
             | AnalysisKind::Stability
@@ -3838,6 +3844,7 @@ impl AnalysisDialog {
             | AnalysisKind::Acf
             | AnalysisKind::Decompose
             | AnalysisKind::Stationarity
+            | AnalysisKind::ExpSmooth
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
             | AnalysisKind::Stability
@@ -3963,6 +3970,7 @@ impl AnalysisDialog {
                 "How well a process fits its specification limits: Cp, Cpk, Pp, Ppk and parts per million outside"
             }
             AnalysisKind::RareChart => "Chart the opportunities or the time between rare events against control limits",
+            AnalysisKind::ExpSmooth => "Smooth a series by level, trend and season, and forecast the next values",
             AnalysisKind::Stationarity => "Test whether a series wanders (a unit root) or stays about a level or trend",
             AnalysisKind::Decompose => "Split a series into a trend, a repeating seasonal pattern and what is left",
             AnalysisKind::Acf => {
@@ -4107,6 +4115,9 @@ impl AnalysisDialog {
             }
             AnalysisKind::RareChart => {
                 "One row per column (fitted distribution, center line, limits, points beyond) in a new sheet, and a chart per column"
+            }
+            AnalysisKind::ExpSmooth => {
+                "The smoothing constants, errors and final states in a new sheet with the one-step forecasts and the forecasts, and a graph"
             }
             AnalysisKind::Stationarity => {
                 "An ADF and a KPSS row per column (statistic, lags, critical values, probability) in a new sheet"

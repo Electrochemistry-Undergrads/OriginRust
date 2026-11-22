@@ -5966,7 +5966,7 @@ Pasted into an untouched graph of the same data and read back (changed propertie
 - Core `crates/core/src/format_clip.rs`: a copy holds the formatted values of every layer (or of one axis) and the groups the choice copies; a paste applies the groups it asks for that the copy holds. Groups: Dimensions (layer left, top, width; page width, not heights), Scales (scale type, limits, steps, reverse, first tick, minor ticks, rescale margin, both axes), Colors, Fonts (family, size, bold, italic; colours stay), Background (layer colour, gradient, border), Thickness (axis line and tick width), Symbol/Line/Fill (the plots' whole line and symbol style), Text (the words of the text labels). All = all eight; All Style Formats = Colors, Fonts, Background, Thickness, Symbol/Line/Fill (no Dimensions, Scales, Text); Colors also takes the layer background colour and the plots' line and symbol colours; Fonts takes tick-label, title, legend and text fonts.
 - Sheaf's own choices where Origin was not measured: layers and plots are paired by position, surplus target layers and plots are left as they are, surplus source ones are dropped; text labels are paired by position and are never created; a paste that changes nothing makes no undo step; the y axis follows Scales; the fill under a curve is not part of Symbol/Line/Fill. The clipboard stays internal; the private profile snapshot now survives a restart (26.10). Another running instance does not automatically refresh its in-memory copy.
 - Enabled (measured behaviour): Edit > Copy Format ▸ All, All Style Formats, Colors, Fonts, Background, Dimensions, Scales; Edit > Paste Format... (the Apply Formats window: Apply From Clipboard, one check box per group the clipboard holds or Scales and Styles for an axis format, Apply To for an axis, Undo Apply, Apply, Close; the grid Origin shows for a graph format is unmeasured, so this window is Sheaf's reading of it); page menu Copy Format (same items) and Paste Format; axis menu Copy Format ▸ All and Paste Format To ▸ All. One undo step "Apply Theme" each.
-- Left greyed (not measured): Symbol/Line/Fill and Text (Edit), Page Background and Legend Translation Mode (page), axis Dimensions and other Paste Format To choices (Scales/Styles follow-ups are 26.9/26.11), the page menu's Paste Format To submenus, and legend Dimensions and All (Styles is 26.12).
+- At the end of this slice the remaining entries included Symbol/Line/Fill and Text (Edit), Page Background and Legend Translation Mode (page), axis Dimensions and other Paste Format To choices, the page menu's Paste Format To submenus, and legend Dimensions and All. The axis Scales and Styles follow-ups are in 26.9 and 26.11. Legend Styles, Dimensions and All follow in 26.12 and 26.16.
 
 - Added after review: Edit > Copy Format with an axis selected copies an axis format (All, All Style Formats and Scales map to the axis parts; Colors, Fonts, Background and Dimensions copy nothing, since an axis format for them is unmeasured); the context menus and Paste Format To follow the clipboard kind. Colors and axis styles also carry the "follows plot colour" flags (Sheaf's reading; unmeasured in Origin). Dimensions pastes a layer frame only between layers of the same kind (root to root, linked to linked) because a linked frame is relative to its parent; mixed pairs are left alone (unmeasured in Origin).
 
@@ -6105,7 +6105,7 @@ colour, which Paste Format (page menu; it now pastes every group the clipboard h
 (Apply Formats, listed as "Page Background") give the target page. All and All Style Formats keep Origin's measured groups and do not carry the page
 colour. Each paste is one undo step ("Apply Theme"). **Legend Translation Mode** stays grey (unknown).
 
-### 26.16 Legend Copy Format Dimensions and All (T179, 2026-11-19, not measured)
+### 26.16 Legend Copy Format Dimensions and All (T179, 2026-11-19)
 
 Origin 2016's legend Copy Format lists Styles, Dimensions | All (26.2); OriginLab's legend guide puts the
 translation mode and custom format strings under All. Sheaf's choices: **Dimensions** copies the legend's
@@ -6114,6 +6114,18 @@ the dimensions and the legend text (Sheaf's custom text, `None` for the automati
 Paste Format To then lists Styles, Dimensions | All: Styles and Dimensions are grey when the copy does not
 hold them (a Dimensions copy holds no styles), and All pastes whatever the copy holds. Each paste is one
 undo step ("Apply Theme"); hidden legends are left alone. Clipboards saved before this read as Styles copies.
+
+**Origin 2016 format API (2026-11-21).** On the synthetic legend, Origin C
+`GetFormat(FPB_DIMENSION, ...)` returned the position, coordinate units, attachment
+and background margins. Applying the tree with `ApplyFormat` changed Left and Top
+to the source values. The target kept its text and 9-point font. Applying the
+`FPB_ALL` tree changed position, text colour, font size (9 to 19 points) and
+the literal legend text. The Dimensions tree did not expose a column count.
+Margins and attachment had equal values in this fixture. These results are for
+the format API. The context-menu field mapping, column layout and transfer of
+the layer's legend translation mode still need live verification.
+[Origin C GetFormat](https://docs.originlab.com/originc/ref/originobject-getformat/) ·
+[Origin C ApplyFormat](https://docs.originlab.com/originc/ref/originobject-applyformat/)
 
 ## 27. Colour scales and bubble scales: Graph > New Color Scale, legend Add Color Scale / Add Bubble Scale (T80)
 

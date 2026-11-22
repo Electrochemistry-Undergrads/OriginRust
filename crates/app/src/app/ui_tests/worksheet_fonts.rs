@@ -311,6 +311,44 @@ fn label_family_only_defaults_save_reopen_and_reach_new_columns_without_data_fon
 }
 
 #[test]
+fn bulk_label_font_drafts_keep_specific_sizes_and_can_restore_inheritance() {
+    let mut h = start_sheet("worksheet-label-bulk");
+    let chosen = label_family_fixture();
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Seed labels", |p| {
+        let sheet = p.workbook_mut(book).unwrap().sheet_mut();
+        sheet.columns[0].long_name = "Alpha".into();
+        sheet.columns[0].units = "mV".into();
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    open(&mut h);
+    category(&mut h, "Data", "Column Labels");
+    family(&mut h, "Automatic", &chosen);
+    size(&mut h, "20");
+    category(&mut h, "Column Labels", "Long Name");
+    size(&mut h, "9");
+    assert_eq!(project(&h), &before);
+    click(&mut h, "Apply");
+    assert_eq!(painted_size(&h, "Alpha"), [12.0]);
+    assert_eq!(painted_size(&h, "mV"), [20.0 * 4.0 / 3.0]);
+    assert_eq!(painted_size(&h, "4.5"), [12.0]);
+    assert_eq!(sheet(&h).font_defaults.column_labels.family, chosen);
+    assert_eq!(sheet(&h).font_defaults.long_name_size_pt, Some(9.0));
+    assert!(sheet(&h).cell_formats.is_empty());
+
+    let applied = project(&h).clone();
+    size(&mut h, "0");
+    click(&mut h, "OK");
+    assert_eq!(sheet(&h).font_defaults.long_name_size_pt, None);
+    assert_eq!(painted_size(&h, "Alpha"), [20.0 * 4.0 / 3.0]);
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &applied);
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
 fn label_category_drafts_apply_together_with_manual_priority_and_one_undo() {
     let mut h = start_sheet("worksheet-label-font-drafts");
     let id = project(&h).workbooks().next().unwrap().id;

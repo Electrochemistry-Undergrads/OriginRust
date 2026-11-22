@@ -157,6 +157,10 @@ pub enum AnalysisKind {
     /// Statistics > Multivariate Analysis and ROC Curve (options in `multivariate_options.rs`).
     Pca,
     Roc,
+    /// Statistics > Regression > Quantile Regression (T342; options in `multivariate_options.rs`).
+    QuantReg,
+    /// Statistics > Change Point Analysis (T346; options in `multivariate_options.rs`).
+    ChangePoint,
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (options in `multivariate_options.rs`).
     KaplanMeier,
     /// Statistics > Multivariate Analysis > K-Means Cluster Analysis (options in `multivariate_options.rs`).
@@ -292,6 +296,8 @@ impl AnalysisKind {
             AnalysisKind::QQPlot => "Q-Q Plot...",
             AnalysisKind::Pca => "Principal Component Analysis...",
             AnalysisKind::Roc => "ROC Curve...",
+            AnalysisKind::QuantReg => "Quantile Regression...",
+            AnalysisKind::ChangePoint => "Change Point Analysis...",
             AnalysisKind::KaplanMeier => "Kaplan-Meier Estimator...",
             AnalysisKind::Kmeans => "K-Means Cluster Analysis...",
             AnalysisKind::Crosstab => "Cross Tabulation...",
@@ -386,6 +392,8 @@ impl AnalysisKind {
             "qqplot" => AnalysisKind::QQPlot,
             "pca" => AnalysisKind::Pca,
             "roc" => AnalysisKind::Roc,
+            "quantreg" => AnalysisKind::QuantReg,
+            "changepoint" => AnalysisKind::ChangePoint,
             "kaplanmeier" => AnalysisKind::KaplanMeier,
             "kmeans" => AnalysisKind::Kmeans,
             "crosstab" => AnalysisKind::Crosstab,
@@ -806,6 +814,8 @@ pub struct AnalysisDialog {
     cv: CvChargeSpec,
     /// Fourier Self-Deconvolution's settings (T341).
     fsd: FsdOptions,
+    /// Peak Analyzer, Find Peaks: search on the FSD-narrowed curve with `fsd`'s settings (T344).
+    chain_fsd: bool,
     diff: DiffOptions,
     smooth_kind: SmoothKind,
     smooth_points: usize,
@@ -1517,6 +1527,7 @@ impl AnalysisDialog {
             integrate: IntegrateSpec::default(),
             cv: CvChargeSpec::default(),
             fsd: FsdOptions::default(),
+            chain_fsd: false,
             diff: DiffOptions::default(),
             smooth_kind: SmoothKind::SavitzkyGolay,
             smooth_points: 5,
@@ -1631,6 +1642,13 @@ impl AnalysisDialog {
             ui.add_enabled(self.peak_keep == PeakKeep::Count, DragValue::new(&mut self.peak_count).range(1..=10_000));
         });
         ui.radio_value(&mut self.peak_keep, PeakKeep::All, "Keep every local extremum");
+        if chain {
+            // Origin 2018b's FSD peak detection (T344): the search runs on the narrowed bands.
+            ui.checkbox(&mut self.chain_fsd, "Search on the Fourier self-deconvolved curve (hidden peaks)");
+            if self.chain_fsd {
+                fsd_options(ui, &mut self.fsd);
+            }
+        }
     }
 
     /// Origin's Peak Analyzer as a wizard: the page list of the goal, Prev and Next, and the page
@@ -2131,9 +2149,12 @@ impl AnalysisDialog {
             AnalysisKind::Fsd => Tool::Fsd(self.fsd),
             AnalysisKind::Differentiate => Tool::Differentiate(self.diff),
             AnalysisKind::DistFit | AnalysisKind::ProbPlot | AnalysisKind::QQPlot => self.dist.tool(self.kind)?,
-            AnalysisKind::Pca | AnalysisKind::Roc | AnalysisKind::KaplanMeier | AnalysisKind::Kmeans => {
-                self.multi.tool(self.kind)?
-            }
+            AnalysisKind::Pca
+            | AnalysisKind::Roc
+            | AnalysisKind::QuantReg
+            | AnalysisKind::ChangePoint
+            | AnalysisKind::KaplanMeier
+            | AnalysisKind::Kmeans => self.multi.tool(self.kind)?,
             AnalysisKind::AverageCurves => self.curves.average_tool(),
             AnalysisKind::Intersect => self.curves.intersect_tool(),
             AnalysisKind::PolygonArea => Tool::PolygonArea,
@@ -2210,6 +2231,7 @@ impl AnalysisDialog {
                             PeakKeep::Count => PeakFilter::Number(self.peak_count),
                             PeakKeep::All => PeakFilter::None,
                         },
+                        fsd: self.chain_fsd.then_some(self.fsd),
                         ..FindOptions::default()
                     },
                     limits: if self.chain_half_height { LimitMode::HalfHeight } else { LimitMode::Baseline },
@@ -3430,9 +3452,12 @@ impl AnalysisDialog {
                 ui.checkbox(&mut st.graph, "Make a graph with a column plot of the counts");
             }
             AnalysisKind::DistFit | AnalysisKind::ProbPlot | AnalysisKind::QQPlot => self.dist.options(ui, self.kind),
-            AnalysisKind::Pca | AnalysisKind::Roc | AnalysisKind::KaplanMeier | AnalysisKind::Kmeans => {
-                self.multi.options(ui, self.kind)
-            }
+            AnalysisKind::Pca
+            | AnalysisKind::Roc
+            | AnalysisKind::QuantReg
+            | AnalysisKind::ChangePoint
+            | AnalysisKind::KaplanMeier
+            | AnalysisKind::Kmeans => self.multi.options(ui, self.kind),
             AnalysisKind::DiscreteFreq => {
                 let d = &mut self.discfreq;
                 egui::CollapsingHeader::new("Quantities to Compute").default_open(true).show(ui, |ui| {
@@ -3609,6 +3634,8 @@ impl AnalysisDialog {
             | AnalysisKind::GraphSummary
             | AnalysisKind::Pca
             | AnalysisKind::Roc
+            | AnalysisKind::QuantReg
+            | AnalysisKind::ChangePoint
             | AnalysisKind::SubtractLine
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
@@ -3713,6 +3740,10 @@ impl AnalysisDialog {
             }
             AnalysisKind::Kmeans => "Group the rows into a chosen number of clusters of similar values",
             AnalysisKind::Roc => "Judge how well a test variable separates the two states of a state column",
+            AnalysisKind::QuantReg => {
+                "Fit straight lines to chosen quantiles of the dependent variable instead of its mean"
+            }
+            AnalysisKind::ChangePoint => "Find where the mean, the variance or both of a series change",
             AnalysisKind::Pca => "Describe the variation of several columns by uncorrelated components",
             AnalysisKind::Crosstab => {
                 "Count the cases of every combination of two categorical variables and test their independence"
@@ -3840,6 +3871,12 @@ impl AnalysisDialog {
             }
             AnalysisKind::Roc => {
                 "Area under the curve with its standard error, the curve points and the best cut-off in a new sheet, and a graph"
+            }
+            AnalysisKind::ChangePoint => {
+                "One row per segment (rows, X range, size, mean, standard deviation) in a new sheet, and a graph of the data with the segment means"
+            }
+            AnalysisKind::QuantReg => {
+                "One row of coefficients per quantile with the sum of check losses and the pseudo R-square in a new sheet, and with one independent column a graph of the data and the lines"
             }
             AnalysisKind::Pca => {
                 "Eigenvalues, percent of variance, loadings and scores in a new sheet, and a scree plot"

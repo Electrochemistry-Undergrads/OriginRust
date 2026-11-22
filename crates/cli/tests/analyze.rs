@@ -1426,6 +1426,51 @@ fn principal_component_analysis_runs_from_the_command_line() {
     assert!(!ok && err.contains("at least two columns"), "{err}");
 }
 
+/// Quantile regression (spec `statistics.md` section 29, T342): independent columns, then the dependent one.
+#[test]
+fn quantile_regression_runs_from_the_command_line() {
+    let dir = scratch("quantreg");
+    let path = dir.join("qr.csv");
+    let mut text = String::from("x,y\n");
+    for i in 1..=30 {
+        let x = f64::from(i);
+        text.push_str(&format!("{x},{}\n", 2.0 + 0.5 * x + (7.3 * x).sin()));
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "quantreg", file, "--y", "x,y", "--quantiles", "0.25,0.5"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Pseudo R-square") && out.contains("Quantile 0.25") && out.contains("QuantReg1"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "quantreg", file, "--y", "x,y", "--no-intercept", "--no-graph"]);
+    assert!(ok && !out.contains("Intercept"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "quantreg", file, "--y", "x,y", "--quantiles", "1.2"]);
+    assert!(!ok && err.contains("between 0 and 1"), "{err}");
+}
+
+/// Change point analysis (spec `statistics.md` section 30, T346): each --y column is a series.
+#[test]
+fn change_point_analysis_runs_from_the_command_line() {
+    let dir = scratch("changepoint");
+    let path = dir.join("cp.csv");
+    let mut text = String::from("t,v\n");
+    for i in 0..60 {
+        let level = if i < 25 { 1.0 } else { 6.0 };
+        text.push_str(&format!("{i},{}\n", level + 0.2 * (f64::from(i * i) * 0.77).sin()));
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "changepoint", file, "--y", "v"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("1 change point(s)") && out.contains("= 25") && out.contains("ChangePoint1"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "changepoint", file, "--y", "v", "--change", "meanvar", "--penalty", "30", "--no-graph"]);
+    assert!(ok && out.contains("penalty 30 per change"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "changepoint", file, "--y", "v", "--penalty", "huge"]);
+    assert!(!ok && err.contains("--penalty"), "{err}");
+    let (ok, _, err) = sheaf(&["analyze", "changepoint", file, "--y", "v", "--change", "slope"]);
+    assert!(!ok && err.contains("--change"), "{err}");
+}
+
 /// ROC curve (spec `statistics.md` section 19): the --y columns are the test variables, the state column last.
 #[test]
 fn roc_curve_runs_from_the_command_line() {
@@ -2148,4 +2193,36 @@ fn fsd_narrows_the_bands() {
     assert_eq!(tops, 2, "two bands after FSD");
     let (ok, _, stderr) = sheaf(&["analyze", "fsd", data.to_str().unwrap(), "--fwhm", "2", "--k", "1"]);
     assert!(!ok && stderr.contains("enhancement factor"), "{stderr}");
+}
+
+/// `analyze peaks --fsd-fwhm` (T344): the search on the FSD-narrowed curve finds two hidden bands.
+#[test]
+fn the_fsd_peak_search_finds_hidden_bands() {
+    let dir = scratch("fsd-peaks");
+    let mut text = String::from("x,y\n");
+    for k in 0..512 {
+        let x = k as f64 * 0.05;
+        let l = |c: f64| 1.0 / ((x - c) * (x - c) + 1.0);
+        text.push_str(&format!("{x},{}\n", 0.1 + l(12.3) + l(13.3)));
+    }
+    let data = dir.join("two.csv");
+    std::fs::write(&data, text).unwrap();
+    let (ok, stdout, stderr) =
+        sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--integrate", "--baseline", "minimum"]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Peak 1") && !stdout.contains("Peak 2"), "{stdout}");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "peaks",
+        data.to_str().unwrap(),
+        "--integrate",
+        "--baseline",
+        "minimum",
+        "--fsd-fwhm",
+        "2",
+        "--fsd-k",
+        "3",
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Peak 2"), "{stdout}");
 }

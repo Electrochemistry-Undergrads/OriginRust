@@ -3,18 +3,33 @@
 
 use super::analysis::AnalysisKind;
 use eframe::egui;
-use sheaf_core::analysis::{KaplanMeierSpec, KmeansSpec, PcaSpec, RocSpec, Tool};
+use sheaf_core::analysis::{
+    ChangeKind, ChangePenalty, ChangePointSpec, KaplanMeierSpec, KmeansSpec, PcaSpec, QuantRegSpec, RocSpec, Tool,
+};
 
 /// What the windows keep between frames.
 #[derive(Default)]
 pub struct MultiOptions {
     pca: PcaSpec,
     roc: RocSpec,
+    quantreg: QuantRegSpec,
+    changepoint: ChangePointSpec,
+    /// The value of the Manual penalty while another penalty is chosen.
+    manual_penalty: Option<f64>,
+    /// The quantiles as typed (comma separated), read when the tool runs.
+    quantiles: Option<String>,
     km: KaplanMeierSpec,
     kmeans: KmeansSpec,
 }
 
 impl MultiOptions {
+    /// The quantiles as the window shows them.
+    fn quantiles_text(&self) -> String {
+        self.quantiles
+            .clone()
+            .unwrap_or_else(|| self.quantreg.quantiles.iter().map(|q| q.to_string()).collect::<Vec<_>>().join(", "))
+    }
+
     /// The tool the window runs.
     pub fn tool(&self, kind: AnalysisKind) -> Result<Tool, String> {
         match kind {
@@ -29,6 +44,29 @@ impl MultiOptions {
                     return Err("give the value of the state column that is the positive state".to_string());
                 }
                 Ok(Tool::Roc(self.roc.clone()))
+            }
+            AnalysisKind::QuantReg => {
+                let text = self.quantiles_text();
+                let quantiles: Vec<f64> = text
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|t| !t.is_empty())
+                    .map(|t| t.parse::<f64>().map_err(|_| format!("\"{t}\" is not a number")))
+                    .collect::<Result<_, _>>()?;
+                if quantiles.is_empty() {
+                    return Err("give at least one quantile".to_string());
+                }
+                if let Some(bad) = quantiles.iter().find(|t| !(**t > 0.0 && **t < 1.0)) {
+                    return Err(format!("a quantile must lie between 0 and 1 (got {bad})"));
+                }
+                Ok(Tool::QuantReg(QuantRegSpec { quantiles, ..self.quantreg.clone() }))
+            }
+            AnalysisKind::ChangePoint => {
+                let need = if self.changepoint.kind == ChangeKind::Mean { 1 } else { 2 };
+                if self.changepoint.min_segment < need {
+                    return Err(format!("the minimum segment length must be at least {need}"));
+                }
+                Ok(Tool::ChangePoint(self.changepoint))
             }
             AnalysisKind::Kmeans => {
                 if self.kmeans.clusters < 2 {
@@ -102,6 +140,62 @@ impl MultiOptions {
                 ui.weak(
                     "The area under the curve with Origin's standard error and confidence interval, the                      curve points with their cut-offs, and the cut-off with the largest sensitivity + specificity - 1.",
                 );
+            }
+            AnalysisKind::QuantReg => {
+                ui.label("The chosen columns are the independent variables; the last one is the dependent variable.");
+                let mut text = self.quantiles_text();
+                ui.horizontal(|ui| {
+                    ui.label("Quantiles");
+                    ui.add(egui::TextEdit::singleline(&mut text).desired_width(200.0))
+                        .on_hover_text("Comma separated, each between 0 and 1");
+                });
+                self.quantiles = Some(text);
+                let s = &mut self.quantreg;
+                ui.checkbox(&mut s.intercept, "Fit an intercept");
+                ui.checkbox(&mut s.graph, "Graph of the data and the fitted lines (one independent column)");
+                ui.weak(
+                    "The exact solution of each quantile (the sum of check losses is as small as it can be); no standard errors.",
+                );
+            }
+            AnalysisKind::ChangePoint => {
+                ui.label("Every chosen column is a series of its own, in row order.");
+                let s = &mut self.changepoint;
+                ui.horizontal(|ui| {
+                    ui.label("Change in");
+                    ui.radio_value(&mut s.kind, ChangeKind::Mean, "Mean");
+                    ui.radio_value(&mut s.kind, ChangeKind::Variance, "Variance");
+                    ui.radio_value(&mut s.kind, ChangeKind::MeanVariance, "Mean and Variance");
+                });
+                let manual = self.manual_penalty.get_or_insert(10.0);
+                ui.horizontal(|ui| {
+                    ui.label("Penalty");
+                    let name = match s.penalty {
+                        ChangePenalty::Mbic => "MBIC",
+                        ChangePenalty::Bic => "BIC (SIC)",
+                        ChangePenalty::Aic => "AIC",
+                        ChangePenalty::HannanQuinn => "Hannan-Quinn",
+                        ChangePenalty::Manual(_) => "Manual",
+                    };
+                    egui::ComboBox::from_id_salt("changepoint_penalty").selected_text(name).show_ui(ui, |ui| {
+                        ui.selectable_value(&mut s.penalty, ChangePenalty::Mbic, "MBIC");
+                        ui.selectable_value(&mut s.penalty, ChangePenalty::Bic, "BIC (SIC)");
+                        ui.selectable_value(&mut s.penalty, ChangePenalty::Aic, "AIC");
+                        ui.selectable_value(&mut s.penalty, ChangePenalty::HannanQuinn, "Hannan-Quinn");
+                        if ui.selectable_label(matches!(s.penalty, ChangePenalty::Manual(_)), "Manual").clicked() {
+                            s.penalty = ChangePenalty::Manual(*manual);
+                        }
+                    });
+                    if let ChangePenalty::Manual(v) = &mut s.penalty {
+                        ui.add(egui::DragValue::new(v).speed(0.5).range(0.0..=1e6));
+                        *manual = *v;
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Minimum segment length");
+                    ui.add(egui::DragValue::new(&mut s.min_segment).range(1..=100_000));
+                });
+                ui.checkbox(&mut s.graph, "Graph of the data with the segment means");
+                ui.weak("The exact optimum of normal costs plus the penalty per change (PELT).");
             }
             AnalysisKind::Kmeans => {
                 let s = &mut self.kmeans;

@@ -52,6 +52,11 @@ pub struct FindOptions {
     pub filter: PeakFilter,
     /// Drop peaks narrower than this FWHM (in X units); 0 keeps all.
     pub min_fwhm: f64,
+    /// Search on the Fourier self-deconvolved curve (T344, Origin 2018b's FSD peak detection): bands
+    /// narrowed K times so that hidden peaks become maxima; heights, widths and areas are still
+    /// measured on the corrected data. `None` searches the curve itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fsd: Option<crate::fsd::FsdOptions>,
 }
 
 impl Default for FindOptions {
@@ -63,6 +68,7 @@ impl Default for FindOptions {
             direction: PeakDirection::Positive,
             filter: PeakFilter::Height(0.0),
             min_fwhm: 0.0,
+            fsd: None,
         }
     }
 }
@@ -323,6 +329,11 @@ fn positive_peaks(x: &[f64], c: &[f64], opts: &FindOptions) -> Vec<usize> {
     } else {
         c.to_vec()
     };
+    // The search on the narrowed bands (checked in `analyze_peaks`, so an error here keeps the curve).
+    let ys = match &opts.fsd {
+        Some(f) => crate::fsd::fourier_self_deconvolution(&x[..n], &ys, f).unwrap_or(ys),
+        None => ys,
+    };
     let k = opts.npts.max(1);
     let mut found: Vec<usize> = Vec::new();
     match opts.method {
@@ -521,6 +532,21 @@ pub fn integrate_peaks(x: &[f64], c: &[f64], peaks: &[usize], mode: LimitMode) -
     out
 }
 
+/// The fixed text of an FSD refusal (the error type is `Copy`).
+fn fsd_reason(e: &str) -> &'static str {
+    if e.contains("evenly spaced") {
+        "the FSD search needs evenly spaced X (Reduce to Evenly Spaced X or Interpolate first)"
+    } else if e.contains("missing") {
+        "the FSD search needs numbers in every row"
+    } else if e.contains("8 points") {
+        "the FSD search needs at least 8 points"
+    } else if e.contains("enhancement") {
+        "the FSD enhancement factor K must be above 1 (at most 20)"
+    } else {
+        "the FSD band width (FWHM) must be above 0"
+    }
+}
+
 /// Why [`analyze_peaks`] could not run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChainError {
@@ -528,6 +554,8 @@ pub enum ChainError {
     NoBaseline,
     /// X is neither rising nor falling (the rows are not sorted along X).
     UnsortedX,
+    /// The Fourier self-deconvolution of the search cannot run (uneven X, missing values, settings).
+    Fsd(&'static str),
 }
 
 /// Runs the chain on `y(x)`. Rows where X or Y is missing are left out of the calculation
@@ -561,6 +589,12 @@ fn chain(x: &[f64], y: &[f64], opts: &ChainOptions, centers: Option<&[f64]>) -> 
     }
     let method = baseline_method(&xv, &yv, &opts.baseline).ok_or(ChainError::NoBaseline)?;
     let (corrected, baseline) = subtract_baseline(&xv, &yv, &method);
+    if let Some(f) = &opts.find.fsd
+        && centers.is_none()
+        && let Err(e) = crate::fsd::fourier_self_deconvolution(&xv, &corrected, f)
+    {
+        return Err(ChainError::Fsd(fsd_reason(&e)));
+    }
     let mut peaks = match centers {
         Some(centers) => {
             let nearest = |c: f64| {
@@ -602,6 +636,28 @@ fn chain(x: &[f64], y: &[f64], opts: &ChainOptions, centers: Option<&[f64]>) -> 
 
 #[cfg(test)]
 mod tests {
+    /// T344: the FSD search finds two bands that the curve shows as one; their heights come from
+    /// the data, and uneven X is refused.
+    #[test]
+    fn the_fsd_search_finds_hidden_peaks() {
+        let x: Vec<f64> = (0..512).map(|i| i as f64 * 0.05).collect();
+        let l = |v: f64, c: f64| 1.0 / ((v - c) * (v - c) + 1.0);
+        let y: Vec<f64> = x.iter().map(|&v| 0.1 + l(v, 12.3) + l(v, 13.3)).collect();
+        let plain = ChainOptions { baseline: ChainBaseline::ConstantStat(BaselineStat::Minimum), ..Default::default() };
+        assert_eq!(analyze_peaks(&x, &y, &plain).unwrap().peaks.len(), 1);
+        let mut o = plain.clone();
+        o.find.fsd = Some(crate::fsd::FsdOptions { fwhm: 2.0, enhancement: 3.0, ..Default::default() });
+        let r = analyze_peaks(&x, &y, &o).unwrap();
+        assert_eq!(r.peaks.len(), 2, "{:?}", r.peaks.iter().map(|p| p.center).collect::<Vec<_>>());
+        for p in &r.peaks {
+            assert!((p.center - 12.3).abs() < 0.15 || (p.center - 13.3).abs() < 0.15, "{}", p.center);
+            assert!((p.height - (y[p.index] - r.baseline[p.index])).abs() < 1e-12, "height from the data");
+        }
+        let mut uneven = x.clone();
+        uneven[100] += 0.01;
+        assert!(matches!(analyze_peaks(&uneven, &y, &o), Err(ChainError::Fsd(_))));
+    }
+
     use super::*;
 
     /// Origin's anchors (re-workspace/scratch/t04base: r-q1, c1, r-q2, n-create).

@@ -5442,6 +5442,74 @@ fn the_statistics_menu_draws_a_roc_curve() {
     assert_eq!(h.state().doc.undo_label(), Some("ROC curve"));
 }
 
+/// Statistics > Quantile Regression... (T342): the independent column then the dependent one give one row of
+/// coefficients per quantile and a graph of the lines; one undo removes both.
+#[test]
+fn the_statistics_menu_runs_a_quantile_regression() {
+    // y = 2x + (x mod 3): the median line has slope 2 and intercept 1.
+    let data = csv_file(
+        "quantreg",
+        "qr",
+        "id,x,y
+1,1,3
+2,2,6
+3,3,6
+4,4,9
+5,5,12
+6,6,12
+7,7,15
+8,8,18
+9,9,18
+10,10,21
+11,11,24
+12,12,24
+",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - qr.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Quantile Regression..."]);
+    assert!(h.state().analysis.is_some(), "the quantile regression window is open");
+    assert!(has_label(&h, "Fit an intercept"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
+    let (sheet, slope) = result_column(&h, "B: x");
+    assert!(sheet.starts_with("QuantReg"), "{sheet}");
+    assert_eq!(slope.len(), 5, "one row per default quantile: {slope:?}");
+    assert!((slope[2] - 2.0).abs() < 1e-9, "{slope:?}");
+    let (_, intercept) = result_column(&h, "Intercept");
+    assert!((intercept[2] - 1.0).abs() < 1e-9, "{intercept:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Quantile regression"));
+}
+
+/// Statistics > Change Point Analysis... (T346): the segments of a series with one mean shift, and a graph;
+/// one undo removes both.
+#[test]
+fn the_statistics_menu_finds_change_points() {
+    let mut text = String::from("t,v\n");
+    for i in 0..40 {
+        let level = if i < 15 { 1.0 } else { 5.0 };
+        text.push_str(&format!("{i},{}\n", level + 0.2 * (f64::from(i * i) * 0.77).sin()));
+    }
+    let data = csv_file("changepoint", "cp", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - cp.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Change Point Analysis..."]);
+    assert!(h.state().analysis.is_some(), "the change point window is open");
+    assert!(has_label(&h, "Minimum segment length"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, starts) = result_column(&h, "Start row");
+    assert!(sheet.starts_with("ChangePoint"), "{sheet}");
+    assert_eq!(starts, [1.0, 16.0]);
+    let (_, means) = result_column(&h, "Mean");
+    assert!((means[1] - 5.0).abs() < 0.2, "{means:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Change point analysis"));
+}
+
 /// Statistics > Descriptive Statistics > Probability Plot... and Q-Q Plot...: a result sheet and a graph with
 /// points and a reference line; one undo removes both.
 #[test]
@@ -5630,6 +5698,51 @@ fn the_analysis_menu_on_a_graph_works_on_its_data_plot() {
     let dialog =
         h.state().analysis.as_ref().expect("the Integrate window is open, not a message to activate a workbook");
     assert_eq!(dialog.columns(), &[ys[1]]);
+}
+
+/// Subtract Straight Line on a graph (T348): the two ends are picked with the Data Reader, the curve minus the
+/// line through them is written and drawn, one undo step; Cancel changes nothing.
+#[test]
+fn subtract_straight_line_on_a_graph_picks_the_two_points() {
+    // A sloped baseline 1 + 0.5 x with a bump in the middle.
+    let mut text = String::from("x,y\n");
+    for i in 0..=20 {
+        let x = f64::from(i);
+        let bump = if (8..=12).contains(&i) { 3.0 } else { 0.0 };
+        text.push_str(&format!("{x},{}\n", 1.0 + 0.5 * x + bump));
+    }
+    let data = csv_file("subpick", "base", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Graph1 - base");
+    let gid = project(&h).graphs().next().unwrap().id;
+    menu_path(&mut h, &["Analysis", "Data Manipulation", "Subtract Straight Line..."]);
+    assert!(h.state().analysis.is_none(), "no typed window on a graph");
+    assert!(h.state().subtract_pick.is_some(), "the picking window is open");
+    assert!(h.state().graphs[&gid].reader, "the Data Reader is on while picking");
+    for row in [2, 18] {
+        h.state_mut().graphs.get_mut(&gid).unwrap().reader_point =
+            Some(crate::reader::Point { layer: 0, plot: 0, row });
+        h.key_press(egui::Key::Enter);
+        settle(&mut h);
+    }
+    let points = h.state().subtract_pick.as_ref().unwrap().points.clone();
+    assert_eq!(points, [(2.0, 2.0), (18.0, 10.0)]);
+    click(&mut h, "Subtract");
+    assert!(h.state().subtract_pick.is_none() && !h.state().graphs[&gid].reader);
+    assert_eq!(h.state().doc.undo_label(), Some("Subtract straight line"));
+    let g = project(&h).graph(gid).unwrap();
+    assert_eq!(g.layers[0].plots.len(), 2, "the result is drawn");
+    let result = project(&h).column(g.layers[0].plots[1].y).unwrap().clone();
+    assert!(result.long_name.ends_with("minus line"), "{}", result.long_name);
+    let v = result.numeric().unwrap();
+    assert!(v[0].abs() < 1e-12 && (v[10] - 3.0).abs() < 1e-12 && v[20].abs() < 1e-12, "{v:?}");
+    h.state_mut().doc.undo();
+    assert_eq!(project(&h).graph(gid).unwrap().layers[0].plots.len(), 1);
+    // Cancel leaves everything as it was.
+    menu_path(&mut h, &["Analysis", "Data Manipulation", "Subtract Straight Line..."]);
+    click(&mut h, "Cancel");
+    assert!(h.state().subtract_pick.is_none() && !h.state().graphs[&gid].reader);
+    assert_eq!(project(&h).graph(gid).unwrap().layers[0].plots.len(), 1);
 }
 
 // ----- the dialogs in Origin's layout: Column Properties, the analysis frame, the Import Wizard ----

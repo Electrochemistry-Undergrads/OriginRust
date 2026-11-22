@@ -71,11 +71,14 @@ impl<'a> Formats<'a> {
         }
         let rows = self.sheet.row_count();
         let mut outside = false;
-        let mut omitted_labels = [LabelKind::LongName, LabelKind::Units, LabelKind::Comments].iter().any(|kind| {
-            (self.sheet.font_defaults.label_size(kind).is_some()
-                || self.sheet.font_defaults.label_family(kind).is_some())
-                && !labels.iter().any(|label| label.as_ref() == Some(kind))
-        });
+        let omitted_extra_labels = !self.sheet.font_defaults.column_labels.is_empty()
+            && self.sheet.columns.iter().any(|c| c.formula.is_some() || !c.params.is_empty());
+        let mut omitted_labels = omitted_extra_labels
+            || [LabelKind::LongName, LabelKind::Units, LabelKind::Comments].iter().any(|kind| {
+                (self.sheet.font_defaults.label_size(kind).is_some()
+                    || self.sheet.font_defaults.label_family(kind).is_some())
+                    && !labels.iter().any(|label| label.as_ref() == Some(kind))
+            });
         let mut alpha = false;
         for range in &self.sheet.cell_formats {
             match &range.target {

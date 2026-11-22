@@ -800,6 +800,42 @@ finding method of User Defined in the baseline goals, as in Origin. Command line
 [--als-asymmetric F --als-threshold T --als-smoothing S --als-iterations N]`; a dataset is given there as
 `--anchors X1:Y1,...`.
 
+### 11.7 End Points Weighted, measured but not built (T328)
+
+Measured in Origin 2016 (2026-11-21, `re-workspace/scratch/baseline-als/run-epw.sh NAME STEP FORMULA
+PCT`: Create Baseline goal, Baseline Mode End Points Weighted, the End Points(%) box set, Finish; the
+baseline read back from `Baseline_Data X1/Y1`):
+
+- Pages: the mode has no settings of its own on the Baseline Mode page; the next page (`pa_epbase`)
+  has End Points(%) (default **12**), Number of Baseline Points (Same as Input Data, ticked) and the
+  Baseline output. OriginLab's help: End Points(%) is a fraction of the points; "the adjacent average
+  smoothing method is used to reduce the noise. The default window for smoothing is 6 percent of the
+  total selected points"; "a simple linear interpolation is used to generate the baseline".
+- Result shape: the baseline is the straight-line interpolation through a set of **data points**
+  (anchors) taken from the two end stretches, with the chord between the last left and first right
+  anchor across the middle, and the line through the two outermost anchors continued to the first and
+  last row. The written values are the data's own at the anchors (no smoothed values appear).
+- On a smooth curve (x = 0..20, y = 0.2 + 0.01 x + 0.002 x^2 with or without a Gaussian at 10) every row
+  of a stretch is an anchor. The anchor rows did not depend on the curve:
+
+  | rows | End Points(%) | left anchors | right anchors |
+  |---|---|---|---|
+  | 401 | 5 | 2 .. 20 | 381 .. 396 |
+  | 401 | 12 | 5 .. 44 | 355 .. 393 |
+  | 401 | 20 | 9 .. 74 | 325 .. 389 |
+  | 401 | 30 | 14 .. 112 | 287 .. 384 |
+  | 201 | 12 | 2 .. 24 | 177 .. 196 |
+
+  (rows from 0; the right stretch always stops two rows further from its end than the left one starts.)
+- With a fast wiggle added (+ 0.01 sin(37 x), 401 rows, 12 %) only some rows are anchors, in adjacent
+  pairs: 7-8, 24-25, 29-30, 41-42 and 367-368, 384-385, 389-390; the baseline between them is straight
+  and lies mostly above the data on the left. The rule choosing them (presumably from the 6 % adjacent
+  average) was not found: the pairs are not where the data crosses the smoothed curve, and not the rows
+  nearest to it.
+
+Sheaf does not offer End Points Weighted (greyed in the Peak Analyzer) until the anchor rule is known;
+Straight Line, User Defined and Asymmetric Least Squares cover the use.
+
 ## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1 to 12.3)
 
 Analysis > Data Manipulation has Subtract Straight Line, Reduce Duplicate X Data (12.1), Reduce to Evenly Spaced X and Curve

@@ -44,6 +44,7 @@ pub mod interp;
 pub mod kde;
 pub mod kmeans;
 pub mod levelcross;
+pub mod lifedata;
 pub mod manip;
 pub mod minverse;
 pub mod nonparam;

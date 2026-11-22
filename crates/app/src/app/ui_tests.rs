@@ -5742,6 +5742,29 @@ fn the_statistics_menu_makes_a_manhattan_plot() {
     assert_eq!(h.state().doc.undo_label(), Some("Manhattan plot"));
 }
 
+/// Statistics > Process Capability... (T365): an upper limit only gives CPU = Cpk and no Cp; one undo step, a graph.
+#[test]
+fn the_statistics_menu_computes_process_capability() {
+    let data = csv_file("capability", "cap", "i,v\n1,10\n2,12\n3,11\n4,13\n5,12\n6,14\n");
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - cap.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Process Capability..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Histogram with the fitted curve and the limits"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_some(), "no limit: the window stays");
+    click(&mut h, "Upper specification limit");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
+    let (sheet, cpk) = result_column(&h, "Cpk");
+    assert!(sheet.starts_with("Capability"), "{sheet}");
+    let (_, cpu) = result_column(&h, "CPU");
+    let (_, cp) = result_column(&h, "Cp");
+    assert!(cp[0].is_nan() && cpk == cpu && cpk[0] < 0.0, "USL 1 lies below every value: {cpk:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Process capability"));
+}
+
 /// Statistics > Rare Event Chart (G/T)... (T364): a T chart with the exponential fit, one undo step and a graph.
 #[test]
 fn the_statistics_menu_makes_a_rare_event_chart() {

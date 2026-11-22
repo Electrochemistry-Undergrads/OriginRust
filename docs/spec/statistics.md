@@ -1898,6 +1898,32 @@ the limits. Checked against scipy (`tools/rarechart-ref.py`, `crates/calc/tests/
 fit solved independently with brentq) to 1e-9 (1e-7 for the Weibull). Tests for runs and trends, and the Minitab-style
 Benneyan G chart variants, are not built.
 
+## 36 Process capability, normal and nonnormal (T365, Origin 2027 Quality apps; not measured)
+
+Origin 2027's Quality improvement apps add nonnormal process capability; Sheaf has no Origin 2016 capability window
+to copy, so this is Sheaf's own. Statistics > Process Capability... (`Tool::Capability`, `sheaf analyze capability
+--y COL[,COL..] [--lsl L] [--usl U] [--subgroup 1] [--model normal|lognormal|weibull] [--no-graph]`): every chosen
+column is a process of its own, in row order, missing values left out; at least one limit is needed, and LSL < USL.
+
+- **Normal**: the within standard deviation is `R bar / d2` of the complete subgroups of `n` (2 to 10; a short last
+  subgroup is left out of it) or, for `n = 1`, the mean moving range of two over `d2 = 1.128379`; the overall one is
+  the sample standard deviation. `Cp = (USL - LSL) / 6 s_w`, `CPL = (mean - LSL) / 3 s_w`, `CPU = (USL - mean) / 3
+  s_w`, `Cpk = min(CPL, CPU)`; `Pp`, `PPL`, `PPU`, `Ppk` the same with the overall deviation. Expected parts per
+  million outside are the normal tails with the overall and with the within deviation.
+- **Lognormal or Weibull** (maximum likelihood): the percentile method (ISO 22514) with the fitted quantiles at
+  0.00135, 0.5 and 0.99865: `Pp = (USL - LSL) / (x_hi - x_lo)`, `PPL = (x_med - LSL) / (x_med - x_lo)`, `PPU = (USL
+  - x_med) / (x_hi - x_med)`, `Ppk = min(PPL, PPU)`; expected parts per million from the fitted tails. The within
+  indices are left empty.
+
+With one limit, the indices that need the other are empty and `Cpk`/`Ppk` is the one side. Observed parts per million
+count the values strictly outside. The result sheet `CapabilityN` has one row per column (N, Mean, StdDev overall and
+within, Cp, CPL, CPU, Cpk, Pp, PPL, PPU, Ppk, observed and expected PPM, the two fitted parameters) and the graph data;
+a new graph per column draws a histogram (Sturges' bins over the data) with the fitted density scaled to counts and
+the limits as vertical lines. Checked against numpy/scipy (`tools/capability-ref.py`,
+`crates/calc/tests/capability_reference.rs`; d2 integrated numerically there, so the within values agree to the six
+decimals of the d2 table) to 1e-9 (1e-6 for the within values, 1e-7 for the Weibull fit). Box-Cox and Johnson
+transformations, confidence intervals of the indices and the Cpm target index are not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

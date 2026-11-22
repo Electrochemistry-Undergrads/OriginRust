@@ -3429,6 +3429,27 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Process capability: Cp, Cpk, Pp, Ppk and parts per million outside the limits of each --y column, normal
+    /// or nonnormal (lognormal or Weibull, percentile method), with a histogram and the fitted curve.
+    Capability {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Lower specification limit.
+        #[arg(long)]
+        lsl: Option<f64>,
+        /// Upper specification limit.
+        #[arg(long)]
+        usl: Option<f64>,
+        /// Subgroup size for the within deviation (1: moving ranges of individual values).
+        #[arg(long, default_value_t = 1)]
+        subgroup: usize,
+        /// normal, lognormal or weibull.
+        #[arg(long, default_value = "normal")]
+        model: String,
+        /// Do not make the graphs.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Rare event chart: a G chart (opportunities between events) or T chart (time between events) of each --y
     /// column, with its center line and control limits.
     Rarechart {

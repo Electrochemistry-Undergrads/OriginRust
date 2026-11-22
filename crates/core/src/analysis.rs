@@ -58,6 +58,7 @@ pub use acf::AcfSpec;
 pub use binscatter::BinScatterSpec;
 pub use calc::binscatter::BinRule;
 pub use calc::changepoint::{ChangeKind, Penalty as ChangePenalty};
+pub use capability::{CapModel, CapabilitySpec};
 pub use changepoint::ChangePointSpec;
 pub use curves::{AverageSpec, IntersectSpec};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
@@ -1160,6 +1161,9 @@ pub enum Tool {
     /// Statistics > Quality > Rare Event Chart (T364, `docs/spec/statistics.md` section 35): a G or T chart of
     /// every chosen column.
     RareChart(RareChartSpec),
+    /// Statistics > Process Capability (T365, `docs/spec/statistics.md` section 36): normal or nonnormal capability
+    /// of every chosen column.
+    Capability(CapabilitySpec),
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
     /// censor and, optionally, group columns.
     KaplanMeier(KaplanMeierSpec),
@@ -1293,6 +1297,7 @@ impl Tool {
             Tool::Manhattan(_) => "Manhattan plot",
             Tool::Acf(_) => "Autocorrelation",
             Tool::RareChart(_) => "Rare event chart",
+            Tool::Capability(_) => "Process capability",
             Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
             Tool::GraphSummary(_) => "Graphical summary",
             Tool::AverageCurves(_) => "Average multiple curves",
@@ -1377,6 +1382,7 @@ impl Tool {
             Tool::Manhattan(_) => "Manhattan",
             Tool::Acf(_) => "ACF",
             Tool::RareChart(_) => "RareChart",
+            Tool::Capability(_) => "Capability",
             Tool::KaplanMeier(_) => "KaplanMeier",
             Tool::GraphSummary(_) => "GraphSummary",
             Tool::AverageCurves(_) => "AverageResult",
@@ -2278,6 +2284,7 @@ fn run_peak_chain(
 mod acf;
 mod anova3;
 mod binscatter;
+mod capability;
 mod categorical;
 mod changepoint;
 mod curves;
@@ -2685,6 +2692,14 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 xy_graph = out.graph;
+            }
+            Tool::Capability(spec) => {
+                let out = capability::run(spec, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+                more_xy_graphs = out.more_graphs;
             }
             Tool::RareChart(spec) => {
                 let out = rarechart::run(spec, &inputs)?;

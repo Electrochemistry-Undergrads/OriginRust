@@ -1795,6 +1795,32 @@ independent column (named by the column), Sum of check losses and Pseudo R-squar
 also holds the data used and two points of each fitted line, and a new graph shows the data as symbols with one line
 per quantile. A notes line per quantile writes the fitted equation.
 
+## 30 Change point analysis (T346, Origin 2019b app; not measured)
+
+Origin's change-point app (2019b, beside Quantile Regression) is not part of Origin 2016, so nothing here is copied
+from Origin; the costs and penalties are those of R's `changepoint` package and the layout is Sheaf's own.
+
+**What is computed** (`sheaf_calc::changepoint`). A series (in row order, missing values left out) is split into
+segments by minimizing the sum of the segment costs plus a penalty per change, solved exactly with PELT (Killick,
+Fearnhead and Eckley 2012). Costs (twice the negative normal log-likelihood): **Mean**, a change in mean with a
+common standard deviation estimated from the first differences (`MAD(diff) / 0.6745 / sqrt 2`, the ordinary standard
+deviation of the differences over sqrt 2 when the MAD is 0), cost `sum (x - mean)^2 / sigma^2`; **Variance**, about
+the mean of the whole series, cost `n (ln 2 pi + ln s2 + 1)`; **Mean and Variance**, the same cost about the
+segment's own mean (segment variances are kept above `1e-12` times the series variance). Penalties per change, with
+`p` = 1 for Mean or Variance and 2 for both: MBIC (default; `changepoint`'s MBIC penalty `(p + 2) ln n`, without its
+short-segment cost term), BIC/SIC `p ln n`, AIC `2 p`, Hannan-Quinn `2 p ln ln n`, or a number. Minimum segment
+length: default 2 (at least 1, at least 2 when the variance changes). Checked against exact optimal partitioning (an
+O(n^2) dynamic programme over every split) on 4 series and 10 settings each: the same change points and objective
+to 1e-9 (`crates/calc/tests/changepoint_exact.rs`, made by `tools/changepoint-ref.py`). With BIC or AIC the mean
+model finds many short segments in plain noise; MBIC is the default for that reason.
+
+**The tool** (`Tool::ChangePoint`, Statistics > Change Point Analysis..., `sheaf analyze changepoint --y COL
+[--change mean|variance|meanvar] [--penalty mbic|bic|aic|hq|NUMBER] [--min-segment N] [--no-graph]`): every chosen
+column is a series of its own. The result sheet `ChangePointN` has one row per segment: Segment, Start row, End
+row, Start X, End X (the column's X, else the row number), N, Mean, Standard deviation; then, with the graph, the
+data and the segment means as a step line (a new graph shows both). A notes line per column lists where the new
+segments start and the penalty used.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

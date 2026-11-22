@@ -3398,6 +3398,25 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Change point analysis: each --y column is a series of its own (in row order); finds where its mean, its
+    /// variance or both change (exact optimum of normal costs plus a penalty per change) and lists the segments;
+    /// makes a graph of the data with the segment means.
+    Changepoint {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// What changes: mean, variance or meanvar.
+        #[arg(long, default_value = "mean")]
+        change: String,
+        /// The penalty per change: mbic, bic, aic, hq (Hannan-Quinn) or a number.
+        #[arg(long, default_value = "mbic")]
+        penalty: String,
+        /// The fewest points in a segment (2 or more when the variance changes).
+        #[arg(long, default_value_t = 2)]
+        min_segment: usize,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Linear quantile regression: the --y columns are the independent variables followed, last, by the
     /// dependent variable. One row of coefficients per quantile (exact solution), the sum of check losses and
     /// the pseudo R-square; with one independent variable a graph of the data and the fitted lines.

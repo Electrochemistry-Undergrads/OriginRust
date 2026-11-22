@@ -13,6 +13,7 @@ pub mod anova2;
 pub mod anova3;
 pub mod baseline;
 pub mod bin2d;
+pub mod changepoint;
 pub mod coherence;
 pub mod correlation;
 pub mod crosstab;

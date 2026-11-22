@@ -304,6 +304,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T334](T334-opj-width.md) | Column widths read from and written to .opj (0x4A in tenths), measured in Origin 2016 | S | done 2026-11-21 |
 | [T337](T337-opj-numfmt.md) | Numeric display formats read from and written to .opj (0x1E/0x1F, Numeric cells), measured in Origin 2016 | S | done 2026-11-21 |
 | [T343](T343-opj-sheet-longname.md) | Sheet long names read from and written to .opj (__LONGNAME annotation), measured in Origin 2016 | S | done 2026-11-21 |
+| [T345](T345-parity-recalc-links.md) | Stale parity row corrected: Recalculate links 15 tools, not 3 | S | done 2026-11-21 (docs only) |
 | [T311](T311-qqplot-measure.md) | Measure Q-Q Plot against Origin (expected values, y = x line ends, band) | S | done 2026-11-21 (statistics 16.2a) |
 | [T312](T312-import-nonnum.md) | Text import: text in a numeric column read as text, stop, new sheet or new columns (NonNum), as Origin 2016 | S | done 2026-11-21, measured |
 | [T313](T313-scatter-matrix-measure.md) | Measure Scatter Matrix against Origin (page, grid, tick labels, titles, symbols, tick step) | S | done 2026-11-21 (graphing 35) |
@@ -311,6 +312,9 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T318](T318-baseline-als-dataset.md) | Peak Analyzer baselines Use Existing Dataset and Asymmetric Least Squares Smoothing (window, CLI) | M | done 2026-11-21; ALS not measured (Pro) |
 | [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T349](T349-cv-feet.md) | CV Charge on a graph: pick the peak's feet with the Data Reader, sloped baseline through them | S | done 2026-11-21 (analysis-tools 21) |
+| [T348](T348-subtract-line-pick.md) | Subtract Straight Line on a graph: pick the two points with the Data Reader, the result drawn | S | done 2026-11-21 (analysis-tools 12) |
+| [T346](T346-change-point.md) | Change point analysis (Origin 2019b app): mean, variance or both by PELT, Statistics menu window, `analyze changepoint` | M | done 2026-11-21 (statistics 30) |
 | [T342](T342-quantile-regression.md) | Linear quantile regression (Origin 2019b app): exact fits, Statistics menu window, `analyze quantreg` | M | done 2026-11-21 (statistics 29) |
 | [T339](T339-legend-options.md) | Legend `%(n, @option)` substitutions as Origin 2016 makes them (21 options measured) | S | done 2026-11-21 (graphing 6.1) |
 | [T335](T335-title-drag.md) | Drag an axis title on the graph to move it (adds to its offset, one undo step) | S | done 2026-11-21 (graphing T291 paragraph) |

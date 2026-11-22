@@ -131,6 +131,35 @@ fn common_scale_arranges_only_the_selected_layers_and_applies_in_one_undo_step()
 }
 
 #[test]
+fn extra_grid_layers_follow_the_preview_selection_and_both_undo_paths() {
+    let mut h = with_layers("lm-extra-grid", 2);
+    let before = project(&h).clone();
+    let before_frames = frames(&h);
+    open(&mut h);
+    click(&mut h, "Layer1");
+    number(&mut h, "Number of Rows", "2");
+    click(&mut h, "Add Extra Layer(s) for Grid");
+    click(&mut h, "Apply");
+    assert!(h.query_by_label("Layer3").is_some());
+    assert_eq!(project(&h), &before);
+    click(&mut h, "Apply");
+    assert!(h.query_by_label("Layer4").is_none());
+    click(&mut h, "Undo");
+    click(&mut h, "Undo");
+    assert!(h.query_by_label("Layer3").is_none());
+    click(&mut h, "Apply");
+    assert!(h.query_by_label("Layer3").is_some());
+    click(&mut h, "OK");
+    let layers = &graph(&h).layers;
+    assert_eq!(layers.len(), 3);
+    assert_eq!(layers[1].frame, before_frames[1]);
+    assert!(layers[2].plots.is_empty() && layers[2].link.is_none());
+    assert!((layers[2].frame.top - 0.50).abs() < 1e-9);
+    menu(&mut h, "Edit", "Undo Layer Management");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
 fn undo_in_the_window_takes_back_the_last_apply_of_the_preview() {
     let mut h = with_layers("lm-undo", 2);
     let before = frames(&h);

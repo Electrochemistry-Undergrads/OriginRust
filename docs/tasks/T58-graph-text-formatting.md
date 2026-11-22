@@ -332,6 +332,10 @@ expectations, restored export pixels match exactly, and preferences are not
 rewritten by choose/Apply/Undo. Both apps and guards close0. Initial test setup
 and menu-name pilots are excluded; six production lines stay fixed through validation.
 
+Worksheet-sourced point labels use the shared renderer for inline styles, scripts, literal
+spans and plot colors. Frame and White Out widths follow the rendered text. The documented
+Label-column escape behavior and Sheaf's plot-slot rules are recorded in graphing 7.11.
+
 ## Origin facts
 
 Recorded in gui-look 1/4 and the command map: the font box says "Default: Arial", the selected

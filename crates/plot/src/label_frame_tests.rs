@@ -150,3 +150,76 @@ fn label_frames_export_through_screen_and_each_vector_backend() {
     assert!(render_eps(&p, g).unwrap().starts_with(b"%!PS"));
     assert!(!render_emf(&p, g).unwrap().is_empty());
 }
+
+#[test]
+fn point_label_escapes_use_the_owning_layers_saved_plot_slots() {
+    let (mut p, g) = project();
+    let book = p.workbooks().next().unwrap().id;
+    let column = p
+        .add_column(
+            book,
+            0,
+            Designation::Label,
+            ColumnData::text(vec!["".into(), r"\cp1(\b(H)\-(2))\cp9(O)\v(\cp2(Q))".into(), "".into()]),
+        )
+        .unwrap();
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    let mut second = layer.clone();
+    let plot = &mut second.plots[0];
+    plot.decor.labels.form = LabelForm::Column { column };
+    plot.decor.labels.rotate_deg = 25.0;
+    plot.decor.labels.font.color = Color::rgb(40, 60, 80);
+    let mut hidden = layer.plots[0].clone();
+    hidden.visible = false;
+    hidden.line.color = Color::rgb(17, 131, 213);
+    second.plots.insert(0, hidden);
+    p.graph_mut(g).unwrap().layers.push(second);
+
+    let scene = graph_scene(&p, g).unwrap();
+    let runs: Vec<_> = scene.layers[1]
+        .plots
+        .iter()
+        .filter_map(|item| if let Item::Text(run) = item { Some(run) } else { None })
+        .collect();
+    assert_eq!(runs.iter().map(|r| r.text.as_str()).collect::<Vec<_>>(), ["H", "2", r"O\cp2(Q)"]);
+    assert!(runs[0].bold && runs[1].size < runs[0].size);
+    assert!(runs.iter().all(|r| r.rotate_ccw == 25.0));
+    assert_eq!(runs[0].color, Color::rgb(17, 131, 213));
+    assert_eq!(runs[1].color, runs[0].color);
+    assert_eq!(runs[2].color, Color::rgb(40, 60, 80));
+    let svg = render_svg(&p, g).unwrap();
+    assert!(svg.contains("#1183D5") && svg.contains(r"O\cp2(Q)"));
+}
+
+#[test]
+fn point_label_frame_and_whiteout_measure_displayed_text() {
+    let (mut p, g) = project();
+    let book = p.workbooks().next().unwrap().id;
+    let column = p
+        .add_column(book, 0, Designation::Label, ColumnData::text(vec!["".into(), "Water".into(), "".into()]))
+        .unwrap();
+    let l = labels(&mut p, g);
+    l.form = LabelForm::Column { column };
+    l.rotate_deg = 40.0;
+    l.white_out = true;
+    l.font.bold = true;
+    let plain = graph_scene(&p, g).unwrap();
+    labels(&mut p, g).font.bold = false;
+    p.column_mut(column).unwrap().data = ColumnData::text(vec!["".into(), r"\cp1(\b(Water))".into(), "".into()]);
+    let decorated = graph_scene(&p, g).unwrap();
+    assert_eq!(rectangles(&decorated), rectangles(&plain));
+    let white_paths = |scene: &Scene| {
+        scene.layers[0]
+            .plots
+            .iter()
+            .filter_map(|item| match item {
+                Item::Path { d, fill: Some(Color::WHITE), .. } => Some(d.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    assert!(!white_paths(&plain).is_empty());
+    assert_eq!(white_paths(&decorated), white_paths(&plain));
+    p.column_mut(column).unwrap().data = ColumnData::text(vec!["".into(), r"\b()".into(), "".into()]);
+    assert!(rectangles(&graph_scene(&p, g).unwrap()).is_empty());
+}

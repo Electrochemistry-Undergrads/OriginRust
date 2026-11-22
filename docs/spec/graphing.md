@@ -5799,11 +5799,32 @@ and focuses that graph; Cancel, Escape and closing the dialog make no edit. Any 
 project revision or replacement closes a stale draft instead of applying it. Source capture,
 conservative stale rejection, this compact layout and post-confirmation focus are Sheaf choices.
 
-User Defined and Auto Offset Overlapped Axes remain disabled with reasons. Arbitrary axis-side
-combinations, custom scale expressions and choosing another input graph within the dialog are
-not implemented by this preset facade. No model, layer-helper, renderer, file or CLI/MCP
-contract changes. The existing preset links, geometry, inset-data copying and native/companion
-save behavior are reused. The developer capture route is `--show add-layer`.
+User Defined remains disabled. Custom scale expressions and choosing another input graph
+inside the dialog remain open. The developer capture route is `--show add-layer`.
+
+**Auto Offset Overlapped Axes (Origin 2016, 2026-11-22).** Four private LabTalk runs read
+`layer.x.position`, `layer.x2.position`, `layer.y.position` and `layer.y2.position` after
+`layadd offset:=1`. Twelve colored EMFs compare the same additions with the option off and on.
+For the default frame (68.16% of page width and 71.83% of height), three added left Y axes
+read 2%, 4% and 6%. Three right Y axes read 0%, 2% and 4%, and three top X axes read 0%, 3%
+and 6%. Bottom-X Right-Y added to the default frame put the bottom axis at 3% and the right
+axis at 0%. A right axis already at 8% allowed the next right axis at the free edge, then
+moved the following one to 10%. Across the measured frame sizes, the gap rounded to whole
+percentages of the width for Y and of the height for X. At roughly 45% frame width and
+height, the respective increments were 3% and 5%. The native linked frames and earlier
+axis positions stayed fixed. [Origin layer-axis position properties](https://docs.originlab.com/labtalk/ref/layer-axis-obj/)
+
+Sheaf enables the option for the five linked presets that use the full parent frame and have
+axes. It starts unchecked. A coincident visible axis on the same model frame triggers an
+outward offset for that side of the new layer. The step is the nearest whole percent of the
+frame dimension (at least 1%), using nominal spacing of 1.5% of page width for Y and 2.03% of
+page height for X. This fit reproduces the measured 20–90% frame-size controls. Sheaf counts
+saved edge and percent-offset axes and omits axes positioned by a scale value. Linked frames,
+scale links and earlier axes stay in place. Undo removes the added layer and its offset
+together. The existing axis-position field carries the result into `.sheaf` projects and
+Origin project companions. Normal, inset and no-axis presets keep the control disabled. Origin's
+unlinked Normal preset changed its rendered position in the offset export, and that
+placement rule remains open.
 
 ---
 

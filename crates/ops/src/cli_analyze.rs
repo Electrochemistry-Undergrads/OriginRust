@@ -1301,6 +1301,14 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 curve: !no_graph,
             })),
         ),
+        AnalyzeTool::Acf { target, lags, confidence, no_graph } => (
+            target,
+            Job::Tool(Tool::Acf(analysis::AcfSpec {
+                lags: lags.unwrap_or(0),
+                confidence: confidence / 100.0,
+                graph: !no_graph,
+            })),
+        ),
         AnalyzeTool::Manhattan { target, threshold, no_graph } => {
             (target, Job::Tool(Tool::Manhattan(analysis::ManhattanSpec { threshold, graph: !no_graph })))
         }

@@ -1485,6 +1485,27 @@ fn manhattan_plot_runs_from_the_command_line() {
     assert!(ok && out.contains("3 groups"), "the group from the X column: {err} {out}");
 }
 
+/// Autocorrelation (spec `statistics.md` section 34, T363).
+#[test]
+fn autocorrelation_runs_from_the_command_line() {
+    let dir = scratch("acf");
+    let path = dir.join("ts.csv");
+    let mut text = String::from("t,v\n");
+    for i in 0..50 {
+        text.push_str(&format!("{i},{}\n", if i % 2 == 0 { 1.0 } else { -1.0 } + 0.01 * f64::from(i)));
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "acf", file, "--y", "v"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("50 values, lags 1 to 16") && out.contains("ACF1"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "acf", file, "--y", "v", "--lags", "4", "--confidence", "99", "--no-graph"]);
+    assert!(ok && out.contains("lags 1 to 4") && out.contains("99%"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "acf", file, "--y", "v", "--lags", "60"]);
+    assert!(!ok && err.contains("too few"), "{err}");
+}
+
 /// Binned scatter (spec `statistics.md` section 31, T356).
 #[test]
 fn binned_scatter_runs_from_the_command_line() {

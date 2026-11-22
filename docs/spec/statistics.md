@@ -1771,6 +1771,30 @@ leaf unit and whether its stems were split. Code: `crates/calc/src/stemleaf.rs`,
 FILE --y B [--leaf-unit U] [--split] [--max-leaves N] [--trim-outliers]`; the MCP `analyze` tool reaches it as
 `stemleaf` with the same options.
 
+## 29 Quantile regression (T342, Origin 2019b app; not measured)
+
+Origin's Quantile Regression app (2019b) is not part of Origin 2016, so nothing here is copied from Origin; the
+statistics are the textbook ones (Koenker and Bassett 1978) and the layout is Sheaf's own.
+
+**What is computed** (`sheaf_calc::quantreg`). For each quantile tau in (0, 1) the coefficients b of
+`y = b0 + b1 x1 + ... + bk xk` (or without b0) minimize the sum of the check losses `rho(u) = u (tau - [u < 0])` of
+the residuals; tau = 0.5 is least absolute deviations. The linear programme (Koenker's dual, `max y'a` with
+`X'a = (1 - tau) X'1`, `0 <= a <= 1`) is solved with the Frisch-Newton interior-point method (Portnoy and Koenker
+1997, `quantreg`'s `fnb`), then moved to the vertex through the k + 1 points with the smallest residuals when that
+vertex has the smaller loss, so the answer is the exact optimum. Checked against `scipy.optimize.linprog` (HiGHS) on
+20 fits (one and two independent variables, no intercept, 500 points) to 1e-9: `crates/calc/tests/scipy_quantreg.rs`,
+made by `tools/quantreg-ref.py`. Rows with a missing X or Y (and masked or filtered rows) are left out. The pseudo
+R-square is Koenker and Machado's `1 - V(tau) / V0(tau)`, `V0` the loss of the intercept-only model (the tau sample
+quantile); it is left blank without an intercept. No standard errors or confidence limits are computed.
+
+**The tool** (`Tool::QuantReg`, Statistics > Quantile Regression..., `sheaf analyze quantreg --y X1[,X2..],Y`): the
+chosen columns are the independent variables and, last, the dependent variable. Options: the quantiles (default
+0.1, 0.25, 0.5, 0.75, 0.9; `--quantiles`), Fit an intercept (default on; `--no-intercept`) and the graph (default
+on; `--no-graph`). The result sheet `QuantRegN` has one row per quantile: N, Intercept, one coefficient per
+independent column (named by the column), Sum of check losses and Pseudo R-square. With one independent column it
+also holds the data used and two points of each fitted line, and a new graph shows the data as symbols with one line
+per quantile. A notes line per quantile writes the fitted equation.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",
@@ -1823,27 +1847,3 @@ Not verified or not done:
   deviations; those are compared with an absolute tolerance.
 - The app window was checked with automated click tests, not looked at by the owner.
 - Section 15 (Dunnett, cross tabulation) is checked against scipy, not Origin.
-
-## 29 Quantile regression (T342, Origin 2019b app; not measured)
-
-Origin's Quantile Regression app (2019b) is not part of Origin 2016, so nothing here is copied from Origin; the
-statistics are the textbook ones (Koenker and Bassett 1978) and the layout is Sheaf's own.
-
-**What is computed** (`sheaf_calc::quantreg`). For each quantile tau in (0, 1) the coefficients b of
-`y = b0 + b1 x1 + ... + bk xk` (or without b0) minimize the sum of the check losses `rho(u) = u (tau - [u < 0])` of
-the residuals; tau = 0.5 is least absolute deviations. The linear programme (Koenker's dual, `max y'a` with
-`X'a = (1 - tau) X'1`, `0 <= a <= 1`) is solved with the Frisch-Newton interior-point method (Portnoy and Koenker
-1997, `quantreg`'s `fnb`), then moved to the vertex through the k + 1 points with the smallest residuals when that
-vertex has the smaller loss, so the answer is the exact optimum. Checked against `scipy.optimize.linprog` (HiGHS) on
-20 fits (one and two independent variables, no intercept, 500 points) to 1e-9: `crates/calc/tests/scipy_quantreg.rs`,
-made by `tools/quantreg-ref.py`. Rows with a missing X or Y (and masked or filtered rows) are left out. The pseudo
-R-square is Koenker and Machado's `1 - V(tau) / V0(tau)`, `V0` the loss of the intercept-only model (the tau sample
-quantile); it is left blank without an intercept. No standard errors or confidence limits are computed.
-
-**The tool** (`Tool::QuantReg`, Statistics > Quantile Regression..., `sheaf analyze quantreg --y X1[,X2..],Y`): the
-chosen columns are the independent variables and, last, the dependent variable. Options: the quantiles (default
-0.1, 0.25, 0.5, 0.75, 0.9; `--quantiles`), Fit an intercept (default on; `--no-intercept`) and the graph (default
-on; `--no-graph`). The result sheet `QuantRegN` has one row per quantile: N, Intercept, one coefficient per
-independent column (named by the column), Sum of check losses and Pseudo R-square. With one independent column it
-also holds the data used and two points of each fitted line, and a new graph shows the data as symbols with one line
-per quantile. A notes line per quantile writes the fitted equation.

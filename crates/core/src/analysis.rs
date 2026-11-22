@@ -62,6 +62,7 @@ pub use capability::{CapModel, CapabilitySpec};
 pub use changepoint::ChangePointSpec;
 pub use curves::{AverageSpec, IntersectSpec};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
+pub use lifedist::{LifeDist, LifeDistSpec};
 pub use manhattan::ManhattanSpec;
 pub use multivariate::{KmeansSpec, PcaSpec};
 pub use quantreg::QuantRegSpec;
@@ -1169,6 +1170,9 @@ pub enum Tool {
     /// Statistics > Process Capability (T365, `docs/spec/statistics.md` section 36): normal or nonnormal capability
     /// of every chosen column.
     Capability(CapabilitySpec),
+    /// Statistics > Survival Analysis > Distribution Overview Plot (T366, `docs/spec/statistics.md` section 37):
+    /// time and censor columns.
+    LifeDist(LifeDistSpec),
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
     /// censor and, optionally, group columns.
     KaplanMeier(KaplanMeierSpec),
@@ -1303,6 +1307,7 @@ impl Tool {
             Tool::Acf(_) => "Autocorrelation",
             Tool::RareChart(_) => "Rare event chart",
             Tool::Capability(_) => "Process capability",
+            Tool::LifeDist(_) => "Distribution overview",
             Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
             Tool::GraphSummary(_) => "Graphical summary",
             Tool::AverageCurves(_) => "Average multiple curves",
@@ -1388,6 +1393,7 @@ impl Tool {
             Tool::Acf(_) => "ACF",
             Tool::RareChart(_) => "RareChart",
             Tool::Capability(_) => "Capability",
+            Tool::LifeDist(_) => "LifeDist",
             Tool::KaplanMeier(_) => "KaplanMeier",
             Tool::GraphSummary(_) => "GraphSummary",
             Tool::AverageCurves(_) => "AverageResult",
@@ -2308,6 +2314,7 @@ mod changepoint;
 mod curves;
 mod dist;
 mod filters;
+mod lifedist;
 mod manhattan;
 mod manip;
 mod multivariate;
@@ -2492,6 +2499,7 @@ impl Project {
                 | Tool::QuantReg(_)
                 | Tool::Manhattan(_)
                 | Tool::KaplanMeier(_)
+                | Tool::LifeDist(_)
                 | Tool::GraphSummary(_)
                 | Tool::SimulateCurve(_)
                 | Tool::XyzArea
@@ -2676,6 +2684,14 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 xy_graph = out.graph;
+            }
+            Tool::LifeDist(spec) => {
+                let out = lifedist::run(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+                more_xy_graphs = out.more_graphs;
             }
             Tool::KaplanMeier(spec) => {
                 let out = survival::run(spec, sheet, &request.columns, request.rows)?;

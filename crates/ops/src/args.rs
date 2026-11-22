@@ -3432,6 +3432,21 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Distribution overview of right-censored life data: --y TIME,CENSOR; a Weibull, lognormal, exponential or
+    /// normal maximum likelihood fit, and the probability, density, survival and hazard graphs.
+    Lifedist {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// weibull, lognormal, exponential or normal.
+        #[arg(long, default_value = "weibull")]
+        distribution: String,
+        /// The value of the censor column that marks a censored case.
+        #[arg(long, default_value = "1")]
+        censor: String,
+        /// Do not make the graphs.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Process capability: Cp, Cpk, Pp, Ppk and parts per million outside the limits of each --y column, normal
     /// or nonnormal (lognormal or Weibull, percentile method), with a histogram and the fitted curve.
     Capability {

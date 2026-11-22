@@ -1924,6 +1924,29 @@ the limits as vertical lines. Checked against numpy/scipy (`tools/capability-ref
 decimals of the d2 table) to 1e-9 (1e-6 for the within values, 1e-7 for the Weibull fit). Box-Cox and Johnson
 transformations, confidence intervals of the indices and the Cpm target index are not built.
 
+## 37 Distribution Overview plot for right-censored data (T366, Origin 2026b; not measured)
+
+Origin 2026b's Distribution Overview plot is not part of Origin 2016, so this is Sheaf's own. Statistics > Survival
+Analysis > Distribution Overview Plot... (`Tool::LifeDist`, `sheaf analyze lifedist --y TIME,CENSOR [--distribution
+weibull|lognormal|exponential|normal] [--censor 1] [--no-graph]`): the chosen columns are the time and the censor
+column, as for the Kaplan-Meier estimator (a case is right-censored when its censor cell equals the censoring value;
+masked censor cells and missing times leave the case out). The distribution is fitted by maximum likelihood with right
+censoring (a failure adds `ln f(t)`, a censored case `ln S(t)`): the exponential mean is `sum t / r` (`r` failures);
+the Weibull shape solves the profile equation `sum t^k ln t / sum t^k - 1/k - mean ln t over the failures = 0` (scale
+`(sum t^k / r)^(1/k)`); the normal and lognormal (on `ln t`) parameters come from Newton's method on the score. The
+exponential needs one failure, the others two with different times; times must be above 0 except for the normal.
+
+The result sheet `LifeDistN` has one row (N, Failures, Censored, Parameter 1 and 2 (Weibull shape and scale, log mean
+and log SD, the exponential mean, or mean and SD), Log-likelihood, AIC, Mean, Median) and the graph data. Four new
+graphs: a probability plot (failures at the modified Kaplan-Meier failure probabilities, the mean of the Kaplan-Meier
+estimate just before and just after each failure, in percent, with the fitted distribution function as a line; Weibull
+and exponential on a Weibull percent axis against log time, lognormal on a normal probability axis against log time,
+normal on a probability axis against time), the fitted density, the fitted survival in percent with the Kaplan-Meier
+points, and the fitted hazard. Checked against scipy (`tools/lifedata-ref.py`, `crates/calc/tests/lifedata_reference.rs`:
+Weibull by brentq, normal and lognormal by a root of the score, all also against scipy's own `fit(CensoredData)` to
+1e-3) to 1e-8. Arbitrary (interval and left) censoring, frequency columns, confidence bands, other distributions and
+regression with life data are not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

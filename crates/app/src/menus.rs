@@ -2100,7 +2100,13 @@ fn statistics_menu() -> Vec<Entry> {
                 item("Paired Sample Sign Test...", Cmd::Analyze(AnalysisKind::SignTest)),
             ],
         ),
-        sub("&Survival Analysis", vec![item("Kaplan-Meier Estimator...", Cmd::Analyze(AnalysisKind::KaplanMeier))]),
+        sub(
+            "&Survival Analysis",
+            vec![
+                item("Kaplan-Meier Estimator...", Cmd::Analyze(AnalysisKind::KaplanMeier)),
+                item("Distribution Overview Plot...", Cmd::Analyze(AnalysisKind::LifeDist)),
+            ],
+        ),
         sub(
             "&Multivariate Analysis",
             vec![

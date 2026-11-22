@@ -2656,6 +2656,13 @@ pub enum AnalyzeTool {
         /// Anchor points of the anchors baseline, written X1:Y1,X2:Y2,... (linear interpolation).
         #[arg(long)]
         anchors: Option<String>,
+        /// Search on the Fourier self-deconvolved curve with bands of this FWHM (X units), so that
+        /// hidden peaks are found; heights and areas are measured on the data. Needs evenly spaced X.
+        #[arg(long, value_name = "FWHM")]
+        fsd_fwhm: Option<f64>,
+        /// Enhancement factor K of the --fsd-fwhm search.
+        #[arg(long, default_value_t = 2.0, value_name = "K")]
+        fsd_k: f64,
         /// ALS baseline: Asymmetric Factor, between 0 and 1 (close to 0 for positive peaks).
         #[arg(long, default_value_t = 0.001)]
         als_asymmetric: f64,

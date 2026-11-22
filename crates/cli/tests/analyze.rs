@@ -2149,3 +2149,35 @@ fn fsd_narrows_the_bands() {
     let (ok, _, stderr) = sheaf(&["analyze", "fsd", data.to_str().unwrap(), "--fwhm", "2", "--k", "1"]);
     assert!(!ok && stderr.contains("enhancement factor"), "{stderr}");
 }
+
+/// `analyze peaks --fsd-fwhm` (T344): the search on the FSD-narrowed curve finds two hidden bands.
+#[test]
+fn the_fsd_peak_search_finds_hidden_bands() {
+    let dir = scratch("fsd-peaks");
+    let mut text = String::from("x,y\n");
+    for k in 0..512 {
+        let x = k as f64 * 0.05;
+        let l = |c: f64| 1.0 / ((x - c) * (x - c) + 1.0);
+        text.push_str(&format!("{x},{}\n", 0.1 + l(12.3) + l(13.3)));
+    }
+    let data = dir.join("two.csv");
+    std::fs::write(&data, text).unwrap();
+    let (ok, stdout, stderr) =
+        sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--integrate", "--baseline", "minimum"]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Peak 1") && !stdout.contains("Peak 2"), "{stdout}");
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "peaks",
+        data.to_str().unwrap(),
+        "--integrate",
+        "--baseline",
+        "minimum",
+        "--fsd-fwhm",
+        "2",
+        "--fsd-k",
+        "3",
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("Peak 2"), "{stdout}");
+}

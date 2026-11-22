@@ -256,6 +256,8 @@ pub struct GraphUi {
     label_drag: Option<LabelDrag>,
     /// A legend being dragged.
     legend_drag: Option<LegendDrag>,
+    /// An axis title being dragged (T335).
+    title_drag: Option<TitleDrag>,
 }
 
 /// An object being drawn: its first point as fractions of the frame of `layer`, and the pointer
@@ -328,6 +330,15 @@ fn valid_resize(s: &Shape, frame_screen: (f64, f64)) -> bool {
 struct LegendDrag {
     layer: usize,
     from: (f64, f64),
+    delta: (f64, f64),
+}
+
+/// An axis title being moved with the mouse: the layer, whether it is the Y title, and how far the
+/// pointer has moved since the drag began (page points).
+#[derive(Clone, Copy)]
+struct TitleDrag {
+    layer: usize,
+    y: bool,
     delta: (f64, f64),
 }
 
@@ -413,6 +424,7 @@ impl GraphUi {
         self.shape_drag = None;
         self.label_drag = None;
         self.legend_drag = None;
+        self.title_drag = None;
     }
 
     /// Layers with an index-based shape selection, context menu or drag.
@@ -766,9 +778,12 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         let moved = state.label_drag.filter(|d| kind == ObjectKind::Label(d.label) && layer == d.layer);
         let moved_legend = state.legend_drag.filter(|d| kind == ObjectKind::Legend && layer == d.layer);
         let moved_shape = state.shape_drag.filter(|d| kind == ObjectKind::Shape(d.shape) && layer == d.layer);
+        let title_kind = |y: bool| if y { ObjectKind::YTitle } else { ObjectKind::XTitle };
+        let moved_title = state.title_drag.filter(|d| kind == title_kind(d.y) && layer == d.layer);
         let shift = moved
             .map(|d| d.delta)
             .or(moved_legend.map(|d| d.delta))
+            .or(moved_title.map(|d| d.delta))
             .or(moved_shape.map(|d| d.delta))
             .or(state.multi_drag)
             .unwrap_or((0.0, 0.0));
@@ -1229,6 +1244,44 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
                     layer: d.layer,
                     x: d.from.0 + d.delta.0 / f.w,
                     y: d.from.1 + d.delta.1 / f.h,
+                });
+            }
+        }
+    }
+
+    // Dragging an axis title moves it: the move is added to the title's offset (T335), as Origin keeps
+    // a dragged title where it was put.
+    if response.drag_started()
+        && state.resize_drag.is_none()
+        && !state.cancelled_shape_gesture
+        && !state.reader
+        && !state.text_tool
+        && state.shape_tool.is_none()
+        && !state.slope_tool
+        && state.data_tool.is_none()
+        && !state.pan_tool
+        && !zoom_took_input
+        && let Some(pos) = ui.input(|i| i.pointer.press_origin())
+        && let Hit::Object { layer, kind: kind @ (ObjectKind::XTitle | ObjectKind::YTitle) } = pick(pos)
+    {
+        state.also.clear();
+        state.selected = Some((layer, kind));
+        state.title_drag = Some(TitleDrag { layer, y: kind == ObjectKind::YTitle, delta: (0.0, 0.0) });
+        actions.push(Action::ActivateLayer { graph: graph_id, layer });
+    }
+    if let Some(mut d) = state.title_drag {
+        let page = response.drag_delta() / fit;
+        d.delta = (d.delta.0 + f64::from(page.x), d.delta.1 + f64::from(page.y));
+        state.title_drag = Some(d);
+        if response.drag_stopped() {
+            state.title_drag = None;
+            if d.delta.0 != 0.0 || d.delta.1 != 0.0 {
+                actions.push(Action::MoveAxisTitle {
+                    graph: graph_id,
+                    layer: d.layer,
+                    y: d.y,
+                    dx: d.delta.0,
+                    dy: d.delta.1,
                 });
             }
         }

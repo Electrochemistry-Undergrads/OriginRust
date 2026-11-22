@@ -301,7 +301,8 @@ or a number) and Offset (pt) right and down; the title turns about its middle an
 offset (`Axis::title_rotation_deg`, `Axis::title_offset_pt`, `turned_title` in
 `crates/plot/src/layout.rs`). The `.opj` reader keeps a title's angle when it is not the default; the
 writer writes the angle and the offset (the moved position as the object's centre). Dragging a title
-with the mouse is not built.
+with the mouse (T335) adds the move, in page points, to that offset in one undo step ("Move axis title"), so
+the title stays where it was dropped, as Origin keeps a moved title; the Title tab shows the new offset.
 
 **Tokens inside a title (T246).** A title of Sheaf's own may hold `%(?X)` and `%(?Y)` anywhere, with
 or without options after a comma (`%(?X,@LG)`, letter case ignored); when the graph is drawn each is

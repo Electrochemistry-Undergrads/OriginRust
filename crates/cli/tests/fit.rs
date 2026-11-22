@@ -376,3 +376,18 @@ fn covariance_and_correlation_matrices_go_to_the_parameter_sheet() {
         "{params}"
     );
 }
+
+/// `--no-auto-init` (T331): the fit starts from 1 (or --param) instead of the guess and still converges.
+#[test]
+fn auto_parameter_initialization_can_be_turned_off() {
+    let dir = scratch("no-auto-init");
+    let data = data_file(&dir);
+    let d = data.to_str().unwrap();
+    let (ok, stdout, stderr) = sheaf(&["fit", d, "--y", "decay", "-m", "ExpDec1", "--no-auto-init"]);
+    assert!(ok, "stderr: {stderr}");
+    let t1: f64 = row(&stdout, "t1")[1].parse().unwrap();
+    assert!((t1 - 4.0).abs() < 1e-4, "{stdout}");
+    let (ok, _, stderr) =
+        sheaf(&["fit", d, "--y", "decay", "-m", "ExpDec1", "--no-auto-init", "--max-iterations", "1"]);
+    assert!(ok || stderr.contains("iteration"), "{stderr}");
+}

@@ -55,7 +55,7 @@ outputs or UI behavior.
 | Sankey and alluvial diagrams | 2020 | Show quantities as flows whose widths reflect their values, including transitions between categories across stages. | [2020][o20] |
 | Browser Graph | 2020b / 2024 | Browse similarly structured datasets inside a graph and switch the displayed series, including datasets on different sheets. | [2020b][browser] · [2024][o24] |
 | Chord and lollipop plots | 2021 | Lollipop done (T33). Draw relationships as chords between categories. Draw values as stems ending in markers. | [2021][o21] |
-| Network and grouped marginal plots | 2021b | Draw connections among nodes. Pair grouped scatter data with distributions along the margins. | [2021b][o21b] |
+| Network and grouped marginal plots | 2021b | Draw connections among nodes (open). Grouped marginal plots done (T373: `sheaf plot -t marginal-histograms|marginal-box-charts --group`, a scatter and a histogram or box per group). | [2021b][o21b] |
 | Sunburst and ridgeline plots | 2022 | Sunburst done (T51), ridgeline done (T44). Draw a hierarchy as concentric rings or compare distributions as vertically offset density curves. | [2022][o22] |
 | Plot-only X sorting | 2023 | Done (T39). Sort points by X for line connections while preserving worksheet row order. | [2023][o23] |
 | Built-in equation rendering | 2023b | Render LaTeX equations in graph labels and worksheet metadata, carry metadata equations into legends and axis titles, and retain vector output on export. | [2023b][o23b] |

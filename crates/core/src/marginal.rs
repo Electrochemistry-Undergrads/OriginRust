@@ -37,42 +37,84 @@ impl Project {
     /// Plots a marginal graph from the Y column `ys[0]` and its X column: the scatter in layer 0, the
     /// X values' histogram or box in layer 1 (top) and the Y values' in layer 2 (right).
     pub fn plot_marginal(&mut self, template: Template, ys: &[ColumnId]) -> Result<WindowId, ProjectError> {
+        if ys.len() != 1 {
+            return Err(ProjectError::MarginalColumns("a marginal plot needs one Y column with an X column"));
+        }
+        self.plot_marginal_groups(template, ys)
+    }
+
+    /// [`Project::plot_marginal`] for several Y columns: several Y columns, each with its own X column, are the groups of a grouped marginal plot (T373,
+    /// Origin 2021b; for example the columns [`Project::group_columns`] makes): a scatter per group in the
+    /// palette's colours, and in each margin a histogram per group in its colour (half transparent, so
+    /// the bars of the groups overlap visibly) or a box per group side by side (positions 1, 2, ...).
+    pub fn plot_marginal_groups(&mut self, template: Template, ys: &[ColumnId]) -> Result<WindowId, ProjectError> {
         let need = "a marginal plot needs one Y column with an X column";
-        let [y] = ys else { return Err(ProjectError::MarginalColumns(need)) };
-        let y = *y;
-        let (book, sheet, _) = self.locate(y).ok_or(ProjectError::NoSuchColumn(y))?;
-        let x = sheet.column_index(y).and_then(|i| sheet.x_for(i)).map(|c| c.id);
-        let Some(x) = x else { return Err(ProjectError::MarginalColumns(need)) };
+        if ys.is_empty() {
+            return Err(ProjectError::MarginalColumns(need));
+        }
+        let mut pairs = Vec::new();
+        for &y in ys {
+            let (_, sheet, _) = self.locate(y).ok_or(ProjectError::NoSuchColumn(y))?;
+            let x = sheet.column_index(y).and_then(|i| sheet.x_for(i)).map(|c| c.id);
+            let Some(x) = x else { return Err(ProjectError::MarginalColumns(need)) };
+            pairs.push((x, y));
+        }
+        let (book, _, _) = self.locate(ys[0]).ok_or(ProjectError::NoSuchColumn(ys[0]))?;
         let name = book.title_for_graph();
+        let grouped = pairs.len() > 1;
         let hist = template == Template::MarginalHistograms;
         let kind = if hist { PlotKind::MarginalHistogram } else { PlotKind::MarginalBox };
         let id = self.add_graph(template);
-        self.add_plot_xy(id, 0, Some(x), y, None)?;
-        if !hist {
+        for &(x, y) in &pairs {
+            self.add_plot_xy(id, 0, Some(x), y, None)?;
+        }
+        if !hist && !grouped {
             let scatter = self.graph_mut(id).and_then(|g| g.layers[0].plots.last_mut()).expect("a plot was just added");
             scatter.symbol.color = Color::rgb(0, 0, 255);
             scatter.auto_color = false;
         }
-        for (layer, column, side) in [(1, x, MarginalSide::Top), (2, y, MarginalSide::Right)] {
-            self.add_plot_xy(id, layer, None, column, None)?;
-            let plot =
-                self.graph_mut(id).and_then(|g| g.layers[layer].plots.last_mut()).expect("a plot was just added");
-            plot.kind = kind;
-            plot.auto_color = false;
-            plot.line.width_pt = 0.5;
-            if hist {
-                plot.line.color = Color::BLACK;
-                plot.symbol.color = HISTOGRAM_FILL;
-            } else {
-                plot.line.color = Color::RED;
-                plot.symbol.color = Color::RED;
-                plot.symbol.shape = SymbolShape::Square;
-                plot.symbol.filled = false;
+        let colors: Vec<Color> =
+            self.graph(id).map(|g| g.layers[0].plots.iter().map(|p| p.symbol.color).collect()).unwrap_or_default();
+        for (i, &(x, y)) in pairs.iter().enumerate() {
+            for (layer, column, side) in [(1, x, MarginalSide::Top), (2, y, MarginalSide::Right)] {
+                self.add_plot_xy(id, layer, None, column, None)?;
+                let plot =
+                    self.graph_mut(id).and_then(|g| g.layers[layer].plots.last_mut()).expect("a plot was just added");
+                plot.kind = kind;
+                plot.auto_color = false;
+                plot.line.width_pt = 0.5;
+                let group = colors.get(i).copied().unwrap_or(Color::BLACK);
+                match (hist, grouped) {
+                    (true, false) => {
+                        plot.line.color = Color::BLACK;
+                        plot.symbol.color = HISTOGRAM_FILL;
+                    }
+                    (true, true) => {
+                        plot.line.color = group;
+                        plot.symbol.color = Color::rgba(group.r, group.g, group.b, 128);
+                    }
+                    (false, _) => {
+                        let c = if grouped { group } else { Color::RED };
+                        plot.line.color = c;
+                        plot.symbol.color = c;
+                        plot.symbol.shape = SymbolShape::Square;
+                        plot.symbol.filled = false;
+                    }
+                }
+                plot.decor.marginal = Some(side);
+                if grouped && !hist {
+                    plot.decor.marginal_slot = Some(i as u32 + 1);
+                }
             }
-            plot.decor.marginal = Some(side);
         }
         if let Some(g) = self.graph_mut(id) {
             g.long_name = name;
+            // A box per group, at positions 1 to k: the box margins span 0.5 to k + 0.5.
+            if grouped && !hist {
+                let end = pairs.len() as f64 + 0.5;
+                g.layers[1].y_axis.max = Some(end);
+                g.layers[2].x_axis.max = Some(end);
+            }
         }
         Ok(id)
     }
@@ -110,5 +152,34 @@ mod tests {
         assert_eq!(graph.layers[2].plots[0].kind, PlotKind::MarginalBox);
         assert_eq!(graph.layers[0].plots[0].symbol.color, Color::rgb(0, 0, 255));
         assert_eq!(graph.layers[1].plots[0].line.color, Color::RED);
+    }
+
+    #[test]
+    fn grouped_marginal_plots_have_a_scatter_and_a_histogram_or_box_per_group() {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0, 4.0, 1.0, 5.0, 3.0, 6.0])).unwrap();
+        let key = p
+            .add_column(
+                book,
+                0,
+                Designation::Disregard,
+                ColumnData::text(["a", "b", "a", "b", "a", "b"].iter().map(|s| s.to_string()).collect()),
+            )
+            .unwrap();
+        let (_, groups) = p.group_columns(book, 0, &[y], key).unwrap();
+        let g = p.plot_marginal_groups(Template::MarginalBoxCharts, &groups).unwrap();
+        let graph = p.graph(g).unwrap();
+        assert_eq!(graph.layers.iter().map(|l| l.plots.len()).collect::<Vec<_>>(), [2, 2, 2]);
+        let slots: Vec<_> = graph.layers[1].plots.iter().map(|q| q.decor.marginal_slot).collect();
+        assert_eq!(slots, [Some(1), Some(2)]);
+        assert_eq!((graph.layers[1].y_axis.max, graph.layers[2].x_axis.max), (Some(2.5), Some(2.5)), "both boxes show");
+        // Each group's box has its scatter's colour.
+        assert_eq!(graph.layers[2].plots[1].line.color, graph.layers[0].plots[1].symbol.color);
+        assert_ne!(graph.layers[0].plots[0].symbol.color, graph.layers[0].plots[1].symbol.color);
+        let h = p.plot_marginal_groups(Template::MarginalHistograms, &groups).unwrap();
+        let fill = p.graph(h).unwrap().layers[1].plots[0].symbol.color;
+        assert_eq!(fill.a, 128, "half transparent so the groups overlap visibly");
     }
 }

@@ -836,6 +836,33 @@ baseline read back from `Baseline_Data X1/Y1`):
 Sheaf does not offer End Points Weighted (greyed in the Peak Analyzer) until the anchor rule is known;
 Straight Line, User Defined and Asymmetric Least Squares cover the use.
 
+### 11.8 Integrate Peaks output and limits, measured (T333)
+
+Measured in Origin 2016 (2026-11-21, `re-workspace/scratch/baseline-als/`: `setup-int*.labtalk.txt`,
+`steps-int.txt`, `after-int*.txt`): x = 0..20, y = 0.2 + 0.01 x + exp(-(x-6)^2/0.5) + 0.6 exp(-(x-14)^2/0.8),
+Peak Analyzer goal Integrate Peaks with every default (Baseline Mode Constant at the minimum, auto find),
+Next to Find Peaks, Finish.
+
+- Output, all in the source book after its sheet: **Integration_Result1** (one row per peak; columns
+  Index, Area, AreaIntgP(%), Row Index (1-based row of the centre), Beginning X, Ending X, FWHM, a column
+  with an empty long name holding the centre X, Height; every comment "Integral Result of B"),
+  **Integrated_Curve_Data1** (an X and a Y column per peak, comments "Peak1 of B", "Peak2 of B": the rows
+  of each peak's integrated stretch) and **Plot_Data1** (X/Y pairs "Baseline of B" (two points, the
+  constant line), "Peak Centers of B" and "Base Markers of B" (the limits)).
+- Figures at 401 rows: peak 1 area 1.55686, AreaIntgP 37.03 %, row 121, limits 0.3 .. 7.8, FWHM 1.22938,
+  centre 6, height 1.06; peak 2 area 1.95099, 46.40 %, row 281, 7.8 .. 16.15, FWHM 1.75301, centre 14,
+  height 0.74. The AreaIntgP of the two add to 83.4 %: the share of the whole corrected curve, as Sheaf
+  already computes (`origin_peakchain` test).
+- Limits: the valley between the peaks (7.8, 7.8 and 7.825 at 201, 401 and 801 rows) and the right limit
+  of the last peak (16.2, 16.15, 16.15) are where the data have a local minimum walking out from the
+  peak; with a sloping background the corrected curve never returns to the baseline there. On the rising
+  ramp left of the first peak Origin stops at x = 1.1, 0.3 and 0.075 (rows 11, 6 and 3 at 201, 401 and
+  801 rows), where the corrected curve is about 1.1 h^2 (h the X step); that rule is not understood.
+- Sheaf's Integrate goal on the same data (`analyze peaks --integrate --baseline minimum`): the same
+  centres, heights, FWHM and valley, but limits 0 .. 7.8 and 7.8 .. 20 (Sheaf walks until the corrected
+  curve reaches the baseline), so peak 2's area is 2.647 instead of 1.951; one sheet PeakAnalysis1 with
+  Row, Center, Height, Area, Area %, FWHM, Left limit, Right limit and the baseline column beside the data.
+
 ## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1 to 12.3)
 
 Analysis > Data Manipulation has Subtract Straight Line, Reduce Duplicate X Data (12.1), Reduce to Evenly Spaced X and Curve

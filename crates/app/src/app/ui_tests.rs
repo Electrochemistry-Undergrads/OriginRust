@@ -5742,6 +5742,28 @@ fn the_statistics_menu_makes_a_manhattan_plot() {
     assert_eq!(h.state().doc.undo_label(), Some("Manhattan plot"));
 }
 
+/// Statistics > Rare Event Chart (G/T)... (T364): a T chart with the exponential fit, one undo step and a graph.
+#[test]
+fn the_statistics_menu_makes_a_rare_event_chart() {
+    let data = csv_file("rarechart", "rare", "n,t\n1,2\n2,4\n3,6\n4,8\n");
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - rare.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Rare Event Chart (G/T)..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Control chart per column"));
+    click(&mut h, "T chart (time between events)");
+    click(&mut h, "Exponential");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
+    let (sheet, mean) = result_column(&h, "Parameter 1");
+    assert!(sheet.starts_with("RareChart"), "{sheet}");
+    assert_eq!(mean, [5.0], "the exponential mean");
+    let (_, cl) = result_column(&h, "Center line");
+    assert!((cl[0] - 5.0 * 2f64.ln()).abs() < 1e-12, "{cl:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Rare event chart"));
+}
+
 /// Statistics > Autocorrelation... (T363): one row per lag in a new sheet, the ACF and PACF graphs, one undo step.
 #[test]
 fn the_statistics_menu_computes_the_autocorrelation() {

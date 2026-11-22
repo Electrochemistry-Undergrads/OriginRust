@@ -1301,6 +1301,34 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 curve: !no_graph,
             })),
         ),
+        AnalyzeTool::Rarechart { target, chart, limits, distribution, sigma, no_graph } => {
+            use analysis::{GLimits, RareChartKind, TDistribution};
+            let kind = match chart.to_ascii_lowercase().as_str() {
+                "g" => RareChartKind::G,
+                "t" => RareChartKind::T,
+                other => bail!("--chart takes g or t, not {other:?}"),
+            };
+            let g_limits = match limits.to_ascii_lowercase().as_str() {
+                "probability" => GLimits::Probability,
+                "sigma" => GLimits::Sigma,
+                other => bail!("--limits takes probability or sigma, not {other:?}"),
+            };
+            let t_distribution = match distribution.to_ascii_lowercase().as_str() {
+                "weibull" => TDistribution::Weibull,
+                "exponential" => TDistribution::Exponential,
+                other => bail!("--distribution takes weibull or exponential, not {other:?}"),
+            };
+            (
+                target,
+                Job::Tool(Tool::RareChart(analysis::RareChartSpec {
+                    kind,
+                    g_limits,
+                    t_distribution,
+                    sigma,
+                    graph: !no_graph,
+                })),
+            )
+        }
         AnalyzeTool::Acf { target, lags, confidence, no_graph } => (
             target,
             Job::Tool(Tool::Acf(analysis::AcfSpec {

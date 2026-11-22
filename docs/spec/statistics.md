@@ -1876,6 +1876,28 @@ bounds as lines. Checked against an independent numpy/scipy computation (PACF by
 equations; `tools/acf-ref.py`, `crates/calc/tests/acf_reference.rs`) to 1e-10. Stationarity tests, trend and
 seasonal decomposition and ARIMA are not built.
 
+## 35 Rare event charts, G and T (T364, Origin 2027 Quality apps; not measured)
+
+Origin's G and T control charts (2027 Pro Quality improvement apps) are not part of Origin 2016, so this is Sheaf's
+own. Statistics > Rare Event Chart (G/T)... (`Tool::RareChart`, `sheaf analyze rarechart --y COL[,COL..] [--chart
+g|t] [--limits probability|sigma] [--distribution weibull|exponential] [--sigma 3] [--no-graph]`): every chosen column
+is a chart of its own, in row order, missing values left out, at least 2 values. With `alpha` the normal upper tail
+beyond `sigma` (0.00135 for 3):
+
+- **G chart** (counts of opportunities between events, 0 or more, not all 0): geometric on 0, 1, 2, ... with `p = 1 /
+  (gbar + 1)`. Probability limits (default) are the continuous geometric quantile `max(0, ln(1 - u) / ln(1 - p) - 1)`
+  at `u = 0.5` (center), `1 - alpha` and `alpha` (rounding up gives scipy's discrete quantile); sigma limits are
+  `gbar` and `gbar +- sigma sqrt(gbar (gbar + 1))`, the lower at least 0.
+- **T chart** (times between events, above 0): an exponential (mean) or Weibull (maximum likelihood, the default)
+  fit, limits its quantiles at 0.5, `1 - alpha` and `alpha`.
+
+The result sheet `RareChartN` has one row per column (N, Mean, Parameter 1 and 2: p; the exponential mean; or the
+Weibull shape and scale; Center line, Upper and Lower control limit, Points above and below) and the chart data; a new
+graph per column draws the values against the point number with the three lines. The notes list the points beyond
+the limits. Checked against scipy (`tools/rarechart-ref.py`, `crates/calc/tests/rarechart_reference.rs`; the Weibull
+fit solved independently with brentq) to 1e-9 (1e-7 for the Weibull). Tests for runs and trends, and the Minitab-style
+Benneyan G chart variants, are not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

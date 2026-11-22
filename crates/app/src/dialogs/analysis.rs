@@ -169,6 +169,8 @@ pub enum AnalysisKind {
     Manhattan,
     /// Statistics > Autocorrelation (T363; options in `multivariate_options.rs`).
     Acf,
+    /// Statistics > Rare Event Chart (G/T) (T364; options in `multivariate_options.rs`).
+    RareChart,
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (options in `multivariate_options.rs`).
     KaplanMeier,
     /// Statistics > Multivariate Analysis > K-Means Cluster Analysis (options in `multivariate_options.rs`).
@@ -310,6 +312,7 @@ impl AnalysisKind {
             AnalysisKind::TimePivot => "Time Series Pivot...",
             AnalysisKind::Manhattan => "Manhattan Plot...",
             AnalysisKind::Acf => "Autocorrelation...",
+            AnalysisKind::RareChart => "Rare Event Chart (G/T)...",
             AnalysisKind::KaplanMeier => "Kaplan-Meier Estimator...",
             AnalysisKind::Kmeans => "K-Means Cluster Analysis...",
             AnalysisKind::Crosstab => "Cross Tabulation...",
@@ -410,6 +413,7 @@ impl AnalysisKind {
             "timepivot" => AnalysisKind::TimePivot,
             "manhattan" => AnalysisKind::Manhattan,
             "acf" => AnalysisKind::Acf,
+            "rarechart" => AnalysisKind::RareChart,
             "kaplanmeier" => AnalysisKind::KaplanMeier,
             "kmeans" => AnalysisKind::Kmeans,
             "crosstab" => AnalysisKind::Crosstab,
@@ -2288,6 +2292,7 @@ impl AnalysisDialog {
             | AnalysisKind::TimePivot
             | AnalysisKind::Manhattan
             | AnalysisKind::Acf
+            | AnalysisKind::RareChart
             | AnalysisKind::KaplanMeier
             | AnalysisKind::Kmeans => self.multi.tool(self.kind)?,
             AnalysisKind::AverageCurves => self.curves.average_tool(),
@@ -3596,6 +3601,7 @@ impl AnalysisDialog {
             | AnalysisKind::TimePivot
             | AnalysisKind::Manhattan
             | AnalysisKind::Acf
+            | AnalysisKind::RareChart
             | AnalysisKind::KaplanMeier
             | AnalysisKind::Kmeans => self.multi.options(ui, self.kind),
             AnalysisKind::DiscreteFreq => {
@@ -3780,6 +3786,7 @@ impl AnalysisDialog {
             | AnalysisKind::TimePivot
             | AnalysisKind::Manhattan
             | AnalysisKind::Acf
+            | AnalysisKind::RareChart
             | AnalysisKind::SubtractLine
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
@@ -3893,6 +3900,7 @@ impl AnalysisDialog {
                 "Summarize values per hour, day, week, month, quarter or year of their date-time"
             }
             AnalysisKind::Manhattan => "Show p-values along grouped positions, such as chromosomes, as -log10 p",
+            AnalysisKind::RareChart => "Chart the opportunities or the time between rare events against control limits",
             AnalysisKind::Acf => {
                 "See how a series correlates with itself at increasing lags, and whether that is more than noise"
             }
@@ -4023,6 +4031,9 @@ impl AnalysisDialog {
             }
             AnalysisKind::Roc => {
                 "Area under the curve with its standard error, the curve points and the best cut-off in a new sheet, and a graph"
+            }
+            AnalysisKind::RareChart => {
+                "One row per column (fitted distribution, center line, limits, points beyond) in a new sheet, and a chart per column"
             }
             AnalysisKind::Acf => {
                 "One row per lag (ACF with bounds, PACF, Ljung-Box Q and probability) in a new sheet, and the ACF and PACF graphs"

@@ -2226,3 +2226,32 @@ fn the_fsd_peak_search_finds_hidden_bands() {
     assert!(ok, "stderr: {stderr}");
     assert!(stdout.contains("Peak 2"), "{stdout}");
 }
+
+/// `analyze peaks --regions` (T352): piecewise peak fitting, one analysis per region.
+#[test]
+fn piecewise_regions_are_analysed_on_their_own() {
+    let dir = scratch("piecewise");
+    let mut text = String::from("x,y\n");
+    for k in 0..401 {
+        let x = k as f64 * 0.05;
+        let g = |c: f64| (-(x - c) * (x - c) / 0.5).exp();
+        let y = if x < 10.0 { 0.2 + g(5.0) } else { 1.0 + 0.5 * g(15.0) };
+        text.push_str(&format!("{x},{y}\n"));
+    }
+    let data = dir.join("steps.csv");
+    std::fs::write(&data, text).unwrap();
+    let (ok, stdout, stderr) = sheaf(&[
+        "analyze",
+        "peaks",
+        data.to_str().unwrap(),
+        "--integrate",
+        "--baseline",
+        "minimum",
+        "--regions",
+        "0:9.95,10:20",
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    assert!(stdout.contains("region 1") && stdout.contains("region 2"), "{stdout}");
+    let (ok, _, stderr) = sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--regions", "0-9"]);
+    assert!(!ok && stderr.contains("region"), "{stderr}");
+}

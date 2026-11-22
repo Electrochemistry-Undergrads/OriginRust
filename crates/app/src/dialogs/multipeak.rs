@@ -94,6 +94,7 @@ impl MultiPeakDialog {
                 integrate: false,
                 fit: Some(PeakFitSpec { peak_curves: true, ..PeakFitSpec::of(self.shape, FitBaseline::Constant) }),
                 centers: self.centers.iter().map(|c| c.0).collect(),
+                regions: Vec::new(),
             }),
         }
     }

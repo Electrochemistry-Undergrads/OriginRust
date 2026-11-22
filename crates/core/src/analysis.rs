@@ -121,6 +121,10 @@ pub struct PeakChainSpec {
     pub fit: Option<PeakFitSpec>,
     /// Peak centres (X) given by the user instead of the search (Multiple Peak Fit); empty: search.
     pub centers: Vec<f64>,
+    /// Piecewise peak fitting (T352): X intervals, each run as its own chain (baseline, search,
+    /// integration, fit) on the first unbroken run of rows inside it; empty: the whole range.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub regions: Vec<(f64, f64)>,
 }
 
 /// Which rows of the chosen columns a tool works on.
@@ -2023,12 +2027,65 @@ fn run_peak_baseline(
     Ok(())
 }
 
+/// The inputs cut to the regions of a piecewise peak analysis (T352): for each input and region, the
+/// first unbroken run of its rows whose X lies in the region, labelled "region k".
+fn region_inputs<'b>(inputs: &'b [Input<'_>], regions: &[(f64, f64)]) -> Result<Vec<Input<'b>>, AnalysisError> {
+    let mut out = Vec::new();
+    for inp in inputs {
+        for (k, &(a, b)) in regions.iter().enumerate() {
+            let (lo, hi) = (a.min(b), a.max(b));
+            if !(lo.is_finite() && hi.is_finite()) || lo == hi {
+                return Err(AnalysisError::BadOption(format!("region {} needs two different X limits", k + 1)));
+            }
+            let inside = |i: usize| inp.x[i] >= lo && inp.x[i] <= hi;
+            let Some(first) = (inp.first..=inp.last).find(|&i| inside(i)) else {
+                return Err(AnalysisError::BadOption(format!(
+                    "region {} ({lo} to {hi}) holds no rows of column {}",
+                    k + 1,
+                    inp.short
+                )));
+            };
+            let last = (first..=inp.last).take_while(|&i| inside(i)).last().expect("first is inside");
+            if last < first + 2 {
+                return Err(AnalysisError::BadOption(format!(
+                    "region {} ({lo} to {hi}) holds fewer than 3 rows of column {}",
+                    k + 1,
+                    inp.short
+                )));
+            }
+            out.push(Input {
+                id: inp.id,
+                short: inp.short.clone(),
+                label: format!("{}, region {}", inp.label, k + 1),
+                name: format!("{} (region {})", inp.name, k + 1),
+                units: inp.units.clone(),
+                x_name: inp.x_name.clone(),
+                x_short: inp.x_short.clone(),
+                x_units: inp.x_units.clone(),
+                x: inp.x.clone(),
+                y: Cow::Borrowed(inp.y.as_ref()),
+                first,
+                last,
+            });
+        }
+    }
+    Ok(out)
+}
+
 fn run_peak_chain(
     spec: &PeakChainSpec,
     inputs: &[Input<'_>],
     beside: &mut Vec<NewColumn>,
     notes: &mut Vec<String>,
 ) -> Result<ResultTable, AnalysisError> {
+    let split;
+    let inputs: &[Input<'_>] = if spec.regions.is_empty() {
+        inputs
+    } else {
+        split = region_inputs(inputs, &spec.regions)?;
+        notes.push(format!("{} regions, each with its own baseline and peaks", spec.regions.len()));
+        &split
+    };
     let mut headers: Vec<&str> = vec!["Row", "Center", "Height"];
     if spec.integrate {
         headers.extend(["Area", "Area %", "FWHM", "Left limit", "Right limit"]);
@@ -5506,6 +5563,7 @@ mod tests {
     fn chain(integrate: bool, fit: Option<PeakFitSpec>) -> Tool {
         Tool::PeakChain(PeakChainSpec {
             centers: Vec::new(),
+            regions: Vec::new(),
             chain: ChainOptions {
                 baseline: ChainBaseline::AutoMinima(4),
                 find: FindOptions { filter: PeakFilter::Height(0.3), ..FindOptions::default() },
@@ -5553,6 +5611,42 @@ mod tests {
         assert!(r.notes[0].contains("R^2"));
     }
 
+    /// T352: piecewise peak fitting. Two peaks on different background levels: each region has its
+    /// own constant baseline, so both heights are right; one baseline for the whole curve is not.
+    #[test]
+    fn piecewise_regions_have_their_own_baseline_and_peaks() {
+        let mut p = Project::new();
+        let book = p.add_workbook("Book1");
+        let x: Vec<f64> = (0..401).map(|i| f64::from(i) * 0.05).collect();
+        let g = |v: f64, c: f64| (-(v - c) * (v - c) / 0.5).exp();
+        let y: Vec<f64> = x.iter().map(|&v| if v < 10.0 { 0.2 + g(v, 5.0) } else { 1.0 + 0.5 * g(v, 15.0) }).collect();
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(x)).unwrap();
+        let yc = p.add_column(book, 0, Designation::Y, ColumnData::numeric(y)).unwrap();
+        let tool = |regions: Vec<(f64, f64)>| {
+            Tool::PeakChain(PeakChainSpec {
+                chain: ChainOptions {
+                    baseline: ChainBaseline::ConstantStat(BaselineStat::Minimum),
+                    ..ChainOptions::default()
+                },
+                integrate: true,
+                fit: None,
+                centers: Vec::new(),
+                regions,
+            })
+        };
+        let r = p.analyze(&request(&[yc], tool(vec![(0.0, 9.95), (10.0, 20.0)]))).unwrap();
+        let t = r.table.unwrap();
+        assert_eq!(t.rows.len(), 2, "{:?}", t.rows);
+        let h = |n: &str| t.headers.iter().position(|h| h == n).unwrap();
+        assert!(t.rows[0].0.contains("region 1") && t.rows[1].0.contains("region 2"), "{:?}", t.rows);
+        assert!((t.rows[0].1[h("Height")] - 1.0).abs() < 1e-6, "{:?}", t.rows[0]);
+        assert!((t.rows[1].1[h("Height")] - 0.5).abs() < 1e-6, "{:?}", t.rows[1]);
+        assert_eq!(t.rows[1].1[h("Row")], 301.0, "rows are the sheet's");
+        assert!(r.notes.iter().any(|n| n.contains("2 regions")), "{:?}", r.notes);
+        let bad = p.analyze(&request(&[yc], tool(vec![(30.0, 40.0)]))).unwrap_err().to_string();
+        assert!(bad.contains("holds no rows"), "{bad}");
+    }
+
     #[test]
     fn multiple_peak_fit_starts_at_the_given_centres() {
         // Multiple Peak Fit: no baseline, Gauss peaks with a constant y0, the centres picked a
@@ -5564,6 +5658,7 @@ mod tests {
             integrate: false,
             fit: Some(PeakFitSpec::of(PeakShape::Gauss, FitBaseline::Constant)),
             centers: vec![12.8, 6.1],
+            regions: Vec::new(),
         });
         let r = p.analyze(&request(&[y], tool)).unwrap();
         let t = r.table.unwrap();
@@ -5587,6 +5682,7 @@ mod tests {
             integrate: false,
             fit: Some(fit),
             centers: vec![6.0, 13.0],
+            regions: Vec::new(),
         });
         p.analyze(&request(&[y], tool)).unwrap();
         let ws = &p.workbook(book).unwrap().sheets[0];
@@ -5653,6 +5749,7 @@ mod tests {
         let before = p.clone();
         let none = Tool::PeakChain(PeakChainSpec {
             centers: Vec::new(),
+            regions: Vec::new(),
             chain: ChainOptions {
                 find: FindOptions { filter: PeakFilter::Height(50.0), ..FindOptions::default() },
                 ..ChainOptions::default()
@@ -5663,6 +5760,7 @@ mod tests {
         assert!(matches!(p.analyze(&request(&[y], none)), Err(AnalysisError::BadOption(m)) if m.contains("no peaks")));
         let bad = Tool::PeakChain(PeakChainSpec {
             centers: Vec::new(),
+            regions: Vec::new(),
             chain: ChainOptions {
                 baseline: ChainBaseline::Anchors(vec![(1.0, 0.0)], InterpMethod::Linear),
                 ..ChainOptions::default()
@@ -5683,6 +5781,7 @@ mod tests {
         y0[120] = f64::NAN; // inside the first peak
         let end = Tool::PeakChain(PeakChainSpec {
             centers: Vec::new(),
+            regions: Vec::new(),
             chain: ChainOptions {
                 baseline: ChainBaseline::EndPoints,
                 find: FindOptions { filter: PeakFilter::Height(0.3), ..FindOptions::default() },

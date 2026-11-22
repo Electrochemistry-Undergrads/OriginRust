@@ -658,6 +658,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             baseline_points,
             baseline_goal,
             anchors,
+            regions,
             fsd_fwhm,
             fsd_k,
             als_asymmetric,
@@ -695,6 +696,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 || baseline.is_some()
                 || anchors.is_some()
                 || fsd_fwhm.is_some()
+                || regions.is_some()
                 || limits.is_some();
             if !chain {
                 (
@@ -801,6 +803,16 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     target,
                     Job::Tool(Tool::PeakChain(analysis::PeakChainSpec {
                         centers: Vec::new(),
+                        regions: match &regions {
+                            None => Vec::new(),
+                            Some(text) => {
+                                let mut out = Vec::new();
+                                for part in text.split(',') {
+                                    out.push(parse_pair::<f64>(part, "region", "2:8")?);
+                                }
+                                out
+                            }
+                        },
                         chain: analysis::ChainOptions { baseline, find, limits },
                         integrate,
                         fit,

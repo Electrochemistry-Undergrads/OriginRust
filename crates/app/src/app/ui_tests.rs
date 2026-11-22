@@ -5483,6 +5483,33 @@ fn the_statistics_menu_runs_a_quantile_regression() {
     assert_eq!(h.state().doc.undo_label(), Some("Quantile regression"));
 }
 
+/// Statistics > Change Point Analysis... (T346): the segments of a series with one mean shift, and a graph;
+/// one undo removes both.
+#[test]
+fn the_statistics_menu_finds_change_points() {
+    let mut text = String::from("t,v\n");
+    for i in 0..40 {
+        let level = if i < 15 { 1.0 } else { 5.0 };
+        text.push_str(&format!("{i},{}\n", level + 0.2 * (f64::from(i * i) * 0.77).sin()));
+    }
+    let data = csv_file("changepoint", "cp", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - cp.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Change Point Analysis..."]);
+    assert!(h.state().analysis.is_some(), "the change point window is open");
+    assert!(has_label(&h, "Minimum segment length"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, starts) = result_column(&h, "Start row");
+    assert!(sheet.starts_with("ChangePoint"), "{sheet}");
+    assert_eq!(starts, [1.0, 16.0]);
+    let (_, means) = result_column(&h, "Mean");
+    assert!((means[1] - 5.0).abs() < 0.2, "{means:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Change point analysis"));
+}
+
 /// Statistics > Descriptive Statistics > Probability Plot... and Q-Q Plot...: a result sheet and a graph with
 /// points and a reference line; one undo removes both.
 #[test]

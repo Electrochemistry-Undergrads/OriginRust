@@ -73,7 +73,7 @@ outputs or UI behavior.
 | Feature | Release | Functionality to add | Source |
 |---|---|---|---|
 | Fourier self-deconvolution peak detection | 2018b | Done (T341, Sheaf's own after Kauppinen 1981: Analysis > Peaks and Baseline > Fourier Self-Deconvolution..., `analyze fsd`; Origin's settings unknown). Enhance separation of overlapping peaks in a spectrum for peak detection. | [2018b][o18b] |
-| Quantile regression and change-point analysis | 2019b Apps | Quantile regression done (T342, linear, exact; no standard errors); change-point analysis remains. Fit conditional quantiles of a response. Detect points at which the statistical behavior of a series changes. | [2019b][o19b] |
+| Quantile regression and change-point analysis | 2019b Apps | Quantile regression done (T342, linear, exact; no standard errors); change-point analysis done (T346: mean, variance or both, PELT, exact). Fit conditional quantiles of a response. Detect points at which the statistical behavior of a series changes. | [2019b][o19b] |
 | Time series modeling and forecasting | 2024b Pro App | Check stationarity, inspect autocorrelation, separate trend and seasonality, and use ARIMA to forecast future observations. | [2024b][o24b] · [Time Series Analysis][tsa] |
 | Best Subset Selection | 2025b Pro App | Compare regression models over candidate predictor subsets and rank the models by fit criteria. | [2025b][o25b] |
 | Piecewise Peak Fitting | 2025b Pro App | Divide a single curve into fitting regions, set a separate baseline for each region and resolve peaks within each region. | [2025b][o25b] · [Piecewise Peak Fitting][piecewise] |

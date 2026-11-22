@@ -311,6 +311,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T318](T318-baseline-als-dataset.md) | Peak Analyzer baselines Use Existing Dataset and Asymmetric Least Squares Smoothing (window, CLI) | M | done 2026-11-21; ALS not measured (Pro) |
 | [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T346](T346-change-point.md) | Change point analysis (Origin 2019b app): mean, variance or both by PELT, Statistics menu window, `analyze changepoint` | M | done 2026-11-21 (statistics 30) |
 | [T342](T342-quantile-regression.md) | Linear quantile regression (Origin 2019b app): exact fits, Statistics menu window, `analyze quantreg` | M | done 2026-11-21 (statistics 29) |
 | [T339](T339-legend-options.md) | Legend `%(n, @option)` substitutions as Origin 2016 makes them (21 options measured) | S | done 2026-11-21 (graphing 6.1) |
 | [T335](T335-title-drag.md) | Drag an axis title on the graph to move it (adds to its offset, one undo step) | S | done 2026-11-21 (graphing T291 paragraph) |

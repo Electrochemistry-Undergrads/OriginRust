@@ -3402,6 +3402,18 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Manhattan plot: the --y columns are the group (chromosome), the position and the p-value; each group's
+    /// positions laid end to end, -log10 p per point, a graph with a significance line.
+    Manhattan {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The significance level drawn as a line.
+        #[arg(long, default_value_t = 5e-8)]
+        threshold: f64,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Time series pivot: each --y column summarized per calendar period of its date-time X column.
     Timepivot {
         #[command(flatten)]

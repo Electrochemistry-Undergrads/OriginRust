@@ -1301,6 +1301,9 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 curve: !no_graph,
             })),
         ),
+        AnalyzeTool::Manhattan { target, threshold, no_graph } => {
+            (target, Job::Tool(Tool::Manhattan(analysis::ManhattanSpec { threshold, graph: !no_graph })))
+        }
         AnalyzeTool::Timepivot { target, period, stat } => {
             let period = match analysis::PivotPeriod::ALL
                 .into_iter()

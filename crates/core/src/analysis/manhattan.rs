@@ -2,7 +2,7 @@
 //! Origin 2016, so the layout is Sheaf's own; `docs/spec/statistics.md` section 33).
 //!
 //! The chosen columns are the group (chromosome; numbers or text), the position inside the group and the p-value,
-//! in that order. Groups are placed one after the other along X (numeric groups in increasing order, text groups in
+//! in that order; with two chosen columns (position, p-value) the group is the sheet's X column for them. Groups are placed one after the other along X (numeric groups in increasing order, text groups in
 //! the order they first appear): each group's positions are moved by the sum of the largest positions of the groups
 //! before it. Y is `-log10 p`. Rows with a missing position, or a p outside (0, 1], are left out.
 
@@ -53,13 +53,25 @@ pub(super) fn run(
     if !(spec.threshold > 0.0 && spec.threshold < 1.0) {
         return Err(AnalysisError::BadOption("the significance level must lie between 0 and 1".into()));
     }
-    let [g_id, pos_id, p_id] = columns else {
-        return Err(AnalysisError::BadOption(
-            "the Manhattan plot needs three columns: the group (chromosome), the position and the p-value".into(),
-        ));
-    };
     let column = |id: ColumnId| sheet.column(id).ok_or(AnalysisError::NoSuchColumn(id));
-    let (gc, pc, vc) = (column(*g_id)?, column(*pos_id)?, column(*p_id)?);
+    let (gc, pc, vc) = match columns {
+        [g, pos, p] => (column(*g)?, column(*pos)?, column(*p)?),
+        // Two columns: the position and the p-value, the group being the sheet's X column for them.
+        [pos, p] => {
+            let index = sheet.column_index(*pos).ok_or(AnalysisError::NoSuchColumn(*pos))?;
+            let g = sheet.x_for(index).filter(|x| x.id != *pos).ok_or_else(|| {
+                AnalysisError::BadOption(
+                    "choose the group column too: the sheet has no X column for the positions".into(),
+                )
+            })?;
+            (g, column(*pos)?, column(*p)?)
+        }
+        _ => {
+            return Err(AnalysisError::BadOption(
+                "the Manhattan plot needs three columns: the group (chromosome), the position and the p-value".into(),
+            ));
+        }
+    };
     let pos = sheet.values_of(pc).ok_or_else(|| AnalysisError::NotNumeric(pc.short_name.clone()))?.into_owned();
     let pv = sheet.values_of(vc).ok_or_else(|| AnalysisError::NotNumeric(vc.short_name.clone()))?.into_owned();
     let n = gc.data.len().max(pos.len()).max(pv.len());
@@ -178,6 +190,6 @@ mod tests {
         assert!(out.new_graph.is_some());
         let bad = ManhattanSpec { threshold: 0.0, graph: false };
         assert!(p.analyze(&request(vec![chrom, pos, pv], bad)).is_err());
-        assert!(p.analyze(&request(vec![chrom, pos], ManhattanSpec::default())).is_err());
+        assert!(p.analyze(&request(vec![chrom], ManhattanSpec::default())).is_err());
     }
 }

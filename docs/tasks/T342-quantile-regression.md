@@ -3,7 +3,7 @@
 **Status:** done 2026-11-21 (Claude Windows "claude:gmail", statistics 29). HANDOFF C (Origin 2026-2027 gaps):
 Origin's Quantile Regression app (2019b) had no counterpart. Sheaf now fits linear quantile regressions exactly
 (interior point, then the optimal vertex; checked against `scipy.optimize.linprog` to 1e-9 on 20 fits), as a tool
-(`Tool::QuantReg`), from Statistics > Quantile Regression... and from `sheaf analyze quantreg`. Not in Origin 2016,
+(`Tool::QuantReg`), from Statistics > Quantile Regression... and from `sheaf analyze quantreg` (and the MCP `analyze` tool, which bridges the command-line tools, as `quantreg`). Not in Origin 2016,
 so nothing is measured; the result sheet and graph are Sheaf's own.
 **Size:** M. **Spec:** statistics 29.
 
@@ -11,7 +11,6 @@ so nothing is measured; the result sheet and graph are Sheaf's own.
 
 - Standard errors and confidence limits of the coefficients (bootstrap or rank inversion), tests between quantiles.
 - Change-point analysis (the other half of the 2019b app pair).
-- The MCP tool list does not name the tool (it reaches it through the generic analysis call only if that exists).
 
 ## Tests
 

@@ -494,6 +494,12 @@ baselines per peak, and splitting a curve into peaks automatically (Origin's Pea
 Command line: `sheaf analyze integrate FILE --ranges 0.2:0.5,0.6:0.9 [--row-ranges 1:200,201:400]
 [--baseline]`; `--absolute` and `--no-cumulative` do not apply and are refused with a message.
 Window: Analysis > Integrate Ranges... (a list of X intervals with Add range and Remove).
+On a graph (T353) the menu item does not open the window: the Data Reader goes on and an "Integrate
+Ranges" window lists the ranges; a double-click on a data point of the active plot (outside the window)
+or Enter picks a limit, every two limits make one range (the rows between them, either order), Remove
+Last takes the last limit back, a tick subtracts the line through each range's ends, and Integrate runs
+Integrate Ranges over those rows (one undo step, "Integrate ranges"; the `Integrate<n>` sheet as from the
+window).
 
 ## 11. Peak chain (Sheaf's Peak Analyzer)
 

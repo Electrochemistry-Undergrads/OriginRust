@@ -157,6 +157,45 @@ fn common_scale_preview_and_merge_use_the_sources_displayed_axis_ranges() {
 }
 
 #[test]
+fn turning_off_source_grouping_reflows_the_preview_and_keeps_linked_axes_together() {
+    use sheaf_core::layers::NewLayerKind;
+
+    let (mut h, ids) = fixture("merge-source-grouping");
+    h.state_mut().doc.apply("Independent layer and linked axis", |p| {
+        let graph = p.graph_mut(ids[2]).unwrap();
+        graph.add_layer(NewLayerKind::Normal, 0).unwrap();
+        graph.add_layer(NewLayerKind::RightY, 0).unwrap();
+        for (layer, to) in graph.layers.iter_mut().zip([10.0, 20.0, 10.0]) {
+            layer.x_axis.min = Some(0.0);
+            layer.x_axis.max = Some(to);
+        }
+        let axis = &mut p.graph_mut(ids[3]).unwrap().layers[0].x_axis;
+        axis.min = Some(0.0);
+        axis.max = Some(40.0);
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    open(&mut h);
+    source(&mut h, "All in Project", "All in Active Folder");
+    click(&mut h, "Add Extra Layer(s) for Grid");
+    click(&mut h, "Set Layer Width by Common Scale");
+    click(&mut h, "Auto Preview");
+    assert!(h.query_by_label("2 source graphs, 4 layers").is_some());
+    click(&mut h, "Treat Each Source Graph as a Unit");
+    assert!(h.query_by_label("2 source graphs, 5 layers").is_some());
+    assert_eq!(project(&h), &before);
+    click(&mut h, "OK");
+    let merged = project(&h).graphs().last().unwrap();
+    assert_eq!(merged.layers.len(), 5);
+    assert_eq!(merged.link_parent(2), Some(0));
+    assert!(merged.layers[1].link.is_none() && merged.layers[4].plots.is_empty());
+    assert!((merged.layers[0].frame.width * 2.0 - merged.layers[1].frame.width).abs() < 1e-9);
+    assert!((merged.layers[0].frame.width * 4.0 - merged.layers[3].frame.width).abs() < 1e-9);
+    menu(&mut h, "Edit", "Undo Merge Graph Windows");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
 fn the_active_page_can_be_previewed_and_merged_in_a_one_graph_project() {
     let mut h = start(vec![data_file("merge-active-page")]);
     show_window(&mut h, "Graph1 - sample");

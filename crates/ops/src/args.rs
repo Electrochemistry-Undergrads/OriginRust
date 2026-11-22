@@ -3429,6 +3429,27 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Rare event chart: a G chart (opportunities between events) or T chart (time between events) of each --y
+    /// column, with its center line and control limits.
+    Rarechart {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// g (counts between events) or t (times between events).
+        #[arg(long, default_value = "g")]
+        chart: String,
+        /// G chart limits: probability (geometric quantiles) or sigma (gbar +- k sqrt(gbar (gbar + 1))).
+        #[arg(long, default_value = "probability")]
+        limits: String,
+        /// T chart distribution: weibull or exponential.
+        #[arg(long, default_value = "weibull")]
+        distribution: String,
+        /// The limits are at this many sigmas (or the matching normal tail probability).
+        #[arg(long, default_value_t = 3.0)]
+        sigma: f64,
+        /// Do not make the graphs.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Time series pivot: each --y column summarized per calendar period of its date-time X column.
     Timepivot {
         #[command(flatten)]

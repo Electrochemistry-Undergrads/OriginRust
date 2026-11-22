@@ -376,6 +376,14 @@ has no project scope and continues to reject qualified references.
 
 - Only a single expression, with Before Formula Scripts limited to `name = expression` statements (T307, below); no other assignments, session string variables, graph/dataset `%()` substitution, generated expression text or user-defined functions. The supported string-expression and static worksheet-cell substitution subsets are described above.
 - No spreadsheet cell notation (`A1`, bare cross-sheet `Sheet!A`), range-variable declarations, or `x`/`y` as built-in column shorthands (a host may supply `x` as a variable). Explicit cross-sheet `col()` references are described above. The `[a:b]` range is accepted only inside statistics. Parameter-row ordering and the supported parameter-name syntax are described above.
+- Bare column names, measured in Origin 2016 (T338, 2026-11-21, `re-workspace/scratch/formula-shorthand/`:
+  `csetvalue col:=col(C) formula:="..."` with A = 1..4, B = 10..40, A's long name `Long`): `A*2`,
+  `A+B`, `B-A`, `a*2`, `Long*2`, `A1`, `A[2]`, `A$` and `i*A` all fill the column with missing values
+  (an unknown name is an undefined LabTalk variable, not a column), `x*2` and `y*2` give 0 (`x` and `y`
+  are LabTalk system variables, 0 unless set), and only `col(A)*2` reads the column. So Origin 2016 has
+  no bare-name, `A1` or `x`/`y` column shorthand either. Sheaf refuses such a formula instead of writing
+  missing values; when the unknown name is a column's short name (any case) the message says
+  "to read column A, write col(A)" (`Host::names_column`).
 - A single `=` is not a comparison here; use `==`.
 - `e` is the constant 2.718...; a parameter literally named `e` in a fit function cannot be used (rename it).
 - `i` is read-only and always the 1-based row number of the output row.

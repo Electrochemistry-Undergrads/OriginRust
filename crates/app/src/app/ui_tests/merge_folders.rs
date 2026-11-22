@@ -61,6 +61,29 @@ fn source(h: &mut Harness<'static, SheafApp>, current: &str, next: &str) {
 }
 
 #[test]
+fn extra_grid_layers_are_included_in_preview_and_in_the_undoable_merge() {
+    let (mut h, _) = fixture("merge-empty-grid-cells");
+    let before = project(&h).clone();
+    open(&mut h);
+    click(&mut h, "Preview");
+    assert!(h.query_by_label("8 source graphs, 8 layers").is_some());
+    click(&mut h, "Add Extra Layer(s) for Grid");
+    assert!(h.query_by_label("8 source graphs, 8 layers").is_none());
+    click(&mut h, "Preview");
+    assert!(h.query_by_label("8 source graphs, 9 layers").is_some());
+    assert_eq!(project(&h), &before);
+    click(&mut h, "OK");
+    let merged = project(&h).graphs().last().unwrap();
+    assert_eq!(merged.layers.len(), 9);
+    let empty = &merged.layers[8];
+    assert!(empty.plots.is_empty() && empty.link.is_none());
+    assert!(empty.frame.left > merged.layers[7].frame.left);
+    assert_eq!(empty.frame.top, merged.layers[7].frame.top);
+    menu(&mut h, "Edit", "Undo Merge Graph Windows");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
 fn merge_panel_labels_follow_source_order_and_the_dialog_draft() {
     use sheaf_core::layers::NewLayerKind;
     let (mut h, ids) = fixture("merge-panel-labels");

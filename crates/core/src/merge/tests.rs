@@ -139,6 +139,32 @@ fn panel_labels_are_scaled_and_placed_once_per_source_graph() {
 }
 
 #[test]
+fn extra_layers_fill_unused_cells_without_counting_linked_layers_as_sources() {
+    let (mut p, sources, _) = project(3);
+    p.graph_mut(sources[1]).unwrap().add_layer(crate::layers::NewLayerKind::RightY, 0).unwrap();
+    let source_graphs = sources.iter().map(|&id| p.graph(id).unwrap()).collect::<Vec<_>>();
+    let options = MergeOptions { rows: Some(2), cols: Some(3), link: true, ..opts(&sources) };
+    let without = merge_graphs(&source_graphs, &options).unwrap();
+    let with = MergeOptions { add_extra_layers: true, ..options };
+    let merged = merge_graphs(&source_graphs, &with).unwrap();
+    assert_eq!(without.layers.len(), 4);
+    assert_eq!(merged.layers[..4], without.layers);
+    assert_eq!(merged.layers.len(), 7);
+    let frames = with.layout(sources.len()).frames().unwrap();
+    for (layer, frame) in merged.layers[4..].iter().zip(&frames[3..]) {
+        assert_eq!(&layer.frame, frame);
+        assert!(layer.link.is_none() && layer.plots.is_empty() && layer.labels.is_empty());
+        assert!(layer.x_axis.min.is_none() && layer.x_axis.max.is_none());
+        assert!(layer.y_axis.min.is_none() && layer.y_axis.max.is_none());
+        assert!(close(layer.x_axis.tick_font.size_pt, 18.0 * 0.36, 1e-9));
+    }
+    let no_arrange = MergeOptions { rearrange: false, ..with.clone() };
+    assert_eq!(merge_graphs(&source_graphs, &no_arrange).unwrap().layers.len(), 4);
+    let full = MergeOptions { rows: Some(3), cols: Some(1), ..with };
+    assert_eq!(merge_graphs(&source_graphs, &full).unwrap().layers.len(), 4);
+}
+
+#[test]
 fn three_graphs_fill_a_two_by_two_grid_and_their_text_shrinks() {
     let (mut p, gs, _) = project(3);
     let tick = p.graph(gs[0]).unwrap().layers[0].x_axis.tick_font.size_pt;

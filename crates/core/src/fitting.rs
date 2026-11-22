@@ -35,7 +35,7 @@ mod datasets;
 mod more;
 mod surface;
 pub use datasets::{CompareDatasetsOptions, CompareDatasetsOutcome, ImplicitOutcome, ImplicitRequest};
-pub use more::{CompareOutcome, MultiRegOutcome, MultiRegRequest, RankOutcome};
+pub use more::{BestSubsetOutcome, BestSubsetRequest, CompareOutcome, MultiRegOutcome, MultiRegRequest, RankOutcome};
 pub use sheaf_fit::nlsf::Algorithm;
 use sheaf_fit::{Bands, FitError, FitReport};
 pub use surface::{SURFACE_CATEGORY, surface_columns, surface_functions};

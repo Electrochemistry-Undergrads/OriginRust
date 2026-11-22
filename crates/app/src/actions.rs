@@ -806,6 +806,20 @@ pub enum Action {
         y: ColumnId,
         layer: usize,
     },
+    /// Analysis > Data Manipulation > Subtract Straight Line on the active data plot of `graph`: pick the two
+    /// points on the graph (T348).
+    SubtractLinePick {
+        graph: WindowId,
+        y: ColumnId,
+        layer: usize,
+    },
+    /// Analysis > Mathematics > CV Charge on the active data plot of `graph`: pick the peak's feet on the
+    /// graph (T349).
+    CvChargePick {
+        graph: WindowId,
+        y: ColumnId,
+        layer: usize,
+    },
     /// Worksheet > Pivot Table: open the window; the table goes to a new sheet.
     PivotTable {
         book: WindowId,

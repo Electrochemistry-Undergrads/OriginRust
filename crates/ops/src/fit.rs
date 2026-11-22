@@ -60,6 +60,8 @@ pub struct FitSpec {
     pub xerr: Option<String>,
     /// Multiple linear regression on these columns.
     pub regress: Vec<String>,
+    /// With `regress`: best subset selection over those columns (T347).
+    pub best_subsets: bool,
     /// Compare `model` with this model.
     pub compare: Option<String>,
     /// Rank these built-in functions.
@@ -104,6 +106,7 @@ impl Default for FitSpec {
             yerr: Vec::new(),
             xerr: None,
             regress: Vec::new(),
+            best_subsets: false,
             compare: None,
             rank: Vec::new(),
             no_scale_errors: false,
@@ -289,6 +292,7 @@ pub enum FitRun {
     Regression(MultiRegOutcome),
     Comparison(CompareOutcome),
     Ranking(RankOutcome),
+    BestSubsets(sheaf_core::fitting::BestSubsetOutcome),
 }
 
 /// The result of [`run`].
@@ -305,6 +309,7 @@ impl FitResult {
             FitRun::Regression(o) => o.param_sheet,
             FitRun::Comparison(o) => o.sheet,
             FitRun::Ranking(o) => o.sheet,
+            FitRun::BestSubsets(o) => o.sheet,
         }
     }
 }
@@ -367,6 +372,11 @@ pub fn run(project: &mut Project, a: &FitSpec, prepared: &Prepared) -> Result<Fi
         request.correlation_matrix = a.correlation_matrix;
         request.x_error = x_error;
         requests.push(request);
+    }
+    if !a.regress.is_empty() && a.best_subsets {
+        let x = named_columns(project, book, sheet, &a.regress)?;
+        let request = sheaf_core::fitting::BestSubsetRequest { y: columns[0], x, rows: prepared.rows };
+        return Ok(FitResult { book, run: FitRun::BestSubsets(project.best_subsets(&request)?) });
     }
     if !a.regress.is_empty() {
         return Ok(FitResult { book, run: FitRun::Regression(regress(project, a, book, sheet, columns[0])?) });

@@ -1936,6 +1936,7 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Fit Linear with X Error...", Cmd::Fit(FitKind::LinearXError)),
                 item("Polynomial Fit...", Cmd::Fit(FitKind::Polynomial)),
                 item("Multiple Linear Regression...", Cmd::FitMore(FitMoreKind::Multiple)),
+                item("Best Subset Selection...", Cmd::FitMore(FitMoreKind::BestSubset)),
                 sep(),
                 keyed("Nonlinear Curve Fit...", ctrl(Key::Y), Cmd::Fit(FitKind::BuiltIn)),
                 item("Nonlinear Implicit Curve Fit...", Cmd::FitMore(FitMoreKind::Implicit)),
@@ -2094,6 +2095,7 @@ fn statistics_menu() -> Vec<Entry> {
         sep(),
         item("&ROC Curve...", Cmd::Analyze(AnalysisKind::Roc)),
         item("&Quantile Regression...", Cmd::Analyze(AnalysisKind::QuantReg)),
+        item("&Change Point Analysis...", Cmd::Analyze(AnalysisKind::ChangePoint)),
         sep(),
         mru_submenu("Most Recently Used Items", MruMenu::Statistics),
     ]
@@ -3759,6 +3761,18 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         },
         Cmd::Analyze(kind) => match (c.book, c.curve) {
             (Some(book), _) => Action::Analyze { book, columns: c.selected.to_vec(), kind: *kind },
+            // On a graph the feet of a CV peak are picked there (T349).
+            (None, Some((_, y))) if c.kind == WindowKind::Graph && *kind == AnalysisKind::CvCharge => match c.graph {
+                Some(graph) => Action::CvChargePick { graph, y, layer: c.layer },
+                None => return Err(ANALYSIS_ON_BOOK),
+            },
+            // On a graph Subtract Straight Line is Origin's interactive tool: the points are picked there (T348).
+            (None, Some((_, y))) if c.kind == WindowKind::Graph && *kind == AnalysisKind::SubtractLine => {
+                match c.graph {
+                    Some(graph) => Action::SubtractLinePick { graph, y, layer: c.layer },
+                    None => return Err(ANALYSIS_ON_BOOK),
+                }
+            }
             (None, Some((book, y))) if c.kind == WindowKind::Graph => {
                 let columns = match kind {
                     AnalysisKind::AverageCurves if c.layer_curves.len() >= 2 => c.layer_curves.clone(),

@@ -3,7 +3,9 @@
 
 use super::analysis::AnalysisKind;
 use eframe::egui;
-use sheaf_core::analysis::{KaplanMeierSpec, KmeansSpec, PcaSpec, QuantRegSpec, RocSpec, Tool};
+use sheaf_core::analysis::{
+    ChangeKind, ChangePenalty, ChangePointSpec, KaplanMeierSpec, KmeansSpec, PcaSpec, QuantRegSpec, RocSpec, Tool,
+};
 
 /// What the windows keep between frames.
 #[derive(Default)]
@@ -11,6 +13,9 @@ pub struct MultiOptions {
     pca: PcaSpec,
     roc: RocSpec,
     quantreg: QuantRegSpec,
+    changepoint: ChangePointSpec,
+    /// The value of the Manual penalty while another penalty is chosen.
+    manual_penalty: Option<f64>,
     /// The quantiles as typed (comma separated), read when the tool runs.
     quantiles: Option<String>,
     km: KaplanMeierSpec,
@@ -55,6 +60,13 @@ impl MultiOptions {
                     return Err(format!("a quantile must lie between 0 and 1 (got {bad})"));
                 }
                 Ok(Tool::QuantReg(QuantRegSpec { quantiles, ..self.quantreg.clone() }))
+            }
+            AnalysisKind::ChangePoint => {
+                let need = if self.changepoint.kind == ChangeKind::Mean { 1 } else { 2 };
+                if self.changepoint.min_segment < need {
+                    return Err(format!("the minimum segment length must be at least {need}"));
+                }
+                Ok(Tool::ChangePoint(self.changepoint))
             }
             AnalysisKind::Kmeans => {
                 if self.kmeans.clusters < 2 {
@@ -144,6 +156,46 @@ impl MultiOptions {
                 ui.weak(
                     "The exact solution of each quantile (the sum of check losses is as small as it can be); no standard errors.",
                 );
+            }
+            AnalysisKind::ChangePoint => {
+                ui.label("Every chosen column is a series of its own, in row order.");
+                let s = &mut self.changepoint;
+                ui.horizontal(|ui| {
+                    ui.label("Change in");
+                    ui.radio_value(&mut s.kind, ChangeKind::Mean, "Mean");
+                    ui.radio_value(&mut s.kind, ChangeKind::Variance, "Variance");
+                    ui.radio_value(&mut s.kind, ChangeKind::MeanVariance, "Mean and Variance");
+                });
+                let manual = self.manual_penalty.get_or_insert(10.0);
+                ui.horizontal(|ui| {
+                    ui.label("Penalty");
+                    let name = match s.penalty {
+                        ChangePenalty::Mbic => "MBIC",
+                        ChangePenalty::Bic => "BIC (SIC)",
+                        ChangePenalty::Aic => "AIC",
+                        ChangePenalty::HannanQuinn => "Hannan-Quinn",
+                        ChangePenalty::Manual(_) => "Manual",
+                    };
+                    egui::ComboBox::from_id_salt("changepoint_penalty").selected_text(name).show_ui(ui, |ui| {
+                        ui.selectable_value(&mut s.penalty, ChangePenalty::Mbic, "MBIC");
+                        ui.selectable_value(&mut s.penalty, ChangePenalty::Bic, "BIC (SIC)");
+                        ui.selectable_value(&mut s.penalty, ChangePenalty::Aic, "AIC");
+                        ui.selectable_value(&mut s.penalty, ChangePenalty::HannanQuinn, "Hannan-Quinn");
+                        if ui.selectable_label(matches!(s.penalty, ChangePenalty::Manual(_)), "Manual").clicked() {
+                            s.penalty = ChangePenalty::Manual(*manual);
+                        }
+                    });
+                    if let ChangePenalty::Manual(v) = &mut s.penalty {
+                        ui.add(egui::DragValue::new(v).speed(0.5).range(0.0..=1e6));
+                        *manual = *v;
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Minimum segment length");
+                    ui.add(egui::DragValue::new(&mut s.min_segment).range(1..=100_000));
+                });
+                ui.checkbox(&mut s.graph, "Graph of the data with the segment means");
+                ui.weak("The exact optimum of normal costs plus the penalty per change (PELT).");
             }
             AnalysisKind::Kmeans => {
                 let s = &mut self.kmeans;

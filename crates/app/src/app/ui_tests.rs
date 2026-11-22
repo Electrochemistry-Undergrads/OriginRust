@@ -2302,6 +2302,51 @@ fn analyze_peaks_runs_from_the_analysis_menu_and_undoes_in_one_step() {
     assert_eq!((b.sheets.len(), b.sheets[0].columns.len()), (1, 2));
 }
 
+/// The Peak Analyzer's User Defined anchors picked on the graph (T351): the Data Reader of the input's graph adds
+/// anchors on Enter, Stop Picking turns it off, and OK uses the line through the picked anchors as the baseline.
+#[test]
+fn peak_analyzer_anchors_are_picked_on_the_graph() {
+    let mut text = String::from("t,i\n");
+    for k in 0..200 {
+        let x = f64::from(k) * 0.1;
+        text.push_str(&format!("{x},{}\n", 0.5 + 0.05 * x + 2.0 * (-(x - 10.0).powi(2) / (2.0 * 0.6 * 0.6)).exp()));
+    }
+    let data = csv_file("pa-anchors", "slope", &text);
+    let mut h = start(vec![data]);
+    let gid = project(&h).graphs().next().unwrap().id;
+    show_window(&mut h, "Book1 - slope.csv");
+    menu_path(&mut h, &["Analysis", "Peaks and Baseline", "Peak Analyzer..."]);
+    click(&mut h, "Next");
+    h.state_mut().analysis.as_mut().unwrap().choose_picked_anchors();
+    settle(&mut h);
+    assert!(has_label(&h, "Pick on Graph"), "the button of the picked anchors");
+    // The window is taller than the test screen, so the button's effect is set directly.
+    h.state_mut().analysis.as_mut().unwrap().anchor_picking = true;
+    settle(&mut h);
+    assert!(h.state().graphs[&gid].reader, "the input's graph reads data points");
+    for row in [20, 180] {
+        h.state_mut().graphs.get_mut(&gid).unwrap().reader_point =
+            Some(crate::reader::Point { layer: 0, plot: 0, row });
+        h.key_press(egui::Key::Enter);
+        settle(&mut h);
+    }
+    assert!(h.state().analysis.is_some(), "Enter picks, it does not press OK");
+    let picked = h.state().analysis.as_ref().unwrap().picked_anchors().to_vec();
+    assert_eq!(picked.len(), 2, "{picked:?}");
+    assert!((picked[0].0 - 2.0).abs() < 1e-9 && (picked[1].0 - 18.0).abs() < 1e-9, "{picked:?}");
+    assert!(has_label(&h, "Stop Picking"));
+    h.state_mut().analysis.as_mut().unwrap().anchor_picking = false;
+    settle(&mut h);
+    assert!(!h.state().graphs[&gid].reader, "the reader goes off when the picking stops");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    // The baseline beside the data is the line through the picked anchors.
+    let b = project(&h).workbooks().next().unwrap();
+    let base = b.sheets[0].columns[2].numeric().unwrap().to_vec();
+    let line = |x: f64| 0.5 + 0.05 * x;
+    assert!((base[0] - line(0.0)).abs() < 1e-3 && (base[199] - line(19.9)).abs() < 1e-3, "{} {}", base[0], base[199]);
+}
+
 /// The Fit Peaks goal of the Peak Analyzer offers Origin's Voigt and a function per peak; OK fits
 /// the found peaks with them.
 #[test]
@@ -5483,6 +5528,33 @@ fn the_statistics_menu_runs_a_quantile_regression() {
     assert_eq!(h.state().doc.undo_label(), Some("Quantile regression"));
 }
 
+/// Statistics > Change Point Analysis... (T346): the segments of a series with one mean shift, and a graph;
+/// one undo removes both.
+#[test]
+fn the_statistics_menu_finds_change_points() {
+    let mut text = String::from("t,v\n");
+    for i in 0..40 {
+        let level = if i < 15 { 1.0 } else { 5.0 };
+        text.push_str(&format!("{i},{}\n", level + 0.2 * (f64::from(i * i) * 0.77).sin()));
+    }
+    let data = csv_file("changepoint", "cp", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - cp.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Change Point Analysis..."]);
+    assert!(h.state().analysis.is_some(), "the change point window is open");
+    assert!(has_label(&h, "Minimum segment length"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, starts) = result_column(&h, "Start row");
+    assert!(sheet.starts_with("ChangePoint"), "{sheet}");
+    assert_eq!(starts, [1.0, 16.0]);
+    let (_, means) = result_column(&h, "Mean");
+    assert!((means[1] - 5.0).abs() < 0.2, "{means:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Change point analysis"));
+}
+
 /// Statistics > Descriptive Statistics > Probability Plot... and Q-Q Plot...: a result sheet and a graph with
 /// points and a reference line; one undo removes both.
 #[test]
@@ -5671,6 +5743,95 @@ fn the_analysis_menu_on_a_graph_works_on_its_data_plot() {
     let dialog =
         h.state().analysis.as_ref().expect("the Integrate window is open, not a message to activate a workbook");
     assert_eq!(dialog.columns(), &[ys[1]]);
+}
+
+/// Subtract Straight Line on a graph (T348): the two ends are picked with the Data Reader, the curve minus the
+/// line through them is written and drawn, one undo step; Cancel changes nothing.
+#[test]
+fn subtract_straight_line_on_a_graph_picks_the_two_points() {
+    // A sloped baseline 1 + 0.5 x with a bump in the middle.
+    let mut text = String::from("x,y\n");
+    for i in 0..=20 {
+        let x = f64::from(i);
+        let bump = if (8..=12).contains(&i) { 3.0 } else { 0.0 };
+        text.push_str(&format!("{x},{}\n", 1.0 + 0.5 * x + bump));
+    }
+    let data = csv_file("subpick", "base", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Graph1 - base");
+    let gid = project(&h).graphs().next().unwrap().id;
+    menu_path(&mut h, &["Analysis", "Data Manipulation", "Subtract Straight Line..."]);
+    assert!(h.state().analysis.is_none(), "no typed window on a graph");
+    assert!(h.state().subtract_pick.is_some(), "the picking window is open");
+    assert!(h.state().graphs[&gid].reader, "the Data Reader is on while picking");
+    for row in [2, 18] {
+        h.state_mut().graphs.get_mut(&gid).unwrap().reader_point =
+            Some(crate::reader::Point { layer: 0, plot: 0, row });
+        h.key_press(egui::Key::Enter);
+        settle(&mut h);
+    }
+    let points = h.state().subtract_pick.as_ref().unwrap().points.clone();
+    assert_eq!(points, [(2.0, 2.0), (18.0, 10.0)]);
+    click(&mut h, "Subtract");
+    assert!(h.state().subtract_pick.is_none() && !h.state().graphs[&gid].reader);
+    assert_eq!(h.state().doc.undo_label(), Some("Subtract straight line"));
+    let g = project(&h).graph(gid).unwrap();
+    assert_eq!(g.layers[0].plots.len(), 2, "the result is drawn");
+    let result = project(&h).column(g.layers[0].plots[1].y).unwrap().clone();
+    assert!(result.long_name.ends_with("minus line"), "{}", result.long_name);
+    let v = result.numeric().unwrap();
+    assert!(v[0].abs() < 1e-12 && (v[10] - 3.0).abs() < 1e-12 && v[20].abs() < 1e-12, "{v:?}");
+    h.state_mut().doc.undo();
+    assert_eq!(project(&h).graph(gid).unwrap().layers[0].plots.len(), 1);
+    // Cancel leaves everything as it was.
+    menu_path(&mut h, &["Analysis", "Data Manipulation", "Subtract Straight Line..."]);
+    click(&mut h, "Cancel");
+    assert!(h.state().subtract_pick.is_none() && !h.state().graphs[&gid].reader);
+    assert_eq!(project(&h).graph(gid).unwrap().layers[0].plots.len(), 1);
+}
+
+/// CV Charge on a graph (T349): the feet of an anodic peak are picked with the Data Reader; the charge between
+/// them above the line through them goes to a results sheet, one undo step.
+#[test]
+fn cv_charge_on_a_graph_picks_the_feet_of_the_peak() {
+    // An anodic sweep 0..1 V: a sloped background 0.2 + 0.5 E with a Gauss peak at 0.5 V.
+    let current = |e: f64| 0.2 + 0.5 * e + 2.0 * (-(e - 0.5).powi(2) / (2.0 * 0.05 * 0.05)).exp();
+    let mut text = String::from("E,I\n");
+    for k in 0..=20 {
+        let e = f64::from(k) * 0.05;
+        text.push_str(&format!("{e},{}\n", current(e)));
+    }
+    let data = csv_file("cvfeet", "cv", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Graph1 - cv");
+    let gid = project(&h).graphs().next().unwrap().id;
+    menu_path(&mut h, &["Analysis", "Mathematics", "CV Charge..."]);
+    assert!(h.state().analysis.is_none() && h.state().cv_pick.is_some(), "the feet are picked on the graph");
+    assert!(h.state().graphs[&gid].reader);
+    for row in [16, 4] {
+        h.state_mut().graphs.get_mut(&gid).unwrap().reader_point =
+            Some(crate::reader::Point { layer: 0, plot: 0, row });
+        h.key_press(egui::Key::Enter);
+        settle(&mut h);
+    }
+    assert_eq!(h.state().cv_pick.as_ref().unwrap().feet.len(), 2);
+    click(&mut h, "Calculate");
+    assert!(h.state().cv_pick.is_none() && !h.state().graphs[&gid].reader);
+    assert_eq!(h.state().doc.undo_label(), Some("CV charge"));
+    // The trapezoid sum of the peak above the line through the feet (0.2 V and 0.8 V), over 0.1 V/s.
+    let line = |e: f64| current(0.2) + (current(0.8) - current(0.2)) * (e - 0.2) / 0.6;
+    let want: f64 = (4..16)
+        .map(|k| {
+            let (a, b) = (f64::from(k) * 0.05, f64::from(k + 1) * 0.05);
+            0.5 * ((current(a) - line(a)) + (current(b) - line(b))) * 0.05
+        })
+        .sum::<f64>()
+        / 0.1;
+    let (sheet, charge) = result_column(&h, "Charge");
+    assert!(sheet.starts_with("CVCharge"), "{sheet}");
+    assert!((charge[0] - want).abs() < 1e-9, "{charge:?} vs {want}");
+    let (_, first) = result_column(&h, "First row");
+    assert_eq!(first[0], 5.0, "from the foot at row 5");
 }
 
 // ----- the dialogs in Origin's layout: Column Properties, the analysis frame, the Import Wizard ----

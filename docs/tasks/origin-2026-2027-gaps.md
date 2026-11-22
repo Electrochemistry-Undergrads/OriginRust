@@ -73,18 +73,18 @@ outputs or UI behavior.
 | Feature | Release | Functionality to add | Source |
 |---|---|---|---|
 | Fourier self-deconvolution peak detection | 2018b | Done (T341, Sheaf's own after Kauppinen 1981: Analysis > Peaks and Baseline > Fourier Self-Deconvolution..., `analyze fsd`; Origin's settings unknown). Enhance separation of overlapping peaks in a spectrum for peak detection. | [2018b][o18b] |
-| Quantile regression and change-point analysis | 2019b Apps | Quantile regression done (T342, linear, exact; no standard errors); change-point analysis remains. Fit conditional quantiles of a response. Detect points at which the statistical behavior of a series changes. | [2019b][o19b] |
+| Quantile regression and change-point analysis | 2019b Apps | Quantile regression done (T342, linear, exact; no standard errors); change-point analysis done (T346: mean, variance or both, PELT, exact). Fit conditional quantiles of a response. Detect points at which the statistical behavior of a series changes. | [2019b][o19b] |
 | Time series modeling and forecasting | 2024b Pro App | Check stationarity, inspect autocorrelation, separate trend and seasonality, and use ARIMA to forecast future observations. | [2024b][o24b] · [Time Series Analysis][tsa] |
-| Best Subset Selection | 2025b Pro App | Compare regression models over candidate predictor subsets and rank the models by fit criteria. | [2025b][o25b] |
-| Piecewise Peak Fitting | 2025b Pro App | Divide a single curve into fitting regions, set a separate baseline for each region and resolve peaks within each region. | [2025b][o25b] · [Piecewise Peak Fitting][piecewise] |
+| Best Subset Selection | 2025b Pro App | Done (T347, Sheaf's own definitions: Analysis > Fitting > Best Subset Selection..., `fit --regress ... --best-subsets`). Compare regression models over candidate predictor subsets and rank the models by fit criteria. | [2025b][o25b] |
+| Piecewise Peak Fitting | 2025b Pro App | Done (T352, Sheaf's own: Peak Analyzer regions, `analyze peaks --regions`). Divide a single curve into fitting regions, set a separate baseline for each region and resolve peaks within each region. | [2025b][o25b] · [Piecewise Peak Fitting][piecewise] |
 | Graphical Summary | 2026 | Done (T40, Separate Graphs). Produce a descriptive report with statistics, diagnostic charts and Anderson–Darling normality testing for individual or grouped data. | [2026][o26] |
 | Life Science structured tables | 2026b Pro | Give experimental data explicit group, replicate, time or survival roles and surface table-specific graphing and analysis actions. | [2026b][o26b] |
 | Random Forest and Acceptance Sampling | 2026b Pro Apps | Train ensembles of decision trees for predictive modeling. Design or evaluate lot-acceptance sampling plans. | [2026b][o26b] |
 | Multiple Comparisons and Significance Plots | 2027 | Done (T64, one-way ANOVA and two-sample t-test; two-way, paired and one-sample left). Generate a chart directly from ANOVA or t-test reports, including comparisons, error bars and p-value annotations. | [2027][o27] |
-| Assay analysis and dose-response extensions | 2027 Pro | Analyze Western blot and qPCR experiments, mark IC50/EC50 on dose-response fits and support robust-regression outlier handling. | [2027][o27] |
+| Assay analysis and dose-response extensions | 2027 Pro | Partly: the DoseResp, Logistic and Logistic5 fits already report EC50 (and EC20, EC80 where Origin's files define them) as derived values (checked in T354); not done: Western blot, qPCR, EC50 marks on the graph, robust-regression outliers. Analyze Western blot and qPCR experiments, mark IC50/EC50 on dose-response fits and support robust-regression outlier handling. | [2027][o27] |
 | Monte Carlo simulation workflow | 2027 Pro App | Define a probabilistic model, sample its inputs, inspect sensitivity and capability, then optimize controllable inputs against tolerances. | [2027][o27] |
 | Quality improvement additions | 2027 Pro Apps | Analyze rare events with G/T control charts, assess nonnormal process capability, run two-level split-plot experiments and model between-batch variation in stability studies. | [2027][o27] |
-| FIR filter design and application | 2027 Pro App | Design and apply a finite impulse response filter to sampled signals. | [2027][o27] · [FIR Filter][fir] |
+| FIR filter design and application | 2027 Pro App | Done (T55: Analysis > Signal Processing > FIR Filter..., windowed-sinc design and application, `analysis-tools.md` 17; the row was stale, corrected in T354). Design and apply a finite impulse response filter to sampled signals. | [2027][o27] · [FIR Filter][fir] |
 
 ## Added 2026-11-20 from the 2026, 2026b and 2027 release notes
 

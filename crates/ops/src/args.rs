@@ -242,6 +242,11 @@ pub struct FitArgs {
     /// (comma-separated columns); --fix Intercept=VALUE holds the intercept.
     #[arg(long, value_delimiter = ',', value_name = "COLUMNS", conflicts_with_all = ["compare", "rank", "global"])]
     pub regress: Vec<String>,
+    /// With --regress: best subset selection instead of one regression. Every subset of the --regress
+    /// columns (at most 15) is fitted with an intercept and scored by R-square, adjusted R-square,
+    /// Mallows Cp, AIC and BIC; the table goes to a new sheet BestSubsets<n>.
+    #[arg(long, requires = "regress")]
+    pub best_subsets: bool,
     /// Compare --model with this model (a model as for --model) on the first Y column: AICc,
     /// Akaike weights, BIC and the F-test.
     #[arg(long, value_name = "MODEL", conflicts_with_all = ["rank", "global"])]
@@ -2656,6 +2661,17 @@ pub enum AnalyzeTool {
         /// Anchor points of the anchors baseline, written X1:Y1,X2:Y2,... (linear interpolation).
         #[arg(long)]
         anchors: Option<String>,
+        /// Piecewise peak fitting: run the analysis (baseline, search, integration, fit) separately in
+        /// each X region, written FROM:TO,FROM:TO,...; each region has its own baseline.
+        #[arg(long, value_name = "REGIONS")]
+        regions: Option<String>,
+        /// Search on the Fourier self-deconvolved curve with bands of this FWHM (X units), so that
+        /// hidden peaks are found; heights and areas are measured on the data. Needs evenly spaced X.
+        #[arg(long, value_name = "FWHM")]
+        fsd_fwhm: Option<f64>,
+        /// Enhancement factor K of the --fsd-fwhm search.
+        #[arg(long, default_value_t = 2.0, value_name = "K")]
+        fsd_k: f64,
         /// ALS baseline: Asymmetric Factor, between 0 and 1 (close to 0 for positive peaks).
         #[arg(long, default_value_t = 0.001)]
         als_asymmetric: f64,
@@ -3382,6 +3398,25 @@ pub enum AnalyzeTool {
         /// Confidence level of the interval of the area, in percent.
         #[arg(long, default_value_t = 95.0)]
         confidence: f64,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// Change point analysis: each --y column is a series of its own (in row order); finds where its mean, its
+    /// variance or both change (exact optimum of normal costs plus a penalty per change) and lists the segments;
+    /// makes a graph of the data with the segment means.
+    Changepoint {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// What changes: mean, variance or meanvar.
+        #[arg(long, default_value = "mean")]
+        change: String,
+        /// The penalty per change: mbic, bic, aic, hq (Hannan-Quinn) or a number.
+        #[arg(long, default_value = "mbic")]
+        penalty: String,
+        /// The fewest points in a segment (2 or more when the variance changes).
+        #[arg(long, default_value_t = 2)]
+        min_segment: usize,
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,

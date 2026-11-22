@@ -771,6 +771,17 @@ Existing Dataset: 11.6). User Defined in
 the peak goals uses the same anchors with straight lines. Command line: `sheaf analyze peaks FILE --baseline-goal
 create|subtract [--baseline second-derivative] [--baseline-points N]`.
 
+### 11.5a Piecewise peak fitting (T352, Sheaf's own)
+
+Origin's Piecewise Peak Fitting is a 2025b Pro app (not run). Sheaf: `PeakChainSpec::regions`, X
+intervals; the Peak Analyzer's Baseline Mode page has "Regions (X from:to, ...)" for the peak goals, the
+command line `analyze peaks ... --regions 2:8,10:15`. Each region is the first unbroken run of rows whose
+X lies inside it (as the X-range row choice), and runs the whole chain on its own: baseline (each region's
+own, so a step in the background is followed), search, integration (Area % of the region's corrected
+curve) and fit. The result table has one row per peak labelled "Peak k of B, region r", with the sheet's
+row numbers; each region writes its own baseline (and fit) column, "Baseline of B (region r)". A region
+with no rows or fewer than 3 is refused with its number; the note says how many regions ran.
+
 ### 11.6 Use Existing Dataset and Asymmetric Least Squares Smoothing (T318)
 
 Origin 2016 (`re-workspace/scratch/baseline-als/`, the dialog driven as in 11.5): the Baseline Mode list
@@ -799,6 +810,17 @@ continues beyond the first and last point). In the window it is a mode of the pe
 finding method of User Defined in the baseline goals, as in Origin. Command line: `--baseline als
 [--als-asymmetric F --als-threshold T --als-smoothing S --als-iterations N]`; a dataset is given there as
 `--anchors X1:Y1,...`.
+
+### 11.6a Anchor points picked on the graph (T351, Sheaf's own)
+
+Origin's User Defined baseline lets the user modify and add anchor points on the graph after they are found
+(Origin's help; not measured, it needs the GUI). Sheaf adds a fourth anchor-finding method on the Baseline Mode
+page, "Pick on the graph (Sheaf's own)": Pick on Graph turns on the Data Reader of a graph that plots the
+input (the first input column); a double-click on one of its data points (outside the window) or Enter adds that
+point as an anchor (a second point at the same X is left out); Remove Last, Clear and Stop Picking work on the
+list, and the reader goes off when the picking stops or the window closes. The anchors, sorted by X, are joined as
+the other anchors are (straight lines for the peak goals, the Create Baseline page's method for the baseline
+goals: `ChainBaseline::Anchors`). At least two anchors are needed.
 
 ### 11.7 End Points Weighted, measured but not built (T328)
 
@@ -902,6 +924,12 @@ link mechanism):
   own value at that X (straight lines between data points) unless a Y is given. Equal X values, an X
   outside the data without a given Y, and a curve with fewer than two valid points are refused with
   nothing changed. The result is a new Y column behind each input named "<name> minus line".
+  On a graph (T348) the menu item does not open the window: as Origin's `subtract_line` is an
+  interactive tool on the graph, the Data Reader goes on and a "Subtract Straight Line" window
+  lists the picked points; a double-click on a data point of the active plot (outside the window)
+  or Enter picks it (as Multiple Peak Fit's Get Points), Remove Last takes one back, and with two
+  points Subtract writes the curve minus the line through the two picked data points (their X and
+  Y) and draws it on the graph as a line, one undo step. Cancel changes nothing.
 - Reduce to Evenly Spaced X: Origin's `reduce_ex`, measured (12.2).
 - Curve Translate X: adds a constant to X, or moves the point at X = `at` to X = `to` (shift
   `to - at`); the result is a new sheet with the shifted X and the unchanged Y. Curve Translate Y
@@ -1854,7 +1882,13 @@ cv-charge FILE --y COL --scan-rate V [--baseline]`) does both in one step (`shea
 - **Output:** a results sheet `CVCharge<n>`: one row per sweep (label "<input>, sweep k (anodic)" or
   "(cathodic)") with First row, Last row, E start, E end and Charge, then the total of all anodic and of
   all cathodic sweeps; a note gives the scan rate. One undo step ("CV charge").
-- **Not built:** picking the peak's feet on the graph (the parity row's "foot picking").
+- **Feet picked on the graph (T349):** with a graph active the menu item does not open the window: the Data
+  Reader goes on and a "CV Charge" window lists the picked feet; a double-click on a data point of the active
+  plot (outside the window) or Enter picks a foot (as Multiple Peak Fit's Get Points), Remove Last takes one
+  back, the scan rate is set there, and Calculate runs CV Charge over the rows from one foot to the other with
+  the end-point baseline, so the straight line through the two feet is the peak's sloped baseline (feet on
+  either side of a turn give each sweep its own line through its ends). The results sheet is the same; one
+  undo step ("CV charge"). From a workbook the typed window stays.
 
 ## 22. Fourier Self-Deconvolution (T341, Sheaf's own)
 
@@ -1878,6 +1912,13 @@ describe Origin's settings, so this follows the method of Kauppinen, Moffatt, Ma
   with the largest side lobes).
 - **Output:** a column "FSD of <input>" beside each input (comment with the settings); with Recalculate
   it follows the input. Noise grows with K (the method's nature): smooth first or lower K.
+- **In the peak search (T344, Origin 2018b's "FSD peak detection"):** the Peak Analyzer's Find Peaks page
+  has "Search on the Fourier self-deconvolved curve (hidden peaks)" with the same three settings
+  (`FindOptions::fsd`; CLI `analyze peaks --fsd-fwhm W [--fsd-k K]`). The chosen method searches the
+  narrowed corrected curve (after any smoothing), so bands hidden as shoulders become maxima; the height
+  filter applies to the narrowed curve; centres, heights, widths, limits and areas are measured on the
+  corrected data as before. Two Lorentzians of FWHM 2, 1.0 apart, are one peak without it and two with
+  FWHM 2, K 3. Uneven X is refused with the column named.
 
 ## Files
 

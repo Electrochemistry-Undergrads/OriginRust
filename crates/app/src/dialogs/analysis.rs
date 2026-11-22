@@ -159,6 +159,8 @@ pub enum AnalysisKind {
     Roc,
     /// Statistics > Regression > Quantile Regression (T342; options in `multivariate_options.rs`).
     QuantReg,
+    /// Statistics > Change Point Analysis (T346; options in `multivariate_options.rs`).
+    ChangePoint,
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (options in `multivariate_options.rs`).
     KaplanMeier,
     /// Statistics > Multivariate Analysis > K-Means Cluster Analysis (options in `multivariate_options.rs`).
@@ -295,6 +297,7 @@ impl AnalysisKind {
             AnalysisKind::Pca => "Principal Component Analysis...",
             AnalysisKind::Roc => "ROC Curve...",
             AnalysisKind::QuantReg => "Quantile Regression...",
+            AnalysisKind::ChangePoint => "Change Point Analysis...",
             AnalysisKind::KaplanMeier => "Kaplan-Meier Estimator...",
             AnalysisKind::Kmeans => "K-Means Cluster Analysis...",
             AnalysisKind::Crosstab => "Cross Tabulation...",
@@ -390,6 +393,7 @@ impl AnalysisKind {
             "pca" => AnalysisKind::Pca,
             "roc" => AnalysisKind::Roc,
             "quantreg" => AnalysisKind::QuantReg,
+            "changepoint" => AnalysisKind::ChangePoint,
             "kaplanmeier" => AnalysisKind::KaplanMeier,
             "kmeans" => AnalysisKind::Kmeans,
             "crosstab" => AnalysisKind::Crosstab,
@@ -453,6 +457,9 @@ enum ChainBaselineKind {
     /// Use Existing Dataset (a mode of the peak goals, an anchor finding method of User Defined in
     /// the baseline goals, T318): the anchors are the points of a chosen column against its X.
     Dataset,
+    /// User Defined with the anchor points picked on a graph of the input with the Data Reader (Sheaf's own way
+    /// of Origin's "Modify/Add" anchors; T351).
+    Picked,
     /// Asymmetric Least Squares Smoothing (T318).
     Als,
 }
@@ -810,6 +817,10 @@ pub struct AnalysisDialog {
     cv: CvChargeSpec,
     /// Fourier Self-Deconvolution's settings (T341).
     fsd: FsdOptions,
+    /// Peak Analyzer, Find Peaks: search on the FSD-narrowed curve with `fsd`'s settings (T344).
+    chain_fsd: bool,
+    /// Piecewise peak fitting (T352): "FROM:TO, FROM:TO" X regions; empty: the whole curve.
+    chain_regions: String,
     diff: DiffOptions,
     smooth_kind: SmoothKind,
     smooth_points: usize,
@@ -842,6 +853,13 @@ pub struct AnalysisDialog {
     chain_minima: usize,
     /// User Defined, 2nd Derivative: Origin's Number of Points to Find (8).
     chain_points: usize,
+    /// The anchor points picked on the graph (T351), in picking order.
+    chain_picked: Vec<(f64, f64)>,
+    /// True while the anchors are picked on the graph: the application turns the graph's Data Reader on and hands
+    /// the picked points to [`AnalysisDialog::pick_anchor`].
+    pub anchor_picking: bool,
+    /// Where the window was drawn last, so a double-click on it does not pick an anchor.
+    pub window_rect: Option<egui::Rect>,
     /// Create Baseline page: Origin's Interpolation Method (Line, Spline, BSpline).
     chain_interp: InterpMethod,
     /// Constant baseline: a value of the data, or `None` for the custom number.
@@ -1299,6 +1317,19 @@ fn reference_choices(project: &Project, exclude: &[ColumnId]) -> Vec<(ColumnId, 
     out
 }
 
+/// The Peak Analyzer's piecewise regions, "2:8, 10:15" (T352); empty text is the whole curve.
+fn parse_regions(text: &str) -> Result<Vec<(f64, f64)>, String> {
+    text.split([',', ';'])
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(|p| {
+            let (a, b) = p.split_once(':').ok_or_else(|| format!("write the region '{p}' as FROM:TO"))?;
+            let num = |t: &str| t.trim().parse::<f64>().map_err(|_| format!("'{t}' in region '{p}' is not a number"));
+            Ok((num(a)?, num(b)?))
+        })
+        .collect()
+}
+
 /// Use Existing Dataset's column list (the Y columns of the project, T318).
 fn dataset_combo(ui: &mut egui::Ui, choices: &[(ColumnId, String)], chosen: &mut usize) {
     ui.horizontal(|ui| {
@@ -1521,6 +1552,8 @@ impl AnalysisDialog {
             integrate: IntegrateSpec::default(),
             cv: CvChargeSpec::default(),
             fsd: FsdOptions::default(),
+            chain_fsd: false,
+            chain_regions: String::new(),
             diff: DiffOptions::default(),
             smooth_kind: SmoothKind::SavitzkyGolay,
             smooth_points: 5,
@@ -1548,6 +1581,9 @@ impl AnalysisDialog {
             chain_baseline: ChainBaselineKind::Constant,
             chain_minima: 5,
             chain_points: 8,
+            chain_picked: Vec::new(),
+            anchor_picking: false,
+            window_rect: None,
             chain_interp: InterpMethod::Linear,
             chain_const: Some(BaselineStat::Minimum),
             chain_custom_y: 0.0,
@@ -1635,6 +1671,13 @@ impl AnalysisDialog {
             ui.add_enabled(self.peak_keep == PeakKeep::Count, DragValue::new(&mut self.peak_count).range(1..=10_000));
         });
         ui.radio_value(&mut self.peak_keep, PeakKeep::All, "Keep every local extremum");
+        if chain {
+            // Origin 2018b's FSD peak detection (T344): the search runs on the narrowed bands.
+            ui.checkbox(&mut self.chain_fsd, "Search on the Fourier self-deconvolved curve (hidden peaks)");
+            if self.chain_fsd {
+                fsd_options(ui, &mut self.fsd);
+            }
+        }
     }
 
     /// Origin's Peak Analyzer as a wizard: the page list of the goal, Prev and Next, and the page
@@ -1743,6 +1786,18 @@ impl AnalysisDialog {
             }
             "Baseline Mode" => {
                 let baseline_goal = matches!(self.chain_goal, ChainGoal::CreateBaseline | ChainGoal::SubtractBaseline);
+                if !baseline_goal {
+                    // Piecewise peak fitting (T352, Sheaf's layout): each region is its own analysis.
+                    ui.horizontal(|ui| {
+                        ui.label("Regions (X from:to, ...)");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.chain_regions)
+                                .hint_text("whole curve")
+                                .desired_width(200.0),
+                        );
+                    });
+                    ui.weak("Each region gets its own baseline, peaks, integration and fit.");
+                }
                 // Origin's list for the baseline goals (measured).
                 const BASELINE_GOAL_MODES: [(&str, Option<ChainBaselineKind>); 4] = [
                     ("User Defined", Some(ChainBaselineKind::SecondDerivative)),
@@ -1766,6 +1821,7 @@ impl AnalysisDialog {
                 let shown = match self.chain_baseline {
                     ChainBaselineKind::Minima => ChainBaselineKind::SecondDerivative,
                     ChainBaselineKind::Dataset if baseline_goal => ChainBaselineKind::SecondDerivative,
+                    ChainBaselineKind::Picked => ChainBaselineKind::SecondDerivative,
                     k => k,
                 };
                 let name = modes.iter().find(|m| m.1 == Some(shown)).map_or("", |m| m.0);
@@ -1825,7 +1881,10 @@ impl AnalysisDialog {
                         });
                         ui.weak("Close to 0 for positive peaks, close to 1 for negative ones; larger smoothing gives a stiffer baseline.");
                     }
-                    ChainBaselineKind::Minima | ChainBaselineKind::SecondDerivative | ChainBaselineKind::Dataset => {
+                    ChainBaselineKind::Minima
+                    | ChainBaselineKind::SecondDerivative
+                    | ChainBaselineKind::Dataset
+                    | ChainBaselineKind::Picked => {
                         ui.label(egui::RichText::new("Anchor Points Finding").strong());
                         ui.horizontal_top(|ui| {
                             ui.label("Method");
@@ -1848,6 +1907,11 @@ impl AnalysisDialog {
                                     ChainBaselineKind::Minima,
                                     "Lowest point of each stretch (Sheaf's own)",
                                 );
+                                ui.radio_value(
+                                    &mut self.chain_baseline,
+                                    ChainBaselineKind::Picked,
+                                    "Pick on the graph (Sheaf's own)",
+                                );
                             });
                         });
                         if self.chain_baseline == ChainBaselineKind::SecondDerivative {
@@ -1864,6 +1928,26 @@ impl AnalysisDialog {
                             });
                         } else if self.chain_baseline == ChainBaselineKind::Dataset {
                             dataset_combo(ui, &self.reference_choices, &mut self.chain_dataset);
+                        } else if self.chain_baseline == ChainBaselineKind::Picked {
+                            ui.label(format!("Anchor points picked: {}", self.chain_picked.len()));
+                            ui.horizontal(|ui| {
+                                let label = if self.anchor_picking { "Stop Picking" } else { "Pick on Graph" };
+                                if ui.button(label).clicked() {
+                                    self.anchor_picking = !self.anchor_picking;
+                                }
+                                if ui
+                                    .add_enabled(!self.chain_picked.is_empty(), egui::Button::new("Remove Last"))
+                                    .clicked()
+                                {
+                                    self.chain_picked.pop();
+                                }
+                                if ui.add_enabled(!self.chain_picked.is_empty(), egui::Button::new("Clear")).clicked() {
+                                    self.chain_picked.clear();
+                                }
+                            });
+                            if self.anchor_picking {
+                                ui.weak("On a graph of the input: click a data point, then double-click it or press Enter to add an anchor.");
+                            }
                         } else {
                             ui.horizontal(|ui| {
                                 ui.label("Anchor points: the lowest point of each of");
@@ -1984,6 +2068,15 @@ impl AnalysisDialog {
                 let points = self.chain_dataset_points.as_ref().map(|(_, p)| p.clone()).unwrap_or_default();
                 ChainBaseline::Anchors(points, method)
             }
+            ChainBaselineKind::Picked => {
+                let method = match self.chain_goal {
+                    ChainGoal::CreateBaseline | ChainGoal::SubtractBaseline => self.chain_interp,
+                    _ => InterpMethod::Linear,
+                };
+                let mut points = self.chain_picked.clone();
+                points.sort_by(|a, b| a.0.total_cmp(&b.0));
+                ChainBaseline::Anchors(points, method)
+            }
             ChainBaselineKind::SecondDerivative => {
                 // The baseline goals join the anchors with the Create Baseline page's method; the
                 // peak goals with straight lines.
@@ -1994,6 +2087,34 @@ impl AnalysisDialog {
                 ChainBaseline::SecondDerivative { points: self.chain_points, method }
             }
         }
+    }
+
+    /// The Y column the anchors are picked for: the first input.
+    pub fn anchor_column(&self) -> Option<ColumnId> {
+        (self.kind == AnalysisKind::PeakChain && self.chain_baseline == ChainBaselineKind::Picked)
+            .then(|| self.columns.first().copied())
+            .flatten()
+    }
+
+    /// Adds a point picked on the graph as an anchor (T351); a point at an X already picked is left out.
+    pub fn pick_anchor(&mut self, x: f64, y: f64) -> bool {
+        if !(x.is_finite() && y.is_finite()) || self.chain_picked.iter().any(|p| p.0 == x) {
+            return false;
+        }
+        self.chain_picked.push((x, y));
+        true
+    }
+
+    /// The anchors picked so far (for tests).
+    #[cfg(test)]
+    pub fn picked_anchors(&self) -> &[(f64, f64)] {
+        &self.chain_picked
+    }
+
+    /// Chooses the Peak Analyzer's "Pick on the graph" anchors (for tests).
+    #[cfg(test)]
+    pub fn choose_picked_anchors(&mut self) {
+        self.chain_baseline = ChainBaselineKind::Picked;
     }
 
     /// Chooses Normalize's reference methods (T260): the statistic match, or the cell when `stat` is
@@ -2010,6 +2131,9 @@ impl AnalysisDialog {
         if self.kind == AnalysisKind::PeakChain {
             match self.chain_baseline {
                 ChainBaselineKind::Als => self.chain_als.check()?,
+                ChainBaselineKind::Picked if self.chain_picked.len() < 2 => {
+                    return Err("pick at least two anchor points on the graph".to_string());
+                }
                 ChainBaselineKind::Dataset if self.chain_dataset_points.as_ref().is_none_or(|(_, p)| p.len() < 2) => {
                     return Err("Use Existing Dataset needs a column with at least two points".to_string());
                 }
@@ -2138,6 +2262,7 @@ impl AnalysisDialog {
             AnalysisKind::Pca
             | AnalysisKind::Roc
             | AnalysisKind::QuantReg
+            | AnalysisKind::ChangePoint
             | AnalysisKind::KaplanMeier
             | AnalysisKind::Kmeans => self.multi.tool(self.kind)?,
             AnalysisKind::AverageCurves => self.curves.average_tool(),
@@ -2204,6 +2329,7 @@ impl AnalysisDialog {
             }
             AnalysisKind::PeakChain => Tool::PeakChain(PeakChainSpec {
                 centers: Vec::new(),
+                regions: parse_regions(&self.chain_regions)?,
                 chain: ChainOptions {
                     baseline: self.chain_baseline_spec(),
                     find: FindOptions {
@@ -2216,6 +2342,7 @@ impl AnalysisDialog {
                             PeakKeep::Count => PeakFilter::Number(self.peak_count),
                             PeakKeep::All => PeakFilter::None,
                         },
+                        fsd: self.chain_fsd.then_some(self.fsd),
                         ..FindOptions::default()
                     },
                     limits: if self.chain_half_height { LimitMode::HalfHeight } else { LimitMode::Baseline },
@@ -3439,6 +3566,7 @@ impl AnalysisDialog {
             AnalysisKind::Pca
             | AnalysisKind::Roc
             | AnalysisKind::QuantReg
+            | AnalysisKind::ChangePoint
             | AnalysisKind::KaplanMeier
             | AnalysisKind::Kmeans => self.multi.options(ui, self.kind),
             AnalysisKind::DiscreteFreq => {
@@ -3618,6 +3746,7 @@ impl AnalysisDialog {
             | AnalysisKind::Pca
             | AnalysisKind::Roc
             | AnalysisKind::QuantReg
+            | AnalysisKind::ChangePoint
             | AnalysisKind::SubtractLine
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
@@ -3725,6 +3854,7 @@ impl AnalysisDialog {
             AnalysisKind::QuantReg => {
                 "Fit straight lines to chosen quantiles of the dependent variable instead of its mean"
             }
+            AnalysisKind::ChangePoint => "Find where the mean, the variance or both of a series change",
             AnalysisKind::Pca => "Describe the variation of several columns by uncorrelated components",
             AnalysisKind::Crosstab => {
                 "Count the cases of every combination of two categorical variables and test their independence"
@@ -3852,6 +3982,9 @@ impl AnalysisDialog {
             }
             AnalysisKind::Roc => {
                 "Area under the curve with its standard error, the curve points and the best cut-off in a new sheet, and a graph"
+            }
+            AnalysisKind::ChangePoint => {
+                "One row per segment (rows, X range, size, mean, standard deviation) in a new sheet, and a graph of the data with the segment means"
             }
             AnalysisKind::QuantReg => {
                 "One row of coefficients per quantile with the sum of check losses and the pseudo R-square in a new sheet, and with one independent column a graph of the data and the lines"
@@ -4289,7 +4422,7 @@ impl AnalysisDialog {
         let pos = (avail.center() - egui::vec2(width, 520.0) / 2.0).max(avail.min);
         let title = self.window_title();
         let filter_fs = self.auto_sample_frequency(doc.project());
-        egui::Window::new(title)
+        let window = egui::Window::new(title)
             .id(egui::Id::new("analysis"))
             .open(&mut open)
             .default_pos(pos)
@@ -4381,6 +4514,7 @@ impl AnalysisDialog {
                     );
                 });
             });
+        self.window_rect = window.map(|r| r.response.rect);
         self.picker_window(ctx, doc.project());
 
         // The preview follows the options while Auto Preview is ticked, or when Preview is pressed.
@@ -4677,5 +4811,20 @@ mod baseline_mode_tests {
         assert_eq!(spec.baseline, ChainBaseline::Als(AlsOptions { iterations: 4, ..AlsOptions::default() }));
         d.chain_als.asymmetric = 1.5;
         assert!(d.tool().is_err());
+    }
+}
+
+#[cfg(test)]
+mod region_text_tests {
+    use super::parse_regions;
+
+    /// T352: the Peak Analyzer's region box.
+    #[test]
+    fn regions_are_read_from_the_text() {
+        assert_eq!(parse_regions("").unwrap(), Vec::<(f64, f64)>::new());
+        assert_eq!(parse_regions("2:8, 10:15.5").unwrap(), [(2.0, 8.0), (10.0, 15.5)]);
+        assert_eq!(parse_regions("1:2; 3:4").unwrap(), [(1.0, 2.0), (3.0, 4.0)]);
+        assert!(parse_regions("2-8").unwrap_err().contains("FROM:TO"));
+        assert!(parse_regions("a:3").unwrap_err().contains("not a number"));
     }
 }

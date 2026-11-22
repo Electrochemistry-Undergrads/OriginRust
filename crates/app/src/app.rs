@@ -14,6 +14,7 @@ use crate::dialogs::column_props::ColumnPropsDialog;
 use crate::dialogs::comparison_plot::{ComparisonPlotDialog, Outcome as ComparisonPlotOutcome};
 use crate::dialogs::cond_format::CondFormatDialog;
 use crate::dialogs::cond_manager::{CondManagerDialog, ManagerOutcome};
+use crate::dialogs::cv_pick::{CvPickDialog, CvPickOutcome};
 use crate::dialogs::error_bars::{ErrorBarsDialog, Outcome as ErrorBarsOutcome};
 use crate::dialogs::export::{ExportDialog, ExportOutcome};
 use crate::dialogs::export_excel::ExcelExportDialog;
@@ -46,6 +47,7 @@ use crate::dialogs::slope_object::SlopeDialog;
 use crate::dialogs::sort::{SortDialog, SortOutcome};
 use crate::dialogs::stack_panels::{Outcome as StackPanelsOutcome, StackPanelsDialog};
 use crate::dialogs::straight_line::StraightLineDialog;
+use crate::dialogs::subtract_pick::{SubtractPickDialog, SubtractPickOutcome};
 use crate::dialogs::text_object::TextDialog;
 use crate::dialogs::trendline::{Outcome as TrendlineOutcome, TrendlineDialog};
 use crate::dialogs::worksheet_color::WorksheetColorDialog;
@@ -234,6 +236,10 @@ pub struct SheafApp {
     reshape: Option<ReshapeDialog>,
     pivot: Option<PivotDialog>,
     multi_peak: Option<MultiPeakDialog>,
+    subtract_pick: Option<SubtractPickDialog>,
+    cv_pick: Option<CvPickDialog>,
+    /// The graph whose Data Reader the Peak Analyzer's anchor picking turned on (T351).
+    anchor_graph: Option<WindowId>,
     export: Option<ExportDialog>,
     export_sheet: Option<SheetExportDialog>,
     export_excel: Option<ExcelExportDialog>,
@@ -438,6 +444,9 @@ impl SheafApp {
             reshape: None,
             pivot: None,
             multi_peak: None,
+            subtract_pick: None,
+            cv_pick: None,
+            anchor_graph: None,
             export: None,
             export_sheet: None,
             export_excel: None,
@@ -1021,6 +1030,8 @@ impl SheafApp {
         self.reshape = None;
         self.pivot = None;
         self.multi_peak = None;
+        self.subtract_pick = None;
+        self.cv_pick = None;
         self.sort = None;
         self.sheet_name = None;
         self.add_columns = None;
@@ -2800,6 +2811,25 @@ impl SheafApp {
                     if self.multi_peak.is_none() {
                         self.warn("The graph has no plot of that column");
                     }
+                }
+            }
+            Action::CvChargePick { graph, y, layer } => {
+                let rate = sheaf_core::analysis::CvChargeSpec::default().scan_rate;
+                self.cv_pick = CvPickDialog::new(self.doc.project(), graph, y, layer, rate);
+                if self.cv_pick.is_none() {
+                    self.warn("The graph has no plot of that column");
+                } else {
+                    self.graphs.entry(graph).or_default().reader = true;
+                    self.focus(graph);
+                }
+            }
+            Action::SubtractLinePick { graph, y, layer } => {
+                self.subtract_pick = SubtractPickDialog::new(self.doc.project(), graph, y, layer);
+                if self.subtract_pick.is_none() {
+                    self.warn("The graph has no plot of that column");
+                } else {
+                    self.graphs.entry(graph).or_default().reader = true;
+                    self.focus(graph);
                 }
             }
             Action::Reshape { book, columns, kind } => {
@@ -5813,6 +5843,115 @@ impl SheafApp {
         }
     }
 
+    /// Subtract Straight Line on a graph (T348): the Data Reader is on and its pinned point becomes an end of the
+    /// line on a double-click (outside the window) or Enter.
+    fn subtract_pick_frame(&mut self, ctx: &egui::Context) {
+        let Some(d) = &mut self.subtract_pick else { return };
+        let (enter, double) = ctx.input(|i| {
+            let double = i.pointer.button_double_clicked(egui::PointerButton::Primary)
+                && i.pointer.interact_pos().is_some_and(|p| !d.window_rect.is_some_and(|r| r.contains(p)));
+            (i.key_pressed(egui::Key::Enter), double)
+        });
+        let state = self.graphs.entry(d.graph).or_default();
+        state.reader = true;
+        if (enter || double)
+            && let Some(point) = state.reader_point
+        {
+            d.pick(self.doc.project(), point);
+        }
+        let graph = d.graph;
+        let outcome = d.show(ctx, &mut self.doc);
+        if !matches!(outcome, SubtractPickOutcome::Open) {
+            self.subtract_pick = None;
+            if let Some(s) = self.graphs.get_mut(&graph) {
+                s.reader = false;
+                s.reader_point = None;
+            }
+        }
+        if let SubtractPickOutcome::Done(report) = outcome {
+            self.focus(graph);
+            self.logs.result(report.message.clone(), report.notes.clone());
+            self.panels.reveal(PanelId::Results);
+            self.say(report.message);
+        }
+    }
+
+    /// CV Charge on a graph (T349): the Data Reader is on and its pinned point becomes a foot of the peak on a
+    /// double-click (outside the window) or Enter.
+    fn cv_pick_frame(&mut self, ctx: &egui::Context) {
+        let Some(d) = &mut self.cv_pick else { return };
+        let (enter, double) = ctx.input(|i| {
+            let double = i.pointer.button_double_clicked(egui::PointerButton::Primary)
+                && i.pointer.interact_pos().is_some_and(|p| !d.window_rect.is_some_and(|r| r.contains(p)));
+            (i.key_pressed(egui::Key::Enter), double)
+        });
+        let state = self.graphs.entry(d.graph).or_default();
+        state.reader = true;
+        if (enter || double)
+            && let Some(point) = state.reader_point
+        {
+            d.pick(self.doc.project(), point);
+        }
+        let graph = d.graph;
+        let outcome = d.show(ctx, &mut self.doc);
+        if !matches!(outcome, CvPickOutcome::Open) {
+            self.cv_pick = None;
+            if let Some(s) = self.graphs.get_mut(&graph) {
+                s.reader = false;
+                s.reader_point = None;
+            }
+        }
+        if let CvPickOutcome::Done(report) = outcome {
+            self.focus(graph);
+            self.logs.result(report.message.clone(), report.notes.clone());
+            self.panels.reveal(PanelId::Results);
+            self.say(report.message);
+        }
+    }
+
+    /// The Peak Analyzer's "Pick on the graph" anchors (T351): while the window picks, the Data Reader of a graph
+    /// that plots the input is on and its pinned point becomes an anchor on a double-click (outside the window)
+    /// or Enter; the reader goes off again when the picking stops or the window closes.
+    fn anchor_pick_frame(&mut self, ctx: &egui::Context) {
+        let picking = self.analysis.as_ref().and_then(|d| d.anchor_column().filter(|_| d.anchor_picking));
+        let Some(y) = picking else {
+            if let Some(g) = self.anchor_graph.take()
+                && let Some(s) = self.graphs.get_mut(&g)
+            {
+                s.reader = false;
+                s.reader_point = None;
+            }
+            return;
+        };
+        let project = self.doc.project();
+        let shows = |g: &sheaf_core::graph::Graph| {
+            g.layers.iter().enumerate().find_map(|(l, layer)| layer.plots.iter().position(|p| p.y == y).map(|i| (l, i)))
+        };
+        let target = self
+            .anchor_graph
+            .and_then(|id| project.graph(id))
+            .or_else(|| project.graphs().find(|g| shows(g).is_some()))
+            .and_then(|g| shows(g).map(|(l, i)| (g.id, l, i)));
+        let Some((graph, layer, plot)) = target else { return };
+        self.anchor_graph = Some(graph);
+        let rect = self.analysis.as_ref().and_then(|d| d.window_rect);
+        let (enter, double) = ctx.input(|i| {
+            let double = i.pointer.button_double_clicked(egui::PointerButton::Primary)
+                && i.pointer.interact_pos().is_some_and(|p| !rect.is_some_and(|r| r.contains(p)));
+            (i.key_pressed(egui::Key::Enter), double)
+        });
+        let state = self.graphs.entry(graph).or_default();
+        state.reader = true;
+        if (enter || double)
+            && let Some(point) = state.reader_point.filter(|p| p.layer == layer && p.plot == plot)
+            && let Some((xs, ys)) = crate::gadget::plot_xy(project, graph, layer, plot)
+            && let (Some(&x), Some(&v)) = (xs.get(point.row), ys.get(point.row))
+            && let Some(d) = &mut self.analysis
+        {
+            d.pick_anchor(x, v);
+        }
+    }
+
     fn show_sheet(&mut self, book: WindowId, sheet: usize) {
         self.doc.adjust_view(|p| {
             if let Some(b) = p.workbook_mut(book) {
@@ -6483,6 +6622,8 @@ impl SheafApp {
             || self.reshape.is_some()
             || self.pivot.is_some()
             || self.multi_peak.is_some()
+            || self.subtract_pick.is_some()
+            || self.cv_pick.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
             || self.export_excel.is_some()
@@ -7089,6 +7230,13 @@ impl SheafApp {
                     self.panels.reveal(PanelId::Results);
                     self.say(o.message);
                 }
+                FitMoreOutcome::BestSubset(o) => {
+                    self.fit_more = None;
+                    self.show_sheet(o.book, o.sheet);
+                    self.logs.result(o.message.clone(), Vec::new());
+                    self.panels.reveal(PanelId::Results);
+                    self.say(o.message);
+                }
                 FitMoreOutcome::Rank(o) => {
                     self.fit_more = None;
                     self.show_sheet(o.book, o.sheet);
@@ -7100,6 +7248,9 @@ impl SheafApp {
             }
         }
         self.multi_peak_frame(ctx);
+        self.subtract_pick_frame(ctx);
+        self.cv_pick_frame(ctx);
+        self.anchor_pick_frame(ctx);
         if let Some(d) = &mut self.pivot {
             let book = d.book;
             match d.show(ctx, &mut self.doc) {

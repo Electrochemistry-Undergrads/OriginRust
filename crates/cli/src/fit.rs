@@ -153,6 +153,7 @@ pub fn fit(a: FitArgs) -> Result<()> {
         FitRun::Regression(out) => print_regression(out),
         FitRun::Comparison(out) => print_comparison(out),
         FitRun::Ranking(out) => print_ranking(out),
+        FitRun::BestSubsets(out) => print_best_subsets(out),
         FitRun::Fits { summary, outcomes, .. } => {
             if let Some(message) = summary {
                 println!(
@@ -265,6 +266,31 @@ fn print_comparison(o: &sheaf_core::fitting::CompareOutcome) {
     for w in &c.warnings {
         eprintln!("warning: {w}");
     }
+    println!("\n{}", o.message);
+}
+
+fn print_best_subsets(o: &sheaf_core::fitting::BestSubsetOutcome) {
+    let head = ["Predictors", "k", "R^2", "Adj. R^2", "Cp", "AIC", "BIC", "Best by"].map(String::from).to_vec();
+    let mut table = vec![head];
+    let r = &o.result;
+    for (i, m) in r.models.iter().enumerate() {
+        let best: Vec<&str> = [(r.best_adj_r2, "adj R^2"), (r.best_cp, "Cp"), (r.best_aic, "AIC"), (r.best_bic, "BIC")]
+            .iter()
+            .filter(|(b, _)| *b == i)
+            .map(|(_, t)| *t)
+            .collect();
+        table.push(vec![
+            m.vars.iter().map(|&j| o.names[j].clone()).collect::<Vec<_>>().join(", "),
+            m.vars.len().to_string(),
+            short_number(m.r_squared),
+            short_number(m.adj_r_squared),
+            short_number(m.cp),
+            short_number(m.aic),
+            short_number(m.bic),
+            best.join(", "),
+        ]);
+    }
+    print_columns(&table);
     println!("\n{}", o.message);
 }
 

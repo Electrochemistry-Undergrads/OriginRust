@@ -32,6 +32,7 @@ pub mod discfreq;
 pub mod distfit;
 pub mod dunnett;
 pub mod envelope;
+pub mod expsmooth;
 pub mod fft;
 pub mod fft2;
 pub mod fir;

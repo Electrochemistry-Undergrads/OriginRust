@@ -5,9 +5,9 @@ use super::analysis::AnalysisKind;
 use eframe::egui;
 use sheaf_core::analysis::{
     AcfSpec, AdfTerms, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty, ChangePointSpec,
-    DecomposeModel, DecomposeSpec, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistSpec,
-    ManhattanSpec, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec, RareChartKind, RareChartSpec, RocSpec, StabilitySpec,
-    StationaritySpec, TDistribution, TimePivotSpec, Tool,
+    DecomposeModel, DecomposeSpec, ExpSmoothSpec, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist,
+    LifeDistSpec, ManhattanSpec, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec, RareChartKind, RareChartSpec, RocSpec,
+    SmoothModel, StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec, Tool,
 };
 
 /// What the windows keep between frames.
@@ -23,6 +23,7 @@ pub struct MultiOptions {
     acf: AcfSpec,
     decompose: DecomposeSpec,
     stationarity: StationaritySpec,
+    expsmooth: ExpSmoothSpec,
     rare: RareChartSpec,
     capability: CapabilitySpec,
     stability: StabilitySpec,
@@ -108,6 +109,13 @@ impl MultiOptions {
                 Ok(Tool::RareChart(self.rare))
             }
             AnalysisKind::Stationarity => Ok(Tool::Stationarity(self.stationarity)),
+            AnalysisKind::ExpSmooth => {
+                let s = &self.expsmooth;
+                if s.horizon == 0 {
+                    return Err("forecast at least one step".to_string());
+                }
+                Ok(Tool::ExpSmooth(*s))
+            }
             AnalysisKind::Decompose => {
                 if self.decompose.period < 2 {
                     return Err("the period must be at least 2".to_string());
@@ -338,6 +346,40 @@ impl MultiOptions {
                     ui.add(egui::DragValue::new(&mut s.sigma).speed(0.05).range(0.5..=6.0));
                 });
                 ui.checkbox(&mut s.graph, "Control chart per column");
+            }
+            AnalysisKind::ExpSmooth => {
+                ui.label("Every chosen column is a series of its own, in row order; it must have no missing values.");
+                let s = &mut self.expsmooth;
+                ui.horizontal(|ui| {
+                    ui.label("Model");
+                    ui.radio_value(&mut s.model, SmoothModel::Simple, "Simple");
+                    ui.radio_value(&mut s.model, SmoothModel::Holt, "Holt (trend)");
+                    ui.radio_value(&mut s.model, SmoothModel::WintersAdditive, "Holt-Winters additive");
+                    ui.radio_value(&mut s.model, SmoothModel::WintersMultiplicative, "Holt-Winters multiplicative");
+                });
+                if matches!(s.model, SmoothModel::WintersAdditive | SmoothModel::WintersMultiplicative) {
+                    ui.horizontal(|ui| {
+                        ui.label("Period (points per season)");
+                        ui.add(egui::DragValue::new(&mut s.period).range(2..=10_000));
+                    });
+                }
+                let mut fixed = s.constants.is_some();
+                if ui.checkbox(&mut fixed, "Fixed smoothing constants (otherwise fitted)").changed() {
+                    s.constants = fixed.then_some([0.3, 0.1, 0.1]);
+                }
+                if let Some(c) = &mut s.constants {
+                    ui.horizontal(|ui| {
+                        for (i, name) in ["Alpha", "Beta", "Gamma"].iter().enumerate().take(s.model.constants()) {
+                            ui.label(*name);
+                            ui.add(egui::DragValue::new(&mut c[i]).speed(0.01).range(0.0..=1.0));
+                        }
+                    });
+                }
+                ui.horizontal(|ui| {
+                    ui.label("Steps to forecast");
+                    ui.add(egui::DragValue::new(&mut s.horizon).range(1..=100_000));
+                });
+                ui.checkbox(&mut s.graph, "Graph of the data, one-step forecasts and forecasts");
             }
             AnalysisKind::Stationarity => {
                 ui.label("Every chosen column is a series of its own, in row order; it must have no missing values.");

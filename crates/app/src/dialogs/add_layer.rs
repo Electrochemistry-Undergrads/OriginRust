@@ -7,7 +7,7 @@ pub enum Outcome {
     Open,
     Closed,
     Stale,
-    Add { graph: WindowId, layer: usize, kind: NewLayerKind, activate: bool },
+    Add { graph: WindowId, layer: usize, kind: NewLayerKind, activate: bool, auto_offset: bool },
 }
 
 pub struct AddLayerDialog {
@@ -18,6 +18,7 @@ pub struct AddLayerDialog {
     revision: u64,
     kind: NewLayerKind,
     activate: bool,
+    auto_offset: bool,
 }
 
 impl AddLayerDialog {
@@ -32,6 +33,7 @@ impl AddLayerDialog {
             revision: doc.revision(),
             kind: NewLayerKind::Normal,
             activate: true,
+            auto_offset: false,
         })
     }
 
@@ -73,11 +75,12 @@ impl AddLayerDialog {
                 let mut user_defined = false;
                 ui.add_enabled(false, egui::Checkbox::new(&mut user_defined, "User Defined"))
                     .on_disabled_hover_text("Custom axis definitions and scale formulas are not available yet.");
-                let mut offset = false;
-                ui.add_enabled(false, egui::Checkbox::new(&mut offset, "Auto Offset Overlapped Axes"))
-                    .on_disabled_hover_text(
-                        "Choose a layer preset. Automatic overlap offsets are not available here yet.",
-                    );
+                let supports_auto_offset = self.kind.supports_auto_offset();
+                ui.add_enabled(
+                    supports_auto_offset,
+                    egui::Checkbox::new(&mut self.auto_offset, "Auto Offset Overlapped Axes"),
+                )
+                .on_disabled_hover_text("Available for linked presets that use the full parent frame.");
                 ui.checkbox(&mut self.activate, "Activate New Layer");
                 ui.separator();
                 ui.horizontal(|ui| {
@@ -87,6 +90,7 @@ impl AddLayerDialog {
                             layer: self.layer,
                             kind: self.kind,
                             activate: self.activate,
+                            auto_offset: supports_auto_offset && self.auto_offset,
                         };
                     }
                     if ui.button("Cancel").clicked() {

@@ -1364,6 +1364,41 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
+        AnalyzeTool::Forecast { target, model, period, constants, horizon, no_graph } => {
+            let model = match model.to_ascii_lowercase().as_str() {
+                "simple" => analysis::SmoothModel::Simple,
+                "holt" => analysis::SmoothModel::Holt,
+                "additive" => analysis::SmoothModel::WintersAdditive,
+                "multiplicative" => analysis::SmoothModel::WintersMultiplicative,
+                other => bail!("--model takes simple, holt, additive or multiplicative, not {other:?}"),
+            };
+            let constants = match constants {
+                None => None,
+                Some(text) => {
+                    let v: Vec<f64> = text
+                        .split(',')
+                        .map(|t| t.trim().parse::<f64>())
+                        .collect::<std::result::Result<_, _>>()
+                        .map_err(|_| anyhow::anyhow!("--constants takes numbers separated by commas (got {text:?})"))?;
+                    if v.len() != model.constants() {
+                        bail!("--constants: the {} model takes {} constant(s)", model.name(), model.constants());
+                    }
+                    let mut c = [0.0; 3];
+                    c[..v.len()].copy_from_slice(&v);
+                    Some(c)
+                }
+            };
+            (
+                target,
+                Job::Tool(Tool::ExpSmooth(analysis::ExpSmoothSpec {
+                    model,
+                    period,
+                    constants,
+                    horizon,
+                    graph: !no_graph,
+                })),
+            )
+        }
         AnalyzeTool::Stationarity { target, adf_terms, adf_lags, kpss_null, kpss_lags } => {
             let adf_terms = match adf_terms.to_ascii_lowercase().as_str() {
                 "constant" => analysis::AdfTerms::Constant,

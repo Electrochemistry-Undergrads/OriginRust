@@ -88,6 +88,7 @@ pub mod sort;
 pub mod stack_panels;
 pub mod stats3_options;
 pub mod straight_line;
+pub mod subtract_pick;
 pub mod system_templates;
 pub mod table_editor;
 pub mod text_object;

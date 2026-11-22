@@ -5700,6 +5700,51 @@ fn the_analysis_menu_on_a_graph_works_on_its_data_plot() {
     assert_eq!(dialog.columns(), &[ys[1]]);
 }
 
+/// Subtract Straight Line on a graph (T348): the two ends are picked with the Data Reader, the curve minus the
+/// line through them is written and drawn, one undo step; Cancel changes nothing.
+#[test]
+fn subtract_straight_line_on_a_graph_picks_the_two_points() {
+    // A sloped baseline 1 + 0.5 x with a bump in the middle.
+    let mut text = String::from("x,y\n");
+    for i in 0..=20 {
+        let x = f64::from(i);
+        let bump = if (8..=12).contains(&i) { 3.0 } else { 0.0 };
+        text.push_str(&format!("{x},{}\n", 1.0 + 0.5 * x + bump));
+    }
+    let data = csv_file("subpick", "base", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Graph1 - base");
+    let gid = project(&h).graphs().next().unwrap().id;
+    menu_path(&mut h, &["Analysis", "Data Manipulation", "Subtract Straight Line..."]);
+    assert!(h.state().analysis.is_none(), "no typed window on a graph");
+    assert!(h.state().subtract_pick.is_some(), "the picking window is open");
+    assert!(h.state().graphs[&gid].reader, "the Data Reader is on while picking");
+    for row in [2, 18] {
+        h.state_mut().graphs.get_mut(&gid).unwrap().reader_point =
+            Some(crate::reader::Point { layer: 0, plot: 0, row });
+        h.key_press(egui::Key::Enter);
+        settle(&mut h);
+    }
+    let points = h.state().subtract_pick.as_ref().unwrap().points.clone();
+    assert_eq!(points, [(2.0, 2.0), (18.0, 10.0)]);
+    click(&mut h, "Subtract");
+    assert!(h.state().subtract_pick.is_none() && !h.state().graphs[&gid].reader);
+    assert_eq!(h.state().doc.undo_label(), Some("Subtract straight line"));
+    let g = project(&h).graph(gid).unwrap();
+    assert_eq!(g.layers[0].plots.len(), 2, "the result is drawn");
+    let result = project(&h).column(g.layers[0].plots[1].y).unwrap().clone();
+    assert!(result.long_name.ends_with("minus line"), "{}", result.long_name);
+    let v = result.numeric().unwrap();
+    assert!(v[0].abs() < 1e-12 && (v[10] - 3.0).abs() < 1e-12 && v[20].abs() < 1e-12, "{v:?}");
+    h.state_mut().doc.undo();
+    assert_eq!(project(&h).graph(gid).unwrap().layers[0].plots.len(), 1);
+    // Cancel leaves everything as it was.
+    menu_path(&mut h, &["Analysis", "Data Manipulation", "Subtract Straight Line..."]);
+    click(&mut h, "Cancel");
+    assert!(h.state().subtract_pick.is_none() && !h.state().graphs[&gid].reader);
+    assert_eq!(project(&h).graph(gid).unwrap().layers[0].plots.len(), 1);
+}
+
 // ----- the dialogs in Origin's layout: Column Properties, the analysis frame, the Import Wizard ----
 
 /// Types into the n-th text box of the window that is open (in the order they are drawn), replacing

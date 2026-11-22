@@ -498,6 +498,22 @@ fn a_tail_that_is_damaged_gives_a_note_and_no_folders() {
 }
 
 #[test]
+fn group_and_subject_columns_keep_their_roles_in_the_opj() {
+    // T330: Origin 2016 stores Group (LabTalk type 8) as role 7 and Subject (9) as 8; Origin read
+    // both back from a file written here (re-workspace/scratch/t330/sheaf-gs.opj).
+    let mut p = Project::new();
+    p.adopt_named_workbook(abcd("Book1"));
+    let Window::Workbook(b) = &mut p.windows[0] else { unreachable!() };
+    b.sheets[0].columns[2].designation = sheaf_core::Designation::Group;
+    b.sheets[0].columns[3].designation = sheaf_core::Designation::Subject;
+    let out = written(&p);
+    let back = read_back(&out.bytes).into_project();
+    let Window::Workbook(b) = &back.windows[0] else { unreachable!() };
+    assert_eq!(b.sheets[0].columns[2].designation, sheaf_core::Designation::Group);
+    assert_eq!(b.sheets[0].columns[3].designation, sheaf_core::Designation::Subject);
+}
+
+#[test]
 fn a_before_formula_script_is_named_in_the_warnings() {
     // T307: the .opj written here has no place for the script.
     let mut p = Project::new();
@@ -571,7 +587,7 @@ fn hidden_columns_and_column_widths_are_named_in_the_warnings() {
     assert!(all.contains("1 column(s) have a sampling interval"), "{all}");
     assert!(all.contains("1 column(s) have a data range"), "{all}");
     assert!(!all.contains("masked cells"), "masks are written now: {all}");
-    assert!(all.contains("1 Group or Subject column(s)"), "{all}");
+    assert!(!all.contains("Group or Subject"), "Group and Subject are written now (T330): {all}");
     assert!(all.contains("1 sheet(s) have a worksheet filter"), "{all}");
 }
 

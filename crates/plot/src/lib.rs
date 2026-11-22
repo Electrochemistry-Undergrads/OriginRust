@@ -148,6 +148,8 @@ mod symbol_gap_tests;
 #[cfg(test)]
 mod symbol_line_order_tests;
 #[cfg(test)]
+mod symbol_shape_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod text_color_tests;

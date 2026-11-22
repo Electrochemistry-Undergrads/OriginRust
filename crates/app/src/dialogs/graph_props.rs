@@ -534,14 +534,5 @@ pub(super) fn connect_name(c: Connect) -> String {
 }
 
 pub(super) fn symbol_name(s: SymbolShape) -> &'static str {
-    match s {
-        SymbolShape::Square => "Square",
-        SymbolShape::Circle => "Circle",
-        SymbolShape::TriangleUp => "Triangle up",
-        SymbolShape::TriangleDown => "Triangle down",
-        SymbolShape::Diamond => "Diamond",
-        SymbolShape::Plus => "Plus",
-        SymbolShape::Cross => "Cross",
-        SymbolShape::Star => "Star",
-    }
+    s.label()
 }

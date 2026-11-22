@@ -38,6 +38,7 @@ pub fn fit_spec(a: &FitArgs) -> FitSpec {
         level: a.level,
         max_iterations: a.max_iterations,
         tolerance: a.tolerance,
+        no_auto_init: a.no_auto_init,
         y: a.y.clone(),
         book: a.book.clone(),
         sheet: a.sheet.clone(),

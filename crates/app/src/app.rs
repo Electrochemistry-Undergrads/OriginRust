@@ -2450,7 +2450,12 @@ impl SheafApp {
                 }
             }
             Action::AddFunctionGraph { graph, layer } => {
-                self.function_graph = Some(crate::dialogs::function_graph::FunctionGraphDialog::new(graph, layer));
+                // Origin's Auto From/To: the range the layer's X axis shows (T322).
+                let range = sheaf_plot::layout_geometry(self.doc.project(), graph)
+                    .ok()
+                    .and_then(|geoms| geoms.get(layer).map(|g| (g.x.min, g.x.max)));
+                self.function_graph =
+                    Some(crate::dialogs::function_graph::FunctionGraphDialog::over(graph, layer, range));
                 self.function_graph_new = false;
             }
             Action::Profile { book, graph } => {
@@ -3278,6 +3283,14 @@ impl SheafApp {
                     {
                         l.x = x;
                         l.y = y;
+                    }
+                });
+            }
+            Action::MoveAxisTitle { graph, layer, y, dx, dy } => {
+                self.doc.apply("Move axis title", |p| {
+                    if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {
+                        let axis = if y { &mut l.y_axis } else { &mut l.x_axis };
+                        axis.title_offset_pt = (axis.title_offset_pt.0 + dx, axis.title_offset_pt.1 + dy);
                     }
                 });
             }
@@ -4783,7 +4796,7 @@ impl SheafApp {
     fn show_function_graph(&mut self, ctx: &egui::Context) {
         use crate::dialogs::function_graph::FunctionOutcome;
         let Some(d) = &mut self.function_graph else { return };
-        let FunctionOutcome::Add { graph, layer, expr, from, to, points } = (match d.show(ctx) {
+        let FunctionOutcome::Add { graph, layer, expr, from, to, points, kind } = (match d.show(ctx) {
             FunctionOutcome::Open => return,
             FunctionOutcome::Closed => {
                 self.function_graph = None;
@@ -4796,9 +4809,15 @@ impl SheafApp {
         };
         let new = std::mem::take(&mut self.function_graph_new);
         let label = if new { "New function plot" } else { "Add function graph" };
-        let made = self.doc.edit(label, |p| {
+        let made = self.doc.edit(label, |p| -> Result<WindowId, sheaf_core::project::ProjectError> {
             let graph = if new { p.add_graph(sheaf_core::template::Template::default()) } else { graph };
-            p.add_function_graph(graph, layer, &expr, (from, to), points).map(|_| graph)
+            p.add_function_graph(graph, layer, &expr, (from, to), points)?;
+            if let Some(plot) =
+                p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)).and_then(|l| l.plots.last_mut())
+            {
+                plot.kind = kind;
+            }
+            Ok(graph)
         });
         match made {
             Ok(graph) => {

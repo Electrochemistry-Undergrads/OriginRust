@@ -361,7 +361,8 @@ pub(super) struct CurveSpec {
     pub shape: u8,
     /// Symbol size in 1/500 point.
     pub size: u16,
-    pub open_symbol: bool,
+    /// Origin's symbol interior number (0 solid, 1 open, 2 to 11 the others; graphing 5.4).
+    pub interior: u8,
     pub symbol: Code,
     /// Fill of a column.
     pub fill: Code,
@@ -425,7 +426,7 @@ pub(super) fn curve_record(c: &CurveSpec) -> Vec<u8> {
     if matches!(c.kind, CurveKind::Scatter | CurveKind::LineSymbol) {
         r[0x17] = c.shape;
         put(&mut r, 0x19, &c.size.to_le_bytes());
-        r[0x18] = u8::from(c.open_symbol);
+        r[0x18] = c.interior;
         put(&mut r, 0x132, &c.symbol.0);
     }
     if c.kind == CurveKind::Area {

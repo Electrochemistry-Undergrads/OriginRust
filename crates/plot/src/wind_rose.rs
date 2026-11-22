@@ -1,6 +1,6 @@
 //! Wind roses (T113, graphing spec "Wind rose"): each speed band is a plot of wedges, one per direction
 //! sector, piled on the bands plotted before it in the same layer. The layer is polar: X is the angle in
-//! degrees, Y the radius (frequency, in percent for Raw Data).
+//! degrees, Y the radius (frequency; a count for Raw Data).
 
 use crate::data::PlotData;
 use crate::scene::{self, Item};
@@ -25,20 +25,18 @@ impl WindRoseData {
         let xcol = pd.plot.x.and_then(|id| project.numeric(id));
         let (angles, values) = match spec.speed {
             Some((lo, hi, closed)) => {
-                // Raw Data: the percentage of all rows in each sector and this band.
+                // Raw Data: the count of the rows in each sector and this band (Origin 2016's default
+                // Quantity to Compute, Count; measured by T324).
                 let n = spec.sectors.max(1);
                 let mut counts = vec![0usize; n];
-                let mut total = 0usize;
                 for r in rows {
                     let (Some(d), Some(&s)) = (xcol.and_then(|x| x.get(r)).copied(), pd.y.get(r)) else { continue };
                     let Some(k) = sector_of(d, n).filter(|_| s.is_finite()) else { continue };
-                    total += 1;
                     if s >= lo && (s < hi || (closed && s <= hi)) {
                         counts[k] += 1;
                     }
                 }
-                let pct = |c: usize| if total > 0 { 100.0 * c as f64 / total as f64 } else { 0.0 };
-                ((0..n).map(|k| k as f64 * 360.0 / n as f64).collect(), counts.into_iter().map(pct).collect())
+                ((0..n).map(|k| k as f64 * 360.0 / n as f64).collect(), counts.into_iter().map(|c| c as f64).collect())
             }
             None => {
                 // Binned Data: one sector per row; numeric directions as given, others spread evenly.
@@ -57,7 +55,13 @@ impl WindRoseData {
                 (angles, values)
             }
         };
-        let width = 360.0 / angles.len().max(1) as f64;
+        // Origin 2016 draws Binned Data wedges 22.5 degrees wide whatever the number of rows (measured on 8
+        // directions 45 degrees apart, T327); more than 16 rows share the circle evenly (Sheaf's choice).
+        let width = if spec.speed.is_some() {
+            360.0 / angles.len().max(1) as f64
+        } else {
+            (360.0 / angles.len().max(1) as f64).min(22.5)
+        };
         let base = vec![0.0; values.len()];
         WindRoseData { angles, values, base, width }
     }

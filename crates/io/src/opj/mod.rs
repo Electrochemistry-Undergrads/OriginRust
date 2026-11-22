@@ -165,6 +165,15 @@ fn column_sampling(record: &[u8]) -> Option<sheaf_core::sampling::SamplingInterv
     })
 }
 
+/// A column's own width in characters from its column record (T334, measured in Origin 2016):
+/// `0x4A` holds tenths of a character (`wks.col2.width=14` stored 140; the default 67 is width 7).
+/// `None` for the default width or a missing value.
+fn column_width(record: &[u8]) -> Option<u16> {
+    let tenths = u16::from_le_bytes([*record.get(0x4A)?, *record.get(0x4B)?]);
+    let chars = ((f64::from(tenths) / 10.0).round() as u16).max(1);
+    (tenths > 0 && chars != sheaf_core::column::DEFAULT_WIDTH).then_some(chars)
+}
+
 fn trim_trailing_missing(column: &mut sheaf_core::Column) {
     let keep = match &column.data {
         sheaf_core::ColumnData::Numeric(v) => v.iter().rposition(|x| !x.is_nan()).map_or(0, |i| i + 1),
@@ -392,6 +401,7 @@ impl<R: Read + Seek> Builder<R> {
                     if designation != Designation::X {
                         col.sampling = column_sampling(&rec.record);
                     }
+                    col.width = column_width(&rec.record);
                     self.apply_formula(&mut col, layer, rec, &short);
                     if is_time_type(rec.value_type) {
                         self.counts.time_columns += 1;
@@ -568,6 +578,9 @@ fn designation_of(code: u8) -> Designation {
         2 => Designation::YError,
         6 => Designation::XError,
         4 => Designation::Label,
+        // T330, measured in Origin 2016: LabTalk wks.col.type 8 (Group) and 9 (Subject) are stored as 7 and 8.
+        7 => Designation::Group,
+        8 => Designation::Subject,
         _ => Designation::Disregard,
     }
 }

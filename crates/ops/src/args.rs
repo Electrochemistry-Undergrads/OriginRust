@@ -283,6 +283,10 @@ pub struct FitArgs {
     /// Convergence tolerance of a nonlinear fit.
     #[arg(long, default_value_t = 1e-9)]
     pub tolerance: f64,
+    /// Turn off Auto Parameter Initialization: a nonlinear fit starts from the --param values,
+    /// else the function's own starting values (1 for most), not from a guess from the data.
+    #[arg(long)]
+    pub no_auto_init: bool,
     /// Y columns to fit, comma-separated short or long names; each is fitted on its own
     /// (default: the columns a plot of the sheet would show).
     #[arg(short, long, value_delimiter = ',')]
@@ -874,6 +878,11 @@ pub struct StyleArgs {
     /// #RRGGBB or basic names.
     #[arg(long, value_delimiter = ',', value_name = "COLORS")]
     pub colors: Vec<String>,
+    /// One of Origin's named colour lists for the curve colours: Default, Q01 Black and RGB, Q02 Basic,
+    /// Q03 Rainbow7, ... S01 Gray Scale ... D05 Blue-Greens, System Color List (the code, for example
+    /// Q03, is enough). --colors still sets single curves.
+    #[arg(long, value_name = "NAME")]
+    pub color_list: Option<String>,
     /// Legend labels in legend order (left axis first, then right axis), comma-separated.
     #[arg(long, value_delimiter = ',', value_name = "LABELS")]
     pub labels: Vec<String>,
@@ -1813,6 +1822,9 @@ pub enum PeakBaselineKind {
     Maximum,
     Mean,
     Median,
+    /// Origin's Asymmetric Least Squares Smoothing (--als-asymmetric, --als-threshold,
+    /// --als-smoothing, --als-iterations).
+    Als,
 }
 
 /// Origin's Peak Analyzer goals that only make the baseline (analysis-tools 11.5).
@@ -2622,6 +2634,19 @@ pub enum AnalyzeTool {
         /// Anchor points of the anchors baseline, written X1:Y1,X2:Y2,... (linear interpolation).
         #[arg(long)]
         anchors: Option<String>,
+        /// ALS baseline: Asymmetric Factor, between 0 and 1 (close to 0 for positive peaks).
+        #[arg(long, default_value_t = 0.001)]
+        als_asymmetric: f64,
+        /// ALS baseline: Threshold, the fraction of the largest distance above which a point counts
+        /// as part of a peak.
+        #[arg(long, default_value_t = 0.05)]
+        als_threshold: f64,
+        /// ALS baseline: Smoothing Factor, the base-10 logarithm of the smoothness penalty.
+        #[arg(long, default_value_t = 5.0)]
+        als_smoothing: f64,
+        /// ALS baseline: Number of Iterations.
+        #[arg(long, default_value_t = 10)]
+        als_iterations: usize,
         /// Where a peak starts and ends: baseline (where the corrected curve reaches the baseline
         /// or the valley to the next peak) or half-height.
         #[arg(long, value_enum)]

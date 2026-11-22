@@ -844,6 +844,230 @@ pub const ORIGIN_COLOR_LIST: [(u8, u8, u8); 24] = [
     (64, 64, 64),
 ];
 
+/// Origin 2016's named colour lists (`Themes\Color\*.oth` of the installation, decoded as in graphing 1.5: an
+/// entry is a base-palette index or red, green, blue), by file name: the colours a Line Color increment hands
+/// out when the list is chosen in the Group tab's Details (T332).
+pub const ORIGIN_COLOR_LISTS: [(&str, &[(u8, u8, u8)]); 18] = [
+    (
+        "D01 Pumpkin Patch",
+        &[
+            (97, 58, 0),
+            (188, 94, 0),
+            (255, 146, 18),
+            (255, 218, 91),
+            (216, 231, 108),
+            (144, 186, 72),
+            (72, 141, 36),
+            (0, 96, 0),
+        ],
+    ),
+    (
+        "D02 Maple",
+        &[
+            (21, 87, 44),
+            (106, 137, 43),
+            (183, 184, 42),
+            (234, 196, 41),
+            (239, 174, 40),
+            (244, 120, 39),
+            (250, 86, 73),
+            (255, 0, 37),
+        ],
+    ),
+    (
+        "D03 Sea and Land",
+        &[
+            (0, 64, 128),
+            (0, 0, 255),
+            (0, 128, 192),
+            (128, 255, 255),
+            (255, 192, 130),
+            (192, 97, 10),
+            (151, 107, 53),
+            (88, 62, 33),
+        ],
+    ),
+    (
+        "D04 Watermelon",
+        &[
+            (0, 129, 0),
+            (60, 189, 45),
+            (120, 249, 90),
+            (180, 255, 135),
+            (255, 220, 193),
+            (255, 130, 97),
+            (255, 70, 52),
+            (255, 0, 0),
+        ],
+    ),
+    ("D05 Blue-Greens", &[(16, 0, 129), (0, 0, 255), (1, 225, 255), (16, 255, 1), (0, 128, 0), (0, 128, 128)]),
+    ("Q01 Black and RGB", &[(0, 0, 0), (255, 0, 0), (0, 255, 0), (0, 0, 255)]),
+    (
+        "Q02 Basic",
+        &[
+            (0, 0, 0),
+            (255, 0, 0),
+            (0, 0, 255),
+            (255, 0, 255),
+            (0, 128, 0),
+            (0, 0, 128),
+            (128, 0, 255),
+            (128, 0, 128),
+            (128, 0, 0),
+            (128, 128, 0),
+            (43, 99, 162),
+            (30, 150, 150),
+            (155, 100, 26),
+            (16, 199, 62),
+            (185, 36, 122),
+            (45, 197, 204),
+            (63, 65, 152),
+            (147, 172, 43),
+            (128, 128, 128),
+            (150, 100, 100),
+            (100, 150, 100),
+            (43, 163, 202),
+            (50, 100, 150),
+        ],
+    ),
+    (
+        "Q03 Rainbow7",
+        &[(255, 0, 0), (255, 102, 0), (255, 238, 0), (0, 255, 0), (0, 125, 255), (68, 0, 255), (153, 0, 255)],
+    ),
+    (
+        "Q04 Paired Color",
+        &[
+            (151, 215, 242),
+            (7, 174, 227),
+            (234, 165, 194),
+            (220, 73, 89),
+            (179, 212, 157),
+            (53, 178, 87),
+            (237, 193, 148),
+            (240, 145, 55),
+            (189, 190, 220),
+            (98, 111, 179),
+            (246, 237, 170),
+            (249, 231, 83),
+        ],
+    ),
+    (
+        "Q05 Season Spring",
+        &[
+            (119, 182, 97),
+            (59, 131, 197),
+            (243, 109, 33),
+            (255, 213, 4),
+            (139, 141, 197),
+            (229, 102, 100),
+            (158, 206, 180),
+            (172, 203, 233),
+            (248, 153, 83),
+            (254, 232, 118),
+            (186, 182, 218),
+            (245, 145, 145),
+        ],
+    ),
+    (
+        "Q06 Season Summer",
+        &[
+            (21, 178, 209),
+            (254, 74, 85),
+            (117, 184, 85),
+            (249, 214, 46),
+            (119, 221, 233),
+            (253, 254, 6),
+            (200, 230, 158),
+            (244, 151, 159),
+            (34, 110, 148),
+            (247, 172, 22),
+            (21, 114, 65),
+            (199, 20, 0),
+        ],
+    ),
+    (
+        "Q07 Season Fall",
+        &[
+            (233, 84, 0),
+            (238, 179, 0),
+            (154, 150, 40),
+            (242, 159, 97),
+            (255, 219, 130),
+            (213, 218, 112),
+            (149, 43, 0),
+            (129, 86, 0),
+            (67, 63, 27),
+            (251, 154, 9),
+            (253, 210, 10),
+            (216, 235, 44),
+        ],
+    ),
+    (
+        "Q08 Season Winter",
+        &[
+            (93, 130, 179),
+            (204, 172, 156),
+            (148, 149, 130),
+            (158, 207, 231),
+            (38, 68, 123),
+            (209, 210, 209),
+            (237, 224, 182),
+            (99, 99, 100),
+            (178, 134, 106),
+            (138, 158, 192),
+            (170, 171, 171),
+            (226, 208, 194),
+        ],
+    ),
+    ("S01 Gray Scale", &[(0, 0, 0), (64, 64, 64), (128, 128, 128), (192, 192, 192), (255, 255, 255)]),
+    (
+        "S02 Cyan",
+        &[(0, 80, 87), (0, 126, 143), (0, 167, 201), (2, 204, 255), (62, 205, 255), (117, 213, 255), (176, 227, 255)],
+    ),
+    (
+        "S03 Green",
+        &[(21, 87, 0), (42, 143, 0), (63, 187, 0), (90, 227, 0), (146, 255, 62), (184, 255, 117), (217, 255, 176)],
+    ),
+    (
+        "S04 Red",
+        &[(87, 13, 0), (143, 15, 0), (201, 11, 0), (255, 2, 2), (255, 64, 70), (255, 117, 129), (255, 176, 186)],
+    ),
+    (
+        "System Color List",
+        &[
+            (240, 0, 130),
+            (250, 60, 60),
+            (240, 130, 40),
+            (230, 175, 45),
+            (230, 220, 50),
+            (160, 230, 50),
+            (0, 220, 0),
+            (0, 210, 140),
+            (0, 200, 200),
+            (0, 160, 255),
+            (30, 60, 255),
+            (110, 0, 220),
+            (160, 0, 200),
+        ],
+    ),
+];
+
+/// The colours of a named list: one of [`ORIGIN_COLOR_LISTS`] by its full name or its code (`Q03`, `s01`),
+/// without regard to case, or `Default` for [`ORIGIN_COLOR_LIST`]. Returns the list's name as well.
+pub fn color_list(name: &str) -> Option<(&'static str, Vec<Color>)> {
+    let name = name.trim();
+    let rgb = |l: &[(u8, u8, u8)]| l.iter().map(|&(r, g, b)| Color::rgb(r, g, b)).collect();
+    if name.eq_ignore_ascii_case("default") {
+        return Some(("Default", rgb(&ORIGIN_COLOR_LIST)));
+    }
+    ORIGIN_COLOR_LISTS
+        .iter()
+        .find(|(n, _)| {
+            n.eq_ignore_ascii_case(name) || n.split(' ').next().is_some_and(|c| c.eq_ignore_ascii_case(name))
+        })
+        .map(|(n, l)| (*n, rgb(l)))
+}
+
 /// The colour list of the owner's graph theme, which Origin's area, stacked area and stacked column
 /// templates use (black, red, blue, magenta, green, navy, violet, purple, wine, dark yellow, then
 /// custom colours; graphing spec section 1.5), measured on the legends of plots made from those
@@ -987,6 +1211,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
     let palette = Palette {
         colors: ORIGIN_COLOR_LIST.iter().map(|&(r, g, b)| Color::rgb(r, g, b)).collect(),
         mode: PaletteMode::Cycle,
+        list: None,
     };
     Graph {
         id,
@@ -1024,6 +1249,8 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
                 size_pt: 9.0,
                 color: Color::BLACK,
                 filled: true,
+                interior: None,
+                fill_color: None,
                 edge_width_pt: 0.5,
                 every: 1,
             },
@@ -1167,6 +1394,8 @@ fn cyclic_voltammetry(id: WindowId, name: &str) -> Graph {
         size_pt: 5.0,
         color: Color::BLACK,
         filled: true,
+        interior: None,
+        fill_color: None,
         edge_width_pt: 0.75,
         every: 1,
     };
@@ -1176,6 +1405,7 @@ fn cyclic_voltammetry(id: WindowId, name: &str) -> Graph {
     layer.palette = Palette {
         colors: vec![Color::rgb(0x46, 0xB1, 0xE1), Color::rgb(0x4E, 0x95, 0xD9), Color::rgb(0x10, 0x48, 0x62)],
         mode: PaletteMode::Spread,
+        list: None,
     };
     layer.default_line =
         LineStyle { color: Color::BLACK, width_pt: 1.75, dash: Dash::Solid, connect: Connect::Spline, sort_x: false };
@@ -1827,7 +2057,7 @@ mod tests {
         assert_eq!(r.palette.colors, reversed);
         // Short color lists start at their last color.
         let mut two = g.layers[0].clone();
-        two.palette = Palette { colors: vec![Color::BLACK, Color::RED], mode: PaletteMode::Cycle };
+        two.palette = Palette { colors: vec![Color::BLACK, Color::RED], mode: PaletteMode::Cycle, list: None };
         assert_eq!(right_y_layer(&two, 0).palette.colors, vec![Color::RED, Color::BLACK]);
         two.palette.colors.clear();
         assert!(right_y_layer(&two, 0).palette.colors.is_empty());
@@ -2500,5 +2730,36 @@ impl FieldTemplate {
             },
         });
         g
+    }
+}
+
+#[cfg(test)]
+mod color_list_tests {
+    use super::*;
+
+    #[test]
+    fn origins_named_colour_lists_are_found_by_name_or_code() {
+        assert_eq!(ORIGIN_COLOR_LISTS.len(), 18);
+        assert!(ORIGIN_COLOR_LISTS.iter().all(|(_, l)| (4..=23).contains(&l.len())));
+        let (name, q03) = color_list("q03").unwrap();
+        assert_eq!(name, "Q03 Rainbow7");
+        assert_eq!(&q03[..3], [Color::rgb(255, 0, 0), Color::rgb(255, 102, 0), Color::rgb(255, 238, 0)]);
+        assert_eq!(color_list("S01 gray scale").unwrap().1.len(), 5);
+        assert_eq!(color_list("Default").unwrap().1.len(), ORIGIN_COLOR_LIST.len());
+        assert!(color_list("Q99").is_none() && color_list("").is_none());
+        // Q02 Basic is the theme list measured on Origin's area templates.
+        let q02 = color_list("Q02").unwrap().1;
+        let theme: Vec<Color> = THEME_COLOR_LIST.iter().map(|&(r, g, b)| Color::rgb(r, g, b)).collect();
+        assert_eq!(q02, theme);
+    }
+
+    #[test]
+    fn a_palette_names_its_list_only_when_one_was_chosen() {
+        let g = Template::Line.new_graph(WindowId(1), "G");
+        let mut palette = g.layers[0].palette.clone();
+        assert!(!serde_json::to_string(&palette).unwrap().contains("list"));
+        palette.list = Some("Q03 Rainbow7".into());
+        let back: Palette = serde_json::from_str(&serde_json::to_string(&palette).unwrap()).unwrap();
+        assert_eq!(back, palette);
     }
 }

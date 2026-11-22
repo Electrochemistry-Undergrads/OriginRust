@@ -1130,6 +1130,7 @@ impl Layer {
         let dash0 = Dash::ALL.iter().position(|d| *d == first.line.dash).unwrap_or(0);
         let shape0 = SymbolShape::ALL.iter().position(|s| *s == first.symbol.shape).unwrap_or(0);
         let filled0 = first.symbol.filled;
+        let first_shape = first.symbol.shape;
         let g = self.group_style;
         let n = self.plots.len();
         for (i, p) in self.plots.iter_mut().enumerate() {
@@ -1137,11 +1138,14 @@ impl Layer {
             if g.line_style == Increment::ByOne {
                 p.line.dash = Dash::ALL[(dash0 + line_step) % Dash::ALL.len()];
             }
-            if g.symbol_type == Increment::ByOne {
+            // A shape outside the increment list (Origin's shapes 9-20) stays on the first plot
+            // and the others step from the start of the list.
+            if g.symbol_type == Increment::ByOne && (shape_step > 0 || SymbolShape::ALL.contains(&first_shape)) {
                 p.symbol.shape = SymbolShape::ALL[(shape0 + shape_step) % SymbolShape::ALL.len()];
             }
             if g.symbol_interior == Increment::ByOne {
                 p.symbol.filled = if shape_step % 2 == 0 { filled0 } else { !filled0 };
+                p.symbol.interior = None;
             }
         }
         self.recolor_automatic();
@@ -1170,7 +1174,9 @@ impl Layer {
             }
             if g.symbol_interior == Increment::None {
                 q.symbol.filled = src.symbol.filled;
+                q.symbol.interior = src.symbol.interior;
             }
+            q.symbol.fill_color = src.symbol.fill_color;
             q.decor.drop = src.decor.drop.clone();
             q.decor.symbol_line = src.decor.symbol_line;
             q.decor.labels = src.decor.labels.clone();
@@ -1699,10 +1705,28 @@ pub enum SymbolShape {
     Diamond,
     Plus,
     Cross,
+    /// Origin's "star(*)": an asterisk of eight strokes.
     Star,
+    /// Origin 2016's shapes 9 to 20 (graphing 5.4, drawn as measured in T323): a horizontal and a
+    /// vertical bar (strokes as wide as the symbol), the row number, the row's capital and small
+    /// letter (A to Z, then again), a triangle pointing left and one pointing right, a hexagon
+    /// with a point up, a five-pointed star, a pentagon with a point up and a shaded sphere.
+    HBar,
+    VBar,
+    Number,
+    CapitalLetter,
+    SmallLetter,
+    TriangleLeft,
+    TriangleRight,
+    Hexagon,
+    FivePointStar,
+    Pentagon,
+    Sphere,
 }
 
 impl SymbolShape {
+    /// The shapes the Symbol Type increment steps through, in Origin's order (the first 8 of the
+    /// default list; the rest are chosen one by one).
     pub const ALL: [SymbolShape; 8] = [
         SymbolShape::Square,
         SymbolShape::Circle,
@@ -1713,6 +1737,155 @@ impl SymbolShape {
         SymbolShape::Cross,
         SymbolShape::Star,
     ];
+
+    /// Every shape with Origin's number (`set -k`, the Plot Details list and the .opj curve byte
+    /// 0x17), in that order. 14 (right arrow) drew nothing in Origin 2016 and is left out.
+    pub const ORIGIN: [(u8, SymbolShape); 19] = [
+        (1, SymbolShape::Square),
+        (2, SymbolShape::Circle),
+        (3, SymbolShape::TriangleUp),
+        (4, SymbolShape::TriangleDown),
+        (5, SymbolShape::Diamond),
+        (6, SymbolShape::Plus),
+        (7, SymbolShape::Cross),
+        (8, SymbolShape::Star),
+        (9, SymbolShape::HBar),
+        (10, SymbolShape::VBar),
+        (11, SymbolShape::Number),
+        (12, SymbolShape::CapitalLetter),
+        (13, SymbolShape::SmallLetter),
+        (15, SymbolShape::TriangleLeft),
+        (16, SymbolShape::TriangleRight),
+        (17, SymbolShape::Hexagon),
+        (18, SymbolShape::FivePointStar),
+        (19, SymbolShape::Pentagon),
+        (20, SymbolShape::Sphere),
+    ];
+
+    /// Origin's number of the shape.
+    pub fn origin_code(self) -> u8 {
+        Self::ORIGIN.iter().find(|(_, s)| *s == self).map_or(1, |(c, _)| *c)
+    }
+
+    /// The shape of an Origin number, if Sheaf draws it.
+    pub fn from_origin_code(code: u8) -> Option<SymbolShape> {
+        Self::ORIGIN.iter().find(|(c, _)| *c == code).map(|(_, s)| *s)
+    }
+
+    /// The name in the Plot Details list.
+    pub fn label(self) -> &'static str {
+        match self {
+            SymbolShape::Square => "Square",
+            SymbolShape::Circle => "Circle",
+            SymbolShape::TriangleUp => "Up Triangle",
+            SymbolShape::TriangleDown => "Down Triangle",
+            SymbolShape::Diamond => "Diamond",
+            SymbolShape::Plus => "Plus",
+            SymbolShape::Cross => "Cross",
+            SymbolShape::Star => "Star (*)",
+            SymbolShape::HBar => "Horizontal Bar",
+            SymbolShape::VBar => "Vertical Bar",
+            SymbolShape::Number => "Number",
+            SymbolShape::CapitalLetter => "Capital Letter",
+            SymbolShape::SmallLetter => "Small Letter",
+            SymbolShape::TriangleLeft => "Left Triangle",
+            SymbolShape::TriangleRight => "Right Triangle",
+            SymbolShape::Hexagon => "Hexagon",
+            SymbolShape::FivePointStar => "Star",
+            SymbolShape::Pentagon => "Pentagon",
+            SymbolShape::Sphere => "Sphere",
+        }
+    }
+
+    /// Drawn with strokes only (no inside to fill).
+    pub fn is_stroke_only(self) -> bool {
+        matches!(
+            self,
+            SymbolShape::Plus | SymbolShape::Cross | SymbolShape::Star | SymbolShape::HBar | SymbolShape::VBar
+        )
+    }
+
+    /// Drawn as text: the row number or its letter.
+    pub fn is_text(self) -> bool {
+        matches!(self, SymbolShape::Number | SymbolShape::CapitalLetter | SymbolShape::SmallLetter)
+    }
+
+    /// The text of a text shape at source row `row` (0-based): `1`, `A`, `a` for the first row;
+    /// letters start again after Z. `None` for a drawn shape.
+    pub fn text_at(self, row: usize) -> Option<String> {
+        let letter = |base: u8| char::from(base + (row % 26) as u8).to_string();
+        match self {
+            SymbolShape::Number => Some((row + 1).to_string()),
+            SymbolShape::CapitalLetter => Some(letter(b'A')),
+            SymbolShape::SmallLetter => Some(letter(b'a')),
+            _ => None,
+        }
+    }
+}
+
+/// Origin's symbol interiors (`set -kf`, Plot Details > Symbol > Interior), measured in Origin 2016
+/// (T323, graphing 5.4): Open is filled with the fill colour (white by default) and hides what is
+/// under it; Hollow is not filled. The "centre" interiors are Open with a mark in the edge colour
+/// (a dot; a plus or a bar reaching the edge; an x reaching the corners of the symbol's square);
+/// the halves fill that half of the symbol with the edge colour and the rest as Open.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SymbolInterior {
+    Solid,
+    Open,
+    DotCenter,
+    Hollow,
+    PlusCenter,
+    XCenter,
+    MinusCenter,
+    BarCenter,
+    HalfUp,
+    HalfRight,
+    HalfDown,
+    HalfLeft,
+}
+
+impl SymbolInterior {
+    /// In Origin's order: the position is its number.
+    pub const ALL: [SymbolInterior; 12] = [
+        SymbolInterior::Solid,
+        SymbolInterior::Open,
+        SymbolInterior::DotCenter,
+        SymbolInterior::Hollow,
+        SymbolInterior::PlusCenter,
+        SymbolInterior::XCenter,
+        SymbolInterior::MinusCenter,
+        SymbolInterior::BarCenter,
+        SymbolInterior::HalfUp,
+        SymbolInterior::HalfRight,
+        SymbolInterior::HalfDown,
+        SymbolInterior::HalfLeft,
+    ];
+
+    pub fn origin_code(self) -> u8 {
+        Self::ALL.iter().position(|i| *i == self).unwrap_or(0) as u8
+    }
+
+    pub fn from_origin_code(code: u8) -> Option<SymbolInterior> {
+        Self::ALL.get(usize::from(code)).copied()
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            SymbolInterior::Solid => "Solid",
+            SymbolInterior::Open => "Open",
+            SymbolInterior::DotCenter => "Dot Center",
+            SymbolInterior::Hollow => "Hollow",
+            SymbolInterior::PlusCenter => "+ Center",
+            SymbolInterior::XCenter => "x Center",
+            SymbolInterior::MinusCenter => "- Center",
+            SymbolInterior::BarCenter => "| Center",
+            SymbolInterior::HalfUp => "Half Up",
+            SymbolInterior::HalfRight => "Half Right",
+            SymbolInterior::HalfDown => "Half Down",
+            SymbolInterior::HalfLeft => "Half Left",
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1721,8 +1894,16 @@ pub struct SymbolStyle {
     /// Width of the symbol's bounding box.
     pub size_pt: f64,
     pub color: Color,
-    /// Filled with the color, or drawn as an outline.
+    /// Filled with the color, or drawn as an outline (used when `interior` is `None`).
     pub filled: bool,
+    /// One of Origin's interiors; `None` draws by `filled` (solid, or an unfilled outline).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interior: Option<SymbolInterior>,
+    /// Origin's Fill Color: the colour of the open part of an Open, centre or half interior;
+    /// `None` is white (Origin 2016's default; `set -cf` did not change it, so other colours are
+    /// Sheaf's reading of the dialog).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_color: Option<Color>,
     pub edge_width_pt: f64,
     /// Drop Lines > Skip Points: draw point decorations (symbols, drop lines, errors and labels)
     /// on the first of every n source points in the plot range (0 or 1 = every point).
@@ -1732,6 +1913,13 @@ pub struct SymbolStyle {
 
 fn one() -> u32 {
     1
+}
+
+impl SymbolStyle {
+    /// The interior drawn: `interior`, or Solid / Hollow from `filled`.
+    pub fn effective_interior(&self) -> SymbolInterior {
+        self.interior.unwrap_or(if self.filled { SymbolInterior::Solid } else { SymbolInterior::Hollow })
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -2735,6 +2923,11 @@ impl Layer {
 pub struct Palette {
     pub colors: Vec<Color>,
     pub mode: PaletteMode,
+    /// The named colour list `colors` was taken from (Origin's Details of the Line Color increment,
+    /// for example `Q03 Rainbow7`; see [`crate::template::color_list`]); `None` for the default
+    /// list or colours chosen one by one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub list: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2856,7 +3049,11 @@ mod tests {
     }
 
     fn pal(mode: PaletteMode) -> Palette {
-        Palette { colors: vec![Color::rgb(0, 0, 0), Color::rgb(100, 100, 100), Color::rgb(200, 200, 200)], mode }
+        Palette {
+            colors: vec![Color::rgb(0, 0, 0), Color::rgb(100, 100, 100), Color::rgb(200, 200, 200)],
+            mode,
+            list: None,
+        }
     }
 
     #[test]
@@ -3103,7 +3300,7 @@ mod tests {
     #[test]
     fn an_automatic_color_fills_a_column_plot_and_leaves_its_outline() {
         let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
-        layer.palette = Palette { colors: vec![Color::BLACK, Color::RED], mode: PaletteMode::Cycle };
+        layer.palette = Palette { colors: vec![Color::BLACK, Color::RED], mode: PaletteMode::Cycle, list: None };
         let plot = |kind: PlotKind| Plot {
             x: None,
             y: ColumnId(1),
@@ -3150,7 +3347,8 @@ mod tests {
     #[test]
     fn group_increments_run_from_the_first_plot_and_dependent_edits_reach_every_plot() {
         let mut layer: Layer = serde_json::from_str(OLD_LAYER).unwrap();
-        layer.palette = Palette { colors: vec![Color::BLACK, Color::RED, Color::BLUE], mode: PaletteMode::Cycle };
+        layer.palette =
+            Palette { colors: vec![Color::BLACK, Color::RED, Color::BLUE], mode: PaletteMode::Cycle, list: None };
         let plot = Plot {
             x: None,
             y: ColumnId(1),
@@ -3200,6 +3398,12 @@ mod tests {
         layer.palette.mode = PaletteMode::Same;
         layer.apply_group_increments();
         assert!(layer.plots.iter().all(|q| q.line.color == Color::BLACK));
+        // A first shape outside the increment list (Origin's 9-20, T323) is kept; the others
+        // step from the start of the list.
+        layer.plots[0].symbol.shape = SymbolShape::Hexagon;
+        layer.apply_group_increments();
+        let shapes: Vec<SymbolShape> = layer.plots.iter().map(|q| q.symbol.shape).collect();
+        assert_eq!(shapes, [SymbolShape::Hexagon, SymbolShape::ALL[1], SymbolShape::ALL[2]]);
     }
 
     #[test]
@@ -3531,6 +3735,8 @@ mod style_tests {
                 size_pt: 5.0,
                 color: Color::BLACK,
                 filled: true,
+                interior: None,
+                fill_color: None,
                 edge_width_pt: 0.5,
                 every: 1,
             },
@@ -3557,8 +3763,11 @@ mod style_tests {
 
     fn layer_of(n: u64) -> Layer {
         let mut layer = Template::Line.new_graph(WindowId(1), "G").layers.remove(0);
-        layer.palette =
-            Palette { colors: vec![Color::BLACK, Color::RED, Color::BLUE, Color::WHITE], mode: PaletteMode::Cycle };
+        layer.palette = Palette {
+            colors: vec![Color::BLACK, Color::RED, Color::BLUE, Color::WHITE],
+            mode: PaletteMode::Cycle,
+            list: None,
+        };
         layer.plots = (1..=n).map(plot).collect();
         layer
     }
@@ -3764,5 +3973,45 @@ mod layer_visibility_tests {
             assert!(!g.layers[added].display.hidden, "{kind:?}");
             assert!(g.layers[0].display.hidden);
         }
+    }
+}
+
+#[cfg(test)]
+mod symbol_code_tests {
+    use super::*;
+
+    #[test]
+    fn origin_numbers_name_every_shape_and_interior_once() {
+        for (code, s) in SymbolShape::ORIGIN {
+            assert_eq!((s.origin_code(), SymbolShape::from_origin_code(code)), (code, Some(s)));
+        }
+        assert_eq!(SymbolShape::from_origin_code(14), None, "the right arrow drew nothing in Origin 2016");
+        for (k, i) in SymbolInterior::ALL.iter().enumerate() {
+            assert_eq!(usize::from(i.origin_code()), k);
+            assert_eq!(SymbolInterior::from_origin_code(k as u8), Some(*i));
+        }
+        assert_eq!(SymbolShape::Number.text_at(9), Some("10".into()));
+        assert_eq!(SymbolShape::CapitalLetter.text_at(11), Some("L".into()), "Origin's row 12");
+        assert_eq!(SymbolShape::Square.text_at(0), None);
+    }
+
+    #[test]
+    fn a_symbol_saved_before_interiors_reads_as_it_was_and_new_fields_are_written_only_when_set() {
+        // A symbol without the two fields, as every file written before T323 holds it.
+        let mut value = serde_json::to_value(
+            crate::template::Template::Scatter.new_graph(WindowId(1), "G").layers[0].default_symbol.clone(),
+        )
+        .unwrap();
+        value["filled"] = serde_json::Value::Bool(false);
+        assert!(value.get("interior").is_none() && value.get("fill_color").is_none());
+        let s: SymbolStyle = serde_json::from_value(value).unwrap();
+        assert_eq!((s.interior, s.fill_color, s.effective_interior()), (None, None, SymbolInterior::Hollow));
+        assert!(!serde_json::to_string(&s).unwrap().contains("interior"));
+        let mut s = s;
+        s.shape = SymbolShape::Hexagon;
+        s.interior = Some(SymbolInterior::HalfLeft);
+        s.fill_color = Some(Color::rgb(1, 2, 3));
+        let back: SymbolStyle = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(back, s);
     }
 }

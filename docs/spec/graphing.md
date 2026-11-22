@@ -92,6 +92,16 @@ A data plot references X column (or row index), Y column, optional error column,
 
 The byte layout is [INF], cross-checked on "Q03 Rainbow7", which decodes to red, orange, yellow, green, blue, violet, purple. **Measured (U1 closed, 2026-11-13):** a fresh `plotxy iy:=(1,2:26) plot:=200` of 25 Y columns, exported with `expGraph type:=png path:="DIR" filename:=NAME overwrite:=1 tr1.unit:=2 tr1.width:=800` and read pixel by pixel from the legend, colours the plots with the BASE palette below in order, not with the theme list above: black, red, green, blue, cyan, magenta, yellow, dark yellow, navy, purple, wine, olive, dark cyan, royal, orange, violet, pink, white (the 18th plot is invisible), light gray, gray, light yellow, light cyan, light magenta, dark gray (24 entries; the 25th plot is black again). Lines, scatter, line+symbol and columns all use this order. Sheaf's templates copy it (`ORIGIN_COLOR_LIST` in `template.rs`); the `.opj` writer's `PALETTE` has the same 24 entries. The file "System Color List" holds 13 RGB values, role unconfirmed: (240,0,130) (250,60,60) (240,130,40) (230,175,45) (230,220,50) (160,230,50) (0,220,0) (0,210,140) (0,200,200) (0,160,255) (30,60,255) (110,0,220) (160,0,200).
 
+**Named colour lists (T332).** Origin 2016 installs 18 lists in `Themes\Color` (Q01 Black and RGB, Q02 Basic, Q03
+Rainbow7, Q04 Paired Color, Q05-Q08 Season Spring/Summer/Fall/Winter, S01 Gray Scale, S02 Cyan, S03 Green, S04 Red,
+D01 Pumpkin Patch, D02 Maple, D03 Sea and Land, D04 Watermelon, D05 Blue-Greens, System Color List), each one blob
+decoded as above (4 to 23 entries). Q02 Basic decodes to exactly the list measured on the area templates
+(`THEME_COLOR_LIST`). Sheaf keeps them as `template::ORIGIN_COLOR_LISTS` (`color_list` finds one by name or code,
+`Default` is the base-palette list of a new graph); Plot Details > Group > Line Color > Details chooses one (the
+plots are recoloured; editing a colour makes the list the layer's own) and `Palette::list` keeps its name in the
+project; `sheaf plot --color-list Q03` does the same from the command line. Choosing a list in Origin's dialog was not
+measured: `themeApply2g` with a colour theme file left a grouped graph's colours unchanged.
+
 **Base palette** (0-based index = LabTalk index minus 1) [W:labtalk list-of-colors]: 0 black 0,0,0; 1 red 255,0,0; 2 green 0,255,0; 3 blue 0,0,255; 4 cyan 0,255,255; 5 magenta 255,0,255; 6 yellow 255,255,0; 7 dark yellow 128,128,0; 8 navy 0,0,128; 9 purple 128,0,128; 10 wine 128,0,0; 11 olive 0,128,0; 12 dark cyan 0,128,128; 13 royal 0,0,160; 14 orange 255,128,0; 15 violet 128,0,255; 16 pink 255,0,128; 17 white; 18 light gray 192; 19 gray 128; 20 light yellow 255,255,128; 21 light cyan 128,255,255; 22 light magenta 255,128,255; 23 dark gray 64. Specials: -9 automatic, -4 none.
 
 **Default line style list:** ids 0..7 in order (solid, dash, dot, dash dot, dash dot dot, short dash, short dot, short dash dot) [F:Themes\Graph\Line Style Default.OTH; addline.OXF]. **Default symbol shape list:** ids 1..16 (square, circle, up triangle, down triangle, diamond, plus, cross, star(*), h-bar, v-bar, numbers, capital letters, lowercase letters, right arrow, left triangle, right triangle) [F:Symbol Type Default.OTH]. **Default interior list:** ids 0..11 [F:Symbol Interior Default.OTH]. Other themes shorten lists (Triangles: 3,4,6,7; Dash and Dot: 1,2,3). [REC] a new overlay increments color only and keeps one solid style and one symbol shape; confirm (U2).
@@ -291,7 +301,8 @@ or a number) and Offset (pt) right and down; the title turns about its middle an
 offset (`Axis::title_rotation_deg`, `Axis::title_offset_pt`, `turned_title` in
 `crates/plot/src/layout.rs`). The `.opj` reader keeps a title's angle when it is not the default; the
 writer writes the angle and the offset (the moved position as the object's centre). Dragging a title
-with the mouse is not built.
+with the mouse (T335) adds the move, in page points, to that offset in one undo step ("Move axis title"), so
+the title stays where it was dropped, as Origin keeps a moved title; the Title tab shows the new offset.
 
 **Tokens inside a title (T246).** A title of Sheaf's own may hold `%(?X)` and `%(?Y)` anywhere, with
 or without options after a comma (`%(?X,@LG)`, letter case ignored); when the graph is drawn each is
@@ -517,6 +528,28 @@ Also: connect begin and end (closes; off), connect within subset (on for line pl
 ### 5.4 Symbols [W:labtalk list-of-symbol-shapes, pd-dialog-sym-tab]
 Shapes: 0 none, 1 square, 2 circle, 3 up triangle, 4 down triangle, 5 diamond, 6 plus, 7 cross, 8 star(*), 9 h-bar, 10 v-bar, 11 numbers, 12 capital letters, 13 lowercase letters, 14 right arrow, 15 left triangle, 16 right triangle, 17 hexagon, 18 star, 19 pentagon, 20 sphere; 56 data markers, 58 X-position marker lines.
 Interiors: 0 solid, 1 open, 2 dot centre, 3 hollow, 4 + centre, 5 x centre, 6 - centre, 7 | centre, 8 half up, 9 half right, 10 half down, 11 half left. Hollow lets objects beneath show; open hides them unless fill is none.
+
+**Measured in Origin 2016 (T323, 2026-11-21; `tools/origin-ref/symbols.lines.txt`, PNGs exported with `expGraph`,
+plots ungrouped with `layer -gu` because a plot group gives every member the first one's shape and interior).**
+- Shapes 1-20 are drawn as the list says: 9 and 10 are a horizontal and a vertical stroke as wide as the symbol;
+  11 writes the row number (row 11 shows "11"), 12 and 13 the row's capital and small letter (row 12 "L", row 13
+  "m"); 15 and 16 are triangles pointing left and right; 17 a hexagon with a point up; 18 a five-pointed star; 19 a
+  pentagon with a point up; 20 a shaded sphere (a lighter spot to the upper left). **14 (right arrow) drew nothing.**
+  The legend sample of 11 is "1" and of both 12 and 13 "a".
+- Interiors on a circle, square, triangle, diamond and hexagon: Open is filled white and hides a yellow layer behind it,
+  Hollow is not filled. Dot centre is a small dot; + centre and - / | centre reach the edge; x centre reaches the
+  corners of the symbol's square (beyond a circle or diamond). The halves fill that half of the shape (cut through
+  the centre) in the edge colour and the rest white. `set -cf` (fill colour) changed nothing that could be seen.
+- The .opj curve record keeps the shape number at 0x17 and the interior number at 0x18 (opj-format 10.5).
+
+**Sheaf (T323).** `SymbolShape` has the 19 drawn shapes (`SymbolShape::ORIGIN` maps Origin's numbers; 14 is read as a
+square with a note), `SymbolStyle::interior` one of the 12 `SymbolInterior`s (`None` keeps the older `filled`
+switch: solid, or an unfilled outline, so earlier files draw as before) and `SymbolStyle::fill_color` the colour of
+the open part (`None` white). Plot Details > Symbol lists every shape and interior and has Fill Color. A file
+Origin wrote reads every shape and interior; Sheaf writes them back the same way. The sphere's gradient is drawn as
+two lighter discs (the scene has no gradients); the fill colour other than white is Sheaf's reading of the dialog,
+not measured. The Symbol Type increment still steps through the first 8 shapes; a first plot with a shape beyond
+them keeps it.
 Other: size (pt, default 9, shape square, solid), edge thickness (2), colour automatic = line colour, fill colour (global default), size from column with scaling factor and formula (`s`, `s1` min, `s2` max), user bitmap/SVG symbols (P2).
 
 ### 5.5 Error bars (P0)
@@ -6454,39 +6487,51 @@ graphs of 2, 3 and 4 variables; probes in `re-workspace/scratch/t313`).
   - The graph is ordinary scatter, histogram and empty layers with text labels, so `.sheaf` and `.opj` save it
     with no new fields.
 
-## 36. Wind rose: Plot > Specialized > Wind Rose - Binned Data, Wind Rose - Raw Data (T113, 2026-11-16, **not measured**)
+## 36. Wind rose: Plot > Specialized > Wind Rose - Binned Data, Wind Rose - Raw Data (T113, 2026-11-16; Raw Data measured by T324, 2026-11-21)
 
-Origin 2016 lists both items under Plot > Specialized (seen in the menu on 2026-11-16). The probes could
-not run: Origin's COM class was unregistered on the test machine (REGDB_E_CLASSNOTREG). This section
-therefore describes Sheaf's version, built from Origin's documented behaviour. Measure it when
-automation works again.
+**Origin 2016, Wind Rose - Raw Data (`plot_windrose`, measured through its menu on 20 rows, speeds also x3 and x0.1;
+probes in `re-workspace/scratch/t324`):**
+
+- Options and defaults: From Minimum 0, To Maximum 337.5, Number of Direction Sectors 16 (4, 8 or 16), Direction
+  Labels N-NNE-NE... (16), speeds automatic (Step by Increment or Intervals), Orientation Direction (Blowing
+  From), Quantity to Compute **Count** (or Percent Frequency), Subtotal Count off, Output Worksheet new.
+- It writes a sheet WindRose1 into the book: Bin Centers of the direction column (0, 22.5, ..., 337.5), one Count
+  column per speed band (its comment the band, "0 - 2"), and Calm.
+- Sectors are centred on 0, 22.5, ...; a direction on a boundary goes to the next sector (11.25 counts under
+  22.5).
+- Speed bands: the step is the 1-2-5 value nearest a fifth of the top speed (8.5 gives 2, 25.5 gives 5, 0.85
+  gives 0.2). The bands run [k s, (k + 1) s) up to the first multiple above the top speed, then an open band
+  ">= that" (8.5: 0 - 2, ..., 8 - 10, >= 10; 25.5: 0 - 5, ..., 25 - 30, >= 30).
+- The wedges are counts, piled from the slowest band out. Band colours black, yellow, red, blue, green, cyan,
+  with black edges. The legend lists the fastest band first. The circle is labelled N, NNE, ... clockwise
+  from north. The radius axis runs 0 to 4.5 for a pile of 4, drawn left of the circle. The page also has
+  "Calms: 0" and the direction column's name at the bottom left.
+
+**Sheaf** (Raw Data copies the measured bands, counts and colours):
 
 - **Layer:** a wind rose is a polar layer on the polar page (graphing 14.18). North (0 degrees) points up,
   the angles run clockwise in degrees, and the radius is the frequency.
 - **Plots:** one plot per speed band, so the legend lists the bands with filled swatches. In each direction
   sector a band is a wedge, piled on the bands plotted before it in the same layer.
-- **Colours:** bands are blue, cyan, green, yellow, orange and red, with black 0.5 pt edges.
-- **Binned Data:**
+- **Colours:** bands are black, yellow, red, blue, green and cyan (Origin's), with black 0.5 pt edges.
+- **Binned Data** (measured by T327: Origin 2016 opens no window and plots the selection at once; eight
+  directions 45 degrees apart with three frequency columns gave wedges 22.5 degrees wide, piled in column order,
+  coloured black, yellow, red, the radius axis 0 to 6.5 for a pile of 6, compass labels, the legend last column
+  first):
   - The X column holds the sector directions in degrees. A text X column, such as N, NNE, ..., spreads
     its rows evenly round the circle.
   - Each selected Y column is one band's frequencies, piled in selection order.
-  - Sectors are 360 / rows wide.
-- **Raw Data:**
-  - The X column holds directions in degrees; the one selected Y column holds the speeds.
-  - There are 16 sectors of 22.5 degrees, centred on 0, 22.5, ... (a direction goes to the nearest
-    centre).
-  - The bands are 0 to s, s to 2s, ..., up to 6 of them. s is the smallest 1-2-5 step of which 6 cover the
-    top speed, and only as many bands as the top speed needs are made. The top band includes its upper
-    edge.
-  - A wedge is the percentage of all rows (with a direction and a speed) that fall in its sector and band.
+  - Wedges are 22.5 degrees wide as Origin's (360 / rows when there are more than 16 rows, Sheaf's choice).
+- **Raw Data:** the X column holds directions in degrees; the one selected Y column holds the speeds. 16
+  sectors and Origin's speed bands (above, `windrose::raw_bands`); a wedge is the count of the rows in its
+  sector and band.
 - **Sheaf internals:** plot kind `wind_rose` with `PlotDecor::wind_rose` (sectors, the band's speed range);
   templates `wind-rose-binned` and `wind-rose-raw`. The .opj writer saves the columns as scatter plots,
   with a warning.
-- **To measure:**
-  - Origin's dialogs, if any.
-  - Its default sector count and speed bins.
-  - Its colours, and whether it shows percent or counts.
-  - Its angle labels: degrees or compass names.
+- **Legend:** the fastest band (the last plot) first, as Origin's: the legend text is `\l(n) %(n)` down to
+  `\l(1) %(1)`.
+- **Left:** Origin's WindRose1 sheet, the Calm count and note, compass labels on the circle, and the options
+  window (sectors, Percent Frequency, Blowing To).
 
 ## 37. Smith chart: Plot > Specialized > Smith Chart (T115, 2026-11-16, **not measured**)
 
@@ -6583,16 +6628,24 @@ this follows Origin's documented behaviour.
 - **To measure:** Origin's marker look, whether markers are per plot or per layer, and how markers are
   moved (drag or click).
 
-## 41. Add Function Graph: Graph > Add Function Graph... (T119, 2026-11-16, **not measured**)
+## 41. Add Function Graph: Graph > Add Function Graph... (T119, 2026-11-16; partly measured by T322, 2026-11-21)
 
-Origin 2016's Graph menu has Add Function Graph.... It could not be probed (Origin's COM class
-unregistered, see 36), so this follows Origin's documented behaviour.
+**Origin 2016 (measured through its menu, T322):** Graph > Add Function Graph... (in the expanded Graph menu, after
+Add Error Bars) adds a function plot F1 to the active layer and opens Plot Details on its Function tab:
+Points 100; From and To greyed, with **Auto** ticked, so the curve follows the X axis range; Y(x) = (empty); a
+Before Formula Script box; Plot Type Line (or Scatter, Line + Symbol, Column / Bar); a Workbook button that turns
+the function into worksheet data; tabs Line, Function, Drop Lines and Label. Origin keeps the curve as a function
+dataset. What its OK draws was not read back (the collapsible menu moved the item between runs).
+
+**Sheaf:**
 
 - **The window "Add Function Graph":**
   - y(x) = an expression in Sheaf's expression language (`docs/spec/expression-language.md`), with the
     variable `x` (default `sin(x)`).
-  - From and To: the X range (default 0 to 10).
-  - Points: the number of evenly spaced points (default 100, at least 2).
+  - From and To: the X range; from Graph > Add Function Graph the range the layer's X axis shows (as Origin's Auto,
+    but fixed once added), from File > New > Function Plot 0 to 10.
+  - Points: the number of evenly spaced points (default 100 as Origin's, at least 2).
+  - Plot Type: Line (default), Scatter, Line + Symbol or Column / Bar, as Origin's.
 - **OK:** samples the function and adds its curve as a line plot to the active layer, one undo step.
   - An expression error is reported, and the window stays open.
   - A point where the function has no value is missing in the curve.
@@ -6600,8 +6653,8 @@ unregistered, see 36), so this follows Origin's documented behaviour.
   new workbook, `FuncN` (long name "y = <expression>"), with an X column `x` and a Y column whose long name
   is the expression. The curve is therefore an ordinary plot that saves, exports and edits like any other.
 - **Sheaf internals:** `sheaf_core::function_graph::sample`, `Project::add_function_graph`.
-- **To measure:** Origin's window and its defaults, whether the curve follows the X axis range, and its
-  line style.
+- **Left:** a curve that follows the X axis as it changes (Origin's Auto), Before Formula Script, the function as
+  a dataset of its own.
 
 
 - **File > New > Function Plot (T213, not measured):** opens the same window for a graph that does

@@ -1171,6 +1171,14 @@ pub enum Action {
         x: f64,
         y: f64,
     },
+    /// An axis title dragged on the graph: `(dx, dy)` page points added to its offset (T335).
+    MoveAxisTitle {
+        graph: WindowId,
+        layer: usize,
+        y: bool,
+        dx: f64,
+        dy: f64,
+    },
     /// Copy Page: the graph as a picture on the clipboard.
     CopyPage(WindowId),
     /// Copy Format of a whole graph (T72).

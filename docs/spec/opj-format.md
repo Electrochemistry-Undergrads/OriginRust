@@ -239,11 +239,11 @@ workbooks. For graph layers public documentation lists axis ranges and ticks at 
 | offset | size | meaning |
 |---|---|---|
 | `0x04` | u16 | position (1-based) of the column's data set in the data-set list |
-| `0x11` | u8 | role: 0 = Y, 3 = X, 5 = Z, 6 = X error, 2 = Y error, 4 = label; 1 and other values = disregard [pub][obs]. Value 1 occurs often and was mapped to "disregard" without a second source [inf]. Value 96 appears in graph curves, never in workbooks |
+| `0x11` | u8 | role: 0 = Y, 3 = X, 5 = Z, 6 = X error, 2 = Y error, 4 = label, 7 = Group, 8 = Subject (LabTalk `wks.col.type` 8 and 9; measured in Origin 2016 on 2026-11-21, T330, which also writes the Y type word 0x6121 for them and makes them belong to the X column; Origin read both back from a file Sheaf wrote); 1 and other values = disregard [pub][obs]. Value 1 occurs often and was mapped to "disregard" without a second source [inf]. Value 96 appears in graph curves, never in workbooks |
 | `0x12` | 12 bytes | short name, NUL padded. Cut at 11 characters in some files (`Independent1` appeared as `Independent`); the data-set name is the full name and is preferred |
 | `0x1E` | u8 | value type (9 plain numeric, 0, 0x10, 0x08 numeric, `0x02` time, `0x03`/`0x33` date, `0x31` text, ...) [pub][obs] |
 | `0x1F` | u8 | display precision: `>= 0x80` significant digits, else decimals offset by 3 [pub]; not used |
-| `0x4A` | u16 | column width in tenths of characters [pub]; not used |
+| `0x4A` | u16 | column width in tenths of characters [pub]: `wks.col2.width=14` stored 140 and Origin's default is 67 (`wks.col.width` reads 7) (measured in Origin 2016 on 2026-11-21, T334); the reader takes a width other than the default as the column's own, the writer writes it, and Origin read 14 and 20 back from a file Sheaf wrote [obs] |
 | `0x23` | u16 | the column this one belongs to (its X); 0 for an X column, a sheet without X, and a column with a sampling interval [obs, T303] |
 | `0x33` | u16 | 1 in most columns; 0xFFFF for a column with a sampling interval in a sheet that has an X column; 0 in a sheet without X [obs, T303] |
 | `0x1D2`, `0x1DA` | f64, f64 | sampling interval: the first X and the step (Origin's `wks.colN.xinit`, `xinc`); 1 and 1 when the column has none. Measured in Origin 2016 on 2026-11-21 (`re-workspace/scratch/t303`): setting `xinit` 3.5 and `xinc` 0.125 on B changed these, `0x23` (6 to 0), `0x33` (1 to 0xFFFF), the same two doubles at `0x25`/`0x2D` of B's data-set header with its `0x52` (6 to 0), and byte `0x68` of the layer header (0 to 1). The reader takes an interval from a non-X column whose `0x23` is 0 when the doubles are not 1 and 1 or `0x33` is 0xFFFF; the writer writes them (Origin read `xinit` 0 and `xinc` 0.5 back from a file Sheaf wrote) [obs, T303] |
@@ -519,7 +519,8 @@ The column records of a graph layer are its curves (515 bytes, the same size as 
 | `0x11` | u8 | line connection: 0 none, 1 and above a line (values 1 to 8 all drew straight lines through 8 points; the other kinds were not told apart) |
 | `0x12` | u8 | line style: 0 solid, 1 dash, 2 dot, 3 dash dot, 4 dash dot dot, 5 short dash, 6 short dot, 7 short dash dot (the `set -d` values, modulo 8) |
 | `0x15` | u16 | line width in 1/500 point (`set -w 1000` is 2 points) |
-| `0x17` | u8 | symbol shape: 0 none, 1 square (the default); the others are guessed: 2 circle, 3 up triangle, 4 down triangle, 5 diamond |
+| `0x17` | u8 | symbol shape: Origin's number, 0 none, 1 square (the default) to 20 sphere as in graphing 5.4 (checked on a project Origin 2016 saved with shapes 1-20, T323) |
+| `0x18` | u8 | symbol interior: Origin's number, 0 solid, 1 open, 2 dot centre ... 11 half left (graphing 5.4; checked the same way with interiors 0-11) |
 | `0x19` | u16 | symbol size in 1/500 point (`set -z 12` is 6000). In a column plot (203) it is the bar width in percent of the X spacing times 50, that is (100 - gap) × 50: 4000 for Origin's default gap of 20, 3000 for 40, 2250 for 55 (`set -vg`); a copy is at `0x11A` (graphing.md 14.7) |
 | `0x23` | u16 | position of the X data set (0 for none). For an error plot it holds the position of the Y data set of the plot the errors belong to |
 | `0x4C` | u16 | plot type: 200 line, 201 scatter, 202 line and symbol, 203 column; 487 (`0x1E7`) is a Y error plot |
@@ -534,8 +535,8 @@ on. The reader gives each automatic plot the list colour of its position in the 
 `set -c 1 -w 1000` (several options in one call) is silently ignored by Origin; each option
 needs its own `set` call.
 
-I could not make `set -k` change the drawn symbol shape in a hidden instance (the record changed, the
-picture did not), so shapes other than the default square are not confirmed against a picture.
+`set -k` did not seem to change the drawn shape because the plots were in a plot group, which gives every
+member the first one's shape; after `layer -gu` every shape and interior is drawn (T323, graphing 5.4).
 
 ### 10.6 Colour list
 
@@ -930,7 +931,7 @@ compared byte for byte with Origin's. Other types are read as line + symbol with
 (a 515-byte record whose `0x04` is the data set of the error column and `0x23` the Y data set of the curve).
 Data-set numbers at `0x04` (Y) and `0x23` (X, 0 for row numbers), first and after-last used row at `0x07`
 and `0x0B`. Line colour at `0x0F` and `0x16A`, dash at `0x12`, connection at `0x11` (1 straight, 5 spline,
-11 and 12 steps), width at `0x15` in 1/500 point, symbol shape at `0x17`, open flag at `0x18`, size at
+11 and 12 steps), width at `0x15` in 1/500 point, symbol shape at `0x17`, interior at `0x18`, size at
 `0x19` in 1/500 point, symbol colour at `0x132`, column fill colour at `0xC2`. Byte `0x06` is 9 so
 that no curve is in a plot group (a group gives every curve the colour of the first one [obs]).
 Origin counts the objects of a project with a running number that is kept at `0x1E2`.

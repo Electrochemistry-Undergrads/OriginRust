@@ -2067,11 +2067,14 @@ fn trace_interpolation_opens_from_mathematics_and_writes_a_sheet_with_its_own_x(
     menu_path(&mut h, &["Analysis", "Mathematics", "Trace Interpolation..."]);
     assert!(h.state().analysis.is_some(), "the window is open");
     click(&mut h, "OK");
+    // T326: as Origin's interp1trace, an X and a Y column for each input at the end of the input sheet.
     let b = project(&h).workbooks().next().unwrap();
-    let sheet = b.sheets.iter().find(|s| s.name.starts_with("TraceInterp")).expect("a result sheet");
-    assert_eq!(sheet.columns.len(), 4, "an X and a Y column for each of the two inputs");
-    assert_eq!(sheet.columns[0].numeric().unwrap().len(), 100, "Origin's default number of points");
-    assert!(sheet.columns[1].comments.starts_with("linear trace interpolation of"));
+    let added: Vec<&sheaf_core::Column> =
+        b.sheets[0].columns.iter().filter(|c| c.long_name.starts_with("Interpolated")).collect();
+    assert_eq!(added.len(), 4, "an X and a Y column for each of the two inputs");
+    assert_eq!(added[0].long_name, "InterpolatedX1");
+    assert_eq!(added[0].numeric().unwrap().len(), 100, "Origin's default number of points");
+    assert!(added[1].comments.starts_with("Linear trace interp of"));
     assert_eq!(h.state().doc.undo_label(), Some("Trace interpolation"));
 }
 
@@ -4311,6 +4314,53 @@ fn plot_details_drop_lines_label_and_fill_tabs_change_the_plot() {
 }
 
 #[test]
+fn plot_details_symbol_tab_offers_origins_shapes_interiors_and_fill_colour() {
+    let mut h = start(vec![data_file("pd-symbol")]);
+    let (_, graph) = window_ids(&h);
+    h.state_mut().doc.apply("Scatter", |p| {
+        let layer = &mut p.graph_mut(graph).unwrap().layers[0];
+        layer.group_style.dependent = false;
+        layer.plots[0].kind = sheaf_core::graph::PlotKind::Scatter;
+    });
+    h.state_mut().panels.set_pinned(PanelId::Objects, true);
+    settle(&mut h);
+    let plots = project(&h).graph(graph).unwrap().layers[0].plots.clone();
+    let at = in_right_panel(&h, &project(&h).plot_label(&plots[0]));
+    double_click_at(&mut h, at);
+    assert!(h.state().graph_props.is_some(), "Plot Details is open");
+    click(&mut h, "Symbol");
+    assert!(has_label(&h, "Fill Color"));
+    let shape = project(&h).graph(graph).unwrap().layers[0].plots[0].symbol.shape.label();
+    choose_recalc(&mut h, shape, "Hexagon");
+    let interior = project(&h).graph(graph).unwrap().layers[0].plots[0].symbol.effective_interior().label();
+    choose_recalc(&mut h, interior, "Half Up");
+    click(&mut h, "OK");
+    let sym = &project(&h).graph(graph).unwrap().layers[0].plots[0].symbol;
+    assert_eq!(sym.interior, Some(sheaf_core::graph::SymbolInterior::HalfUp));
+    assert_eq!(sym.shape, sheaf_core::graph::SymbolShape::Hexagon);
+}
+
+#[test]
+fn the_group_tab_chooses_one_of_origins_named_colour_lists() {
+    let mut h = start(vec![data_file("pd-colorlist")]);
+    let (_, graph) = window_ids(&h);
+    h.state_mut().panels.set_pinned(PanelId::Objects, true);
+    settle(&mut h);
+    let plots = project(&h).graph(graph).unwrap().layers[0].plots.clone();
+    let at = in_right_panel(&h, &project(&h).plot_label(&plots[0]));
+    double_click_at(&mut h, at);
+    assert!(h.state().graph_props.is_some(), "Plot Details is open");
+    click(&mut h, "Group");
+    choose_recalc(&mut h, "Default", "Q03 Rainbow7");
+    click(&mut h, "OK");
+    let layer = &project(&h).graph(graph).unwrap().layers[0];
+    assert_eq!(layer.palette.list.as_deref(), Some("Q03 Rainbow7"));
+    let colors: Vec<sheaf_core::Color> = layer.plots.iter().map(|q| q.line.color).collect();
+    let want = sheaf_core::template::color_list("Q03").unwrap().1;
+    assert_eq!(colors, want[..colors.len()], "the plots take the list's colours in order");
+}
+
+#[test]
 fn a_dependent_group_shares_a_change_and_an_independent_one_does_not() {
     let mut h = start(vec![data_file("pd-group")]);
     let (_, graph) = window_ids(&h);
@@ -4819,6 +4869,32 @@ fn the_legend_is_dragged_to_a_manual_position_in_one_undo_step() {
 }
 
 #[test]
+fn an_axis_title_is_dragged_to_a_new_place_in_one_undo_step() {
+    let mut h = start(vec![data_file("dragtitle")]);
+    for (kind, y) in [(ObjectKind::XTitle, false), (ObjectKind::YTitle, true)] {
+        let axis = |h: &Harness<'static, SheafApp>| {
+            let l = &graph(h).layers[0];
+            if y { l.y_axis.title_offset_pt } else { l.x_axis.title_offset_pt }
+        };
+        assert_eq!(axis(&h), (0.0, 0.0));
+        let at = on(&h, 0, kind);
+        pause(&mut h);
+        drag(&mut h, at, at + egui::vec2(40.0, -30.0));
+        let (dx, dy) = axis(&h);
+        // Moved right and up, in page points (the screen shows the page smaller or larger).
+        assert!(dx > 0.0 && dy < 0.0 && (dx / dy + 40.0 / 30.0).abs() < 0.05, "{kind:?}: {dx} {dy}");
+        assert_eq!(graph_ui(&h).selected, Some((0, kind)));
+        assert_eq!(h.state().doc.undo_label(), Some("Move axis title"));
+        assert!(h.state().graph_props.is_none(), "a drag is not a double click");
+        // The title is where it was dropped: it can be picked there.
+        let moved = on(&h, 0, kind);
+        assert!((moved - at - egui::vec2(40.0, -30.0)).length() < 3.0, "{kind:?}: {at:?} -> {moved:?}");
+        menu(&mut h, "Edit", "Undo Move axis title");
+        assert_eq!(axis(&h), (0.0, 0.0));
+    }
+}
+
+#[test]
 fn reconstruct_legend_goes_back_to_the_automatic_text() {
     let mut h = start(vec![data_file("reconleg")]);
     h.state_mut().doc.apply("Legend text", |p| {
@@ -5005,9 +5081,14 @@ fn csv_file(tag: &str, name: &str, text: &str) -> PathBuf {
 
 /// The result sheet that the last tool added to the first workbook: its name and the numbers of a column.
 fn result_column(h: &Harness<'static, SheafApp>, column: &str) -> (String, Vec<f64>) {
+    // The last sheet that has the column: a result sheet, or the input sheet for tools that write there.
     let b = project(h).workbooks().next().unwrap();
-    let ws = b.sheets.last().unwrap();
-    let c = ws.columns.iter().find(|c| c.long_name == column).unwrap_or_else(|| panic!("no column {column}"));
+    let (ws, c) = b
+        .sheets
+        .iter()
+        .rev()
+        .find_map(|ws| ws.columns.iter().find(|c| c.long_name == column).map(|c| (ws, c)))
+        .unwrap_or_else(|| panic!("no column {column}"));
     (ws.name.clone(), c.numeric().unwrap().to_vec())
 }
 
@@ -5912,8 +5993,9 @@ fn the_mathematics_menu_finds_the_intersection_of_two_curves() {
     assert!(has_label(&h, "Also list the points where the curves touch without crossing"));
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none());
+    // T322: at the end of the input sheet, as Origin's intersect writes it.
     let (sheet, x) = result_column(&h, "Intersection X1");
-    assert!(sheet.starts_with("Intersect"), "{sheet}");
+    assert_eq!(sheet, project(&h).workbooks().next().unwrap().sheets[0].name, "the input sheet");
     assert_eq!(x.len(), 1);
     assert!((x[0] - 10.0 / 3.0).abs() < 1e-9, "{x:?}");
     assert_eq!(h.state().doc.undo_label(), Some("Intersect"));
@@ -5990,8 +6072,9 @@ fn from_a_graph_the_curve_tools_start_with_the_plots_of_the_layer() {
     assert!(h.state().analysis.is_some());
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none(), "it ran with the two plots");
+    // T322: Intersect writes into the input sheet, as Origin's intersect.
     let (sheet, x) = result_column(&h, "Intersection X1");
-    assert!(sheet.starts_with("Intersect"), "{sheet}");
+    assert_eq!(sheet, project(&h).workbooks().next().unwrap().sheets[0].name);
     assert!((x[0] - 10.0 / 3.0).abs() < 1e-9, "{x:?}");
 }
 

@@ -746,20 +746,42 @@ fn plot_tab_body(
             let plot = &mut graph.layers[l].plots[p];
             grid(ui, "plot_symbol", |ui| {
                 ui.label("Shape");
-                egui::ComboBox::from_id_salt("plot_symbol").selected_text(symbol_name(plot.symbol.shape)).show_ui(
-                    ui,
-                    |ui| {
-                        for s in SymbolShape::ALL {
+                egui::ComboBox::from_id_salt("plot_symbol")
+                    .height(480.0)
+                    .selected_text(symbol_name(plot.symbol.shape))
+                    .show_ui(ui, |ui| {
+                        for (_, s) in SymbolShape::ORIGIN {
                             ui.selectable_value(&mut plot.symbol.shape, s, symbol_name(s));
                         }
-                    },
-                );
+                    });
                 ui.end_row();
                 ui.label("Size");
                 ui.add(DragValue::new(&mut plot.symbol.size_pt).range(0.5..=40.0).speed(0.1).suffix(" pt"));
                 ui.end_row();
                 ui.label("Interior");
-                ui.checkbox(&mut plot.symbol.filled, "Filled");
+                // Origin's twelve interiors (graphing 5.4). Solid and Hollow keep the plain
+                // `filled` switch, so files and increments made before stay as they were.
+                let current = plot.symbol.effective_interior();
+                let mut chosen = current;
+                egui::ComboBox::from_id_salt("plot_symbol_interior").selected_text(current.label()).show_ui(ui, |ui| {
+                    for i in SymbolInterior::ALL {
+                        ui.selectable_value(&mut chosen, i, i.label());
+                    }
+                });
+                if chosen != current {
+                    plot.symbol.filled = chosen == SymbolInterior::Solid;
+                    plot.symbol.interior =
+                        (!matches!(chosen, SymbolInterior::Solid | SymbolInterior::Hollow)).then_some(chosen);
+                }
+                ui.end_row();
+                ui.label("Fill Color");
+                let mut fill = plot.symbol.fill_color.unwrap_or(Color::WHITE);
+                ui.add_enabled_ui(!matches!(chosen, SymbolInterior::Solid | SymbolInterior::Hollow), |ui| {
+                    color_button(ui, &mut fill);
+                });
+                if fill != plot.symbol.fill_color.unwrap_or(Color::WHITE) {
+                    plot.symbol.fill_color = Some(fill);
+                }
                 ui.end_row();
                 ui.label("Edge Thickness");
                 ui.add(DragValue::new(&mut plot.symbol.edge_width_pt).range(0.0..=10.0).speed(0.05).suffix(" pt"));
@@ -1208,7 +1230,7 @@ fn group_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, labels: &
         ui.radio_value(&mut layer.group_style.dependent, false, "Independent");
         ui.radio_value(&mut layer.group_style.dependent, true, "Dependent");
     });
-    let before = (layer.palette.mode, layer.group_style);
+    let before = (layer.palette.mode, layer.group_style, layer.palette.list.clone());
     let has_symbols = layer.plots.iter().any(|q| q.kind.has_symbols());
     egui::Grid::new("group_increments").num_columns(3).striped(true).spacing([12.0, 4.0]).show(ui, |ui| {
         ui.label("");
@@ -1228,6 +1250,22 @@ fn group_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, labels: &
                 ui.selectable_value(&mut layer.palette.mode, PaletteMode::Spread, "Stretch");
             });
         ui.horizontal(|ui| {
+            // Origin's named colour lists (graphing 1.5, T332); editing a colour makes the list
+            // the layer's own.
+            let shown = layer.palette.list.clone().unwrap_or_else(|| "Default".into());
+            egui::ComboBox::from_id_salt("inc_color_list").height(480.0).selected_text(&shown).show_ui(ui, |ui| {
+                let names =
+                    std::iter::once("Default").chain(sheaf_core::template::ORIGIN_COLOR_LISTS.iter().map(|(n, _)| *n));
+                for name in names {
+                    if ui.selectable_label(shown == name, name).clicked()
+                        && let Some((n, colors)) = sheaf_core::template::color_list(name)
+                    {
+                        layer.palette.colors = colors;
+                        layer.palette.list = (n != "Default").then(|| n.to_string());
+                    }
+                }
+            });
+            let before = layer.palette.colors.clone();
             for c in &mut layer.palette.colors {
                 color_button(ui, c);
             }
@@ -1236,6 +1274,9 @@ fn group_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, labels: &
             }
             if layer.palette.colors.len() > 1 && ui.small_button("-").clicked() {
                 layer.palette.colors.pop();
+            }
+            if layer.palette.colors != before {
+                layer.palette.list = None;
             }
         });
         ui.end_row();
@@ -1257,7 +1298,9 @@ fn group_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize, p: usize, labels: &
         }
     });
     look::subgrouping_ui(ui, &mut layer.group_style);
-    if (layer.palette.mode, layer.group_style) != before || ui.button("Recolor plots").clicked() {
+    if (layer.palette.mode, layer.group_style, layer.palette.list.clone()) != before
+        || ui.button("Recolor plots").clicked()
+    {
         layer.apply_palette();
         layer.apply_group_increments();
     }

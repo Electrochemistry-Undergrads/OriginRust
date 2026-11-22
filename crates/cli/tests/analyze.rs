@@ -643,9 +643,15 @@ V,A
     ]);
     assert!(ok, "stderr: {stderr}");
     assert!(stdout.contains("Trace interpolation"), "{stdout}");
+    // T326: the X and Y go to the end of the input sheet (v, i, InterpolatedX1, InterpolatedY1).
     let rows: Vec<String> = std::fs::read_to_string(&out).unwrap().lines().skip(3).map(str::to_string).collect();
     assert_eq!(rows.len(), 10);
-    assert_eq!((rows[0].as_str(), rows[3].as_str(), rows[9].as_str()), ("1,0", "3,1", "-1,1"));
+    let last_two =
+        |r: &str| r.rsplitn(3, ',').take(2).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join(",");
+    assert_eq!(
+        (last_two(&rows[0]), last_two(&rows[3]), last_two(&rows[9])),
+        ("1,0".into(), "3,1".into(), "-1,1".into())
+    );
     // One point is no trace.
     let (ok, _, stderr) = sheaf(&["analyze", "trace-interp", data.to_str().unwrap(), "--y", "i", "--points", "1"]);
     assert!(!ok && !stderr.is_empty());
@@ -2072,4 +2078,39 @@ fn cv_charge_splits_the_sweeps() {
     assert!(stdout.contains("20"), "2 A over 1 V at 0.1 V/s: {stdout}");
     let (ok, _, stderr) = sheaf(&["analyze", "cv-charge", d, "--y", "I", "--scan-rate", "0"]);
     assert!(!ok && stderr.contains("scan rate"), "{stderr}");
+}
+
+/// `--baseline als` (T318): the Asymmetric Least Squares baseline stays on the sloping background.
+#[test]
+fn als_baseline_goal_follows_the_background() {
+    let dir = scratch("baseline-als");
+    let mut text = String::from("x,y\n");
+    for k in 0..401 {
+        let x = k as f64 * 0.05;
+        text.push_str(&format!("{x},{}\n", 0.2 + 0.01 * x + (-(x - 10.0) * (x - 10.0) / 0.5).exp()));
+    }
+    let data = dir.join("one.csv");
+    std::fs::write(&data, text).unwrap();
+    let out = dir.join("out.csv");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "peaks",
+        data.to_str().unwrap(),
+        "--baseline-goal",
+        "create",
+        "--baseline",
+        "als",
+        "--als-smoothing",
+        "6",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    let csv = std::fs::read_to_string(&out).unwrap();
+    let rows = numeric_rows(&csv);
+    // Row 200 is x = 10, the top of the peak: the baseline stays near 0.3.
+    assert!((rows[200][2] - 0.3).abs() < 0.02, "{:?}", rows[200]);
+    let (ok, _, stderr) =
+        sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--baseline", "als", "--als-asymmetric", "2"]);
+    assert!(!ok && stderr.contains("asymmetric factor"), "{stderr}");
 }

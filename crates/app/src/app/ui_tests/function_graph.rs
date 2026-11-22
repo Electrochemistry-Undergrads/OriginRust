@@ -19,15 +19,24 @@ fn the_function_curve_goes_into_the_active_layer() {
     h.state_mut().apply(Action::AddFunctionGraph { graph, layer: 0 }, &ctx);
     settle(&mut h);
     assert!(h.query_by_label("y(x) =").is_some());
-    h.state_mut().function_graph.as_mut().unwrap().expr = "2*x".into();
+    // Origin's Auto From/To (T322): the window starts over the range the layer's X axis shows.
+    let geom = sheaf_plot::layout_geometry(project(&h), graph).unwrap()[0].clone();
+    let (from, to) = (geom.x.min, geom.x.max);
+    {
+        let d = h.state_mut().function_graph.as_mut().unwrap();
+        assert_eq!((d.from, d.to, d.points), (from, to, 100));
+        d.expr = "2*x".into();
+        d.kind = PlotKind::LineSymbol;
+    }
     h.get_by_label("OK").click();
     settle(&mut h);
     assert!(h.state().function_graph.is_none());
     let plots = &project(&h).graph(graph).unwrap().layers[0].plots;
     assert_eq!(plots.len(), 2);
-    assert_eq!(plots[1].kind, PlotKind::Line);
+    assert_eq!(plots[1].kind, PlotKind::LineSymbol, "the Plot Type chosen");
     let ys = project(&h).numeric(plots[1].y).unwrap().to_vec();
-    assert_eq!((ys.len(), ys[ys.len() - 1]), (100, 20.0));
+    assert_eq!(ys.len(), 100);
+    assert!((ys[ys.len() - 1] - 2.0 * to).abs() < 1e-9);
 }
 
 #[test]

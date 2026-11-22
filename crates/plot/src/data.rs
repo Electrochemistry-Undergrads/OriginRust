@@ -878,7 +878,8 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
                 let values = pd.visible_values().into_owned();
                 let side = plot.decor.marginal.unwrap_or(sheaf_core::marginal::MarginalSide::Top);
                 let bins = plot.kind == PlotKind::MarginalHistogram;
-                pd.marginal = crate::marginal_plot::MarginalData::new(&values, side, &plot.hist, bins);
+                let slot = f64::from(plot.decor.marginal_slot.unwrap_or(1));
+                pd.marginal = crate::marginal_plot::MarginalData::new(&values, side, &plot.hist, bins, slot);
                 // The bars or box are not points on the axes; their extent counts through `marginal`.
                 pd.end = pd.start;
                 pd.mask = None;

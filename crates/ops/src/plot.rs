@@ -404,7 +404,24 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
                 bail!("--group {name}: there are no Y columns left to plot besides the group column");
             }
             let (_, grouped) = project.group_columns(book, sheet, &ys, key)?;
-            project.plot_columns(template, &grouped)?
+            let graph = if matches!(template, Template::MarginalHistograms | Template::MarginalBoxCharts) {
+                // Grouped marginal plots (T373): a scatter and a histogram or box per group.
+                project.plot_marginal_groups(template, &grouped)?
+            } else {
+                project.plot_columns(template, &grouped)?
+            };
+            // The grouped columns are named after the group values; the Y axis is named after the Y
+            // column itself (T373; the automatic title would show the first group's value).
+            if let [y] = ys.as_slice()
+                && let Some(c) = project.column(*y)
+            {
+                let base = if c.long_name.is_empty() { c.short_name.clone() } else { c.long_name.clone() };
+                let title = if c.units.is_empty() { base } else { format!("{base} ({})", c.units) };
+                if let Some(layer) = project.graph_mut(graph).and_then(|g| g.layers.first_mut()) {
+                    layer.y_axis.title = Some(title);
+                }
+            }
+            graph
         } else if a.y2.is_empty() && template != Template::DoubleY {
             project.plot_columns(template, &ys)?
         } else {

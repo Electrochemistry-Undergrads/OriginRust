@@ -2329,6 +2329,9 @@ pub struct PlotDecor {
     /// The margin a marginal histogram or box stands in (T110).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub marginal: Option<crate::marginal::MarginalSide>,
+    /// A grouped marginal box chart's position in its margin layer, 1 for the first group (T373); `None` is 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub marginal_slot: Option<u32>,
     /// The centre line of an X bar R chart's means or ranges (T111).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub qc_center: Option<f64>,

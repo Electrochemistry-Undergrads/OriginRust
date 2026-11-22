@@ -1582,6 +1582,33 @@ fn rare_event_charts_run_from_the_command_line() {
     assert!(!ok && err.contains("--chart"), "{err}");
 }
 
+/// Exponential smoothing forecast (spec `statistics.md` section 42, T374).
+#[test]
+fn exponential_smoothing_forecast_runs_from_the_command_line() {
+    let dir = scratch("forecast");
+    let path = dir.join("ts.csv");
+    let mut text = String::from("t,v\n");
+    for i in 0..24 {
+        text.push_str(&format!("{i},{}\n", 10.0 + 0.2 * f64::from(i) + [2.0, -1.0, 0.5, -1.5][i as usize % 4]));
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) =
+        sheaf(&["analyze", "forecast", file, "--y", "v", "--model", "additive", "--period", "4", "--horizon", "4"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("additive Holt-Winters smoothing, fitted alpha")
+            && out.contains("4 forecast(s)")
+            && out.contains("Forecast1"),
+        "{out}"
+    );
+    let (ok, out, err) =
+        sheaf(&["analyze", "forecast", file, "--y", "v", "--model", "simple", "--constants", "0.5", "--no-graph"]);
+    assert!(ok && out.contains("simple smoothing, given alpha = 0.5"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "forecast", file, "--y", "v", "--constants", "0.5"]);
+    assert!(!ok && err.contains("takes 2 constant"), "{err}");
+}
+
 /// Stationarity tests (spec `statistics.md` section 41, T372).
 #[test]
 fn stationarity_tests_run_from_the_command_line() {

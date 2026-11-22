@@ -4869,6 +4869,32 @@ fn the_legend_is_dragged_to_a_manual_position_in_one_undo_step() {
 }
 
 #[test]
+fn an_axis_title_is_dragged_to_a_new_place_in_one_undo_step() {
+    let mut h = start(vec![data_file("dragtitle")]);
+    for (kind, y) in [(ObjectKind::XTitle, false), (ObjectKind::YTitle, true)] {
+        let axis = |h: &Harness<'static, SheafApp>| {
+            let l = &graph(h).layers[0];
+            if y { l.y_axis.title_offset_pt } else { l.x_axis.title_offset_pt }
+        };
+        assert_eq!(axis(&h), (0.0, 0.0));
+        let at = on(&h, 0, kind);
+        pause(&mut h);
+        drag(&mut h, at, at + egui::vec2(40.0, -30.0));
+        let (dx, dy) = axis(&h);
+        // Moved right and up, in page points (the screen shows the page smaller or larger).
+        assert!(dx > 0.0 && dy < 0.0 && (dx / dy + 40.0 / 30.0).abs() < 0.05, "{kind:?}: {dx} {dy}");
+        assert_eq!(graph_ui(&h).selected, Some((0, kind)));
+        assert_eq!(h.state().doc.undo_label(), Some("Move axis title"));
+        assert!(h.state().graph_props.is_none(), "a drag is not a double click");
+        // The title is where it was dropped: it can be picked there.
+        let moved = on(&h, 0, kind);
+        assert!((moved - at - egui::vec2(40.0, -30.0)).length() < 3.0, "{kind:?}: {at:?} -> {moved:?}");
+        menu(&mut h, "Edit", "Undo Move axis title");
+        assert_eq!(axis(&h), (0.0, 0.0));
+    }
+}
+
+#[test]
 fn reconstruct_legend_goes_back_to_the_automatic_text() {
     let mut h = start(vec![data_file("reconleg")]);
     h.state_mut().doc.apply("Legend text", |p| {

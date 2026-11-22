@@ -3284,6 +3284,14 @@ impl SheafApp {
                     }
                 });
             }
+            Action::MoveAxisTitle { graph, layer, y, dx, dy } => {
+                self.doc.apply("Move axis title", |p| {
+                    if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {
+                        let axis = if y { &mut l.y_axis } else { &mut l.x_axis };
+                        axis.title_offset_pt = (axis.title_offset_pt.0 + dx, axis.title_offset_pt.1 + dy);
+                    }
+                });
+            }
             Action::MoveLegend { graph, layer, x, y } => {
                 self.doc.apply("Move legend", |p| {
                     if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {

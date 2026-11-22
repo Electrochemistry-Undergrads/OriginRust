@@ -136,13 +136,12 @@ fn invert(a: &[Vec<f64>]) -> Option<Vec<Vec<f64>>> {
         for v in &mut m[c] {
             *v /= d;
         }
-        for r in 0..n {
-            if r != c {
-                let f = m[r][c];
-                if f != 0.0 {
-                    for k in 0..2 * n {
-                        m[r][k] -= f * m[c][k];
-                    }
+        let pivot = m[c].clone();
+        for (r, rowr) in m.iter_mut().enumerate() {
+            let f = rowr[c];
+            if r != c && f != 0.0 {
+                for (v, p) in rowr.iter_mut().zip(&pivot) {
+                    *v -= f * p;
                 }
             }
         }

@@ -5442,6 +5442,47 @@ fn the_statistics_menu_draws_a_roc_curve() {
     assert_eq!(h.state().doc.undo_label(), Some("ROC curve"));
 }
 
+/// Statistics > Quantile Regression... (T342): the independent column then the dependent one give one row of
+/// coefficients per quantile and a graph of the lines; one undo removes both.
+#[test]
+fn the_statistics_menu_runs_a_quantile_regression() {
+    // y = 2x + (x mod 3): the median line has slope 2 and intercept 1.
+    let data = csv_file(
+        "quantreg",
+        "qr",
+        "id,x,y
+1,1,3
+2,2,6
+3,3,6
+4,4,9
+5,5,12
+6,6,12
+7,7,15
+8,8,18
+9,9,18
+10,10,21
+11,11,24
+12,12,24
+",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - qr.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Quantile Regression..."]);
+    assert!(h.state().analysis.is_some(), "the quantile regression window is open");
+    assert!(has_label(&h, "Fit an intercept"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
+    let (sheet, slope) = result_column(&h, "B: x");
+    assert!(sheet.starts_with("QuantReg"), "{sheet}");
+    assert_eq!(slope.len(), 5, "one row per default quantile: {slope:?}");
+    assert!((slope[2] - 2.0).abs() < 1e-9, "{slope:?}");
+    let (_, intercept) = result_column(&h, "Intercept");
+    assert!((intercept[2] - 1.0).abs() < 1e-9, "{intercept:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Quantile regression"));
+}
+
 /// Statistics > Descriptive Statistics > Probability Plot... and Q-Q Plot...: a result sheet and a graph with
 /// points and a reference line; one undo removes both.
 #[test]

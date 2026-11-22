@@ -3800,10 +3800,10 @@ the OK button to apply the changes in preview graph to source graph."; Undo, OK 
 
 **Sheaf's Layer Management** (`sheaf_core::layer_manage`, `dialogs/layer_management.rs`; Graph menu,
 page right-click and layer icon menu, the icon's layer selected): the layer list allows several
-layers. Add, Arrange, Size/Position, Link and Display Background Color work on a copy shown as
+layers. Add, Arrange, Size/Position, Link, Axes and Display Background Color work on a copy shown as
 numbered frames on a page-shaped preview. Undo takes back the last Apply. OK writes the copy in one
-undo step. Cancel and Escape discard it. Axes is shown disabled, as are the Align/Custom links, the Units combo of
-Link and the reposition-parent tick. Arrange with no selection takes every layer; "Treat Linked
+undo step. Cancel and Escape discard it. The Align/Custom links, the Units combo of Link and the
+reposition-parent tick are disabled. Arrange with no selection takes every layer; "Treat Linked
 Layers as a group" places a layer with the layers linked to it as one unit; Link Layers links the
 later units to the first in position only. Sheaf choices (not measured): Move in "% of Reference
 Layer" counts from the reference layer's top left corner, a pixel is 1/96 in, the reference layer
@@ -3840,6 +3840,25 @@ Origin 2016 `layarrange` command exposes only uniform sizing, and attempts
 to drive the affected dialog did not produce a fresh geometry measurement.
 Sheaf uses the sizing rules measured for Merge Graph Windows.
 [Origin Arrange tab](https://docs.originlab.com/origin-help/laymanage-arrangetab/)
+
+**Modify Axes** (T60, 2026-11-22). Select one or more Cartesian layers and use the Axes tab to
+change X or Y scale type, move or hide the primary axis, set its tick direction, show its title
+and tick labels, or enter a numeric tick-label formula of `x`. Opposite Line and Opposite Ticks
+control the mirrored edge. The tick direction applies to both major and minor ticks. The mirrored
+edge shares the primary tick direction and has no separate title, labels or formula in Sheaf.
+
+Apply changes the chosen settings in the preview. A mixed value stays as it was on each layer
+until explicitly edited. Scale type applies to independent axes only. Straight-linked axes keep
+their parent scale while remaining eligible for display edits. Scale changes retain explicit
+limits and use Sheaf's normal axis resolution. The preview remains a numbered frame view. Undo
+restores the settings loaded into the tab, and OK writes the preview as one document edit.
+
+The captured Origin 2016 controls show independent Bottom, Left, Top and Right sections with Axis,
+Tick, Title, Tick Label and Formula. The documentation demonstrates changing the Y scale for a
+multi-layer selection. Sheaf uses its primary and mirrored axis representation for these edits.
+The Origin 2016 capture establishes the controls. Live Apply behavior was not read back.
+[Origin Axes tab](https://docs.originlab.com/origin-help/laymanage-axestab/),
+[Origin Layer Management quick start](https://docs.originlab.com/origin-help/layer-management-quick-start/)
 
 **Display > Color > Background Color** (T60 follow-up, measured in Origin 2016 on
 2026-11-16): the stock layer starts at None (`layer.color=0`). The palette has None,

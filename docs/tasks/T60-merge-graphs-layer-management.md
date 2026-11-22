@@ -4,8 +4,9 @@
 15.7c, 15.7d; probes `tools/origin-ref/merge-graph-*.lines.txt`, `fit-page-to-layers.lines.txt`):
 Merge Graph Windows (core `merge.rs`, dialog, `sheaf merge-graphs`), Layer Management (Arrange,
 Size/Position, Link; core `layer_manage.rs`), Fit Page to Layers (dialog and Format item). Fit Layer to
-Graph did nothing measurable in Origin and is tagged `N`. Remaining work includes Layer Management's
-Axes and remaining Display controls and an MCP tool for merging. See T61 for Layer Management Add.
+Graph did nothing measurable in Origin and is tagged `N`. Remaining work includes independent
+opposite-axis styling, the rest of Layer Management Display, and an MCP tool for merging.
+See T61 for Layer Management Add.
 **Size:** L, merge then management.
 Background-colour follow-up (`codex/t60-layer-display`, 2026-11-16): Display > Color >
 Background Color supports selected layers, None, basic presets and opaque RGB. Native two-layer
@@ -123,6 +124,11 @@ linked groups, and Common Scale supplies the cell frames when enabled. The
 preview supports Apply and Undo before OK creates one history entry. Sheaf
 starts with the option off. Origin's documented control and the comparison
 with the 2016 dialog are recorded in graphing 15.7d.
+
+**Layer Management Axes (2026-11-22).** Selected Cartesian layers can change their X and Y scale
+types, primary edges, ticks, titles, tick labels and formulas, and mirrored lines and ticks. Apply
+preserves mixed settings until edited and keeps straight scale links in force. Graphing 15.7d
+records the Origin 2016 controls, documented multiple-layer behavior and Sheaf's mirrored-edge limits.
 
 **Branch:** `merge-graphs`. **Priority:** P0, wave 2, owner's stacked-figure priority.
 **Spec:** [graphing](../spec/graphing.md) 15 (add Merge Graph Windows and Layer Management

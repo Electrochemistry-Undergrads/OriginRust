@@ -1,6 +1,7 @@
 //! Marginal histograms and box charts (T110, graphing spec "Marginal plots"): the bins or the box of
 //! the plot's Y column drawn in a margin layer. In the top margin the values run along X and the counts
-//! (or the box's position, 1 in a 0.5 to 1.5 span) up Y; in the right margin the other way round.
+//! (or the box's position, 1 in a 0.5 to 1.5 span) up Y; in the right margin the other way round. A grouped
+//! marginal box chart (T373) puts group k at position k, so its margin spans 0.5 to k + 0.5.
 
 use crate::data::{BoxStats, PlotData, box_stats, histogram_freq};
 use crate::scene::{self, Item};
@@ -27,6 +28,7 @@ impl MarginalData {
         side: MarginalSide,
         hist: &sheaf_core::graph::HistogramStyle,
         bins: bool,
+        slot: f64,
     ) -> Option<Self> {
         let shape = if bins {
             let f = histogram_freq(values, hist)?;
@@ -38,7 +40,8 @@ impl MarginalData {
                 .collect();
             MarginalShape::Bins(rows)
         } else {
-            let mut b = box_stats(values, 1.0, String::new())?;
+            // A grouped marginal box chart puts group k at position k (T373).
+            let mut b = box_stats(values, slot, String::new())?;
             b.width = BOX_WIDTH;
             MarginalShape::Box(b)
         };
@@ -57,7 +60,7 @@ impl MarginalData {
             MarginalShape::Box(b) => {
                 let lo = b.outliers.iter().copied().fold(b.whisker_low, f64::min);
                 let hi = b.outliers.iter().copied().fold(b.whisker_high, f64::max);
-                ((lo, hi), (0.5, 1.5))
+                ((lo, hi), (b.pos - 0.5, b.pos + 0.5))
             }
         }
     }

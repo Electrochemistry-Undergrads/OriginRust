@@ -1,5 +1,5 @@
 //! Add a matching column to many sheets at once (T359; Origin 2026b's "insert columns across sheets", not in
-//! Origin 2016, so the rules are Sheaf's own; `docs/spec/workbook-model.md` 13x).
+//! Origin 2016, so the rules are Sheaf's own; `docs/spec/workbook-model.md` 13q).
 //!
 //! The same column (long name, units, comments, designation and, if given, a Set Column Values formula with its
 //! Recalculate mode) is added at the end of every sheet of one workbook or of every workbook of the project. The

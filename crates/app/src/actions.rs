@@ -619,6 +619,8 @@ pub enum Action {
     },
     /// Column > Add New Columns...: the window that asks how many columns to add (T305).
     AddColumnsDialog(WindowId),
+    /// Column > Add Column to All Sheets... of this workbook's window (T359).
+    AddColumnAcross(WindowId),
     DeleteColumns(Vec<ColumnId>),
     /// Column > Move Columns: these columns go to the first or last position or one step left or right.
     MoveColumns {

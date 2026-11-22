@@ -16,6 +16,33 @@ use crate::dialogs::cond_format::CondFormatDialog;
 use crate::dialogs::cond_manager::{CondManagerDialog, ManagerOutcome};
 use crate::dialogs::cv_pick::{CvPickDialog, CvPickOutcome};
 
+/// What Column > Add Column to All Sheets... edits (T359).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ColumnAcross {
+    pub book: WindowId,
+    pub long_name: String,
+    pub units: String,
+    pub formula: String,
+    pub recalc: sheaf_core::column::RecalcMode,
+    /// Every workbook of the project instead of this one.
+    pub project: bool,
+    pub problem: Option<String>,
+}
+
+impl ColumnAcross {
+    fn new(book: WindowId) -> Self {
+        ColumnAcross {
+            book,
+            long_name: String::new(),
+            units: String::new(),
+            formula: String::new(),
+            recalc: sheaf_core::column::RecalcMode::None,
+            project: false,
+            problem: None,
+        }
+    }
+}
+
 /// What the Integrate gadget's Preferences window edits (T357).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct GadgetPrefs {
@@ -249,6 +276,8 @@ pub struct SheafApp {
     multi_peak: Option<MultiPeakDialog>,
     subtract_pick: Option<SubtractPickDialog>,
     cv_pick: Option<CvPickDialog>,
+    /// Column > Add Column to All Sheets... (T359).
+    pub(crate) column_across: Option<ColumnAcross>,
     /// The Integrate gadget's Preferences window (T357).
     pub(crate) gadget_prefs: Option<GadgetPrefs>,
     range_pick: Option<RangePickDialog>,
@@ -460,6 +489,7 @@ impl SheafApp {
             multi_peak: None,
             subtract_pick: None,
             cv_pick: None,
+            column_across: None,
             gadget_prefs: None,
             range_pick: None,
             anchor_graph: None,
@@ -2380,6 +2410,7 @@ impl SheafApp {
                 }
             }
             Action::AddColumnsDialog(book) => self.add_columns = Some((book, 1)),
+            Action::AddColumnAcross(book) => self.column_across = Some(ColumnAcross::new(book)),
             Action::DeleteColumns(columns) => {
                 self.doc.apply("Delete columns", |p| delete_columns(p, &columns));
             }
@@ -6139,6 +6170,84 @@ impl SheafApp {
         }
     }
 
+    /// Column > Add Column to All Sheets... (T359): one column, with an optional formula, at the end of every sheet
+    /// of the workbook (or of every workbook), as one undo step.
+    fn column_across_frame(&mut self, ctx: &egui::Context) {
+        let Some(d) = &mut self.column_across else { return };
+        let mut open = true;
+        let mut pressed = None;
+        egui::Window::new("Add Column to All Sheets")
+            .id(egui::Id::new("column_across"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                egui::Grid::new("column_across_grid").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+                    ui.label("Long Name");
+                    ui.text_edit_singleline(&mut d.long_name);
+                    ui.end_row();
+                    ui.label("Units");
+                    ui.text_edit_singleline(&mut d.units);
+                    ui.end_row();
+                    ui.label("Formula");
+                    ui.text_edit_singleline(&mut d.formula).on_hover_text(
+                        "Optional Set Column Values formula, run in each sheet against that sheet's columns, for example col(B)*2",
+                    );
+                    ui.end_row();
+                    ui.label("Recalculate");
+                    ui.horizontal(|ui| {
+                        use sheaf_core::column::RecalcMode;
+                        ui.radio_value(&mut d.recalc, RecalcMode::None, "None");
+                        ui.radio_value(&mut d.recalc, RecalcMode::Auto, "Auto");
+                        ui.radio_value(&mut d.recalc, RecalcMode::Manual, "Manual");
+                    });
+                    ui.end_row();
+                    ui.label("Sheets");
+                    ui.vertical(|ui| {
+                        ui.radio_value(&mut d.project, false, "Every sheet of this workbook");
+                        ui.radio_value(&mut d.project, true, "Every sheet of every workbook");
+                    });
+                    ui.end_row();
+                });
+                if let Some(p) = &d.problem {
+                    ui.colored_label(egui::Color32::from_rgb(170, 30, 30), p);
+                }
+                ui.add_space(6.0);
+                pressed = crate::dialogs::frame::button_row(ui, false);
+            });
+        match pressed {
+            Some(crate::dialogs::frame::DialogButton::Ok) => {
+                let d = d.clone();
+                let spec = sheaf_core::across::AcrossColumn {
+                    long_name: d.long_name.trim().to_string(),
+                    units: d.units.trim().to_string(),
+                    formula: Some(d.formula.trim().to_string()).filter(|f| !f.is_empty()),
+                    recalc: d.recalc,
+                    ..Default::default()
+                };
+                let scope = if d.project {
+                    sheaf_core::across::AcrossScope::Project
+                } else {
+                    sheaf_core::across::AcrossScope::Workbook(d.book)
+                };
+                match self.doc.edit("Add column to all sheets", |p| p.add_column_across_sheets(scope, &spec)) {
+                    Ok(made) => {
+                        self.column_across = None;
+                        self.say(format!("A column was added to {} sheet(s)", made.len()));
+                    }
+                    Err(e) => {
+                        if let Some(d) = &mut self.column_across {
+                            d.problem = Some(e.to_string());
+                        }
+                    }
+                }
+            }
+            Some(crate::dialogs::frame::DialogButton::Cancel) => self.column_across = None,
+            _ if !open => self.column_across = None,
+            _ => {}
+        }
+    }
+
     fn show_sheet(&mut self, book: WindowId, sheet: usize) {
         self.doc.adjust_view(|p| {
             if let Some(b) = p.workbook_mut(book) {
@@ -7438,6 +7547,7 @@ impl SheafApp {
         self.multi_peak_frame(ctx);
         self.subtract_pick_frame(ctx);
         self.cv_pick_frame(ctx);
+        self.column_across_frame(ctx);
         self.gadget_prefs_frame(ctx);
         self.range_pick_frame(ctx);
         self.anchor_pick_frame(ctx);

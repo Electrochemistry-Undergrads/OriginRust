@@ -492,6 +492,8 @@ pub enum Cmd {
     Recalculate,
     /// Column > Add New Columns... (Ctrl+D): the window that asks how many (T305).
     AddColumns,
+    /// Column > Add Column to All Sheets... (T359).
+    AddColumnAcross,
     /// The Standard toolbar's Add New Columns: one column at once, as Origin's button (T305).
     AddOneColumn,
     ColumnProperties,
@@ -1780,6 +1782,7 @@ fn column_menu() -> Vec<Entry> {
         item("Show X Column...", Cmd::ShowXColumn),
         sep(),
         keyed("Add &New Columns...", ctrl(Key::D), Cmd::AddColumns),
+        item("Add Column to All Sheets...", Cmd::AddColumnAcross),
         hide_menu(),
         sep(),
         filter_menu(),
@@ -3667,6 +3670,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::Recalculate(some()?)
         }
         Cmd::AddColumns => Action::AddColumnsDialog(book?),
+        Cmd::AddColumnAcross => Action::AddColumnAcross(book?),
         Cmd::AddOneColumn => Action::AddColumn(book?),
         Cmd::ColumnProperties => {
             book?;

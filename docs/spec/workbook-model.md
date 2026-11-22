@@ -1400,6 +1400,17 @@ window is its own, **unmeasured**:
   `batch_process` (T238, mcp.md).
 - Tests: `crates/core/src/book_template.rs`, `crates/app/src/app/ui_tests/user_templates.rs`.
 
+## 13q. Add Column to All Sheets (T359, 2026-11-22, not measured)
+
+Origin 2026b can add or insert a matching column with its formula in several related sheets of a workbook, folder
+or project; Origin 2016 cannot, so this is Sheaf's own. Column > Add Column to All Sheets... asks for a Long Name,
+Units, an optional Set Column Values formula with its Recalculate mode (None, Auto, Manual) and the sheets: every
+sheet of this workbook (default) or every sheet of every workbook. OK adds one Y column at the end of each of those
+sheets (`Project::add_column_across_sheets`, `sheaf_core::across`); the formula runs in each sheet against that
+sheet's own columns (`col(B)*2` reads each sheet's B). A formula that fails in any sheet adds nothing and the window
+names the sheet. One undo step ("Add column to all sheets"). Inserting at a position, folders as a scope and
+choosing the sheets one by one are not built.
+
 ## 14. Suggested Rust data model (P0)
 
 ```

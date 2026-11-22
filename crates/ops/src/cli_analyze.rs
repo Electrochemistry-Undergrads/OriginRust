@@ -1285,6 +1285,33 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 curve: !no_graph,
             })),
         ),
+        AnalyzeTool::Changepoint { target, change, penalty, min_segment, no_graph } => {
+            let kind = match change.trim().to_ascii_lowercase().as_str() {
+                "mean" => analysis::ChangeKind::Mean,
+                "variance" | "var" => analysis::ChangeKind::Variance,
+                "meanvar" | "meanvariance" | "both" => analysis::ChangeKind::MeanVariance,
+                other => bail!("--change must be mean, variance or meanvar (got \"{other}\")"),
+            };
+            let penalty = match penalty.trim().to_ascii_lowercase().as_str() {
+                "mbic" => analysis::ChangePenalty::Mbic,
+                "bic" | "sic" => analysis::ChangePenalty::Bic,
+                "aic" => analysis::ChangePenalty::Aic,
+                "hq" | "hannan-quinn" => analysis::ChangePenalty::HannanQuinn,
+                other => match other.parse::<f64>() {
+                    Ok(v) if v.is_finite() && v >= 0.0 => analysis::ChangePenalty::Manual(v),
+                    _ => bail!("--penalty must be mbic, bic, aic, hq or a number of at least 0 (got \"{other}\")"),
+                },
+            };
+            (
+                target,
+                Job::Tool(Tool::ChangePoint(analysis::ChangePointSpec {
+                    kind,
+                    penalty,
+                    min_segment,
+                    graph: !no_graph,
+                })),
+            )
+        }
         AnalyzeTool::Quantreg { target, quantiles, no_intercept, no_graph } => (
             target,
             Job::Tool(Tool::QuantReg(analysis::QuantRegSpec { quantiles, intercept: !no_intercept, graph: !no_graph })),

@@ -54,6 +54,8 @@ pub use sheaf_calc::{RmTerm, ThreeWayEffect, ThreeWayTerms};
 pub use sheaf_calc::{StftOptions, StftOutput};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
+pub use calc::changepoint::{ChangeKind, Penalty as ChangePenalty};
+pub use changepoint::ChangePointSpec;
 pub use curves::{AverageSpec, IntersectSpec};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
 pub use multivariate::{KmeansSpec, PcaSpec};
@@ -1131,6 +1133,9 @@ pub enum Tool {
     /// Statistics > Regression > Quantile Regression (T342, `docs/spec/statistics.md` section 29): the
     /// independent columns, then the dependent column.
     QuantReg(QuantRegSpec),
+    /// Statistics > Change Point Analysis (T346, `docs/spec/statistics.md` section 30): every chosen column is a
+    /// series of its own.
+    ChangePoint(ChangePointSpec),
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
     /// censor and, optionally, group columns.
     KaplanMeier(KaplanMeierSpec),
@@ -1258,6 +1263,7 @@ impl Tool {
             Tool::Kmeans(_) => "K-means cluster analysis",
             Tool::Roc(_) => "ROC curve",
             Tool::QuantReg(_) => "Quantile regression",
+            Tool::ChangePoint(_) => "Change point analysis",
             Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
             Tool::GraphSummary(_) => "Graphical summary",
             Tool::AverageCurves(_) => "Average multiple curves",
@@ -1336,6 +1342,7 @@ impl Tool {
             Tool::Kmeans(_) => "KMeans",
             Tool::Roc(_) => "ROC",
             Tool::QuantReg(_) => "QuantReg",
+            Tool::ChangePoint(_) => "ChangePoint",
             Tool::KaplanMeier(_) => "KaplanMeier",
             Tool::GraphSummary(_) => "GraphSummary",
             Tool::AverageCurves(_) => "AverageResult",
@@ -2181,6 +2188,7 @@ fn run_peak_chain(
 
 mod anova3;
 mod categorical;
+mod changepoint;
 mod curves;
 mod dist;
 mod filters;
@@ -2555,6 +2563,13 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 summary_graphs = out.graphs;
+            }
+            Tool::ChangePoint(spec) => {
+                let out = changepoint::run(spec, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
             }
             Tool::Pca(_) | Tool::Kmeans(_) => {
                 let out = multivariate::run(&request.tool, &inputs)?;

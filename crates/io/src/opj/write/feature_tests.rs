@@ -498,6 +498,36 @@ fn a_tail_that_is_damaged_gives_a_note_and_no_folders() {
 }
 
 #[test]
+fn numeric_displays_are_written_where_origin_keeps_them_and_read_back() {
+    // T337: Origin 2016 keeps the display at 0x1E (high nibble) and the digits at 0x1F of the column
+    // record of a Numeric-format column.
+    use sheaf_core::format::NumberFormat as F;
+    for format in [
+        F::Decimal(3),
+        F::Decimal(0),
+        F::Significant(4),
+        F::Scientific(2),
+        F::ScientificAuto,
+        F::EngineeringSi(1),
+        F::EngineeringSig(3),
+        F::EngineeringAuto,
+        F::DecimalGrouped(2),
+    ] {
+        let mut p = Project::new();
+        p.adopt_named_workbook(abcd("Book1"));
+        let Window::Workbook(b) = &mut p.windows[0] else { unreachable!() };
+        b.sheets[0].columns[1].format = format;
+        let out = written(&p);
+        assert!(!out.warnings.iter().any(|w| w.contains("display format")), "{format:?}: {:?}", out.warnings);
+        let back = read_back(&out.bytes).into_project();
+        let Window::Workbook(b) = &back.windows[0] else { unreachable!() };
+        assert_eq!(b.sheets[0].columns[1].format, format);
+        assert_eq!(b.sheets[0].columns[1].numeric(), p.workbooks().next().unwrap().sheets[0].columns[1].numeric());
+        assert_eq!(b.sheets[0].columns[0].format, F::General, "{format:?}: the other columns keep the default");
+    }
+}
+
+#[test]
 fn a_column_width_is_written_where_origin_keeps_it_and_read_back() {
     // T334: Origin 2016 keeps the width in tenths of a character at 0x4A of the column record.
     let mut p = Project::new();

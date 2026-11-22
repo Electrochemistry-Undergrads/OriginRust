@@ -10,8 +10,9 @@ pub(crate) enum Part<'a> {
     Text(&'a str),
     /// `\l(id)`: the line and symbol sample of a plot.
     Symbol(&'a str),
-    /// `%(id)`: the name of a plot. Options after a comma, such as `%(1,@LG)`, are ignored.
-    Name(&'a str),
+    /// `%(id)` or `%(id, option)`: the name of a plot, or what the option names (`@LL` the long
+    /// name, ...; T339). The option is empty without a comma.
+    Name(&'a str, &'a str),
 }
 
 /// Whether `text` refers to a plot with `\l(n)` or `%(n)` on any line: a free text label with such a
@@ -46,7 +47,8 @@ pub(crate) fn parse_line(line: &str) -> Vec<Part<'_>> {
             continue;
         };
         let inner = &rest[skip..skip + close];
-        let id = inner.split(',').next().unwrap_or("").trim();
+        let (id, option) = inner.split_once(',').unwrap_or((inner, ""));
+        let (id, option) = (id.trim(), option.trim());
         if id.is_empty() || !id.chars().all(|c| c.is_ascii_digit() || c == '.') {
             i += skip;
             continue;
@@ -54,7 +56,7 @@ pub(crate) fn parse_line(line: &str) -> Vec<Part<'_>> {
         if text_from < i {
             out.push(Part::Text(&line[text_from..i]));
         }
-        out.push(if kind == 0 { Part::Symbol(id) } else { Part::Name(id) });
+        out.push(if kind == 0 { Part::Symbol(id) } else { Part::Name(id, option) });
         i += skip + close + 1;
         text_from = i;
     }
@@ -130,13 +132,13 @@ mod tests {
     fn symbols_names_and_text_are_found() {
         assert_eq!(
             parse_line("\\l(1) %(1) at 5\\+(2) K"),
-            vec![Part::Symbol("1"), Part::Text(" "), Part::Name("1"), Part::Text(" at 5\\+(2) K")]
+            vec![Part::Symbol("1"), Part::Text(" "), Part::Name("1", ""), Part::Text(" at 5\\+(2) K")]
         );
-        assert_eq!(parse_line("%(2.1,@LG)"), vec![Part::Name("2.1")]);
+        assert_eq!(parse_line("%(2.1,@LG)"), vec![Part::Name("2.1", "@LG")]);
         assert_eq!(parse_line("\\L(2.1)"), vec![Part::Symbol("2.1")], "the capital form is the same");
         // Not plot ids, or not closed: literal.
         assert_eq!(parse_line("%(x) \\l(1"), vec![Part::Text("%(x) \\l(1")]);
-        assert_eq!(parse_line("\u{b0}C \u{3b1}%(1)"), vec![Part::Text("\u{b0}C \u{3b1}"), Part::Name("1")]);
+        assert_eq!(parse_line("\u{b0}C \u{3b1}%(1)"), vec![Part::Text("\u{b0}C \u{3b1}"), Part::Name("1", "")]);
     }
 
     #[test]
@@ -152,7 +154,7 @@ mod tests {
     fn literal_blocks_keep_legend_references_together() {
         let protected = r"\b(\h(μ \l(1) %(1))) \v(\L(2) %(2)) ";
         let line = format!("{protected}\\l(1) %(2)");
-        assert_eq!(parse_line(&line), [Part::Text(protected), Part::Symbol("1"), Part::Text(" "), Part::Name("2")],);
+        assert_eq!(parse_line(&line), [Part::Text(protected), Part::Symbol("1"), Part::Text(" "), Part::Name("2", "")],);
         let open = r"\h(Text %(1)";
         assert_eq!(parse_line(open), [Part::Text(open)]);
     }

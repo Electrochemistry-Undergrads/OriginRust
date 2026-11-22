@@ -302,6 +302,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T329](T329-adr5-origin-placement.md) | ADR 0005 addendum: tools that write at the end of the sheet as Origin; owner decision on Smooth/Differentiate | S | done 2026-11-21 (docs only) |
 | [T330](T330-opj-group-subject.md) | Group and Subject columns read from and written to .opj (roles 7 and 8), measured in Origin 2016 | S | done 2026-11-21 |
 | [T334](T334-opj-width.md) | Column widths read from and written to .opj (0x4A in tenths), measured in Origin 2016 | S | done 2026-11-21 |
+| [T337](T337-opj-numfmt.md) | Numeric display formats read from and written to .opj (0x1E/0x1F, Numeric cells), measured in Origin 2016 | S | done 2026-11-21 |
 | [T311](T311-qqplot-measure.md) | Measure Q-Q Plot against Origin (expected values, y = x line ends, band) | S | done 2026-11-21 (statistics 16.2a) |
 | [T312](T312-import-nonnum.md) | Text import: text in a numeric column read as text, stop, new sheet or new columns (NonNum), as Origin 2016 | S | done 2026-11-21, measured |
 | [T313](T313-scatter-matrix-measure.md) | Measure Scatter Matrix against Origin (page, grid, tick labels, titles, symbols, tick step) | S | done 2026-11-21 (graphing 35) |
@@ -309,6 +310,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T318](T318-baseline-als-dataset.md) | Peak Analyzer baselines Use Existing Dataset and Asymmetric Least Squares Smoothing (window, CLI) | M | done 2026-11-21; ALS not measured (Pro) |
 | [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T339](T339-legend-options.md) | Legend `%(n, @option)` substitutions as Origin 2016 makes them (21 options measured) | S | done 2026-11-21 (graphing 6.1) |
 | [T335](T335-title-drag.md) | Drag an axis title on the graph to move it (adds to its offset, one undo step) | S | done 2026-11-21 (graphing T291 paragraph) |
 | [T332](T332-color-lists.md) | Origin 2016's 18 named colour lists in the Group tab and `plot --color-list` | S | done 2026-11-21 (graphing 1.5) |
 | [T323](T323-symbol-shapes.md) | Symbols: Origin 2016's shapes 9-20, twelve interiors and a fill colour, measured and drawn; .opj bytes 0x17/0x18 | M | done 2026-11-21 (graphing 5.4) |

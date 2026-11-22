@@ -5122,6 +5122,40 @@ fn the_integrate_gadget_shows_a_range_and_new_output_writes_the_area_to_a_sheet(
     assert!(graph_ui(&h).gadget.is_none());
 }
 
+/// The Integrate gadget's Preferences... (T357): typed X From/To, the baseline and the Absolute area type.
+#[test]
+fn the_integrate_gadget_preferences_set_the_range_baseline_and_area_type() {
+    // y = x - 5 on 0..10: the signed area is 0, the absolute area 25.
+    let mut text = String::from("x,y\n");
+    for k in 0..=20 {
+        let x = f64::from(k) * 0.5;
+        text.push_str(&format!("{x},{}\n", x - 5.0));
+    }
+    let data = csv_file("gadgetprefs", "cross", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Graph1 - cross");
+    menu(&mut h, "Gadgets", "Integrate...");
+    let range = graph_ui(&h).gadget_rect.expect("the gadget is drawn");
+    right_click_at(&mut h, range.center());
+    click(&mut h, "Preferences...");
+    assert!(h.state().gadget_prefs.is_some() && has_label(&h, "Absolute Area"), "the Preferences window");
+    {
+        let p = h.state_mut().gadget_prefs.as_mut().unwrap();
+        (p.from, p.to, p.absolute) = (0.0, 10.0, true);
+    }
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().gadget_prefs.is_none());
+    let g = graph_ui(&h).gadget.unwrap();
+    assert_eq!((g.x0, g.x1, g.absolute, g.end_point_baseline), (0.0, 10.0, true, false));
+    let (x, y) = crate::gadget::plot_xy(project(&h), graph(&h).id, 0, 0).unwrap();
+    assert!((g.result(&x, &y).unwrap().area - 25.0).abs() < 1e-12);
+    // Back to the mathematical area: the halves cancel.
+    let mut signed = g;
+    signed.absolute = false;
+    assert!(signed.result(&x, &y).unwrap().area.abs() < 1e-12);
+}
+
 #[test]
 fn copy_page_puts_the_graph_on_the_clipboard_at_40_percent_with_a_border() {
     let mut h = start(vec![data_file("copypage")]);

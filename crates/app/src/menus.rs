@@ -2287,6 +2287,7 @@ pub fn integrate_gadget_menu(end_point_baseline: bool) -> Vec<Entry> {
     vec![
         item(baseline, Cmd::Gadget(GadgetOp::ToggleBaseline)),
         item("New Output", Cmd::Gadget(GadgetOp::NewOutput)),
+        item("Preferences...", Cmd::Gadget(GadgetOp::Preferences)),
         sep(),
         keyed("Delete", plain_key(Key::Escape), Cmd::Gadget(GadgetOp::Close)),
     ]

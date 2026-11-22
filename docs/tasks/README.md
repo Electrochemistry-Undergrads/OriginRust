@@ -316,6 +316,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T318](T318-baseline-als-dataset.md) | Peak Analyzer baselines Use Existing Dataset and Asymmetric Least Squares Smoothing (window, CLI) | M | done 2026-11-21; ALS not measured (Pro) |
 | [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T374](T374-exponential-smoothing.md) | Exponential smoothing forecast: simple, Holt, Holt-Winters (Origin 2024b Time Series app) | S | done 2026-11-22 (statistics 42) |
 | [T372](T372-stationarity-tests.md) | Stationarity tests: ADF statistic and KPSS with table probability (Origin 2024b Time Series app) | S | done 2026-11-22 (statistics 41) |
 | [T370](T370-seasonal-decomposition.md) | Classical seasonal decomposition, additive or multiplicative (Origin 2024b Time Series app) | S | done 2026-11-22 (statistics 40) |
 | [T368](T368-stability-study.md) | Stability study and shelf life after ICH Q1E (Origin 2027 Quality app) | S | done 2026-11-22 (statistics 38) |

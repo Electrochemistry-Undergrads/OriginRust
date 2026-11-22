@@ -2036,6 +2036,31 @@ Prob); the notes give the 5 % decisions. The statistics, lag choices and table p
 are quoted, not checked here (neither statsmodels nor the tables are available locally). ADF p-values (MacKinnon's
 response surfaces), finite-sample critical values, the Phillips-Perron test and automatic KPSS bandwidths are not built.
 
+## 42 Exponential smoothing forecast (T374, Origin 2024b Time Series Analysis app; not measured)
+
+Origin's Time Series Analysis app (2024b Pro) is not part of Origin 2016, so this is Sheaf's own, with the classical
+recursions and statsmodels' "legacy-heuristic" initial states. Statistics > Exponential Smoothing Forecast...
+(`Tool::ExpSmooth`, `sheaf analyze forecast --y COL[,COL..] [--model simple|holt|additive|multiplicative] [--period
+12] [--constants a[,b[,g]]] [--horizon 10] [--no-graph]`): every chosen column is a series of its own, in row order,
+complete in the chosen rows (simple needs 2 values, Holt 3, Holt-Winters two periods; multiplicative needs values
+above 0).
+
+- Initial states, taken as the states before the first value: level `y_0` (simple, Holt) or the mean of the first
+  period; trend `y_1 - y_0` (Holt) or the mean of `(y_{m+j} - y_j) / m`; seasonals `y_j - l_0` or `y_j / l_0`.
+- The one-step forecast of `y_t` is `l + b + s` (or `(l + b) s`) from the states before it; then `l' = a (y - s) + (1 -
+  a)(l + b)` (or `a y / s + ...`; simple `a y + (1 - a) l`, Holt `a y + (1 - a)(l + b)`), `b' = beta (l' - l) + (1 -
+  beta) b`, `s' = gamma (y - l - b) + (1 - gamma) s` (or `gamma y / (l + b) + ...`).
+- The forecast `h` steps on is `l + h b (+ s)` (or `(l + h b) s`) with the season of that step.
+- Without `--constants` the constants are fitted on `[0, 1]` by least squares of the one-step errors (Nelder-Mead
+  kept inside the box, from a grid of starts and once more from the best).
+
+The result sheet `ForecastN` has one row per column (Alpha, Beta, Gamma, SSE, RMSE, Final level, Final trend) and,
+per column, the X, the data, the one-step forecasts, the residuals, the forecast X (the last X step continued) and the
+forecasts; a new graph per column draws the data, the one-step forecasts and the forecasts. At fixed constants the
+fitted values, SSE, final states and forecasts are checked against numpy, and the fitted SSE against scipy's best
+(L-BFGS-B from many starts and Powell), in `tools/expsmooth-ref.py` and `crates/calc/tests/expsmooth_reference.rs`.
+Prediction intervals, damped trends, the ETS state-space likelihood and ARIMA are not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

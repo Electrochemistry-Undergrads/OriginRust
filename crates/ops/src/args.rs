@@ -2717,6 +2717,9 @@ pub enum AnalyzeTool {
         /// Confidence level of the limits of the mean.
         #[arg(long, default_value_t = 0.95)]
         level: f64,
+        /// Percentiles in percent (comma separated, for example 5,95): one column each, P5, P95, ...
+        #[arg(long, value_delimiter = ',')]
+        percentiles: Vec<f64>,
     },
     /// t-test: each column against a hypothesized mean (one-sample), two columns against each other
     /// (two-sample, equal variances unless --unequal) or two columns as pairs. The result goes to a

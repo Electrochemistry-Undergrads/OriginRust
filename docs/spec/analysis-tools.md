@@ -382,6 +382,14 @@ checked in `statistics.md` section 1). Which quantities Origin's dialog ticks by
 (its `DescStats` window cannot be driven from a script); the default stays the eleven columns Sheaf always
 had. Not done: mode, geometric mean, trimmed mean and the other quantities of the Origin dialog.
 
+**Percentiles (T244, 2026-11-20/22, not measured: Origin was not installed).** The window's Percentiles (%)
+box (numbers from 0 to 100 separated by spaces, commas or semicolons), `sheaf analyze stats --percentiles
+5,97.5` and the MCP `statistics` option `percentiles` add one column per value, headed `P5`, `P97.5`, ... in
+the order given, after the other quantities and before the confidence limits, in the data's unit. Each is the
+quartile rule above applied to p = value / 100 (`sheaf_calc::quantile_origin`), so P25, P50 and P75 equal Q1,
+Median and Q3; whether Origin's Custom Percentile option uses the same rule for other p, and its column
+names, were not compared. A value outside 0 to 100 is refused.
+
 ## 9. Curve math: subtract a reference curve and simple math (`subtract_ref`, `mathtool`)
 
 Origin has two menu items for this: Analysis > Mathematics > Subtract Reference Data (`subtract_ref`)

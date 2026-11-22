@@ -865,7 +865,7 @@ impl Default for KruskalWallisSpec {
 /// What [`Tool::Statistics`] (Origin's Statistics on Columns) writes: one flag per column of the result
 /// table. The default is the original eleven columns; the others are the quantities that `sheaf_calc::stats`
 /// computes as well and the confidence limits of the mean.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StatisticsSpec {
     pub n: bool,
     pub missing: bool,
@@ -888,6 +888,10 @@ pub struct StatisticsSpec {
     pub confidence_limits: bool,
     /// Confidence level of the limits, for example 0.95.
     pub level: f64,
+    /// Percentiles in percent (0 to 100), one result column each, `P5`, `P97.5`, ... in the order given,
+    /// after the other quantities (T244; Origin's quartile rule applied to any p, see
+    /// [`sheaf_calc::quantile_origin`]).
+    pub percentiles: Vec<f64>,
 }
 
 impl Default for StatisticsSpec {
@@ -911,6 +915,7 @@ impl Default for StatisticsSpec {
             cv: false,
             confidence_limits: false,
             level: 0.95,
+            percentiles: Vec::new(),
         }
     }
 }
@@ -1880,6 +1885,9 @@ fn statistics_table(
             spec.level
         )));
     }
+    if let Some(p) = spec.percentiles.iter().find(|p| !(0.0..=100.0).contains(*p)) {
+        return Err(AnalysisError::BadOption(format!("a percentile must be between 0 and 100, not {p}")));
+    }
     let percent = format!("{}", (spec.level * 100.0 * 1e6).round() / 1e6);
     // (header, is a count, value of one column)
     type Pick = fn(&calc::Stats) -> f64;
@@ -1908,6 +1916,7 @@ fn statistics_table(
     let headers: Vec<String> = picks
         .iter()
         .map(|p| p.0.clone())
+        .chain(spec.percentiles.iter().map(|p| format!("P{}", (p * 1e6).round() / 1e6)))
         .chain(
             spec.confidence_limits
                 .then(|| [format!("Lower {percent}% CL of Mean"), format!("Upper {percent}% CL of Mean")])
@@ -1925,12 +1934,21 @@ fn statistics_table(
             }
             None => inp.ys(),
         };
-        let s = calc::stats(values);
+        let data = values;
+        let s = calc::stats(data);
         let mut values: Vec<f64> = picks.iter().map(|p| (p.2)(&s)).collect();
         // The unit goes with the numbers that carry the data's unit: not the counts, skewness, kurtosis
         // and the coefficient of variation, which have none, and not the variance (unit squared).
         let mut units: Vec<String> =
             picks.iter().map(|p| if p.1 || p.0 == "Variance" { String::new() } else { inp.units.clone() }).collect();
+        if !spec.percentiles.is_empty() {
+            let mut sorted: Vec<f64> = data.iter().copied().filter(|v| v.is_finite()).collect();
+            sorted.sort_by(f64::total_cmp);
+            for p in &spec.percentiles {
+                values.push(calc::quantile_origin(&sorted, p / 100.0));
+                units.push(inp.units.clone());
+            }
+        }
         if spec.confidence_limits {
             let (lcl, ucl) = calc::mean_confidence_limits(&s, spec.level);
             values.extend([lcl, ucl]);
@@ -4656,6 +4674,19 @@ mod tests {
         let r = p.analyze(&request(&[col], Tool::Statistics(spec))).unwrap();
         assert!(r.table.unwrap().headers.iter().any(|h| h == "Lower 90% CL of Mean"));
         let bad = StatisticsSpec { confidence_limits: true, level: 1.5, ..StatisticsSpec::default() };
+        let percentiles = StatisticsSpec { percentiles: vec![-1.0], ..StatisticsSpec::default() };
+        assert!(p.analyze(&request(&[col], Tool::Statistics(percentiles))).is_err());
+        // T244: percentiles by Origin's quartile rule, after the other quantities.
+        let spec = StatisticsSpec { percentiles: vec![25.0, 50.0, 5.0, 97.5], ..StatisticsSpec::default() };
+        let t = p.analyze(&request(&[col], Tool::Statistics(spec))).unwrap().table.unwrap();
+        let at = |name: &str| t.headers.iter().position(|h| h == name).unwrap_or_else(|| panic!("{name}"));
+        let row = &t.rows[0].1;
+        assert_eq!(&t.headers[11..], ["P25", "P50", "P5", "P97.5"]);
+        assert_eq!((row[at("P25")], row[at("P50")]), (row[at("Q1")], row[at("Median")]));
+        let mut sorted: Vec<f64> = data.iter().copied().filter(|v| v.is_finite()).collect();
+        sorted.sort_by(f64::total_cmp);
+        assert_eq!(row[at("P5")], calc::quantile_origin(&sorted, 0.05));
+        assert_eq!(row[at("P97.5")], calc::quantile_origin(&sorted, 0.975));
         assert!(p.analyze(&request(&[col], Tool::Statistics(bad))).is_err());
     }
 

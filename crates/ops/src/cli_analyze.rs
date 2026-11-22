@@ -820,7 +820,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 )
             }
         }
-        AnalyzeTool::Stats { target, all, add, level } => {
+        AnalyzeTool::Stats { target, all, add, level, percentiles } => {
             let mut spec = if all { analysis::StatisticsSpec::all() } else { analysis::StatisticsSpec::default() };
             for name in &add {
                 match name.trim().to_ascii_lowercase().as_str() {
@@ -836,6 +836,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 }
             }
             spec.level = level;
+            spec.percentiles = percentiles;
             (target, Job::Tool(Tool::Statistics(spec)))
         }
         AnalyzeTool::Ttest { target, test, mean, difference, unequal, tail, alpha, .. } => {

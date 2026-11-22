@@ -1,6 +1,6 @@
 # T228: Sampling interval check (parity "Sampling interval check", vinc)
 
-**Status:** done 2026-11-20 (Claude Windows "claude:1"), **not measured**. `sheaf_core::sampling::check_increment`
+**Status:** done 2026-11-20 (Claude Windows "claude:1"); the rule was **measured** against Origin's `vinc` / `vinc_check` on 2026-11-22 (T371). `sheaf_core::sampling::check_increment`
 gives the start, mean step and largest step deviation of a run of X values and whether they are evenly
 spaced; Set Sampling Interval's "From X Column" button fills Initial X Value and X Increment from the
 selected column's evenly spaced X column, or says why it cannot.

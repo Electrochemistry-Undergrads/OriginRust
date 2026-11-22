@@ -5840,6 +5840,30 @@ fn the_statistics_menu_makes_a_rare_event_chart() {
     assert_eq!(h.state().doc.undo_label(), Some("Rare event chart"));
 }
 
+/// Statistics > Exponential Smoothing Forecast... (T374): fitted Holt smoothing, the forecasts and a graph, one undo
+/// step.
+#[test]
+fn the_statistics_menu_makes_an_exponential_smoothing_forecast() {
+    let mut text = String::from("t,v\n");
+    for i in 0..20 {
+        text.push_str(&format!("{i},{}\n", 5.0 + 0.5 * f64::from(i) + if i % 2 == 0 { 0.1 } else { -0.1 }));
+    }
+    let data = csv_file("forecast", "ts", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - ts.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Exponential Smoothing Forecast..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Steps to forecast"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
+    let (sheet, forecast) = result_column(&h, "Forecast");
+    assert!(sheet.starts_with("Forecast"), "{sheet}");
+    assert_eq!(forecast.len(), 10);
+    assert!((forecast[9] - (5.0 + 0.5 * 29.0)).abs() < 1.0, "the trend goes on: {forecast:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Exponential smoothing forecast"));
+}
+
 /// Statistics > Stationarity Tests (ADF, KPSS)... (T372): an ADF and a KPSS row in a new sheet, one undo step.
 #[test]
 fn the_statistics_menu_runs_stationarity_tests() {

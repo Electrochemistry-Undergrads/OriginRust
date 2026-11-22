@@ -71,6 +71,38 @@ fn opening_cancel_escape_and_unavailable_custom_controls_do_not_edit_the_project
 }
 
 #[test]
+fn auto_offset_moves_only_the_new_linked_axis_and_undoes_with_the_layer() {
+    let mut h = setup("add-layer-dialog-auto-offset");
+    let graph_id = graph(&h).id;
+    h.state_mut().doc.apply("Set reference frame", |p| {
+        let layer = &mut p.graph_mut(graph_id).unwrap().layers[0];
+        layer.frame.width = 0.6816;
+        layer.y_axis.side = sheaf_core::graph::AxisSide::Normal;
+        layer.y_axis.offset_pct = 0.0;
+        layer.display.show_y_axes = true;
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    open(&mut h);
+    kind(&mut h, NewLayerKind::LeftY);
+    let checkbox = "Auto Offset Overlapped Axes";
+    assert!(!h.get_by_label(checkbox).accesskit_node().is_disabled());
+    assert_eq!(h.get_by_label(checkbox).accesskit_node().toggled(), Some(egui::accesskit::Toggled::False));
+    click(&mut h, checkbox);
+    click(&mut h, "OK");
+
+    let g = graph(&h);
+    assert_eq!(g.layers[0], before.graph(graph_id).unwrap().layers[0]);
+    assert_eq!(g.absolute_frame(1), g.absolute_frame(0));
+    assert_eq!(g.layers[1].y_axis.offset_pct, 2.0);
+    assert_eq!(g.layers[1].x_axis.offset_pct, 0.0);
+    assert_eq!(graph_ui(&h).active_layer, 1);
+    assert_eq!(h.state().doc.undo_label(), Some(sheaf_core::layers::ADD_LAYER_UNDO));
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
 fn unchecked_activation_keeps_the_captured_parent_active_and_preserves_other_layers() {
     let mut h = setup("add-layer-dialog-activation");
     menu_path(&mut h, &["Graph", "New Layer(Axes)", NewLayerKind::Normal.menu_label()]);

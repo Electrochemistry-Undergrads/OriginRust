@@ -353,7 +353,7 @@ fn segments(sheet: &Worksheet, ranges: &[(usize, usize, u32)]) -> Vec<Seg> {
 
 impl FormatIndex {
     pub fn new(sheet: &Worksheet) -> Self {
-        let mut ix = FormatIndex { has_default_fonts: !sheet.font_defaults.is_empty(), ..Default::default() };
+        let mut ix = FormatIndex { has_default_fonts: sheet.font_defaults.has_cell_fonts(), ..Default::default() };
         let mut spans: HashMap<ColumnId, Vec<(usize, usize, u32)>> = HashMap::new();
         for (i, r) in sheet.cell_formats.iter().enumerate() {
             match &r.target {

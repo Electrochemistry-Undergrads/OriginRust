@@ -22,7 +22,7 @@ impl Default for WorksheetFont {
     }
 }
 
-/// A column-label font whose family and point size can inherit independently.
+/// A worksheet category font whose family and point size can inherit independently.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ColumnLabelFont {
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -35,6 +35,16 @@ impl ColumnLabelFont {
     pub fn is_empty(&self) -> bool {
         self.family.is_empty() && self.size_pt.is_none()
     }
+
+    pub fn style(&self) -> ResolvedStyle<'_> {
+        ResolvedStyle {
+            font: (!self.family.is_empty()).then_some(self.family.as_str()),
+            size_pt: self
+                .size_pt
+                .map(|size| clamp_cell_pt(if size.is_finite() && size > 0.0 { size } else { default_size() })),
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -43,6 +53,10 @@ pub struct WorksheetFonts {
     pub data: Option<WorksheetFont>,
     #[serde(default, skip_serializing_if = "ColumnLabelFont::is_empty")]
     pub column_labels: ColumnLabelFont,
+    #[serde(default, skip_serializing_if = "ColumnLabelFont::is_empty")]
+    pub column_header: ColumnLabelFont,
+    #[serde(default, skip_serializing_if = "ColumnLabelFont::is_empty")]
+    pub row_header: ColumnLabelFont,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub long_name_size_pt: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -59,14 +73,18 @@ pub struct WorksheetFonts {
 
 impl WorksheetFonts {
     pub fn is_empty(&self) -> bool {
-        self.data.is_none()
-            && self.column_labels.is_empty()
-            && self.long_name_size_pt.is_none()
-            && self.units_size_pt.is_none()
-            && self.comments_size_pt.is_none()
-            && self.long_name_family.is_none()
-            && self.units_family.is_none()
-            && self.comments_family.is_none()
+        !self.has_cell_fonts() && self.column_header.is_empty() && self.row_header.is_empty()
+    }
+
+    pub fn has_cell_fonts(&self) -> bool {
+        self.data.is_some()
+            || !self.column_labels.is_empty()
+            || self.long_name_size_pt.is_some()
+            || self.units_size_pt.is_some()
+            || self.comments_size_pt.is_some()
+            || self.long_name_family.is_some()
+            || self.units_family.is_some()
+            || self.comments_family.is_some()
     }
 
     pub fn label_size(&self, kind: &LabelKind) -> Option<f32> {
@@ -126,18 +144,16 @@ impl WorksheetFonts {
 
 impl Worksheet {
     /// Changes the common font under the independent column-label categories.
-    pub fn set_column_labels_font(&mut self, mut font: ColumnLabelFont) -> bool {
-        if font.size_pt.is_some_and(|size| !size.is_finite() || size <= 0.0) {
-            return false;
-        }
-        font.family = font.family.trim().to_owned();
-        font.size_pt = font.size_pt.map(clamp_cell_pt);
-        let slot = &mut self.font_defaults.column_labels;
-        if *slot == font {
-            return false;
-        }
-        *slot = font;
-        true
+    pub fn set_column_labels_font(&mut self, font: ColumnLabelFont) -> bool {
+        set_category_font(&mut self.font_defaults.column_labels, font)
+    }
+
+    pub fn set_column_header_font(&mut self, font: ColumnLabelFont) -> bool {
+        set_category_font(&mut self.font_defaults.column_header, font)
+    }
+
+    pub fn set_row_header_font(&mut self, font: ColumnLabelFont) -> bool {
+        set_category_font(&mut self.font_defaults.row_header, font)
     }
 
     /// Changes one label category's family. Empty names restore the automatic face;
@@ -198,6 +214,19 @@ impl Worksheet {
     }
 }
 
+fn set_category_font(slot: &mut ColumnLabelFont, mut font: ColumnLabelFont) -> bool {
+    if font.size_pt.is_some_and(|size| !size.is_finite() || size <= 0.0) {
+        return false;
+    }
+    font.family = font.family.trim().to_owned();
+    font.size_pt = font.size_pt.map(clamp_cell_pt);
+    if *slot == font {
+        return false;
+    }
+    *slot = font;
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,6 +251,35 @@ mod tests {
         assert_eq!(serde_json::to_value(&back).unwrap(), value);
         assert!(back.format_index().is_empty());
         assert!(back.cell_format_at(ColumnId(1), 0).is_default());
+    }
+
+    #[test]
+    fn header_fonts_are_sparse_and_style_only_the_printed_headings() {
+        use crate::sheet_print::{Align, PrintOp, PrintStyle, SheetTable};
+        let mut s = sheet();
+        s.columns[0].long_name = "Alpha".into();
+        assert!(s.set_column_header_font(ColumnLabelFont { family: String::new(), size_pt: Some(18.0) }));
+        assert!(s.set_row_header_font(ColumnLabelFont { family: " Courier New ".into(), size_pt: Some(13.5) }));
+        let back: Worksheet = serde_json::from_value(serde_json::to_value(&s).unwrap()).unwrap();
+        assert_eq!(back.font_defaults, s.font_defaults);
+        assert!(s.format_index().is_empty(), "header fonts are independent of cell fonts");
+
+        let table = SheetTable::new(&s, PrintStyle::default());
+        let (pages, _) = table.pages_for(&crate::page_setup::PageSetup::default());
+        let ops = table.draw_page(&pages[0], pages.len());
+        assert!(table.head_height() > 24.0);
+        for (label, align, expected_size, family) in [
+            ("A(Y1)", Align::Center, 16.0, None),
+            ("Long Name", Align::Right, 12.0, Some("Courier New")),
+            ("2", Align::Right, 12.0, Some("Courier New")),
+            ("Alpha", Align::Left, 8.0, None),
+        ] {
+            assert!(ops.iter().any(|op| matches!(op, PrintOp::Text { text, align: view, size, fmt, .. }
+                if text == label && *view == align && *size == expected_size && fmt.family.as_deref() == family)));
+        }
+        assert!(s.set_row_header_font(ColumnLabelFont::default()));
+        assert!(s.set_column_header_font(ColumnLabelFont::default()));
+        assert!(serde_json::to_value(s).unwrap().get("font_defaults").is_none());
     }
 
     #[test]

@@ -7,7 +7,10 @@ use sheaf_core::{Document, WindowId};
 
 const DATA: usize = 0;
 const BULK: usize = 4;
-const CATEGORIES: [&str; 5] = ["Data", "Long Name", "Units", "Comments", "Column Labels"];
+const COLUMN_HEADER: usize = 5;
+const ROW_HEADER: usize = 6;
+const CATEGORIES: [&str; 7] =
+    ["Data", "Long Name", "Units", "Comments", "Column Labels", "Column Header", "Row Header"];
 
 pub struct WorksheetFontsDialog {
     book: WindowId,
@@ -42,6 +45,8 @@ impl WorksheetFontsDialog {
                 size_pt: defaults.comments_size_pt,
             },
             defaults.column_labels.clone(),
+            defaults.column_header.clone(),
+            defaults.row_header.clone(),
         ];
         let mut fonts: Vec<_> = sheaf_plot::SystemFonts::shared()
             .database()
@@ -86,6 +91,12 @@ impl WorksheetFontsDialog {
             if self.shown[BULK] != self.base[BULK] {
                 sheet.set_column_labels_font(self.shown[BULK].clone());
             }
+            if self.shown[COLUMN_HEADER] != self.base[COLUMN_HEADER] {
+                sheet.set_column_header_font(self.shown[COLUMN_HEADER].clone());
+            }
+            if self.shown[ROW_HEADER] != self.base[ROW_HEADER] {
+                sheet.set_row_header_font(self.shown[ROW_HEADER].clone());
+            }
             for (i, kind) in [LabelKind::LongName, LabelKind::Units, LabelKind::Comments].iter().enumerate() {
                 if self.shown[i + 1].size_pt != self.base[i + 1].size_pt {
                     sheet.set_label_font_size_override(kind, self.shown[i + 1].size_pt);
@@ -123,7 +134,7 @@ impl WorksheetFontsDialog {
                                 ui.selectable_value(&mut self.category, i, *name);
                             }
                             ui.add_enabled_ui(false, |ui| {
-                                for name in ["Standard", "Column Header", "Row Header", "F(x)="] {
+                                for name in ["Standard", "F(x)="] {
                                     let _ =
                                         ui.selectable_label(false, name).on_hover_text("Not available in Sheaf yet");
                                 }

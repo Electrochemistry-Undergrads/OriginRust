@@ -63,9 +63,16 @@ impl<'a> Formats<'a> {
     }
 
     pub(super) fn warn_omissions(&self, labels: &[Option<LabelKind>], warnings: &mut Vec<String>) {
-        if !self.sheet.font_defaults.is_empty() {
+        let defaults = &self.sheet.font_defaults;
+        if defaults.has_cell_fonts() {
             warnings.push(format!(
                 "sheet '{}': worksheet default fonts are exported as current-cell styles; future cells use Excel defaults",
+                self.sheet.name
+            ));
+        }
+        if !defaults.column_header.is_empty() || !defaults.row_header.is_empty() {
+            warnings.push(format!(
+                "sheet '{}': worksheet header fonts are omitted; Excel controls its row and column headings",
                 self.sheet.name
             ));
         }

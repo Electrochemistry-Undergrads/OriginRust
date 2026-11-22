@@ -811,7 +811,7 @@ The compact layout, draft policy and manual-label precedence are Sheaf choices; 
 priority remains unverified against Native. Existing derived label heights remain in use.
 Family-only edits keep point-size overrides absent. Automatic clears only the category family,
 using the existing Arial fallback; manual names/sizes and other category drafts stay independent.
-The native Font apply-mask checkbox is omitted. Standard, headers, and the individual
+The native Font apply-mask checkbox is omitted. Standard and the individual
 F(x)= category remain disabled. Other worksheet tabs and category color and text controls
 remain open. The [official Format tab reference](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
 and [wproperties reference](https://docs.originlab.com/x-function/ref/wproperties/) describe the
@@ -832,6 +832,23 @@ Comments setting and then Column Labels. The category's Automatic family and
 Default size restore inheritance for that property. Type 0 to select Default size.
 The dialog retains drafts when switching categories and commits them together.
 Sheaf continues to derive row heights from the effective text.
+
+**Header fonts (T59).** In a private Origin 2016 workbook, Column Header at 18 pt
+enlarged the column names, including a newly added column. Row Header at 20 pt
+enlarged both row numbers and the captions beside the label rows. Data and
+column-label cell text kept their sizes. Origin kept the header and body
+heights fixed in the probe, clipping some of the larger captions. The Format
+tab manual documents the family control. The live probe measured size.
+[Worksheet Properties Format tab](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
+
+Sheaf's Column Header and Row Header categories set family and point size
+independently. Existing and future headings share each setting. Automatic
+family and Default size (enter 0) restore the default for that property. The
+grid derives enough height for visible heading text, including in frozen
+panes, using the same policy as worksheet cells. Print uses the heading fonts.
+Worksheet images contain only label and data cells. Native project files and
+OPJ companions preserve both categories. Excel uses its own row and column
+headings, so the export reports that it omits these fonts.
 
 Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
 The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,

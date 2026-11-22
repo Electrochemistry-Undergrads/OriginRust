@@ -127,7 +127,7 @@ mod tests {
         chain.find.npts = npts;
         chain.find.method = FindMethod::LocalMax;
         chain.limits = LimitMode::HalfHeight;
-        PeakChainSpec { chain, integrate: true, fit: None, centers: Vec::new() }
+        PeakChainSpec { chain, integrate: true, fit: None, centers: Vec::new(), regions: Vec::new() }
     }
 
     #[test]

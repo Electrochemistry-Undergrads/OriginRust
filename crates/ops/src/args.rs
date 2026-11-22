@@ -2661,6 +2661,10 @@ pub enum AnalyzeTool {
         /// Anchor points of the anchors baseline, written X1:Y1,X2:Y2,... (linear interpolation).
         #[arg(long)]
         anchors: Option<String>,
+        /// Piecewise peak fitting: run the analysis (baseline, search, integration, fit) separately in
+        /// each X region, written FROM:TO,FROM:TO,...; each region has its own baseline.
+        #[arg(long, value_name = "REGIONS")]
+        regions: Option<String>,
         /// Search on the Fourier self-deconvolved curve with bands of this FWHM (X units), so that
         /// hidden peaks are found; heights and areas are measured on the data. Needs evenly spaced X.
         #[arg(long, value_name = "FWHM")]

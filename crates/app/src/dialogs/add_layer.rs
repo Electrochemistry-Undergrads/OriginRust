@@ -76,11 +76,15 @@ impl AddLayerDialog {
                 ui.add_enabled(false, egui::Checkbox::new(&mut user_defined, "User Defined"))
                     .on_disabled_hover_text("Custom axis definitions and scale formulas are not available yet.");
                 let supports_auto_offset = self.kind.supports_auto_offset();
+                let auto_offset_hint = match self.kind {
+                    NewLayerKind::Normal => "Bottom-X Left-Y uses independent frame placement.",
+                    _ => "Available for linked presets that use the full parent frame.",
+                };
                 ui.add_enabled(
                     supports_auto_offset,
                     egui::Checkbox::new(&mut self.auto_offset, "Auto Offset Overlapped Axes"),
                 )
-                .on_disabled_hover_text("Available for linked presets that use the full parent frame.");
+                .on_disabled_hover_text(auto_offset_hint);
                 ui.checkbox(&mut self.activate, "Activate New Layer");
                 ui.separator();
                 ui.horizontal(|ui| {

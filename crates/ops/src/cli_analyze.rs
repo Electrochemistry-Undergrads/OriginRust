@@ -1301,6 +1301,14 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 curve: !no_graph,
             })),
         ),
+        AnalyzeTool::Binscatter { target, bins, equal_width, no_graph } => {
+            if bins == 0 {
+                bail!("--bins must be at least 1");
+            }
+            let rule =
+                if equal_width { analysis::BinRule::EqualWidth(bins) } else { analysis::BinRule::EqualCount(bins) };
+            (target, Job::Tool(Tool::BinScatter(analysis::BinScatterSpec { rule, graph: !no_graph })))
+        }
         AnalyzeTool::Changepoint { target, change, penalty, min_segment, no_graph } => {
             let kind = match change.trim().to_ascii_lowercase().as_str() {
                 "mean" => analysis::ChangeKind::Mean,

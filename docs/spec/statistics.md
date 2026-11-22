@@ -1821,6 +1821,19 @@ row, Start X, End X (the column's X, else the row number), N, Mean, Standard dev
 data and the segment means as a step line (a new graph shows both). A notes line per column lists where the new
 segments start and the penalty used.
 
+## 31 Binned scatter (T356, Origin 2027 feature; not measured)
+
+Origin 2027 adds binned scatter plots; Origin 2016 has none, so this is Sheaf's own. Statistics > Descriptive
+Statistics > Binned Scatter... (`Tool::BinScatter`, `sheaf analyze binscatter --y COL [--bins N] [--equal-width]
+[--no-graph]`, `sheaf_calc::binned_scatter`): every chosen column is binned against its X column (or the row
+number); rows with a missing X or Y are left out. Bins of equal counts (default, 10 bins): the points in X order are
+cut into N groups whose sizes differ by at most one, the first `count % N` holding one more; a bin's X range is its
+smallest and largest X. Bins of equal width: N intervals from the smallest to the largest X (the last includes its
+right edge), empty bins left out. Each bin gives X from, X to, X mean, N, Y mean, Y SD (n - 1; blank for one point)
+and Y SE (`SD / sqrt N`). The result sheet `BinScatterN` has one row per bin ("<column>, bin k"), then, with the
+graph, the data and the bin means; a new graph shows the data as symbols and the bin means as line and symbols at
+the bins' mean X. Error bars on the means are not drawn.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

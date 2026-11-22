@@ -66,7 +66,7 @@ outputs or UI behavior.
 | On-graph trendlines | 2025b | Done (T43). Add a fitted trend or moving average directly to a plot with its own editable label and curve settings. | [2025b][o25b] |
 | Cause-and-effect and nested frequency charts | 2026 | Draw a fishbone diagram or summarize frequency counts as columns, bars, pie or doughnut sections, including nested categories. | [2026][o26] |
 | Slope Annotation | 2026b | Done (T52). Mark a slope directly on a graph with a data-linked annotation. | [2026b][o26b] |
-| Hexbin, binned scatter and UpSet plots | 2027 | Hexbin done (T45); binned scatter and UpSet remain. Summarize dense XY data in hexagonal bins or binned scatter points. Visualize sizes of set intersections. | [2027][o27] |
+| Hexbin, binned scatter and UpSet plots | 2027 | Hexbin done (T45); binned scatter done (T356, Statistics > Descriptive Statistics > Binned Scatter); UpSet remains. Summarize dense XY data in hexagonal bins or binned scatter points. Visualize sizes of set intersections. | [2027][o27] |
 
 ## Analysis and statistics
 

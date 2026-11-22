@@ -4,7 +4,8 @@
 use super::analysis::AnalysisKind;
 use eframe::egui;
 use sheaf_core::analysis::{
-    ChangeKind, ChangePenalty, ChangePointSpec, KaplanMeierSpec, KmeansSpec, PcaSpec, QuantRegSpec, RocSpec, Tool,
+    BinRule, BinScatterSpec, ChangeKind, ChangePenalty, ChangePointSpec, KaplanMeierSpec, KmeansSpec, PcaSpec,
+    QuantRegSpec, RocSpec, Tool,
 };
 
 /// What the windows keep between frames.
@@ -14,6 +15,7 @@ pub struct MultiOptions {
     roc: RocSpec,
     quantreg: QuantRegSpec,
     changepoint: ChangePointSpec,
+    binscatter: BinScatterSpec,
     /// The value of the Manual penalty while another penalty is chosen.
     manual_penalty: Option<f64>,
     /// The quantiles as typed (comma separated), read when the tool runs.
@@ -60,6 +62,13 @@ impl MultiOptions {
                     return Err(format!("a quantile must lie between 0 and 1 (got {bad})"));
                 }
                 Ok(Tool::QuantReg(QuantRegSpec { quantiles, ..self.quantreg.clone() }))
+            }
+            AnalysisKind::BinScatter => {
+                let (BinRule::EqualWidth(n) | BinRule::EqualCount(n)) = self.binscatter.rule;
+                if n == 0 {
+                    return Err("the number of bins must be at least 1".to_string());
+                }
+                Ok(Tool::BinScatter(self.binscatter))
             }
             AnalysisKind::ChangePoint => {
                 let need = if self.changepoint.kind == ChangeKind::Mean { 1 } else { 2 };
@@ -156,6 +165,25 @@ impl MultiOptions {
                 ui.weak(
                     "The exact solution of each quantile (the sum of check losses is as small as it can be); no standard errors.",
                 );
+            }
+            AnalysisKind::BinScatter => {
+                ui.label("Every chosen column is binned against its X column (or the row number).");
+                let s = &mut self.binscatter;
+                let (mut n, mut width) = match s.rule {
+                    BinRule::EqualWidth(n) => (n, true),
+                    BinRule::EqualCount(n) => (n, false),
+                };
+                ui.horizontal(|ui| {
+                    ui.label("Number of bins");
+                    ui.add(egui::DragValue::new(&mut n).range(1..=100_000));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Bins of");
+                    ui.radio_value(&mut width, false, "Equal counts");
+                    ui.radio_value(&mut width, true, "Equal width");
+                });
+                s.rule = if width { BinRule::EqualWidth(n) } else { BinRule::EqualCount(n) };
+                ui.checkbox(&mut s.graph, "Graph of the data with the bin means");
             }
             AnalysisKind::ChangePoint => {
                 ui.label("Every chosen column is a series of its own, in row order.");

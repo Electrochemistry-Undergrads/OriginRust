@@ -13,6 +13,7 @@ pub mod acf;
 pub mod anova;
 pub mod anova2;
 pub mod anova3;
+pub mod arima;
 pub mod baseline;
 pub mod bin2d;
 pub mod binscatter;

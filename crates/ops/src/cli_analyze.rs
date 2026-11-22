@@ -1301,6 +1301,18 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 curve: !no_graph,
             })),
         ),
+        AnalyzeTool::Capability { target, lsl, usl, subgroup, model, no_graph } => {
+            let model = match model.to_ascii_lowercase().as_str() {
+                "normal" => analysis::CapModel::Normal,
+                "lognormal" => analysis::CapModel::Lognormal,
+                "weibull" => analysis::CapModel::Weibull,
+                other => bail!("--model takes normal, lognormal or weibull, not {other:?}"),
+            };
+            (
+                target,
+                Job::Tool(Tool::Capability(analysis::CapabilitySpec { lsl, usl, subgroup, model, graph: !no_graph })),
+            )
+        }
         AnalyzeTool::Rarechart { target, chart, limits, distribution, sigma, no_graph } => {
             use analysis::{GLimits, RareChartKind, TDistribution};
             let kind = match chart.to_ascii_lowercase().as_str() {

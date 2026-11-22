@@ -4,9 +4,10 @@
 use super::analysis::AnalysisKind;
 use eframe::egui;
 use sheaf_core::analysis::{
-    AcfSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty, ChangePointSpec, GLimits,
-    KaplanMeierSpec, KmeansSpec, ManhattanSpec, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec, RareChartKind,
-    RareChartSpec, RocSpec, TDistribution, TimePivotSpec, Tool,
+    AcfSpec, AdfTerms, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty, ChangePointSpec,
+    DecomposeModel, DecomposeSpec, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistSpec,
+    ManhattanSpec, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec, RareChartKind, RareChartSpec, RocSpec, StabilitySpec,
+    StationaritySpec, TDistribution, TimePivotSpec, Tool,
 };
 
 /// What the windows keep between frames.
@@ -20,8 +21,12 @@ pub struct MultiOptions {
     timepivot: TimePivotSpec,
     manhattan: ManhattanSpec,
     acf: AcfSpec,
+    decompose: DecomposeSpec,
+    stationarity: StationaritySpec,
     rare: RareChartSpec,
     capability: CapabilitySpec,
+    stability: StabilitySpec,
+    life: LifeDistSpec,
     /// The value of the Manual penalty while another penalty is chosen.
     manual_penalty: Option<f64>,
     /// The quantiles as typed (comma separated), read when the tool runs.
@@ -31,6 +36,12 @@ pub struct MultiOptions {
 }
 
 impl MultiOptions {
+    /// Sets the Seasonal Decomposition period (for tests).
+    #[cfg(test)]
+    pub fn set_decompose_period(&mut self, period: usize) {
+        self.decompose.period = period;
+    }
+
     /// The quantiles as the window shows them.
     fn quantiles_text(&self) -> String {
         self.quantiles
@@ -70,6 +81,19 @@ impl MultiOptions {
                 Ok(Tool::QuantReg(QuantRegSpec { quantiles, ..self.quantreg.clone() }))
             }
             AnalysisKind::TimePivot => Ok(Tool::TimePivot(self.timepivot)),
+            AnalysisKind::LifeDist => {
+                if self.life.censor.trim().is_empty() {
+                    return Err("give the censoring value".to_string());
+                }
+                Ok(Tool::LifeDist(self.life.clone()))
+            }
+            AnalysisKind::Stability => {
+                let s = &self.stability;
+                if s.lower.is_none() && s.upper.is_none() {
+                    return Err("give a lower or an upper specification limit".to_string());
+                }
+                Ok(Tool::Stability(*s))
+            }
             AnalysisKind::Capability => {
                 let c = &self.capability;
                 if c.lsl.is_none() && c.usl.is_none() {
@@ -82,6 +106,13 @@ impl MultiOptions {
                     return Err("the number of sigmas must be above 0".to_string());
                 }
                 Ok(Tool::RareChart(self.rare))
+            }
+            AnalysisKind::Stationarity => Ok(Tool::Stationarity(self.stationarity)),
+            AnalysisKind::Decompose => {
+                if self.decompose.period < 2 {
+                    return Err("the period must be at least 2".to_string());
+                }
+                Ok(Tool::Decompose(self.decompose))
             }
             AnalysisKind::Acf => {
                 if !(self.acf.confidence > 0.0 && self.acf.confidence < 1.0) {
@@ -198,6 +229,57 @@ impl MultiOptions {
                     "The exact solution of each quantile (the sum of check losses is as small as it can be); no standard errors.",
                 );
             }
+            AnalysisKind::LifeDist => {
+                let s = &mut self.life;
+                ui.label("The chosen columns are the time and the censor column.");
+                ui.horizontal(|ui| {
+                    ui.label("Censoring value");
+                    ui.add(egui::TextEdit::singleline(&mut s.censor).desired_width(80.0));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Distribution");
+                    for d in [LifeDist::Weibull, LifeDist::Lognormal, LifeDist::Exponential, LifeDist::Normal] {
+                        let name = match d {
+                            LifeDist::Weibull => "Weibull",
+                            LifeDist::Lognormal => "Lognormal",
+                            LifeDist::Exponential => "Exponential",
+                            LifeDist::Normal => "Normal",
+                        };
+                        ui.radio_value(&mut s.dist, d, name);
+                    }
+                });
+                ui.checkbox(&mut s.graph, "Probability, density, survival and hazard graphs");
+            }
+            AnalysisKind::Stability => {
+                ui.label("The chosen columns are the time, the response and, optionally, the batch.");
+                let s = &mut self.stability;
+                for (name, limit, start) in [
+                    ("Lower specification limit", &mut s.lower, 95.0),
+                    ("Upper specification limit", &mut s.upper, 105.0),
+                ] {
+                    ui.horizontal(|ui| {
+                        let mut on = limit.is_some();
+                        if ui.checkbox(&mut on, name).changed() {
+                            *limit = on.then_some(start);
+                        }
+                        if let Some(v) = limit {
+                            ui.add(egui::DragValue::new(v).speed(0.01));
+                        }
+                    });
+                }
+                ui.horizontal(|ui| {
+                    ui.label("Confidence level of the bounds");
+                    let mut pct = s.confidence * 100.0;
+                    if ui.add(egui::DragValue::new(&mut pct).speed(0.1).range(50.0..=99.99).suffix(" %")).changed() {
+                        s.confidence = pct / 100.0;
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Poolability significance level");
+                    ui.add(egui::DragValue::new(&mut s.alpha).speed(0.01).range(0.01..=0.5));
+                });
+                ui.checkbox(&mut s.graph, "Graph of the batches, fits, bounds and limits");
+            }
             AnalysisKind::Capability => {
                 ui.label("Every chosen column is a process of its own, in row order; missing values are left out.");
                 let s = &mut self.capability;
@@ -256,6 +338,53 @@ impl MultiOptions {
                     ui.add(egui::DragValue::new(&mut s.sigma).speed(0.05).range(0.5..=6.0));
                 });
                 ui.checkbox(&mut s.graph, "Control chart per column");
+            }
+            AnalysisKind::Stationarity => {
+                ui.label("Every chosen column is a series of its own, in row order; it must have no missing values.");
+                let s = &mut self.stationarity;
+                ui.horizontal(|ui| {
+                    ui.label("ADF terms");
+                    ui.radio_value(&mut s.adf_terms, AdfTerms::Constant, "Constant");
+                    ui.radio_value(&mut s.adf_terms, AdfTerms::Trend, "Constant and trend");
+                    ui.radio_value(&mut s.adf_terms, AdfTerms::None, "None");
+                });
+                ui.horizontal(|ui| {
+                    let mut auto = s.adf_lags.is_none();
+                    if ui.checkbox(&mut auto, "ADF lags by AIC").changed() {
+                        s.adf_lags = if auto { None } else { Some(1) };
+                    }
+                    if let Some(l) = &mut s.adf_lags {
+                        ui.add(egui::DragValue::new(l).range(0..=1000));
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("KPSS null hypothesis");
+                    ui.radio_value(&mut s.kpss_null, KpssNull::Level, "Level stationary");
+                    ui.radio_value(&mut s.kpss_null, KpssNull::Trend, "Trend stationary");
+                });
+                ui.horizontal(|ui| {
+                    let mut auto = s.kpss_lags.is_none();
+                    if ui.checkbox(&mut auto, "KPSS lags from the length").changed() {
+                        s.kpss_lags = if auto { None } else { Some(4) };
+                    }
+                    if let Some(l) = &mut s.kpss_lags {
+                        ui.add(egui::DragValue::new(l).range(0..=1000));
+                    }
+                });
+            }
+            AnalysisKind::Decompose => {
+                ui.label("Every chosen column is a series of its own, in row order; it must have no missing values.");
+                let s = &mut self.decompose;
+                ui.horizontal(|ui| {
+                    ui.label("Period (points per season)");
+                    ui.add(egui::DragValue::new(&mut s.period).range(2..=10_000));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Model");
+                    ui.radio_value(&mut s.model, DecomposeModel::Additive, "Additive");
+                    ui.radio_value(&mut s.model, DecomposeModel::Multiplicative, "Multiplicative");
+                });
+                ui.checkbox(&mut s.graph, "Data with trend, seasonal and residual graphs");
             }
             AnalysisKind::Acf => {
                 ui.label("Every chosen column is a series of its own, in row order; missing values are left out.");

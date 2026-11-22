@@ -151,6 +151,7 @@ pub(super) fn run(
     for (i, h) in table.headers.iter().enumerate() {
         sheet_cols.push(number_column(h, "", Designation::Y, table.rows.iter().map(|(_, v)| v[i]).collect()));
     }
+    let shift = sheet_cols.len();
     sheet_cols.extend(on_sheet);
     let graph = spec.graph.then(|| XyGraph {
         plots,
@@ -160,7 +161,7 @@ pub(super) fn run(
         y_title: "-log10 p".into(),
         look: Default::default(),
     });
-    Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph, more_graphs: Vec::new() })
+    Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph, more_graphs: Vec::new() }.shift_graphs(shift))
 }
 
 #[cfg(test)]
@@ -187,7 +188,9 @@ mod tests {
         assert_eq!((t.rows[0].1[0], t.rows[0].1[1]), (2.0, 0.0));
         assert_eq!((t.rows[1].1[0], t.rows[1].1[1], t.rows[1].1[4]), (2.0, 100.0, 1.0));
         assert!((t.rows[1].1[3] - 9.0).abs() < 1e-12);
-        assert!(out.new_graph.is_some());
+        let cols = super::super::dist::plot_columns(&p, out.new_graph.unwrap());
+        assert_eq!((cols[0].0.as_str(), cols[0].1.as_str()), ("Cumulative position", "-log10 p"), "{cols:?}");
+        assert_eq!(cols.last().unwrap().1, "Line Y");
         let bad = ManhattanSpec { threshold: 0.0, graph: false };
         assert!(p.analyze(&request(vec![chrom, pos, pv], bad)).is_err());
         assert!(p.analyze(&request(vec![chrom], ManhattanSpec::default())).is_err());

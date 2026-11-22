@@ -222,6 +222,11 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T239](T239-hour-minute-second.md) | Formula functions hour, minute, second of a date-time number | S | done 2026-11-20 (expression-language 7), not measured (Origin not installed) |
 | [T240](T240-mcp-link-test-flakes.md) | MCP link tests wait for a queued call or a logged job instead of sleeping (load flakes) | S | done 2026-11-20, tests only |
 | [T242](T242-send-graphs-to-word.md) | Send Graphs window's Word choice and sheaf export -o .docx: a graph per page | S | done 2026-11-20 (graphing 17.11), not measured |
+| [T244](T244-statistics-percentiles.md) | Statistics on Columns: Percentiles (%) list, one column per p | S | done 2026-11-22 (analysis-tools), not measured |
+| [T367](T367-date-time-parts-measured.md) | hour/minute/second measured in Origin; T262's date bounds re-checked | S | done 2026-11-22, test + docs |
+| [T369](T369-acceptance-sampling.md) | Statistics > Acceptance Sampling: attribute single sampling plans, OC, AOQ, ATI (scipy-checked) | S | done 2026-11-22 (statistics 39), not measured |
+| [T371](T371-vinc-measured.md) | Origin's vinc / vinc_check measured; check_increment gains the step SD | S | done 2026-11-22 (workbook-model 13d) |
+| [T373](T373-grouped-marginal-plots.md) | Grouped marginal histograms and box charts (sheaf plot --group) | S | done 2026-11-22 (graphing 32), not measured |
 | [T233](T233-batch-summary.md) | File > Batch Processing: Summary Sheet, Dataset Identifier, Delete Intermediate Books (a Batch Summary book stacking one sheet of every book) | S | done 2026-11-20 (workbook-model 13p), not measured; left: Origin's layout and identifier choices |
 | [T235](T235-batch-cli.md) | sheaf batch: Batch Processing without a window (template, summary, --summary-csv), core Project::batch_process shared with the window | S | done 2026-11-20 (workbook-model 13p); MCP: T238 |
 | [T238](T238-batch-mcp.md) | MCP batch_process: the shared batch run (books, summary, delete) on the session project, one undo step attached | S | done 2026-11-20 (mcp.md 5.1); left: read options |
@@ -312,6 +317,10 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T318](T318-baseline-als-dataset.md) | Peak Analyzer baselines Use Existing Dataset and Asymmetric Least Squares Smoothing (window, CLI) | M | done 2026-11-21; ALS not measured (Pro) |
 | [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T372](T372-stationarity-tests.md) | Stationarity tests: ADF statistic and KPSS with table probability (Origin 2024b Time Series app) | S | done 2026-11-22 (statistics 41) |
+| [T370](T370-seasonal-decomposition.md) | Classical seasonal decomposition, additive or multiplicative (Origin 2024b Time Series app) | S | done 2026-11-22 (statistics 40) |
+| [T368](T368-stability-study.md) | Stability study and shelf life after ICH Q1E (Origin 2027 Quality app) | S | done 2026-11-22 (statistics 38) |
+| [T366](T366-distribution-overview.md) | Distribution Overview plot for right-censored life data (Origin 2026b) | S | done 2026-11-22 (statistics 37) |
 | [T365](T365-process-capability.md) | Process capability, normal and nonnormal (Origin 2027 Quality app) | S | done 2026-11-22 (statistics 36) |
 | [T364](T364-rare-event-charts.md) | G and T control charts for rare events (Origin 2027 Quality app) | S | done 2026-11-22 (statistics 35) |
 | [T363](T363-autocorrelation.md) | Autocorrelation (Origin 2024b Time Series app): ACF, PACF and Ljung-Box per lag with graphs | S | done 2026-11-22 (statistics 34) |

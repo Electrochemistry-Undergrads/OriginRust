@@ -820,7 +820,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 )
             }
         }
-        AnalyzeTool::Stats { target, all, add, level } => {
+        AnalyzeTool::Stats { target, all, add, level, percentiles } => {
             let mut spec = if all { analysis::StatisticsSpec::all() } else { analysis::StatisticsSpec::default() };
             for name in &add {
                 match name.trim().to_ascii_lowercase().as_str() {
@@ -836,6 +836,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 }
             }
             spec.level = level;
+            spec.percentiles = percentiles;
             (target, Job::Tool(Tool::Statistics(spec)))
         }
         AnalyzeTool::Ttest { target, test, mean, difference, unequal, tail, alpha, .. } => {
@@ -974,7 +975,9 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
-        AnalyzeTool::Power { .. } => unreachable!("handled before the data file is read"),
+        AnalyzeTool::Power { .. } | AnalyzeTool::Acceptance { .. } => {
+            unreachable!("handled before the data file is read")
+        }
         AnalyzeTool::Anova2 { target, raw, levels_a, levels_b, no_interaction, comparison, alpha } => {
             no_x_range(&target, "the two-way ANOVA")?;
             let layout = if raw {
@@ -1301,6 +1304,26 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 curve: !no_graph,
             })),
         ),
+        AnalyzeTool::Lifedist { target, distribution, censor, no_graph } => {
+            let dist = match distribution.to_ascii_lowercase().as_str() {
+                "weibull" => analysis::LifeDist::Weibull,
+                "lognormal" => analysis::LifeDist::Lognormal,
+                "exponential" => analysis::LifeDist::Exponential,
+                "normal" => analysis::LifeDist::Normal,
+                other => bail!("--distribution takes weibull, lognormal, exponential or normal, not {other:?}"),
+            };
+            (target, Job::Tool(Tool::LifeDist(analysis::LifeDistSpec { dist, censor, graph: !no_graph })))
+        }
+        AnalyzeTool::Stability { target, lsl, usl, confidence, alpha, no_graph } => (
+            target,
+            Job::Tool(Tool::Stability(analysis::StabilitySpec {
+                lower: lsl,
+                upper: usl,
+                confidence: confidence / 100.0,
+                alpha,
+                graph: !no_graph,
+            })),
+        ),
         AnalyzeTool::Capability { target, lsl, usl, subgroup, model, no_graph } => {
             let model = match model.to_ascii_lowercase().as_str() {
                 "normal" => analysis::CapModel::Normal,
@@ -1340,6 +1363,31 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     graph: !no_graph,
                 })),
             )
+        }
+        AnalyzeTool::Stationarity { target, adf_terms, adf_lags, kpss_null, kpss_lags } => {
+            let adf_terms = match adf_terms.to_ascii_lowercase().as_str() {
+                "constant" => analysis::AdfTerms::Constant,
+                "trend" => analysis::AdfTerms::Trend,
+                "none" => analysis::AdfTerms::None,
+                other => bail!("--adf-terms takes constant, trend or none, not {other:?}"),
+            };
+            let kpss_null = match kpss_null.to_ascii_lowercase().as_str() {
+                "level" => analysis::KpssNull::Level,
+                "trend" => analysis::KpssNull::Trend,
+                other => bail!("--kpss-null takes level or trend, not {other:?}"),
+            };
+            (
+                target,
+                Job::Tool(Tool::Stationarity(analysis::StationaritySpec { adf_terms, adf_lags, kpss_null, kpss_lags })),
+            )
+        }
+        AnalyzeTool::Decompose { target, period, model, no_graph } => {
+            let model = match model.to_ascii_lowercase().as_str() {
+                "additive" => analysis::DecomposeModel::Additive,
+                "multiplicative" => analysis::DecomposeModel::Multiplicative,
+                other => bail!("--model takes additive or multiplicative, not {other:?}"),
+            };
+            (target, Job::Tool(Tool::Decompose(analysis::DecomposeSpec { period, model, graph: !no_graph })))
         }
         AnalyzeTool::Acf { target, lags, confidence, no_graph } => (
             target,

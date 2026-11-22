@@ -1485,6 +1485,53 @@ fn manhattan_plot_runs_from_the_command_line() {
     assert!(ok && out.contains("3 groups"), "the group from the X column: {err} {out}");
 }
 
+/// Distribution overview of right-censored data (spec `statistics.md` section 37, T366).
+#[test]
+fn distribution_overview_runs_from_the_command_line() {
+    let dir = scratch("lifedist");
+    let path = dir.join("life.csv");
+    std::fs::write(&path, "id,t,c\n1,2,0\n2,4,0\n3,6,1\n4,8,0\n5,9,1\n").unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "lifedist", file, "--y", "t,c"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("Weibull fit to 5 cases (3 failures, 2 right-censored)") && out.contains("LifeDist1"),
+        "{out}"
+    );
+    let (ok, out, err) =
+        sheaf(&["analyze", "lifedist", file, "--y", "t,c", "--distribution", "exponential", "--no-graph"]);
+    assert!(ok && out.contains("Mean (theta) 9.66"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "lifedist", file, "--y", "t,c", "--distribution", "gamma"]);
+    assert!(!ok && err.contains("--distribution"), "{err}");
+}
+
+/// Stability study (spec `statistics.md` section 38, T368).
+#[test]
+fn stability_study_runs_from_the_command_line() {
+    let dir = scratch("stability");
+    let path = dir.join("stab.csv");
+    let mut text = String::from("t,assay,batch\n");
+    for (b, start) in [(1, 100.0), (2, 100.0)] {
+        for (i, t) in [0.0, 3.0, 6.0, 9.0, 12.0].iter().enumerate() {
+            let wobble = if i % 2 == 0 { 0.1 } else { -0.1 } * f64::from(b);
+            text.push_str(&format!("{t},{},{b}\n", start - 0.5 * t + wobble));
+        }
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "stability", file, "--y", "t,assay,batch", "--lsl", "90"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("2 batch(es), 10 points; model: one line for all batches") && out.contains("Stability1"),
+        "{out}"
+    );
+    let (ok, out, err) =
+        sheaf(&["analyze", "stability", file, "--y", "t,assay", "--lsl", "90", "--usl", "110", "--no-graph"]);
+    assert!(ok && out.contains("1 batch(es)") && out.contains("two-sided"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "stability", file, "--y", "t,assay"]);
+    assert!(!ok && err.contains("specification limit"), "{err}");
+}
+
 /// Process capability (spec `statistics.md` section 36, T365).
 #[test]
 fn process_capability_runs_from_the_command_line() {
@@ -1533,6 +1580,67 @@ fn rare_event_charts_run_from_the_command_line() {
     assert!(ok && out.contains("T chart of 7 values (exponential mean 5)"), "{err} {out}");
     let (ok, _, err) = sheaf(&["analyze", "rarechart", file, "--y", "g", "--chart", "x"]);
     assert!(!ok && err.contains("--chart"), "{err}");
+}
+
+/// Stationarity tests (spec `statistics.md` section 41, T372).
+#[test]
+fn stationarity_tests_run_from_the_command_line() {
+    let dir = scratch("stationarity");
+    let path = dir.join("ts.csv");
+    let mut text = String::from("t,walk\n");
+    let (mut st, mut y) = (7u64, 0.0);
+    for i in 0..150 {
+        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        y += (st >> 11) as f64 / (1u64 << 53) as f64 - 0.5;
+        text.push_str(&format!("{i},{y}\n"));
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "stationarity", file, "--y", "walk"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("does not reject a unit root at 5%") && out.contains("Stationarity1"), "{out}");
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "stationarity",
+        file,
+        "--y",
+        "walk",
+        "--adf-terms",
+        "trend",
+        "--adf-lags",
+        "2",
+        "--kpss-null",
+        "trend",
+    ]);
+    assert!(ok && out.contains("with 2 lag(s)") && out.contains("trend stationarity"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "stationarity", file, "--y", "walk", "--kpss-null", "drift"]);
+    assert!(!ok && err.contains("--kpss-null"), "{err}");
+}
+
+/// Seasonal decomposition (spec `statistics.md` section 40, T370).
+#[test]
+fn seasonal_decomposition_runs_from_the_command_line() {
+    let dir = scratch("decompose");
+    let path = dir.join("ts.csv");
+    let pattern = [1.0, -2.0, 0.5, 0.5];
+    let mut text = String::from("t,v\n");
+    for i in 0..16 {
+        text.push_str(&format!("{i},{}\n", 3.0 + 0.5 * f64::from(i) + pattern[i as usize % 4]));
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "decompose", file, "--y", "v", "--period", "4"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("additive decomposition with period 4; seasonal indices from -2 to 1")
+            && out.contains("Decompose1"),
+        "{out}"
+    );
+    let (ok, out, err) =
+        sheaf(&["analyze", "decompose", file, "--y", "v", "--period", "4", "--model", "multiplicative", "--no-graph"]);
+    assert!(ok && out.contains("multiplicative decomposition"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "decompose", file, "--y", "v", "--period", "9"]);
+    assert!(!ok && err.contains("two full periods"), "{err}");
 }
 
 /// Autocorrelation (spec `statistics.md` section 34, T363).
@@ -2384,4 +2492,33 @@ fn piecewise_regions_are_analysed_on_their_own() {
     assert!(stdout.contains("region 1") && stdout.contains("region 2"), "{stdout}");
     let (ok, _, stderr) = sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--regions", "0-9"]);
     assert!(!ok && stderr.contains("region"), "{stderr}");
+}
+
+#[test]
+fn stats_percentiles_add_one_column_each() {
+    let dir = scratch("stats-percentiles");
+    let data = groups_file(&dir);
+    let file = data.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "stats", file, "--y", "untreated", "--percentiles", "5,97.5"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("P5") && out.contains("P97.5"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "stats", file, "--y", "untreated", "--percentiles", "101"]);
+    assert!(!ok && err.contains("between 0 and 100"), "{err}");
+}
+
+#[test]
+fn acceptance_sampling_designs_and_evaluates_plans_without_a_data_file() {
+    // scipy (tools/acceptance-ref.py): AQL 1 %, LTPD 5 %, risks 5 % and 10 % give n 132, c 3.
+    let (ok, out, err) = sheaf(&["analyze", "acceptance", "--aql", "0.01", "--ltpd", "0.05"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Sample size n") && out.contains("132"), "{out}");
+    let dir = scratch("acceptance");
+    let csv = dir.join("oc.csv");
+    let (ok, out, err) =
+        sheaf(&["analyze", "acceptance", "--n", "50", "--c", "1", "--lot", "1000", "--export", csv.to_str().unwrap()]);
+    assert!(ok, "{err}");
+    assert!(out.contains("AOQL") && out.contains("0.0158626"), "{out}");
+    assert!(std::fs::read_to_string(&csv).unwrap().lines().count() > 100);
+    let (ok, _, err) = sheaf(&["analyze", "acceptance", "--aql", "0.1", "--ltpd", "0.05"]);
+    assert!(!ok && err.contains("below LTPD"), "{err}");
 }

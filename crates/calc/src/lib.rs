@@ -8,6 +8,7 @@
 //!
 //! Row numbers in options and results are 1-based, as in a worksheet.
 
+pub mod acceptance;
 pub mod acf;
 pub mod anova;
 pub mod anova2;
@@ -24,6 +25,7 @@ pub mod curvemath;
 pub mod curves;
 pub mod cwt;
 pub mod decimate;
+pub mod decompose;
 pub mod dierckx;
 pub mod differentiate;
 pub mod discfreq;
@@ -44,6 +46,7 @@ pub mod interp;
 pub mod kde;
 pub mod kmeans;
 pub mod levelcross;
+pub mod lifedata;
 pub mod manip;
 pub mod minverse;
 pub mod nonparam;
@@ -65,6 +68,8 @@ pub mod rmanova;
 pub mod roc;
 pub mod signal;
 pub mod smooth;
+pub mod stability;
+pub mod stationarity;
 pub mod stats;
 pub mod stemleaf;
 pub mod stft;

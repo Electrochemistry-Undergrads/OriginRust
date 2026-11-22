@@ -357,6 +357,8 @@ pub struct SheafApp {
     /// The saved user workbook templates, read with them (T160).
     user_book_templates: Vec<String>,
     power: Option<PowerDialog>,
+    /// Statistics > Acceptance Sampling... (T369).
+    acceptance: Option<crate::dialogs::acceptance::AcceptanceDialog>,
     find: Option<FindDialog>,
     sort: Option<SortDialog>,
     sheet_name: Option<SheetNameDialog>,
@@ -545,6 +547,7 @@ impl SheafApp {
                 .map(|d| sheaf_io::user_templates::names_of(d, sheaf_io::user_templates::TemplateKind::Workbook))
                 .unwrap_or_default(),
             power: None,
+            acceptance: None,
             find: None,
             sort: None,
             sheet_name: None,
@@ -2045,6 +2048,7 @@ impl SheafApp {
             Action::ImportPick(pick) => self.start_import(None, pick),
             Action::GoToCell(book) => self.open_go_to(book),
             Action::Power(kind) => self.power = Some(PowerDialog::new(kind)),
+            Action::AcceptanceSampling => self.acceptance = Some(Default::default()),
             Action::FindInSheets(book) => self.open_find(book, false),
             Action::ReplaceInSheets(book) => self.open_find(book, true),
             Action::ImportWizard => {
@@ -7794,6 +7798,22 @@ impl SheafApp {
                     }
                 }
                 ExportOutcome::Failed(e) => self.message = Some(("Could not export to Excel".to_string(), e)),
+            }
+        }
+        if let Some(d) = &mut self.acceptance {
+            use crate::dialogs::acceptance::AcceptanceOutcome;
+            match d.show(ctx, &mut self.doc) {
+                AcceptanceOutcome::Open => {}
+                AcceptanceOutcome::Closed => self.acceptance = None,
+                AcceptanceOutcome::Done(report) => {
+                    self.acceptance = None;
+                    if let Some(sheet) = report.new_sheet {
+                        self.show_sheet(report.book, sheet);
+                    }
+                    self.logs.result(report.message.clone(), report.notes.clone());
+                    self.panels.reveal(PanelId::Results);
+                    self.say(report.message);
+                }
             }
         }
         if let Some(d) = &mut self.power {

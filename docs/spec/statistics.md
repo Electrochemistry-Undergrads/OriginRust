@@ -1924,6 +1924,118 @@ the limits as vertical lines. Checked against numpy/scipy (`tools/capability-ref
 decimals of the d2 table) to 1e-9 (1e-6 for the within values, 1e-7 for the Weibull fit). Box-Cox and Johnson
 transformations, confidence intervals of the indices and the Cpm target index are not built.
 
+## 37 Distribution Overview plot for right-censored data (T366, Origin 2026b; not measured)
+
+Origin 2026b's Distribution Overview plot is not part of Origin 2016, so this is Sheaf's own. Statistics > Survival
+Analysis > Distribution Overview Plot... (`Tool::LifeDist`, `sheaf analyze lifedist --y TIME,CENSOR [--distribution
+weibull|lognormal|exponential|normal] [--censor 1] [--no-graph]`): the chosen columns are the time and the censor
+column, as for the Kaplan-Meier estimator (a case is right-censored when its censor cell equals the censoring value;
+masked censor cells and missing times leave the case out). The distribution is fitted by maximum likelihood with right
+censoring (a failure adds `ln f(t)`, a censored case `ln S(t)`): the exponential mean is `sum t / r` (`r` failures);
+the Weibull shape solves the profile equation `sum t^k ln t / sum t^k - 1/k - mean ln t over the failures = 0` (scale
+`(sum t^k / r)^(1/k)`); the normal and lognormal (on `ln t`) parameters come from Newton's method on the score. The
+exponential needs one failure, the others two with different times; times must be above 0 except for the normal.
+
+The result sheet `LifeDistN` has one row (N, Failures, Censored, Parameter 1 and 2 (Weibull shape and scale, log mean
+and log SD, the exponential mean, or mean and SD), Log-likelihood, AIC, Mean, Median) and the graph data. Four new
+graphs: a probability plot (failures at the modified Kaplan-Meier failure probabilities, the mean of the Kaplan-Meier
+estimate just before and just after each failure, in percent, with the fitted distribution function as a line; Weibull
+and exponential on a Weibull percent axis against log time, lognormal on a normal probability axis against log time,
+normal on a probability axis against time), the fitted density, the fitted survival in percent with the Kaplan-Meier
+points, and the fitted hazard. Checked against scipy (`tools/lifedata-ref.py`, `crates/calc/tests/lifedata_reference.rs`:
+Weibull by brentq, normal and lognormal by a root of the score, all also against scipy's own `fit(CensoredData)` to
+1e-3) to 1e-8. Arbitrary (interval and left) censoring, frequency columns, confidence bands, other distributions and
+regression with life data are not built.
+
+## 38 Stability study and shelf life, ICH Q1E (T368, Origin 2027 Quality app; not measured)
+
+Origin 2027's stability-study app is not part of Origin 2016, so this is Sheaf's own, after ICH Q1E. Statistics >
+Stability Study... (`Tool::Stability`, `sheaf analyze stability --y TIME,RESPONSE[,BATCH] [--lsl L] [--usl U]
+[--confidence 95] [--alpha 0.25] [--no-graph]`): rows with a missing time, response or batch are left out; numeric batch
+labels are sorted, text labels keep their first order; every batch needs two different times and the separate-lines
+model a residual degree of freedom. Three least-squares models: separate intercepts and slopes, separate intercepts
+with a common slope, one line. Poolability at `alpha`: equal slopes by `F = ((SSE_2 - SSE_1) / (g - 1)) / (SSE_1 / (n -
+2g))`; if not rejected, equal intercepts by `F = ((SSE_3 - SSE_2) / (g - 1)) / (SSE_2 / (n - g - 1))`. The chosen model
+gives each batch's mean line and its bound `yhat -+ t sqrt(MSE x0' (X'X)^-1 x0)` on the model's residual degrees of
+freedom, one-sided at the confidence level with one limit and two-sided with two. A batch's shelf life is the first
+time from 0 at which a bound reaches a limit (searched up to 10 times the last time; beyond that it is left empty), and
+the study's is the smallest; a bound beyond a limit at time 0 is refused.
+
+The result sheet `StabilityN` has one row per batch (N, Intercept, Slope, Shelf life) and an "All batches" row (N,
+Shelf life, Prob of equal slopes and of equal intercepts), and the graph data; a new graph draws each batch's points,
+fitted line and bound(s) and the limits. Checked against numpy/scipy (`tools/stability-ref.py`,
+`crates/calc/tests/stability_reference.rs`, all three models) to 1e-9 (shelf lives 1e-8). Random-batch (mixed model)
+estimates, transformed responses and extrapolation rules are not built.
+
+## 39 Acceptance sampling by attributes (T369, Origin 2026b Pro app; not measured)
+
+Origin 2026b's Acceptance Sampling app designs or evaluates lot-acceptance plans; Origin 2016 has nothing to copy,
+so this is Sheaf's own, checked against scipy (`tools/acceptance-ref.py`, `crates/calc/tests/acceptance_reference.rs`;
+no Origin numbers). Statistics > Acceptance Sampling... (a window that needs no worksheet data, one undo step
+"Acceptance sampling") and `sheaf analyze acceptance [--aql 0.01] [--ltpd 0.05] [--alpha 0.05] [--beta 0.10] [--n N
+--c C] [--lot N] [--export oc.csv] [--save p.sheaf]` (`sheaf_calc::acceptance`, `Project::acceptance_sampling`):
+
+- **Single sampling plan by attributes**: take `n` items, accept the lot with at most `c` defective. The probability
+  of acceptance at a fraction defective `p` is binomial, `Pa(p) = P(X <= c)`, `X ~ B(n, p)` (type B; the lot is
+  treated as large, also when a lot size is given).
+- **Design**: AQL and LTPD as fractions (0 < AQL < LTPD < 1), producer's risk `alpha` and consumer's risk `beta`.
+  For `c = 0, 1, ...` the smallest `n` with `Pa(LTPD) <= beta` is found; the first that also has `Pa(AQL) >= 1 -
+  alpha` is the plan, which is the smallest sample that meets both risks (a larger `c` needs a larger `n`). Samples
+  above 1 000 000 are refused. AQL 1 %, LTPD 5 %, 5 % and 10 % give n = 132, c = 3, as a brute-force search does.
+- **Evaluate**: a plan typed in (`n > c`).
+- **Lot size N** (rectifying inspection, rejected lots sorted completely): `AOQ(p) = p Pa(p) (N - n) / N`, the AOQL
+  its largest value (a scan of 2000 points refined by golden-section search) and where it is reached, and `ATI(p) =
+  n + (1 - Pa(p)) (N - n)`. A lot smaller than the sample is refused.
+- **Output**: a workbook "Acceptance Sampling" with sheet `Plan` (Quantity and Value: n, c, AQL, LTPD, P(accept) at
+  both, producer's and consumer's risk, and with a lot size the lot size, AOQL and its fraction) and sheet `OC
+  Curve` (Fraction Defective as X, P(accept), and AOQ and ATI with a lot size; 101 points from 0 to where `Pa` falls
+  below 0.001, at least to the LTPD), and a line graph of the OC curve. The plan also goes to the Results Log.
+- Not done: double, multiple and sequential plans, variables plans, hypergeometric (type A) curves, MIL-STD-105E /
+  ISO 2859 tables, and Origin's own layout.
+
+## 40 Seasonal decomposition (T370, Origin 2024b Time Series Analysis app; not measured)
+
+Origin's Time Series Analysis app (2024b Pro) is not part of Origin 2016, so this is Sheaf's own, with the classical
+method (statsmodels' `seasonal_decompose` without trend extrapolation). Statistics > Seasonal Decomposition...
+(`Tool::Decompose`, `sheaf analyze decompose --y COL[,COL..] [--period 12] [--model additive|multiplicative]
+[--no-graph]`): every chosen column is a series of its own, in row order, complete in the chosen rows (a missing value
+is refused), with at least two full periods; the multiplicative model needs values above 0. With period `m` the trend
+is the centred moving average of `m` points (odd `m`) or of `m + 1` points with half weights at the ends (even `m`),
+empty for the first and last `floor(m / 2)` rows. The detrended values `y - trend` (or `y / trend`) are averaged per
+position in the period, and the indices adjusted to sum to 0 (or to average 1); position 1 is the first chosen row.
+The residual is `y - trend - seasonal` (or `y / (trend seasonal)`).
+
+The result sheet `DecomposeN` has one row per series and position (Position, Seasonal index) and, per series, the X,
+the data, Trend, Seasonal and Residual columns; three new graphs per series draw the data with the trend, the seasonal
+part and the residuals. Checked against numpy (`tools/decompose-ref.py`, `crates/calc/tests/decompose_reference.rs`)
+to 1e-10. STL (loess) decomposition, trend extrapolation to the ends and stationarity tests are not built.
+
+## 41 Stationarity tests, ADF and KPSS (T372, Origin 2024b Time Series Analysis app; not measured)
+
+Origin's Time Series Analysis app (2024b Pro) is not part of Origin 2016, so this is Sheaf's own, with the conventions
+of statsmodels' `adfuller` and `kpss` (nlags "legacy"). Statistics > Stationarity Tests (ADF, KPSS)...
+(`Tool::Stationarity`, `sheaf analyze stationarity --y COL[,COL..] [--adf-terms constant|trend|none] [--adf-lags P]
+[--kpss-null level|trend] [--kpss-lags L]`): every chosen column is a series of its own, in row order, complete in the
+chosen rows.
+
+- **ADF**: the least-squares regression of `dy_t` on `y_{t-1}`, `p` lagged differences and the chosen deterministic
+  terms (a constant; a constant and time counted from 1 in the regression sample; or neither); the statistic is the t
+  value of the `y_{t-1}` coefficient. Without `--adf-lags`, the orders `0..=maxlag` (`maxlag = ceil(12 (n/100)^(1/4))`,
+  at most `n/2 - k - 1`) are fitted on one common sample and the smallest AIC (`-2 lnL + 2k`) wins; the chosen order is
+  then fitted on all the points it allows. Critical values at 1, 5 and 10 % are MacKinnon's (2010) asymptotic ones:
+  -3.43035, -2.86154, -2.56677 (constant); -3.95877, -3.41049, -3.12705 (trend); -2.56574, -1.94100, -1.61682
+  (none). No p-value is computed.
+- **KPSS**: the residuals of `y` on a constant (level) or a constant and time (trend), `eta = sum S_t^2 / (n^2 s^2)`
+  with partial sums `S_t` and the Bartlett-weighted long-run variance on `l = ceil(12 (n/100)^(1/4))` lags unless
+  given. The probability is interpolated linearly in Kwiatkowski et al.'s (1992) table (level 0.347, 0.463, 0.574,
+  0.739; trend 0.119, 0.146, 0.176, 0.216 at 10, 5, 2.5, 1 %) and held at 0.1 and 0.01 beyond it.
+
+The result sheet `StationarityN` has an ADF and a KPSS row per column (Statistic, Lags, Points, Critical 1%, 5%, 10%,
+Prob); the notes give the 5 % decisions. The statistics, lag choices and table probabilities are checked against numpy
+(`tools/stationarity-ref.py`, `crates/calc/tests/stationarity_reference.rs`) to 1e-9; the published critical values
+are quoted, not checked here (neither statsmodels nor the tables are available locally). ADF p-values (MacKinnon's
+response surfaces), finite-sample critical values, the Phillips-Perron test and automatic KPSS bandwidths are not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

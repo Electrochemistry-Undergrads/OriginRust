@@ -2717,6 +2717,9 @@ pub enum AnalyzeTool {
         /// Confidence level of the limits of the mean.
         #[arg(long, default_value_t = 0.95)]
         level: f64,
+        /// Percentiles in percent (comma separated, for example 5,95): one column each, P5, P95, ...
+        #[arg(long, value_delimiter = ',')]
+        percentiles: Vec<f64>,
     },
     /// t-test: each column against a hypothesized mean (one-sample), two columns against each other
     /// (two-sample, equal variances unless --unequal) or two columns as pairs. The result goes to a
@@ -2903,6 +2906,38 @@ pub enum AnalyzeTool {
         /// Write the table to this file (CSV or text, by extension).
         #[arg(long)]
         export: Option<std::path::PathBuf>,
+    },
+    /// Acceptance sampling by attributes (T369): the single sampling plan with the smallest sample that
+    /// meets both risks at the AQL and LTPD, or a plan given with --n and --c, with its OC curve; with --lot
+    /// also AOQ, AOQL and ATI. Needs no data file. Fractions defective are given as fractions (0.01 is 1 %).
+    Acceptance {
+        /// Acceptable quality level.
+        #[arg(long, default_value_t = 0.01)]
+        aql: f64,
+        /// Lot tolerance percent defective, as a fraction.
+        #[arg(long, default_value_t = 0.05)]
+        ltpd: f64,
+        /// Producer's risk.
+        #[arg(long, default_value_t = 0.05)]
+        alpha: f64,
+        /// Consumer's risk.
+        #[arg(long, default_value_t = 0.10)]
+        beta: f64,
+        /// Evaluate this sample size (with --c) instead of designing a plan.
+        #[arg(long, requires = "c")]
+        n: Option<u64>,
+        /// The acceptance number of the plan given with --n.
+        #[arg(long, requires = "n")]
+        c: Option<u64>,
+        /// Lot size, for AOQ, AOQL and ATI.
+        #[arg(long)]
+        lot: Option<u64>,
+        /// Write the OC curve table to this file (CSV or text, by extension).
+        #[arg(long)]
+        export: Option<std::path::PathBuf>,
+        /// Save the project (the Acceptance Sampling book and its OC graph) to this file.
+        #[arg(long)]
+        save: Option<std::path::PathBuf>,
     },
     /// Two-way ANOVA. Indexed data (default): --y FACTOR_A,FACTOR_B,DATA names three columns, the first two
     /// holding the levels (text or numbers) of each row. With --raw every --y column is one cell of the
@@ -3414,6 +3449,39 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Stationarity tests: the augmented Dickey-Fuller statistic (MacKinnon asymptotic critical values) and the KPSS
+    /// statistic with its table probability, for each --y column.
+    Stationarity {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// ADF deterministic terms: constant, trend or none.
+        #[arg(long, default_value = "constant")]
+        adf_terms: String,
+        /// ADF lagged differences (default: chosen by AIC).
+        #[arg(long)]
+        adf_lags: Option<usize>,
+        /// KPSS null hypothesis: level or trend.
+        #[arg(long, default_value = "level")]
+        kpss_null: String,
+        /// KPSS autocovariance lags (default ceil(12 (n/100)^(1/4))).
+        #[arg(long)]
+        kpss_lags: Option<usize>,
+    },
+    /// Seasonal decomposition: trend (centred moving average), seasonal indices and residual of each --y column,
+    /// additive or multiplicative, with graphs.
+    Decompose {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Points per season (12 for monthly data with a yearly pattern).
+        #[arg(long, default_value_t = 12)]
+        period: usize,
+        /// additive or multiplicative.
+        #[arg(long, default_value = "additive")]
+        model: String,
+        /// Do not make the graphs.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Autocorrelation: ACF (Bartlett bounds), PACF and Ljung-Box Q per lag of each --y column, with ACF and PACF
     /// graphs.
     Acf {
@@ -3426,6 +3494,42 @@ pub enum AnalyzeTool {
         #[arg(long, default_value_t = 95.0)]
         confidence: f64,
         /// Do not make the graphs.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// Distribution overview of right-censored life data: --y TIME,CENSOR; a Weibull, lognormal, exponential or
+    /// normal maximum likelihood fit, and the probability, density, survival and hazard graphs.
+    Lifedist {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// weibull, lognormal, exponential or normal.
+        #[arg(long, default_value = "weibull")]
+        distribution: String,
+        /// The value of the censor column that marks a censored case.
+        #[arg(long, default_value = "1")]
+        censor: String,
+        /// Do not make the graphs.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// Stability study (ICH Q1E): --y TIME,RESPONSE[,BATCH]; per-batch lines, poolability tests and the shelf life
+    /// where a confidence bound of the mean meets a specification limit, with a graph.
+    Stability {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Lower specification limit.
+        #[arg(long)]
+        lsl: Option<f64>,
+        /// Upper specification limit.
+        #[arg(long)]
+        usl: Option<f64>,
+        /// Confidence level of the bounds, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        confidence: f64,
+        /// Significance level of the poolability tests.
+        #[arg(long, default_value_t = 0.25)]
+        alpha: f64,
+        /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,
     },

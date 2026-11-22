@@ -1264,15 +1264,23 @@ Nested styles, literal blocks and glyph decorations follow the existing text rul
 Sheaf counts the layer's saved plots in order, including hidden ones. It uses the same
 representative line or symbol color as its axis color-following control. Index zero and
 missing plot slots leave the text in its enclosing color. The slot and fallback behavior are
-Sheaf choices. This applies to free labels, ordinary legends and Cartesian axis titles.
+Sheaf choices. This applies to free labels, ordinary legends, Cartesian axis titles and
+point labels sourced from worksheet columns.
 Graph exports and the legend and title editors' scene previews use the same rendering.
 A shared-frame legend resolves the
 color from its owning layer even when its text names a plot in a different layer. For example,
 `\l(2.1) \cp1(%(2.1))` draws the sample and name of the second layer's first plot and
 colors the name with the owning layer's first plot. A title shared by touching Cartesian
-panels uses the plot color from the panel that draws the title. Point labels, specialized
+panels uses the plot color from the panel that draws the title. Specialized
 axis titles, the parallel coordinates group legend and the standalone free-label editor
 preview remain open.
+
+**Worksheet-sourced point labels (T58).** Origin documents escape sequences for text plotted
+from a Label column. Sheaf interprets the existing inline formatting escapes for point labels
+that read a worksheet column, including nested styles, scripts, literal spans and plot color.
+The frame and White Out use the width of the rendered runs with the existing height and
+padding rules. Text that produces no runs draws no frame. Generated X, Y, XY and row-number
+labels use their existing number formatting. [Origin escape sequences](https://docs.originlab.com/origin-help/escape-sequences/)
 
 ### 7.12 Reusable Custom RGB wells (T58/T59, documented contract)
 
@@ -6548,6 +6556,15 @@ Probed with twelve (X, Y) points selected as A(X), B(Y).
     rule (1.5 IQR, outliers drawn as small crosses). The scatter dots are 4 pt circles, and the scatter's
     axes keep Sheaf's usual end margins.
   - The .opj writer saves the margins as scatter plots of their values, with a warning.
+- **Grouped marginal plots (T373, Origin 2021b; Sheaf's layout, not measured):** `sheaf plot -t
+  marginal-histograms|marginal-box-charts -y Y --group G` splits the rows by the values of G into a `Grouped`
+  sheet (as `--group` with XY templates, 17.10) and plots one scatter per group in the palette's colours
+  (`Project::plot_marginal_groups`). Each margin gets a histogram per group in the group's colour, half
+  transparent with an outline in the colour, so overlapping bars stay visible (each group binned on its own),
+  or a box per group side by side at positions 1, 2, ... (`PlotDecor::marginal_slot`; the box margins then span
+  0.5 to k + 0.5). The Y axis title is the Y column's name (and units), not the first group's value; this
+  applies to every `--group` plot with one Y column. The menu items still take one Y column (no group column
+  in the window yet).
 
 ## 33. QC (X bar R) chart: Plot > Statistics > QC (X bar R) Chart (T111, measured 2026-11-16, Origin 2016)
 

@@ -587,6 +587,8 @@ pub enum Action {
     /// Edit > Go to... (Ctrl+G) in a workbook.
     GoToCell(WindowId),
     /// Statistics > Power and Sample Size > a test.
+    /// Statistics > Acceptance Sampling...: its window (T369).
+    AcceptanceSampling,
     Power(sheaf_core::analysis::PowerKind),
     /// Edit > Find in Sheets... in this workbook.
     FindInSheets(WindowId),

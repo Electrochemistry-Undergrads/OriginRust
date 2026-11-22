@@ -5742,6 +5742,59 @@ fn the_statistics_menu_makes_a_manhattan_plot() {
     assert_eq!(h.state().doc.undo_label(), Some("Manhattan plot"));
 }
 
+/// Statistics > Survival Analysis > Distribution Overview Plot... (T366): time and censor columns give the fit and
+/// four graphs; one undo step.
+#[test]
+fn the_survival_menu_makes_a_distribution_overview() {
+    let data = csv_file("lifedist", "life", "id,t,c\n1,2,0\n2,4,0\n3,6,1\n4,8,0\n5,9,1\n");
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - life.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Survival Analysis", "Distribution Overview Plot..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Censoring value"));
+    click(&mut h, "Exponential");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
+    let (sheet, theta) = result_column(&h, "Parameter 1");
+    assert!(sheet.starts_with("LifeDist"), "{sheet}");
+    assert!((theta[0] - 29.0 / 3.0).abs() < 1e-12, "{theta:?}");
+    let (_, failures) = result_column(&h, "Failures");
+    assert_eq!(failures, [3.0]);
+    assert_eq!(project(&h).graphs().count(), graphs_before + 4);
+    assert_eq!(h.state().doc.undo_label(), Some("Distribution overview"));
+}
+
+/// Statistics > Stability Study... (T368): time, response and batch columns give per-batch rows, the shelf life and a
+/// graph; one undo step.
+#[test]
+fn the_statistics_menu_runs_a_stability_study() {
+    let mut text = String::from("id,t,assay,batch\n");
+    let mut id = 0;
+    for b in [1, 2] {
+        for (i, t) in [0.0, 3.0, 6.0, 9.0, 12.0].iter().enumerate() {
+            id += 1;
+            let wobble = if i % 2 == 0 { 0.1 } else { -0.1 } * f64::from(b);
+            text.push_str(&format!("{id},{t},{},{b}\n", 100.0 - 0.5 * t + wobble));
+        }
+    }
+    let data = csv_file("stability", "stab", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - stab.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Stability Study..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Poolability significance level"));
+    click(&mut h, "Lower specification limit");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
+    let (sheet, n) = result_column(&h, "N");
+    assert!(sheet.starts_with("Stability"), "{sheet}");
+    assert_eq!(n, [5.0, 5.0, 10.0]);
+    let (_, life) = result_column(&h, "Shelf life");
+    assert!(life[2] > 5.0 && life[2] < 10.0, "the line meets 95 at 10: {life:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Stability study"));
+}
+
 /// Statistics > Process Capability... (T365): an upper limit only gives CPU = Cpk and no Cp; one undo step, a graph.
 #[test]
 fn the_statistics_menu_computes_process_capability() {
@@ -5785,6 +5838,55 @@ fn the_statistics_menu_makes_a_rare_event_chart() {
     assert!((cl[0] - 5.0 * 2f64.ln()).abs() < 1e-12, "{cl:?}");
     assert_eq!(project(&h).graphs().count(), graphs_before + 1);
     assert_eq!(h.state().doc.undo_label(), Some("Rare event chart"));
+}
+
+/// Statistics > Stationarity Tests (ADF, KPSS)... (T372): an ADF and a KPSS row in a new sheet, one undo step.
+#[test]
+fn the_statistics_menu_runs_stationarity_tests() {
+    let mut text = String::from("t,walk\n");
+    let (mut st, mut y) = (7u64, 0.0);
+    for i in 0..150 {
+        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        y += (st >> 11) as f64 / (1u64 << 53) as f64 - 0.5;
+        text.push_str(&format!("{i},{y}\n"));
+    }
+    let data = csv_file("stationarity", "ts", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - ts.csv");
+    menu_path(&mut h, &["Statistics", "Stationarity Tests (ADF, KPSS)..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "KPSS null hypothesis"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
+    let (sheet, crit) = result_column(&h, "Critical 5%");
+    assert!(sheet.starts_with("Stationarity"), "{sheet}");
+    assert_eq!(crit, [-2.86154, 0.463]);
+    assert_eq!(h.state().doc.undo_label(), Some("Stationarity tests"));
+}
+
+/// Statistics > Seasonal Decomposition... (T370): the seasonal indices, three graphs, one undo step.
+#[test]
+fn the_statistics_menu_decomposes_a_series() {
+    let pattern = [1.0, -2.0, 0.5, 0.5];
+    let mut text = String::from("t,v\n");
+    for i in 0..16 {
+        text.push_str(&format!("{i},{}\n", 3.0 + 0.5 * f64::from(i) + pattern[i as usize % 4]));
+    }
+    let data = csv_file("decompose", "ts", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - ts.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Seasonal Decomposition..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Period (points per season)"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_some(), "16 points are too few for the default period 12");
+    h.state_mut().analysis.as_mut().unwrap().set_decompose_period(4);
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
+    let (sheet, idx) = result_column(&h, "Seasonal index");
+    assert!(sheet.starts_with("Decompose"), "{sheet}");
+    assert!((idx[1] + 2.0).abs() < 1e-12, "{idx:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 3);
+    assert_eq!(h.state().doc.undo_label(), Some("Seasonal decomposition"));
 }
 
 /// Statistics > Autocorrelation... (T363): one row per lag in a new sheet, the ACF and PACF graphs, one undo step.
@@ -7701,6 +7803,24 @@ fn power_and_sample_size_menu_opens_a_dialog_that_makes_a_workbook() {
     let r = h.state_mut().doc.apply("test", |p| p.power_analysis(&spec)).unwrap();
     assert_eq!(project(&h).workbooks().count(), books + 1);
     assert_eq!(r.new_sheet, Some(0));
+}
+
+#[test]
+fn acceptance_sampling_designs_a_plan_into_a_new_book_with_its_oc_graph() {
+    let mut h = start(vec![data_file("acceptance")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    menu_path(&mut h, &["Statistics", "Acceptance Sampling..."]);
+    assert!(h.state().acceptance.is_some(), "the window opened");
+    click(&mut h, "Lot size (AOQ, ATI)");
+    let (books, graphs) = (project(&h).workbooks().count(), project(&h).graphs().count());
+    click(&mut h, "OK");
+    assert!(h.state().acceptance.is_none(), "OK runs and closes");
+    assert_eq!((project(&h).workbooks().count(), project(&h).graphs().count()), (books + 1, graphs + 1));
+    let b = project(&h).workbooks().last().unwrap();
+    // AQL 1 %, LTPD 5 %, risks 5 % and 10 %: n 132, c 3 (scipy, tools/acceptance-ref.py).
+    assert_eq!(b.sheets[0].columns[1].numeric().unwrap()[..2], [132.0, 3.0]);
+    assert_eq!(b.sheets[1].columns.len(), 4);
+    assert_eq!(h.state().doc.undo_label(), Some("Acceptance sampling"));
 }
 
 #[test]

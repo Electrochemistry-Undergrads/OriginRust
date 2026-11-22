@@ -169,10 +169,18 @@ pub enum AnalysisKind {
     Manhattan,
     /// Statistics > Autocorrelation (T363; options in `multivariate_options.rs`).
     Acf,
+    /// Statistics > Seasonal Decomposition (T370; options in `multivariate_options.rs`).
+    Decompose,
+    /// Statistics > Stationarity Tests (T372; options in `multivariate_options.rs`).
+    Stationarity,
     /// Statistics > Rare Event Chart (G/T) (T364; options in `multivariate_options.rs`).
     RareChart,
     /// Statistics > Process Capability (T365; options in `multivariate_options.rs`).
     Capability,
+    /// Statistics > Stability Study (T368; options in `multivariate_options.rs`).
+    Stability,
+    /// Statistics > Survival Analysis > Distribution Overview Plot (T366; options in `multivariate_options.rs`).
+    LifeDist,
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (options in `multivariate_options.rs`).
     KaplanMeier,
     /// Statistics > Multivariate Analysis > K-Means Cluster Analysis (options in `multivariate_options.rs`).
@@ -314,8 +322,12 @@ impl AnalysisKind {
             AnalysisKind::TimePivot => "Time Series Pivot...",
             AnalysisKind::Manhattan => "Manhattan Plot...",
             AnalysisKind::Acf => "Autocorrelation...",
+            AnalysisKind::Decompose => "Seasonal Decomposition...",
+            AnalysisKind::Stationarity => "Stationarity Tests (ADF, KPSS)...",
             AnalysisKind::RareChart => "Rare Event Chart (G/T)...",
             AnalysisKind::Capability => "Process Capability...",
+            AnalysisKind::Stability => "Stability Study...",
+            AnalysisKind::LifeDist => "Distribution Overview Plot...",
             AnalysisKind::KaplanMeier => "Kaplan-Meier Estimator...",
             AnalysisKind::Kmeans => "K-Means Cluster Analysis...",
             AnalysisKind::Crosstab => "Cross Tabulation...",
@@ -416,8 +428,12 @@ impl AnalysisKind {
             "timepivot" => AnalysisKind::TimePivot,
             "manhattan" => AnalysisKind::Manhattan,
             "acf" => AnalysisKind::Acf,
+            "decompose" => AnalysisKind::Decompose,
+            "stationarity" => AnalysisKind::Stationarity,
             "rarechart" => AnalysisKind::RareChart,
             "capability" => AnalysisKind::Capability,
+            "stability" => AnalysisKind::Stability,
+            "lifedist" => AnalysisKind::LifeDist,
             "kaplanmeier" => AnalysisKind::KaplanMeier,
             "kmeans" => AnalysisKind::Kmeans,
             "crosstab" => AnalysisKind::Crosstab,
@@ -681,6 +697,8 @@ struct StatsOptions {
     listwise: bool,
     /// Statistics on Columns: which quantities to write.
     desc: StatisticsSpec,
+    /// Statistics on Columns: the Percentiles (%) box, numbers separated by spaces or commas (T244).
+    percentiles: String,
     /// Statistics on Rows: which quantities to add.
     rows: RowStatsSpec,
     /// Stem-and-leaf options (T275); the leaf unit comes from `stem_auto_unit` and `stem_unit`.
@@ -746,6 +764,7 @@ impl Default for StatsOptions {
             kendall: false,
             listwise: false,
             desc: StatisticsSpec::default(),
+            percentiles: String::new(),
             rows: RowStatsSpec::default(),
             stem: StemLeafOptions::default(),
             stem_auto_unit: true,
@@ -2296,8 +2315,12 @@ impl AnalysisDialog {
             | AnalysisKind::TimePivot
             | AnalysisKind::Manhattan
             | AnalysisKind::Acf
+            | AnalysisKind::Decompose
+            | AnalysisKind::Stationarity
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
+            | AnalysisKind::Stability
+            | AnalysisKind::LifeDist
             | AnalysisKind::KaplanMeier
             | AnalysisKind::Kmeans => self.multi.tool(self.kind)?,
             AnalysisKind::AverageCurves => self.curves.average_tool(),
@@ -2390,7 +2413,11 @@ impl AnalysisDialog {
                     peak_curves: false,
                 }),
             }),
-            AnalysisKind::Statistics => Tool::Statistics(self.stats.desc),
+            AnalysisKind::Statistics => {
+                let mut spec = self.stats.desc.clone();
+                spec.percentiles = parse_percentiles(&self.stats.percentiles)?;
+                Tool::Statistics(spec)
+            }
             AnalysisKind::TTest => Tool::TTest(TTestSpec {
                 kind: match self.stats.ttest {
                     0 => TTestKind::OneSample { mean: self.stats.mean },
@@ -3119,6 +3146,13 @@ impl AnalysisDialog {
                     ui.checkbox(&mut d.confidence_limits, "Confidence limits of the mean, level");
                     ui.add_enabled(d.confidence_limits, DragValue::new(&mut d.level).speed(0.001).range(0.5..=0.9999));
                 });
+                // T244: any percentiles, one result column each.
+                ui.horizontal(|ui| {
+                    let name = ui.label("Percentiles (%)");
+                    ui.add(egui::TextEdit::singleline(&mut self.stats.percentiles).desired_width(160.0))
+                        .labelled_by(name.id)
+                        .on_hover_text("For example 5 95 or 2.5, 97.5; empty for none");
+                });
             }
             AnalysisKind::TTest => {
                 let st = &mut self.stats;
@@ -3606,8 +3640,12 @@ impl AnalysisDialog {
             | AnalysisKind::TimePivot
             | AnalysisKind::Manhattan
             | AnalysisKind::Acf
+            | AnalysisKind::Decompose
+            | AnalysisKind::Stationarity
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
+            | AnalysisKind::Stability
+            | AnalysisKind::LifeDist
             | AnalysisKind::KaplanMeier
             | AnalysisKind::Kmeans => self.multi.options(ui, self.kind),
             AnalysisKind::DiscreteFreq => {
@@ -3696,6 +3734,12 @@ impl AnalysisDialog {
     #[cfg(test)]
     pub fn set_crossing_level(&mut self, level: f64) {
         self.level_crossing.level = level;
+    }
+
+    /// Sets the Seasonal Decomposition period as the window's field would (for tests).
+    #[cfg(test)]
+    pub fn set_decompose_period(&mut self, period: usize) {
+        self.multi.set_decompose_period(period);
     }
 
     /// Sets the Curve Translate shift as the dialog's field would (for tests).
@@ -3792,8 +3836,12 @@ impl AnalysisDialog {
             | AnalysisKind::TimePivot
             | AnalysisKind::Manhattan
             | AnalysisKind::Acf
+            | AnalysisKind::Decompose
+            | AnalysisKind::Stationarity
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
+            | AnalysisKind::Stability
+            | AnalysisKind::LifeDist
             | AnalysisKind::SubtractLine
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
@@ -3907,10 +3955,16 @@ impl AnalysisDialog {
                 "Summarize values per hour, day, week, month, quarter or year of their date-time"
             }
             AnalysisKind::Manhattan => "Show p-values along grouped positions, such as chromosomes, as -log10 p",
+            AnalysisKind::LifeDist => {
+                "Fit a life distribution to failure times with right-censored cases and see it four ways"
+            }
+            AnalysisKind::Stability => "Estimate a shelf life from batches measured over time (ICH Q1E)",
             AnalysisKind::Capability => {
                 "How well a process fits its specification limits: Cp, Cpk, Pp, Ppk and parts per million outside"
             }
             AnalysisKind::RareChart => "Chart the opportunities or the time between rare events against control limits",
+            AnalysisKind::Stationarity => "Test whether a series wanders (a unit root) or stays about a level or trend",
+            AnalysisKind::Decompose => "Split a series into a trend, a repeating seasonal pattern and what is left",
             AnalysisKind::Acf => {
                 "See how a series correlates with itself at increasing lags, and whether that is more than noise"
             }
@@ -4042,11 +4096,23 @@ impl AnalysisDialog {
             AnalysisKind::Roc => {
                 "Area under the curve with its standard error, the curve points and the best cut-off in a new sheet, and a graph"
             }
+            AnalysisKind::LifeDist => {
+                "The fitted parameters, log-likelihood, mean and median in a new sheet, and the probability, density, survival and hazard graphs"
+            }
+            AnalysisKind::Stability => {
+                "One row per batch (line and shelf life) and one for all batches (poolability) in a new sheet, and a graph of the data, fits, bounds and limits"
+            }
             AnalysisKind::Capability => {
                 "One row per column (indices, observed and expected PPM, fitted parameters) in a new sheet, and a histogram with the fitted curve and the limits"
             }
             AnalysisKind::RareChart => {
                 "One row per column (fitted distribution, center line, limits, points beyond) in a new sheet, and a chart per column"
+            }
+            AnalysisKind::Stationarity => {
+                "An ADF and a KPSS row per column (statistic, lags, critical values, probability) in a new sheet"
+            }
+            AnalysisKind::Decompose => {
+                "The seasonal indices in a new sheet with the trend, seasonal and residual columns, and three graphs"
             }
             AnalysisKind::Acf => {
                 "One row per lag (ACF with bounds, PACF, Ljung-Box Q and probability) in a new sheet, and the ACF and PACF graphs"
@@ -4903,5 +4969,28 @@ mod region_text_tests {
         assert_eq!(parse_regions("1:2; 3:4").unwrap(), [(1.0, 2.0), (3.0, 4.0)]);
         assert!(parse_regions("2-8").unwrap_err().contains("FROM:TO"));
         assert!(parse_regions("a:3").unwrap_err().contains("not a number"));
+    }
+}
+
+/// The Percentiles (%) box of Statistics on Columns (T244): numbers from 0 to 100 separated by spaces,
+/// commas or semicolons; empty for none.
+pub(crate) fn parse_percentiles(text: &str) -> Result<Vec<f64>, String> {
+    text.split(|c: char| c.is_whitespace() || c == ',' || c == ';')
+        .filter(|t| !t.is_empty())
+        .map(|t| match t.parse::<f64>() {
+            Ok(p) if (0.0..=100.0).contains(&p) => Ok(p),
+            _ => Err(format!("Percentiles: {t:?} is not a number from 0 to 100")),
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod percentile_tests {
+    #[test]
+    fn the_percentiles_box_takes_spaces_commas_and_semicolons() {
+        assert_eq!(super::parse_percentiles(" 5, 95;97.5 "), Ok(vec![5.0, 95.0, 97.5]));
+        assert_eq!(super::parse_percentiles(""), Ok(vec![]));
+        assert!(super::parse_percentiles("5 x").is_err());
+        assert!(super::parse_percentiles("120").is_err());
     }
 }

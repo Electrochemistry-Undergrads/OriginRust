@@ -12,11 +12,12 @@ use sheaf_core::layer_manage::{AlignEdge, ArrangeOptions, ArrangeOrder, LayerErr
 use sheaf_core::layers::NewLayerKind;
 use sheaf_core::{Document, Project, WindowId};
 
+mod axes;
 mod background;
+use axes::AxesDraft;
 use background::BackgroundDraft;
 
 const HINT: &str = "Use the Apply buttons on each tab to update your preview graph. Use the OK button to apply the changes in preview graph to source graph.";
-const NOT_YET: &str = "Not available in Sheaf yet";
 
 /// What the application should do after a frame of the window.
 pub enum Outcome {
@@ -88,6 +89,7 @@ pub struct LayerManagementDialog {
     link_y: ScaleLink,
     /// The layer whose link the Link tab shows (the first selected one when the tab was drawn).
     link_shown_for: Option<usize>,
+    axes: AxesDraft,
     background: BackgroundDraft,
     problem: Option<String>,
 }
@@ -130,6 +132,7 @@ impl LayerManagementDialog {
             link_x: ScaleLink::None,
             link_y: ScaleLink::None,
             link_shown_for: None,
+            axes: AxesDraft::default(),
             background: BackgroundDraft::default(),
             problem: None,
         })
@@ -145,6 +148,7 @@ impl LayerManagementDialog {
         match change(&mut self.work) {
             Ok(()) => {
                 self.history.push(before);
+                self.axes.invalidate();
                 self.problem = None;
             }
             Err(e) => self.problem = Some(e.to_string()),
@@ -155,6 +159,7 @@ impl LayerManagementDialog {
         if let Some(layers) = self.history.pop() {
             self.work.layers = layers;
             self.selected.retain(|&index| index < self.work.layers.len());
+            self.axes.invalidate();
             self.background.invalidate();
             self.problem = None;
         }
@@ -169,6 +174,7 @@ impl LayerManagementDialog {
             Some(g) if self.history.is_empty() && g.layers.len() != self.work.layers.len() => {
                 self.work = g.clone();
                 self.source_layers = g.layers.clone();
+                self.axes.invalidate();
                 self.background.invalidate();
                 self.selected.retain(|&i| i < self.work.layers.len());
             }
@@ -202,8 +208,8 @@ impl LayerManagementDialog {
                             Tab::Arrange => self.arrange_tab(ui, doc.project()),
                             Tab::SizePosition => self.size_tab(ui),
                             Tab::Link => self.link_tab(ui),
+                            Tab::Axes => self.axes_tab(ui),
                             Tab::Display => self.display_tab(ui),
-                            Tab::Axes => unavailable(ui),
                         }
                     });
                     ui.vertical(|ui| self.preview(ui));
@@ -569,6 +575,16 @@ impl LayerManagementDialog {
         }
     }
 
+    fn axes_tab(&mut self, ui: &mut egui::Ui) {
+        let selection = self.selection();
+        if let Some(changes) = self.axes.show(ui, &self.work, &selection) {
+            self.apply(|graph| {
+                axes::apply(graph, &selection, &changes);
+                Ok(())
+            });
+        }
+    }
+
     fn display_tab(&mut self, ui: &mut egui::Ui) {
         let selection = self.selection();
         if let Some(color) = self.background.show(ui, &self.work, &selection) {
@@ -616,13 +632,6 @@ impl LayerManagementDialog {
             );
         }
     }
-}
-
-fn unavailable(ui: &mut egui::Ui) {
-    ui.label(NOT_YET);
-    ui.add_enabled_ui(false, |ui| {
-        ui.checkbox(&mut false, "Options");
-    });
 }
 
 fn add_scale_combo(ui: &mut egui::Ui, name: &str, scale: &mut ScaleKind, linked: Option<ScaleKind>) {

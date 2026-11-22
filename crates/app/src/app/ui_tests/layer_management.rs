@@ -1,5 +1,5 @@
 use super::*;
-use sheaf_core::graph::{AxisSide, Frame, ScaleKind, ScaleLink};
+use sheaf_core::graph::{AxisSide, Frame, ScaleKind, ScaleLink, TickDirection};
 
 /// The sample project with Graph1 made of `layers` independent layers (copies of its first one).
 fn with_layers(tag: &str, layers: usize) -> Harness<'static, SheafApp> {
@@ -325,11 +325,92 @@ fn linking_layer_2_to_layer_1_keeps_its_place_and_shows_in_the_grid() {
 }
 
 #[test]
-fn the_axes_tab_is_disabled() {
-    let mut h = with_layers("lm-tabs", 2);
+fn axes_apply_only_the_changed_settings_to_selected_layers() {
+    let mut h = with_layers("lm-axes", 3);
+    let id = graph(&h).id;
+    h.state_mut().doc.apply("Different axis settings", |p| {
+        let layers = &mut p.graph_mut(id).unwrap().layers;
+        layers[0].y_axis.scale = ScaleKind::Ln;
+        layers[0].y_axis.show_title = true;
+        layers[2].y_axis.show_title = false;
+        for layer in layers {
+            layer.x_axis.show_title = true;
+            layer.x_axis.show_opposite = false;
+        }
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
     open(&mut h);
     click(&mut h, "Axes");
-    assert!(h.query_by_label("Not available in Sheaf yet").is_some());
+    assert!(h.get_by_label("Apply").accesskit_node().is_disabled());
+    click(&mut h, "Layer1");
+    click(&mut h, "Layer3");
+    let _ = h.get(By::new().role(egui::accesskit::Role::ComboBox).label("Y Scale").value("Mixed"));
+    click(&mut h, "Y Scale");
+    click(&mut h, "Log10");
+    click(&mut h, "Apply");
+    assert_eq!(project(&h), &before);
+    click(&mut h, "Undo");
+    let _ = h.get(By::new().role(egui::accesskit::Role::ComboBox).label("Y Scale").value("Mixed"));
+    assert!(h.get_by_label("Undo").accesskit_node().is_disabled());
+
+    for (control, value) in [("Y Scale", "Log10"), ("X Axis Edge", "Top"), ("X Tick", "Out")] {
+        click(&mut h, control);
+        click(&mut h, value);
+    }
+    click(&mut h, "X Title");
+    click(&mut h, "X Opposite Line");
+    click(&mut h, "X Formula");
+    h.event(egui::Event::Text("2*x".into()));
+    settle(&mut h);
+    click(&mut h, "Apply");
+    assert_eq!(project(&h), &before);
+    click(&mut h, "OK");
+    let layers = &graph(&h).layers;
+    let original = &before.graph(id).unwrap().layers;
+    assert_eq!(layers[1], original[1]);
+    for i in [0, 2] {
+        let (x, y) = (&layers[i].x_axis, &layers[i].y_axis);
+        assert_eq!(x.side, AxisSide::Opposite);
+        assert_eq!((x.major_tick, x.minor_tick), (TickDirection::Out, TickDirection::Out));
+        assert!(!x.show_title && x.show_opposite);
+        assert_eq!(x.tick_label_formula, "2*x");
+        assert_eq!(y.scale, ScaleKind::Log10);
+        assert_eq!(y.show_title, original[i].y_axis.show_title);
+    }
+    assert!(sheaf_plot::render_svg(project(&h), id).unwrap().contains("<svg"));
+    menu(&mut h, "Edit", "Undo Layer Management");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn axes_keep_straight_links_and_cancel_the_preview() {
+    let mut h = with_layers("lm-axes-linked", 1);
+    let id = graph(&h).id;
+    h.state_mut().doc.apply("Add linked layer", |p| {
+        let graph = p.graph_mut(id).unwrap();
+        graph.layers[0].x_axis.scale = ScaleKind::Log10;
+        graph.add_layer(sheaf_core::layers::NewLayerKind::RightY, 0).unwrap();
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    for button in ["Cancel", "OK"] {
+        open(&mut h);
+        click(&mut h, "Axes");
+        click(&mut h, "Layer2");
+        assert!(h.get_by_label("X Scale").accesskit_node().is_disabled());
+        click(&mut h, "Y Scale");
+        click(&mut h, "Log2");
+        click(&mut h, "Apply");
+        assert_eq!(project(&h), &before);
+        click(&mut h, button);
+        assert!(h.state().layer_management.is_none());
+    }
+    let layers = &graph(&h).layers;
+    assert_eq!(layers[1].link, before.graph(id).unwrap().layers[1].link);
+    assert_eq!(layers[0].x_axis.scale, ScaleKind::Log10);
+    assert_eq!(layers[1].x_axis.scale, ScaleKind::Log10);
+    assert_eq!(layers[1].y_axis.scale, ScaleKind::Log2);
 }
 
 fn background_choice(h: &mut Harness<'static, SheafApp>, name: &str) {

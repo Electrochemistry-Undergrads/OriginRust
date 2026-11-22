@@ -21,7 +21,7 @@ outputs or UI behavior.
 | Named cells and ranges | 2022 | Assign a reusable name to a cell or selected range and reference it in calculations. | [2022][o22] |
 | Cell notes | 2022 | Done (T36). Attach a comment to an individual data cell, show an indicator and read the note in place. | [2022][o22] |
 | Worksheet frozen panes | 2023 | Done (T34). Keep selected data rows or columns visible while scrolling the data area. | [2023][o23] |
-| Time Series Pivot | 2025 | Aggregate timestamped records by calendar intervals and a second period grouping, including fiscal calendars and custom intervals. | [2025][o25] |
+| Time Series Pivot | 2025 | Calendar periods done (T358: Worksheet > Time Series Pivot, minute to year, six statistics); fiscal calendars, custom intervals and a second grouping remain. Aggregate timestamped records by calendar intervals and a second period grouping, including fiscal calendars and custom intervals. | [2025][o25] |
 | Project Browser | 2025b | Search a project-wide list of sheets, columns, graphs and folders, preview matches and apply metadata edits to multiple selections. | [2025b][o25b] |
 | Window Switcher | 2025b | Done (T42). Cycle through open child windows with keyboard shortcuts and previews. | [2025b][o25b] |
 | Interactive formula references | 2025b | Insert a cell, column or range into the formula being edited by clicking or dragging in the sheet. | [2025b][o25b] |

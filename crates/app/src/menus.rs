@@ -1868,6 +1868,7 @@ fn worksheet_menu() -> Vec<Entry> {
         item("Clear Worksheet...", Cmd::ClearWorksheet),
         item("Split Columns...", Cmd::Reshape(ReshapeKind::Split)),
         item("Pivot Table...", Cmd::PivotTable),
+        item("Time Series Pivot...", Cmd::Analyze(AnalysisKind::TimePivot)),
         item("Reduce Rows...", Cmd::Reshape(ReshapeKind::Reduce)),
         item("Transpose...", Cmd::Reshape(ReshapeKind::Transpose)),
         item("Stack Columns...", Cmd::Reshape(ReshapeKind::Stack)),

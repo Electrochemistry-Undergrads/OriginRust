@@ -1447,6 +1447,24 @@ fn quantile_regression_runs_from_the_command_line() {
     assert!(!ok && err.contains("between 0 and 1"), "{err}");
 }
 
+/// Time series pivot (spec `statistics.md` section 32, T358).
+#[test]
+fn time_series_pivot_runs_from_the_command_line() {
+    let dir = scratch("timepivot");
+    let path = dir.join("tp.csv");
+    std::fs::write(&path, "t,v\n2026-01-05 09:00,1\n2026-01-05 17:00,3\n2026-01-06 08:00,10\n2026-02-01 12:00,7\n")
+        .unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "timepivot", file, "--y", "v", "--period", "month", "--stat", "sum"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("2026-01") && out.contains("2026-02") && out.contains("Sum of"), "{out}");
+    assert!(out.contains("2 period(s)") && out.contains("TimePivot1"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "timepivot", file, "--y", "v"]);
+    assert!(ok && out.contains("3 period(s)"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "timepivot", file, "--y", "v", "--period", "fortnight"]);
+    assert!(!ok && err.contains("--period"), "{err}");
+}
+
 /// Binned scatter (spec `statistics.md` section 31, T356).
 #[test]
 fn binned_scatter_runs_from_the_command_line() {

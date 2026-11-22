@@ -96,7 +96,10 @@ impl Preview {
             }
         });
         if let Some(layers) = self.layers {
-            ui.label(format!("{} source graphs, {layers} layers", key.options.sources.len()));
+            let count = key.options.sources.len();
+            let source = if count == 1 { "source graph" } else { "source graphs" };
+            let layer = if layers == 1 { "layer" } else { "layers" };
+            ui.label(format!("{count} {source}, {layers} {layer}"));
         }
         self.key = Some(key);
     }

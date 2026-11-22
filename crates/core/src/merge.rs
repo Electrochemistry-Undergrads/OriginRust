@@ -35,6 +35,8 @@ pub enum MergeTextScale {
 pub struct MergeOptions {
     /// The graphs to merge, in the order they fill the cells (row by row from the top left).
     pub sources: Vec<WindowId>,
+    /// Allow a single source for the Active Page, Open and Include Embedded dialog choices.
+    pub allow_single_source: bool,
     /// Rows and columns of the grid; `None` lets them follow the number of graphs (Origin's
     /// automatic choice, see [`auto_grid`]).
     pub rows: Option<usize>,
@@ -77,6 +79,7 @@ impl Default for MergeOptions {
     fn default() -> Self {
         MergeOptions {
             sources: Vec::new(),
+            allow_single_source: false,
             rows: None,
             cols: None,
             h_gap: 5.0,
@@ -103,6 +106,8 @@ impl Default for MergeOptions {
 pub enum MergeError {
     #[error("Merge Graph Windows needs at least two graphs")]
     TooFew,
+    #[error("Choose a source graph to merge")]
+    NoSource,
     #[error("window {0:?} is not a graph of this project")]
     NotAGraph(WindowId),
     #[error("the graph '{0}' is listed more than once")]
@@ -227,7 +232,10 @@ fn scale_text(layer: &mut crate::graph::Layer, factor: f64) {
 
 /// Builds the merged graph (id and name not yet set) from the source graphs, in cell order.
 pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, MergeError> {
-    if sources.len() < 2 {
+    if sources.is_empty() && opts.allow_single_source {
+        return Err(MergeError::NoSource);
+    }
+    if sources.len() < 2 && !opts.allow_single_source {
         return Err(MergeError::TooFew);
     }
     if let MergeTextScale::Fixed(f) = opts.text_scale

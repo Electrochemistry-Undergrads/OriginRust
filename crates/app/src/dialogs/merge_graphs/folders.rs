@@ -4,7 +4,7 @@
 use crate::panels::explorer;
 use sheaf_core::project::Folder;
 use sheaf_core::{Project, WindowId};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 pub(crate) struct FolderScope {
     path: Vec<usize>,
@@ -56,5 +56,19 @@ impl FolderScope {
         let mut out = Vec::new();
         visit(project, &mut self.path.clone(), recursive, &by_folder, &mut out);
         out
+    }
+
+    pub(super) fn graphs_with_embedded(&self, project: &Project) -> Vec<WindowId> {
+        if !self.valid(project) {
+            return Vec::new();
+        }
+        let embedded = project
+            .workbooks()
+            .filter(|book| explorer::home(&project.root, book.id) == self.path)
+            .flat_map(|book| &book.sheets)
+            .flat_map(|sheet| sheet.graph_sheet.into_iter().chain(sheet.cell_graphs.iter().map(|cell| cell.graph)))
+            .filter(|&id| project.graph(id).is_some());
+        let mut seen = HashSet::new();
+        embedded.chain(self.graphs(project, false)).filter(|id| seen.insert(*id)).collect()
     }
 }

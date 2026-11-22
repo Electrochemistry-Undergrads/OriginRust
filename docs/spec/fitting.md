@@ -82,6 +82,21 @@ Gaussian has parameters (y0, xc, A, w) with `A` the area and `w` the FWHM: its g
 
 A test fits every such function (every name with a guess, 57 cases; a test also fails if a function with a guess has no case) from its guess on noisy generated data and requires the true parameters back within a few percent. The whole table runs at y scales 1, 1e-3 and 1e-6: offsets, amplitudes and areas and the noise are multiplied by the scale. Power (`y = x^A`) has no prefactor, so there its x range is scaled by `scale^(1/A)`, which scales y by `scale`. Poly is fitted with its six highest coefficients held at zero and ExpGrow1 with `x0` held at 0 (it trades off against `A1`). The phases of ExpDec2, ExpDec3 and ExpAssoc are compared ordered by time constant, because the fit may swap them.
 
+### Auto Parameter Initialization (T331)
+
+Origin's NLFit window has a tick "Auto Parameter Initialization" above its parameter table, on by
+default: the function's initialization code (for Gauss `xc = peak_pos(...)`, `w *= 0.85`, in the
+file's `[Parameters Initialization]` section) sets the starting values. Off, the fit starts from the
+values in the table. Origin 2016's built-in files hold no starting values (`GAUSS.FDF` has names,
+meanings and bounds only), and what its table shows with the tick off was **not measured** (the table is
+a grid the dialog probe cannot read; `nlbegin` takes no such option, `re-workspace/scratch/fit-autoinit/`).
+
+Sheaf (`FitRequest::auto_init`, default on): off, a nonlinear fit (curve or surface) skips the guess and
+starts from the typed values, else the function's own (an FDF numeric initial value, a few library
+functions' non-degenerate values, otherwise 1, as Simulate Curve starts). Window: the tick above the
+Parameters table (not for the closed-form linear and polynomial fits); command line `sheaf fit
+--no-auto-init`.
+
 ### FDF import
 
 `fdf::parse_fdf(text)` reads the sections of an FDF file (see `fdf-format.md`) and `to_fit_function()` builds the function. The formula body is translated: comments and `#` lines dropped, `double t = ...;` temporaries substituted as parenthesised text, `if / else if / else` turned into nested conditionals (a branch that leaves `y` unassigned makes the file untranslatable), `log` to `ln` in the formula (natural logarithm in the Origin C formula text; no function in the library uses `log` there) and to `log10` in a derived-parameter line (those are LabTalk, where `log(100)` is 2: checked in Origin), `fabs` to `abs`, `PI` to `pi`, `NANUM` to `na()`. A formula that calls a routine the expression language lacks (`nlf_voigt`, `gamcdf`, ...) fails with a message when the function is built. Bounds are enforced only if the file's state flag is ON. A numeric initial value with `(F)` makes the parameter fixed. Starting-value code is not executed.

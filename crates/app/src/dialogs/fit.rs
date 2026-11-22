@@ -212,6 +212,8 @@ pub struct FitDialog {
     band_level: f64,
     max_iterations: usize,
     algorithm: Algorithm,
+    /// Origin's "Auto Parameter Initialization" (on; T331).
+    auto_init: bool,
     /// The tolerance is 10^-digits (Origin's default 1e-9 is 9 digits).
     tolerance_digits: u32,
     row_mode: RowMode,
@@ -357,6 +359,7 @@ impl FitDialog {
             band_level: 95.0,
             max_iterations: 400,
             algorithm: Algorithm::LevenbergMarquardt,
+            auto_init: true,
             tolerance_digits: 9,
             row_mode: RowMode::All,
             rows_in_sheet,
@@ -670,6 +673,7 @@ impl FitDialog {
         r.band_level = self.band_level / 100.0;
         r.max_iterations = self.max_iterations;
         r.algorithm = self.algorithm;
+        r.auto_init = self.auto_init;
         r.curve_points = self.curve_points;
         r.curve_range = self.curve_custom.then_some((self.curve_from, self.curve_to));
         r.add_to_graphs = self.plot_on_graph;
@@ -1172,6 +1176,13 @@ impl FitDialog {
         }
         // A linear fit can fix the intercept and the slope; a polynomial only the intercept.
         let closed_form = matches!(self.kind, FitKind::Linear | FitKind::LinearXError | FitKind::Polynomial);
+        if !closed_form {
+            // Origin's tick above the parameter table (T331): off, a fit starts from the values
+            // typed here, else the function's own starting values, instead of the guess.
+            ui.checkbox(&mut self.auto_init, "Auto Parameter Initialization").on_hover_text(
+                "Start from values guessed from the data. Off: start from the typed values, else the function's own (1 for most).",
+            );
+        }
         let global = self.global();
         egui::Grid::new("fit_params").num_columns(if global { 4 } else { 3 }).spacing([14.0, 4.0]).striped(true).show(
             ui,
@@ -1792,6 +1803,9 @@ mod tests {
         assert_eq!(r.algorithm, Algorithm::LevenbergMarquardt);
         d.algorithm = Algorithm::Simplex;
         assert_eq!(d.request().unwrap().algorithm, Algorithm::Simplex);
+        assert!(d.request().unwrap().auto_init, "Auto Parameter Initialization is on by default");
+        d.auto_init = false;
+        assert!(!d.request().unwrap().auto_init);
 
         // Switching to a straight line keeps only fixed values.
         let (p, book, y) = project();

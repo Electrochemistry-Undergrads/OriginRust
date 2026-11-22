@@ -125,7 +125,11 @@ impl Project {
                 "the X, Y and Z columns of a surface fit must be three different columns".into(),
             ));
         }
-        let func = surface_function(&request.model, &request.params)?;
+        let mut func = surface_function(&request.model, &request.params)?;
+        if !request.auto_init {
+            func.init = None;
+            func.init2 = None;
+        }
 
         // ----- gather the input (no changes yet) ----------------------------------------
         let (book, sheet, z_col) = self.locate(z_id).ok_or(AnalysisError::NoSuchColumn(z_id))?;
@@ -190,6 +194,7 @@ impl Project {
             tolerance: request.tolerance,
             scale_errors: request.scale_errors,
             algorithm: request.algorithm,
+            auto_init: request.auto_init,
         };
         let ys = pick(&y_all);
         let source_label = format!("{}, {}, {}", column_label(x_col), column_label(y_col), column_label(z_col));

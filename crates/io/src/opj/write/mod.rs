@@ -366,6 +366,13 @@ impl Writer {
                 self.windows.extend(tail::formula_annotation(&sheet.columns[i].short_name, text));
             }
         }
+        // T343: the sheet's long name, as Origin 2016 stores it: an annotation named "__LONGNAME"
+        // with the same header as a formula annotation and the text in its first block.
+        let long = sheet.long_name.trim();
+        if !long.is_empty() {
+            let text = self.label_text(long, "sheet long name")?;
+            self.windows.extend(tail::formula_annotation("__LONGNAME", &encode_cp1252(&text).0));
+        }
         self.windows.extend(framed(&[]));
         // Origin stores every column of a sheet with the same number of cells, 32 for a new sheet
         let longest = sheet.columns.iter().map(Column::len).max().unwrap_or(0);
@@ -389,7 +396,8 @@ impl Writer {
             })
             .collect();
         self.notes.filters_dropped += usize::from(sheet.filter.is_some());
-        self.notes.sheet_names_dropped += usize::from(!sheet.long_name.is_empty() || !sheet.tab_label.is_default());
+        // T343: the long name is written; only a tab that shows another name is lost.
+        self.notes.sheet_names_dropped += usize::from(!sheet.tab_label.is_default());
         self.notes.sheet_comments_dropped += usize::from(!sheet.comments.is_empty());
         self.notes.plot_exclusions_dropped += usize::from(sheet.exclude_from_plotting);
         self.notes.sheet_views_dropped += usize::from(!sheet.view.is_default());
@@ -892,7 +900,7 @@ impl Writer {
         }
         if n.sheet_names_dropped > 0 {
             warnings.push(format!(
-                "{} sheet(s) have a long name or show it on their tab, which the project file written here does not hold; Origin shows their short names.",
+                "{} sheet(s) show their long name on their tab, which the project file written here does not hold; Origin shows their short names on the tabs.",
                 n.sheet_names_dropped
             ));
         }

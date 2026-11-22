@@ -303,6 +303,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T330](T330-opj-group-subject.md) | Group and Subject columns read from and written to .opj (roles 7 and 8), measured in Origin 2016 | S | done 2026-11-21 |
 | [T334](T334-opj-width.md) | Column widths read from and written to .opj (0x4A in tenths), measured in Origin 2016 | S | done 2026-11-21 |
 | [T337](T337-opj-numfmt.md) | Numeric display formats read from and written to .opj (0x1E/0x1F, Numeric cells), measured in Origin 2016 | S | done 2026-11-21 |
+| [T343](T343-opj-sheet-longname.md) | Sheet long names read from and written to .opj (__LONGNAME annotation), measured in Origin 2016 | S | done 2026-11-21 |
 | [T311](T311-qqplot-measure.md) | Measure Q-Q Plot against Origin (expected values, y = x line ends, band) | S | done 2026-11-21 (statistics 16.2a) |
 | [T312](T312-import-nonnum.md) | Text import: text in a numeric column read as text, stop, new sheet or new columns (NonNum), as Origin 2016 | S | done 2026-11-21, measured |
 | [T313](T313-scatter-matrix-measure.md) | Measure Scatter Matrix against Origin (page, grid, tick labels, titles, symbols, tick step) | S | done 2026-11-21 (graphing 35) |

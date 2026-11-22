@@ -285,6 +285,12 @@ data sets of a sheet carry a `@<n>` suffix for every sheet but, usually, the fir
 sheet index (section 3.1), so the link must be made through the column records. The column order
 within a sheet is the order of its column records, not the data-set order [obs].
 
+A sheet's long name (`wks.longname$`) is an annotation of the sheet's layer named `__LONGNAME`: the
+same 131-byte header as a column-formula annotation (name at `0x46`, text size at `0x23`), the text
+with its NUL in the first block (at least 20 bytes), and two empty blocks (measured in Origin 2016 on
+2026-11-21, T343, `re-workspace/scratch/t339`). The reader takes it as `Worksheet::long_name`; the writer
+writes it, and Origin read "Scan QZ" back from a file Sheaf wrote [obs].
+
 ## 5. Annotations and other layer contents
 
 ### 5.1 Annotation [obs]

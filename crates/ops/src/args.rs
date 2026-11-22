@@ -3414,6 +3414,21 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Autocorrelation: ACF (Bartlett bounds), PACF and Ljung-Box Q per lag of each --y column, with ACF and PACF
+    /// graphs.
+    Acf {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The largest lag (default min(10 log10 n, n - 1)).
+        #[arg(long)]
+        lags: Option<usize>,
+        /// Confidence level of the bounds, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        confidence: f64,
+        /// Do not make the graphs.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Time series pivot: each --y column summarized per calendar period of its date-time X column.
     Timepivot {
         #[command(flatten)]

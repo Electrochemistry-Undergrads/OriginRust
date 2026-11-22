@@ -2118,6 +2118,7 @@ fn statistics_menu() -> Vec<Entry> {
         item("&Quantile Regression...", Cmd::Analyze(AnalysisKind::QuantReg)),
         item("&Change Point Analysis...", Cmd::Analyze(AnalysisKind::ChangePoint)),
         item("M&anhattan Plot...", Cmd::Analyze(AnalysisKind::Manhattan)),
+        item("Au&tocorrelation...", Cmd::Analyze(AnalysisKind::Acf)),
         sep(),
         mru_submenu("Most Recently Used Items", MruMenu::Statistics),
     ]

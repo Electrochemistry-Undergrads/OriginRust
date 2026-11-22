@@ -1860,6 +1860,22 @@ cumulative positions and `-log10 p`; a new graph draws each group as its own sca
 in turn) and the significance line at `-log10(threshold)` (default 5e-8) across the data. Alternating two colours,
 group labels at the group centres and point labels for the top hits are not built.
 
+## 34 Autocorrelation (T363, Origin 2024b Time Series Analysis app; not measured)
+
+Origin's Time Series Analysis app (2024b Pro) is not part of Origin 2016, so this is Sheaf's own, with the textbook
+formulas (Box, Jenkins and Reinsel). Statistics > Autocorrelation... (`Tool::Acf`, `sheaf analyze acf --y COL[,COL..]
+[--lags N] [--confidence 95] [--no-graph]`): every chosen column is a series of its own, in row order, missing values
+left out. With `n` values and mean `m`, the ACF at lag `k` is `r_k = sum_{t<n-k} (x_t - m)(x_{t+k} - m) / sum (x_t -
+m)^2`; its bounds are `+-z * sqrt((1 + 2 sum_{j<k} r_j^2) / n)` (Bartlett), `z` the normal quantile of the confidence
+level. The PACF comes from the Durbin-Levinson recursion on the `r_k`, bounds `+-z / sqrt n`. The Ljung-Box statistic
+is `Q_k = n (n + 2) sum_{j<=k} r_j^2 / (n - j)` with its chi-square upper probability on `k` degrees of freedom. The
+largest lag defaults to `min(floor(10 log10 n), n - 1)` and must be less than `n`; a constant series is refused. The
+result sheet `ACFN` has one row per series and lag (Lag, ACF, ACF standard error, ACF lower and upper bound, PACF, PACF
+bound, Ljung-Box Q, Prob>Q) and the graph data; two new graphs draw the ACF and the PACF as columns per lag with the
+bounds as lines. Checked against an independent numpy/scipy computation (PACF by solving each lag's Yule-Walker
+equations; `tools/acf-ref.py`, `crates/calc/tests/acf_reference.rs`) to 1e-10. Stationarity tests, trend and
+seasonal decomposition and ARIMA are not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

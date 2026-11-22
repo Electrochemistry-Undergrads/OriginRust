@@ -114,7 +114,7 @@ impl std::fmt::Display for StabilityError {
 impl std::error::Error for StabilityError {}
 
 /// Inverts a symmetric positive definite matrix by Gauss-Jordan elimination with partial pivoting.
-fn invert(a: &[Vec<f64>]) -> Option<Vec<Vec<f64>>> {
+pub(crate) fn invert(a: &[Vec<f64>]) -> Option<Vec<Vec<f64>>> {
     let n = a.len();
     let mut m: Vec<Vec<f64>> = a
         .iter()

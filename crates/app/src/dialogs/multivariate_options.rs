@@ -4,9 +4,9 @@
 use super::analysis::AnalysisKind;
 use eframe::egui;
 use sheaf_core::analysis::{
-    AcfSpec, BinRule, BinScatterSpec, ChangeKind, ChangePenalty, ChangePointSpec, GLimits, KaplanMeierSpec, KmeansSpec,
-    ManhattanSpec, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec, RareChartKind, RareChartSpec, RocSpec, TDistribution,
-    TimePivotSpec, Tool,
+    AcfSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty, ChangePointSpec, GLimits,
+    KaplanMeierSpec, KmeansSpec, ManhattanSpec, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec, RareChartKind,
+    RareChartSpec, RocSpec, TDistribution, TimePivotSpec, Tool,
 };
 
 /// What the windows keep between frames.
@@ -21,6 +21,7 @@ pub struct MultiOptions {
     manhattan: ManhattanSpec,
     acf: AcfSpec,
     rare: RareChartSpec,
+    capability: CapabilitySpec,
     /// The value of the Manual penalty while another penalty is chosen.
     manual_penalty: Option<f64>,
     /// The quantiles as typed (comma separated), read when the tool runs.
@@ -69,6 +70,13 @@ impl MultiOptions {
                 Ok(Tool::QuantReg(QuantRegSpec { quantiles, ..self.quantreg.clone() }))
             }
             AnalysisKind::TimePivot => Ok(Tool::TimePivot(self.timepivot)),
+            AnalysisKind::Capability => {
+                let c = &self.capability;
+                if c.lsl.is_none() && c.usl.is_none() {
+                    return Err("give a lower or an upper specification limit".to_string());
+                }
+                Ok(Tool::Capability(*c))
+            }
             AnalysisKind::RareChart => {
                 if self.rare.sigma.is_nan() || self.rare.sigma <= 0.0 {
                     return Err("the number of sigmas must be above 0".to_string());
@@ -189,6 +197,36 @@ impl MultiOptions {
                 ui.weak(
                     "The exact solution of each quantile (the sum of check losses is as small as it can be); no standard errors.",
                 );
+            }
+            AnalysisKind::Capability => {
+                ui.label("Every chosen column is a process of its own, in row order; missing values are left out.");
+                let s = &mut self.capability;
+                for (name, limit, start) in
+                    [("Lower specification limit", &mut s.lsl, 0.0), ("Upper specification limit", &mut s.usl, 1.0)]
+                {
+                    ui.horizontal(|ui| {
+                        let mut on = limit.is_some();
+                        if ui.checkbox(&mut on, name).changed() {
+                            *limit = on.then_some(start);
+                        }
+                        if let Some(v) = limit {
+                            ui.add(egui::DragValue::new(v).speed(0.01));
+                        }
+                    });
+                }
+                ui.horizontal(|ui| {
+                    ui.label("Model");
+                    ui.radio_value(&mut s.model, CapModel::Normal, "Normal");
+                    ui.radio_value(&mut s.model, CapModel::Lognormal, "Lognormal");
+                    ui.radio_value(&mut s.model, CapModel::Weibull, "Weibull");
+                });
+                if s.model == CapModel::Normal {
+                    ui.horizontal(|ui| {
+                        ui.label("Subgroup size (1: moving ranges)");
+                        ui.add(egui::DragValue::new(&mut s.subgroup).range(1..=10));
+                    });
+                }
+                ui.checkbox(&mut s.graph, "Histogram with the fitted curve and the limits");
             }
             AnalysisKind::RareChart => {
                 ui.label("Every chosen column is a chart of its own, in row order; missing values are left out.");

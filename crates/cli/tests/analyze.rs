@@ -1485,6 +1485,26 @@ fn manhattan_plot_runs_from_the_command_line() {
     assert!(ok && out.contains("3 groups"), "the group from the X column: {err} {out}");
 }
 
+/// Process capability (spec `statistics.md` section 36, T365).
+#[test]
+fn process_capability_runs_from_the_command_line() {
+    let dir = scratch("capability");
+    let path = dir.join("cap.csv");
+    std::fs::write(&path, "i,v\n1,10\n2,12\n3,11\n4,13\n5,12\n6,14\n").unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "capability", file, "--y", "v", "--lsl", "5", "--usl", "20"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("6 values, mean 12") && out.contains("moving range of 2") && out.contains("Capability1"),
+        "{out}"
+    );
+    let (ok, out, err) =
+        sheaf(&["analyze", "capability", file, "--y", "v", "--usl", "20", "--model", "weibull", "--no-graph"]);
+    assert!(ok && out.contains("Weibull fit") && out.contains("percentile method"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "capability", file, "--y", "v"]);
+    assert!(!ok && err.contains("specification limit"), "{err}");
+}
+
 /// Rare event charts (spec `statistics.md` section 35, T364).
 #[test]
 fn rare_event_charts_run_from_the_command_line() {

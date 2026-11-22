@@ -580,6 +580,15 @@ Per entry: `\L(n) %(n)`. `\L(n)` (also `\l`) draws the sample of plot n; `\L(2.1
 | @W, @WS | workbook, worksheet name |
 | @GF | graph filter condition |
 | @V, @WT | cell access (point-by-point legend) |
+**Measured in Origin 2016 (T339, 2026-11-21, `re-workspace/scratch/t338`):** `string s$ = "%(1,@opt)"` on a graph window
+whose plot 1 is column B (long name Volt, units mV, comment cmt; book long name BookLong) and plot 2 column C (no
+labels): no option `cmt` / `C` (comment's first line, else long name, else short name); `@LL` and `@L` Volt / empty;
+`@LU` mV / empty; `@LC` cmt / empty (not the fallback the table above says); `@LS` and `@C` B / C; `@LG` and `@U`
+`Volt (mV)` / C; `@LA` Volt / C; `@LN` `cmt (mV)` / C; `@LM` cmt / C; `@D` Book1_B; `@W` Book1; `@WS` Sheet1; `@WL`
+BookLong; `@LP` empty; `@R` `[Book1]Sheet1!Col("Volt")[1:5]` / `[Book1]Sheet1!Col(C)[1:5]`; `@X`, `@LD` (without a
+number), `@N` `###`. These are the axis-title answers (T281) plus `@LM` and `@R`. Sheaf draws them in legends and
+free labels with `%(n, option)` (`layout::legend_name`); the combined form `%(1,@(...))` is not read.
+
 Combine: `%(1,@(@LL(@LU)))` = long name followed by (units). Other legend kinds: categorical, box-chart components, point-by-point. Legend symbols not tied to a plot: `\L(O Shape:=..., ...)` (P2) [W:legend-substitution-notation].
 
 ### 6.2 Which label is used; translation modes

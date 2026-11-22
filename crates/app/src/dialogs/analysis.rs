@@ -11,8 +11,8 @@ use super::frame::{
 };
 use eframe::egui::{self, DragValue, RichText};
 use sheaf_core::analysis::{
-    AlsOptions, BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline, LimitMode,
-    PeakBaselineSpec, PeakChainSpec, PeakFitSpec, PeakShape,
+    AlsOptions, Apodization, BaselineStat, ChainBaseline, ChainOptions, FindMethod, FindOptions, FitBaseline,
+    FsdOptions, LimitMode, PeakBaselineSpec, PeakChainSpec, PeakFitSpec, PeakShape,
 };
 use sheaf_core::analysis::{
     AnovaSpec, BinSize, CorrelationSpec, CrosstabSpec, DiscSort, DiscreteFreqSpec, FreqOptions, FriedmanSpec,
@@ -178,6 +178,8 @@ pub enum AnalysisKind {
     TranslateX,
     TranslateY,
     MedianFilter,
+    /// Fourier self-deconvolution (T341).
+    Fsd,
 }
 
 impl AnalysisKind {
@@ -304,6 +306,7 @@ impl AnalysisKind {
             AnalysisKind::TranslateX => "Curve Translate X...",
             AnalysisKind::TranslateY => "Curve Translate Y...",
             AnalysisKind::MedianFilter => "Median Filter...",
+            AnalysisKind::Fsd => "Fourier Self-Deconvolution...",
         }
     }
 
@@ -397,6 +400,7 @@ impl AnalysisKind {
             "translate-x" => AnalysisKind::TranslateX,
             "translate-y" => AnalysisKind::TranslateY,
             "median-filter" => AnalysisKind::MedianFilter,
+            "fsd" => AnalysisKind::Fsd,
             _ => return None,
         })
     }
@@ -800,6 +804,8 @@ pub struct AnalysisDialog {
     integrate: IntegrateSpec,
     /// CV Charge's options (T296).
     cv: CvChargeSpec,
+    /// Fourier Self-Deconvolution's settings (T341).
+    fsd: FsdOptions,
     diff: DiffOptions,
     smooth_kind: SmoothKind,
     smooth_points: usize,
@@ -1207,6 +1213,26 @@ fn stft_options(ui: &mut egui::Ui, spec: &mut StftSpec) {
     ui.weak("Origin writes a matrix; Sheaf writes a frequency column and one column per segment.");
 }
 
+/// Fourier Self-Deconvolution's settings (T341, Sheaf's own window).
+fn fsd_options(ui: &mut egui::Ui, o: &mut FsdOptions) {
+    egui::Grid::new("fsd_options").num_columns(2).spacing([12.0, 5.0]).show(ui, |ui| {
+        ui.label("Band width (FWHM)");
+        ui.add(DragValue::new(&mut o.fwhm).speed(0.01).range(1e-12..=f64::MAX));
+        ui.end_row();
+        ui.label("Enhancement factor K");
+        ui.add(DragValue::new(&mut o.enhancement).speed(0.05).range(1.01..=20.0));
+        ui.end_row();
+        ui.label("Apodization");
+        egui::ComboBox::from_id_salt("fsd_apodization").selected_text(o.apodization.label()).show_ui(ui, |ui| {
+            for a in Apodization::ALL {
+                ui.selectable_value(&mut o.apodization, a, a.label());
+            }
+        });
+        ui.end_row();
+    });
+    ui.weak("X must be evenly spaced. Bands of the given width come out about K times narrower, with the same area.");
+}
+
 fn fft_options(ui: &mut egui::Ui, spec: &mut FftSpec) {
     let o = &mut spec.options;
     ui.horizontal(|ui| {
@@ -1490,6 +1516,7 @@ impl AnalysisDialog {
             x_to: x_hi,
             integrate: IntegrateSpec::default(),
             cv: CvChargeSpec::default(),
+            fsd: FsdOptions::default(),
             diff: DiffOptions::default(),
             smooth_kind: SmoothKind::SavitzkyGolay,
             smooth_points: 5,
@@ -2101,6 +2128,7 @@ impl AnalysisDialog {
             | AnalysisKind::TranslateX
             | AnalysisKind::TranslateY
             | AnalysisKind::MedianFilter => self.manip.tool(self.kind),
+            AnalysisKind::Fsd => Tool::Fsd(self.fsd),
             AnalysisKind::Differentiate => Tool::Differentiate(self.diff),
             AnalysisKind::DistFit | AnalysisKind::ProbPlot | AnalysisKind::QQPlot => self.dist.tool(self.kind)?,
             AnalysisKind::Pca | AnalysisKind::Roc | AnalysisKind::KaplanMeier | AnalysisKind::Kmeans => {
@@ -2499,6 +2527,7 @@ impl AnalysisDialog {
             | AnalysisKind::TranslateX
             | AnalysisKind::TranslateY
             | AnalysisKind::MedianFilter => self.manip.options(ui, self.kind),
+            AnalysisKind::Fsd => fsd_options(ui, &mut self.fsd),
             AnalysisKind::SubtractRef => {
                 self.reference_options(ui);
                 ui.weak("The reference is interpolated onto the X values of the data.");
@@ -3585,6 +3614,7 @@ impl AnalysisDialog {
             | AnalysisKind::TranslateX
             | AnalysisKind::TranslateY
             | AnalysisKind::MedianFilter
+            | AnalysisKind::Fsd
             | AnalysisKind::DistFit
             | AnalysisKind::ProbPlot
             | AnalysisKind::QQPlot => "",
@@ -3701,6 +3731,7 @@ impl AnalysisDialog {
             AnalysisKind::TranslateX => "Shift the input curves horizontally",
             AnalysisKind::TranslateY => "Shift the input curves vertically",
             AnalysisKind::MedianFilter => "Replace each point by the median of the points around it",
+            AnalysisKind::Fsd => "Narrow the bands of a spectrum K times so that overlapping peaks separate",
         }
     }
 
@@ -3826,7 +3857,7 @@ impl AnalysisDialog {
             }
             AnalysisKind::XyzArea => "The surface area with the points and triangles used in a new sheet",
             AnalysisKind::Correlation => "The matrices of coefficients and p-values in a new sheet",
-            AnalysisKind::SubtractLine | AnalysisKind::TranslateY | AnalysisKind::MedianFilter => {
+            AnalysisKind::SubtractLine | AnalysisKind::TranslateY | AnalysisKind::MedianFilter | AnalysisKind::Fsd => {
                 "New columns beside the input"
             }
             AnalysisKind::ReduceDup | AnalysisKind::ReduceX | AnalysisKind::TranslateX => {
@@ -3941,6 +3972,7 @@ impl AnalysisDialog {
                 | AnalysisKind::SubtractLine
                 | AnalysisKind::TranslateY
                 | AnalysisKind::MedianFilter
+                | AnalysisKind::Fsd
         )
     }
 

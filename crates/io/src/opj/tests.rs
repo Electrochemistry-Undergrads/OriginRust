@@ -305,6 +305,47 @@ fn collect(dir: &Path, recurse: bool, out: &mut Vec<std::path::PathBuf>) {
     }
 }
 
+/// Origin 2016's own file with a sheet long name (T343; `re-workspace/scratch/t339/s.opj`, local only).
+#[test]
+fn local_origin_file_gives_the_sheet_long_name() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../re-workspace/scratch/t339/s.opj");
+    if !path.exists() {
+        eprintln!("opj: {} not found; skipping", path.display());
+        return;
+    }
+    let project = read_opj(&path).unwrap().into_project();
+    let b = project.workbooks().find(|b| b.sheets.iter().any(|s| s.name == "Short1")).expect("the book");
+    let s = b.sheets.iter().find(|s| s.name == "Short1").unwrap();
+    assert_eq!(s.long_name, "QZLongSheet");
+}
+
+/// Origin 2016's own file with numeric displays (T337; `re-workspace/scratch/t337/f.opj`, local only).
+#[test]
+fn local_origin_file_gives_the_numeric_displays() {
+    use sheaf_core::format::NumberFormat as F;
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../re-workspace/scratch/t337/f.opj");
+    if !path.exists() {
+        eprintln!("opj: {} not found; skipping", path.display());
+        return;
+    }
+    let project = read_opj(&path).unwrap().into_project();
+    let b = project.workbooks().find(|b| b.name == "Book1").unwrap();
+    let formats: Vec<F> = b.sheets[0].columns.iter().map(|c| c.format).collect();
+    assert_eq!(
+        formats,
+        [
+            F::General,
+            F::Decimal(3),
+            F::Scientific(2),
+            F::EngineeringAuto,
+            F::Significant(4),
+            F::DecimalGrouped(1),
+            F::ScientificAuto,
+            F::Decimal(0)
+        ]
+    );
+}
+
 /// Origin 2016's own files with sampling intervals (T303; `re-workspace/scratch/t303`, local only):
 /// s1 sets B's interval to 3.5 / 0.125 beside the X column A, s2 sets 0 / 2 on B of a sheet without X.
 #[test]

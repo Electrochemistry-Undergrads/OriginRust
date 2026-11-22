@@ -268,6 +268,26 @@ pub(super) fn run(
                 });
             }
         }
+        Tool::Fsd(spec) => {
+            for inp in inputs {
+                let v = calc::fourier_self_deconvolution(inp.xs(), inp.ys(), spec)
+                    .map_err(|e| AnalysisError::BadOption(format!("column {}: {e}", inp.short)))?;
+                beside.push(NewColumn {
+                    after: inp.id,
+                    long_name: format!("FSD of {}", inp.name),
+                    units: inp.units.clone(),
+                    comments: format!(
+                        "{} Fourier self-deconvolution, FWHM {}, K {}, {} apodization{}",
+                        inp.short,
+                        spec.fwhm,
+                        spec.enhancement,
+                        spec.apodization.label().to_lowercase(),
+                        inp.range_note()
+                    ),
+                    data: inp.aligned(&v),
+                });
+            }
+        }
         _ => unreachable!("only the data manipulation tools are sent here"),
     }
     Ok(())
@@ -380,6 +400,34 @@ mod tests {
             let spec = TranslateSpec { axis: TranslateAxis::Y, shift: Shift::PointTo { at: 1.0, to } };
             assert!(p.analyze(&req(y, Tool::Translate(spec))).is_err(), "to = {to}");
         }
+    }
+
+    /// T341: Fourier self-deconvolution writes the narrowed curve beside the input.
+    #[test]
+    fn fourier_self_deconvolution_separates_two_bands() {
+        let mut p = Project::new();
+        let book = p.add_workbook("Book1");
+        let x: Vec<f64> = (0..512).map(|i| f64::from(i) * 0.05).collect();
+        let l = |v: f64, c: f64| 1.0 / ((v - c) * (v - c) + 1.0);
+        let yv: Vec<f64> = x.iter().map(|&v| l(v, 12.3) + l(v, 13.3)).collect();
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(x.clone())).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(yv)).unwrap();
+        let spec = FsdOptions { fwhm: 2.0, enhancement: 3.0, ..Default::default() };
+        let r = p.analyze(&req(y, Tool::Fsd(spec))).unwrap();
+        let out = p.column(r.new_columns[0]).unwrap();
+        assert_eq!(out.long_name, format!("FSD of {}", p.column(y).unwrap().display_name()));
+        assert!(out.comments.contains("FWHM 2, K 3"), "{}", out.comments);
+        let v = out.numeric().unwrap();
+        let tops = (1..v.len() - 1).filter(|&i| v[i] > v[i - 1] && v[i] >= v[i + 1] && v[i] > 0.5).count();
+        assert_eq!(tops, 2);
+        // Uneven X is refused with the column named.
+        p.column_mut(y).unwrap().data = ColumnData::numeric(vec![1.0; 512]);
+        let xs = p.workbook(book).unwrap().sheets[0].columns[0].id;
+        let mut uneven = x;
+        uneven[10] += 0.01;
+        p.column_mut(xs).unwrap().data = ColumnData::numeric(uneven);
+        let e = p.analyze(&req(y, Tool::Fsd(spec))).unwrap_err().to_string();
+        assert!(e.contains("evenly spaced"), "{e}");
     }
 
     #[test]

@@ -260,6 +260,8 @@ pub(super) struct ColumnSpec<'a> {
     pub index: usize,
     /// The column's own width in characters (T334), written in tenths at `0x4A`.
     pub width: Option<u16>,
+    /// A numeric display (T337): the value-type byte at `0x1E` and the digits byte at `0x1F`.
+    pub display: Option<(u8, u8)>,
     /// The number that ties the column to the recalculation records (0 for a column that takes
     /// no part in one; spec section 13.10).
     pub object_id: u16,
@@ -288,6 +290,10 @@ pub(super) fn column_record(c: &ColumnSpec) -> Vec<u8> {
     }
     put(&mut h, 0x23, &c.parent.to_le_bytes());
     put(&mut h, 0x25, &c.type_code.to_le_bytes());
+    if let Some((value_type, digits)) = c.display {
+        h[0x1e] = value_type;
+        h[0x1f] = digits;
+    }
     if c.index < 2 {
         h[0x4a] = 0x43;
     }

@@ -628,6 +628,14 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             };
             (target, Job::Tool(Tool::Translate(analysis::TranslateSpec { axis, shift })))
         }
+        AnalyzeTool::Fsd { target, fwhm, k, apodization } => {
+            let apodization = match apodization {
+                ApodizationKind::Boxcar => analysis::Apodization::Boxcar,
+                ApodizationKind::Triangle => analysis::Apodization::Triangle,
+                ApodizationKind::TriangleSquared => analysis::Apodization::TriangleSquared,
+            };
+            (target, Job::Tool(Tool::Fsd(analysis::FsdOptions { fwhm, enhancement: k, apodization })))
+        }
         AnalyzeTool::MedianFilter { target, points, edge } => {
             let edge = match edge {
                 MedianEdgeKind::Shrink => analysis::MedianEdge::Shrink,

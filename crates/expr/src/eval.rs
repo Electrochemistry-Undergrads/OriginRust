@@ -34,6 +34,13 @@ pub trait Host {
         true
     }
 
+    /// Whether a column is called `name` (its short name), so that an unknown variable of that
+    /// name can say how to read the column (`col(A)`; T338: Origin 2016 has no bare column names
+    /// either). The default knows no columns.
+    fn names_column(&self, _name: &str) -> bool {
+        false
+    }
+
     /// The column's values as one slice, if the host stores them that way. This is the fast
     /// path for column formulas; return `None` to have [`cell`](Host::cell) called per value.
     fn column_data(&self, _col: &ColumnRef) -> Option<&[f64]> {
@@ -422,6 +429,12 @@ fn build_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node) -> Result<C<
         Kind::Var { name, pos } => match host.variable(name) {
             Some(v) => C::Num(v),
             None if name == "i" => C::Row,
+            None if host.names_column(name) => {
+                return Err(ExprError::at(
+                    *pos,
+                    format!("unknown variable '{name}'; to read column {name}, write col({name})"),
+                ));
+            }
             None => return Err(ExprError::at(*pos, format!("unknown variable '{name}'"))),
         },
         Kind::Col { .. } => C::Col(build_col(host, n)?),

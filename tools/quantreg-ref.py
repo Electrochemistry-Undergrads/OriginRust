@@ -48,6 +48,7 @@ cases.append(("five_hundred", [x4], y4, True))
 
 taus = [0.1, 0.25, 0.5, 0.75, 0.9]
 print("// Made by tools/quantreg-ref.py (scipy.optimize.linprog, HiGHS). Do not edit.")
+print("#![allow(clippy::approx_constant)] // the x grids pass 3.14 and 6.28")
 print("pub struct Case {")
 print("    pub name: &'static str,")
 print("    pub xs: &'static [&'static [f64]],")

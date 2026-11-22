@@ -1,4 +1,5 @@
 // Made by tools/quantreg-ref.py (scipy.optimize.linprog, HiGHS). Do not edit.
+#![allow(clippy::approx_constant)] // the x grids pass 3.14 and 6.28
 pub struct Case {
     pub name: &'static str,
     pub xs: &'static [&'static [f64]],

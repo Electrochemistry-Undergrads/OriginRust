@@ -37,6 +37,7 @@ pub mod expsmooth;
 pub mod fft;
 pub mod fft2;
 pub mod fir;
+pub mod forest;
 pub mod freq;
 pub mod fsd;
 pub mod graph_summary;

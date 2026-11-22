@@ -6470,8 +6470,10 @@ probes in `re-workspace/scratch/t324`):**
 - **Sheaf internals:** plot kind `wind_rose` with `PlotDecor::wind_rose` (sectors, the band's speed range);
   templates `wind-rose-binned` and `wind-rose-raw`. The .opj writer saves the columns as scatter plots,
   with a warning.
-- **Left:** Origin's WindRose1 sheet, the Calm count and note, compass labels on the circle, the legend order
-  (fastest first), and the options window (sectors, Percent Frequency, Blowing To).
+- **Legend:** the fastest band (the last plot) first, as Origin's: the legend text is `\l(n) %(n)` down to
+  `\l(1) %(1)`.
+- **Left:** Origin's WindRose1 sheet, the Calm count and note, compass labels on the circle, and the options
+  window (sectors, Percent Frequency, Blowing To).
 
 ## 37. Smith chart: Plot > Specialized > Smith Chart (T115, 2026-11-16, **not measured**)
 

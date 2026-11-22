@@ -139,6 +139,10 @@ impl Project {
         }
         if let Some(g) = self.graph_mut(id) {
             g.long_name = name;
+            // Origin 2016 lists the fastest band (the last plot) first (measured, T324/T327).
+            let n = g.layers[0].plots.len();
+            g.layers[0].legend.text =
+                Some((1..=n).rev().map(|k| format!("\\l({k}) %({k})")).collect::<Vec<_>>().join("\n"));
             debug_assert!(matches!(g.layers[0].coords, Coords::Polar(_)));
         }
         Ok(id)
@@ -181,6 +185,8 @@ mod tests {
         assert_eq!(plots[0].label.as_deref(), Some("0 - 2"));
         assert_eq!(plots[6].label.as_deref(), Some(">= 12"));
         assert_eq!(plots[0].symbol.color, Color::BLACK, "Origin's first band colour");
+        let legend = graph.layers[0].legend.text.as_deref().unwrap_or_default();
+        assert!(legend.starts_with("\\l(7) %(7)\n") && legend.ends_with("\\l(1) %(1)"), "fastest band first: {legend}");
         let polar = graph.layers[0].coords.polar().unwrap();
         assert!(polar.clockwise && polar.zero_deg == 90.0, "north up, clockwise");
         let g = p.plot_columns(Template::WindRoseBinned, &[s, f]).unwrap();

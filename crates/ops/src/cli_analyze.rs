@@ -650,6 +650,10 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             baseline_points,
             baseline_goal,
             anchors,
+            als_asymmetric,
+            als_threshold,
+            als_smoothing,
+            als_iterations,
             limits,
             integrate,
             fit,
@@ -726,6 +730,16 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     }
                     (Some(PeakBaselineKind::Median), _) => {
                         analysis::ChainBaseline::ConstantStat(analysis::BaselineStat::Median)
+                    }
+                    (Some(PeakBaselineKind::Als), _) => {
+                        let o = analysis::AlsOptions {
+                            asymmetric: als_asymmetric,
+                            threshold: als_threshold,
+                            smoothing: als_smoothing,
+                            iterations: als_iterations,
+                        };
+                        o.check().map_err(anyhow::Error::msg)?;
+                        analysis::ChainBaseline::Als(o)
                     }
                     (Some(PeakBaselineKind::None) | None, None) => analysis::ChainBaseline::None,
                 };

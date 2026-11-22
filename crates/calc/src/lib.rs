@@ -81,7 +81,7 @@ pub use anova3::{
     Effect as ThreeWayEffect, EffectPower, Levene, MAX_THREE_WAY_LEVELS, ThreeWayAnova, ThreeWayError, ThreeWayTerms,
     anova_three_way,
 };
-pub use baseline::{BaselineMethod, subtract_baseline, subtract_constant, subtract_line};
+pub use baseline::{AlsOptions, BaselineMethod, als_baseline, subtract_baseline, subtract_constant, subtract_line};
 pub use bin2d::{AxisBins, AxisLayout, Bin, Bin2d, Bin2dOptions, Bin2dStat, axis_layout, bin2d};
 pub use coherence::{CoherenceOptions, CoherenceResult, CoherenceWindow, coherence, coherence_window};
 pub use correlation::{Corr, CorrKind, CorrMatrix, correlation, correlation_matrix};

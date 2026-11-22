@@ -33,11 +33,13 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 
 pub use sheaf_calc::{
+    AlsOptions, BaselineStat, ChainBaseline, ChainOptions, CrossingIndex, FindMethod, FindOptions, LimitMode,
+};
+pub use sheaf_calc::{
     AreaType, Boundary, CurveOp, DiffOptions, Extrapolation, InterpMethod, LocalSpan, NormalizeMethod, PeakDirection,
     PeakFilter, PeakOptions, RefStat, SmoothMethod, SmoothOptions, SplineBoundary, StemLeafOptions,
 };
 pub use sheaf_calc::{AxisBins, Bin2dOptions, Bin2dStat, BinSize, DiscSort, FreqOptions, MeansComparison, Tail};
-pub use sheaf_calc::{BaselineStat, ChainBaseline, ChainOptions, CrossingIndex, FindMethod, FindOptions, LimitMode};
 pub use sheaf_calc::{
     CoherenceOptions, CoherenceWindow, DecimateFilter, DecimateOptions, FftFilterOptions, FftFilterType, FftOptions,
     FftWindow, IfftOptions, PowerNorm, TraceMethod, WindowCorrection,

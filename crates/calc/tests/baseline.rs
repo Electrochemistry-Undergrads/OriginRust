@@ -180,3 +180,32 @@ fn anchors_follow_the_interpolation_tools() {
         }
     }
 }
+
+/// Asymmetric Least Squares (T318): a peak on a sloping line leaves the line as the baseline.
+#[test]
+fn als_follows_the_background_under_a_peak() {
+    use sheaf_calc::{AlsOptions, als_baseline};
+    let x: Vec<f64> = (0..401).map(|i| i as f64 * 0.05).collect();
+    let line = |x: f64| 0.2 + 0.01 * x;
+    let y: Vec<f64> = x.iter().map(|&x| line(x) + (-(x - 10.0).powi(2) / 0.5).exp()).collect();
+    let smooth = AlsOptions { smoothing: 6.0, ..AlsOptions::default() };
+    let b = als_baseline(&y, &smooth);
+    let worst = x.iter().zip(&b).map(|(&x, b)| (b - line(x)).abs()).fold(0.0, f64::max);
+    assert!(worst < 0.02, "largest distance from the line {worst}");
+    // At the peak the baseline stays near the line, far below the peak's top (1.3).
+    assert!((b[200] - line(10.0)).abs() < 0.02, "{}", b[200]);
+    // Negative peaks with a factor near 1.
+    let neg: Vec<f64> = y.iter().zip(&x).map(|(v, &x)| 2.0 * line(x) - v).collect();
+    let bn = als_baseline(&neg, &AlsOptions { asymmetric: 0.999, ..smooth });
+    assert!((bn[200] - line(10.0)).abs() < 0.02, "{}", bn[200]);
+    // One pass with every weight 1 is the plain smoother: a straight line comes back unchanged.
+    let straight: Vec<f64> = x.iter().map(|&x| line(x)).collect();
+    let s = als_baseline(&straight, &AlsOptions { iterations: 1, ..AlsOptions::default() });
+    assert!(s.iter().zip(&straight).all(|(a, b)| (a - b).abs() < 1e-9));
+    // A missing value gets no weight; too short data comes back as it is.
+    let mut gap = y.clone();
+    gap[5] = f64::NAN;
+    assert!(als_baseline(&gap, &AlsOptions::default())[5].is_finite());
+    assert_eq!(als_baseline(&[1.0, 2.0], &AlsOptions::default()), vec![1.0, 2.0]);
+    assert!(AlsOptions { asymmetric: 1.0, ..AlsOptions::default() }.check().is_err());
+}

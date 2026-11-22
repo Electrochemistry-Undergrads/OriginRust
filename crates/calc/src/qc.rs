@@ -25,6 +25,11 @@ const CONSTANTS: [(f64, f64, f64, f64); 9] = [
 pub const MIN_GROUP: usize = 2;
 pub const MAX_GROUP: usize = 10;
 
+/// The control chart constant d2 (the mean range of `n` standard normal values) for `n` = 2 to 10.
+pub fn d2(n: usize) -> Option<f64> {
+    (MIN_GROUP..=MAX_GROUP).contains(&n).then(|| CONSTANTS[n - MIN_GROUP].0)
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct XbarR {
     pub means: Vec<f64>,

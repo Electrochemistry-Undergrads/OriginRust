@@ -33,9 +33,9 @@ Statuses: ✓ done, ◐ partial, ✗ missing. Priorities: P0 is the owner's dail
 
 | | Done ✓ | Partial ◐ | Missing ✗ | Total |
 |---|---|---|---|---|
-| All rows | 58 | 198 | 5 | 261 |
+| All rows | 58 | 197 | 5 | 260 |
 | P0 | 37 | 66 | 0 | 103 |
-| P1 and P2 together | 21 | 132 | 5 | 158 |
+| P1 and P2 together | 21 | 131 | 5 | 157 |
 
 By priority alone: 103 rows are P0, 86 are P1 and 63 are P2.
 
@@ -188,7 +188,7 @@ Cross-cutting findings:
 | Translate X or Y | cxt, vshift | Curve Translate X and Y (Data Manipulation, T23) | ◐ | Origin's in-place/copy choice not measured | P1 |
 | Level crossing and curve intersect | levelcrossing, intersect | Intersect window and `analyze intersect` (two curves, crossings and optional touching points); Level Crossing window and `analyze level-crossing` (measured, analysis-tools 14) | ◐ | intersect measured (2026-11-13, T322); its columns go to the end of the input sheet as Origin's (T322) | P1 |
 | Data reduction | reducerows, reducedup | Worksheet > Reduce Rows (T10), Reduce to Evenly Spaced X (Origin's reduce_ex: every N points, intervals, number of intervals, frequency, first point or Y mean, measured), Reduce Duplicate X Data (all eight methods, tolerance, counts, column names checked against Origin's reducedup) | ◐ | Reduce Rows layout not compared with Origin; reducedup adds its columns to the input sheet as Origin does (T321); no Reduce XY Data | P1 |
-| Sampling interval check | vinc | internal use only | ◐ | Set Sampling Interval's From X Column checks the X column's spacing and takes its start and step (workbook-model 13d, T228); no `vinc` command | P1 |
+| Sampling interval check | vinc | internal use only | ◐ | Set Sampling Interval's From X Column checks the X column's spacing and takes its start and step (workbook-model 13d, T228); the test is `vinc_check`'s, measured (T371) | no `vinc` command; From X Column uses 1e-6, not Origin's 0.05 | P1 |
 | Average multiple curves | avecurves | Average Multiple Curves window and `analyze average` with Origin's defaults (Full X Range, Auto points, curves continued past their ends), Same as Source X and Common X Range, Std Dev, Std Err, N, Minimum, Maximum; Recalculate Auto/Manual; measured (`analysis-curve-math.md` 4) | ◐ | no Custom X, Follow Curve Trace or Concatenate; a turning X is sorted as Origin does (T325, measured) | P1 |
 | Polygon area | polyarea | Polygon Area window and `analyze polygon-area`: area, signed area, centroid, perimeter | ◐ | measured (2026-11-13); Origin's polyarea writes only a number, Sheaf's result table is its own addition (T322) | P1 |
 | Cumulative sum | Mathematics | `cumsum()` in Set Column Values | ◐ | no Mathematics menu item | P1 |

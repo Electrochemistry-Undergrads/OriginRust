@@ -29,7 +29,8 @@ pub struct SamplingInterval {
     pub units: String,
 }
 
-/// What [`check_increment`] finds about a run of X values (Origin's `vinc`, T228).
+/// What [`check_increment`] finds about a run of X values (Origin's `vinc` and `vinc_check`, T228;
+/// measured in Origin 2016 by T371).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct IncrementCheck {
     /// The first value.
@@ -38,16 +39,25 @@ pub struct IncrementCheck {
     pub inc: f64,
     /// The largest difference between one step and the mean step.
     pub max_deviation: f64,
+    /// The sample standard deviation of the steps (`vinc`'s `sd`; 0 for a single step).
+    pub sd: f64,
     /// The steps are equal within the tolerance: `max_deviation <= tolerance * |inc|`.
     pub uniform: bool,
 }
 
-/// The default relative tolerance of [`check_increment`] (Sheaf's choice; Origin's was not measured).
+/// The relative tolerance Set Sampling Interval's From X Column uses: Sheaf's choice, far below Origin's
+/// default, because the interval then replaces the X values exactly.
 pub const INCREMENT_TOLERANCE: f64 = 1e-6;
 
-/// Checks whether `xs` are evenly spaced (Origin's `vinc`): the start, the mean step and the largest
-/// deviation of a step from it, and whether that deviation is within `tolerance` times the step. `None`
-/// with fewer than two values, a missing value, or a zero mean step.
+/// `vinc_check`'s default tolerance in Origin 2016 (measured, T371).
+pub const ORIGIN_TOLERANCE: f64 = 0.05;
+
+/// Checks whether `xs` are evenly spaced as Origin's `vinc_check` does (measured, T371): the mean step is
+/// (last - first) / (count - 1), and the run is even when no step differs from it by more than
+/// `tolerance` times its size (a relative test: steps 10, 10.4, 9.6 pass at 0.05 and fail at 0.039, as
+/// steps 0.1, 0.104, 0.096 do; the largest deviation counts, not the standard deviation). `None` with
+/// fewer than two values, a missing value (Origin reads a missing cell as about 0 instead), or a zero
+/// mean step.
 pub fn check_increment(xs: &[f64], tolerance: f64) -> Option<IncrementCheck> {
     if xs.len() < 2 || xs.iter().any(|x| !x.is_finite()) {
         return None;
@@ -58,7 +68,14 @@ pub fn check_increment(xs: &[f64], tolerance: f64) -> Option<IncrementCheck> {
         return None;
     }
     let max_deviation = xs.windows(2).map(|w| ((w[1] - w[0]) - inc).abs()).fold(0.0, f64::max);
-    Some(IncrementCheck { x0: first, inc, max_deviation, uniform: max_deviation <= tolerance * inc.abs() })
+    let steps = xs.len() - 1;
+    let sd = if steps < 2 {
+        0.0
+    } else {
+        let ss: f64 = xs.windows(2).map(|w| (w[1] - w[0] - inc).powi(2)).sum();
+        (ss / (steps - 1) as f64).sqrt()
+    };
+    Some(IncrementCheck { x0: first, inc, max_deviation, sd, uniform: max_deviation <= tolerance * inc.abs() })
 }
 
 impl SamplingInterval {
@@ -167,5 +184,29 @@ mod increment_tests {
         // Floating-point steps such as 0.1 still count as even.
         let xs: Vec<f64> = (0..50).map(|i| f64::from(i) * 0.1).collect();
         assert!(check_increment(&xs, INCREMENT_TOLERANCE).unwrap().uniform);
+    }
+
+    #[test]
+    fn vinc_and_vinc_check_match_origin() {
+        // Origin 2016, 2026-11-22 (T371, probes re-workspace/scratch/t371, local only).
+        let c = check_increment(&[0.0, 1.0, 2.04, 3.0], ORIGIN_TOLERANCE).unwrap();
+        assert!((c.inc, c.uniform) == (1.0, true) && (c.sd - 0.04).abs() < 1e-12);
+        let d = check_increment(&[0.0, 1.0, 2.06, 3.0], ORIGIN_TOLERANCE).unwrap();
+        assert!(!d.uniform && (d.sd - 0.06).abs() < 1e-12);
+        assert!(check_increment(&[0.0, 1.0, 2.06, 3.0], 0.1).unwrap().uniform);
+        assert!(!check_increment(&[0.0, 1.0, 2.04, 3.0], 0.01).unwrap().uniform);
+        let b = check_increment(&[0.0, 1.0, 3.0], ORIGIN_TOLERANCE).unwrap();
+        assert!((b.inc, b.uniform) == (1.5, false) && (b.sd - 0.707_106_781_186_547_6).abs() < 1e-12);
+        let down = check_increment(&[3.0, 2.0, 1.0, 0.0], ORIGIN_TOLERANCE).unwrap();
+        assert!((down.inc, down.sd, down.uniform) == (-1.0, 0.0, true));
+        // The largest deviation counts, not the standard deviation (0.032 here).
+        let a = [0.0, 1.0, 2.0, 3.0, 4.045, 5.0];
+        let r = check_increment(&a, 0.044).unwrap();
+        assert!(!r.uniform && (r.sd - 0.031_819_805_153_394_59).abs() < 1e-12);
+        assert!(check_increment(&a, 0.046).unwrap().uniform);
+        // Relative to the step.
+        assert!(check_increment(&[0.0, 10.0, 20.4, 30.0], ORIGIN_TOLERANCE).unwrap().uniform);
+        assert!(!check_increment(&[0.0, 10.0, 20.4, 30.0], 0.039).unwrap().uniform);
+        assert!(!check_increment(&[0.0, 0.1, 0.204, 0.3], 0.039).unwrap().uniform);
     }
 }

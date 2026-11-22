@@ -13,4 +13,6 @@ to any p (`StatisticsSpec::percentiles`).
 
 ## Left
 
-- Compare Origin's Custom Percentile output (rule and column names) when Origin is installed again.
+- Compare Origin's Custom Percentile output (rule and column names). Origin 2016 runs again, but its
+  scriptable `quantiles` X-function has no custom percentiles and there is no `percentile` X-function
+  (checked 2026-11-22); only the DescStats window has them, which a script cannot drive (screenshots).

@@ -1331,3 +1331,18 @@ fn numextract_and_numbreak_follow_origins_reference() {
     assert_eq!(ev(r#"NumBreak("abcd12,343", 5, 1)"#), 0.0);
     assert_eq!(ev(r#"numbreak("abc", 9)"#), 0.0, "an offset past the end");
 }
+
+#[test]
+fn hour_minute_and_second_match_origins_worksheet_column() {
+    // Origin 2016, 2026-11-22 (T239 probe, a worksheet column): hour, minute, second.
+    let hms = |x: &str| [format!("hour({x})"), format!("minute({x})"), format!("second({x})")].map(|e| ev(&e));
+    assert_eq!(hms("date(2020,1,1)+0.75"), [18.0, 0.0, 0.0]);
+    assert_eq!(hms("date(2020,1,1)+0.5+30/86400"), [12.0, 0.0, 30.0]);
+    assert_eq!(hms("date(2020,1,1)+(12*3600+34*60+56.789)/86400"), [12.0, 34.0, 56.789]);
+    assert_eq!(hms("date(2020,1,1)+0.9999999"), [23.0, 59.0, 59.991]);
+    assert_eq!(hms("date(2020,1,1)+59.6/86400"), [0.0, 0.0, 59.6]);
+    assert_eq!(hms("time(13,30,15)"), [13.0, 30.0, 15.0]);
+    assert_eq!(hms("-0.25"), [18.0, 0.0, 0.0]);
+    assert_eq!(hms("1.5"), [-1.0, -1.0, -1.0]);
+    assert_eq!(hms("na()"), [-1.0, -1.0, -1.0]);
+}

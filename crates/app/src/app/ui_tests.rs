@@ -5573,6 +5573,30 @@ fn the_statistics_menu_runs_a_quantile_regression() {
     assert_eq!(h.state().doc.undo_label(), Some("Quantile regression"));
 }
 
+/// Statistics > Descriptive Statistics > Binned Scatter... (T356): the bins of a column, a sheet and a graph.
+#[test]
+fn the_descriptive_menu_makes_a_binned_scatter() {
+    let mut text = String::from("t,v\n");
+    for i in 0..40 {
+        text.push_str(&format!("{i},{}\n", i % 4));
+    }
+    let data = csv_file("binscatter", "bs", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - bs.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Descriptive Statistics", "Binned Scatter..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Number of bins"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let (sheet, n) = result_column(&h, "N");
+    assert!(sheet.starts_with("BinScatter"), "{sheet}");
+    assert_eq!(n, [4.0; 10], "ten bins of four points");
+    let (_, means) = result_column(&h, "Y mean");
+    assert!(means.iter().all(|m| *m == 1.5), "{means:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Binned scatter"));
+}
+
 /// Statistics > Change Point Analysis... (T346): the segments of a series with one mean shift, and a graph;
 /// one undo removes both.
 #[test]

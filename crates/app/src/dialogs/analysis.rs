@@ -161,6 +161,8 @@ pub enum AnalysisKind {
     QuantReg,
     /// Statistics > Change Point Analysis (T346; options in `multivariate_options.rs`).
     ChangePoint,
+    /// Statistics > Descriptive Statistics > Binned Scatter (T356; options in `multivariate_options.rs`).
+    BinScatter,
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (options in `multivariate_options.rs`).
     KaplanMeier,
     /// Statistics > Multivariate Analysis > K-Means Cluster Analysis (options in `multivariate_options.rs`).
@@ -298,6 +300,7 @@ impl AnalysisKind {
             AnalysisKind::Roc => "ROC Curve...",
             AnalysisKind::QuantReg => "Quantile Regression...",
             AnalysisKind::ChangePoint => "Change Point Analysis...",
+            AnalysisKind::BinScatter => "Binned Scatter...",
             AnalysisKind::KaplanMeier => "Kaplan-Meier Estimator...",
             AnalysisKind::Kmeans => "K-Means Cluster Analysis...",
             AnalysisKind::Crosstab => "Cross Tabulation...",
@@ -394,6 +397,7 @@ impl AnalysisKind {
             "roc" => AnalysisKind::Roc,
             "quantreg" => AnalysisKind::QuantReg,
             "changepoint" => AnalysisKind::ChangePoint,
+            "binscatter" => AnalysisKind::BinScatter,
             "kaplanmeier" => AnalysisKind::KaplanMeier,
             "kmeans" => AnalysisKind::Kmeans,
             "crosstab" => AnalysisKind::Crosstab,
@@ -2263,6 +2267,7 @@ impl AnalysisDialog {
             | AnalysisKind::Roc
             | AnalysisKind::QuantReg
             | AnalysisKind::ChangePoint
+            | AnalysisKind::BinScatter
             | AnalysisKind::KaplanMeier
             | AnalysisKind::Kmeans => self.multi.tool(self.kind)?,
             AnalysisKind::AverageCurves => self.curves.average_tool(),
@@ -3567,6 +3572,7 @@ impl AnalysisDialog {
             | AnalysisKind::Roc
             | AnalysisKind::QuantReg
             | AnalysisKind::ChangePoint
+            | AnalysisKind::BinScatter
             | AnalysisKind::KaplanMeier
             | AnalysisKind::Kmeans => self.multi.options(ui, self.kind),
             AnalysisKind::DiscreteFreq => {
@@ -3747,6 +3753,7 @@ impl AnalysisDialog {
             | AnalysisKind::Roc
             | AnalysisKind::QuantReg
             | AnalysisKind::ChangePoint
+            | AnalysisKind::BinScatter
             | AnalysisKind::SubtractLine
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
@@ -3855,6 +3862,7 @@ impl AnalysisDialog {
                 "Fit straight lines to chosen quantiles of the dependent variable instead of its mean"
             }
             AnalysisKind::ChangePoint => "Find where the mean, the variance or both of a series change",
+            AnalysisKind::BinScatter => "Summarize dense XY data by the mean Y in bins of X",
             AnalysisKind::Pca => "Describe the variation of several columns by uncorrelated components",
             AnalysisKind::Crosstab => {
                 "Count the cases of every combination of two categorical variables and test their independence"
@@ -3982,6 +3990,9 @@ impl AnalysisDialog {
             }
             AnalysisKind::Roc => {
                 "Area under the curve with its standard error, the curve points and the best cut-off in a new sheet, and a graph"
+            }
+            AnalysisKind::BinScatter => {
+                "One row per bin (X range, X mean, count, Y mean, SD, SE) in a new sheet, and a graph of the data with the bin means"
             }
             AnalysisKind::ChangePoint => {
                 "One row per segment (rows, X range, size, mean, standard deviation) in a new sheet, and a graph of the data with the segment means"

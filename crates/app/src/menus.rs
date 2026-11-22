@@ -2027,6 +2027,7 @@ fn statistics_menu() -> Vec<Entry> {
                 item("Discrete Frequency...", Cmd::Analyze(AnalysisKind::DiscreteFreq)),
                 item("Frequency Counts...", Cmd::Analyze(AnalysisKind::Histogram)),
                 item("2D Frequency Counts/Binning...", Cmd::Analyze(AnalysisKind::Binning2D)),
+                item("Binned Scatter...", Cmd::Analyze(AnalysisKind::BinScatter)),
                 sep(),
                 item("Distribution Fit...", Cmd::Analyze(AnalysisKind::DistFit)),
                 item("Probability Plot...", Cmd::Analyze(AnalysisKind::ProbPlot)),

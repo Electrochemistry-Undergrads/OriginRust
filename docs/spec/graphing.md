@@ -4375,7 +4375,7 @@ that multipliers are omitted. Screen and all exports share the transformed scene
 plot/coordinate combinations beyond Cartesian line/scatter are not Origin-measured here.
 
 Display tab (measured, section 18 list): Sheaf offers Labels (the tick labels of both axes), Data
-(`LayerDisplay::show_data`), Frame (the opposite-edge lines of both axes), Clip Data to Frame (off: the
+(`LayerDisplay::show_data`), Frame (the plotting rectangle, see 22.10), Clip Data to Frame (off: the
 data may run over the whole page), Grid on Top of Data (the grid lines are drawn after the plots), and
 X Axes and Y Axes (off hides that axis: line, ticks, tick labels and title; the grid stays; what Origin
 hides is not measured). Data on Top of Axes (`LayerDisplay::data_on_top`, default off) draws the
@@ -5712,7 +5712,7 @@ LabTalk `page.viewmode` is 1 Print, 2 Page (default of a new graph), 3 Window, 4
 
 In order, with separators after the third, fifth and ninth item: Layer Icons, Active Layer Indicator, Axis Layer Icons | Object Grid, Layer Grid | Frame, Labels, Data, Active Layer Only | Master Items on Screen. Ticks of a new graph: **Layer Icons, Labels and Data**; the other seven are off. Show Data Info (below the submenu) is ticked on a new graph.
 - **Layer Icons** unticked: the numbered layer icons ("1", "2" in the top-left corner of the page) disappear; no dialog.
-- Active Layer Indicator, Axis Layer Icons, Object Grid, Layer Grid, Frame, Labels, Data, Active Layer Only, Master Items on Screen and Show Data Info: **unmeasured** (the effect of switching each; every attempt to click them hit a different item because the collapsed View menu changed between clicks). To measure: open View, click the chevron, take a shot to confirm the full menu, then open Show, click the item once, shot, and finish the session (do one item per session); or untick Tools > Options > Miscellaneous > Enable Collapsible Menus (the hint text of the menu names that box; the dialog was opened with Ctrl+U but the tab was not reached).
+- Frame was later measured in 22.10. Switching Active Layer Indicator, Axis Layer Icons, Object Grid, Layer Grid, Labels, Data, Active Layer Only, Master Items on Screen and Show Data Info remained unmeasured in this run. The collapsed View menu changed between attempts.
 
 ### 22.4 Full Screen
 
@@ -5806,6 +5806,26 @@ produce no highlight, and gaps at axis breaks stay open. The overlay follows
 layer activation, axis placement, pan and zoom. It belongs to the graph editor,
 so exports and printed output use the same graph scene. Indicators for
 non-Cartesian axes and for opposite axes are outside this implementation.
+
+### 22.10 View > Show > Frame (T66, Origin 2016, measured 2026-11-22)
+
+In a graph with two separate Cartesian layers, invoking the View > Show > Frame
+command (menu ID 33092 via LabTalk) added a thin black rectangle to the active
+layer. The rectangle followed the plot bounds with both axes hidden and with the
+X axis moved inward by 25%. The colored axes and opposite-line settings kept
+their values. Switching the command off on the same layer restored the original
+PNG pixels. Saving and reopening kept the frame. Invoking the command in the
+other layer added its frame independently. The Origin EPS used a hairline for
+the frame.
+[Origin 2019b release note](https://www.originlab.com/ReleaseNotes/detail.aspx?id=2019b3ORG-19899)
+
+Sheaf's Plot Details > Display controls the frame of a Cartesian layer. The
+graph scene uses a 0.5 pt black outline under the axes, including when clipping
+to the frame is off. Screen, print and exports share the scene. The setting
+defaults to off in older Sheaf projects and persists in `.sheaf` and the
+`.opj` graph layer header (opj-format 10.2). Existing opposite-edge line
+settings keep their effect. The View menu shortcut remains pending.
+[Origin Plot Details guide](https://docs.originlab.com/origin-help/pd-dialog-display-speed-tab/)
 
 ## 23. View > Zoom All and the Tools-bar Scale In / Scale Out (T69, measured 2026-11-15, Origin 2016)
 

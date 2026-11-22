@@ -777,6 +777,17 @@ Existing Dataset: 11.6). User Defined in
 the peak goals uses the same anchors with straight lines. Command line: `sheaf analyze peaks FILE --baseline-goal
 create|subtract [--baseline second-derivative] [--baseline-points N]`.
 
+### 11.5a Piecewise peak fitting (T352, Sheaf's own)
+
+Origin's Piecewise Peak Fitting is a 2025b Pro app (not run). Sheaf: `PeakChainSpec::regions`, X
+intervals; the Peak Analyzer's Baseline Mode page has "Regions (X from:to, ...)" for the peak goals, the
+command line `analyze peaks ... --regions 2:8,10:15`. Each region is the first unbroken run of rows whose
+X lies inside it (as the X-range row choice), and runs the whole chain on its own: baseline (each region's
+own, so a step in the background is followed), search, integration (Area % of the region's corrected
+curve) and fit. The result table has one row per peak labelled "Peak k of B, region r", with the sheet's
+row numbers; each region writes its own baseline (and fit) column, "Baseline of B (region r)". A region
+with no rows or fewer than 3 is refused with its number; the note says how many regions ran.
+
 ### 11.6 Use Existing Dataset and Asymmetric Least Squares Smoothing (T318)
 
 Origin 2016 (`re-workspace/scratch/baseline-als/`, the dialog driven as in 11.5): the Baseline Mode list

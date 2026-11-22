@@ -4,6 +4,7 @@
 //! graph (`graph_tables.rs`), and the fields that depend on the graph are put in on top. Offsets are
 //! into the block body.
 
+use super::super::graph::{SHOW_FRAME_AT, SHOW_FRAME_BIT};
 use super::super::strings::encode_cp1252;
 use super::graph_tables::*;
 use super::layout::{fill, framed, put, put_name};
@@ -118,6 +119,7 @@ pub(super) struct LayerSpec {
     pub page: (u16, u16),
     pub x: AxisScale,
     pub y: AxisScale,
+    pub show_frame: bool,
     /// Set for a layer linked to its parent.
     pub link: Option<LinkSpec>,
     /// The curves of the layer carry their own offsets (stacked lines).
@@ -163,6 +165,9 @@ pub(super) fn layer_header(l: &LayerSpec) -> Vec<u8> {
     }
     for (i, v) in l.frame.iter().enumerate() {
         put(&mut h, 0x71 + 2 * i, &v.to_le_bytes());
+    }
+    if l.show_frame {
+        h[SHOW_FRAME_AT] |= SHOW_FRAME_BIT;
     }
     // the rectangle around the frame that holds the tick labels and titles; Origin works it out again
     let outer = [

@@ -819,6 +819,8 @@ pub struct AnalysisDialog {
     fsd: FsdOptions,
     /// Peak Analyzer, Find Peaks: search on the FSD-narrowed curve with `fsd`'s settings (T344).
     chain_fsd: bool,
+    /// Piecewise peak fitting (T352): "FROM:TO, FROM:TO" X regions; empty: the whole curve.
+    chain_regions: String,
     diff: DiffOptions,
     smooth_kind: SmoothKind,
     smooth_points: usize,
@@ -1315,6 +1317,19 @@ fn reference_choices(project: &Project, exclude: &[ColumnId]) -> Vec<(ColumnId, 
     out
 }
 
+/// The Peak Analyzer's piecewise regions, "2:8, 10:15" (T352); empty text is the whole curve.
+fn parse_regions(text: &str) -> Result<Vec<(f64, f64)>, String> {
+    text.split([',', ';'])
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(|p| {
+            let (a, b) = p.split_once(':').ok_or_else(|| format!("write the region '{p}' as FROM:TO"))?;
+            let num = |t: &str| t.trim().parse::<f64>().map_err(|_| format!("'{t}' in region '{p}' is not a number"));
+            Ok((num(a)?, num(b)?))
+        })
+        .collect()
+}
+
 /// Use Existing Dataset's column list (the Y columns of the project, T318).
 fn dataset_combo(ui: &mut egui::Ui, choices: &[(ColumnId, String)], chosen: &mut usize) {
     ui.horizontal(|ui| {
@@ -1538,6 +1553,7 @@ impl AnalysisDialog {
             cv: CvChargeSpec::default(),
             fsd: FsdOptions::default(),
             chain_fsd: false,
+            chain_regions: String::new(),
             diff: DiffOptions::default(),
             smooth_kind: SmoothKind::SavitzkyGolay,
             smooth_points: 5,
@@ -1770,6 +1786,18 @@ impl AnalysisDialog {
             }
             "Baseline Mode" => {
                 let baseline_goal = matches!(self.chain_goal, ChainGoal::CreateBaseline | ChainGoal::SubtractBaseline);
+                if !baseline_goal {
+                    // Piecewise peak fitting (T352, Sheaf's layout): each region is its own analysis.
+                    ui.horizontal(|ui| {
+                        ui.label("Regions (X from:to, ...)");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.chain_regions)
+                                .hint_text("whole curve")
+                                .desired_width(200.0),
+                        );
+                    });
+                    ui.weak("Each region gets its own baseline, peaks, integration and fit.");
+                }
                 // Origin's list for the baseline goals (measured).
                 const BASELINE_GOAL_MODES: [(&str, Option<ChainBaselineKind>); 4] = [
                     ("User Defined", Some(ChainBaselineKind::SecondDerivative)),
@@ -2301,6 +2329,7 @@ impl AnalysisDialog {
             }
             AnalysisKind::PeakChain => Tool::PeakChain(PeakChainSpec {
                 centers: Vec::new(),
+                regions: parse_regions(&self.chain_regions)?,
                 chain: ChainOptions {
                     baseline: self.chain_baseline_spec(),
                     find: FindOptions {
@@ -4782,5 +4811,20 @@ mod baseline_mode_tests {
         assert_eq!(spec.baseline, ChainBaseline::Als(AlsOptions { iterations: 4, ..AlsOptions::default() }));
         d.chain_als.asymmetric = 1.5;
         assert!(d.tool().is_err());
+    }
+}
+
+#[cfg(test)]
+mod region_text_tests {
+    use super::parse_regions;
+
+    /// T352: the Peak Analyzer's region box.
+    #[test]
+    fn regions_are_read_from_the_text() {
+        assert_eq!(parse_regions("").unwrap(), Vec::<(f64, f64)>::new());
+        assert_eq!(parse_regions("2:8, 10:15.5").unwrap(), [(2.0, 8.0), (10.0, 15.5)]);
+        assert_eq!(parse_regions("1:2; 3:4").unwrap(), [(1.0, 2.0), (3.0, 4.0)]);
+        assert!(parse_regions("2-8").unwrap_err().contains("FROM:TO"));
+        assert!(parse_regions("a:3").unwrap_err().contains("not a number"));
     }
 }

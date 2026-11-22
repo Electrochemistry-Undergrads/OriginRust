@@ -2311,6 +2311,7 @@ fn run_peak_chain(
     Ok(t)
 }
 
+mod acceptance;
 mod acf;
 mod anova3;
 mod binscatter;
@@ -2339,6 +2340,7 @@ mod survival;
 mod timepivot;
 mod wavelet;
 mod xyzarea;
+pub use acceptance::{AcceptanceOutput, AcceptanceSpec, acceptance_sampling};
 pub use manip::{
     MedianFilterSpec, ReduceDupSpec, Shift, SubtractLineSpec, TranslateAxis, TranslateSpec, dup_method_name,
 };

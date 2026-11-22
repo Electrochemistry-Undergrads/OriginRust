@@ -1620,6 +1620,12 @@ fn analyze_bridged(
         }
         return Ok(ToolOut::json(report_json(s.project, &report)));
     }
+    // Acceptance sampling (T369) needs no data either: its book and OC graph go into the session project.
+    if let AnalyzeTool::Acceptance { aql, ltpd, alpha, beta, n, c, lot, .. } = parsed.tool {
+        let spec = sheaf_core::analysis::AcceptanceSpec { aql, ltpd, alpha, beta, plan: n.zip(c), lot };
+        let report = s.project.acceptance_sampling(&spec).map_err(|e| ToolError::new(e.to_string()))?;
+        return Ok(ToolOut::json(report_json(s.project, &report)));
+    }
     let plot = sheaf_ops::cli_analyze::comparison_plot_request(&parsed.tool)?;
     let (target_args, job) = job_from(parsed.tool)?;
     let target = Target {

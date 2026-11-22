@@ -1967,6 +1967,32 @@ fitted line and bound(s) and the limits. Checked against numpy/scipy (`tools/sta
 `crates/calc/tests/stability_reference.rs`, all three models) to 1e-9 (shelf lives 1e-8). Random-batch (mixed model)
 estimates, transformed responses and extrapolation rules are not built.
 
+## 39 Acceptance sampling by attributes (T369, Origin 2026b Pro app; not measured)
+
+Origin 2026b's Acceptance Sampling app designs or evaluates lot-acceptance plans; Origin 2016 has nothing to copy,
+so this is Sheaf's own, checked against scipy (`tools/acceptance-ref.py`, `crates/calc/tests/acceptance_reference.rs`;
+no Origin numbers). Statistics > Acceptance Sampling... (a window that needs no worksheet data, one undo step
+"Acceptance sampling") and `sheaf analyze acceptance [--aql 0.01] [--ltpd 0.05] [--alpha 0.05] [--beta 0.10] [--n N
+--c C] [--lot N] [--export oc.csv] [--save p.sheaf]` (`sheaf_calc::acceptance`, `Project::acceptance_sampling`):
+
+- **Single sampling plan by attributes**: take `n` items, accept the lot with at most `c` defective. The probability
+  of acceptance at a fraction defective `p` is binomial, `Pa(p) = P(X <= c)`, `X ~ B(n, p)` (type B; the lot is
+  treated as large, also when a lot size is given).
+- **Design**: AQL and LTPD as fractions (0 < AQL < LTPD < 1), producer's risk `alpha` and consumer's risk `beta`.
+  For `c = 0, 1, ...` the smallest `n` with `Pa(LTPD) <= beta` is found; the first that also has `Pa(AQL) >= 1 -
+  alpha` is the plan, which is the smallest sample that meets both risks (a larger `c` needs a larger `n`). Samples
+  above 1 000 000 are refused. AQL 1 %, LTPD 5 %, 5 % and 10 % give n = 132, c = 3, as a brute-force search does.
+- **Evaluate**: a plan typed in (`n > c`).
+- **Lot size N** (rectifying inspection, rejected lots sorted completely): `AOQ(p) = p Pa(p) (N - n) / N`, the AOQL
+  its largest value (a scan of 2000 points refined by golden-section search) and where it is reached, and `ATI(p) =
+  n + (1 - Pa(p)) (N - n)`. A lot smaller than the sample is refused.
+- **Output**: a workbook "Acceptance Sampling" with sheet `Plan` (Quantity and Value: n, c, AQL, LTPD, P(accept) at
+  both, producer's and consumer's risk, and with a lot size the lot size, AOQL and its fraction) and sheet `OC
+  Curve` (Fraction Defective as X, P(accept), and AOQ and ATI with a lot size; 101 points from 0 to where `Pa` falls
+  below 0.001, at least to the LTPD), and a line graph of the OC curve. The plan also goes to the Results Log.
+- Not done: double, multiple and sequential plans, variables plans, hypergeometric (type A) curves, MIL-STD-105E /
+  ISO 2859 tables, and Origin's own layout.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

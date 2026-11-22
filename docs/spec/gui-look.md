@@ -1695,3 +1695,13 @@ tabs.
   Underline in worksheets and text editors (Origin itself did not open Options with Ctrl+U in a
   worksheet, see above).
 
+
+### Repeat Last Analysis (T360, 2026-11-22, not measured)
+
+Origin 2026 can repeat the last action on another selection and reopen the last tool; Origin 2016 cannot, so this
+is Sheaf's own. Analysis > Repeat Last Analysis (just above Most Recently Used Items) runs the last tool that ran
+from its window (OK or Apply), with the same options, on the columns now chosen in the active workbook, or on the
+active data plot of a graph; with nothing chosen it takes the active sheet's Y columns. No window opens; the result
+goes where the tool puts it, as one undo step named after the tool, and the status line says what was repeated.
+Before any tool has run the item only says so. Plots, fits and the tools of their own windows (Multiple Peak Fit,
+the picking tools) are not repeated.

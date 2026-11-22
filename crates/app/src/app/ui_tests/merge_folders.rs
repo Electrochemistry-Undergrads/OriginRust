@@ -116,6 +116,47 @@ fn merge_panel_labels_follow_source_order_and_the_dialog_draft() {
 }
 
 #[test]
+fn common_scale_preview_and_merge_use_the_sources_displayed_axis_ranges() {
+    let (mut h, ids) = fixture("merge-common-scale");
+    let (first, second) = (ids[2], ids[3]);
+    h.state_mut().doc.apply("Set X limits", |p| {
+        for (id, from, to) in [(first, 100.0, 1.0), (second, 1.0, 10.0)] {
+            let axis = &mut p.graph_mut(id).unwrap().layers[0].x_axis;
+            axis.scale = sheaf_core::graph::ScaleKind::Log10;
+            axis.min = Some(from);
+            axis.max = Some(to);
+        }
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    let resolved_y = [first, second].map(|id| {
+        let axis = &sheaf_plot::layout_geometry(&before, id).unwrap()[0].y;
+        axis.max - axis.min
+    });
+    assert_ne!(resolved_y[0], resolved_y[1]);
+    open(&mut h);
+    source(&mut h, "All in Project", "All in Active Folder");
+    click(&mut h, "Preview");
+    assert!(h.query_by_label("2 source graphs, 2 layers").is_some());
+    click(&mut h, "Set Layer Width by Common Scale");
+    click(&mut h, "Set Layer Height by Common Scale");
+    assert!(h.query_by_label("2 source graphs, 2 layers").is_none());
+    click(&mut h, "Preview");
+    assert!(h.query_by_label("2 source graphs, 2 layers").is_some());
+    assert_eq!(project(&h), &before);
+    click(&mut h, "OK");
+    let layers = &project(&h).graphs().last().unwrap().layers;
+    assert_eq!(layers[0].legend.text.as_deref(), Some("LocalZ"));
+    assert_eq!(layers[1].legend.text.as_deref(), Some("LocalA"));
+    let (a, b) = (layers[0].frame, layers[1].frame);
+    assert!((a.width / 99.0 - b.width / 9.0).abs() < 1e-9);
+    assert!((a.height / resolved_y[0] - b.height / resolved_y[1]).abs() < 1e-9);
+    assert!((b.top - a.top - a.height - 0.05).abs() < 1e-9);
+    menu(&mut h, "Edit", "Undo Merge Graph Windows");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
 fn the_active_page_can_be_previewed_and_merged_in_a_one_graph_project() {
     let mut h = start(vec![data_file("merge-active-page")]);
     show_window(&mut h, "Graph1 - sample");

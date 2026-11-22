@@ -5722,6 +5722,26 @@ fn add_column_to_all_sheets_reaches_every_sheet_of_the_workbook() {
     assert_eq!(last(1).numeric().unwrap(), [20.0, 40.0]);
 }
 
+/// Statistics > Manhattan Plot... (T362): group, position and p-value columns give the per-group table and a graph.
+#[test]
+fn the_statistics_menu_makes_a_manhattan_plot() {
+    let data = csv_file("manhattan", "gwas", "chrom,pos,p\n1,10,0.5\n1,100,1e-9\n2,20,0.01\n2,50,2e-8\n");
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - gwas.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Manhattan Plot..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Significance line at p ="));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
+    let (sheet, offsets) = result_column(&h, "Offset");
+    assert!(sheet.starts_with("Manhattan"), "{sheet}");
+    assert_eq!(offsets, [0.0, 100.0], "chromosome 2 starts after the largest position of chromosome 1");
+    let (_, above) = result_column(&h, "Above the line");
+    assert_eq!(above, [1.0, 1.0]);
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Manhattan plot"));
+}
+
 /// Worksheet > Time Series Pivot... (T358): the values per day of their date-time X, one undo step.
 #[test]
 fn the_worksheet_menu_makes_a_time_series_pivot() {

@@ -60,6 +60,7 @@ pub use calc::changepoint::{ChangeKind, Penalty as ChangePenalty};
 pub use changepoint::ChangePointSpec;
 pub use curves::{AverageSpec, IntersectSpec};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
+pub use manhattan::ManhattanSpec;
 pub use multivariate::{KmeansSpec, PcaSpec};
 pub use quantreg::QuantRegSpec;
 pub use roc::RocSpec;
@@ -1149,6 +1150,8 @@ pub enum Tool {
     /// Worksheet > Time Series Pivot (T358, `docs/spec/statistics.md` section 32): the Y columns summarized per
     /// calendar period of their date-time X.
     TimePivot(TimePivotSpec),
+    /// Statistics > Manhattan Plot (T362, `docs/spec/statistics.md` section 33): group, position and p-value columns.
+    Manhattan(ManhattanSpec),
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
     /// censor and, optionally, group columns.
     KaplanMeier(KaplanMeierSpec),
@@ -1279,6 +1282,7 @@ impl Tool {
             Tool::ChangePoint(_) => "Change point analysis",
             Tool::BinScatter(_) => "Binned scatter",
             Tool::TimePivot(_) => "Time series pivot",
+            Tool::Manhattan(_) => "Manhattan plot",
             Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
             Tool::GraphSummary(_) => "Graphical summary",
             Tool::AverageCurves(_) => "Average multiple curves",
@@ -1360,6 +1364,7 @@ impl Tool {
             Tool::ChangePoint(_) => "ChangePoint",
             Tool::BinScatter(_) => "BinScatter",
             Tool::TimePivot(_) => "TimePivot",
+            Tool::Manhattan(_) => "Manhattan",
             Tool::KaplanMeier(_) => "KaplanMeier",
             Tool::GraphSummary(_) => "GraphSummary",
             Tool::AverageCurves(_) => "AverageResult",
@@ -2265,6 +2270,7 @@ mod changepoint;
 mod curves;
 mod dist;
 mod filters;
+mod manhattan;
 mod manip;
 mod multivariate;
 mod partcorr;
@@ -2445,6 +2451,7 @@ impl Project {
                 | Tool::PoissonTest(_)
                 | Tool::Roc(_)
                 | Tool::QuantReg(_)
+                | Tool::Manhattan(_)
                 | Tool::KaplanMeier(_)
                 | Tool::GraphSummary(_)
                 | Tool::SimulateCurve(_)
@@ -2605,6 +2612,13 @@ impl Project {
             }
             Tool::DistFit(_) | Tool::ProbPlot(_) => {
                 let out = dist::run(&request.tool, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::Manhattan(spec) => {
+                let out = manhattan::run(spec, sheet, &request.columns, request.rows)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;

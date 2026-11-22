@@ -1465,6 +1465,26 @@ fn time_series_pivot_runs_from_the_command_line() {
     assert!(!ok && err.contains("--period"), "{err}");
 }
 
+/// Manhattan plot (spec `statistics.md` section 33, T362).
+#[test]
+fn manhattan_plot_runs_from_the_command_line() {
+    let dir = scratch("manhattan");
+    let path = dir.join("gwas.csv");
+    std::fs::write(&path, "chrom,pos,p\n1,10,0.5\n1,100,1e-9\n2,20,0.01\n2,50,2e-8\nX,5,0.3\n").unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "manhattan", file, "--y", "chrom,pos,p"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("3 groups, 5 points; 2 at or above the line") && out.contains("Manhattan1"), "{out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "manhattan", file, "--y", "chrom,pos,p", "--threshold", "0.05", "--no-graph"]);
+    assert!(ok && out.contains("3 at or above"), "{err} {out}");
+    // Two columns are the position and the p-value with the group from the sheet's X: chrom is X itself here.
+    let (ok, _, err) = sheaf(&["analyze", "manhattan", file, "--y", "chrom,pos"]);
+    assert!(!ok && err.contains("choose the group column"), "{err}");
+    let (ok, out, err) = sheaf(&["analyze", "manhattan", file, "--y", "pos,p"]);
+    assert!(ok && out.contains("3 groups"), "the group from the X column: {err} {out}");
+}
+
 /// Binned scatter (spec `statistics.md` section 31, T356).
 #[test]
 fn binned_scatter_runs_from_the_command_line() {

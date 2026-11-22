@@ -312,6 +312,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T318](T318-baseline-als-dataset.md) | Peak Analyzer baselines Use Existing Dataset and Asymmetric Least Squares Smoothing (window, CLI) | M | done 2026-11-21; ALS not measured (Pro) |
 | [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T362](T362-manhattan-plot.md) | Manhattan plot (Origin 2017 app): -log10 p along grouped positions with a significance line | S | done 2026-11-22 (statistics 33) |
 | [T361](T361-find-project-files.md) | File > Find in Project Files: search the saved projects of a folder, open a match (Origin 2026) | S | done 2026-11-22 (gui-look) |
 | [T360](T360-repeat-analysis.md) | Analysis > Repeat Last Analysis: the last tool and options on the new selection (Origin 2026) | S | done 2026-11-22 (gui-look) |
 | [T359](T359-column-across-sheets.md) | Column > Add Column to All Sheets: a matching column and formula in every sheet (Origin 2026b) | S | done 2026-11-22 (workbook-model 13q) |

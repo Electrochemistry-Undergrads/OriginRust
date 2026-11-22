@@ -1847,6 +1847,19 @@ sheet `TimePivotN` has a Period label ("2026-11-22", "Week of 2026-11-16", "2026
 and time for minutes and hours), the period start as a number (X), and per column "<Stat> of <column>" and
 "N of <column>". Fiscal calendars, custom intervals and a second grouping are not built.
 
+## 33 Manhattan plot (T362, Origin 2017 app; not measured)
+
+Origin's Manhattan Plot app (2017 Pro) is not part of Origin 2016, so this is Sheaf's own. Statistics > Manhattan
+Plot... (`Tool::Manhattan`, `sheaf analyze manhattan --y GROUP,POS,P [--threshold 5e-8] [--no-graph]`): the chosen
+columns are the group (chromosome; numbers or text), the position and the p-value; with two chosen columns
+(position, p-value) the group is the sheet's X column for them. Rows with a missing group or position, or a p outside
+(0, 1], are left out. Numeric groups are sorted, text groups keep the order they first appear; each group's positions
+are moved by the sum of the largest positions of the groups before it (no gap), and Y is `-log10 p`. The result sheet
+`ManhattanN` has one row per group (N, Offset, Smallest p, Largest -log10 p, Above the line) and, per group, the
+cumulative positions and `-log10 p`; a new graph draws each group as its own scatter (so groups take the colour list
+in turn) and the significance line at `-log10(threshold)` (default 5e-8) across the data. Alternating two colours,
+group labels at the group centres and point labels for the top hits are not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

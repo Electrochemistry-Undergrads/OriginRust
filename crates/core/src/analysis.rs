@@ -61,6 +61,7 @@ pub use calc::changepoint::{ChangeKind, Penalty as ChangePenalty};
 pub use capability::{CapModel, CapabilitySpec};
 pub use changepoint::ChangePointSpec;
 pub use curves::{AverageSpec, IntersectSpec};
+pub use decompose::{DecomposeModel, DecomposeSpec};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
 pub use lifedist::{LifeDist, LifeDistSpec};
 pub use manhattan::ManhattanSpec;
@@ -1177,6 +1178,9 @@ pub enum Tool {
     /// Statistics > Stability Study (T368, `docs/spec/statistics.md` section 38): time, response and, optionally,
     /// batch columns.
     Stability(StabilitySpec),
+    /// Statistics > Seasonal Decomposition (T370, `docs/spec/statistics.md` section 39): trend, seasonal and
+    /// residual of every chosen column.
+    Decompose(DecomposeSpec),
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
     /// censor and, optionally, group columns.
     KaplanMeier(KaplanMeierSpec),
@@ -1313,6 +1317,7 @@ impl Tool {
             Tool::Capability(_) => "Process capability",
             Tool::LifeDist(_) => "Distribution overview",
             Tool::Stability(_) => "Stability study",
+            Tool::Decompose(_) => "Seasonal decomposition",
             Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
             Tool::GraphSummary(_) => "Graphical summary",
             Tool::AverageCurves(_) => "Average multiple curves",
@@ -1400,6 +1405,7 @@ impl Tool {
             Tool::Capability(_) => "Capability",
             Tool::LifeDist(_) => "LifeDist",
             Tool::Stability(_) => "Stability",
+            Tool::Decompose(_) => "Decompose",
             Tool::KaplanMeier(_) => "KaplanMeier",
             Tool::GraphSummary(_) => "GraphSummary",
             Tool::AverageCurves(_) => "AverageResult",
@@ -2318,6 +2324,7 @@ mod capability;
 mod categorical;
 mod changepoint;
 mod curves;
+mod decompose;
 mod dist;
 mod filters;
 mod lifedist;
@@ -2752,6 +2759,14 @@ impl Project {
             }
             Tool::RareChart(spec) => {
                 let out = rarechart::run(spec, &inputs)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+                more_xy_graphs = out.more_graphs;
+            }
+            Tool::Decompose(spec) => {
+                let out = decompose::run(spec, &inputs)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;

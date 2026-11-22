@@ -165,6 +165,32 @@ fn column_sampling(record: &[u8]) -> Option<sheaf_core::sampling::SamplingInterv
     })
 }
 
+/// A numeric column's display from its column record (T337, measured in Origin 2016): `0x1E` holds the
+/// display in its high nibble (0 Decimal, 1 Scientific, 2 Engineering, 3 Decimal:1,000) over a low nibble
+/// of 0 (the Numeric format); `0x1F` the digits (decimal places + 3, `0x80 | n` significant digits, 0 the
+/// default). `None` for anything else, which keeps Sheaf's own default.
+fn column_display(record: &[u8]) -> Option<sheaf_core::format::NumberFormat> {
+    use sheaf_core::format::NumberFormat as F;
+    let (value_type, digits) = (*record.get(0x1E)?, *record.get(0x1F)?);
+    if value_type & 0x0F != 0 {
+        return None;
+    }
+    let places = (digits & 0x80 == 0 && digits >= 3).then(|| digits - 3);
+    let sig = (digits & 0x80 != 0).then(|| (digits & 0x7F).max(1));
+    match (value_type >> 4, places, sig) {
+        (0, Some(d), _) => Some(F::Decimal(d)),
+        (0, _, Some(n)) => Some(F::Significant(n)),
+        (1, Some(d), _) => Some(F::Scientific(d)),
+        (1, _, Some(n)) => Some(F::Scientific(n - 1)),
+        (1, None, None) => Some(F::ScientificAuto),
+        (2, Some(d), _) => Some(F::EngineeringSi(d)),
+        (2, _, Some(n)) => Some(F::EngineeringSig(n)),
+        (2, None, None) => Some(F::EngineeringAuto),
+        (3, Some(d), _) => Some(F::DecimalGrouped(d)),
+        _ => None,
+    }
+}
+
 /// A column's own width in characters from its column record (T334, measured in Origin 2016):
 /// `0x4A` holds tenths of a character (`wks.col2.width=14` stored 140; the default 67 is width 7).
 /// `None` for the default width or a missing value.
@@ -381,6 +407,11 @@ impl<R: Read + Seek> Builder<R> {
             for (n, layer) in w.layers.iter().enumerate() {
                 let name = if layer.name.is_empty() { format!("Sheet{}", n + 1) } else { layer.name.clone() };
                 let mut sheet = Worksheet::new(name);
+                // T343, measured in Origin 2016: the sheet's long name is an annotation named "__LONGNAME"
+                // holding the text in its first block.
+                if let Some(a) = layer.annotations.iter().find(|a| graph::annotation_name(a) == "__LONGNAME") {
+                    sheet.long_name = strings::decode_cp1252(strings::c_bytes(&a.block1)).trim().to_string();
+                }
                 for rec in &layer.columns {
                     let linked = rec.dataset.checked_sub(1).filter(|&i| i < self.sets.len());
                     let Some(i) = linked.filter(|&i| self.sets[i].name.starts_with(&prefix)) else {
@@ -402,6 +433,9 @@ impl<R: Read + Seek> Builder<R> {
                         col.sampling = column_sampling(&rec.record);
                     }
                     col.width = column_width(&rec.record);
+                    if let Some(f) = column_display(&rec.record) {
+                        col.format = f;
+                    }
                     self.apply_formula(&mut col, layer, rec, &short);
                     if is_time_type(rec.value_type) {
                         self.counts.time_columns += 1;

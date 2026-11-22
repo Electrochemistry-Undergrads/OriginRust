@@ -1996,6 +1996,7 @@ fn analysis_menu() -> Vec<Entry> {
                 item("Find Peaks...", Cmd::Analyze(AnalysisKind::Peaks)),
                 item("Subtract Baseline...", Cmd::Analyze(AnalysisKind::Baseline)),
                 item("Multiple Peak Fit", Cmd::MultiPeakFit),
+                item("Fourier Self-Deconvolution...", Cmd::Analyze(AnalysisKind::Fsd)),
                 item("Batch Peak Analysis Using Theme...", Cmd::BatchPeaks),
             ],
         ),

@@ -3,6 +3,7 @@ use sheaf_core::cellformat::{CellFormat, FormatTarget, HAlign, LabelKind};
 use sheaf_core::color::Color;
 use sheaf_core::datetime::DatePattern;
 use sheaf_core::format::NumberFormat;
+use sheaf_core::sheet_fonts::ColumnLabelFont;
 use sheaf_core::{Column, ColumnData, ColumnId, Designation, Worksheet};
 use sheaf_io::excel::{ExcelExportOptions, write_xlsx};
 use std::io::Read;
@@ -111,6 +112,29 @@ fn worksheet_label_default_families_preserve_sizes_manual_faces_and_data_types()
     assert!(data.contains("val=\"Arial\"") && data.contains("val=\"9\""));
     assert!(!xml.contains("r=\"A5\""));
     let (_, _, warnings) = Output::new("label-family-omitted").export(&s, &plain());
+    assert!(warnings.iter().any(|w| w.contains("label rows omitted")));
+}
+
+#[test]
+fn bulk_label_font_exports_resolved_styles_and_warns_about_omitted_formula_labels() {
+    let mut a = column(1, vec![1.0]);
+    a.long_name = "Potential".into();
+    a.units = "V".into();
+    a.comments = "note".into();
+    a.formula = Some("2+3".into());
+    let mut s = Worksheet { columns: vec![a], ..Worksheet::new("Bulk labels") };
+    s.set_column_labels_font(ColumnLabelFont { family: "Times New Roman".into(), size_pt: Some(20.0) });
+    s.set_label_font_size(&LabelKind::LongName, 24.0);
+    let (xml, styles, warnings) = Output::new("bulk-labels").export(&s, &ExcelExportOptions::default());
+    for (address, family, size) in [
+        ("A1", "Times New Roman", 24),
+        ("A2", "Times New Roman", 20),
+        ("A3", "Times New Roman", 20),
+        ("A4", "Arial", 9),
+    ] {
+        let f = font(style(&xml, &styles, address), &styles);
+        assert!(f.contains(&format!("val=\"{family}\"")) && f.contains(&format!("val=\"{size}\"")), "{address}: {f}");
+    }
     assert!(warnings.iter().any(|w| w.contains("label rows omitted")));
 }
 

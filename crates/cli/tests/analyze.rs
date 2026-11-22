@@ -2135,3 +2135,38 @@ fn als_baseline_goal_follows_the_background() {
         sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--baseline", "als", "--als-asymmetric", "2"]);
     assert!(!ok && stderr.contains("asymmetric factor"), "{stderr}");
 }
+
+/// `analyze fsd` (T341): Fourier self-deconvolution writes the narrowed curve beside the input.
+#[test]
+fn fsd_narrows_the_bands() {
+    let dir = scratch("fsd");
+    let mut text = String::from("x,y\n");
+    for k in 0..512 {
+        let x = k as f64 * 0.05;
+        let l = |c: f64| 1.0 / ((x - c) * (x - c) + 1.0);
+        text.push_str(&format!("{x},{}\n", l(12.3) + l(13.3)));
+    }
+    let data = dir.join("two.csv");
+    std::fs::write(&data, text).unwrap();
+    let out = dir.join("out.csv");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "fsd",
+        data.to_str().unwrap(),
+        "--fwhm",
+        "2",
+        "--k",
+        "3",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    let csv = std::fs::read_to_string(&out).unwrap();
+    assert!(csv.lines().next().unwrap().contains("FSD of"), "{csv:.200}");
+    let rows = numeric_rows(&csv);
+    let v: Vec<f64> = rows.iter().map(|r| r[2]).collect();
+    let tops = (1..v.len() - 1).filter(|&i| v[i] > v[i - 1] && v[i] >= v[i + 1] && v[i] > 0.5).count();
+    assert_eq!(tops, 2, "two bands after FSD");
+    let (ok, _, stderr) = sheaf(&["analyze", "fsd", data.to_str().unwrap(), "--fwhm", "2", "--k", "1"]);
+    assert!(!ok && stderr.contains("enhancement factor"), "{stderr}");
+}

@@ -1488,6 +1488,13 @@ pub enum AxisKind {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ApodizationKind {
+    Boxcar,
+    Triangle,
+    TriangleSquared,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum MedianEdgeKind {
     Shrink,
     Repeat,
@@ -2588,6 +2595,21 @@ pub enum AnalyzeTool {
         /// shrink (default): the window shrinks symmetrically at the ends; repeat or reflect fill it.
         #[arg(long, value_enum, default_value_t = MedianEdgeKind::Shrink)]
         edge: MedianEdgeKind,
+    },
+    /// Fourier self-deconvolution: narrows the bands of each curve K times so that overlapping peaks
+    /// separate (Sheaf's own; X evenly spaced). The result goes beside the curve.
+    Fsd {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Full width at half maximum of the bands, in X units.
+        #[arg(long)]
+        fwhm: f64,
+        /// Resolution enhancement factor K (above 1).
+        #[arg(long, default_value_t = 2.0)]
+        k: f64,
+        /// The apodization that ends the deconvolution.
+        #[arg(long, value_enum, default_value_t = ApodizationKind::TriangleSquared)]
+        apodization: ApodizationKind,
     },
     /// Find the peaks of each curve; positions and heights go to a new sheet.
     Peaks {

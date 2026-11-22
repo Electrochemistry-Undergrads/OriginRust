@@ -189,7 +189,7 @@ fn frisch_newton(xm: &DMatrix<f64>, yv: &DVector<f64>, tau: f64) -> Result<(DVec
 /// lies within rounding of it.
 fn polish(x: &DMatrix<f64>, y: &DVector<f64>, tau: f64, b: &mut DVector<f64>) {
     let p = x.ncols();
-    let r = y - &*x * &*b;
+    let r = y - x * &*b;
     let mut order: Vec<usize> = (0..r.len()).collect();
     order.sort_by(|&i, &j| r[i].abs().total_cmp(&r[j].abs()));
     let h = &order[..p];

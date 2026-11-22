@@ -1966,6 +1966,7 @@ Shelf life, Prob of equal slopes and of equal intercepts), and the graph data; a
 fitted line and bound(s) and the limits. Checked against numpy/scipy (`tools/stability-ref.py`,
 `crates/calc/tests/stability_reference.rs`, all three models) to 1e-9 (shelf lives 1e-8). Random-batch (mixed model)
 estimates, transformed responses and extrapolation rules are not built.
+
 ## 39 Acceptance sampling by attributes (T369, Origin 2026b Pro app; not measured)
 
 Origin 2026b's Acceptance Sampling app designs or evaluates lot-acceptance plans; Origin 2016 has nothing to copy,

@@ -3587,8 +3587,15 @@ checklist with Up and Down, and the source choices below. All in Project is the
 Sheaf default for projects with multiple graphs. Duplicate, missing or non-graph
 sources, too few sources or cells, a factor outside 0.05 to 20 and a page side
 outside 0.5 to 200 in are refused without changing the project.
-Add Extra Layer(s) for Grid, Set Layer Width/Height by Common Scale and turning
-off Treat Each Source Graph as a Unit remain open.
+Set Layer Width/Height by Common Scale and turning off Treat Each Source Graph
+as a Unit remain open.
+
+**Add Extra Layer(s) for Grid** puts an independent empty Line layer in each
+unused cell when Rearrange Layout is on. The layers have automatic axes and
+use the selected text scale. Origin 2016's scripted merge appended the same
+number of layers at the default page position, which overlapped the source
+panels in its PNG output. The [T60 brief](../tasks/T60-merge-graphs-layer-management.md)
+records the measurements.
 
 **Panel labels** (T60, Origin 2016 measured 2026-11-22). Three source graphs
 arranged in a 2 × 2 grid received one editable text object per source on its

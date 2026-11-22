@@ -167,6 +167,7 @@ pub struct MergeGraphsDialog {
     rearrange: bool,
     rows: Option<usize>,
     cols: Option<usize>,
+    add_extra_layers: bool,
     keep_aspect: bool,
     link: bool,
     share_x: bool,
@@ -201,6 +202,7 @@ impl MergeGraphsDialog {
             rearrange: true,
             rows: None,
             cols: None,
+            add_extra_layers: false,
             keep_aspect: false,
             link: false,
             share_x: false,
@@ -256,6 +258,7 @@ impl MergeGraphsDialog {
             allow_single_source: self.source.allows_single_source(),
             rows: Some(rows),
             cols: Some(cols),
+            add_extra_layers: self.add_extra_layers,
             h_gap: self.h_gap,
             v_gap: self.v_gap,
             margin_left: self.margins[0],
@@ -464,7 +467,7 @@ impl MergeGraphsDialog {
                 }
                 ui.end_row();
             });
-            ui.add_enabled(false, egui::Checkbox::new(&mut false, "Add Extra Layer(s) for Grid"));
+            ui.checkbox(&mut self.add_extra_layers, "Add Extra Layer(s) for Grid");
             ui.checkbox(&mut self.keep_aspect, "Keep Layer Aspect Ratio");
             ui.add_enabled(false, egui::Checkbox::new(&mut true, "Treat Each Source Graph as a Unit"));
             ui.checkbox(&mut self.link, "Link Source Graphs");

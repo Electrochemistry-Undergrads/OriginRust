@@ -14,6 +14,7 @@ use crate::graph::{Font, Frame, Graph, Layer, LayerLink, Page, ScaleLink, TextLa
 use crate::ids::WindowId;
 use crate::panels::{PanelError, PanelLayout, PanelOrder, PanelPage};
 use crate::project::{Project, Window};
+use crate::template::Template;
 
 /// Origin's merged page: 11.41 x 7.973 in (6846 x 4784 dots at 600 dpi), landscape.
 pub const MERGE_PAGE_IN: (f64, f64) = (11.41, 7.973);
@@ -73,6 +74,16 @@ pub enum MergeTextScale {
     Keep,
 }
 
+impl MergeTextScale {
+    fn factor(self, frame: Frame, rearrange: bool) -> f64 {
+        match self {
+            Self::Auto if rearrange => auto_text_factor((100.0 * frame.width, 100.0 * frame.height)),
+            Self::Auto | Self::Keep => 1.0,
+            Self::Fixed(factor) => factor,
+        }
+    }
+}
+
 /// The options of Merge Graph Windows. Lengths are percent of the page, as in [`PanelLayout`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct MergeOptions {
@@ -84,6 +95,8 @@ pub struct MergeOptions {
     /// automatic choice, see [`auto_grid`]).
     pub rows: Option<usize>,
     pub cols: Option<usize>,
+    /// Put an independent empty layer in each unused cell of the rearranged grid.
+    pub add_extra_layers: bool,
     pub h_gap: f64,
     pub v_gap: f64,
     pub margin_left: f64,
@@ -128,6 +141,7 @@ impl Default for MergeOptions {
             allow_single_source: false,
             rows: None,
             cols: None,
+            add_extra_layers: false,
             h_gap: 5.0,
             v_gap: 5.0,
             margin_left: 15.0,
@@ -330,12 +344,7 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
         };
         // the automatic factor follows the frame the source gets (with Keep Layer Aspect Ratio the
         // shrunk frame: a 3 x 1 merge gave 0.28 for 20.57 x 21.68); without rearranging it is 1
-        let factor = match opts.text_scale {
-            MergeTextScale::Auto if !opts.rearrange => 1.0,
-            MergeTextScale::Auto => auto_text_factor((100.0 * target.width, 100.0 * target.height)),
-            MergeTextScale::Fixed(f) => f,
-            MergeTextScale::Keep => 1.0,
-        };
+        let factor = opts.text_scale.factor(target, opts.rearrange);
         for (i, layer) in src.layers.iter().enumerate() {
             let mut l = layer.clone();
             match src.link_parent(i) {
@@ -375,6 +384,15 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
     }
     if opts.hide_inner && opts.rearrange {
         hide_inner_axes(&mut g, &layout, sources);
+    }
+    if opts.rearrange && opts.add_extra_layers && cells.len() > sources.len() {
+        let empty = Template::Line.new_graph(WindowId(0), "");
+        for &frame in &cells[sources.len()..] {
+            let mut layer = empty.layers[0].clone();
+            layer.frame = frame;
+            scale_text(&mut layer, opts.text_scale.factor(frame, true));
+            g.layers.push(layer);
+        }
     }
     Ok(g)
 }

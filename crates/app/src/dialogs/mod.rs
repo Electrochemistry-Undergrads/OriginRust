@@ -70,6 +70,7 @@ pub mod plot_setup;
 pub mod power;
 pub mod printing;
 pub mod qc_chart;
+pub mod range_pick;
 pub mod recovery;
 pub mod reshape;
 pub mod rm_options;

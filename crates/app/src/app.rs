@@ -36,6 +36,7 @@ use crate::dialogs::multipeak::{MultiPeakDialog, MultiPeakOutcome};
 use crate::dialogs::pivot::PivotDialog;
 use crate::dialogs::power::{PowerDialog, PowerOutcome};
 use crate::dialogs::printing::{PageSetupDialog, PageSetupOutcome, PreviewOutcome, PrintPreview};
+use crate::dialogs::range_pick::{RangePickDialog, RangePickOutcome};
 use crate::dialogs::recovery::{RecoveryChoice, RecoveryOffer};
 use crate::dialogs::reshape::{ReshapeDialog, ReshapeOutcome};
 use crate::dialogs::row_filter::RowFilterDialog;
@@ -238,6 +239,7 @@ pub struct SheafApp {
     multi_peak: Option<MultiPeakDialog>,
     subtract_pick: Option<SubtractPickDialog>,
     cv_pick: Option<CvPickDialog>,
+    range_pick: Option<RangePickDialog>,
     /// The graph whose Data Reader the Peak Analyzer's anchor picking turned on (T351).
     anchor_graph: Option<WindowId>,
     export: Option<ExportDialog>,
@@ -446,6 +448,7 @@ impl SheafApp {
             multi_peak: None,
             subtract_pick: None,
             cv_pick: None,
+            range_pick: None,
             anchor_graph: None,
             export: None,
             export_sheet: None,
@@ -1032,6 +1035,7 @@ impl SheafApp {
         self.multi_peak = None;
         self.subtract_pick = None;
         self.cv_pick = None;
+        self.range_pick = None;
         self.sort = None;
         self.sheet_name = None;
         self.add_columns = None;
@@ -2811,6 +2815,15 @@ impl SheafApp {
                     if self.multi_peak.is_none() {
                         self.warn("The graph has no plot of that column");
                     }
+                }
+            }
+            Action::IntegrateRangesPick { graph, y, layer } => {
+                self.range_pick = RangePickDialog::new(self.doc.project(), graph, y, layer);
+                if self.range_pick.is_none() {
+                    self.warn("The graph has no plot of that column");
+                } else {
+                    self.graphs.entry(graph).or_default().reader = true;
+                    self.focus(graph);
                 }
             }
             Action::CvChargePick { graph, y, layer } => {
@@ -5952,6 +5965,39 @@ impl SheafApp {
         }
     }
 
+    /// Integrate Ranges on a graph (T353): the Data Reader is on and its pinned point becomes a range limit on a
+    /// double-click (outside the window) or Enter.
+    fn range_pick_frame(&mut self, ctx: &egui::Context) {
+        let Some(d) = &mut self.range_pick else { return };
+        let (enter, double) = ctx.input(|i| {
+            let double = i.pointer.button_double_clicked(egui::PointerButton::Primary)
+                && i.pointer.interact_pos().is_some_and(|p| !d.window_rect.is_some_and(|r| r.contains(p)));
+            (i.key_pressed(egui::Key::Enter), double)
+        });
+        let state = self.graphs.entry(d.graph).or_default();
+        state.reader = true;
+        if (enter || double)
+            && let Some(point) = state.reader_point
+        {
+            d.pick(self.doc.project(), point);
+        }
+        let graph = d.graph;
+        let outcome = d.show(ctx, &mut self.doc);
+        if !matches!(outcome, RangePickOutcome::Open) {
+            self.range_pick = None;
+            if let Some(s) = self.graphs.get_mut(&graph) {
+                s.reader = false;
+                s.reader_point = None;
+            }
+        }
+        if let RangePickOutcome::Done(report) = outcome {
+            self.focus(graph);
+            self.logs.result(report.message.clone(), report.notes.clone());
+            self.panels.reveal(PanelId::Results);
+            self.say(report.message);
+        }
+    }
+
     fn show_sheet(&mut self, book: WindowId, sheet: usize) {
         self.doc.adjust_view(|p| {
             if let Some(b) = p.workbook_mut(book) {
@@ -6624,6 +6670,7 @@ impl SheafApp {
             || self.multi_peak.is_some()
             || self.subtract_pick.is_some()
             || self.cv_pick.is_some()
+            || self.range_pick.is_some()
             || self.export.is_some()
             || self.export_sheet.is_some()
             || self.export_excel.is_some()
@@ -7250,6 +7297,7 @@ impl SheafApp {
         self.multi_peak_frame(ctx);
         self.subtract_pick_frame(ctx);
         self.cv_pick_frame(ctx);
+        self.range_pick_frame(ctx);
         self.anchor_pick_frame(ctx);
         if let Some(d) = &mut self.pivot {
             let book = d.book;

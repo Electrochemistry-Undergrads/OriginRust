@@ -123,6 +123,9 @@ pub struct SheetTable<'a> {
     cond: Option<CellStyles>,
     row_heights: RowHeights,
     label_heights: Vec<f64>,
+    column_header_height: f64,
+    column_header: ResolvedStyle<'a>,
+    row_header: ResolvedStyle<'a>,
 }
 
 impl<'a> SheetTable<'a> {
@@ -135,6 +138,24 @@ impl<'a> SheetTable<'a> {
         sheet: &'a Worksheet,
         style: PrintStyle,
         line_height: &dyn Fn(ResolvedStyle<'_>, f64) -> f64,
+    ) -> Self {
+        Self::build(sheet, style, line_height, true)
+    }
+
+    /// Measure the data and label cells for a worksheet image, which omits the headings.
+    pub fn with_image_metrics(
+        sheet: &'a Worksheet,
+        style: PrintStyle,
+        line_height: &dyn Fn(ResolvedStyle<'_>, f64) -> f64,
+    ) -> Self {
+        Self::build(sheet, style, line_height, false)
+    }
+
+    fn build(
+        sheet: &'a Worksheet,
+        style: PrintStyle,
+        line_height: &dyn Fn(ResolvedStyle<'_>, f64) -> f64,
+        heading_fonts: bool,
     ) -> Self {
         let cols: Vec<usize> = (0..sheet.columns.len()).filter(|&i| !sheet.columns[i].hidden).collect();
         let n = sheet.row_count();
@@ -153,16 +174,37 @@ impl<'a> SheetTable<'a> {
             });
             line_height(st, size).max(style.row_h)
         };
-        let row_heights = RowHeights::new(sheet, &formats, style.row_h, height).shown(&rows);
+        let (column_header, row_header) = if heading_fonts {
+            (sheet.font_defaults.column_header.style(), sheet.font_defaults.row_header.style())
+        } else {
+            (ResolvedStyle::default(), ResolvedStyle::default())
+        };
+        let column_header = ResolvedStyle { bold: true, ..column_header };
+        let column_header_height = height(column_header);
+        let row_header_height = height(row_header);
+        let row_heights = RowHeights::new(sheet, &formats, row_header_height, height).shown(&rows);
         let label_heights = labels
             .iter()
             .map(|l| {
                 cols.iter()
                     .map(|&c| height(formats.resolve_label(sheet, sheet.columns[c].id, &l.kind())))
-                    .fold(style.row_h, f64::max)
+                    .fold(row_header_height, f64::max)
             })
             .collect();
-        SheetTable { sheet, cols, rows, labels, style, formats, cond, row_heights, label_heights }
+        SheetTable {
+            sheet,
+            cols,
+            rows,
+            labels,
+            style,
+            formats,
+            cond,
+            row_heights,
+            label_heights,
+            column_header_height,
+            column_header,
+            row_header,
+        }
     }
 
     /// The manual format of a data cell with the conditional colours over it.
@@ -215,7 +257,7 @@ impl<'a> SheetTable<'a> {
 
     /// Height of the head: the grey name row and the label rows.
     pub fn head_height(&self) -> f64 {
-        self.style.row_h + self.label_heights.iter().sum::<f64>()
+        self.column_header_height + self.label_heights.iter().sum::<f64>()
     }
 
     /// Width in points of each printed column.
@@ -303,11 +345,18 @@ impl<'a> SheetTable<'a> {
         let width: f64 = s.rownum_w + cols.iter().map(|&c| widths[c]).sum::<f64>();
         let body_top = self.row_heights.offset(slot.rows.start);
         let row_top = |r| head_h + self.row_heights.offset(r) - body_top;
-        let label_top = |i: usize| s.row_h + self.label_heights[..i].iter().sum::<f64>();
+        let column_header_height = self.column_header_height;
+        let label_top = |i: usize| column_header_height + self.label_heights[..i].iter().sum::<f64>();
         let height = row_top(slot.rows.end);
         // Fills first so the grid is drawn over them.
-        ops.push(PrintOp::Fill { x: 0.0, y: 0.0, w: width, h: s.row_h, color: head_fill });
-        ops.push(PrintOp::Fill { x: 0.0, y: s.row_h, w: width, h: head_h - s.row_h, color: label_fill });
+        ops.push(PrintOp::Fill { x: 0.0, y: 0.0, w: width, h: column_header_height, color: head_fill });
+        ops.push(PrintOp::Fill {
+            x: 0.0,
+            y: column_header_height,
+            w: width,
+            h: head_h - column_header_height,
+            color: label_fill,
+        });
         ops.push(PrintOp::Fill { x: 0.0, y: head_h, w: s.rownum_w, h: height - head_h, color: head_fill });
         // Manual and conditional fills of cells and label cells.
         if !self.formats.is_empty() || self.cond.is_some() {
@@ -349,20 +398,19 @@ impl<'a> SheetTable<'a> {
         let cell_size = |st: &ResolvedStyle<'_>| {
             st.size_pt.map_or(s.font_pt, |p| f64::from(crate::cellformat::clamp_cell_pt(p)) * s.font_pt / GRID_BODY_PT)
         };
+        let row_header_size = cell_size(&self.row_header);
         // Head: names, then the label rows.
         for (k, &c) in cols.iter().enumerate() {
             let (cx, cw) = (xs[k], widths[c]);
             let pos = self.cols[c];
-            ops.push(PrintOp::Text {
-                x: cx + cw / 2.0,
-                y: base(0.0, s.row_h, s.font_pt),
-                max_w: cw - 2.0 * s.pad,
-                text: head_name(self.sheet, pos),
-                align: Align::Center,
-                bold: true,
-                size: s.font_pt,
-                fmt: TextFmt::default(),
-            });
+            ops.push(self.cell_text(
+                cx,
+                cw,
+                base(0.0, column_header_height, cell_size(&self.column_header)),
+                head_name(self.sheet, pos),
+                Align::Center,
+                &self.column_header,
+            ));
             for (i, l) in self.labels.iter().enumerate() {
                 let text = l.text(&self.sheet.columns[pos]);
                 if text.is_empty() {
@@ -380,30 +428,26 @@ impl<'a> SheetTable<'a> {
             }
         }
         for (i, l) in self.labels.iter().enumerate() {
-            ops.push(PrintOp::Text {
-                x: s.rownum_w - s.pad,
-                y: base(label_top(i), self.label_heights[i], s.font_pt),
-                max_w: s.rownum_w - 2.0 * s.pad,
-                text: l.title(),
-                align: Align::Right,
-                bold: false,
-                size: s.font_pt,
-                fmt: TextFmt::default(),
-            });
+            ops.push(self.cell_text(
+                0.0,
+                s.rownum_w,
+                base(label_top(i), self.label_heights[i], row_header_size),
+                l.title(),
+                Align::Right,
+                &self.row_header,
+            ));
         }
         // Body: row numbers and the cells as the sheet shows them.
         for &r in &rows {
             let top = row_top(r);
-            ops.push(PrintOp::Text {
-                x: s.rownum_w - s.pad,
-                y: base(top, self.row_heights.height(r), s.font_pt),
-                max_w: s.rownum_w - 2.0 * s.pad,
-                text: (self.rows[r] + 1).to_string(),
-                align: Align::Right,
-                bold: false,
-                size: s.font_pt,
-                fmt: TextFmt::default(),
-            });
+            ops.push(self.cell_text(
+                0.0,
+                s.rownum_w,
+                base(top, self.row_heights.height(r), row_header_size),
+                (self.rows[r] + 1).to_string(),
+                Align::Right,
+                &self.row_header,
+            ));
             for (k, &c) in cols.iter().enumerate() {
                 let column = &self.sheet.columns[self.cols[c]];
                 let text = column.shown_text(self.rows[r]);

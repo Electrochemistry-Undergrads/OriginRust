@@ -1,6 +1,7 @@
 //! Graph > Merge Graph Windows... (T60): copies the layers of several graphs into the cells of one
 //! new graph, over [`Project::merge_graphs`].
 
+use crate::workspace::{Mode, Workspace};
 use eframe::egui;
 use sheaf_core::merge::{MERGE_PAGE_IN, MergeOptions, MergeTextScale, auto_grid};
 use sheaf_core::{Document, Project, WindowId};
@@ -17,24 +18,44 @@ pub enum Outcome {
 
 #[derive(Copy, Clone, PartialEq)]
 enum Source {
+    ActivePage,
     AllInProject,
     Specified,
     ActiveFolder,
     Recursive,
+    OpenFolder,
+    IncludeEmbedded,
 }
 
 impl Source {
+    const ALL: [Self; 7] = [
+        Self::ActivePage,
+        Self::ActiveFolder,
+        Self::Recursive,
+        Self::OpenFolder,
+        Self::IncludeEmbedded,
+        Self::AllInProject,
+        Self::Specified,
+    ];
+
     fn name(self) -> &'static str {
         match self {
+            Self::ActivePage => "Active Page",
             Self::AllInProject => "All in Project",
             Self::Specified => "Specified",
             Self::ActiveFolder => "All in Active Folder",
             Self::Recursive => "All in Active Folder (Recursive)",
+            Self::OpenFolder => "All in Active Folder (Open)",
+            Self::IncludeEmbedded => "All in Active Folder (Include Embedded)",
         }
     }
 
     fn is_folder(self) -> bool {
-        matches!(self, Self::ActiveFolder | Self::Recursive)
+        matches!(self, Self::ActiveFolder | Self::Recursive | Self::OpenFolder | Self::IncludeEmbedded)
+    }
+
+    fn allows_single_source(self) -> bool {
+        matches!(self, Self::ActivePage | Self::OpenFolder | Self::IncludeEmbedded)
     }
 }
 
@@ -81,6 +102,7 @@ impl Unit {
 
 pub struct MergeGraphsDialog {
     source: Source,
+    active_page: Option<WindowId>,
     folder: FolderScope,
     /// The graphs in merge order, each with its tick (used by "Specified").
     graphs: Vec<(WindowId, bool)>,
@@ -107,11 +129,14 @@ pub struct MergeGraphsDialog {
 }
 
 impl MergeGraphsDialog {
-    pub fn new(project: &Project, folder: &[usize]) -> Self {
+    pub fn new(project: &Project, folder: &[usize], active_page: Option<WindowId>) -> Self {
+        let active_page = active_page.filter(|&id| project.graph(id).is_some());
+        let graphs: Vec<_> = project.graphs().map(|g| (g.id, true)).collect();
         Self {
-            source: Source::AllInProject,
+            source: if graphs.len() == 1 && active_page.is_some() { Source::ActivePage } else { Source::AllInProject },
+            active_page,
             folder: FolderScope::new(project, folder),
-            graphs: project.graphs().map(|g| (g.id, true)).collect(),
+            graphs,
             keep_sources: true,
             rearrange: true,
             rows: None,
@@ -134,21 +159,30 @@ impl MergeGraphsDialog {
     }
 
     /// The graphs that will be merged, in order.
-    fn chosen(&self, project: &Project) -> Vec<WindowId> {
-        if self.source.is_folder() {
-            self.folder.graphs(project, self.source == Source::Recursive)
-        } else {
-            self.graphs.iter().filter(|(_, on)| self.source == Source::AllInProject || *on).map(|(id, _)| *id).collect()
+    fn chosen(&self, project: &Project, workspace: &Workspace) -> Vec<WindowId> {
+        match self.source {
+            Source::ActivePage => self.active_page.filter(|&id| project.graph(id).is_some()).into_iter().collect(),
+            Source::AllInProject => self.graphs.iter().map(|(id, _)| *id).collect(),
+            Source::Specified => self.graphs.iter().filter(|(_, on)| *on).map(|(id, _)| *id).collect(),
+            Source::ActiveFolder | Source::Recursive => self.folder.graphs(project, self.source == Source::Recursive),
+            Source::OpenFolder => self
+                .folder
+                .graphs(project, false)
+                .into_iter()
+                .filter(|&id| workspace.is_shown(id) && workspace.mode(id) != Some(Mode::Minimised))
+                .collect(),
+            Source::IncludeEmbedded => self.folder.graphs_with_embedded(project),
         }
     }
 
-    fn options(&self, project: &Project) -> MergeOptions {
-        let sources = self.chosen(project);
+    fn options(&self, project: &Project, workspace: &Workspace) -> MergeOptions {
+        let sources = self.chosen(project, workspace);
         let (rows, cols) = auto_grid(sources.len(), self.rows, self.cols);
         let page = (self.page_in[0], self.page_in[1]);
         let default_page = !self.portrait && page == MERGE_PAGE_IN;
         MergeOptions {
             sources,
+            allow_single_source: self.source.allows_single_source(),
             rows: Some(rows),
             cols: Some(cols),
             h_gap: self.h_gap,
@@ -181,7 +215,7 @@ impl MergeGraphsDialog {
         }
     }
 
-    pub fn show(&mut self, ctx: &egui::Context, doc: &mut Document) -> Outcome {
+    pub fn show(&mut self, ctx: &egui::Context, doc: &mut Document, workspace: &Workspace) -> Outcome {
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             return Outcome::Closed;
         }
@@ -211,14 +245,14 @@ impl MergeGraphsDialog {
                             egui::ScrollArea::vertical()
                                 .auto_shrink([false, true])
                                 .max_height(560.0)
-                                .show(ui, |ui| self.body(ui, doc.project()));
+                                .show(ui, |ui| self.body(ui, doc.project(), workspace));
                         },
                     );
                     ui.allocate_ui_with_layout(
                         egui::vec2(preview_width, 0.0),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| {
-                            let options = self.options(doc.project());
+                            let options = self.options(doc.project(), workspace);
                             let valid_folder = !self.source.is_folder() || self.folder.valid(doc.project());
                             self.preview.show(ui, doc, options, valid_folder);
                         },
@@ -235,7 +269,7 @@ impl MergeGraphsDialog {
                         if self.source.is_folder() && !self.folder.valid(doc.project()) {
                             self.problem = Some("Source folder tree changed. Reopen Merge Graph Windows.".into());
                         } else {
-                            let opts = self.options(doc.project());
+                            let opts = self.options(doc.project(), workspace);
                             match doc.edit("Merge Graph Windows", |p| p.merge_graphs(&opts)) {
                                 Ok(id) => result = Outcome::Created(id),
                                 Err(e) => self.problem = Some(e.to_string()),
@@ -250,17 +284,16 @@ impl MergeGraphsDialog {
         if !open { Outcome::Closed } else { result }
     }
 
-    fn body(&mut self, ui: &mut egui::Ui, project: &Project) {
+    fn body(&mut self, ui: &mut egui::Ui, project: &Project, workspace: &Workspace) {
         let previous = self.source;
         egui::Grid::new("merge_top").num_columns(2).show(ui, |ui| {
             let label = ui.label("Merge");
             egui::ComboBox::from_id_salt("merge_source")
                 .selected_text(self.source.name())
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.source, Source::ActiveFolder, "All in Active Folder");
-                    ui.selectable_value(&mut self.source, Source::Recursive, "All in Active Folder (Recursive)");
-                    ui.selectable_value(&mut self.source, Source::AllInProject, "All in Project");
-                    ui.selectable_value(&mut self.source, Source::Specified, "Specified");
+                    for source in Source::ALL {
+                        ui.selectable_value(&mut self.source, source, source.name());
+                    }
                 })
                 .response
                 .labelled_by(label.id);
@@ -269,7 +302,7 @@ impl MergeGraphsDialog {
         if previous != self.source {
             self.problem = None;
         }
-        let chosen = self.chosen(project);
+        let chosen = self.chosen(project, workspace);
         ui.label("Graphs");
         let specified = self.source == Source::Specified;
         let mut swap = None;

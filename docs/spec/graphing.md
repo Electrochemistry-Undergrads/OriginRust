@@ -301,7 +301,8 @@ or a number) and Offset (pt) right and down; the title turns about its middle an
 offset (`Axis::title_rotation_deg`, `Axis::title_offset_pt`, `turned_title` in
 `crates/plot/src/layout.rs`). The `.opj` reader keeps a title's angle when it is not the default; the
 writer writes the angle and the offset (the moved position as the object's centre). Dragging a title
-with the mouse is not built.
+with the mouse (T335) adds the move, in page points, to that offset in one undo step ("Move axis title"), so
+the title stays where it was dropped, as Origin keeps a moved title; the Title tab shows the new offset.
 
 **Tokens inside a title (T246).** A title of Sheaf's own may hold `%(?X)` and `%(?Y)` anywhere, with
 or without options after a comma (`%(?X,@LG)`, letter case ignored); when the graph is drawn each is
@@ -579,6 +580,15 @@ Per entry: `\L(n) %(n)`. `\L(n)` (also `\l`) draws the sample of plot n; `\L(2.1
 | @W, @WS | workbook, worksheet name |
 | @GF | graph filter condition |
 | @V, @WT | cell access (point-by-point legend) |
+**Measured in Origin 2016 (T339, 2026-11-21, `re-workspace/scratch/t338`):** `string s$ = "%(1,@opt)"` on a graph window
+whose plot 1 is column B (long name Volt, units mV, comment cmt; book long name BookLong) and plot 2 column C (no
+labels): no option `cmt` / `C` (comment's first line, else long name, else short name); `@LL` and `@L` Volt / empty;
+`@LU` mV / empty; `@LC` cmt / empty (not the fallback the table above says); `@LS` and `@C` B / C; `@LG` and `@U`
+`Volt (mV)` / C; `@LA` Volt / C; `@LN` `cmt (mV)` / C; `@LM` cmt / C; `@D` Book1_B; `@W` Book1; `@WS` Sheet1; `@WL`
+BookLong; `@LP` empty; `@R` `[Book1]Sheet1!Col("Volt")[1:5]` / `[Book1]Sheet1!Col(C)[1:5]`; `@X`, `@LD` (without a
+number), `@N` `###`. These are the axis-title answers (T281) plus `@LM` and `@R`. Sheaf draws them in legends and
+free labels with `%(n, option)` (`layout::legend_name`); the combined form `%(1,@(...))` is not read.
+
 Combine: `%(1,@(@LL(@LU)))` = long name followed by (units). Other legend kinds: categorical, box-chart components, point-by-point. Legend symbols not tied to a plot: `\L(O Shape:=..., ...)` (P2) [W:legend-substitution-notation].
 
 ### 6.2 Which label is used; translation modes
@@ -3572,14 +3582,13 @@ adds **Share X** (`share_x`, `--share-x`): the linked layers also follow the fir
 to one, the vertical shared-X figure of the brief. Linking needs Rearrange Layout (the dialog greys
 it with Arrange Settings). A typed page size is used as given. The text factor also scales the
 plots' data labels (unmeasured) and a Fixed Factor applies without rearranging (unmeasured; Auto then
-gives 1 as measured). The app's Merge choice offers "All in Project" (the retained Sheaf default),
-"Specified" (a checklist with Up and Down), "All in Active Folder" and
-"All in Active Folder (Recursive)". The folder modes are measured below; the existing project
-and manual-list order is retained.
-Duplicate, missing or non-graph sources, fewer than two graphs, too few cells, a factor outside 0.05
-to 20 and a page side outside 0.5 to 200 in are refused without changing the project. Not built:
-Add Extra Layer(s) for Grid, Set Layer Width/Height by Common Scale, panel labels, Active Page,
-Open/embedded-only source filters and "Treat Each Source Graph as a Unit" off.
+gives 1 as measured). The app's Merge choices include the project-wide list, a Specified
+checklist with Up and Down, and the source choices below. All in Project is the
+Sheaf default for projects with multiple graphs. Duplicate, missing or non-graph
+sources, too few sources or cells, a factor outside 0.05 to 20 and a page side
+outside 0.5 to 200 in are refused without changing the project.
+Add Extra Layer(s) for Grid, Set Layer Width/Height by Common Scale, panel labels
+and turning off Treat Each Source Graph as a Unit remain open.
 
 **Folder source choices** (Origin 2016, T60 follow-up measured 2026-11-16): fresh
 standard Line graphs were placed using public Project Explorer commands. RootZ/RootA remain
@@ -3616,8 +3625,34 @@ requires reopening before a folder-mode merge, preventing index paths from silen
 another folder. All in Project/Specified keep their existing live graph-list behavior, ticks
 and manual ordering. Empty/one-graph choices are refused without history; source removal,
 multilayer grouping, layout, Undo and native/companion saves reuse the existing core merge.
-New-graph destination placement and visibility/open-only handling retain their existing scope;
-these filters add no folder mutations, model fields, IO format or CLI/MCP options.
+New-graph destination placement is outside these source choices.
+
+**Active Page, Open and Include Embedded** (T60, measured 2026-11-21).
+On Origin 2016, the scripted `merge_graph` Active Page mode made a new graph
+from the active window, with one or two layers in the measured examples.
+Scripted Open selected the active folder's two visible single-layer windows
+and two visible multilayer windows, in creation order, for six layers total.
+It excluded a minimized window, a hidden window and the graph in a child
+folder. This was a command probe. The current guide describes a one-frame
+preference for the dialog's initial list. An actual cell embedding was verified
+with `page.isEmbedded` (1). On that fixture, direct-folder mode returned eight
+layers. Include Embedded returned nine, with the embedded graph first.
+[Origin merge command](https://docs.originlab.com/x-function/ref/merge_graph/) ·
+[Merge Graph dialog](https://docs.originlab.com/origin-help/graphref-mergegraph/) ·
+[Insert Graph](https://docs.originlab.com/x-function/ref/insertgraph/)
+
+In Sheaf, Active Page uses the graph active when the dialog opens and is the
+initial choice for a project with only that graph. Open uses the captured
+folder and the current workspace visibility, excluding minimized windows.
+Include Embedded starts with graphs referenced by graph sheets and by cells
+of workbooks in that folder. It follows workbook order, sheet order and the
+stored order of a sheet's cell references, then appends the folder's ordinary
+graphs in creation order. Sheaf stores these worksheet items as links to
+standalone graph windows, so it resolves every link to its live graph and
+includes each window at most once. The three new choices can merge a single
+graph. The original choices and CLI still require two. Preview and OK use
+the same selection rules, and Keep Source Graphs applies to the selected
+graph windows, including the ones found through worksheet references.
 
 The Merge dialog's vertical scroll viewport fills the available dialog width. Short source
 choices no longer shrink its clipping rectangle around the narrow top controls, so longer

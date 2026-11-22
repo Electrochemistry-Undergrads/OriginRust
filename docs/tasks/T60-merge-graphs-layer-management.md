@@ -4,7 +4,7 @@
 15.7c, 15.7d; probes `tools/origin-ref/merge-graph-*.lines.txt`, `fit-page-to-layers.lines.txt`):
 Merge Graph Windows (core `merge.rs`, dialog, `sheaf merge-graphs`), Layer Management (Arrange,
 Size/Position, Link; core `layer_manage.rs`), Fit Page to Layers (dialog and Format item). Fit Layer to
-Graph did nothing measurable in Origin and is tagged `N`. Left: Merge's Active Page/Open/embedded filters, extra layers
+Graph did nothing measurable in Origin and is tagged `N`. Left: Merge's extra layers
 for empty cells and Common Scale options, panel labels; Layer Management's Add
 (T61), Axes and remaining Display controls; MCP tool for merging. **Size:** L, merge then management.
 Background-colour follow-up (`codex/t60-layer-display`, 2026-11-16): Display > Color >
@@ -60,6 +60,11 @@ threads. Current manual/Auto/folder/source-removal/merged/Undo captures and inde
 were inspected; all owned builders/apps/helpers/guards are terminal. Initial fixture/layout/style
 pilots are excluded; published merge assertions are preserved.
 
+Source-choice follow-up (2026-11-21). Active Page, All in Active Folder (Open)
+and All in Active Folder (Include Embedded) use the measured Origin 2016
+command scopes in graphing 15.7c. Preview and OK share the source resolution.
+Include Embedded resolves Sheaf's existing graph-sheet and cell references.
+
 **Branch:** `merge-graphs`. **Priority:** P0, wave 2, owner's stacked-figure priority.
 **Spec:** [graphing](../spec/graphing.md) 15 (add Merge Graph Windows and Layer Management
 subsections); ADR 0009. **Inventory:** 0 locations tagged `T60`.
@@ -79,7 +84,7 @@ Origin 2016 merge/window controls, defaults, layout/scaling, linked source layer
 retention and fit margins are recorded in graphing 15.7c/15.7d. Folder membership and named
 recursive traversal have fresh controls; reverse-arrival ordering remains unmeasured.
 The spec distinguishes measured fixtures from Sheaf policies, including shared-X and the
-existing project/manual-list order. Remaining filters/labels and unimplemented
+existing project/manual-list order. Panel labels and unimplemented
 management controls need separate measurements before being enabled.
 
 ## Where

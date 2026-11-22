@@ -2711,10 +2711,12 @@ impl SheafApp {
                 }
             }
             Action::MergeGraphs => {
-                if self.doc.project().graphs().count() < 2 {
-                    self.warn("Merge Graph Windows needs at least two graphs");
+                let project = self.doc.project();
+                if project.graphs().next().is_none() {
+                    self.warn("Choose a source graph to merge");
                 } else {
-                    self.merge_graphs = Some(MergeGraphsDialog::new(self.doc.project(), &self.panels.explorer.folder));
+                    self.merge_graphs =
+                        Some(MergeGraphsDialog::new(project, &self.panels.explorer.folder, self.active));
                 }
             }
             Action::LabelPanels { book, columns } => {
@@ -3281,6 +3283,14 @@ impl SheafApp {
                     {
                         l.x = x;
                         l.y = y;
+                    }
+                });
+            }
+            Action::MoveAxisTitle { graph, layer, y, dx, dy } => {
+                self.doc.apply("Move axis title", |p| {
+                    if let Some(l) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer)) {
+                        let axis = if y { &mut l.y_axis } else { &mut l.x_axis };
+                        axis.title_offset_pt = (axis.title_offset_pt.0 + dx, axis.title_offset_pt.1 + dy);
                     }
                 });
             }
@@ -6871,7 +6881,7 @@ impl SheafApp {
             }
         }
         if let Some(d) = &mut self.merge_graphs {
-            match d.show(ctx, &mut self.doc) {
+            match d.show(ctx, &mut self.doc, &self.workspace) {
                 MergeGraphsOutcome::Open => {}
                 MergeGraphsOutcome::Closed => self.merge_graphs = None,
                 MergeGraphsOutcome::Created(graph) => {
@@ -7840,8 +7850,9 @@ impl SheafApp {
                         self.graphs.entry(graph).or_default().zoom = crate::graph_zoom::Zoom { factor, scroll };
                     }
                 }
-                "merge-graphs" if self.doc.project().graphs().count() >= 2 => {
-                    self.merge_graphs = Some(MergeGraphsDialog::new(self.doc.project(), &self.panels.explorer.folder));
+                "merge-graphs" if first_graph.is_some() => {
+                    let active = self.active.filter(|&id| project.graph(id).is_some()).or(first_graph);
+                    self.merge_graphs = Some(MergeGraphsDialog::new(project, &self.panels.explorer.folder, active));
                 }
                 "add-layer" => {
                     if let Some(graph) = first_graph {

@@ -11,5 +11,7 @@ found). **Size:** S. **Spec:** `docs/spec/analysis-tools.md` 11.8.
 ## Left
 
 - Stop the limits at the local minimum as Origin does (needs a noise-proof rule and the
-  `origin_peakchain` integ1 reference re-run over the new rows); the left-edge rule.
+  `origin_peakchain` integ1 reference re-run over the new rows); the left-edge rule. T336 measured
+  Origin on rippled data (analysis-tools 11.8): its limits there fit no single local-minimum rule, so
+  nothing was changed.
 - Write Origin's three sheets (names, columns) for the Integrate goal.

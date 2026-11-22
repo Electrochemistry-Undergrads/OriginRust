@@ -61,6 +61,102 @@ fn source(h: &mut Harness<'static, SheafApp>, current: &str, next: &str) {
 }
 
 #[test]
+fn the_active_page_can_be_previewed_and_merged_in_a_one_graph_project() {
+    let mut h = start(vec![data_file("merge-active-page")]);
+    show_window(&mut h, "Graph1 - sample");
+    let first = graph(&h).id;
+    let before = project(&h).clone();
+    open(&mut h);
+    click(&mut h, "Preview");
+    assert!(h.query_by_label("1 source graph, 1 layer").is_some());
+    assert_eq!(project(&h), &before);
+
+    click(&mut h, "OK");
+    let mut expected = before.clone();
+    expected
+        .merge_graphs(&sheaf_core::merge::MergeOptions {
+            sources: vec![first],
+            allow_single_source: true,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(project(&h), &expected);
+    menu(&mut h, "Edit", "Undo Merge Graph Windows");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn open_folder_uses_current_window_visibility_and_includes_multilayer_graphs() {
+    let (mut h, ids) = fixture("merge-folder-open");
+    h.state_mut().doc.apply("Open graph fixture", |p| {
+        p.root.windows.retain(|id| *id != ids[0]);
+        p.root.folders[0].windows.extend(&ids[..2]);
+        let g = p.graph_mut(ids[3]).unwrap();
+        g.layers.push(g.layers[0].clone());
+    });
+    let app = h.state_mut();
+    app.focus(ids[0]);
+    app.workspace.hide(ids[0]);
+    app.focus(ids[1]);
+    app.workspace.minimise(ids[1]);
+    app.focus(ids[3]);
+    app.focus(ids[4]);
+    app.focus(ids[2]);
+    settle(&mut h);
+    let before = project(&h).clone();
+    open(&mut h);
+    source(&mut h, "All in Project", "All in Active Folder (Open)");
+    click(&mut h, "Auto Preview");
+    assert!(h.query_by_label("2 source graphs, 3 layers").is_some());
+    h.state_mut().workspace.hide(ids[3]);
+    settle(&mut h);
+    assert!(h.query_by_label("1 source graph, 1 layer").is_some());
+    assert_eq!(project(&h), &before);
+
+    click(&mut h, "OK");
+    let mut expected = before;
+    expected
+        .merge_graphs(&sheaf_core::merge::MergeOptions {
+            sources: vec![ids[2]],
+            allow_single_source: true,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(project(&h), &expected);
+}
+
+#[test]
+fn include_embedded_adds_graphs_from_the_folders_books_and_deduplicates_windows() {
+    let (mut h, ids) = fixture("merge-folder-embedded");
+    let book_id = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Embedded graph fixture", |p| {
+        let book = p.workbook_mut(book_id).unwrap();
+        book.add_graph_sheet(ids[4], "ChildZ");
+        book.add_graph_sheet(WindowId(u64::MAX), "Missing");
+        let sheet = &mut book.sheets[0];
+        let y = sheet.columns[1].id;
+        sheet.set_cell_graph(y, 0, Some(ids[5]));
+        sheet.set_cell_graph(y, 1, Some(ids[4]));
+        sheet.set_cell_graph(y, 2, Some(ids[2]));
+        p.root.folders[0].windows.push(book_id);
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    open(&mut h);
+    source(&mut h, "All in Project", "All in Active Folder (Include Embedded)");
+    click(&mut h, "OK");
+
+    let mut expected = before;
+    let opts = sheaf_core::merge::MergeOptions {
+        sources: [5, 4, 2, 3].map(|i| ids[i]).to_vec(),
+        allow_single_source: true,
+        ..Default::default()
+    };
+    expected.merge_graphs(&opts).unwrap();
+    assert_eq!(project(&h), &expected);
+}
+
+#[test]
 fn active_folder_merges_only_its_graphs_in_the_measured_order_and_undoes_once() {
     let (mut h, ids) = fixture("merge-folder-direct");
     let before = project(&h).clone();
@@ -205,7 +301,7 @@ fn empty_single_graph_and_invalid_folder_paths_do_not_create_history() {
         h.state_mut()
             .doc
             .apply("Empty folder", |p| p.root.folders.push(Folder { name: "Empty".into(), ..Default::default() }));
-        let d = MergeGraphsDialog::new(project(&h), &path);
+        let d = MergeGraphsDialog::new(project(&h), &path, h.state().active);
         h.state_mut().merge_graphs = Some(d);
         settle(&mut h);
         let before = project(&h).clone();

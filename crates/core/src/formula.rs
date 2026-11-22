@@ -200,6 +200,10 @@ impl Host for SheetHost<'_> {
         self.find(col).is_some()
     }
 
+    fn names_column(&self, name: &str) -> bool {
+        self.sheet.columns.iter().any(|c| c.short_name.eq_ignore_ascii_case(name))
+    }
+
     fn column_data(&self, col: &ColumnRef) -> Option<&[f64]> {
         // A column with masked cells goes through `cell` value by value, which reads them as
         // missing (T264); the slice is only the fast path.
@@ -920,6 +924,21 @@ mod tests {
         let c = p.add_column(book, 0, Designation::Y, ColumnData::numeric(Vec::new())).unwrap();
         p.column_mut(b).unwrap().long_name = "Current".into();
         (p, a, b, c)
+    }
+
+    /// T338: Origin 2016's Set Column Values has no bare column names (`A*2` gives missing values
+    /// there, measured); Sheaf refuses the formula and says how to read the column.
+    #[test]
+    fn a_bare_column_name_is_refused_with_the_col_form() {
+        let (mut p, _, _, c) = sample();
+        let e = p.set_column_values(c, "A*2", None).unwrap_err().to_string();
+        assert!(e.contains("unknown variable 'A'") && e.contains("write col(A)"), "{e}");
+        let e = p.set_column_values(c, "b+1", None).unwrap_err().to_string();
+        assert!(e.contains("write col(b)"), "the short name matches in any case: {e}");
+        let e = p.set_column_values(c, "zz+1", None).unwrap_err().to_string();
+        assert!(e.contains("unknown variable 'zz'") && !e.contains("col(zz)"), "{e}");
+        p.set_column_values(c, "col(A)*2", None).unwrap();
+        assert_eq!(p.column(c).unwrap().numeric().unwrap(), [2.0, 4.0, 6.0, 8.0]);
     }
 
     #[test]

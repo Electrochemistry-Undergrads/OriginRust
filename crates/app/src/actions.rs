@@ -636,7 +636,7 @@ pub enum Action {
     SwapColumns(ColumnId, ColumnId),
     /// Edit > Find in Project (F3): open the Find window.
     FindInProject,
-    /// Edit > Find in Project Files... (T361).
+    /// File > Find in Project Files... (T361).
     FindInProjectFiles,
     /// File > Export > Worksheet as Image...: save the active sheet as a picture.
     ExportWorksheetImage(WindowId),

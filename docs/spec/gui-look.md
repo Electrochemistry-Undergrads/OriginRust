@@ -1709,7 +1709,7 @@ the picking tools) are not repeated.
 ### Find in Project Files (T361, 2026-11-22, not measured)
 
 Origin 2026 searches a collection of saved projects for text in metadata, graph labels, notes and data cells and opens
-the matching project; Origin 2016 cannot, so the window is Sheaf's own. Edit > Find in Project Files... has Find What,
+the matching project; Origin 2016 cannot, so the window is Sheaf's own. File > Find in Project Files... has Find What,
 Folder (typed or Browse..., starting at the open project's folder), Include Subfolders (on), Case Sensitive, Match
 Whole Word and Data in Cells (on). Find All opens every `.sheaf`, `.opj` and `.opju` file there read-only
 (`sheaf_io::open_project`) and searches the whole project with Find in Project's rules (T95, `project_find`: names,

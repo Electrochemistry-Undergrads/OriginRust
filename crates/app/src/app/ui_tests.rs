@@ -5607,7 +5607,7 @@ fn the_statistics_menu_runs_a_quantile_regression() {
     assert_eq!(h.state().doc.undo_label(), Some("Quantile regression"));
 }
 
-/// Edit > Find in Project Files... (T361): the projects of a folder are searched and Open opens the chosen one.
+/// File > Find in Project Files... (T361): the projects of a folder are searched and Open opens the chosen one.
 #[test]
 fn find_in_project_files_lists_the_matching_projects_and_opens_one() {
     let dir = std::env::temp_dir().join(format!("sheaf-app-ui-findfiles-{}", std::process::id()));
@@ -5619,12 +5619,9 @@ fn find_in_project_files_lists_the_matching_projects_and_opens_one() {
         p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();
         sheaf_io::project_file::save(&p, &dir.join(name)).unwrap();
     }
-    // An empty project (nothing to save, so Open does not ask); without a window there is no Edit menu, so the
-    // window is opened by its action, the one the menu item sends.
+    // An empty project: nothing to save, so Open does not ask.
     let mut h = start(vec![]);
-    let ctx = h.ctx.clone();
-    h.state_mut().apply(Action::FindInProjectFiles, &ctx);
-    settle(&mut h);
+    menu_path(&mut h, &["File", "Find in Project Files..."]);
     assert!(h.state().find_files.is_some() && has_label(&h, "Include Subfolders"));
     {
         let d = h.state_mut().find_files.as_mut().unwrap();

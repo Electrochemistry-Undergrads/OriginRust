@@ -334,7 +334,7 @@ pub enum Cmd {
     FindInSheets,
     /// Edit > Find in Project (F3, T95).
     FindInProject,
-    /// Edit > Find in Project Files... (T361).
+    /// File > Find in Project Files... (T361).
     FindInProjectFiles,
     /// File > Export > Worksheet as Image... (T97).
     ExportWorksheetImage,
@@ -1331,7 +1331,13 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
     if kind == WindowKind::Graph {
         v.push(recent_submenu("Recent Graphs", RecentKind::Graphs));
     }
-    v.extend([recent_submenu("Recent Projects", RecentKind::Projects), sep(), item("Exi&t", Cmd::Exit)]);
+    v.extend([
+        recent_submenu("Recent Projects", RecentKind::Projects),
+        // Origin 2026's search of saved projects (T361); with any window type, also with no window open.
+        item("Find in Project Files...", Cmd::FindInProjectFiles),
+        sep(),
+        item("Exi&t", Cmd::Exit),
+    ]);
     v
 }
 
@@ -1378,7 +1384,6 @@ fn edit_menu(kind: WindowKind) -> Vec<Entry> {
         v.push(item("Reset to Full Range", Cmd::ResetFullRange));
         v.push(sep());
         v.push(keyed("Find in Project...", plain_key(Key::F3), Cmd::FindInProject));
-        v.push(item("Find in Project Files...", Cmd::FindInProjectFiles));
         v.push(keyed("Find in Sheets...", ctrl(Key::F), Cmd::FindInSheets));
         v.push(keyed("R&eplace...", ctrl(Key::H), Cmd::ReplaceInSheets));
         v.push(keyed("Go to...", ctrl(Key::G), Cmd::GoToCell));

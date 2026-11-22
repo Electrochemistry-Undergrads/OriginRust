@@ -1,4 +1,4 @@
-//! Edit > Find in Project Files... (T361; Origin 2026's "Find in Project Files", not in Origin 2016, so the window is
+//! File > Find in Project Files... (T361; Origin 2026's "Find in Project Files", not in Origin 2016, so the window is
 //! Sheaf's own): every project file (`.sheaf`, `.opj`, `.opju`) in a folder, and its subfolders when asked, is opened
 //! read-only and searched with the rules of Find in Project (`crate::project_find`): names, long names, comments,
 //! units, data cells and text on graphs. The files with hits are listed with their hits; Open opens the chosen file

@@ -276,7 +276,7 @@ pub struct SheafApp {
     multi_peak: Option<MultiPeakDialog>,
     subtract_pick: Option<SubtractPickDialog>,
     cv_pick: Option<CvPickDialog>,
-    /// Edit > Find in Project Files... (T361).
+    /// File > Find in Project Files... (T361).
     pub(crate) find_files: Option<crate::dialogs::find_files::FindFilesDialog>,
     /// The last analysis run from its window, with its menu label, for Repeat Last Analysis (T360).
     last_analysis: Option<(sheaf_core::analysis::Tool, &'static str)>,
@@ -6292,7 +6292,7 @@ impl SheafApp {
         }
     }
 
-    /// Edit > Find in Project Files... (T361): Open closes the window and opens the chosen project.
+    /// File > Find in Project Files... (T361): Open closes the window and opens the chosen project.
     fn find_files_frame(&mut self, ctx: &egui::Context) {
         let Some(d) = &mut self.find_files else { return };
         match d.show(ctx) {

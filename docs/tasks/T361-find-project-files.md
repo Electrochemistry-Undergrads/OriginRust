@@ -1,7 +1,7 @@
 # T361: Find in Project Files
 
 **Status:** done 2026-11-22 (Claude Windows "claude:gmail", gui-look "Find in Project Files"). HANDOFF C (Origin 2026
-"Find in Project Files"): Edit > Find in Project Files... searches every `.sheaf`, `.opj` and `.opju` project of a
+"Find in Project Files"): File > Find in Project Files... searches every `.sheaf`, `.opj` and `.opju` project of a
 folder (and its subfolders) with Find in Project's rules, lists the files with hits, and opens the chosen one. Not in
 Origin 2016, so the window is Sheaf's own.
 **Size:** S. **Spec:** gui-look, Find in Project Files.

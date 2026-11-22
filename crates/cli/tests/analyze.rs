@@ -2079,3 +2079,38 @@ fn cv_charge_splits_the_sweeps() {
     let (ok, _, stderr) = sheaf(&["analyze", "cv-charge", d, "--y", "I", "--scan-rate", "0"]);
     assert!(!ok && stderr.contains("scan rate"), "{stderr}");
 }
+
+/// `--baseline als` (T318): the Asymmetric Least Squares baseline stays on the sloping background.
+#[test]
+fn als_baseline_goal_follows_the_background() {
+    let dir = scratch("baseline-als");
+    let mut text = String::from("x,y\n");
+    for k in 0..401 {
+        let x = k as f64 * 0.05;
+        text.push_str(&format!("{x},{}\n", 0.2 + 0.01 * x + (-(x - 10.0) * (x - 10.0) / 0.5).exp()));
+    }
+    let data = dir.join("one.csv");
+    std::fs::write(&data, text).unwrap();
+    let out = dir.join("out.csv");
+    let (ok, _, stderr) = sheaf(&[
+        "analyze",
+        "peaks",
+        data.to_str().unwrap(),
+        "--baseline-goal",
+        "create",
+        "--baseline",
+        "als",
+        "--als-smoothing",
+        "6",
+        "--export",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "stderr: {stderr}");
+    let csv = std::fs::read_to_string(&out).unwrap();
+    let rows = numeric_rows(&csv);
+    // Row 200 is x = 10, the top of the peak: the baseline stays near 0.3.
+    assert!((rows[200][2] - 0.3).abs() < 0.02, "{:?}", rows[200]);
+    let (ok, _, stderr) =
+        sheaf(&["analyze", "peaks", data.to_str().unwrap(), "--baseline", "als", "--als-asymmetric", "2"]);
+    assert!(!ok && stderr.contains("asymmetric factor"), "{stderr}");
+}

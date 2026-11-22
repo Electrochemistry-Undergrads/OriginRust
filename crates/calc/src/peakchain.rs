@@ -99,6 +99,8 @@ pub enum ChainBaseline {
         points: usize,
         method: InterpMethod,
     },
+    /// Origin's Baseline Mode "Asymmetric Least Squares Smoothing" (T318, [`crate::als_baseline`]).
+    Als(crate::baseline::AlsOptions),
 }
 
 /// Which value of the data a constant baseline takes (Origin's Constant choices).
@@ -285,6 +287,7 @@ fn baseline_method(x: &[f64], y: &[f64], b: &ChainBaseline) -> Option<BaselineMe
             }
             BaselineMethod::Anchors { points: p, method: *method, boundary: SplineBoundary::NotAKnot }
         }
+        ChainBaseline::Als(o) => BaselineMethod::Als(*o),
         ChainBaseline::AutoMinima(k) => {
             let mut p = auto_minima_anchors(x, y, *k);
             p.dedup_by(|a, b| a.0 == b.0);

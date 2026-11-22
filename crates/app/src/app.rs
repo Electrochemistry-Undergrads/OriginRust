@@ -3239,6 +3239,15 @@ impl SheafApp {
                     }
                 });
             }
+            Action::SetLayerFrame { graph, layer, on } => {
+                self.doc.apply("Show Frame", |p| {
+                    if let Some(layer) = p.graph_mut(graph).and_then(|g| g.layers.get_mut(layer))
+                        && layer.coords.is_cartesian()
+                    {
+                        layer.display.show_frame = on;
+                    }
+                });
+            }
             Action::FullScreen(graph) if self.full_screen.is_none() => {
                 self.full_screen = Some(crate::view_modes::FullScreen::new(graph, !self.full_screen_reminder_off));
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
@@ -6612,6 +6621,7 @@ impl SheafApp {
             _ => WindowKind::None,
         };
         let selected: &[ColumnId] = book.and_then(|b| self.books.get(&b)).map(|s| s.selected.as_slice()).unwrap_or(&[]);
+        let layer = graph.and_then(|g| self.graphs.get(&g)).map_or(0, |s| s.active_layer);
         MenuContext {
             kind,
             book,
@@ -6657,7 +6667,7 @@ impl SheafApp {
             templates: self.startup.templates_dir.is_some(),
             panels: self.panels.shown_flags(),
             ai_link: self.live.active(),
-            layer: graph.and_then(|g| self.graphs.get(&g)).map_or(0, |s| s.active_layer),
+            layer,
             tool: graph.and_then(|g| self.graphs.get(&g)).map_or(GraphTool::Pointer, |s| s.tool()),
             curve: graph.and_then(|g| self.graph_curve(g)),
             graph_pick: graph.and_then(|g| self.graphs.get(&g)).and_then(|s| s.selected).map(|(_, k)| k),
@@ -6687,6 +6697,10 @@ impl SheafApp {
             active_layer_indicator: graph
                 .and_then(|g| project.graph(g))
                 .is_some_and(|g| g.page.style.active_layer_indicator),
+            show_frame: graph
+                .and_then(|g| project.graph(g)?.layers.get(layer))
+                .filter(|l| l.coords.is_cartesian())
+                .map(|l| l.display.show_frame),
             lock_position: graph.and_then(|g| project.graph(g)).map(|g| g.page.style.lock_position).unwrap_or_default(),
             page_breaks: book
                 .and_then(|b| project.workbook(b))

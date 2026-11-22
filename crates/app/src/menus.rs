@@ -632,6 +632,7 @@ pub enum Cmd {
     /// View > Show > Layer Icons.
     ToggleLayerIcons,
     ToggleActiveLayerIndicator,
+    ToggleLayerFrame,
     /// Data > Lock Position (T186): where the graph's analysis locks are drawn.
     LockPosition(sheaf_core::graph::LockPosition),
     /// The layer icon menu's Set Active Layer By Layer Icon Only (T183).
@@ -934,6 +935,8 @@ pub struct MenuContext<'a> {
     pub layer_icons: bool,
     /// Whether View > Show > Active Layer Indicator is checked for this graph.
     pub active_layer_indicator: bool,
+    /// The active Cartesian layer's plot frame. None disables the command.
+    pub show_frame: Option<bool>,
     /// The active graph's Lock Position (the tick of Data > Lock Position, T186).
     pub lock_position: sheaf_core::graph::LockPosition,
     /// The active sheet shows Page Break Preview Lines (the tick of the View menu's item, T185).
@@ -1468,7 +1471,8 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
                 item("Layer Icons", Cmd::ToggleLayerIcons),
                 item("Active Layer Indicator", Cmd::ToggleActiveLayerIndicator),
             ];
-            show.extend(greys(&["Axis Layer Icons", "-", "Object Grid", "Layer Grid", "-", "Frame"]));
+            show.extend(greys(&["Axis Layer Icons", "-", "Object Grid", "Layer Grid", "-"]));
+            show.push(item("Frame", Cmd::ToggleLayerFrame));
             show.push(item("Labels", Cmd::ToggleShowLabels));
             show.push(item("Data", Cmd::ToggleShowData));
             show.push(keyed("Active Layer Only", ctrl_alt(Key::D), Cmd::ToggleActiveLayerOnly));
@@ -3967,6 +3971,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             switch: crate::actions::PageSwitch::ActiveLayerIndicator,
             on: !c.active_layer_indicator,
         },
+        Cmd::ToggleLayerFrame => Action::SetLayerFrame {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            layer: c.layer,
+            on: !c.show_frame.ok_or("Activate a Cartesian layer first")?,
+        },
         Cmd::LockPosition(position) => {
             Action::SetLockPosition { graph: c.graph.ok_or(NEED_GRAPH)?, position: *position }
         }
@@ -4297,6 +4306,9 @@ fn show_entries(
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleActiveLayerIndicator)) && c.active_layer_indicator {
+                    tick(ui, &response);
+                }
+                if matches!(it.cmd, Some(Cmd::ToggleLayerFrame)) && c.show_frame == Some(true) {
                     tick(ui, &response);
                 }
                 if let Some(Cmd::LockPosition(position)) = &it.cmd
@@ -4713,6 +4725,7 @@ mod tests {
             view_mode: Default::default(),
             layer_icons: true,
             active_layer_indicator: false,
+            show_frame: None,
             lock_position: Default::default(),
             page_breaks: false,
             activate_by_icon_only: false,

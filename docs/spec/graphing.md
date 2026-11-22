@@ -5914,12 +5914,14 @@ other layer added its frame independently. The Origin EPS used a hairline for
 the frame.
 [Origin 2019b release note](https://www.originlab.com/ReleaseNotes/detail.aspx?id=2019b3ORG-19899)
 
-Sheaf's Plot Details > Display controls the frame of a Cartesian layer. The
-graph scene uses a 0.5 pt black outline under the axes, including when clipping
+Sheaf's View > Show > Frame toggles the active Cartesian layer's frame in
+one undo step. The menu check follows the active layer and shares the
+setting with Plot Details > Display. The graph scene uses a 0.5 pt black
+outline under the axes, including when clipping
 to the frame is off. Screen, print and exports share the scene. The setting
 defaults to off in older Sheaf projects and persists in `.sheaf` and the
 `.opj` graph layer header (opj-format 10.2). Existing opposite-edge line
-settings keep their effect. The View menu shortcut remains pending.
+settings keep their effect.
 [Origin Plot Details guide](https://docs.originlab.com/origin-help/pd-dialog-display-speed-tab/)
 
 ## 23. View > Zoom All and the Tools-bar Scale In / Scale Out (T69, measured 2026-11-15, Origin 2016)

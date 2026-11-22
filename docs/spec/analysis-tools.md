@@ -766,9 +766,39 @@ points a few rows away. Those anchors lie on flat baseline, so the baseline hard
 Create Baseline and Subtract Baseline goals are offered with User Defined (2nd Derivative, Number of Points to
 Find 8, or Sheaf's own lowest point of each stretch) and Line, Spline or BSpline; the columns are named as
 Origin's (`Baseline_Data Y<n>`, `Subtracted_Data Y<n>`), without Origin's copies of X. The other methods, Snap
-to Spectrum, anchor editing, XPS, End Points Weighted and Asymmetric Least Squares are greyed. User Defined in
+to Spectrum, anchor editing, XPS and End Points Weighted are greyed (Asymmetric Least Squares and Use
+Existing Dataset: 11.6). User Defined in
 the peak goals uses the same anchors with straight lines. Command line: `sheaf analyze peaks FILE --baseline-goal
 create|subtract [--baseline second-derivative] [--baseline-points N]`.
+
+### 11.6 Use Existing Dataset and Asymmetric Least Squares Smoothing (T318)
+
+Origin 2016 (`re-workspace/scratch/baseline-als/`, the dialog driven as in 11.5): the Baseline Mode list
+of the peak goals has ten entries in the Integrate goal (Constant, User Defined, Use Existing Dataset,
+Local Baseline, XPS, None, Min&Max, End Points Weighted, Straight Line, Asymmetric Least Squares Smoothing
+(Pro)); ALS is marked Pro, and on this (non-Pro) installation picking it does not open its page, so its
+results were **not measured**. OriginLab's help (ALS Baseline and Algorithms pages) names its settings
+Asymmetric Factor [0-1], Threshold, Smoothing Factor and Number of Iterations, gives typical values
+(0.001 for positive peaks, smoothing 2 to 9, 10 iterations) but no defaults, and gives the method of Eilers
+and Boelens (2005).
+
+Sheaf (`sheaf_calc::als_baseline`, `ChainBaseline::Als(AlsOptions)`): the baseline `z` minimises
+`sum w_i (y_i - z_i)^2 + 10^s sum (z_i+1 - 2 z_i + z_i-1)^2` (a banded Cholesky solve). The first pass
+weighs every point 1; after each pass the points on the peak side (above the baseline when the factor is
+below 0.5, below it otherwise) whose distance is more than Threshold times the largest such distance get
+the small weight (the factor, or 1 - factor for negative peaks) and the others the large one; Number of
+Iterations passes in all, no other stopping rule. Points that are not numbers get weight 0; the X spacing
+is not used. Defaults (Sheaf's choice): factor 0.001, threshold 0.05, smoothing 5, 10 iterations. On a
+Gaussian of height 1 on a sloping line (401 points) the baseline under the top is 0.017 high with
+smoothing 5 and 0.008 with 6.
+
+Use Existing Dataset (Origin's help: "use an existing dataset as the XY coordinates of baseline anchor
+points"): a Y column of the project, against its X column, gives the anchors; the baseline goals join them
+with the Create Baseline page's Line, Spline or BSpline, the peak goals with straight lines (the line
+continues beyond the first and last point). In the window it is a mode of the peak goals and an anchor
+finding method of User Defined in the baseline goals, as in Origin. Command line: `--baseline als
+[--als-asymmetric F --als-threshold T --als-smoothing S --als-iterations N]`; a dataset is given there as
+`--anchors X1:Y1,...`.
 
 ## 12. Data manipulation tools and Median Filter (Sheaf's own rules, not measured, except 12.1 to 12.3)
 
@@ -1289,12 +1319,16 @@ Origin's printed numbers):
   cleaning (a constant Y column becomes one point), and for the B-spline with fewer than four
   points. Cubic Spline with two points is the line, with three it is the natural spline. A
   non-integer `npts` (5.7) is cut to 5.
-- Not measured: a constant-X (vertical) curve, which Sheaf merges to one point and refuses;
-  whether the tolerance compares with the previous point or the first of a run; and an X range
-  given with a row range.
+- A constant-X (vertical) curve fails in Origin too (measured 2026-11-21, T326); Sheaf merges it to one
+  point and refuses it. Not measured: whether the tolerance compares with the previous point or the
+  first of a run; and an X range given with a row range.
+- Output (measured 2026-11-21, T326, `re-workspace/scratch/t326`): `InterpolatedX1` (X) and
+  `InterpolatedY1` (Y, comment "Linear trace interp of B"; "Spline" and "B-Spline" for the other
+  methods) at the end of the input sheet; each run goes on with 2, 3, ...
 
-Sheaf: `sheaf_calc::trace_interp`, `Tool::TraceInterp(TraceInterpSpec)`: the X and Y of each input
-in a new sheet (`TraceInterp`), the Y labelled "linear trace interpolation of B". Command line:
+Sheaf: `sheaf_calc::trace_interp`, `Tool::TraceInterp(TraceInterpSpec)`: since T326 the X and Y of each
+input go to the end of the input sheet as in Origin (names and comments as above); "New sheet" in the
+window's Output still writes them to a sheet of their own. Command line:
 `sheaf analyze trace-interp FILE --y B [--method linear|spline|bspline] [--points N]`.
 
 ## 17. IIR Filter and FIR Filter (`dfilter`, the FIR Filter app; T55)

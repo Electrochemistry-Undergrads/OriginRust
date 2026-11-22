@@ -173,6 +173,8 @@ pub enum AnalysisKind {
     RareChart,
     /// Statistics > Process Capability (T365; options in `multivariate_options.rs`).
     Capability,
+    /// Statistics > Survival Analysis > Distribution Overview Plot (T366; options in `multivariate_options.rs`).
+    LifeDist,
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (options in `multivariate_options.rs`).
     KaplanMeier,
     /// Statistics > Multivariate Analysis > K-Means Cluster Analysis (options in `multivariate_options.rs`).
@@ -316,6 +318,7 @@ impl AnalysisKind {
             AnalysisKind::Acf => "Autocorrelation...",
             AnalysisKind::RareChart => "Rare Event Chart (G/T)...",
             AnalysisKind::Capability => "Process Capability...",
+            AnalysisKind::LifeDist => "Distribution Overview Plot...",
             AnalysisKind::KaplanMeier => "Kaplan-Meier Estimator...",
             AnalysisKind::Kmeans => "K-Means Cluster Analysis...",
             AnalysisKind::Crosstab => "Cross Tabulation...",
@@ -418,6 +421,7 @@ impl AnalysisKind {
             "acf" => AnalysisKind::Acf,
             "rarechart" => AnalysisKind::RareChart,
             "capability" => AnalysisKind::Capability,
+            "lifedist" => AnalysisKind::LifeDist,
             "kaplanmeier" => AnalysisKind::KaplanMeier,
             "kmeans" => AnalysisKind::Kmeans,
             "crosstab" => AnalysisKind::Crosstab,
@@ -2301,6 +2305,7 @@ impl AnalysisDialog {
             | AnalysisKind::Acf
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
+            | AnalysisKind::LifeDist
             | AnalysisKind::KaplanMeier
             | AnalysisKind::Kmeans => self.multi.tool(self.kind)?,
             AnalysisKind::AverageCurves => self.curves.average_tool(),
@@ -3622,6 +3627,7 @@ impl AnalysisDialog {
             | AnalysisKind::Acf
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
+            | AnalysisKind::LifeDist
             | AnalysisKind::KaplanMeier
             | AnalysisKind::Kmeans => self.multi.options(ui, self.kind),
             AnalysisKind::DiscreteFreq => {
@@ -3808,6 +3814,7 @@ impl AnalysisDialog {
             | AnalysisKind::Acf
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
+            | AnalysisKind::LifeDist
             | AnalysisKind::SubtractLine
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
@@ -3921,6 +3928,9 @@ impl AnalysisDialog {
                 "Summarize values per hour, day, week, month, quarter or year of their date-time"
             }
             AnalysisKind::Manhattan => "Show p-values along grouped positions, such as chromosomes, as -log10 p",
+            AnalysisKind::LifeDist => {
+                "Fit a life distribution to failure times with right-censored cases and see it four ways"
+            }
             AnalysisKind::Capability => {
                 "How well a process fits its specification limits: Cp, Cpk, Pp, Ppk and parts per million outside"
             }
@@ -4055,6 +4065,9 @@ impl AnalysisDialog {
             }
             AnalysisKind::Roc => {
                 "Area under the curve with its standard error, the curve points and the best cut-off in a new sheet, and a graph"
+            }
+            AnalysisKind::LifeDist => {
+                "The fitted parameters, log-likelihood, mean and median in a new sheet, and the probability, density, survival and hazard graphs"
             }
             AnalysisKind::Capability => {
                 "One row per column (indices, observed and expected PPM, fitted parameters) in a new sheet, and a histogram with the fitted curve and the limits"

@@ -67,6 +67,32 @@ pub(super) struct Overlay {
     pub labels: Vec<(usize, usize)>,
 }
 
+impl Output {
+    /// Moves the column positions of the graph plots by `by`, for a tool that writes `by` columns (the row labels
+    /// and the result table) in front of the columns its plots were counted in.
+    pub(super) fn shift_graphs(mut self, by: usize) -> Self {
+        for g in self.graph.iter_mut().chain(self.more_graphs.iter_mut()) {
+            for p in &mut g.plots {
+                p.x += by;
+                p.y += by;
+            }
+        }
+        self
+    }
+}
+
+/// The long names of the X and Y columns of the plots of a graph's first layer (tests of the tools that build
+/// their graphs from a result sheet).
+#[cfg(test)]
+pub(super) fn plot_columns(p: &Project, graph: WindowId) -> Vec<(String, String)> {
+    let name = |id: ColumnId| p.column(id).map(|c| c.long_name.clone()).unwrap_or_default();
+    p.graph(graph).expect("the graph exists").layers[0]
+        .plots
+        .iter()
+        .map(|pl| (pl.x.map(name).unwrap_or_default(), name(pl.y)))
+        .collect()
+}
+
 pub(super) struct GraphPlot {
     pub x: usize,
     pub y: usize,

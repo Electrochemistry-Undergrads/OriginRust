@@ -214,7 +214,9 @@ mod tests {
         assert!(out.new_graph.is_none());
         // A count of 0 is no time between events.
         let zero = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.0, 4.0])).unwrap();
-        assert!(p.analyze(&request(vec![zero], RareChartSpec { kind: RareChartKind::T, ..Default::default() })).is_err());
+        assert!(
+            p.analyze(&request(vec![zero], RareChartSpec { kind: RareChartKind::T, ..Default::default() })).is_err()
+        );
         assert!(p.analyze(&request(vec![zero], RareChartSpec::default())).is_ok());
     }
 }

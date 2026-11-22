@@ -61,6 +61,38 @@ fn source(h: &mut Harness<'static, SheafApp>, current: &str, next: &str) {
 }
 
 #[test]
+fn merge_panel_labels_follow_source_order_and_the_dialog_draft() {
+    use sheaf_core::layers::NewLayerKind;
+    let (mut h, ids) = fixture("merge-panel-labels");
+    h.state_mut().doc.apply("Second axis", |p| {
+        p.graph_mut(ids[3]).unwrap().add_layer(NewLayerKind::RightY, 0).unwrap();
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    open(&mut h);
+    source(&mut h, "All in Project", "All in Active Folder");
+    click(&mut h, "Arrange Settings");
+    click(&mut h, "Spacing (in % of Page Dimension)");
+    click(&mut h, "Add Label");
+    source(&mut h, "None", "Custom");
+    click(&mut h, "Preview");
+    assert!(h.query_by_label("2 source graphs, 3 layers").is_some());
+    source(&mut h, "Top Left Outside", "Top Right Inside");
+    assert!(h.query_by_label("2 source graphs, 3 layers").is_none());
+    assert_eq!(project(&h), &before);
+    click(&mut h, "OK");
+
+    let merged = project(&h).graphs().last().unwrap();
+    let titles: Vec<_> = merged.layers.iter().map(|l| l.labels.first().map(|label| label.text.as_str())).collect();
+    assert_eq!(titles, [Some("Graph01"), Some("Graph02"), None]);
+    assert!(merged.layers[0].labels[0].x > 0.5 && merged.layers[0].labels[0].y > 0.0);
+    let svg = sheaf_plot::render_svg(project(&h), merged.id).unwrap();
+    assert!(svg.contains("Graph01") && svg.contains("Graph02"));
+    menu(&mut h, "Edit", "Undo Merge Graph Windows");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
 fn the_active_page_can_be_previewed_and_merged_in_a_one_graph_project() {
     let mut h = start(vec![data_file("merge-active-page")]);
     show_window(&mut h, "Graph1 - sample");

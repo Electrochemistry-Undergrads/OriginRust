@@ -10,13 +10,56 @@
 //! Graphs" links the layers to the first one in position only; "Show Axes Frame" hides the X tick
 //! labels and ticks of a panel that touches the one below it.
 
-use crate::graph::{Frame, Graph, LayerLink, Page, ScaleLink, TickDirection};
+use crate::graph::{Font, Frame, Graph, Layer, LayerLink, Page, ScaleLink, TextLabel, TickDirection};
 use crate::ids::WindowId;
 use crate::panels::{PanelError, PanelLayout, PanelOrder, PanelPage};
 use crate::project::{Project, Window};
 
 /// Origin's merged page: 11.41 x 7.973 in (6846 x 4784 dots at 600 dpi), landscape.
 pub const MERGE_PAGE_IN: (f64, f64) = (11.41, 7.973);
+
+/// The four source-label positions of the Origin 2016 merge dialog.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MergeLabelPosition {
+    #[default]
+    TopLeftOutside,
+    TopLeftInside,
+    TopRightOutside,
+    TopRightInside,
+}
+
+/// The text for one source and its width in points before scaling to the merged layer.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MergePanelLabel {
+    pub text: String,
+    pub width_pt: f64,
+}
+
+impl MergePanelLabel {
+    pub fn font() -> Font {
+        Font::new(crate::template::DEFAULT_FONT, 30.0)
+    }
+
+    fn add(&self, layer: &mut Layer, position: MergeLabelPosition, factor: f64, page: (f64, f64)) {
+        let (w, h) = (layer.frame.width * page.0, layer.frame.height * page.1);
+        if self.text.is_empty() || w <= 0.0 || h <= 0.0 {
+            return;
+        }
+        let mut font = Self::font();
+        font.size_pt *= factor;
+        let width = self.width_pt * factor / w;
+        // Origin leaves a gap of 2% of the layer size on each side of the label.
+        // A Sheaf text label starts at the left edge and vertical middle of the first line.
+        let inner_y = 0.02 + 0.5 * font.size_pt / h;
+        let (x, y) = match position {
+            MergeLabelPosition::TopLeftOutside => (-0.02 - width, -inner_y),
+            MergeLabelPosition::TopLeftInside => (0.02, inner_y),
+            MergeLabelPosition::TopRightOutside => (1.02, -inner_y),
+            MergeLabelPosition::TopRightInside => (0.98 - width, inner_y),
+        };
+        layer.labels.push(TextLabel::new(self.text.clone(), x, y, font));
+    }
+}
 
 /// How the text of the merged layers is sized.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -72,6 +115,9 @@ pub struct MergeOptions {
     /// labels, title or ticks, and one that touches the panel on its right no Y ones on that side.
     pub hide_inner: bool,
     pub text_scale: MergeTextScale,
+    /// Optional source labels, in the same order as `sources`.
+    pub panel_labels: Vec<MergePanelLabel>,
+    pub label_position: MergeLabelPosition,
 }
 
 impl Default for MergeOptions {
@@ -97,6 +143,8 @@ impl Default for MergeOptions {
             share_x: false,
             hide_inner: false,
             text_scale: MergeTextScale::Auto,
+            panel_labels: Vec::new(),
+            label_position: MergeLabelPosition::default(),
         }
     }
 }
@@ -307,6 +355,9 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
             }
             scale_text(&mut l, factor);
             g.layers.push(l);
+        }
+        if let Some(label) = opts.panel_labels.get(k) {
+            label.add(&mut g.layers[base], opts.label_position, factor, (page_w, page_h));
         }
         // Link Source Graphs: the roots of the later sources follow the first merged layer. A root
         // that other layers follow (the left layer of a double-Y source) stays on the page, since

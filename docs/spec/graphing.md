@@ -3587,8 +3587,32 @@ checklist with Up and Down, and the source choices below. All in Project is the
 Sheaf default for projects with multiple graphs. Duplicate, missing or non-graph
 sources, too few sources or cells, a factor outside 0.05 to 20 and a page side
 outside 0.5 to 200 in are refused without changing the project.
-Add Extra Layer(s) for Grid, Set Layer Width/Height by Common Scale, panel labels
-and turning off Treat Each Source Graph as a Unit remain open.
+Add Extra Layer(s) for Grid, Set Layer Width/Height by Common Scale and turning
+off Treat Each Source Graph as a Unit remain open.
+
+**Panel labels** (T60, Origin 2016 measured 2026-11-22). Three source graphs
+arranged in a 2 × 2 grid received one editable text object per source on its
+first layer. This held with both a double-Y source and a source with two
+separated unlinked layers. The fourth, empty cell had no label.
+The letter choices produced A/B/C and a/b/c in source order. Custom
+`Graph##` produced Graph01/Graph02/Graph03 and `Panel $(i)` produced
+Panel 1/Panel 2/Panel 3. Plain custom text was repeated on each source.
+The four corner positions put the label on the chosen side of both the
+horizontal and vertical edges of the first layer with about 2% of its extent as
+padding in each direction. The label used a nominal 30 pt font, scaled with
+the layer. Labels were also created with Rearrange Layout off.
+[Origin merge command](https://docs.originlab.com/x-function/ref/merge_graph/) ·
+[Merge Graph dialog](https://docs.originlab.com/origin-help/graphref-mergegraph/)
+
+Sheaf exposes these controls in Add Label. None is the default. A and a use
+alphabetical labels and extend past Z/z with AA/aa. Custom accepts literal
+text and the measured numbering forms, with a run of hashes specifying the
+padding width. The dialog measures the text in the figure's default font.
+The merge engine creates regular graph labels at the selected corner using
+Sheaf's existing text scale for the source layers. The
+draft uses the same settings for Preview and OK, and Undo removes the
+merged graph with its labels. Further Origin custom substitution codes
+remain open.
 
 **Folder source choices** (Origin 2016, T60 follow-up measured 2026-11-16): fresh
 standard Line graphs were placed using public Project Explorer commands. RootZ/RootA remain

@@ -104,6 +104,41 @@ fn three_graphs_in_three_rows_take_origins_rectangles_and_keep_their_text() {
 }
 
 #[test]
+fn panel_labels_are_scaled_and_placed_once_per_source_graph() {
+    use crate::layers::NewLayerKind;
+    let (mut p, sources, _) = project(3);
+    p.graph_mut(sources[1]).unwrap().add_layer(NewLayerKind::RightY, 0).unwrap();
+    let original = p.clone();
+    use MergeLabelPosition::*;
+    for position in [TopLeftOutside, TopLeftInside, TopRightOutside, TopRightInside] {
+        let graphs = sources.iter().map(|&id| p.graph(id).unwrap()).collect::<Vec<_>>();
+        let labels = ["A", "B", "C"].into_iter().map(|text| MergePanelLabel { text: text.into(), width_pt: 20.0 });
+        let result = merge_graphs(
+            &graphs,
+            &MergeOptions { panel_labels: labels.collect(), label_position: position, ..opts(&sources) },
+        )
+        .unwrap();
+        assert!(result.layers[2].labels.is_empty(), "the secondary Y layer gets no separate label");
+        for (index, want) in [(0, "A"), (1, "B"), (3, "C")] {
+            let layer = &result.layers[index];
+            let [label] = layer.labels.as_slice() else { panic!("expected one panel label") };
+            assert_eq!(label.text, want);
+            let width = 20.0 * 0.46 / (layer.frame.width * result.page.width_pt);
+            let half_height = 0.5 * label.font.size_pt / (layer.frame.height * result.page.height_pt);
+            let ((edge_x, edge_y), (want_x, want_y)) = match position {
+                TopLeftOutside => ((label.x + width, label.y + half_height), (-0.02, -0.02)),
+                TopLeftInside => ((label.x, label.y - half_height), (0.02, 0.02)),
+                TopRightOutside => ((label.x, label.y + half_height), (1.02, -0.02)),
+                TopRightInside => ((label.x + width, label.y - half_height), (0.98, 0.02)),
+            };
+            assert!(close(edge_x, want_x, 1e-9) && close(edge_y, want_y, 1e-9));
+            assert!(close(label.font.size_pt, 13.8, 1e-9));
+        }
+    }
+    assert_eq!(p, original);
+}
+
+#[test]
 fn three_graphs_fill_a_two_by_two_grid_and_their_text_shrinks() {
     let (mut p, gs, _) = project(3);
     let tick = p.graph(gs[0]).unwrap().layers[0].x_axis.tick_font.size_pt;

@@ -3,8 +3,10 @@
 
 use crate::workspace::{Mode, Workspace};
 use eframe::egui;
-use sheaf_core::merge::{MERGE_PAGE_IN, MergeOptions, MergeTextScale, auto_grid};
+use sheaf_core::column::default_short_name;
+use sheaf_core::merge::{MERGE_PAGE_IN, MergeLabelPosition, MergeOptions, MergePanelLabel, MergeTextScale, auto_grid};
 use sheaf_core::{Document, Project, WindowId};
+use sheaf_plot::{SystemFonts, TextMeasurer};
 
 pub(crate) mod folders;
 mod preview;
@@ -66,6 +68,61 @@ enum Scale {
     Fixed,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LabelText {
+    None,
+    Uppercase,
+    Lowercase,
+    Custom,
+}
+
+impl LabelText {
+    const ALL: [Self; 4] = [Self::None, Self::Uppercase, Self::Lowercase, Self::Custom];
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::None => "None",
+            Self::Uppercase => "A",
+            Self::Lowercase => "a",
+            Self::Custom => "Custom",
+        }
+    }
+
+    fn text(self, index: usize, custom: &str) -> Option<String> {
+        match self {
+            Self::None => None,
+            Self::Uppercase => Some(default_short_name(index)),
+            Self::Lowercase => Some(default_short_name(index).to_ascii_lowercase()),
+            Self::Custom => Some(numbered_label(custom, index + 1)),
+        }
+    }
+}
+
+/// Each run of # pads the number to its length. The other numbered form is `$(i)`.
+fn numbered_label(pattern: &str, number: usize) -> String {
+    let pattern = pattern.replace("$(i)", &number.to_string());
+    let mut formatted = String::with_capacity(pattern.len());
+    let mut rest = pattern.as_str();
+    while let Some((prefix, suffix)) = rest.split_once('#') {
+        formatted.push_str(prefix);
+        let following_hashes = suffix.bytes().take_while(|&b| b == b'#').count();
+        let width = following_hashes + 1;
+        formatted.push_str(&format!("{number:0width$}"));
+        rest = &suffix[following_hashes..];
+    }
+    formatted.push_str(rest);
+    formatted
+}
+
+fn label_position_name(position: MergeLabelPosition) -> &'static str {
+    match position {
+        MergeLabelPosition::TopLeftOutside => "Top Left Outside",
+        MergeLabelPosition::TopLeftInside => "Top Left Inside",
+        MergeLabelPosition::TopRightOutside => "Top Right Outside",
+        MergeLabelPosition::TopRightInside => "Top Right Inside",
+    }
+}
+
 #[derive(Copy, Clone, PartialEq)]
 enum Unit {
     Inch,
@@ -124,6 +181,9 @@ pub struct MergeGraphsDialog {
     page_in: [f64; 2],
     scale: Scale,
     factor: f64,
+    label_text: LabelText,
+    custom_label: String,
+    label_position: MergeLabelPosition,
     problem: Option<String>,
     preview: preview::Preview,
 }
@@ -153,6 +213,9 @@ impl MergeGraphsDialog {
             page_in: [MERGE_PAGE_IN.0, MERGE_PAGE_IN.1],
             scale: Scale::Auto,
             factor: 1.0,
+            label_text: LabelText::None,
+            custom_label: "Graph##".into(),
+            label_position: MergeLabelPosition::default(),
             problem: None,
             preview: preview::Preview::default(),
         }
@@ -180,6 +243,14 @@ impl MergeGraphsDialog {
         let (rows, cols) = auto_grid(sources.len(), self.rows, self.cols);
         let page = (self.page_in[0], self.page_in[1]);
         let default_page = !self.portrait && page == MERGE_PAGE_IN;
+        let font = MergePanelLabel::font();
+        let panel_labels = (0..sources.len())
+            .filter_map(|index| self.label_text.text(index, &self.custom_label))
+            .map(|text| {
+                let width_pt = SystemFonts::shared().width(&text, &font, font.size_pt);
+                MergePanelLabel { text, width_pt }
+            })
+            .collect();
         MergeOptions {
             sources,
             allow_single_source: self.source.allows_single_source(),
@@ -205,6 +276,8 @@ impl MergeGraphsDialog {
                 Scale::Auto | Scale::LayerFrame => MergeTextScale::Auto,
                 Scale::Fixed => MergeTextScale::Fixed(self.factor),
             },
+            panel_labels,
+            label_position: self.label_position,
         }
     }
 
@@ -339,15 +412,35 @@ impl MergeGraphsDialog {
         self.page_setup(ui);
         self.scale_elements(ui);
         egui::CollapsingHeader::new("Add Label").show(ui, |ui| {
-            ui.add_enabled_ui(false, |ui| {
-                egui::Grid::new("merge_label").num_columns(2).show(ui, |ui| {
-                    ui.label("Label Text");
-                    egui::ComboBox::from_id_salt("merge_label_text").selected_text("None").show_ui(ui, |_| {});
+            egui::Grid::new("merge_label").num_columns(2).show(ui, |ui| {
+                let label = ui.label("Label Text");
+                egui::ComboBox::from_id_salt("merge_label_text")
+                    .selected_text(self.label_text.name())
+                    .show_ui(ui, |ui| {
+                        for mode in LabelText::ALL {
+                            ui.selectable_value(&mut self.label_text, mode, mode.name());
+                        }
+                    })
+                    .response
+                    .labelled_by(label.id);
+                ui.end_row();
+                if self.label_text == LabelText::Custom {
+                    let label = ui.label("Custom");
+                    ui.text_edit_singleline(&mut self.custom_label)
+                        .labelled_by(label.id)
+                        .on_hover_text("Use # for the source number, ## for 01, 02, …, or $(i) for 1, 2, …");
                     ui.end_row();
+                }
+                ui.add_enabled_ui(self.label_text != LabelText::None, |ui| {
                     ui.label("Label Position");
                     egui::ComboBox::from_id_salt("merge_label_pos")
-                        .selected_text("Top Left Outside")
-                        .show_ui(ui, |_| {});
+                        .selected_text(label_position_name(self.label_position))
+                        .show_ui(ui, |ui| {
+                            use MergeLabelPosition::*;
+                            for position in [TopLeftOutside, TopLeftInside, TopRightOutside, TopRightInside] {
+                                ui.selectable_value(&mut self.label_position, position, label_position_name(position));
+                            }
+                        });
                     ui.end_row();
                 });
             });
@@ -481,4 +574,16 @@ fn number(ui: &mut egui::Ui, name: &str, value: &mut f64, max: f64) {
     let label = ui.label(name);
     ui.add(egui::DragValue::new(value).speed(0.1).range(0.0..=max).max_decimals(2)).labelled_by(label.id);
     ui.end_row();
+}
+
+#[cfg(test)]
+mod label_tests {
+    use super::numbered_label;
+
+    #[test]
+    fn each_panel_number_expands_with_its_own_padding() {
+        assert_eq!(numbered_label("Panel $(i) / ##", 3), "Panel 3 / 03");
+        assert_eq!(numbered_label("Graph##", 123), "Graph123");
+        assert_eq!(numbered_label("Section (a$)", 1), "Section (a$)");
+    }
 }

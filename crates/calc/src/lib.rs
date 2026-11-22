@@ -67,6 +67,7 @@ pub mod rmanova;
 pub mod roc;
 pub mod signal;
 pub mod smooth;
+pub mod stability;
 pub mod stats;
 pub mod stemleaf;
 pub mod stft;

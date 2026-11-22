@@ -1947,6 +1947,25 @@ Weibull by brentq, normal and lognormal by a root of the score, all also against
 1e-3) to 1e-8. Arbitrary (interval and left) censoring, frequency columns, confidence bands, other distributions and
 regression with life data are not built.
 
+## 38 Stability study and shelf life, ICH Q1E (T368, Origin 2027 Quality app; not measured)
+
+Origin 2027's stability-study app is not part of Origin 2016, so this is Sheaf's own, after ICH Q1E. Statistics >
+Stability Study... (`Tool::Stability`, `sheaf analyze stability --y TIME,RESPONSE[,BATCH] [--lsl L] [--usl U]
+[--confidence 95] [--alpha 0.25] [--no-graph]`): rows with a missing time, response or batch are left out; numeric batch
+labels are sorted, text labels keep their first order; every batch needs two different times and the separate-lines
+model a residual degree of freedom. Three least-squares models: separate intercepts and slopes, separate intercepts
+with a common slope, one line. Poolability at `alpha`: equal slopes by `F = ((SSE_2 - SSE_1) / (g - 1)) / (SSE_1 / (n -
+2g))`; if not rejected, equal intercepts by `F = ((SSE_3 - SSE_2) / (g - 1)) / (SSE_2 / (n - g - 1))`. The chosen model
+gives each batch's mean line and its bound `yhat -+ t sqrt(MSE x0' (X'X)^-1 x0)` on the model's residual degrees of
+freedom, one-sided at the confidence level with one limit and two-sided with two. A batch's shelf life is the first
+time from 0 at which a bound reaches a limit (searched up to 10 times the last time; beyond that it is left empty), and
+the study's is the smallest; a bound beyond a limit at time 0 is refused.
+
+The result sheet `StabilityN` has one row per batch (N, Intercept, Slope, Shelf life) and an "All batches" row (N,
+Shelf life, Prob of equal slopes and of equal intercepts), and the graph data; a new graph draws each batch's points,
+fitted line and bound(s) and the limits. Checked against numpy/scipy (`tools/stability-ref.py`,
+`crates/calc/tests/stability_reference.rs`, all three models) to 1e-9 (shelf lives 1e-8). Random-batch (mixed model)
+estimates, transformed responses and extrapolation rules are not built.
 ## 39 Acceptance sampling by attributes (T369, Origin 2026b Pro app; not measured)
 
 Origin 2026b's Acceptance Sampling app designs or evaluates lot-acceptance plans; Origin 2016 has nothing to copy,

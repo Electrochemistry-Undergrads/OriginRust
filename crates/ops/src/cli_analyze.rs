@@ -1314,6 +1314,16 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             };
             (target, Job::Tool(Tool::LifeDist(analysis::LifeDistSpec { dist, censor, graph: !no_graph })))
         }
+        AnalyzeTool::Stability { target, lsl, usl, confidence, alpha, no_graph } => (
+            target,
+            Job::Tool(Tool::Stability(analysis::StabilitySpec {
+                lower: lsl,
+                upper: usl,
+                confidence: confidence / 100.0,
+                alpha,
+                graph: !no_graph,
+            })),
+        ),
         AnalyzeTool::Capability { target, lsl, usl, subgroup, model, no_graph } => {
             let model = match model.to_ascii_lowercase().as_str() {
                 "normal" => analysis::CapModel::Normal,

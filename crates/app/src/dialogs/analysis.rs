@@ -173,6 +173,8 @@ pub enum AnalysisKind {
     RareChart,
     /// Statistics > Process Capability (T365; options in `multivariate_options.rs`).
     Capability,
+    /// Statistics > Stability Study (T368; options in `multivariate_options.rs`).
+    Stability,
     /// Statistics > Survival Analysis > Distribution Overview Plot (T366; options in `multivariate_options.rs`).
     LifeDist,
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (options in `multivariate_options.rs`).
@@ -318,6 +320,7 @@ impl AnalysisKind {
             AnalysisKind::Acf => "Autocorrelation...",
             AnalysisKind::RareChart => "Rare Event Chart (G/T)...",
             AnalysisKind::Capability => "Process Capability...",
+            AnalysisKind::Stability => "Stability Study...",
             AnalysisKind::LifeDist => "Distribution Overview Plot...",
             AnalysisKind::KaplanMeier => "Kaplan-Meier Estimator...",
             AnalysisKind::Kmeans => "K-Means Cluster Analysis...",
@@ -421,6 +424,7 @@ impl AnalysisKind {
             "acf" => AnalysisKind::Acf,
             "rarechart" => AnalysisKind::RareChart,
             "capability" => AnalysisKind::Capability,
+            "stability" => AnalysisKind::Stability,
             "lifedist" => AnalysisKind::LifeDist,
             "kaplanmeier" => AnalysisKind::KaplanMeier,
             "kmeans" => AnalysisKind::Kmeans,
@@ -2305,6 +2309,7 @@ impl AnalysisDialog {
             | AnalysisKind::Acf
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
+            | AnalysisKind::Stability
             | AnalysisKind::LifeDist
             | AnalysisKind::KaplanMeier
             | AnalysisKind::Kmeans => self.multi.tool(self.kind)?,
@@ -3627,6 +3632,7 @@ impl AnalysisDialog {
             | AnalysisKind::Acf
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
+            | AnalysisKind::Stability
             | AnalysisKind::LifeDist
             | AnalysisKind::KaplanMeier
             | AnalysisKind::Kmeans => self.multi.options(ui, self.kind),
@@ -3814,6 +3820,7 @@ impl AnalysisDialog {
             | AnalysisKind::Acf
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
+            | AnalysisKind::Stability
             | AnalysisKind::LifeDist
             | AnalysisKind::SubtractLine
             | AnalysisKind::ReduceX
@@ -3931,6 +3938,7 @@ impl AnalysisDialog {
             AnalysisKind::LifeDist => {
                 "Fit a life distribution to failure times with right-censored cases and see it four ways"
             }
+            AnalysisKind::Stability => "Estimate a shelf life from batches measured over time (ICH Q1E)",
             AnalysisKind::Capability => {
                 "How well a process fits its specification limits: Cp, Cpk, Pp, Ppk and parts per million outside"
             }
@@ -4068,6 +4076,9 @@ impl AnalysisDialog {
             }
             AnalysisKind::LifeDist => {
                 "The fitted parameters, log-likelihood, mean and median in a new sheet, and the probability, density, survival and hazard graphs"
+            }
+            AnalysisKind::Stability => {
+                "One row per batch (line and shelf life) and one for all batches (poolability) in a new sheet, and a graph of the data, fits, bounds and limits"
             }
             AnalysisKind::Capability => {
                 "One row per column (indices, observed and expected PPM, fitted parameters) in a new sheet, and a histogram with the fitted curve and the limits"

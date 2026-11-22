@@ -30,6 +30,7 @@ pub mod fft;
 pub mod fft2;
 pub mod fir;
 pub mod freq;
+pub mod fsd;
 pub mod graph_summary;
 pub mod hexbin;
 pub mod hypothesis;
@@ -111,6 +112,7 @@ pub use fir::{
     window as fir_window,
 };
 pub use freq::{BinSize, Freq, FreqOptions, FreqRow, auto_bin_range, auto_bin_size, freq_counts};
+pub use fsd::{Apodization, FsdOptions, fourier_self_deconvolution};
 pub use graph_summary::{SampleSummary, graph_summary, median_confidence_limits, sd_confidence_limits};
 pub use hypothesis::{SampleStats, TTest, Tail, ttest_one, ttest_paired, ttest_two};
 pub use iir::{

@@ -106,6 +106,8 @@ mod layer_visibility_tests;
 #[cfg(test)]
 mod layers_tests;
 #[cfg(test)]
+mod legend_option_tests;
+#[cfg(test)]
 mod legend_tests;
 #[cfg(test)]
 mod lollipop_tests;

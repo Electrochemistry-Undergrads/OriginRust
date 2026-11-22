@@ -1582,6 +1582,67 @@ fn rare_event_charts_run_from_the_command_line() {
     assert!(!ok && err.contains("--chart"), "{err}");
 }
 
+/// Stationarity tests (spec `statistics.md` section 41, T372).
+#[test]
+fn stationarity_tests_run_from_the_command_line() {
+    let dir = scratch("stationarity");
+    let path = dir.join("ts.csv");
+    let mut text = String::from("t,walk\n");
+    let (mut st, mut y) = (7u64, 0.0);
+    for i in 0..150 {
+        st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        y += (st >> 11) as f64 / (1u64 << 53) as f64 - 0.5;
+        text.push_str(&format!("{i},{y}\n"));
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "stationarity", file, "--y", "walk"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("does not reject a unit root at 5%") && out.contains("Stationarity1"), "{out}");
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "stationarity",
+        file,
+        "--y",
+        "walk",
+        "--adf-terms",
+        "trend",
+        "--adf-lags",
+        "2",
+        "--kpss-null",
+        "trend",
+    ]);
+    assert!(ok && out.contains("with 2 lag(s)") && out.contains("trend stationarity"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "stationarity", file, "--y", "walk", "--kpss-null", "drift"]);
+    assert!(!ok && err.contains("--kpss-null"), "{err}");
+}
+
+/// Seasonal decomposition (spec `statistics.md` section 40, T370).
+#[test]
+fn seasonal_decomposition_runs_from_the_command_line() {
+    let dir = scratch("decompose");
+    let path = dir.join("ts.csv");
+    let pattern = [1.0, -2.0, 0.5, 0.5];
+    let mut text = String::from("t,v\n");
+    for i in 0..16 {
+        text.push_str(&format!("{i},{}\n", 3.0 + 0.5 * f64::from(i) + pattern[i as usize % 4]));
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "decompose", file, "--y", "v", "--period", "4"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("additive decomposition with period 4; seasonal indices from -2 to 1")
+            && out.contains("Decompose1"),
+        "{out}"
+    );
+    let (ok, out, err) =
+        sheaf(&["analyze", "decompose", file, "--y", "v", "--period", "4", "--model", "multiplicative", "--no-graph"]);
+    assert!(ok && out.contains("multiplicative decomposition"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "decompose", file, "--y", "v", "--period", "9"]);
+    assert!(!ok && err.contains("two full periods"), "{err}");
+}
+
 /// Autocorrelation (spec `statistics.md` section 34, T363).
 #[test]
 fn autocorrelation_runs_from_the_command_line() {

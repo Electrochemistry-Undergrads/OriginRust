@@ -782,6 +782,16 @@ Name) and `colshowx` (Clear Sampling Interval, default off). Measured from LabTa
   Long Name with the X column's when it has them; otherwise the window says "X column A is not evenly
   spaced: a step differs from the mean step M by D" (or "needs at least two numbers and no gaps" for
   fewer than two numbers, a missing value or a zero step) and changes nothing. The X column stays.
+- **Origin's `vinc` and `vinc_check`, measured (T371, Origin 2016, 2026-11-22, probes
+  `re-workspace/scratch/t371`, local only).** `vinc` gives the mean step and the **sample** standard
+  deviation of the steps (steps 1, 1.04, 0.96: mean 1, sd 0.04; steps 1, 2: mean 1.5, sd 0.7071). `vinc_check`
+  (default tolerance 0.05) passes when the **largest** deviation of a step from the mean step is at most
+  tolerance x |mean step|: steps 1, 1, 1, 1.045, 0.955 (sd 0.032) fail at 0.044 and pass at 0.046; steps 10,
+  10.4, 9.6 and 0.1, 0.104, 0.096 pass at 0.05 and fail at 0.039 (relative). It then returns the mean step
+  (negative for falling values); otherwise it fails and returns 0, also for a single value. A missing cell is
+  read as about 0 (steps 1, -1, 3 for 0, 1, missing, 3). `check_increment` is the same test, with the sample
+  standard deviation as `sd` and `ORIGIN_TOLERANCE` = 0.05; Sheaf refuses a missing value instead, and From X
+  Column keeps the 1e-6 tolerance because the interval then replaces the X values exactly.
 
 ## 13e. Swap Columns and Paste Transpose (T86, 2026-11-16)
 

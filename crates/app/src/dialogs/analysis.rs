@@ -169,6 +169,10 @@ pub enum AnalysisKind {
     Manhattan,
     /// Statistics > Autocorrelation (T363; options in `multivariate_options.rs`).
     Acf,
+    /// Statistics > Seasonal Decomposition (T370; options in `multivariate_options.rs`).
+    Decompose,
+    /// Statistics > Stationarity Tests (T372; options in `multivariate_options.rs`).
+    Stationarity,
     /// Statistics > Rare Event Chart (G/T) (T364; options in `multivariate_options.rs`).
     RareChart,
     /// Statistics > Process Capability (T365; options in `multivariate_options.rs`).
@@ -318,6 +322,8 @@ impl AnalysisKind {
             AnalysisKind::TimePivot => "Time Series Pivot...",
             AnalysisKind::Manhattan => "Manhattan Plot...",
             AnalysisKind::Acf => "Autocorrelation...",
+            AnalysisKind::Decompose => "Seasonal Decomposition...",
+            AnalysisKind::Stationarity => "Stationarity Tests (ADF, KPSS)...",
             AnalysisKind::RareChart => "Rare Event Chart (G/T)...",
             AnalysisKind::Capability => "Process Capability...",
             AnalysisKind::Stability => "Stability Study...",
@@ -422,6 +428,8 @@ impl AnalysisKind {
             "timepivot" => AnalysisKind::TimePivot,
             "manhattan" => AnalysisKind::Manhattan,
             "acf" => AnalysisKind::Acf,
+            "decompose" => AnalysisKind::Decompose,
+            "stationarity" => AnalysisKind::Stationarity,
             "rarechart" => AnalysisKind::RareChart,
             "capability" => AnalysisKind::Capability,
             "stability" => AnalysisKind::Stability,
@@ -2307,6 +2315,8 @@ impl AnalysisDialog {
             | AnalysisKind::TimePivot
             | AnalysisKind::Manhattan
             | AnalysisKind::Acf
+            | AnalysisKind::Decompose
+            | AnalysisKind::Stationarity
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
             | AnalysisKind::Stability
@@ -3630,6 +3640,8 @@ impl AnalysisDialog {
             | AnalysisKind::TimePivot
             | AnalysisKind::Manhattan
             | AnalysisKind::Acf
+            | AnalysisKind::Decompose
+            | AnalysisKind::Stationarity
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
             | AnalysisKind::Stability
@@ -3722,6 +3734,12 @@ impl AnalysisDialog {
     #[cfg(test)]
     pub fn set_crossing_level(&mut self, level: f64) {
         self.level_crossing.level = level;
+    }
+
+    /// Sets the Seasonal Decomposition period as the window's field would (for tests).
+    #[cfg(test)]
+    pub fn set_decompose_period(&mut self, period: usize) {
+        self.multi.set_decompose_period(period);
     }
 
     /// Sets the Curve Translate shift as the dialog's field would (for tests).
@@ -3818,6 +3836,8 @@ impl AnalysisDialog {
             | AnalysisKind::TimePivot
             | AnalysisKind::Manhattan
             | AnalysisKind::Acf
+            | AnalysisKind::Decompose
+            | AnalysisKind::Stationarity
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
             | AnalysisKind::Stability
@@ -3943,6 +3963,8 @@ impl AnalysisDialog {
                 "How well a process fits its specification limits: Cp, Cpk, Pp, Ppk and parts per million outside"
             }
             AnalysisKind::RareChart => "Chart the opportunities or the time between rare events against control limits",
+            AnalysisKind::Stationarity => "Test whether a series wanders (a unit root) or stays about a level or trend",
+            AnalysisKind::Decompose => "Split a series into a trend, a repeating seasonal pattern and what is left",
             AnalysisKind::Acf => {
                 "See how a series correlates with itself at increasing lags, and whether that is more than noise"
             }
@@ -4085,6 +4107,12 @@ impl AnalysisDialog {
             }
             AnalysisKind::RareChart => {
                 "One row per column (fitted distribution, center line, limits, points beyond) in a new sheet, and a chart per column"
+            }
+            AnalysisKind::Stationarity => {
+                "An ADF and a KPSS row per column (statistic, lags, critical values, probability) in a new sheet"
+            }
+            AnalysisKind::Decompose => {
+                "The seasonal indices in a new sheet with the trend, seasonal and residual columns, and three graphs"
             }
             AnalysisKind::Acf => {
                 "One row per lag (ACF with bounds, PACF, Ljung-Box Q and probability) in a new sheet, and the ACF and PACF graphs"

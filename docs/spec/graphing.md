@@ -1264,15 +1264,23 @@ Nested styles, literal blocks and glyph decorations follow the existing text rul
 Sheaf counts the layer's saved plots in order, including hidden ones. It uses the same
 representative line or symbol color as its axis color-following control. Index zero and
 missing plot slots leave the text in its enclosing color. The slot and fallback behavior are
-Sheaf choices. This applies to free labels, ordinary legends and Cartesian axis titles.
+Sheaf choices. This applies to free labels, ordinary legends, Cartesian axis titles and
+point labels sourced from worksheet columns.
 Graph exports and the legend and title editors' scene previews use the same rendering.
 A shared-frame legend resolves the
 color from its owning layer even when its text names a plot in a different layer. For example,
 `\l(2.1) \cp1(%(2.1))` draws the sample and name of the second layer's first plot and
 colors the name with the owning layer's first plot. A title shared by touching Cartesian
-panels uses the plot color from the panel that draws the title. Point labels, specialized
+panels uses the plot color from the panel that draws the title. Specialized
 axis titles, the parallel coordinates group legend and the standalone free-label editor
 preview remain open.
+
+**Worksheet-sourced point labels (T58).** Origin documents escape sequences for text plotted
+from a Label column. Sheaf interprets the existing inline formatting escapes for point labels
+that read a worksheet column, including nested styles, scripts, literal spans and plot color.
+The frame and White Out use the width of the rendered runs with the existing height and
+padding rules. Text that produces no runs draws no frame. Generated X, Y, XY and row-number
+labels use their existing number formatting. [Origin escape sequences](https://docs.originlab.com/origin-help/escape-sequences/)
 
 ### 7.12 Reusable Custom RGB wells (T58/T59, documented contract)
 
@@ -3792,10 +3800,10 @@ the OK button to apply the changes in preview graph to source graph."; Undo, OK 
 
 **Sheaf's Layer Management** (`sheaf_core::layer_manage`, `dialogs/layer_management.rs`; Graph menu,
 page right-click and layer icon menu, the icon's layer selected): the layer list allows several
-layers. Add, Arrange, Size/Position, Link and Display Background Color work on a copy shown as
+layers. Add, Arrange, Size/Position, Link, Axes and Display Background Color work on a copy shown as
 numbered frames on a page-shaped preview. Undo takes back the last Apply. OK writes the copy in one
-undo step. Cancel and Escape discard it. Axes is shown disabled, as are the Align/Custom links, the Units combo of
-Link and the reposition-parent tick. Arrange with no selection takes every layer; "Treat Linked
+undo step. Cancel and Escape discard it. The Align/Custom links, the Units combo of Link and the
+reposition-parent tick are disabled. Arrange with no selection takes every layer; "Treat Linked
 Layers as a group" places a layer with the layers linked to it as one unit; Link Layers links the
 later units to the first in position only. Sheaf choices (not measured): Move in "% of Reference
 Layer" counts from the reference layer's top left corner, a pixel is 1/96 in, the reference layer
@@ -3832,6 +3840,25 @@ Origin 2016 `layarrange` command exposes only uniform sizing, and attempts
 to drive the affected dialog did not produce a fresh geometry measurement.
 Sheaf uses the sizing rules measured for Merge Graph Windows.
 [Origin Arrange tab](https://docs.originlab.com/origin-help/laymanage-arrangetab/)
+
+**Modify Axes** (T60, 2026-11-22). Select one or more Cartesian layers and use the Axes tab to
+change X or Y scale type, move or hide the primary axis, set its tick direction, show its title
+and tick labels, or enter a numeric tick-label formula of `x`. Opposite Line and Opposite Ticks
+control the mirrored edge. The tick direction applies to both major and minor ticks. The mirrored
+edge shares the primary tick direction and has no separate title, labels or formula in Sheaf.
+
+Apply changes the chosen settings in the preview. A mixed value stays as it was on each layer
+until explicitly edited. Scale type applies to independent axes only. Straight-linked axes keep
+their parent scale while remaining eligible for display edits. Scale changes retain explicit
+limits and use Sheaf's normal axis resolution. The preview remains a numbered frame view. Undo
+restores the settings loaded into the tab, and OK writes the preview as one document edit.
+
+The captured Origin 2016 controls show independent Bottom, Left, Top and Right sections with Axis,
+Tick, Title, Tick Label and Formula. The documentation demonstrates changing the Y scale for a
+multi-layer selection. Sheaf uses its primary and mirrored axis representation for these edits.
+The Origin 2016 capture establishes the controls. Live Apply behavior was not read back.
+[Origin Axes tab](https://docs.originlab.com/origin-help/laymanage-axestab/),
+[Origin Layer Management quick start](https://docs.originlab.com/origin-help/layer-management-quick-start/)
 
 **Display > Color > Background Color** (T60 follow-up, measured in Origin 2016 on
 2026-11-16): the stock layer starts at None (`layer.color=0`). The palette has None,
@@ -6529,6 +6556,15 @@ Probed with twelve (X, Y) points selected as A(X), B(Y).
     rule (1.5 IQR, outliers drawn as small crosses). The scatter dots are 4 pt circles, and the scatter's
     axes keep Sheaf's usual end margins.
   - The .opj writer saves the margins as scatter plots of their values, with a warning.
+- **Grouped marginal plots (T373, Origin 2021b; Sheaf's layout, not measured):** `sheaf plot -t
+  marginal-histograms|marginal-box-charts -y Y --group G` splits the rows by the values of G into a `Grouped`
+  sheet (as `--group` with XY templates, 17.10) and plots one scatter per group in the palette's colours
+  (`Project::plot_marginal_groups`). Each margin gets a histogram per group in the group's colour, half
+  transparent with an outline in the colour, so overlapping bars stay visible (each group binned on its own),
+  or a box per group side by side at positions 1, 2, ... (`PlotDecor::marginal_slot`; the box margins then span
+  0.5 to k + 0.5). The Y axis title is the Y column's name (and units), not the first group's value; this
+  applies to every `--group` plot with one Y column. The menu items still take one Y column (no group column
+  in the window yet).
 
 ## 33. QC (X bar R) chart: Plot > Statistics > QC (X bar R) Chart (T111, measured 2026-11-16, Origin 2016)
 

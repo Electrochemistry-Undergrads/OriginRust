@@ -140,8 +140,9 @@ pub(super) fn run(spec: &AcfSpec, inputs: &[Input<'_>]) -> Result<Output, Analys
     for (i, h) in table.headers.iter().enumerate() {
         sheet.push(column_of(h, "", Designation::Y, table.rows.iter().map(|(_, v)| v[i]).collect()));
     }
+    let shift = sheet.len();
     sheet.extend(on_sheet);
-    Ok(Output { table: Some(table), on_sheet: sheet, notes, graph, more_graphs })
+    Ok(Output { table: Some(table), on_sheet: sheet, notes, graph, more_graphs }.shift_graphs(shift))
 }
 
 #[cfg(test)]
@@ -171,6 +172,11 @@ mod tests {
         assert_eq!(t.rows[0].1[3], -t.rows[0].1[4]);
         assert!(out.new_graph.is_some());
         assert_eq!(out.more_graphs.len(), 1);
+        let cols = super::super::dist::plot_columns(&p, out.new_graph.unwrap());
+        assert_eq!((cols[0].0.as_str(), cols[0].1.as_str()), ("Lag", "ACF"), "the graph draws its own columns");
+        assert_eq!(cols[1].1, "ACF upper 95% bound");
+        let cols = super::super::dist::plot_columns(&p, out.more_graphs[0]);
+        assert_eq!(cols[0].1, "PACF");
 
         let spec = AcfSpec { lags: 5, confidence: 0.99, graph: false };
         let out = p.analyze(&request(vec![y], spec)).unwrap();

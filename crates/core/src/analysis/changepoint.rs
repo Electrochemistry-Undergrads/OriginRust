@@ -139,8 +139,9 @@ pub(super) fn run(spec: &ChangePointSpec, inputs: &[Input<'_>]) -> Result<Output
     for (i, h) in table.headers.iter().enumerate() {
         sheet.push(column_of(h, "", Designation::Y, table.rows.iter().map(|(_, v)| v[i]).collect()));
     }
+    let shift = sheet.len();
     sheet.extend(on_sheet);
-    Ok(Output { table: Some(table), on_sheet: sheet, notes, graph, more_graphs: Vec::new() })
+    Ok(Output { table: Some(table), on_sheet: sheet, notes, graph, more_graphs: Vec::new() }.shift_graphs(shift))
 }
 
 #[cfg(test)]
@@ -186,7 +187,8 @@ mod tests {
         // The missing row is left out of the first segment's count.
         assert_eq!(t.rows[0].1[5], 19.0);
         assert!((t.rows[1].1[6] - 4.0).abs() < 0.2);
-        assert!(out.new_graph.is_some());
+        let cols = super::super::dist::plot_columns(&p, out.new_graph.unwrap());
+        assert_eq!(cols[1].1, "Segment means of B", "the graph draws its own columns: {cols:?}");
     }
 
     #[test]

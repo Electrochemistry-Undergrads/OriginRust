@@ -169,6 +169,7 @@ pub(super) fn run(spec: &RareChartSpec, inputs: &[Input<'_>]) -> Result<Output, 
     for (i, h) in table.headers.iter().enumerate() {
         sheet.push(column_of(h, "", Designation::Y, table.rows.iter().map(|(_, v)| v[i]).collect()));
     }
+    let shift = sheet.len();
     sheet.extend(on_sheet);
     let (graph, more_graphs) = if spec.graph && !graphs.is_empty() {
         let first = graphs.remove(0);
@@ -176,7 +177,7 @@ pub(super) fn run(spec: &RareChartSpec, inputs: &[Input<'_>]) -> Result<Output, 
     } else {
         (None, Vec::new())
     };
-    Ok(Output { table: Some(table), on_sheet: sheet, notes, graph, more_graphs })
+    Ok(Output { table: Some(table), on_sheet: sheet, notes, graph, more_graphs }.shift_graphs(shift))
 }
 
 #[cfg(test)]
@@ -200,6 +201,12 @@ mod tests {
         assert!((t.rows[0].1[4] - 408.0 / 7.0).abs() < 1e-12);
         assert_eq!(t.rows[0].1[7], 1.0, "300 is above the limit");
         assert!(out.new_graph.is_some() && out.notes[0].contains("point(s) 6 beyond"), "{:?}", out.notes);
+        let cols = super::super::dist::plot_columns(&p, out.new_graph.unwrap());
+        assert_eq!(
+            (cols[0].0.as_str(), cols[1].1.as_str(), cols[2].1.as_str()),
+            ("Point", "Center line", "UCL"),
+            "{cols:?}"
+        );
 
         let times = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![2.0, 4.0, 6.0, 8.0])).unwrap();
         let spec = RareChartSpec {

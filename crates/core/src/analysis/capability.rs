@@ -214,6 +214,7 @@ pub(super) fn run(spec: &CapabilitySpec, inputs: &[Input<'_>]) -> Result<Output,
     for (i, h) in table.headers.iter().enumerate() {
         sheet.push(column_of(h, "", Designation::Y, table.rows.iter().map(|(_, v)| v[i]).collect()));
     }
+    let shift = sheet.len();
     sheet.extend(on_sheet);
     let (graph, more_graphs) = if graphs.is_empty() {
         (None, Vec::new())
@@ -221,7 +222,7 @@ pub(super) fn run(spec: &CapabilitySpec, inputs: &[Input<'_>]) -> Result<Output,
         let first = graphs.remove(0);
         (Some(first), graphs)
     };
-    Ok(Output { table: Some(table), on_sheet: sheet, notes, graph, more_graphs })
+    Ok(Output { table: Some(table), on_sheet: sheet, notes, graph, more_graphs }.shift_graphs(shift))
 }
 
 #[cfg(test)]
@@ -251,7 +252,14 @@ mod tests {
         let sw = t.rows[0].1[3];
         assert!((sw - 1.6 / std::f64::consts::FRAC_2_SQRT_PI).abs() < 1e-6);
         assert!((t.rows[0].1[7] - 7.0 / (3.0 * sw)).abs() < 1e-12);
-        assert!(out.new_graph.is_some());
+        let cols = super::super::dist::plot_columns(&p, out.new_graph.unwrap());
+        assert_eq!(
+            (cols[0].0.as_str(), cols[0].1.as_str()),
+            ("Bin center", "Count"),
+            "the graph draws its own columns"
+        );
+        assert_eq!(cols[1].1, "Fitted normal");
+        assert_eq!((cols[2].0.as_str(), cols[3].1.as_str()), ("LSL X", "USL"));
 
         let spec = CapabilitySpec { usl: Some(30.0), model: CapModel::Weibull, graph: false, ..Default::default() };
         let out = p.analyze(&request(vec![y], spec)).unwrap();

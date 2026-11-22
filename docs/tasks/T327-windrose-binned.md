@@ -8,7 +8,7 @@ now 22.5 degrees wide (360 / rows above 16 rows).
 
 ## Left
 
-- Compass labels on the circle and the legend with the last column first (as for Raw Data, T324).
+- Compass labels on the circle. (The legend lists the last column first since this slice.)
 
 ## Tests
 

@@ -5607,6 +5607,48 @@ fn the_statistics_menu_runs_a_quantile_regression() {
     assert_eq!(h.state().doc.undo_label(), Some("Quantile regression"));
 }
 
+/// Analysis > Repeat Last Analysis (T360): nothing before a tool ran from its window; afterwards the same tool and
+/// options run again on the columns now chosen, as one undo step.
+#[test]
+fn repeat_last_analysis_runs_the_last_tool_on_the_new_selection() {
+    let data = csv_file("repeat", "ab", "x,a,b\n0,1,2\n1,1,2\n2,1,2\n");
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - ab.csv");
+    let steps = |h: &Harness<'static, SheafApp>| h.state().doc.undo_label().map(str::to_string);
+    let before = steps(&h);
+    menu_path(&mut h, &["Analysis", "Repeat Last Analysis"]);
+    assert_eq!(steps(&h), before, "nothing to repeat yet");
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Analysis", "Mathematics", "Integrate..."]);
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    let areas = |h: &Harness<'static, SheafApp>| {
+        project(h)
+            .workbooks()
+            .next()
+            .unwrap()
+            .sheets
+            .iter()
+            .flat_map(|s| s.columns.iter())
+            .filter(|c| c.long_name == "Area")
+            .flat_map(|c| c.numeric().unwrap().to_vec())
+            .collect::<Vec<f64>>()
+    };
+    let first = areas(&h);
+    assert_eq!(first, [2.0], "the area under a = 1 over 0..2");
+    // Repeat on column b (what choosing it and the menu item send): the same Integrate runs on it.
+    let book = project(&h).workbooks().next().unwrap().id;
+    let b_col = project(&h).workbook(book).unwrap().sheets[0].columns.iter().find(|c| c.long_name == "b").unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::RepeatAnalysis { book, columns: vec![b_col] }, &ctx);
+    settle(&mut h);
+    assert!(h.state().analysis.is_none(), "no window opens");
+    assert_eq!(h.state().doc.undo_label(), Some("Integrate"));
+    let after = areas(&h);
+    assert_eq!(after.len(), 2, "{after:?}");
+    assert!(after.contains(&4.0), "the area under b = 2: {after:?}");
+}
+
 /// Column > Add Column to All Sheets... (T359): the column and its formula land in every sheet of the workbook,
 /// computed from each sheet's own data, as one undo step.
 #[test]

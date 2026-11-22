@@ -4,10 +4,10 @@
 use super::analysis::AnalysisKind;
 use eframe::egui;
 use sheaf_core::analysis::{
-    AcfSpec, AdfTerms, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty, ChangePointSpec,
-    DecomposeModel, DecomposeSpec, ExpSmoothSpec, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist,
-    LifeDistSpec, ManhattanSpec, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec, RareChartKind, RareChartSpec, RocSpec,
-    SmoothModel, StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec, Tool,
+    AcfSpec, AdfTerms, ArimaSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty,
+    ChangePointSpec, DecomposeModel, DecomposeSpec, ExpSmoothSpec, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull,
+    LifeDist, LifeDistSpec, ManhattanSpec, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec, RareChartKind, RareChartSpec,
+    RocSpec, SmoothModel, StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec, Tool,
 };
 
 /// What the windows keep between frames.
@@ -24,6 +24,7 @@ pub struct MultiOptions {
     decompose: DecomposeSpec,
     stationarity: StationaritySpec,
     expsmooth: ExpSmoothSpec,
+    arima: ArimaSpec,
     rare: RareChartSpec,
     capability: CapabilitySpec,
     stability: StabilitySpec,
@@ -109,6 +110,13 @@ impl MultiOptions {
                 Ok(Tool::RareChart(self.rare))
             }
             AnalysisKind::Stationarity => Ok(Tool::Stationarity(self.stationarity)),
+            AnalysisKind::Arima => {
+                let s = &self.arima;
+                if s.p + s.q == 0 && !s.constant {
+                    return Err("the model has nothing to fit: give p, q or a constant".to_string());
+                }
+                Ok(Tool::Arima(*s))
+            }
             AnalysisKind::ExpSmooth => {
                 let s = &self.expsmooth;
                 if s.horizon == 0 {
@@ -346,6 +354,29 @@ impl MultiOptions {
                     ui.add(egui::DragValue::new(&mut s.sigma).speed(0.05).range(0.5..=6.0));
                 });
                 ui.checkbox(&mut s.graph, "Control chart per column");
+            }
+            AnalysisKind::Arima => {
+                ui.label("Every chosen column is a series of its own, in row order; it must have no missing values.");
+                let s = &mut self.arima;
+                ui.horizontal(|ui| {
+                    ui.label("AR order p");
+                    ui.add(egui::DragValue::new(&mut s.p).range(0..=20));
+                    ui.label("Differences d");
+                    ui.add(egui::DragValue::new(&mut s.d).range(0..=3));
+                    ui.label("MA order q");
+                    ui.add(egui::DragValue::new(&mut s.q).range(0..=20));
+                });
+                ui.checkbox(&mut s.constant, "Constant (mean of the differenced series)");
+                ui.horizontal(|ui| {
+                    ui.label("Steps to forecast");
+                    ui.add(egui::DragValue::new(&mut s.horizon).range(0..=100_000));
+                    ui.label("Band confidence");
+                    let mut pct = s.confidence * 100.0;
+                    if ui.add(egui::DragValue::new(&mut pct).speed(0.1).range(50.0..=99.99).suffix(" %")).changed() {
+                        s.confidence = pct / 100.0;
+                    }
+                });
+                ui.checkbox(&mut s.graph, "Graph of the data, predictions, forecasts and bands");
             }
             AnalysisKind::ExpSmooth => {
                 ui.label("Every chosen column is a series of its own, in row order; it must have no missing values.");

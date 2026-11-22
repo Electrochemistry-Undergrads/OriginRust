@@ -1364,6 +1364,18 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
+        AnalyzeTool::Arima { target, p, d, q, no_constant, horizon, confidence, no_graph } => (
+            target,
+            Job::Tool(Tool::Arima(analysis::ArimaSpec {
+                p,
+                d,
+                q,
+                constant: !no_constant,
+                horizon,
+                confidence: confidence / 100.0,
+                graph: !no_graph,
+            })),
+        ),
         AnalyzeTool::Forecast { target, model, period, constants, horizon, no_graph } => {
             let model = match model.to_ascii_lowercase().as_str() {
                 "simple" => analysis::SmoothModel::Simple,

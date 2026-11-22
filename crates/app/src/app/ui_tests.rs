@@ -5840,6 +5840,33 @@ fn the_statistics_menu_makes_a_rare_event_chart() {
     assert_eq!(h.state().doc.undo_label(), Some("Rare event chart"));
 }
 
+/// Statistics > ARIMA Forecast... (T376): an AR(1) with mean, forecasts with bands, a graph, one undo step.
+#[test]
+fn the_statistics_menu_makes_an_arima_forecast() {
+    let mut text = String::from("t,v\n");
+    let mut y = 0.0f64;
+    for i in 0..40 {
+        y = 0.6 * y + (f64::from(i) * 1.7).sin();
+        text.push_str(&format!("{i},{}\n", 10.0 + y));
+    }
+    let data = csv_file("arima", "ts", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - ts.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "ARIMA Forecast..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "AR order p"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
+    let (sheet, values) = result_column(&h, "Value");
+    assert!(sheet.starts_with("ARIMA"), "{sheet}");
+    assert_eq!(values.len(), 5, "mean, AR 1, SS, sigma^2, AIC");
+    assert!((values[0] - 10.0).abs() < 1.0, "{values:?}");
+    let (_, forecast) = result_column(&h, "Forecast");
+    assert_eq!(forecast.len(), 10);
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("ARIMA forecast"));
+}
+
 /// Statistics > Exponential Smoothing Forecast... (T374): fitted Holt smoothing, the forecasts and a graph, one undo
 /// step.
 #[test]

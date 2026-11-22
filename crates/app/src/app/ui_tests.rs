@@ -5764,6 +5764,37 @@ fn the_survival_menu_makes_a_distribution_overview() {
     assert_eq!(h.state().doc.undo_label(), Some("Distribution overview"));
 }
 
+/// Statistics > Stability Study... (T368): time, response and batch columns give per-batch rows, the shelf life and a
+/// graph; one undo step.
+#[test]
+fn the_statistics_menu_runs_a_stability_study() {
+    let mut text = String::from("id,t,assay,batch\n");
+    let mut id = 0;
+    for b in [1, 2] {
+        for (i, t) in [0.0, 3.0, 6.0, 9.0, 12.0].iter().enumerate() {
+            id += 1;
+            let wobble = if i % 2 == 0 { 0.1 } else { -0.1 } * f64::from(b);
+            text.push_str(&format!("{id},{t},{},{b}\n", 100.0 - 0.5 * t + wobble));
+        }
+    }
+    let data = csv_file("stability", "stab", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - stab.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Stability Study..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Poolability significance level"));
+    click(&mut h, "Lower specification limit");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
+    let (sheet, n) = result_column(&h, "N");
+    assert!(sheet.starts_with("Stability"), "{sheet}");
+    assert_eq!(n, [5.0, 5.0, 10.0]);
+    let (_, life) = result_column(&h, "Shelf life");
+    assert!(life[2] > 5.0 && life[2] < 10.0, "the line meets 95 at 10: {life:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Stability study"));
+}
+
 /// Statistics > Process Capability... (T365): an upper limit only gives CPU = Cpk and no Cp; one undo step, a graph.
 #[test]
 fn the_statistics_menu_computes_process_capability() {

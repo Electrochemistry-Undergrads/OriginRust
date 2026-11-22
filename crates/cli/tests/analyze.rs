@@ -1505,6 +1505,33 @@ fn distribution_overview_runs_from_the_command_line() {
     assert!(!ok && err.contains("--distribution"), "{err}");
 }
 
+/// Stability study (spec `statistics.md` section 38, T368).
+#[test]
+fn stability_study_runs_from_the_command_line() {
+    let dir = scratch("stability");
+    let path = dir.join("stab.csv");
+    let mut text = String::from("t,assay,batch\n");
+    for (b, start) in [(1, 100.0), (2, 100.0)] {
+        for (i, t) in [0.0, 3.0, 6.0, 9.0, 12.0].iter().enumerate() {
+            let wobble = if i % 2 == 0 { 0.1 } else { -0.1 } * f64::from(b);
+            text.push_str(&format!("{t},{},{b}\n", start - 0.5 * t + wobble));
+        }
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "stability", file, "--y", "t,assay,batch", "--lsl", "90"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("2 batch(es), 10 points; model: one line for all batches") && out.contains("Stability1"),
+        "{out}"
+    );
+    let (ok, out, err) =
+        sheaf(&["analyze", "stability", file, "--y", "t,assay", "--lsl", "90", "--usl", "110", "--no-graph"]);
+    assert!(ok && out.contains("1 batch(es)") && out.contains("two-sided"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "stability", file, "--y", "t,assay"]);
+    assert!(!ok && err.contains("specification limit"), "{err}");
+}
+
 /// Process capability (spec `statistics.md` section 36, T365).
 #[test]
 fn process_capability_runs_from_the_command_line() {

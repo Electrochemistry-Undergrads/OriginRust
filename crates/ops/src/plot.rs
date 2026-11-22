@@ -69,6 +69,9 @@ pub struct Style {
     /// Leave the equation and R-squared label off the trendlines.
     pub no_trendline_label: bool,
     pub colors: Vec<String>,
+    /// One of Origin's named colour lists (`Q03 Rainbow7`, `Q03`, `Default`; graphing 1.5) for the
+    /// automatic colours of the plots, applied before `colors`.
+    pub color_list: Option<String>,
     pub labels: Vec<String>,
     pub no_legend: bool,
     /// none, auto, auto:GAP or step:STEP.
@@ -731,6 +734,13 @@ pub fn apply_style(project: &mut Project, graph: WindowId, s: &Style, every_pane
     check_limits("y2", s.y2_min, s.y2_max)?;
     let colors: Vec<Color> =
         s.colors.iter().map(|c| c.parse::<Color>().map_err(|e| anyhow!("{e}"))).collect::<Result<_>>()?;
+    let color_list = match &s.color_list {
+        Some(n) => Some(sheaf_core::template::color_list(n).ok_or_else(|| {
+            let names: Vec<&str> = sheaf_core::template::ORIGIN_COLOR_LISTS.iter().map(|(n, _)| *n).collect();
+            anyhow!("--color-list: no colour list {n:?}; the lists are Default, {}", names.join(", "))
+        })?),
+        None => None,
+    };
     let stack = stack_option(s)?;
     let trends: Vec<TrendKind> = s
         .trendline
@@ -817,6 +827,14 @@ pub fn apply_style(project: &mut Project, graph: WindowId, s: &Style, every_pane
                 p.hexbin.x.by = sheaf_core::graph::HexbinBy::Bins(n as u32);
                 p.hexbin.y.by = sheaf_core::graph::HexbinBy::Bins(n as u32);
             }
+        }
+    }
+    if let Some((name, list)) = &color_list {
+        for &i in &styled {
+            let layer = &mut g.layers[i];
+            layer.palette.colors = list.clone();
+            layer.palette.list = (*name != "Default").then(|| name.to_string());
+            layer.apply_palette();
         }
     }
     style_plots(g, &styled, s, &colors, &trends);

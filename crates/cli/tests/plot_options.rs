@@ -163,3 +163,29 @@ fn trendline_adds_curves_and_a_label_and_refuses_bad_kinds() {
     assert!(ok, "{e}");
     assert!(!std::fs::read_to_string(&bare).unwrap().contains("y = 2.02"));
 }
+
+#[test]
+fn a_named_colour_list_colours_the_curves_and_an_unknown_name_lists_the_choices() {
+    let dir = scratch("colorlist");
+    let data = data_file(&dir);
+    let data = data.to_str().unwrap();
+    let (plain, rainbow, project) = (dir.join("plain.svg"), dir.join("q03.svg"), dir.join("q03.sheaf"));
+    let (ok1, _, e1) = sheaf(&["plot", data, "-o", plain.to_str().unwrap()]);
+    let (ok2, _, e2) = sheaf(&[
+        "plot",
+        data,
+        "--color-list",
+        "q03",
+        "-o",
+        rainbow.to_str().unwrap(),
+        "--save",
+        project.to_str().unwrap(),
+    ]);
+    assert!(ok1 && ok2, "{e1} {e2}");
+    // Q03 Rainbow7 starts with red; the default list with black.
+    let (p, r) = (std::fs::read_to_string(&plain).unwrap(), std::fs::read_to_string(&rainbow).unwrap());
+    let red = ["#ff0000", "#FF0000", "rgb(255,0,0)"];
+    assert!(red.iter().any(|c| r.contains(c)) && !red.iter().any(|c| p.contains(c)), "{r}");
+    let (ok, _, stderr) = sheaf(&["plot", data, "--color-list", "Q99", "-o", plain.to_str().unwrap()]);
+    assert!(!ok && stderr.contains("--color-list") && stderr.contains("Q08 Season Winter"), "{stderr}");
+}

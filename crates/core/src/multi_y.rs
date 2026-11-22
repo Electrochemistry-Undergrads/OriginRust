@@ -155,7 +155,7 @@ impl MultiYPlan {
             let own = a.color;
             let mut colors = vec![own];
             colors.extend(ORIGIN_COLOR_LIST.iter().map(|&(r, g, b)| Color::rgb(r, g, b)).filter(|c| *c != own));
-            l.palette = Palette { colors, mode: PaletteMode::Cycle };
+            l.palette = Palette { colors, mode: PaletteMode::Cycle, list: None };
             if i > 0 {
                 // The symbol shape changes from layer to layer as in Origin's scatter multi-Y graph.
                 l.default_symbol.shape = SymbolShape::ALL[i % SymbolShape::ALL.len()];

@@ -196,7 +196,7 @@ mod increment_tests {
         assert!(check_increment(&[0.0, 1.0, 2.06, 3.0], 0.1).unwrap().uniform);
         assert!(!check_increment(&[0.0, 1.0, 2.04, 3.0], 0.01).unwrap().uniform);
         let b = check_increment(&[0.0, 1.0, 3.0], ORIGIN_TOLERANCE).unwrap();
-        assert!((b.inc, b.uniform) == (1.5, false) && (b.sd - 0.707_106_781_186_547_6).abs() < 1e-12);
+        assert!((b.inc, b.uniform) == (1.5, false) && (b.sd - std::f64::consts::FRAC_1_SQRT_2).abs() < 1e-12);
         let down = check_increment(&[3.0, 2.0, 1.0, 0.0], ORIGIN_TOLERANCE).unwrap();
         assert!((down.inc, down.sd, down.uniform) == (-1.0, 0.0, true));
         // The largest deviation counts, not the standard deviation (0.032 here).

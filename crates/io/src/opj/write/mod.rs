@@ -194,8 +194,6 @@ struct Notes {
     ranges_dropped: usize,
     /// Columns whose formula has Before Formula Scripts (T307), which the file written here does not hold.
     scripts_dropped: usize,
-    /// Group and Subject columns, written as unused.
-    group_roles_dropped: usize,
     /// Sheets with a worksheet filter: the file written here holds no filter.
     filters_dropped: usize,
     /// Sheets with a long name or a tab showing it (T90), which the file written here does not hold.
@@ -382,10 +380,6 @@ impl Writer {
             .map(|c| {
                 if c.designation == Designation::Label && !has_y {
                     self.notes.demoted_labels += 1;
-                    Designation::Disregard
-                } else if matches!(c.designation, Designation::Group | Designation::Subject) {
-                    // The project file written here has no Group or Subject role.
-                    self.notes.group_roles_dropped += 1;
                     Designation::Disregard
                 } else {
                     c.designation
@@ -903,12 +897,6 @@ impl Writer {
                 n.cell_notes_dropped
             ));
         }
-        if n.group_roles_dropped > 0 {
-            warnings.push(format!(
-                "{} Group or Subject column(s) were written as unused: the project file written here has no such role.",
-                n.group_roles_dropped
-            ));
-        }
         if n.widths_dropped > 0 {
             warnings.push(format!(
                 "{} column(s) have their own width, which the project file written here does not hold; Origin shows them at its default width.",
@@ -934,7 +922,10 @@ fn designation_code(d: Designation) -> u8 {
         Designation::YError => 2,
         Designation::XError => 6,
         Designation::Label => 4,
-        Designation::Disregard | Designation::Group | Designation::Subject => 1,
+        // T330: Origin 2016's codes of Group and Subject (LabTalk types 8 and 9).
+        Designation::Group => 7,
+        Designation::Subject => 8,
+        Designation::Disregard => 1,
     }
 }
 
@@ -943,10 +934,11 @@ fn designation_code(d: Designation) -> u8 {
 fn type_code(d: Designation) -> u16 {
     match d {
         Designation::X => 0x5121,
-        Designation::Y => 0x6121,
+        // Origin writes the Y type word for Group and Subject columns too (T330).
+        Designation::Y | Designation::Group | Designation::Subject => 0x6121,
         Designation::Z | Designation::Label => 0x6120,
         Designation::YError | Designation::XError => 0x6130,
-        Designation::Disregard | Designation::Group | Designation::Subject => 0x4121,
+        Designation::Disregard => 0x4121,
     }
 }
 

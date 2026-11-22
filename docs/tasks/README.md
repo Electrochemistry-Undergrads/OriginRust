@@ -227,6 +227,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T369](T369-acceptance-sampling.md) | Statistics > Acceptance Sampling: attribute single sampling plans, OC, AOQ, ATI (scipy-checked) | S | done 2026-11-22 (statistics 39), not measured |
 | [T371](T371-vinc-measured.md) | Origin's vinc / vinc_check measured; check_increment gains the step SD | S | done 2026-11-22 (workbook-model 13d) |
 | [T373](T373-grouped-marginal-plots.md) | Grouped marginal histograms and box charts (sheaf plot --group) | S | done 2026-11-22 (graphing 32), not measured |
+| [T375](T375-fishbone.md) | Plot > Categorical > Cause-and-Effect Diagram and sheaf plot -t fishbone | S | done 2026-11-22 (graphing 17.13), not measured |
 | [T233](T233-batch-summary.md) | File > Batch Processing: Summary Sheet, Dataset Identifier, Delete Intermediate Books (a Batch Summary book stacking one sheet of every book) | S | done 2026-11-20 (workbook-model 13p), not measured; left: Origin's layout and identifier choices |
 | [T235](T235-batch-cli.md) | sheaf batch: Batch Processing without a window (template, summary, --summary-csv), core Project::batch_process shared with the window | S | done 2026-11-20 (workbook-model 13p); MCP: T238 |
 | [T238](T238-batch-mcp.md) | MCP batch_process: the shared batch run (books, summary, delete) on the session project, one undo step attached | S | done 2026-11-20 (mcp.md 5.1); left: read options |

@@ -11,8 +11,8 @@
 //!
 //! Positions are fractions of the layer frame (0, 0 top left). Rules: `docs/spec/graphing.md`, "Cause-and-effect".
 
-use crate::ids::ColumnId;
 use crate::graph::{Font, TextLabel};
+use crate::ids::ColumnId;
 use crate::project::{Project, ProjectError};
 use crate::shape::{Shape, ShapeKind};
 use crate::template::Template;

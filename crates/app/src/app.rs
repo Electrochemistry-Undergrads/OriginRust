@@ -4562,6 +4562,27 @@ impl SheafApp {
     }
 
     fn plot_columns(&mut self, book: WindowId, columns: Vec<ColumnId>, template: Template) {
+        // A cause-and-effect diagram (T375): the selected columns, of any kind, are the categories (else every
+        // column of the active sheet); the effect text is edited on the graph afterwards.
+        if template == Template::Fishbone {
+            let categories: Vec<ColumnId> = if columns.is_empty() {
+                let project = self.doc.project();
+                project
+                    .workbook(book)
+                    .and_then(|b| b.sheets.get(b.active_sheet))
+                    .map(|s| s.columns.iter().map(|c| c.id).collect())
+                    .unwrap_or_default()
+            } else {
+                columns
+            };
+            let n = categories.len();
+            match self.doc.edit("Plot columns", |p| p.plot_fishbone(&categories, sheaf_core::fishbone::DEFAULT_EFFECT))
+            {
+                Ok(_) => self.say(format!("Cause-and-effect diagram of {n} categories")),
+                Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+            }
+            return;
+        }
         // A Parallel Index is grouped by the selected column of text (else the first text column of the sheet).
         let group = if template == Template::ParallelIndex {
             columns.iter().copied().find(|id| self.doc.project().column(*id).is_some_and(|c| !c.data.is_numeric()))

@@ -25,6 +25,7 @@ pub mod curvemath;
 pub mod curves;
 pub mod cwt;
 pub mod decimate;
+pub mod decompose;
 pub mod dierckx;
 pub mod differentiate;
 pub mod discfreq;

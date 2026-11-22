@@ -1426,6 +1426,27 @@ fn principal_component_analysis_runs_from_the_command_line() {
     assert!(!ok && err.contains("at least two columns"), "{err}");
 }
 
+/// Quantile regression (spec `statistics.md` section 29, T342): independent columns, then the dependent one.
+#[test]
+fn quantile_regression_runs_from_the_command_line() {
+    let dir = scratch("quantreg");
+    let path = dir.join("qr.csv");
+    let mut text = String::from("x,y\n");
+    for i in 1..=30 {
+        let x = f64::from(i);
+        text.push_str(&format!("{x},{}\n", 2.0 + 0.5 * x + (7.3 * x).sin()));
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "quantreg", file, "--y", "x,y", "--quantiles", "0.25,0.5"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Pseudo R-square") && out.contains("Quantile 0.25") && out.contains("QuantReg1"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "quantreg", file, "--y", "x,y", "--no-intercept", "--no-graph"]);
+    assert!(ok && !out.contains("Intercept"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "quantreg", file, "--y", "x,y", "--quantiles", "1.2"]);
+    assert!(!ok && err.contains("between 0 and 1"), "{err}");
+}
+
 /// ROC curve (spec `statistics.md` section 19): the --y columns are the test variables, the state column last.
 #[test]
 fn roc_curve_runs_from_the_command_line() {

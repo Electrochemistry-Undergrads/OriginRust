@@ -65,7 +65,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | Brief | Wave | Size | Scope and dependency |
 |---|---|---|---|
 | [T58](T58-graph-text-formatting.md) | 1, P0 | L | Renderer and graph Format toolbar/shared dispatch published in slices; selected-object font toolbar has all 24 Classic and custom RGB colours, and shared label/title/legend selection editor has installed-family/paired-script insertion plus all 24 Classic and custom RGB colours; documented prime escapes render through the shared text path (7.11); graph font/fill/line and shared text-editor Custom RGB wells share a private profile pool with worksheet controls (7.12); remaining native measurements, special escape aliases and named/project palettes stay open |
-| [T59](T59-worksheet-cell-formatting.md) | 1, P0 | L | Cell model/dialog and worksheet toolbar font/size/Bold/Italic/Underline/all 24 Classic and custom RGB text/fill colours; installed faces and derived row/print geometry (basic Origin toolbar measured); Set Data Style > More reuses Format Cells; text/fill drafts share reusable RGB wells with graph/editor controls (GUI3/graphing7.12); left: worksheet category-default dialog, vertical alignment pending a supported worksheet route (GUI 3; Data Info/tooltip alignment is separate) and remaining measurements (rich/wrap/float text controls are B5) |
+| [T59](T59-worksheet-cell-formatting.md) | 1, P0 | L | Cell fonts, styles and colours, shared RGB wells, and Worksheet Properties fonts for Data, Column Labels, Long Name, Units and Comments (GUI 3). Left: Standard/header defaults, category colours and other controls, and vertical alignment pending a supported worksheet route. Worksheet text controls are B5 |
 | [T60](T60-merge-graphs-layer-management.md) | 2, P0 | L | Merge Graph Windows (dialog, CLI, manual/Auto preview, Active Page and folder/recursive/Open/Include Embedded filters), Layer Management (Arrange, Size/Position, Link, Display Background Color), Fit Page to Layers. Left: merge labels, Common Scale, extra layers, Add/Axes/remaining Display controls, MCP. Border fill/outline need independent geometry and storage |
 | [T61](T61-layers-and-multi-y.md) | 2, P0 | L | Done 2026-11-15 (graphing 21): nine Add Layer kinds, insets, Delete Layer, Layer Properties, displaced Y axes and Move to Layer, 3Ys/4Ys templates and Multiple Y Axes (CLI `-t 3ys-y-yy` etc.); Hide Layer restores curves/axes together (21.13), Hide Other Layers toggles isolation/show-all (21.14, documented); left: Open Dialog..., unsupported layer-icon modes and remaining template legend spacing/membership |
 | [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Done 2026-11-15 (unmeasured Sheaf rules, graphing 13.15-13.17): Offset Grouped Data menu with Cumulative, Stacked Histograms, waterfall Y/Z colour mapping |
@@ -198,7 +198,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T171](T171-axis-paste-groups.md) | Axis Paste Format To: Tick Direction, Ticks, Line, Tick Labels, Title Styles, Colors, Thickness, Title Text (T72 slice) | S | done 2026-11-19 (graphing 26.13), not measured; left: Title Dimensions |
 | [T174](T174-page-axis-paste.md) | Page Paste Format To > Bottom Axes / All X Axes / All Axes with an axis format (T72 slice) | S | done 2026-11-19 (graphing 26.14), not measured; left: first-level All |
 | [T176](T176-copy-format-groups.md) | Copy Format: Symbol/Line/Fill, Text (Edit menu), Page Background (page menu) (T72 slice) | S | done 2026-11-19 (graphing 26.15), not measured; left: Legend Translation Mode |
-| [T179](T179-legend-format-all.md) | Legend Copy Format / Paste Format To: Dimensions and All (T72 slice) | S | done 2026-11-19 (graphing 26.16), not measured |
+| [T179](T179-legend-format-all.md) | Legend Copy Format / Paste Format To: Dimensions and All (T72 slice) | S | Shipped 2026-11-19. Origin 2016 format API measured 2026-11-21 (graphing 26.16). Live menu fields remain open. |
 | [T182](T182-export-no-graph.md) | File > Export > Graphs / Graph as Image / Multi-Page PDF from a workbook or no window (T63 group E) | S | done 2026-11-19 (graphing 9.7a), not measured |
 | [T183](T183-layer-icon-switches.md) | Layer icon menu: Show Active Layer Only, Set Active Layer By Layer Icon Only, Double click to open Plot Setup (T61 leftovers) | S | done 2026-11-19 (graphing 21.16), not measured |
 | [T185](T185-page-break-lines.md) | Worksheet Page Break Preview Lines (View menu, corner menu) (B6 slice) | S | done 2026-11-19 (workbook-model 13i), not measured |
@@ -303,6 +303,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T330](T330-opj-group-subject.md) | Group and Subject columns read from and written to .opj (roles 7 and 8), measured in Origin 2016 | S | done 2026-11-21 |
 | [T334](T334-opj-width.md) | Column widths read from and written to .opj (0x4A in tenths), measured in Origin 2016 | S | done 2026-11-21 |
 | [T337](T337-opj-numfmt.md) | Numeric display formats read from and written to .opj (0x1E/0x1F, Numeric cells), measured in Origin 2016 | S | done 2026-11-21 |
+| [T343](T343-opj-sheet-longname.md) | Sheet long names read from and written to .opj (__LONGNAME annotation), measured in Origin 2016 | S | done 2026-11-21 |
 | [T311](T311-qqplot-measure.md) | Measure Q-Q Plot against Origin (expected values, y = x line ends, band) | S | done 2026-11-21 (statistics 16.2a) |
 | [T312](T312-import-nonnum.md) | Text import: text in a numeric column read as text, stop, new sheet or new columns (NonNum), as Origin 2016 | S | done 2026-11-21, measured |
 | [T313](T313-scatter-matrix-measure.md) | Measure Scatter Matrix against Origin (page, grid, tick labels, titles, symbols, tick step) | S | done 2026-11-21 (graphing 35) |
@@ -310,6 +311,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T318](T318-baseline-als-dataset.md) | Peak Analyzer baselines Use Existing Dataset and Asymmetric Least Squares Smoothing (window, CLI) | M | done 2026-11-21; ALS not measured (Pro) |
 | [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T342](T342-quantile-regression.md) | Linear quantile regression (Origin 2019b app): exact fits, Statistics menu window, `analyze quantreg` | M | done 2026-11-21 (statistics 29) |
 | [T339](T339-legend-options.md) | Legend `%(n, @option)` substitutions as Origin 2016 makes them (21 options measured) | S | done 2026-11-21 (graphing 6.1) |
 | [T335](T335-title-drag.md) | Drag an axis title on the graph to move it (adds to its offset, one undo step) | S | done 2026-11-21 (graphing T291 paragraph) |
 | [T332](T332-color-lists.md) | Origin 2016's 18 named colour lists in the Group tab and `plot --color-list` | S | done 2026-11-21 (graphing 1.5) |
@@ -326,7 +328,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T344](T344-fsd-peak-search.md) | Peak Analyzer Find Peaks on the Fourier self-deconvolved curve (hidden peaks), window and CLI | S | done 2026-11-21 (Sheaf's own) |
 | [T68](T68-drop-line-and-column-label.md) | 4 (B4 slice 1), P1 | S | Done 2026-11-15 (graphing 18.12): Vertical Drop Line and Column + Label as Origin's DROPLINE and ColumnLabel; left: the rest of B4 |
 | [T69](T69-zoom-all-scale-tools.md) | 4 (B1), P1 | S | Done 2026-11-15: View > Zoom All (zoom to all objects, not a presentation), Tools-bar Scale In / Scale Out (measured in graphing 23); left: Ctrl+drag "Enlarged" graph, double-click restore, combo percentage, drawing objects outside the page |
-| [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Open: graph formats, axis Scales/Styles (26.9/26.11), legend Styles (26.12), Apply Formats and private clipboard restart persistence (26.10); legend Dimensions and All still pending. See the spec for measured behavior and field mappings. |
+| [T72](T72-copy-paste-format.md) | 4 (B2 slice 1), P1 | M | Partly done: graph and axis formats, legend Styles/Dimensions/All (T179, graphing 26.16), Apply Formats and private clipboard restart persistence. The spec records measured behavior, Sheaf field mappings and the remaining choices. |
 
 ## Index
 
@@ -395,7 +397,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T64](T64-significance-plot.md) | Multiple comparisons plot with significance brackets | M | done 2026-11-15 (statistics 23, `significance-plot`, macOS); left: two-way ANOVA, paired and one-sample, Origin measurements, editable brackets |
 | [T77](T77-new-graph-and-project-without-data.md) | File > New > Graph and Standard New Graph (empty graph from the default template), Save Project without Data... and Duplicate Project without Data (B12 slice) | M | done 2026-11-16 (`new-graph-nodata`, graphing.md 25, project-file-format.md); Origin behaviour of the two project items unmeasured |
 | [T125](T125-drawn-shape-clipboard.md) | Drawn-shape Cut/Copy/Paste (B2 slice) | M | done 2026-11-19 (graphing 17.8): right-click Cut/Copy and page Paste at the clicked point, not measured; left: Edit menu/keyboard routes, several objects |
-| [T72](T72-copy-paste-format.md) | Graph formats, axis Scales/Styles and legend Styles through Copy Format and Paste Format To (B2 slice 1) | M | open; see graphing 26 for measurements and field mappings. Legend Dimensions and All still pending. |
+| [T72](T72-copy-paste-format.md) | Graph, axis and legend Copy Format and Paste Format To (B2 slice 1) | M | Partly done. Legend Styles, Dimensions and All are available. See graphing 26 for measurements and field mappings. |
 | [T81](T81-partial-correlation-anova3-rmanova.md) | Partial Correlation Coefficient, Three-Way ANOVA, One-Way and Two-Way Repeated Measures ANOVA (B8 slice) | L | done 2026-11-16 (`partial-corr`, `anova3`, `rmanova`, statistics.md 24-26, Origin 2016 runs reproduced); left: Raw layout, missing values, two-way means comparisons, mean/plot graphs |
 
 For every active claim (including matrices/contour/heatmaps), read the current

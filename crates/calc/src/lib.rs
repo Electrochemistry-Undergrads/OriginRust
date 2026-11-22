@@ -54,6 +54,7 @@ pub mod peaks;
 pub mod poisson;
 pub mod power;
 pub mod qc;
+pub mod quantreg;
 pub mod risetime;
 pub mod rmanova;
 pub mod roc;

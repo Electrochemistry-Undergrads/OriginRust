@@ -407,6 +407,11 @@ impl<R: Read + Seek> Builder<R> {
             for (n, layer) in w.layers.iter().enumerate() {
                 let name = if layer.name.is_empty() { format!("Sheet{}", n + 1) } else { layer.name.clone() };
                 let mut sheet = Worksheet::new(name);
+                // T343, measured in Origin 2016: the sheet's long name is an annotation named "__LONGNAME"
+                // holding the text in its first block.
+                if let Some(a) = layer.annotations.iter().find(|a| graph::annotation_name(a) == "__LONGNAME") {
+                    sheet.long_name = strings::decode_cp1252(strings::c_bytes(&a.block1)).trim().to_string();
+                }
                 for rec in &layer.columns {
                     let linked = rec.dataset.checked_sub(1).filter(|&i| i < self.sets.len());
                     let Some(i) = linked.filter(|&i| self.sets[i].name.starts_with(&prefix)) else {

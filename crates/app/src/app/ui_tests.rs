@@ -2302,6 +2302,51 @@ fn analyze_peaks_runs_from_the_analysis_menu_and_undoes_in_one_step() {
     assert_eq!((b.sheets.len(), b.sheets[0].columns.len()), (1, 2));
 }
 
+/// The Peak Analyzer's User Defined anchors picked on the graph (T351): the Data Reader of the input's graph adds
+/// anchors on Enter, Stop Picking turns it off, and OK uses the line through the picked anchors as the baseline.
+#[test]
+fn peak_analyzer_anchors_are_picked_on_the_graph() {
+    let mut text = String::from("t,i\n");
+    for k in 0..200 {
+        let x = f64::from(k) * 0.1;
+        text.push_str(&format!("{x},{}\n", 0.5 + 0.05 * x + 2.0 * (-(x - 10.0).powi(2) / (2.0 * 0.6 * 0.6)).exp()));
+    }
+    let data = csv_file("pa-anchors", "slope", &text);
+    let mut h = start(vec![data]);
+    let gid = project(&h).graphs().next().unwrap().id;
+    show_window(&mut h, "Book1 - slope.csv");
+    menu_path(&mut h, &["Analysis", "Peaks and Baseline", "Peak Analyzer..."]);
+    click(&mut h, "Next");
+    h.state_mut().analysis.as_mut().unwrap().choose_picked_anchors();
+    settle(&mut h);
+    assert!(has_label(&h, "Pick on Graph"), "the button of the picked anchors");
+    // The window is taller than the test screen, so the button's effect is set directly.
+    h.state_mut().analysis.as_mut().unwrap().anchor_picking = true;
+    settle(&mut h);
+    assert!(h.state().graphs[&gid].reader, "the input's graph reads data points");
+    for row in [20, 180] {
+        h.state_mut().graphs.get_mut(&gid).unwrap().reader_point =
+            Some(crate::reader::Point { layer: 0, plot: 0, row });
+        h.key_press(egui::Key::Enter);
+        settle(&mut h);
+    }
+    assert!(h.state().analysis.is_some(), "Enter picks, it does not press OK");
+    let picked = h.state().analysis.as_ref().unwrap().picked_anchors().to_vec();
+    assert_eq!(picked.len(), 2, "{picked:?}");
+    assert!((picked[0].0 - 2.0).abs() < 1e-9 && (picked[1].0 - 18.0).abs() < 1e-9, "{picked:?}");
+    assert!(has_label(&h, "Stop Picking"));
+    h.state_mut().analysis.as_mut().unwrap().anchor_picking = false;
+    settle(&mut h);
+    assert!(!h.state().graphs[&gid].reader, "the reader goes off when the picking stops");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none());
+    // The baseline beside the data is the line through the picked anchors.
+    let b = project(&h).workbooks().next().unwrap();
+    let base = b.sheets[0].columns[2].numeric().unwrap().to_vec();
+    let line = |x: f64| 0.5 + 0.05 * x;
+    assert!((base[0] - line(0.0)).abs() < 1e-3 && (base[199] - line(19.9)).abs() < 1e-3, "{} {}", base[0], base[199]);
+}
+
 /// The Fit Peaks goal of the Peak Analyzer offers Origin's Voigt and a function per peak; OK fits
 /// the found peaks with them.
 #[test]

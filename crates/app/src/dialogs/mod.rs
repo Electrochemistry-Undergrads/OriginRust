@@ -1,6 +1,7 @@
 //! The application's dialog windows. Each one is an egui window that the
 //! application shows while its `Option` is filled.
 
+pub mod acceptance;
 pub mod add_layer;
 pub mod analysis;
 pub mod autosave;

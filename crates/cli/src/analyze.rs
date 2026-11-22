@@ -88,9 +88,35 @@ fn power(a: AnalyzeTool) -> Result<()> {
     Ok(())
 }
 
+/// `analyze acceptance`: no data file; the plan and its numbers go to the terminal (T369).
+fn acceptance(a: AnalyzeTool) -> Result<()> {
+    let AnalyzeTool::Acceptance { aql, ltpd, alpha, beta, n, c, lot, export, save } = a else {
+        unreachable!("called for the acceptance tool only");
+    };
+    let spec = sheaf_core::analysis::AcceptanceSpec { aql, ltpd, alpha, beta, plan: n.zip(c), lot };
+    let mut project = Project::new();
+    let report = project.acceptance_sampling(&spec)?;
+    let book = project.workbook(report.book).expect("just added");
+    let plan = &book.sheets[0];
+    let values = plan.columns[1].numeric().unwrap_or(&[]);
+    for (i, v) in values.iter().enumerate() {
+        println!("{:<28}  {}", plan.columns[0].shown_text(i), short_number(*v));
+    }
+    if let Some(path) = export {
+        write_sheet(&book.sheets[1], &path)?;
+    }
+    if let Some(path) = save {
+        save_project(&project, &path)?;
+    }
+    Ok(())
+}
+
 pub fn analyze(a: AnalyzeArgs) -> Result<()> {
     if matches!(a.tool, AnalyzeTool::Power { .. }) {
         return power(a.tool);
+    }
+    if matches!(a.tool, AnalyzeTool::Acceptance { .. }) {
+        return acceptance(a.tool);
     }
     let plot = sheaf_ops::cli_analyze::comparison_plot_request(&a.tool)?;
     let (target, job) = job_from(a.tool)?;

@@ -330,6 +330,8 @@ pub enum Cmd {
     GoToCell,
     /// Statistics > Power and Sample Size > one of the tests.
     Power(sheaf_core::analysis::PowerKind),
+    /// Statistics > Acceptance Sampling... (T369).
+    AcceptanceSampling,
     /// Edit > Find in Sheets... (Ctrl+F) in a workbook.
     FindInSheets,
     /// Edit > Find in Project (F3, T95).
@@ -2131,6 +2133,7 @@ fn statistics_menu() -> Vec<Entry> {
         item("Au&tocorrelation...", Cmd::Analyze(AnalysisKind::Acf)),
         item("Rar&e Event Chart (G/T)...", Cmd::Analyze(AnalysisKind::RareChart)),
         item("Process Capabilit&y...", Cmd::Analyze(AnalysisKind::Capability)),
+        item("Acceptance Sa&mpling...", Cmd::AcceptanceSampling),
         sep(),
         mru_submenu("Most Recently Used Items", MruMenu::Statistics),
     ]
@@ -3558,6 +3561,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ImportExcel => Action::ImportPick(ImportPick::Excel),
         Cmd::GoToCell => Action::GoToCell(book?),
         Cmd::Power(kind) => Action::Power(*kind),
+        Cmd::AcceptanceSampling => Action::AcceptanceSampling,
         Cmd::FindInSheets => Action::FindInSheets(book?),
         Cmd::FindInProject => Action::FindInProject,
         Cmd::FindInProjectFiles => Action::FindInProjectFiles,

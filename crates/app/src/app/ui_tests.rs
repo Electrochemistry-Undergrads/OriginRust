@@ -7726,6 +7726,24 @@ fn power_and_sample_size_menu_opens_a_dialog_that_makes_a_workbook() {
 }
 
 #[test]
+fn acceptance_sampling_designs_a_plan_into_a_new_book_with_its_oc_graph() {
+    let mut h = start(vec![data_file("acceptance")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    menu_path(&mut h, &["Statistics", "Acceptance Sampling..."]);
+    assert!(h.state().acceptance.is_some(), "the window opened");
+    click(&mut h, "Lot size (AOQ, ATI)");
+    let (books, graphs) = (project(&h).workbooks().count(), project(&h).graphs().count());
+    click(&mut h, "OK");
+    assert!(h.state().acceptance.is_none(), "OK runs and closes");
+    assert_eq!((project(&h).workbooks().count(), project(&h).graphs().count()), (books + 1, graphs + 1));
+    let b = project(&h).workbooks().last().unwrap();
+    // AQL 1 %, LTPD 5 %, risks 5 % and 10 %: n 132, c 3 (scipy, tools/acceptance-ref.py).
+    assert_eq!(b.sheets[0].columns[1].numeric().unwrap()[..2], [132.0, 3.0]);
+    assert_eq!(b.sheets[1].columns.len(), 4);
+    assert_eq!(h.state().doc.undo_label(), Some("Acceptance sampling"));
+}
+
+#[test]
 fn ctrl_shift_c_copies_with_the_label_rows() {
     let mut h = start(vec![data_file("copy-labels")]);
     show_window(&mut h, "Book1 - sample.csv");

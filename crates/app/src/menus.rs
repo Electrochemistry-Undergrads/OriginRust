@@ -2137,6 +2137,13 @@ fn statistics_menu() -> Vec<Entry> {
         item("E&xponential Smoothing Forecast...", Cmd::Analyze(AnalysisKind::ExpSmooth)),
         item("ARIMA &Forecast...", Cmd::Analyze(AnalysisKind::Arima)),
         item("Random Forest (Machine Learnin&g)...", Cmd::Analyze(AnalysisKind::RandomForest)),
+        sub(
+            "T&wo-Level Experiments",
+            vec![
+                item("Factorial Design...", Cmd::Analyze(AnalysisKind::FactorialDesign)),
+                item("Factorial Effects...", Cmd::Analyze(AnalysisKind::FactorialEffects)),
+            ],
+        ),
         item("Rar&e Event Chart (G/T)...", Cmd::Analyze(AnalysisKind::RareChart)),
         item("Process Capabilit&y...", Cmd::Analyze(AnalysisKind::Capability)),
         item("Sta&bility Study...", Cmd::Analyze(AnalysisKind::Stability)),

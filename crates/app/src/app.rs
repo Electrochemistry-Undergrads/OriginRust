@@ -5836,7 +5836,11 @@ impl SheafApp {
         // The proportion tests read no data: one column of the sheet only says where the results go.
         let host_only = matches!(
             kind,
-            AnalysisKind::PropTestOne | AnalysisKind::PropTestTwo | AnalysisKind::PoissonOne | AnalysisKind::PoissonTwo
+            AnalysisKind::PropTestOne
+                | AnalysisKind::PropTestTwo
+                | AnalysisKind::PoissonOne
+                | AnalysisKind::PoissonTwo
+                | AnalysisKind::FactorialDesign
         );
         let columns: Vec<ColumnId> = if host_only {
             let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);

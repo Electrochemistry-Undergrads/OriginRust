@@ -124,6 +124,9 @@ pub(super) fn run_effects(
             y.push(v);
         }
     }
+    if y.is_empty() {
+        return Err(AnalysisError::BadOption("no row has every factor and the response".into()));
+    }
     let e = effects(&x, &y).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
     // Term letters are factor positions; name them by the factor columns.
     let names: Vec<String> = xcs.iter().map(|c| column_label(c)).collect();

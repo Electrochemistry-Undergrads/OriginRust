@@ -119,6 +119,12 @@ fill defaults with the existing color picker and saved wells. Origin 2016
 scope and manual priority were measured. Grid, print, worksheet images and
 Excel apply the resolved colors (GUI 3 and workbook model 13b).
 
+Column Labels color follow-up. Worksheet Properties > Column Labels sets
+text and fill defaults for Long Name, Units, Comments, F(x)= and parameters.
+Origin 2016 probes cover blank labels, future columns and manual priority in
+both operation orders. Print, worksheet images and Excel use the resolved
+colors (GUI 3 and workbook model 13b).
+
 **Size:** L. **Branch:** `cell-format` (model/dialog), `codex/t59-format-toolbar` (toolbar/font geometry), `codex/t59-worksheet-controls` (underline/fill/keys), `codex/t59-worksheet-dialog` (dialog measurements/More entry), `codex/t59-custom-colors` (one-off RGB chooser), `codex/t59-classic-colors` (24 Classic worksheet presets), `codex/t59-xlsx-formats` (Excel cell styles). **Priority:** P0, wave 1.
 **Spec:** [workbook model](../spec/workbook-model.md), new Cell formats section;
 [GUI](../spec/gui-look.md) 3. **Inventory:** the worksheet-wide `T59` menu location now opens the bounded Data-font dialog; the three unsupported text-control choices are B5.

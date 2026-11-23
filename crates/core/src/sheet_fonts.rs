@@ -142,11 +142,7 @@ impl WorksheetFonts {
     }
 
     fn column_labels_for(&self, kind: &LabelKind) -> Option<&ColumnLabelFont> {
-        matches!(
-            kind,
-            LabelKind::LongName | LabelKind::Units | LabelKind::Comments | LabelKind::Formula | LabelKind::Param(_)
-        )
-        .then_some(&self.column_labels)
+        kind.uses_column_label_defaults().then_some(&self.column_labels)
     }
 
     pub(crate) fn label_style<'a>(&'a self, kind: &LabelKind, mut manual: ResolvedStyle<'a>) -> ResolvedStyle<'a> {

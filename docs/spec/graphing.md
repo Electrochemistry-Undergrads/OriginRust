@@ -3830,7 +3830,7 @@ the OK button to apply the changes in preview graph to source graph."; Undo, OK 
 
 **Sheaf's Layer Management** (`sheaf_core::layer_manage`, `dialogs/layer_management.rs`; Graph menu,
 page right-click and layer icon menu, the icon's layer selected): the layer list allows several
-layers. Add, Arrange, Size/Position, Link, Axes and Display Background Color work on a copy shown as
+layers. Add, Arrange, Size/Position, Link, Axes and Display work on a copy shown as
 numbered frames on a page-shaped preview. Undo takes back the last Apply. OK writes the copy in one
 undo step. Cancel and Escape discard it. The Align/Custom links, the Units combo of Link and the
 reposition-parent tick are disabled. Arrange with no selection takes every layer; "Treat Linked
@@ -3911,10 +3911,8 @@ leave the source alone. No selection, an unchanged colour and a final preview eq
 source add no history. OK refuses to overwrite layer edits made behind the window. Frames,
 links, axes, plots, legends, gradient settings and border settings are preserved. The small
 numbered-frame preview shows base colours; it does not render gradients or full plots.
-Native `.sheaf` saves and `.opj` companions retain the colour; bare `.opj` still omits it with
-the existing loss warning. Drawing Order, Border Fill Color, Border Color, Border Dimensions
-and Scale Elements remain disabled in this dialog. Native mixed-value interaction and the
-existing Sheaf layer drawing order are not changed by this slice. Supporting current docs:
+Native `.sheaf` saves and `.opj` companions retain the colour. The native writer reports the
+omission from bare `.opj`. Supporting current docs:
 [Display tab](https://docs.originlab.com/origin-help/laymanage-displaytab/) and
 [Layer properties](https://docs.originlab.com/labtalk/ref/layer-obj/).
 
@@ -3943,14 +3941,21 @@ with its own Origin instance and helpers closed. Other sessions' instances were 
 These controls establish the geometry and independence from Background Color; multi-layer
 mixed/selection behavior, overlap drawing order and changes to Border Dimensions remain open.
 
-**Backend prerequisite:** Sheaf's existing `Layer.background` fills the plot frame, and
-`BackgroundStyle.border` strokes that same frame (`plot/fill.rs`, called from `plot/layout.rs`).
-There is no separately stored border fill or four border outsets. Reusing those fields would
-change the wrong rectangle or the independent background colour. Keep both Display colour
-controls disabled until a separately represented layer-relative rectangle, independent fill
-and outline, rendering and persistence are implemented with preview/history/roundtrip tests.
-Preserve the existing plot-frame border semantics and the published Background Color control.
-This measurement slice changes no Rust code, model, renderer, file format or enabled inventory.
+**Sheaf Display border (2026-11-22).** The Color option has Background Color, Border Fill Color
+and Border Color, each with None, the shared presets and RGB channels. Border Dimensions accepts
+left, top, right and bottom outsets from 0 to 1000 percent. Left and right use the layer width.
+Top and bottom use its height. The default values follow the measured Line fixture. Sheaf draws
+the independent border fill beneath the plot-frame background, with a 0.75 pt outline. The
+800 × 612 Sheaf reference exports match the measured red fill and outline bounds within one
+pixel. Tight exports include the visible expanded rectangle. The preview uses the same
+percentages with its numbered layer frames.
+
+Apply changes the edited fields on the selected layers. Mixed fields keep their individual
+values until edited. Undo reverts the last preview Apply and OK makes one document history
+entry. A native `.sheaf` file or the `.opj.sheaf` companion stores colours and dimensions.
+The writer reports the omission from bare `.opj`. The existing Background tab and View >
+Show > Frame still use the plot rectangle. Sheaf's overlap ordering and numeric input bounds
+are implementation choices. Drawing Order and Scale Elements remain open.
 
 **Fit Page to Layers** (`pfit2l`; Margin Control Border (default) or Tight, Border Width 5, Adjust
 Direction Height and Width (default), Height Only, Width Only), measured on the stock page: the
@@ -5866,8 +5871,8 @@ and focuses that graph; Cancel, Escape and closing the dialog make no edit. Any 
 project revision or replacement closes a stale draft instead of applying it. Source capture,
 conservative stale rejection, this compact layout and post-confirmation focus are Sheaf choices.
 
-User Defined remains disabled. Custom scale expressions and choosing another input graph
-inside the dialog remain open. The developer capture route is `--show add-layer`.
+Choosing another input graph inside the dialog remains open. The developer capture route is
+`--show add-layer`.
 
 **Auto Offset Overlapped Axes (Origin 2016, 2026-11-22).** Four private LabTalk runs read
 `layer.x.position`, `layer.x2.position`, `layer.y.position` and `layer.y2.position` after
@@ -5901,6 +5906,28 @@ layer preserved that stock placement, and doubling either page dimension approxi
 its percent displacement. The varying placement accounts for the differences between the
 paired exports. Sheaf keeps the checkbox disabled for this preset and uses its deterministic
 placement from 21.9.
+
+**User Defined (Origin 2016, 2026-11-22).** With `userdef:=1`, Bottom and Left are selected by
+default. The four edge settings override the preset and can show both sides of a dimension or
+hide both. `showAxes` and `showLabels` both returned 3 for the two sides, 1 for the bottom or left,
+2 for the top or right, and 0 for neither. Without a parent, requesting Straight still used an
+independent scale and a page-relative frame. With parent Layer 1, the frame read 0/0/100/100 in
+percent of that layer. The X and Y scale links independently returned 1 for Straight and 0 for
+Independent. For a parent with X 2–14 and Y 3–27, the linked dimensions used those limits and
+each independent dimension used 0–10. `activate:=0` left the source layer active.
+
+With all four sides shown on the parent and two linked additions with auto offset, the first
+new layer moved both X axes 3% and both Y axes 2%. The second moved both X axes 6% and both
+Y axes 4%. With the opposite parent edges open, only the bottom and left edges shifted.
+
+Sheaf shows the four edge choices, Link To, and separate X and Y Scale Link choices when a
+parent is selected. Link To lists earlier independent layers under the model's link rule.
+Without a parent, the layer uses the existing independent placement from 21.9. The dialog
+still captures its source, so leaving Activate New Layer off keeps the source active even
+when Link To names a different layer. When both edges of a dimension are selected, the
+bottom or left edge gets the labels, title and automatic offset, and the facing edge shares
+the axis line and ticks. Labels, titles and an independent offset for the facing edge are
+follow-up work. Custom Formula remains disabled.
 
 ---
 

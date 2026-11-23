@@ -131,7 +131,8 @@ pub fn drawn_bounds(scene: &Scene, m: &dyn TextMeasurer, page: Option<Rect>) -> 
         all = Some(all.map_or(b, |a| union(a, b)));
     };
     for layer in &scene.layers {
-        layer.grid.iter().for_each(|it| add(it, Some(layer.clip)));
+        // Backgrounds and grid lines are drawn outside the data clip.
+        layer.grid.iter().for_each(|it| add(it, None));
         layer.plots.iter().for_each(|it| add(it, Some(layer.clip)));
         layer.overlay.iter().for_each(|it| add(it, None));
     }

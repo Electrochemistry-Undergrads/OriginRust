@@ -1,5 +1,6 @@
 //! The layer-preset dialog reuses existing addition semantics with a captured parent.
 use super::*;
+use sheaf_core::graph::{AxisSide, Frame, LayerLink, ScaleLink};
 use sheaf_core::layers::NewLayerKind;
 
 fn setup(tag: &str) -> Harness<'static, SheafApp> {
@@ -50,14 +51,15 @@ fn all_nine_dialog_presets_match_the_existing_direct_menu_with_one_undo() {
 }
 
 #[test]
-fn opening_cancel_escape_and_unavailable_custom_controls_do_not_edit_the_project() {
+fn opening_cancel_and_escape_do_not_edit_the_project() {
     let mut h = setup("add-layer-dialog-dismiss");
     let before = project(&h).clone();
     let revision = h.state().doc.revision();
     open(&mut h);
-    assert!(h.get_by_label("User Defined").accesskit_node().is_disabled());
     assert!(h.get_by_label("Auto Offset Overlapped Axes").accesskit_node().is_disabled());
     kind(&mut h, NewLayerKind::InsetWithData);
+    click(&mut h, "User Defined");
+    click(&mut h, "Right");
     click(&mut h, "Activate New Layer");
     click(&mut h, "Cancel");
     assert_eq!(project(&h), &before);
@@ -68,6 +70,40 @@ fn opening_cancel_escape_and_unavailable_custom_controls_do_not_edit_the_project
     assert!(h.state().add_layer_dialog.is_none());
     assert_eq!(project(&h), &before);
     assert_eq!(h.state().doc.revision(), revision);
+}
+
+#[test]
+fn user_defined_axes_link_to_the_chosen_layer_and_keep_the_source_active() {
+    let mut h = setup("add-layer-dialog-user-defined");
+    menu_path(&mut h, &["Graph", "New Layer(Axes)", NewLayerKind::Normal.menu_label()]);
+    assert_eq!(graph_ui(&h).active_layer, 1);
+    let before = project(&h).clone();
+    open(&mut h);
+    click(&mut h, "User Defined");
+    click(&mut h, "Top");
+    click(&mut h, "Left");
+    click(&mut h, "Right");
+    let choose = |h: &mut Harness<'static, SheafApp>, label, value| {
+        h.get_by_role_and_label(egui::accesskit::Role::ComboBox, label).click();
+        settle(h);
+        click(h, value);
+    };
+    choose(&mut h, "Link To", "Layer 1");
+    choose(&mut h, "X Scale Link", "Straight (1 to 1)");
+    click(&mut h, "Activate New Layer");
+    click(&mut h, "OK");
+
+    let g = graph(&h);
+    let layer = &g.layers[2];
+    assert_eq!(layer.frame, Frame::WHOLE);
+    assert_eq!(layer.link, Some(LayerLink { parent: 0, x: ScaleLink::Straight, y: ScaleLink::None }));
+    assert_eq!(layer.x_axis.side, AxisSide::Normal);
+    assert!(layer.x_axis.show_opposite && layer.x_axis.opposite_ticks);
+    assert_eq!(layer.y_axis.side, AxisSide::Opposite);
+    assert_eq!(graph_ui(&h).active_layer, 1);
+    assert_eq!(h.state().doc.undo_label(), Some(sheaf_core::layers::ADD_LAYER_UNDO));
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
 }
 
 #[test]

@@ -92,6 +92,39 @@ impl NewLayerKind {
     }
 }
 
+/// Axis and link choices for the User Defined option in New Layer (Axes).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct UserDefinedLayer {
+    pub bottom: bool,
+    pub top: bool,
+    pub left: bool,
+    pub right: bool,
+    pub parent: Option<usize>,
+    pub x_link: ScaleLink,
+    pub y_link: ScaleLink,
+}
+
+impl Default for UserDefinedLayer {
+    fn default() -> Self {
+        Self {
+            bottom: true,
+            top: false,
+            left: true,
+            right: false,
+            parent: None,
+            x_link: ScaleLink::None,
+            y_link: ScaleLink::None,
+        }
+    }
+}
+
+impl UserDefinedLayer {
+    /// Auto offset applies to visible axes on a parent's frame.
+    pub fn supports_auto_offset(self) -> bool {
+        self.parent.is_some() && (self.bottom || self.top || self.left || self.right)
+    }
+}
+
 /// The undo text of Origin after adding a layer.
 pub const ADD_LAYER_UNDO: &str = "Create";
 /// The undo text of Origin after deleting a layer.
@@ -212,17 +245,65 @@ impl Graph {
     pub fn add_layer_with_auto_offset(&mut self, kind: NewLayerKind, active: usize) -> Option<usize> {
         let index = self.add_layer(kind, active)?;
         if kind.supports_auto_offset() {
-            let frame = self.absolute_frame(index)?;
-            let layer = &self.layers[index];
-            let x = self.new_axis_offset(index, frame, layer.x_axis.side, true);
-            let y = self.new_axis_offset(index, frame, layer.y_axis.side, false);
-            let layer = &mut self.layers[index];
-            layer.x_axis.at_position = None;
-            layer.y_axis.at_position = None;
-            layer.x_axis.offset_pct = x;
-            layer.y_axis.offset_pct = y;
+            self.offset_new_layer_axes(index);
         }
         Some(index)
+    }
+
+    /// Adds an empty layer with the requested axes, optionally covering an earlier unlinked layer.
+    /// An invalid source or parent leaves the graph unchanged.
+    pub fn add_user_defined_layer(
+        &mut self,
+        options: UserDefinedLayer,
+        active: usize,
+        auto_offset: bool,
+    ) -> Option<usize> {
+        self.layers.get(active)?;
+        let (kind, source) = if let Some(parent) = options.parent {
+            if self.layers.get(parent)?.link.is_some() {
+                return None;
+            }
+            (NewLayerKind::NoAxes, parent)
+        } else {
+            (NewLayerKind::Normal, active)
+        };
+        let index = self.add_layer(kind, source)?;
+        let layer = &mut self.layers[index];
+        if let Some(link) = &mut layer.link {
+            link.x = options.x_link;
+            link.y = options.y_link;
+        }
+        for (axis, near, far) in
+            [(&mut layer.x_axis, options.bottom, options.top), (&mut layer.y_axis, options.left, options.right)]
+        {
+            axis.side = match (near, far) {
+                (true, _) => AxisSide::Normal,
+                (false, true) => AxisSide::Opposite,
+                (false, false) => AxisSide::Hidden,
+            };
+            axis.at_position = None;
+            axis.show_tick_labels = near || far;
+            axis.show_opposite = near && far;
+            axis.opposite_ticks = near && far;
+        }
+        layer.display.show_x_axes = true;
+        layer.display.show_y_axes = true;
+        if auto_offset && options.supports_auto_offset() {
+            self.offset_new_layer_axes(index);
+        }
+        Some(index)
+    }
+
+    fn offset_new_layer_axes(&mut self, index: usize) {
+        let Some(frame) = self.absolute_frame(index) else { return };
+        let layer = &self.layers[index];
+        let x = self.new_axis_offset(index, frame, layer.x_axis.side, true);
+        let y = self.new_axis_offset(index, frame, layer.y_axis.side, false);
+        let layer = &mut self.layers[index];
+        layer.x_axis.at_position = None;
+        layer.y_axis.at_position = None;
+        layer.x_axis.offset_pct = x;
+        layer.y_axis.offset_pct = y;
     }
 
     fn new_axis_offset(&self, index: usize, frame: Frame, side: AxisSide, is_x: bool) -> f64 {
@@ -345,6 +426,38 @@ mod tests {
         g.add_layer(NewLayerKind::RightY, 0).unwrap();
         let l = &g.layers[1];
         assert_eq!((l.x_axis.offset_pct, l.y_axis.offset_pct), (0.0, 0.0));
+    }
+
+    #[test]
+    fn user_defined_links_use_the_chosen_frame_and_reject_invalid_parents() {
+        let mut g = graph();
+        g.layers[0].frame.width = 0.6816;
+        g.layers[0].frame.height = 0.7183;
+        let linked = g.add_layer(NewLayerKind::Inset, 0).unwrap();
+        let request = UserDefinedLayer { parent: Some(linked), ..UserDefinedLayer::default() };
+        let before = g.layers.clone();
+        assert_eq!(g.add_user_defined_layer(request, 0, true), None);
+        assert_eq!(g.add_user_defined_layer(UserDefinedLayer::default(), 99, false), None);
+        assert_eq!(g.layers, before);
+
+        let request = UserDefinedLayer {
+            parent: Some(0),
+            x_link: ScaleLink::Straight,
+            top: true,
+            left: false,
+            right: true,
+            ..UserDefinedLayer::default()
+        };
+        let index = g.add_user_defined_layer(request, linked, true).unwrap();
+        assert_eq!(&g.layers[..index], before);
+        let layer = &g.layers[index];
+        assert_eq!(layer.frame, Frame::WHOLE);
+        assert_eq!(g.absolute_frame(index), Some(before[0].frame));
+        assert_eq!(layer.link, Some(LayerLink { parent: 0, x: ScaleLink::Straight, y: ScaleLink::None }));
+        assert_eq!((layer.x_axis.side, layer.y_axis.side), (AxisSide::Normal, AxisSide::Opposite));
+        assert!(layer.x_axis.show_opposite && layer.x_axis.opposite_ticks);
+        assert_eq!(layer.x_axis.offset_pct, 3.0);
+        assert_eq!(layer.y_axis.offset_pct, 0.0);
     }
 
     #[test]

@@ -64,6 +64,7 @@ pub use changepoint::ChangePointSpec;
 pub use curves::{AverageSpec, IntersectSpec};
 pub use decompose::{DecomposeModel, DecomposeSpec};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
+pub use doe::{FactorialDesignSpec, FactorialEffectsSpec};
 pub use expsmooth::{ExpSmoothSpec, SmoothModel};
 pub use forest::{ForestTask, RandomForestSpec};
 pub use lifedist::{LifeDist, LifeDistSpec};
@@ -1197,6 +1198,11 @@ pub enum Tool {
     /// Statistics > Random Forest (T377, `docs/spec/statistics.md` section 44): predictor columns, then the
     /// response.
     RandomForest(RandomForestSpec),
+    /// Statistics > Design of Experiments > Two-Level Factorial Design (T380, `docs/spec/statistics.md` section 45):
+    /// reads no data; the design goes to a new sheet.
+    FactorialDesign(FactorialDesignSpec),
+    /// Statistics > Design of Experiments > Factorial Effects (T380): factor columns, then the response.
+    FactorialEffects(FactorialEffectsSpec),
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (T29, `docs/spec/statistics.md` section 20): time,
     /// censor and, optionally, group columns.
     KaplanMeier(KaplanMeierSpec),
@@ -1338,6 +1344,8 @@ impl Tool {
             Tool::ExpSmooth(_) => "Exponential smoothing forecast",
             Tool::Arima(_) => "ARIMA forecast",
             Tool::RandomForest(_) => "Random forest",
+            Tool::FactorialDesign(_) => "Two-level factorial design",
+            Tool::FactorialEffects(_) => "Factorial effects",
             Tool::KaplanMeier(_) => "Kaplan-Meier estimator",
             Tool::GraphSummary(_) => "Graphical summary",
             Tool::AverageCurves(_) => "Average multiple curves",
@@ -1430,6 +1438,8 @@ impl Tool {
             Tool::ExpSmooth(_) => "Forecast",
             Tool::Arima(_) => "ARIMA",
             Tool::RandomForest(_) => "RandomForest",
+            Tool::FactorialDesign(_) => "Design",
+            Tool::FactorialEffects(_) => "Effects",
             Tool::KaplanMeier(_) => "KaplanMeier",
             Tool::GraphSummary(_) => "GraphSummary",
             Tool::AverageCurves(_) => "AverageResult",
@@ -2352,6 +2362,7 @@ mod changepoint;
 mod curves;
 mod decompose;
 mod dist;
+mod doe;
 mod expsmooth;
 mod filters;
 mod forest;
@@ -2546,6 +2557,8 @@ impl Project {
                 | Tool::LifeDist(_)
                 | Tool::Stability(_)
                 | Tool::RandomForest(_)
+                | Tool::FactorialDesign(_)
+                | Tool::FactorialEffects(_)
                 | Tool::GraphSummary(_)
                 | Tool::SimulateCurve(_)
                 | Tool::XyzArea
@@ -2726,6 +2739,19 @@ impl Project {
             }
             Tool::Roc(spec) => {
                 let out = roc::run(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::FactorialDesign(spec) => {
+                let out = doe::run_design(spec)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
+            Tool::FactorialEffects(spec) => {
+                let out = doe::run_effects(spec, sheet, &request.columns, request.rows)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;

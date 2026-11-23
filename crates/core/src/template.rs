@@ -1306,6 +1306,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             coords: Coords::Cartesian,
             background: None,
             background_style: BackgroundStyle::default(),
+            border: Default::default(),
             group_style: GroupStyle::default(),
             display: LayerDisplay::default(),
             xy_ratio: None,
@@ -1833,9 +1834,10 @@ pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
         l.y_axis.show_tick_labels = true;
     }
     l.link = Some(LayerLink { parent: parent_index, x: ScaleLink::Straight, y: ScaleLink::None });
-    // The parent's background covers the frame already; a second one would hide its plots.
+    // The parent's background and border already cover the frame; copying them would hide its plots.
     l.background = None;
     l.background_style = BackgroundStyle::default();
+    l.border = Default::default();
     l.frame = Frame { left: 0.0, top: 0.0, width: 1.0, height: 1.0 };
     l.x_axis.side = AxisSide::Hidden;
     l.x_axis.major_grid = None;

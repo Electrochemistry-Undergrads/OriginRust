@@ -402,6 +402,9 @@ pub struct Layer {
     /// A gradient from that colour and a border line around the frame (the rest of the Background tab).
     #[serde(default, skip_serializing_if = "BackgroundStyle::is_default")]
     pub background_style: BackgroundStyle,
+    /// Layer Management's independent rectangle around the plot frame.
+    #[serde(default, skip_serializing_if = "LayerBorder::is_default")]
+    pub border: LayerBorder,
     /// The Group tab of the layer's plots: edit mode and increments (the colour increment is
     /// [`Layer::palette`]'s mode).
     #[serde(default, skip_serializing_if = "GroupStyle::is_default")]
@@ -540,6 +543,37 @@ impl Layer {
         } else if let Some(need_w) = xy_ratio_height(h, span_y, span_x, 1.0 / ratio) {
             self.frame.width = need_w / page.0;
         }
+    }
+}
+
+/// Layer Management > Display border, expressed as outsets from the plot frame.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LayerBorder {
+    pub fill: Option<Color>,
+    pub outline: Option<Color>,
+    /// Left, top, right and bottom, as percentages of the layer width or height.
+    pub dimensions_pct: [f64; 4],
+}
+
+impl Default for LayerBorder {
+    fn default() -> Self {
+        Self { fill: None, outline: None, dimensions_pct: [16.6, 10.0, 12.4, 15.2] }
+    }
+}
+
+impl LayerBorder {
+    pub const MAX_OUTSET_PERCENT: f64 = 1000.0;
+
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// Border frame as fractions of the plot frame, including the outward offsets.
+    pub fn relative_frame(self) -> Frame {
+        let [left, top, right, bottom] = self
+            .dimensions_pct
+            .map(|pct| if pct.is_finite() { pct.clamp(0.0, Self::MAX_OUTSET_PERCENT) / 100.0 } else { 0.0 });
+        Frame { left: -left, top: -top, width: 1.0 + left + right, height: 1.0 + top + bottom }
     }
 }
 
@@ -2044,6 +2078,9 @@ pub enum PlotKind {
     /// Origin's Sunburst plot (2022, Sunburst.OTP): the plot's Y column is the value, the category columns of its
     /// [`SunburstStyle`] the rings, the first innermost (graphing spec 14.27).
     Sunburst,
+    /// A Sankey diagram (Origin 2020, T379): the plot's Y column is the flow, the source and target columns of its
+    /// [`SankeyStyle`] the nodes (graphing spec 14.32).
+    Sankey,
     /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
     /// from 12 o'clock, each labelled with its share. The layer draws no axes.
     Pie,
@@ -2274,6 +2311,9 @@ pub struct Plot {
     /// The settings of a sunburst plot (graphing spec 14.27).
     #[serde(default, skip_serializing_if = "SunburstStyle::is_default")]
     pub sunburst: SunburstStyle,
+    /// The source and target columns of a Sankey diagram (T379).
+    #[serde(default, skip_serializing_if = "SankeyStyle::is_default")]
+    pub sankey: SankeyStyle,
     /// Indexed data of a column or box plot: the rows of `y` split by group columns (T76).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub indexed: Option<Indexed>,
@@ -3331,6 +3371,7 @@ mod tests {
             indexed: None,
             stat: None,
             sunburst: Default::default(),
+            sankey: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -3379,6 +3420,7 @@ mod tests {
             indexed: None,
             stat: None,
             sunburst: Default::default(),
+            sankey: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -3509,6 +3551,7 @@ mod tests {
             indexed: None,
             stat: None,
             sunburst: Default::default(),
+            sankey: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -3548,6 +3591,7 @@ mod tests {
             parallel: Default::default(),
             treemap: Default::default(),
             sunburst: Default::default(),
+            sankey: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -3762,6 +3806,7 @@ mod style_tests {
             indexed: None,
             stat: None,
             sunburst: Default::default(),
+            sankey: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),

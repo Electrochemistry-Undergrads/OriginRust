@@ -910,6 +910,7 @@ fn read_curve(
         indexed: None,
         stat: None,
         sunburst: Default::default(),
+        sankey: Default::default(),
         size_from: None,
         color_from: None,
         decor: Default::default(),

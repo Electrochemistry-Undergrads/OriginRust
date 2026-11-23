@@ -335,6 +335,12 @@ impl Writer {
         if !layer.background_style.is_default() {
             notes.push("the gradient and border of a layer's background were not written".into());
         }
+        if !layer.border.is_default() {
+            notes.push(
+                "layer management border colours and dimensions were not written (the companion file keeps them)"
+                    .into(),
+            );
+        }
         if !layer.group_style.is_default() {
             notes.push("the Group tab of a layer (edit mode, increments, subgroups) was not written".into());
         }
@@ -758,6 +764,12 @@ impl Writer {
                     .into(),
             );
         }
+        if has(&|k| k == PlotKind::Sankey) {
+            notes.push(
+                "Sankey diagrams were written as column plots of their flow column; their nodes and bands were not written"
+                    .into(),
+            );
+        }
         if has(&|k| k == PlotKind::Sunburst) {
             notes.push(
                 "sunburst plots were written as column plots of their value column; their categories and rings were not written"
@@ -849,6 +861,7 @@ impl Writer {
                 | PlotKind::Ridgeline
                 | PlotKind::Treemap
                 | PlotKind::Sunburst
+                | PlotKind::Sankey
                 | PlotKind::Pie
                 | PlotKind::Pie3D
                 | PlotKind::PieBw => CurveKind::Column,

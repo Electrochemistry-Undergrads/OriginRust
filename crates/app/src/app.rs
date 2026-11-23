@@ -6,6 +6,7 @@ use crate::actions::{
     Action, CellOp, CopyKind, DataEdit, DataTool, GraphOp, GraphTool, ImportPick, LabelRow, SheetOp, ViewOp,
 };
 use crate::autosave::{Autosave, Due};
+use crate::dialogs::add_layer::LayerChoice;
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::autosave::{AutosaveDialog, AutosaveOutcome};
 use crate::dialogs::cell_format::CellFormatDialog;
@@ -1607,21 +1608,20 @@ impl SheafApp {
         }
     }
 
-    /// Graph > New Layer(Axes): one undo step; the new layer becomes the active layer.
-    fn add_layer(&mut self, graph: WindowId, active: usize, kind: sheaf_core::layers::NewLayerKind, auto_offset: bool) {
-        let Some(g) = self.doc.project().graph(graph) else { return };
-        if active >= g.layers.len() {
-            return;
-        }
-        self.doc.apply(sheaf_core::layers::ADD_LAYER_UNDO, |p| {
-            if let Some(g) = p.graph_mut(graph) {
-                let _ =
-                    if auto_offset { g.add_layer_with_auto_offset(kind, active) } else { g.add_layer(kind, active) };
+    /// Graph > New Layer(Axes): add one layer in a single undo step.
+    fn add_layer(&mut self, graph: WindowId, active: usize, choice: LayerChoice, activate: bool, auto_offset: bool) {
+        let Some(added) = self.doc.apply(sheaf_core::layers::ADD_LAYER_UNDO, |p| {
+            let g = p.graph_mut(graph)?;
+            match choice {
+                LayerChoice::Preset(kind) if auto_offset => g.add_layer_with_auto_offset(kind, active),
+                LayerChoice::Preset(kind) => g.add_layer(kind, active),
+                LayerChoice::UserDefined(options) => g.add_user_defined_layer(options, active, auto_offset),
             }
-        });
-        let count = self.doc.project().graph(graph).map_or(0, |g| g.layers.len());
+        }) else {
+            return;
+        };
         let state = self.graphs.entry(graph).or_default();
-        state.active_layer = count.saturating_sub(1);
+        state.active_layer = if activate { added } else { active };
         state.selected = None;
     }
 
@@ -1732,7 +1732,7 @@ impl SheafApp {
             GraphOp::HidePlot { .. } | GraphOp::SetStack { .. } => unreachable!("handled above"),
         };
         if let GraphOp::AddLayer { layer, kind } = op {
-            self.add_layer(graph, layer, kind, false);
+            self.add_layer(graph, layer, LayerChoice::Preset(kind), true, false);
             return;
         }
         if let GraphOp::DeleteLayer { layer } = op {
@@ -4594,7 +4594,8 @@ impl SheafApp {
         };
         // A Treemap (or Sunburst plot) nests by the selected columns of text (in selection order; else every text column of the
         // sheet) and sizes by the last numeric one.
-        let categories: Vec<ColumnId> = if matches!(template, Template::Treemap | Template::Sunburst) {
+        let categories: Vec<ColumnId> = if matches!(template, Template::Treemap | Template::Sunburst | Template::Sankey)
+        {
             let project = self.doc.project();
             columns.iter().copied().filter(|id| project.column(*id).is_some_and(|c| !c.data.is_numeric())).collect()
         } else {
@@ -4670,7 +4671,7 @@ impl SheafApp {
         }
         let ys = self.plot_y_columns(book, columns, template);
         if ys.is_empty() {
-            let what = if matches!(template, Template::Treemap | Template::Sunburst) {
+            let what = if matches!(template, Template::Treemap | Template::Sunburst | Template::Sankey) {
                 "Nothing to plot: select one or more text category columns and a numeric value column"
             } else {
                 "Nothing to plot: select one or more numeric Y columns"
@@ -4680,7 +4681,7 @@ impl SheafApp {
         }
         let made = self.doc.edit("Plot columns", |p| match group {
             Some(g) => p.plot_parallel(template, &ys, Some(g)),
-            None if matches!(template, Template::Treemap | Template::Sunburst) => {
+            None if matches!(template, Template::Treemap | Template::Sunburst | Template::Sankey) => {
                 p.plot_columns(template, &[categories.as_slice(), &ys].concat())
             }
             None => p.plot_columns(template, &ys).inspect(|g| sheaf_plot::place_zoom_regions(p, *g)),
@@ -7410,13 +7411,10 @@ impl SheafApp {
                     self.add_layer_dialog = None;
                     self.warn("The project changed. Open New Layer (Axes) again.");
                 }
-                Outcome::Add { graph, layer, kind, activate, auto_offset } => {
+                Outcome::Add { graph, layer, choice, activate, auto_offset } => {
                     self.add_layer_dialog = None;
-                    self.add_layer(graph, layer, kind, auto_offset);
+                    self.add_layer(graph, layer, choice, activate, auto_offset);
                     self.focus(graph);
-                    if !activate && let Some(state) = self.graphs.get_mut(&graph) {
-                        state.active_layer = layer;
-                    }
                 }
             }
         }

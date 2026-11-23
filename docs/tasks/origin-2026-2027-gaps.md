@@ -52,7 +52,7 @@ outputs or UI behavior.
 | Manhattan plot | 2017 Pro App | Done (T362: Statistics > Manhattan Plot..., one scatter per group and a significance line). Plot significance across grouped genomic positions, typically with chromosome groups and a significance cutoff. | [2017][o17] |
 | Violin and parallel-coordinate plots | 2019 | Violin done (T37); parallel plot and parallel index done (T49). Show each group's distribution as a density silhouette, or draw each record across parallel variable axes. | [2019][o19] |
 | Rug plot | 2019b | Done (T41). Add a mark along an axis for each observation to reveal its distribution. | [2019b][o19b] |
-| Sankey and alluvial diagrams | 2020 | Show quantities as flows whose widths reflect their values, including transitions between categories across stages. | [2020][o20] |
+| Sankey and alluvial diagrams | 2020 | Sankey diagrams done (T379: Plot > Categorical > Sankey Diagram, `sheaf plot -t sankey`); alluvial diagrams open. | [2020][o20] |
 | Browser Graph | 2020b / 2024 | Browse similarly structured datasets inside a graph and switch the displayed series, including datasets on different sheets. | [2020b][browser] · [2024][o24] |
 | Chord and lollipop plots | 2021 | Lollipop done (T33). Draw relationships as chords between categories. Draw values as stems ending in markers. | [2021][o21] |
 | Network and grouped marginal plots | 2021b | Draw connections among nodes (open). Grouped marginal plots done (T373: `sheaf plot -t marginal-histograms|marginal-box-charts --group`, a scatter and a histogram or box per group). | [2021b][o21b] |

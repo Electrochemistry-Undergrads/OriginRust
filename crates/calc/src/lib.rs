@@ -70,6 +70,7 @@ pub mod rarechart;
 pub mod risetime;
 pub mod rmanova;
 pub mod roc;
+pub mod sankey;
 pub mod signal;
 pub mod smooth;
 pub mod stability;

@@ -1685,6 +1685,7 @@ fn plot_menu() -> Vec<Entry> {
                 item("Parallel Index", Cmd::Plot(Template::ParallelIndex)),
                 item("Treemap", Cmd::Plot(Template::Treemap)),
                 item("Sunburst Plot", Cmd::Plot(Template::Sunburst)),
+                item("Sankey Diagram", Cmd::Plot(Template::Sankey)),
                 item("Cause-and-Effect Diagram", Cmd::Plot(Template::Fishbone)),
             ],
         ),

@@ -134,7 +134,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T133](T133-sample-projects.md) | File / Help > Open Sample Projects (B12 slice) | S | done 2026-11-18 (gui-look "Sample Projects"); Sheaf's own synthetic samples |
 | [T134](T134-options.md) | Tools > Options... (B13 slice: Open/Close autosave, File Locations) | S | done 2026-11-18 (gui-look "Options"), not measured; left: Origin's other tabs |
 | [T135](T135-analysis-markers.md) | Graph Data > Analysis Markers (B3 slice) | S | done 2026-11-18 (graphing "Analysis markers"), not measured; left: Lock Position, measure and match |
-| [T136](T136-graph-table.md) | Graph > New Table (B3 slice) | S | done 2026-11-18 (graphing "Tables"), not measured; left: table styles, cell formats, links |
+| [T136](T136-graph-table.md) | Graph > New Table (B3 slice) | S | done 2026-11-18 (graphing "Tables"), window measured by T395; left: table styles, cell formats, links |
 | [T137](T137-label-order.md) | Text label Bring to the front / Push to the back (B2 slice) | S | done 2026-11-18 (graphing "Text label order"), not measured; left: order across object kinds |
 | [T138](T138-rise-time-gadget.md) | Gadgets > Rise Time (B9 slice) | S | done 2026-11-18 (graphing "Rise Time gadget"), not measured; left: settings dialog, output, measure |
 | [T139](T139-intersect-gadget.md) | Gadgets > Intersect (B9 slice) | S | done 2026-11-18 (graphing "Intersect gadget"), not measured; left: settings, output, measure |
@@ -421,6 +421,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T385](T385-smith-measure.md) | Measure Smith Chart against Origin (grid, labels, line plot) | S | done 2026-11-22 (graphing 37) |
 | [T389](T389-piper-measure.md) | Measure Piper diagram against Origin (grids, side labels, titles, sample symbols) | S | done 2026-11-23 (graphing 39) |
 | [T390](T390-markers-measure.md) | Measure graph Data > Mark Data Range against Origin (red lines across the layer) | S | done 2026-11-23 (graphing 40) |
+| [T395](T395-table-measure.md) | Measure Graph > New Table against Origin (5 x 8 default, up to 9) | S | done 2026-11-23 (graphing Tables) |
 | [T40](T40-graphical-summary.md) | Graphical Summary: statistics, CIs, Anderson-Darling and charts per variable/group | L | done 2026-11-15 (statistics.md 22); left: three other arrangements, Origin layout unmeasured |
 | [T41](T41-rug-plot.md) | Rug plots: Axis dialog Rug tab and Scatter + Rug template | M | done 2026-11-15 (graphing 18.10); left: Origin defaults unmeasured, rug hit-testing |
 | [T42](T42-window-switcher.md) | Window Switcher: Ctrl+Tab through child windows with previews | M | done 2026-11-15 (`window-switcher`, macOS) |

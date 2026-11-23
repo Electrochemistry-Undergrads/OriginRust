@@ -402,7 +402,7 @@ pub enum ProjectError {
     SankeyColumns,
     #[error("an alluvial diagram needs two or more category columns (its stages); select them")]
     AlluvialColumns,
-    #[error("a network plot needs a source and a target column; select them")]
+    #[error("a network plot or a chord diagram needs a source and a target column; select them")]
     NetworkColumns,
     #[error("{0}")]
     BadName(String),
@@ -1400,7 +1400,7 @@ impl Project {
         if template == Template::Fishbone {
             return self.plot_fishbone(ys, crate::fishbone::DEFAULT_EFFECT);
         }
-        if template == Template::Network {
+        if matches!(template, Template::Network | Template::Chord) {
             // The first two columns of text are the ends of the edges; the last numeric one, if any, weighs them.
             let weight = ys.iter().rev().copied().find(|y| self.numeric(*y).is_some());
             let mut ends: Vec<ColumnId> = ys.iter().copied().filter(|y| self.numeric(*y).is_none()).collect();
@@ -1413,7 +1413,7 @@ impl Project {
                     .unwrap_or_default();
             }
             let [source, target, ..] = ends[..] else { return Err(ProjectError::NetworkColumns) };
-            return self.plot_network(source, target, weight);
+            return self.plot_links(template, source, target, weight);
         }
         if template == Template::Alluvial {
             // The columns of text are the stages, in order; the last numeric one, if any, weights the rows.
@@ -1950,6 +1950,28 @@ impl Project {
         target: ColumnId,
         weight: Option<ColumnId>,
     ) -> Result<WindowId, ProjectError> {
+        self.plot_links(Template::Network, source, target, weight)
+    }
+
+    /// A chord diagram (T402): a flow per row from the node named in `source` to the one in `target`, weighted by
+    /// `weight` or, without one, counted (the plot's Y column is then `source`, which is not numeric).
+    pub fn plot_chord(
+        &mut self,
+        source: ColumnId,
+        target: ColumnId,
+        weight: Option<ColumnId>,
+    ) -> Result<WindowId, ProjectError> {
+        self.plot_links(Template::Chord, source, target, weight)
+    }
+
+    /// A network plot or a chord diagram of the rows of `source` and `target`.
+    fn plot_links(
+        &mut self,
+        template: Template,
+        source: ColumnId,
+        target: ColumnId,
+        weight: Option<ColumnId>,
+    ) -> Result<WindowId, ProjectError> {
         for c in [source, target].iter().chain(weight.as_ref()) {
             self.column(*c).ok_or(ProjectError::NoSuchColumn(*c))?;
         }
@@ -1958,7 +1980,7 @@ impl Project {
         }
         let y = weight.unwrap_or(source);
         let long_name = self.locate(y).map(|(b, _, _)| b.title_for_graph());
-        let graph = self.add_graph(Template::Network);
+        let graph = self.add_graph(template);
         self.add_plot(graph, 0, y)?;
         if let Some(g) = self.graph_mut(graph) {
             if let Some(l) = g.layers.first_mut() {
@@ -2121,7 +2143,7 @@ impl Project {
         if template == Template::Fishbone {
             return Err(ProjectError::FishboneColumns);
         }
-        if matches!(template, Template::Sankey | Template::Alluvial | Template::Network) {
+        if matches!(template, Template::Sankey | Template::Alluvial | Template::Network | Template::Chord) {
             return Err(ProjectError::SankeyColumns);
         }
         if matches!(template, Template::GroupedColumns | Template::GroupedBox) {

@@ -227,6 +227,8 @@ pub enum Template {
     Alluvial,
     /// Network plot (Origin 2021b, T383): nodes and edges of a source and a target column.
     Network,
+    /// Chord diagram (Origin 2021, T402): arcs and ribbons of a source and a target column.
+    Chord,
     /// Cause-and-effect (fishbone) diagram (Origin 2026, T375): the chosen columns are the categories, their
     /// cells the causes; drawn as line and text objects in one layer without axes.
     Fishbone,
@@ -245,7 +247,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 105] = [
+    pub const ALL: [Template; 106] = [
         Template::Line,
         Template::Scatter3d,
         Template::Trajectory3d,
@@ -306,6 +308,7 @@ impl Template {
         Template::Sankey,
         Template::Alluvial,
         Template::Network,
+        Template::Chord,
         Template::Fishbone,
         Template::Bubble,
         Template::ColorMapped,
@@ -460,6 +463,7 @@ impl Template {
             Template::Sankey => "sankey",
             Template::Alluvial => "alluvial",
             Template::Network => "network",
+            Template::Chord => "chord",
             Template::Fishbone => "fishbone",
         }
     }
@@ -570,6 +574,7 @@ impl Template {
             Template::Sankey => "Sankey Diagram",
             Template::Alluvial => "Alluvial Diagram",
             Template::Network => "Network Plot",
+            Template::Chord => "Chord Diagram",
             Template::Fishbone => "Cause-and-Effect Diagram",
         }
     }
@@ -810,9 +815,10 @@ impl Template {
                 }
                 g
             }
-            Template::Network => {
+            Template::Network | Template::Chord => {
                 // Nodes and edges fill the layer's frame: no axes, no legend (the names are beside the nodes).
-                let mut g = general(id, name, PlotKind::Network);
+                let kind = if *self == Template::Chord { PlotKind::Chord } else { PlotKind::Network };
+                let mut g = general(id, name, kind);
                 for l in &mut g.layers {
                     l.x_axis.side = AxisSide::Hidden;
                     l.y_axis.side = AxisSide::Hidden;
@@ -1963,7 +1969,8 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 105);
+        assert_eq!(Template::ALL.len(), 106);
+        assert_eq!(Template::from_name("chord"), Some(Template::Chord));
         assert_eq!(Template::from_name("network"), Some(Template::Network));
         assert_eq!(Template::from_name("alluvial"), Some(Template::Alluvial));
         assert_eq!(Template::from_name("sankey"), Some(Template::Sankey));

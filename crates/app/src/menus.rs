@@ -1693,6 +1693,7 @@ fn plot_menu() -> Vec<Entry> {
                 item("Sankey Diagram", Cmd::Plot(Template::Sankey)),
                 item("Alluvial Diagram", Cmd::Plot(Template::Alluvial)),
                 item("Network Plot", Cmd::Plot(Template::Network)),
+                item("Chord Diagram", Cmd::Plot(Template::Chord)),
                 item("Cause-and-Effect Diagram", Cmd::Plot(Template::Fishbone)),
             ],
         ),

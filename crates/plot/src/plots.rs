@@ -1804,9 +1804,13 @@ pub(crate) fn smooth_for_test(connect: Connect, pts: &[(f64, f64)]) -> Vec<(f64,
 
 /// Data > Mark Data Range (T118): an I-beam at each of the two marked points, 24 pt high at the Medium
 /// size of Data > Analysis Markers (T135).
+/// The data markers of a plot as Origin 2016 draws them (measured, T390): a red line across the whole layer at
+/// each marked point, with a short bar at the point whose length follows Data > Analysis Markers' size (a
+/// third of its height).
 fn draw_data_markers(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, (a, b): (usize, usize)) {
-    let stroke = Stroke::solid(sheaf_core::Color::BLACK, 1.0);
-    let half = pd.marker_display.size.half_height_pt();
+    let stroke = Stroke::solid(sheaf_core::Color::rgb(255, 0, 0), 1.0);
+    let bar = pd.marker_display.size.half_height_pt() / 3.0;
+    let (top, bottom) = (geom.frame.y, geom.frame.y + geom.frame.h);
     for row in [a, b] {
         if !(pd.start..pd.end).contains(&row) {
             continue;
@@ -1816,12 +1820,10 @@ fn draw_data_markers(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeometry, (
             continue;
         }
         let mut d = String::new();
-        move_to(&mut d, x, y - half);
-        line_to(&mut d, x, y + half);
-        move_to(&mut d, x - 4.0, y - half);
-        line_to(&mut d, x + 4.0, y - half);
-        move_to(&mut d, x - 4.0, y + half);
-        line_to(&mut d, x + 4.0, y + half);
+        move_to(&mut d, x, top);
+        line_to(&mut d, x, bottom);
+        move_to(&mut d, x - bar, y);
+        line_to(&mut d, x + bar, y);
         out.push(Item::Path { d, fill: None, stroke: Some(stroke.clone()) });
     }
 }

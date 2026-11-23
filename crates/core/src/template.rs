@@ -2456,15 +2456,18 @@ mod tests {
             p.add_column(b, 0, Designation::Y, ColumnData::text(vec!["x".into(), "y".into(), "z".into()])).unwrap();
         let v = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
         let w = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![4.0, 5.0, 6.0])).unwrap();
-        let err = p.plot_columns(Template::Treemap, &[region, name]).unwrap_err();
-        assert!(err.to_string().contains("numeric value column"), "{err}");
+        // Text columns only: nested frequencies, every row counts 1 (T392).
+        let g = p.plot_columns(Template::Treemap, &[region, name]).unwrap();
+        let plot = &p.graph(g).unwrap().layers[0].plots[0];
+        assert_eq!((plot.y, plot.treemap.categories.clone()), (region, vec![region, name]));
+        let counted_graphs = p.graphs().count();
         let err = p.plot_treemap(&[], v).unwrap_err();
         assert!(err.to_string().contains("category column"), "{err}");
         let err = p.plot_treemap(&[v], region).unwrap_err();
         assert!(err.to_string().contains("numeric value column"), "{err}");
         let err = p.plot_columns_double_y(Template::Treemap, &[v], &[w]).unwrap_err();
         assert!(err.to_string().contains("right Y axis"), "{err}");
-        assert_eq!(p.graphs().count(), 0, "a refused plot leaves no graph behind");
+        assert_eq!(p.graphs().count(), counted_graphs, "a refused plot leaves no graph behind");
         // Text columns among the selection are the categories in selection order; the last numeric is the value.
         let g = p.plot_columns(Template::Treemap, &[name, region, v, w]).unwrap();
         let l = p.graph(g).unwrap().layers[0].clone();
@@ -2634,15 +2637,18 @@ mod tests {
             p.add_column(b, 0, Designation::Y, ColumnData::text(vec!["x".into(), "y".into(), "z".into()])).unwrap();
         let v = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
         let w = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![4.0, 5.0, 6.0])).unwrap();
-        let err = p.plot_columns(Template::Sunburst, &[region, name]).unwrap_err();
-        assert!(err.to_string().contains("numeric value column"), "{err}");
+        // Text columns only: nested frequencies, every row counts 1 (T392).
+        let g = p.plot_columns(Template::Sunburst, &[region, name]).unwrap();
+        let plot = &p.graph(g).unwrap().layers[0].plots[0];
+        assert_eq!((plot.y, plot.sunburst.categories.clone()), (region, vec![region, name]));
+        let counted_graphs = p.graphs().count();
         let err = p.plot_sunburst(&[], v).unwrap_err();
         assert!(err.to_string().contains("category column"), "{err}");
         let err = p.plot_sunburst(&[v], region).unwrap_err();
         assert!(err.to_string().contains("numeric value column"), "{err}");
         let err = p.plot_columns_double_y(Template::Sunburst, &[v], &[w]).unwrap_err();
         assert!(err.to_string().contains("right Y axis"), "{err}");
-        assert_eq!(p.graphs().count(), 0, "a refused plot leaves no graph behind");
+        assert_eq!(p.graphs().count(), counted_graphs, "a refused plot leaves no graph behind");
         let g = p.plot_columns(Template::Sunburst, &[name, region, v, w]).unwrap();
         let l = p.graph(g).unwrap().layers[0].clone();
         assert_eq!(l.plots.len(), 1);

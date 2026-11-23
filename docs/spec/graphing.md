@@ -3104,6 +3104,14 @@ Origin's documented facts (Origin 2022 help, not measured; no Origin was at hand
   the Radius/Center settings, tangential labels for thin rings, a colour-by-category-palette option, a label font setting, reading
   Origin's sunburst from .opj.
 
+**Nested frequency charts (T392, Origin 2026 feature, Sheaf's rule, not measured).** A treemap (14.26) or sunburst
+plot (14.27) whose chosen columns are all text counts its rows instead of summing a value: every row counts 1, so the
+rectangles or wedges are the frequencies of the category combinations, nested by the columns in order. In the app,
+select the text columns only; on the command line give no numeric `-y` (`sheaf plot FILE -t sunburst|treemap
+[--group A,B,...]`; without `--group` every text column of the sheet). The plot's Y column is then the first category
+column; the sunburst's colour scale is titled "Count", the treemap's value labels show the counts. A file of text only
+needs `--header-lines 1 --long-name-line 1` on import, or its header row is counted.
+
 ### 14.28 Grouped Columns (indexed data) and Grouped Box Charts (T76)
 
 Origin's documented facts (documentation only, **not measured**; no Origin was at hand; paraphrased;
@@ -6973,7 +6981,13 @@ samples in Origin's symbol and colour sequence.
 - **Sheaf internals:** plot kind `piper` with `PlotDecor::piper` (the five columns after Ca), template `piper`.
 - **Left:** Sample ID and TDS columns, a legend entry per sample, Origin's three layers.
 
-## 40. Data markers and display range: graph Data menu (T118, 2026-11-16, **not measured**)
+## 40. Data markers and display range: graph Data menu (T118, 2026-11-16; marker look measured by T390, 2026-11-23)
+
+**Origin 2016 (measured from its window, `re-workspace/scratch/t390`):** the graph Data menu reads Set Display Range,
+Reset to Full Range | Mark Data Range (Ctrl+Alt+M), Clear Data Markers (Ctrl+Alt+N, greyed with no markers) |
+Analysis Markers >, Lock Position > | Mask Data Points, Move Data Points, Remove Bad Data Points | the plot list.
+Mark Data Range puts its two markers at the first and last points of the plot. Each is a **red vertical line
+across the whole layer** at the point, with a small cursor on the point, and the markers stay after Esc.
 
 Origin 2016's graph Data menu has Set Display Range, Reset to Full Range, Mark Data Range (Ctrl+Alt+M) and
 Clear Data Markers (Ctrl+Alt+N). They could not be probed (Origin's COM class unregistered, see 36), so
@@ -6981,7 +6995,8 @@ this follows Origin's documented behaviour.
 
 - **Mark Data Range** puts two data markers on the active layer's first plot, at its first and last plotted
   rows (inside its display range when it has one).
-  - The markers are drawn as 24 pt black I-beams at the points.
+  - The markers are drawn as Origin's: a red 1 pt line across the layer at each point, with a short bar at the
+    point (a third of the Analysis Markers size, 12 pt for Large).
   - A Data tool then runs: a click on a point moves the nearer marker of that point's plot to its row.
     Each move is one undo step. Esc or a right-click ends the tool; the markers stay.
 - **Set Display Range** gives every plot with markers the rows between them, both included
@@ -6990,8 +7005,8 @@ this follows Origin's documented behaviour.
 - **Clear Data Markers** removes every marker of the graph.
 - **Sheaf internals:** core `data_markers` (`Project::mark_data_range`, `Graph::set_data_markers`,
   `clear_data_markers`, `set_display_range`, `reset_full_range`); markers in `PlotDecor::markers`.
-- **To measure:** Origin's marker look, whether markers are per plot or per layer, and how markers are
-  moved (drag or click).
+- **Left:** whether Origin's markers are per plot or per layer, how they are moved (drag or click), and Set
+  Display Range's result (its menu did not open while the marker tool was active in the probe).
 
 ## 41. Add Function Graph: Graph > Add Function Graph... (T119, 2026-11-16; partly measured by T322, 2026-11-21)
 
@@ -7059,13 +7074,19 @@ Origin's documented behaviour. The markers they act on are the data markers of D
     sheet.
   - Not done: Origin's Change Parameters and View > Show > Lock Icons. [Origin hotkeys](https://docs.originlab.com/origin-help/hotkey-in-origin/)
 
-## Tables: Graph > New Table (T136, 2026-11-18, **not measured**)
+## Tables: Graph > New Table (T136, 2026-11-18; window measured by T395, 2026-11-23)
+
+**Origin 2016 (measured, `re-workspace/scratch/t395`):** Graph > New Table... (in the expanded Graph menu, after Legend)
+opens a window "Add a linked table to a graph or a layout". It has Layer ([Graph1]1), Number of Columns 5 and Number
+of Rows 8 (lists of 1 to 9), Table Title (empty), Show Column Labels (off) and Table Name (an automatic name, ticked).
+Origin's table is linked to a worksheet. Its OK left no table on the graph in the probe, so its look is not measured.
 
 Origin 2016's Graph menu has New Table, which puts a table object on the graph. It could not be probed
 (Origin's COM class was unregistered), so this follows Origin's documented behaviour.
 
-- **Making a table:** Graph > New Table opens the "New Table" window with a grid of 3 x 3 empty cells. Add
-  Row, Remove Row, Add Column and Remove Column change the size. OK puts the table into the active layer,
+- **Making a table:** Graph > New Table opens the "New Table" window with a grid of 8 rows of 5 empty cells
+  (Origin's defaults). Add Row, Remove Row, Add Column and Remove Column change the size, up to 9 rows and
+  9 columns as Origin's lists allow. OK puts the table into the active layer,
   its top-left corner at 10 % of the frame from the left and top, in the layer's new-label font. It is one
   undo step.
 - **Editing:** a double-click on a table opens the same grid, titled "Table". OK changes the cells in one

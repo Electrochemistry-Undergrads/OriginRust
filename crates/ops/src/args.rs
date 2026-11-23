@@ -3475,6 +3475,29 @@ pub enum AnalyzeTool {
         #[arg(long, default_value_t = 1)]
         seed: u64,
     },
+    /// Monte Carlo simulation: --input NAME=DIST(...) (repeat; normal, uniform, lognormal, triangular, constant) are
+    /// drawn --samples times and --formula is computed from them; draws, summary, capability against --lsl/--usl and
+    /// rank-correlation sensitivity go to a new sheet; --y only says which book.
+    MonteCarlo {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// An input, as name=normal(10,1) (repeat for each input).
+        #[arg(long = "input", required = true, value_name = "NAME=DIST")]
+        inputs: Vec<String>,
+        /// The output as an expression of the input names.
+        #[arg(long)]
+        formula: String,
+        #[arg(long, default_value_t = 10000)]
+        samples: usize,
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+        /// Lower specification limit of the output.
+        #[arg(long)]
+        lsl: Option<f64>,
+        /// Upper specification limit of the output.
+        #[arg(long)]
+        usl: Option<f64>,
+    },
     /// Mixture design: a simplex lattice {q, m} or simplex centroid design (optionally with axial check blends and
     /// the overall centroid) for one or more totals and lower bounds, in a new sheet; --y only says which book.
     MixtureDesign {
@@ -3686,6 +3709,9 @@ pub enum AnalyzeTool {
         /// Do not make the graphs.
         #[arg(long)]
         no_graph: bool,
+        /// The last --y column holds each row's frequency (count).
+        #[arg(long)]
+        frequency: bool,
     },
     /// Stability study (ICH Q1E): --y TIME,RESPONSE[,BATCH]; per-batch lines, poolability tests and the shelf life
     /// where a confidence bound of the mean meets a specification limit, with a graph.
@@ -3708,6 +3734,35 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// qPCR relative quantification: --y GROUP,TARGET_CT,REFERENCE_CT; dCt, ddCt against the control group and the
+    /// Livak (2^-ddCt) or Pfaffl expression ratio with a Welch interval and test, and a graph.
+    Qpcr {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The control group (default: the first group).
+        #[arg(long, default_value = "")]
+        control: String,
+        /// Amplification factor of the target (2 = 100 % efficiency).
+        #[arg(long, default_value_t = 2.0)]
+        e_target: f64,
+        /// Amplification factor of the reference.
+        #[arg(long, default_value_t = 2.0)]
+        e_reference: f64,
+        /// Confidence level of the ratio interval, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        confidence: f64,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// qPCR standard curve: --y QUANTITY,CT of a dilution series; slope, R^2, amplification factor and efficiency.
+    QpcrCurve {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Life data regression: --y COVARIATE[,COVARIATE..],TIME,CENSOR; an accelerated failure time model (Weibull,
     /// lognormal or exponential) of log time on the covariates with right censoring.
     Lifereg {
@@ -3719,6 +3774,9 @@ pub enum AnalyzeTool {
         /// The value of the censor column that marks a censored case.
         #[arg(long, default_value = "1")]
         censor: String,
+        /// The last --y column holds each row's frequency (count).
+        #[arg(long)]
+        frequency: bool,
     },
     /// Distribution analysis with arbitrary censoring: --y START,END; equal = exact, empty end = right-censored, empty
     /// start = left-censored, otherwise interval-censored; Weibull, lognormal, exponential or normal maximum likelihood.
@@ -3731,6 +3789,9 @@ pub enum AnalyzeTool {
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,
+        /// The last --y column holds each row's frequency (count).
+        #[arg(long)]
+        frequency: bool,
     },
     /// Process capability: Cp, Cpk, Pp, Ppk and parts per million outside the limits of each --y column, normal
     /// or nonnormal (lognormal or Weibull, percentile method), with a histogram and the fitted curve.

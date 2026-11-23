@@ -2227,6 +2227,17 @@ log-likelihood, AIC and, for the Weibull, the shape. Checked against numpy/scipy
 1e-5). Proportional hazards (Cox) regression, interval-censored regression, text (factor) covariates and prediction
 of percentiles are not built.
 
+## 49 Frequency columns of the life-data tools (T394, Origin 2026b; not measured)
+
+Origin 2026b's life-data analyses take an optional frequency input; so do Sheaf's Distribution Overview Plot (section
+37), Distribution Analysis (Arbitrary Censoring) (section 47) and Life Data Regression (section 48): with "Last column:
+frequency (count) of each row" ticked (`--frequency` on `sheaf analyze lifedist`, `lifedist-interval` and `lifereg`),
+the last chosen column holds how many units each row stands for. A row of frequency `k` counts exactly as `k` copies
+of it (the fits, counts, plotting positions and graphs are those of the written-out rows); a frequency of 0 leaves
+the row out, a missing, negative or fractional one is refused, and the frequencies may add up to at most 1,000,000
+rows. Checked by fitting the same data written out row by row (`crates/core/src/analysis/lifedist.rs`,
+`crates/cli/tests/analyze.rs`).
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

@@ -256,7 +256,7 @@ impl CategoryColors {
 
 pub type DataColors = CategoryColors;
 
-/// Colors for individual column label rows in Worksheet Properties.
+/// Colors for individual worksheet label rows and headings.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LabelColors {
     #[serde(default, skip_serializing_if = "CategoryColors::is_empty")]
@@ -267,15 +267,21 @@ pub struct LabelColors {
     pub comments: CategoryColors,
     #[serde(default, skip_serializing_if = "CategoryColors::is_empty")]
     pub formula: CategoryColors,
+    #[serde(default, skip_serializing_if = "CategoryColors::is_empty")]
+    pub column_header: CategoryColors,
+    #[serde(default, skip_serializing_if = "CategoryColors::is_empty")]
+    pub row_header: CategoryColors,
 }
 
 impl LabelColors {
-    pub fn categories(&self) -> [CategoryColors; 4] {
+    pub fn label_rows(&self) -> [CategoryColors; 4] {
         [self.long_name, self.units, self.comments, self.formula]
     }
 
     pub fn is_empty(&self) -> bool {
-        self.categories().iter().all(CategoryColors::is_empty)
+        self.label_rows().iter().all(CategoryColors::is_empty)
+            && self.column_header.is_empty()
+            && self.row_header.is_empty()
     }
 
     fn for_row(&self, row: &LabelKind) -> CategoryColors {
@@ -410,7 +416,9 @@ fn segments(sheet: &Worksheet, ranges: &[(usize, usize, u32)]) -> Vec<Seg> {
 impl FormatIndex {
     pub fn new(sheet: &Worksheet) -> Self {
         let mut ix = FormatIndex {
-            has_default_styles: sheet.font_defaults.has_cell_fonts() || sheet.has_category_colors(),
+            has_default_styles: sheet.font_defaults.has_cell_fonts()
+                || !sheet.data_colors.is_empty()
+                || sheet.has_label_cell_colors(),
             ..Default::default()
         };
         let mut spans: HashMap<ColumnId, Vec<(usize, usize, u32)>> = HashMap::new();
@@ -490,6 +498,26 @@ fn finish<'a>(f: &CellFormat, font: Option<&'a str>, colors: CategoryColors) -> 
 impl Worksheet {
     pub fn has_category_colors(&self) -> bool {
         !self.data_colors.is_empty() || !self.column_label_colors.is_empty() || !self.label_colors.is_empty()
+    }
+
+    pub fn has_label_cell_colors(&self) -> bool {
+        !self.column_label_colors.is_empty() || self.label_colors.label_rows().iter().any(|color| !color.is_empty())
+    }
+
+    pub fn column_header_style(&self) -> ResolvedStyle<'_> {
+        ResolvedStyle {
+            text_color: visible(self.label_colors.column_header.text_color),
+            fill: visible(self.label_colors.column_header.fill),
+            ..self.font_defaults.column_header_style()
+        }
+    }
+
+    pub fn row_header_style(&self) -> ResolvedStyle<'_> {
+        ResolvedStyle {
+            text_color: visible(self.label_colors.row_header.text_color),
+            fill: visible(self.label_colors.row_header.fill),
+            ..self.font_defaults.row_header_style()
+        }
     }
 
     /// The category colors of a label below per-range formatting.

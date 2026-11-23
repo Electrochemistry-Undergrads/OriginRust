@@ -76,6 +76,12 @@ impl<'a> Formats<'a> {
                 self.sheet.name
             ));
         }
+        if !self.sheet.label_colors.column_header.is_empty() || !self.sheet.label_colors.row_header.is_empty() {
+            warnings.push(format!(
+                "sheet '{}': worksheet header colors are omitted; Excel controls its row and column headings",
+                self.sheet.name
+            ));
+        }
         if !self.sheet.data_colors.is_empty() {
             warnings.push(format!(
                 "sheet '{}': worksheet data colors are exported as current-cell styles; future cells use Excel defaults",
@@ -83,7 +89,7 @@ impl<'a> Formats<'a> {
             ));
         }
         let bulk_colors = self.sheet.column_label_colors;
-        if !bulk_colors.is_empty() || !self.sheet.label_colors.is_empty() {
+        if self.sheet.has_label_cell_colors() {
             warnings.push(format!(
                 "sheet '{}': worksheet column label colors are exported as current-cell styles; future cells use Excel defaults",
                 self.sheet.name
@@ -108,7 +114,7 @@ impl<'a> Formats<'a> {
                 .any(|kind| has_label_style(kind) && !labels.iter().any(|label| label.as_ref() == Some(kind)));
         let mut alpha = [self.sheet.data_colors, bulk_colors]
             .into_iter()
-            .chain(self.sheet.label_colors.categories())
+            .chain(self.sheet.label_colors.label_rows())
             .flat_map(|colors| [colors.text_color, colors.fill])
             .flatten()
             .any(|c| c.a != 0 && c.a != 255);

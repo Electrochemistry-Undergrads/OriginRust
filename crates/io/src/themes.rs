@@ -362,8 +362,8 @@ fn keep_as_bad(path: &Path) {
     let _ = std::fs::rename(path, path.with_file_name(format!("{name}.bad")));
 }
 
-/// Changes the store in the file at `path`: waits for the file lock (up to ten seconds, then goes on
-/// without it), reads the file as it is now, applies `change`, writes the file and returns the new
+/// Changes the store in the file at `path`: waits for the file lock (`recent::lock`: up to a minute, then
+/// refuses the change), reads the file as it is now, applies `change`, writes the file and returns the new
 /// store. Themes another instance added in the meantime are kept. A missing file is an empty store. A
 /// file that is damaged, or that a newer layout wrote (`version` above 1), is kept as `<name>.bad`
 /// before the new one is written. A file that cannot be read for another reason (no permission, a
@@ -372,7 +372,7 @@ pub fn update<T>(path: &Path, change: impl FnOnce(&mut ThemeStore) -> T) -> Resu
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent).map_err(|e| IoError::io(parent, e))?;
     }
-    let _lock = recent::lock(path);
+    let _lock = recent::lock(path)?;
     let mut store = match std::fs::read(path) {
         Ok(bytes) => {
             let parsed = parse(&bytes);

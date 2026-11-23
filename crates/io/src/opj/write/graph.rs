@@ -764,6 +764,12 @@ impl Writer {
                     .into(),
             );
         }
+        if has(&|k| k == PlotKind::Sankey) {
+            notes.push(
+                "Sankey diagrams were written as column plots of their flow column; their nodes and bands were not written"
+                    .into(),
+            );
+        }
         if has(&|k| k == PlotKind::Sunburst) {
             notes.push(
                 "sunburst plots were written as column plots of their value column; their categories and rings were not written"
@@ -855,6 +861,7 @@ impl Writer {
                 | PlotKind::Ridgeline
                 | PlotKind::Treemap
                 | PlotKind::Sunburst
+                | PlotKind::Sankey
                 | PlotKind::Pie
                 | PlotKind::Pie3D
                 | PlotKind::PieBw => CurveKind::Column,

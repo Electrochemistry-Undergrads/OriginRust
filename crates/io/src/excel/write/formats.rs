@@ -33,7 +33,7 @@ impl<'a> Formats<'a> {
     /// never manufacture a million blank rows, nor stretch the exported data to a remote range.
     pub(super) fn blank_ranges(&self, column: ColumnId) -> Vec<Range<usize>> {
         let limit = self.sheet.row_count();
-        if self.sheet.font_defaults.data.is_some() {
+        if self.sheet.font_defaults.has_data_fonts() {
             return (limit > 0).then_some(0..limit).into_iter().collect();
         }
         let mut ranges: Vec<_> = self
@@ -70,7 +70,7 @@ impl<'a> Formats<'a> {
                 self.sheet.name
             ));
         }
-        if !defaults.column_header.is_empty() || !defaults.row_header.is_empty() {
+        if !defaults.column_header_style().is_default() || !defaults.row_header_style().is_default() {
             warnings.push(format!(
                 "sheet '{}': worksheet header fonts are omitted; Excel controls its row and column headings",
                 self.sheet.name
@@ -78,7 +78,7 @@ impl<'a> Formats<'a> {
         }
         let rows = self.sheet.row_count();
         let mut outside = false;
-        let omitted_extra_labels = !self.sheet.font_defaults.column_labels.is_empty()
+        let omitted_extra_labels = (!defaults.column_labels.is_empty() || !defaults.standard.is_empty())
             && self.sheet.columns.iter().any(|c| c.formula.is_some() || !c.params.is_empty());
         let mut omitted_labels = omitted_extra_labels
             || [LabelKind::LongName, LabelKind::Units, LabelKind::Comments].iter().any(|kind| {

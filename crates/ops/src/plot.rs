@@ -165,6 +165,8 @@ pub struct PlotSpec {
     /// Parallel plots: a parallel index's group column (default: the first text column of the sheet) or a parallel
     /// plot's numeric colour column (default: the last Y column); `none` colours every line in the plot colour.
     pub group: Option<String>,
+    /// A cause-and-effect diagram's effect text (T375; default "Effect").
+    pub effect: Option<String>,
     pub style: Style,
     /// The folder of the user graph templates (T56) that a template name not among the built-in ones
     /// is looked up in. `None` (MCP, and requests that do not ask) uses no user template; the command
@@ -372,7 +374,22 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
         panel_graph(project, template_from(a.template.as_deref(), suggested)?, p, a)?
     } else if a.overlay {
         overlay_files(project, template_from(a.template.as_deref(), suggested)?, a)?
+    } else if template_from(a.template.as_deref(), suggested)? == Template::Fishbone {
+        // A cause-and-effect diagram (T375): the -y columns (any kind) are the categories, else every
+        // column of the sheet.
+        let book = pick_book(project, a.book.as_deref())?;
+        let sheet = pick_sheet(project, book, a.sheet.as_deref())?;
+        let columns = if a.y.is_empty() {
+            project.workbook(book).map(|b| b.sheets[sheet].columns.iter().map(|c| c.id).collect()).unwrap_or_default()
+        } else {
+            named_columns(project, book, sheet, &a.y)?
+        };
+        let effect = a.effect.as_deref().unwrap_or(sheaf_core::fishbone::DEFAULT_EFFECT);
+        project.plot_fishbone(&columns, effect)?
     } else {
+        if a.effect.is_some() {
+            bail!("--effect is for -t fishbone (a cause-and-effect diagram)");
+        }
         let template = template_from(a.template.as_deref(), suggested)?;
         let book = pick_book(project, a.book.as_deref())?;
         let sheet = pick_sheet(project, book, a.sheet.as_deref())?;
@@ -387,6 +404,8 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
             treemap_graph(project, book, sheet, &ys, a.group.as_deref(), &a.style)?
         } else if template == Template::Sunburst {
             sunburst_graph(project, book, sheet, &ys, a.group.as_deref(), &a.style)?
+        } else if template == Template::Sankey {
+            sankey_graph(project, book, sheet, &ys, a.group.as_deref(), !a.y2.is_empty())?
         } else if matches!(template, Template::GroupedColumns | Template::GroupedBox) {
             grouped_graph(project, book, sheet, template, &ys, a.group.as_deref(), &a.style)?
         } else if template == Template::IntervalPlot {
@@ -623,6 +642,41 @@ fn grouped_graph(
 
 /// A sunburst plot: the last numeric column among `ys` is the value, the category columns (first = innermost ring)
 /// are those named by `group` (comma-separated), else the text columns among `ys`, else every text column of the sheet.
+/// A Sankey diagram (T379): the flow is the last numeric Y column; `group` names the source and target columns
+/// ("Source,Target"), else they are the first two text columns of the sheet.
+fn sankey_graph(
+    project: &mut Project,
+    book: WindowId,
+    sheet: usize,
+    ys: &[ColumnId],
+    group: Option<&str>,
+    right_axis: bool,
+) -> Result<WindowId> {
+    if right_axis {
+        bail!("a Sankey diagram cannot have a right Y axis; leave out --y2");
+    }
+    let value = ys
+        .iter()
+        .rev()
+        .copied()
+        .find(|y| project.numeric(*y).is_some())
+        .ok_or_else(|| anyhow!("a Sankey diagram needs a numeric flow column (the last --y column)"))?;
+    let ends: Vec<ColumnId> = match group {
+        Some(g) => {
+            let names: Vec<String> = g.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect();
+            named_columns(project, book, sheet, &names)?
+        }
+        None => project
+            .workbook(book)
+            .map(|b| b.sheets[sheet].columns.iter().filter(|c| !c.data.is_numeric()).map(|c| c.id).collect())
+            .unwrap_or_default(),
+    };
+    let [source, target, ..] = ends[..] else {
+        bail!("a Sankey diagram needs a source and a target column: --group SOURCE,TARGET (or two text columns)")
+    };
+    Ok(project.plot_sankey(source, target, value)?)
+}
+
 fn sunburst_graph(
     project: &mut Project,
     book: WindowId,

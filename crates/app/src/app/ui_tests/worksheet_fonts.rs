@@ -230,6 +230,42 @@ fn worksheet_header_fonts_reach_titles_and_row_numbers_with_one_undo() {
     assert_eq!(painted_size(&h, "2"), before_row);
 }
 
+#[test]
+fn standard_font_scales_the_grid_and_data_can_reset_to_it() {
+    let mut h = start_sheet("worksheet-standard-font");
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Seed label", |p| {
+        p.workbook_mut(book).unwrap().sheet_mut().columns[0].long_name = "Alpha".into();
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    let heading = sheaf_core::sheet_print::head_name(sheet(&h), 0);
+
+    let heading_center = |h: &Harness<'static, SheafApp>| h.get_by_label(&heading).rect().center().x;
+    let before_x = heading_center(&h);
+    open(&mut h);
+    size(&mut h, "12");
+    category(&mut h, "Data", "Standard");
+    size(&mut h, "18");
+    click(&mut h, "OK");
+    assert_eq!(painted_size(&h, &heading), [24.0]);
+    assert_eq!(painted_size(&h, "Alpha"), [24.0]);
+    assert_eq!(painted_size(&h, "4.5"), [16.0]);
+    assert!(heading_center(&h) > before_x + 80.0);
+
+    open(&mut h);
+    size(&mut h, "0");
+    click(&mut h, "OK");
+    assert!(sheet(&h).font_defaults.data.is_none());
+    assert_eq!(painted_size(&h, "4.5"), [24.0]);
+
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(painted_size(&h, "4.5"), [16.0]);
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+    assert!((heading_center(&h) - before_x).abs() < 0.5);
+}
+
 fn label_family_fixture() -> String {
     let names: Vec<_> = sheaf_plot::SystemFonts::shared()
         .database()

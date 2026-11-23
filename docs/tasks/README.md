@@ -232,6 +232,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T387](T387-settings-lock-queue.md) | Settings lock: wait in the system's queue, not by polling (writer starved on the daily-push run) | S | done 2026-11-23 |
 | [T379](T379-sankey.md) | Plot > Categorical > Sankey Diagram and sheaf plot -t sankey | M | done 2026-11-22 (graphing 14.32), not measured |
 | [T381](T381-alluvial.md) | Plot > Categorical > Alluvial Diagram and sheaf plot -t alluvial (counts or weights) | S | done 2026-11-22 (graphing 14.32), not measured |
+| [T383](T383-network-plot.md) | Plot > Categorical > Network Plot and sheaf plot -t network | M | done 2026-11-22 (graphing 14.33), not measured |
 | [T233](T233-batch-summary.md) | File > Batch Processing: Summary Sheet, Dataset Identifier, Delete Intermediate Books (a Batch Summary book stacking one sheet of every book) | S | done 2026-11-20 (workbook-model 13p), not measured; left: Origin's layout and identifier choices |
 | [T235](T235-batch-cli.md) | sheaf batch: Batch Processing without a window (template, summary, --summary-csv), core Project::batch_process shared with the window | S | done 2026-11-20 (workbook-model 13p); MCP: T238 |
 | [T238](T238-batch-mcp.md) | MCP batch_process: the shared batch run (books, summary, delete) on the session project, one undo step attached | S | done 2026-11-20 (mcp.md 5.1); left: read options |

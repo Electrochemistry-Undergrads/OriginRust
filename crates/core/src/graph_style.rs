@@ -814,7 +814,7 @@ fn border_half() -> f64 {
     0.5
 }
 
-/// The columns of a Sankey diagram (T379): every row is a flow of the plot's Y value from the node named in
+/// The columns of a Sankey diagram (T379), an alluvial diagram (T381, `stages`) or a network plot (T383): every row is a flow of the plot's Y value from the node named in
 /// `source` to the one named in `target`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]

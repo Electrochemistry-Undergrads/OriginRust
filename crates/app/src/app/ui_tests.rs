@@ -8040,6 +8040,24 @@ fn plot_categorical_alluvial_takes_the_sheets_text_columns_as_stages() {
 }
 
 #[test]
+fn plot_categorical_network_joins_the_sheets_first_two_text_columns() {
+    let mut h = start(vec![data_file("network")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = project(&h).workbooks().next().unwrap().id;
+    let text = |v: &[&str]| ColumnData::text(v.iter().map(|s| s.to_string()).collect());
+    h.state_mut().doc.apply("text", |p| {
+        p.add_column(book, 0, sheaf_core::Designation::Y, text(&["a", "a", "b", "c"])).unwrap();
+        p.add_column(book, 0, sheaf_core::Designation::Y, text(&["b", "c", "c", "d"])).unwrap();
+    });
+    let graphs = project(&h).graphs().count();
+    menu_path(&mut h, &["Plot", "Categorical", "Network Plot"]);
+    assert_eq!(project(&h).graphs().count(), graphs + 1);
+    let plot = &project(&h).graphs().last().unwrap().layers[0].plots[0];
+    assert_eq!(plot.kind, sheaf_core::graph::PlotKind::Network);
+    assert!(plot.sankey.source.is_some() && plot.sankey.target.is_some());
+}
+
+#[test]
 fn ctrl_shift_c_copies_with_the_label_rows() {
     let mut h = start(vec![data_file("copy-labels")]);
     show_window(&mut h, "Book1 - sample.csv");

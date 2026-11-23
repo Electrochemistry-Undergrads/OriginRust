@@ -119,6 +119,8 @@ pub(crate) struct PlotData<'a> {
     pub sunburst: Option<Box<crate::sunburst::SunburstData>>,
     /// What a Sankey diagram draws (T379); `None` for other kinds.
     pub sankey: Option<Box<crate::sankey::SankeyData>>,
+    /// What a network plot draws (T383); `None` for other kinds.
+    pub network: Option<Box<crate::network::NetworkData>>,
     /// The colour mapping of a waterfall curve; `None` when the layer has none.
     pub wf: Option<WaterfallColors>,
     /// The rows of a 3D ribbon (T161); `None` for other plots.
@@ -626,7 +628,8 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         // A Pareto chart counts the cells of any column, text included.
         // So does an alluvial diagram without a weight column (T381): its Y column is a stage of text.
         let counted = matches!(plot.stat, Some(StatPlot::Pareto | StatPlot::ParetoCumulative))
-            || (plot.kind == PlotKind::Sankey && !plot.sankey.stages.is_empty());
+            || (plot.kind == PlotKind::Sankey && !plot.sankey.stages.is_empty())
+            || plot.kind == PlotKind::Network;
         let Some(y) = project.numeric(plot.y).or_else(|| counted.then_some(&[][..])) else { continue };
         // A Y column with a sampling interval stands at its own X (T84), even beside an X column:
         // Origin writes such a column as belonging to no X column (T303, T304).
@@ -708,6 +711,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             treemap: None,
             sunburst: None,
             sankey: None,
+            network: None,
             wf: None,
             ribbon: None,
             surface: None,
@@ -771,6 +775,15 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             PlotKind::Treemap => {
                 pd.treemap = crate::treemap::TreemapData::new(project, layer, &pd).map(Box::new);
                 // A treemap has no points on any axis.
+                pd.end = pd.start;
+                pd.mask = None;
+                pd.err = None;
+                pd.xerr = None;
+                pd.base = None;
+            }
+            PlotKind::Network => {
+                pd.network = crate::network::NetworkData::new(project, layer, &pd).map(Box::new);
+                // A network plot has no points on any axis.
                 pd.end = pd.start;
                 pd.mask = None;
                 pd.err = None;

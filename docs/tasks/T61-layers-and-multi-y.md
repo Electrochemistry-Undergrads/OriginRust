@@ -15,7 +15,9 @@ measured top-left positions above the frame, Arial 22 pt (YY-YY: 20 pt), and no 
 A compatible top-left position variant keeps the left edge fixed when labels grow; existing
 centre positions, Multiple Y Axes dialog plans and layer assignment remain unchanged.
 The Legend editor and native/companion saves handle the anchor. Graphing 21.12 records
-24 synthetic native controls/readbacks and the remaining spacing/membership limits.
+the original anchor controls and the 36 follow-up Origin 2016 exports for legend
+spacing, membership and plot edits. The stock templates show the first plot of each
+layer and append additional plots from the legend's own layer.
 Fmt, strict workspace/all-target Clippy and all 4,214 workspace tests pass (eight ignored),
 including seven anchor/layout/editor/persistence regressions. Four updated SVG goldens and
 fresh CLI PNGs were reviewed; inventory 310 and eight Python tooling tests pass. Source and

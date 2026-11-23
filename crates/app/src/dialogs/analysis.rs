@@ -181,6 +181,8 @@ pub enum AnalysisKind {
     RandomForest,
     /// Statistics > Two-Level Experiments > Factorial Design (T380; options in `multivariate_options.rs`).
     FactorialDesign,
+    /// Statistics > Design of Experiments > Mixture Design (T386).
+    MixtureDesign,
     /// Statistics > Two-Level Experiments > Factorial Effects (T380; options in `multivariate_options.rs`).
     FactorialEffects,
     /// Statistics > Two-Level Experiments > Split-Plot Design (T382; options in `multivariate_options.rs`).
@@ -198,6 +200,8 @@ pub enum AnalysisKind {
     /// Statistics > Survival Analysis > Distribution Analysis (Arbitrary Censoring) (T384; options in
     /// `multivariate_options.rs`).
     LifeDistArbitrary,
+    /// Statistics > Survival Analysis > Life Data Regression (T391; options in `multivariate_options.rs`).
+    LifeRegression,
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (options in `multivariate_options.rs`).
     KaplanMeier,
     /// Statistics > Multivariate Analysis > K-Means Cluster Analysis (options in `multivariate_options.rs`).
@@ -345,6 +349,7 @@ impl AnalysisKind {
             AnalysisKind::Arima => "ARIMA Forecast...",
             AnalysisKind::RandomForest => "Random Forest...",
             AnalysisKind::FactorialDesign => "Two-Level Factorial Design...",
+            AnalysisKind::MixtureDesign => "Mixture Design...",
             AnalysisKind::FactorialEffects => "Factorial Effects...",
             AnalysisKind::SplitPlotDesign => "Split-Plot Design...",
             AnalysisKind::SplitPlotEffects => "Split-Plot Effects...",
@@ -353,6 +358,7 @@ impl AnalysisKind {
             AnalysisKind::Stability => "Stability Study...",
             AnalysisKind::LifeDist => "Distribution Overview Plot...",
             AnalysisKind::LifeDistArbitrary => "Distribution Analysis (Arbitrary Censoring)...",
+            AnalysisKind::LifeRegression => "Life Data Regression...",
             AnalysisKind::KaplanMeier => "Kaplan-Meier Estimator...",
             AnalysisKind::Kmeans => "K-Means Cluster Analysis...",
             AnalysisKind::Crosstab => "Cross Tabulation...",
@@ -459,6 +465,7 @@ impl AnalysisKind {
             "arima" => AnalysisKind::Arima,
             "randomforest" => AnalysisKind::RandomForest,
             "factorialdesign" => AnalysisKind::FactorialDesign,
+            "mixturedesign" => AnalysisKind::MixtureDesign,
             "factorialeffects" => AnalysisKind::FactorialEffects,
             "splitplotdesign" => AnalysisKind::SplitPlotDesign,
             "splitploteffects" => AnalysisKind::SplitPlotEffects,
@@ -467,6 +474,7 @@ impl AnalysisKind {
             "stability" => AnalysisKind::Stability,
             "lifedist" => AnalysisKind::LifeDist,
             "lifedistinterval" => AnalysisKind::LifeDistArbitrary,
+            "lifereg" => AnalysisKind::LifeRegression,
             "kaplanmeier" => AnalysisKind::KaplanMeier,
             "kmeans" => AnalysisKind::Kmeans,
             "crosstab" => AnalysisKind::Crosstab,
@@ -2354,6 +2362,7 @@ impl AnalysisDialog {
             | AnalysisKind::Arima
             | AnalysisKind::RandomForest
             | AnalysisKind::FactorialDesign
+            | AnalysisKind::MixtureDesign
             | AnalysisKind::FactorialEffects
             | AnalysisKind::SplitPlotDesign
             | AnalysisKind::SplitPlotEffects
@@ -2362,6 +2371,7 @@ impl AnalysisDialog {
             | AnalysisKind::Stability
             | AnalysisKind::LifeDist
             | AnalysisKind::LifeDistArbitrary
+            | AnalysisKind::LifeRegression
             | AnalysisKind::KaplanMeier
             | AnalysisKind::Kmeans => self.multi.tool(self.kind)?,
             AnalysisKind::AverageCurves => self.curves.average_tool(),
@@ -3687,6 +3697,7 @@ impl AnalysisDialog {
             | AnalysisKind::Arima
             | AnalysisKind::RandomForest
             | AnalysisKind::FactorialDesign
+            | AnalysisKind::MixtureDesign
             | AnalysisKind::FactorialEffects
             | AnalysisKind::SplitPlotDesign
             | AnalysisKind::SplitPlotEffects
@@ -3695,6 +3706,7 @@ impl AnalysisDialog {
             | AnalysisKind::Stability
             | AnalysisKind::LifeDist
             | AnalysisKind::LifeDistArbitrary
+            | AnalysisKind::LifeRegression
             | AnalysisKind::KaplanMeier
             | AnalysisKind::Kmeans => self.multi.options(ui, self.kind),
             AnalysisKind::DiscreteFreq => {
@@ -3897,6 +3909,7 @@ impl AnalysisDialog {
             | AnalysisKind::Arima
             | AnalysisKind::RandomForest
             | AnalysisKind::FactorialDesign
+            | AnalysisKind::MixtureDesign
             | AnalysisKind::FactorialEffects
             | AnalysisKind::SplitPlotDesign
             | AnalysisKind::SplitPlotEffects
@@ -3905,6 +3918,7 @@ impl AnalysisDialog {
             | AnalysisKind::Stability
             | AnalysisKind::LifeDist
             | AnalysisKind::LifeDistArbitrary
+            | AnalysisKind::LifeRegression
             | AnalysisKind::SubtractLine
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
@@ -4021,6 +4035,7 @@ impl AnalysisDialog {
             AnalysisKind::LifeDistArbitrary => {
                 "Fit a life distribution to failures known exactly, after, before or between times"
             }
+            AnalysisKind::LifeRegression => "See how covariates stretch or shorten lifetimes, with censored times",
             AnalysisKind::LifeDist => {
                 "Fit a life distribution to failure times with right-censored cases and see it four ways"
             }
@@ -4036,6 +4051,9 @@ impl AnalysisDialog {
                 "Estimate split-plot effects, each tested against the error of its stratum"
             }
             AnalysisKind::FactorialDesign => "Make a two-level full or fractional factorial design with its run order",
+            AnalysisKind::MixtureDesign => {
+                "Make a simplex lattice or simplex centroid mixture design for one or more totals"
+            }
             AnalysisKind::FactorialEffects => {
                 "Estimate the effects of two-level factors and their interactions on a response"
             }
@@ -4177,6 +4195,9 @@ impl AnalysisDialog {
             AnalysisKind::Roc => {
                 "Area under the curve with its standard error, the curve points and the best cut-off in a new sheet, and a graph"
             }
+            AnalysisKind::LifeRegression => {
+                "One row per coefficient (with standard error, z and probability) and the scale in a new sheet"
+            }
             AnalysisKind::LifeDistArbitrary => {
                 "The row counts by censoring, fitted parameters, log-likelihood, mean and median in a new sheet, and the fitted CDF and survival graph"
             }
@@ -4200,6 +4221,9 @@ impl AnalysisDialog {
             }
             AnalysisKind::FactorialDesign => {
                 "The design in a new sheet: run and standard order, the coded factor levels and an empty response column"
+            }
+            AnalysisKind::MixtureDesign => {
+                "The design in a new sheet: run and standard order, total, point type, the component amounts and an empty response"
             }
             AnalysisKind::FactorialEffects => {
                 "One row per term (coefficient, effect, t test or Lenth activity) in a new sheet, and an effects graph"

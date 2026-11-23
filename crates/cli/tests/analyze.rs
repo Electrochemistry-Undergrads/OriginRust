@@ -1485,6 +1485,32 @@ fn manhattan_plot_runs_from_the_command_line() {
     assert!(ok && out.contains("3 groups"), "the group from the X column: {err} {out}");
 }
 
+/// Life data regression (spec `statistics.md` section 48, T391).
+#[test]
+fn life_data_regression_runs_from_the_command_line() {
+    let dir = scratch("lifereg");
+    let path = dir.join("lr.csv");
+    let mut text = String::from("id,dose,hours,cens\n");
+    for i in 0..20 {
+        let dose = f64::from(i % 2);
+        let hours = (2.0 - 0.8 * dose + 0.3 * (f64::from(i) * 1.3).sin()).exp();
+        text.push_str(&format!("{i},{dose},{hours},{}\n", i32::from(i % 7 == 3)));
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "lifereg", file, "--y", "dose,hours,cens"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("Weibull accelerated failure time model of ln C: hours on 1 covariate(s): 20 rows, 17 failures")
+            && out.contains("LifeReg1"),
+        "{out}"
+    );
+    let (ok, out, err) = sheaf(&["analyze", "lifereg", file, "--y", "dose,hours,cens", "--distribution", "lognormal"]);
+    assert!(ok && out.contains("lognormal accelerated"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "lifereg", file, "--y", "dose,hours,cens", "--distribution", "normal"]);
+    assert!(!ok && err.contains("--distribution"), "{err}");
+}
+
 /// Distribution analysis with arbitrary censoring (spec `statistics.md` section 47, T384).
 #[test]
 fn distribution_analysis_with_arbitrary_censoring_runs_from_the_command_line() {
@@ -2698,4 +2724,37 @@ fn acceptance_sampling_designs_and_evaluates_plans_without_a_data_file() {
     assert!(std::fs::read_to_string(&csv).unwrap().lines().count() > 100);
     let (ok, _, err) = sheaf(&["analyze", "acceptance", "--aql", "0.1", "--ltpd", "0.05"]);
     assert!(!ok && err.contains("below LTPD"), "{err}");
+}
+
+/// `analyze mixture-design` (T386): a simplex centroid for two totals with lower bounds.
+#[test]
+fn mixture_design_for_two_totals() {
+    let dir = scratch("mixture");
+    let path = dir.join("m.csv");
+    std::fs::write(
+        &path, "y
+1
+",
+    )
+    .unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "mixture-design",
+        file,
+        "--y",
+        "y",
+        "--components",
+        "3",
+        "--centroid-design",
+        "--totals",
+        "1,100",
+        "--lower",
+        "0.1,0,0",
+        "--no-randomize",
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("3-component simplex centroid: 7 blends, totals 1, 100") && out.contains("A >= 0.1"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "mixture-design", file, "--y", "y", "--lower", "0.6,0.5,0"]);
+    assert!(!ok && err.contains("nothing to vary"), "{err}");
 }

@@ -899,6 +899,20 @@ properties and Data defaults. An explicit manual no-fill keeps that cell
 unfilled. Print and worksheet images use the resolved colors. XLSX exports
 the effective colors for the current data rectangle.
 
+**Column Labels category colors (T59).** An Origin 2016 `wproperties` probe
+applied text and fill to Long Name, Units, Comments, F(x)= and a user
+parameter row. The fill reached blank label cells and labels in a newly
+added column. Data cells, row captions and column headings kept their
+appearance. Manual Long Name colors set before the category palette and
+manual Units colors set after it both took precedence.
+[Worksheet Properties settings](https://docs.originlab.com/x-function/ref/wproperties/)
+
+In Sheaf, choose Column Labels to set independent text and fill defaults for
+these label rows. The Data and Column Labels drafts survive switching
+categories and commit together on Apply or OK. Manual formatting resolves
+each property first. The grid, print and worksheet images use the result.
+XLSX applies the colors to the exported label cells and reports omissions.
+
 Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
 The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,
 Dynamic Merge, per-cell numeric display/precision selectors and a Font selector. In this new book,

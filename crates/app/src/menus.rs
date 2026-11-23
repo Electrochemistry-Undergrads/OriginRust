@@ -2112,6 +2112,7 @@ fn statistics_menu() -> Vec<Entry> {
                 item("Kaplan-Meier Estimator...", Cmd::Analyze(AnalysisKind::KaplanMeier)),
                 item("Distribution Overview Plot...", Cmd::Analyze(AnalysisKind::LifeDist)),
                 item("Distribution Analysis (Arbitrary Censoring)...", Cmd::Analyze(AnalysisKind::LifeDistArbitrary)),
+                item("Life Data Regression...", Cmd::Analyze(AnalysisKind::LifeRegression)),
             ],
         ),
         sub(
@@ -2145,6 +2146,7 @@ fn statistics_menu() -> Vec<Entry> {
             "T&wo-Level Experiments",
             vec![
                 item("Factorial Design...", Cmd::Analyze(AnalysisKind::FactorialDesign)),
+                item("Mixture Design...", Cmd::Analyze(AnalysisKind::MixtureDesign)),
                 item("Factorial Effects...", Cmd::Analyze(AnalysisKind::FactorialEffects)),
                 item("Split-Plot Design...", Cmd::Analyze(AnalysisKind::SplitPlotDesign)),
                 item("Split-Plot Effects...", Cmd::Analyze(AnalysisKind::SplitPlotEffects)),

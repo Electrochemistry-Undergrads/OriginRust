@@ -176,6 +176,11 @@ pub enum Cmd {
     ManageTemplates,
     /// File > Batch Processing... (T165).
     BatchProcessing,
+    /// A data cell's Define Name... (T396).
+    DefineName {
+        column: ColumnId,
+        row: usize,
+    },
     /// A data cell's Insert Graph... (T194).
     InsertCellGraph {
         column: ColumnId,
@@ -2661,6 +2666,7 @@ pub fn cell_menu_for(
     if sparkline {
         v.push(item("Remove Sparkline", Cmd::RemoveCellSparkline { column, row }));
     }
+    v.push(item("Define Name...", Cmd::DefineName { column, row }));
     v.extend(greys(&["Insert Variables...", "-"]));
     v.push(item("Format Cells...", Cmd::FormatCells));
     if noted {
@@ -3558,6 +3564,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             Action::ManageTemplates
         }
         Cmd::InsertCellGraph { column, row } => Action::PickCellGraph { column: *column, row: *row },
+        Cmd::DefineName { column, row } => Action::DefineName { column: *column, row: *row },
         Cmd::RemoveCellGraph { column, row } => Action::SetCellGraph { column: *column, row: *row, graph: None },
         Cmd::InsertCellSparkline { column, row } => Action::PickCellSparkline { column: *column, row: *row },
         Cmd::InsertCellImage { column, row } => Action::PickCellImage { column: *column, row: *row },

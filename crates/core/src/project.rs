@@ -404,6 +404,8 @@ pub enum ProjectError {
     AlluvialColumns,
     #[error("a network plot needs a source and a target column; select them")]
     NetworkColumns,
+    #[error("{0}")]
+    BadName(String),
     #[error("a sunburst plot cannot have a right Y axis; use one Y axis or another template")]
     SunburstNoRightAxis,
     #[error(

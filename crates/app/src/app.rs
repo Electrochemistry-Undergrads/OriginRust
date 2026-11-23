@@ -305,6 +305,8 @@ pub struct SheafApp {
     graph_sheet_picker: Option<crate::dialogs::graph_sheet::GraphSheetPicker>,
     /// Send Graphs to PowerPoint... (T232).
     send_ppt: Option<crate::dialogs::send_ppt::SendPptDialog>,
+    /// A data cell's Define Name... (T396).
+    name_cell: Option<crate::dialogs::name_cell::NameCellDialog>,
     /// A data cell's Insert Sparklines... (T200).
     cell_sparkline_picker: Option<crate::dialogs::cell_sparkline::CellSparklinePicker>,
     /// Batch Peak Analysis Using Theme... (T169).
@@ -514,6 +516,7 @@ impl SheafApp {
             batch: None,
             graph_sheet_picker: None,
             send_ppt: None,
+            name_cell: None,
             cell_sparkline_picker: None,
             batch_peaks: None,
             fill_pattern: None,
@@ -2254,6 +2257,26 @@ impl SheafApp {
                 self.doc.apply("New notes", |p| {
                     p.add_notes();
                 });
+            }
+            Action::DefineName { column, row } => {
+                let current = self.doc.project().name_of_cell(column, row).map(str::to_string);
+                self.name_cell = Some(crate::dialogs::name_cell::NameCellDialog::new(column, row, current.as_deref()));
+            }
+            Action::SetCellName { column, row, name } => {
+                let label = format!("Define Name {name}");
+                match self.doc.edit(&label, |p| p.define_name(&name, column, row)) {
+                    Ok(_) => {
+                        self.name_cell = None;
+                        self.say(format!("Formulas of this workbook can read {name}"));
+                    }
+                    Err(e) => {
+                        if let Some(d) = &mut self.name_cell {
+                            d.problem = Some(e.to_string());
+                        } else {
+                            self.warn(e.to_string());
+                        }
+                    }
+                }
             }
             Action::PickCellGraph { column, row } => {
                 let graphs: Vec<(WindowId, String)> =
@@ -5544,6 +5567,20 @@ impl SheafApp {
         }
     }
 
+    /// A data cell's Define Name... (T396).
+    fn show_name_cell(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::name_cell::NameCellOutcome;
+        let Some(d) = &mut self.name_cell else { return };
+        match d.show(ctx) {
+            NameCellOutcome::Open => {}
+            NameCellOutcome::Closed => self.name_cell = None,
+            NameCellOutcome::Define(name) => {
+                let (column, row) = (d.column, d.row);
+                self.apply(Action::SetCellName { column, row, name }, ctx);
+            }
+        }
+    }
+
     /// Send Graphs to PowerPoint... (T232): the window, then the file picker and the file.
     fn show_send_ppt(&mut self, ctx: &egui::Context) {
         use crate::dialogs::send_ppt::SendPptOutcome;
@@ -7943,6 +7980,7 @@ impl SheafApp {
         self.show_batch(ctx);
         self.show_graph_sheet_picker(ctx);
         self.show_send_ppt(ctx);
+        self.show_name_cell(ctx);
         self.show_cell_sparkline_picker(ctx);
         self.show_batch_peaks(ctx);
         self.show_fill_pattern(ctx);

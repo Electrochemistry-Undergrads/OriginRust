@@ -5859,8 +5859,8 @@ and focuses that graph; Cancel, Escape and closing the dialog make no edit. Any 
 project revision or replacement closes a stale draft instead of applying it. Source capture,
 conservative stale rejection, this compact layout and post-confirmation focus are Sheaf choices.
 
-User Defined remains disabled. Custom scale expressions and choosing another input graph
-inside the dialog remain open. The developer capture route is `--show add-layer`.
+Choosing another input graph inside the dialog remains open. The developer capture route is
+`--show add-layer`.
 
 **Auto Offset Overlapped Axes (Origin 2016, 2026-11-22).** Four private LabTalk runs read
 `layer.x.position`, `layer.x2.position`, `layer.y.position` and `layer.y2.position` after
@@ -5894,6 +5894,28 @@ layer preserved that stock placement, and doubling either page dimension approxi
 its percent displacement. The varying placement accounts for the differences between the
 paired exports. Sheaf keeps the checkbox disabled for this preset and uses its deterministic
 placement from 21.9.
+
+**User Defined (Origin 2016, 2026-11-22).** With `userdef:=1`, Bottom and Left are selected by
+default. The four edge settings override the preset and can show both sides of a dimension or
+hide both. `showAxes` and `showLabels` both returned 3 for the two sides, 1 for the bottom or left,
+2 for the top or right, and 0 for neither. Without a parent, requesting Straight still used an
+independent scale and a page-relative frame. With parent Layer 1, the frame read 0/0/100/100 in
+percent of that layer. The X and Y scale links independently returned 1 for Straight and 0 for
+Independent. For a parent with X 2–14 and Y 3–27, the linked dimensions used those limits and
+each independent dimension used 0–10. `activate:=0` left the source layer active.
+
+With all four sides shown on the parent and two linked additions with auto offset, the first
+new layer moved both X axes 3% and both Y axes 2%. The second moved both X axes 6% and both
+Y axes 4%. With the opposite parent edges open, only the bottom and left edges shifted.
+
+Sheaf shows the four edge choices, Link To, and separate X and Y Scale Link choices when a
+parent is selected. Link To lists earlier independent layers under the model's link rule.
+Without a parent, the layer uses the existing independent placement from 21.9. The dialog
+still captures its source, so leaving Activate New Layer off keeps the source active even
+when Link To names a different layer. When both edges of a dimension are selected, the
+bottom or left edge gets the labels, title and automatic offset, and the facing edge shares
+the axis line and ticks. Labels, titles and an independent offset for the facing edge are
+follow-up work. Custom Formula remains disabled.
 
 ---
 

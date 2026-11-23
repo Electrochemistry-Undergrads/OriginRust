@@ -6,6 +6,7 @@ use crate::actions::{
     Action, CellOp, CopyKind, DataEdit, DataTool, GraphOp, GraphTool, ImportPick, LabelRow, SheetOp, ViewOp,
 };
 use crate::autosave::{Autosave, Due};
+use crate::dialogs::add_layer::LayerChoice;
 use crate::dialogs::analysis::{AnalysisDialog, AnalysisKind, AnalysisOutcome, FilterDialog, FilterOutcome};
 use crate::dialogs::autosave::{AutosaveDialog, AutosaveOutcome};
 use crate::dialogs::cell_format::CellFormatDialog;
@@ -1607,21 +1608,20 @@ impl SheafApp {
         }
     }
 
-    /// Graph > New Layer(Axes): one undo step; the new layer becomes the active layer.
-    fn add_layer(&mut self, graph: WindowId, active: usize, kind: sheaf_core::layers::NewLayerKind, auto_offset: bool) {
-        let Some(g) = self.doc.project().graph(graph) else { return };
-        if active >= g.layers.len() {
-            return;
-        }
-        self.doc.apply(sheaf_core::layers::ADD_LAYER_UNDO, |p| {
-            if let Some(g) = p.graph_mut(graph) {
-                let _ =
-                    if auto_offset { g.add_layer_with_auto_offset(kind, active) } else { g.add_layer(kind, active) };
+    /// Graph > New Layer(Axes): add one layer in a single undo step.
+    fn add_layer(&mut self, graph: WindowId, active: usize, choice: LayerChoice, activate: bool, auto_offset: bool) {
+        let Some(added) = self.doc.apply(sheaf_core::layers::ADD_LAYER_UNDO, |p| {
+            let g = p.graph_mut(graph)?;
+            match choice {
+                LayerChoice::Preset(kind) if auto_offset => g.add_layer_with_auto_offset(kind, active),
+                LayerChoice::Preset(kind) => g.add_layer(kind, active),
+                LayerChoice::UserDefined(options) => g.add_user_defined_layer(options, active, auto_offset),
             }
-        });
-        let count = self.doc.project().graph(graph).map_or(0, |g| g.layers.len());
+        }) else {
+            return;
+        };
         let state = self.graphs.entry(graph).or_default();
-        state.active_layer = count.saturating_sub(1);
+        state.active_layer = if activate { added } else { active };
         state.selected = None;
     }
 
@@ -1732,7 +1732,7 @@ impl SheafApp {
             GraphOp::HidePlot { .. } | GraphOp::SetStack { .. } => unreachable!("handled above"),
         };
         if let GraphOp::AddLayer { layer, kind } = op {
-            self.add_layer(graph, layer, kind, false);
+            self.add_layer(graph, layer, LayerChoice::Preset(kind), true, false);
             return;
         }
         if let GraphOp::DeleteLayer { layer } = op {
@@ -7407,13 +7407,10 @@ impl SheafApp {
                     self.add_layer_dialog = None;
                     self.warn("The project changed. Open New Layer (Axes) again.");
                 }
-                Outcome::Add { graph, layer, kind, activate, auto_offset } => {
+                Outcome::Add { graph, layer, choice, activate, auto_offset } => {
                     self.add_layer_dialog = None;
-                    self.add_layer(graph, layer, kind, auto_offset);
+                    self.add_layer(graph, layer, choice, activate, auto_offset);
                     self.focus(graph);
-                    if !activate && let Some(state) = self.graphs.get_mut(&graph) {
-                        state.active_layer = layer;
-                    }
                 }
             }
         }

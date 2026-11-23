@@ -5742,6 +5742,26 @@ fn the_statistics_menu_makes_a_manhattan_plot() {
     assert_eq!(h.state().doc.undo_label(), Some("Manhattan plot"));
 }
 
+/// Statistics > Survival Analysis > Distribution Analysis (Arbitrary Censoring)... (T384): start and end columns give
+/// the counts by censoring, the fit and a graph; one undo step.
+#[test]
+fn the_survival_menu_fits_arbitrarily_censored_data() {
+    let data =
+        csv_file("lifedist_interval", "ic", "id,start,stop\n1,,10\n2,10,20\n3,20,30\n4,5,5\n5,30,\n6,12,18\n7,8,15\n");
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - ic.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Survival Analysis", "Distribution Analysis (Arbitrary Censoring)..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Fitted CDF and survival graph"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
+    let (sheet, interval) = result_column(&h, "Interval-censored");
+    assert!(sheet.starts_with("LifeInterval"), "{sheet}");
+    assert_eq!(interval, [4.0]);
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Distribution analysis (arbitrary censoring)"));
+}
+
 /// Statistics > Survival Analysis > Distribution Overview Plot... (T366): time and censor columns give the fit and
 /// four graphs; one undo step.
 #[test]

@@ -11,7 +11,7 @@ use super::statistics::{cell_left_out, num};
 use super::*;
 use crate::graph::{PlotKind, ScaleKind};
 pub use calc::lifedata::LifeDist;
-use calc::lifedata::{fit_right_censored, plotting_positions};
+use calc::lifedata::{Obs, fit_arbitrary, fit_right_censored, plotting_positions};
 
 /// What [`Tool::LifeDist`] does.
 #[derive(Debug, Clone, PartialEq)]
@@ -26,6 +26,19 @@ pub struct LifeDistSpec {
 impl Default for LifeDistSpec {
     fn default() -> Self {
         LifeDistSpec { dist: LifeDist::Weibull, censor: "1".into(), graph: true }
+    }
+}
+
+/// What [`Tool::LifeDistArbitrary`] does: the chosen columns are the start and the end of each failure window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LifeDistArbitrarySpec {
+    pub dist: LifeDist,
+    pub graph: bool,
+}
+
+impl Default for LifeDistArbitrarySpec {
+    fn default() -> Self {
+        LifeDistArbitrarySpec { dist: LifeDist::Weibull, graph: true }
     }
 }
 
@@ -235,6 +248,156 @@ pub(super) fn run(
     Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph, more_graphs }.shift_graphs(shift))
 }
 
+pub(super) fn run_arbitrary(
+    spec: &LifeDistArbitrarySpec,
+    sheet: &Worksheet,
+    columns: &[ColumnId],
+    rows: RowRange,
+) -> Result<Output, AnalysisError> {
+    let [start_id, end_id] = columns else {
+        return Err(AnalysisError::BadOption(
+            "distribution analysis with arbitrary censoring takes two columns: the start and the end of each failure window".into(),
+        ));
+    };
+    let column = |id: ColumnId| sheet.column(id).ok_or(AnalysisError::NoSuchColumn(id));
+    let sc = column(*start_id)?;
+    let ec = column(*end_id)?;
+    let read = |c: &Column| -> Result<Vec<f64>, AnalysisError> {
+        sheet.values_of(c).map(|v| v.into_owned()).ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))
+    };
+    let starts = read(sc)?;
+    let ends = read(ec)?;
+    let n = starts.len().max(ends.len());
+    if n == 0 {
+        return Err(AnalysisError::Empty(sc.short_name.clone()));
+    }
+    let (first, last) = resolve_rows(rows, &sc.short_name, &[], n)?;
+    let mut obs = Vec::new();
+    for r in first..=last {
+        let a = starts.get(r).copied().unwrap_or(f64::NAN);
+        let b = ends.get(r).copied().unwrap_or(f64::NAN);
+        if a.is_nan() && b.is_nan() {
+            continue;
+        }
+        match Obs::from_columns(a, b) {
+            Some(o) => obs.push(o),
+            None => {
+                return Err(AnalysisError::BadOption(format!("row {}: the start {a} is after the end {b}", r + 1)));
+            }
+        }
+    }
+    let fit = fit_arbitrary(&obs, spec.dist).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
+    let count = |f: fn(&Obs) -> bool| obs.iter().filter(|o| f(o)).count() as f64;
+    let exact = count(|o| matches!(o, Obs::Exact(_)));
+    let right = count(|o| matches!(o, Obs::Right(_)));
+    let left = count(|o| matches!(o, Obs::Left(_)));
+    let interval = count(|o| matches!(o, Obs::Interval(..)));
+    let k = fit.params.len() as f64;
+    let mut table = ResultTable::new(&[
+        "N",
+        "Exact",
+        "Right-censored",
+        "Left-censored",
+        "Interval-censored",
+        "Parameter 1",
+        "Parameter 2",
+        "Log-likelihood",
+        "AIC",
+        "Mean",
+        "Median",
+    ]);
+    let label = format!("{} to {}", column_label(sc), column_label(ec));
+    table.push_row(
+        label.clone(),
+        vec![
+            obs.len() as f64,
+            exact,
+            right,
+            left,
+            interval,
+            fit.params[0],
+            fit.params.get(1).copied().unwrap_or(f64::NAN),
+            fit.log_likelihood,
+            2.0 * k - 2.0 * fit.log_likelihood,
+            fit.mean,
+            fit.median,
+        ],
+        vec![String::new(); 11],
+    );
+    let names = spec.dist.param_names();
+    let params: Vec<String> = names.iter().zip(&fit.params).map(|(n, v)| format!("{n} {}", num(*v))).collect();
+    let notes = vec![
+        format!(
+            "{} fit to {} rows ({exact} exact, {right} right-, {left} left-, {interval} interval-censored): {}; log-likelihood {}, mean {}, median {}.",
+            spec.dist.name(),
+            obs.len(),
+            params.join(", "),
+            num(fit.log_likelihood),
+            num(fit.mean),
+            num(fit.median)
+        ),
+        "Rows: equal start and end = exact, empty end = still working at the start, empty start = failed before the end, otherwise failed between them.".into(),
+    ];
+    let mut sheet_cols = vec![SheetColumn {
+        designation: Designation::Label,
+        long_name: "Data".into(),
+        units: String::new(),
+        comments: String::new(),
+        data: ColumnData::text(vec![label.clone()]),
+    }];
+    for (i, h) in table.headers.iter().enumerate() {
+        sheet_cols.push(column_of(h, "", Designation::Y, table.rows.iter().map(|(_, v)| v[i]).collect()));
+    }
+    let shift = sheet_cols.len();
+    let mut on_sheet = Vec::new();
+    let mut graph = None;
+    if spec.graph {
+        let times: Vec<f64> = obs
+            .iter()
+            .flat_map(|o| match *o {
+                Obs::Exact(t) | Obs::Right(t) | Obs::Left(t) => vec![t],
+                Obs::Interval(a, b) => vec![a, b],
+            })
+            .collect();
+        let hi = times.iter().copied().fold(f64::NEG_INFINITY, f64::max) * 1.2;
+        let lo = if spec.dist == LifeDist::Normal { fit.quantile(0.001).min(0.0) } else { 0.0 };
+        let curve: Vec<f64> = (0..=200).map(|i| lo + (hi - lo) * f64::from(i) / 200.0).collect();
+        let comment = format!("Distribution analysis of {label}");
+        on_sheet.push(column_of("Time", &comment, Designation::X, curve.clone()));
+        on_sheet.push(column_of(
+            "Percent failed",
+            &comment,
+            Designation::Y,
+            curve.iter().map(|t| 100.0 * fit.cdf(*t)).collect(),
+        ));
+        on_sheet.push(column_of(
+            "Percent surviving",
+            &comment,
+            Designation::Y,
+            curve.iter().map(|t| 100.0 * fit.survival(*t)).collect(),
+        ));
+        graph = Some(XyGraph {
+            plots: vec![
+                GraphPlot {
+                    x: 0,
+                    y: 1,
+                    kind: PlotKind::Line,
+                    label: format!("Fitted {} CDF", spec.dist.name()),
+                    line_of: None,
+                },
+                GraphPlot { x: 0, y: 2, kind: PlotKind::Line, label: "Fitted survival".into(), line_of: None },
+            ],
+            x_scale: ScaleKind::Linear,
+            y_scale: ScaleKind::Linear,
+            x_title: "Time".into(),
+            y_title: "Percent".into(),
+            look: Default::default(),
+        });
+    }
+    sheet_cols.extend(on_sheet);
+    Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph, more_graphs: Vec::new() }.shift_graphs(shift))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,5 +431,38 @@ mod tests {
         assert!(out.new_graph.is_none() && out.notes[0].contains("Weibull fit to 5 cases"), "{:?}", out.notes);
         assert!(p.analyze(&request(vec![t], LifeDistSpec::default())).is_err());
         assert!(p.analyze(&request(vec![t, c], LifeDistSpec { censor: " ".into(), ..Default::default() })).is_err());
+    }
+
+    #[test]
+    fn interval_and_left_censored_rows_are_counted_and_fitted() {
+        let mut p = Project::new();
+        let book = p.add_workbook("ic");
+        let s = p
+            .add_column(book, 0, Designation::Y, ColumnData::numeric(vec![f64::NAN, 10.0, 20.0, 5.0, 30.0, 12.0]))
+            .unwrap();
+        let e = p
+            .add_column(book, 0, Designation::Y, ColumnData::numeric(vec![10.0, 20.0, 30.0, 5.0, f64::NAN, 18.0]))
+            .unwrap();
+        let out = p
+            .analyze(&Request {
+                columns: vec![s, e],
+                rows: RowRange::All,
+                tool: Tool::LifeDistArbitrary(Default::default()),
+            })
+            .unwrap();
+        let row = &out.table.as_ref().unwrap().rows[0].1;
+        assert_eq!(&row[..5], &[6.0, 1.0, 1.0, 1.0, 3.0]);
+        assert!(row[5] > 0.0 && row[6] > 0.0, "{row:?}");
+        let gc = super::super::dist::plot_columns(&p, out.new_graph.unwrap());
+        assert_eq!(gc[1].1, "Percent surviving");
+        let bad = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![40.0])).unwrap();
+        assert!(
+            p.analyze(&Request {
+                columns: vec![bad, e],
+                rows: RowRange::All,
+                tool: Tool::LifeDistArbitrary(Default::default())
+            })
+            .is_err()
+        );
     }
 }

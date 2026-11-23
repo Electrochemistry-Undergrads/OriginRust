@@ -1697,7 +1697,8 @@ pub const SPACE3D_EXTENT: f64 = 1.8;
 /// A Smith chart (T115, from Origin's documentation, not measured): line + symbol plots in a square layer
 /// of the polar page whose axes run from -1 to 1 and are not drawn; the layer draws the Smith grid.
 fn smith(id: WindowId, name: &str) -> Graph {
-    let mut g = polar_of(id, name, RadiusColumn::Y, PlotKind::LineSymbol);
+    // Origin 2016 draws the data as a line plot (measured, T385).
+    let mut g = polar_of(id, name, RadiusColumn::Y, PlotKind::Line);
     let l = &mut g.layers[0];
     l.coords = Coords::Smith(SmithCoords::default());
     for a in [&mut l.x_axis, &mut l.y_axis] {
@@ -1714,7 +1715,7 @@ fn smith(id: WindowId, name: &str) -> Graph {
 /// A Piper diagram (T117, from the standard construction, not measured): one layer with hidden axes over the
 /// diagram's extent, one X unit as long as one Y unit, the corner labels, no legend.
 fn piper(id: WindowId, name: &str) -> Graph {
-    use crate::piper::{X_RANGE, Y_RANGE, corner_labels};
+    use crate::piper::{X_RANGE, Y_RANGE};
     let mut g = general(id, name, PlotKind::Piper);
     let page = (g.page.width_pt, g.page.height_pt);
     let l = &mut g.layers[0];
@@ -1728,7 +1729,7 @@ fn piper(id: WindowId, name: &str) -> Graph {
         a.minor_grid = None;
     }
     l.fit_xy_ratio(1.0, page, X_RANGE.1 - X_RANGE.0, Y_RANGE.1 - Y_RANGE.0);
-    l.labels = corner_labels(&l.x_axis.tick_font);
+    // Origin 2016 titles the sides with the column names (drawn with the plot, T389); no corner labels.
     g
 }
 

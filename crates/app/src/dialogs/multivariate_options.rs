@@ -6,9 +6,10 @@ use eframe::egui;
 use sheaf_core::analysis::{
     AcfSpec, AdfTerms, ArimaSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty,
     ChangePointSpec, DecomposeModel, DecomposeSpec, ExpSmoothSpec, FactorialDesignSpec, FactorialEffectsSpec,
-    ForestTask, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistSpec, ManhattanSpec, PcaSpec,
-    PivotPeriod, PivotStat, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec, RocSpec, SmoothModel,
-    SplitPlotDesignSpec, SplitPlotEffectsSpec, StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec, Tool,
+    ForestTask, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistArbitrarySpec, LifeDistSpec,
+    ManhattanSpec, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec,
+    RocSpec, SmoothModel, SplitPlotDesignSpec, SplitPlotEffectsSpec, StabilitySpec, StationaritySpec, TDistribution,
+    TimePivotSpec, Tool,
 };
 
 /// What the windows keep between frames.
@@ -35,6 +36,7 @@ pub struct MultiOptions {
     capability: CapabilitySpec,
     stability: StabilitySpec,
     life: LifeDistSpec,
+    life_any: LifeDistArbitrarySpec,
     /// The value of the Manual penalty while another penalty is chosen.
     manual_penalty: Option<f64>,
     /// The quantiles as typed (comma separated), read when the tool runs.
@@ -89,6 +91,7 @@ impl MultiOptions {
                 Ok(Tool::QuantReg(QuantRegSpec { quantiles, ..self.quantreg.clone() }))
             }
             AnalysisKind::TimePivot => Ok(Tool::TimePivot(self.timepivot)),
+            AnalysisKind::LifeDistArbitrary => Ok(Tool::LifeDistArbitrary(self.life_any)),
             AnalysisKind::LifeDist => {
                 if self.life.censor.trim().is_empty() {
                     return Err("give the censoring value".to_string());
@@ -260,6 +263,22 @@ impl MultiOptions {
                 ui.weak(
                     "The exact solution of each quantile (the sum of check losses is as small as it can be); no standard errors.",
                 );
+            }
+            AnalysisKind::LifeDistArbitrary => {
+                ui.label("The chosen columns are the start and the end of each failure window: equal for an exact failure, an empty end if it was still working, an empty start if it failed before the end.");
+                let s = &mut self.life_any;
+                ui.horizontal(|ui| {
+                    ui.label("Distribution");
+                    for (d, name) in [
+                        (LifeDist::Weibull, "Weibull"),
+                        (LifeDist::Lognormal, "Lognormal"),
+                        (LifeDist::Exponential, "Exponential"),
+                        (LifeDist::Normal, "Normal"),
+                    ] {
+                        ui.radio_value(&mut s.dist, d, name);
+                    }
+                });
+                ui.checkbox(&mut s.graph, "Fitted CDF and survival graph");
             }
             AnalysisKind::LifeDist => {
                 let s = &mut self.life;

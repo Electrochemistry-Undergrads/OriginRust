@@ -629,7 +629,8 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         // So does an alluvial diagram without a weight column (T381): its Y column is a stage of text.
         let counted = matches!(plot.stat, Some(StatPlot::Pareto | StatPlot::ParetoCumulative))
             || (plot.kind == PlotKind::Sankey && !plot.sankey.stages.is_empty())
-            || plot.kind == PlotKind::Network;
+            || plot.kind == PlotKind::Network
+            || (matches!(plot.kind, PlotKind::Treemap | PlotKind::Sunburst) && project.numeric(plot.y).is_none());
         let Some(y) = project.numeric(plot.y).or_else(|| counted.then_some(&[][..])) else { continue };
         // A Y column with a sampling interval stands at its own X (T84), even beside an X column:
         // Origin writes such a column as belonging to no X column (T303, T304).

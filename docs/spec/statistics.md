@@ -2141,7 +2141,7 @@ fold-over, Plackett-Burman, response surfaces, half-normal plots and higher-orde
 ## 45a Mixture designs (T386, Origin 2026b's "mixture designs with several totals"; not measured)
 
 Origin 2016 has no design of experiments; the designs are the textbook ones (Cornell, *Experiments with
-Mixtures*; `sheaf_calc::mixture`). Statistics > Design of Experiments > Mixture Design... (CLI `analyze
+Mixtures*; `sheaf_calc::mixture`). Statistics > Two-Level Experiments > Mixture Design... (CLI `analyze
 mixture-design --components Q [--centroid-design] [--degree M] [--axial] [--centroid] [--replicates R]
 [--totals T1,T2] [--lower L1,L2,..] [--no-randomize] [--seed S]`; `Tool::MixtureDesign`):
 
@@ -2226,6 +2226,61 @@ log-likelihood, AIC and, for the Weibull, the shape. Checked against numpy/scipy
 `crates/calc/tests/lifereg_reference.rs`: 60 rows, two covariates, three distributions) to 1e-7 (standard errors
 1e-5). Proportional hazards (Cox) regression, interval-censored regression, text (factor) covariates and prediction
 of percentiles are not built.
+
+## 49 Frequency columns of the life-data tools (T394, Origin 2026b; not measured)
+
+Origin 2026b's life-data analyses take an optional frequency input; so do Sheaf's Distribution Overview Plot (section
+37), Distribution Analysis (Arbitrary Censoring) (section 47) and Life Data Regression (section 48): with "Last column:
+frequency (count) of each row" ticked (`--frequency` on `sheaf analyze lifedist`, `lifedist-interval` and `lifereg`),
+the last chosen column holds how many units each row stands for. A row of frequency `k` counts exactly as `k` copies
+of it (the fits, counts, plotting positions and graphs are those of the written-out rows); a frequency of 0 leaves
+the row out, a missing, negative or fractional one is refused, and the frequencies may add up to at most 1,000,000
+rows. Checked by fitting the same data written out row by row (`crates/core/src/analysis/lifedist.rs`,
+`crates/cli/tests/analyze.rs`).
+
+## 50 qPCR relative quantification and standard curves (T397, Origin 2027 Pro assay apps; not measured)
+
+Origin 2027's assay apps analyze qPCR experiments; Origin 2016 has none, so this is Sheaf's own. Statistics >
+Quantitative PCR:
+
+- **Relative Quantification...** (`Tool::Qpcr`, `sheaf analyze qpcr --y GROUP,TARGET_CT,REFERENCE_CT [--control NAME]
+  [--e-target 2] [--e-reference 2] [--confidence 95] [--no-graph]`): wells with a missing Ct are left out; groups keep
+  their first order and the control is the named group (default the first); every group needs two wells. Per group,
+  `dCt = Ct_target - Ct_reference` (mean, sample SD) and `ddCt = mean dCt - mean dCt(control)`. The expression ratio is
+  `E_t^(mean Ct_t(control) - mean Ct_t) / E_r^(mean Ct_r(control) - mean Ct_r)` (Pfaffl), which is Livak's `2^-ddCt`
+  for amplification factors of 2. Against the control, `SE = sqrt(s^2/n + s_c^2/n_c)` with Welch's degrees of freedom
+  gives the two-sided t test of dCt and the interval `ddCt -+ t SE`, mapped to the ratio with the mean log factor
+  (exact for equal factors). The result sheet `qPCRN` has one row per group (N, mean target and reference Ct, mean and
+  SD dCt, ddCt, SE ddCt, Expression ratio, lower and upper bound, Prob (Welch)); a new graph draws the ratios as columns
+  with the bounds.
+- **Standard Curve...** (`Tool::QpcrCurve`, `sheaf analyze qpcr-curve --y QUANTITY,CT [--no-graph]`): Ct against
+  `log10` quantity by least squares (quantities above 0); slope, intercept, R^2, amplification factor `E = 10^(-1/slope)`
+  and efficiency `(E - 1) 100 %`, with the curve graph.
+
+Checked against numpy and scipy (`tools/qpcr-ref.py`, `crates/calc/tests/qpcr_reference.rs`: Livak and Pfaffl on three
+groups, a ten-point standard curve) to 1e-10. Multiple reference genes (geometric mean), plate layouts, melt curves,
+outlier wells and Western blot densitometry are not built.
+
+## 51 Monte Carlo simulation (T393, Origin 2027's Monte Carlo app; Sheaf's own, not measured)
+
+Statistics > Monte Carlo Simulation (Randomize Inputs)... (CLI `analyze monte-carlo FILE --y Y --input NAME=DIST(...) [--input ...]
+--formula EXPR [--samples N] [--seed S] [--lsl L] [--usl U]`; `Tool::MonteCarlo`, `sheaf_calc::montecarlo`):
+
+- **Inputs**, one per line in the window: `name = normal(mean, sd)`, `uniform(low, high)`, `lognormal(mu, sigma)`
+  (of `ln x`), `triangular(low, mode, high)` or `constant(value)`; `#` starts a comment. Names are letters, digits
+  and `_`, starting with a letter, each used once.
+- **Draws**: a seeded SplitMix64 stream of uniforms in (0, 1), taken input by input within each row, through the
+  inverse distribution function. The same seed gives the same draws. 1 to 1 000 000 draws (10 000 by default).
+- **Output**: the formula (the expression language, input names as variables) evaluated for every row; an unknown
+  name or a formula error is refused with its message.
+- **Results**: a new sheet with one column per input (comment: its distribution) and Output (comment: the formula);
+  a table with Mean, SD (n - 1), 5th percentile, Median, 95th percentile (linear interpolation at `(n - 1) p`), Min,
+  Max and the Spearman rank correlation with the output, one row for the output and one per input (NaN for a
+  constant); notes with the number of draws and seed, the specification (share of draws outside, Cp =
+  (USL - LSL)/6s with both limits, Cpk = min(USL - mean, mean - LSL)/3s or the one-sided form) and the input the
+  output follows most.
+- Not built: optimizing controllable inputs against tolerances (the last step of Origin's workflow),
+  correlated inputs, histograms of the output.
 
 ## 5 Where results go (ADR 0005)
 

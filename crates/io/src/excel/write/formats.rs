@@ -82,8 +82,8 @@ impl<'a> Formats<'a> {
                 self.sheet.name
             ));
         }
-        let label_colors = self.sheet.column_label_colors;
-        if !label_colors.is_empty() {
+        let bulk_colors = self.sheet.column_label_colors;
+        if !bulk_colors.is_empty() || !self.sheet.label_colors.is_empty() {
             warnings.push(format!(
                 "sheet '{}': worksheet column label colors are exported as current-cell styles; future cells use Excel defaults",
                 self.sheet.name
@@ -91,26 +91,27 @@ impl<'a> Formats<'a> {
         }
         let rows = self.sheet.row_count();
         let mut outside = false;
-        let has_font = |kind| defaults.label_size(kind).is_some() || defaults.label_family(kind).is_some();
-        let omitted_formula = (has_font(&LabelKind::Formula) || !label_colors.is_empty())
-            && self.sheet.columns.iter().any(|c| c.formula.is_some());
+        let has_label_style = |kind| {
+            defaults.label_size(kind).is_some()
+                || defaults.label_family(kind).is_some()
+                || !self.sheet.label_color_defaults(kind).is_empty()
+        };
+        let omitted_formula =
+            has_label_style(&LabelKind::Formula) && self.sheet.columns.iter().any(|c| c.formula.is_some());
         let omitted_params =
-            (!defaults.column_labels.is_empty() || !defaults.standard.is_empty() || !label_colors.is_empty())
+            (!defaults.column_labels.is_empty() || !defaults.standard.is_empty() || !bulk_colors.is_empty())
                 && self.sheet.columns.iter().any(|c| !c.params.is_empty());
         let mut omitted_labels = omitted_formula
             || omitted_params
-            || [LabelKind::LongName, LabelKind::Units, LabelKind::Comments].iter().any(|kind| {
-                (has_font(kind) || !label_colors.is_empty()) && !labels.iter().any(|label| label.as_ref() == Some(kind))
-            });
-        let mut alpha = [
-            self.sheet.data_colors.text_color,
-            self.sheet.data_colors.fill,
-            label_colors.text_color,
-            label_colors.fill,
-        ]
-        .into_iter()
-        .flatten()
-        .any(|c| c.a != 0 && c.a != 255);
+            || [LabelKind::LongName, LabelKind::Units, LabelKind::Comments]
+                .iter()
+                .any(|kind| has_label_style(kind) && !labels.iter().any(|label| label.as_ref() == Some(kind)));
+        let mut alpha = [self.sheet.data_colors, bulk_colors]
+            .into_iter()
+            .chain(self.sheet.label_colors.categories())
+            .flat_map(|colors| [colors.text_color, colors.fill])
+            .flatten()
+            .any(|c| c.a != 0 && c.a != 255);
         for range in &self.sheet.cell_formats {
             match &range.target {
                 FormatTarget::Cells { rows: span, .. } => {

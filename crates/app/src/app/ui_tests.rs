@@ -5742,6 +5742,27 @@ fn the_statistics_menu_makes_a_manhattan_plot() {
     assert_eq!(h.state().doc.undo_label(), Some("Manhattan plot"));
 }
 
+/// Statistics > Quantitative PCR > Relative Quantification... (T397): text groups and two Ct columns give the ratios;
+/// one undo step.
+#[test]
+fn the_statistics_menu_quantifies_qpcr() {
+    let data = csv_file(
+        "qpcr",
+        "q",
+        "well,sample,gene,actin\n1,ctrl,25.0,18.0\n2,ctrl,25.2,18.1\n3,ctrl,24.8,17.9\n4,treated,23.0,18.0\n5,treated,23.1,18.0\n6,treated,22.9,18.0\n",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - q.csv");
+    menu_path(&mut h, &["Statistics", "Quantitative PCR", "Relative Quantification..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Control group (empty: the first)"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
+    let (sheet, ratio) = result_column(&h, "Expression ratio");
+    assert!(sheet.starts_with("qPCR"), "{sheet}");
+    assert!((ratio[1] - 4.0).abs() < 1e-12, "{ratio:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("qPCR relative quantification"));
+}
+
 /// Statistics > Survival Analysis > Life Data Regression... (T391): covariate, time and censor columns give the
 /// coefficients; one undo step.
 #[test]
@@ -8078,6 +8099,24 @@ fn plot_categorical_network_joins_the_sheets_first_two_text_columns() {
     let plot = &project(&h).graphs().last().unwrap().layers[0].plots[0];
     assert_eq!(plot.kind, sheaf_core::graph::PlotKind::Network);
     assert!(plot.sankey.source.is_some() && plot.sankey.target.is_some());
+}
+
+#[test]
+fn a_sunburst_of_selected_text_columns_counts_the_rows() {
+    let mut h = start(vec![data_file("nested-freq")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = project(&h).workbooks().next().unwrap().id;
+    let text = |v: &[&str]| ColumnData::text(v.iter().map(|s| s.to_string()).collect());
+    let (a, b) = h.state_mut().doc.apply("text", |p| {
+        let a = p.add_column(book, 0, sheaf_core::Designation::Y, text(&["x", "x", "y", "y"])).unwrap();
+        let b = p.add_column(book, 0, sheaf_core::Designation::Y, text(&["p", "q", "p", "p"])).unwrap();
+        (a, b)
+    });
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::PlotColumns { book, columns: vec![a, b], template: Template::Sunburst }, &ctx);
+    settle(&mut h);
+    let plot = &project(&h).graphs().last().unwrap().layers[0].plots[0];
+    assert_eq!((plot.kind, plot.y), (sheaf_core::graph::PlotKind::Sunburst, a));
 }
 
 #[test]

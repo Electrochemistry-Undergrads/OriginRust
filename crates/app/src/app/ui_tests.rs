@@ -5840,6 +5840,41 @@ fn the_statistics_menu_makes_a_rare_event_chart() {
     assert_eq!(h.state().doc.undo_label(), Some("Rare event chart"));
 }
 
+/// Statistics > Two-Level Experiments > Split-Plot Effects and Design (T382): the strata of a small experiment, then a
+/// design sheet; one undo step each.
+#[test]
+fn the_statistics_menu_analyzes_and_designs_a_split_plot_experiment() {
+    let mut text = String::from("run,plot,a,b,c,y\n");
+    let mut run = 0;
+    for (w, bump) in [0.3, -0.2, 0.1, -0.2].into_iter().enumerate() {
+        let a = if w % 2 == 1 { 1.0 } else { -1.0 };
+        for k in 0..4usize {
+            let (b, c) = (if k & 1 == 1 { 1.0 } else { -1.0 }, if k & 2 == 2 { 1.0 } else { -1.0 });
+            run += 1;
+            let y = 5.0 + 2.0 * a + b + bump + 0.05 * (f64::from(run) * 1.7).sin();
+            text.push_str(&format!("{run},{},{a},{b},{c},{y}\n", w + 1));
+        }
+    }
+    let data = csv_file("splitplot", "sp", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - sp.csv");
+    menu_path(&mut h, &["Statistics", "Two-Level Experiments", "Split-Plot Effects..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Whole-plot factors (the first factor columns)"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
+    let (sheet, whole) = result_column(&h, "Whole-plot term");
+    assert!(sheet.starts_with("SplitEffects"), "{sheet}");
+    assert_eq!(whole[..2], [1.0, 0.0], "a is a whole-plot term, b is not");
+    assert_eq!(h.state().doc.undo_label(), Some("Split-plot effects"));
+    show_window(&mut h, "Book1 - sp.csv");
+    menu_path(&mut h, &["Statistics", "Two-Level Experiments", "Split-Plot Design..."]);
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
+    let (sheet, plots) = result_column(&h, "Whole plot");
+    assert!(sheet.starts_with("SplitPlot"), "{sheet}");
+    assert_eq!(plots.len(), 16, "1 whole-plot and 2 subplot factors, 2 replicates");
+}
+
 /// Statistics > Two-Level Experiments (T380): a design sheet from Factorial Design, then the effects of a small
 /// experiment; one undo step each.
 #[test]

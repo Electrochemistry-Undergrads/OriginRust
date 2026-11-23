@@ -266,6 +266,62 @@ fn standard_font_scales_the_grid_and_data_can_reset_to_it() {
     assert!((heading_center(&h) - before_x).abs() < 0.5);
 }
 
+#[test]
+fn f4_data_colors_keep_drafts_across_categories_and_restore_with_undo() {
+    use sheaf_core::cellformat::DataColors;
+    use sheaf_core::color::Color;
+
+    let mut h = start_sheet("worksheet-data-colors");
+    let before = project(&h).clone();
+    open(&mut h);
+    click(&mut h, "Use color");
+    click(&mut h, "Use fill");
+    category(&mut h, "Data", "Long Name");
+    assert!(h.query_by_label("Use fill").is_none());
+    assert_eq!(project(&h), &before);
+    click(&mut h, "OK");
+
+    let s = sheet(&h);
+    let yellow = Color::rgb(255, 255, 153);
+    assert_eq!(s.data_colors, DataColors { text_color: Some(Color::BLACK), fill: Some(yellow) });
+    assert!(s.cell_formats.is_empty());
+    assert_eq!(s.cell_format_at(s.columns[0].id, 999_999).fill, Some(yellow));
+    assert_eq!(h.state().doc.undo_label(), Some("Worksheet colors"));
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn f4_formula_font_overrides_label_defaults_and_undo_restores_the_sheet() {
+    let mut h = start_sheet("worksheet-formula-label-font");
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Seed formula", |p| {
+        let sheet = p.workbook_mut(book).unwrap().sheet_mut();
+        sheet.columns[0].long_name = "Alpha".into();
+        sheet.columns[1].formula = Some("i+1".into());
+        sheet.view.formula = true;
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    assert_eq!(painted_size(&h, "i+1"), [12.0]);
+
+    open(&mut h);
+    category(&mut h, "Data", "Column Labels");
+    size(&mut h, "12");
+    category(&mut h, "Column Labels", "F(x)=");
+    size(&mut h, "18");
+    click(&mut h, "OK");
+    assert_eq!(painted_size(&h, "Alpha"), [16.0]);
+    assert_eq!(painted_size(&h, "i+1"), [24.0]);
+    assert_eq!(painted_size(&h, "4.5"), [12.0]);
+    assert_eq!(sheet(&h).columns, before.workbook(book).unwrap().sheet().columns);
+    assert!(sheet(&h).cell_formats.is_empty());
+
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+    assert_eq!(painted_size(&h, "i+1"), [12.0]);
+}
+
 fn label_family_fixture() -> String {
     let names: Vec<_> = sheaf_plot::SystemFonts::shared()
         .database()

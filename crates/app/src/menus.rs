@@ -2145,6 +2145,8 @@ fn statistics_menu() -> Vec<Entry> {
             vec![
                 item("Factorial Design...", Cmd::Analyze(AnalysisKind::FactorialDesign)),
                 item("Factorial Effects...", Cmd::Analyze(AnalysisKind::FactorialEffects)),
+                item("Split-Plot Design...", Cmd::Analyze(AnalysisKind::SplitPlotDesign)),
+                item("Split-Plot Effects...", Cmd::Analyze(AnalysisKind::SplitPlotEffects)),
             ],
         ),
         item("Rar&e Event Chart (G/T)...", Cmd::Analyze(AnalysisKind::RareChart)),

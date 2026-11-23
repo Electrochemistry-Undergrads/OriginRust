@@ -5887,6 +5887,7 @@ impl SheafApp {
                 | AnalysisKind::PoissonOne
                 | AnalysisKind::PoissonTwo
                 | AnalysisKind::FactorialDesign
+                | AnalysisKind::SplitPlotDesign
         );
         let columns: Vec<ColumnId> = if host_only {
             let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);

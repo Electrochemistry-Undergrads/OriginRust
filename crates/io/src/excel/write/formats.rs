@@ -33,7 +33,7 @@ impl<'a> Formats<'a> {
     /// never manufacture a million blank rows, nor stretch the exported data to a remote range.
     pub(super) fn blank_ranges(&self, column: ColumnId) -> Vec<Range<usize>> {
         let limit = self.sheet.row_count();
-        if self.sheet.font_defaults.has_data_fonts() {
+        if self.sheet.font_defaults.has_data_fonts() || !self.sheet.data_colors.is_empty() {
             return (limit > 0).then_some(0..limit).into_iter().collect();
         }
         let mut ranges: Vec<_> = self
@@ -76,17 +76,27 @@ impl<'a> Formats<'a> {
                 self.sheet.name
             ));
         }
+        if !self.sheet.data_colors.is_empty() {
+            warnings.push(format!(
+                "sheet '{}': worksheet data colors are exported as current-cell styles; future cells use Excel defaults",
+                self.sheet.name
+            ));
+        }
         let rows = self.sheet.row_count();
         let mut outside = false;
-        let omitted_extra_labels = (!defaults.column_labels.is_empty() || !defaults.standard.is_empty())
-            && self.sheet.columns.iter().any(|c| c.formula.is_some() || !c.params.is_empty());
-        let mut omitted_labels = omitted_extra_labels
-            || [LabelKind::LongName, LabelKind::Units, LabelKind::Comments].iter().any(|kind| {
-                (self.sheet.font_defaults.label_size(kind).is_some()
-                    || self.sheet.font_defaults.label_family(kind).is_some())
-                    && !labels.iter().any(|label| label.as_ref() == Some(kind))
-            });
-        let mut alpha = false;
+        let has_font = |kind| defaults.label_size(kind).is_some() || defaults.label_family(kind).is_some();
+        let omitted_formula = has_font(&LabelKind::Formula) && self.sheet.columns.iter().any(|c| c.formula.is_some());
+        let omitted_params = (!defaults.column_labels.is_empty() || !defaults.standard.is_empty())
+            && self.sheet.columns.iter().any(|c| !c.params.is_empty());
+        let mut omitted_labels = omitted_formula
+            || omitted_params
+            || [LabelKind::LongName, LabelKind::Units, LabelKind::Comments]
+                .iter()
+                .any(|kind| has_font(kind) && !labels.iter().any(|label| label.as_ref() == Some(kind)));
+        let mut alpha = [self.sheet.data_colors.text_color, self.sheet.data_colors.fill]
+            .into_iter()
+            .flatten()
+            .any(|c| c.a != 0 && c.a != 255);
         for range in &self.sheet.cell_formats {
             match &range.target {
                 FormatTarget::Cells { rows: span, .. } => {

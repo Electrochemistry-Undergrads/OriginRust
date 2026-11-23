@@ -165,6 +165,8 @@ pub struct PlotSpec {
     /// Parallel plots: a parallel index's group column (default: the first text column of the sheet) or a parallel
     /// plot's numeric colour column (default: the last Y column); `none` colours every line in the plot colour.
     pub group: Option<String>,
+    /// A cause-and-effect diagram's effect text (T375; default "Effect").
+    pub effect: Option<String>,
     pub style: Style,
     /// The folder of the user graph templates (T56) that a template name not among the built-in ones
     /// is looked up in. `None` (MCP, and requests that do not ask) uses no user template; the command
@@ -372,7 +374,22 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
         panel_graph(project, template_from(a.template.as_deref(), suggested)?, p, a)?
     } else if a.overlay {
         overlay_files(project, template_from(a.template.as_deref(), suggested)?, a)?
+    } else if template_from(a.template.as_deref(), suggested)? == Template::Fishbone {
+        // A cause-and-effect diagram (T375): the -y columns (any kind) are the categories, else every
+        // column of the sheet.
+        let book = pick_book(project, a.book.as_deref())?;
+        let sheet = pick_sheet(project, book, a.sheet.as_deref())?;
+        let columns = if a.y.is_empty() {
+            project.workbook(book).map(|b| b.sheets[sheet].columns.iter().map(|c| c.id).collect()).unwrap_or_default()
+        } else {
+            named_columns(project, book, sheet, &a.y)?
+        };
+        let effect = a.effect.as_deref().unwrap_or(sheaf_core::fishbone::DEFAULT_EFFECT);
+        project.plot_fishbone(&columns, effect)?
     } else {
+        if a.effect.is_some() {
+            bail!("--effect is for -t fishbone (a cause-and-effect diagram)");
+        }
         let template = template_from(a.template.as_deref(), suggested)?;
         let book = pick_book(project, a.book.as_deref())?;
         let sheet = pick_sheet(project, book, a.sheet.as_deref())?;

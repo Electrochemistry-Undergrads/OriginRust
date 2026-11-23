@@ -221,6 +221,9 @@ pub enum Template {
     /// Sunburst plot (Origin's "Sunburst Plot", 2022): the hierarchy of the category columns as concentric rings,
     /// the angles proportional to a value column. No axes and no legend; a colour scale beside the layer.
     Sunburst,
+    /// Cause-and-effect (fishbone) diagram (Origin 2026, T375): the chosen columns are the categories, their
+    /// cells the causes; drawn as line and text objects in one layer without axes.
+    Fishbone,
     /// Origin's Plot > Column/Bar/Pie > Grouped Columns (indexed data) (X-Function plot_gindexed, T76): the
     /// column template; one data column whose rows are split by the values of one or two group columns.
     GroupedColumns,
@@ -236,7 +239,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 101] = [
+    pub const ALL: [Template; 102] = [
         Template::Line,
         Template::Scatter3d,
         Template::Trajectory3d,
@@ -294,6 +297,7 @@ impl Template {
         Template::ParallelIndex,
         Template::Treemap,
         Template::Sunburst,
+        Template::Fishbone,
         Template::Bubble,
         Template::ColorMapped,
         Template::BubbleColorMapped,
@@ -444,6 +448,7 @@ impl Template {
             Template::ParallelIndex => "parallel-index",
             Template::Treemap => "treemap",
             Template::Sunburst => "sunburst",
+            Template::Fishbone => "fishbone",
         }
     }
 
@@ -550,6 +555,7 @@ impl Template {
             Template::ParallelIndex => "Parallel Index",
             Template::Treemap => "Treemap",
             Template::Sunburst => "Sunburst Plot",
+            Template::Fishbone => "Cause-and-Effect Diagram",
         }
     }
 
@@ -773,6 +779,19 @@ impl Template {
                     l.x_axis.side = AxisSide::Hidden;
                     l.y_axis.side = AxisSide::Hidden;
                     l.legend.visible = false;
+                }
+                g
+            }
+            Template::Fishbone => {
+                // Only drawn objects and labels: no axes, no legend, the frame over most of the page.
+                let mut g = general(id, name, PlotKind::Line);
+                for l in &mut g.layers {
+                    l.x_axis.side = AxisSide::Hidden;
+                    l.y_axis.side = AxisSide::Hidden;
+                    l.x_axis.show_opposite = false;
+                    l.y_axis.show_opposite = false;
+                    l.legend.visible = false;
+                    l.frame = Frame { left: 0.04, top: 0.06, width: 0.9, height: 0.88 };
                 }
                 g
             }
@@ -1895,7 +1914,8 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 101);
+        assert_eq!(Template::ALL.len(), 102);
+        assert_eq!(Template::from_name("fishbone"), Some(Template::Fishbone));
         assert_eq!(Template::from_name("piper"), Some(Template::Piper));
         assert_eq!(Template::from_name("kde-2d"), Some(Template::Kde2d));
         assert_eq!(Template::from_name("smith-chart"), Some(Template::SmithChart));

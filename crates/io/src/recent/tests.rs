@@ -558,3 +558,15 @@ fn damaged_commands_and_exports_are_skipped_and_an_older_file_loads_empty() {
     std::fs::write(&file, "not json").unwrap();
     assert_eq!(RecentList::load(&file), RecentList::default());
 }
+
+#[test]
+fn a_busy_lock_refuses_the_change_instead_of_writing_without_it() {
+    // T378: a writer that times out must not go on unlocked (it would lose the holder's change).
+    let dir = scratch("busy-lock");
+    let file = dir.join(FILE_NAME);
+    let held = lock(&file).unwrap().expect("this file system can lock");
+    let err = lock_within(&file, Duration::from_millis(50)).unwrap_err();
+    assert!(err.to_string().contains("still changing"), "{err}");
+    drop(held);
+    assert!(lock_within(&file, Duration::from_millis(50)).unwrap().is_some(), "free again");
+}

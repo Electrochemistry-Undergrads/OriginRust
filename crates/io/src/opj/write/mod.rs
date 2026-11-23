@@ -404,10 +404,7 @@ impl Writer {
         self.notes.frozen_dropped += usize::from(!sheet.frozen.is_none());
         self.notes.cond_formats_dropped += usize::from(!sheet.cond_formats.is_empty());
         self.notes.cell_formats_dropped += usize::from(
-            !sheet.cell_formats.is_empty()
-                || !sheet.font_defaults.is_empty()
-                || !sheet.data_colors.is_empty()
-                || !sheet.column_label_colors.is_empty(),
+            !sheet.cell_formats.is_empty() || !sheet.font_defaults.is_empty() || sheet.has_category_colors(),
         );
         self.notes.cell_notes_dropped += sheet.notes.len();
         for (i, column) in sheet.columns.iter().enumerate() {

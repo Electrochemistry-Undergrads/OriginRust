@@ -242,13 +242,12 @@ fn sheet_image_scene(sheet: &Worksheet) -> Result<Scene, PlotError> {
     let pages = table.pages(1.0e9, 1.0e9);
     let slot = pages.first().ok_or_else(|| PlotError::Size("the sheet has nothing to draw".into()))?;
     let (dx, dy) = table.heading_extent();
-    let head_fill = Color::rgb(222, 222, 222);
     let mut ops = Vec::new();
     let (mut w, mut h) = (0.0_f64, 0.0_f64);
     for op in table.draw_page(slot, 1) {
         match op {
             PrintOp::Line { .. } => {}
-            PrintOp::Fill { color, .. } if color == head_fill => {}
+            PrintOp::Fill { x, y, w, h, .. } if x + w <= dx || y + h <= dy => {}
             PrintOp::Fill { x, y, w: fw, h: fh, color } => {
                 w = w.max(x + fw - dx);
                 h = h.max(y + fh - dy);
@@ -285,6 +284,19 @@ mod tests {
     use sheaf_core::column::{Column, ColumnData, Designation};
     use sheaf_core::ids::ColumnId;
     use sheaf_core::page_setup::{Margins, Orientation, Paper};
+
+    #[test]
+    fn worksheet_image_preserves_a_data_fill_that_matches_the_heading_fill() {
+        let mut ws = Worksheet::new("Sheet1");
+        ws.columns.push(Column::new(ColumnId(1), "A", Designation::Y, ColumnData::numeric(vec![10.0])));
+        let gray = Color::rgb(222, 222, 222);
+        let unstyled = sheet_image_svg(&ws).unwrap();
+        assert!(!unstyled.to_ascii_lowercase().contains("#dedede"));
+        ws.data_colors.fill = Some(gray);
+        let styled = sheet_image_svg(&ws).unwrap();
+        assert!(styled.to_ascii_lowercase().contains("#dedede"));
+        assert!(!styled.contains("A(Y1)"));
+    }
 
     #[test]
     fn standard_font_scales_worksheet_image_content_without_showing_the_headings() {

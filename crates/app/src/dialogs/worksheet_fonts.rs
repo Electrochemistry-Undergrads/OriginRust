@@ -1,7 +1,9 @@
 //! Worksheet Properties: category defaults below manual cell/range formats (T59).
+use super::cell_format::optional_color;
 use super::frame::{DialogButton, ok_cancel_apply};
 use eframe::egui;
-use sheaf_core::cellformat::LabelKind;
+use sheaf_core::cellformat::{DataColors, LabelKind};
+use sheaf_core::color::Color;
 use sheaf_core::sheet_fonts::ColumnLabelFont;
 use sheaf_core::{Document, WindowId};
 
@@ -21,6 +23,8 @@ pub struct WorksheetFontsDialog {
     revision: u64,
     base: [ColumnLabelFont; CATEGORIES.len()],
     shown: [ColumnLabelFont; CATEGORIES.len()],
+    base_colors: DataColors,
+    shown_colors: DataColors,
     category: usize,
     fonts: Vec<String>,
     font_search: String,
@@ -30,7 +34,8 @@ impl WorksheetFontsDialog {
     pub fn new(doc: &Document, book: WindowId) -> Option<Self> {
         let b = doc.project().workbook(book)?;
         let sheet = b.active_sheet.min(b.sheets.len().checked_sub(1)?);
-        let defaults = &b.sheets[sheet].font_defaults;
+        let worksheet = &b.sheets[sheet];
+        let defaults = &worksheet.font_defaults;
         let base = [
             defaults.data.clone().unwrap_or_default(),
             ColumnLabelFont {
@@ -68,6 +73,8 @@ impl WorksheetFontsDialog {
             revision: doc.revision(),
             shown: base.clone(),
             base,
+            base_colors: worksheet.data_colors,
+            shown_colors: worksheet.data_colors,
             category: DATA,
             fonts,
             font_search: String::new(),
@@ -83,12 +90,22 @@ impl WorksheetFontsDialog {
                 .is_some_and(|b| b.active_sheet == self.sheet && b.sheets.get(self.sheet).is_some())
     }
 
+    fn changed(&self) -> bool {
+        self.shown != self.base || self.shown_colors != self.base_colors
+    }
+
     fn apply(&mut self, doc: &mut Document) {
-        if self.shown == self.base || !self.current(doc) {
+        if !self.changed() || !self.current(doc) {
             return;
         }
-        doc.apply("Worksheet font", |p| {
+        let label = match (self.shown != self.base, self.shown_colors != self.base_colors) {
+            (true, true) => "Worksheet formatting",
+            (true, false) => "Worksheet font",
+            (false, _) => "Worksheet colors",
+        };
+        doc.apply(label, |p| {
             let sheet = &mut p.workbook_mut(self.book).unwrap().sheets[self.sheet];
+            sheet.data_colors = self.shown_colors;
             if self.shown[DATA] != self.base[DATA] {
                 sheet.set_data_font_override(self.shown[DATA].clone());
             }
@@ -119,6 +136,7 @@ impl WorksheetFontsDialog {
             }
         });
         self.base = self.shown.clone();
+        self.base_colors = self.shown_colors;
         self.revision = doc.revision();
     }
 
@@ -194,6 +212,26 @@ impl WorksheetFontsDialog {
                         shown.size_pt = (size > 0.0).then_some(size.max(4.0));
                     }
                     ui.end_row();
+                    if self.category == DATA {
+                        ui.label("Text Color");
+                        optional_color(
+                            ui,
+                            &mut self.shown_colors.text_color,
+                            "Use color",
+                            Color::BLACK,
+                            "Data text color",
+                        );
+                        ui.end_row();
+                        ui.label("Fill Color");
+                        optional_color(
+                            ui,
+                            &mut self.shown_colors.fill,
+                            "Use fill",
+                            Color::rgb(255, 255, 153),
+                            "Data fill color",
+                        );
+                        ui.end_row();
+                    }
                 });
                 ui.add_space(6.0);
                 ui.label("Manual cell formats take precedence over category defaults.");
@@ -201,7 +239,7 @@ impl WorksheetFontsDialog {
                     egui::vec2(340.0, ui.spacing().interact_size.y),
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
-                        pressed = ok_cancel_apply(ui, self.shown != self.base);
+                        pressed = ok_cancel_apply(ui, self.changed());
                     },
                 );
             });

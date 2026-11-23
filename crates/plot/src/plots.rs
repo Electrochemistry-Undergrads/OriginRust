@@ -99,6 +99,10 @@ pub(crate) fn draw_plot(
         crate::sunburst::draw_sunburst(out, pd, geom, m);
         return;
     }
+    if plot.kind == PlotKind::Network {
+        crate::network::draw_network(out, pd, geom, m);
+        return;
+    }
     if plot.kind == PlotKind::Sankey {
         crate::sankey::draw_sankey(out, pd, geom, m);
         return;

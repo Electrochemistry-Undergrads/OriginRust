@@ -2143,6 +2143,7 @@ fn statistics_menu() -> Vec<Entry> {
             "T&wo-Level Experiments",
             vec![
                 item("Factorial Design...", Cmd::Analyze(AnalysisKind::FactorialDesign)),
+                item("Mixture Design...", Cmd::Analyze(AnalysisKind::MixtureDesign)),
                 item("Factorial Effects...", Cmd::Analyze(AnalysisKind::FactorialEffects)),
                 item("Split-Plot Design...", Cmd::Analyze(AnalysisKind::SplitPlotDesign)),
                 item("Split-Plot Effects...", Cmd::Analyze(AnalysisKind::SplitPlotEffects)),

@@ -53,6 +53,7 @@ pub mod levelcross;
 pub mod lifedata;
 pub mod manip;
 pub mod minverse;
+pub mod mixture;
 pub mod nonparam;
 pub mod normality;
 pub mod normalize;

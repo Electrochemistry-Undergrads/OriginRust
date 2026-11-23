@@ -2670,3 +2670,36 @@ fn acceptance_sampling_designs_and_evaluates_plans_without_a_data_file() {
     let (ok, _, err) = sheaf(&["analyze", "acceptance", "--aql", "0.1", "--ltpd", "0.05"]);
     assert!(!ok && err.contains("below LTPD"), "{err}");
 }
+
+/// `analyze mixture-design` (T386): a simplex centroid for two totals with lower bounds.
+#[test]
+fn mixture_design_for_two_totals() {
+    let dir = scratch("mixture");
+    let path = dir.join("m.csv");
+    std::fs::write(
+        &path, "y
+1
+",
+    )
+    .unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "mixture-design",
+        file,
+        "--y",
+        "y",
+        "--components",
+        "3",
+        "--centroid-design",
+        "--totals",
+        "1,100",
+        "--lower",
+        "0.1,0,0",
+        "--no-randomize",
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("3-component simplex centroid: 7 blends, totals 1, 100") && out.contains("A >= 0.1"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "mixture-design", file, "--y", "y", "--lower", "0.6,0.5,0"]);
+    assert!(!ok && err.contains("nothing to vary"), "{err}");
+}

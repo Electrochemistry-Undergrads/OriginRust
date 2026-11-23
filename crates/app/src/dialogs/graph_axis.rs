@@ -211,6 +211,7 @@ fn copy_axis_look(dst: &mut Axis, src: &Axis) {
         title: dst.title.clone(),
         side: dst.side,
         offset_pct: dst.offset_pct,
+        opposite_offset_pct: dst.opposite_offset_pct,
         reverse: dst.reverse,
         first_tick: dst.first_tick,
         axis_breaks: dst.axis_breaks.clone(),
@@ -842,8 +843,11 @@ mod tests {
         let mut dst = g.layers[0].y_axis.clone();
         dst.min = Some(3.0);
         dst.title = Some("dst".into());
+        dst.offset_pct = 2.0;
+        dst.opposite_offset_pct = Some(4.0);
         copy_axis_look(&mut dst, &src);
         assert_eq!((dst.line_width_pt, dst.tick_color), (2.5, Some(Color::rgb(255, 0, 0))));
         assert_eq!((dst.scale, dst.min, dst.title.as_deref()), (ScaleKind::Linear, Some(3.0), Some("dst")));
+        assert_eq!((dst.offset_pct, dst.opposite_offset_pct), (2.0, Some(4.0)));
     }
 }

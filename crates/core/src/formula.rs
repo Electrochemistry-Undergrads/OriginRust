@@ -180,7 +180,11 @@ impl Host for SheetHost<'_> {
     }
 
     fn variable(&self, name: &str) -> Option<f64> {
-        (name == "j").then_some(self.j? as f64)
+        if name == "j" {
+            return Some(self.j? as f64);
+        }
+        // A named cell of the workbook (T396).
+        self.book?.named_value(name)
     }
 
     fn cell(&self, col: &ColumnRef, row: usize) -> Option<f64> {
@@ -264,6 +268,15 @@ fn resolve_deps(expr: &Expr, host: &SheetHost<'_>, me: ColumnId) -> Result<Formu
         let id = host.find(&r).ok_or(r)?.id;
         if !out.contains(&id) {
             out.push(id);
+        }
+    }
+    // A named cell (T396) is read from its column.
+    for v in expr.variables() {
+        if let Some(n) = host.book.and_then(|b| b.named_cell(&v))
+            && n.column != me
+            && !out.contains(&n.column)
+        {
+            out.push(n.column);
         }
     }
     match expr.cell_reads() {

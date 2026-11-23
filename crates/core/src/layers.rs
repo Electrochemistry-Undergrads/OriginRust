@@ -148,6 +148,7 @@ fn fresh_axis(from: &crate::graph::Axis, side: AxisSide) -> crate::graph::Axis {
     a.tick_label_divisor = 1.0;
     a.show_opposite = false;
     a.opposite_ticks = false;
+    a.opposite_offset_pct = None;
     a.major_grid = None;
     a.minor_grid = None;
     a.offset_pct = 0.0;
@@ -285,6 +286,7 @@ impl Graph {
             axis.show_tick_labels = near || far;
             axis.show_opposite = near && far;
             axis.opposite_ticks = near && far;
+            axis.opposite_offset_pct = (near && far).then_some(0.0);
         }
         layer.display.show_x_axes = true;
         layer.display.show_y_axes = true;
@@ -299,11 +301,17 @@ impl Graph {
         let layer = &self.layers[index];
         let x = self.new_axis_offset(index, frame, layer.x_axis.side, true);
         let y = self.new_axis_offset(index, frame, layer.y_axis.side, false);
+        let x_opposite =
+            layer.x_axis.opposite_offset_pct.map(|_| self.new_axis_offset(index, frame, AxisSide::Opposite, true));
+        let y_opposite =
+            layer.y_axis.opposite_offset_pct.map(|_| self.new_axis_offset(index, frame, AxisSide::Opposite, false));
         let layer = &mut self.layers[index];
         layer.x_axis.at_position = None;
         layer.y_axis.at_position = None;
         layer.x_axis.offset_pct = x;
         layer.y_axis.offset_pct = y;
+        layer.x_axis.opposite_offset_pct = x_opposite;
+        layer.y_axis.opposite_offset_pct = y_opposite;
     }
 
     fn new_axis_offset(&self, index: usize, frame: Frame, side: AxisSide, is_x: bool) -> f64 {
@@ -327,11 +335,14 @@ impl Graph {
             if !show || layer.display.hidden || axis.side == AxisSide::Hidden || self.absolute_frame(i) != Some(frame) {
                 continue;
             }
-            if axis.side == side && axis.at_position.is_none() && axis.offset_pct.is_finite() {
-                on_edge |= axis.offset_pct == 0.0;
-                outermost = outermost.max(axis.offset_pct);
-            } else if axis.side != side && (axis.show_opposite || axis.opposite_ticks) {
-                on_edge = true;
+            let offset = if axis.side == side {
+                axis.at_position.is_none().then_some(axis.offset_pct)
+            } else {
+                (axis.show_opposite || axis.opposite_ticks).then_some(axis.opposite_offset_pct.unwrap_or_default())
+            };
+            if let Some(offset) = offset.filter(|offset| offset.is_finite()) {
+                on_edge |= offset == 0.0;
+                outermost = outermost.max(offset);
             }
         }
         let offset = outermost + step;
@@ -458,6 +469,35 @@ mod tests {
         assert!(layer.x_axis.show_opposite && layer.x_axis.opposite_ticks);
         assert_eq!(layer.x_axis.offset_pct, 3.0);
         assert_eq!(layer.y_axis.offset_pct, 0.0);
+    }
+
+    #[test]
+    fn paired_axes_count_the_offsets_on_each_edge_separately() {
+        for far_edges_on_parent in [false, true] {
+            let mut g = graph();
+            let parent = &mut g.layers[0];
+            parent.frame.width = 0.6816;
+            parent.frame.height = 0.7183;
+            for axis in [&mut parent.x_axis, &mut parent.y_axis] {
+                axis.show_opposite = far_edges_on_parent;
+                axis.opposite_ticks = false;
+            }
+            let request = UserDefinedLayer { top: true, right: true, parent: Some(0), ..UserDefinedLayer::default() };
+            for (index, (x, y)) in [(3.0, 2.0), (6.0, 4.0)].into_iter().enumerate() {
+                let saved = g.layers.clone();
+                let i = g.add_user_defined_layer(request, 0, true).unwrap();
+                assert_eq!(g.layers[..i], saved);
+                let layer = &g.layers[i];
+                assert_eq!((layer.x_axis.offset_pct, layer.y_axis.offset_pct), (x, y));
+                let (top, right) = if far_edges_on_parent { (x, y) } else { (3.0 * index as f64, 2.0 * index as f64) };
+                assert_eq!(
+                    (layer.x_axis.opposite_offset_pct, layer.y_axis.opposite_offset_pct),
+                    (Some(top), Some(right))
+                );
+            }
+            let json = serde_json::to_string(&g).unwrap();
+            assert_eq!(serde_json::from_str::<Graph>(&json).unwrap(), g);
+        }
     }
 
     #[test]

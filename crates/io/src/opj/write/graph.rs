@@ -1273,6 +1273,11 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         );
     }
     for (name, axis) in [("X", &layer.x_axis), ("Y", &layer.y_axis)] {
+        if axis.opposite_offset_pct.is_some() {
+            notes.push(format!(
+                "the paired {name} axis' tick labels, title and offset were not written (the .opj.sheaf companion keeps them)"
+            ));
+        }
         if axis.arrow_begin || axis.arrow_end {
             notes.push(format!(
                 "the arrows at the ends of the {name} axis line were not written (the .opj.sheaf companion keeps them)"

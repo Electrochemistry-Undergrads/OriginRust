@@ -1386,8 +1386,13 @@ pub struct Axis {
     /// Draw the axis line on the opposite side too (top for X, right for Y).
     /// With both axes set this closes the box around the plot.
     pub show_opposite: bool,
-    /// Draw ticks (without labels) on the opposite side.
+    /// Draw ticks on the opposite side. Ordinary mirrored ticks have no labels.
     pub opposite_ticks: bool,
+    /// The outward offset of a paired axis on the facing edge, measured in percent of the same
+    /// frame dimension as the main offset. When set, a visible facing axis also shares the
+    /// main axis' tick labels and title. `None` keeps the ordinary line-and-ticks mirror.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opposite_offset_pct: Option<f64>,
     pub major_grid: Option<LineStyle>,
     pub minor_grid: Option<LineStyle>,
     /// The edge the axis is drawn on. With [`AxisSide::Opposite`], `show_opposite` and

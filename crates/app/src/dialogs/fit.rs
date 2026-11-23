@@ -236,6 +236,8 @@ pub struct FitDialog {
     curve_to: f64,
     /// Fitted Curves page: add the curve to the source graph, and rebuild its legend.
     plot_on_graph: bool,
+    /// Mark the EC50 of a dose-response fit on the graph (T398; off by default, as Origin 2016 draws none).
+    mark_ec50: bool,
     update_legend: bool,
     /// How the last trial fit (Fit until converged, 1 Iteration) went.
     message: Option<String>,
@@ -377,6 +379,7 @@ impl FitDialog {
             curve_from: 0.0,
             curve_to: 1.0,
             plot_on_graph: true,
+            mark_ec50: false,
             update_legend: false,
             message: None,
             log: Vec::new(),
@@ -570,6 +573,12 @@ impl FitDialog {
 
     fn converged(&self) -> bool {
         self.converged_at.as_ref() == Some(&self.params)
+    }
+
+    /// Ticks Mark EC50 on the Graph (for tests).
+    #[cfg(test)]
+    pub(crate) fn mark_ec50_for_test(&mut self, on: bool) {
+        self.mark_ec50 = on;
     }
 
     /// Test hooks: the built-in function in use, the table, the status line.
@@ -1120,6 +1129,7 @@ impl FitDialog {
         });
         ui.checkbox(&mut self.plot_on_graph, "Plot on Source Graph");
         ui.checkbox(&mut self.update_legend, "Update Legend on Source Graph");
+        ui.checkbox(&mut self.mark_ec50, "Mark EC50 on the Graph (dose-response functions)");
         ui.weak(
             "Fitted values and residuals go next to the column; the curve is added to a graph that shows it.              Origin's other options here (plot type, stacking with the residual plot, preview on the graph) are not offered.",
         );
@@ -1549,6 +1559,7 @@ impl FitDialog {
                 }
                 return if open && !cancel { FitDialogOutcome::Open } else { FitDialogOutcome::Closed };
             }
+            let mark = self.mark_ec50;
             let result = doc.edit("Fit", |p| -> Result<(FitOutcome, Option<WindowId>), FitRequestError> {
                 let outcome = p.fit(&request)?;
                 let graph = if outcome.graphs.is_empty() && !outcome.surface {
@@ -1556,6 +1567,10 @@ impl FitDialog {
                 } else {
                     None
                 };
+                // The marks go on the graph that shows the fitted curve (T398).
+                if mark && let Some(g) = graph.or_else(|| outcome.graphs.first().copied()) {
+                    p.mark_ec50(g, &outcome).map_err(FitRequestError::BadOption)?;
+                }
                 Ok((outcome, graph))
             });
             match result {

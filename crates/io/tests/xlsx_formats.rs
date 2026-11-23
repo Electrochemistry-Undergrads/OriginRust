@@ -245,6 +245,24 @@ fn individual_label_colors_export_on_their_rows_and_report_the_omitted_formula()
 }
 
 #[test]
+fn worksheet_heading_colors_are_reported_without_changing_xlsx_cells() {
+    let mut a = column(1, vec![1.0, 2.0]);
+    a.long_name = "Signal".into();
+    let mut s = Worksheet { columns: vec![a], ..Worksheet::new("Heading colors") };
+    let output = Output::new("worksheet-heading-colors");
+    let options = ExcelExportOptions { short_names: true, long_names: true, ..plain() };
+    let (before_xml, before_styles, _) = output.export(&s, &options);
+
+    s.label_colors.column_header.text_color = Some(Color::RED);
+    s.label_colors.row_header.fill = Some(Color::BLUE);
+    let (xml, styles, warnings) = output.export(&s, &options);
+    assert_eq!(xml, before_xml);
+    assert_eq!(styles, before_styles);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("worksheet header colors are omitted"));
+}
+
+#[test]
 fn formula_label_font_is_reported_when_xlsx_omits_the_formula_row() {
     let mut a = column(1, vec![2.0, 3.0]);
     a.formula = Some("i+1".into());

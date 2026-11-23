@@ -5963,10 +5963,12 @@ Sheaf shows the four edge choices, Link To, and separate X and Y Scale Link choi
 parent is selected. Link To lists earlier independent layers under the model's link rule.
 Without a parent, the layer uses the existing independent placement from 21.9. The dialog
 still captures its source, so leaving Activate New Layer off keeps the source active even
-when Link To names a different layer. When both edges of a dimension are selected, the
-bottom or left edge gets the labels, title and automatic offset, and the facing edge shares
-the axis line and ticks. Labels, titles and an independent offset for the facing edge are
-follow-up work. Custom Formula remains disabled.
+when Link To names a different layer. Selecting both edges of a dimension gives each edge a
+line, ticks, tick labels and a title. The edges share the resolved scale and use the same
+label and title settings, including the default title from the first plot or the placeholder
+on an empty layer. Auto Offset calculates the distance independently for each edge. The paired
+axis settings are saved in the Sheaf project and the OPJ companion. A plain OPJ export warns
+that the facing edge's tick labels, title and offset are omitted. Custom Formula remains disabled.
 
 ---
 

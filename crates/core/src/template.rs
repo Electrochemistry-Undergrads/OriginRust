@@ -1698,7 +1698,7 @@ fn smith(id: WindowId, name: &str) -> Graph {
 /// A Piper diagram (T117, from the standard construction, not measured): one layer with hidden axes over the
 /// diagram's extent, one X unit as long as one Y unit, the corner labels, no legend.
 fn piper(id: WindowId, name: &str) -> Graph {
-    use crate::piper::{X_RANGE, Y_RANGE, corner_labels};
+    use crate::piper::{X_RANGE, Y_RANGE};
     let mut g = general(id, name, PlotKind::Piper);
     let page = (g.page.width_pt, g.page.height_pt);
     let l = &mut g.layers[0];
@@ -1712,7 +1712,7 @@ fn piper(id: WindowId, name: &str) -> Graph {
         a.minor_grid = None;
     }
     l.fit_xy_ratio(1.0, page, X_RANGE.1 - X_RANGE.0, Y_RANGE.1 - Y_RANGE.0);
-    l.labels = corner_labels(&l.x_axis.tick_font);
+    // Origin 2016 titles the sides with the column names (drawn with the plot, T389); no corner labels.
     g
 }
 

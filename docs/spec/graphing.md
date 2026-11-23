@@ -3694,8 +3694,15 @@ merged graph with its labels.
 forms work, for example `%(p$)##` gives #01, #02 and #03. Sheaf expands
 these codes in source order alongside the existing numeric forms.
 In the scripted Origin 2016 merge, `%H` wrote the destination graph's
-short name on every panel. Roman shorthand `(r$)` stayed literal.
-The documented source-name and Roman options remain open.
+short name on every panel. The documented source-name option remains open.
+[Origin Merge Graph dialog](https://docs.originlab.com/origin-help/graphref-mergegraph/)
+
+**Roman panel labels.** The current Origin guide lists uppercase and lowercase Roman
+enumeration. Seven Origin 2016 script exports of 12 panels confirmed the letter and hash
+control. The tested Roman forms returned literal text, empty labels, or text with the
+substitution removed. Sheaf offers `I, II, III` and `i, ii, iii` in Label Text. Both start
+at one, follow source order, use IV and IX, and share the Preview and OK path with the
+other label modes. Custom still keeps unfamiliar tokens as literal text.
 [Origin Merge Graph dialog](https://docs.originlab.com/origin-help/graphref-mergegraph/)
 
 **Folder source choices** (Origin 2016, T60 follow-up measured 2026-11-16): fresh
@@ -4008,7 +4015,7 @@ The `.opj` reader reads the layers of a panel graph as independent layers with t
 - Owner choices: the page size of stacks with many panels (Origin keeps the page; a 6-panel stack on the upright Line page has panels of about 61 pt), one Y title by default instead of one per panel, panel labels such as (a) and (b) (Merge Graph can add them; not measured), and one colour per panel across the graph instead of Origin's colours per layer (with the cyclic voltammetry palette, every one-curve panel gets the first light blue).
 - Merge Graph's automatic rows and columns were seen only for 2 to 5 graphs.
 - Not tested in Origin: the column assignment of PAN2VERT and PAN4 with several X columns and horizontal stacks. The Layer Management Arrange defaults were measured on 2026-11-15 (15.7d).
-- Merge Graph Windows: Origin's own text-factor formula (15.7c fits it) and the documented source-name and Roman label options.
+- Merge Graph Windows: Origin's own text-factor formula (15.7c fits it) and the documented source-name label option.
 
 ## 16. Free text labels (P0, GP-TXT-01)
 

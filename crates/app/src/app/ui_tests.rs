@@ -1001,6 +1001,33 @@ fn the_fit_window_offers_direct_weighting_and_the_scale_errors_switch() {
     assert!(b.sheets.iter().any(|s| s.name == "FitLinear1"), "the fit was written");
 }
 
+/// Fit with Mark EC50 on the Graph (T398): a DoseResp fit's new graph gets the EC50 crosshair, in one undo step.
+#[test]
+fn the_fit_window_marks_the_ec50_of_a_dose_response_fit() {
+    let mut text = String::from("logdose,response\n");
+    for i in 0..21 {
+        let x = -3.0 + 0.2 * f64::from(i);
+        let y = 5.0 + 90.0 / (1.0 + 10f64.powf((-1.0 - x) * 1.2)) + 0.3 * (f64::from(i) * 1.7).sin();
+        text.push_str(&format!("{x},{y}\n"));
+    }
+    let mut h = start(vec![csv_file("ec50", "dr", &text)]);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::Fit { book, column: None, kind: FitKind::BuiltIn }, &ctx);
+    settle(&mut h);
+    h.state_mut().fit.as_mut().unwrap().choose_for_test("DoseResp");
+    h.state_mut().fit.as_mut().unwrap().mark_ec50_for_test(true);
+    settle(&mut h);
+    click(&mut h, "Fit");
+    assert!(h.state().fit.is_none(), "{:?}", h.state().status);
+    // The curve goes on the graph that already shows the data; the marks go with it.
+    let g =
+        project(&h).graphs().find(|g| g.layers.iter().any(|l| !l.straight_lines.is_empty())).expect("a marked graph");
+    let lines = &g.layers.iter().find(|l| !l.straight_lines.is_empty()).unwrap().straight_lines;
+    assert_eq!(lines.len(), 2, "the vertical and the horizontal mark");
+    assert!((lines[0].value + 1.0).abs() < 0.05 && (lines[1].value - 50.0).abs() < 1.0, "{lines:?}");
+}
+
 #[test]
 fn the_fit_window_fits_several_columns_independently_or_as_a_global_fit() {
     let mut h = start(vec![decays_file("fitglobal")]);
@@ -5742,6 +5769,27 @@ fn the_statistics_menu_makes_a_manhattan_plot() {
     assert_eq!(h.state().doc.undo_label(), Some("Manhattan plot"));
 }
 
+/// Statistics > Quantitative PCR > Relative Quantification... (T397): text groups and two Ct columns give the ratios;
+/// one undo step.
+#[test]
+fn the_statistics_menu_quantifies_qpcr() {
+    let data = csv_file(
+        "qpcr",
+        "q",
+        "well,sample,gene,actin\n1,ctrl,25.0,18.0\n2,ctrl,25.2,18.1\n3,ctrl,24.8,17.9\n4,treated,23.0,18.0\n5,treated,23.1,18.0\n6,treated,22.9,18.0\n",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - q.csv");
+    menu_path(&mut h, &["Statistics", "Quantitative PCR", "Relative Quantification..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Control group (empty: the first)"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
+    let (sheet, ratio) = result_column(&h, "Expression ratio");
+    assert!(sheet.starts_with("qPCR"), "{sheet}");
+    assert!((ratio[1] - 4.0).abs() < 1e-12, "{ratio:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("qPCR relative quantification"));
+}
+
 /// Statistics > Survival Analysis > Life Data Regression... (T391): covariate, time and censor columns give the
 /// coefficients; one undo step.
 #[test]
@@ -8096,6 +8144,31 @@ fn a_sunburst_of_selected_text_columns_counts_the_rows() {
     settle(&mut h);
     let plot = &project(&h).graphs().last().unwrap().layers[0].plots[0];
     assert_eq!((plot.kind, plot.y), (sheaf_core::graph::PlotKind::Sunburst, a));
+}
+
+#[test]
+fn define_name_on_a_cell_lets_formulas_read_it() {
+    let mut h = start(vec![data_file("named-cell")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let (b, c) = (column_id(&h, "B"), column_id(&h, "C"));
+    let entries = menus::cell_menu_for(false, (b, 1), false, false, false, false, (false, false));
+    assert!(entries.iter().any(|e| matches!(e, menus::Entry::Item(i)
+        if i.label == "Define Name..." && i.cmd == Some(menus::Cmd::DefineName { column: b, row: 1 }))));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::DefineName { column: b, row: 1 }, &ctx);
+    settle(&mut h);
+    assert!(h.state().name_cell.is_some(), "the window opened");
+    // A reserved name is refused and the window says why.
+    h.state_mut().apply(Action::SetCellName { column: b, row: 1, name: "j".into() }, &ctx);
+    assert!(h.state().name_cell.as_ref().unwrap().problem.is_some());
+    h.state_mut().apply(Action::SetCellName { column: b, row: 1, name: "Rate".into() }, &ctx);
+    settle(&mut h);
+    assert!(h.state().name_cell.is_none(), "OK closes");
+    assert_eq!(project(&h).name_of_cell(b, 1), Some("Rate"));
+    assert_eq!(h.state().doc.undo_label(), Some("Define Name Rate"));
+    // The sample's B is 2.5, 4.5, 6.5, 8.5: Rate is 4.5.
+    h.state_mut().doc.edit("formula", |p| p.set_column_values(c, "Rate*2", Some(0..1))).unwrap();
+    assert_eq!(project(&h).numeric(c).unwrap()[0], 9.0);
 }
 
 #[test]

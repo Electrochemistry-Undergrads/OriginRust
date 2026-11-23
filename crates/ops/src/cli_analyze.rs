@@ -1304,6 +1304,19 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 curve: !no_graph,
             })),
         ),
+        AnalyzeTool::Qpcr { target, control, e_target, e_reference, confidence, no_graph } => (
+            target,
+            Job::Tool(Tool::Qpcr(analysis::QpcrSpec {
+                control,
+                e_target,
+                e_reference,
+                confidence: confidence / 100.0,
+                graph: !no_graph,
+            })),
+        ),
+        AnalyzeTool::QpcrCurve { target, no_graph } => {
+            (target, Job::Tool(Tool::QpcrCurve(analysis::QpcrCurveSpec { graph: !no_graph })))
+        }
         AnalyzeTool::Lifereg { target, distribution, censor, frequency } => {
             let dist = match distribution.to_ascii_lowercase().as_str() {
                 "weibull" => analysis::LifeDist::Weibull,
@@ -1387,6 +1400,23 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     t_distribution,
                     sigma,
                     graph: !no_graph,
+                })),
+            )
+        }
+        AnalyzeTool::MonteCarlo { target, inputs, formula, samples, seed, lsl, usl } => {
+            let mut parsed = Vec::new();
+            for text in &inputs {
+                parsed.push(analysis::parse_monte_carlo_input(text).map_err(anyhow::Error::msg)?);
+            }
+            (
+                target,
+                Job::Tool(Tool::MonteCarlo(analysis::MonteCarloSpec {
+                    inputs: parsed,
+                    formula,
+                    samples,
+                    seed,
+                    lsl,
+                    usl,
                 })),
             )
         }

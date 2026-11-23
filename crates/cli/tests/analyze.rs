@@ -1485,6 +1485,34 @@ fn manhattan_plot_runs_from_the_command_line() {
     assert!(ok && out.contains("3 groups"), "the group from the X column: {err} {out}");
 }
 
+/// qPCR relative quantification and standard curve (spec `statistics.md` section 50, T397).
+#[test]
+fn qpcr_runs_from_the_command_line() {
+    let dir = scratch("qpcr");
+    let path = dir.join("q.csv");
+    std::fs::write(&path, "well,sample,gene,actin\n1,ctrl,25.0,18.0\n2,ctrl,25.2,18.1\n3,ctrl,24.8,17.9\n4,treated,23.0,18.0\n5,treated,23.1,18.0\n6,treated,22.9,18.0\n").unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "qpcr", file, "--y", "sample,gene,actin"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("2 groups against the control ctrl: Livak ratio")
+            && out.contains("treated: ratio 4 (")
+            && out.contains("qPCR1"),
+        "{out}"
+    );
+    let (ok, out, err) =
+        sheaf(&["analyze", "qpcr", file, "--y", "sample,gene,actin", "--e-target", "1.9", "--no-graph"]);
+    assert!(ok && out.contains("Pfaffl ratio with amplification factors 1.9"), "{err} {out}");
+    let curve = dir.join("curve.csv");
+    let mut text = String::from("well,copies,ct\n");
+    for (i, q) in [10.0f64, 100.0, 1000.0, 10000.0].iter().enumerate() {
+        text.push_str(&format!("{i},{q},{}\n", 30.0 - q.log10() / 2f64.log10()));
+    }
+    std::fs::write(&curve, text).unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "qpcr-curve", curve.to_str().unwrap(), "--y", "copies,ct"]);
+    assert!(ok && out.contains("amplification factor 2 (efficiency 100 %)"), "{err} {out}");
+}
+
 /// Frequency columns of the life-data tools (spec `statistics.md` sections 37, 47 and 48, T394).
 #[test]
 fn life_data_frequency_columns_count_rows() {
@@ -2784,4 +2812,37 @@ fn mixture_design_for_two_totals() {
     assert!(out.contains("3-component simplex centroid: 7 blends, totals 1, 100") && out.contains("A >= 0.1"), "{out}");
     let (ok, _, err) = sheaf(&["analyze", "mixture-design", file, "--y", "y", "--lower", "0.6,0.5,0"]);
     assert!(!ok && err.contains("nothing to vary"), "{err}");
+}
+
+/// `analyze monte-carlo` (T393): inputs through a formula, summary, capability and sensitivity.
+#[test]
+fn monte_carlo_summarises_the_output() {
+    let dir = scratch("monte-carlo");
+    let path = dir.join("m.csv");
+    std::fs::write(&path, "y\n1\n").unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "monte-carlo",
+        file,
+        "--y",
+        "y",
+        "--input",
+        "a=normal(10,0.1)",
+        "--input",
+        "b=uniform(1.9,2.1)",
+        "--formula",
+        "a*b",
+        "--samples",
+        "3000",
+        "--lsl",
+        "19",
+        "--usl",
+        "21",
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Output = a*b") && out.contains("Cp = ") && out.contains("follows b most"), "{out}");
+    let (ok, _, err) =
+        sheaf(&["analyze", "monte-carlo", file, "--y", "y", "--input", "a=gamma(1,2)", "--formula", "a"]);
+    assert!(!ok && err.contains("unknown distribution"), "{err}");
 }

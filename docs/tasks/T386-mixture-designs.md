@@ -5,7 +5,7 @@ experiments; Origin 2026b's mixture designs were not run).
 HANDOFF C / origin-2026-2027-gaps "Mixture designs with several totals". Simplex lattice {q, m} and
 simplex centroid designs, optional axial check blends and overall centroid, scaled from pseudo-components
 to each total with lower bounds; replicates and a seeded run order; a design sheet with an empty response.
-Statistics > Design of Experiments > Mixture Design..., CLI `analyze mixture-design`.
+Statistics > Two-Level Experiments > Mixture Design..., CLI `analyze mixture-design`.
 **Size:** M. **Spec:** `docs/spec/statistics.md` 45a.
 
 ## Tests

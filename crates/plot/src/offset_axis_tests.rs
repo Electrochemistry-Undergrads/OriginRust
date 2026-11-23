@@ -4,7 +4,7 @@
 
 use super::*;
 use sheaf_core::graph::{AxisSide, ScaleLink};
-use sheaf_core::layers::NewLayerKind;
+use sheaf_core::layers::{NewLayerKind, UserDefinedLayer};
 use sheaf_core::template::Template;
 
 /// Three layers: the left axis at the frame, a right axis at the frame (layer 1) and a second right
@@ -153,6 +153,74 @@ fn horizontal_lines(items: &[scene::Item], width: f64) -> Vec<f64> {
             _ => None,
         })
         .collect()
+}
+
+#[test]
+fn paired_axes_draw_pickable_labels_and_titles_at_separate_offsets() {
+    let (mut p, g) = three_axes(0.0);
+    let graph = p.graph_mut(g).unwrap();
+    let i = graph
+        .add_user_defined_layer(
+            UserDefinedLayer {
+                top: true,
+                right: true,
+                parent: Some(0),
+                x_link: ScaleLink::Straight,
+                ..Default::default()
+            },
+            0,
+            false,
+        )
+        .unwrap();
+    let layer = &mut graph.layers[i];
+    layer.x_axis.offset_pct = 5.0;
+    layer.x_axis.opposite_offset_pct = Some(12.0);
+    layer.x_axis.show_title = true;
+    layer.x_axis.title_on_top = true;
+    layer.y_axis.offset_pct = 8.0;
+    layer.y_axis.opposite_offset_pct = Some(16.0);
+    layer.y_axis.show_title = true;
+    let (x_width, y_width) = (layer.x_axis.line_width_pt, layer.y_axis.line_width_pt);
+    let geometry = geoms(&p, g);
+    let f = geometry[i].frame;
+    assert_eq!(geometry[0].frame, f);
+    assert_eq!(geometry[0].x, geometry[i].x);
+
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let overlay = &scene.layers[i].overlay;
+    assert!(
+        overlay[overlay.len() - 2..]
+            .iter()
+            .all(|item| matches!(item, scene::Item::Text(t) if t.text == "X Axis Title"))
+    );
+    let mut xs = vertical_lines(overlay, y_width);
+    let mut ys = horizontal_lines(overlay, x_width);
+    xs.sort_by(f64::total_cmp);
+    ys.sort_by(f64::total_cmp);
+    let (left, right) = (f.x - 0.08 * f.w, f.x + 1.16 * f.w);
+    let (top, bottom) = (f.y - 0.12 * f.h, f.y + 1.05 * f.h);
+    assert_eq!((xs.len(), ys.len()), (2, 2), "{xs:?} {ys:?}");
+    for (actual, expected) in xs.into_iter().chain(ys).zip([left, right, top, bottom]) {
+        assert!((actual - expected).abs() < 0.01, "{actual} vs {expected}");
+    }
+    let texts: Vec<_> =
+        overlay.iter().filter_map(|item| if let scene::Item::Text(t) = item { Some(t) } else { None }).collect();
+    for (title, past_face) in [
+        ("X Axis Title", texts.iter().any(|t| t.text == "X Axis Title" && t.y < top)),
+        ("X Axis Title", texts.iter().any(|t| t.text == "X Axis Title" && t.y > bottom)),
+        ("Y Axis Title", texts.iter().any(|t| t.text == "Y Axis Title" && t.x < left)),
+        ("Y Axis Title", texts.iter().any(|t| t.text == "Y Axis Title" && t.x > right)),
+    ] {
+        assert!(past_face, "{title}: {texts:?}");
+    }
+    assert!(texts.iter().any(|t| t.text.parse::<f64>().is_ok() && t.y < top));
+    assert!(texts.iter().any(|t| t.text.parse::<f64>().is_ok() && t.x > right));
+    let (mid_x, mid_y) = (f.x + f.w / 2.0, f.y + f.h / 2.0);
+    for (xy, kind) in [((mid_x, top), scene::ObjectKind::XAxis), ((right, mid_y), scene::ObjectKind::YAxis)] {
+        assert_eq!(hit::hit_test(&scene, xy, 3.0), hit::Hit::Object { layer: i, kind });
+    }
+    let b = margin::drawn_bounds(&scene, &FixedMetrics, None).unwrap();
+    assert!(b.x < left && b.x + b.w > right && b.y < top && b.y + b.h > bottom, "{b:?}");
 }
 
 #[test]

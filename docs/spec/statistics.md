@@ -2110,6 +2110,61 @@ agree exactly with an independent Python implementation of these rules (`tools/f
 `crates/calc/tests/forest_reference.rs`; scikit-learn is not available here). Permutation importance, class weights,
 probability outputs, prediction of new rows and saved models are not built.
 
+## 45 Two-level factorial designs and effects (T380, base of Origin 2027's split-plot designs; not measured)
+
+Origin 2016 has no design of experiments, and Origin 2027's two-level split-plot designs need this base, so this is
+Sheaf's own. Statistics > Two-Level Experiments:
+
+- **Factorial Design...** (`Tool::FactorialDesign`, `sheaf analyze factorial-design FILE --y COL [--factors 3]
+  [--fraction 0] [--replicates 1] [--center-points 0] [--no-randomize] [--seed 1]`) reads no data; it writes a new sheet
+  `DesignN` in the book (Run order, Standard order, one column per factor A, B, ... with coded levels -1/+1, and an empty
+  Response column). Full designs take 2 to 10 factors; `2^(k-p)` fractions use Montgomery's standard generators for
+  (k, p) = (3,1) C=AB; (4,1) D=ABC; (5,1) E=ABCD; (5,2) D=AB, E=AC; (6,1) F=ABCDE; (6,2) E=ABC, F=BCD; (6,3) D=AB, E=AC,
+  F=BC; (7,1) G=ABCDEF; (7,2) F=ABCD, G=ABDE; (7,3) E=ABC, F=BCD, G=ACD; (7,4) D=AB, E=AC, F=BC, G=ABC; (8,4) E=BCD,
+  F=ACD, G=ABC, H=ABD. Standard order runs the base factors as a full design with A alternating fastest; replicates
+  repeat it, centre points (all 0) follow, and the run order is a Fisher-Yates shuffle with the 64-bit LCG of section
+  44 from the seed. The resolution is the shortest word of the defining relation.
+- **Factorial Effects...** (`Tool::FactorialEffects`, `sheaf analyze factorial-effects FILE --y F1[,F2..],RESPONSE
+  [--no-graph]`): rows missing a factor or the response are left out; each factor is coded to -1..+1 from its smallest
+  and largest value. The model is the intercept, the main effects and the two-factor interactions in order; a term
+  whose column is a multiple of an earlier one is left out as an alias (listed), and terms stop at `n - 1`. Least
+  squares gives the coefficients and each effect is twice its coefficient. With residual degrees of freedom the
+  effects get standard errors, t and two-sided p; Lenth's `PSE = 1.5 median{|e| : |e| < 2.5 s0}` (`s0 = 1.5 median
+  |e|`) and margin of error `t(0.975, m/3) PSE` are always given and mark the active terms. The result sheet `EffectsN`
+  has one row per term (Coefficient, Effect, SE of effect, t, Prob>|t|, Active (Lenth)); a new graph draws |effect| per
+  term with the margin as a line.
+
+Checked against numpy and scipy (`tools/doe-ref.py`, `crates/calc/tests/doe_reference.rs`: replicated and unreplicated
+full designs and two fractions with aliases) to 1e-10. Split-plot designs (hard-to-change factors, whole-plot error),
+fold-over, Plackett-Burman, response surfaces, half-normal plots and higher-order interactions are not built.
+
+## 46 Two-level split-plot designs and effects (T382, Origin 2027 Quality app; not measured)
+
+Origin 2027's two-level split-plot experiments are not part of Origin 2016, so this is Sheaf's own, on section 45.
+Statistics > Two-Level Experiments:
+
+- **Split-Plot Design...** (`Tool::SplitPlotDesign`, `sheaf analyze split-plot-design FILE --y COL
+  [--whole-plot-factors 1] [--subplot-factors 2] [--replicates 2] [--no-randomize] [--seed 1]`) reads no data; it
+  writes a new sheet `SplitPlotN` (Run order, Whole plot, factor columns A, B, ... with the whole-plot factors first,
+  an empty Response). Each whole plot holds one combination of the hard-to-change factors (a full `2^w` design,
+  replicated) and every combination of the `s` subplot factors (`w + s <= 8`). Randomizing shuffles the whole plots,
+  then the subplots within each, with the 64-bit LCG of section 44.
+- **Split-Plot Effects...** (`Tool::SplitPlotEffects`, `sheaf analyze split-plot-effects FILE --y
+  PLOT,F1[,F2..],RESPONSE [--whole-plot-factors 1] [--no-graph]`): the first column numbers the whole plots, the first
+  `w` factor columns are the whole-plot factors. Every whole plot must hold the same number of runs and one level of
+  each whole-plot factor. The effects are those of section 45 (full model, coded factors); terms of whole-plot factors
+  only form the whole-plot stratum, the others the subplot stratum. The whole-plot error is `b` times the residual sum
+  of squares of the whole-plot means regressed on the whole-plot terms (`W - 1 - t_w` degrees of freedom); the subplot
+  error is the rest of the full model's residual. Each effect's standard error is `sqrt(4 MS / N)` with its stratum's
+  mean square (balanced, orthogonal designs) and its t test uses that stratum's degrees of freedom; a stratum without
+  degrees of freedom gets Lenth's margin over its own effects (unreliable with fewer than about six effects). The
+  result sheet `SplitEffectsN` has one row per term (Whole-plot term 1/0, Effect, SE of effect, t, Prob>|t|, Active
+  (Lenth)); a new graph draws |effect| per term.
+
+Checked against numpy and scipy (`tools/splitplot-ref.py`, `crates/calc/tests/splitplot_reference.rs`: two designs
+with whole-plot random effects) to 1e-10. Restricted maximum likelihood for unbalanced plots, fractional split-plot
+designs, split-split-plot designs and variance components are not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

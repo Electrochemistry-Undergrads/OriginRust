@@ -5,10 +5,10 @@ use super::analysis::AnalysisKind;
 use eframe::egui;
 use sheaf_core::analysis::{
     AcfSpec, AdfTerms, ArimaSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty,
-    ChangePointSpec, DecomposeModel, DecomposeSpec, ExpSmoothSpec, ForestTask, GLimits, KaplanMeierSpec, KmeansSpec,
-    KpssNull, LifeDist, LifeDistSpec, ManhattanSpec, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec, RandomForestSpec,
-    RareChartKind, RareChartSpec, RocSpec, SmoothModel, StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec,
-    Tool,
+    ChangePointSpec, DecomposeModel, DecomposeSpec, ExpSmoothSpec, FactorialDesignSpec, FactorialEffectsSpec,
+    ForestTask, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistSpec, ManhattanSpec, PcaSpec,
+    PivotPeriod, PivotStat, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec, RocSpec, SmoothModel,
+    SplitPlotDesignSpec, SplitPlotEffectsSpec, StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec, Tool,
 };
 
 /// What the windows keep between frames.
@@ -27,6 +27,10 @@ pub struct MultiOptions {
     expsmooth: ExpSmoothSpec,
     arima: ArimaSpec,
     forest: RandomForestSpec,
+    design: FactorialDesignSpec,
+    factorial: FactorialEffectsSpec,
+    split_design: SplitPlotDesignSpec,
+    split_effects: SplitPlotEffectsSpec,
     rare: RareChartSpec,
     capability: CapabilitySpec,
     stability: StabilitySpec,
@@ -112,6 +116,10 @@ impl MultiOptions {
                 Ok(Tool::RareChart(self.rare))
             }
             AnalysisKind::Stationarity => Ok(Tool::Stationarity(self.stationarity)),
+            AnalysisKind::FactorialDesign => Ok(Tool::FactorialDesign(self.design)),
+            AnalysisKind::FactorialEffects => Ok(Tool::FactorialEffects(self.factorial)),
+            AnalysisKind::SplitPlotDesign => Ok(Tool::SplitPlotDesign(self.split_design)),
+            AnalysisKind::SplitPlotEffects => Ok(Tool::SplitPlotEffects(self.split_effects)),
             AnalysisKind::RandomForest => {
                 if self.forest.trees == 0 {
                     return Err("grow at least one tree".to_string());
@@ -362,6 +370,55 @@ impl MultiOptions {
                     ui.add(egui::DragValue::new(&mut s.sigma).speed(0.05).range(0.5..=6.0));
                 });
                 ui.checkbox(&mut s.graph, "Control chart per column");
+            }
+            AnalysisKind::FactorialDesign => {
+                ui.label("The design goes to a new sheet; the chosen column only says which book.");
+                let s = &mut self.design;
+                ui.horizontal(|ui| {
+                    ui.label("Factors");
+                    ui.add(egui::DragValue::new(&mut s.factors).range(2..=10));
+                    ui.label("Fraction p of 2^(k-p) (0: full)");
+                    ui.add(egui::DragValue::new(&mut s.fraction).range(0..=4));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Replicates");
+                    ui.add(egui::DragValue::new(&mut s.replicates).range(1..=100));
+                    ui.label("Centre points");
+                    ui.add(egui::DragValue::new(&mut s.center_points).range(0..=100));
+                });
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut s.randomize, "Randomize the run order, seed");
+                    ui.add_enabled(s.randomize, egui::DragValue::new(&mut s.seed));
+                });
+            }
+            AnalysisKind::SplitPlotDesign => {
+                ui.label("The design goes to a new sheet; the chosen column only says which book.");
+                let s = &mut self.split_design;
+                ui.horizontal(|ui| {
+                    ui.label("Whole-plot (hard-to-change) factors");
+                    ui.add(egui::DragValue::new(&mut s.whole_plot_factors).range(1..=7));
+                    ui.label("Subplot factors");
+                    ui.add(egui::DragValue::new(&mut s.subplot_factors).range(1..=7));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Whole-plot replicates");
+                    ui.add(egui::DragValue::new(&mut s.replicates).range(1..=100));
+                    ui.checkbox(&mut s.randomize, "Randomize, seed");
+                    ui.add_enabled(s.randomize, egui::DragValue::new(&mut s.seed));
+                });
+            }
+            AnalysisKind::SplitPlotEffects => {
+                ui.label("The chosen columns are the whole plot, the factors (whole-plot factors first) and, last, the response.");
+                let s = &mut self.split_effects;
+                ui.horizontal(|ui| {
+                    ui.label("Whole-plot factors (the first factor columns)");
+                    ui.add(egui::DragValue::new(&mut s.whole_plot_factors).range(1..=7));
+                });
+                ui.checkbox(&mut s.graph, "Effects graph");
+            }
+            AnalysisKind::FactorialEffects => {
+                ui.label("The chosen columns are the factors (two levels each) and, last, the response.");
+                ui.checkbox(&mut self.factorial.graph, "Effects graph with Lenth's margin of error");
             }
             AnalysisKind::RandomForest => {
                 ui.label("The chosen columns are the predictors (numbers) and, last, the response.");

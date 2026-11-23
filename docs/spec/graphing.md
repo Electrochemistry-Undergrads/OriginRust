@@ -3306,8 +3306,15 @@ column plot of the flow with a warning.
   nodes in the order of the other end, filled with the source node's palette colour at 40 % opacity; nodes are boxes
   in the layer palette's colours with a darker 0.5 pt outline; names are written right of their nodes (left of the
   last stage's) in the X axis tick font at 0.8 of its size. No axes, no legend.
-- Not done: alluvial diagrams (categories across stages of the same rows), node reordering, value labels, the Plot
-  Details pages of Origin's Sankey plot.
+- Not done: node reordering, value labels, the Plot Details pages of Origin's Sankey plot.
+- **Alluvial diagram (T381):** Plot > Categorical > Alluvial Diagram and `sheaf plot FILE -t alluvial [--group
+  A,B,C] [-y WEIGHT]` (`Template::Alluvial`, `Project::plot_alluvial`, `SankeyStyle::stages`): the category columns
+  are the stages, left to right (default: every text column of the sheet; in the app the selected text columns,
+  else the sheet's). Every row flows through its cells, from each stage to the next; a node is a (stage, value)
+  pair, so the same value in two columns makes two nodes, each in its column's stage. A row weighs its value in
+  the weight column (`-y`, or the last selected numeric column), else 1 (counts; the plot's Y column is then the
+  first stage). An empty cell breaks the row's flow at that stage. Drawn as the Sankey diagram above. A file of
+  text only needs `--header-lines 1 --long-name-line 1` on import, or its header row becomes a flow.
 
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
@@ -3830,7 +3837,7 @@ the OK button to apply the changes in preview graph to source graph."; Undo, OK 
 
 **Sheaf's Layer Management** (`sheaf_core::layer_manage`, `dialogs/layer_management.rs`; Graph menu,
 page right-click and layer icon menu, the icon's layer selected): the layer list allows several
-layers. Add, Arrange, Size/Position, Link, Axes and Display Background Color work on a copy shown as
+layers. Add, Arrange, Size/Position, Link, Axes and Display work on a copy shown as
 numbered frames on a page-shaped preview. Undo takes back the last Apply. OK writes the copy in one
 undo step. Cancel and Escape discard it. The Align/Custom links, the Units combo of Link and the
 reposition-parent tick are disabled. Arrange with no selection takes every layer; "Treat Linked
@@ -3911,10 +3918,8 @@ leave the source alone. No selection, an unchanged colour and a final preview eq
 source add no history. OK refuses to overwrite layer edits made behind the window. Frames,
 links, axes, plots, legends, gradient settings and border settings are preserved. The small
 numbered-frame preview shows base colours; it does not render gradients or full plots.
-Native `.sheaf` saves and `.opj` companions retain the colour; bare `.opj` still omits it with
-the existing loss warning. Drawing Order, Border Fill Color, Border Color, Border Dimensions
-and Scale Elements remain disabled in this dialog. Native mixed-value interaction and the
-existing Sheaf layer drawing order are not changed by this slice. Supporting current docs:
+Native `.sheaf` saves and `.opj` companions retain the colour. The native writer reports the
+omission from bare `.opj`. Supporting current docs:
 [Display tab](https://docs.originlab.com/origin-help/laymanage-displaytab/) and
 [Layer properties](https://docs.originlab.com/labtalk/ref/layer-obj/).
 
@@ -3943,14 +3948,21 @@ with its own Origin instance and helpers closed. Other sessions' instances were 
 These controls establish the geometry and independence from Background Color; multi-layer
 mixed/selection behavior, overlap drawing order and changes to Border Dimensions remain open.
 
-**Backend prerequisite:** Sheaf's existing `Layer.background` fills the plot frame, and
-`BackgroundStyle.border` strokes that same frame (`plot/fill.rs`, called from `plot/layout.rs`).
-There is no separately stored border fill or four border outsets. Reusing those fields would
-change the wrong rectangle or the independent background colour. Keep both Display colour
-controls disabled until a separately represented layer-relative rectangle, independent fill
-and outline, rendering and persistence are implemented with preview/history/roundtrip tests.
-Preserve the existing plot-frame border semantics and the published Background Color control.
-This measurement slice changes no Rust code, model, renderer, file format or enabled inventory.
+**Sheaf Display border (2026-11-22).** The Color option has Background Color, Border Fill Color
+and Border Color, each with None, the shared presets and RGB channels. Border Dimensions accepts
+left, top, right and bottom outsets from 0 to 1000 percent. Left and right use the layer width.
+Top and bottom use its height. The default values follow the measured Line fixture. Sheaf draws
+the independent border fill beneath the plot-frame background, with a 0.75 pt outline. The
+800 × 612 Sheaf reference exports match the measured red fill and outline bounds within one
+pixel. Tight exports include the visible expanded rectangle. The preview uses the same
+percentages with its numbered layer frames.
+
+Apply changes the edited fields on the selected layers. Mixed fields keep their individual
+values until edited. Undo reverts the last preview Apply and OK makes one document history
+entry. A native `.sheaf` file or the `.opj.sheaf` companion stores colours and dimensions.
+The writer reports the omission from bare `.opj`. The existing Background tab and View >
+Show > Frame still use the plot rectangle. Sheaf's overlap ordering and numeric input bounds
+are implementation choices. Drawing Order and Scale Elements remain open.
 
 **Fit Page to Layers** (`pfit2l`; Margin Control Border (default) or Tight, Border Width 5, Adjust
 Direction Height and Width (default), Height Only, Width Only), measured on the stock page: the
@@ -6850,26 +6862,30 @@ probes in `re-workspace/scratch/t324`):**
 - **Left:** Origin's WindRose1 sheet, the Calm count and note, compass labels on the circle, and the options
   window (sectors, Percent Frequency, Blowing To).
 
-## 37. Smith chart: Plot > Specialized > Smith Chart (T115, 2026-11-16, **not measured**)
+## 37. Smith chart: Plot > Specialized > Smith Chart (T115, 2026-11-16; measured by T385, 2026-11-22)
 
-Origin 2016 lists the item under Plot > Specialized (seen in the menu on 2026-11-16). The probes could not
-run because Origin's COM class was unregistered (see 36), so this is Sheaf's version, built from the
-standard Smith chart and Origin's documented behaviour. Measure it when automation works again.
+**Origin 2016 (measured through its menu on X = resistance, Y = reactance; probes in `re-workspace/scratch/t385`):**
+no window; a graph on a page of 6848 x 4784 with one square layer (left 7.1 %, top 0.3 %, 68.2 % x 97.7 % of the
+page). The data are taken as normalised impedances (Z0 = 1): (1, 0) is the centre, (0, 0) the left end. They are
+drawn as a black line plot with a legend at the right.
 
-- **Layer:** a Smith chart is a square layer on the polar page (graphing 14.18) with `Coords::Smith`. It
-  holds ordinary line + symbol plots.
-- **Data mapping:** each plot's X column is the resistance and its Y column the reactance of an impedance,
-  divided by the layer's characteristic impedance `z0` (1 by default: the data are already normalised).
-  The point drawn is the reflection coefficient gamma = (z - 1) / (z + 1):
-  - a matched load (1 + 0j) is the centre;
-  - a short circuit is the left end and an open circuit the right end;
-  - pure +j is the top.
+- **Grid:** circles of constant resistance and arcs of constant reactance at 0.2, 0.5, 1, 2, 5 and 20 in solid
+  gray (Origin's Gray; 132 in the antialiased picture), and dotted light-gray ones (198 in the picture) halfway
+  between them in gamma: u = (r - 1) / (r + 1) = +-1/6, +-1/2, +-5/6, so 1/11, 1/3, 5/7, 1.4, 3 and 11 (read as
+  0.09, 0.34, 0.72, 1.4, 3.0; the outermost reactance read between 11 and 14). The real axis and the unit circle
+  are black.
+- **Labels:** the resistances 0.2, 0.5, 1.0, 2.0, 5.0 just right of where their circles meet the axis, below it;
+  the reactances 0.2j ... 5.0j and -0.2j ... -5.0j outside the rim at the ends of their arcs (20 is not labelled).
+
+**Sheaf** draws the same grid, colours (Origin's Gray 128 and LT Gray 192, the minor dotted) and labels (in the
+layer's tick-label font), and plots the data as a line (`smith::draw_grid`, template `smith-chart`).
+
+- **Layer:** a square layer on the polar page (graphing 14.18) with `Coords::Smith`.
+- **Data mapping:** each plot's X column is the resistance and its Y column the reactance of an impedance, divided
+  by the layer's characteristic impedance `z0` (1 by default, as Origin's). The point drawn is the reflection
+  coefficient gamma = (z - 1) / (z + 1).
 - **Axes:** they run from -1 to 1 and are not drawn.
-- **Grid:** light grey (204, 204, 204) 0.5 pt circles of constant resistance and arcs of constant
-  reactance (+-) at 0.2, 0.5, 1, 2 and 5, and the real axis. The unit circle is a black 1 pt edge.
-- **Templates:** `smith-chart`.
-- **To measure:** Origin's grid values and labels, its Z0 setting, its page, its plot type, and whether
-  it takes impedance or reflection data.
+- **Left:** Origin's page and layer proportions, the legend at the right.
 
 ## 38. 2D kernel density: Plot > Statistics > 2D Kernel Density... (T116, 2026-11-16; measured by T289, 2026-11-21)
 

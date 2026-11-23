@@ -223,6 +223,8 @@ pub enum Template {
     Sunburst,
     /// Sankey diagram (Origin 2020, T379): flows of a value column between the nodes of a source and a target column.
     Sankey,
+    /// Alluvial diagram (Origin 2020, T381): category columns as stages, rows flowing through their cells.
+    Alluvial,
     /// Cause-and-effect (fishbone) diagram (Origin 2026, T375): the chosen columns are the categories, their
     /// cells the causes; drawn as line and text objects in one layer without axes.
     Fishbone,
@@ -241,7 +243,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 103] = [
+    pub const ALL: [Template; 104] = [
         Template::Line,
         Template::Scatter3d,
         Template::Trajectory3d,
@@ -300,6 +302,7 @@ impl Template {
         Template::Treemap,
         Template::Sunburst,
         Template::Sankey,
+        Template::Alluvial,
         Template::Fishbone,
         Template::Bubble,
         Template::ColorMapped,
@@ -452,6 +455,7 @@ impl Template {
             Template::Treemap => "treemap",
             Template::Sunburst => "sunburst",
             Template::Sankey => "sankey",
+            Template::Alluvial => "alluvial",
             Template::Fishbone => "fishbone",
         }
     }
@@ -560,6 +564,7 @@ impl Template {
             Template::Treemap => "Treemap",
             Template::Sunburst => "Sunburst Plot",
             Template::Sankey => "Sankey Diagram",
+            Template::Alluvial => "Alluvial Diagram",
             Template::Fishbone => "Cause-and-Effect Diagram",
         }
     }
@@ -800,7 +805,7 @@ impl Template {
                 }
                 g
             }
-            Template::Sankey => {
+            Template::Sankey | Template::Alluvial => {
                 // The nodes and bands fill the layer's frame: no axes, no legend (the names are beside the nodes).
                 let mut g = general(id, name, PlotKind::Sankey);
                 for l in &mut g.layers {
@@ -1301,6 +1306,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             coords: Coords::Cartesian,
             background: None,
             background_style: BackgroundStyle::default(),
+            border: Default::default(),
             group_style: GroupStyle::default(),
             display: LayerDisplay::default(),
             xy_ratio: None,
@@ -1674,7 +1680,8 @@ pub const SPACE3D_EXTENT: f64 = 1.8;
 /// A Smith chart (T115, from Origin's documentation, not measured): line + symbol plots in a square layer
 /// of the polar page whose axes run from -1 to 1 and are not drawn; the layer draws the Smith grid.
 fn smith(id: WindowId, name: &str) -> Graph {
-    let mut g = polar_of(id, name, RadiusColumn::Y, PlotKind::LineSymbol);
+    // Origin 2016 draws the data as a line plot (measured, T385).
+    let mut g = polar_of(id, name, RadiusColumn::Y, PlotKind::Line);
     let l = &mut g.layers[0];
     l.coords = Coords::Smith(SmithCoords::default());
     for a in [&mut l.x_axis, &mut l.y_axis] {
@@ -1828,9 +1835,10 @@ pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
         l.y_axis.show_tick_labels = true;
     }
     l.link = Some(LayerLink { parent: parent_index, x: ScaleLink::Straight, y: ScaleLink::None });
-    // The parent's background covers the frame already; a second one would hide its plots.
+    // The parent's background and border already cover the frame; copying them would hide its plots.
     l.background = None;
     l.background_style = BackgroundStyle::default();
+    l.border = Default::default();
     l.frame = Frame { left: 0.0, top: 0.0, width: 1.0, height: 1.0 };
     l.x_axis.side = AxisSide::Hidden;
     l.x_axis.major_grid = None;
@@ -1931,7 +1939,8 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 103);
+        assert_eq!(Template::ALL.len(), 104);
+        assert_eq!(Template::from_name("alluvial"), Some(Template::Alluvial));
         assert_eq!(Template::from_name("sankey"), Some(Template::Sankey));
         assert_eq!(Template::from_name("fishbone"), Some(Template::Fishbone));
         assert_eq!(Template::from_name("piper"), Some(Template::Piper));

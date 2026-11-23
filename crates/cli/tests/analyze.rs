@@ -1582,6 +1582,82 @@ fn rare_event_charts_run_from_the_command_line() {
     assert!(!ok && err.contains("--chart"), "{err}");
 }
 
+/// Split-plot design and effects (spec `statistics.md` section 46, T382).
+#[test]
+fn split_plot_design_and_effects_run_from_the_command_line() {
+    let dir = scratch("splitplot");
+    let path = dir.join("sp.csv");
+    let mut text = String::from("run,plot,heat,speed,feed,y\n");
+    let mut run = 0;
+    for (w, bump) in [0.3, -0.2, 0.1, -0.2].into_iter().enumerate() {
+        let a = if w % 2 == 1 { 1.0 } else { -1.0 };
+        for k in 0..4usize {
+            let (b, c) = (if k & 1 == 1 { 1.0 } else { -1.0 }, if k & 2 == 2 { 1.0 } else { -1.0 });
+            run += 1;
+            let y = 5.0 + 2.0 * a + b + bump + 0.05 * (f64::from(run) * 1.7).sin();
+            text.push_str(&format!("{run},{},{a},{b},{c},{y}\n", w + 1));
+        }
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    // Long names that are not also short names (the CLI matches short names A, B, C first).
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "split-plot-design",
+        file,
+        "--y",
+        "y",
+        "--whole-plot-factors",
+        "2",
+        "--subplot-factors",
+        "1",
+        "--no-randomize",
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("hard-to-change factor(s) AB set once per whole plot (8 whole plots, 2 replicate(s)), 2 subplot runs in each; 16 runs"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "split-plot-effects", file, "--y", "plot,heat,speed,feed,y"]);
+    assert!(ok && out.contains("16 runs in 4 whole plots") && out.contains("Whole-plot error: SS"), "{err} {out}");
+    let (ok, _, err) =
+        sheaf(&["analyze", "split-plot-effects", file, "--y", "plot,heat,speed,feed,y", "--whole-plot-factors", "2"]);
+    assert!(!ok && err.contains("one level of each whole-plot factor"), "{err}");
+}
+
+/// Two-level factorial design and effects (spec `statistics.md` section 45, T380).
+#[test]
+fn factorial_design_and_effects_run_from_the_command_line() {
+    let dir = scratch("factorial");
+    let path = dir.join("f.csv");
+    let mut text = String::from("a,b,c,y\n");
+    for i in 0..8 {
+        let (a, b, c) =
+            (if i & 1 == 1 { 1 } else { -1 }, if i & 2 == 2 { 1 } else { -1 }, if i & 4 == 4 { 1 } else { -1 });
+        text.push_str(&format!("{a},{b},{c},{}\n", 10.0 + 3.0 * f64::from(a) + 0.1 * (f64::from(i) * 1.3).sin()));
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "factorial-design",
+        file,
+        "--y",
+        "y",
+        "--factors",
+        "5",
+        "--fraction",
+        "2",
+        "--no-randomize",
+    ]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("2^(5-2) fractional factorial: 8 runs") && out.contains("resolution 3, generators D = AB, E = AC"),
+        "{out}"
+    );
+    let (ok, out, err) = sheaf(&["analyze", "factorial-effects", file, "--y", "a,b,c,y"]);
+    assert!(ok && out.contains("8 runs, 6 term(s), 1 residual df"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "factorial-design", file, "--y", "y", "--factors", "9", "--fraction", "3"]);
+    assert!(!ok && err.contains("no 2^(9-3) design"), "{err}");
+}
+
 /// Random forest (spec `statistics.md` section 44, T377).
 #[test]
 fn random_forest_runs_from_the_command_line() {

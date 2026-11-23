@@ -1,5 +1,5 @@
 use super::*;
-use sheaf_core::graph::{AxisSide, Frame, ScaleKind, ScaleLink, TickDirection};
+use sheaf_core::graph::{AxisSide, Frame, LayerBorder, ScaleKind, ScaleLink, TickDirection};
 
 /// The sample project with Graph1 made of `layers` independent layers (copies of its first one).
 fn with_layers(tag: &str, layers: usize) -> Harness<'static, SheafApp> {
@@ -537,6 +537,76 @@ fn display_background_rgb_renders_and_survives_native_and_companion_saves() {
         let reopened = sheaf_io::open_project(&saved.path).unwrap();
         assert_eq!(reopened.project.graphs().next().unwrap().layers[0].background, Some(c));
     }
+}
+
+#[test]
+fn display_border_edit_is_scoped_renders_outside_the_frame_and_round_trips() {
+    use sheaf_core::Color;
+    use sheaf_plot::scene::Item;
+
+    let mut h = with_layers("lm-border", 2);
+    let id = graph(&h).id;
+    h.state_mut().doc.apply("Layer background", |p| {
+        p.graph_mut(id).unwrap().layers[1].background = Some(Color::WHITE);
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    open(&mut h);
+    click(&mut h, "Layer2");
+    click(&mut h, "Display");
+    click(&mut h, "Border Fill Color");
+    click(&mut h, "Red");
+    click(&mut h, "Border Color");
+    click(&mut h, "Blue");
+    click(&mut h, "Apply");
+    click(&mut h, "Border Dimensions");
+    for input in ["", "25"] {
+        click(&mut h, "Left Border");
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+        h.key_press(egui::Key::Backspace);
+        if !input.is_empty() {
+            h.event(egui::Event::Text(input.into()));
+        }
+        settle(&mut h);
+        assert_eq!(h.get_by_label("Apply").accesskit_node().is_disabled(), input.is_empty());
+    }
+    click(&mut h, "Apply");
+    assert_eq!(project(&h), &before);
+    click(&mut h, "OK");
+    let expected =
+        LayerBorder { fill: Some(Color::RED), outline: Some(Color::BLUE), dimensions_pct: [25.0, 10.0, 12.4, 15.2] };
+    let mut expected_layers = before.graph(id).unwrap().layers.clone();
+    expected_layers[1].border = expected;
+    assert_eq!(graph(&h).layers, expected_layers);
+
+    let scene = sheaf_plot::graph_scene(project(&h), id).unwrap();
+    let layer = &scene.layers[1];
+    let [Item::Rect { rect, fill: Some(Color::RED), stroke: None }, Item::Rect { fill: Some(Color::WHITE), .. }, ..] =
+        layer.grid.as_slice()
+    else {
+        panic!("border fill must come before the layer background");
+    };
+    let clip = layer.clip;
+    assert!((rect.x - (clip.x - clip.w * 0.25)).abs() < 1e-8);
+    assert!((rect.y - (clip.y - clip.h * 0.1)).abs() < 1e-8);
+    assert!((rect.w - clip.w * 1.374).abs() < 1e-8);
+    assert!((rect.h - clip.h * 1.252).abs() < 1e-8);
+    assert!(layer.overlay.iter().any(|item| {
+        matches!(item, Item::Rect { rect: outline, fill: None, stroke: Some(stroke) } if outline == rect && stroke.color == Color::BLUE)
+    }));
+    let svg = sheaf_plot::render_svg(project(&h), id).unwrap();
+    assert!(svg.contains("#FF0000") && svg.contains("#0000FF"));
+    let folder = save_dir("lm-border");
+    for extension in ["sheaf", "opj"] {
+        let saved = sheaf_io::save::save_project(project(&h), &folder.join(format!("border.{extension}"))).unwrap();
+        if extension == "opj" {
+            assert!(saved.warnings.iter().any(|w| w.contains("layer management border colours and dimensions")));
+        }
+        let reopened = sheaf_io::open_project(&saved.path).unwrap();
+        assert_eq!(reopened.project.graphs().next().unwrap().layers, expected_layers);
+    }
+    menu(&mut h, "Edit", "Undo Layer Management");
+    assert_eq!(project(&h), &before);
 }
 
 #[test]

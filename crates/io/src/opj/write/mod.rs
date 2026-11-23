@@ -403,8 +403,9 @@ impl Writer {
         self.notes.sheet_views_dropped += usize::from(!sheet.view.is_default());
         self.notes.frozen_dropped += usize::from(!sheet.frozen.is_none());
         self.notes.cond_formats_dropped += usize::from(!sheet.cond_formats.is_empty());
-        self.notes.cell_formats_dropped +=
-            usize::from(!sheet.cell_formats.is_empty() || !sheet.font_defaults.is_empty());
+        self.notes.cell_formats_dropped += usize::from(
+            !sheet.cell_formats.is_empty() || !sheet.font_defaults.is_empty() || !sheet.data_colors.is_empty(),
+        );
         self.notes.cell_notes_dropped += sheet.notes.len();
         for (i, column) in sheet.columns.iter().enumerate() {
             let dataset_name = format!("{}_{}{}", book.name, column.short_name, suffix);

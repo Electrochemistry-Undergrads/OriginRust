@@ -608,7 +608,7 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   unsupported text controls (B5). Its Worksheet Properties Format tab instead has category
   defaults (Data > Standard, plus headers and label categories). F4 now opens a separate
   category-font dialog with Standard, Data, Column Labels, Column Header,
-  Row Header and Long Name/Units/Comments family and size controls (GUI 3).
+  Row Header, Long Name, Units, Comments and F(x)= family and size controls (GUI 3).
 - **Data font defaults.** Optional `Worksheet.font_defaults.data` holds independent family
   and point-size overrides. An empty Data category is omitted. Resolution fills missing manual
   family and size from Data and then Standard, preserving other manual and conditional
@@ -623,7 +623,7 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
 - **Label size defaults.** Optional `font_defaults.long_name_size_pt`, `units_size_pt` and
   `comments_size_pt` store independent sparse point sizes below manual label ranges. Old sheets
   retain their serialized shape. Each setting covers existing and future columns without
-  per-column records, leaves data and unsupported formula/parameter categories independent,
+  per-column records, leaves data and other label categories independent,
   and uses the existing 4..96 pt bounds. The F4 dialog keeps category drafts and commits all
   changed categories in one Undo; Cancel/Escape discard unapplied drafts. These draft rules
   and retained manual-label precedence are Sheaf policy, not measured Native parity. Native
@@ -664,6 +664,19 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   the Standard size to scale their base geometry. Excel exports effective cell fonts
   and reports omitted row and column heading fonts. Native projects and OPJ companions
   preserve the setting. See GUI 3 for the Origin 2016 size and family probes.
+- **Formula label font (T59).** Sparse `formula_family` and `formula_size_pt`
+  override Column Labels and Standard for F(x)= cells, including new columns.
+  The fields do not change the stored formula, its evaluated values or the row
+  caption. Grid, print, images and project saves use the existing label-font
+  path. Excel reports when it omits the styled formula label row.
+- **Data colors (T59).** Optional `data_colors.text_color` and `data_colors.fill`
+  hold Worksheet Properties defaults for data cells. They fill missing manual
+  properties, and conditional colors retain their priority over both. A manual
+  transparent fill continues to clear a fill. New rows and columns inherit the
+  settings without range records. The grid, print and images use the resolved
+  colors. Native projects and OPJ companions preserve the settings. Excel
+  writes effective colors for cell values and blanks inside the used rectangle
+  and reports that future cells take Excel defaults.
 - **Vertical alignment.** The 2016 selected-A1 Format Cells and Worksheet Properties Data
   Format/Size probes (GUI 3, 2026-11-16) found no vertical text-alignment control in those
   inspected routes. Other routes and mutation semantics remain unestablished; this probe

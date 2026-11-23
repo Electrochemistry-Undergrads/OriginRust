@@ -3453,6 +3453,67 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Two-level factorial design: a full or 2^(k-p) fractional design (coded levels, run and standard order) in a
+    /// new sheet; the --y column only says which book the sheet goes to.
+    FactorialDesign {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Number of factors.
+        #[arg(long, default_value_t = 3)]
+        factors: usize,
+        /// p of a 2^(k-p) fraction (0: full design).
+        #[arg(long, default_value_t = 0)]
+        fraction: usize,
+        #[arg(long, default_value_t = 1)]
+        replicates: usize,
+        #[arg(long, default_value_t = 0)]
+        center_points: usize,
+        /// Keep the standard order instead of shuffling the runs.
+        #[arg(long)]
+        no_randomize: bool,
+        /// Seed of the run order.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+    },
+    /// Factorial effects: --y FACTOR[,FACTOR..],RESPONSE; effects of the main factors and two-factor interactions,
+    /// t tests when there is an error estimate, Lenth's margin otherwise, with an effects graph.
+    FactorialEffects {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// Split-plot design: hard-to-change whole-plot factors set once per whole plot, subplot factors inside, in a new
+    /// sheet; the --y column only says which book the sheet goes to.
+    SplitPlotDesign {
+        #[command(flatten)]
+        target: TargetArgs,
+        #[arg(long, default_value_t = 1)]
+        whole_plot_factors: usize,
+        #[arg(long, default_value_t = 2)]
+        subplot_factors: usize,
+        /// Replicates of the whole plots.
+        #[arg(long, default_value_t = 2)]
+        replicates: usize,
+        /// Keep the standard order instead of shuffling plots and subplots.
+        #[arg(long)]
+        no_randomize: bool,
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+    },
+    /// Split-plot effects: --y PLOT,FACTOR[,FACTOR..],RESPONSE (whole-plot factors first); whole-plot terms tested
+    /// against the whole-plot error, the others against the subplot error.
+    SplitPlotEffects {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// How many of the factor columns (the first ones) are whole-plot factors.
+        #[arg(long, default_value_t = 1)]
+        whole_plot_factors: usize,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Random forest: --y PREDICTOR[,PREDICTOR..],RESPONSE; a seeded forest of CART trees, out-of-bag error,
     /// predictor importance, out-of-bag predictions (and a confusion matrix for classes).
     Randomforest {

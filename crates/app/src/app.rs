@@ -4565,6 +4565,27 @@ impl SheafApp {
     }
 
     fn plot_columns(&mut self, book: WindowId, columns: Vec<ColumnId>, template: Template) {
+        // An alluvial diagram (T381): the selected columns of text are the stages (else every text column of the
+        // active sheet), the last selected numeric one weights the rows (else every row counts 1).
+        if template == Template::Alluvial {
+            let project = self.doc.project();
+            let is_text = |id: &ColumnId| project.column(*id).is_some_and(|c| !c.data.is_numeric());
+            let mut stages: Vec<ColumnId> = columns.iter().copied().filter(is_text).collect();
+            if stages.len() < 2 {
+                stages = project
+                    .workbook(book)
+                    .and_then(|b| b.sheets.get(b.active_sheet))
+                    .map(|s| s.columns.iter().filter(|c| !c.data.is_numeric()).map(|c| c.id).collect())
+                    .unwrap_or_default();
+            }
+            let value = columns.iter().rev().copied().find(|id| project.numeric(*id).is_some());
+            let n = stages.len();
+            match self.doc.edit("Plot columns", |p| p.plot_alluvial(&stages, value)) {
+                Ok(_) => self.say(format!("Alluvial diagram of {n} stages")),
+                Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+            }
+            return;
+        }
         // A cause-and-effect diagram (T375): the selected columns, of any kind, are the categories (else every
         // column of the active sheet); the effect text is edited on the graph afterwards.
         if template == Template::Fishbone {
@@ -5837,7 +5858,12 @@ impl SheafApp {
         // The proportion tests read no data: one column of the sheet only says where the results go.
         let host_only = matches!(
             kind,
-            AnalysisKind::PropTestOne | AnalysisKind::PropTestTwo | AnalysisKind::PoissonOne | AnalysisKind::PoissonTwo
+            AnalysisKind::PropTestOne
+                | AnalysisKind::PropTestTwo
+                | AnalysisKind::PoissonOne
+                | AnalysisKind::PoissonTwo
+                | AnalysisKind::FactorialDesign
+                | AnalysisKind::SplitPlotDesign
         );
         let columns: Vec<ColumnId> = if host_only {
             let sheet = project.workbook(book).map(|b| b.active_sheet).unwrap_or(0);

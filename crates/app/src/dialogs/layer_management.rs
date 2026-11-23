@@ -7,15 +7,15 @@
 use std::collections::BTreeSet;
 
 use eframe::egui::{self, Color32, Sense, Stroke};
-use sheaf_core::graph::{Graph, Layer, ScaleKind, ScaleLink};
+use sheaf_core::graph::{Frame, Graph, Layer, ScaleKind, ScaleLink};
 use sheaf_core::layer_manage::{AlignEdge, ArrangeOptions, ArrangeOrder, LayerError, SizeUnit};
 use sheaf_core::layers::NewLayerKind;
 use sheaf_core::{Document, Project, WindowId};
 
 mod axes;
-mod background;
+mod display;
 use axes::AxesDraft;
-use background::BackgroundDraft;
+use display::DisplayDraft;
 
 const HINT: &str = "Use the Apply buttons on each tab to update your preview graph. Use the OK button to apply the changes in preview graph to source graph.";
 
@@ -90,7 +90,7 @@ pub struct LayerManagementDialog {
     /// The layer whose link the Link tab shows (the first selected one when the tab was drawn).
     link_shown_for: Option<usize>,
     axes: AxesDraft,
-    background: BackgroundDraft,
+    display: DisplayDraft,
     problem: Option<String>,
 }
 
@@ -133,7 +133,7 @@ impl LayerManagementDialog {
             link_y: ScaleLink::None,
             link_shown_for: None,
             axes: AxesDraft::default(),
-            background: BackgroundDraft::default(),
+            display: DisplayDraft::default(),
             problem: None,
         })
     }
@@ -149,6 +149,7 @@ impl LayerManagementDialog {
             Ok(()) => {
                 self.history.push(before);
                 self.axes.invalidate();
+                self.display.invalidate();
                 self.problem = None;
             }
             Err(e) => self.problem = Some(e.to_string()),
@@ -160,7 +161,7 @@ impl LayerManagementDialog {
             self.work.layers = layers;
             self.selected.retain(|&index| index < self.work.layers.len());
             self.axes.invalidate();
-            self.background.invalidate();
+            self.display.invalidate();
             self.problem = None;
         }
     }
@@ -175,7 +176,7 @@ impl LayerManagementDialog {
                 self.work = g.clone();
                 self.source_layers = g.layers.clone();
                 self.axes.invalidate();
-                self.background.invalidate();
+                self.display.invalidate();
                 self.selected.retain(|&i| i < self.work.layers.len());
             }
             Some(_) => {}
@@ -587,17 +588,15 @@ impl LayerManagementDialog {
 
     fn display_tab(&mut self, ui: &mut egui::Ui) {
         let selection = self.selection();
-        if let Some(color) = self.background.show(ui, &self.work, &selection) {
-            self.apply(|g| {
-                for &i in &selection {
-                    g.layers[i].background = color;
-                }
+        if let Some(changes) = self.display.show(ui, &self.work, &selection) {
+            self.apply(|graph| {
+                changes.write(graph, &selection);
                 Ok(())
             });
         }
     }
 
-    /// The page with numbered layer frames, their backgrounds and a selection tint.
+    /// The page with numbered layer frames, their backgrounds and borders, and a selection tint.
     fn preview(&self, ui: &mut egui::Ui) {
         ui.strong("Preview");
         let (pw, ph) = (self.work.page.width_pt.max(1.0), self.work.page.height_pt.max(1.0));
@@ -606,16 +605,23 @@ impl LayerManagementDialog {
         let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
         let painter = ui.painter_at(rect);
         let page = self.work.page.background;
-        painter.rect_filled(rect, 0.0, Color32::from_rgba_unmultiplied(page.r, page.g, page.b, page.a));
+        painter.rect_filled(rect, 0.0, display::rgba(page));
         painter.rect_stroke(rect, 0.0, Stroke::new(1.0_f32, Color32::GRAY), egui::StrokeKind::Inside);
-        for i in 0..self.work.layers.len() {
-            let f = self.work.page_frame(i);
-            let r = egui::Rect::from_min_size(
+        let screen = |f: Frame| {
+            egui::Rect::from_min_size(
                 rect.min + egui::vec2(f.left as f32 * size.x, f.top as f32 * size.y),
                 egui::vec2(f.width as f32 * size.x, f.height as f32 * size.y),
-            );
-            if let Some(c) = self.work.layers[i].background {
-                painter.rect_filled(r, 0.0, Color32::from_rgba_unmultiplied(c.r, c.g, c.b, c.a));
+            )
+        };
+        for (i, layer) in self.work.layers.iter().enumerate() {
+            let frame = self.work.page_frame(i);
+            let r = screen(frame);
+            let border = screen(layer.border.relative_frame().within(frame));
+            if let Some(c) = layer.border.fill {
+                painter.rect_filled(border, 0.0, display::rgba(c));
+            }
+            if let Some(c) = layer.background {
+                painter.rect_filled(r, 0.0, display::rgba(c));
             }
             let on = self.selected.contains(&i);
             if on {
@@ -623,6 +629,9 @@ impl LayerManagementDialog {
             }
             let color = if on { Color32::from_rgb(40, 90, 190) } else { Color32::from_rgb(90, 90, 90) };
             painter.rect_stroke(r, 0.0, Stroke::new(1.0_f32, color), egui::StrokeKind::Inside);
+            if let Some(c) = layer.border.outline {
+                painter.rect_stroke(border, 0.0, Stroke::new(1.0_f32, display::rgba(c)), egui::StrokeKind::Middle);
+            }
             painter.text(
                 r.center(),
                 egui::Align2::CENTER_CENTER,

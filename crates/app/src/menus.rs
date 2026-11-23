@@ -1686,6 +1686,7 @@ fn plot_menu() -> Vec<Entry> {
                 item("Treemap", Cmd::Plot(Template::Treemap)),
                 item("Sunburst Plot", Cmd::Plot(Template::Sunburst)),
                 item("Sankey Diagram", Cmd::Plot(Template::Sankey)),
+                item("Alluvial Diagram", Cmd::Plot(Template::Alluvial)),
                 item("Cause-and-Effect Diagram", Cmd::Plot(Template::Fishbone)),
             ],
         ),
@@ -2138,6 +2139,15 @@ fn statistics_menu() -> Vec<Entry> {
         item("E&xponential Smoothing Forecast...", Cmd::Analyze(AnalysisKind::ExpSmooth)),
         item("ARIMA &Forecast...", Cmd::Analyze(AnalysisKind::Arima)),
         item("Random Forest (Machine Learnin&g)...", Cmd::Analyze(AnalysisKind::RandomForest)),
+        sub(
+            "T&wo-Level Experiments",
+            vec![
+                item("Factorial Design...", Cmd::Analyze(AnalysisKind::FactorialDesign)),
+                item("Factorial Effects...", Cmd::Analyze(AnalysisKind::FactorialEffects)),
+                item("Split-Plot Design...", Cmd::Analyze(AnalysisKind::SplitPlotDesign)),
+                item("Split-Plot Effects...", Cmd::Analyze(AnalysisKind::SplitPlotEffects)),
+            ],
+        ),
         item("Rar&e Event Chart (G/T)...", Cmd::Analyze(AnalysisKind::RareChart)),
         item("Process Capabilit&y...", Cmd::Analyze(AnalysisKind::Capability)),
         item("Sta&bility Study...", Cmd::Analyze(AnalysisKind::Stability)),

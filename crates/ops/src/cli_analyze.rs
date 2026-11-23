@@ -1364,6 +1364,41 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
+        AnalyzeTool::FactorialDesign { target, factors, fraction, replicates, center_points, no_randomize, seed } => (
+            target,
+            Job::Tool(Tool::FactorialDesign(analysis::FactorialDesignSpec {
+                factors,
+                fraction,
+                replicates,
+                center_points,
+                randomize: !no_randomize,
+                seed,
+            })),
+        ),
+        AnalyzeTool::SplitPlotDesign {
+            target,
+            whole_plot_factors,
+            subplot_factors,
+            replicates,
+            no_randomize,
+            seed,
+        } => (
+            target,
+            Job::Tool(Tool::SplitPlotDesign(analysis::SplitPlotDesignSpec {
+                whole_plot_factors,
+                subplot_factors,
+                replicates,
+                randomize: !no_randomize,
+                seed,
+            })),
+        ),
+        AnalyzeTool::SplitPlotEffects { target, whole_plot_factors, no_graph } => (
+            target,
+            Job::Tool(Tool::SplitPlotEffects(analysis::SplitPlotEffectsSpec { whole_plot_factors, graph: !no_graph })),
+        ),
+        AnalyzeTool::FactorialEffects { target, no_graph } => {
+            (target, Job::Tool(Tool::FactorialEffects(analysis::FactorialEffectsSpec { graph: !no_graph })))
+        }
         AnalyzeTool::Randomforest { target, task, trees, mtry, min_leaf, max_depth, seed, no_graph } => {
             let task = match task.to_ascii_lowercase().as_str() {
                 "auto" => analysis::ForestTask::Auto,

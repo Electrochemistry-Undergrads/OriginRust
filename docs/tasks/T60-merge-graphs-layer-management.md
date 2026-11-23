@@ -82,7 +82,8 @@ three codes can be combined with `$(i)` and padded numbers. Origin 2016 was
 checked with literal `labelcustom` arguments, and the PNG showed the
 combined labels on the right layers. In Sheaf, `I, II, III` and `i, ii, iii`
 are available in Label Text for Roman numbering in source order. Graphing
-15.7c records the Origin 2016 script controls and the remaining source-name option.
+15.7c records the Origin 2016 script controls. Source Graph Name adds a static,
+editable label containing the short name of each selected graph.
 
 **Add Extra Layer(s) for Grid (2026-11-22).** Origin 2016's `merge_graph`
 command with `newlayer:=1` appended one blank layer for three sources in a

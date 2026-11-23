@@ -2082,6 +2082,34 @@ of squares against scipy's minimum (Nelder-Mead, BFGS), in `tools/arima-ref.py` 
 Exact (Kalman) maximum likelihood, coefficient standard errors, seasonal ARIMA and automatic order choice are not
 built.
 
+## 44 Random forest (T377, Origin 2026b Pro app; not measured)
+
+Origin 2026b's Random Forest app is not part of Origin 2016, so this is Sheaf's own (the CART and random forest of
+Breiman, with fully stated rules). Statistics > Random Forest (Machine Learning)... (`Tool::RandomForest`, `sheaf
+analyze randomforest --y PRED[,PRED..],RESPONSE [--task auto|classification|regression] [--trees 100] [--mtry 0]
+[--min-leaf 0] [--max-depth 0] [--seed 1] [--no-graph]`): the predictors are numeric columns and the last column is the
+response, classes (a text column, or numbers with `classification`; classes are numbered in their first order) or
+values; rows with a missing predictor or response are left out. With no columns selected, the window starts with every
+Y and Label column of the sheet.
+
+- Trees split on the feature and midpoint threshold that most reduce `n - sum c_k^2 / n` (classes) or `sum y^2 -
+  (sum y)^2 / n` (values), with at least `min_leaf` rows on each side (default 1 for classes, 5 for values); rows at
+  or below the threshold go left; features are tried in order (a forest's drawn subset in its drawn order) and
+  thresholds from the smallest, a candidate winning only when strictly better. Leaves predict the majority class
+  (lowest on ties) or the mean.
+- Each tree grows on a bootstrap sample and tries `mtry` features per node (default `floor(sqrt p)` for classes,
+  `floor(p / 3)` for values), drawn with the 64-bit generator `s = s * 6364136223846793005 + 1442695040888963407`, `u
+  = (s >> 11) / 2^53`, from the seed; the same seed gives the same forest.
+- Out-of-bag predictions use the trees that did not see a row; the out-of-bag error is the share misclassified or the
+  mean squared error. Importance is each predictor's total impurity decrease, scaled to sum to 1.
+
+The result sheet `RandomForestN` has one row per predictor (Importance), then the row numbers, the response, the
+out-of-bag and whole-forest predictions, and for classes a confusion matrix of the out-of-bag predictions (actual
+classes down, predicted across); a new graph draws the importance as columns. Single trees and whole seeded forests
+agree exactly with an independent Python implementation of these rules (`tools/forest-ref.py`,
+`crates/calc/tests/forest_reference.rs`; scikit-learn is not available here). Permutation importance, class weights,
+probability outputs, prediction of new rows and saved models are not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

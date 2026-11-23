@@ -76,17 +76,22 @@ enum LabelText {
     None,
     Uppercase,
     Lowercase,
+    UppercaseRoman,
+    LowercaseRoman,
     Custom,
 }
 
 impl LabelText {
-    const ALL: [Self; 4] = [Self::None, Self::Uppercase, Self::Lowercase, Self::Custom];
+    const ALL: [Self; 6] =
+        [Self::None, Self::Uppercase, Self::Lowercase, Self::UppercaseRoman, Self::LowercaseRoman, Self::Custom];
 
     fn name(self) -> &'static str {
         match self {
             Self::None => "None",
             Self::Uppercase => "A",
             Self::Lowercase => "a",
+            Self::UppercaseRoman => "I, II, III",
+            Self::LowercaseRoman => "i, ii, iii",
             Self::Custom => "Custom",
         }
     }
@@ -96,9 +101,37 @@ impl LabelText {
             Self::None => None,
             Self::Uppercase => Some(default_short_name(index)),
             Self::Lowercase => Some(default_short_name(index).to_ascii_lowercase()),
+            Self::UppercaseRoman => Some(roman_number(index + 1)),
+            Self::LowercaseRoman => Some(roman_number(index + 1).to_ascii_lowercase()),
             Self::Custom => Some(custom_panel_label(custom, index)),
         }
     }
+}
+
+fn roman_number(mut number: usize) -> String {
+    const DIGITS: [(usize, &str); 13] = [
+        (1000, "M"),
+        (900, "CM"),
+        (500, "D"),
+        (400, "CD"),
+        (100, "C"),
+        (90, "XC"),
+        (50, "L"),
+        (40, "XL"),
+        (10, "X"),
+        (9, "IX"),
+        (5, "V"),
+        (4, "IV"),
+        (1, "I"),
+    ];
+    let mut text = String::new();
+    for (value, symbol) in DIGITS {
+        while number >= value {
+            text.push_str(symbol);
+            number -= value;
+        }
+    }
+    text
 }
 
 /// Expands the measured enumeration codes and pads the index to the length of each hash run.
@@ -662,7 +695,18 @@ fn number(ui: &mut egui::Ui, name: &str, value: &mut f64, max: f64) {
 
 #[cfg(test)]
 mod label_tests {
-    use super::custom_panel_label;
+    use super::{LabelText, custom_panel_label};
+
+    #[test]
+    fn roman_labels_are_one_based_and_use_subtractive_notation() {
+        for (number, expected) in [(1, "I"), (4, "IV"), (9, "IX"), (49, "XLIX"), (994, "CMXCIV"), (2024, "MMXXIV")] {
+            assert_eq!(LabelText::UppercaseRoman.text(number - 1, "").as_deref(), Some(expected));
+            assert_eq!(
+                LabelText::LowercaseRoman.text(number - 1, "").as_deref(),
+                Some(expected.to_ascii_lowercase().as_str())
+            );
+        }
+    }
 
     #[test]
     fn each_panel_number_expands_with_its_own_padding() {

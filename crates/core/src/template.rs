@@ -1680,7 +1680,8 @@ pub const SPACE3D_EXTENT: f64 = 1.8;
 /// A Smith chart (T115, from Origin's documentation, not measured): line + symbol plots in a square layer
 /// of the polar page whose axes run from -1 to 1 and are not drawn; the layer draws the Smith grid.
 fn smith(id: WindowId, name: &str) -> Graph {
-    let mut g = polar_of(id, name, RadiusColumn::Y, PlotKind::LineSymbol);
+    // Origin 2016 draws the data as a line plot (measured, T385).
+    let mut g = polar_of(id, name, RadiusColumn::Y, PlotKind::Line);
     let l = &mut g.layers[0];
     l.coords = Coords::Smith(SmithCoords::default());
     for a in [&mut l.x_axis, &mut l.y_axis] {

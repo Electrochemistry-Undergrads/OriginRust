@@ -229,6 +229,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T373](T373-grouped-marginal-plots.md) | Grouped marginal histograms and box charts (sheaf plot --group) | S | done 2026-11-22 (graphing 32), not measured |
 | [T375](T375-fishbone.md) | Plot > Categorical > Cause-and-Effect Diagram and sheaf plot -t fishbone | S | done 2026-11-22 (graphing 17.13), not measured |
 | [T378](T378-settings-lock.md) | Settings file lock: refuse a change after a 60 s wait instead of writing unlocked | S | done 2026-11-22 |
+| [T379](T379-sankey.md) | Plot > Categorical > Sankey Diagram and sheaf plot -t sankey | M | done 2026-11-22 (graphing 14.32), not measured |
 | [T233](T233-batch-summary.md) | File > Batch Processing: Summary Sheet, Dataset Identifier, Delete Intermediate Books (a Batch Summary book stacking one sheet of every book) | S | done 2026-11-20 (workbook-model 13p), not measured; left: Origin's layout and identifier choices |
 | [T235](T235-batch-cli.md) | sheaf batch: Batch Processing without a window (template, summary, --summary-csv), core Project::batch_process shared with the window | S | done 2026-11-20 (workbook-model 13p); MCP: T238 |
 | [T238](T238-batch-mcp.md) | MCP batch_process: the shared batch run (books, summary, delete) on the session project, one undo step attached | S | done 2026-11-20 (mcp.md 5.1); left: read options |

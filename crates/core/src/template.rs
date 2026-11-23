@@ -221,6 +221,8 @@ pub enum Template {
     /// Sunburst plot (Origin's "Sunburst Plot", 2022): the hierarchy of the category columns as concentric rings,
     /// the angles proportional to a value column. No axes and no legend; a colour scale beside the layer.
     Sunburst,
+    /// Sankey diagram (Origin 2020, T379): flows of a value column between the nodes of a source and a target column.
+    Sankey,
     /// Cause-and-effect (fishbone) diagram (Origin 2026, T375): the chosen columns are the categories, their
     /// cells the causes; drawn as line and text objects in one layer without axes.
     Fishbone,
@@ -239,7 +241,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 102] = [
+    pub const ALL: [Template; 103] = [
         Template::Line,
         Template::Scatter3d,
         Template::Trajectory3d,
@@ -297,6 +299,7 @@ impl Template {
         Template::ParallelIndex,
         Template::Treemap,
         Template::Sunburst,
+        Template::Sankey,
         Template::Fishbone,
         Template::Bubble,
         Template::ColorMapped,
@@ -448,6 +451,7 @@ impl Template {
             Template::ParallelIndex => "parallel-index",
             Template::Treemap => "treemap",
             Template::Sunburst => "sunburst",
+            Template::Sankey => "sankey",
             Template::Fishbone => "fishbone",
         }
     }
@@ -555,6 +559,7 @@ impl Template {
             Template::ParallelIndex => "Parallel Index",
             Template::Treemap => "Treemap",
             Template::Sunburst => "Sunburst Plot",
+            Template::Sankey => "Sankey Diagram",
             Template::Fishbone => "Cause-and-Effect Diagram",
         }
     }
@@ -792,6 +797,18 @@ impl Template {
                     l.y_axis.show_opposite = false;
                     l.legend.visible = false;
                     l.frame = Frame { left: 0.04, top: 0.06, width: 0.9, height: 0.88 };
+                }
+                g
+            }
+            Template::Sankey => {
+                // The nodes and bands fill the layer's frame: no axes, no legend (the names are beside the nodes).
+                let mut g = general(id, name, PlotKind::Sankey);
+                for l in &mut g.layers {
+                    l.x_axis.side = AxisSide::Hidden;
+                    l.y_axis.side = AxisSide::Hidden;
+                    l.x_axis.show_opposite = false;
+                    l.y_axis.show_opposite = false;
+                    l.legend.visible = false;
                 }
                 g
             }
@@ -1914,7 +1931,8 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 102);
+        assert_eq!(Template::ALL.len(), 103);
+        assert_eq!(Template::from_name("sankey"), Some(Template::Sankey));
         assert_eq!(Template::from_name("fishbone"), Some(Template::Fishbone));
         assert_eq!(Template::from_name("piper"), Some(Template::Piper));
         assert_eq!(Template::from_name("kde-2d"), Some(Template::Kde2d));
@@ -2781,5 +2799,26 @@ mod color_list_tests {
         palette.list = Some("Q03 Rainbow7".into());
         let back: Palette = serde_json::from_str(&serde_json::to_string(&palette).unwrap()).unwrap();
         assert_eq!(back, palette);
+    }
+
+    #[test]
+    fn a_sankey_plot_takes_two_text_columns_and_the_flow() {
+        let mut p = crate::Project::new();
+        let b = p.add_workbook("");
+        let text = |v: &[&str]| crate::ColumnData::text(v.iter().map(|s| s.to_string()).collect());
+        let src = p.add_column(b, 0, crate::Designation::Y, text(&["Coal", "Gas", "Power"])).unwrap();
+        let tgt = p.add_column(b, 0, crate::Designation::Y, text(&["Power", "Power", "Homes"])).unwrap();
+        let v = p.add_column(b, 0, crate::Designation::Y, crate::ColumnData::numeric(vec![3.0, 2.0, 5.0])).unwrap();
+        let g = p.plot_columns(super::Template::Sankey, &[src, tgt, v]).unwrap();
+        let plot = &p.graph(g).unwrap().layers[0].plots[0];
+        assert_eq!(
+            (plot.kind, plot.y, plot.sankey.source, plot.sankey.target),
+            (crate::graph::PlotKind::Sankey, v, Some(src), Some(tgt))
+        );
+        // Only the value chosen: the sheet's text columns are the ends.
+        let g = p.plot_columns(super::Template::Sankey, &[v]).unwrap();
+        assert_eq!(p.graph(g).unwrap().layers[0].plots[0].sankey.source, Some(src));
+        assert!(p.plot_columns_double_y(super::Template::Sankey, &[v], &[v]).is_err());
+        assert_eq!(serde_json::to_string(&crate::graph::PlotKind::Sankey).unwrap(), "\"sankey\"");
     }
 }

@@ -3286,6 +3286,29 @@ was the source, and Origin 2016 has no such plot, so nothing here is measured.
   values together). One undo step ("Grouped Histogram"). Separate Graphs, panels, pages, distribution
   curves and data height are not built.
 
+### 14.32 Sankey diagram (T379, Origin 2020 feature, Sheaf's look, not measured)
+
+Plot > Categorical > Sankey Diagram and `sheaf plot FILE -t sankey [--group SOURCE,TARGET]` (`PlotKind::Sankey`,
+`Template::Sankey`, `Project::plot_sankey`; layout `sheaf_calc::sankey`, drawing `crates/plot/src/sankey.rs`): every
+row is a flow of the value column (the last numeric Y column) from the node named in the source column to the one in
+the target column. Without `--group` (or text columns selected in the app) the first two text columns of the sheet
+are the source and the target. The plot keeps them in `Plot::sankey` (saved in `.sheaf`); the `.opj` writer saves a
+column plot of the flow with a warning.
+
+- Nodes are the distinct names, in order of first appearance; flows with the same ends are summed; rows with an
+  empty name, a missing or non-positive value or the same source and target are left out, and so is a flow that
+  would close a cycle.
+- A node's stage (column) is the longest path to it from a node without incoming flows; stages are spread evenly
+  across the layer's frame. A node is as tall as the larger of its inflow and outflow, one scale for all stages
+  (the fullest stage fills the height less a 20 % share of gaps); every stage is centred vertically. No crossing
+  reduction: nodes keep their order of first appearance within a stage.
+- Each flow is a band of two cubic curves from the source's right edge to the target's left edge, stacked on both
+  nodes in the order of the other end, filled with the source node's palette colour at 40 % opacity; nodes are boxes
+  in the layer palette's colours with a darker 0.5 pt outline; names are written right of their nodes (left of the
+  last stage's) in the X axis tick font at 0.8 of its size. No axes, no legend.
+- Not done: alluvial diagrams (categories across stages of the same rows), node reordering, value labels, the Plot
+  Details pages of Origin's Sankey plot.
+
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
 Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin. Where the current online help **[W]** and Origin disagree, Origin decides.

@@ -363,6 +363,7 @@ fn new_plot(layer: &Layer, x: Option<ColumnId>, y: ColumnId, y_error: Option<Col
         indexed: None,
         stat: None,
         sunburst: layer.inherited_sunburst(),
+        sankey: Default::default(),
         size_from: None,
         color_from: None,
         decor: Default::default(),

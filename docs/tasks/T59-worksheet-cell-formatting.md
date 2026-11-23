@@ -114,6 +114,11 @@ Formula label follow-up. F4 > F(x)= sets family and size for formula label
 cells below manual formatting and above Column Labels. Origin 2016 size,
 precedence and new-column measurements are in GUI 3.
 
+Data color follow-up. Worksheet Properties > Data sets independent text and
+fill defaults with the existing color picker and saved wells. Origin 2016
+scope and manual priority were measured. Grid, print, worksheet images and
+Excel apply the resolved colors (GUI 3 and workbook model 13b).
+
 **Size:** L. **Branch:** `cell-format` (model/dialog), `codex/t59-format-toolbar` (toolbar/font geometry), `codex/t59-worksheet-controls` (underline/fill/keys), `codex/t59-worksheet-dialog` (dialog measurements/More entry), `codex/t59-custom-colors` (one-off RGB chooser), `codex/t59-classic-colors` (24 Classic worksheet presets), `codex/t59-xlsx-formats` (Excel cell styles). **Priority:** P0, wave 1.
 **Spec:** [workbook model](../spec/workbook-model.md), new Cell formats section;
 [GUI](../spec/gui-look.md) 3. **Inventory:** the worksheet-wide `T59` menu location now opens the bounded Data-font dialog; the three unsupported text-control choices are B5.

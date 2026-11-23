@@ -180,10 +180,10 @@ impl CellFormatDialog {
                     });
                     ui.end_row();
                     ui.label("Text Color");
-                    optional_color(ui, &mut self.shown.text, "Use color", Color::BLACK);
+                    optional_color(ui, &mut self.shown.text, "Use color", Color::BLACK, "Cell text color");
                     ui.end_row();
                     ui.label("Fill Color");
-                    optional_color(ui, &mut self.shown.fill, "Use fill", Color::rgb(255, 255, 153));
+                    optional_color(ui, &mut self.shown.fill, "Use fill", Color::rgb(255, 255, 153), "Cell fill color");
                     ui.end_row();
                     ui.label("Horizontal");
                     ui.horizontal(|ui| {
@@ -222,7 +222,7 @@ impl CellFormatDialog {
 }
 
 /// A checkbox that switches a colour on (with the colour button) or off (automatic).
-fn optional_color(ui: &mut egui::Ui, value: &mut Option<Color>, label: &str, default: Color) {
+pub(super) fn optional_color(ui: &mut egui::Ui, value: &mut Option<Color>, label: &str, default: Color, prefix: &str) {
     ui.horizontal(|ui| {
         let mut on = value.is_some();
         if ui.checkbox(&mut on, label).changed() {
@@ -231,7 +231,6 @@ fn optional_color(ui: &mut egui::Ui, value: &mut Option<Color>, label: &str, def
         if let Some(c) = value {
             color_button(ui, c);
         }
-        let prefix = if label == "Use color" { "Cell text color" } else { "Cell fill color" };
         if let Some(color) = crate::custom_colors::menu(ui, prefix) {
             *value = Some(color);
         }

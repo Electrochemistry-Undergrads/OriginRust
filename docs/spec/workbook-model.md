@@ -669,6 +669,14 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   The fields do not change the stored formula, its evaluated values or the row
   caption. Grid, print, images and project saves use the existing label-font
   path. Excel reports when it omits the styled formula label row.
+- **Data colors (T59).** Optional `data_colors.text_color` and `data_colors.fill`
+  hold Worksheet Properties defaults for data cells. They fill missing manual
+  properties, and conditional colors retain their priority over both. A manual
+  transparent fill continues to clear a fill. New rows and columns inherit the
+  settings without range records. The grid, print and images use the resolved
+  colors. Native projects and OPJ companions preserve the settings. Excel
+  writes effective colors for cell values and blanks inside the used rectangle
+  and reports that future cells take Excel defaults.
 - **Vertical alignment.** The 2016 selected-A1 Format Cells and Worksheet Properties Data
   Format/Size probes (GUI 3, 2026-11-16) found no vertical text-alignment control in those
   inspected routes. Other routes and mutation semantics remain unestablished; this probe

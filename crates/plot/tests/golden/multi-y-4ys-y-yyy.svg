@@ -63,14 +63,14 @@
 <text x="711.126" y="320.676" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#FF00FF">0</text>
 <text x="711.126" y="244.976" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#FF00FF">20</text>
 <text x="711.126" y="169.276" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="18" fill="#FF00FF">40</text>
-<path d="M577.048 18.86L625.448 18.86" fill="none" stroke="#0000FF" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
-<text x="636.448" y="24.47" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Curve 1</text>
-<path d="M577.048 47.46L625.448 47.46" fill="none" stroke="#008000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
-<text x="636.448" y="53.07" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Curve 2</text>
-<path d="M577.048 76.06L625.448 76.06" fill="none" stroke="#FF8000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
-<text x="636.448" y="81.67" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Curve 3</text>
-<path d="M577.048 104.66L625.448 104.66" fill="none" stroke="#FF00FF" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
-<text x="636.448" y="110.27" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Curve 4</text>
+<path d="M577.048 18.86L625.888 18.86" fill="none" stroke="#0000FF" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="631.938" y="24.47" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Curve 1</text>
+<path d="M577.048 45.7L625.888 45.7" fill="none" stroke="#008000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="631.938" y="51.31" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Curve 2</text>
+<path d="M577.048 72.54L625.888 72.54" fill="none" stroke="#FF8000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="631.938" y="78.15" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Curve 3</text>
+<path d="M577.048 99.38L625.888 99.38" fill="none" stroke="#FF00FF" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="631.938" y="104.99" font-family="'Arial', 'Liberation Sans', 'Helvetica', 'DejaVu Sans', sans-serif" font-size="22" fill="#000000">Curve 4</text>
 </g>
 </g>
 </svg>

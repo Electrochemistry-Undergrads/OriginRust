@@ -602,14 +602,37 @@ impl Writer {
                     (lines, longest)
                 }
                 None => {
+                    let selected: Vec<_> = if layer.legend.stock_multi_y {
+                        let drawable: Vec<_> = entries.iter().filter(|(_, plot)| plot.visible).collect();
+                        let model_ids = graph.legend_ids_by_slot(ctx.index, |j| {
+                            graph.layers[j].stock_legend_plot_slots(
+                                ctx.plans[j].plots.iter().map(|p| p.plot).filter(|p| p.visible),
+                            )
+                        });
+                        notes.push(
+                            "the stock multi-Y legend's current rows were written (the .opj.sheaf companion keeps automatic membership and spacing)"
+                                .into(),
+                        );
+                        layer
+                            .legend
+                            .automatic_entry_order(ctx.index, &model_ids)
+                            .into_iter()
+                            .map(|i| drawable[i])
+                            .collect()
+                    } else {
+                        entries.iter().collect()
+                    };
                     let mut lines = Vec::new();
-                    for (id, plot) in &entries {
+                    for (id, plot) in &selected {
                         match &plot.label {
                             Some(t) => lines.push(format!("\\l({id}) {}", t.replace(['\r', '\n'], " "))),
+                            // Name the column explicitly so import retains the selected rows as
+                            // authored references instead of reconstructing the full automatic legend.
+                            None if layer.legend.stock_multi_y => lines.push(format!("\\l({id}) %({id},@LG)")),
                             None => lines.push(format!("\\l({id}) %({id})")),
                         }
                     }
-                    let longest = entries
+                    let longest = selected
                         .iter()
                         .map(|(_, p)| p.label.as_ref().map_or(12, |t| t.chars().count()))
                         .max()

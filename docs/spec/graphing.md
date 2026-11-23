@@ -5768,7 +5768,7 @@ Implemented in `crates/core/src/multi_y.rs` (plans, options), `Template::Multi3Y
 
 - **Templates** take the frames, sides, offsets and colours of the table in 21.5 (`MultiYKind::plan`). Layer 1 is the root with the bottom X axis; every other layer is linked to it with a straight X scale and its own Y scale, covers it and shows only its Y axis. The box is open, the Y axes have no titles, each axis takes its plot's colour, one legend in layer 1 lists every plot. **Provisional deviation:** layer 3 of Y-YY is linked to layer 1, not to layer 2 (Sheaf links only to an unlinked layer; the X range is the same either way).
 - **Columns** go to layer *i* mod *N* (21.5), N = 3 or 4. Fewer columns than layers still make every layer (Origin did the same, no message); the empty layers draw their axis with a 0 to 1 scale. No column at all is refused ("a multiple Y axes graph needs at least one Y column"). `--y2` and `--panels` are refused with these templates.
-- **Colours**: the layer's colour first, then Origin's colour list without it, so a second plot in the layer takes the next colour. The stock legend anchors, logical font sizes and background are measured and implemented in 21.12; shared spacing and extra-column membership remain provisional.
+- **Colours**: the layer's colour first, then Origin's colour list without it, so a second plot in the layer takes the next colour. Section 21.12 records the stock legend anchors, font sizes, spacing and membership.
 - **Multiple Y Axes...** follows 21.6: Plot Type (Line, Scatter, Line + Symbol; Custom is not offered), Number of Left/Right Y Axes with Auto (floor(N/2) left, rest right), Add Middle Y Axis (-50 %), Number of Plots in Each Layer (the sum must equal the number of columns, a layer cannot be empty), Link Axis Color to Plot, Show Y Title, Show Top X Axis (line and ticks only; tick labels on the top axis are not drawn), Y Axes Gap (Auto 10, and 14 when Y titles or the top X axis are on: which of the options causes it is **unmeasured**, Sheaf uses titles or top X; `axiscolor:=0` alone is unmeasured). The first frame is centred with the outward offsets by the formula of 21.6; one Y column makes an ordinary graph with a left axis and the frame at 17.91 %. A count of axes that does not fit the number of layers is reported in the dialog and nothing is made. The Preview button and `hide` are not built.
 - **Files**: `.sheaf` keeps `offset_pct` and the layer links. The `.opj` writer writes one ordinary layer per Y axis but no axis position; the save names "the position of a Y axis away from the frame" so the `.opj.sheaf` companion keeps it (ADR 0008). CLI and MCP have the four template names only; the Multiple Y Axes options are in the app.
 - Goldens: `crates/plot/tests/golden/multi-y-3ys-y-yy.svg`, `-3ys-y-y-y`, `-4ys-y-yyy`, `-4ys-yy-yy` and `multi-y-multiple-axes.svg`.
@@ -5817,13 +5817,35 @@ annotation rectangle using its top-left plus half its width/height, and warns th
 anchor was written as a fixed position. A bare native reopen therefore has the existing
 centre-based representation; the companion restores dynamic top-left placement.
 
-This closes the provisional **anchor/font/background** defaults in 21.11. It does not
-establish exact native row spacing, padding or symbol lengths: those still use Sheaf's
-shared legend metrics. Native raw template text references the first plot of each layer,
-but the five-column export showed additional labels not explained by the raw text readback;
-extra-column legend membership and empty-layer row translation remain follow-ups. The
-existing automatic graph-wide legend contents are unchanged. No layer assignment, axes,
-links, dialog-plan defaults or worksheet behavior is changed here.
+**Legend entries and spacing (Origin 2016, 2026-11-23).** A fresh set of 24 EMF exports
+used independently named selections of 1, 2, N, 5, 6 and 8 Y columns for each N-axis template.
+`layer -c` confirmed the round-robin plot assignments. The visible legend starts with the
+first plot of each populated layer, followed by the extra plots in the first layer. With
+eight plots, both three-axis templates show selection positions 1, 2, 3, 4 and 7. Both
+four-axis templates show positions 1, 2, 3, 4 and 5. Empty layers contribute no row. The
+raw legend text reports only the first-plot references even after export.
+[Origin legend substitution notation](https://docs.originlab.com/labtalk/ref/legend-substitution-notation/)
+
+Twelve more exports checked plot visibility and edits in one template of each size.
+Hiding the first plot of layer 2 removes its row until it is shown again. Removing
+that plot promotes the next plot in layer 2. Adding a plot to layer 1 appends a row.
+Adding one to layer 2 leaves the selected rows as they were.
+
+| Stock template | Font height (EMF units) | Baseline step | Sample length | Gap after sample |
+|---|---:|---:|---:|---:|
+| 3Ys Y-YY | 91 | 111 | 202 | 25 |
+| 3Ys Y-Y-Y | 90 | 109 | 198 | 25 |
+| 4Ys Y-YYY | 80 | 98 | 178 | 22 |
+| 4Ys YY-YY | 84 | 103 | 188 | 23 |
+
+The eight-plot exports provide the sample and gap measurements. The baseline step is
+constant in the multirow exports of each template. Sheaf uses the measured membership
+rule and ratios of 1.22 font heights for the baseline step, 2.22 for the line sample and
+0.275 for the gap. An explicitly edited legend can refer to any visible plot by its
+layer and plot number. Existing graphs and independently constructed Multiple Y Axes
+plans use ordinary legend defaults. The Sheaf project and OPJ companion save the stock
+legend settings. A bare OPJ export writes the selected rows as text references, using
+`@LG` for the plot's column name and units.
 
 ### 21.13 Reversible layer visibility (T61 follow-up, 2026-11-16)
 

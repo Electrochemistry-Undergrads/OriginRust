@@ -383,13 +383,6 @@ impl Obs {
             _ => None,
         }
     }
-
-    fn times(&self) -> [f64; 2] {
-        match *self {
-            Obs::Exact(t) | Obs::Right(t) | Obs::Left(t) => [t, t],
-            Obs::Interval(a, b) => [a, b],
-        }
-    }
 }
 
 fn fit_of(dist: LifeDist, params: Vec<f64>) -> LifeFit {
@@ -472,17 +465,16 @@ pub fn fit_arbitrary(obs: &[Obs], dist: LifeDist) -> Result<LifeFit, LifeError> 
     if obs.is_empty() {
         return Err(LifeError::TooFewFailures(0));
     }
+    // The positive distributions need times above 0; an interval may start at 0.
     if dist != LifeDist::Normal
-        && let Some(t) = obs.iter().flat_map(|o| o.times()).find(|t| *t < 0.0 || (*t == 0.0))
+        && let Some(t) = obs.iter().find_map(|o| match *o {
+            Obs::Exact(t) | Obs::Right(t) | Obs::Left(t) if t <= 0.0 => Some(t),
+            Obs::Interval(a, _) if a < 0.0 => Some(a),
+            Obs::Interval(_, b) if b <= 0.0 => Some(b),
+            _ => None,
+        })
     {
-        // A left time of 0 or an interval starting at 0 is fine for the start; exact and right times must be above 0.
-        let ok = obs.iter().all(|o| match *o {
-            Obs::Exact(t) | Obs::Right(t) | Obs::Left(t) => t > 0.0,
-            Obs::Interval(a, b) => a >= 0.0 && b > 0.0,
-        });
-        if !ok {
-            return Err(LifeError::NotPositive(t));
-        }
+        return Err(LifeError::NotPositive(t));
     }
     let failures = obs.iter().filter(|o| !matches!(o, Obs::Right(_))).count();
     let need = if dist == LifeDist::Exponential { 1 } else { 2 };

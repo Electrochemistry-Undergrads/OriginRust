@@ -240,15 +240,29 @@ impl Graph {
     /// `l.p` (layer and plot, both from 1) when the legend lists the plots of several layers; they
     /// are what `\l(n)` and `%(n)` in the legend text refer to ([`Legend::text`]).
     pub fn legend_ids(&self, index: usize, plots_in: &dyn Fn(usize) -> usize) -> Vec<String> {
+        self.legend_ids_by_slot(index, |layer| 0..plots_in(layer))
+    }
+
+    /// The legend ID for each selected zero-based plot slot, in layer and slot order.
+    pub fn legend_ids_by_slot<I: IntoIterator<Item = usize>>(
+        &self,
+        index: usize,
+        slots_in: impl Fn(usize) -> I,
+    ) -> Vec<String> {
         let Some(layer) = self.layers.get(index) else { return Vec::new() };
         if layer.legend.scope == LegendScope::Graph {
             let layers = self.same_frame(index);
             if layers.len() > 1 {
-                return layers.iter().flat_map(|&l| (1..=plots_in(l)).map(move |k| format!("{}.{k}", l + 1))).collect();
+                return layers
+                    .into_iter()
+                    .flat_map(|l| slots_in(l).into_iter().map(move |slot| format!("{}.{}", l + 1, slot + 1)))
+                    .collect();
             }
-            return layers.first().map_or_else(Vec::new, |&l| (1..=plots_in(l)).map(|k| k.to_string()).collect());
+            return layers
+                .first()
+                .map_or_else(Vec::new, |&l| slots_in(l).into_iter().map(|slot| (slot + 1).to_string()).collect());
         }
-        (1..=plots_in(index)).map(|k| k.to_string()).collect()
+        slots_in(index).into_iter().map(|slot| (slot + 1).to_string()).collect()
     }
 
     /// The panels of the graph, in layer order: every layer except those drawn in the frame of an
@@ -2882,6 +2896,9 @@ pub struct Legend {
     /// list.
     #[serde(default = "one_column", skip_serializing_if = "is_one_column")]
     pub columns: u32,
+    /// Use the stock 3Ys/4Ys legend's measured spacing and first-plot membership.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub stock_multi_y: bool,
     /// The legend text in Origin's notation, one entry per line: `\l(n)` draws the symbol of
     /// plot n, `%(n)` is its name, any other text is shown as it is (with the label markup). `n`
     /// counts the plots the legend lists (`l.p`, layer and plot, when it lists several layers).

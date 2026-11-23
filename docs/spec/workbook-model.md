@@ -684,6 +684,11 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   label background. The grid, print, worksheet images, project files and OPJ
   companions retain the colors. Excel writes the effective colors on selected
   metadata rows, including their blank cells, and reports omitted styles.
+- **Individual label colors (T59).** `label_colors` holds optional text and
+  fill overrides for Long Name, Units, Comments and F(x)=. Each property
+  resolves from manual cell formatting, then the individual row, then
+  Column Labels. New columns inherit the same defaults. Export and project
+  persistence follow the Column Labels color rules.
 - **Vertical alignment.** The 2016 selected-A1 Format Cells and Worksheet Properties Data
   Format/Size probes (GUI 3, 2026-11-16) found no vertical text-alignment control in those
   inspected routes. Other routes and mutation semantics remain unestablished; this probe

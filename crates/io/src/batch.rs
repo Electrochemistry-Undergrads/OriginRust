@@ -166,6 +166,7 @@ pub fn place_workbook_with(
                     font_defaults: Default::default(),
                     data_colors: Default::default(),
                     column_label_colors: Default::default(),
+                    label_colors: Default::default(),
                     comparison_source: None,
                     notes_text: None,
                     graph_sheet: None,

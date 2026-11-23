@@ -57,6 +57,12 @@ pub struct Sankey {
 
 /// Lays out the diagram of `rows` (source, target, value).
 pub fn layout(rows: &[(String, String, f64)]) -> Sankey {
+    layout_in_stages(rows, &|_| None)
+}
+
+/// [`layout`] with stages given for some nodes: `stage(name)` overrides the longest-path stage when it is
+/// `Some` (an alluvial diagram puts every node in the stage of its column, T381).
+pub fn layout_in_stages(rows: &[(String, String, f64)], fixed: &dyn Fn(&str) -> Option<usize>) -> Sankey {
     let mut index: HashMap<String, usize> = HashMap::new();
     let mut names: Vec<String> = Vec::new();
     let mut id = |name: &str, names: &mut Vec<String>| -> usize {
@@ -120,6 +126,11 @@ pub fn layout(rows: &[(String, String, f64)]) -> Sankey {
         }
         if !changed {
             break;
+        }
+    }
+    for (i, name) in names.iter().enumerate() {
+        if let Some(s) = fixed(name) {
+            stage[i] = s;
         }
     }
     let stages = stage.iter().copied().max().unwrap_or(0) + 1;
@@ -251,5 +262,14 @@ mod tests {
             layout(&rows(&[("A", "B", 1.0), ("B", "A", 1.0), ("", "B", 1.0), ("A", "C", f64::NAN), ("A", "A", 2.0)]));
         assert_eq!((s.links.len(), s.dropped_cycles), (1, 1));
         assert!(layout(&[]).nodes.is_empty());
+    }
+
+    #[test]
+    fn fixed_stages_override_the_longest_path() {
+        // "b" has no incoming link, so by itself it would be in stage 0.
+        let s = layout_in_stages(&rows(&[("a", "x", 1.0), ("b", "y", 1.0)]), &|n| (n == "b").then_some(1));
+        let stage = |name: &str| s.nodes.iter().find(|n| n.name == name).unwrap().stage;
+        assert_eq!((stage("a"), stage("b"), stage("y")), (0, 1, 1), "y keeps its longest path, 1");
+        assert_eq!(s.stages, 2);
     }
 }

@@ -223,6 +223,8 @@ pub enum Template {
     Sunburst,
     /// Sankey diagram (Origin 2020, T379): flows of a value column between the nodes of a source and a target column.
     Sankey,
+    /// Alluvial diagram (Origin 2020, T381): category columns as stages, rows flowing through their cells.
+    Alluvial,
     /// Cause-and-effect (fishbone) diagram (Origin 2026, T375): the chosen columns are the categories, their
     /// cells the causes; drawn as line and text objects in one layer without axes.
     Fishbone,
@@ -241,7 +243,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 103] = [
+    pub const ALL: [Template; 104] = [
         Template::Line,
         Template::Scatter3d,
         Template::Trajectory3d,
@@ -300,6 +302,7 @@ impl Template {
         Template::Treemap,
         Template::Sunburst,
         Template::Sankey,
+        Template::Alluvial,
         Template::Fishbone,
         Template::Bubble,
         Template::ColorMapped,
@@ -452,6 +455,7 @@ impl Template {
             Template::Treemap => "treemap",
             Template::Sunburst => "sunburst",
             Template::Sankey => "sankey",
+            Template::Alluvial => "alluvial",
             Template::Fishbone => "fishbone",
         }
     }
@@ -560,6 +564,7 @@ impl Template {
             Template::Treemap => "Treemap",
             Template::Sunburst => "Sunburst Plot",
             Template::Sankey => "Sankey Diagram",
+            Template::Alluvial => "Alluvial Diagram",
             Template::Fishbone => "Cause-and-Effect Diagram",
         }
     }
@@ -800,7 +805,7 @@ impl Template {
                 }
                 g
             }
-            Template::Sankey => {
+            Template::Sankey | Template::Alluvial => {
                 // The nodes and bands fill the layer's frame: no axes, no legend (the names are beside the nodes).
                 let mut g = general(id, name, PlotKind::Sankey);
                 for l in &mut g.layers {
@@ -1933,7 +1938,8 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 103);
+        assert_eq!(Template::ALL.len(), 104);
+        assert_eq!(Template::from_name("alluvial"), Some(Template::Alluvial));
         assert_eq!(Template::from_name("sankey"), Some(Template::Sankey));
         assert_eq!(Template::from_name("fishbone"), Some(Template::Fishbone));
         assert_eq!(Template::from_name("piper"), Some(Template::Piper));

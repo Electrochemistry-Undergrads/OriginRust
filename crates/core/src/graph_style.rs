@@ -823,6 +823,11 @@ pub struct SankeyStyle {
     pub source: Option<ColumnId>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target: Option<ColumnId>,
+    /// An alluvial diagram (T381): the category columns that are its stages, left to right; when set,
+    /// `source` and `target` are not used. Every row flows through its cells, weighted by the plot's Y value,
+    /// or 1 when the Y column is not numeric (counts).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub stages: Vec<ColumnId>,
 }
 
 impl SankeyStyle {

@@ -21,11 +21,13 @@ pub struct LifeDistSpec {
     pub censor: String,
     /// Make the four graphs: probability plot, density, survival and hazard.
     pub graph: bool,
+    /// The last chosen column holds each row's frequency (count) (T394).
+    pub frequency: bool,
 }
 
 impl Default for LifeDistSpec {
     fn default() -> Self {
-        LifeDistSpec { dist: LifeDist::Weibull, censor: "1".into(), graph: true }
+        LifeDistSpec { dist: LifeDist::Weibull, censor: "1".into(), graph: true, frequency: false }
     }
 }
 
@@ -34,12 +36,71 @@ impl Default for LifeDistSpec {
 pub struct LifeDistArbitrarySpec {
     pub dist: LifeDist,
     pub graph: bool,
+    /// The last chosen column holds each row's frequency (count) (T394).
+    pub frequency: bool,
 }
 
 impl Default for LifeDistArbitrarySpec {
     fn default() -> Self {
-        LifeDistArbitrarySpec { dist: LifeDist::Weibull, graph: true }
+        LifeDistArbitrarySpec { dist: LifeDist::Weibull, graph: true, frequency: false }
     }
+}
+
+/// What [`Tool::LifeRegression`] does: the chosen columns are the covariates, then the time and the censor column.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LifeRegressionSpec {
+    /// Weibull, lognormal or exponential.
+    pub dist: LifeDist,
+    /// The value of the censor column that marks a censored case (default 1).
+    pub censor: String,
+    /// The last chosen column holds each row's frequency (count) (T394).
+    pub frequency: bool,
+}
+
+impl Default for LifeRegressionSpec {
+    fn default() -> Self {
+        LifeRegressionSpec { dist: LifeDist::Weibull, censor: "1".into(), frequency: false }
+    }
+}
+
+/// The chosen columns without the frequency column, and the frequencies by row when the last chosen column holds them
+/// (T394; `None`: every row counts once).
+fn split_frequency<'a>(
+    sheet: &Worksheet,
+    columns: &'a [ColumnId],
+    on: bool,
+) -> Result<(&'a [ColumnId], Option<Vec<f64>>), AnalysisError> {
+    if !on {
+        return Ok((columns, None));
+    }
+    let Some((last, rest)) = columns.split_last() else {
+        return Err(AnalysisError::BadOption("choose the frequency column last".into()));
+    };
+    let c = sheet.column(*last).ok_or(AnalysisError::NoSuchColumn(*last))?;
+    let v = sheet.values_of(c).ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))?.into_owned();
+    Ok((rest, Some(v)))
+}
+
+/// How many times row `r` counts: once without frequencies; a missing, negative or fractional frequency is refused.
+fn count_of(counts: &Option<Vec<f64>>, r: usize) -> Result<usize, AnalysisError> {
+    let Some(v) = counts else { return Ok(1) };
+    let c = v.get(r).copied().unwrap_or(f64::NAN);
+    if c >= 0.0 && c.fract() == 0.0 && c <= 1e6 {
+        Ok(c as usize)
+    } else {
+        Err(AnalysisError::BadOption(format!(
+            "row {}: the frequency must be a whole number of 0 or more (got {c})",
+            r + 1
+        )))
+    }
+}
+
+/// The frequencies may not add up to more than a million rows.
+fn check_total(n: usize) -> Result<(), AnalysisError> {
+    if n > 1_000_000 {
+        return Err(AnalysisError::BadOption("the frequencies add up to more than 1,000,000 rows".into()));
+    }
+    Ok(())
 }
 
 fn column_of(name: &str, comments: &str, designation: Designation, values: Vec<f64>) -> SheetColumn {
@@ -62,9 +123,11 @@ pub(super) fn run(
     if censor.is_empty() {
         return Err(AnalysisError::BadOption("give the value of the censor column that marks a censored case".into()));
     }
+    let (columns, counts) = split_frequency(sheet, columns, spec.frequency)?;
     let [time_id, censor_id] = columns else {
         return Err(AnalysisError::BadOption(
-            "the distribution overview takes two columns: the time and the censor column".into(),
+            "the distribution overview takes two columns: the time and the censor column (and the frequency last)"
+                .into(),
         ));
     };
     let column = |id: ColumnId| sheet.column(id).ok_or(AnalysisError::NoSuchColumn(id));
@@ -84,8 +147,11 @@ pub(super) fn run(
             continue;
         }
         let Some(is_censored) = cell_equals(censor_col, row, censor, censor_number) else { continue };
-        t.push(v);
-        c.push(is_censored);
+        for _ in 0..count_of(&counts, row)? {
+            t.push(v);
+            c.push(is_censored);
+        }
+        check_total(t.len())?;
     }
     let fit = fit_right_censored(&t, &c, spec.dist).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
     let label = column_label(time_col);
@@ -248,12 +314,110 @@ pub(super) fn run(
     Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph, more_graphs }.shift_graphs(shift))
 }
 
+pub(super) fn run_regression(
+    spec: &LifeRegressionSpec,
+    sheet: &Worksheet,
+    columns: &[ColumnId],
+    rows: RowRange,
+) -> Result<Output, AnalysisError> {
+    let censor = spec.censor.trim();
+    if censor.is_empty() {
+        return Err(AnalysisError::BadOption("give the value of the censor column that marks a censored case".into()));
+    }
+    let (columns, counts) = split_frequency(sheet, columns, spec.frequency)?;
+    if columns.len() < 3 {
+        return Err(AnalysisError::BadOption(
+            "life-data regression takes the covariate column(s), then the time and the censor column (and the frequency last)".into(),
+        ));
+    }
+    let column = |id: ColumnId| sheet.column(id).ok_or(AnalysisError::NoSuchColumn(id));
+    let read = |c: &Column| -> Result<Vec<f64>, AnalysisError> {
+        sheet.values_of(c).map(|v| v.into_owned()).ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))
+    };
+    let k = columns.len() - 2;
+    let xcs: Vec<&Column> = columns[..k].iter().map(|id| column(*id)).collect::<Result<_, _>>()?;
+    let tc = column(columns[k])?;
+    let cc = column(columns[k + 1])?;
+    let x_all: Vec<Vec<f64>> = xcs.iter().map(|c| read(c)).collect::<Result<_, _>>()?;
+    let t_all = read(tc)?;
+    let n = x_all.iter().map(Vec::len).chain([t_all.len(), cc.data.len()]).max().unwrap_or(0);
+    if n == 0 {
+        return Err(AnalysisError::Empty(tc.short_name.clone()));
+    }
+    let (first, last) = resolve_rows(rows, &tc.short_name, &[], n)?;
+    let censor_number = censor.parse::<f64>().ok();
+    let (mut x, mut t, mut failed) = (Vec::new(), Vec::new(), Vec::new());
+    for r in first..=last {
+        let row: Vec<f64> = x_all.iter().map(|c| c.get(r).copied().unwrap_or(f64::NAN)).collect();
+        let v = t_all.get(r).copied().unwrap_or(f64::NAN);
+        if !v.is_finite() || row.iter().any(|a| !a.is_finite()) || cell_left_out(sheet, cc, r) {
+            continue;
+        }
+        let Some(is_censored) = cell_equals(cc, r, censor, censor_number) else { continue };
+        for _ in 0..count_of(&counts, r)? {
+            x.push(row.clone());
+            t.push(v);
+            failed.push(!is_censored);
+        }
+        check_total(t.len())?;
+    }
+    let fit = calc::lifereg::life_regression(&x, &t, &failed, spec.dist)
+        .map_err(|e| AnalysisError::BadOption(e.to_string()))?;
+    let mut table = ResultTable::new(&["Coefficient", "Standard error", "z", "Prob>|z|"]);
+    table.push_row(
+        "Intercept".into(),
+        vec![fit.coefficients[0], fit.se[0], fit.z[0], fit.p[0]],
+        vec![String::new(); 4],
+    );
+    for (i, c) in xcs.iter().enumerate() {
+        table.push_row(
+            column_label(c),
+            vec![fit.coefficients[i + 1], fit.se[i + 1], fit.z[i + 1], fit.p[i + 1]],
+            vec![String::new(); 4],
+        );
+    }
+    table.push_row("Scale (sigma)".into(), vec![fit.scale, fit.scale_se, f64::NAN, f64::NAN], vec![String::new(); 4]);
+    let free = fit.coefficients.len() + usize::from(spec.dist != LifeDist::Exponential);
+    let mut notes = vec![format!(
+        "{} accelerated failure time model of ln {} on {} covariate(s): {} rows, {} failures; log-likelihood {}, AIC {}.",
+        spec.dist.name(),
+        column_label(tc),
+        k,
+        fit.n,
+        fit.failures,
+        num(fit.log_likelihood),
+        num(2.0 * free as f64 - 2.0 * fit.log_likelihood)
+    )];
+    notes.push(match spec.dist {
+        LifeDist::Weibull => format!(
+            "Coefficients act on log time (exp(b) multiplies the life); Weibull shape = 1 / scale = {}.",
+            num(1.0 / fit.scale)
+        ),
+        LifeDist::Exponential => {
+            "Coefficients act on log time (exp(b) multiplies the mean life); the scale is fixed at 1.".into()
+        }
+        _ => "Coefficients act on log time (exp(b) multiplies the median life).".into(),
+    });
+    let mut sheet_cols = vec![SheetColumn {
+        designation: Designation::Label,
+        long_name: "Term".into(),
+        units: String::new(),
+        comments: String::new(),
+        data: ColumnData::text(table.rows.iter().map(|(l, _)| l.clone()).collect()),
+    }];
+    for (i, h) in table.headers.iter().enumerate() {
+        sheet_cols.push(column_of(h, "", Designation::Y, table.rows.iter().map(|(_, v)| v[i]).collect()));
+    }
+    Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph: None, more_graphs: Vec::new() })
+}
+
 pub(super) fn run_arbitrary(
     spec: &LifeDistArbitrarySpec,
     sheet: &Worksheet,
     columns: &[ColumnId],
     rows: RowRange,
 ) -> Result<Output, AnalysisError> {
+    let (columns, counts) = split_frequency(sheet, columns, spec.frequency)?;
     let [start_id, end_id] = columns else {
         return Err(AnalysisError::BadOption(
             "distribution analysis with arbitrary censoring takes two columns: the start and the end of each failure window".into(),
@@ -280,7 +444,12 @@ pub(super) fn run_arbitrary(
             continue;
         }
         match Obs::from_columns(a, b) {
-            Some(o) => obs.push(o),
+            Some(o) => {
+                for _ in 0..count_of(&counts, r)? {
+                    obs.push(o);
+                }
+                check_total(obs.len())?;
+            }
             None => {
                 return Err(AnalysisError::BadOption(format!("row {}: the start {a} is after the end {b}", r + 1)));
             }
@@ -431,6 +600,67 @@ mod tests {
         assert!(out.new_graph.is_none() && out.notes[0].contains("Weibull fit to 5 cases"), "{:?}", out.notes);
         assert!(p.analyze(&request(vec![t], LifeDistSpec::default())).is_err());
         assert!(p.analyze(&request(vec![t, c], LifeDistSpec { censor: " ".into(), ..Default::default() })).is_err());
+    }
+
+    #[test]
+    fn a_frequency_counts_a_row_as_often_as_copies_of_it() {
+        let mut p = Project::new();
+        let book = p.add_workbook("freq");
+        // Rows with counts 2, 1, 3, 1, 2 and the same data written out row by row.
+        let (t, c, f) = ([2.0, 4.0, 6.0, 8.0, 9.0], [0.0, 0.0, 1.0, 0.0, 1.0], [2.0, 1.0, 3.0, 1.0, 2.0]);
+        let mut te = Vec::new();
+        let mut ce = Vec::new();
+        for i in 0..5 {
+            for _ in 0..f[i] as usize {
+                te.push(t[i]);
+                ce.push(c[i]);
+            }
+        }
+        let add = |p: &mut Project, v: Vec<f64>| p.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap();
+        let (tc, cc, fc) = (add(&mut p, t.to_vec()), add(&mut p, c.to_vec()), add(&mut p, f.to_vec()));
+        let (tec, cec) = (add(&mut p, te), add(&mut p, ce));
+        let spec = LifeDistSpec { graph: false, frequency: true, ..Default::default() };
+        let weighted = p.analyze(&request(vec![tc, cc, fc], spec)).unwrap();
+        let spec = LifeDistSpec { graph: false, ..Default::default() };
+        let expanded = p.analyze(&request(vec![tec, cec], spec)).unwrap();
+        let (w, e) = (&weighted.table.as_ref().unwrap().rows[0].1, &expanded.table.as_ref().unwrap().rows[0].1);
+        assert_eq!(w, e, "the same fit");
+        assert_eq!(w[0], 9.0);
+        // The same with the start/end form: equal start and end are exact failures.
+        let any = |cols: Vec<ColumnId>, frequency: bool| Request {
+            columns: cols,
+            rows: RowRange::All,
+            tool: Tool::LifeDistArbitrary(LifeDistArbitrarySpec { graph: false, frequency, ..Default::default() }),
+        };
+        let ends = add(&mut p, vec![2.0, 4.0, f64::NAN, 8.0, f64::NAN]);
+        let w = p.analyze(&any(vec![tc, ends, fc], true)).unwrap();
+        let ends_e = add(&mut p, vec![2.0, 2.0, 4.0, f64::NAN, f64::NAN, f64::NAN, 8.0, f64::NAN, f64::NAN]);
+        let e = p.analyze(&any(vec![tec, ends_e], false)).unwrap();
+        assert_eq!(w.table.as_ref().unwrap().rows[0].1, e.table.as_ref().unwrap().rows[0].1);
+        let bad = add(&mut p, vec![1.0, 0.5, 1.0, 1.0, 1.0]);
+        let spec = LifeDistSpec { frequency: true, ..Default::default() };
+        assert!(p.analyze(&request(vec![tc, cc, bad], spec)).is_err(), "a fractional frequency");
+    }
+
+    #[test]
+    fn a_covariate_shortens_life_in_the_regression() {
+        let mut p = Project::new();
+        let book = p.add_workbook("lr");
+        let x: Vec<f64> = (0..20).map(|i| f64::from(i % 2)).collect();
+        let t: Vec<f64> =
+            (0..20).map(|i| (2.0 - 0.8 * f64::from(i % 2) + 0.3 * (f64::from(i) * 1.3).sin()).exp()).collect();
+        let c: Vec<f64> = (0..20).map(|i| if i % 7 == 3 { 1.0 } else { 0.0 }).collect();
+        let cols: Vec<ColumnId> = [x, t, c]
+            .into_iter()
+            .map(|v| p.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap())
+            .collect();
+        let out = p
+            .analyze(&Request { columns: cols, rows: RowRange::All, tool: Tool::LifeRegression(Default::default()) })
+            .unwrap();
+        let t = out.table.as_ref().unwrap();
+        assert_eq!(t.rows.len(), 3, "intercept, covariate, scale");
+        assert!((t.rows[1].1[0] + 0.8).abs() < 0.2, "{:?}", t.rows[1]);
+        assert!(out.notes[0].contains("20 rows, 17 failures"), "{:?}", out.notes);
     }
 
     #[test]

@@ -1363,9 +1363,12 @@ impl Project {
         if template == Template::Treemap {
             // The category columns are the columns of text, in selection order (else those of the value column's
             // sheet); the value is the last numeric column.
-            let value =
-                ys.iter().rev().copied().find(|y| self.numeric(*y).is_some()).ok_or(ProjectError::TreemapNeedsValue)?;
             let mut categories: Vec<ColumnId> = ys.iter().copied().filter(|y| self.numeric(*y).is_none()).collect();
+            // No numeric column: a nested frequency treemap, every row counts 1 (T392).
+            let Some(value) = ys.iter().rev().copied().find(|y| self.numeric(*y).is_some()) else {
+                let first = *categories.first().ok_or(ProjectError::TreemapNeedsValue)?;
+                return self.plot_treemap(&categories, first);
+            };
             if categories.is_empty() {
                 categories = self.treemap_default_categories(value);
             }
@@ -1442,13 +1445,12 @@ impl Project {
         if template == Template::Sunburst {
             // Like the treemap: the columns of text are the rings, in selection order (else those of the value
             // column's sheet); the value is the last numeric column.
-            let value = ys
-                .iter()
-                .rev()
-                .copied()
-                .find(|y| self.numeric(*y).is_some())
-                .ok_or(ProjectError::SunburstNeedsValue)?;
             let mut categories: Vec<ColumnId> = ys.iter().copied().filter(|y| self.numeric(*y).is_none()).collect();
+            // No numeric column: a nested frequency doughnut, every row counts 1 (T392).
+            let Some(value) = ys.iter().rev().copied().find(|y| self.numeric(*y).is_some()) else {
+                let first = *categories.first().ok_or(ProjectError::SunburstNeedsValue)?;
+                return self.plot_sunburst(&categories, first);
+            };
             if categories.is_empty() {
                 categories = self.treemap_default_categories(value);
             }
@@ -1577,12 +1579,14 @@ impl Project {
         for c in categories.iter().chain([&value]) {
             self.column(*c).ok_or(ProjectError::NoSuchColumn(*c))?;
         }
-        if self.numeric(value).is_none() {
+        // A value column of text counts the rows (nested frequencies, T392); it must then be a category.
+        let counted = self.numeric(value).is_none();
+        if counted && !categories.contains(&value) {
             return Err(ProjectError::TreemapNeedsValue);
         }
         let mut cats: Vec<ColumnId> = Vec::new();
         for c in categories {
-            if *c != value && !cats.contains(c) {
+            if (counted || *c != value) && !cats.contains(c) {
                 cats.push(*c);
             }
         }
@@ -1972,12 +1976,14 @@ impl Project {
         for c in categories.iter().chain([&value]) {
             self.column(*c).ok_or(ProjectError::NoSuchColumn(*c))?;
         }
-        if self.numeric(value).is_none() {
+        // A value column of text counts the rows (nested frequencies, T392); it must then be a category.
+        let counted = self.numeric(value).is_none();
+        if counted && !categories.contains(&value) {
             return Err(ProjectError::SunburstNeedsValue);
         }
         let mut cats: Vec<ColumnId> = Vec::new();
         for c in categories {
-            if *c != value && !cats.contains(c) {
+            if (counted || *c != value) && !cats.contains(c) {
                 cats.push(*c);
             }
         }

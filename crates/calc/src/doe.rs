@@ -246,10 +246,10 @@ pub fn effects(x: &[Vec<f64>], y: &[f64]) -> Result<Effects, DoeError> {
     let row = |r: usize| -> Vec<f64> { std::iter::once(1.0).chain(terms.iter().map(|t| t.1[r])).collect() };
     let mut xtx = vec![vec![0.0; m]; m];
     let mut xty = vec![0.0; m];
-    for r in 0..n {
+    for (r, yr) in y.iter().enumerate() {
         let xr = row(r);
         for i in 0..m {
-            xty[i] += xr[i] * y[r];
+            xty[i] += xr[i] * yr;
             for j in 0..m {
                 xtx[i][j] += xr[i] * xr[j];
             }

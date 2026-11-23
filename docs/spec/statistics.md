@@ -2061,6 +2061,27 @@ fitted values, SSE, final states and forecasts are checked against numpy, and th
 (L-BFGS-B from many starts and Powell), in `tools/expsmooth-ref.py` and `crates/calc/tests/expsmooth_reference.rs`.
 Prediction intervals, damped trends, the ETS state-space likelihood and ARIMA are not built.
 
+## 43 ARIMA forecast (T376, Origin 2024b Time Series Analysis app; not measured)
+
+Origin's Time Series Analysis app (2024b Pro) is not part of Origin 2016, so this is Sheaf's own. Statistics > ARIMA
+Forecast... (`Tool::Arima`, `sheaf analyze arima --y COL[,COL..] [--p 1] [--d 0] [--q 0] [--no-constant] [--horizon
+10] [--confidence 95] [--no-graph]`): every chosen column is a series of its own, in row order, complete in the chosen
+rows. The series is differenced `d` times to `w`; with mean `mu` (the constant; a drift when `d = 1`) the model is
+`w_t - mu = sum phi_i (w_{t-i} - mu) + e_t + sum theta_j e_{t-j}`. The conditional sum of squares (errors before `t =
+p` taken as 0, summed from `t = p`) is minimized by Nelder-Mead from `mu = mean(w)`, `phi = theta = 0`, restarted from
+its best point until it stops improving; stationarity and invertibility are not imposed. `sigma^2 = SS / m` over the `m`
+summed errors and `AIC = m ln(2 pi sigma^2) + m + 2 (k + 1)`. The one-step prediction of `y_t` is `y_t - e` (empty for
+the first `d + p` rows). Forecasts set future errors to 0 and undo the differences; the bands are `forecast -+ z sigma
+sqrt(sum_{j<h} psi_j^2)` with the psi weights of `phi(B) (1 - B)^d y = theta(B) e`.
+
+The result sheet `ARIMAN` has one row per coefficient (Mean or Constant (drift), AR i, MA j) and the sum of squares,
+sigma^2 and AIC per column, then per column the X, data, one-step predictions, residuals, forecast X (the last X step
+continued), forecasts and lower and upper band; a new graph per column draws the data, predictions, forecasts and
+bands. At given parameters the errors, forecasts and standard errors are checked against numpy, and the fitted sum
+of squares against scipy's minimum (Nelder-Mead, BFGS), in `tools/arima-ref.py` and `crates/calc/tests/arima_reference.rs`.
+Exact (Kalman) maximum likelihood, coefficient standard errors, seasonal ARIMA and automatic order choice are not
+built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

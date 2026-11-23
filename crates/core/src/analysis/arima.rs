@@ -1,0 +1,198 @@
+//! Statistics > ARIMA Forecast as a tool of `Project::analyze` (T376; Origin 2024b's Time Series Analysis app, not
+//! in Origin 2016, so the layout is Sheaf's own). The numerics are in `sheaf_calc::arima`; `docs/spec/statistics.md`
+//! section 43 says what is computed and written.
+//!
+//! Every chosen column is a series of its own, in row order; it must be complete in the chosen rows.
+
+use super::dist::{GraphPlot, Output, XyGraph};
+use super::statistics::num;
+use super::*;
+use crate::graph::{PlotKind, ScaleKind};
+use calc::arima::{ArimaOrder, fit};
+
+/// What [`Tool::Arima`] does.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ArimaSpec {
+    pub p: usize,
+    pub d: usize,
+    pub q: usize,
+    /// A constant: the mean of the differenced series (a drift when `d = 1`).
+    pub constant: bool,
+    pub horizon: usize,
+    /// Confidence level of the forecast bands (0.95).
+    pub confidence: f64,
+    pub graph: bool,
+}
+
+impl Default for ArimaSpec {
+    fn default() -> Self {
+        ArimaSpec { p: 1, d: 0, q: 0, constant: true, horizon: 10, confidence: 0.95, graph: true }
+    }
+}
+
+fn column_of(name: &str, comments: &str, designation: Designation, values: Vec<f64>) -> SheetColumn {
+    SheetColumn {
+        designation,
+        long_name: name.to_string(),
+        units: String::new(),
+        comments: comments.to_string(),
+        data: ColumnData::numeric(values),
+    }
+}
+
+pub(super) fn run(spec: &ArimaSpec, inputs: &[Input<'_>]) -> Result<Output, AnalysisError> {
+    if !(spec.confidence > 0.0 && spec.confidence < 1.0) {
+        return Err(AnalysisError::BadOption("the confidence level must lie between 0 and 1".into()));
+    }
+    let order = ArimaOrder { p: spec.p, d: spec.d, q: spec.q, constant: spec.constant };
+    let z = calc::standard_quantile(calc::Family::Normal, 1.0, 0.5 + spec.confidence / 2.0);
+    let pct = num(100.0 * spec.confidence);
+    let mut table = ResultTable::new(&["Value"]);
+    let mut notes = Vec::new();
+    let mut on_sheet = Vec::new();
+    let mut graphs = Vec::new();
+    for input in inputs {
+        let m = fit(input.ys(), order, spec.horizon)
+            .map_err(|e| AnalysisError::BadOption(format!("{}: {e}", input.label)))?;
+        let mut names = Vec::new();
+        if spec.constant {
+            names.push(if spec.d == 0 { "Mean".to_string() } else { "Constant (drift)".to_string() });
+        }
+        names.extend((1..=spec.p).map(|i| format!("AR {i}")));
+        names.extend((1..=spec.q).map(|i| format!("MA {i}")));
+        for (name, v) in names.iter().zip(&m.params) {
+            table.push_row(format!("{}, {name}", input.label), vec![*v], vec![String::new()]);
+        }
+        for (name, v) in [("Sum of squares", m.ss), ("Sigma^2", m.sigma2), ("AIC", m.aic)] {
+            table.push_row(format!("{}, {name}", input.label), vec![v], vec![String::new()]);
+        }
+        let coefs: Vec<String> = names.iter().zip(&m.params).map(|(n, v)| format!("{n} {}", num(*v))).collect();
+        notes.push(format!(
+            "{}: ARIMA({},{},{}) by conditional least squares: {}; sigma^2 {}, AIC {}; {} forecast(s) from {} to {}.",
+            input.label,
+            spec.p,
+            spec.d,
+            spec.q,
+            if coefs.is_empty() { "no coefficients".to_string() } else { coefs.join(", ") },
+            num(m.sigma2),
+            num(m.aic),
+            spec.horizon,
+            m.forecast.first().map_or("-".to_string(), |v| num(*v)),
+            m.forecast.last().map_or("-".to_string(), |v| num(*v))
+        ));
+        let comment = format!("ARIMA({},{},{}) of {}", spec.p, spec.d, spec.q, input.name);
+        let xs = input.xs().to_vec();
+        let step = if xs.len() >= 2 { xs[xs.len() - 1] - xs[xs.len() - 2] } else { 1.0 };
+        let step = if step.is_finite() && step != 0.0 { step } else { 1.0 };
+        let last_x = xs.last().copied().unwrap_or(0.0);
+        let x = on_sheet.len();
+        on_sheet.push(column_of(&input.x_name, &comment, Designation::X, xs));
+        on_sheet.push(column_of(&input.name, &comment, Designation::Y, input.ys().to_vec()));
+        on_sheet.push(column_of("One-step prediction", &comment, Designation::Y, m.fitted.clone()));
+        on_sheet.push(column_of(
+            "Residual",
+            &comment,
+            Designation::Y,
+            input.ys().iter().zip(&m.fitted).map(|(y, f)| y - f).collect(),
+        ));
+        let fx = on_sheet.len();
+        on_sheet.push(column_of(
+            &format!("Forecast {}", input.x_name),
+            &comment,
+            Designation::X,
+            (1..=spec.horizon).map(|h| last_x + step * h as f64).collect(),
+        ));
+        on_sheet.push(column_of("Forecast", &comment, Designation::Y, m.forecast.clone()));
+        on_sheet.push(column_of(
+            &format!("Lower {pct}%"),
+            &comment,
+            Designation::Y,
+            m.forecast.iter().zip(&m.forecast_se).map(|(f, s)| f - z * s).collect(),
+        ));
+        on_sheet.push(column_of(
+            &format!("Upper {pct}%"),
+            &comment,
+            Designation::Y,
+            m.forecast.iter().zip(&m.forecast_se).map(|(f, s)| f + z * s).collect(),
+        ));
+        if spec.graph {
+            graphs.push(XyGraph {
+                plots: vec![
+                    GraphPlot { x, y: x + 1, kind: PlotKind::LineSymbol, label: input.label.clone(), line_of: None },
+                    GraphPlot { x, y: x + 2, kind: PlotKind::Line, label: "One-step prediction".into(), line_of: None },
+                    GraphPlot { x: fx, y: fx + 1, kind: PlotKind::LineSymbol, label: "Forecast".into(), line_of: None },
+                    GraphPlot {
+                        x: fx,
+                        y: fx + 2,
+                        kind: PlotKind::Line,
+                        label: format!("Lower {pct}%"),
+                        line_of: Some(2),
+                    },
+                    GraphPlot {
+                        x: fx,
+                        y: fx + 3,
+                        kind: PlotKind::Line,
+                        label: format!("Upper {pct}%"),
+                        line_of: Some(2),
+                    },
+                ],
+                x_scale: ScaleKind::Linear,
+                y_scale: ScaleKind::Linear,
+                x_title: input.x_name.clone(),
+                y_title: input.name.clone(),
+                look: Default::default(),
+            });
+        }
+    }
+    notes.push(format!(
+        "Forecast bands: forecast -+ {} times the standard error from the psi weights (future errors taken as 0).",
+        num(z)
+    ));
+    let mut sheet = vec![SheetColumn {
+        designation: Designation::Label,
+        long_name: "Data".into(),
+        units: String::new(),
+        comments: String::new(),
+        data: ColumnData::text(table.rows.iter().map(|(l, _)| l.clone()).collect()),
+    }];
+    sheet.push(column_of("Value", "", Designation::Y, table.rows.iter().map(|(_, v)| v[0]).collect()));
+    let shift = sheet.len();
+    sheet.extend(on_sheet);
+    let (graph, more_graphs) = if graphs.is_empty() {
+        (None, Vec::new())
+    } else {
+        let first = graphs.remove(0);
+        (Some(first), graphs)
+    };
+    Ok(Output { table: Some(table), on_sheet: sheet, notes, graph, more_graphs }.shift_graphs(shift))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn request(columns: Vec<ColumnId>, spec: ArimaSpec) -> Request {
+        Request { columns, rows: RowRange::All, tool: Tool::Arima(spec) }
+    }
+
+    #[test]
+    fn a_drifting_walk_and_its_forecast_bands() {
+        let mut p = Project::new();
+        let book = p.add_workbook("ts");
+        let walk = vec![0.0, 1.0, 3.0, 4.0, 6.0, 7.0, 9.0];
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(walk)).unwrap();
+        let spec = ArimaSpec { p: 0, d: 1, q: 0, horizon: 2, ..Default::default() };
+        let out = p.analyze(&request(vec![y], spec)).unwrap();
+        let t = out.table.as_ref().unwrap();
+        assert_eq!(t.rows[0].0, "A, Constant (drift)");
+        assert!((t.rows[0].1[0] - 1.5).abs() < 1e-9, "{:?}", t.rows[0]);
+        let cols = super::super::dist::plot_columns(&p, out.new_graph.unwrap());
+        assert_eq!(cols[2].1, "Forecast", "{cols:?}");
+        assert_eq!(cols[4].1, "Upper 95%");
+        let g = p.graph(out.new_graph.unwrap()).unwrap();
+        let fc = p.column(g.layers[0].plots[2].y).unwrap().numeric().unwrap().to_vec();
+        assert!((fc[1] - 12.0).abs() < 1e-8, "{fc:?}");
+        let none = ArimaSpec { p: 0, d: 0, q: 0, constant: false, ..Default::default() };
+        assert!(p.analyze(&request(vec![y], none)).is_err());
+    }
+}

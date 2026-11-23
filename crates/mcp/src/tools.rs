@@ -1,5 +1,7 @@
 //! The tools: each reads its arguments, calls `sheaf-ops` and turns the result into JSON.
 
+mod merge_graphs;
+
 use crate::exec::Ctx;
 use crate::schemas::{self, Def};
 use crate::{analysis_tools, b64, bridge};
@@ -177,6 +179,7 @@ pub fn call(server: &mut Ctx, name: &str, a: &Value) -> Res {
         "read_columns" => read_columns(server, a),
         "set_column_values" => set_column_values(server, a),
         "plot" => plot(server, a),
+        "merge_graphs" => merge_graphs::run(server, a),
         "export_graph" => export_graph(server, a),
         "export_data" => export_data(server, a),
         "list_analysis_tools" => {

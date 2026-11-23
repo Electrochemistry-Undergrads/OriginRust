@@ -4,7 +4,9 @@
 Move to Layer, multi-Y templates and the Multiple Y Axes dialog are implemented. Graphing
 21.13–21.17 records layer visibility, the New Layer (Axes) dialog, icon switches and Layer
 Management Add. Auto Offset Overlapped Axes works for the five linked full-frame presets
-(21.15). User Defined, custom scales and auto-offset placement for unlinked layers remain open.
+(21.15). Origin 2016 leaves the unlinked Bottom-X Left-Y axis positions at zero with either
+offset setting, so Sheaf keeps that preset's control disabled. User Defined and custom scales
+remain open.
 **Size:** L, three slices.
 Legend-anchor follow-up (`codex/multi-y-template-legends`): the four stock templates use
 measured top-left positions above the frame, Arial 22 pt (YY-YY: 20 pt), and no frame or background.

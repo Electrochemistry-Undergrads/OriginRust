@@ -5840,6 +5840,30 @@ fn the_statistics_menu_makes_a_rare_event_chart() {
     assert_eq!(h.state().doc.undo_label(), Some("Rare event chart"));
 }
 
+/// Statistics > Random Forest... (T377): two predictors and a text class give the importance, the out-of-bag
+/// predictions and a graph; one undo step.
+#[test]
+fn the_statistics_menu_grows_a_random_forest() {
+    let mut text = String::from("id,a,b,kind\n");
+    for i in 0..40 {
+        let kind = if i % 10 >= 5 { "high" } else { "low" };
+        text.push_str(&format!("{i},{},{},{kind}\n", i % 10, (i * 7) % 5));
+    }
+    let data = csv_file("randomforest", "rf", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - rf.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Random Forest (Machine Learning)..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Predictors per split (0: auto)"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
+    let (sheet, imp) = result_column(&h, "Importance");
+    assert!(sheet.starts_with("RandomForest"), "{sheet}");
+    assert!(imp.len() == 2 && imp[0] > imp[1], "a decides the class: {imp:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Random forest"));
+}
+
 /// Statistics > ARIMA Forecast... (T376): an AR(1) with mean, forecasts with bands, a graph, one undo step.
 #[test]
 fn the_statistics_menu_makes_an_arima_forecast() {

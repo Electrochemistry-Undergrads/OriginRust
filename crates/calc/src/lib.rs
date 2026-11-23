@@ -31,6 +31,7 @@ pub mod dierckx;
 pub mod differentiate;
 pub mod discfreq;
 pub mod distfit;
+pub mod doe;
 pub mod dunnett;
 pub mod envelope;
 pub mod expsmooth;

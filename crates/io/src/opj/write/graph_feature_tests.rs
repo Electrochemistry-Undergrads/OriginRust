@@ -859,7 +859,9 @@ fn the_plot_details_settings_the_file_cannot_hold_are_named_in_the_save_warnings
         d.labels.form = LabelForm::Y;
     });
     let id = p.graphs().next().unwrap().id;
-    p.graph_mut(id).unwrap().page.style.border = Some(BorderStyle::solid(Color::BLACK, 1.0));
+    let style = &mut p.graph_mut(id).unwrap().page.style;
+    style.border = Some(BorderStyle::solid(Color::BLACK, 1.0));
+    style.layer_drawing_order = LayerDrawingOrder::Composite;
     let (_, out) = round_trip(&p);
     for word in [
         "pattern, transparency and gradient",
@@ -868,6 +870,7 @@ fn the_plot_details_settings_the_file_cannot_hold_are_named_in_the_save_warnings
         "Display tab",
         "gradient and border",
         "page's border",
+        "layer drawing order flag",
     ] {
         assert!(out.warnings.iter().any(|w| w.contains(word)), "{word}: {:?}", out.warnings);
     }

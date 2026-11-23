@@ -136,6 +136,11 @@ types, primary edges, ticks, titles, tick labels and formulas, and mirrored line
 preserves mixed settings until edited and keeps straight scale links in force. Graphing 15.7d
 records the Origin 2016 controls, documented multiple-layer behavior and Sheaf's mirrored-edge limits.
 
+**Layer Management Drawing Order (2026-11-23).** The Display tab selects page-wide
+Draw Composite or Draw Layer by Layer. The working preview, Undo and saved
+project share the choice. Graphing 15.7d records the opaque and transparent inset
+exports in Origin 2016 and Sheaf's legacy default.
+
 **Merge graphs through MCP (2026-11-22).** The `merge_graphs` tool accepts a list of graph names
 or all graphs in project order, uses the existing merge engine, and returns the new graph name
 for export. Attached, creating the graph and optionally removing the source windows is one

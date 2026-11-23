@@ -509,6 +509,10 @@ pub struct FieldPlot {
     pub line: LineStyle,
     pub label_font: Font,
     pub scale: ColorScale,
+    /// The colour of values above the scale when it is not the palette's (Origin 2016's ternary contour
+    /// paints them light gray, measured by T401).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub above_color: Option<Color>,
 }
 
 impl FieldPlot {

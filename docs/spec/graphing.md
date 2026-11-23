@@ -6855,26 +6855,30 @@ probes in `re-workspace/scratch/t324`):**
 - **Left:** Origin's WindRose1 sheet, the Calm count and note, compass labels on the circle, and the options
   window (sectors, Percent Frequency, Blowing To).
 
-## 37. Smith chart: Plot > Specialized > Smith Chart (T115, 2026-11-16, **not measured**)
+## 37. Smith chart: Plot > Specialized > Smith Chart (T115, 2026-11-16; measured by T385, 2026-11-22)
 
-Origin 2016 lists the item under Plot > Specialized (seen in the menu on 2026-11-16). The probes could not
-run because Origin's COM class was unregistered (see 36), so this is Sheaf's version, built from the
-standard Smith chart and Origin's documented behaviour. Measure it when automation works again.
+**Origin 2016 (measured through its menu on X = resistance, Y = reactance; probes in `re-workspace/scratch/t385`):**
+no window; a graph on a page of 6848 x 4784 with one square layer (left 7.1 %, top 0.3 %, 68.2 % x 97.7 % of the
+page). The data are taken as normalised impedances (Z0 = 1): (1, 0) is the centre, (0, 0) the left end. They are
+drawn as a black line plot with a legend at the right.
 
-- **Layer:** a Smith chart is a square layer on the polar page (graphing 14.18) with `Coords::Smith`. It
-  holds ordinary line + symbol plots.
-- **Data mapping:** each plot's X column is the resistance and its Y column the reactance of an impedance,
-  divided by the layer's characteristic impedance `z0` (1 by default: the data are already normalised).
-  The point drawn is the reflection coefficient gamma = (z - 1) / (z + 1):
-  - a matched load (1 + 0j) is the centre;
-  - a short circuit is the left end and an open circuit the right end;
-  - pure +j is the top.
+- **Grid:** circles of constant resistance and arcs of constant reactance at 0.2, 0.5, 1, 2, 5 and 20 in solid
+  gray (Origin's Gray; 132 in the antialiased picture), and dotted light-gray ones (198 in the picture) halfway
+  between them in gamma: u = (r - 1) / (r + 1) = +-1/6, +-1/2, +-5/6, so 1/11, 1/3, 5/7, 1.4, 3 and 11 (read as
+  0.09, 0.34, 0.72, 1.4, 3.0; the outermost reactance read between 11 and 14). The real axis and the unit circle
+  are black.
+- **Labels:** the resistances 0.2, 0.5, 1.0, 2.0, 5.0 just right of where their circles meet the axis, below it;
+  the reactances 0.2j ... 5.0j and -0.2j ... -5.0j outside the rim at the ends of their arcs (20 is not labelled).
+
+**Sheaf** draws the same grid, colours (Origin's Gray 128 and LT Gray 192, the minor dotted) and labels (in the
+layer's tick-label font), and plots the data as a line (`smith::draw_grid`, template `smith-chart`).
+
+- **Layer:** a square layer on the polar page (graphing 14.18) with `Coords::Smith`.
+- **Data mapping:** each plot's X column is the resistance and its Y column the reactance of an impedance, divided
+  by the layer's characteristic impedance `z0` (1 by default, as Origin's). The point drawn is the reflection
+  coefficient gamma = (z - 1) / (z + 1).
 - **Axes:** they run from -1 to 1 and are not drawn.
-- **Grid:** light grey (204, 204, 204) 0.5 pt circles of constant resistance and arcs of constant
-  reactance (+-) at 0.2, 0.5, 1, 2 and 5, and the real axis. The unit circle is a black 1 pt edge.
-- **Templates:** `smith-chart`.
-- **To measure:** Origin's grid values and labels, its Z0 setting, its page, its plot type, and whether
-  it takes impedance or reflection data.
+- **Left:** Origin's page and layer proportions, the legend at the right.
 
 ## 38. 2D kernel density: Plot > Statistics > 2D Kernel Density... (T116, 2026-11-16; measured by T289, 2026-11-21)
 

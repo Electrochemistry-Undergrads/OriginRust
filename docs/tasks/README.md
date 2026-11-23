@@ -117,7 +117,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T112](T112-zoom-plot.md) | Plot > Specialized > Zoom | M | done 2026-11-16 (graphing 34); left: curve over the region |
 | [T113](T113-wind-rose.md) | Plot > Specialized > Wind Rose (Binned Data, Raw Data) | M | done 2026-11-16 (graphing 36), not measured (Origin COM unregistered); left: measure and match |
 | [T114](T114-scatter-matrix.md) | Plot > Statistics > Scatter Matrix (B4 slice) | M | done 2026-11-16 (`scatter-matrix`, graphing 35, measured by T313); left: Mixed display, box/distribution diagonals, tick modes, ellipse, linear fit, grouping, listwise missing |
-| [T115](T115-smith-chart.md) | Plot > Specialized > Smith Chart | M | done 2026-11-16 (graphing 37), not measured (Origin COM unregistered); left: measure and match |
+| [T115](T115-smith-chart.md) | Plot > Specialized > Smith Chart | M | done 2026-11-16 (graphing 37), measured by T385 (Origin COM unregistered); left: measure and match |
 | [T116](T116-kernel-density-2d.md) | Plot > Statistics > 2D Kernel Density | M | done 2026-11-16 (graphing 38); grid and bandwidths measured and matched by T289; left: contour drawing, points shown, method choice |
 | [T117](T117-piper.md) | Plot > Specialized > Piper | M | done 2026-11-16 (graphing 39), not measured (Origin COM unregistered); left: measure and match |
 | [T118](T118-data-markers.md) | Graph Data menu: Set Display Range, Reset to Full Range, Mark Data Range, Clear Data Markers (B3 slice) | M | done 2026-11-16 (graphing 40), not measured (Origin COM unregistered); left: measure and match |
@@ -413,6 +413,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T37](T37-violin-plot.md) | Violin plot (kernel density silhouettes per Y column, box/quartile/point variants) | M | done 2026-11-15 (graphing 14.22); left: Split Violin, grouped violins, violin settings (bandwidth, extend, scale), Origin's defaults unmeasured |
 | [T38](T38-recent-files.md) | Recent Projects and Recent Imports (File menu lists that survive a restart) | M | done, merged 2026-11-15 (`docs/spec/recent-files.md`); left: Origin measurements, Recent Books/Graphs/Exports |
 | [T39](T39-plot-sort-x.md) | Line plots connected in X order without sorting the sheet | M | done 2026-11-15 (graphing 18.9, `plot-sort-x`, macOS); left: Origin's effect on symbols, fills, missing values, ties and splines unmeasured |
+| [T385](T385-smith-measure.md) | Measure Smith Chart against Origin (grid, labels, line plot) | S | done 2026-11-22 (graphing 37) |
 | [T40](T40-graphical-summary.md) | Graphical Summary: statistics, CIs, Anderson-Darling and charts per variable/group | L | done 2026-11-15 (statistics.md 22); left: three other arrangements, Origin layout unmeasured |
 | [T41](T41-rug-plot.md) | Rug plots: Axis dialog Rug tab and Scatter + Rug template | M | done 2026-11-15 (graphing 18.10); left: Origin defaults unmeasured, rug hit-testing |
 | [T42](T42-window-switcher.md) | Window Switcher: Ctrl+Tab through child windows with previews | M | done 2026-11-15 (`window-switcher`, macOS) |

@@ -825,6 +825,18 @@ fn layer_scene(
         scene.clip = Rect { x: geom.clip.x, y: geom.clip.y, w: 0.0, h: 0.0 };
         return scene;
     }
+    let border = layer.border;
+    let frame = geom.frame;
+    let relative = border.relative_frame();
+    let border_frame = Rect {
+        x: frame.x + relative.left * frame.w,
+        y: frame.y + relative.top * frame.h,
+        w: relative.width * frame.w,
+        h: relative.height * frame.h,
+    };
+    if let Some(color) = border.fill {
+        scene.grid.push(Item::Rect { rect: border_frame, fill: Some(color), stroke: None });
+    }
     // The layer's Background colour fills the frame behind the grid and the data.
     fill::draw_background(&mut scene.grid, layer.background, &layer.background_style, geom.frame);
     let background_items = scene.grid.len();
@@ -936,6 +948,9 @@ fn layer_scene(
     let objects = &mut scene.objects;
     let out = &mut scene.overlay;
     let f = geom.frame;
+    if let Some(color) = border.outline {
+        out.push(Item::Rect { rect: border_frame, fill: None, stroke: Some(Stroke::solid(color, 0.75)) });
+    }
     fill::draw_border(out, &layer.background_style, f);
     if layer.coords.is_cartesian() && layer.display.show_frame {
         out.push(Item::Rect { rect: f, fill: None, stroke: Some(Stroke::solid(Color::BLACK, 0.5)) });

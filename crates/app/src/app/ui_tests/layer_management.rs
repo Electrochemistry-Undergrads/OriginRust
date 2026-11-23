@@ -1,5 +1,7 @@
 use super::*;
-use sheaf_core::graph::{AxisSide, Frame, LayerBorder, LayerDrawingOrder, ScaleKind, ScaleLink, TickDirection};
+use sheaf_core::graph::{
+    AxisSide, Frame, LayerBorder, LayerDrawingOrder, LayerElementScale, ScaleKind, ScaleLink, TickDirection,
+};
 
 /// The sample project with Graph1 made of `layers` independent layers (copies of its first one).
 fn with_layers(tag: &str, layers: usize) -> Harness<'static, SheafApp> {
@@ -673,6 +675,74 @@ fn drawing_order_rejects_a_page_order_changed_behind_the_preview() {
     assert!(h.state().layer_management.is_some());
     assert!(h.query_by_label_contains("drawing order changed").is_some());
     assert_eq!(h.state().doc.undo_label(), Some("Independent drawing order"));
+}
+
+#[test]
+fn display_fixed_element_scale_validates_and_round_trips_the_selected_layer() {
+    let mut h = with_layers("lm-fixed-element-scale", 2);
+    let before = project(&h).clone();
+    let id = graph(&h).id;
+    open(&mut h);
+    click(&mut h, "Display");
+    click(&mut h, "Scale Elements");
+    assert!(h.get_by_label("Factor").accesskit_node().is_disabled());
+    click(&mut h, "Layer2");
+    assert!(h.get_by_label("Apply").accesskit_node().is_disabled());
+    for (value, invalid) in [("0", true), ("inf", true), ("0.75", false)] {
+        click(&mut h, "Factor");
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+        h.event(egui::Event::Text(value.into()));
+        settle(&mut h);
+        assert_eq!(h.get_by_label("Apply").accesskit_node().is_disabled(), invalid);
+    }
+    click(&mut h, "Apply");
+    assert_eq!(project(&h), &before);
+    click(&mut h, "Undo");
+    assert!(h.get_by_label("Apply").accesskit_node().is_disabled());
+    number(&mut h, "Factor", "0.75");
+    click(&mut h, "Apply");
+    click(&mut h, "OK");
+    let mut expected = before.clone();
+    expected.graph_mut(id).unwrap().layers[1].element_scale = LayerElementScale::Fixed(0.75);
+    assert_eq!(project(&h), &expected);
+    let folder = save_dir("lm-fixed-element-scale");
+    for extension in ["sheaf", "opj"] {
+        let saved = sheaf_io::save::save_project(project(&h), &folder.join(format!("scale.{extension}"))).unwrap();
+        if extension == "opj" {
+            assert!(saved.warnings.iter().any(|warning| warning.contains("layer management element scaling")));
+        }
+        let reopened = sheaf_io::open_project(&saved.path).unwrap();
+        assert_eq!(reopened.project.graph(id), expected.graph(id));
+    }
+    menu(&mut h, "Edit", "Undo Layer Management");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn display_frame_element_scale_preserves_mixed_layers_until_apply() {
+    let mut h = with_layers("lm-with-frame-element-scale", 3);
+    let id = graph(&h).id;
+    h.state_mut().doc.apply("Existing scaling", |p| {
+        p.graph_mut(id).unwrap().layers[1].element_scale = LayerElementScale::WithLayerFrame;
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    for button in ["Cancel", "OK"] {
+        open(&mut h);
+        click(&mut h, "Layer1");
+        click(&mut h, "Layer2");
+        click(&mut h, "Display");
+        click(&mut h, "Scale Elements");
+        assert!(h.get_by_label("Apply").accesskit_node().is_disabled());
+        click(&mut h, "Scale with Layer Frame");
+        assert!(h.get_by_label("Factor").accesskit_node().is_disabled());
+        click(&mut h, "Apply");
+        assert_eq!(project(&h), &before);
+        click(&mut h, button);
+    }
+    let mut expected = before;
+    expected.graph_mut(id).unwrap().layers[0].element_scale = LayerElementScale::WithLayerFrame;
+    assert_eq!(project(&h), &expected);
 }
 
 #[test]

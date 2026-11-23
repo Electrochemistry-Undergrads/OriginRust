@@ -22,6 +22,35 @@ fn graph(n: usize) -> Graph {
     g
 }
 
+#[test]
+fn element_scaling_fits_measured_frame_factors_and_defaults_to_authored_units() {
+    use crate::graph::LayerElementScale;
+
+    let auto = LayerElementScale::WithLayerFrame;
+    for (width, height, expected) in [
+        (0.6816, 0.7183, 1.0),
+        (0.3408, 0.7183, 1.0),
+        (0.6816, 0.3591, 0.65),
+        (0.6820, 0.3591, 0.66),
+        (0.3408, 0.3591, 0.46),
+        (0.5, 0.45, 0.63),
+        (0.6, 0.6, 0.79),
+        (0.01, 0.01, 0.10),
+    ] {
+        assert_eq!(auto.factor(Frame { width, height, ..Frame::WHOLE }), expected);
+    }
+    for invalid in [0.0, f64::NAN, f64::INFINITY] {
+        assert_eq!(LayerElementScale::Fixed(invalid).factor(Frame::WHOLE), 1.0);
+    }
+
+    let g = graph(1);
+    let saved = serde_json::to_value(&g).unwrap();
+    assert!(saved["layers"][0].get("element_scale").is_none());
+    let loaded: Graph = serde_json::from_value(saved).unwrap();
+    assert_eq!(loaded, g);
+    assert!(matches!(loaded.scaled_layer_elements(), Cow::Borrowed(_)));
+}
+
 fn rows(n: usize) -> ArrangeOptions {
     ArrangeOptions { rows: n, ..ArrangeOptions::default() }
 }

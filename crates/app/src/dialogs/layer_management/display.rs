@@ -2,7 +2,7 @@
 
 use eframe::egui;
 use sheaf_core::Color;
-use sheaf_core::graph::{Graph, LayerBorder, LayerDrawingOrder};
+use sheaf_core::graph::{Graph, LayerBorder, LayerDrawingOrder, LayerElementScale};
 
 use crate::object_format::PALETTE;
 
@@ -15,6 +15,7 @@ enum Tab {
     #[default]
     Color,
     Dimensions,
+    Scale,
 }
 
 #[derive(Default)]
@@ -24,6 +25,7 @@ pub(super) struct DisplayDraft {
     colors: [ColorDraft; 3],
     dimensions: [DimensionDraft; 4],
     drawing_order: Option<LayerDrawingOrder>,
+    scale: ScaleDraft,
 }
 
 #[derive(Default)]
@@ -31,11 +33,13 @@ pub(super) struct DisplayChanges {
     colors: [Option<Option<Color>>; 3],
     dimensions: [Option<f64>; 4],
     drawing_order: Option<LayerDrawingOrder>,
+    element_scale: Option<LayerElementScale>,
 }
 
 impl DisplayChanges {
     fn has_change(&self) -> bool {
         self.drawing_order.is_some()
+            || self.element_scale.is_some()
             || self.colors.iter().any(Option::is_some)
             || self.dimensions.iter().any(Option::is_some)
     }
@@ -46,6 +50,9 @@ impl DisplayChanges {
         }
         for &i in selection {
             let layer = &mut graph.layers[i];
+            if let Some(scale) = self.element_scale {
+                layer.element_scale = scale;
+            }
             for (dst, change) in
                 [&mut layer.background, &mut layer.border.fill, &mut layer.border.outline].into_iter().zip(self.colors)
             {
@@ -80,6 +87,7 @@ impl DisplayDraft {
             self.dimensions = std::array::from_fn(|i| {
                 DimensionDraft::new(common(layers.clone().map(|l| l.border.dimensions_pct[i])))
             });
+            self.scale = ScaleDraft::new(graph, selection);
         }
         let original = graph.page.style.layer_drawing_order;
         let mut order = self.drawing_order.unwrap_or(original);
@@ -103,12 +111,13 @@ impl DisplayDraft {
             ui.strong("Option");
             ui.radio_value(&mut self.tab, Tab::Color, "Color");
             ui.radio_value(&mut self.tab, Tab::Dimensions, "Border Dimensions");
-            ui.add_enabled(false, egui::RadioButton::new(false, "Scale Elements"));
+            ui.radio_value(&mut self.tab, Tab::Scale, "Scale Elements");
         });
         let changes = ui
             .add_enabled_ui(!selection.is_empty(), |ui| match self.tab {
                 Tab::Color => Some(self.show_colors(ui)),
                 Tab::Dimensions => self.show_dimensions(ui),
+                Tab::Scale => self.scale.show(ui),
             })
             .inner
             .map(|mut changes| {
@@ -168,6 +177,83 @@ impl DisplayDraft {
 fn common<T: PartialEq>(mut values: impl Iterator<Item = T>) -> Option<T> {
     let first = values.next()?;
     values.all(|value| value == first).then_some(first)
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum ScaleMode {
+    WithFrame,
+    Fixed,
+}
+
+impl From<LayerElementScale> for ScaleMode {
+    fn from(scale: LayerElementScale) -> Self {
+        match scale {
+            LayerElementScale::WithLayerFrame => Self::WithFrame,
+            LayerElementScale::Fixed(_) => Self::Fixed,
+        }
+    }
+}
+
+#[derive(Default)]
+struct ScaleDraft {
+    original: Option<LayerElementScale>,
+    original_mode: Option<ScaleMode>,
+    mode: Option<ScaleMode>,
+    fixed_factor: String,
+    edited_factor: bool,
+    frame_factor: Option<f64>,
+}
+
+impl ScaleDraft {
+    fn new(graph: &Graph, selection: &[usize]) -> Self {
+        let scales = selection.iter().map(|&i| graph.layers[i].element_scale);
+        let original = common(scales.clone());
+        let original_mode = common(scales.map(ScaleMode::from));
+        let applied_factor =
+            common(selection.iter().map(|&i| graph.layers[i].element_scale.factor(graph.page_frame(i))));
+        let frame_factor =
+            common(selection.iter().map(|&i| LayerElementScale::WithLayerFrame.factor(graph.page_frame(i))));
+        let fixed_factor = applied_factor.map_or_else(String::new, |value| value.to_string());
+        Self { original, original_mode, mode: original_mode, fixed_factor, edited_factor: false, frame_factor }
+    }
+
+    fn show(&mut self, ui: &mut egui::Ui) -> Option<DisplayChanges> {
+        ui.group(|ui| {
+            ui.label("Scale Mode");
+            ui.radio_value(&mut self.mode, Some(ScaleMode::WithFrame), "Scale with Layer Frame");
+            ui.radio_value(&mut self.mode, Some(ScaleMode::Fixed), "Fixed Factor");
+            ui.horizontal(|ui| {
+                let label = ui.label("Factor");
+                let mut frame_factor = self.frame_factor.map_or_else(String::new, |value| value.to_string());
+                let fixed = self.mode == Some(ScaleMode::Fixed);
+                let text =
+                    if self.mode == Some(ScaleMode::WithFrame) { &mut frame_factor } else { &mut self.fixed_factor };
+                let hint = if text.is_empty() && !self.edited_factor { "Mixed" } else { "" };
+                self.edited_factor |= ui
+                    .add_enabled(fixed, egui::TextEdit::singleline(text).hint_text(hint).desired_width(90.0))
+                    .labelled_by(label.id)
+                    .changed();
+            });
+        });
+        let element_scale = match self.mode {
+            Some(ScaleMode::WithFrame) => Some(LayerElementScale::WithLayerFrame),
+            Some(ScaleMode::Fixed) if self.edited_factor || self.mode != self.original_mode => {
+                let range = LayerElementScale::FIXED_RANGE;
+                let Some(factor) = self.fixed_factor.trim().parse::<f64>().ok().filter(|value| range.contains(value))
+                else {
+                    ui.colored_label(
+                        ui.visuals().error_fg_color,
+                        format!("Enter a factor from {} to {}.", range.start(), range.end()),
+                    );
+                    return None;
+                };
+                Some(LayerElementScale::Fixed(factor))
+            }
+            _ => None,
+        };
+        let element_scale = element_scale.filter(|scale| Some(*scale) != self.original);
+        Some(DisplayChanges { element_scale, ..DisplayChanges::default() })
+    }
 }
 
 #[derive(Default)]

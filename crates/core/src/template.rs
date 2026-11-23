@@ -1325,6 +1325,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             background: None,
             background_style: BackgroundStyle::default(),
             border: Default::default(),
+            element_scale: LayerElementScale::default(),
             group_style: GroupStyle::default(),
             display: LayerDisplay::default(),
             xy_ratio: None,

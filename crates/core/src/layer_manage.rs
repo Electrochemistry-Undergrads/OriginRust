@@ -10,6 +10,44 @@
 use crate::graph::{Frame, Graph, ScaleLink, TickDirection};
 use crate::panels::{PanelError, PanelLayout, PanelOrder, PanelPage};
 use crate::template::Template;
+use std::borrow::Cow;
+
+impl Graph {
+    /// The effective styles shared by layout, painting and hit testing.
+    /// Keep the saved styles in authored units for editing and future resizes.
+    pub fn scaled_layer_elements(&self) -> Cow<'_, Self> {
+        let mut styled = Cow::Borrowed(self);
+        for (i, layer) in self.layers.iter().enumerate() {
+            if layer.element_scale.is_default() {
+                continue;
+            }
+            let factor = layer.element_scale.factor(self.page_frame(i));
+            if factor == 1.0 {
+                continue;
+            }
+            let layer = &mut styled.to_mut().layers[i];
+            crate::merge::scale_text(layer, factor);
+            for axis in [&mut layer.x_axis, &mut layer.y_axis] {
+                axis.line_width_pt *= factor;
+                axis.major_tick_len_pt *= factor;
+                axis.minor_tick_len_pt *= factor;
+                if let Some(width) = &mut axis.tick_width_pt {
+                    *width *= factor;
+                }
+                for grid in [&mut axis.major_grid, &mut axis.minor_grid].into_iter().flatten() {
+                    grid.width_pt *= factor;
+                }
+            }
+            for plot in &mut layer.plots {
+                plot.line.width_pt *= factor;
+                plot.symbol.size_pt *= factor;
+                plot.symbol.edge_width_pt *= factor;
+                plot.error.cap_width_pt *= factor;
+            }
+        }
+        styled
+    }
+}
 
 /// The smallest and largest size of a layer, as fractions of the page.
 const SIZE_RANGE: (f64, f64) = (0.001, 10.0);

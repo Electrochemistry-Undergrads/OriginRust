@@ -405,6 +405,9 @@ pub struct Layer {
     /// Layer Management's independent rectangle around the plot frame.
     #[serde(default, skip_serializing_if = "LayerBorder::is_default")]
     pub border: LayerBorder,
+    /// Render scale for the layer's styled elements.
+    #[serde(default, skip_serializing_if = "LayerElementScale::is_default")]
+    pub element_scale: LayerElementScale,
     /// The Group tab of the layer's plots: edit mode and increments (the colour increment is
     /// [`Layer::palette`]'s mode).
     #[serde(default, skip_serializing_if = "GroupStyle::is_default")]

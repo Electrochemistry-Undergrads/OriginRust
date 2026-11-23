@@ -3286,6 +3286,36 @@ was the source, and Origin 2016 has no such plot, so nothing here is measured.
   values together). One undo step ("Grouped Histogram"). Separate Graphs, panels, pages, distribution
   curves and data height are not built.
 
+### 14.32 Sankey diagram (T379, Origin 2020 feature, Sheaf's look, not measured)
+
+Plot > Categorical > Sankey Diagram and `sheaf plot FILE -t sankey [--group SOURCE,TARGET]` (`PlotKind::Sankey`,
+`Template::Sankey`, `Project::plot_sankey`; layout `sheaf_calc::sankey`, drawing `crates/plot/src/sankey.rs`): every
+row is a flow of the value column (the last numeric Y column) from the node named in the source column to the one in
+the target column. Without `--group` (or text columns selected in the app) the first two text columns of the sheet
+are the source and the target. The plot keeps them in `Plot::sankey` (saved in `.sheaf`); the `.opj` writer saves a
+column plot of the flow with a warning.
+
+- Nodes are the distinct names, in order of first appearance; flows with the same ends are summed; rows with an
+  empty name, a missing or non-positive value or the same source and target are left out, and so is a flow that
+  would close a cycle.
+- A node's stage (column) is the longest path to it from a node without incoming flows; stages are spread evenly
+  across the layer's frame. A node is as tall as the larger of its inflow and outflow, one scale for all stages
+  (the fullest stage fills the height less a 20 % share of gaps); every stage is centred vertically. No crossing
+  reduction: nodes keep their order of first appearance within a stage.
+- Each flow is a band of two cubic curves from the source's right edge to the target's left edge, stacked on both
+  nodes in the order of the other end, filled with the source node's palette colour at 40 % opacity; nodes are boxes
+  in the layer palette's colours with a darker 0.5 pt outline; names are written right of their nodes (left of the
+  last stage's) in the X axis tick font at 0.8 of its size. No axes, no legend.
+- Not done: node reordering, value labels, the Plot Details pages of Origin's Sankey plot.
+- **Alluvial diagram (T381):** Plot > Categorical > Alluvial Diagram and `sheaf plot FILE -t alluvial [--group
+  A,B,C] [-y WEIGHT]` (`Template::Alluvial`, `Project::plot_alluvial`, `SankeyStyle::stages`): the category columns
+  are the stages, left to right (default: every text column of the sheet; in the app the selected text columns,
+  else the sheet's). Every row flows through its cells, from each stage to the next; a node is a (stage, value)
+  pair, so the same value in two columns makes two nodes, each in its column's stage. A row weighs its value in
+  the weight column (`-y`, or the last selected numeric column), else 1 (counts; the plot's Y column is then the
+  first stage). An empty cell breaks the row's flow at that stage. Drawn as the Sankey diagram above. A file of
+  text only needs `--header-lines 1 --long-name-line 1` on import, or its header row becomes a flow.
+
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
 Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin. Where the current online help **[W]** and Origin disagree, Origin decides.
@@ -3800,7 +3830,7 @@ the OK button to apply the changes in preview graph to source graph."; Undo, OK 
 
 **Sheaf's Layer Management** (`sheaf_core::layer_manage`, `dialogs/layer_management.rs`; Graph menu,
 page right-click and layer icon menu, the icon's layer selected): the layer list allows several
-layers. Add, Arrange, Size/Position, Link, Axes and Display Background Color work on a copy shown as
+layers. Add, Arrange, Size/Position, Link, Axes and Display work on a copy shown as
 numbered frames on a page-shaped preview. Undo takes back the last Apply. OK writes the copy in one
 undo step. Cancel and Escape discard it. The Align/Custom links, the Units combo of Link and the
 reposition-parent tick are disabled. Arrange with no selection takes every layer; "Treat Linked
@@ -3881,10 +3911,8 @@ leave the source alone. No selection, an unchanged colour and a final preview eq
 source add no history. OK refuses to overwrite layer edits made behind the window. Frames,
 links, axes, plots, legends, gradient settings and border settings are preserved. The small
 numbered-frame preview shows base colours; it does not render gradients or full plots.
-Native `.sheaf` saves and `.opj` companions retain the colour; bare `.opj` still omits it with
-the existing loss warning. Drawing Order, Border Fill Color, Border Color, Border Dimensions
-and Scale Elements remain disabled in this dialog. Native mixed-value interaction and the
-existing Sheaf layer drawing order are not changed by this slice. Supporting current docs:
+Native `.sheaf` saves and `.opj` companions retain the colour. The native writer reports the
+omission from bare `.opj`. Supporting current docs:
 [Display tab](https://docs.originlab.com/origin-help/laymanage-displaytab/) and
 [Layer properties](https://docs.originlab.com/labtalk/ref/layer-obj/).
 
@@ -3913,14 +3941,21 @@ with its own Origin instance and helpers closed. Other sessions' instances were 
 These controls establish the geometry and independence from Background Color; multi-layer
 mixed/selection behavior, overlap drawing order and changes to Border Dimensions remain open.
 
-**Backend prerequisite:** Sheaf's existing `Layer.background` fills the plot frame, and
-`BackgroundStyle.border` strokes that same frame (`plot/fill.rs`, called from `plot/layout.rs`).
-There is no separately stored border fill or four border outsets. Reusing those fields would
-change the wrong rectangle or the independent background colour. Keep both Display colour
-controls disabled until a separately represented layer-relative rectangle, independent fill
-and outline, rendering and persistence are implemented with preview/history/roundtrip tests.
-Preserve the existing plot-frame border semantics and the published Background Color control.
-This measurement slice changes no Rust code, model, renderer, file format or enabled inventory.
+**Sheaf Display border (2026-11-22).** The Color option has Background Color, Border Fill Color
+and Border Color, each with None, the shared presets and RGB channels. Border Dimensions accepts
+left, top, right and bottom outsets from 0 to 1000 percent. Left and right use the layer width.
+Top and bottom use its height. The default values follow the measured Line fixture. Sheaf draws
+the independent border fill beneath the plot-frame background, with a 0.75 pt outline. The
+800 × 612 Sheaf reference exports match the measured red fill and outline bounds within one
+pixel. Tight exports include the visible expanded rectangle. The preview uses the same
+percentages with its numbered layer frames.
+
+Apply changes the edited fields on the selected layers. Mixed fields keep their individual
+values until edited. Undo reverts the last preview Apply and OK makes one document history
+entry. A native `.sheaf` file or the `.opj.sheaf` companion stores colours and dimensions.
+The writer reports the omission from bare `.opj`. The existing Background tab and View >
+Show > Frame still use the plot rectangle. Sheaf's overlap ordering and numeric input bounds
+are implementation choices. Drawing Order and Scale Elements remain open.
 
 **Fit Page to Layers** (`pfit2l`; Margin Control Border (default) or Tight, Border Width 5, Adjust
 Direction Height and Width (default), Height Only, Width Only), measured on the stock page: the
@@ -5836,8 +5871,8 @@ and focuses that graph; Cancel, Escape and closing the dialog make no edit. Any 
 project revision or replacement closes a stale draft instead of applying it. Source capture,
 conservative stale rejection, this compact layout and post-confirmation focus are Sheaf choices.
 
-User Defined remains disabled. Custom scale expressions and choosing another input graph
-inside the dialog remain open. The developer capture route is `--show add-layer`.
+Choosing another input graph inside the dialog remains open. The developer capture route is
+`--show add-layer`.
 
 **Auto Offset Overlapped Axes (Origin 2016, 2026-11-22).** Four private LabTalk runs read
 `layer.x.position`, `layer.x2.position`, `layer.y.position` and `layer.y2.position` after
@@ -5871,6 +5906,28 @@ layer preserved that stock placement, and doubling either page dimension approxi
 its percent displacement. The varying placement accounts for the differences between the
 paired exports. Sheaf keeps the checkbox disabled for this preset and uses its deterministic
 placement from 21.9.
+
+**User Defined (Origin 2016, 2026-11-22).** With `userdef:=1`, Bottom and Left are selected by
+default. The four edge settings override the preset and can show both sides of a dimension or
+hide both. `showAxes` and `showLabels` both returned 3 for the two sides, 1 for the bottom or left,
+2 for the top or right, and 0 for neither. Without a parent, requesting Straight still used an
+independent scale and a page-relative frame. With parent Layer 1, the frame read 0/0/100/100 in
+percent of that layer. The X and Y scale links independently returned 1 for Straight and 0 for
+Independent. For a parent with X 2–14 and Y 3–27, the linked dimensions used those limits and
+each independent dimension used 0–10. `activate:=0` left the source layer active.
+
+With all four sides shown on the parent and two linked additions with auto offset, the first
+new layer moved both X axes 3% and both Y axes 2%. The second moved both X axes 6% and both
+Y axes 4%. With the opposite parent edges open, only the bottom and left edges shifted.
+
+Sheaf shows the four edge choices, Link To, and separate X and Y Scale Link choices when a
+parent is selected. Link To lists earlier independent layers under the model's link rule.
+Without a parent, the layer uses the existing independent placement from 21.9. The dialog
+still captures its source, so leaving Activate New Layer off keeps the source active even
+when Link To names a different layer. When both edges of a dimension are selected, the
+bottom or left edge gets the labels, title and automatic offset, and the facing edge shares
+the axis line and ticks. Labels, titles and an independent offset for the facing edge are
+follow-up work. Custom Formula remains disabled.
 
 ---
 

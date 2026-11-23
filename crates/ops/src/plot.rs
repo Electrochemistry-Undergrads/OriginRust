@@ -374,6 +374,30 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
         panel_graph(project, template_from(a.template.as_deref(), suggested)?, p, a)?
     } else if a.overlay {
         overlay_files(project, template_from(a.template.as_deref(), suggested)?, a)?
+    } else if template_from(a.template.as_deref(), suggested)? == Template::Alluvial {
+        // An alluvial diagram (T381): --group names the stage columns (default: every text column of the
+        // sheet), -y the weight column (default: none, every row counts 1).
+        let book = pick_book(project, a.book.as_deref())?;
+        let sheet = pick_sheet(project, book, a.sheet.as_deref())?;
+        let stages: Vec<ColumnId> = match a.group.as_deref() {
+            Some(g) => {
+                let names: Vec<String> = g.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect();
+                named_columns(project, book, sheet, &names)?
+            }
+            None => project
+                .workbook(book)
+                .map(|b| b.sheets[sheet].columns.iter().filter(|c| !c.data.is_numeric()).map(|c| c.id).collect())
+                .unwrap_or_default(),
+        };
+        if stages.len() < 2 {
+            bail!("an alluvial diagram needs two or more stage columns: --group A,B,... (or two text columns)");
+        }
+        let value = match a.y.as_slice() {
+            [] => None,
+            [one] => Some(named_columns(project, book, sheet, std::slice::from_ref(one))?[0]),
+            _ => bail!("an alluvial diagram takes one -y column (the weight of each row)"),
+        };
+        project.plot_alluvial(&stages, value)?
     } else if template_from(a.template.as_deref(), suggested)? == Template::Fishbone {
         // A cause-and-effect diagram (T375): the -y columns (any kind) are the categories, else every
         // column of the sheet.
@@ -404,6 +428,8 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
             treemap_graph(project, book, sheet, &ys, a.group.as_deref(), &a.style)?
         } else if template == Template::Sunburst {
             sunburst_graph(project, book, sheet, &ys, a.group.as_deref(), &a.style)?
+        } else if template == Template::Sankey {
+            sankey_graph(project, book, sheet, &ys, a.group.as_deref(), !a.y2.is_empty())?
         } else if matches!(template, Template::GroupedColumns | Template::GroupedBox) {
             grouped_graph(project, book, sheet, template, &ys, a.group.as_deref(), &a.style)?
         } else if template == Template::IntervalPlot {
@@ -640,6 +666,41 @@ fn grouped_graph(
 
 /// A sunburst plot: the last numeric column among `ys` is the value, the category columns (first = innermost ring)
 /// are those named by `group` (comma-separated), else the text columns among `ys`, else every text column of the sheet.
+/// A Sankey diagram (T379): the flow is the last numeric Y column; `group` names the source and target columns
+/// ("Source,Target"), else they are the first two text columns of the sheet.
+fn sankey_graph(
+    project: &mut Project,
+    book: WindowId,
+    sheet: usize,
+    ys: &[ColumnId],
+    group: Option<&str>,
+    right_axis: bool,
+) -> Result<WindowId> {
+    if right_axis {
+        bail!("a Sankey diagram cannot have a right Y axis; leave out --y2");
+    }
+    let value = ys
+        .iter()
+        .rev()
+        .copied()
+        .find(|y| project.numeric(*y).is_some())
+        .ok_or_else(|| anyhow!("a Sankey diagram needs a numeric flow column (the last --y column)"))?;
+    let ends: Vec<ColumnId> = match group {
+        Some(g) => {
+            let names: Vec<String> = g.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect();
+            named_columns(project, book, sheet, &names)?
+        }
+        None => project
+            .workbook(book)
+            .map(|b| b.sheets[sheet].columns.iter().filter(|c| !c.data.is_numeric()).map(|c| c.id).collect())
+            .unwrap_or_default(),
+    };
+    let [source, target, ..] = ends[..] else {
+        bail!("a Sankey diagram needs a source and a target column: --group SOURCE,TARGET (or two text columns)")
+    };
+    Ok(project.plot_sankey(source, target, value)?)
+}
+
 fn sunburst_graph(
     project: &mut Project,
     book: WindowId,

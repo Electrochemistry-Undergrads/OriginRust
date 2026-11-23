@@ -5,9 +5,10 @@ use super::analysis::AnalysisKind;
 use eframe::egui;
 use sheaf_core::analysis::{
     AcfSpec, AdfTerms, ArimaSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty,
-    ChangePointSpec, DecomposeModel, DecomposeSpec, ExpSmoothSpec, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull,
-    LifeDist, LifeDistSpec, ManhattanSpec, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec, RareChartKind, RareChartSpec,
-    RocSpec, SmoothModel, StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec, Tool,
+    ChangePointSpec, DecomposeModel, DecomposeSpec, ExpSmoothSpec, FactorialDesignSpec, FactorialEffectsSpec,
+    ForestTask, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistSpec, ManhattanSpec, PcaSpec,
+    PivotPeriod, PivotStat, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec, RocSpec, SmoothModel,
+    StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec, Tool,
 };
 
 /// What the windows keep between frames.
@@ -25,6 +26,9 @@ pub struct MultiOptions {
     stationarity: StationaritySpec,
     expsmooth: ExpSmoothSpec,
     arima: ArimaSpec,
+    forest: RandomForestSpec,
+    design: FactorialDesignSpec,
+    factorial: FactorialEffectsSpec,
     rare: RareChartSpec,
     capability: CapabilitySpec,
     stability: StabilitySpec,
@@ -110,6 +114,14 @@ impl MultiOptions {
                 Ok(Tool::RareChart(self.rare))
             }
             AnalysisKind::Stationarity => Ok(Tool::Stationarity(self.stationarity)),
+            AnalysisKind::FactorialDesign => Ok(Tool::FactorialDesign(self.design)),
+            AnalysisKind::FactorialEffects => Ok(Tool::FactorialEffects(self.factorial)),
+            AnalysisKind::RandomForest => {
+                if self.forest.trees == 0 {
+                    return Err("grow at least one tree".to_string());
+                }
+                Ok(Tool::RandomForest(self.forest))
+            }
             AnalysisKind::Arima => {
                 let s = &self.arima;
                 if s.p + s.q == 0 && !s.constant {
@@ -354,6 +366,55 @@ impl MultiOptions {
                     ui.add(egui::DragValue::new(&mut s.sigma).speed(0.05).range(0.5..=6.0));
                 });
                 ui.checkbox(&mut s.graph, "Control chart per column");
+            }
+            AnalysisKind::FactorialDesign => {
+                ui.label("The design goes to a new sheet; the chosen column only says which book.");
+                let s = &mut self.design;
+                ui.horizontal(|ui| {
+                    ui.label("Factors");
+                    ui.add(egui::DragValue::new(&mut s.factors).range(2..=10));
+                    ui.label("Fraction p of 2^(k-p) (0: full)");
+                    ui.add(egui::DragValue::new(&mut s.fraction).range(0..=4));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Replicates");
+                    ui.add(egui::DragValue::new(&mut s.replicates).range(1..=100));
+                    ui.label("Centre points");
+                    ui.add(egui::DragValue::new(&mut s.center_points).range(0..=100));
+                });
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut s.randomize, "Randomize the run order, seed");
+                    ui.add_enabled(s.randomize, egui::DragValue::new(&mut s.seed));
+                });
+            }
+            AnalysisKind::FactorialEffects => {
+                ui.label("The chosen columns are the factors (two levels each) and, last, the response.");
+                ui.checkbox(&mut self.factorial.graph, "Effects graph with Lenth's margin of error");
+            }
+            AnalysisKind::RandomForest => {
+                ui.label("The chosen columns are the predictors (numbers) and, last, the response.");
+                let s = &mut self.forest;
+                ui.horizontal(|ui| {
+                    ui.label("Task");
+                    ui.radio_value(&mut s.task, ForestTask::Auto, "Auto (classes for text)");
+                    ui.radio_value(&mut s.task, ForestTask::Classification, "Classification");
+                    ui.radio_value(&mut s.task, ForestTask::Regression, "Regression");
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Trees");
+                    ui.add(egui::DragValue::new(&mut s.trees).range(1..=10_000));
+                    ui.label("Predictors per split (0: auto)");
+                    ui.add(egui::DragValue::new(&mut s.mtry).range(0..=1000));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Smallest leaf (0: auto)");
+                    ui.add(egui::DragValue::new(&mut s.min_leaf).range(0..=1000));
+                    ui.label("Depth limit (0: none)");
+                    ui.add(egui::DragValue::new(&mut s.max_depth).range(0..=1000));
+                    ui.label("Seed");
+                    ui.add(egui::DragValue::new(&mut s.seed));
+                });
+                ui.checkbox(&mut s.graph, "Importance graph");
             }
             AnalysisKind::Arima => {
                 ui.label("Every chosen column is a series of its own, in row order; it must have no missing values.");

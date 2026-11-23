@@ -1582,6 +1582,67 @@ fn rare_event_charts_run_from_the_command_line() {
     assert!(!ok && err.contains("--chart"), "{err}");
 }
 
+/// Two-level factorial design and effects (spec `statistics.md` section 45, T380).
+#[test]
+fn factorial_design_and_effects_run_from_the_command_line() {
+    let dir = scratch("factorial");
+    let path = dir.join("f.csv");
+    let mut text = String::from("a,b,c,y\n");
+    for i in 0..8 {
+        let (a, b, c) =
+            (if i & 1 == 1 { 1 } else { -1 }, if i & 2 == 2 { 1 } else { -1 }, if i & 4 == 4 { 1 } else { -1 });
+        text.push_str(&format!("{a},{b},{c},{}\n", 10.0 + 3.0 * f64::from(a) + 0.1 * (f64::from(i) * 1.3).sin()));
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "factorial-design",
+        file,
+        "--y",
+        "y",
+        "--factors",
+        "5",
+        "--fraction",
+        "2",
+        "--no-randomize",
+    ]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("2^(5-2) fractional factorial: 8 runs") && out.contains("resolution 3, generators D = AB, E = AC"),
+        "{out}"
+    );
+    let (ok, out, err) = sheaf(&["analyze", "factorial-effects", file, "--y", "a,b,c,y"]);
+    assert!(ok && out.contains("8 runs, 6 term(s), 1 residual df"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "factorial-design", file, "--y", "y", "--factors", "9", "--fraction", "3"]);
+    assert!(!ok && err.contains("no 2^(9-3) design"), "{err}");
+}
+
+/// Random forest (spec `statistics.md` section 44, T377).
+#[test]
+fn random_forest_runs_from_the_command_line() {
+    let dir = scratch("randomforest");
+    let path = dir.join("rf.csv");
+    let mut text = String::from("a,b,kind,size\n");
+    for i in 0..40 {
+        let kind = if i % 10 >= 5 { "high" } else { "low" };
+        text.push_str(&format!("{},{},{kind},{}\n", i % 10, (i * 7) % 5, 2 * (i % 10)));
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "randomforest", file, "--y", "a,b,kind", "--trees", "20"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("Classification forest of 20 trees on 40 complete rows (2 classes)")
+            && out.contains("RandomForest1"),
+        "{out}"
+    );
+    let (ok, out, err) = sheaf(&["analyze", "randomforest", file, "--y", "a,b,size", "--trees", "10", "--no-graph"]);
+    assert!(ok && out.contains("Regression forest"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "randomforest", file, "--y", "a,b,kind", "--task", "boosting"]);
+    assert!(!ok && err.contains("--task"), "{err}");
+}
+
 /// ARIMA forecast (spec `statistics.md` section 43, T376).
 #[test]
 fn arima_forecast_runs_from_the_command_line() {

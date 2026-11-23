@@ -516,6 +516,7 @@ fn into_project_renumbers_the_stack_offsets_with_the_columns() {
             indexed: None,
             stat: None,
             sunburst: Default::default(),
+            sankey: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),

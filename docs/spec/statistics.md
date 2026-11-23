@@ -2082,6 +2082,62 @@ of squares against scipy's minimum (Nelder-Mead, BFGS), in `tools/arima-ref.py` 
 Exact (Kalman) maximum likelihood, coefficient standard errors, seasonal ARIMA and automatic order choice are not
 built.
 
+## 44 Random forest (T377, Origin 2026b Pro app; not measured)
+
+Origin 2026b's Random Forest app is not part of Origin 2016, so this is Sheaf's own (the CART and random forest of
+Breiman, with fully stated rules). Statistics > Random Forest (Machine Learning)... (`Tool::RandomForest`, `sheaf
+analyze randomforest --y PRED[,PRED..],RESPONSE [--task auto|classification|regression] [--trees 100] [--mtry 0]
+[--min-leaf 0] [--max-depth 0] [--seed 1] [--no-graph]`): the predictors are numeric columns and the last column is the
+response, classes (a text column, or numbers with `classification`; classes are numbered in their first order) or
+values; rows with a missing predictor or response are left out. With no columns selected, the window starts with every
+Y and Label column of the sheet.
+
+- Trees split on the feature and midpoint threshold that most reduce `n - sum c_k^2 / n` (classes) or `sum y^2 -
+  (sum y)^2 / n` (values), with at least `min_leaf` rows on each side (default 1 for classes, 5 for values); rows at
+  or below the threshold go left; features are tried in order (a forest's drawn subset in its drawn order) and
+  thresholds from the smallest, a candidate winning only when strictly better. Leaves predict the majority class
+  (lowest on ties) or the mean.
+- Each tree grows on a bootstrap sample and tries `mtry` features per node (default `floor(sqrt p)` for classes,
+  `floor(p / 3)` for values), drawn with the 64-bit generator `s = s * 6364136223846793005 + 1442695040888963407`, `u
+  = (s >> 11) / 2^53`, from the seed; the same seed gives the same forest.
+- Out-of-bag predictions use the trees that did not see a row; the out-of-bag error is the share misclassified or the
+  mean squared error. Importance is each predictor's total impurity decrease, scaled to sum to 1.
+
+The result sheet `RandomForestN` has one row per predictor (Importance), then the row numbers, the response, the
+out-of-bag and whole-forest predictions, and for classes a confusion matrix of the out-of-bag predictions (actual
+classes down, predicted across); a new graph draws the importance as columns. Single trees and whole seeded forests
+agree exactly with an independent Python implementation of these rules (`tools/forest-ref.py`,
+`crates/calc/tests/forest_reference.rs`; scikit-learn is not available here). Permutation importance, class weights,
+probability outputs, prediction of new rows and saved models are not built.
+
+## 45 Two-level factorial designs and effects (T380, base of Origin 2027's split-plot designs; not measured)
+
+Origin 2016 has no design of experiments, and Origin 2027's two-level split-plot designs need this base, so this is
+Sheaf's own. Statistics > Two-Level Experiments:
+
+- **Factorial Design...** (`Tool::FactorialDesign`, `sheaf analyze factorial-design FILE --y COL [--factors 3]
+  [--fraction 0] [--replicates 1] [--center-points 0] [--no-randomize] [--seed 1]`) reads no data; it writes a new sheet
+  `DesignN` in the book (Run order, Standard order, one column per factor A, B, ... with coded levels -1/+1, and an empty
+  Response column). Full designs take 2 to 10 factors; `2^(k-p)` fractions use Montgomery's standard generators for
+  (k, p) = (3,1) C=AB; (4,1) D=ABC; (5,1) E=ABCD; (5,2) D=AB, E=AC; (6,1) F=ABCDE; (6,2) E=ABC, F=BCD; (6,3) D=AB, E=AC,
+  F=BC; (7,1) G=ABCDEF; (7,2) F=ABCD, G=ABDE; (7,3) E=ABC, F=BCD, G=ACD; (7,4) D=AB, E=AC, F=BC, G=ABC; (8,4) E=BCD,
+  F=ACD, G=ABC, H=ABD. Standard order runs the base factors as a full design with A alternating fastest; replicates
+  repeat it, centre points (all 0) follow, and the run order is a Fisher-Yates shuffle with the 64-bit LCG of section
+  44 from the seed. The resolution is the shortest word of the defining relation.
+- **Factorial Effects...** (`Tool::FactorialEffects`, `sheaf analyze factorial-effects FILE --y F1[,F2..],RESPONSE
+  [--no-graph]`): rows missing a factor or the response are left out; each factor is coded to -1..+1 from its smallest
+  and largest value. The model is the intercept, the main effects and the two-factor interactions in order; a term
+  whose column is a multiple of an earlier one is left out as an alias (listed), and terms stop at `n - 1`. Least
+  squares gives the coefficients and each effect is twice its coefficient. With residual degrees of freedom the
+  effects get standard errors, t and two-sided p; Lenth's `PSE = 1.5 median{|e| : |e| < 2.5 s0}` (`s0 = 1.5 median
+  |e|`) and margin of error `t(0.975, m/3) PSE` are always given and mark the active terms. The result sheet `EffectsN`
+  has one row per term (Coefficient, Effect, SE of effect, t, Prob>|t|, Active (Lenth)); a new graph draws |effect| per
+  term with the margin as a line.
+
+Checked against numpy and scipy (`tools/doe-ref.py`, `crates/calc/tests/doe_reference.rs`: replicated and unreplicated
+full designs and two fractions with aliases) to 1e-10. Split-plot designs (hard-to-change factors, whole-plot error),
+fold-over, Plackett-Burman, response surfaces, half-normal plots and higher-order interactions are not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

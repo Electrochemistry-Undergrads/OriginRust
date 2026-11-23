@@ -177,6 +177,12 @@ pub enum AnalysisKind {
     ExpSmooth,
     /// Statistics > ARIMA Forecast (T376; options in `multivariate_options.rs`).
     Arima,
+    /// Statistics > Random Forest (T377; options in `multivariate_options.rs`).
+    RandomForest,
+    /// Statistics > Two-Level Experiments > Factorial Design (T380; options in `multivariate_options.rs`).
+    FactorialDesign,
+    /// Statistics > Two-Level Experiments > Factorial Effects (T380; options in `multivariate_options.rs`).
+    FactorialEffects,
     /// Statistics > Rare Event Chart (G/T) (T364; options in `multivariate_options.rs`).
     RareChart,
     /// Statistics > Process Capability (T365; options in `multivariate_options.rs`).
@@ -330,6 +336,9 @@ impl AnalysisKind {
             AnalysisKind::Stationarity => "Stationarity Tests (ADF, KPSS)...",
             AnalysisKind::ExpSmooth => "Exponential Smoothing Forecast...",
             AnalysisKind::Arima => "ARIMA Forecast...",
+            AnalysisKind::RandomForest => "Random Forest...",
+            AnalysisKind::FactorialDesign => "Two-Level Factorial Design...",
+            AnalysisKind::FactorialEffects => "Factorial Effects...",
             AnalysisKind::RareChart => "Rare Event Chart (G/T)...",
             AnalysisKind::Capability => "Process Capability...",
             AnalysisKind::Stability => "Stability Study...",
@@ -438,6 +447,9 @@ impl AnalysisKind {
             "stationarity" => AnalysisKind::Stationarity,
             "forecast" => AnalysisKind::ExpSmooth,
             "arima" => AnalysisKind::Arima,
+            "randomforest" => AnalysisKind::RandomForest,
+            "factorialdesign" => AnalysisKind::FactorialDesign,
+            "factorialeffects" => AnalysisKind::FactorialEffects,
             "rarechart" => AnalysisKind::RareChart,
             "capability" => AnalysisKind::Capability,
             "stability" => AnalysisKind::Stability,
@@ -2327,6 +2339,9 @@ impl AnalysisDialog {
             | AnalysisKind::Stationarity
             | AnalysisKind::ExpSmooth
             | AnalysisKind::Arima
+            | AnalysisKind::RandomForest
+            | AnalysisKind::FactorialDesign
+            | AnalysisKind::FactorialEffects
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
             | AnalysisKind::Stability
@@ -3654,6 +3669,9 @@ impl AnalysisDialog {
             | AnalysisKind::Stationarity
             | AnalysisKind::ExpSmooth
             | AnalysisKind::Arima
+            | AnalysisKind::RandomForest
+            | AnalysisKind::FactorialDesign
+            | AnalysisKind::FactorialEffects
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
             | AnalysisKind::Stability
@@ -3746,6 +3764,12 @@ impl AnalysisDialog {
     #[cfg(test)]
     pub fn set_crossing_level(&mut self, level: f64) {
         self.level_crossing.level = level;
+    }
+
+    /// The message the window shows when OK fails (for tests).
+    #[cfg(test)]
+    pub fn problem(&self) -> Option<&str> {
+        self.problem.as_deref()
     }
 
     /// Sets the Seasonal Decomposition period as the window's field would (for tests).
@@ -3852,6 +3876,9 @@ impl AnalysisDialog {
             | AnalysisKind::Stationarity
             | AnalysisKind::ExpSmooth
             | AnalysisKind::Arima
+            | AnalysisKind::RandomForest
+            | AnalysisKind::FactorialDesign
+            | AnalysisKind::FactorialEffects
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
             | AnalysisKind::Stability
@@ -3977,6 +4004,13 @@ impl AnalysisDialog {
                 "How well a process fits its specification limits: Cp, Cpk, Pp, Ppk and parts per million outside"
             }
             AnalysisKind::RareChart => "Chart the opportunities or the time between rare events against control limits",
+            AnalysisKind::FactorialDesign => "Make a two-level full or fractional factorial design with its run order",
+            AnalysisKind::FactorialEffects => {
+                "Estimate the effects of two-level factors and their interactions on a response"
+            }
+            AnalysisKind::RandomForest => {
+                "Predict a class or a value from several columns with an ensemble of decision trees"
+            }
             AnalysisKind::Arima => "Model a series by autoregression, differences and moving averages, and forecast it",
             AnalysisKind::ExpSmooth => "Smooth a series by level, trend and season, and forecast the next values",
             AnalysisKind::Stationarity => "Test whether a series wanders (a unit root) or stays about a level or trend",
@@ -4123,6 +4157,15 @@ impl AnalysisDialog {
             }
             AnalysisKind::RareChart => {
                 "One row per column (fitted distribution, center line, limits, points beyond) in a new sheet, and a chart per column"
+            }
+            AnalysisKind::FactorialDesign => {
+                "The design in a new sheet: run and standard order, the coded factor levels and an empty response column"
+            }
+            AnalysisKind::FactorialEffects => {
+                "One row per term (coefficient, effect, t test or Lenth activity) in a new sheet, and an effects graph"
+            }
+            AnalysisKind::RandomForest => {
+                "Predictor importance, out-of-bag error and predictions (and a confusion matrix) in a new sheet, and an importance graph"
             }
             AnalysisKind::Arima => {
                 "The coefficients, sigma^2 and AIC in a new sheet with the predictions, the forecasts and their bands, and a graph"

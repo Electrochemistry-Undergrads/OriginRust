@@ -5840,6 +5840,64 @@ fn the_statistics_menu_makes_a_rare_event_chart() {
     assert_eq!(h.state().doc.undo_label(), Some("Rare event chart"));
 }
 
+/// Statistics > Two-Level Experiments (T380): a design sheet from Factorial Design, then the effects of a small
+/// experiment; one undo step each.
+#[test]
+fn the_statistics_menu_designs_and_analyzes_a_two_level_experiment() {
+    let mut text = String::from("id,a,b,c,y\n");
+    for i in 0..8 {
+        let (a, b, c) =
+            (if i & 1 == 1 { 1 } else { -1 }, if i & 2 == 2 { 1 } else { -1 }, if i & 4 == 4 { 1 } else { -1 });
+        text.push_str(&format!("{i},{a},{b},{c},{}\n", 10.0 + 3.0 * f64::from(a) + 0.1 * (f64::from(i) * 1.3).sin()));
+    }
+    let data = csv_file("factorial", "f", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - f.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Two-Level Experiments", "Factorial Effects..."]);
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
+    let (sheet, effect) = result_column(&h, "Effect");
+    assert!(sheet.starts_with("Effects"), "{sheet}");
+    assert!((effect[1] - 6.0).abs() < 0.2, "the effect of a: {effect:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Factorial effects"));
+    // The design reads no data: it goes to a new sheet of the book whichever sheet is shown.
+    show_window(&mut h, "Book1 - f.csv");
+    menu_path(&mut h, &["Statistics", "Two-Level Experiments", "Factorial Design..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Centre points"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
+    let (sheet, std_order) = result_column(&h, "Standard order");
+    assert!(sheet.starts_with("Design"), "{sheet}");
+    assert_eq!(std_order.len(), 8, "2^3 runs");
+    assert_eq!(h.state().doc.undo_label(), Some("Two-level factorial design"));
+}
+
+/// Statistics > Random Forest... (T377): two predictors and a text class give the importance, the out-of-bag
+/// predictions and a graph; one undo step.
+#[test]
+fn the_statistics_menu_grows_a_random_forest() {
+    let mut text = String::from("id,a,b,kind\n");
+    for i in 0..40 {
+        let kind = if i % 10 >= 5 { "high" } else { "low" };
+        text.push_str(&format!("{i},{},{},{kind}\n", i % 10, (i * 7) % 5));
+    }
+    let data = csv_file("randomforest", "rf", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - rf.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Random Forest (Machine Learning)..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Predictors per split (0: auto)"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
+    let (sheet, imp) = result_column(&h, "Importance");
+    assert!(sheet.starts_with("RandomForest"), "{sheet}");
+    assert!(imp.len() == 2 && imp[0] > imp[1], "a decides the class: {imp:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Random forest"));
+}
+
 /// Statistics > ARIMA Forecast... (T376): an AR(1) with mean, forecasts with bands, a graph, one undo step.
 #[test]
 fn the_statistics_menu_makes_an_arima_forecast() {
@@ -7887,6 +7945,43 @@ fn plot_categorical_cause_and_effect_draws_the_selected_columns_as_categories() 
     assert_eq!(texts[..2], ["Effect", "t"]);
     assert_eq!(g.layers[0].labels.iter().filter(|l| l.font.bold).count(), 4, "the effect and three category names");
     assert_eq!(h.state().doc.undo_label(), Some("Plot columns"));
+}
+
+#[test]
+fn plot_categorical_sankey_uses_the_sheets_text_columns_and_the_flow() {
+    let mut h = start(vec![data_file("sankey")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let down = column_id(&h, "C");
+    let book = project(&h).locate(down).unwrap().0.id;
+    let text = |v: &[&str]| ColumnData::text(v.iter().map(|s| s.to_string()).collect());
+    h.state_mut().doc.apply("text", |p| {
+        p.add_column(book, 0, sheaf_core::Designation::Y, text(&["a", "a", "b", "b"])).unwrap();
+        p.add_column(book, 0, sheaf_core::Designation::Y, text(&["b", "c", "c", "d"])).unwrap();
+    });
+    // Nothing selected: the sheet's numeric Y columns, the last (C) the flow; its text columns the ends.
+    let graphs = project(&h).graphs().count();
+    menu_path(&mut h, &["Plot", "Categorical", "Sankey Diagram"]);
+    assert_eq!(project(&h).graphs().count(), graphs + 1);
+    let plot = &project(&h).graphs().last().unwrap().layers[0].plots[0];
+    assert_eq!((plot.kind, plot.y), (sheaf_core::graph::PlotKind::Sankey, down));
+    assert!(plot.sankey.source.is_some() && plot.sankey.target.is_some());
+}
+
+#[test]
+fn plot_categorical_alluvial_takes_the_sheets_text_columns_as_stages() {
+    let mut h = start(vec![data_file("alluvial")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = project(&h).workbooks().next().unwrap().id;
+    let text = |v: &[&str]| ColumnData::text(v.iter().map(|s| s.to_string()).collect());
+    h.state_mut().doc.apply("text", |p| {
+        p.add_column(book, 0, sheaf_core::Designation::Y, text(&["a", "a", "b", "b"])).unwrap();
+        p.add_column(book, 0, sheaf_core::Designation::Y, text(&["b", "c", "c", "d"])).unwrap();
+    });
+    let graphs = project(&h).graphs().count();
+    menu_path(&mut h, &["Plot", "Categorical", "Alluvial Diagram"]);
+    assert_eq!(project(&h).graphs().count(), graphs + 1);
+    let plot = &project(&h).graphs().last().unwrap().layers[0].plots[0];
+    assert_eq!((plot.kind, plot.sankey.stages.len()), (sheaf_core::graph::PlotKind::Sankey, 2));
 }
 
 #[test]

@@ -1374,6 +1374,37 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
+        AnalyzeTool::MixtureDesign {
+            target,
+            components,
+            centroid_design,
+            degree,
+            axial,
+            centroid,
+            replicates,
+            totals,
+            lower,
+            no_randomize,
+            seed,
+        } => (
+            target,
+            Job::Tool(Tool::MixtureDesign(analysis::MixtureDesignSpec {
+                components,
+                kind: if centroid_design {
+                    analysis::MixtureKind::SimplexCentroid
+                } else {
+                    analysis::MixtureKind::SimplexLattice
+                },
+                degree,
+                axial,
+                centroid,
+                replicates,
+                totals,
+                lower,
+                randomize: !no_randomize,
+                seed,
+            })),
+        ),
         AnalyzeTool::FactorialDesign { target, factors, fraction, replicates, center_points, no_randomize, seed } => (
             target,
             Job::Tool(Tool::FactorialDesign(analysis::FactorialDesignSpec {

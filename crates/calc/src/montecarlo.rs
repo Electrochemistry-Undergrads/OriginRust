@@ -1,5 +1,5 @@
 //! Monte Carlo simulation (T393, Origin 2027's Monte Carlo simulation app; Sheaf's own, Origin's app
-//! was not run; `docs/spec/statistics.md` section 47): the inputs of a model are drawn from their
+//! was not run; `docs/spec/statistics.md` section 50): the inputs of a model are drawn from their
 //! distributions, the model's output is computed for every draw (by the caller, from a formula), and
 //! the output is summarised, compared with specification limits and traced back to the inputs.
 //!

@@ -2141,6 +2141,7 @@ fn statistics_menu() -> Vec<Entry> {
         item("E&xponential Smoothing Forecast...", Cmd::Analyze(AnalysisKind::ExpSmooth)),
         item("ARIMA &Forecast...", Cmd::Analyze(AnalysisKind::Arima)),
         item("Random Forest (Machine Learnin&g)...", Cmd::Analyze(AnalysisKind::RandomForest)),
+        item("Monte Carlo Sim&ulation...", Cmd::Analyze(AnalysisKind::MonteCarlo)),
         sub(
             "T&wo-Level Experiments",
             vec![

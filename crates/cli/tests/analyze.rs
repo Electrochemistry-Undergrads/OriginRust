@@ -2732,3 +2732,36 @@ fn mixture_design_for_two_totals() {
     let (ok, _, err) = sheaf(&["analyze", "mixture-design", file, "--y", "y", "--lower", "0.6,0.5,0"]);
     assert!(!ok && err.contains("nothing to vary"), "{err}");
 }
+
+/// `analyze monte-carlo` (T393): inputs through a formula, summary, capability and sensitivity.
+#[test]
+fn monte_carlo_summarises_the_output() {
+    let dir = scratch("monte-carlo");
+    let path = dir.join("m.csv");
+    std::fs::write(&path, "y\n1\n").unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "monte-carlo",
+        file,
+        "--y",
+        "y",
+        "--input",
+        "a=normal(10,0.1)",
+        "--input",
+        "b=uniform(1.9,2.1)",
+        "--formula",
+        "a*b",
+        "--samples",
+        "3000",
+        "--lsl",
+        "19",
+        "--usl",
+        "21",
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Output = a*b") && out.contains("Cp = ") && out.contains("follows b most"), "{out}");
+    let (ok, _, err) =
+        sheaf(&["analyze", "monte-carlo", file, "--y", "y", "--input", "a=gamma(1,2)", "--formula", "a"]);
+    assert!(!ok && err.contains("unknown distribution"), "{err}");
+}

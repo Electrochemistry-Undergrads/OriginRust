@@ -1,7 +1,7 @@
 //! Statistics > Monte Carlo Simulation (T393, Origin 2027's app; Sheaf's own layout, not measured): the
 //! inputs are drawn (`sheaf_calc::montecarlo`), the formula is evaluated for each draw with the inputs
 //! as variables, and the draws, the output summary, capability and sensitivity are written
-//! (`docs/spec/statistics.md` section 47).
+//! (`docs/spec/statistics.md` section 50).
 
 use super::dist::Output;
 use super::*;

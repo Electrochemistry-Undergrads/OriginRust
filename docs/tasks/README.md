@@ -326,6 +326,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T384](T384-arbitrary-censoring.md) | Life-data distribution analysis with exact, right-, left- and interval-censored rows (Origin 2026b) | S | done 2026-11-22 (statistics 47) |
 | [T382](T382-split-plot.md) | Two-level split-plot designs and two-stratum effects (Origin 2027 Quality app) | S | done 2026-11-22 (statistics 46) |
 | [T386](T386-mixture-designs.md) | Mixture designs: simplex lattice and centroid for one or more totals, lower bounds (window, CLI) | M | done 2026-11-22 (Sheaf's own) |
+| [T393](T393-monte-carlo.md) | Monte Carlo simulation: input distributions through a formula, summary, capability, sensitivity (window, CLI) | M | done 2026-11-23 (Sheaf's own) |
 | [T380](T380-two-level-factorial.md) | Two-level full and fractional factorial designs and their effects (base for 2027 split-plot) | M | done 2026-11-22 (statistics 45) |
 | [T377](T377-random-forest.md) | Random forest: seeded CART forests for classes and values, OOB error, importance (Origin 2026b) | M | done 2026-11-22 (statistics 44) |
 | [T376](T376-arima.md) | ARIMA(p,d,q) by conditional least squares with forecast bands (Origin 2024b Time Series app) | S | done 2026-11-22 (statistics 43) |

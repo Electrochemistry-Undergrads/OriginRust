@@ -416,6 +416,9 @@ pub struct Workbook {
     /// file can be imported again with the same settings.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<ImportSource>,
+    /// Named cells (T396): a formula of this workbook reads a name as its cell's value.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub names: Vec<crate::named::NamedCell>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -479,6 +482,7 @@ impl Workbook {
             sheets: vec![Worksheet::new("Sheet1")],
             active_sheet: 0,
             source: None,
+            names: Vec::new(),
         }
     }
 

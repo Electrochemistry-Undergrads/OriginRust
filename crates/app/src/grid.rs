@@ -1730,6 +1730,9 @@ fn corner_and_titles(
     let line = Stroke::new(1.0_f32, LINE_HEADER);
     if sheet.view.column_header {
         let corner = Rect::from_min_size(rect.min, vec2(rect.width(), column_header_height(state)));
+        if let Some(fill) = sheet.column_header_style().fill.map(header_color) {
+            ui.painter().rect_filled(corner, 0.0, fill);
+        }
         let response = ui.interact(corner, ui.id().with("corner"), Sense::CLICK);
         if response.clicked() {
             state.select_all(sheet);
@@ -1738,6 +1741,7 @@ fn corner_and_titles(
         response
             .context_menu(|ui| menus::show_context(ui, &menus::corner_menu(sheet), &book_ctx(book_id, state), actions));
     }
+    let row_header = sheet.row_header_style();
     for (i, row) in label_rows.iter().enumerate() {
         let cell = Rect::from_min_size(
             Pos2::new(
@@ -1746,9 +1750,12 @@ fn corner_and_titles(
             ),
             vec2(rect.width(), state.layout_cache.as_ref().expect("worksheet layout").value.labels[i]),
         );
+        if let Some(fill) = row_header.fill.map(header_color) {
+            ui.painter().rect_filled(cell, 0.0, fill);
+        }
         // Row Labels for Column Label Rows off: the titles are left out (T92).
         if sheet.view.row_labels {
-            title_text(ui, cell, &row_title(row), &sheet.font_defaults.row_header_style());
+            title_text(ui, cell, &row_title(row), &row_header);
         }
         // T310: a user parameter row's title has Rename and Delete.
         if let LabelRow::Param(name) = row {
@@ -1779,11 +1786,15 @@ fn column_header_height(state: &BookUi) -> f32 {
     state.layout_cache.as_ref().expect("worksheet layout").value.column_header_height()
 }
 
-/// Right-aligned text in a grey title cell.
+fn header_color(color: sheaf_core::Color) -> Color32 {
+    Color32::from_rgb(color.r, color.g, color.b)
+}
+
+/// Right-aligned text in a label row's caption.
 fn title_text(ui: &mut egui::Ui, cell: Rect, text: &str, style: &ResolvedStyle<'_>) {
     let inner = cell.shrink2(vec2(4.0, 0.0));
     ui.scope_builder(UiBuilder::new().max_rect(inner).layout(Layout::right_to_left(Align::Center)), |ui| {
-        header_text(ui, text, TEXT, style);
+        header_text(ui, text, style.text_color.map_or(TEXT, header_color), style);
     });
 }
 
@@ -1808,24 +1819,22 @@ fn column_head(
     }
     let selected = state.selected.contains(&column.id) && matches!(state.sel, Sel::Columns | Sel::All);
     let line = Stroke::new(1.0_f32, LINE_HEADER);
-    let text_color = if selected { Color32::WHITE } else { TEXT };
 
     if sheet.view.column_header {
-        // The grey row with the name.
+        let style = sheet.column_header_style();
         let head = Rect::from_min_size(rect.min, vec2(rect.width(), column_header_height(state)));
         let head_fill = if selected {
             HEADER_DARK
-        } else if frozen {
-            FROZEN_GREY
         } else {
-            HEADER_GREY
+            style.fill.map_or(if frozen { FROZEN_GREY } else { HEADER_GREY }, header_color)
         };
+        let text_color = if selected { Color32::WHITE } else { style.text_color.map_or(TEXT, header_color) };
         ui.painter().rect_filled(head, 0.0, head_fill);
         let head_response = ui.interact(head, ui.id().with(("col_header", column.id.0)), Sense::CLICK | Sense::DRAG);
         ui.scope_builder(
             UiBuilder::new().max_rect(head).layout(Layout::centered_and_justified(egui::Direction::LeftToRight)),
             |ui| {
-                header_text(ui, &head_name(sheet, position), text_color, &sheet.font_defaults.column_header_style());
+                header_text(ui, &head_name(sheet, position), text_color, &style);
             },
         );
         if head_response.clicked() {
@@ -2234,13 +2243,14 @@ fn row_header_cell(
         Sel::All => true,
         _ => false,
     };
+    let style = sheet.row_header_style();
     let fill = if selected {
         ROW_SELECTED
-    } else if state.frozen_rows.contains(&r) {
-        FROZEN_GREY
     } else {
-        HEADER_GREY
+        let default = if state.frozen_rows.contains(&r) { FROZEN_GREY } else { HEADER_GREY };
+        style.fill.map_or(default, header_color)
     };
+    let text_color = if selected { TEXT } else { style.text_color.map_or(TEXT, header_color) };
     ui.painter().rect_filled(rect, 0.0, fill);
     let line = Stroke::new(1.0_f32, LINE_HEADER);
     ui.painter().hline(rect.x_range(), rect.bottom() - 0.5, line);
@@ -2269,7 +2279,7 @@ fn row_header_cell(
     }
     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
         ui.add_space(5.0);
-        header_text(ui, &(r + 1).to_string(), TEXT, &sheet.font_defaults.row_header_style());
+        header_text(ui, &(r + 1).to_string(), text_color, &style);
     });
     if response.clicked() {
         let shift = click_modifiers(ui).shift;

@@ -65,7 +65,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | Brief | Wave | Size | Scope and dependency |
 |---|---|---|---|
 | [T58](T58-graph-text-formatting.md) | 1, P0 | L | Renderer and graph Format toolbar/shared dispatch published in slices; selected-object font toolbar has all 24 Classic and custom RGB colours, and shared label/title/legend selection editor has installed-family/paired-script insertion plus all 24 Classic and custom RGB colours; documented prime escapes render through the shared text path (7.11); graph font/fill/line and shared text-editor Custom RGB wells share a private profile pool with worksheet controls (7.12); remaining native measurements, special escape aliases and named/project palettes stay open |
-| [T59](T59-worksheet-cell-formatting.md) | 1, P0 | L | Cell fonts, styles and colours, shared RGB wells, and Worksheet Properties fonts for Standard, Data, Column Labels, Long Name, Units, Comments, Column Header, Row Header and F(x)=. Text and fill colours cover Data, Column Labels, Long Name, Units, Comments and F(x)= (GUI 3). Left: Standard and heading colours, other controls, and vertical alignment pending a supported worksheet route. Worksheet text controls are B5 |
+| [T59](T59-worksheet-cell-formatting.md) | 1, P0 | L | Cell fonts, styles and colours, shared RGB wells, and Worksheet Properties fonts for Standard, Data, Column Labels, Long Name, Units, Comments, Column Header, Row Header and F(x)=. Text and fill colours cover Data, column labels and both headings (GUI 3). Left: Standard colours, other controls, and vertical alignment pending a supported worksheet route. Worksheet text controls are B5 |
 | [T60](T60-merge-graphs-layer-management.md) | 2, P0 | L | Merge Graph Windows (dialog, CLI and MCP, manual/Auto preview, source filters and grouping, panel labels and letter/number/Roman enumeration, source graph names, extra grid layers, Common Scale), Layer Management (Arrange with Common Scale and extra grid layers, Size/Position, Link, Axes with primary and mirrored edges, Display colors, border dimensions and page Drawing Order), Fit Page to Layers. Left: independent opposite-axis styling and Display Scale Elements |
 | [T61](T61-layers-and-multi-y.md) | 2, P0 | L | Nine Add Layer kinds, insets, Delete Layer, Layer Properties, displaced Y axes and Move to Layer, 3Ys/4Ys templates and Multiple Y Axes (graphing 21). Hide Layer and Hide Other Layers (21.13–14), New Layer (Axes) preset dialog (21.15), layer-icon switches (21.16) and Layer Management Add with scale selection and linked parent (21.17). Left: User Defined and Auto Offset in the preset dialog, Custom Formula and Discrete scales, and template legend spacing/membership |
 | [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Done 2026-11-15 (unmeasured Sheaf rules, graphing 13.15-13.17): Offset Grouped Data menu with Cumulative, Stacked Histograms, waterfall Y/Z colour mapping |
@@ -156,7 +156,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T237](T237-layout-page.md) | Layout pages: File > New > Layout, New Layout, Add Graph (B14 slice 1) | L | slices 1-12 done 2026-11-20 (layout-page spec), not measured; left: dashes, text toolbar, .opj |
 | [T234](T234-matrix-profiles.md) | Plot > Profile: Contour and Image Profiles as row/column cuts (B14 slice) | S | done 2026-11-20 (matrices 7l), not measured |
 | [T226](T226-ternary-contour.md) | Plot > Contour/Heat Map > Ternary Contour (B14 slice) | S | done 2026-11-20 (matrices 7k), not measured |
-| [T225](T225-polar-contour.md) | Plot > Contour/Heat Map > Polar Contour theta(X) r(Y), r(X) theta(Y) (B14 slice) | S | done 2026-11-20 (matrices 7k), not measured |
+| [T225](T225-polar-contour.md) | Plot > Contour/Heat Map > Polar Contour theta(X) r(Y), r(X) theta(Y) (B14 slice) | S | done 2026-11-20 (matrices 7k), measured by T399 |
 | [T221](T221-matrix-surface-fit.md) | Nonlinear Surface Fit on a matrix through XYZ columns | S | done 2026-11-20 (matrices 7j), not measured |
 | [T218](T218-image-rgb.md) | Colour pictures as RGB sheets; Image > Color to Gray, RGB Split (B14 slice) | S | done 2026-11-20 (matrices 7h/7i), not measured |
 | [T213](T213-new-function-plot.md) | File > New > Function Plot (B14 slice) | S | done 2026-11-20 (graphing 41), not measured |
@@ -234,6 +234,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T381](T381-alluvial.md) | Plot > Categorical > Alluvial Diagram and sheaf plot -t alluvial (counts or weights) | S | done 2026-11-22 (graphing 14.32), not measured |
 | [T383](T383-network-plot.md) | Plot > Categorical > Network Plot and sheaf plot -t network | M | done 2026-11-22 (graphing 14.33), not measured |
 | [T392](T392-nested-frequency.md) | Nested frequency charts: treemap and sunburst of text columns count the rows | S | done 2026-11-23 (graphing 14.27), not measured |
+| [T396](T396-named-cells.md) | Named cells: Define Name... on a data cell, formulas read the name | S | done 2026-11-23 (expression-language), not measured |
 | [T233](T233-batch-summary.md) | File > Batch Processing: Summary Sheet, Dataset Identifier, Delete Intermediate Books (a Batch Summary book stacking one sheet of every book) | S | done 2026-11-20 (workbook-model 13p), not measured; left: Origin's layout and identifier choices |
 | [T235](T235-batch-cli.md) | sheaf batch: Batch Processing without a window (template, summary, --summary-csv), core Project::batch_process shared with the window | S | done 2026-11-20 (workbook-model 13p); MCP: T238 |
 | [T238](T238-batch-mcp.md) | MCP batch_process: the shared batch run (books, summary, delete) on the session project, one undo step attached | S | done 2026-11-20 (mcp.md 5.1); left: read options |
@@ -324,6 +325,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T318](T318-baseline-als-dataset.md) | Peak Analyzer baselines Use Existing Dataset and Asymmetric Least Squares Smoothing (window, CLI) | M | done 2026-11-21; ALS not measured (Pro) |
 | [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T398](T398-ec50-marks.md) | Opt-in EC50 marks on dose-response fit graphs (Origin 2027) | S | done 2026-11-23 (fitting "EC50 marks") |
 | [T397](T397-qpcr.md) | qPCR relative quantification (ddCt, Pfaffl) and standard-curve efficiency (Origin 2027 assay apps) | S | done 2026-11-23 (statistics 50) |
 | [T394](T394-life-data-frequency.md) | Frequency (count) column for the life-data tools (Origin 2026b) | S | done 2026-11-23 (statistics 49) |
 | [T391](T391-life-data-regression.md) | Life data regression: Weibull, lognormal and exponential AFT models with censoring (Origin 2026b) | S | done 2026-11-23 (statistics 48) |
@@ -426,6 +428,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T389](T389-piper-measure.md) | Measure Piper diagram against Origin (grids, side labels, titles, sample symbols) | S | done 2026-11-23 (graphing 39) |
 | [T390](T390-markers-measure.md) | Measure graph Data > Mark Data Range against Origin (red lines across the layer) | S | done 2026-11-23 (graphing 40) |
 | [T395](T395-table-measure.md) | Measure Graph > New Table against Origin (5 x 8 default, up to 9) | S | done 2026-11-23 (graphing Tables) |
+| [T399](T399-polar-contour-measure.md) | Measure Polar Contour against Origin (north clockwise, no lines, reversed rainbow, closed circle) | S | done 2026-11-23 (matrices 7k) |
 | [T40](T40-graphical-summary.md) | Graphical Summary: statistics, CIs, Anderson-Darling and charts per variable/group | L | done 2026-11-15 (statistics.md 22); left: three other arrangements, Origin layout unmeasured |
 | [T41](T41-rug-plot.md) | Rug plots: Axis dialog Rug tab and Scatter + Rug template | M | done 2026-11-15 (graphing 18.10); left: Origin defaults unmeasured, rug hit-testing |
 | [T42](T42-window-switcher.md) | Window Switcher: Ctrl+Tab through child windows with previews | M | done 2026-11-15 (`window-switcher`, macOS) |

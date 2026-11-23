@@ -462,6 +462,8 @@ pub enum FieldPalette {
     BlueWhiteRed,
     /// Black to white.
     Gray,
+    /// Red, yellow, green, cyan, blue: Origin 2016's polar contour, blue at the highest value (measured, T399).
+    RainbowReversed,
 }
 
 /// The levels of a field: the range of Z that the colour scale covers, split into `major` equal

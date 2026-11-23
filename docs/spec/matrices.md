@@ -486,7 +486,16 @@ Measured against Origin 2016's `impImage` on PNG, BMP, GIF and JPEG pictures of 
 - **Sheaf choice:** Origin fits a matrix directly; Sheaf goes through XYZ columns, so the fit
   results, residuals and report are those of an ordinary XYZ surface fit.
 
-## 7k. Plot > Contour/Heat Map > Polar Contour (T225, 2026-11-20, not measured)
+## 7k. Plot > Contour/Heat Map > Polar Contour (T225, 2026-11-20; measured by T399, 2026-11-23)
+
+**Origin 2016 (measured through its menu on a 12 x 5 grid of angles 0..330 and radii 1..5 with z = r cos(angle);
+`re-workspace/scratch/t399`):** it needs the three columns designated X, Y and Z (else "To make this plot, you need
+to select columns designated as 'XYZ'"). It draws a colour-fill contour with **no level lines** in a polar layer:
+0 degrees at the top, the angles clockwise, labelled every 30. The radius axis runs from the smallest radius (1, at
+the centre) to the largest (5), step 0.5. The levels are 8 major steps of 5 bands (-5 to 5). The rainbow is
+**reversed** (blue at the highest value, red at the lowest), with a light gray box above and a black box below on
+the colour scale, titled with the Z column's name. The fill **closes round the circle**: the wedge from 330 back
+to 0 is filled.
 
 - Polar Contour theta(X) r(Y) and r(X) theta(Y) take three selected worksheet columns. The first
   item reads them as angle (degrees), radius and Z; the second as radius, angle and Z.
@@ -496,9 +505,9 @@ Measured against Origin 2016's `impImage` on PNG, BMP, GIF and JPEG pictures of 
   follow the circle. It is one undo step ("New graph").
 - **Sheaf choices:**
   - Edges between vertices are straight on the page, so a coarse grid shows facets.
-  - The triangulation does not wrap from the last angle to the first: data that stops at 330 degrees
-    leaves the wedge to 360 open.
-  - Origin's own polar contour layout and levels are not measured.
+  - As Origin's: north up and clockwise, no level lines, the reversed rainbow (`FieldPalette::RainbowReversed`,
+    gray above and black below), the radius axis from the smallest radius, and a grid whose angles stop one even
+    step short of 360 closed round the circle (`FieldGrid::wrap_full_circle`).
 - **Ternary Contour (T226):** takes four selected columns, the compositions A, B and C (any common
   total; each point is normalized to fractions) and a value Z. It makes the same colour-fill contour
   in Origin's ternary layer (graphing 14.20), whose frame is narrowed to the field templates' frame

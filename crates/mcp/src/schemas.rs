@@ -24,6 +24,13 @@ fn strs(d: &str) -> Value {
     json!({"type": "array", "items": {"type": "string"}, "description": d})
 }
 
+fn number_list(len: usize, description: &str) -> Value {
+    json!({
+        "type": "array", "items": {"type": "number"},
+        "minItems": len, "maxItems": len, "description": description,
+    })
+}
+
 fn en(values: &[&str], d: &str) -> Value {
     json!({"type": "string", "enum": values, "description": d})
 }
@@ -395,6 +402,61 @@ pub fn defs() -> Vec<Def> {
                 &[],
             ),
             example: json!({"template": "line", "y": ["B"], "style": {"x_title": "E / V", "y_title": "I / A"}}),
+        },
+        Def {
+            name: "merge_graphs",
+            description: "Arrange existing graphs into one new graph. Source graphs are kept by default. Returns the new graph name for export_graph.",
+            read_only: false,
+            mutates: true,
+            headless_only: false,
+            schema: obj(
+                vec![
+                    ("graphs", strs("At least two distinct graph names, in grid order. Use graphs or all_graphs.")),
+                    ("all_graphs", b("Use every graph in project order. Default: false.")),
+                    ("rows", t("integer", "Number of rows. Default: automatic.")),
+                    ("cols", t("integer", "Number of columns. Default: automatic.")),
+                    (
+                        "gap",
+                        number_list(2, "Horizontal and vertical gaps as percentages of the page. Default: [5, 5]."),
+                    ),
+                    ("margins", number_list(4, "Left, right, top and bottom margins as percentages of the page.")),
+                    ("page_size", number_list(2, "Width and height in inches. Default: [11.41, 7.973].")),
+                    ("portrait", b("Turn the longer side of the page upright. Default: false.")),
+                    ("keep_aspect", b("Keep each source panel's aspect ratio. Default: false.")),
+                    (
+                        "group_sources",
+                        b(
+                            "Use one cell per source graph. If false, each independent layer and its linked layers get a cell. Default: true.",
+                        ),
+                    ),
+                    ("rearrange", b("Arrange panels on the grid. If false, keep the original frames. Default: true.")),
+                    ("add_extra_layers", b("Fill vacant grid cells with independent blank layers. Default: false.")),
+                    (
+                        "link",
+                        b(
+                            "Link later panels to the first in position when their existing layer links allow it. Default: false.",
+                        ),
+                    ),
+                    (
+                        "share_x",
+                        b("Also link the X scales to the first layer where possible. Implies link. Default: false."),
+                    ),
+                    ("hide_inner", b("Hide labels, titles and ticks at touching inner edges. Default: false.")),
+                    (
+                        "text_scale",
+                        json!({
+                            "anyOf": [{"enum": ["auto", "keep"]}, {"type": "number", "minimum": 0.05, "maximum": 20}],
+                            "description": "Text size: auto, keep, or a numeric multiplier. Default: auto."
+                        }),
+                    ),
+                    (
+                        "remove_sources",
+                        b("Remove the source graph windows only after a successful merge. Default: false."),
+                    ),
+                ],
+                &[],
+            ),
+            example: json!({"graphs": ["Graph1", "Graph2"], "cols": 1, "gap": [5, 0], "share_x": true, "hide_inner": true}),
         },
         Def {
             name: "export_graph",

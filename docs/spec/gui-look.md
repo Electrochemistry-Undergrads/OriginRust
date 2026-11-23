@@ -937,14 +937,22 @@ grid draws selection colors on selected headings, and print uses the
 worksheet palette. Worksheet images omit these headings. Excel reports
 that heading colors are omitted.
 
-**Standard color probe (T59).** In Origin 2016, assigning red text and yellow
-fill with `wproperties` > TextControl > Standard yielded pixel-identical
-worksheet regions. The probe applied Standard both before and after
-explicit Data, Column Labels and Column Header palettes. Those palettes
-visibly changed their cells and headings, and manual colors on A1 held.
-The worksheet had numeric data, a blank cell and populated labels. Whether
-the Format tab's Standard controls can change worksheet colors remains open.
-[Origin Worksheet Properties settings](https://docs.originlab.com/x-function/ref/wproperties/)
+**Standard colors (T59).** In Origin 2016's Worksheet Properties Format tab,
+Standard red text reached data, Long Name, Units, Comments, F(x)= and
+parameter cells. Standard yellow fill reached populated and blank data
+cells. Label backgrounds and both headings kept their original colors.
+A1 kept its manual text and fill. A new column inherited both Standard
+colors for data and the Standard text color for labels. Data and Column
+Labels palettes took precedence in both application orders. Existing
+individual Long Name and heading palettes also held when applying Standard.
+The same Standard assignments through `wproperties` produced pixel-identical
+regions in both orders, while explicit category assignments changed the
+worksheet. [Origin Worksheet Properties Format tab](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
+
+Sheaf uses those Standard scopes beneath individual, category and manual
+colors. Clearing either Standard control restores the ordinary fallback for
+that property. The grid, print and worksheet images use the resolved styles.
+Excel writes the styles in the current rectangle and exported label rows.
 
 Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
 The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,

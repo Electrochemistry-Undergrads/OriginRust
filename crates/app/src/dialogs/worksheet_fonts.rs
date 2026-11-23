@@ -71,7 +71,7 @@ impl WorksheetFontsDialog {
             worksheet.column_label_colors,
             labels.column_header,
             labels.row_header,
-            CategoryColors::default(),
+            worksheet.standard_colors,
             labels.formula,
         ];
         let mut fonts: Vec<_> = sheaf_plot::SystemFonts::shared()
@@ -120,6 +120,7 @@ impl WorksheetFontsDialog {
         };
         doc.apply(label, |p| {
             let sheet = &mut p.workbook_mut(self.book).unwrap().sheets[self.sheet];
+            sheet.standard_colors = self.shown_colors[STANDARD];
             sheet.data_colors = self.shown_colors[DATA];
             sheet.column_label_colors = self.shown_colors[BULK];
             sheet.label_colors = LabelColors {
@@ -236,28 +237,26 @@ impl WorksheetFontsDialog {
                         shown.size_pt = (size > 0.0).then_some(size.max(4.0));
                     }
                     ui.end_row();
-                    if self.category != STANDARD {
-                        let category = CATEGORIES[self.category];
-                        let colors = &mut self.shown_colors[self.category];
-                        ui.label("Text Color");
-                        optional_color(
-                            ui,
-                            &mut colors.text_color,
-                            "Use color",
-                            Color::BLACK,
-                            &format!("{category} text color"),
-                        );
-                        ui.end_row();
-                        ui.label("Fill Color");
-                        optional_color(
-                            ui,
-                            &mut colors.fill,
-                            "Use fill",
-                            Color::rgb(255, 255, 153),
-                            &format!("{category} fill color"),
-                        );
-                        ui.end_row();
-                    }
+                    let category = CATEGORIES[self.category];
+                    let colors = &mut self.shown_colors[self.category];
+                    ui.label("Text Color");
+                    optional_color(
+                        ui,
+                        &mut colors.text_color,
+                        "Use color",
+                        Color::BLACK,
+                        &format!("{category} text color"),
+                    );
+                    ui.end_row();
+                    ui.label("Fill Color");
+                    optional_color(
+                        ui,
+                        &mut colors.fill,
+                        "Use fill",
+                        Color::rgb(255, 255, 153),
+                        &format!("{category} fill color"),
+                    );
+                    ui.end_row();
                 });
                 ui.add_space(6.0);
                 ui.label("Manual cell formats take precedence over category defaults.");

@@ -8120,6 +8120,31 @@ fn a_sunburst_of_selected_text_columns_counts_the_rows() {
 }
 
 #[test]
+fn define_name_on_a_cell_lets_formulas_read_it() {
+    let mut h = start(vec![data_file("named-cell")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let (b, c) = (column_id(&h, "B"), column_id(&h, "C"));
+    let entries = menus::cell_menu_for(false, (b, 1), false, false, false, false, (false, false));
+    assert!(entries.iter().any(|e| matches!(e, menus::Entry::Item(i)
+        if i.label == "Define Name..." && i.cmd == Some(menus::Cmd::DefineName { column: b, row: 1 }))));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::DefineName { column: b, row: 1 }, &ctx);
+    settle(&mut h);
+    assert!(h.state().name_cell.is_some(), "the window opened");
+    // A reserved name is refused and the window says why.
+    h.state_mut().apply(Action::SetCellName { column: b, row: 1, name: "j".into() }, &ctx);
+    assert!(h.state().name_cell.as_ref().unwrap().problem.is_some());
+    h.state_mut().apply(Action::SetCellName { column: b, row: 1, name: "Rate".into() }, &ctx);
+    settle(&mut h);
+    assert!(h.state().name_cell.is_none(), "OK closes");
+    assert_eq!(project(&h).name_of_cell(b, 1), Some("Rate"));
+    assert_eq!(h.state().doc.undo_label(), Some("Define Name Rate"));
+    // The sample's B is 2.5, 4.5, 6.5, 8.5: Rate is 4.5.
+    h.state_mut().doc.edit("formula", |p| p.set_column_values(c, "Rate*2", Some(0..1))).unwrap();
+    assert_eq!(project(&h).numeric(c).unwrap()[0], 9.0);
+}
+
+#[test]
 fn ctrl_shift_c_copies_with_the_label_rows() {
     let mut h = start(vec![data_file("copy-labels")]);
     show_window(&mut h, "Book1 - sample.csv");

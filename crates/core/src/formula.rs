@@ -187,6 +187,25 @@ impl Host for SheetHost<'_> {
         self.book?.named_value(name)
     }
 
+    fn named_range(&self, name: &str) -> Option<(ColumnRef, usize, usize)> {
+        // A named range of the workbook (T400), as `col(k)[first:last]` on its sheet.
+        let book = self.book?;
+        let n = book.named_cell(name).filter(|n| n.is_range())?;
+        let (s, sheet) = book.sheets.iter().enumerate().find(|(_, s)| s.columns.iter().any(|c| c.id == n.column))?;
+        let position = sheet.columns.iter().position(|c| c.id == n.column)? + 1;
+        let column = if std::ptr::eq(sheet, self.sheet) {
+            ColumnRef::Index(position)
+        } else {
+            ColumnRef::Scoped {
+                book: None,
+                sheet: WorksheetRef::Index(s + 1),
+                column: Box::new(ColumnRef::Index(position)),
+            }
+        };
+        let (first, last) = n.rows();
+        Some((column, first + 1, last + 1))
+    }
+
     fn cell(&self, col: &ColumnRef, row: usize) -> Option<f64> {
         let c = self.find(col)?;
         // A masked cell reads as missing (measured in Origin 2016, T264: col(A)+col(B) is missing in

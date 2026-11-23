@@ -363,7 +363,7 @@ Expression, model and native/companion round-trip regressions are in the `cross_
 `cross_sheet_formulas` test files. The sheet-only host used for filters and analysis conditions
 has no project scope and continues to reject qualified references.
 
-### Named cells (T396, Origin 2022 feature, single cells only, not measured)
+### Named cells (T396, T400, Origin 2022 feature, not measured)
 
 A data cell's right-click Define Name... names the cell (`Project::define_name`, kept in `Workbook::names` and saved
 in `.sheaf`). A formula of any column of that workbook reads the name as the cell's value: `col(B) * Rate`. Names
@@ -372,7 +372,15 @@ at most 32 characters, and `i`, `j` and `pi` are refused (formulas already use t
 moves it to the new cell. A text, empty or out-of-range cell reads as missing; a name whose column was deleted no
 longer resolves. A formula that reads a name depends on the named cell's column, so Auto and Manual columns are
 updated when that column changes. One undo step ("Define Name Rate"). The window prefills the cell's current name.
-Not done: named ranges of several cells, project-wide names, a name manager, the `.opj` and Excel round trip.
+
+Named ranges (T400, Origin 2022 feature, one column only, not measured): with several cells of one column selected,
+right-click inside the selection, Define Name... names those rows (`Project::define_range`; the same `Workbook::names`
+entry with a last row). A formula uses the name where a column with a row range goes: `mean(Upper)` is
+`mean(col(B)[2:4])`, and so are `total`, `count`, `sd`, `max(Upper)`, `cumsum(Upper)` and the other statistics
+and column functions. The range's column may be on another sheet of the workbook. On its own (`Upper * 2`) the name
+is refused: it is not one value. Rows past the column's end are not read. A selection over several columns names
+only the right-clicked cell. Defining a one-row range names a single cell again.
+Not done: blocks of several columns, project-wide names, a name manager, the `.opj` and Excel round trip.
 
 ## 4. Calling it from the program
 

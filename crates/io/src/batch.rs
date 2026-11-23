@@ -164,6 +164,7 @@ pub fn place_workbook_with(
                     notes: Vec::new(),
                     cell_formats: Vec::new(),
                     font_defaults: Default::default(),
+                    standard_colors: Default::default(),
                     data_colors: Default::default(),
                     column_label_colors: Default::default(),
                     label_colors: Default::default(),

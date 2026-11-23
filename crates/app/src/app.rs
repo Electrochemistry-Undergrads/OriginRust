@@ -2259,12 +2259,15 @@ impl SheafApp {
                 });
             }
             Action::DefineName { column, row } => {
-                let current = self.doc.project().name_of_cell(column, row).map(str::to_string);
-                self.name_cell = Some(crate::dialogs::name_cell::NameCellDialog::new(column, row, current.as_deref()));
+                // Several selected cells of this column only: they are named together (a named range, T400).
+                let (first, last) = self.selected_rows_of(column, row).unwrap_or((row, row));
+                let current = self.doc.project().name_of_range(column, first, last).map(str::to_string);
+                self.name_cell =
+                    Some(crate::dialogs::name_cell::NameCellDialog::new(column, first, last, current.as_deref()));
             }
-            Action::SetCellName { column, row, name } => {
+            Action::SetCellName { column, row, last, name } => {
                 let label = format!("Define Name {name}");
-                match self.doc.edit(&label, |p| p.define_name(&name, column, row)) {
+                match self.doc.edit(&label, |p| p.define_range(&name, column, row, last)) {
                     Ok(_) => {
                         self.name_cell = None;
                         self.say(format!("Formulas of this workbook can read {name}"));
@@ -5575,10 +5578,22 @@ impl SheafApp {
             NameCellOutcome::Open => {}
             NameCellOutcome::Closed => self.name_cell = None,
             NameCellOutcome::Define(name) => {
-                let (column, row) = (d.column, d.row);
-                self.apply(Action::SetCellName { column, row, name }, ctx);
+                let (column, row, last) = (d.column, d.row, d.last);
+                self.apply(Action::SetCellName { column, row, last, name }, ctx);
             }
         }
+    }
+
+    /// The first and last selected rows when the selection is several cells of `column` alone and holds
+    /// `row` (T400).
+    fn selected_rows_of(&self, column: ColumnId, row: usize) -> Option<(usize, usize)> {
+        let project = self.doc.project();
+        let (book, _, _) = project.locate(column)?;
+        let sheet = book.sheets.get(book.active_sheet)?;
+        let index = sheet.column_index(column)?;
+        let target = self.books.get(&book.id)?.target(sheet)?;
+        let rows = target.rows;
+        (target.columns == [index] && rows.contains(&row) && rows.len() > 1).then(|| (rows.start, rows.end - 1))
     }
 
     /// Send Graphs to PowerPoint... (T232): the window, then the file picker and the file.

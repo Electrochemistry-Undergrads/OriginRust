@@ -5742,6 +5742,27 @@ fn the_statistics_menu_makes_a_manhattan_plot() {
     assert_eq!(h.state().doc.undo_label(), Some("Manhattan plot"));
 }
 
+/// Statistics > Quantitative PCR > Relative Quantification... (T397): text groups and two Ct columns give the ratios;
+/// one undo step.
+#[test]
+fn the_statistics_menu_quantifies_qpcr() {
+    let data = csv_file(
+        "qpcr",
+        "q",
+        "well,sample,gene,actin\n1,ctrl,25.0,18.0\n2,ctrl,25.2,18.1\n3,ctrl,24.8,17.9\n4,treated,23.0,18.0\n5,treated,23.1,18.0\n6,treated,22.9,18.0\n",
+    );
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - q.csv");
+    menu_path(&mut h, &["Statistics", "Quantitative PCR", "Relative Quantification..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Control group (empty: the first)"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
+    let (sheet, ratio) = result_column(&h, "Expression ratio");
+    assert!(sheet.starts_with("qPCR"), "{sheet}");
+    assert!((ratio[1] - 4.0).abs() < 1e-12, "{ratio:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("qPCR relative quantification"));
+}
+
 /// Statistics > Survival Analysis > Life Data Regression... (T391): covariate, time and censor columns give the
 /// coefficients; one undo step.
 #[test]

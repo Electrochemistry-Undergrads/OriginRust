@@ -2238,6 +2238,29 @@ the row out, a missing, negative or fractional one is refused, and the frequenci
 rows. Checked by fitting the same data written out row by row (`crates/core/src/analysis/lifedist.rs`,
 `crates/cli/tests/analyze.rs`).
 
+## 50 qPCR relative quantification and standard curves (T397, Origin 2027 Pro assay apps; not measured)
+
+Origin 2027's assay apps analyze qPCR experiments; Origin 2016 has none, so this is Sheaf's own. Statistics >
+Quantitative PCR:
+
+- **Relative Quantification...** (`Tool::Qpcr`, `sheaf analyze qpcr --y GROUP,TARGET_CT,REFERENCE_CT [--control NAME]
+  [--e-target 2] [--e-reference 2] [--confidence 95] [--no-graph]`): wells with a missing Ct are left out; groups keep
+  their first order and the control is the named group (default the first); every group needs two wells. Per group,
+  `dCt = Ct_target - Ct_reference` (mean, sample SD) and `ddCt = mean dCt - mean dCt(control)`. The expression ratio is
+  `E_t^(mean Ct_t(control) - mean Ct_t) / E_r^(mean Ct_r(control) - mean Ct_r)` (Pfaffl), which is Livak's `2^-ddCt`
+  for amplification factors of 2. Against the control, `SE = sqrt(s^2/n + s_c^2/n_c)` with Welch's degrees of freedom
+  gives the two-sided t test of dCt and the interval `ddCt -+ t SE`, mapped to the ratio with the mean log factor
+  (exact for equal factors). The result sheet `qPCRN` has one row per group (N, mean target and reference Ct, mean and
+  SD dCt, ddCt, SE ddCt, Expression ratio, lower and upper bound, Prob (Welch)); a new graph draws the ratios as columns
+  with the bounds.
+- **Standard Curve...** (`Tool::QpcrCurve`, `sheaf analyze qpcr-curve --y QUANTITY,CT [--no-graph]`): Ct against
+  `log10` quantity by least squares (quantities above 0); slope, intercept, R^2, amplification factor `E = 10^(-1/slope)`
+  and efficiency `(E - 1) 100 %`, with the curve graph.
+
+Checked against numpy and scipy (`tools/qpcr-ref.py`, `crates/calc/tests/qpcr_reference.rs`: Livak and Pfaffl on three
+groups, a ten-point standard curve) to 1e-10. Multiple reference genes (geometric mean), plate layouts, melt curves,
+outlier wells and Western blot densitometry are not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

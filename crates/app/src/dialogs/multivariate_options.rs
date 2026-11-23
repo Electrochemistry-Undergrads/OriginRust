@@ -7,9 +7,9 @@ use sheaf_core::analysis::{
     AcfSpec, AdfTerms, ArimaSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty,
     ChangePointSpec, DecomposeModel, DecomposeSpec, ExpSmoothSpec, FactorialDesignSpec, FactorialEffectsSpec,
     ForestTask, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistArbitrarySpec, LifeDistSpec,
-    LifeRegressionSpec, ManhattanSpec, MixtureDesignSpec, MixtureKind, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec,
-    RandomForestSpec, RareChartKind, RareChartSpec, RocSpec, SmoothModel, SplitPlotDesignSpec, SplitPlotEffectsSpec,
-    StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec, Tool,
+    LifeRegressionSpec, ManhattanSpec, MixtureDesignSpec, MixtureKind, PcaSpec, PivotPeriod, PivotStat, QpcrCurveSpec,
+    QpcrSpec, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec, RocSpec, SmoothModel, SplitPlotDesignSpec,
+    SplitPlotEffectsSpec, StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec, Tool,
 };
 
 /// Comma-separated numbers typed in a box (T386); empty text is no number.
@@ -51,6 +51,8 @@ pub struct MultiOptions {
     life: LifeDistSpec,
     life_any: LifeDistArbitrarySpec,
     life_reg: LifeRegressionSpec,
+    qpcr: QpcrSpec,
+    qpcr_curve: QpcrCurveSpec,
     /// The value of the Manual penalty while another penalty is chosen.
     manual_penalty: Option<f64>,
     /// The quantiles as typed (comma separated), read when the tool runs.
@@ -106,6 +108,8 @@ impl MultiOptions {
             }
             AnalysisKind::TimePivot => Ok(Tool::TimePivot(self.timepivot)),
             AnalysisKind::LifeDistArbitrary => Ok(Tool::LifeDistArbitrary(self.life_any)),
+            AnalysisKind::Qpcr => Ok(Tool::Qpcr(self.qpcr.clone())),
+            AnalysisKind::QpcrCurve => Ok(Tool::QpcrCurve(self.qpcr_curve)),
             AnalysisKind::LifeRegression => {
                 if self.life_reg.censor.trim().is_empty() {
                     return Err("give the censoring value".to_string());
@@ -296,6 +300,32 @@ impl MultiOptions {
                 ui.weak(
                     "The exact solution of each quantile (the sum of check losses is as small as it can be); no standard errors.",
                 );
+            }
+            AnalysisKind::Qpcr => {
+                ui.label("The chosen columns are the sample group, the target Ct and the reference Ct.");
+                let s = &mut self.qpcr;
+                ui.horizontal(|ui| {
+                    ui.label("Control group (empty: the first)");
+                    ui.add(egui::TextEdit::singleline(&mut s.control).desired_width(100.0));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Amplification factor: target");
+                    ui.add(egui::DragValue::new(&mut s.e_target).speed(0.01).range(1.0..=3.0));
+                    ui.label("reference");
+                    ui.add(egui::DragValue::new(&mut s.e_reference).speed(0.01).range(1.0..=3.0));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Confidence level");
+                    let mut pct = s.confidence * 100.0;
+                    if ui.add(egui::DragValue::new(&mut pct).speed(0.1).range(50.0..=99.99).suffix(" %")).changed() {
+                        s.confidence = pct / 100.0;
+                    }
+                });
+                ui.checkbox(&mut s.graph, "Expression ratio graph");
+            }
+            AnalysisKind::QpcrCurve => {
+                ui.label("The chosen columns are the quantity (copies, dilution) and the Ct.");
+                ui.checkbox(&mut self.qpcr_curve.graph, "Standard curve graph");
             }
             AnalysisKind::LifeRegression => {
                 ui.label("The chosen columns are the covariates, then the time and the censor column.");

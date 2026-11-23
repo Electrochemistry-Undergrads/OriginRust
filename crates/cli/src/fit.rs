@@ -178,6 +178,14 @@ pub fn fit(a: FitArgs) -> Result<()> {
     {
         crate::commands::require_positive("--dpi", Some(a.dpi))?;
         let graph = sheaf_ops::fit::fit_graph(&mut project, &outcomes[0], columns[0])?;
+        if a.mark_ec50 {
+            let m = project.mark_ec50(graph, &outcomes[0]).map_err(anyhow::Error::msg)?;
+            println!(
+                "EC50 marked at X = {} with the half response {}",
+                sheaf_core::format::format_general(m.x, 6),
+                sheaf_core::format::format_general(m.y, 6)
+            );
+        }
         sheaf_plot::export_file(&project, graph, path, a.dpi)
             .with_context(|| format!("could not write '{}'", path.display()))?;
         println!("wrote {}", path.display());

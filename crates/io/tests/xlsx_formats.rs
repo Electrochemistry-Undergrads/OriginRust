@@ -194,6 +194,30 @@ fn worksheet_data_colors_export_for_values_and_in_range_blanks() {
 }
 
 #[test]
+fn worksheet_standard_colors_export_label_text_and_filled_data_blanks() {
+    use sheaf_core::cellformat::CategoryColors;
+
+    let mut a = column(1, vec![1.0, f64::NAN, 3.0]);
+    a.long_name = "Signal".into();
+    a.formula = Some("i".into());
+    let mut s = Worksheet { columns: vec![a, column(2, vec![4.0])], ..Worksheet::new("Standard colors") };
+    s.standard_colors = CategoryColors { text_color: Some(Color::RED), fill: Some(Color::rgb(22, 33, 44)) };
+    let options = ExcelExportOptions { short_names: true, long_names: true, ..plain() };
+    let (xml, styles, warnings) = Output::new("worksheet-standard-colors").export(&s, &options);
+    for address in ["A2", "B2", "A3", "A4", "B5"] {
+        let format = style(&xml, &styles, address);
+        assert!(font(format, &styles).contains("FFFF0000"), "{address}");
+        assert_eq!(fill(format, &styles).contains("FF16212C"), !address.ends_with('2'), "{address}");
+    }
+    let heading = style(&xml, &styles, "A1");
+    assert!(!font(heading, &styles).contains("FFFF0000"));
+    assert!(!fill(heading, &styles).contains("FF16212C"));
+    assert!(!xml.contains("r=\"B6\""));
+    assert!(warnings.iter().any(|w| w.contains("worksheet Standard colors")));
+    assert!(warnings.iter().any(|w| w.contains("label rows omitted")));
+}
+
+#[test]
 fn worksheet_column_label_colors_export_for_label_values_and_blanks_only() {
     use sheaf_core::cellformat::CategoryColors;
 
@@ -242,6 +266,24 @@ fn individual_label_colors_export_on_their_rows_and_report_the_omitted_formula()
     assert_eq!(xml, before_xml);
     assert_eq!(styles, before_styles);
     assert!(warnings.iter().any(|w| w.contains("label rows omitted")));
+}
+
+#[test]
+fn worksheet_heading_colors_are_reported_without_changing_xlsx_cells() {
+    let mut a = column(1, vec![1.0, 2.0]);
+    a.long_name = "Signal".into();
+    let mut s = Worksheet { columns: vec![a], ..Worksheet::new("Heading colors") };
+    let output = Output::new("worksheet-heading-colors");
+    let options = ExcelExportOptions { short_names: true, long_names: true, ..plain() };
+    let (before_xml, before_styles, _) = output.export(&s, &options);
+
+    s.label_colors.column_header.text_color = Some(Color::RED);
+    s.label_colors.row_header.fill = Some(Color::BLUE);
+    let (xml, styles, warnings) = output.export(&s, &options);
+    assert_eq!(xml, before_xml);
+    assert_eq!(styles, before_styles);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("worksheet header colors are omitted"));
 }
 
 #[test]

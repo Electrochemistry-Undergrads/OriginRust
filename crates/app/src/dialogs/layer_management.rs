@@ -7,7 +7,7 @@
 use std::collections::BTreeSet;
 
 use eframe::egui::{self, Color32, Sense, Stroke};
-use sheaf_core::graph::{Frame, Graph, Layer, ScaleKind, ScaleLink};
+use sheaf_core::graph::{Frame, Graph, Layer, LayerDrawingOrder, ScaleKind, ScaleLink};
 use sheaf_core::layer_manage::{AlignEdge, ArrangeOptions, ArrangeOrder, LayerError, SizeUnit};
 use sheaf_core::layers::NewLayerKind;
 use sheaf_core::{Document, Project, WindowId};
@@ -62,8 +62,9 @@ pub struct LayerManagementDialog {
     work: Graph,
     /// The source layers at opening: OK must not overwrite an edit made behind this window.
     source_layers: Vec<Layer>,
-    /// The layers before each Apply, newest last.
-    history: Vec<Vec<Layer>>,
+    source_drawing_order: LayerDrawingOrder,
+    /// The layers and page drawing order before each Apply, newest last.
+    history: Vec<(Vec<Layer>, LayerDrawingOrder)>,
     selected: BTreeSet<usize>,
     tab: Tab,
     add_kind: NewLayerKind,
@@ -106,6 +107,7 @@ impl LayerManagementDialog {
         Some(Self {
             graph,
             source_layers: work.layers.clone(),
+            source_drawing_order: work.page.style.layer_drawing_order,
             work,
             history: Vec::new(),
             selected,
@@ -144,7 +146,7 @@ impl LayerManagementDialog {
 
     /// Runs one Apply on the preview; a refused one leaves the preview as it was.
     fn apply(&mut self, change: impl FnOnce(&mut Graph) -> Result<(), LayerError>) {
-        let before = self.work.layers.clone();
+        let before = (self.work.layers.clone(), self.work.page.style.layer_drawing_order);
         match change(&mut self.work) {
             Ok(()) => {
                 self.history.push(before);
@@ -157,8 +159,9 @@ impl LayerManagementDialog {
     }
 
     fn undo(&mut self) {
-        if let Some(layers) = self.history.pop() {
+        if let Some((layers, drawing_order)) = self.history.pop() {
             self.work.layers = layers;
+            self.work.page.style.layer_drawing_order = drawing_order;
             self.selected.retain(|&index| index < self.work.layers.len());
             self.axes.invalidate();
             self.display.invalidate();
@@ -172,9 +175,14 @@ impl LayerManagementDialog {
         }
         // The graph was deleted, or its layers changed behind the window.
         match doc.project().graph(self.graph) {
-            Some(g) if self.history.is_empty() && g.layers.len() != self.work.layers.len() => {
+            Some(g)
+                if self.history.is_empty()
+                    && (g.layers.len() != self.work.layers.len()
+                        || g.page.style.layer_drawing_order != self.source_drawing_order) =>
+            {
                 self.work = g.clone();
                 self.source_layers = g.layers.clone();
+                self.source_drawing_order = g.page.style.layer_drawing_order;
                 self.axes.invalidate();
                 self.display.invalidate();
                 self.selected.retain(|&i| i < self.work.layers.len());
@@ -235,14 +243,24 @@ impl LayerManagementDialog {
         if open { result } else { Outcome::Closed }
     }
 
-    /// OK: writes the preview's layers to the graph as one undo step (nothing when no Apply was made).
+    /// OK: writes the preview to the graph as one undo step when an Apply changed it.
     fn commit(&mut self, doc: &mut Document) -> Outcome {
-        if self.history.is_empty() || self.work.layers == self.source_layers {
+        let order = self.work.page.style.layer_drawing_order;
+        let changed_order = order != self.source_drawing_order;
+        if self.history.is_empty() || (!changed_order && self.work.layers == self.source_layers) {
             return Outcome::Closed;
         }
-        if doc.project().graph(self.graph).is_some_and(|g| g.layers != self.source_layers) {
-            self.problem =
-                Some("The graph layers changed while this window was open. Cancel and reopen Layer Management.".into());
+        let stale = doc.project().graph(self.graph).and_then(|g| {
+            if g.layers != self.source_layers {
+                Some("The graph layers changed")
+            } else if changed_order && g.page.style.layer_drawing_order != self.source_drawing_order {
+                Some("The drawing order changed")
+            } else {
+                None
+            }
+        });
+        if let Some(reason) = stale {
+            self.problem = Some(format!("{reason} while this window was open. Cancel and reopen Layer Management."));
             return Outcome::Open;
         }
         let layers = self.work.layers.clone();
@@ -250,6 +268,9 @@ impl LayerManagementDialog {
         let done = doc.edit("Layer Management", |p| match p.graph_mut(id) {
             Some(g) => {
                 g.layers = layers;
+                if changed_order {
+                    g.page.style.layer_drawing_order = order;
+                }
                 Ok(())
             }
             None => Err("the graph is gone"),
@@ -613,15 +634,29 @@ impl LayerManagementDialog {
                 egui::vec2(f.width as f32 * size.x, f.height as f32 * size.y),
             )
         };
-        for (i, layer) in self.work.layers.iter().enumerate() {
+        let frames = |i, layer: &Layer| {
             let frame = self.work.page_frame(i);
-            let r = screen(frame);
-            let border = screen(layer.border.relative_frame().within(frame));
+            (screen(frame), screen(layer.border.relative_frame().within(frame)))
+        };
+        let draw_fills = |layer: &Layer, r, border| {
             if let Some(c) = layer.border.fill {
                 painter.rect_filled(border, 0.0, display::rgba(c));
             }
             if let Some(c) = layer.background {
                 painter.rect_filled(r, 0.0, display::rgba(c));
+            }
+        };
+        let composite = self.work.page.style.layer_drawing_order == LayerDrawingOrder::Composite;
+        if composite {
+            for (i, layer) in self.work.layers.iter().enumerate() {
+                let (r, border) = frames(i, layer);
+                draw_fills(layer, r, border);
+            }
+        }
+        for (i, layer) in self.work.layers.iter().enumerate() {
+            let (r, border) = frames(i, layer);
+            if !composite {
+                draw_fills(layer, r, border);
             }
             let on = self.selected.contains(&i);
             if on {

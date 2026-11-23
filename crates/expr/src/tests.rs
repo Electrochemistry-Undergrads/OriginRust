@@ -1346,3 +1346,28 @@ fn hour_minute_and_second_match_origins_worksheet_column() {
     assert_eq!(hms("1.5"), [-1.0, -1.0, -1.0]);
     assert_eq!(hms("na()"), [-1.0, -1.0, -1.0]);
 }
+
+#[test]
+fn a_named_range_stands_for_rows_of_a_column() {
+    // T400: `Name` is `col(A)[2:4]` inside statistics and vector functions.
+    let a = [1.0, 2.0, 3.0, 4.0, 5.0];
+    let host = SimpleHost::new().short("A", &a).range("Mid", ColumnRef::Short("A".into()), 2, 4);
+    let one = |src: &str| Expr::parse(src).unwrap_or_else(|e| panic!("{src}: {e}")).eval(&host);
+    assert_eq!(one("total(Mid)").unwrap(), 9.0);
+    assert_eq!(one("mean(mid)").unwrap(), 3.0, "letter case is ignored");
+    assert_eq!(one("count(Mid)").unwrap(), 3.0);
+    assert_eq!(one("max(Mid) - min(Mid)").unwrap(), 2.0);
+    assert_eq!(one("total(Mid) == total(col(A)[2:4])").unwrap(), 1.0);
+    let cum = Expr::parse("cumsum(Mid)").unwrap().eval_rows(&host, 3).unwrap();
+    assert_eq!(cum, [2.0, 5.0, 9.0]);
+    // A range is not a single value; an unknown name in a statistics function says what it needs.
+    let bare = one("Mid + 1").unwrap_err().to_string();
+    assert!(bare.contains("names a range of cells"), "{bare}");
+    let unknown = one("mean(Nope)").unwrap_err().to_string();
+    assert!(unknown.contains("is not a named range"), "{unknown}");
+    // A named range past the column's end reads the rows that exist.
+    let host = SimpleHost::new().short("A", &a).range("Tail", ColumnRef::Short("A".into()), 4, 9);
+    assert_eq!(Expr::parse("total(Tail)").unwrap().eval(&host).unwrap(), 9.0);
+    // A plain scalar min(x) keeps its meaning.
+    assert_eq!(Expr::parse("min(x)").unwrap().eval(&SimpleHost::new().var("x", 7.0)).unwrap(), 7.0);
+}

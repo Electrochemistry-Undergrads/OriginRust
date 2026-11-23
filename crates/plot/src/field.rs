@@ -33,6 +33,37 @@ pub(crate) struct FieldGrid {
 }
 
 impl FieldGrid {
+    /// Closes a polar grid round the circle (T399): when the angles (the columns when `angle_on_x`, else
+    /// the rows) are even steps in degrees that stop one step short of a full turn, the first column (row)
+    /// is repeated one step past the last, so the wedge from the last angle back to the first is filled.
+    pub fn wrap_full_circle(&mut self, angle_on_x: bool) {
+        let (from, to, n) =
+            if angle_on_x { (self.x_from, self.x_to, self.cols) } else { (self.y_from, self.y_to, self.rows) };
+        if n < 2 {
+            return;
+        }
+        let step = (to - from) / (n - 1) as f64;
+        if !(step > 0.0 && ((to + step - from) - 360.0).abs() < 1e-6 * 360.0) {
+            return;
+        }
+        if angle_on_x {
+            let cols = self.cols;
+            let mut z = Vec::with_capacity(self.rows * (cols + 1));
+            for r in 0..self.rows {
+                z.extend_from_slice(&self.z[r * cols..(r + 1) * cols]);
+                z.push(self.z[r * cols]);
+            }
+            self.z = z;
+            self.cols += 1;
+            self.x_to = to + step;
+        } else {
+            let first: Vec<f64> = self.z[..self.cols].to_vec();
+            self.z.extend(first);
+            self.rows += 1;
+            self.y_to = to + step;
+        }
+    }
+
     pub fn x_at(&self, c: usize) -> f64 {
         spaced(self.x_from, self.x_to, c, self.cols)
     }
@@ -59,7 +90,7 @@ impl FieldGrid {
         }
     }
 
-    fn at(&self, r: usize, c: usize) -> f64 {
+    pub(crate) fn at(&self, r: usize, c: usize) -> f64 {
         self.z[r * self.cols + c]
     }
 
@@ -296,6 +327,9 @@ pub(crate) fn band_color(palette: FieldPalette, k: usize, n: usize) -> Color {
         }
         FieldPalette::BlueWhiteRed => &[(0.0, 0.0, 255.0), (255.0, 255.0, 255.0), (255.0, 0.0, 0.0)],
         FieldPalette::Gray => &[(0.0, 0.0, 0.0), (255.0, 255.0, 255.0)],
+        FieldPalette::RainbowReversed => {
+            &[(255.0, 0.0, 0.0), (255.0, 255.0, 0.0), (0.0, 255.0, 0.0), (0.0, 255.0, 255.0), (0.0, 0.0, 255.0)]
+        }
     };
     let x = t * (stops.len() - 1) as f64;
     let i = (x.floor() as usize).min(stops.len() - 2);
@@ -307,6 +341,9 @@ pub(crate) fn band_color(palette: FieldPalette, k: usize, n: usize) -> Color {
 fn out_of_range_color(palette: FieldPalette, above: bool) -> Color {
     match (palette, above) {
         (FieldPalette::Rainbow, false) => Color::BLACK,
+        // Origin's polar contour (measured): light gray above, black below.
+        (FieldPalette::RainbowReversed, true) => Color::rgb(192, 192, 192),
+        (FieldPalette::RainbowReversed, false) => Color::BLACK,
         (FieldPalette::Gray, true) => Color::rgb(0, 0, 255),
         (FieldPalette::Gray, false) => Color::rgb(255, 0, 0),
         _ => Color::WHITE,
@@ -428,7 +465,9 @@ fn draw_cells(out: &mut Vec<Item>, field: &FieldPlot, grid: &FieldGrid, geom: &L
             }
             let color = match band {
                 Ok(k) => band_color(field.palette, k, n),
-                Err(above) => out_of_range_color(field.palette, above),
+                Err(above) => {
+                    field.above_color.filter(|_| above).unwrap_or_else(|| out_of_range_color(field.palette, above))
+                }
             };
             let (left, right) = (across(cols[i]).0, across(cols[end - 1]).1);
             if [left, right, top, bottom].iter().all(|v| v.is_finite()) {
@@ -684,7 +723,7 @@ fn draw_scale(out: &mut Vec<Item>, field: &FieldPlot, grid: &FieldGrid, geom: &L
     // The cells beyond the scale.
     out.push(Item::Rect {
         rect: Rect { x: bar_x, y: f.y, w: bar_w, h: end },
-        fill: Some(out_of_range_color(field.palette, true)),
+        fill: Some(field.above_color.unwrap_or_else(|| out_of_range_color(field.palette, true))),
         stroke: None,
     });
     out.push(Item::Rect {

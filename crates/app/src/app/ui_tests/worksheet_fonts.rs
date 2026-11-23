@@ -231,6 +231,50 @@ fn worksheet_header_fonts_reach_titles_and_row_numbers_with_one_undo() {
 }
 
 #[test]
+fn f4_heading_colors_keep_separate_drafts_and_paint_the_corner_and_captions() {
+    use sheaf_core::color::Color;
+
+    let mut h = start_sheet("worksheet-heading-colors");
+    let id = project(&h).workbooks().next().unwrap().id;
+    let blue = Color::rgb(22, 33, 44);
+    h.state_mut().doc.apply("Seed row header color", |p| {
+        let worksheet = p.workbook_mut(id).unwrap().sheet_mut();
+        worksheet.columns[0].long_name = "Alpha".into();
+        worksheet.label_colors.row_header.fill = Some(blue);
+    });
+    let before = project(&h).clone();
+    open(&mut h);
+    category(&mut h, "Data", "Column Header");
+    click(&mut h, "Use fill");
+    category(&mut h, "Column Header", "Row Header");
+    click(&mut h, "Use color");
+    assert_eq!(project(&h), &before);
+    click(&mut h, "OK");
+
+    let s = sheet(&h);
+    assert_eq!(s.column_header_style().fill, Some(Color::rgb(255, 255, 153)));
+    assert_eq!(s.row_header_style().fill, Some(blue));
+    assert_eq!(s.row_header_style().text_color, Some(Color::BLACK));
+    let fills = |color| {
+        h.output()
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Rect(rect) if rect.fill == color => Some(rect.rect),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let columns = fills(egui::Color32::from_rgb(255, 255, 153));
+    let rows = fills(egui::Color32::from_rgb(22, 33, 44));
+    assert!(columns.len() > s.columns.len(), "the corner has the column header color");
+    let top = columns.iter().map(|r| r.bottom()).fold(f32::NEG_INFINITY, f32::max);
+    assert!(rows.into_iter().any(|r| (r.top() - top).abs() < 1.0), "the first caption uses the row header color");
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
 fn standard_font_scales_the_grid_and_data_can_reset_to_it() {
     let mut h = start_sheet("worksheet-standard-font");
     let book = project(&h).workbooks().next().unwrap().id;
@@ -276,8 +320,8 @@ fn f4_data_colors_keep_drafts_across_categories_and_restore_with_undo() {
     open(&mut h);
     click(&mut h, "Use color");
     click(&mut h, "Use fill");
-    category(&mut h, "Data", "Column Header");
-    assert!(h.query_by_label("Use fill").is_none());
+    category(&mut h, "Data", "Standard");
+    assert!(h.query_by_label("Use fill").is_some());
     assert_eq!(project(&h), &before);
     click(&mut h, "OK");
 
@@ -292,6 +336,40 @@ fn f4_data_colors_keep_drafts_across_categories_and_restore_with_undo() {
 }
 
 #[test]
+fn f4_standard_colors_keep_their_draft_and_clear_independently() {
+    use sheaf_core::cellformat::CategoryColors;
+    use sheaf_core::color::Color;
+
+    let mut h = start_sheet("worksheet-standard-colors");
+    let before = project(&h).clone();
+    open(&mut h);
+    category(&mut h, "Data", "Standard");
+    click(&mut h, "Use fill");
+    click(&mut h, "Use color");
+    category(&mut h, "Standard", "Data");
+    assert_eq!(project(&h), &before);
+    click(&mut h, "Apply");
+    let yellow = Color::rgb(255, 255, 153);
+    let s = sheet(&h);
+    assert_eq!(s.standard_colors, CategoryColors { text_color: Some(Color::BLACK), fill: Some(yellow) });
+    assert!(s.data_colors.is_empty());
+    assert_eq!(s.cell_format_at(s.columns[0].id, 0).fill, Some(yellow));
+    assert_eq!(s.label_color_defaults(&LabelKind::LongName).fill, None);
+    assert!(h.output().shapes.iter().any(|shape| {
+        matches!(&shape.shape, egui::Shape::Rect(rect) if rect.fill == egui::Color32::from_rgb(255, 255, 153))
+    }));
+
+    category(&mut h, "Data", "Standard");
+    click(&mut h, "Use fill");
+    click(&mut h, "OK");
+    assert_eq!(sheet(&h).standard_colors, CategoryColors { text_color: Some(Color::BLACK), fill: None });
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(sheet(&h).standard_colors.fill, Some(yellow));
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
 fn f4_column_label_colors_keep_a_separate_draft_and_repaint_the_grid() {
     use sheaf_core::color::Color;
 
@@ -301,8 +379,8 @@ fn f4_column_label_colors_keep_a_separate_draft_and_repaint_the_grid() {
     click(&mut h, "Use color");
     category(&mut h, "Data", "Column Labels");
     click(&mut h, "Use fill");
-    category(&mut h, "Column Labels", "Row Header");
-    assert!(h.query_by_label("Use fill").is_none());
+    category(&mut h, "Column Labels", "Standard");
+    assert!(h.query_by_label("Use fill").is_some());
     assert_eq!(project(&h), &before);
     click(&mut h, "OK");
 

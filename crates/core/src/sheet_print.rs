@@ -155,7 +155,7 @@ impl<'a> SheetTable<'a> {
         sheet: &'a Worksheet,
         mut style: PrintStyle,
         line_height: &dyn Fn(ResolvedStyle<'_>, f64) -> f64,
-        heading_fonts: bool,
+        heading_formats: bool,
     ) -> Self {
         let scale = f64::from(sheet.font_defaults.size_scale());
         style.row_h *= scale;
@@ -178,8 +178,8 @@ impl<'a> SheetTable<'a> {
             });
             line_height(st, size).max(style.row_h)
         };
-        let (column_header, row_header) = if heading_fonts {
-            (sheet.font_defaults.column_header_style(), sheet.font_defaults.row_header_style())
+        let (column_header, row_header) = if heading_formats {
+            (sheet.column_header_style(), sheet.row_header_style())
         } else {
             (ResolvedStyle::default(), ResolvedStyle::default())
         };
@@ -358,7 +358,13 @@ impl<'a> SheetTable<'a> {
         let label_top = |i: usize| column_header_height + self.label_heights[..i].iter().sum::<f64>();
         let height = row_top(slot.rows.end);
         // Fills first so the grid is drawn over them.
-        ops.push(PrintOp::Fill { x: 0.0, y: 0.0, w: width, h: column_header_height, color: head_fill });
+        ops.push(PrintOp::Fill {
+            x: 0.0,
+            y: 0.0,
+            w: width,
+            h: column_header_height,
+            color: self.column_header.fill.unwrap_or(head_fill),
+        });
         ops.push(PrintOp::Fill {
             x: 0.0,
             y: column_header_height,
@@ -366,7 +372,14 @@ impl<'a> SheetTable<'a> {
             h: head_h - column_header_height,
             color: label_fill,
         });
-        ops.push(PrintOp::Fill { x: 0.0, y: head_h, w: s.rownum_w, h: height - head_h, color: head_fill });
+        let row_header_top = if self.row_header.fill.is_some() { column_header_height } else { head_h };
+        ops.push(PrintOp::Fill {
+            x: 0.0,
+            y: row_header_top,
+            w: s.rownum_w,
+            h: height - row_header_top,
+            color: self.row_header.fill.unwrap_or(head_fill),
+        });
         // Manual and conditional fills of cells and label cells.
         if !self.formats.is_empty() || self.cond.is_some() {
             let mut x = s.rownum_w;
@@ -860,6 +873,64 @@ mod tests {
         assert!(*bold, "manual bold stays under a conditional colour");
         let PrintOp::Text { fmt, .. } = text_op(&ops, "1.5") else { unreachable!() };
         assert_eq!(fmt.color, Some(Color::rgb(9, 9, 8)), "unmarked cells keep the manual colour");
+    }
+
+    #[test]
+    fn worksheet_standard_colors_print_data_fill_and_data_and_label_text() {
+        use crate::cellformat::CategoryColors;
+
+        let mut ws = sheet();
+        let yellow = Color::rgb(255, 255, 0);
+        ws.standard_colors = CategoryColors { text_color: Some(Color::RED), fill: Some(yellow) };
+        let table = SheetTable::new(&ws, PrintStyle::default());
+        let (pages, _) = table.pages_for(&setup());
+        let ops = table.draw_page(&pages[0], 1);
+        let data_top = table.head_height();
+        let fills = ops.iter().filter_map(|op| match op {
+            PrintOp::Fill { y, color, .. } if *color == yellow => Some(*y),
+            _ => None,
+        });
+        let first_fill = fills.reduce(f64::min);
+        assert_eq!(first_fill, Some(data_top));
+        let heading = head_name(&ws, 0);
+        for (text, expected) in [("Index", Some(Color::RED)), ("t1", Some(Color::RED)), (heading.as_str(), None)] {
+            let PrintOp::Text { fmt, .. } = text_op(&ops, text) else { unreachable!() };
+            assert_eq!(fmt.color, expected, "{text}");
+        }
+    }
+
+    #[test]
+    fn worksheet_heading_colors_reach_the_printed_heads_and_captions() {
+        use crate::cellformat::CategoryColors;
+
+        let mut ws = sheet();
+        let col_fill = Color::rgb(22, 33, 44);
+        let row_fill = Color::rgb(55, 66, 77);
+        ws.label_colors.column_header = CategoryColors { text_color: Some(Color::RED), fill: Some(col_fill) };
+        ws.label_colors.row_header = CategoryColors { text_color: Some(Color::BLUE), fill: Some(row_fill) };
+        let back: Worksheet = serde_json::from_value(serde_json::to_value(&ws).unwrap()).unwrap();
+        assert_eq!(back.label_colors, ws.label_colors);
+        let table = SheetTable::new(&ws, PrintStyle::default());
+        let (row_header_width, column_header_height) = table.heading_extent();
+        let (pages, _) = table.pages_for(&setup());
+        let ops = table.draw_page(&pages[0], 1);
+
+        assert!(matches!(ops[0], PrintOp::Fill { y, h, color, .. }
+            if y == 0.0 && h == column_header_height && color == col_fill));
+        assert!(ops.iter().any(|op| matches!(op, PrintOp::Fill { x, y, w, color, .. }
+            if *x == 0.0 && *y == column_header_height && *w == row_header_width && *color == row_fill)));
+        let heading = head_name(&ws, 0);
+        for (text, expected) in [
+            (heading.as_str(), Some(Color::RED)),
+            ("Long Name", Some(Color::BLUE)),
+            ("2", Some(Color::BLUE)),
+            ("Index", None),
+            ("t1", None),
+        ] {
+            let PrintOp::Text { fmt, .. } = text_op(&ops, text) else { unreachable!() };
+            assert_eq!(fmt.color, expected, "{text}");
+        }
+        assert!(back.format_index().is_empty(), "heading colors are separate from cell formatting");
     }
 
     #[test]

@@ -273,8 +273,13 @@ impl Writer {
         if graph.page.background != Color::WHITE {
             notes.push("the page background colour was not written (Origin's page is white)".into());
         }
-        if !graph.page.style.is_default() {
+        let style = &graph.page.style;
+        let default_with_order = PageStyle { layer_drawing_order: style.layer_drawing_order, ..PageStyle::default() };
+        if *style != default_with_order {
             notes.push("the page's border, layer icons, window title choice and comments were not written".into());
+        }
+        if style.layer_drawing_order != LayerDrawingOrder::default() {
+            notes.push("the page's layer drawing order flag was not written".into());
         }
         let spec = WindowSpec {
             name: &name,

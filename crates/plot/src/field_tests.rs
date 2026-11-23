@@ -234,6 +234,17 @@ fn a_polar_contour_is_drawn_inside_the_circle() {
     let graph = p.graph(g).unwrap();
     assert!(graph.layers[0].coords.polar().is_some(), "a polar layer");
     assert!(graph.layers[0].field.is_some(), "with a contour field");
+    // Origin 2016's Polar Contour (T399): north up and clockwise, no level lines, the rainbow reversed, the
+    // radius axis from the smallest radius, and the grid closed round the circle (330 + 30 = 360).
+    let l = &graph.layers[0];
+    let polar = l.coords.polar().unwrap();
+    assert!(polar.zero_deg == 90.0 && polar.clockwise);
+    let field = l.field.as_ref().unwrap();
+    assert!(!field.lines && field.palette == sheaf_core::graph::FieldPalette::RainbowReversed);
+    assert_eq!(l.y_axis.min, Some(1.0));
+    let grid = data::collect(&p, l).field.unwrap();
+    assert_eq!((grid.cols, grid.x_from, grid.x_to), (13, 0.0, 360.0));
+    assert_eq!(grid.at(0, 12), grid.at(0, 0), "the 360 column repeats 0");
     let geom = crate::layout_geometry(&p, g).unwrap();
     let f = geom[0].frame;
     let (cx, cy, radius) = (f.x + f.w / 2.0, f.y + f.h / 2.0, f.w.min(f.h) / 2.0);
@@ -272,6 +283,14 @@ fn a_ternary_contour_is_drawn_inside_the_triangle() {
     let g = p.plot_ternary_contour(cols[0], cols[1], cols[2], cols[3]).unwrap();
     let graph = p.graph(g).unwrap();
     assert!(graph.layers[0].coords.ternary().is_some() && graph.layers[0].field.is_some());
+    // Origin 2016 (T401): values above the scale light gray; the scale's top box shows it.
+    let field = graph.layers[0].field.as_ref().unwrap();
+    assert_eq!(field.above_color, Some(sheaf_core::Color::rgb(192, 192, 192)));
+    let svg = crate::tests::svg_of(&p, g);
+    assert!(svg.contains("#C0C0C0"), "the light gray box above the scale");
+    // Ticks every quarter of each side, as Origin's every 25 (Sheaf writes fractions).
+    let texts = crate::tests::texts(&crate::tests::doc(&svg));
+    assert!(texts.iter().filter(|t| *t == "0.25").count() == 3, "{texts:?}");
     let geom = crate::layout_geometry(&p, g).unwrap();
     let map = geom[0].ternary.as_ref().expect("a ternary map");
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();

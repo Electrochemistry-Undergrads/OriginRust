@@ -926,6 +926,34 @@ default. The picker, saved RGB wells, Apply and Undo are shared with the
 other categories. Excel writes the resolved colors for exported labels and
 reports styles omitted with the formula row.
 
+**Heading colors (T59).** In Origin 2016, Column Header text and fill reached
+the column headings, including a new column. The corner button used the
+Column Header fill. Row Header colors reached the row numbers and label
+captions. Data and label cells kept their colors.
+[Origin Worksheet Properties Format tab](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
+
+Sheaf uses those scopes for the two Worksheet Properties categories. The
+grid draws selection colors on selected headings, and print uses the
+worksheet palette. Worksheet images omit these headings. Excel reports
+that heading colors are omitted.
+
+**Standard colors (T59).** In Origin 2016's Worksheet Properties Format tab,
+Standard red text reached data, Long Name, Units, Comments, F(x)= and
+parameter cells. Standard yellow fill reached populated and blank data
+cells. Label backgrounds and both headings kept their original colors.
+A1 kept its manual text and fill. A new column inherited both Standard
+colors for data and the Standard text color for labels. Data and Column
+Labels palettes took precedence in both application orders. Existing
+individual Long Name and heading palettes also held when applying Standard.
+The same Standard assignments through `wproperties` produced pixel-identical
+regions in both orders, while explicit category assignments changed the
+worksheet. [Origin Worksheet Properties Format tab](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
+
+Sheaf uses those Standard scopes beneath individual, category and manual
+colors. Clearing either Standard control restores the ordinary fallback for
+that property. The grid, print and worksheet images use the resolved styles.
+Excel writes the styles in the current rectangle and exported label rows.
+
 Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
 The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,
 Dynamic Merge, per-cell numeric display/precision selectors and a Font selector. In this new book,

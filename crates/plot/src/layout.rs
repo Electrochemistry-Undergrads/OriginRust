@@ -26,8 +26,8 @@ use crate::ticks::{ResolvedAxis, resolve_axis_edges};
 use crate::{LayerGeometry, PlotError, Rect};
 use sheaf_core::Color;
 use sheaf_core::graph::{
-    Axis, AxisSide, Font, Graph, Layer, Legend, LegendPosition, LegendScope, LineStyle, Page, Plot, PlotKind,
-    ScaleLink, StatPlot, TickDirection,
+    Axis, AxisSide, Font, Graph, Layer, LayerDrawingOrder, Legend, LegendPosition, LegendScope, LineStyle, Page, Plot,
+    PlotKind, ScaleLink, StatPlot, TickDirection,
 };
 use sheaf_core::{Project, WindowId};
 
@@ -60,6 +60,17 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
             )
         })
         .collect();
+    if g.page.style.layer_drawing_order == LayerDrawingOrder::Composite
+        && let Some(first) = layers.first_mut()
+    {
+        // The first layer's unclipped grid is the first paint pass in every backend.
+        let mut backgrounds = Vec::new();
+        for (layer, geom) in g.layers.iter().zip(&geoms).filter(|(layer, _)| !layer.display.hidden) {
+            draw_layer_background(&mut backgrounds, layer, geom.frame, layer_border_frame(layer, geom.frame));
+        }
+        backgrounds.append(&mut first.grid);
+        first.grid = backgrounds;
+    }
     // A legend that lists the plots of every layer drawn in its frame (a layer and its right Y
     // layer) is drawn after all layers, so that no layer's curves cover it.
     for (i, layer) in g.layers.iter().enumerate() {
@@ -822,6 +833,23 @@ fn title_places(
     out
 }
 
+fn layer_border_frame(layer: &Layer, frame: Rect) -> Rect {
+    let relative = layer.border.relative_frame();
+    Rect {
+        x: frame.x + relative.left * frame.w,
+        y: frame.y + relative.top * frame.h,
+        w: relative.width * frame.w,
+        h: relative.height * frame.h,
+    }
+}
+
+fn draw_layer_background(out: &mut Vec<Item>, layer: &Layer, frame: Rect, border_frame: Rect) {
+    if let Some(color) = layer.border.fill {
+        out.push(Item::Rect { rect: border_frame, fill: Some(color), stroke: None });
+    }
+    fill::draw_background(out, layer.background, &layer.background_style, frame);
+}
+
 fn layer_scene(
     project: &Project,
     g: &Graph,
@@ -851,19 +879,10 @@ fn layer_scene(
         return scene;
     }
     let border = layer.border;
-    let frame = geom.frame;
-    let relative = border.relative_frame();
-    let border_frame = Rect {
-        x: frame.x + relative.left * frame.w,
-        y: frame.y + relative.top * frame.h,
-        w: relative.width * frame.w,
-        h: relative.height * frame.h,
-    };
-    if let Some(color) = border.fill {
-        scene.grid.push(Item::Rect { rect: border_frame, fill: Some(color), stroke: None });
+    let border_frame = layer_border_frame(layer, geom.frame);
+    if g.page.style.layer_drawing_order == LayerDrawingOrder::LayerByLayer {
+        draw_layer_background(&mut scene.grid, layer, geom.frame, border_frame);
     }
-    // The layer's Background colour fills the frame behind the grid and the data.
-    fill::draw_background(&mut scene.grid, layer.background, &layer.background_style, geom.frame);
     let background_items = scene.grid.len();
     let plot_index = |pd: &PlotData| layer.plots.iter().position(|p| std::ptr::eq(p, pd.plot)).unwrap_or(0);
     let waterfall = stack::waterfall(g, index);

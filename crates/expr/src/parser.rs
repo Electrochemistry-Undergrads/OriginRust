@@ -420,7 +420,9 @@ impl Parser {
                 {
                     func = Func::Agg(if max { Agg::Max } else { Agg::Min });
                 }
-                if matches!(func, Func::Agg(_)) && !args.first().is_some_and(is_col) {
+                // A bare name may be a named range (T400); the host says so when the formula is bound.
+                let is_col_or_name = |n: &Node| is_col(n) || matches!(n.kind, Kind::Var { .. });
+                if matches!(func, Func::Agg(_)) && !args.first().is_some_and(is_col_or_name) {
                     return Err(ExprError::at(
                         pos,
                         format!("function '{canonical}' needs a column such as col(A) or col(A)[1:10] as its argument"),
@@ -432,7 +434,7 @@ impl Parser {
                         format!("function '{canonical}' needs a column such as col(A) as its {what} argument"),
                     )
                 };
-                if matches!(func, Func::Vec(_)) && !args.first().is_some_and(is_col) {
+                if matches!(func, Func::Vec(_)) && !args.first().is_some_and(is_col_or_name) {
                     return Err(needs_col("first"));
                 }
                 if matches!(func, Func::Lookup) {

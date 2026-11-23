@@ -30,6 +30,32 @@ fn data_file(dir: &Path) -> PathBuf {
     path
 }
 
+/// EC50 marks on a dose-response fit figure (T398).
+#[test]
+fn a_dose_response_fit_marks_its_ec50_on_the_figure() {
+    let dir = scratch("ec50");
+    let data = dir.join("dr.csv");
+    let mut text = String::from("logdose,response\n");
+    for i in 0..21 {
+        let x = -3.0 + 0.2 * f64::from(i);
+        let y = 5.0 + 90.0 / (1.0 + 10f64.powf((-1.0 - x) * 1.2)) + 0.3 * (f64::from(i) * 1.7).sin();
+        text.push_str(&format!("{x},{y}\n"));
+    }
+    std::fs::write(&data, text).unwrap();
+    let d = data.to_str().unwrap();
+    let figure = dir.join("dr.svg");
+    let (ok, out, err) =
+        sheaf(&["fit", d, "--y", "response", "--model", "DoseResp", "--plot", figure.to_str().unwrap(), "--mark-ec50"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("EC50 marked at X = -0.99"), "{out}");
+    let svg = std::fs::read_to_string(&figure).unwrap();
+    assert!(svg.contains("<svg"), "a figure was written");
+    let (ok, _, err) = sheaf(&["fit", d, "--y", "response", "--plot", figure.to_str().unwrap(), "--mark-ec50"]);
+    assert!(!ok && err.contains("has no EC50"), "a straight line has none: {err}");
+    let (ok, _, err) = sheaf(&["fit", d, "--y", "response", "--mark-ec50"]);
+    assert!(!ok && err.contains("--plot"), "{err}");
+}
+
 fn sheaf(args: &[&str]) -> (bool, String, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_sheaf")).args(args).output().expect("the program starts");
     (

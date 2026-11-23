@@ -252,11 +252,15 @@ impl CategoryColors {
     pub fn is_empty(&self) -> bool {
         self.text_color.is_none() && self.fill.is_none()
     }
+
+    fn with_fallback(self, fallback: Self) -> Self {
+        Self { text_color: self.text_color.or(fallback.text_color), fill: self.fill.or(fallback.fill) }
+    }
 }
 
 pub type DataColors = CategoryColors;
 
-/// Colors for individual column label rows in Worksheet Properties.
+/// Colors for individual worksheet label rows and headings.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LabelColors {
     #[serde(default, skip_serializing_if = "CategoryColors::is_empty")]
@@ -267,15 +271,21 @@ pub struct LabelColors {
     pub comments: CategoryColors,
     #[serde(default, skip_serializing_if = "CategoryColors::is_empty")]
     pub formula: CategoryColors,
+    #[serde(default, skip_serializing_if = "CategoryColors::is_empty")]
+    pub column_header: CategoryColors,
+    #[serde(default, skip_serializing_if = "CategoryColors::is_empty")]
+    pub row_header: CategoryColors,
 }
 
 impl LabelColors {
-    pub fn categories(&self) -> [CategoryColors; 4] {
+    pub fn label_rows(&self) -> [CategoryColors; 4] {
         [self.long_name, self.units, self.comments, self.formula]
     }
 
     pub fn is_empty(&self) -> bool {
-        self.categories().iter().all(CategoryColors::is_empty)
+        self.label_rows().iter().all(CategoryColors::is_empty)
+            && self.column_header.is_empty()
+            && self.row_header.is_empty()
     }
 
     fn for_row(&self, row: &LabelKind) -> CategoryColors {
@@ -410,7 +420,9 @@ fn segments(sheet: &Worksheet, ranges: &[(usize, usize, u32)]) -> Vec<Seg> {
 impl FormatIndex {
     pub fn new(sheet: &Worksheet) -> Self {
         let mut ix = FormatIndex {
-            has_default_styles: sheet.font_defaults.has_cell_fonts() || sheet.has_category_colors(),
+            has_default_styles: sheet.font_defaults.has_cell_fonts()
+                || !sheet.data_color_defaults().is_empty()
+                || sheet.has_label_cell_colors(),
             ..Default::default()
         };
         let mut spans: HashMap<ColumnId, Vec<(usize, usize, u32)>> = HashMap::new();
@@ -448,7 +460,7 @@ impl FormatIndex {
         let empty = CellFormat::default();
         let style = segment.map_or(&empty, |seg| &seg.style);
         let font = segment.and_then(|seg| seg.font).and_then(|i| sheet.cell_formats[i as usize].style.font.as_deref());
-        sheet.font_defaults.data_style(finish(style, font, sheet.data_colors))
+        sheet.font_defaults.data_style(finish(style, font, sheet.data_color_defaults()))
     }
 
     /// The format of a label cell.
@@ -489,7 +501,33 @@ fn finish<'a>(f: &CellFormat, font: Option<&'a str>, colors: CategoryColors) -> 
 
 impl Worksheet {
     pub fn has_category_colors(&self) -> bool {
-        !self.data_colors.is_empty() || !self.column_label_colors.is_empty() || !self.label_colors.is_empty()
+        !self.data_color_defaults().is_empty() || !self.column_label_colors.is_empty() || !self.label_colors.is_empty()
+    }
+
+    /// Whether the column-label categories explicitly set text or fill colors.
+    pub fn has_label_cell_colors(&self) -> bool {
+        !self.column_label_colors.is_empty() || self.label_colors.label_rows().iter().any(|color| !color.is_empty())
+    }
+
+    pub fn column_header_style(&self) -> ResolvedStyle<'_> {
+        ResolvedStyle {
+            text_color: visible(self.label_colors.column_header.text_color),
+            fill: visible(self.label_colors.column_header.fill),
+            ..self.font_defaults.column_header_style()
+        }
+    }
+
+    pub fn row_header_style(&self) -> ResolvedStyle<'_> {
+        ResolvedStyle {
+            text_color: visible(self.label_colors.row_header.text_color),
+            fill: visible(self.label_colors.row_header.fill),
+            ..self.font_defaults.row_header_style()
+        }
+    }
+
+    /// The category colors of a data cell below per-range formatting.
+    pub fn data_color_defaults(&self) -> CategoryColors {
+        self.data_colors.with_fallback(self.standard_colors)
     }
 
     /// The category colors of a label below per-range formatting.
@@ -497,11 +535,8 @@ impl Worksheet {
         if !row.uses_column_label_defaults() {
             return CategoryColors::default();
         }
-        let specific = self.label_colors.for_row(row);
-        CategoryColors {
-            text_color: specific.text_color.or(self.column_label_colors.text_color),
-            fill: specific.fill.or(self.column_label_colors.fill),
-        }
+        let colors = self.label_colors.for_row(row).with_fallback(self.column_label_colors);
+        CategoryColors { text_color: colors.text_color.or(self.standard_colors.text_color), ..colors }
     }
 
     pub fn format_index(&self) -> FormatIndex {
@@ -932,6 +967,45 @@ mod tests {
         assert!(!json.contains("cell_formats"));
         let back: Worksheet = serde_json::from_str(&json).unwrap();
         assert!(back.cell_formats.is_empty());
+    }
+
+    #[test]
+    fn standard_colors_supply_data_and_label_text_and_data_fill() {
+        let mut s = sheet();
+        let yellow = Color::rgb(255, 255, 0);
+        assert!(!serde_json::to_string(&s).unwrap().contains("standard_colors"));
+        s.standard_colors = CategoryColors { text_color: Some(Color::RED), fill: Some(yellow) };
+        s.data_colors.text_color = Some(Color::BLUE);
+        s.column_label_colors.fill = Some(Color::WHITE);
+        s.label_colors.long_name.text_color = Some(Color::BLACK);
+        s.apply_cell_format(
+            FormatTarget::cells(vec![A], 0, Some(0)),
+            CellFormat { fill: Some(Color::TRANSPARENT), ..Default::default() },
+        );
+        let future = ColumnId(4);
+        s.columns.push(Column::new(future, "D", Designation::Y, ColumnData::numeric(vec![42.0])));
+        let mut back: Worksheet = serde_json::from_value(serde_json::to_value(&s).unwrap()).unwrap();
+        assert_eq!(back.standard_colors, s.standard_colors);
+        let ix = back.format_index();
+        let a = ix.resolve(&back, A, 0);
+        assert_eq!((a.text_color, a.fill), (Some(Color::BLUE), None));
+        let blank = ix.resolve(&back, future, 24);
+        assert_eq!((blank.text_color, blank.fill), (Some(Color::BLUE), Some(yellow)));
+        let long_name = ix.resolve_label(&back, future, &LabelKind::LongName);
+        assert_eq!((long_name.text_color, long_name.fill), (Some(Color::BLACK), Some(Color::WHITE)));
+        let formula = ix.resolve_label(&back, future, &LabelKind::Formula);
+        assert_eq!((formula.text_color, formula.fill), (Some(Color::RED), Some(Color::WHITE)));
+        assert!(back.column_header_style().is_default());
+        assert!(back.row_header_style().is_default());
+
+        back.data_colors = Default::default();
+        back.column_label_colors = Default::default();
+        let index = back.format_index();
+        assert!(!index.is_empty());
+        let data = index.resolve(&back, future, 0);
+        assert_eq!((data.text_color, data.fill), (Some(Color::RED), Some(yellow)));
+        let label = index.resolve_label(&back, future, &LabelKind::Param("P".into()));
+        assert_eq!((label.text_color, label.fill), (Some(Color::RED), None));
     }
 
     #[test]

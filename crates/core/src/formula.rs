@@ -180,7 +180,30 @@ impl Host for SheetHost<'_> {
     }
 
     fn variable(&self, name: &str) -> Option<f64> {
-        (name == "j").then_some(self.j? as f64)
+        if name == "j" {
+            return Some(self.j? as f64);
+        }
+        // A named cell of the workbook (T396).
+        self.book?.named_value(name)
+    }
+
+    fn named_range(&self, name: &str) -> Option<(ColumnRef, usize, usize)> {
+        // A named range of the workbook (T400), as `col(k)[first:last]` on its sheet.
+        let book = self.book?;
+        let n = book.named_cell(name).filter(|n| n.is_range())?;
+        let (s, sheet) = book.sheets.iter().enumerate().find(|(_, s)| s.columns.iter().any(|c| c.id == n.column))?;
+        let position = sheet.columns.iter().position(|c| c.id == n.column)? + 1;
+        let column = if std::ptr::eq(sheet, self.sheet) {
+            ColumnRef::Index(position)
+        } else {
+            ColumnRef::Scoped {
+                book: None,
+                sheet: WorksheetRef::Index(s + 1),
+                column: Box::new(ColumnRef::Index(position)),
+            }
+        };
+        let (first, last) = n.rows();
+        Some((column, first + 1, last + 1))
     }
 
     fn cell(&self, col: &ColumnRef, row: usize) -> Option<f64> {
@@ -264,6 +287,15 @@ fn resolve_deps(expr: &Expr, host: &SheetHost<'_>, me: ColumnId) -> Result<Formu
         let id = host.find(&r).ok_or(r)?.id;
         if !out.contains(&id) {
             out.push(id);
+        }
+    }
+    // A named cell (T396) is read from its column.
+    for v in expr.variables() {
+        if let Some(n) = host.book.and_then(|b| b.named_cell(&v))
+            && n.column != me
+            && !out.contains(&n.column)
+        {
+            out.push(n.column);
         }
     }
     match expr.cell_reads() {

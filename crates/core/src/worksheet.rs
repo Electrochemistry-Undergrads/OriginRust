@@ -61,6 +61,9 @@ pub struct Worksheet {
     /// Category fonts under per-range formatting (T59); absent in older project files.
     #[serde(default, skip_serializing_if = "crate::sheet_fonts::WorksheetFonts::is_empty")]
     pub font_defaults: crate::sheet_fonts::WorksheetFonts,
+    /// Standard text color for data and label cells and Standard fill for data cells (T59).
+    #[serde(default, skip_serializing_if = "crate::cellformat::CategoryColors::is_empty")]
+    pub standard_colors: crate::cellformat::CategoryColors,
     /// Worksheet Properties colors for data cells (T59).
     #[serde(default, skip_serializing_if = "crate::cellformat::DataColors::is_empty")]
     pub data_colors: crate::cellformat::DataColors,
@@ -222,6 +225,7 @@ impl Worksheet {
             notes: Vec::new(),
             cell_formats: Vec::new(),
             font_defaults: Default::default(),
+            standard_colors: Default::default(),
             data_colors: Default::default(),
             column_label_colors: Default::default(),
             label_colors: Default::default(),
@@ -416,6 +420,9 @@ pub struct Workbook {
     /// file can be imported again with the same settings.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<ImportSource>,
+    /// Named cells (T396): a formula of this workbook reads a name as its cell's value.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub names: Vec<crate::named::NamedCell>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -479,6 +486,7 @@ impl Workbook {
             sheets: vec![Worksheet::new("Sheet1")],
             active_sheet: 0,
             source: None,
+            names: Vec::new(),
         }
     }
 

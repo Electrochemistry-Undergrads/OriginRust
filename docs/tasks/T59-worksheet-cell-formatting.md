@@ -130,6 +130,18 @@ Long Name, Units, Comments and F(x)=. Origin 2016 measurements cover individual
 scope, both application orders with Column Labels, future columns and manual
 priority (GUI 3 and workbook model 13b).
 
+Heading color follow-up. Worksheet Properties adds independent text and
+fill for Column Header and Row Header. The Origin 2016 probe covers the
+corner, new column headings, row numbers and label captions. The grid and
+print use the colors, and Excel reports their omission (GUI 3 and workbook
+model 13b).
+
+Standard color follow-up. Worksheet Properties sets the Standard text color
+for data and labels and the Standard fill for data. Origin 2016 Format tab
+probes cover blank cells, new columns and category and manual priority.
+Sheaf uses the scopes in the grid, print, worksheet images and Excel
+(GUI 3 and workbook model 13b).
+
 **Size:** L. **Branch:** `cell-format` (model/dialog), `codex/t59-format-toolbar` (toolbar/font geometry), `codex/t59-worksheet-controls` (underline/fill/keys), `codex/t59-worksheet-dialog` (dialog measurements/More entry), `codex/t59-custom-colors` (one-off RGB chooser), `codex/t59-classic-colors` (24 Classic worksheet presets), `codex/t59-xlsx-formats` (Excel cell styles). **Priority:** P0, wave 1.
 **Spec:** [workbook model](../spec/workbook-model.md), new Cell formats section;
 [GUI](../spec/gui-look.md) 3. **Inventory:** the worksheet-wide `T59` menu location now opens the bounded Data-font dialog; the three unsupported text-control choices are B5.

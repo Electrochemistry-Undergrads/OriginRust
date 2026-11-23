@@ -33,7 +33,7 @@ impl<'a> Formats<'a> {
     /// never manufacture a million blank rows, nor stretch the exported data to a remote range.
     pub(super) fn blank_ranges(&self, column: ColumnId) -> Vec<Range<usize>> {
         let limit = self.sheet.row_count();
-        if self.sheet.font_defaults.has_data_fonts() || !self.sheet.data_colors.is_empty() {
+        if self.sheet.font_defaults.has_data_fonts() || !self.sheet.data_color_defaults().is_empty() {
             return (limit > 0).then_some(0..limit).into_iter().collect();
         }
         let mut ranges: Vec<_> = self
@@ -76,6 +76,18 @@ impl<'a> Formats<'a> {
                 self.sheet.name
             ));
         }
+        if !self.sheet.label_colors.column_header.is_empty() || !self.sheet.label_colors.row_header.is_empty() {
+            warnings.push(format!(
+                "sheet '{}': worksheet header colors are omitted; Excel controls its row and column headings",
+                self.sheet.name
+            ));
+        }
+        if !self.sheet.standard_colors.is_empty() {
+            warnings.push(format!(
+                "sheet '{}': worksheet Standard colors are exported as current-cell styles; future cells use Excel defaults",
+                self.sheet.name
+            ));
+        }
         if !self.sheet.data_colors.is_empty() {
             warnings.push(format!(
                 "sheet '{}': worksheet data colors are exported as current-cell styles; future cells use Excel defaults",
@@ -83,7 +95,7 @@ impl<'a> Formats<'a> {
             ));
         }
         let bulk_colors = self.sheet.column_label_colors;
-        if !bulk_colors.is_empty() || !self.sheet.label_colors.is_empty() {
+        if self.sheet.has_label_cell_colors() {
             warnings.push(format!(
                 "sheet '{}': worksheet column label colors are exported as current-cell styles; future cells use Excel defaults",
                 self.sheet.name
@@ -98,17 +110,19 @@ impl<'a> Formats<'a> {
         };
         let omitted_formula =
             has_label_style(&LabelKind::Formula) && self.sheet.columns.iter().any(|c| c.formula.is_some());
-        let omitted_params =
-            (!defaults.column_labels.is_empty() || !defaults.standard.is_empty() || !bulk_colors.is_empty())
-                && self.sheet.columns.iter().any(|c| !c.params.is_empty());
+        let omitted_params = (!defaults.column_labels.is_empty()
+            || !defaults.standard.is_empty()
+            || !bulk_colors.is_empty()
+            || self.sheet.standard_colors.text_color.is_some())
+            && self.sheet.columns.iter().any(|c| !c.params.is_empty());
         let mut omitted_labels = omitted_formula
             || omitted_params
             || [LabelKind::LongName, LabelKind::Units, LabelKind::Comments]
                 .iter()
                 .any(|kind| has_label_style(kind) && !labels.iter().any(|label| label.as_ref() == Some(kind)));
-        let mut alpha = [self.sheet.data_colors, bulk_colors]
+        let mut alpha = [self.sheet.standard_colors, self.sheet.data_colors, bulk_colors]
             .into_iter()
-            .chain(self.sheet.label_colors.categories())
+            .chain(self.sheet.label_colors.label_rows())
             .flat_map(|colors| [colors.text_color, colors.fill])
             .flatten()
             .any(|c| c.a != 0 && c.a != 255);

@@ -476,6 +476,8 @@ pub enum FieldPalette {
     BlueWhiteRed,
     /// Black to white.
     Gray,
+    /// Red, yellow, green, cyan, blue: Origin 2016's polar contour, blue at the highest value (measured, T399).
+    RainbowReversed,
 }
 
 /// The levels of a field: the range of Z that the colour scale covers, split into `major` equal
@@ -521,6 +523,10 @@ pub struct FieldPlot {
     pub line: LineStyle,
     pub label_font: Font,
     pub scale: ColorScale,
+    /// The colour of values above the scale when it is not the palette's (Origin 2016's ternary contour
+    /// paints them light gray, measured by T401).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub above_color: Option<Color>,
 }
 
 impl FieldPlot {

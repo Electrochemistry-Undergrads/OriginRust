@@ -468,6 +468,18 @@ pub enum Action {
         page: (f64, f64),
         png: std::sync::Arc<Vec<u8>>,
     },
+    /// A data cell's Define Name...: its window (T396).
+    DefineName {
+        column: ColumnId,
+        row: usize,
+    },
+    /// Name a data cell, or rows `row..=last` of its column (T400), for formulas, one undo step (T396).
+    SetCellName {
+        column: ColumnId,
+        row: usize,
+        last: usize,
+        name: String,
+    },
     /// Draw an arrow across a data cell (`Some(double)`) or take it out (T205), one undo step.
     SetCellArrow {
         column: ColumnId,

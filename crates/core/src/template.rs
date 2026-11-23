@@ -2805,6 +2805,7 @@ impl FieldTemplate {
                 font: Font::new(DEFAULT_FONT, 8.0),
                 title_font: Font::new(DEFAULT_FONT, 12.0),
             },
+            above_color: None,
         });
         g
     }

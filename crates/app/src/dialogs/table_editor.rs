@@ -24,9 +24,12 @@ pub struct TableEditor {
     pub cells: Vec<Vec<String>>,
 }
 
-/// The rows and columns of a new table (Sheaf's choice).
-pub const NEW_ROWS: usize = 3;
-pub const NEW_COLS: usize = 3;
+/// The rows and columns of a new table: Origin 2016's New Table defaults, Number of Rows 8 and Number of Columns
+/// 5 (measured, T395).
+pub const NEW_ROWS: usize = 8;
+pub const NEW_COLS: usize = 5;
+/// The most rows and columns Origin's New Table offers (its lists run 1 to 9).
+pub const MAX_SIZE: usize = 9;
 
 impl TableEditor {
     pub fn new_table(graph: WindowId, layer: usize) -> Self {
@@ -69,13 +72,13 @@ impl TableEditor {
                 });
                 ui.horizontal(|ui| {
                     let cols = self.cols();
-                    if ui.button("Add Row").clicked() {
+                    if ui.add_enabled(self.cells.len() < MAX_SIZE, egui::Button::new("Add Row")).clicked() {
                         self.cells.push(vec![String::new(); cols]);
                     }
                     if ui.add_enabled(self.cells.len() > 1, egui::Button::new("Remove Row")).clicked() {
                         self.cells.pop();
                     }
-                    if ui.button("Add Column").clicked() {
+                    if ui.add_enabled(cols < MAX_SIZE, egui::Button::new("Add Column")).clicked() {
                         self.cells.iter_mut().for_each(|r| r.push(String::new()));
                     }
                     if ui.add_enabled(cols > 1, egui::Button::new("Remove Column")).clicked() {

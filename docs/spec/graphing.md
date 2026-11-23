@@ -7072,13 +7072,19 @@ Origin's documented behaviour. The markers they act on are the data markers of D
     sheet.
   - Not done: Origin's Change Parameters and View > Show > Lock Icons. [Origin hotkeys](https://docs.originlab.com/origin-help/hotkey-in-origin/)
 
-## Tables: Graph > New Table (T136, 2026-11-18, **not measured**)
+## Tables: Graph > New Table (T136, 2026-11-18; window measured by T395, 2026-11-23)
+
+**Origin 2016 (measured, `re-workspace/scratch/t395`):** Graph > New Table... (in the expanded Graph menu, after Legend)
+opens a window "Add a linked table to a graph or a layout". It has Layer ([Graph1]1), Number of Columns 5 and Number
+of Rows 8 (lists of 1 to 9), Table Title (empty), Show Column Labels (off) and Table Name (an automatic name, ticked).
+Origin's table is linked to a worksheet. Its OK left no table on the graph in the probe, so its look is not measured.
 
 Origin 2016's Graph menu has New Table, which puts a table object on the graph. It could not be probed
 (Origin's COM class was unregistered), so this follows Origin's documented behaviour.
 
-- **Making a table:** Graph > New Table opens the "New Table" window with a grid of 3 x 3 empty cells. Add
-  Row, Remove Row, Add Column and Remove Column change the size. OK puts the table into the active layer,
+- **Making a table:** Graph > New Table opens the "New Table" window with a grid of 8 rows of 5 empty cells
+  (Origin's defaults). Add Row, Remove Row, Add Column and Remove Column change the size, up to 9 rows and
+  9 columns as Origin's lists allow. OK puts the table into the active layer,
   its top-left corner at 10 % of the frame from the left and top, in the layer's new-label font. It is one
   undo step.
 - **Editing:** a double-click on a table opens the same grid, titled "Table". OK changes the cells in one

@@ -229,6 +229,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T373](T373-grouped-marginal-plots.md) | Grouped marginal histograms and box charts (sheaf plot --group) | S | done 2026-11-22 (graphing 32), not measured |
 | [T375](T375-fishbone.md) | Plot > Categorical > Cause-and-Effect Diagram and sheaf plot -t fishbone | S | done 2026-11-22 (graphing 17.13), not measured |
 | [T378](T378-settings-lock.md) | Settings file lock: refuse a change after a 60 s wait instead of writing unlocked | S | done 2026-11-22 |
+| [T387](T387-settings-lock-queue.md) | Settings lock: wait in the system's queue, not by polling (writer starved on the daily-push run) | S | done 2026-11-23 |
 | [T379](T379-sankey.md) | Plot > Categorical > Sankey Diagram and sheaf plot -t sankey | M | done 2026-11-22 (graphing 14.32), not measured |
 | [T381](T381-alluvial.md) | Plot > Categorical > Alluvial Diagram and sheaf plot -t alluvial (counts or weights) | S | done 2026-11-22 (graphing 14.32), not measured |
 | [T233](T233-batch-summary.md) | File > Batch Processing: Summary Sheet, Dataset Identifier, Delete Intermediate Books (a Batch Summary book stacking one sheet of every book) | S | done 2026-11-20 (workbook-model 13p), not measured; left: Origin's layout and identifier choices |

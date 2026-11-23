@@ -60,7 +60,8 @@ pub(crate) fn draw_plot(
         draw_data_markers(out, pd, geom, markers);
     }
     if plot.kind == PlotKind::Piper {
-        crate::piper_plot::draw(out, pd, geom);
+        // Origin's Piper axis labels (T389) in a 10 pt Arial.
+        crate::piper_plot::draw(out, pd, geom, &sheaf_core::graph::Font::new("Arial", 10.0));
         return;
     }
     if plot.kind == PlotKind::Kde2d {

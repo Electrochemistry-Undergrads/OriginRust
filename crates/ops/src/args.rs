@@ -3673,6 +3673,18 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Distribution analysis with arbitrary censoring: --y START,END; equal = exact, empty end = right-censored, empty
+    /// start = left-censored, otherwise interval-censored; Weibull, lognormal, exponential or normal maximum likelihood.
+    LifedistInterval {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// weibull, lognormal, exponential or normal.
+        #[arg(long, default_value = "weibull")]
+        distribution: String,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Process capability: Cp, Cpk, Pp, Ppk and parts per million outside the limits of each --y column, normal
     /// or nonnormal (lognormal or Weibull, percentile method), with a histogram and the fitted curve.
     Capability {

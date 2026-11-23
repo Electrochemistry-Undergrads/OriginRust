@@ -629,7 +629,7 @@ Frame tab (none, line, shadow...), position by anchor corner, size, arrange vert
 | `\q(text)`, `\_(text\)`, `\[text\]` | LaTeX equation (P2) |
 | `\L(n)` | legend symbol |
 | `\sep:nn` | extra line gap, % of font height |
-| `\sc(...)` | one conditional space |
+| `\sc` or `\sc(...)` | one conditional horizontal space between visible spans |
 | `\ww(text)` | literal wrapped text in legends |
 | `%(...)` | substitution |
 Unsupported codes and a bare backslash are dropped silently. Literal backslash: `\\`. Examples: `i / \g(m)A`, `cm\+(-1)`, `H\-(2)O`.
@@ -1208,8 +1208,7 @@ Literal blocks retain the original notation. Other bodies, whitespace, missing
 closing parentheses, uppercase codes and the 24-level bound retain existing
 unknown/malformed handling. No font aliases, lookup, project fields, editor
 controls or backend implementations change. Modern special-default fonts remain
-deferred under 7.6; accents, conditional spaces, wrapping and line separation
-remain separate work. Regressions compare styles, placement, rotation, vector/
+deferred under 7.6. Regressions compare styles, placement, rotation, vector/
 raster output and actual legend/title/tick scenes with explicit Unicode controls.
 
 **Overbar escape (T58).** The [Origin escape reference](https://docs.originlab.com/origin-help/escape-sequences/)
@@ -1255,6 +1254,20 @@ plot symbol and name references within the block. Parentheses balance within a r
 and an unclosed block protects the remainder of that row. References outside a block
 expand through the ordinary legend rules. Literal handling for the entire body is Sheaf's
 reading of the documented example. [Origin escape sequences](https://docs.originlab.com/origin-help/escape-sequences/)
+
+**Conditional spaces (T58).** Current Origin documentation lists bare `\sc` for legend
+substitutions and `\sc(text)` in the text escape table. Both forms rendered literally
+in our Origin 2016 Arial label EMFs. A legend with the documented metadata pattern
+also retained the escapes in the 2016 EMF. [Legend substitution notation](https://docs.originlab.com/labtalk/ref/legend-substitution-notation/), [Origin escape sequences](https://docs.originlab.com/origin-help/escape-sequences/)
+
+Sheaf accepts both forms in the shared graph text parser. The parenthesized form lays
+out its contents using the surrounding style. Once substitutions are resolved, consecutive
+conditional spaces contribute at most one ordinary space between nonblank spans on the
+same line. The space uses the first escape's style. Adjacent authored whitespace already
+separates the spans and retains its original width. Leading and trailing conditional
+spaces disappear. Literal and protected spans keep the escape characters. For example,
+`\b(%(1,@LL)\sc%(1,@LC)\sc(%(1,@LU)))` draws the bold long name and units with one
+space when Comments are empty. The legend frame is sized from the resulting runs.
 
 **Plot-colored graph text (T58).** `\cpN(text)` uses the color of the Nth plot in the
 text object's layer. Repainting the graph after a style change resolves the color again.

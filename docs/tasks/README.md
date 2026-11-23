@@ -120,7 +120,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T115](T115-smith-chart.md) | Plot > Specialized > Smith Chart | M | done 2026-11-16 (graphing 37), measured by T385 (Origin COM unregistered); left: measure and match |
 | [T116](T116-kernel-density-2d.md) | Plot > Statistics > 2D Kernel Density | M | done 2026-11-16 (graphing 38); grid and bandwidths measured and matched by T289; left: contour drawing, points shown, method choice |
 | [T117](T117-piper.md) | Plot > Specialized > Piper | M | done 2026-11-16 (graphing 39), measured by T389 (Origin COM unregistered); left: measure and match |
-| [T118](T118-data-markers.md) | Graph Data menu: Set Display Range, Reset to Full Range, Mark Data Range, Clear Data Markers (B3 slice) | M | done 2026-11-16 (graphing 40), not measured (Origin COM unregistered); left: measure and match |
+| [T118](T118-data-markers.md) | Graph Data menu: Set Display Range, Reset to Full Range, Mark Data Range, Clear Data Markers (B3 slice) | M | done 2026-11-16 (graphing 40), marker look measured by T390 (Origin COM unregistered); left: measure and match |
 | [T119](T119-add-function-graph.md) | Graph > Add Function Graph... (B3 slice) | S | done 2026-11-16 (graphing 41), not measured (Origin COM unregistered); left: measure and match |
 | [T120](T120-conditional-heatmap.md) | Worksheet > Conditional Formatting > Conditional Heatmap... (B7 slice) | M | done 2026-11-17 (gui-look "Conditional Heatmap"), not measured; left: Other Colors mixing, Load Palette |
 | [T121](T121-conditional-outliers-pareto.md) | Conditional Formatting > Conditional Outliers and Conditional Pareto (B7 slice) | S | done 2026-11-17 (gui-look "Conditional Pareto and Conditional Outliers"), not measured |
@@ -233,6 +233,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T379](T379-sankey.md) | Plot > Categorical > Sankey Diagram and sheaf plot -t sankey | M | done 2026-11-22 (graphing 14.32), not measured |
 | [T381](T381-alluvial.md) | Plot > Categorical > Alluvial Diagram and sheaf plot -t alluvial (counts or weights) | S | done 2026-11-22 (graphing 14.32), not measured |
 | [T383](T383-network-plot.md) | Plot > Categorical > Network Plot and sheaf plot -t network | M | done 2026-11-22 (graphing 14.33), not measured |
+| [T392](T392-nested-frequency.md) | Nested frequency charts: treemap and sunburst of text columns count the rows | S | done 2026-11-23 (graphing 14.27), not measured |
 | [T233](T233-batch-summary.md) | File > Batch Processing: Summary Sheet, Dataset Identifier, Delete Intermediate Books (a Batch Summary book stacking one sheet of every book) | S | done 2026-11-20 (workbook-model 13p), not measured; left: Origin's layout and identifier choices |
 | [T235](T235-batch-cli.md) | sheaf batch: Batch Processing without a window (template, summary, --summary-csv), core Project::batch_process shared with the window | S | done 2026-11-20 (workbook-model 13p); MCP: T238 |
 | [T238](T238-batch-mcp.md) | MCP batch_process: the shared batch run (books, summary, delete) on the session project, one undo step attached | S | done 2026-11-20 (mcp.md 5.1); left: read options |
@@ -323,6 +324,8 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T318](T318-baseline-als-dataset.md) | Peak Analyzer baselines Use Existing Dataset and Asymmetric Least Squares Smoothing (window, CLI) | M | done 2026-11-21; ALS not measured (Pro) |
 | [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T394](T394-life-data-frequency.md) | Frequency (count) column for the life-data tools (Origin 2026b) | S | done 2026-11-23 (statistics 49) |
+| [T391](T391-life-data-regression.md) | Life data regression: Weibull, lognormal and exponential AFT models with censoring (Origin 2026b) | S | done 2026-11-23 (statistics 48) |
 | [T384](T384-arbitrary-censoring.md) | Life-data distribution analysis with exact, right-, left- and interval-censored rows (Origin 2026b) | S | done 2026-11-22 (statistics 47) |
 | [T382](T382-split-plot.md) | Two-level split-plot designs and two-stratum effects (Origin 2027 Quality app) | S | done 2026-11-22 (statistics 46) |
 | [T386](T386-mixture-designs.md) | Mixture designs: simplex lattice and centroid for one or more totals, lower bounds (window, CLI) | M | done 2026-11-22 (Sheaf's own) |
@@ -420,6 +423,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T39](T39-plot-sort-x.md) | Line plots connected in X order without sorting the sheet | M | done 2026-11-15 (graphing 18.9, `plot-sort-x`, macOS); left: Origin's effect on symbols, fills, missing values, ties and splines unmeasured |
 | [T385](T385-smith-measure.md) | Measure Smith Chart against Origin (grid, labels, line plot) | S | done 2026-11-22 (graphing 37) |
 | [T389](T389-piper-measure.md) | Measure Piper diagram against Origin (grids, side labels, titles, sample symbols) | S | done 2026-11-23 (graphing 39) |
+| [T390](T390-markers-measure.md) | Measure graph Data > Mark Data Range against Origin (red lines across the layer) | S | done 2026-11-23 (graphing 40) |
 | [T40](T40-graphical-summary.md) | Graphical Summary: statistics, CIs, Anderson-Darling and charts per variable/group | L | done 2026-11-15 (statistics.md 22); left: three other arrangements, Origin layout unmeasured |
 | [T41](T41-rug-plot.md) | Rug plots: Axis dialog Rug tab and Scatter + Rug template | M | done 2026-11-15 (graphing 18.10); left: Origin defaults unmeasured, rug hit-testing |
 | [T42](T42-window-switcher.md) | Window Switcher: Ctrl+Tab through child windows with previews | M | done 2026-11-15 (`window-switcher`, macOS) |

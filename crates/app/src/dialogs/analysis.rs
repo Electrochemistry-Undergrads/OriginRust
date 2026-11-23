@@ -202,6 +202,8 @@ pub enum AnalysisKind {
     /// Statistics > Survival Analysis > Distribution Analysis (Arbitrary Censoring) (T384; options in
     /// `multivariate_options.rs`).
     LifeDistArbitrary,
+    /// Statistics > Survival Analysis > Life Data Regression (T391; options in `multivariate_options.rs`).
+    LifeRegression,
     /// Statistics > Survival Analysis > Kaplan-Meier Estimator (options in `multivariate_options.rs`).
     KaplanMeier,
     /// Statistics > Multivariate Analysis > K-Means Cluster Analysis (options in `multivariate_options.rs`).
@@ -359,6 +361,7 @@ impl AnalysisKind {
             AnalysisKind::Stability => "Stability Study...",
             AnalysisKind::LifeDist => "Distribution Overview Plot...",
             AnalysisKind::LifeDistArbitrary => "Distribution Analysis (Arbitrary Censoring)...",
+            AnalysisKind::LifeRegression => "Life Data Regression...",
             AnalysisKind::KaplanMeier => "Kaplan-Meier Estimator...",
             AnalysisKind::Kmeans => "K-Means Cluster Analysis...",
             AnalysisKind::Crosstab => "Cross Tabulation...",
@@ -475,6 +478,7 @@ impl AnalysisKind {
             "stability" => AnalysisKind::Stability,
             "lifedist" => AnalysisKind::LifeDist,
             "lifedistinterval" => AnalysisKind::LifeDistArbitrary,
+            "lifereg" => AnalysisKind::LifeRegression,
             "kaplanmeier" => AnalysisKind::KaplanMeier,
             "kmeans" => AnalysisKind::Kmeans,
             "crosstab" => AnalysisKind::Crosstab,
@@ -2372,6 +2376,7 @@ impl AnalysisDialog {
             | AnalysisKind::Stability
             | AnalysisKind::LifeDist
             | AnalysisKind::LifeDistArbitrary
+            | AnalysisKind::LifeRegression
             | AnalysisKind::KaplanMeier
             | AnalysisKind::Kmeans => self.multi.tool(self.kind)?,
             AnalysisKind::AverageCurves => self.curves.average_tool(),
@@ -3707,6 +3712,7 @@ impl AnalysisDialog {
             | AnalysisKind::Stability
             | AnalysisKind::LifeDist
             | AnalysisKind::LifeDistArbitrary
+            | AnalysisKind::LifeRegression
             | AnalysisKind::KaplanMeier
             | AnalysisKind::Kmeans => self.multi.options(ui, self.kind),
             AnalysisKind::DiscreteFreq => {
@@ -3919,6 +3925,7 @@ impl AnalysisDialog {
             | AnalysisKind::Stability
             | AnalysisKind::LifeDist
             | AnalysisKind::LifeDistArbitrary
+            | AnalysisKind::LifeRegression
             | AnalysisKind::SubtractLine
             | AnalysisKind::ReduceX
             | AnalysisKind::TranslateX
@@ -4035,6 +4042,7 @@ impl AnalysisDialog {
             AnalysisKind::LifeDistArbitrary => {
                 "Fit a life distribution to failures known exactly, after, before or between times"
             }
+            AnalysisKind::LifeRegression => "See how covariates stretch or shorten lifetimes, with censored times",
             AnalysisKind::LifeDist => {
                 "Fit a life distribution to failure times with right-censored cases and see it four ways"
             }
@@ -4196,6 +4204,9 @@ impl AnalysisDialog {
             }
             AnalysisKind::Roc => {
                 "Area under the curve with its standard error, the curve points and the best cut-off in a new sheet, and a graph"
+            }
+            AnalysisKind::LifeRegression => {
+                "One row per coefficient (with standard error, z and probability) and the scale in a new sheet"
             }
             AnalysisKind::LifeDistArbitrary => {
                 "The row counts by censoring, fitted parameters, log-likelihood, mean and median in a new sheet, and the fitted CDF and survival graph"

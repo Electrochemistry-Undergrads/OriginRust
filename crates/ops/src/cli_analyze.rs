@@ -1304,17 +1304,16 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 curve: !no_graph,
             })),
         ),
-        AnalyzeTool::LifedistInterval { target, distribution, no_graph } => {
+        AnalyzeTool::Lifereg { target, distribution, censor, frequency } => {
             let dist = match distribution.to_ascii_lowercase().as_str() {
                 "weibull" => analysis::LifeDist::Weibull,
                 "lognormal" => analysis::LifeDist::Lognormal,
                 "exponential" => analysis::LifeDist::Exponential,
-                "normal" => analysis::LifeDist::Normal,
-                other => bail!("--distribution takes weibull, lognormal, exponential or normal, not {other:?}"),
+                other => bail!("--distribution takes weibull, lognormal or exponential, not {other:?}"),
             };
-            (target, Job::Tool(Tool::LifeDistArbitrary(analysis::LifeDistArbitrarySpec { dist, graph: !no_graph })))
+            (target, Job::Tool(Tool::LifeRegression(analysis::LifeRegressionSpec { dist, censor, frequency })))
         }
-        AnalyzeTool::Lifedist { target, distribution, censor, no_graph } => {
+        AnalyzeTool::LifedistInterval { target, distribution, no_graph, frequency } => {
             let dist = match distribution.to_ascii_lowercase().as_str() {
                 "weibull" => analysis::LifeDist::Weibull,
                 "lognormal" => analysis::LifeDist::Lognormal,
@@ -1322,7 +1321,24 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 "normal" => analysis::LifeDist::Normal,
                 other => bail!("--distribution takes weibull, lognormal, exponential or normal, not {other:?}"),
             };
-            (target, Job::Tool(Tool::LifeDist(analysis::LifeDistSpec { dist, censor, graph: !no_graph })))
+            (
+                target,
+                Job::Tool(Tool::LifeDistArbitrary(analysis::LifeDistArbitrarySpec {
+                    dist,
+                    graph: !no_graph,
+                    frequency,
+                })),
+            )
+        }
+        AnalyzeTool::Lifedist { target, distribution, censor, no_graph, frequency } => {
+            let dist = match distribution.to_ascii_lowercase().as_str() {
+                "weibull" => analysis::LifeDist::Weibull,
+                "lognormal" => analysis::LifeDist::Lognormal,
+                "exponential" => analysis::LifeDist::Exponential,
+                "normal" => analysis::LifeDist::Normal,
+                other => bail!("--distribution takes weibull, lognormal, exponential or normal, not {other:?}"),
+            };
+            (target, Job::Tool(Tool::LifeDist(analysis::LifeDistSpec { dist, censor, graph: !no_graph, frequency })))
         }
         AnalyzeTool::Stability { target, lsl, usl, confidence, alpha, no_graph } => (
             target,

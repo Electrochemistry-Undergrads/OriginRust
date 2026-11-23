@@ -3104,6 +3104,14 @@ Origin's documented facts (Origin 2022 help, not measured; no Origin was at hand
   the Radius/Center settings, tangential labels for thin rings, a colour-by-category-palette option, a label font setting, reading
   Origin's sunburst from .opj.
 
+**Nested frequency charts (T392, Origin 2026 feature, Sheaf's rule, not measured).** A treemap (14.26) or sunburst
+plot (14.27) whose chosen columns are all text counts its rows instead of summing a value: every row counts 1, so the
+rectangles or wedges are the frequencies of the category combinations, nested by the columns in order. In the app,
+select the text columns only; on the command line give no numeric `-y` (`sheaf plot FILE -t sunburst|treemap
+[--group A,B,...]`; without `--group` every text column of the sheet). The plot's Y column is then the first category
+column; the sunburst's colour scale is titled "Count", the treemap's value labels show the counts. A file of text only
+needs `--header-lines 1 --long-name-line 1` on import, or its header row is counted.
+
 ### 14.28 Grouped Columns (indexed data) and Grouped Box Charts (T76)
 
 Origin's documented facts (documentation only, **not measured**; no Origin was at hand; paraphrased;
@@ -3719,8 +3727,13 @@ merged graph with its labels.
 `%(v$)` generating a/b/c and `%(p$)` generating a literal hash. Combined
 forms work, for example `%(p$)##` gives #01, #02 and #03. Sheaf expands
 these codes in source order alongside the existing numeric forms.
-In the scripted Origin 2016 merge, `%H` wrote the destination graph's
-short name on every panel. The documented source-name option remains open.
+
+**Source graph names.** The current Origin guide describes static labels from source
+short names. An Origin 2016 scripted merge of `SourceZ` and `SourceA` with `%H` instead
+produced two `Graph1` labels, the destination short name. The export after renaming
+`SourceZ` to `RenamedZ` retained both `Graph1` labels. In Sheaf, **Source Graph Name**
+copies each selected graph's short name into one editable panel label. Preview and OK
+use the same selection order, and later renames leave the copied text in place.
 [Origin Merge Graph dialog](https://docs.originlab.com/origin-help/graphref-mergegraph/)
 
 **Roman panel labels.** The current Origin guide lists uppercase and lowercase Roman
@@ -4046,7 +4059,7 @@ The `.opj` reader reads the layers of a panel graph as independent layers with t
 - Owner choices: the page size of stacks with many panels (Origin keeps the page; a 6-panel stack on the upright Line page has panels of about 61 pt), one Y title by default instead of one per panel, panel labels such as (a) and (b) (Merge Graph can add them; not measured), and one colour per panel across the graph instead of Origin's colours per layer (with the cyclic voltammetry palette, every one-curve panel gets the first light blue).
 - Merge Graph's automatic rows and columns were seen only for 2 to 5 graphs.
 - Not tested in Origin: the column assignment of PAN2VERT and PAN4 with several X columns and horizontal stacks. The Layer Management Arrange defaults were measured on 2026-11-15 (15.7d).
-- Merge Graph Windows: Origin's own text-factor formula (15.7c fits it) and the documented source-name label option.
+- Merge Graph Windows: Origin's own text-factor formula (15.7c fits it).
 
 ## 16. Free text labels (P0, GP-TXT-01)
 
@@ -6966,7 +6979,13 @@ samples in Origin's symbol and colour sequence.
 - **Sheaf internals:** plot kind `piper` with `PlotDecor::piper` (the five columns after Ca), template `piper`.
 - **Left:** Sample ID and TDS columns, a legend entry per sample, Origin's three layers.
 
-## 40. Data markers and display range: graph Data menu (T118, 2026-11-16, **not measured**)
+## 40. Data markers and display range: graph Data menu (T118, 2026-11-16; marker look measured by T390, 2026-11-23)
+
+**Origin 2016 (measured from its window, `re-workspace/scratch/t390`):** the graph Data menu reads Set Display Range,
+Reset to Full Range | Mark Data Range (Ctrl+Alt+M), Clear Data Markers (Ctrl+Alt+N, greyed with no markers) |
+Analysis Markers >, Lock Position > | Mask Data Points, Move Data Points, Remove Bad Data Points | the plot list.
+Mark Data Range puts its two markers at the first and last points of the plot. Each is a **red vertical line
+across the whole layer** at the point, with a small cursor on the point, and the markers stay after Esc.
 
 Origin 2016's graph Data menu has Set Display Range, Reset to Full Range, Mark Data Range (Ctrl+Alt+M) and
 Clear Data Markers (Ctrl+Alt+N). They could not be probed (Origin's COM class unregistered, see 36), so
@@ -6974,7 +6993,8 @@ this follows Origin's documented behaviour.
 
 - **Mark Data Range** puts two data markers on the active layer's first plot, at its first and last plotted
   rows (inside its display range when it has one).
-  - The markers are drawn as 24 pt black I-beams at the points.
+  - The markers are drawn as Origin's: a red 1 pt line across the layer at each point, with a short bar at the
+    point (a third of the Analysis Markers size, 12 pt for Large).
   - A Data tool then runs: a click on a point moves the nearer marker of that point's plot to its row.
     Each move is one undo step. Esc or a right-click ends the tool; the markers stay.
 - **Set Display Range** gives every plot with markers the rows between them, both included
@@ -6983,8 +7003,8 @@ this follows Origin's documented behaviour.
 - **Clear Data Markers** removes every marker of the graph.
 - **Sheaf internals:** core `data_markers` (`Project::mark_data_range`, `Graph::set_data_markers`,
   `clear_data_markers`, `set_display_range`, `reset_full_range`); markers in `PlotDecor::markers`.
-- **To measure:** Origin's marker look, whether markers are per plot or per layer, and how markers are
-  moved (drag or click).
+- **Left:** whether Origin's markers are per plot or per layer, how they are moved (drag or click), and Set
+  Display Range's result (its menu did not open while the marker tool was active in the probe).
 
 ## 41. Add Function Graph: Graph > Add Function Graph... (T119, 2026-11-16; partly measured by T322, 2026-11-21)
 

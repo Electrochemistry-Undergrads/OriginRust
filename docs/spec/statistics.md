@@ -2207,6 +2207,37 @@ optimum to 1e-10, Sheaf's maximum no lower, parameters to 1e-5; scipy's own `fit
 Nonparametric (Turnbull) estimates, probability plots with interval data, frequency columns and life-data regression
 are not built.
 
+## 48 Life data regression (T391, Origin 2026b; not measured)
+
+Origin 2026b's regression with life data is not part of Origin 2016, so this is Sheaf's own: accelerated failure time
+models. Statistics > Survival Analysis > Life Data Regression... (`Tool::LifeRegression`, `sheaf analyze lifereg --y
+COV[,COV..],TIME,CENSOR [--distribution weibull|lognormal|exponential] [--censor 1]`): the chosen columns are numeric
+covariates, then the time (above 0) and the censor column (a case is right-censored when its cell equals the censoring
+value, as for the Kaplan-Meier estimator); rows with a missing value are left out. The model is `ln T = b0 + b1 x1 +
+... + sigma W` with `W` the standard smallest extreme value (Weibull, shape `1 / sigma`), the standard normal
+(lognormal) or the extreme value with `sigma = 1` (exponential); a failure adds `-ln sigma - ln t + ln g(z)` and a
+censored time `ln G(z)`, `z = (ln t - x'b) / sigma`, so without covariates the fit is the distribution fit of section
+37. It is maximized by Newton's method on `(b, ln sigma)` with the analytic gradient and a central-difference Hessian
+(only uphill steps, else a gradient step, halving until the likelihood rises), from the least-squares line of the
+failures' log times. Standard errors come from the inverse of the observed information, z = b / SE with normal
+two-sided probabilities, and the scale's error by the delta method. The result sheet `LifeRegN` has one row per term
+(Intercept, each covariate, Scale (sigma)) with Coefficient, Standard error, z and Prob>|z|; the notes give the
+log-likelihood, AIC and, for the Weibull, the shape. Checked against numpy/scipy (`tools/lifereg-ref.py`,
+`crates/calc/tests/lifereg_reference.rs`: 60 rows, two covariates, three distributions) to 1e-7 (standard errors
+1e-5). Proportional hazards (Cox) regression, interval-censored regression, text (factor) covariates and prediction
+of percentiles are not built.
+
+## 49 Frequency columns of the life-data tools (T394, Origin 2026b; not measured)
+
+Origin 2026b's life-data analyses take an optional frequency input; so do Sheaf's Distribution Overview Plot (section
+37), Distribution Analysis (Arbitrary Censoring) (section 47) and Life Data Regression (section 48): with "Last column:
+frequency (count) of each row" ticked (`--frequency` on `sheaf analyze lifedist`, `lifedist-interval` and `lifereg`),
+the last chosen column holds how many units each row stands for. A row of frequency `k` counts exactly as `k` copies
+of it (the fits, counts, plotting positions and graphs are those of the written-out rows); a frequency of 0 leaves
+the row out, a missing, negative or fractional one is refused, and the frequencies may add up to at most 1,000,000
+rows. Checked by fitting the same data written out row by row (`crates/core/src/analysis/lifedist.rs`,
+`crates/cli/tests/analyze.rs`).
+
 ## 50 Monte Carlo simulation (T393, Origin 2027's Monte Carlo app; Sheaf's own, not measured)
 
 Statistics > Monte Carlo Simulation (Random Variates)... (CLI `analyze monte-carlo FILE --y Y --input NAME=DIST(...) [--input ...]

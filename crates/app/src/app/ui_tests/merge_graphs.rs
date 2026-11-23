@@ -86,6 +86,41 @@ fn roman_panel_labels_follow_the_dialog_draft_and_source_order() {
 }
 
 #[test]
+fn source_name_labels_copy_the_short_names_once_per_graph() {
+    use sheaf_core::layers::NewLayerKind;
+
+    let mut h = with_graphs("merge-source-names", 2);
+    let sources: Vec<_> = project(&h).graphs().map(|graph| graph.id).collect();
+    h.state_mut().doc.apply("Set source names", |project| {
+        for (&id, name) in sources.iter().zip(["SourceZ", "SourceA"]) {
+            project.rename_window(id, name).unwrap();
+            project.graph_mut(id).unwrap().long_name = format!("Title of {name}");
+        }
+        project.graph_mut(sources[0]).unwrap().add_layer(NewLayerKind::RightY, 0).unwrap();
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    open(&mut h);
+    click(&mut h, "Arrange Settings");
+    click(&mut h, "Spacing (in % of Page Dimension)");
+    click(&mut h, "Add Label");
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("None")).click();
+    settle(&mut h);
+    click(&mut h, "Source Graph Name");
+    click(&mut h, "Preview");
+    assert!(h.query_by_label("2 source graphs, 3 layers").is_some());
+    assert_eq!(project(&h), &before);
+    click(&mut h, "OK");
+
+    let merged_id = project(&h).graphs().last().unwrap().id;
+    h.state_mut().doc.apply("Rename a source", |project| project.rename_window(sources[0], "RenamedZ").unwrap());
+    let merged = project(&h).graph(merged_id).unwrap();
+    let labels: Vec<_> =
+        merged.layers.iter().map(|layer| layer.labels.first().map(|label| label.text.as_str())).collect();
+    assert_eq!(labels, [Some("SourceZ"), None, Some("SourceA")]);
+}
+
+#[test]
 fn without_keep_source_graphs_the_sources_go_and_one_undo_brings_them_back() {
     let mut h = with_graphs("merge-nokeep", 3);
     open(&mut h);

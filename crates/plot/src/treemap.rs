@@ -60,12 +60,17 @@ impl TreemapData {
             return None;
         }
         let order_col = style.order_column.and_then(|id| project.column(id));
-        let rows: Vec<Row> = pd
-            .rows()
-            .filter(|r| !pd.mask.is_some_and(|m| m.contains(r)))
+        // Nested frequencies (T392): without a numeric value column every row of the categories counts 1.
+        let counted = project.numeric(pd.plot.y).is_none();
+        let all: Vec<usize> =
+            if counted { (0..columns.iter().map(|c| c.len()).max().unwrap_or(0)).collect() } else { Vec::new() };
+        let shown: Vec<usize> =
+            if counted { all } else { pd.rows().filter(|r| !pd.mask.is_some_and(|m| m.contains(r))).collect() };
+        let rows: Vec<Row> = shown
+            .into_iter()
             .map(|r| Row {
                 path: columns.iter().map(|c| c.cell_text(r)).collect(),
-                value: pd.y.get(r).copied().unwrap_or(f64::NAN),
+                value: if counted { 1.0 } else { pd.y.get(r).copied().unwrap_or(f64::NAN) },
                 key: match order_col {
                     None => Key::Missing,
                     Some(c) => match c.data.text_cell(r) {

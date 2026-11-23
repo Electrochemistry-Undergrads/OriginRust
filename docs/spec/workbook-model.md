@@ -607,19 +607,19 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   Origin 2016 has no Default data-style command; Rich Text/Wrap Text/Float remain separate,
   unsupported text controls (B5). Its Worksheet Properties Format tab instead has category
   defaults (Data > Standard, plus headers and label categories). F4 now opens a separate
-  category-font dialog with Data, Column Labels and Long Name/Units/Comments family
-  and size controls (GUI 3).
-- **Data font defaults.** Optional `Worksheet.font_defaults.data` holds a family/point size;
-  old files omit the empty field. Resolution fills missing manual family/size from that default,
-  preserving every other manual/conditional property and keeping labels independent. One sparse
+  category-font dialog with Standard, Data, Column Labels, Column Header,
+  Row Header and Long Name/Units/Comments family and size controls (GUI 3).
+- **Data font defaults.** Optional `Worksheet.font_defaults.data` holds independent family
+  and point-size overrides. An empty Data category is omitted. Resolution fills missing manual
+  family and size from Data and then Standard, preserving other manual and conditional
+  properties and keeping label overrides independent. One sparse
   setting reaches future columns and arbitrarily remote rows without per-cell records. Clone,
   duplicate and project/companion save carry it with the worksheet. The existing batch ReplaceSheet
   path starts with default formatting, matching its existing range-format reset policy. The grid
   cache includes defaults even when no manual ranges exist. Print/image and Excel reuse effective
   style resolution. `.opj` warns and requires its full `.sheaf` companion for these fonts.
   Excel writes current values and blank cells inside the used rectangle; it cannot retain Sheaf's
-  future-cell inheritance, and import still does not read cell styles. Category labels, Standard/
-  header defaults and persistent row-height changes remain outside this slice.
+  future-cell inheritance, and import still does not read cell styles.
 - **Label size defaults.** Optional `font_defaults.long_name_size_pt`, `units_size_pt` and
   `comments_size_pt` store independent sparse point sizes below manual label ranges. Old sheets
   retain their serialized shape. Each setting covers existing and future columns without
@@ -633,7 +633,7 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   Project and OPJ-companion saves preserve the fields; unsupported native OPJ formatting warns.
   Excel writes effective sizes only for exported label rows, reports omitted category styles,
   and leaves data blanks unstyled when only label defaults exist. Future Excel label inheritance
-  is not preserved. Standard and header defaults remain disabled.
+  is not preserved.
 - **Label family defaults (documented contract).** Optional `long_name_family`, `units_family`
   and `comments_family` strings extend the existing `font_defaults` object without changing
   its point-size fields. A missing family uses the existing automatic Arial face. Family-only
@@ -657,6 +657,13 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   metadata rows and warns when styled label rows are omitted, including formula
   or parameter rows. Grid, print and image export use the worksheet style resolver.
   See GUI 3 for the Origin 2016 size probe and the documented family control.
+- **Standard font (T59).** Sparse `font_defaults.standard` supplies the base family and
+  point size for the worksheet. Each manual property wins over its category's setting,
+  and each category inherits missing parts independently. The default size of 9 pt
+  leaves the existing base row heights and widths intact. Grid, print and images use
+  the Standard size to scale their base geometry. Excel exports effective cell fonts
+  and reports omitted row and column heading fonts. Native projects and OPJ companions
+  preserve the setting. See GUI 3 for the Origin 2016 size and family probes.
 - **Vertical alignment.** The 2016 selected-A1 Format Cells and Worksheet Properties Data
   Format/Size probes (GUI 3, 2026-11-16) found no vertical text-alignment control in those
   inspected routes. Other routes and mutation semantics remain unestablished; this probe

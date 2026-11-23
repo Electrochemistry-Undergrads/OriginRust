@@ -187,10 +187,11 @@ pub struct BookUi {
     h_offset: f32,
     h_content: f32,
     h_view: f32,
-    /// Frozen panes (see [`frozen_split`]), from the last frame's layout. The width in pixels
-    /// of the scrolling columns' heads, to start a frozen column from.
+    /// Standard point-size scale of the table's cached widths.
+    standard_scale: Option<f32>,
+    /// Width of each scrolling column at the default Standard size.
     col_px: HashMap<ColumnId, f32>,
-    /// Widths the user gave frozen columns by dragging the edge of their heads.
+    /// Widths given to frozen columns by dragging, at the default Standard size.
     frozen_widths: HashMap<ColumnId, f32>,
     /// The screen x where the scrolling cells are not hidden by the frozen columns.
     frozen_clip_x: f32,
@@ -207,6 +208,10 @@ pub struct BookUi {
 }
 
 impl BookUi {
+    fn width_scale(&self) -> f32 {
+        self.standard_scale.unwrap_or(1.0)
+    }
+
     /// The sheet rows after which Page Break Preview Lines draw a line (T185), once the sheet was shown.
     #[cfg(test)]
     pub fn page_break_rows(&self) -> Option<Vec<usize>> {
@@ -516,9 +521,9 @@ fn row_header_width(sheet: &Worksheet) -> f32 {
     if !sheet.view.row_header {
         0.0
     } else if sheet.view.row_labels && sheet.shows_view_switch(ViewSwitch::SamplingInterval) {
-        112.0
+        112.0 * sheet.font_defaults.size_scale()
     } else {
-        ROW_HEADER_WIDTH
+        ROW_HEADER_WIDTH * sheet.font_defaults.size_scale()
     }
 }
 /// Empty rows shown below the data so that new values can be typed in.
@@ -571,7 +576,7 @@ fn float_room(sheet: &Worksheet, position: usize, r: usize, state: &BookUi) -> f
 }
 
 fn column_px(state: &BookUi, column: &Column) -> f32 {
-    match column.width {
+    let base = match column.width {
         Some(chars) => column_pixels(chars),
         None => state
             .frozen_widths
@@ -579,7 +584,8 @@ fn column_px(state: &BookUi, column: &Column) -> f32 {
             .or_else(|| state.col_px.get(&column.id))
             .copied()
             .unwrap_or(COLUMN_WIDTH),
-    }
+    };
+    (base * state.width_scale()).max(8.0)
 }
 
 /// The share of the body width that the frozen block (row header and frozen columns) may take.
@@ -601,7 +607,8 @@ pub fn frozen_split(
     header_height: f32,
     width_of: &dyn Fn(&Column) -> f32,
 ) -> (usize, Vec<usize>) {
-    let room = ((body_size.y - header_height) / ROW_HEIGHT).floor() as i64 - 3;
+    let row_height = ROW_HEIGHT * sheet.font_defaults.size_scale();
+    let room = ((body_size.y - header_height) / row_height).floor() as i64 - 3;
     let rows = usize::from(sheet.frozen.rows).min(data_rows).min(room.max(0) as usize);
     let mut used = row_header_width(sheet);
     let mut columns = Vec::new();
@@ -977,6 +984,8 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         return;
     }
 
+    let scale = sheet.font_defaults.size_scale();
+    let scale_changed = state.standard_scale.replace(scale) != Some(scale);
     let rows = shown_rows(sheet);
     // With an active filter the grid shows only the rows that pass, with their own numbers.
     let shown: Option<Vec<usize>> = sheet.shown_rows(rows);
@@ -1092,12 +1101,17 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                             _ if frozen_positions.contains(&position) => {
                                 table.column(TableColumn::exact(column_px(state, column)))
                             }
-                            Some(chars) => table.column(TableColumn::exact(column_pixels(chars)).clip(true)),
-                            None => table.column(TableColumn::initial(COLUMN_WIDTH).at_least(30.0).clip(true)),
+                            Some(_) => table.column(TableColumn::exact(column_px(state, column)).clip(true)),
+                            None => table.column(
+                                TableColumn::initial(column_px(state, column)).at_least(30.0 * scale).clip(true),
+                            ),
                         };
                     }
                     // One empty column at the end as a target for "add column".
                     table = table.column(TableColumn::remainder().at_least(40.0));
+                    if scale_changed {
+                        table.reset();
+                    }
                     if state.reveal > 0
                         && let Some(row) = state.reveal_target().map(|c| c.1)
                     {
@@ -1734,7 +1748,7 @@ fn corner_and_titles(
         );
         // Row Labels for Column Label Rows off: the titles are left out (T92).
         if sheet.view.row_labels {
-            title_text(ui, cell, &row_title(row), &sheet.font_defaults.row_header.style());
+            title_text(ui, cell, &row_title(row), &sheet.font_defaults.row_header_style());
         }
         // T310: a user parameter row's title has Rename and Delete.
         if let LabelRow::Param(name) = row {
@@ -1789,7 +1803,7 @@ fn column_head(
     let frozen = state.frozen_cols.contains(&column.id);
     if !overlay {
         // The width this column has in the table, where a frozen column starts from.
-        state.col_px.insert(column.id, rect.width());
+        state.col_px.insert(column.id, rect.width() / state.width_scale());
         state.frozen_widths.remove(&column.id);
     }
     let selected = state.selected.contains(&column.id) && matches!(state.sel, Sel::Columns | Sel::All);
@@ -1811,7 +1825,7 @@ fn column_head(
         ui.scope_builder(
             UiBuilder::new().max_rect(head).layout(Layout::centered_and_justified(egui::Direction::LeftToRight)),
             |ui| {
-                header_text(ui, &head_name(sheet, position), text_color, &sheet.font_defaults.column_header.style());
+                header_text(ui, &head_name(sheet, position), text_color, &sheet.font_defaults.column_header_style());
             },
         );
         if head_response.clicked() {
@@ -2149,8 +2163,10 @@ fn frozen_resize(ui: &mut egui::Ui, state: &mut BookUi, column: &Column, head: R
     if response.dragged() {
         // Never wider than leaves the block within the cap, or the column would leave the block.
         let room = state.frozen_max_w - (state.frozen_w - head.width());
-        let width = (head.width() + response.drag_delta().x).max(30.0).min(room.max(30.0) - 0.01);
-        state.frozen_widths.insert(column.id, width);
+        let scale = state.width_scale();
+        let min_width = 30.0 * scale;
+        let width = (head.width() + response.drag_delta().x).max(min_width).min(room.max(min_width) - 0.01);
+        state.frozen_widths.insert(column.id, width / scale);
         ui.ctx().request_repaint();
     }
 }
@@ -2253,7 +2269,7 @@ fn row_header_cell(
     }
     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
         ui.add_space(5.0);
-        header_text(ui, &(r + 1).to_string(), TEXT, &sheet.font_defaults.row_header.style());
+        header_text(ui, &(r + 1).to_string(), TEXT, &sheet.font_defaults.row_header_style());
     });
     if response.clicked() {
         let shift = click_modifiers(ui).shift;

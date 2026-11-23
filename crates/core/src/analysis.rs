@@ -67,7 +67,7 @@ pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
 pub use doe::{FactorialDesignSpec, FactorialEffectsSpec, SplitPlotDesignSpec, SplitPlotEffectsSpec};
 pub use expsmooth::{ExpSmoothSpec, SmoothModel};
 pub use forest::{ForestTask, RandomForestSpec};
-pub use lifedist::{LifeDist, LifeDistArbitrarySpec, LifeDistSpec};
+pub use lifedist::{LifeDist, LifeDistArbitrarySpec, LifeDistSpec, LifeRegressionSpec};
 pub use manhattan::ManhattanSpec;
 pub use multivariate::{KmeansSpec, PcaSpec};
 pub use quantreg::QuantRegSpec;
@@ -1183,6 +1183,9 @@ pub enum Tool {
     /// Statistics > Survival Analysis > Distribution Analysis (Arbitrary Censoring) (T384, `docs/spec/statistics.md`
     /// section 47): start and end columns.
     LifeDistArbitrary(LifeDistArbitrarySpec),
+    /// Statistics > Survival Analysis > Life Data Regression (T391, `docs/spec/statistics.md` section 48): covariates,
+    /// then the time and the censor column.
+    LifeRegression(LifeRegressionSpec),
     /// Statistics > Stability Study (T368, `docs/spec/statistics.md` section 38): time, response and, optionally,
     /// batch columns.
     Stability(StabilitySpec),
@@ -1346,6 +1349,7 @@ impl Tool {
             Tool::Capability(_) => "Process capability",
             Tool::LifeDist(_) => "Distribution overview",
             Tool::LifeDistArbitrary(_) => "Distribution analysis (arbitrary censoring)",
+            Tool::LifeRegression(_) => "Life data regression",
             Tool::Stability(_) => "Stability study",
             Tool::Decompose(_) => "Seasonal decomposition",
             Tool::Stationarity(_) => "Stationarity tests",
@@ -1443,6 +1447,7 @@ impl Tool {
             Tool::Capability(_) => "Capability",
             Tool::LifeDist(_) => "LifeDist",
             Tool::LifeDistArbitrary(_) => "LifeInterval",
+            Tool::LifeRegression(_) => "LifeReg",
             Tool::Stability(_) => "Stability",
             Tool::Decompose(_) => "Decompose",
             Tool::Stationarity(_) => "Stationarity",
@@ -2569,6 +2574,7 @@ impl Project {
                 | Tool::KaplanMeier(_)
                 | Tool::LifeDist(_)
                 | Tool::LifeDistArbitrary(_)
+                | Tool::LifeRegression(_)
                 | Tool::Stability(_)
                 | Tool::RandomForest(_)
                 | Tool::FactorialDesign(_)
@@ -2799,6 +2805,12 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 xy_graph = out.graph;
+            }
+            Tool::LifeRegression(spec) => {
+                let out = lifedist::run_regression(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
             }
             Tool::LifeDistArbitrary(spec) => {
                 let out = lifedist::run_arbitrary(spec, sheet, &request.columns, request.rows)?;

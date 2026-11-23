@@ -5840,6 +5840,40 @@ fn the_statistics_menu_makes_a_rare_event_chart() {
     assert_eq!(h.state().doc.undo_label(), Some("Rare event chart"));
 }
 
+/// Statistics > Two-Level Experiments (T380): a design sheet from Factorial Design, then the effects of a small
+/// experiment; one undo step each.
+#[test]
+fn the_statistics_menu_designs_and_analyzes_a_two_level_experiment() {
+    let mut text = String::from("id,a,b,c,y\n");
+    for i in 0..8 {
+        let (a, b, c) =
+            (if i & 1 == 1 { 1 } else { -1 }, if i & 2 == 2 { 1 } else { -1 }, if i & 4 == 4 { 1 } else { -1 });
+        text.push_str(&format!("{i},{a},{b},{c},{}\n", 10.0 + 3.0 * f64::from(a) + 0.1 * (f64::from(i) * 1.3).sin()));
+    }
+    let data = csv_file("factorial", "f", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - f.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Two-Level Experiments", "Factorial Effects..."]);
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
+    let (sheet, effect) = result_column(&h, "Effect");
+    assert!(sheet.starts_with("Effects"), "{sheet}");
+    assert!((effect[1] - 6.0).abs() < 0.2, "the effect of a: {effect:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Factorial effects"));
+    // The design reads no data: it goes to a new sheet of the book whichever sheet is shown.
+    show_window(&mut h, "Book1 - f.csv");
+    menu_path(&mut h, &["Statistics", "Two-Level Experiments", "Factorial Design..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Centre points"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
+    let (sheet, std_order) = result_column(&h, "Standard order");
+    assert!(sheet.starts_with("Design"), "{sheet}");
+    assert_eq!(std_order.len(), 8, "2^3 runs");
+    assert_eq!(h.state().doc.undo_label(), Some("Two-level factorial design"));
+}
+
 /// Statistics > Random Forest... (T377): two predictors and a text class give the importance, the out-of-bag
 /// predictions and a graph; one undo step.
 #[test]

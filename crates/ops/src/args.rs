@@ -3453,6 +3453,37 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Two-level factorial design: a full or 2^(k-p) fractional design (coded levels, run and standard order) in a
+    /// new sheet; the --y column only says which book the sheet goes to.
+    FactorialDesign {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Number of factors.
+        #[arg(long, default_value_t = 3)]
+        factors: usize,
+        /// p of a 2^(k-p) fraction (0: full design).
+        #[arg(long, default_value_t = 0)]
+        fraction: usize,
+        #[arg(long, default_value_t = 1)]
+        replicates: usize,
+        #[arg(long, default_value_t = 0)]
+        center_points: usize,
+        /// Keep the standard order instead of shuffling the runs.
+        #[arg(long)]
+        no_randomize: bool,
+        /// Seed of the run order.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+    },
+    /// Factorial effects: --y FACTOR[,FACTOR..],RESPONSE; effects of the main factors and two-factor interactions,
+    /// t tests when there is an error estimate, Lenth's margin otherwise, with an effects graph.
+    FactorialEffects {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Random forest: --y PREDICTOR[,PREDICTOR..],RESPONSE; a seeded forest of CART trees, out-of-bag error,
     /// predictor importance, out-of-bag predictions (and a confusion matrix for classes).
     Randomforest {

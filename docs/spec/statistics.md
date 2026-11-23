@@ -2138,6 +2138,33 @@ Checked against numpy and scipy (`tools/doe-ref.py`, `crates/calc/tests/doe_refe
 full designs and two fractions with aliases) to 1e-10. Split-plot designs (hard-to-change factors, whole-plot error),
 fold-over, Plackett-Burman, response surfaces, half-normal plots and higher-order interactions are not built.
 
+## 46 Two-level split-plot designs and effects (T382, Origin 2027 Quality app; not measured)
+
+Origin 2027's two-level split-plot experiments are not part of Origin 2016, so this is Sheaf's own, on section 45.
+Statistics > Two-Level Experiments:
+
+- **Split-Plot Design...** (`Tool::SplitPlotDesign`, `sheaf analyze split-plot-design FILE --y COL
+  [--whole-plot-factors 1] [--subplot-factors 2] [--replicates 2] [--no-randomize] [--seed 1]`) reads no data; it
+  writes a new sheet `SplitPlotN` (Run order, Whole plot, factor columns A, B, ... with the whole-plot factors first,
+  an empty Response). Each whole plot holds one combination of the hard-to-change factors (a full `2^w` design,
+  replicated) and every combination of the `s` subplot factors (`w + s <= 8`). Randomizing shuffles the whole plots,
+  then the subplots within each, with the 64-bit LCG of section 44.
+- **Split-Plot Effects...** (`Tool::SplitPlotEffects`, `sheaf analyze split-plot-effects FILE --y
+  PLOT,F1[,F2..],RESPONSE [--whole-plot-factors 1] [--no-graph]`): the first column numbers the whole plots, the first
+  `w` factor columns are the whole-plot factors. Every whole plot must hold the same number of runs and one level of
+  each whole-plot factor. The effects are those of section 45 (full model, coded factors); terms of whole-plot factors
+  only form the whole-plot stratum, the others the subplot stratum. The whole-plot error is `b` times the residual sum
+  of squares of the whole-plot means regressed on the whole-plot terms (`W - 1 - t_w` degrees of freedom); the subplot
+  error is the rest of the full model's residual. Each effect's standard error is `sqrt(4 MS / N)` with its stratum's
+  mean square (balanced, orthogonal designs) and its t test uses that stratum's degrees of freedom; a stratum without
+  degrees of freedom gets Lenth's margin over its own effects (unreliable with fewer than about six effects). The
+  result sheet `SplitEffectsN` has one row per term (Whole-plot term 1/0, Effect, SE of effect, t, Prob>|t|, Active
+  (Lenth)); a new graph draws |effect| per term.
+
+Checked against numpy and scipy (`tools/splitplot-ref.py`, `crates/calc/tests/splitplot_reference.rs`: two designs
+with whole-plot random effects) to 1e-10. Restricted maximum likelihood for unbalanced plots, fractional split-plot
+designs, split-split-plot designs and variance components are not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

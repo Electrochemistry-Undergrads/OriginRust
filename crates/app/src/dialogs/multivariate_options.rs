@@ -8,7 +8,7 @@ use sheaf_core::analysis::{
     ChangePointSpec, DecomposeModel, DecomposeSpec, ExpSmoothSpec, FactorialDesignSpec, FactorialEffectsSpec,
     ForestTask, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistSpec, ManhattanSpec, PcaSpec,
     PivotPeriod, PivotStat, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec, RocSpec, SmoothModel,
-    StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec, Tool,
+    SplitPlotDesignSpec, SplitPlotEffectsSpec, StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec, Tool,
 };
 
 /// What the windows keep between frames.
@@ -29,6 +29,8 @@ pub struct MultiOptions {
     forest: RandomForestSpec,
     design: FactorialDesignSpec,
     factorial: FactorialEffectsSpec,
+    split_design: SplitPlotDesignSpec,
+    split_effects: SplitPlotEffectsSpec,
     rare: RareChartSpec,
     capability: CapabilitySpec,
     stability: StabilitySpec,
@@ -116,6 +118,8 @@ impl MultiOptions {
             AnalysisKind::Stationarity => Ok(Tool::Stationarity(self.stationarity)),
             AnalysisKind::FactorialDesign => Ok(Tool::FactorialDesign(self.design)),
             AnalysisKind::FactorialEffects => Ok(Tool::FactorialEffects(self.factorial)),
+            AnalysisKind::SplitPlotDesign => Ok(Tool::SplitPlotDesign(self.split_design)),
+            AnalysisKind::SplitPlotEffects => Ok(Tool::SplitPlotEffects(self.split_effects)),
             AnalysisKind::RandomForest => {
                 if self.forest.trees == 0 {
                     return Err("grow at least one tree".to_string());
@@ -386,6 +390,31 @@ impl MultiOptions {
                     ui.checkbox(&mut s.randomize, "Randomize the run order, seed");
                     ui.add_enabled(s.randomize, egui::DragValue::new(&mut s.seed));
                 });
+            }
+            AnalysisKind::SplitPlotDesign => {
+                ui.label("The design goes to a new sheet; the chosen column only says which book.");
+                let s = &mut self.split_design;
+                ui.horizontal(|ui| {
+                    ui.label("Whole-plot (hard-to-change) factors");
+                    ui.add(egui::DragValue::new(&mut s.whole_plot_factors).range(1..=7));
+                    ui.label("Subplot factors");
+                    ui.add(egui::DragValue::new(&mut s.subplot_factors).range(1..=7));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Whole-plot replicates");
+                    ui.add(egui::DragValue::new(&mut s.replicates).range(1..=100));
+                    ui.checkbox(&mut s.randomize, "Randomize, seed");
+                    ui.add_enabled(s.randomize, egui::DragValue::new(&mut s.seed));
+                });
+            }
+            AnalysisKind::SplitPlotEffects => {
+                ui.label("The chosen columns are the whole plot, the factors (whole-plot factors first) and, last, the response.");
+                let s = &mut self.split_effects;
+                ui.horizontal(|ui| {
+                    ui.label("Whole-plot factors (the first factor columns)");
+                    ui.add(egui::DragValue::new(&mut s.whole_plot_factors).range(1..=7));
+                });
+                ui.checkbox(&mut s.graph, "Effects graph");
             }
             AnalysisKind::FactorialEffects => {
                 ui.label("The chosen columns are the factors (two levels each) and, last, the response.");

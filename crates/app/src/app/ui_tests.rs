@@ -7875,6 +7875,21 @@ fn acceptance_sampling_designs_a_plan_into_a_new_book_with_its_oc_graph() {
 }
 
 #[test]
+fn plot_categorical_cause_and_effect_draws_the_selected_columns_as_categories() {
+    let mut h = start(vec![data_file("fishbone")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let graphs = project(&h).graphs().count();
+    menu_path(&mut h, &["Plot", "Categorical", "Cause-and-Effect Diagram"]);
+    assert_eq!(project(&h).graphs().count(), graphs + 1);
+    let g = project(&h).graphs().last().unwrap();
+    // No column selected: every column of the sheet (t, up, down) is a category.
+    let texts: Vec<&str> = g.layers[0].labels.iter().map(|l| l.text.as_str()).collect();
+    assert_eq!(texts[..2], ["Effect", "t"]);
+    assert_eq!(g.layers[0].labels.iter().filter(|l| l.font.bold).count(), 4, "the effect and three category names");
+    assert_eq!(h.state().doc.undo_label(), Some("Plot columns"));
+}
+
+#[test]
 fn ctrl_shift_c_copies_with_the_label_rows() {
     let mut h = start(vec![data_file("copy-labels")]);
     show_window(&mut h, "Book1 - sample.csv");

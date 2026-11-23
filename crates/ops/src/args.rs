@@ -1125,6 +1125,10 @@ pub struct PlotArgs {
     /// (Origin's plotgroup): the rows are split into a new sheet `Grouped`, the legend names the values.
     #[arg(long, value_name = "COLUMN", conflicts_with_all = ["graph", "panels"])]
     pub group: Option<String>,
+    /// -t fishbone (a cause-and-effect diagram): the effect's text at the head of the spine (default
+    /// "Effect"). The -y columns (default: every column of the sheet) are the categories, their cells the causes.
+    #[arg(long, value_name = "TEXT")]
+    pub effect: Option<String>,
     /// Make a graph of several panels: stack (one column of panels that share the X axis, the
     /// first at the bottom, as Origin's Stack command), or ROWSxCOLUMNS such as 2x1 (Origin's
     /// Vertical 2 Panel), 1x2 (Horizontal 2 Panel) or 2x2 (4 Panel). Each Y column gets its own

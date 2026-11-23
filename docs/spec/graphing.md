@@ -4264,6 +4264,24 @@ region": per plot with points inside, an X column (the plot's X name, "Row" with
 Disregard column "Source row" (1-based), each commented "in the region of <plot>". One undo step ("Extract data in
 region"). Freeform regions and several regions at once are not built.
 
+### 17.13 Cause-and-effect (fishbone) diagram (T375, Origin 2026 feature, Sheaf's layout, not measured)
+
+Plot > Categorical > Cause-and-Effect Diagram and `sheaf plot FILE -t fishbone [-y COL,...] [--effect TEXT]`
+(`Template::Fishbone`, `Project::plot_fishbone`, `sheaf_core::fishbone`): each chosen column is a category, named
+by its long name (else its short name), and its non-empty cells, as shown, are the causes, in row order. With no
+column chosen (no `-y`), every column of the sheet is one. The effect's text defaults to "Effect"
+(`--effect` on the command line; in the app it is edited on the graph like any label).
+
+The graph has one layer without axes or legend, the frame over most of the page, and the diagram is made of
+ordinary drawn objects and text labels, so each part can be moved, restyled or edited: a 2 pt horizontal arrow
+(the spine) across the frame's middle with the effect in 14 pt bold right of its head; one 1 pt slanted rib per
+category, alternately above and below (the first above), meeting the spine at even steps, with the category's
+name in 11 pt bold beyond its outer end; one 0.75 pt horizontal twig per cause, evenly spaced along the rib from
+its outer end towards the spine, ending on the rib, with the cause in 9 pt starting at the twig's left end just
+above it. Long causes may run past their twig; nothing measures text yet. A text-only file needs its header line
+named on import (`--header-lines 1 --long-name-line 1`), because the import cannot tell a header of text from
+text data. Not done: nested sub-causes, Origin's own look and its nested frequency charts.
+
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 
 Measured on 2026-11-13 by opening Origin's Plot Details on a line plot (`tools/origin-ref/origin-dialog.ps1`,

@@ -175,6 +175,25 @@ fn worksheet_label_default_sizes_export_independently_without_styling_data_blank
 }
 
 #[test]
+fn worksheet_data_colors_export_for_values_and_in_range_blanks() {
+    use sheaf_core::cellformat::DataColors;
+    let mut a = column(1, vec![1.0, f64::NAN, 3.0]);
+    a.long_name = "Signal".into();
+    let mut s = Worksheet { columns: vec![a], ..Worksheet::new("Data colors") };
+    s.data_colors = DataColors { text_color: Some(Color::RED), fill: Some(Color::rgb(22, 33, 44)) };
+
+    let (xml, styles, warnings) =
+        Output::new("worksheet-data-colors").export(&s, &ExcelExportOptions { long_names: true, ..plain() });
+    for address in ["A2", "A3", "A4"] {
+        let format = style(&xml, &styles, address);
+        assert!(font(format, &styles).contains("FFFF0000"));
+        assert!(fill(format, &styles).contains("FF16212C"));
+    }
+    assert!(!fill(style(&xml, &styles, "A1"), &styles).contains("FF16212C"));
+    assert!(warnings.iter().any(|w| w.contains("worksheet data colors")));
+}
+
+#[test]
 fn formula_label_font_is_reported_when_xlsx_omits_the_formula_row() {
     let mut a = column(1, vec![2.0, 3.0]);
     a.formula = Some("i+1".into());

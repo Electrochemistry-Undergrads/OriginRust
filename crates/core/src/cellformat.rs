@@ -233,6 +233,21 @@ fn span_reorder(rows: Option<RowSpan>, order: &[usize], n: usize) -> Vec<Option<
     merged.into_iter().map(|(s, e)| span(s, e)).collect()
 }
 
+/// Worksheet Properties color defaults for data cells, below per-range formatting.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DataColors {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_color: Option<Color>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<Color>,
+}
+
+impl DataColors {
+    pub fn is_empty(&self) -> bool {
+        self.text_color.is_none() && self.fill.is_none()
+    }
+}
+
 // ----- resolved styles ---------------------------------------------------------------------
 
 /// What a cell looks like after all ranges (and conditional colours) are applied. Borrows the
@@ -293,7 +308,7 @@ struct Seg {
 pub struct FormatIndex {
     cells: HashMap<ColumnId, Vec<Seg>>,
     labels: HashMap<ColumnId, Vec<u32>>,
-    has_default_fonts: bool,
+    has_default_styles: bool,
 }
 
 /// The stretches of one column from its ranges (`(span, range index)` in range order).
@@ -353,7 +368,10 @@ fn segments(sheet: &Worksheet, ranges: &[(usize, usize, u32)]) -> Vec<Seg> {
 
 impl FormatIndex {
     pub fn new(sheet: &Worksheet) -> Self {
-        let mut ix = FormatIndex { has_default_fonts: sheet.font_defaults.has_cell_fonts(), ..Default::default() };
+        let mut ix = FormatIndex {
+            has_default_styles: sheet.font_defaults.has_cell_fonts() || !sheet.data_colors.is_empty(),
+            ..Default::default()
+        };
         let mut spans: HashMap<ColumnId, Vec<(usize, usize, u32)>> = HashMap::new();
         for (i, r) in sheet.cell_formats.iter().enumerate() {
             match &r.target {
@@ -377,22 +395,19 @@ impl FormatIndex {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.cells.is_empty() && self.labels.is_empty() && !self.has_default_fonts
+        self.cells.is_empty() && self.labels.is_empty() && !self.has_default_styles
     }
 
     /// The format of a data cell of `sheet` (the sheet the index was built from).
     pub fn resolve<'a>(&self, sheet: &'a Worksheet, column: ColumnId, row: usize) -> ResolvedStyle<'a> {
-        sheet.font_defaults.data_style(self.resolve_manual(sheet, column, row))
-    }
-
-    fn resolve_manual<'a>(&self, sheet: &'a Worksheet, column: ColumnId, row: usize) -> ResolvedStyle<'a> {
-        let Some(list) = self.cells.get(&column) else { return ResolvedStyle::default() };
-        let at = list.partition_point(|s| s.first <= row);
-        let Some(seg) = at.checked_sub(1).map(|i| &list[i]).filter(|s| row <= s.last) else {
-            return ResolvedStyle::default();
-        };
-        let font = seg.font.and_then(|i| sheet.cell_formats[i as usize].style.font.as_deref());
-        finish(&seg.style, font)
+        let segment = self.cells.get(&column).and_then(|list| {
+            let at = list.partition_point(|s| s.first <= row);
+            at.checked_sub(1).map(|i| &list[i]).filter(|s| row <= s.last)
+        });
+        let empty = CellFormat::default();
+        let style = segment.map_or(&empty, |seg| &seg.style);
+        let font = segment.and_then(|seg| seg.font).and_then(|i| sheet.cell_formats[i as usize].style.font.as_deref());
+        sheet.font_defaults.data_style(finish(style, font, sheet.data_colors))
     }
 
     /// The format of a label cell.
@@ -414,19 +429,19 @@ impl FormatIndex {
                 }
             }
         }
-        finish(&f, font)
+        finish(&f, font, DataColors::default())
     }
 }
 
-fn finish<'a>(f: &CellFormat, font: Option<&'a str>) -> ResolvedStyle<'a> {
+fn finish<'a>(f: &CellFormat, font: Option<&'a str>, colors: DataColors) -> ResolvedStyle<'a> {
     ResolvedStyle {
         bold: f.bold.unwrap_or(false),
         italic: f.italic.unwrap_or(false),
         underline: f.underline.unwrap_or(false),
         font: font.filter(|n| !n.is_empty()),
         size_pt: f.size_pt.filter(|p| *p > 0.0),
-        text_color: visible(f.text_color),
-        fill: visible(f.fill),
+        text_color: visible(f.text_color.or(colors.text_color)),
+        fill: visible(f.fill.or(colors.fill)),
         h_align: f.h_align.filter(|a| *a != HAlign::Auto),
         rich_text: f.rich_text.unwrap_or(false),
         float: f.float.unwrap_or(false),
@@ -864,6 +879,31 @@ mod tests {
         assert!(!json.contains("cell_formats"));
         let back: Worksheet = serde_json::from_str(&json).unwrap();
         assert!(back.cell_formats.is_empty());
+    }
+
+    #[test]
+    fn data_colors_fill_only_missing_manual_properties_and_skip_labels() {
+        let mut s = sheet();
+        let yellow = Color::rgb(255, 255, 0);
+        s.apply_cell_format(
+            FormatTarget::cells(vec![A], 0, Some(0)),
+            CellFormat { fill: Some(Color::TRANSPARENT), text_color: Some(Color::BLUE), ..Default::default() },
+        );
+        s.data_colors = DataColors { text_color: Some(Color::RED), fill: Some(yellow) };
+        s.apply_cell_format(FormatTarget::cells(vec![B], 0, Some(0)), fill(0, 255, 0));
+
+        let back: Worksheet = serde_json::from_value(serde_json::to_value(&s).unwrap()).unwrap();
+        assert_eq!(back.data_colors, s.data_colors);
+        let index = back.format_index();
+        let a = index.resolve(&back, A, 0);
+        assert_eq!((a.text_color, a.fill), (Some(Color::BLUE), None));
+        let b = index.resolve(&back, B, 0);
+        assert_eq!((b.text_color, b.fill), (Some(Color::RED), Some(Color::rgb(0, 255, 0))));
+        let spare = index.resolve(&back, C, 999_999);
+        assert_eq!((spare.text_color, spare.fill), (Some(Color::RED), Some(yellow)));
+        assert!(index.resolve_label(&back, A, &LabelKind::LongName).is_default());
+        let conditional = spare.with_conditional(Some(CellStyle { fill: Some(Color::WHITE), font: None }));
+        assert_eq!((conditional.text_color, conditional.fill), (Some(Color::RED), Some(Color::WHITE)));
     }
 
     #[test]

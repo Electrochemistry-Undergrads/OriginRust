@@ -283,6 +283,14 @@ fn a_ternary_contour_is_drawn_inside_the_triangle() {
     let g = p.plot_ternary_contour(cols[0], cols[1], cols[2], cols[3]).unwrap();
     let graph = p.graph(g).unwrap();
     assert!(graph.layers[0].coords.ternary().is_some() && graph.layers[0].field.is_some());
+    // Origin 2016 (T401): values above the scale light gray; the scale's top box shows it.
+    let field = graph.layers[0].field.as_ref().unwrap();
+    assert_eq!(field.above_color, Some(sheaf_core::Color::rgb(192, 192, 192)));
+    let svg = crate::tests::svg_of(&p, g);
+    assert!(svg.contains("#C0C0C0"), "the light gray box above the scale");
+    // Ticks every quarter of each side, as Origin's every 25 (Sheaf writes fractions).
+    let texts = crate::tests::texts(&crate::tests::doc(&svg));
+    assert!(texts.iter().filter(|t| *t == "0.25").count() == 3, "{texts:?}");
     let geom = crate::layout_geometry(&p, g).unwrap();
     let map = geom[0].ternary.as_ref().expect("a ternary map");
     let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();

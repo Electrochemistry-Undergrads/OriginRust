@@ -1,6 +1,6 @@
 # T226: Plot > Contour/Heat Map > Ternary Contour (B14 slice)
 
-**Status:** done 2026-11-20 (Claude Windows "obj-align"), **not measured**.
+**Status:** done 2026-11-20 (Claude Windows "obj-align"), **not measured**. T401 (2026-11-23) measured Origin 2016: the same colour-fill look; Sheaf copied its light gray above-scale box. Left: percent tick labels in the data units, side titles.
 **Size:** S. **Source:** greyed inventory package B14 ("Contour/Heat Map: Ternary Contour").
 **Spec:** `docs/spec/matrices.md` 7k.
 

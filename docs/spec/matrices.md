@@ -508,6 +508,12 @@ to 0 is filled.
   - As Origin's: north up and clockwise, no level lines, the reversed rainbow (`FieldPalette::RainbowReversed`,
     gray above and black below), the radius axis from the smallest radius, and a grid whose angles stop one even
     step short of 360 closed round the circle (`FieldGrid::wrap_full_circle`).
+- **Ternary Contour, Origin 2016 (measured by T401, 2026-11-23, `re-workspace/scratch/t401`):** with columns X, Y,
+  Z, Z (A, B, C in percent and the value) it draws the Contour - Color Fill look: the rainbow (blue lowest), thin
+  black lines at the inner major levels, 8 x 5 levels (0 to 100 for values 0 to 100), the colour scale titled with
+  the value column's name, a **light gray** box above it and a black one below (the plain colour-fill contour has
+  white above). Each side is labelled 0 to 100 every 25 in the data's units and titled A, B, C. Sheaf copies the
+  gray box (`FieldPlot::above_color`); its sides read 0 to 1 every 0.25 and have no titles.
 - **Ternary Contour (T226):** takes four selected columns, the compositions A, B and C (any common
   total; each point is normalized to fractions) and a value Z. It makes the same colour-fill contour
   in Origin's ternary layer (graphing 14.20), whose frame is narrowed to the field templates' frame

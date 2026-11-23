@@ -814,6 +814,23 @@ fn border_half() -> f64 {
     0.5
 }
 
+/// The columns of a Sankey diagram (T379): every row is a flow of the plot's Y value from the node named in
+/// `source` to the one named in `target`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SankeyStyle {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<ColumnId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<ColumnId>,
+}
+
+impl SankeyStyle {
+    pub fn is_default(&self) -> bool {
+        *self == SankeyStyle::default()
+    }
+}
+
 /// The settings of a sunburst plot (Origin 2022 Sunburst plot, graphing spec 14.27). The plot's own Y column is the
 /// value column; the category columns are named here, the first the innermost ring. Every field is skipped when
 /// written while it has its default, so older files load unchanged.

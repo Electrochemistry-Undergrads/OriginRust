@@ -4594,7 +4594,8 @@ impl SheafApp {
         };
         // A Treemap (or Sunburst plot) nests by the selected columns of text (in selection order; else every text column of the
         // sheet) and sizes by the last numeric one.
-        let categories: Vec<ColumnId> = if matches!(template, Template::Treemap | Template::Sunburst) {
+        let categories: Vec<ColumnId> = if matches!(template, Template::Treemap | Template::Sunburst | Template::Sankey)
+        {
             let project = self.doc.project();
             columns.iter().copied().filter(|id| project.column(*id).is_some_and(|c| !c.data.is_numeric())).collect()
         } else {
@@ -4670,7 +4671,7 @@ impl SheafApp {
         }
         let ys = self.plot_y_columns(book, columns, template);
         if ys.is_empty() {
-            let what = if matches!(template, Template::Treemap | Template::Sunburst) {
+            let what = if matches!(template, Template::Treemap | Template::Sunburst | Template::Sankey) {
                 "Nothing to plot: select one or more text category columns and a numeric value column"
             } else {
                 "Nothing to plot: select one or more numeric Y columns"
@@ -4680,7 +4681,7 @@ impl SheafApp {
         }
         let made = self.doc.edit("Plot columns", |p| match group {
             Some(g) => p.plot_parallel(template, &ys, Some(g)),
-            None if matches!(template, Template::Treemap | Template::Sunburst) => {
+            None if matches!(template, Template::Treemap | Template::Sunburst | Template::Sankey) => {
                 p.plot_columns(template, &[categories.as_slice(), &ys].concat())
             }
             None => p.plot_columns(template, &ys).inspect(|g| sheaf_plot::place_zoom_regions(p, *g)),

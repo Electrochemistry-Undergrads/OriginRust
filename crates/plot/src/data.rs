@@ -117,6 +117,8 @@ pub(crate) struct PlotData<'a> {
     pub treemap: Option<Box<crate::treemap::TreemapData>>,
     /// What a sunburst plot draws; `None` for other kinds.
     pub sunburst: Option<Box<crate::sunburst::SunburstData>>,
+    /// What a Sankey diagram draws (T379); `None` for other kinds.
+    pub sankey: Option<Box<crate::sankey::SankeyData>>,
     /// The colour mapping of a waterfall curve; `None` when the layer has none.
     pub wf: Option<WaterfallColors>,
     /// The rows of a 3D ribbon (T161); `None` for other plots.
@@ -703,6 +705,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             parallel: None,
             treemap: None,
             sunburst: None,
+            sankey: None,
             wf: None,
             ribbon: None,
             surface: None,
@@ -766,6 +769,15 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             PlotKind::Treemap => {
                 pd.treemap = crate::treemap::TreemapData::new(project, layer, &pd).map(Box::new);
                 // A treemap has no points on any axis.
+                pd.end = pd.start;
+                pd.mask = None;
+                pd.err = None;
+                pd.xerr = None;
+                pd.base = None;
+            }
+            PlotKind::Sankey => {
+                pd.sankey = crate::sankey::SankeyData::new(project, layer, &pd).map(Box::new);
+                // A Sankey diagram has no points on any axis.
                 pd.end = pd.start;
                 pd.mask = None;
                 pd.err = None;

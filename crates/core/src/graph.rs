@@ -2044,6 +2044,9 @@ pub enum PlotKind {
     /// Origin's Sunburst plot (2022, Sunburst.OTP): the plot's Y column is the value, the category columns of its
     /// [`SunburstStyle`] the rings, the first innermost (graphing spec 14.27).
     Sunburst,
+    /// A Sankey diagram (Origin 2020, T379): the plot's Y column is the flow, the source and target columns of its
+    /// [`SankeyStyle`] the nodes (graphing spec 14.32).
+    Sankey,
     /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
     /// from 12 o'clock, each labelled with its share. The layer draws no axes.
     Pie,
@@ -2274,6 +2277,9 @@ pub struct Plot {
     /// The settings of a sunburst plot (graphing spec 14.27).
     #[serde(default, skip_serializing_if = "SunburstStyle::is_default")]
     pub sunburst: SunburstStyle,
+    /// The source and target columns of a Sankey diagram (T379).
+    #[serde(default, skip_serializing_if = "SankeyStyle::is_default")]
+    pub sankey: SankeyStyle,
     /// Indexed data of a column or box plot: the rows of `y` split by group columns (T76).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub indexed: Option<Indexed>,
@@ -3331,6 +3337,7 @@ mod tests {
             indexed: None,
             stat: None,
             sunburst: Default::default(),
+            sankey: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -3379,6 +3386,7 @@ mod tests {
             indexed: None,
             stat: None,
             sunburst: Default::default(),
+            sankey: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -3509,6 +3517,7 @@ mod tests {
             indexed: None,
             stat: None,
             sunburst: Default::default(),
+            sankey: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -3548,6 +3557,7 @@ mod tests {
             parallel: Default::default(),
             treemap: Default::default(),
             sunburst: Default::default(),
+            sankey: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -3762,6 +3772,7 @@ mod style_tests {
             indexed: None,
             stat: None,
             sunburst: Default::default(),
+            sankey: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),

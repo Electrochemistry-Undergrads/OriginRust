@@ -7914,6 +7914,26 @@ fn plot_categorical_cause_and_effect_draws_the_selected_columns_as_categories() 
 }
 
 #[test]
+fn plot_categorical_sankey_uses_the_sheets_text_columns_and_the_flow() {
+    let mut h = start(vec![data_file("sankey")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let down = column_id(&h, "C");
+    let book = project(&h).locate(down).unwrap().0.id;
+    let text = |v: &[&str]| ColumnData::text(v.iter().map(|s| s.to_string()).collect());
+    h.state_mut().doc.apply("text", |p| {
+        p.add_column(book, 0, sheaf_core::Designation::Y, text(&["a", "a", "b", "b"])).unwrap();
+        p.add_column(book, 0, sheaf_core::Designation::Y, text(&["b", "c", "c", "d"])).unwrap();
+    });
+    // Nothing selected: the sheet's numeric Y columns, the last (C) the flow; its text columns the ends.
+    let graphs = project(&h).graphs().count();
+    menu_path(&mut h, &["Plot", "Categorical", "Sankey Diagram"]);
+    assert_eq!(project(&h).graphs().count(), graphs + 1);
+    let plot = &project(&h).graphs().last().unwrap().layers[0].plots[0];
+    assert_eq!((plot.kind, plot.y), (sheaf_core::graph::PlotKind::Sankey, down));
+    assert!(plot.sankey.source.is_some() && plot.sankey.target.is_some());
+}
+
+#[test]
 fn ctrl_shift_c_copies_with_the_label_rows() {
     let mut h = start(vec![data_file("copy-labels")]);
     show_window(&mut h, "Book1 - sample.csv");

@@ -1375,6 +1375,27 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 seed,
             })),
         ),
+        AnalyzeTool::SplitPlotDesign {
+            target,
+            whole_plot_factors,
+            subplot_factors,
+            replicates,
+            no_randomize,
+            seed,
+        } => (
+            target,
+            Job::Tool(Tool::SplitPlotDesign(analysis::SplitPlotDesignSpec {
+                whole_plot_factors,
+                subplot_factors,
+                replicates,
+                randomize: !no_randomize,
+                seed,
+            })),
+        ),
+        AnalyzeTool::SplitPlotEffects { target, whole_plot_factors, no_graph } => (
+            target,
+            Job::Tool(Tool::SplitPlotEffects(analysis::SplitPlotEffectsSpec { whole_plot_factors, graph: !no_graph })),
+        ),
         AnalyzeTool::FactorialEffects { target, no_graph } => {
             (target, Job::Tool(Tool::FactorialEffects(analysis::FactorialEffectsSpec { graph: !no_graph })))
         }

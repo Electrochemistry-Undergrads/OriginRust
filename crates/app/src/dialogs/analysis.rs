@@ -183,6 +183,10 @@ pub enum AnalysisKind {
     FactorialDesign,
     /// Statistics > Two-Level Experiments > Factorial Effects (T380; options in `multivariate_options.rs`).
     FactorialEffects,
+    /// Statistics > Two-Level Experiments > Split-Plot Design (T382; options in `multivariate_options.rs`).
+    SplitPlotDesign,
+    /// Statistics > Two-Level Experiments > Split-Plot Effects (T382; options in `multivariate_options.rs`).
+    SplitPlotEffects,
     /// Statistics > Rare Event Chart (G/T) (T364; options in `multivariate_options.rs`).
     RareChart,
     /// Statistics > Process Capability (T365; options in `multivariate_options.rs`).
@@ -339,6 +343,8 @@ impl AnalysisKind {
             AnalysisKind::RandomForest => "Random Forest...",
             AnalysisKind::FactorialDesign => "Two-Level Factorial Design...",
             AnalysisKind::FactorialEffects => "Factorial Effects...",
+            AnalysisKind::SplitPlotDesign => "Split-Plot Design...",
+            AnalysisKind::SplitPlotEffects => "Split-Plot Effects...",
             AnalysisKind::RareChart => "Rare Event Chart (G/T)...",
             AnalysisKind::Capability => "Process Capability...",
             AnalysisKind::Stability => "Stability Study...",
@@ -450,6 +456,8 @@ impl AnalysisKind {
             "randomforest" => AnalysisKind::RandomForest,
             "factorialdesign" => AnalysisKind::FactorialDesign,
             "factorialeffects" => AnalysisKind::FactorialEffects,
+            "splitplotdesign" => AnalysisKind::SplitPlotDesign,
+            "splitploteffects" => AnalysisKind::SplitPlotEffects,
             "rarechart" => AnalysisKind::RareChart,
             "capability" => AnalysisKind::Capability,
             "stability" => AnalysisKind::Stability,
@@ -2342,6 +2350,8 @@ impl AnalysisDialog {
             | AnalysisKind::RandomForest
             | AnalysisKind::FactorialDesign
             | AnalysisKind::FactorialEffects
+            | AnalysisKind::SplitPlotDesign
+            | AnalysisKind::SplitPlotEffects
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
             | AnalysisKind::Stability
@@ -3672,6 +3682,8 @@ impl AnalysisDialog {
             | AnalysisKind::RandomForest
             | AnalysisKind::FactorialDesign
             | AnalysisKind::FactorialEffects
+            | AnalysisKind::SplitPlotDesign
+            | AnalysisKind::SplitPlotEffects
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
             | AnalysisKind::Stability
@@ -3879,6 +3891,8 @@ impl AnalysisDialog {
             | AnalysisKind::RandomForest
             | AnalysisKind::FactorialDesign
             | AnalysisKind::FactorialEffects
+            | AnalysisKind::SplitPlotDesign
+            | AnalysisKind::SplitPlotEffects
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
             | AnalysisKind::Stability
@@ -4004,6 +4018,12 @@ impl AnalysisDialog {
                 "How well a process fits its specification limits: Cp, Cpk, Pp, Ppk and parts per million outside"
             }
             AnalysisKind::RareChart => "Chart the opportunities or the time between rare events against control limits",
+            AnalysisKind::SplitPlotDesign => {
+                "Make a two-level design whose hard-to-change factors are set once per whole plot"
+            }
+            AnalysisKind::SplitPlotEffects => {
+                "Estimate split-plot effects, each tested against the error of its stratum"
+            }
             AnalysisKind::FactorialDesign => "Make a two-level full or fractional factorial design with its run order",
             AnalysisKind::FactorialEffects => {
                 "Estimate the effects of two-level factors and their interactions on a response"
@@ -4157,6 +4177,12 @@ impl AnalysisDialog {
             }
             AnalysisKind::RareChart => {
                 "One row per column (fitted distribution, center line, limits, points beyond) in a new sheet, and a chart per column"
+            }
+            AnalysisKind::SplitPlotDesign => {
+                "The design in a new sheet: run order, whole plot, the coded factor levels and an empty response column"
+            }
+            AnalysisKind::SplitPlotEffects => {
+                "One row per term (stratum, effect, t test or Lenth activity) in a new sheet, and an effects graph"
             }
             AnalysisKind::FactorialDesign => {
                 "The design in a new sheet: run and standard order, the coded factor levels and an empty response column"

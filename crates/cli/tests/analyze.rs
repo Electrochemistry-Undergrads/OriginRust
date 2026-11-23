@@ -1582,6 +1582,47 @@ fn rare_event_charts_run_from_the_command_line() {
     assert!(!ok && err.contains("--chart"), "{err}");
 }
 
+/// Split-plot design and effects (spec `statistics.md` section 46, T382).
+#[test]
+fn split_plot_design_and_effects_run_from_the_command_line() {
+    let dir = scratch("splitplot");
+    let path = dir.join("sp.csv");
+    let mut text = String::from("run,plot,heat,speed,feed,y\n");
+    let bump = [0.3, -0.2, 0.1, -0.2];
+    let mut run = 0;
+    for w in 0..4usize {
+        let a = if w % 2 == 1 { 1.0 } else { -1.0 };
+        for k in 0..4usize {
+            let (b, c) = (if k & 1 == 1 { 1.0 } else { -1.0 }, if k & 2 == 2 { 1.0 } else { -1.0 });
+            run += 1;
+            let y = 5.0 + 2.0 * a + b + bump[w] + 0.05 * (f64::from(run) * 1.7).sin();
+            text.push_str(&format!("{run},{},{a},{b},{c},{y}\n", w + 1));
+        }
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    // Long names that are not also short names (the CLI matches short names A, B, C first).
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "split-plot-design",
+        file,
+        "--y",
+        "y",
+        "--whole-plot-factors",
+        "2",
+        "--subplot-factors",
+        "1",
+        "--no-randomize",
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("hard-to-change factor(s) AB set once per whole plot (8 whole plots, 2 replicate(s)), 2 subplot runs in each; 16 runs"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "split-plot-effects", file, "--y", "plot,heat,speed,feed,y"]);
+    assert!(ok && out.contains("16 runs in 4 whole plots") && out.contains("Whole-plot error: SS"), "{err} {out}");
+    let (ok, _, err) =
+        sheaf(&["analyze", "split-plot-effects", file, "--y", "plot,heat,speed,feed,y", "--whole-plot-factors", "2"]);
+    assert!(!ok && err.contains("one level of each whole-plot factor"), "{err}");
+}
+
 /// Two-level factorial design and effects (spec `statistics.md` section 45, T380).
 #[test]
 fn factorial_design_and_effects_run_from_the_command_line() {

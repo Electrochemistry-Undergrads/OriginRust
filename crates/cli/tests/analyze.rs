@@ -1588,14 +1588,13 @@ fn split_plot_design_and_effects_run_from_the_command_line() {
     let dir = scratch("splitplot");
     let path = dir.join("sp.csv");
     let mut text = String::from("run,plot,heat,speed,feed,y\n");
-    let bump = [0.3, -0.2, 0.1, -0.2];
     let mut run = 0;
-    for w in 0..4usize {
+    for (w, bump) in [0.3, -0.2, 0.1, -0.2].into_iter().enumerate() {
         let a = if w % 2 == 1 { 1.0 } else { -1.0 };
         for k in 0..4usize {
             let (b, c) = (if k & 1 == 1 { 1.0 } else { -1.0 }, if k & 2 == 2 { 1.0 } else { -1.0 });
             run += 1;
-            let y = 5.0 + 2.0 * a + b + bump[w] + 0.05 * (f64::from(run) * 1.7).sin();
+            let y = 5.0 + 2.0 * a + b + bump + 0.05 * (f64::from(run) * 1.7).sin();
             text.push_str(&format!("{run},{},{a},{b},{c},{y}\n", w + 1));
         }
     }

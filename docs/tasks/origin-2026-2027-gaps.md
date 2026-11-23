@@ -64,7 +64,7 @@ outputs or UI behavior.
 | Graph Slicer | 2025 / 2025b | Filter plots from a common source sheet at page, layer or plot scope and extract the selected subset. | [2025][o25] · [2025b][o25b] |
 | Treemap | 2025b | Done (T50). Show hierarchical magnitudes as nested rectangles sized by values. | [2025b][o25b] |
 | On-graph trendlines | 2025b | Done (T43). Add a fitted trend or moving average directly to a plot with its own editable label and curve settings. | [2025b][o25b] |
-| Cause-and-effect and nested frequency charts | 2026 | Fishbone diagram done (T375: Plot > Categorical > Cause-and-Effect Diagram, `sheaf plot -t fishbone`); nested frequency charts (columns, bars, pie or doughnut sections of counts, nested categories) open. | [2026][o26] |
+| Cause-and-effect and nested frequency charts | 2026 | Fishbone diagram done (T375: Plot > Categorical > Cause-and-Effect Diagram, `sheaf plot -t fishbone`); nested frequency charts done as counted treemaps and sunburst doughnuts (T392, graphing 14.27); frequency columns and bars come from Discrete Frequency. | [2026][o26] |
 | Slope Annotation | 2026b | Done (T52). Mark a slope directly on a graph with a data-linked annotation. | [2026b][o26b] |
 | Hexbin, binned scatter and UpSet plots | 2027 | Hexbin done (T45); binned scatter done (T356, Statistics > Descriptive Statistics > Binned Scatter); UpSet remains. Summarize dense XY data in hexagonal bins or binned scatter points. Visualize sizes of set intersections. | [2027][o27] |
 

@@ -8058,6 +8058,24 @@ fn plot_categorical_network_joins_the_sheets_first_two_text_columns() {
 }
 
 #[test]
+fn a_sunburst_of_selected_text_columns_counts_the_rows() {
+    let mut h = start(vec![data_file("nested-freq")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = project(&h).workbooks().next().unwrap().id;
+    let text = |v: &[&str]| ColumnData::text(v.iter().map(|s| s.to_string()).collect());
+    let (a, b) = h.state_mut().doc.apply("text", |p| {
+        let a = p.add_column(book, 0, sheaf_core::Designation::Y, text(&["x", "x", "y", "y"])).unwrap();
+        let b = p.add_column(book, 0, sheaf_core::Designation::Y, text(&["p", "q", "p", "p"])).unwrap();
+        (a, b)
+    });
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::PlotColumns { book, columns: vec![a, b], template: Template::Sunburst }, &ctx);
+    settle(&mut h);
+    let plot = &project(&h).graphs().last().unwrap().layers[0].plots[0];
+    assert_eq!((plot.kind, plot.y), (sheaf_core::graph::PlotKind::Sunburst, a));
+}
+
+#[test]
 fn ctrl_shift_c_copies_with_the_label_rows() {
     let mut h = start(vec![data_file("copy-labels")]);
     show_window(&mut h, "Book1 - sample.csv");

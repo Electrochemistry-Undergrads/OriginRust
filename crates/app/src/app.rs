@@ -4715,6 +4715,14 @@ impl SheafApp {
             return;
         }
         let ys = self.plot_y_columns(book, columns, template);
+        // Text columns only: a nested frequency treemap or sunburst counts the rows (T392).
+        if ys.is_empty() && matches!(template, Template::Treemap | Template::Sunburst) && !categories.is_empty() {
+            match self.doc.edit("Plot columns", |p| p.plot_columns(template, &categories)) {
+                Ok(_) => self.say(format!("Counted the rows of {} category column(s)", categories.len())),
+                Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+            }
+            return;
+        }
         if ys.is_empty() {
             let what = if matches!(template, Template::Treemap | Template::Sunburst | Template::Sankey) {
                 "Nothing to plot: select one or more text category columns and a numeric value column"

@@ -443,7 +443,8 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
         let sheet = pick_sheet(project, book, a.sheet.as_deref())?;
         let (left, right) = axis_columns(project, book, sheet, template, a)?;
         let ys: Vec<ColumnId> = left.iter().chain(&right).copied().collect();
-        if ys.is_empty() {
+        // A treemap or sunburst plot without a numeric column counts its rows (T392).
+        if ys.is_empty() && !matches!(template, Template::Treemap | Template::Sunburst) {
             bail!("there are no numeric Y columns to plot");
         }
         if template.is_parallel() {
@@ -541,9 +542,7 @@ fn treemap_graph(
     style: &Style,
 ) -> Result<WindowId> {
     use sheaf_core::graph::{TreemapLayout, TreemapOrder};
-    let value = ys.iter().rev().copied().find(|y| project.numeric(*y).is_some()).ok_or_else(|| {
-        anyhow!("a treemap needs a numeric value column (the last numeric --y column; default: the last Y column)")
-    })?;
+    let numeric_value = ys.iter().rev().copied().find(|y| project.numeric(*y).is_some());
     let mut categories: Vec<ColumnId> = match group {
         Some(g) => {
             let names: Vec<String> = g.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect();
@@ -554,12 +553,28 @@ fn treemap_graph(
         }
         None => ys.iter().copied().filter(|y| project.numeric(*y).is_none()).collect(),
     };
-    if categories.is_empty() {
-        categories = project.treemap_default_categories(value);
-    }
-    if categories.contains(&value) {
-        bail!("the value column of a treemap cannot also be a category column");
-    }
+    // Without a numeric column the rows are counted (nested frequencies, T392): the categories are the
+    // --group columns, else every text column of the sheet, and the value is the first of them.
+    let value = match numeric_value {
+        Some(v) => {
+            if categories.is_empty() {
+                categories = project.treemap_default_categories(v);
+            }
+            if categories.contains(&v) {
+                bail!("the value column of a treemap cannot also be a category column");
+            }
+            v
+        }
+        None => {
+            if categories.is_empty() {
+                categories = project
+                    .workbook(book)
+                    .map(|b| b.sheets[sheet].columns.iter().filter(|c| !c.data.is_numeric()).map(|c| c.id).collect())
+                    .unwrap_or_default();
+            }
+            *categories.first().ok_or_else(|| anyhow!("a treemap needs category columns (text) to count"))?
+        }
+    };
     let layout = match &style.treemap_layout {
         Some(name) => Some(TreemapLayout::from_name(name).ok_or_else(|| {
             let all: Vec<&str> = TreemapLayout::ALL.iter().map(|l| l.name()).collect();
@@ -734,11 +749,7 @@ fn sunburst_graph(
     style: &Style,
 ) -> Result<WindowId> {
     use sheaf_core::graph::SunburstOrder;
-    let value = ys.iter().rev().copied().find(|y| project.numeric(*y).is_some()).ok_or_else(|| {
-        anyhow!(
-            "a sunburst plot needs a numeric value column (the last numeric --y column; default: the last Y column)"
-        )
-    })?;
+    let numeric_value = ys.iter().rev().copied().find(|y| project.numeric(*y).is_some());
     let mut categories: Vec<ColumnId> = match group {
         Some(g) => {
             let names: Vec<String> = g.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect();
@@ -749,12 +760,28 @@ fn sunburst_graph(
         }
         None => ys.iter().copied().filter(|y| project.numeric(*y).is_none()).collect(),
     };
-    if categories.is_empty() {
-        categories = project.treemap_default_categories(value);
-    }
-    if categories.contains(&value) {
-        bail!("the value column of a sunburst plot cannot also be a category column");
-    }
+    // Without a numeric column the rows are counted (nested frequencies, T392): the categories are the
+    // --group columns, else every text column of the sheet, and the value is the first of them.
+    let value = match numeric_value {
+        Some(v) => {
+            if categories.is_empty() {
+                categories = project.treemap_default_categories(v);
+            }
+            if categories.contains(&v) {
+                bail!("the value column of a sunburst plot cannot also be a category column");
+            }
+            v
+        }
+        None => {
+            if categories.is_empty() {
+                categories = project
+                    .workbook(book)
+                    .map(|b| b.sheets[sheet].columns.iter().filter(|c| !c.data.is_numeric()).map(|c| c.id).collect())
+                    .unwrap_or_default();
+            }
+            *categories.first().ok_or_else(|| anyhow!("a sunburst plot needs category columns (text) to count"))?
+        }
+    };
     if let Some(s) = style.sunburst_start
         && !s.is_finite()
     {

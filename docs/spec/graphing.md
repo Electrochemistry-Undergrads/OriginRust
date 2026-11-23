@@ -3104,6 +3104,14 @@ Origin's documented facts (Origin 2022 help, not measured; no Origin was at hand
   the Radius/Center settings, tangential labels for thin rings, a colour-by-category-palette option, a label font setting, reading
   Origin's sunburst from .opj.
 
+**Nested frequency charts (T392, Origin 2026 feature, Sheaf's rule, not measured).** A treemap (14.26) or sunburst
+plot (14.27) whose chosen columns are all text counts its rows instead of summing a value: every row counts 1, so the
+rectangles or wedges are the frequencies of the category combinations, nested by the columns in order. In the app,
+select the text columns only; on the command line give no numeric `-y` (`sheaf plot FILE -t sunburst|treemap
+[--group A,B,...]`; without `--group` every text column of the sheet). The plot's Y column is then the first category
+column; the sunburst's colour scale is titled "Count", the treemap's value labels show the counts. A file of text only
+needs `--header-lines 1 --long-name-line 1` on import, or its header row is counted.
+
 ### 14.28 Grouped Columns (indexed data) and Grouped Box Charts (T76)
 
 Origin's documented facts (documentation only, **not measured**; no Origin was at hand; paraphrased;

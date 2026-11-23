@@ -6915,11 +6915,20 @@ matrices are in `crates/calc/tests/fixtures/kde2d_origin.rs`).
 - **Not measured:** Origin's contour levels and colours, its colour scale, and its picture (the dialog could
   not be confirmed from the screenshot tool).
 
-## 39. Piper diagram: Plot > Specialized > Piper (T117, 2026-11-16, **not measured**)
+## 39. Piper diagram: Plot > Specialized > Piper (T117, 2026-11-16; measured by T389, 2026-11-23)
 
-Origin 2016 lists the item under Plot > Specialized (seen in the menu on 2026-11-16). The probes could not
-run because Origin's COM class was unregistered (see 36), so this is Sheaf's version of the standard Piper
-(trilinear) diagram. Measure Origin's input rules and look when automation works again.
+**Origin 2016 (`plotpiper`, measured through its menu on three samples; probes in `re-workspace/scratch/t389`):** the
+window takes Input (six columns, "Column order of input data need to range as Ca, Mg, Na+K, Cl, SO4, CO3+HCO3"),
+Sample ID and Total Dissolved Solids (both optional) and Output Graph (a new graph from the piper template).
+The graph has three layers: the cation triangle at the bottom left, the anion triangle at the bottom right and the
+diamond above between them. Corners as below. Grid lines every 20 % in solid gray and every 10 % dotted. Each
+side is labelled 0 to 100 by 20, counting toward the corner it ends at (the cation bottom 100 at the left), and
+titled with the column names (A, B, C on the cation triangle, D, E, F on the anion one, "D+E" and "A+B" on the
+diamond's upper sides). Each sample is its own plot with the next symbol and colour (1 black square, 2 red
+circle, 3 green triangle), listed in a legend.
+
+**Sheaf** (one layer, `piper` template): the same input order, corners, grids, side labels and titles, and the
+samples in Origin's symbol and colour sequence.
 
 - **Input:** six Y columns, in order Ca, Mg, Na+K, Cl, SO4, HCO3+CO3, in any unit (meq/L or percent).
   Each row's cation triple and anion triple are turned into percentages of their sums. Rows with an empty
@@ -6931,15 +6940,12 @@ run because Origin's COM class was unregistered (see 36), so this is Sheaf's ver
   - **Diamond:** above them. Each sample sits where the line from its cation point, parallel to the cation
     triangle's right side, meets the line from its anion point, parallel to the anion triangle's left
     side. Pure Ca + HCO3 water is the diamond's left corner, Na + Cl its right corner, Na + HCO3 its
-    bottom.
-- **Drawing:**
-  - Black 1 pt outlines, light grey grid lines every 20 %.
-  - Each sample as a red dot with a black edge in all three figures.
-  - Corner labels as free labels; hidden axes; no legend.
-- **Sheaf internals:** plot kind `piper` with `PlotDecor::piper` (the five columns after Ca), template
-  `piper`.
-- **To measure:** Origin's column rules (it may take 8 columns with K, CO3 apart), its labels, ticks, colours
-  and symbols.
+    bottom (as Origin's).
+- **Drawing:** black 1 pt outlines; Origin's Gray grid every 20 % and LT Gray dotted between; the side labels in
+  8 pt and the titles in 10 pt Arial; each sample's three points filled with Origin's increment (square, circle,
+  up triangle, down triangle, diamond; black, red, green, blue, cyan, magenta); hidden axes.
+- **Sheaf internals:** plot kind `piper` with `PlotDecor::piper` (the five columns after Ca), template `piper`.
+- **Left:** Sample ID and TDS columns, a legend entry per sample, Origin's three layers.
 
 ## 40. Data markers and display range: graph Data menu (T118, 2026-11-16, **not measured**)
 

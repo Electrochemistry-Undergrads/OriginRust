@@ -66,6 +66,7 @@ pub mod merge_graphs;
 pub mod multi_y;
 pub mod multipeak;
 pub mod multivariate_options;
+pub mod name_cell;
 pub mod options;
 pub mod pivot;
 pub mod plot_setup;

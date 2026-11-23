@@ -13,7 +13,7 @@ fn a_new_table_is_made_and_edited_cell_by_cell() {
     settle(&mut h);
     {
         let e = h.state_mut().table_editor.as_mut().unwrap();
-        assert_eq!((e.cells.len(), e.cells[0].len()), (3, 3));
+        assert_eq!((e.cells.len(), e.cells[0].len()), (8, 5), "Origin 2016's 8 rows of 5 columns (T395)");
         e.cells[0][0] = "Sample".into();
         e.cells[1][0] = "A".into();
         e.cells[1][1] = "1.5".into();
@@ -26,7 +26,7 @@ fn a_new_table_is_made_and_edited_cell_by_cell() {
     assert_eq!(all.len(), before + 1);
     let t = all.last().unwrap();
     assert!(t.table);
-    assert_eq!(t.cells()[1], ["A", "1.5", "", ""]);
+    assert_eq!(t.cells()[1], ["A", "1.5", "", "", "", ""]);
     // A double-click on the table (EditText) opens the cell editor, not the text editor.
     let k = all.len() - 1;
     h.state_mut().apply(Action::EditText { graph, layer: 0, label: k }, &ctx);

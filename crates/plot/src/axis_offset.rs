@@ -79,3 +79,15 @@ pub(crate) fn y_line_x(axis: &Axis, frame: Rect) -> f64 {
     let f = y_axis_frame(axis, frame);
     if axis.side == AxisSide::Opposite { f.x + f.w } else { f.x }
 }
+
+/// The opposite line's page coordinate and the direction from it toward the frame.
+pub(crate) fn opposite_line(axis: &Axis, frame: Rect, horizontal: bool) -> (f64, f64) {
+    let (edge, inward, dimension) = match (horizontal, axis.side == AxisSide::Opposite) {
+        (true, false) => (frame.y, 1.0, frame.h),
+        (true, true) => (frame.y + frame.h, -1.0, frame.h),
+        (false, false) => (frame.x + frame.w, -1.0, frame.w),
+        (false, true) => (frame.x, 1.0, frame.w),
+    };
+    let offset = axis.opposite_offset_pct.filter(|pct| pct.is_finite()).unwrap_or_default();
+    (edge - inward * (offset / 100.0 * dimension), inward)
+}

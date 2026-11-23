@@ -57,6 +57,7 @@ pub mod matrix_image;
 pub mod matrix_project;
 pub mod merge;
 pub mod multi_y;
+pub mod named;
 pub mod notes;
 pub mod notes_window;
 pub mod page_setup;

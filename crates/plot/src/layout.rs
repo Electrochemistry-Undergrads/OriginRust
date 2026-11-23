@@ -556,6 +556,23 @@ impl LabelEdges {
         LabelEdges { left: f64::INFINITY, right: f64::NEG_INFINITY, top: f64::INFINITY, bottom: f64::NEG_INFINITY };
 }
 
+/// Lay out the labels and title on the facing side using the shared scale and style.
+fn paired_axis(axis: &Axis) -> Option<Axis> {
+    let offset_pct = axis.opposite_offset_pct?;
+    if !(axis.show_opposite || axis.opposite_ticks) || axis.side == AxisSide::Hidden {
+        return None;
+    }
+    let mut other = axis.clone();
+    other.side = if axis.side == AxisSide::Opposite { AxisSide::Normal } else { AxisSide::Opposite };
+    other.offset_pct = offset_pct;
+    other.rug = axis.rug_opposite.clone();
+    if !axis.opposite_ticks {
+        other.major_tick = TickDirection::None;
+        other.minor_tick = TickDirection::None;
+    }
+    Some(other)
+}
+
 /// Widens `e` by the tick labels and titles of one layer laid out at frame `f`.
 ///
 /// `waterfall` is true for a layer drawn as a waterfall, which draws no ticks on the opposite edges, so
@@ -592,19 +609,19 @@ fn label_edges(
         e.bottom = e.bottom.max(b);
         return;
     }
-    let x_size = xa.title_font.size_pt;
-    match xa.side {
-        AxisSide::Normal => {
-            let below = draw_x_labels(&mut scratch, xa, x, f, &xa.tick_font, m);
-            let edge = if xa.show_title { below + 0.6 * x_size + (ASCENT + DESCENT) * x_size } else { below };
-            e.bottom = e.bottom.max(edge);
+    let pairs = !waterfall && layer.coords.is_cartesian();
+    let x_pair = (pairs && layer.display.show_x_axes).then(|| paired_axis(xa)).flatten();
+    for axis in [Some(xa), x_pair.as_ref()].into_iter().flatten() {
+        if axis.side == AxisSide::Hidden {
+            continue;
         }
-        AxisSide::Opposite => {
-            let above = draw_x_labels(&mut scratch, xa, x, f, &xa.tick_font, m);
-            let edge = if xa.show_title { above - 0.6 * x_size - (ASCENT + DESCENT) * x_size } else { above };
-            e.top = e.top.min(edge);
+        let edge = draw_x_labels(&mut scratch, axis, x, f, &axis.tick_font, m);
+        let size = if axis.show_title { axis.title_font.size_pt } else { 0.0 };
+        if axis.side == AxisSide::Opposite {
+            e.top = e.top.min(edge - 0.6 * size - (ASCENT + DESCENT) * size);
+        } else {
+            e.bottom = e.bottom.max(edge + 0.6 * size + (ASCENT + DESCENT) * size);
         }
-        AxisSide::Hidden => {}
     }
     // The band of significance brackets over the frame (or over the labels and title of a top X axis).
     if layer.display.show_data
@@ -634,19 +651,18 @@ fn label_edges(
             e.right = e.right.max(f.x + f.w + room);
         }
     }
-    let y_size = ya.title_font.size_pt;
-    match ya.side {
-        AxisSide::Normal => {
-            let left = draw_y_labels(&mut scratch, ya, y, f, &ya.tick_font, m);
-            let edge = if ya.show_title { left - 0.6 * y_size - (ASCENT + DESCENT) * y_size } else { left };
-            e.left = e.left.min(edge);
+    let y_pair = (pairs && layer.display.show_y_axes).then(|| paired_axis(ya)).flatten();
+    for axis in [Some(ya), y_pair.as_ref()].into_iter().flatten() {
+        if axis.side == AxisSide::Hidden {
+            continue;
         }
-        AxisSide::Opposite => {
-            let right = draw_y_labels(&mut scratch, ya, y, f, &ya.tick_font, m);
-            let edge = if ya.show_title { right + 0.6 * y_size + (ASCENT + DESCENT) * y_size } else { right };
-            e.right = e.right.max(edge);
+        let edge = draw_y_labels(&mut scratch, axis, y, f, &axis.tick_font, m);
+        let size = if axis.show_title { axis.title_font.size_pt } else { 0.0 };
+        if axis.side == AxisSide::Opposite {
+            e.right = e.right.max(edge + 0.6 * size + (ASCENT + DESCENT) * size);
+        } else {
+            e.left = e.left.min(edge - 0.6 * size - (ASCENT + DESCENT) * size);
         }
-        AxisSide::Hidden => {}
     }
     let across = crate::rug::opposite_reach(ya, f, !waterfall);
     if across > 0.0 {
@@ -661,9 +677,17 @@ fn label_edges(
 /// outer edge of its tick labels and title.
 fn band_base(layer: &Layer, x: &ResolvedAxis, f: Rect, m: &dyn TextMeasurer) -> f64 {
     let xa = &layer.x_axis;
-    if xa.side != AxisSide::Opposite {
+    let top;
+    let xa = if xa.side == AxisSide::Opposite {
+        xa
+    } else if layer.display.show_x_axes
+        && let Some(axis) = paired_axis(xa)
+    {
+        top = axis;
+        &top
+    } else {
         return f.y;
-    }
+    };
     let above = draw_x_labels(&mut Vec::new(), xa, x, f, &xa.tick_font, m);
     let size = xa.title_font.size_pt;
     let edge = if xa.show_title { above - 0.6 * size - (ASCENT + DESCENT) * size } else { above };
@@ -1041,6 +1065,9 @@ fn layer_scene(
     // The edge each axis line is drawn on, as a box of no height or width.
     let x_line = Rect { y: crate::axis_offset::x_line_y(xa, f), h: 0.0, ..f };
     let y_line = Rect { x: crate::axis_offset::y_line_x(ya, f), w: 0.0, ..f };
+    let (x_pair, y_pair) = (paired_axis(xa), paired_axis(ya));
+    let x_lines = [x_line, Rect { y: crate::axis_offset::opposite_line(xa, f, true).0, ..x_line }];
+    let y_lines = [y_line, Rect { x: crate::axis_offset::opposite_line(ya, f, false).0, ..y_line }];
     let spans = |r: &ResolvedAxis| r.gaps.iter().map(|g| g.span(r.reversed)).collect::<Vec<_>>();
     let gaps = (spans(&geom.x), spans(&geom.y));
     draw_axis_lines(out, xa, ya, f, xp.line, yp.line, &gaps);
@@ -1049,20 +1076,22 @@ fn layer_scene(
     draw_ticks(out, xa, &geom.x, f, true, xp.line);
     draw_axis_arrows(out, xa, f, true, xp.line);
     if xa.side != AxisSide::Hidden {
-        rec(objects, out, start, ObjectKind::XAxis, &[x_line]);
+        rec(objects, out, start, ObjectKind::XAxis, &x_lines[..1 + usize::from(x_pair.is_some() && xa.show_opposite)]);
     }
     let start = out.len();
     draw_ticks(out, ya, &geom.y, f, false, yp.line);
     draw_axis_arrows(out, ya, f, false, yp.line);
     if ya.side != AxisSide::Hidden {
-        rec(objects, out, start, ObjectKind::YAxis, &[y_line]);
+        rec(objects, out, start, ObjectKind::YAxis, &y_lines[..1 + usize::from(y_pair.is_some() && ya.show_opposite)]);
     }
     crate::rug::draw(out, layer, xa, ya, geom, pds, xp.line, yp.line);
     let start = out.len();
     let x_edge = (xa.side != AxisSide::Hidden).then(|| draw_x_labels(out, xa, &geom.x, f, &xp.labels, m));
+    let x_pair_edge = x_pair.as_ref().map(|axis| draw_x_labels(out, axis, &geom.x, f, &xp.labels, m));
     rec(objects, out, start, ObjectKind::XAxis, &[]);
     let start = out.len();
     let y_edge = (ya.side != AxisSide::Hidden).then(|| draw_y_labels(out, ya, &geom.y, f, &yp.labels, m));
+    let y_pair_edge = y_pair.as_ref().map(|axis| draw_y_labels(out, axis, &geom.y, f, &yp.labels, m));
     rec(objects, out, start, ObjectKind::YAxis, &[]);
     let plot_color = |slot| layer.plots.get(slot).map(crate::rug::plot_color);
     let place_title = |out: &mut Vec<Item>, title: &str, font: &Font, pos, angle| {
@@ -1082,6 +1111,11 @@ fn layer_scene(
         }
     }
     rec(objects, out, start, ObjectKind::XTitle, &[]);
+    if let Some((axis, edge)) = x_pair.as_ref().zip(x_pair_edge) {
+        let start = out.len();
+        draw_x_title(out, project, axis, f, pds, edge, &xp.title, &place_title);
+        rec(objects, out, start, ObjectKind::XTitle, &[]);
+    }
     let start = out.len();
     if y_edge.is_some() && ya.offset_pct < 0.0 && ya.offset_pct.is_finite() && y_title == TitlePlace::Own {
         draw_y_title_inward(out, project, ya, f, pds, crate::axis_offset::y_line_x(ya, f), &yp.title, &place_title);
@@ -1095,6 +1129,11 @@ fn layer_scene(
         }
     }
     rec(objects, out, start, ObjectKind::YTitle, &[]);
+    if let Some((axis, edge)) = y_pair.as_ref().zip(y_pair_edge) {
+        let start = out.len();
+        draw_y_title(out, project, axis, f, pds, edge, &yp.title, &place_title);
+        rec(objects, out, start, ObjectKind::YTitle, &[]);
+    }
     if layer.display.data_on_top {
         scene.underlay_len = out.len();
         scene.data_on_top = true;
@@ -1195,32 +1234,31 @@ fn draw_legend_and_labels(
     }
 }
 
-/// Moves object `kind` of model layer `model` to the end of `scene`'s overlay, over everything else of
+/// Moves items of kind `kind` of model layer `model` to the end of `scene`'s overlay, over everything else of
 /// the layer, keeping every object's item range right (T153).
 fn move_to_top(scene: &mut LayerScene, kind: ObjectKind, model: usize) {
-    let Some(at) = scene.objects.iter().position(|o| o.kind == kind && o.layer == model && o.list == ItemList::Overlay)
-    else {
-        return;
-    };
-    let range = scene.objects[at].items.clone();
-    if range.is_empty() {
-        return;
-    }
-    let n = range.len();
-    let items: Vec<Item> = scene.overlay.drain(range.clone()).collect();
-    if range.end <= scene.underlay_len {
-        scene.underlay_len -= n;
-    }
-    let to = scene.overlay.len();
-    scene.overlay.extend(items);
-    for (i, o) in scene.objects.iter_mut().enumerate() {
-        if o.list != ItemList::Overlay {
+    for at in 0..scene.objects.len() {
+        let object = &scene.objects[at];
+        if object.kind != kind || object.layer != model || object.list != ItemList::Overlay || object.items.is_empty() {
             continue;
         }
-        if i == at {
-            o.items = to..to + n;
-        } else if o.items.start >= range.end {
-            o.items = o.items.start - n..o.items.end - n;
+        let range = object.items.clone();
+        let n = range.len();
+        let items: Vec<Item> = scene.overlay.drain(range.clone()).collect();
+        if range.end <= scene.underlay_len {
+            scene.underlay_len -= n;
+        }
+        let to = scene.overlay.len();
+        scene.overlay.extend(items);
+        for (i, o) in scene.objects.iter_mut().enumerate() {
+            if o.list != ItemList::Overlay {
+                continue;
+            }
+            if i == at {
+                o.items = to..to + n;
+            } else if o.items.start >= range.end {
+                o.items = o.items.start - n..o.items.end - n;
+            }
         }
     }
 }
@@ -1390,8 +1428,12 @@ fn draw_axis_lines(
     let shown = |a: &Axis| a.side != AxisSide::Hidden;
     let same = xa.line_width_pt == ya.line_width_pt && xc == yc;
     let y_main_x = crate::axis_offset::y_line_x(ya, f);
+    let x_other = crate::axis_offset::opposite_line(xa, f, true).0;
+    let y_other = crate::axis_offset::opposite_line(ya, f, false).0;
     let displaced = y_main_x != if ya.side == AxisSide::Opposite { r } else { l }
-        || crate::axis_offset::x_line_y(xa, f) != if xa.side == AxisSide::Opposite { t } else { b };
+        || crate::axis_offset::x_line_y(xa, f) != if xa.side == AxisSide::Opposite { t } else { b }
+        || x_other != if xa.side == AxisSide::Opposite { b } else { t }
+        || y_other != if ya.side == AxisSide::Opposite { l } else { r };
     if shown(xa)
         && shown(ya)
         && xa.show_opposite
@@ -1456,9 +1498,7 @@ fn draw_axis_lines(
     let gap_y: Vec<(f64, f64)> = gaps.1.iter().map(|&(lo, hi)| (1.0 - hi, 1.0 - lo)).collect();
     let gap_x = &gaps.0;
     // The edge each axis is drawn on, and the edge across from it.
-    let x_other = if xa.side == AxisSide::Opposite { b } else { t };
     let x_main = crate::axis_offset::x_line_y(xa, f);
-    let y_other = if ya.side == AxisSide::Opposite { l } else { r };
     let y_main = y_main_x;
     if shown(xa) {
         line(out, (l, x_main), (r, x_main), xa, xc, gap_x);
@@ -1475,11 +1515,11 @@ fn draw_axis_lines(
     // An axis moved into the frame (Scatter Central) leaves its own edge bare; with the box shown, that
     // edge is drawn as part of the frame.
     let x_home = if xa.side == AxisSide::Opposite { t } else { b };
-    if shown(xa) && xa.show_opposite && xa.offset_pct < 0.0 && x_main != x_home {
+    if shown(xa) && xa.show_opposite && xa.opposite_offset_pct.is_none() && xa.offset_pct < 0.0 && x_main != x_home {
         line(out, (l, x_home), (r, x_home), xa, xc, gap_x);
     }
     let y_home = if ya.side == AxisSide::Opposite { r } else { l };
-    if shown(ya) && ya.show_opposite && ya.offset_pct < 0.0 && y_main != y_home {
+    if shown(ya) && ya.show_opposite && ya.opposite_offset_pct.is_none() && ya.offset_pct < 0.0 && y_main != y_home {
         line(out, (y_home, t), (y_home, b), ya, yc, &gap_y);
     }
 }
@@ -1545,15 +1585,16 @@ pub(crate) fn outward_extent(axis: &Axis) -> f64 {
 /// Draws the ticks of one axis on its own edge and, with `opposite_ticks`, on the edge across
 /// (mirrored, so an `In` tick still points into the frame). `horizontal` is true for X.
 fn draw_ticks(out: &mut Vec<Item>, axis: &Axis, resolved: &ResolvedAxis, f: Rect, horizontal: bool, color: Color) {
+    let other = crate::axis_offset::opposite_line(axis, f, horizontal);
     let f =
         if horizontal { crate::axis_offset::x_axis_frame(axis, f) } else { crate::axis_offset::y_axis_frame(axis, f) };
     // (position of the edge, +1 when "into the frame" is the positive page direction).
-    let (main, other) = match (horizontal, axis.side) {
+    let main = match (horizontal, axis.side) {
         (_, AxisSide::Hidden) => return,
-        (true, AxisSide::Normal) => ((f.y + f.h, -1.0), (f.y, 1.0)),
-        (true, AxisSide::Opposite) => ((f.y, 1.0), (f.y + f.h, -1.0)),
-        (false, AxisSide::Normal) => ((f.x, 1.0), (f.x + f.w, -1.0)),
-        (false, AxisSide::Opposite) => ((f.x + f.w, -1.0), (f.x, 1.0)),
+        (true, AxisSide::Normal) => (f.y + f.h, -1.0),
+        (true, AxisSide::Opposite) => (f.y, 1.0),
+        (false, AxisSide::Normal) => (f.x, 1.0),
+        (false, AxisSide::Opposite) => (f.x + f.w, -1.0),
     };
     let side = |out: &mut Vec<Item>, (line_pos, inward): (f64, f64)| {
         let mut d = String::new();
@@ -1834,7 +1875,15 @@ pub(crate) fn title_source<'a>(
 ) -> TitleSource<'a> {
     let column = |id| project.column(id).map_or(TitleSource::Text(String::new()), TitleSource::Column);
     let text = |s: &str| TitleSource::Text(s.to_string());
-    let Some(pd) = pds.first() else { return text("") };
+    let Some(pd) = pds.first() else {
+        return text(if axis.opposite_offset_pct.is_none() {
+            ""
+        } else if y_axis {
+            "Y Axis Title"
+        } else {
+            "X Axis Title"
+        });
+    };
     if pd.plot.kind == PlotKind::Histogram {
         // The counts up the page, the binned column along it.
         return if y_axis { text("Count") } else { column(pd.plot.y) };

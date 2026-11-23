@@ -13,6 +13,15 @@
 //! freedom the effects get standard errors and t tests; without, Lenth's pseudo standard error `PSE = 1.5 median{|c|
 //! : |c| < 2.5 s0}` (`s0 = 1.5 median |c|`) of the effects and the margin of error `t(0.975, m/3) PSE` mark the active
 //! ones. Checked against numpy in `crates/calc/tests/doe_reference.rs` (made by `tools/doe-ref.py`).
+//!
+//! **Split-plot designs** (T382): the first `w` factors are hard to change. Each whole plot holds one combination of
+//! them (a full `2^w` design, replicated `r` times) and every combination of the `s` subplot factors. Randomizing
+//! shuffles the whole plots, then the subplots within each, with the same generator. The effects are those of the
+//! full model above; terms of whole-plot factors only belong to the whole-plot stratum, the others to the subplot
+//! stratum. The whole-plot error is `b` times the residual sum of squares of the whole-plot means on the whole-plot
+//! terms (`b` subplots per plot, `W - 1 - t_w` degrees of freedom); the subplot error is the rest of the full model's
+//! residual. Each effect's standard error is `sqrt(4 MS / N)` with its stratum's mean square (balanced, orthogonal
+//! designs), and each stratum without degrees of freedom falls back to Lenth's margin over its own effects.
 
 use crate::stability::invert;
 use statrs::distribution::{ContinuousCDF, StudentsT};
@@ -70,6 +79,8 @@ pub enum DoeError {
     Missing(usize),
     NotTwoLevel(usize),
     TooFewRuns,
+    BadSplit,
+    Unbalanced,
 }
 
 impl std::fmt::Display for DoeError {
@@ -84,6 +95,10 @@ impl std::fmt::Display for DoeError {
             DoeError::Missing(r) => write!(f, "row {} has a missing value", r + 1),
             DoeError::NotTwoLevel(i) => write!(f, "factor {} does not vary", letter(*i)),
             DoeError::TooFewRuns => f.write_str("too few runs for the model"),
+            DoeError::BadSplit => f.write_str("give at least one whole-plot and one subplot factor"),
+            DoeError::Unbalanced => f.write_str(
+                "every whole plot must hold the same number of runs and one level of each whole-plot factor",
+            ),
         }
     }
 }
@@ -286,6 +301,191 @@ pub fn effects(x: &[Vec<f64>], y: &[f64]) -> Result<Effects, DoeError> {
     Ok(Effects { intercept: beta[0], effects, aliased, df, mse, pse, margin })
 }
 
+/// A split-plot design: rows in run order.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SplitPlotDesign {
+    /// The whole plot of each run (1-based, in run order of the plots).
+    pub plot: Vec<usize>,
+    pub runs: Vec<Vec<f64>>,
+}
+
+/// Makes a split-plot design with `wp` whole-plot and `sp` subplot factors.
+pub fn split_plot_design(
+    wp: usize,
+    sp: usize,
+    replicates: usize,
+    randomize: bool,
+    seed: u64,
+) -> Result<SplitPlotDesign, DoeError> {
+    if wp == 0 || sp == 0 || wp + sp > 8 {
+        return Err(DoeError::NoDesign { k: wp + sp, p: 0 });
+    }
+    if replicates == 0 {
+        return Err(DoeError::BadReplicates);
+    }
+    let level = |i: usize, j: usize| if (i >> j) & 1 == 1 { 1.0 } else { -1.0 };
+    let mut plots: Vec<Vec<f64>> = Vec::new();
+    for _ in 0..replicates {
+        for i in 0..1usize << wp {
+            plots.push((0..wp).map(|j| level(i, j)).collect());
+        }
+    }
+    let mut s = seed;
+    let mut draw = |n: usize| -> usize {
+        s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        let u = (s >> 11) as f64 / (1u64 << 53) as f64;
+        ((u * n as f64) as usize).min(n - 1)
+    };
+    if randomize {
+        for i in (1..plots.len()).rev() {
+            let j = draw(i + 1);
+            plots.swap(i, j);
+        }
+    }
+    let mut plot = Vec::new();
+    let mut runs = Vec::new();
+    for (w, levels) in plots.iter().enumerate() {
+        let mut subs: Vec<Vec<f64>> = (0..1usize << sp).map(|i| (0..sp).map(|j| level(i, j)).collect()).collect();
+        if randomize {
+            for i in (1..subs.len()).rev() {
+                let j = draw(i + 1);
+                subs.swap(i, j);
+            }
+        }
+        for sub in subs {
+            plot.push(w + 1);
+            runs.push(levels.iter().chain(&sub).copied().collect());
+        }
+    }
+    Ok(SplitPlotDesign { plot, runs })
+}
+
+/// One stratum's error.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Stratum {
+    pub ss: f64,
+    pub df: usize,
+    /// Mean square (NaN without degrees of freedom).
+    pub ms: f64,
+    /// Lenth's margin of error over this stratum's effects.
+    pub margin: f64,
+}
+
+/// The effects of a split-plot experiment: `whole[i]` says whether `effects[i]` is a whole-plot term.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SplitPlotEffects {
+    pub fit: Effects,
+    pub whole: Vec<bool>,
+    pub whole_plot: Stratum,
+    pub subplot: Stratum,
+}
+
+fn lenth_margin(effects: &[f64]) -> f64 {
+    let mut abs: Vec<f64> = effects.iter().map(|e| e.abs()).collect();
+    if abs.is_empty() {
+        return f64::NAN;
+    }
+    let s0 = 1.5 * median(&mut abs.clone());
+    abs.retain(|v| *v < 2.5 * s0);
+    let pse = 1.5 * median(&mut abs);
+    StudentsT::new(0.0, 1.0, effects.len() as f64 / 3.0).map_or(f64::NAN, |d| d.inverse_cdf(0.975)) * pse
+}
+
+/// Two-stratum effects of a split-plot experiment; `plot` is the whole plot of each row and the first `wp` columns
+/// of `x` are the whole-plot factors.
+pub fn split_plot_effects(x: &[Vec<f64>], y: &[f64], plot: &[usize], wp: usize) -> Result<SplitPlotEffects, DoeError> {
+    if plot.len() != y.len() {
+        return Err(DoeError::Ragged);
+    }
+    let mut fit = effects(x, y)?;
+    let k = x[0].len();
+    if wp == 0 || wp >= k {
+        return Err(DoeError::BadSplit);
+    }
+    // Balance: every plot the same size, whole-plot factors constant within a plot.
+    let mut ids: Vec<usize> = plot.to_vec();
+    ids.sort_unstable();
+    ids.dedup();
+    let rows_of = |id: usize| (0..y.len()).filter(move |&r| plot[r] == id);
+    let b = rows_of(ids[0]).count();
+    for &id in &ids {
+        let rows: Vec<usize> = rows_of(id).collect();
+        if rows.len() != b {
+            return Err(DoeError::Unbalanced);
+        }
+        if rows.iter().any(|&r| (0..wp).any(|j| x[r][j] != x[rows[0]][j])) {
+            return Err(DoeError::Unbalanced);
+        }
+    }
+    let wcount = ids.len();
+    let whole: Vec<bool> = fit.effects.iter().map(|e| e.term.bytes().all(|c| ((c - b'A') as usize) < wp)).collect();
+    // Whole-plot means regressed on the whole-plot terms (coded as in the full model).
+    let coded = |r: usize, j: usize| {
+        let (lo, hi) = x.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, c), row| (a.min(row[j]), c.max(row[j])));
+        (x[r][j] - 0.5 * (lo + hi)) / (0.5 * (hi - lo))
+    };
+    let wp_terms: Vec<&str> =
+        fit.effects.iter().zip(&whole).filter(|(_, w)| **w).map(|(e, _)| e.term.as_str()).collect();
+    let mut means = Vec::with_capacity(wcount);
+    let mut design = Vec::with_capacity(wcount);
+    for &id in &ids {
+        let rows: Vec<usize> = rows_of(id).collect();
+        means.push(rows.iter().map(|&r| y[r]).sum::<f64>() / b as f64);
+        let r0 = rows[0];
+        let mut row = vec![1.0];
+        for t in &wp_terms {
+            row.push(t.bytes().map(|c| coded(r0, (c - b'A') as usize)).product());
+        }
+        design.push(row);
+    }
+    let m = wp_terms.len() + 1;
+    let mut xtx = vec![vec![0.0; m]; m];
+    let mut xty = vec![0.0; m];
+    for (row, mean) in design.iter().zip(&means) {
+        for i in 0..m {
+            xty[i] += row[i] * mean;
+            for j in 0..m {
+                xtx[i][j] += row[i] * row[j];
+            }
+        }
+    }
+    let inv = invert(&xtx).ok_or(DoeError::TooFewRuns)?;
+    let beta: Vec<f64> = (0..m).map(|i| (0..m).map(|j| inv[i][j] * xty[j]).sum()).collect();
+    let sse_means: f64 = design
+        .iter()
+        .zip(&means)
+        .map(|(row, v)| (v - row.iter().zip(&beta).map(|(a, c)| a * c).sum::<f64>()).powi(2))
+        .sum();
+    let wp_df = wcount.saturating_sub(m);
+    let wp_ss = b as f64 * sse_means;
+    let full_ss = if fit.df > 0 { fit.mse * fit.df as f64 } else { 0.0 };
+    let sp_df = fit.df.saturating_sub(wp_df);
+    let sp_ss = (full_ss - wp_ss).max(0.0);
+    let ms = |ss: f64, df: usize| if df > 0 { ss / df as f64 } else { f64::NAN };
+    let n = y.len() as f64;
+    let wp_eff: Vec<f64> = fit.effects.iter().zip(&whole).filter(|(_, w)| **w).map(|(e, _)| e.effect).collect();
+    let sp_eff: Vec<f64> = fit.effects.iter().zip(&whole).filter(|(_, w)| !**w).map(|(e, _)| e.effect).collect();
+    let whole_plot = Stratum { ss: wp_ss, df: wp_df, ms: ms(wp_ss, wp_df), margin: lenth_margin(&wp_eff) };
+    let subplot = Stratum { ss: sp_ss, df: sp_df, ms: ms(sp_ss, sp_df), margin: lenth_margin(&sp_eff) };
+    for (e, w) in fit.effects.iter_mut().zip(&whole) {
+        let st = if *w { whole_plot } else { subplot };
+        if st.df > 0 {
+            e.se = (4.0 * st.ms / n).sqrt();
+            e.t = e.effect / e.se;
+            e.p = match StudentsT::new(0.0, 1.0, st.df as f64) {
+                Ok(d) if e.t.is_finite() => 2.0 * d.sf(e.t.abs()),
+                Ok(_) if e.t.is_infinite() => 0.0,
+                _ => f64::NAN,
+            };
+        } else {
+            e.se = f64::NAN;
+            e.t = f64::NAN;
+            e.p = f64::NAN;
+        }
+    }
+    Ok(SplitPlotEffects { fit, whole, whole_plot, subplot })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -305,6 +505,25 @@ mod tests {
         s.sort_unstable();
         assert_eq!(s[..2], [1, 1], "two replicates of run 1");
         assert!(design(9, 3, 1, 0, false, 1).is_err());
+    }
+
+    #[test]
+    fn a_split_plot_design_keeps_whole_plot_factors_within_plots() {
+        let d = split_plot_design(1, 2, 2, true, 3).unwrap();
+        assert_eq!(d.runs.len(), 16);
+        for w in 1..=4 {
+            let rows: Vec<&Vec<f64>> = d.runs.iter().zip(&d.plot).filter(|(_, p)| **p == w).map(|(r, _)| r).collect();
+            assert_eq!(rows.len(), 4);
+            assert!(rows.iter().all(|r| r[0] == rows[0][0]), "plot {w} changes A");
+        }
+        // Whole-plot error from replicated plots: an exact model plus a plot effect puts all error in that stratum.
+        let bump = [0.3, -0.2, 0.1, -0.2];
+        let y: Vec<f64> = d.runs.iter().zip(&d.plot).map(|(r, p)| 5.0 + 2.0 * r[0] + r[1] + bump[p - 1]).collect();
+        let e = split_plot_effects(&d.runs, &y, &d.plot, 1).unwrap();
+        assert_eq!(e.whole, [true, false, false, false, false, false]);
+        assert!(e.whole_plot.ss > 0.1 && e.subplot.ss < 1e-20, "{:?} {:?}", e.whole_plot, e.subplot);
+        assert_eq!((e.whole_plot.df, e.subplot.df), (2, 7));
+        assert!(split_plot_effects(&d.runs, &y, &d.plot, 2).is_err(), "B changes within plots");
     }
 
     #[test]

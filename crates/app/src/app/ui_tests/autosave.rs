@@ -28,10 +28,15 @@ fn start_in(paths: Vec<PathBuf>, recovery_dir: &Path, settings_path: Option<Path
     h
 }
 
+/// How long a test waits for the autosave worker thread: generous, because a full workspace run on a
+/// loaded machine can hold the thread back for many seconds (T388; 5 s was too short).
+const WORKER_WAIT: Duration = Duration::from_secs(60);
+
 /// Runs frames until the worker thread has written the recovery (the sidecar comes last).
 fn wait_for_write(h: &mut Harness<'static, SheafApp>) {
     let sidecar = h.state().autosave.project_path().unwrap().with_extension("json");
-    for _ in 0..500 {
+    let deadline = std::time::Instant::now() + WORKER_WAIT;
+    while std::time::Instant::now() < deadline {
         h.step();
         if sidecar.exists() && h.state().autosave.idle() {
             return;
@@ -253,7 +258,8 @@ fn a_failing_write_is_reported_once() {
     for round in 1..=3 {
         h.state_mut().autosave.advance(11 * MINUTE);
         // Run frames until this round's write has started and ended.
-        for _ in 0..1000 {
+        let deadline = std::time::Instant::now() + WORKER_WAIT;
+        while std::time::Instant::now() < deadline {
             h.step();
             if h.state().autosave.writes_started() == round && h.state().autosave.idle() {
                 break;

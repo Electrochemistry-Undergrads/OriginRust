@@ -402,6 +402,8 @@ pub enum ProjectError {
     SankeyColumns,
     #[error("an alluvial diagram needs two or more category columns (its stages); select them")]
     AlluvialColumns,
+    #[error("a network plot needs a source and a target column; select them")]
+    NetworkColumns,
     #[error("a sunburst plot cannot have a right Y axis; use one Y axis or another template")]
     SunburstNoRightAxis,
     #[error(
@@ -1393,6 +1395,21 @@ impl Project {
         if template == Template::Fishbone {
             return self.plot_fishbone(ys, crate::fishbone::DEFAULT_EFFECT);
         }
+        if template == Template::Network {
+            // The first two columns of text are the ends of the edges; the last numeric one, if any, weighs them.
+            let weight = ys.iter().rev().copied().find(|y| self.numeric(*y).is_some());
+            let mut ends: Vec<ColumnId> = ys.iter().copied().filter(|y| self.numeric(*y).is_none()).collect();
+            if ends.len() < 2
+                && let Some(w) = weight
+            {
+                ends = self
+                    .locate(w)
+                    .map(|(_, sheet, _)| sheet.columns.iter().filter(|c| !c.data.is_numeric()).map(|c| c.id).collect())
+                    .unwrap_or_default();
+            }
+            let [source, target, ..] = ends[..] else { return Err(ProjectError::NetworkColumns) };
+            return self.plot_network(source, target, weight);
+        }
         if template == Template::Alluvial {
             // The columns of text are the stages, in order; the last numeric one, if any, weights the rows.
             let value = ys.iter().rev().copied().find(|y| self.numeric(*y).is_some());
@@ -1919,6 +1936,38 @@ impl Project {
         Ok(graph)
     }
 
+    /// A network plot (T383): an edge per row between the nodes named in `source` and `target`, weighted by
+    /// `weight` or, without one, counted (the plot's Y column is then `source`, which is not numeric).
+    pub fn plot_network(
+        &mut self,
+        source: ColumnId,
+        target: ColumnId,
+        weight: Option<ColumnId>,
+    ) -> Result<WindowId, ProjectError> {
+        for c in [source, target].iter().chain(weight.as_ref()) {
+            self.column(*c).ok_or(ProjectError::NoSuchColumn(*c))?;
+        }
+        if source == target {
+            return Err(ProjectError::NetworkColumns);
+        }
+        let y = weight.unwrap_or(source);
+        let long_name = self.locate(y).map(|(b, _, _)| b.title_for_graph());
+        let graph = self.add_graph(Template::Network);
+        self.add_plot(graph, 0, y)?;
+        if let Some(g) = self.graph_mut(graph) {
+            if let Some(l) = g.layers.first_mut() {
+                for p in &mut l.plots {
+                    p.sankey.source = Some(source);
+                    p.sankey.target = Some(target);
+                }
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        Ok(graph)
+    }
+
     pub fn plot_sunburst(&mut self, categories: &[ColumnId], value: ColumnId) -> Result<WindowId, ProjectError> {
         for c in categories.iter().chain([&value]) {
             self.column(*c).ok_or(ProjectError::NoSuchColumn(*c))?;
@@ -2064,7 +2113,7 @@ impl Project {
         if template == Template::Fishbone {
             return Err(ProjectError::FishboneColumns);
         }
-        if matches!(template, Template::Sankey | Template::Alluvial) {
+        if matches!(template, Template::Sankey | Template::Alluvial | Template::Network) {
             return Err(ProjectError::SankeyColumns);
         }
         if matches!(template, Template::GroupedColumns | Template::GroupedBox) {

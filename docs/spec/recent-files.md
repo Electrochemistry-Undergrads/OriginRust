@@ -113,7 +113,8 @@ entries are dropped; each list is cut to 15; unknown keys are ignored. Reading t
 - **Merging two instances.** Every change (`recent::update` and the helpers over it) takes an
   exclusive lock on `recent.json.lock` next to the file, re-reads the file, applies the change, writes
   the file and releases the lock. So an entry another instance added since this one last read is
-  kept. The wait for the lock is 60 seconds (2 until T230, 10 until T378); when another instance
+  kept. The wait for the lock is 60 seconds (2 until T230, 10 until T378), in the system's queue of the lock
+  (T387: polling every 10 ms let one writer lose to the others again and again on a loaded machine); when another instance
   still holds it after that, the change is refused with "another Sheaf is still changing this settings
   file; nothing was written, try again" rather than written without the lock, which lost the other
   writer's change under heavy load (T378). Only when the lock file cannot be made or the file system

@@ -12,7 +12,7 @@
 //! - Every sample is drawn as a symbol in the two triangles and the diamond.
 
 use crate::Color;
-use crate::graph::{PlotKind, TextLabel};
+use crate::graph::PlotKind;
 use crate::ids::{ColumnId, WindowId};
 use crate::project::{Project, ProjectError};
 use crate::template::Template;
@@ -92,28 +92,6 @@ impl Project {
     }
 }
 
-/// The corner labels of the diagram as free labels of the layer (positions as fractions of the frame).
-pub fn corner_labels(font: &crate::graph::Font) -> Vec<TextLabel> {
-    let (x0, x1) = X_RANGE;
-    let (y0, y1) = Y_RANGE;
-    let at = |x: f64, y: f64| ((x - x0) / (x1 - x0), (y1 - y) / (y1 - y0));
-    let g = GAP;
-    [
-        ("Ca", -0.12, -0.08),
-        ("Na+K", 0.76, -0.08),
-        ("Mg", 0.44, H + 0.05),
-        ("HCO3+CO3", 1.0 + g, -0.08),
-        ("Cl", 1.98 + g, -0.08),
-        ("SO4", 1.42 + g, H + 0.05),
-    ]
-    .into_iter()
-    .map(|(t, x, y)| {
-        let (fx, fy) = at(x, y);
-        TextLabel::new(t, fx, fy, font.clone())
-    })
-    .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -147,6 +125,6 @@ mod tests {
         let plot = &graph.layers[0].plots[0];
         assert_eq!((plot.kind, plot.y), (PlotKind::Piper, ids[0]));
         assert_eq!(plot.decor.piper.unwrap().hco3, ids[5]);
-        assert_eq!(graph.layers[0].labels.len(), 6, "the corner labels");
+        assert!(graph.layers[0].labels.is_empty(), "Origin titles the sides instead of the corners (T389)");
     }
 }

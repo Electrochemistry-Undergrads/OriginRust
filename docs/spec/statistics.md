@@ -2187,6 +2187,26 @@ Checked against numpy and scipy (`tools/splitplot-ref.py`, `crates/calc/tests/sp
 with whole-plot random effects) to 1e-10. Restricted maximum likelihood for unbalanced plots, fractional split-plot
 designs, split-split-plot designs and variance components are not built.
 
+## 47 Distribution analysis with arbitrary censoring (T384, Origin 2026b; not measured)
+
+Origin 2026b's distribution analysis with arbitrary censoring is not part of Origin 2016, so this is Sheaf's own,
+extending section 37. Statistics > Survival Analysis > Distribution Analysis (Arbitrary Censoring)...
+(`Tool::LifeDistArbitrary`, `sheaf analyze lifedist-interval --y START,END [--distribution
+weibull|lognormal|exponential|normal] [--no-graph]`): each row is the window in which a unit failed. Equal start and end
+mean an exact failure (`ln f(t)`), an empty end that it was still working at the start (right-censored, `ln S(t)`), an
+empty start that it failed before the end (left-censored, `ln F(t)`), otherwise that it failed between them
+(interval-censored, `ln(F(b) - F(a))`, taken from the nearer tail); rows with both cells empty are left out and a start
+after its end is refused. Times must be above 0 for the positive distributions (an interval may start at 0). The
+likelihood is maximized by Nelder-Mead on `(ln shape, ln scale)`, `(mu, ln sigma)` or `ln theta`, starting from the
+right-censored fit (section 37) of a pseudo sample (exact times, interval midpoints, left times halved) and restarted
+until it stops improving; with only exact and right-censored rows it gives section 37's fit. The result sheet
+`LifeIntervalN` has one row (N, Exact, Right-, Left- and Interval-censored counts, Parameter 1 and 2, Log-likelihood,
+AIC, Mean, Median); a new graph draws the fitted distribution function and survival in percent. Checked against scipy
+(`tools/interval-censor-ref.py`, `crates/calc/tests/interval_censor_reference.rs`: the log-likelihood at scipy's
+optimum to 1e-10, Sheaf's maximum no lower, parameters to 1e-5; scipy's own `fit(CensoredData)` agrees to 1e-3).
+Nonparametric (Turnbull) estimates, probability plots with interval data, frequency columns and life-data regression
+are not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

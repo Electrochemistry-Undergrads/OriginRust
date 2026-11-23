@@ -292,6 +292,34 @@ fn f4_data_colors_keep_drafts_across_categories_and_restore_with_undo() {
 }
 
 #[test]
+fn f4_column_label_colors_keep_a_separate_draft_and_repaint_the_grid() {
+    use sheaf_core::color::Color;
+
+    let mut h = start_sheet("worksheet-column-label-colors");
+    let before = project(&h).clone();
+    open(&mut h);
+    click(&mut h, "Use color");
+    category(&mut h, "Data", "Column Labels");
+    click(&mut h, "Use fill");
+    category(&mut h, "Column Labels", "Units");
+    assert!(h.query_by_label("Use fill").is_none());
+    assert_eq!(project(&h), &before);
+    click(&mut h, "OK");
+
+    let s = sheet(&h);
+    let yellow = Color::rgb(255, 255, 153);
+    assert_eq!(s.data_colors.text_color, Some(Color::BLACK));
+    assert_eq!(s.data_colors.fill, None);
+    assert_eq!(s.column_label_colors.fill, Some(yellow));
+    assert_eq!(s.column_label_colors.text_color, None);
+    assert!(h.output().shapes.iter().any(|shape| {
+        matches!(&shape.shape, egui::Shape::Rect(rect) if rect.fill == egui::Color32::from_rgb(255, 255, 153))
+    }));
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
 fn f4_formula_font_overrides_label_defaults_and_undo_restores_the_sheet() {
     let mut h = start_sheet("worksheet-formula-label-font");
     let book = project(&h).workbooks().next().unwrap().id;

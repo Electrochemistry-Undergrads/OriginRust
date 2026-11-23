@@ -299,6 +299,21 @@ mod tests {
     }
 
     #[test]
+    fn worksheet_image_preserves_column_label_colors() {
+        let mut ws = Worksheet::new("Sheet1");
+        let mut column = Column::new(ColumnId(1), "A", Designation::Y, ColumnData::numeric(vec![10.0]));
+        column.long_name = "Signal".into();
+        ws.columns.push(column);
+        ws.column_label_colors.fill = Some(Color::rgb(22, 33, 44));
+        ws.column_label_colors.text_color = Some(Color::RED);
+
+        let svg = sheet_image_svg(&ws).unwrap().to_ascii_lowercase();
+        assert!(svg.contains("#16212c"), "{svg}");
+        assert!(svg.lines().any(|line| line.contains("#ff0000") && line.contains(">signal</text>")), "{svg}");
+        assert!(svg.lines().any(|line| !line.contains("#ff0000") && line.contains(">10</text>")), "{svg}");
+    }
+
+    #[test]
     fn standard_font_scales_worksheet_image_content_without_showing_the_headings() {
         let mut ws = Worksheet::new("Sheet1");
         ws.columns.push(Column::new(ColumnId(1), "A", Designation::Y, ColumnData::numeric(vec![10.0])));

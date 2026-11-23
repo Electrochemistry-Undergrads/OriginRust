@@ -17,7 +17,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fs::{OpenOptions, TryLockError};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// The most entries each list keeps (Sheaf's choice, not measured in Origin).
 /// Origin 2016 shows 15 recent projects, numbered 1 to 9 and A to F (measured, recent-files.md 2).
@@ -28,7 +28,8 @@ pub const MAX_COMMANDS: usize = 10;
 /// The name of the file in the settings folder.
 pub const FILE_NAME: &str = "recent.json";
 
-/// How long [`update`] waits for another instance to finish its change. Sixty seconds (T230: two were too
+/// How long [`update`] waits for another instance to finish its change, in the system's queue of the lock
+/// (T387). Sixty seconds (T230: two were too
 /// short when many writers queued on a busy machine; T378: ten were too short as well). When the lock is
 /// still busy after that the change is refused with an error, not written without the lock, which would
 /// lose the other writer's change.
@@ -427,21 +428,31 @@ fn lock_within(path: &Path, wait: Duration) -> Result<Option<std::fs::File>, IoE
     let Ok(file) = OpenOptions::new().create(true).truncate(false).write(true).open(&lock_path) else {
         return Ok(None);
     };
-    let start = Instant::now();
-    loop {
-        match file.try_lock() {
-            Ok(()) => return Ok(Some(file)),
-            Err(TryLockError::WouldBlock) if start.elapsed() < wait => {
-                std::thread::sleep(Duration::from_millis(10));
-            }
-            Err(TryLockError::WouldBlock) => {
-                let e = std::io::Error::new(
-                    std::io::ErrorKind::TimedOut,
-                    "another Sheaf is still changing this settings file; nothing was written, try again",
-                );
-                return Err(IoError::io(&lock_path, e));
-            }
-            Err(TryLockError::Error(_)) => return Ok(None),
+    match file.try_lock() {
+        Ok(()) => return Ok(Some(file)),
+        Err(TryLockError::Error(_)) => return Ok(None),
+        Err(TryLockError::WouldBlock) => {}
+    }
+    // Busy: wait in the system's queue of the lock, on a helper thread so that the wait has a limit (T387).
+    // Polling with try_lock let a writer lose to the others again and again on a loaded machine; the system
+    // hands the lock to its waiters in turn. A helper that gets the lock after the limit drops it at once.
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let got = match file.lock() {
+            Ok(()) => Ok(file),
+            Err(e) => Err(e),
+        };
+        let _ = tx.send(got);
+    });
+    match rx.recv_timeout(wait) {
+        Ok(Ok(file)) => Ok(Some(file)),
+        Ok(Err(_)) => Ok(None),
+        Err(_) => {
+            let e = std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "another Sheaf is still changing this settings file; nothing was written, try again",
+            );
+            Err(IoError::io(&lock_path, e))
         }
     }
 }

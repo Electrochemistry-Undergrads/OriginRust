@@ -3316,6 +3316,25 @@ column plot of the flow with a warning.
   first stage). An empty cell breaks the row's flow at that stage. Drawn as the Sankey diagram above. A file of
   text only needs `--header-lines 1 --long-name-line 1` on import, or its header row becomes a flow.
 
+### 14.33 Network plot (T383, Origin 2021b feature, Sheaf's look, not measured)
+
+Plot > Categorical > Network Plot and `sheaf plot FILE -t network [--group SOURCE,TARGET] [-y WEIGHT]`
+(`PlotKind::Network`, `Template::Network`, `Project::plot_network`; layout `sheaf_calc::network`, drawing
+`crates/plot/src/network.rs`): every row is an edge between the nodes named in the source and target columns (default:
+the sheet's first two text columns; in the app the selected text columns, else those), weighted by the weight column
+(`-y`, or the last selected numeric column) or 1 per row. The columns are kept in `Plot::sankey` (source, target).
+
+- Edges are undirected; rows joining the same two names (either way) are one edge with the summed weight. Empty
+  names, missing or non-positive weights and self-loops add no edge.
+- Layout: Fruchterman and Reingold force-directed placement, 300 steps from the nodes evenly on a circle (no
+  randomness, so the same data always gives the same picture), then fitted into a square in the middle of the
+  layer's frame with an 8 % margin.
+- Edges are grey lines at 60 % opacity, 0.5 to 4 pt wide by weight; nodes are circles in the layer palette's colours
+  (node order), 3 to 10 pt in radius by the square root of the weighted degree, with a white outline; names right of
+  the circles in the X axis tick font at 0.8 of its size. No axes, no legend. The `.opj` writer saves a column plot of
+  the weight column with a warning.
+- Not done: directed arrows, node grouping colours, other layouts, label collision avoidance, Origin's Plot Details.
+
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
 Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin. Where the current online help **[W]** and Origin disagree, Origin decides.
@@ -3701,8 +3720,15 @@ merged graph with its labels.
 forms work, for example `%(p$)##` gives #01, #02 and #03. Sheaf expands
 these codes in source order alongside the existing numeric forms.
 In the scripted Origin 2016 merge, `%H` wrote the destination graph's
-short name on every panel. Roman shorthand `(r$)` stayed literal.
-The documented source-name and Roman options remain open.
+short name on every panel. The documented source-name option remains open.
+[Origin Merge Graph dialog](https://docs.originlab.com/origin-help/graphref-mergegraph/)
+
+**Roman panel labels.** The current Origin guide lists uppercase and lowercase Roman
+enumeration. Seven Origin 2016 script exports of 12 panels confirmed the letter and hash
+control. The tested Roman forms returned literal text, empty labels, or text with the
+substitution removed. Sheaf offers `I, II, III` and `i, ii, iii` in Label Text. Both start
+at one, follow source order, use IV and IX, and share the Preview and OK path with the
+other label modes. Custom still keeps unfamiliar tokens as literal text.
 [Origin Merge Graph dialog](https://docs.originlab.com/origin-help/graphref-mergegraph/)
 
 **Folder source choices** (Origin 2016, T60 follow-up measured 2026-11-16): fresh
@@ -4020,7 +4046,7 @@ The `.opj` reader reads the layers of a panel graph as independent layers with t
 - Owner choices: the page size of stacks with many panels (Origin keeps the page; a 6-panel stack on the upright Line page has panels of about 61 pt), one Y title by default instead of one per panel, panel labels such as (a) and (b) (Merge Graph can add them; not measured), and one colour per panel across the graph instead of Origin's colours per layer (with the cyclic voltammetry palette, every one-curve panel gets the first light blue).
 - Merge Graph's automatic rows and columns were seen only for 2 to 5 graphs.
 - Not tested in Origin: the column assignment of PAN2VERT and PAN4 with several X columns and horizontal stacks. The Layer Management Arrange defaults were measured on 2026-11-15 (15.7d).
-- Merge Graph Windows: Origin's own text-factor formula (15.7c fits it) and the documented source-name and Roman label options.
+- Merge Graph Windows: Origin's own text-factor formula (15.7c fits it) and the documented source-name label option.
 
 ## 16. Free text labels (P0, GP-TXT-01)
 
@@ -6908,11 +6934,20 @@ matrices are in `crates/calc/tests/fixtures/kde2d_origin.rs`).
 - **Not measured:** Origin's contour levels and colours, its colour scale, and its picture (the dialog could
   not be confirmed from the screenshot tool).
 
-## 39. Piper diagram: Plot > Specialized > Piper (T117, 2026-11-16, **not measured**)
+## 39. Piper diagram: Plot > Specialized > Piper (T117, 2026-11-16; measured by T389, 2026-11-23)
 
-Origin 2016 lists the item under Plot > Specialized (seen in the menu on 2026-11-16). The probes could not
-run because Origin's COM class was unregistered (see 36), so this is Sheaf's version of the standard Piper
-(trilinear) diagram. Measure Origin's input rules and look when automation works again.
+**Origin 2016 (`plotpiper`, measured through its menu on three samples; probes in `re-workspace/scratch/t389`):** the
+window takes Input (six columns, "Column order of input data need to range as Ca, Mg, Na+K, Cl, SO4, CO3+HCO3"),
+Sample ID and Total Dissolved Solids (both optional) and Output Graph (a new graph from the piper template).
+The graph has three layers: the cation triangle at the bottom left, the anion triangle at the bottom right and the
+diamond above between them. Corners as below. Grid lines every 20 % in solid gray and every 10 % dotted. Each
+side is labelled 0 to 100 by 20, counting toward the corner it ends at (the cation bottom 100 at the left), and
+titled with the column names (A, B, C on the cation triangle, D, E, F on the anion one, "D+E" and "A+B" on the
+diamond's upper sides). Each sample is its own plot with the next symbol and colour (1 black square, 2 red
+circle, 3 green triangle), listed in a legend.
+
+**Sheaf** (one layer, `piper` template): the same input order, corners, grids, side labels and titles, and the
+samples in Origin's symbol and colour sequence.
 
 - **Input:** six Y columns, in order Ca, Mg, Na+K, Cl, SO4, HCO3+CO3, in any unit (meq/L or percent).
   Each row's cation triple and anion triple are turned into percentages of their sums. Rows with an empty
@@ -6924,15 +6959,12 @@ run because Origin's COM class was unregistered (see 36), so this is Sheaf's ver
   - **Diamond:** above them. Each sample sits where the line from its cation point, parallel to the cation
     triangle's right side, meets the line from its anion point, parallel to the anion triangle's left
     side. Pure Ca + HCO3 water is the diamond's left corner, Na + Cl its right corner, Na + HCO3 its
-    bottom.
-- **Drawing:**
-  - Black 1 pt outlines, light grey grid lines every 20 %.
-  - Each sample as a red dot with a black edge in all three figures.
-  - Corner labels as free labels; hidden axes; no legend.
-- **Sheaf internals:** plot kind `piper` with `PlotDecor::piper` (the five columns after Ca), template
-  `piper`.
-- **To measure:** Origin's column rules (it may take 8 columns with K, CO3 apart), its labels, ticks, colours
-  and symbols.
+    bottom (as Origin's).
+- **Drawing:** black 1 pt outlines; Origin's Gray grid every 20 % and LT Gray dotted between; the side labels in
+  8 pt and the titles in 10 pt Arial; each sample's three points filled with Origin's increment (square, circle,
+  up triangle, down triangle, diamond; black, red, green, blue, cyan, magenta); hidden axes.
+- **Sheaf internals:** plot kind `piper` with `PlotDecor::piper` (the five columns after Ca), template `piper`.
+- **Left:** Sample ID and TDS columns, a legend entry per sample, Origin's three layers.
 
 ## 40. Data markers and display range: graph Data menu (T118, 2026-11-16, **not measured**)
 

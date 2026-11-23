@@ -194,6 +194,32 @@ fn worksheet_data_colors_export_for_values_and_in_range_blanks() {
 }
 
 #[test]
+fn worksheet_column_label_colors_export_for_label_values_and_blanks_only() {
+    use sheaf_core::cellformat::CategoryColors;
+
+    let mut a = column(1, vec![1.0, 2.0]);
+    a.long_name = "Signal".into();
+    a.formula = Some("i".into());
+    let b = column(2, vec![3.0]);
+    let mut s = Worksheet { columns: vec![a, b], ..Worksheet::new("Label colors") };
+    s.column_label_colors = CategoryColors { text_color: Some(Color::RED), fill: Some(Color::rgb(22, 33, 44)) };
+
+    let (xml, styles, warnings) = Output::new("worksheet-column-label-colors")
+        .export(&s, &ExcelExportOptions { short_names: true, long_names: true, ..plain() });
+    for address in ["A2", "B2"] {
+        let format = style(&xml, &styles, address);
+        assert!(font(format, &styles).contains("FFFF0000"));
+        assert!(fill(format, &styles).contains("FF16212C"));
+    }
+    for address in ["A1", "B1", "A3", "B3", "A4"] {
+        assert!(!fill(style(&xml, &styles, address), &styles).contains("FF16212C"));
+    }
+    assert!(!xml.contains("r=\"B4\""));
+    assert!(warnings.iter().any(|w| w.contains("worksheet column label colors")));
+    assert!(warnings.iter().any(|w| w.contains("label rows omitted")));
+}
+
+#[test]
 fn formula_label_font_is_reported_when_xlsx_omits_the_formula_row() {
     let mut a = column(1, vec![2.0, 3.0]);
     a.formula = Some("i+1".into());

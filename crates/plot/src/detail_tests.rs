@@ -4,7 +4,8 @@
 
 use super::*;
 use sheaf_core::graph::{
-    BorderStyle, FillPattern, Gradient, GradientDirection, LabelForm, LabelPosition, LineStyle, PlotKind,
+    BorderStyle, FillPattern, Gradient, GradientDirection, LabelForm, LabelPosition, LayerDrawingOrder, LineStyle,
+    PlotKind,
 };
 use sheaf_core::template::Template;
 use sheaf_core::{Color, ColumnData, Designation};
@@ -287,6 +288,40 @@ fn the_layer_background_gradient_and_border_are_drawn() {
     layer_mut(&mut p, g).display.grid_on_top = true;
     let on_top = scene(&p, g);
     assert_eq!(on_top.layers[0].grid.len(), n, "only the background items stay");
+}
+
+#[test]
+fn composite_draws_all_visible_backgrounds_below_earlier_data() {
+    let (mut p, g) = project(Template::Line);
+    let graph = p.graph_mut(g).unwrap();
+    let base = &mut graph.layers[0];
+    base.legend.visible = false;
+    base.plots[0].line = LineStyle::solid(Color::RED, 3.0);
+    let mut cover = base.clone();
+    cover.plots.clear();
+    cover.display.show_x_axes = false;
+    cover.display.show_y_axes = false;
+    cover.background = Some(Color::rgb(18, 163, 188));
+    graph.layers.push(cover);
+    let red_pixels = |p: &Project| {
+        let raster = crate::render_scene_raster(&scene(p, g), 1.0).unwrap();
+        raster.rgba.as_chunks::<4>().0.iter().filter(|&&pixel| pixel == [255, 0, 0, 255]).count()
+    };
+    assert_eq!(red_pixels(&p), 0);
+
+    p.graph_mut(g).unwrap().page.style.layer_drawing_order = LayerDrawingOrder::Composite;
+    let exposed = red_pixels(&p);
+    assert!(exposed > 100);
+    let svg = crate::svg::write_svg(&scene(&p, g));
+    assert!(svg.find("#12A3BC").unwrap() < svg.find("#FF0000").unwrap());
+
+    p.graph_mut(g).unwrap().layers[1].display.hidden = true;
+    assert!(!crate::svg::write_svg(&scene(&p, g)).contains("#12A3BC"));
+    let graph = p.graph_mut(g).unwrap();
+    graph.layers[1].display.hidden = false;
+    graph.layers[1].background = None;
+    graph.page.style.layer_drawing_order = LayerDrawingOrder::LayerByLayer;
+    assert_eq!(red_pixels(&p), exposed);
 }
 
 #[test]

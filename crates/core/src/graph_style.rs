@@ -334,6 +334,17 @@ pub enum LockPosition {
     LastPoint,
 }
 
+/// Whether a later layer's background can cover an earlier layer's data.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LayerDrawingOrder {
+    /// Draw backgrounds first, then each layer's data and foreground elements.
+    Composite,
+    /// Draw each layer completely before the next one.
+    #[default]
+    LayerByLayer,
+}
+
 /// The settings of the page beyond its size and colour.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PageStyle {
@@ -370,6 +381,9 @@ pub struct PageStyle {
     /// Plot Setup instead of the layer's properties.
     #[serde(default, skip_serializing_if = "is_false")]
     pub icon_double_click_plot_setup: bool,
+    /// Layer Management > Display > Drawing Order.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub layer_drawing_order: LayerDrawingOrder,
 }
 
 fn is_false(v: &bool) -> bool {
@@ -389,6 +403,7 @@ impl Default for PageStyle {
             connect_across_missing: false,
             activate_by_icon_only: false,
             icon_double_click_plot_setup: false,
+            layer_drawing_order: LayerDrawingOrder::default(),
         }
     }
 }
@@ -435,6 +450,7 @@ mod tests {
             connect_across_missing: true,
             activate_by_icon_only: true,
             icon_double_click_plot_setup: true,
+            layer_drawing_order: LayerDrawingOrder::Composite,
         };
         let json = serde_json::to_string(&page).unwrap();
         assert_eq!(serde_json::from_str::<PageStyle>(&json).unwrap(), page);

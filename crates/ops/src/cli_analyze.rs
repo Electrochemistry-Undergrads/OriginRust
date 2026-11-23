@@ -1403,6 +1403,23 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
+        AnalyzeTool::MonteCarlo { target, inputs, formula, samples, seed, lsl, usl } => {
+            let mut parsed = Vec::new();
+            for text in &inputs {
+                parsed.push(analysis::parse_monte_carlo_input(text).map_err(anyhow::Error::msg)?);
+            }
+            (
+                target,
+                Job::Tool(Tool::MonteCarlo(analysis::MonteCarloSpec {
+                    inputs: parsed,
+                    formula,
+                    samples,
+                    seed,
+                    lsl,
+                    usl,
+                })),
+            )
+        }
         AnalyzeTool::MixtureDesign {
             target,
             components,

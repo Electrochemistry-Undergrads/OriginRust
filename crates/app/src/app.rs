@@ -5896,6 +5896,7 @@ impl SheafApp {
                 | AnalysisKind::PoissonTwo
                 | AnalysisKind::FactorialDesign
                 | AnalysisKind::MixtureDesign
+                | AnalysisKind::MonteCarlo
                 | AnalysisKind::SplitPlotDesign
         );
         let columns: Vec<ColumnId> = if host_only {

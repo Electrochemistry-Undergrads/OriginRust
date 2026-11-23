@@ -2141,7 +2141,7 @@ fold-over, Plackett-Burman, response surfaces, half-normal plots and higher-orde
 ## 45a Mixture designs (T386, Origin 2026b's "mixture designs with several totals"; not measured)
 
 Origin 2016 has no design of experiments; the designs are the textbook ones (Cornell, *Experiments with
-Mixtures*; `sheaf_calc::mixture`). Statistics > Design of Experiments > Mixture Design... (CLI `analyze
+Mixtures*; `sheaf_calc::mixture`). Statistics > Two-Level Experiments > Mixture Design... (CLI `analyze
 mixture-design --components Q [--centroid-design] [--degree M] [--axial] [--centroid] [--replicates R]
 [--totals T1,T2] [--lower L1,L2,..] [--no-randomize] [--seed S]`; `Tool::MixtureDesign`):
 
@@ -2260,6 +2260,27 @@ Quantitative PCR:
 Checked against numpy and scipy (`tools/qpcr-ref.py`, `crates/calc/tests/qpcr_reference.rs`: Livak and Pfaffl on three
 groups, a ten-point standard curve) to 1e-10. Multiple reference genes (geometric mean), plate layouts, melt curves,
 outlier wells and Western blot densitometry are not built.
+
+## 51 Monte Carlo simulation (T393, Origin 2027's Monte Carlo app; Sheaf's own, not measured)
+
+Statistics > Monte Carlo Simulation (Randomize Inputs)... (CLI `analyze monte-carlo FILE --y Y --input NAME=DIST(...) [--input ...]
+--formula EXPR [--samples N] [--seed S] [--lsl L] [--usl U]`; `Tool::MonteCarlo`, `sheaf_calc::montecarlo`):
+
+- **Inputs**, one per line in the window: `name = normal(mean, sd)`, `uniform(low, high)`, `lognormal(mu, sigma)`
+  (of `ln x`), `triangular(low, mode, high)` or `constant(value)`; `#` starts a comment. Names are letters, digits
+  and `_`, starting with a letter, each used once.
+- **Draws**: a seeded SplitMix64 stream of uniforms in (0, 1), taken input by input within each row, through the
+  inverse distribution function. The same seed gives the same draws. 1 to 1 000 000 draws (10 000 by default).
+- **Output**: the formula (the expression language, input names as variables) evaluated for every row; an unknown
+  name or a formula error is refused with its message.
+- **Results**: a new sheet with one column per input (comment: its distribution) and Output (comment: the formula);
+  a table with Mean, SD (n - 1), 5th percentile, Median, 95th percentile (linear interpolation at `(n - 1) p`), Min,
+  Max and the Spearman rank correlation with the output, one row for the output and one per input (NaN for a
+  constant); notes with the number of draws and seed, the specification (share of draws outside, Cp =
+  (USL - LSL)/6s with both limits, Cpk = min(USL - mean, mean - LSL)/3s or the one-sided form) and the input the
+  output follows most.
+- Not built: optimizing controllable inputs against tolerances (the last step of Origin's workflow),
+  correlated inputs, histograms of the output.
 
 ## 5 Where results go (ADR 0005)
 

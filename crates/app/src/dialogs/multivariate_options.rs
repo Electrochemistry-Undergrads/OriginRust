@@ -314,6 +314,7 @@ impl MultiOptions {
                         ui.radio_value(&mut s.dist, d, name);
                     }
                 });
+                ui.checkbox(&mut s.frequency, "Last column: frequency (count) of each row");
             }
             AnalysisKind::LifeDistArbitrary => {
                 ui.label("The chosen columns are the start and the end of each failure window: equal for an exact failure, an empty end if it was still working, an empty start if it failed before the end.");
@@ -330,6 +331,7 @@ impl MultiOptions {
                     }
                 });
                 ui.checkbox(&mut s.graph, "Fitted CDF and survival graph");
+                ui.checkbox(&mut s.frequency, "Last column: frequency (count) of each row");
             }
             AnalysisKind::LifeDist => {
                 let s = &mut self.life;
@@ -351,6 +353,7 @@ impl MultiOptions {
                     }
                 });
                 ui.checkbox(&mut s.graph, "Probability, density, survival and hazard graphs");
+                ui.checkbox(&mut s.frequency, "Last column: frequency (count) of each row");
             }
             AnalysisKind::Stability => {
                 ui.label("The chosen columns are the time, the response and, optionally, the batch.");

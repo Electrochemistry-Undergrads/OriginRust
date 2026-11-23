@@ -3686,6 +3686,9 @@ pub enum AnalyzeTool {
         /// Do not make the graphs.
         #[arg(long)]
         no_graph: bool,
+        /// The last --y column holds each row's frequency (count).
+        #[arg(long)]
+        frequency: bool,
     },
     /// Stability study (ICH Q1E): --y TIME,RESPONSE[,BATCH]; per-batch lines, poolability tests and the shelf life
     /// where a confidence bound of the mean meets a specification limit, with a graph.
@@ -3719,6 +3722,9 @@ pub enum AnalyzeTool {
         /// The value of the censor column that marks a censored case.
         #[arg(long, default_value = "1")]
         censor: String,
+        /// The last --y column holds each row's frequency (count).
+        #[arg(long)]
+        frequency: bool,
     },
     /// Distribution analysis with arbitrary censoring: --y START,END; equal = exact, empty end = right-censored, empty
     /// start = left-censored, otherwise interval-censored; Weibull, lognormal, exponential or normal maximum likelihood.
@@ -3731,6 +3737,9 @@ pub enum AnalyzeTool {
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,
+        /// The last --y column holds each row's frequency (count).
+        #[arg(long)]
+        frequency: bool,
     },
     /// Process capability: Cp, Cpk, Pp, Ppk and parts per million outside the limits of each --y column, normal
     /// or nonnormal (lognormal or Weibull, percentile method), with a histogram and the fitted curve.

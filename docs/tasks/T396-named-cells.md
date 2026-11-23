@@ -12,5 +12,5 @@ column (`Workbook::names`, `Project::define_name`, the formula host's variables)
 
 ## Left
 
-- Named ranges of several cells (in functions such as `sum`), project-wide names, a name manager, `.opj` and
+- Named ranges of several cells: done in T400. Project-wide names, a name manager, `.opj` and
   Excel names.

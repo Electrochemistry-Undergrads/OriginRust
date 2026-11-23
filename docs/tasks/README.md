@@ -320,6 +320,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T318](T318-baseline-als-dataset.md) | Peak Analyzer baselines Use Existing Dataset and Asymmetric Least Squares Smoothing (window, CLI) | M | done 2026-11-21; ALS not measured (Pro) |
 | [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T382](T382-split-plot.md) | Two-level split-plot designs and two-stratum effects (Origin 2027 Quality app) | S | done 2026-11-22 (statistics 46) |
 | [T380](T380-two-level-factorial.md) | Two-level full and fractional factorial designs and their effects (base for 2027 split-plot) | M | done 2026-11-22 (statistics 45) |
 | [T377](T377-random-forest.md) | Random forest: seeded CART forests for classes and values, OOB error, importance (Origin 2026b) | M | done 2026-11-22 (statistics 44) |
 | [T376](T376-arima.md) | ARIMA(p,d,q) by conditional least squares with forecast bands (Origin 2024b Time Series app) | S | done 2026-11-22 (statistics 43) |

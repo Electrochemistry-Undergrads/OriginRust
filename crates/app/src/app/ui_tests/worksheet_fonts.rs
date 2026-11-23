@@ -276,7 +276,7 @@ fn f4_data_colors_keep_drafts_across_categories_and_restore_with_undo() {
     open(&mut h);
     click(&mut h, "Use color");
     click(&mut h, "Use fill");
-    category(&mut h, "Data", "Long Name");
+    category(&mut h, "Data", "Column Header");
     assert!(h.query_by_label("Use fill").is_none());
     assert_eq!(project(&h), &before);
     click(&mut h, "OK");
@@ -301,7 +301,7 @@ fn f4_column_label_colors_keep_a_separate_draft_and_repaint_the_grid() {
     click(&mut h, "Use color");
     category(&mut h, "Data", "Column Labels");
     click(&mut h, "Use fill");
-    category(&mut h, "Column Labels", "Units");
+    category(&mut h, "Column Labels", "Row Header");
     assert!(h.query_by_label("Use fill").is_none());
     assert_eq!(project(&h), &before);
     click(&mut h, "OK");
@@ -315,6 +315,43 @@ fn f4_column_label_colors_keep_a_separate_draft_and_repaint_the_grid() {
     assert!(h.output().shapes.iter().any(|shape| {
         matches!(&shape.shape, egui::Shape::Rect(rect) if rect.fill == egui::Color32::from_rgb(255, 255, 153))
     }));
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn f4_individual_label_colors_keep_independent_drafts_and_clear_to_inherited_colors() {
+    use sheaf_core::cellformat::CategoryColors;
+    use sheaf_core::color::Color;
+
+    let mut h = start_sheet("worksheet-individual-label-colors");
+    let id = project(&h).workbooks().next().unwrap().id;
+    let bulk = CategoryColors { text_color: Some(Color::RED), fill: Some(Color::BLUE) };
+    h.state_mut().doc.apply("Seed column label colors", |p| {
+        p.workbook_mut(id).unwrap().sheet_mut().column_label_colors = bulk;
+    });
+    let before = project(&h).clone();
+    open(&mut h);
+    category(&mut h, "Data", "Long Name");
+    click(&mut h, "Use fill");
+    category(&mut h, "Long Name", "Units");
+    click(&mut h, "Use color");
+    category(&mut h, "Units", "F(x)=");
+    click(&mut h, "Use fill");
+    assert_eq!(project(&h), &before);
+    click(&mut h, "Apply");
+
+    let s = sheet(&h);
+    let yellow = Color::rgb(255, 255, 153);
+    assert_eq!(s.column_label_colors, bulk);
+    assert_eq!(s.label_color_defaults(&LabelKind::LongName), CategoryColors { fill: Some(yellow), ..bulk });
+    assert_eq!(s.label_color_defaults(&LabelKind::Units), CategoryColors { text_color: Some(Color::BLACK), ..bulk });
+    assert_eq!(s.label_color_defaults(&LabelKind::Formula), CategoryColors { fill: Some(yellow), ..bulk });
+    assert_eq!(s.label_color_defaults(&LabelKind::Comments), bulk);
+    click(&mut h, "Use fill");
+    click(&mut h, "OK");
+    assert_eq!(sheet(&h).label_color_defaults(&LabelKind::Formula), bulk);
+    menu(&mut h, "Edit", "Undo");
     menu(&mut h, "Edit", "Undo");
     assert_eq!(project(&h), &before);
 }

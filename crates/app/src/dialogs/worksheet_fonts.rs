@@ -28,6 +28,8 @@ pub struct WorksheetFontsDialog {
     shown: [ColumnLabelFont; CATEGORIES.len()],
     base_colors: [CategoryColors; CATEGORIES.len()],
     shown_colors: [CategoryColors; CATEGORIES.len()],
+    base_missing_as_blank: Option<bool>,
+    shown_missing_as_blank: Option<bool>,
     category: usize,
     fonts: Vec<String>,
     font_search: String,
@@ -90,6 +92,8 @@ impl WorksheetFontsDialog {
             base,
             base_colors: colors,
             shown_colors: colors,
+            base_missing_as_blank: worksheet.view.show_missing_as_blank,
+            shown_missing_as_blank: worksheet.view.show_missing_as_blank,
             category: DATA,
             fonts,
             font_search: String::new(),
@@ -106,20 +110,28 @@ impl WorksheetFontsDialog {
     }
 
     fn changed(&self) -> bool {
-        self.shown != self.base || self.shown_colors != self.base_colors
+        self.shown != self.base
+            || self.shown_colors != self.base_colors
+            || self.shown_missing_as_blank != self.base_missing_as_blank
     }
 
     fn apply(&mut self, doc: &mut Document) {
         if !self.changed() || !self.current(doc) {
             return;
         }
-        let label = match (self.shown != self.base, self.shown_colors != self.base_colors) {
-            (true, true) => "Worksheet formatting",
-            (true, false) => "Worksheet font",
-            (false, _) => "Worksheet colors",
+        let label = match (
+            self.shown != self.base,
+            self.shown_colors != self.base_colors,
+            self.shown_missing_as_blank != self.base_missing_as_blank,
+        ) {
+            (true, false, false) => "Worksheet font",
+            (false, true, false) => "Worksheet colors",
+            (false, false, true) => "Worksheet missing display",
+            _ => "Worksheet formatting",
         };
         doc.apply(label, |p| {
             let sheet = &mut p.workbook_mut(self.book).unwrap().sheets[self.sheet];
+            sheet.view.show_missing_as_blank = self.shown_missing_as_blank;
             sheet.standard_colors = self.shown_colors[STANDARD];
             sheet.data_colors = self.shown_colors[DATA];
             sheet.column_label_colors = self.shown_colors[BULK];
@@ -162,6 +174,7 @@ impl WorksheetFontsDialog {
         });
         self.base = self.shown.clone();
         self.base_colors = self.shown_colors;
+        self.base_missing_as_blank = self.shown_missing_as_blank;
         self.revision = doc.revision();
     }
 
@@ -257,6 +270,15 @@ impl WorksheetFontsDialog {
                         &format!("{category} fill color"),
                     );
                     ui.end_row();
+                    if self.category == DATA {
+                        let mut blank = self.shown_missing_as_blank.unwrap_or(false);
+                        let check = egui::Checkbox::new(&mut blank, "Show Missing as Blank")
+                            .indeterminate(self.shown_missing_as_blank.is_none());
+                        if ui.add(check).changed() {
+                            self.shown_missing_as_blank = Some(blank);
+                        }
+                        ui.end_row();
+                    }
                 });
                 ui.add_space(6.0);
                 ui.label("Manual cell formats take precedence over category defaults.");

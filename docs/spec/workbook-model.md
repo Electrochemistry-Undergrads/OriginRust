@@ -701,6 +701,11 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   fonts. The column fill also covers the select-all corner. Row colors cover
   numbers and label captions. The grid and print use these styles, worksheet
   images crop the headings, and Excel reports their omission.
+- **Missing display (T59).** Optional `view.show_missing_as_blank` controls the
+  numeric missing marker in the grid, print and worksheet images. With the
+  field absent, the grid hides numeric markers and printed or exported images
+  show them. The display option preserves stored values and literal text.
+  Native projects and OPJ companions carry the worksheet view setting.
 - **Vertical alignment.** The 2016 selected-A1 Format Cells and Worksheet Properties Data
   Format/Size probes (GUI 3, 2026-11-16) found no vertical text-alignment control in those
   inspected routes. Other routes and mutation semantics remain unestablished; this probe

@@ -343,3 +343,21 @@ fn a_sunburst_without_category_columns_draws_nothing_and_other_kinds_are_unchang
     assert_eq!(svg_of(&q, s), alone);
     assert_eq!(q.graph(s).unwrap().layers[0].default_kind, PlotKind::Scatter);
 }
+
+#[test]
+fn text_columns_alone_give_a_nested_frequency_doughnut() {
+    // T392: no numeric column, every row counts 1.
+    let mut p = Project::new();
+    let b = p.add_workbook("");
+    let text = |v: &[&str]| ColumnData::text(v.iter().map(|s| s.to_string()).collect());
+    let outer = p.add_column(b, 0, Designation::Y, text(&["Yes", "Yes", "No", "Yes"])).unwrap();
+    let inner = p.add_column(b, 0, Designation::Y, text(&["A", "B", "A", "A"])).unwrap();
+    let g = p.plot_columns(Template::Sunburst, &[outer, inner]).unwrap();
+    let graph = p.graph(g).unwrap();
+    let data = crate::data::collect(&p, &graph.layers[0]);
+    let sb = data.plots[0].sunburst.as_deref().unwrap();
+    let span = |level: usize, name: &str| sb.wedges.iter().find(|w| w.level == level && w.name == name).unwrap().span;
+    assert!((span(0, "Yes") - 0.75).abs() < 1e-12, "three rows of four");
+    assert!((span(1, "A") + span(1, "B") - 0.75).abs() < 1e-9);
+    assert_eq!(sb.title, "Count");
+}

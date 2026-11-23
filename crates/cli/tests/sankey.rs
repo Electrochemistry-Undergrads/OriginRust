@@ -85,3 +85,23 @@ fn a_network_plot_takes_its_ends_and_an_optional_weight() {
     let (ok, e) = sheaf(&["plot", c, "-t", "network", "--group", "From", "-o", p]);
     assert!(!ok && e.contains("source and a target"), "{e}");
 }
+
+#[test]
+fn treemaps_and_sunbursts_of_text_columns_count_the_rows() {
+    // T392: nested frequency charts.
+    let dir = std::env::temp_dir().join(format!("sheaf-cli-nested-freq-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("rows.csv");
+    std::fs::write(&csv, "Class,Sex\nFirst,F\nThird,M\nFirst,M\nFirst,F\n").unwrap();
+    let (png, saved) = (dir.join("f.png"), dir.join("f.sheaf"));
+    let (c, p, s) = (csv.to_str().unwrap(), png.to_str().unwrap(), saved.to_str().unwrap());
+    for template in ["sunburst", "treemap"] {
+        let args = ["plot", c, "-t", template, "--header-lines", "1", "--long-name-line", "1", "-o", p, "--save", s];
+        let (ok, e) = sheaf(&args);
+        assert!(ok, "{template}: {e}");
+        let project = sheaf_io::project_file::load(&saved).unwrap();
+        let plot = &project.graphs().next().unwrap().layers[0].plots[0];
+        assert!(project.numeric(plot.y).is_none(), "{template}: counted");
+    }
+}

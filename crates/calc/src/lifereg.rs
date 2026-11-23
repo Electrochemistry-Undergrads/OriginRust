@@ -123,26 +123,20 @@ impl Data<'_> {
 
     fn hessian(&self, theta: &[f64]) -> Vec<Vec<f64>> {
         let m = theta.len();
-        let mut h = vec![vec![0.0; m]; m];
-        for j in 0..m {
-            let e = 1e-5 * theta[j].abs().max(1.0);
-            let mut up = theta.to_vec();
-            let mut dn = theta.to_vec();
-            up[j] += e;
-            dn[j] -= e;
-            let (gu, gd) = (self.eval(&up).1, self.eval(&dn).1);
-            for i in 0..m {
-                h[i][j] = (gu[i] - gd[i]) / (2.0 * e);
-            }
-        }
-        for i in 0..m {
-            for j in 0..i {
-                let v = 0.5 * (h[i][j] + h[j][i]);
-                h[i][j] = v;
-                h[j][i] = v;
-            }
-        }
-        h
+        // Column j: the central difference of the gradient along parameter j.
+        let cols: Vec<Vec<f64>> = (0..m)
+            .map(|j| {
+                let e = 1e-5 * theta[j].abs().max(1.0);
+                let mut up = theta.to_vec();
+                let mut dn = theta.to_vec();
+                up[j] += e;
+                dn[j] -= e;
+                let (gu, gd) = (self.eval(&up).1, self.eval(&dn).1);
+                gu.iter().zip(&gd).map(|(a, b)| (a - b) / (2.0 * e)).collect()
+            })
+            .collect();
+        // Symmetrized.
+        (0..m).map(|i| (0..m).map(|j| 0.5 * (cols[j][i] + cols[i][j])).collect()).collect()
     }
 }
 

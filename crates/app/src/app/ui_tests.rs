@@ -5742,6 +5742,29 @@ fn the_statistics_menu_makes_a_manhattan_plot() {
     assert_eq!(h.state().doc.undo_label(), Some("Manhattan plot"));
 }
 
+/// Statistics > Survival Analysis > Life Data Regression... (T391): covariate, time and censor columns give the
+/// coefficients; one undo step.
+#[test]
+fn the_survival_menu_runs_a_life_data_regression() {
+    let mut text = String::from("id,dose,hours,cens\n");
+    for i in 0..20 {
+        let dose = f64::from(i % 2);
+        let hours = (2.0 - 0.8 * dose + 0.3 * (f64::from(i) * 1.3).sin()).exp();
+        text.push_str(&format!("{i},{dose},{hours},{}\n", i32::from(i % 7 == 3)));
+    }
+    let data = csv_file("lifereg", "lr", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - lr.csv");
+    menu_path(&mut h, &["Statistics", "Survival Analysis", "Life Data Regression..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Censoring value"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
+    let (sheet, coef) = result_column(&h, "Coefficient");
+    assert!(sheet.starts_with("LifeReg"), "{sheet}");
+    assert!((coef[1] + 0.8).abs() < 0.2, "the dose shortens life: {coef:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Life data regression"));
+}
+
 /// Statistics > Survival Analysis > Distribution Analysis (Arbitrary Censoring)... (T384): start and end columns give
 /// the counts by censoring, the fit and a graph; one undo step.
 #[test]
@@ -8037,6 +8060,24 @@ fn plot_categorical_alluvial_takes_the_sheets_text_columns_as_stages() {
     assert_eq!(project(&h).graphs().count(), graphs + 1);
     let plot = &project(&h).graphs().last().unwrap().layers[0].plots[0];
     assert_eq!((plot.kind, plot.sankey.stages.len()), (sheaf_core::graph::PlotKind::Sankey, 2));
+}
+
+#[test]
+fn plot_categorical_network_joins_the_sheets_first_two_text_columns() {
+    let mut h = start(vec![data_file("network")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = project(&h).workbooks().next().unwrap().id;
+    let text = |v: &[&str]| ColumnData::text(v.iter().map(|s| s.to_string()).collect());
+    h.state_mut().doc.apply("text", |p| {
+        p.add_column(book, 0, sheaf_core::Designation::Y, text(&["a", "a", "b", "c"])).unwrap();
+        p.add_column(book, 0, sheaf_core::Designation::Y, text(&["b", "c", "c", "d"])).unwrap();
+    });
+    let graphs = project(&h).graphs().count();
+    menu_path(&mut h, &["Plot", "Categorical", "Network Plot"]);
+    assert_eq!(project(&h).graphs().count(), graphs + 1);
+    let plot = &project(&h).graphs().last().unwrap().layers[0].plots[0];
+    assert_eq!(plot.kind, sheaf_core::graph::PlotKind::Network);
+    assert!(plot.sankey.source.is_some() && plot.sankey.target.is_some());
 }
 
 #[test]

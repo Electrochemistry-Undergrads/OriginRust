@@ -3316,6 +3316,25 @@ column plot of the flow with a warning.
   first stage). An empty cell breaks the row's flow at that stage. Drawn as the Sankey diagram above. A file of
   text only needs `--header-lines 1 --long-name-line 1` on import, or its header row becomes a flow.
 
+### 14.33 Network plot (T383, Origin 2021b feature, Sheaf's look, not measured)
+
+Plot > Categorical > Network Plot and `sheaf plot FILE -t network [--group SOURCE,TARGET] [-y WEIGHT]`
+(`PlotKind::Network`, `Template::Network`, `Project::plot_network`; layout `sheaf_calc::network`, drawing
+`crates/plot/src/network.rs`): every row is an edge between the nodes named in the source and target columns (default:
+the sheet's first two text columns; in the app the selected text columns, else those), weighted by the weight column
+(`-y`, or the last selected numeric column) or 1 per row. The columns are kept in `Plot::sankey` (source, target).
+
+- Edges are undirected; rows joining the same two names (either way) are one edge with the summed weight. Empty
+  names, missing or non-positive weights and self-loops add no edge.
+- Layout: Fruchterman and Reingold force-directed placement, 300 steps from the nodes evenly on a circle (no
+  randomness, so the same data always gives the same picture), then fitted into a square in the middle of the
+  layer's frame with an 8 % margin.
+- Edges are grey lines at 60 % opacity, 0.5 to 4 pt wide by weight; nodes are circles in the layer palette's colours
+  (node order), 3 to 10 pt in radius by the square root of the weighted degree, with a white outline; names right of
+  the circles in the X axis tick font at 0.8 of its size. No axes, no legend. The `.opj` writer saves a column plot of
+  the weight column with a warning.
+- Not done: directed arrows, node grouping colours, other layouts, label collision avoidance, Origin's Plot Details.
+
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
 Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin. Where the current online help **[W]** and Origin disagree, Origin decides.

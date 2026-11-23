@@ -1304,6 +1304,15 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 curve: !no_graph,
             })),
         ),
+        AnalyzeTool::Lifereg { target, distribution, censor } => {
+            let dist = match distribution.to_ascii_lowercase().as_str() {
+                "weibull" => analysis::LifeDist::Weibull,
+                "lognormal" => analysis::LifeDist::Lognormal,
+                "exponential" => analysis::LifeDist::Exponential,
+                other => bail!("--distribution takes weibull, lognormal or exponential, not {other:?}"),
+            };
+            (target, Job::Tool(Tool::LifeRegression(analysis::LifeRegressionSpec { dist, censor })))
+        }
         AnalyzeTool::LifedistInterval { target, distribution, no_graph } => {
             let dist = match distribution.to_ascii_lowercase().as_str() {
                 "weibull" => analysis::LifeDist::Weibull,
@@ -1374,6 +1383,37 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
+        AnalyzeTool::MixtureDesign {
+            target,
+            components,
+            centroid_design,
+            degree,
+            axial,
+            centroid,
+            replicates,
+            totals,
+            lower,
+            no_randomize,
+            seed,
+        } => (
+            target,
+            Job::Tool(Tool::MixtureDesign(analysis::MixtureDesignSpec {
+                components,
+                kind: if centroid_design {
+                    analysis::MixtureKind::SimplexCentroid
+                } else {
+                    analysis::MixtureKind::SimplexLattice
+                },
+                degree,
+                axial,
+                centroid,
+                replicates,
+                totals,
+                lower,
+                randomize: !no_randomize,
+                seed,
+            })),
+        ),
         AnalyzeTool::FactorialDesign { target, factors, fraction, replicates, center_points, no_randomize, seed } => (
             target,
             Job::Tool(Tool::FactorialDesign(analysis::FactorialDesignSpec {

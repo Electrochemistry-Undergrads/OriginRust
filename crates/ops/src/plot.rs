@@ -374,6 +374,30 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
         panel_graph(project, template_from(a.template.as_deref(), suggested)?, p, a)?
     } else if a.overlay {
         overlay_files(project, template_from(a.template.as_deref(), suggested)?, a)?
+    } else if template_from(a.template.as_deref(), suggested)? == Template::Network {
+        // A network plot (T383): --group names the source and target columns (default: the sheet's first two
+        // text columns), -y the weight column (default: none, every row counts 1).
+        let book = pick_book(project, a.book.as_deref())?;
+        let sheet = pick_sheet(project, book, a.sheet.as_deref())?;
+        let ends: Vec<ColumnId> = match a.group.as_deref() {
+            Some(g) => {
+                let names: Vec<String> = g.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect();
+                named_columns(project, book, sheet, &names)?
+            }
+            None => project
+                .workbook(book)
+                .map(|b| b.sheets[sheet].columns.iter().filter(|c| !c.data.is_numeric()).map(|c| c.id).collect())
+                .unwrap_or_default(),
+        };
+        let [source, target, ..] = ends[..] else {
+            bail!("a network plot needs a source and a target column: --group SOURCE,TARGET (or two text columns)")
+        };
+        let weight = match a.y.as_slice() {
+            [] => None,
+            [one] => Some(named_columns(project, book, sheet, std::slice::from_ref(one))?[0]),
+            _ => bail!("a network plot takes one -y column (the weight of each edge)"),
+        };
+        project.plot_network(source, target, weight)?
     } else if template_from(a.template.as_deref(), suggested)? == Template::Alluvial {
         // An alluvial diagram (T381): --group names the stage columns (default: every text column of the
         // sheet), -y the weight column (default: none, every row counts 1).

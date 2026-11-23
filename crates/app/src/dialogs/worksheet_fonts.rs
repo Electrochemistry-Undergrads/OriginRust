@@ -2,7 +2,7 @@
 use super::cell_format::optional_color;
 use super::frame::{DialogButton, ok_cancel_apply};
 use eframe::egui;
-use sheaf_core::cellformat::{DataColors, LabelKind};
+use sheaf_core::cellformat::{CategoryColors, LabelKind};
 use sheaf_core::color::Color;
 use sheaf_core::sheet_fonts::ColumnLabelFont;
 use sheaf_core::{Document, WindowId};
@@ -23,8 +23,8 @@ pub struct WorksheetFontsDialog {
     revision: u64,
     base: [ColumnLabelFont; CATEGORIES.len()],
     shown: [ColumnLabelFont; CATEGORIES.len()],
-    base_colors: DataColors,
-    shown_colors: DataColors,
+    base_colors: [CategoryColors; CATEGORIES.len()],
+    shown_colors: [CategoryColors; CATEGORIES.len()],
     category: usize,
     fonts: Vec<String>,
     font_search: String,
@@ -59,6 +59,9 @@ impl WorksheetFontsDialog {
                 size_pt: defaults.formula_size_pt,
             },
         ];
+        let mut colors = [CategoryColors::default(); CATEGORIES.len()];
+        colors[DATA] = worksheet.data_colors;
+        colors[BULK] = worksheet.column_label_colors;
         let mut fonts: Vec<_> = sheaf_plot::SystemFonts::shared()
             .database()
             .faces()
@@ -73,8 +76,8 @@ impl WorksheetFontsDialog {
             revision: doc.revision(),
             shown: base.clone(),
             base,
-            base_colors: worksheet.data_colors,
-            shown_colors: worksheet.data_colors,
+            base_colors: colors,
+            shown_colors: colors,
             category: DATA,
             fonts,
             font_search: String::new(),
@@ -105,7 +108,8 @@ impl WorksheetFontsDialog {
         };
         doc.apply(label, |p| {
             let sheet = &mut p.workbook_mut(self.book).unwrap().sheets[self.sheet];
-            sheet.data_colors = self.shown_colors;
+            sheet.data_colors = self.shown_colors[DATA];
+            sheet.column_label_colors = self.shown_colors[BULK];
             if self.shown[DATA] != self.base[DATA] {
                 sheet.set_data_font_override(self.shown[DATA].clone());
             }
@@ -212,24 +216,18 @@ impl WorksheetFontsDialog {
                         shown.size_pt = (size > 0.0).then_some(size.max(4.0));
                     }
                     ui.end_row();
-                    if self.category == DATA {
+                    let color_ids = match self.category {
+                        DATA => Some(("Data text color", "Data fill color")),
+                        BULK => Some(("Column Labels text color", "Column Labels fill color")),
+                        _ => None,
+                    };
+                    if let Some((text_id, fill_id)) = color_ids {
+                        let colors = &mut self.shown_colors[self.category];
                         ui.label("Text Color");
-                        optional_color(
-                            ui,
-                            &mut self.shown_colors.text_color,
-                            "Use color",
-                            Color::BLACK,
-                            "Data text color",
-                        );
+                        optional_color(ui, &mut colors.text_color, "Use color", Color::BLACK, text_id);
                         ui.end_row();
                         ui.label("Fill Color");
-                        optional_color(
-                            ui,
-                            &mut self.shown_colors.fill,
-                            "Use fill",
-                            Color::rgb(255, 255, 153),
-                            "Data fill color",
-                        );
+                        optional_color(ui, &mut colors.fill, "Use fill", Color::rgb(255, 255, 153), fill_id);
                         ui.end_row();
                     }
                 });

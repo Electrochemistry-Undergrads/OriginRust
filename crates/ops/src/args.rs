@@ -3479,6 +3479,29 @@ pub enum AnalyzeTool {
         #[arg(long, default_value_t = 1)]
         seed: u64,
     },
+    /// Monte Carlo simulation: --input NAME=DIST(...) (repeat; normal, uniform, lognormal, triangular, constant) are
+    /// drawn --samples times and --formula is computed from them; draws, summary, capability against --lsl/--usl and
+    /// rank-correlation sensitivity go to a new sheet; --y only says which book.
+    MonteCarlo {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// An input, as name=normal(10,1) (repeat for each input).
+        #[arg(long = "input", required = true, value_name = "NAME=DIST")]
+        inputs: Vec<String>,
+        /// The output as an expression of the input names.
+        #[arg(long)]
+        formula: String,
+        #[arg(long, default_value_t = 10000)]
+        samples: usize,
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+        /// Lower specification limit of the output.
+        #[arg(long)]
+        lsl: Option<f64>,
+        /// Upper specification limit of the output.
+        #[arg(long)]
+        usl: Option<f64>,
+    },
     /// Mixture design: a simplex lattice {q, m} or simplex centroid design (optionally with axial check blends and
     /// the overall centroid) for one or more totals and lower bounds, in a new sheet; --y only says which book.
     MixtureDesign {

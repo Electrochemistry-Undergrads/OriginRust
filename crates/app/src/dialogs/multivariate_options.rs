@@ -7,9 +7,9 @@ use sheaf_core::analysis::{
     AcfSpec, AdfTerms, ArimaSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty,
     ChangePointSpec, DecomposeModel, DecomposeSpec, ExpSmoothSpec, FactorialDesignSpec, FactorialEffectsSpec,
     ForestTask, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistArbitrarySpec, LifeDistSpec,
-    LifeRegressionSpec, ManhattanSpec, MixtureDesignSpec, MixtureKind, PcaSpec, PivotPeriod, PivotStat, QpcrCurveSpec,
-    QpcrSpec, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec, RocSpec, SmoothModel, SplitPlotDesignSpec,
-    SplitPlotEffectsSpec, StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec, Tool,
+    LifeRegressionSpec, ManhattanSpec, MixtureDesignSpec, MixtureKind, MonteCarloSpec, PcaSpec, PivotPeriod, PivotStat,
+    QpcrCurveSpec, QpcrSpec, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec, RocSpec, SmoothModel,
+    SplitPlotDesignSpec, SplitPlotEffectsSpec, StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec, Tool,
 };
 
 /// Comma-separated numbers typed in a box (T386); empty text is no number.
@@ -40,6 +40,12 @@ pub struct MultiOptions {
     design: FactorialDesignSpec,
     /// Mixture Design (T386), with its totals and lower bounds as typed (comma separated).
     mixture: MixtureDesignSpec,
+    /// Monte Carlo Simulation (T393): the inputs as typed (one `name = dist(...)` per line) and the
+    /// specification limits as typed (empty: none).
+    monte_carlo: MonteCarloSpec,
+    mc_inputs: Option<String>,
+    mc_lsl: String,
+    mc_usl: String,
     mixture_totals: Option<String>,
     mixture_lower: Option<String>,
     factorial: FactorialEffectsSpec,
@@ -156,6 +162,27 @@ impl MultiOptions {
                     spec.lower = numbers(t, "lower bound")?;
                 }
                 Ok(Tool::MixtureDesign(spec))
+            }
+            AnalysisKind::MonteCarlo => {
+                let mut spec = self.monte_carlo.clone();
+                if let Some(text) = &self.mc_inputs {
+                    spec.inputs = text
+                        .lines()
+                        .filter(|l| !l.split('#').next().unwrap_or("").trim().is_empty())
+                        .map(sheaf_core::analysis::parse_monte_carlo_input)
+                        .collect::<Result<_, _>>()?;
+                }
+                let limit = |t: &str, what: &str| -> Result<Option<f64>, String> {
+                    let t = t.trim();
+                    if t.is_empty() {
+                        Ok(None)
+                    } else {
+                        t.parse::<f64>().map(Some).map_err(|_| format!("the {what} '{t}' is not a number"))
+                    }
+                };
+                spec.lsl = limit(&self.mc_lsl, "lower specification limit")?;
+                spec.usl = limit(&self.mc_usl, "upper specification limit")?;
+                Ok(Tool::MonteCarlo(spec))
             }
             AnalysisKind::FactorialEffects => Ok(Tool::FactorialEffects(self.factorial)),
             AnalysisKind::SplitPlotDesign => Ok(Tool::SplitPlotDesign(self.split_design)),
@@ -473,6 +500,36 @@ impl MultiOptions {
                     ui.add(egui::DragValue::new(&mut s.sigma).speed(0.05).range(0.5..=6.0));
                 });
                 ui.checkbox(&mut s.graph, "Control chart per column");
+            }
+            AnalysisKind::MonteCarlo => {
+                ui.label("The draws go to a new sheet; the chosen column only says which book.");
+                let inputs = self.mc_inputs.get_or_insert_with(|| {
+                    self.monte_carlo
+                        .inputs
+                        .iter()
+                        .map(|(n, d)| format!("{n} = {}", d.text()))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                });
+                ui.label("Inputs, one per line: name = normal(mean, sd), uniform(a, b), lognormal(mu, sigma), triangular(a, mode, b) or constant(v)");
+                ui.add(egui::TextEdit::multiline(inputs).desired_rows(4).desired_width(360.0).code_editor());
+                let s = &mut self.monte_carlo;
+                ui.horizontal(|ui| {
+                    ui.label("Output =");
+                    ui.add(egui::TextEdit::singleline(&mut s.formula).desired_width(280.0).code_editor());
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Draws");
+                    ui.add(egui::DragValue::new(&mut s.samples).range(1..=sheaf_core::analysis::MONTE_CARLO_MAX));
+                    ui.label("Seed");
+                    ui.add(egui::DragValue::new(&mut s.seed));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Specification limits: lower");
+                    ui.add(egui::TextEdit::singleline(&mut self.mc_lsl).desired_width(70.0).hint_text("none"));
+                    ui.label("upper");
+                    ui.add(egui::TextEdit::singleline(&mut self.mc_usl).desired_width(70.0).hint_text("none"));
+                });
             }
             AnalysisKind::MixtureDesign => {
                 ui.label("The design goes to a new sheet; the chosen column only says which book.");

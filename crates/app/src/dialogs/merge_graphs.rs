@@ -78,12 +78,20 @@ enum LabelText {
     Lowercase,
     UppercaseRoman,
     LowercaseRoman,
+    SourceName,
     Custom,
 }
 
 impl LabelText {
-    const ALL: [Self; 6] =
-        [Self::None, Self::Uppercase, Self::Lowercase, Self::UppercaseRoman, Self::LowercaseRoman, Self::Custom];
+    const ALL: [Self; 7] = [
+        Self::None,
+        Self::Uppercase,
+        Self::Lowercase,
+        Self::UppercaseRoman,
+        Self::LowercaseRoman,
+        Self::SourceName,
+        Self::Custom,
+    ];
 
     fn name(self) -> &'static str {
         match self {
@@ -92,17 +100,19 @@ impl LabelText {
             Self::Lowercase => "a",
             Self::UppercaseRoman => "I, II, III",
             Self::LowercaseRoman => "i, ii, iii",
+            Self::SourceName => "Source Graph Name",
             Self::Custom => "Custom",
         }
     }
 
-    fn text(self, index: usize, custom: &str) -> Option<String> {
+    fn text(self, index: usize, source_name: &str, custom: &str) -> Option<String> {
         match self {
             Self::None => None,
             Self::Uppercase => Some(default_short_name(index)),
             Self::Lowercase => Some(default_short_name(index).to_ascii_lowercase()),
             Self::UppercaseRoman => Some(roman_number(index + 1)),
             Self::LowercaseRoman => Some(roman_number(index + 1).to_ascii_lowercase()),
+            Self::SourceName => Some(source_name.to_owned()),
             Self::Custom => Some(custom_panel_label(custom, index)),
         }
     }
@@ -346,8 +356,13 @@ impl MergeGraphsDialog {
         let page = (self.page_in[0], self.page_in[1]);
         let default_page = !self.portrait && page == MERGE_PAGE_IN;
         let font = MergePanelLabel::font();
-        let panel_labels = (0..sources.len())
-            .filter_map(|index| self.label_text.text(index, &self.custom_label))
+        let panel_labels = sources
+            .iter()
+            .enumerate()
+            .filter_map(|(index, &id)| {
+                let source = project.graph(id)?;
+                self.label_text.text(index, &source.name, &self.custom_label)
+            })
             .map(|text| {
                 let width_pt = SystemFonts::shared().width(&text, &font, font.size_pt);
                 MergePanelLabel { text, width_pt }
@@ -700,9 +715,9 @@ mod label_tests {
     #[test]
     fn roman_labels_are_one_based_and_use_subtractive_notation() {
         for (number, expected) in [(1, "I"), (4, "IV"), (9, "IX"), (49, "XLIX"), (994, "CMXCIV"), (2024, "MMXXIV")] {
-            assert_eq!(LabelText::UppercaseRoman.text(number - 1, "").as_deref(), Some(expected));
+            assert_eq!(LabelText::UppercaseRoman.text(number - 1, "", "").as_deref(), Some(expected));
             assert_eq!(
-                LabelText::LowercaseRoman.text(number - 1, "").as_deref(),
+                LabelText::LowercaseRoman.text(number - 1, "", "").as_deref(),
                 Some(expected.to_ascii_lowercase().as_str())
             );
         }

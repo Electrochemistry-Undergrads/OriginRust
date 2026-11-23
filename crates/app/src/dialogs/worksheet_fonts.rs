@@ -10,8 +10,9 @@ const BULK: usize = 4;
 const COLUMN_HEADER: usize = 5;
 const ROW_HEADER: usize = 6;
 const STANDARD: usize = 7;
-const CATEGORIES: [&str; 8] =
-    ["Data", "Long Name", "Units", "Comments", "Column Labels", "Column Header", "Row Header", "Standard"];
+const FORMULA: usize = 8;
+const CATEGORIES: [&str; 9] =
+    ["Data", "Long Name", "Units", "Comments", "Column Labels", "Column Header", "Row Header", "Standard", "F(x)="];
 
 pub struct WorksheetFontsDialog {
     book: WindowId,
@@ -48,6 +49,10 @@ impl WorksheetFontsDialog {
             defaults.column_header.clone(),
             defaults.row_header.clone(),
             defaults.standard.clone(),
+            ColumnLabelFont {
+                family: defaults.formula_family.clone().unwrap_or_default(),
+                size_pt: defaults.formula_size_pt,
+            },
         ];
         let mut fonts: Vec<_> = sheaf_plot::SystemFonts::shared()
             .database()
@@ -99,12 +104,17 @@ impl WorksheetFontsDialog {
             if self.shown[STANDARD] != self.base[STANDARD] {
                 sheet.set_standard_font(self.shown[STANDARD].clone());
             }
-            for (i, kind) in [LabelKind::LongName, LabelKind::Units, LabelKind::Comments].iter().enumerate() {
-                if self.shown[i + 1].size_pt != self.base[i + 1].size_pt {
-                    sheet.set_label_font_size_override(kind, self.shown[i + 1].size_pt);
+            for (i, kind) in [
+                (1, LabelKind::LongName),
+                (2, LabelKind::Units),
+                (3, LabelKind::Comments),
+                (FORMULA, LabelKind::Formula),
+            ] {
+                if self.shown[i].size_pt != self.base[i].size_pt {
+                    sheet.set_label_font_size_override(&kind, self.shown[i].size_pt);
                 }
-                if self.shown[i + 1].family != self.base[i + 1].family {
-                    sheet.set_label_font_family(kind, &self.shown[i + 1].family);
+                if self.shown[i].family != self.base[i].family {
+                    sheet.set_label_font_family(&kind, &self.shown[i].family);
                 }
             }
         });
@@ -135,9 +145,6 @@ impl WorksheetFontsDialog {
                             for (i, name) in CATEGORIES.iter().enumerate() {
                                 ui.selectable_value(&mut self.category, i, *name);
                             }
-                            ui.add_enabled_ui(false, |ui| {
-                                let _ = ui.selectable_label(false, "F(x)=").on_hover_text("Not available in Sheaf yet");
-                            });
                         });
                     ui.end_row();
                     ui.label("Font");

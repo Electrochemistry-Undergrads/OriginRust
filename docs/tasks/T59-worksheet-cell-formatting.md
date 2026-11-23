@@ -110,6 +110,10 @@ and point size beneath category and manual values. Grid, print and image
 geometry scale with the Standard size. The Origin 2016 size and family probes
 used the worksheet's `wks.fsize` and `wks.font` properties (GUI 3).
 
+Formula label follow-up. F4 > F(x)= sets family and size for formula label
+cells below manual formatting and above Column Labels. Origin 2016 size,
+precedence and new-column measurements are in GUI 3.
+
 **Size:** L. **Branch:** `cell-format` (model/dialog), `codex/t59-format-toolbar` (toolbar/font geometry), `codex/t59-worksheet-controls` (underline/fill/keys), `codex/t59-worksheet-dialog` (dialog measurements/More entry), `codex/t59-custom-colors` (one-off RGB chooser), `codex/t59-classic-colors` (24 Classic worksheet presets), `codex/t59-xlsx-formats` (Excel cell styles). **Priority:** P0, wave 1.
 **Spec:** [workbook model](../spec/workbook-model.md), new Cell formats section;
 [GUI](../spec/gui-look.md) 3. **Inventory:** the worksheet-wide `T59` menu location now opens the bounded Data-font dialog; the three unsupported text-control choices are B5.

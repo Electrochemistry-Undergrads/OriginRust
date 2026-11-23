@@ -175,6 +175,10 @@ pub enum AnalysisKind {
     Stationarity,
     /// Statistics > Exponential Smoothing Forecast (T374; options in `multivariate_options.rs`).
     ExpSmooth,
+    /// Statistics > ARIMA Forecast (T376; options in `multivariate_options.rs`).
+    Arima,
+    /// Statistics > Random Forest (T377; options in `multivariate_options.rs`).
+    RandomForest,
     /// Statistics > Rare Event Chart (G/T) (T364; options in `multivariate_options.rs`).
     RareChart,
     /// Statistics > Process Capability (T365; options in `multivariate_options.rs`).
@@ -327,6 +331,8 @@ impl AnalysisKind {
             AnalysisKind::Decompose => "Seasonal Decomposition...",
             AnalysisKind::Stationarity => "Stationarity Tests (ADF, KPSS)...",
             AnalysisKind::ExpSmooth => "Exponential Smoothing Forecast...",
+            AnalysisKind::Arima => "ARIMA Forecast...",
+            AnalysisKind::RandomForest => "Random Forest...",
             AnalysisKind::RareChart => "Rare Event Chart (G/T)...",
             AnalysisKind::Capability => "Process Capability...",
             AnalysisKind::Stability => "Stability Study...",
@@ -434,6 +440,8 @@ impl AnalysisKind {
             "decompose" => AnalysisKind::Decompose,
             "stationarity" => AnalysisKind::Stationarity,
             "forecast" => AnalysisKind::ExpSmooth,
+            "arima" => AnalysisKind::Arima,
+            "randomforest" => AnalysisKind::RandomForest,
             "rarechart" => AnalysisKind::RareChart,
             "capability" => AnalysisKind::Capability,
             "stability" => AnalysisKind::Stability,
@@ -2322,6 +2330,8 @@ impl AnalysisDialog {
             | AnalysisKind::Decompose
             | AnalysisKind::Stationarity
             | AnalysisKind::ExpSmooth
+            | AnalysisKind::Arima
+            | AnalysisKind::RandomForest
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
             | AnalysisKind::Stability
@@ -3648,6 +3658,8 @@ impl AnalysisDialog {
             | AnalysisKind::Decompose
             | AnalysisKind::Stationarity
             | AnalysisKind::ExpSmooth
+            | AnalysisKind::Arima
+            | AnalysisKind::RandomForest
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
             | AnalysisKind::Stability
@@ -3740,6 +3752,12 @@ impl AnalysisDialog {
     #[cfg(test)]
     pub fn set_crossing_level(&mut self, level: f64) {
         self.level_crossing.level = level;
+    }
+
+    /// The message the window shows when OK fails (for tests).
+    #[cfg(test)]
+    pub fn problem(&self) -> Option<&str> {
+        self.problem.as_deref()
     }
 
     /// Sets the Seasonal Decomposition period as the window's field would (for tests).
@@ -3845,6 +3863,8 @@ impl AnalysisDialog {
             | AnalysisKind::Decompose
             | AnalysisKind::Stationarity
             | AnalysisKind::ExpSmooth
+            | AnalysisKind::Arima
+            | AnalysisKind::RandomForest
             | AnalysisKind::RareChart
             | AnalysisKind::Capability
             | AnalysisKind::Stability
@@ -3970,6 +3990,10 @@ impl AnalysisDialog {
                 "How well a process fits its specification limits: Cp, Cpk, Pp, Ppk and parts per million outside"
             }
             AnalysisKind::RareChart => "Chart the opportunities or the time between rare events against control limits",
+            AnalysisKind::RandomForest => {
+                "Predict a class or a value from several columns with an ensemble of decision trees"
+            }
+            AnalysisKind::Arima => "Model a series by autoregression, differences and moving averages, and forecast it",
             AnalysisKind::ExpSmooth => "Smooth a series by level, trend and season, and forecast the next values",
             AnalysisKind::Stationarity => "Test whether a series wanders (a unit root) or stays about a level or trend",
             AnalysisKind::Decompose => "Split a series into a trend, a repeating seasonal pattern and what is left",
@@ -4115,6 +4139,12 @@ impl AnalysisDialog {
             }
             AnalysisKind::RareChart => {
                 "One row per column (fitted distribution, center line, limits, points beyond) in a new sheet, and a chart per column"
+            }
+            AnalysisKind::RandomForest => {
+                "Predictor importance, out-of-bag error and predictions (and a confusion matrix) in a new sheet, and an importance graph"
+            }
+            AnalysisKind::Arima => {
+                "The coefficients, sigma^2 and AIC in a new sheet with the predictions, the forecasts and their bands, and a graph"
             }
             AnalysisKind::ExpSmooth => {
                 "The smoothing constants, errors and final states in a new sheet with the one-step forecasts and the forecasts, and a graph"

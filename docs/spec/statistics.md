@@ -2061,6 +2061,55 @@ fitted values, SSE, final states and forecasts are checked against numpy, and th
 (L-BFGS-B from many starts and Powell), in `tools/expsmooth-ref.py` and `crates/calc/tests/expsmooth_reference.rs`.
 Prediction intervals, damped trends, the ETS state-space likelihood and ARIMA are not built.
 
+## 43 ARIMA forecast (T376, Origin 2024b Time Series Analysis app; not measured)
+
+Origin's Time Series Analysis app (2024b Pro) is not part of Origin 2016, so this is Sheaf's own. Statistics > ARIMA
+Forecast... (`Tool::Arima`, `sheaf analyze arima --y COL[,COL..] [--p 1] [--d 0] [--q 0] [--no-constant] [--horizon
+10] [--confidence 95] [--no-graph]`): every chosen column is a series of its own, in row order, complete in the chosen
+rows. The series is differenced `d` times to `w`; with mean `mu` (the constant; a drift when `d = 1`) the model is
+`w_t - mu = sum phi_i (w_{t-i} - mu) + e_t + sum theta_j e_{t-j}`. The conditional sum of squares (errors before `t =
+p` taken as 0, summed from `t = p`) is minimized by Nelder-Mead from `mu = mean(w)`, `phi = theta = 0`, restarted from
+its best point until it stops improving; stationarity and invertibility are not imposed. `sigma^2 = SS / m` over the `m`
+summed errors and `AIC = m ln(2 pi sigma^2) + m + 2 (k + 1)`. The one-step prediction of `y_t` is `y_t - e` (empty for
+the first `d + p` rows). Forecasts set future errors to 0 and undo the differences; the bands are `forecast -+ z sigma
+sqrt(sum_{j<h} psi_j^2)` with the psi weights of `phi(B) (1 - B)^d y = theta(B) e`.
+
+The result sheet `ARIMAN` has one row per coefficient (Mean or Constant (drift), AR i, MA j) and the sum of squares,
+sigma^2 and AIC per column, then per column the X, data, one-step predictions, residuals, forecast X (the last X step
+continued), forecasts and lower and upper band; a new graph per column draws the data, predictions, forecasts and
+bands. At given parameters the errors, forecasts and standard errors are checked against numpy, and the fitted sum
+of squares against scipy's minimum (Nelder-Mead, BFGS), in `tools/arima-ref.py` and `crates/calc/tests/arima_reference.rs`.
+Exact (Kalman) maximum likelihood, coefficient standard errors, seasonal ARIMA and automatic order choice are not
+built.
+
+## 44 Random forest (T377, Origin 2026b Pro app; not measured)
+
+Origin 2026b's Random Forest app is not part of Origin 2016, so this is Sheaf's own (the CART and random forest of
+Breiman, with fully stated rules). Statistics > Random Forest (Machine Learning)... (`Tool::RandomForest`, `sheaf
+analyze randomforest --y PRED[,PRED..],RESPONSE [--task auto|classification|regression] [--trees 100] [--mtry 0]
+[--min-leaf 0] [--max-depth 0] [--seed 1] [--no-graph]`): the predictors are numeric columns and the last column is the
+response, classes (a text column, or numbers with `classification`; classes are numbered in their first order) or
+values; rows with a missing predictor or response are left out. With no columns selected, the window starts with every
+Y and Label column of the sheet.
+
+- Trees split on the feature and midpoint threshold that most reduce `n - sum c_k^2 / n` (classes) or `sum y^2 -
+  (sum y)^2 / n` (values), with at least `min_leaf` rows on each side (default 1 for classes, 5 for values); rows at
+  or below the threshold go left; features are tried in order (a forest's drawn subset in its drawn order) and
+  thresholds from the smallest, a candidate winning only when strictly better. Leaves predict the majority class
+  (lowest on ties) or the mean.
+- Each tree grows on a bootstrap sample and tries `mtry` features per node (default `floor(sqrt p)` for classes,
+  `floor(p / 3)` for values), drawn with the 64-bit generator `s = s * 6364136223846793005 + 1442695040888963407`, `u
+  = (s >> 11) / 2^53`, from the seed; the same seed gives the same forest.
+- Out-of-bag predictions use the trees that did not see a row; the out-of-bag error is the share misclassified or the
+  mean squared error. Importance is each predictor's total impurity decrease, scaled to sum to 1.
+
+The result sheet `RandomForestN` has one row per predictor (Importance), then the row numbers, the response, the
+out-of-bag and whole-forest predictions, and for classes a confusion matrix of the out-of-bag predictions (actual
+classes down, predicted across); a new graph draws the importance as columns. Single trees and whole seeded forests
+agree exactly with an independent Python implementation of these rules (`tools/forest-ref.py`,
+`crates/calc/tests/forest_reference.rs`; scikit-learn is not available here). Permutation importance, class weights,
+probability outputs, prediction of new rows and saved models are not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

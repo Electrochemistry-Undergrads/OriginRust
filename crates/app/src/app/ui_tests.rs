@@ -5840,6 +5840,57 @@ fn the_statistics_menu_makes_a_rare_event_chart() {
     assert_eq!(h.state().doc.undo_label(), Some("Rare event chart"));
 }
 
+/// Statistics > Random Forest... (T377): two predictors and a text class give the importance, the out-of-bag
+/// predictions and a graph; one undo step.
+#[test]
+fn the_statistics_menu_grows_a_random_forest() {
+    let mut text = String::from("id,a,b,kind\n");
+    for i in 0..40 {
+        let kind = if i % 10 >= 5 { "high" } else { "low" };
+        text.push_str(&format!("{i},{},{},{kind}\n", i % 10, (i * 7) % 5));
+    }
+    let data = csv_file("randomforest", "rf", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - rf.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Random Forest (Machine Learning)..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Predictors per split (0: auto)"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
+    let (sheet, imp) = result_column(&h, "Importance");
+    assert!(sheet.starts_with("RandomForest"), "{sheet}");
+    assert!(imp.len() == 2 && imp[0] > imp[1], "a decides the class: {imp:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Random forest"));
+}
+
+/// Statistics > ARIMA Forecast... (T376): an AR(1) with mean, forecasts with bands, a graph, one undo step.
+#[test]
+fn the_statistics_menu_makes_an_arima_forecast() {
+    let mut text = String::from("t,v\n");
+    let mut y = 0.0f64;
+    for i in 0..40 {
+        y = 0.6 * y + (f64::from(i) * 1.7).sin();
+        text.push_str(&format!("{i},{}\n", 10.0 + y));
+    }
+    let data = csv_file("arima", "ts", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - ts.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "ARIMA Forecast..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "AR order p"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
+    let (sheet, values) = result_column(&h, "Value");
+    assert!(sheet.starts_with("ARIMA"), "{sheet}");
+    assert_eq!(values.len(), 5, "mean, AR 1, SS, sigma^2, AIC");
+    assert!((values[0] - 10.0).abs() < 1.0, "{values:?}");
+    let (_, forecast) = result_column(&h, "Forecast");
+    assert_eq!(forecast.len(), 10);
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("ARIMA forecast"));
+}
+
 /// Statistics > Exponential Smoothing Forecast... (T374): fitted Holt smoothing, the forecasts and a graph, one undo
 /// step.
 #[test]
@@ -7845,6 +7896,41 @@ fn acceptance_sampling_designs_a_plan_into_a_new_book_with_its_oc_graph() {
     assert_eq!(b.sheets[0].columns[1].numeric().unwrap()[..2], [132.0, 3.0]);
     assert_eq!(b.sheets[1].columns.len(), 4);
     assert_eq!(h.state().doc.undo_label(), Some("Acceptance sampling"));
+}
+
+#[test]
+fn plot_categorical_cause_and_effect_draws_the_selected_columns_as_categories() {
+    let mut h = start(vec![data_file("fishbone")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let graphs = project(&h).graphs().count();
+    menu_path(&mut h, &["Plot", "Categorical", "Cause-and-Effect Diagram"]);
+    assert_eq!(project(&h).graphs().count(), graphs + 1);
+    let g = project(&h).graphs().last().unwrap();
+    // No column selected: every column of the sheet (t, up, down) is a category.
+    let texts: Vec<&str> = g.layers[0].labels.iter().map(|l| l.text.as_str()).collect();
+    assert_eq!(texts[..2], ["Effect", "t"]);
+    assert_eq!(g.layers[0].labels.iter().filter(|l| l.font.bold).count(), 4, "the effect and three category names");
+    assert_eq!(h.state().doc.undo_label(), Some("Plot columns"));
+}
+
+#[test]
+fn plot_categorical_sankey_uses_the_sheets_text_columns_and_the_flow() {
+    let mut h = start(vec![data_file("sankey")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let down = column_id(&h, "C");
+    let book = project(&h).locate(down).unwrap().0.id;
+    let text = |v: &[&str]| ColumnData::text(v.iter().map(|s| s.to_string()).collect());
+    h.state_mut().doc.apply("text", |p| {
+        p.add_column(book, 0, sheaf_core::Designation::Y, text(&["a", "a", "b", "b"])).unwrap();
+        p.add_column(book, 0, sheaf_core::Designation::Y, text(&["b", "c", "c", "d"])).unwrap();
+    });
+    // Nothing selected: the sheet's numeric Y columns, the last (C) the flow; its text columns the ends.
+    let graphs = project(&h).graphs().count();
+    menu_path(&mut h, &["Plot", "Categorical", "Sankey Diagram"]);
+    assert_eq!(project(&h).graphs().count(), graphs + 1);
+    let plot = &project(&h).graphs().last().unwrap().layers[0].plots[0];
+    assert_eq!((plot.kind, plot.y), (sheaf_core::graph::PlotKind::Sankey, down));
+    assert!(plot.sankey.source.is_some() && plot.sankey.target.is_some());
 }
 
 #[test]

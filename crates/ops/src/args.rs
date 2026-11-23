@@ -1125,6 +1125,10 @@ pub struct PlotArgs {
     /// (Origin's plotgroup): the rows are split into a new sheet `Grouped`, the legend names the values.
     #[arg(long, value_name = "COLUMN", conflicts_with_all = ["graph", "panels"])]
     pub group: Option<String>,
+    /// -t fishbone (a cause-and-effect diagram): the effect's text at the head of the spine (default
+    /// "Effect"). The -y columns (default: every column of the sheet) are the categories, their cells the causes.
+    #[arg(long, value_name = "TEXT")]
+    pub effect: Option<String>,
     /// Make a graph of several panels: stack (one column of panels that share the X axis, the
     /// first at the bottom, as Origin's Stack command), or ROWSxCOLUMNS such as 2x1 (Origin's
     /// Vertical 2 Panel), 1x2 (Horizontal 2 Panel) or 2x2 (4 Panel). Each Y column gets its own
@@ -3445,6 +3449,60 @@ pub enum AnalyzeTool {
         /// The significance level drawn as a line.
         #[arg(long, default_value_t = 5e-8)]
         threshold: f64,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// Random forest: --y PREDICTOR[,PREDICTOR..],RESPONSE; a seeded forest of CART trees, out-of-bag error,
+    /// predictor importance, out-of-bag predictions (and a confusion matrix for classes).
+    Randomforest {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// auto (classes for a text response), classification or regression.
+        #[arg(long, default_value = "auto")]
+        task: String,
+        /// Number of trees.
+        #[arg(long, default_value_t = 100)]
+        trees: usize,
+        /// Predictors tried at each node (0: sqrt p for classes, p/3 for values).
+        #[arg(long, default_value_t = 0)]
+        mtry: usize,
+        /// Smallest leaf (0: 1 for classes, 5 for values).
+        #[arg(long, default_value_t = 0)]
+        min_leaf: usize,
+        /// Depth limit (0: none).
+        #[arg(long, default_value_t = 0)]
+        max_depth: usize,
+        /// Seed of the random draws.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// ARIMA forecast: ARIMA(p, d, q) of each --y column by conditional least squares, forecasts with confidence
+    /// bands, with a graph.
+    Arima {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Autoregressive order.
+        #[arg(long, default_value_t = 1)]
+        p: usize,
+        /// Differences.
+        #[arg(long, default_value_t = 0)]
+        d: usize,
+        /// Moving-average order.
+        #[arg(long, default_value_t = 0)]
+        q: usize,
+        /// Leave out the constant (the mean of the differenced series).
+        #[arg(long)]
+        no_constant: bool,
+        /// Steps to forecast.
+        #[arg(long, default_value_t = 10)]
+        horizon: usize,
+        /// Confidence level of the forecast bands, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        confidence: f64,
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,

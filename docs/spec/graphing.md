@@ -3286,6 +3286,29 @@ was the source, and Origin 2016 has no such plot, so nothing here is measured.
   values together). One undo step ("Grouped Histogram"). Separate Graphs, panels, pages, distribution
   curves and data height are not built.
 
+### 14.32 Sankey diagram (T379, Origin 2020 feature, Sheaf's look, not measured)
+
+Plot > Categorical > Sankey Diagram and `sheaf plot FILE -t sankey [--group SOURCE,TARGET]` (`PlotKind::Sankey`,
+`Template::Sankey`, `Project::plot_sankey`; layout `sheaf_calc::sankey`, drawing `crates/plot/src/sankey.rs`): every
+row is a flow of the value column (the last numeric Y column) from the node named in the source column to the one in
+the target column. Without `--group` (or text columns selected in the app) the first two text columns of the sheet
+are the source and the target. The plot keeps them in `Plot::sankey` (saved in `.sheaf`); the `.opj` writer saves a
+column plot of the flow with a warning.
+
+- Nodes are the distinct names, in order of first appearance; flows with the same ends are summed; rows with an
+  empty name, a missing or non-positive value or the same source and target are left out, and so is a flow that
+  would close a cycle.
+- A node's stage (column) is the longest path to it from a node without incoming flows; stages are spread evenly
+  across the layer's frame. A node is as tall as the larger of its inflow and outflow, one scale for all stages
+  (the fullest stage fills the height less a 20 % share of gaps); every stage is centred vertically. No crossing
+  reduction: nodes keep their order of first appearance within a stage.
+- Each flow is a band of two cubic curves from the source's right edge to the target's left edge, stacked on both
+  nodes in the order of the other end, filled with the source node's palette colour at 40 % opacity; nodes are boxes
+  in the layer palette's colours with a darker 0.5 pt outline; names are written right of their nodes (left of the
+  last stage's) in the X axis tick font at 0.8 of its size. No axes, no legend.
+- Not done: alluvial diagrams (categories across stages of the same rows), node reordering, value labels, the Plot
+  Details pages of Origin's Sankey plot.
+
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
 Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin. Where the current online help **[W]** and Origin disagree, Origin decides.
@@ -4263,6 +4286,24 @@ are left out and the offsets of stacked plots are not applied. The points go to 
 region": per plot with points inside, an X column (the plot's X name, "Row" without one), a Y column (its Y name) and a
 Disregard column "Source row" (1-based), each commented "in the region of <plot>". One undo step ("Extract data in
 region"). Freeform regions and several regions at once are not built.
+
+### 17.13 Cause-and-effect (fishbone) diagram (T375, Origin 2026 feature, Sheaf's layout, not measured)
+
+Plot > Categorical > Cause-and-Effect Diagram and `sheaf plot FILE -t fishbone [-y COL,...] [--effect TEXT]`
+(`Template::Fishbone`, `Project::plot_fishbone`, `sheaf_core::fishbone`): each chosen column is a category, named
+by its long name (else its short name), and its non-empty cells, as shown, are the causes, in row order. With no
+column chosen (no `-y`), every column of the sheet is one. The effect's text defaults to "Effect"
+(`--effect` on the command line; in the app it is edited on the graph like any label).
+
+The graph has one layer without axes or legend, the frame over most of the page, and the diagram is made of
+ordinary drawn objects and text labels, so each part can be moved, restyled or edited: a 2 pt horizontal arrow
+(the spine) across the frame's middle with the effect in 14 pt bold right of its head; one 1 pt slanted rib per
+category, alternately above and below (the first above), meeting the spine at even steps, with the category's
+name in 11 pt bold beyond its outer end; one 0.75 pt horizontal twig per cause, evenly spaced along the rib from
+its outer end towards the spine, ending on the rib, with the cause in 9 pt starting at the twig's left end just
+above it. Long causes may run past their twig; nothing measures text yet. A text-only file needs its header line
+named on import (`--header-lines 1 --long-name-line 1`), because the import cannot tell a header of text from
+text data. Not done: nested sub-causes, Origin's own look and its nested frequency charts.
 
 ## 18. Plot Details: drop lines, fill under the curve, data labels, layer background (T13)
 

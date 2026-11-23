@@ -153,10 +153,14 @@ impl<'a> SheetTable<'a> {
 
     fn build(
         sheet: &'a Worksheet,
-        style: PrintStyle,
+        mut style: PrintStyle,
         line_height: &dyn Fn(ResolvedStyle<'_>, f64) -> f64,
         heading_fonts: bool,
     ) -> Self {
+        let scale = f64::from(sheet.font_defaults.size_scale());
+        style.row_h *= scale;
+        style.rownum_w *= scale;
+        style.default_col_w *= scale;
         let cols: Vec<usize> = (0..sheet.columns.len()).filter(|&i| !sheet.columns[i].hidden).collect();
         let n = sheet.row_count();
         let rows = sheet.shown_rows(n).unwrap_or_else(|| (0..n).collect());
@@ -175,7 +179,7 @@ impl<'a> SheetTable<'a> {
             line_height(st, size).max(style.row_h)
         };
         let (column_header, row_header) = if heading_fonts {
-            (sheet.font_defaults.column_header.style(), sheet.font_defaults.row_header.style())
+            (sheet.font_defaults.column_header_style(), sheet.font_defaults.row_header_style())
         } else {
             (ResolvedStyle::default(), ResolvedStyle::default())
         };
@@ -258,6 +262,11 @@ impl<'a> SheetTable<'a> {
     /// Height of the head: the grey name row and the label rows.
     pub fn head_height(&self) -> f64 {
         self.column_header_height + self.label_heights.iter().sum::<f64>()
+    }
+
+    /// Width of the row headings and height of the column headings, in points.
+    pub fn heading_extent(&self) -> (f64, f64) {
+        (self.style.rownum_w, self.column_header_height)
     }
 
     /// Width in points of each printed column.

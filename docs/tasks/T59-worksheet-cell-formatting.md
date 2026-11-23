@@ -104,7 +104,11 @@ family control are recorded in GUI 3.
 Column Header and Row Header follow-up. Worksheet Properties sets the font
 family and size of column names, row numbers and label-row captions. Origin
 2016 size measurements and Sheaf's grid and print sizing rules are in GUI 3.
-Standard remains open.
+
+Standard font follow-up. Worksheet Properties sets the sheet's base family
+and point size beneath category and manual values. Grid, print and image
+geometry scale with the Standard size. The Origin 2016 size and family probes
+used the worksheet's `wks.fsize` and `wks.font` properties (GUI 3).
 
 **Size:** L. **Branch:** `cell-format` (model/dialog), `codex/t59-format-toolbar` (toolbar/font geometry), `codex/t59-worksheet-controls` (underline/fill/keys), `codex/t59-worksheet-dialog` (dialog measurements/More entry), `codex/t59-custom-colors` (one-off RGB chooser), `codex/t59-classic-colors` (24 Classic worksheet presets), `codex/t59-xlsx-formats` (Excel cell styles). **Priority:** P0, wave 1.
 **Spec:** [workbook model](../spec/workbook-model.md), new Cell formats section;

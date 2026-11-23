@@ -4565,6 +4565,27 @@ impl SheafApp {
     }
 
     fn plot_columns(&mut self, book: WindowId, columns: Vec<ColumnId>, template: Template) {
+        // A cause-and-effect diagram (T375): the selected columns, of any kind, are the categories (else every
+        // column of the active sheet); the effect text is edited on the graph afterwards.
+        if template == Template::Fishbone {
+            let categories: Vec<ColumnId> = if columns.is_empty() {
+                let project = self.doc.project();
+                project
+                    .workbook(book)
+                    .and_then(|b| b.sheets.get(b.active_sheet))
+                    .map(|s| s.columns.iter().map(|c| c.id).collect())
+                    .unwrap_or_default()
+            } else {
+                columns
+            };
+            let n = categories.len();
+            match self.doc.edit("Plot columns", |p| p.plot_fishbone(&categories, sheaf_core::fishbone::DEFAULT_EFFECT))
+            {
+                Ok(_) => self.say(format!("Cause-and-effect diagram of {n} categories")),
+                Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+            }
+            return;
+        }
         // A Parallel Index is grouped by the selected column of text (else the first text column of the sheet).
         let group = if template == Template::ParallelIndex {
             columns.iter().copied().find(|id| self.doc.project().column(*id).is_some_and(|c| !c.data.is_numeric()))
@@ -4573,7 +4594,8 @@ impl SheafApp {
         };
         // A Treemap (or Sunburst plot) nests by the selected columns of text (in selection order; else every text column of the
         // sheet) and sizes by the last numeric one.
-        let categories: Vec<ColumnId> = if matches!(template, Template::Treemap | Template::Sunburst) {
+        let categories: Vec<ColumnId> = if matches!(template, Template::Treemap | Template::Sunburst | Template::Sankey)
+        {
             let project = self.doc.project();
             columns.iter().copied().filter(|id| project.column(*id).is_some_and(|c| !c.data.is_numeric())).collect()
         } else {
@@ -4649,7 +4671,7 @@ impl SheafApp {
         }
         let ys = self.plot_y_columns(book, columns, template);
         if ys.is_empty() {
-            let what = if matches!(template, Template::Treemap | Template::Sunburst) {
+            let what = if matches!(template, Template::Treemap | Template::Sunburst | Template::Sankey) {
                 "Nothing to plot: select one or more text category columns and a numeric value column"
             } else {
                 "Nothing to plot: select one or more numeric Y columns"
@@ -4659,7 +4681,7 @@ impl SheafApp {
         }
         let made = self.doc.edit("Plot columns", |p| match group {
             Some(g) => p.plot_parallel(template, &ys, Some(g)),
-            None if matches!(template, Template::Treemap | Template::Sunburst) => {
+            None if matches!(template, Template::Treemap | Template::Sunburst | Template::Sankey) => {
                 p.plot_columns(template, &[categories.as_slice(), &ys].concat())
             }
             None => p.plot_columns(template, &ys).inspect(|g| sheaf_plot::place_zoom_regions(p, *g)),
@@ -5828,6 +5850,12 @@ impl SheafApp {
                 // Categorical columns are not Y columns: start with the first two of the sheet.
                 let all = project.workbook(book).and_then(|b| b.sheets.get(sheet)).map(|s| &s.columns);
                 all.map(|c| c.iter().take(2).map(|c| c.id).collect()).unwrap_or_default()
+            } else if kind == AnalysisKind::RandomForest {
+                // The response (last) may be a text column of classes, which an import makes a Label column: every
+                // Y and Label column of the sheet, in order (T377).
+                let all = project.workbook(book).and_then(|b| b.sheets.get(sheet)).map(|s| &s.columns);
+                let wanted = |c: &&sheaf_core::Column| matches!(c.designation, Designation::Y | Designation::Label);
+                all.map(|c| c.iter().filter(wanted).map(|c| c.id).collect()).unwrap_or_default()
             } else {
                 project.default_plot_columns(book, sheet, Template::Line)
             }
@@ -5835,7 +5863,11 @@ impl SheafApp {
             // These tools read categorical columns (factors, subjects), which may hold text.
             let any_type = matches!(
                 kind,
-                AnalysisKind::Crosstab | AnalysisKind::Anova3 | AnalysisKind::RmAnova1 | AnalysisKind::RmAnova2
+                AnalysisKind::Crosstab
+                    | AnalysisKind::Anova3
+                    | AnalysisKind::RmAnova1
+                    | AnalysisKind::RmAnova2
+                    | AnalysisKind::RandomForest
             );
             columns
                 .into_iter()

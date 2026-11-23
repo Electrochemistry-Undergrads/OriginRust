@@ -1582,6 +1582,51 @@ fn rare_event_charts_run_from_the_command_line() {
     assert!(!ok && err.contains("--chart"), "{err}");
 }
 
+/// Random forest (spec `statistics.md` section 44, T377).
+#[test]
+fn random_forest_runs_from_the_command_line() {
+    let dir = scratch("randomforest");
+    let path = dir.join("rf.csv");
+    let mut text = String::from("a,b,kind,size\n");
+    for i in 0..40 {
+        let kind = if i % 10 >= 5 { "high" } else { "low" };
+        text.push_str(&format!("{},{},{kind},{}\n", i % 10, (i * 7) % 5, 2 * (i % 10)));
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "randomforest", file, "--y", "a,b,kind", "--trees", "20"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("Classification forest of 20 trees on 40 complete rows (2 classes)")
+            && out.contains("RandomForest1"),
+        "{out}"
+    );
+    let (ok, out, err) = sheaf(&["analyze", "randomforest", file, "--y", "a,b,size", "--trees", "10", "--no-graph"]);
+    assert!(ok && out.contains("Regression forest"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "randomforest", file, "--y", "a,b,kind", "--task", "boosting"]);
+    assert!(!ok && err.contains("--task"), "{err}");
+}
+
+/// ARIMA forecast (spec `statistics.md` section 43, T376).
+#[test]
+fn arima_forecast_runs_from_the_command_line() {
+    let dir = scratch("arima");
+    let path = dir.join("ts.csv");
+    std::fs::write(&path, "t,v\n0,0\n1,1\n2,3\n3,4\n4,6\n5,7\n6,9\n").unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "arima", file, "--y", "v", "--p", "0", "--d", "1", "--horizon", "2"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("ARIMA(0,1,0) by conditional least squares: Constant (drift) 1.5") && out.contains("ARIMA1"),
+        "{out}"
+    );
+    let (ok, out, err) =
+        sheaf(&["analyze", "arima", file, "--y", "v", "--p", "1", "--d", "1", "--no-constant", "--no-graph"]);
+    assert!(ok && out.contains("ARIMA(1,1,0)") && out.contains("AR 1"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "arima", file, "--y", "v", "--p", "0", "--no-constant"]);
+    assert!(!ok && err.contains("nothing to fit"), "{err}");
+}
+
 /// Exponential smoothing forecast (spec `statistics.md` section 42, T374).
 #[test]
 fn exponential_smoothing_forecast_runs_from_the_command_line() {

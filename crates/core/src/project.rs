@@ -396,6 +396,10 @@ pub enum ProjectError {
     SunburstNeedsCategory,
     #[error("a sunburst plot needs a numeric value column; select one")]
     SunburstNeedsValue,
+    #[error("a cause-and-effect diagram needs one or more category columns; select them")]
+    FishboneColumns,
+    #[error("a Sankey diagram needs a source and a target column (text) and a numeric value column; select them")]
+    SankeyColumns,
     #[error("a sunburst plot cannot have a right Y axis; use one Y axis or another template")]
     SunburstNoRightAxis,
     #[error(
@@ -1167,6 +1171,7 @@ impl Project {
             indexed: None,
             stat: None,
             sunburst: Default::default(),
+            sankey: Default::default(),
             size_from: None,
             color_from: None,
             decor: Default::default(),
@@ -1382,6 +1387,24 @@ impl Project {
             let [y] = data[..] else { return Err(ProjectError::IndexedNeedsData) };
             let groups: Vec<ColumnId> = ys.iter().copied().filter(|c| *c != y).collect();
             return self.plot_indexed(template, &groups, y);
+        }
+        if template == Template::Fishbone {
+            return self.plot_fishbone(ys, crate::fishbone::DEFAULT_EFFECT);
+        }
+        if template == Template::Sankey {
+            // The first two columns of text are the source and the target, the last numeric one the flow.
+            let value =
+                ys.iter().rev().copied().find(|y| self.numeric(*y).is_some()).ok_or(ProjectError::SankeyColumns)?;
+            let mut names: Vec<ColumnId> = ys.iter().copied().filter(|y| self.numeric(*y).is_none()).collect();
+            if names.len() < 2 {
+                // None chosen: the text columns of the value column's sheet.
+                names = self
+                    .locate(value)
+                    .map(|(_, sheet, _)| sheet.columns.iter().filter(|c| !c.data.is_numeric()).map(|c| c.id).collect())
+                    .unwrap_or_default();
+            }
+            let [source, target, ..] = names[..] else { return Err(ProjectError::SankeyColumns) };
+            return self.plot_sankey(source, target, value);
         }
         if template == Template::Sunburst {
             // Like the treemap: the columns of text are the rings, in selection order (else those of the value
@@ -1824,6 +1847,36 @@ impl Project {
 
     /// Creates a sunburst plot of `value` (a numeric column; the angles) with a ring per `categories` column (the
     /// first innermost) and returns its id. One plot, the value column's; the categories live in its style.
+    /// A Sankey diagram (T379): the flows of `value` from the nodes named in `source` to those named in `target`.
+    pub fn plot_sankey(
+        &mut self,
+        source: ColumnId,
+        target: ColumnId,
+        value: ColumnId,
+    ) -> Result<WindowId, ProjectError> {
+        for c in [source, target, value] {
+            self.column(c).ok_or(ProjectError::NoSuchColumn(c))?;
+        }
+        if self.numeric(value).is_none() || source == target {
+            return Err(ProjectError::SankeyColumns);
+        }
+        let long_name = self.locate(value).map(|(b, _, _)| b.title_for_graph());
+        let graph = self.add_graph(Template::Sankey);
+        self.add_plot(graph, 0, value)?;
+        if let Some(g) = self.graph_mut(graph) {
+            if let Some(l) = g.layers.first_mut() {
+                for p in &mut l.plots {
+                    p.sankey.source = Some(source);
+                    p.sankey.target = Some(target);
+                }
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        Ok(graph)
+    }
+
     pub fn plot_sunburst(&mut self, categories: &[ColumnId], value: ColumnId) -> Result<WindowId, ProjectError> {
         for c in categories.iter().chain([&value]) {
             self.column(*c).ok_or(ProjectError::NoSuchColumn(*c))?;
@@ -1965,6 +2018,12 @@ impl Project {
         }
         if template == Template::Sunburst {
             return Err(ProjectError::SunburstNoRightAxis);
+        }
+        if template == Template::Fishbone {
+            return Err(ProjectError::FishboneColumns);
+        }
+        if template == Template::Sankey {
+            return Err(ProjectError::SankeyColumns);
         }
         if matches!(template, Template::GroupedColumns | Template::GroupedBox) {
             return Err(ProjectError::IndexedNoRightAxis);

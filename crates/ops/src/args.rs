@@ -323,6 +323,10 @@ pub struct FitArgs {
     /// several columns, only the first one is drawn.
     #[arg(long, value_name = "FIGURE")]
     pub plot: Option<PathBuf>,
+    /// Mark the EC50 of a dose-response fit (DoseResp, Logistic, Logistic5, ...) on the --plot figure with a
+    /// dashed crosshair at the half response.
+    #[arg(long, requires = "plot")]
+    pub mark_ec50: bool,
     /// Resolution of a raster figure in dots per inch.
     #[arg(long, default_value_t = 300.0)]
     pub dpi: f64,

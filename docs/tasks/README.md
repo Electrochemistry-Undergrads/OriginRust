@@ -156,7 +156,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T237](T237-layout-page.md) | Layout pages: File > New > Layout, New Layout, Add Graph (B14 slice 1) | L | slices 1-12 done 2026-11-20 (layout-page spec), not measured; left: dashes, text toolbar, .opj |
 | [T234](T234-matrix-profiles.md) | Plot > Profile: Contour and Image Profiles as row/column cuts (B14 slice) | S | done 2026-11-20 (matrices 7l), not measured |
 | [T226](T226-ternary-contour.md) | Plot > Contour/Heat Map > Ternary Contour (B14 slice) | S | done 2026-11-20 (matrices 7k), not measured |
-| [T225](T225-polar-contour.md) | Plot > Contour/Heat Map > Polar Contour theta(X) r(Y), r(X) theta(Y) (B14 slice) | S | done 2026-11-20 (matrices 7k), not measured |
+| [T225](T225-polar-contour.md) | Plot > Contour/Heat Map > Polar Contour theta(X) r(Y), r(X) theta(Y) (B14 slice) | S | done 2026-11-20 (matrices 7k), measured by T399 |
 | [T221](T221-matrix-surface-fit.md) | Nonlinear Surface Fit on a matrix through XYZ columns | S | done 2026-11-20 (matrices 7j), not measured |
 | [T218](T218-image-rgb.md) | Colour pictures as RGB sheets; Image > Color to Gray, RGB Split (B14 slice) | S | done 2026-11-20 (matrices 7h/7i), not measured |
 | [T213](T213-new-function-plot.md) | File > New > Function Plot (B14 slice) | S | done 2026-11-20 (graphing 41), not measured |
@@ -428,6 +428,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T389](T389-piper-measure.md) | Measure Piper diagram against Origin (grids, side labels, titles, sample symbols) | S | done 2026-11-23 (graphing 39) |
 | [T390](T390-markers-measure.md) | Measure graph Data > Mark Data Range against Origin (red lines across the layer) | S | done 2026-11-23 (graphing 40) |
 | [T395](T395-table-measure.md) | Measure Graph > New Table against Origin (5 x 8 default, up to 9) | S | done 2026-11-23 (graphing Tables) |
+| [T399](T399-polar-contour-measure.md) | Measure Polar Contour against Origin (north clockwise, no lines, reversed rainbow, closed circle) | S | done 2026-11-23 (matrices 7k) |
 | [T40](T40-graphical-summary.md) | Graphical Summary: statistics, CIs, Anderson-Darling and charts per variable/group | L | done 2026-11-15 (statistics.md 22); left: three other arrangements, Origin layout unmeasured |
 | [T41](T41-rug-plot.md) | Rug plots: Axis dialog Rug tab and Scatter + Rug template | M | done 2026-11-15 (graphing 18.10); left: Origin defaults unmeasured, rug hit-testing |
 | [T42](T42-window-switcher.md) | Window Switcher: Ctrl+Tab through child windows with previews | M | done 2026-11-15 (`window-switcher`, macOS) |

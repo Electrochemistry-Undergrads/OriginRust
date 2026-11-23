@@ -68,6 +68,7 @@ pub mod peaks;
 pub mod poisson;
 pub mod power;
 pub mod qc;
+pub mod qpcr;
 pub mod quantreg;
 pub mod rarechart;
 pub mod risetime;

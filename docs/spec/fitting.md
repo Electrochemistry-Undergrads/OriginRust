@@ -596,3 +596,18 @@ Origin's documented behaviour and the `.FDF` format (`docs/spec/fdf-format.md`).
   - Function names are translated to Origin C, so the file reads back to the same function: Sheaf's `ln`
     is written `log` (Origin C's natural log) and Sheaf's `log` (base 10) is written `log10`.
 
+## EC50 marks (T398, Origin 2027 Pro; not measured)
+
+Origin 2027 marks IC50/EC50 on dose-response fits; Origin 2016, whose fit graphs Sheaf copies, draws no such marks, so
+they are opt-in: "Mark EC50 on the Graph (dose-response functions)" on the Fitted Curves page of the Fit window (a
+single fit; the marks go on the graph that shows the fitted curve, new or source), `sheaf fit ... --plot FIGURE
+--mark-ec50`, or `Project::mark_ec50`. A fit qualifies when its function has an `EC50` derived value and `A1` and `A2`
+parameters (DoseResp, Logistic, Logistic5 and the like); otherwise the request is refused ("has no EC50 to mark") and
+nothing changes. Two dashed straight lines (section "Straight lines" of graphing, T67) in the fitted curve's colour,
+1 pt, cross at the half response: a vertical one at the EC50 on the plot's X scale (`log10 EC50`, which is `LOGx0`, when
+the function has a `LOGx0` parameter and so a log-dose X) labelled at the top with its X value, and a horizontal one at
+`(A1 + A2) / 2` labelled at the right; they are named `vline`/`hline` (the next free names) and can be edited like any
+straight line. The marks are tested in `crates/core/src/fit_marks.rs`, `crates/cli/tests/fit.rs`
+(`a_dose_response_fit_marks_its_ec50_on_the_figure`) and the Fit window UI test
+`the_fit_window_marks_the_ec50_of_a_dose_response_fit`. Marks for global or multiple fits, other levels (EC20, EC80)
+and a text label with the EC50 itself instead of its log are not built.

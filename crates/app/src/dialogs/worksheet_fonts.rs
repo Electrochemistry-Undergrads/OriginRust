@@ -69,8 +69,8 @@ impl WorksheetFontsDialog {
             labels.units,
             labels.comments,
             worksheet.column_label_colors,
-            CategoryColors::default(),
-            CategoryColors::default(),
+            labels.column_header,
+            labels.row_header,
             CategoryColors::default(),
             labels.formula,
         ];
@@ -127,6 +127,8 @@ impl WorksheetFontsDialog {
                 units: self.shown_colors[UNITS],
                 comments: self.shown_colors[COMMENTS],
                 formula: self.shown_colors[FORMULA],
+                column_header: self.shown_colors[COLUMN_HEADER],
+                row_header: self.shown_colors[ROW_HEADER],
             };
             if self.shown[DATA] != self.base[DATA] {
                 sheet.set_data_font_override(self.shown[DATA].clone());
@@ -234,7 +236,7 @@ impl WorksheetFontsDialog {
                         shown.size_pt = (size > 0.0).then_some(size.max(4.0));
                     }
                     ui.end_row();
-                    if matches!(self.category, DATA | LONG_NAME | UNITS | COMMENTS | BULK | FORMULA) {
+                    if self.category != STANDARD {
                         let category = CATEGORIES[self.category];
                         let colors = &mut self.shown_colors[self.category];
                         ui.label("Text Color");

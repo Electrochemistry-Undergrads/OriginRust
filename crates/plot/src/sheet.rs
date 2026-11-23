@@ -345,6 +345,10 @@ mod tests {
         ws.set_column_header_font(font.clone());
         ws.set_row_header_font(font);
         assert_eq!(sheet_image_svg(&ws).unwrap(), svg, "headings and their geometry are omitted from images");
+        ws.label_colors.column_header.fill = Some(Color::RED);
+        ws.label_colors.row_header.text_color = Some(Color::BLUE);
+        ws.label_colors.row_header.fill = Some(Color::BLUE);
+        assert_eq!(sheet_image_svg(&ws).unwrap(), svg, "heading colors are omitted from images");
         for want in [">Bee<", ">mA<", ">10<", ">20<", ">7<"] {
             assert!(svg.contains(want), "{want} missing");
         }

@@ -196,14 +196,18 @@ pub(crate) fn draw(
         let reach = outward_extent(axis);
         let normal = axis.side == AxisSide::Normal;
         // (page position of the main edge, outward direction) for the axis' own edge and the one across.
-        let (main, other) = match (horizontal, normal) {
-            (true, true) => ((f.y + f.h, 1.0), (f.y, -1.0)),
-            (true, false) => ((f.y, -1.0), (f.y + f.h, 1.0)),
-            (false, true) => ((f.x, -1.0), (f.x + f.w, 1.0)),
-            (false, false) => ((f.x + f.w, 1.0), (f.x, -1.0)),
+        let paired = axis.opposite_offset_pct.is_some();
+        let main = match (horizontal, normal, paired) {
+            (true, _, true) => crate::axis_offset::x_line_y(axis, f),
+            (false, _, true) => crate::axis_offset::y_line_x(axis, f),
+            (true, true, false) => f.y + f.h,
+            (true, false, false) => f.y,
+            (false, true, false) => f.x,
+            (false, false, false) => f.x + f.w,
         };
-        draw_edge(out, layer, &axis.rug, pds, resolved, f, horizontal, (main.0, main.1, reach), color);
+        let (other, inward) = crate::axis_offset::opposite_line(axis, f, horizontal);
+        draw_edge(out, layer, &axis.rug, pds, resolved, f, horizontal, (main, inward, reach), color);
         let across = if axis.opposite_ticks { reach } else { 0.0 };
-        draw_edge(out, layer, &axis.rug_opposite, pds, resolved, f, horizontal, (other.0, other.1, across), color);
+        draw_edge(out, layer, &axis.rug_opposite, pds, resolved, f, horizontal, (other, -inward, across), color);
     }
 }

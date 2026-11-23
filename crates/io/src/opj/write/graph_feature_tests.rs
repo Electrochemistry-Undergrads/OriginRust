@@ -937,6 +937,21 @@ fn an_x_axis_offset_is_named_in_the_notes() {
 }
 
 #[test]
+fn a_paired_axis_is_named_in_the_notes() {
+    let mut p = source();
+    let c = ids(&p);
+    let id = p.plot_columns(Template::Line, &[c[1]]).unwrap();
+    let axis = &mut p.graph_mut(id).unwrap().layers[0].x_axis;
+    axis.show_opposite = true;
+    axis.opposite_ticks = true;
+    axis.opposite_offset_pct = Some(3.0);
+    let (imp, out) = round_trip(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("paired X axis' tick labels, title and offset")));
+    let axis = &imp.graphs[0].layers[0].x_axis;
+    assert!(axis.show_opposite && axis.opposite_offset_pct.is_none());
+}
+
+#[test]
 fn an_axis_at_a_position_is_named_in_the_notes() {
     // T243: Origin's "At Position =" is not written; the companion keeps it.
     let mut p = source();

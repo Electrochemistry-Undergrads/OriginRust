@@ -1485,6 +1485,35 @@ fn manhattan_plot_runs_from_the_command_line() {
     assert!(ok && out.contains("3 groups"), "the group from the X column: {err} {out}");
 }
 
+/// Distribution analysis with arbitrary censoring (spec `statistics.md` section 47, T384).
+#[test]
+fn distribution_analysis_with_arbitrary_censoring_runs_from_the_command_line() {
+    let dir = scratch("lifedist_interval");
+    let path = dir.join("ic.csv");
+    std::fs::write(&path, "id,start,stop\n1,,10\n2,10,20\n3,20,30\n4,5,5\n5,30,\n6,12,18\n7,8,15\n").unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "lifedist-interval", file, "--y", "start,stop"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("Weibull fit to 7 rows (1 exact, 1 right-, 1 left-, 4 interval-censored)")
+            && out.contains("LifeInterval1"),
+        "{out}"
+    );
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "lifedist-interval",
+        file,
+        "--y",
+        "start,stop",
+        "--distribution",
+        "exponential",
+        "--no-graph",
+    ]);
+    assert!(ok && out.contains("exponential fit"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "lifedist-interval", file, "--y", "start,stop", "--distribution", "gamma"]);
+    assert!(!ok && err.contains("--distribution"), "{err}");
+}
+
 /// Distribution overview of right-censored data (spec `statistics.md` section 37, T366).
 #[test]
 fn distribution_overview_runs_from_the_command_line() {
@@ -2669,4 +2698,37 @@ fn acceptance_sampling_designs_and_evaluates_plans_without_a_data_file() {
     assert!(std::fs::read_to_string(&csv).unwrap().lines().count() > 100);
     let (ok, _, err) = sheaf(&["analyze", "acceptance", "--aql", "0.1", "--ltpd", "0.05"]);
     assert!(!ok && err.contains("below LTPD"), "{err}");
+}
+
+/// `analyze mixture-design` (T386): a simplex centroid for two totals with lower bounds.
+#[test]
+fn mixture_design_for_two_totals() {
+    let dir = scratch("mixture");
+    let path = dir.join("m.csv");
+    std::fs::write(
+        &path, "y
+1
+",
+    )
+    .unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "mixture-design",
+        file,
+        "--y",
+        "y",
+        "--components",
+        "3",
+        "--centroid-design",
+        "--totals",
+        "1,100",
+        "--lower",
+        "0.1,0,0",
+        "--no-randomize",
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("3-component simplex centroid: 7 blends, totals 1, 100") && out.contains("A >= 0.1"), "{out}");
+    let (ok, _, err) = sheaf(&["analyze", "mixture-design", file, "--y", "y", "--lower", "0.6,0.5,0"]);
+    assert!(!ok && err.contains("nothing to vary"), "{err}");
 }

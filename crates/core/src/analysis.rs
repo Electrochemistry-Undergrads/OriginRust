@@ -67,7 +67,7 @@ pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
 pub use doe::{FactorialDesignSpec, FactorialEffectsSpec, SplitPlotDesignSpec, SplitPlotEffectsSpec};
 pub use expsmooth::{ExpSmoothSpec, SmoothModel};
 pub use forest::{ForestTask, RandomForestSpec};
-pub use lifedist::{LifeDist, LifeDistSpec};
+pub use lifedist::{LifeDist, LifeDistArbitrarySpec, LifeDistSpec};
 pub use manhattan::ManhattanSpec;
 pub use multivariate::{KmeansSpec, PcaSpec};
 pub use quantreg::QuantRegSpec;
@@ -75,6 +75,8 @@ pub use rarechart::{GLimits, RareChartKind, RareChartSpec, TDistribution};
 pub use roc::RocSpec;
 pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::PlotScores;
+/// What [`Tool::MixtureDesign`] makes (T386).
+pub use sheaf_calc::mixture::{MixtureKind, MixtureOptions as MixtureDesignSpec};
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
 pub use sheaf_calc::{CwtWavelet, Wavelet, WaveletExtension};
 pub use sheaf_fit::simulate::Spacing as SimulateSpacing;
@@ -1180,6 +1182,9 @@ pub enum Tool {
     /// Statistics > Survival Analysis > Distribution Overview Plot (T366, `docs/spec/statistics.md` section 37):
     /// time and censor columns.
     LifeDist(LifeDistSpec),
+    /// Statistics > Survival Analysis > Distribution Analysis (Arbitrary Censoring) (T384, `docs/spec/statistics.md`
+    /// section 47): start and end columns.
+    LifeDistArbitrary(LifeDistArbitrarySpec),
     /// Statistics > Stability Study (T368, `docs/spec/statistics.md` section 38): time, response and, optionally,
     /// batch columns.
     Stability(StabilitySpec),
@@ -1201,6 +1206,8 @@ pub enum Tool {
     /// Statistics > Design of Experiments > Two-Level Factorial Design (T380, `docs/spec/statistics.md` section 45):
     /// reads no data; the design goes to a new sheet.
     FactorialDesign(FactorialDesignSpec),
+    /// Mixture design: simplex lattice or centroid for one or more totals (T386).
+    MixtureDesign(MixtureDesignSpec),
     /// Statistics > Design of Experiments > Factorial Effects (T380): factor columns, then the response.
     FactorialEffects(FactorialEffectsSpec),
     /// Statistics > Two-Level Experiments > Split-Plot Design (T382): reads no data; the design goes to a new sheet.
@@ -1342,6 +1349,7 @@ impl Tool {
             Tool::RareChart(_) => "Rare event chart",
             Tool::Capability(_) => "Process capability",
             Tool::LifeDist(_) => "Distribution overview",
+            Tool::LifeDistArbitrary(_) => "Distribution analysis (arbitrary censoring)",
             Tool::Stability(_) => "Stability study",
             Tool::Decompose(_) => "Seasonal decomposition",
             Tool::Stationarity(_) => "Stationarity tests",
@@ -1349,6 +1357,7 @@ impl Tool {
             Tool::Arima(_) => "ARIMA forecast",
             Tool::RandomForest(_) => "Random forest",
             Tool::FactorialDesign(_) => "Two-level factorial design",
+            Tool::MixtureDesign(_) => "Mixture design",
             Tool::FactorialEffects(_) => "Factorial effects",
             Tool::SplitPlotDesign(_) => "Split-plot design",
             Tool::SplitPlotEffects(_) => "Split-plot effects",
@@ -1438,6 +1447,7 @@ impl Tool {
             Tool::RareChart(_) => "RareChart",
             Tool::Capability(_) => "Capability",
             Tool::LifeDist(_) => "LifeDist",
+            Tool::LifeDistArbitrary(_) => "LifeInterval",
             Tool::Stability(_) => "Stability",
             Tool::Decompose(_) => "Decompose",
             Tool::Stationarity(_) => "Stationarity",
@@ -1445,6 +1455,7 @@ impl Tool {
             Tool::Arima(_) => "ARIMA",
             Tool::RandomForest(_) => "RandomForest",
             Tool::FactorialDesign(_) => "Design",
+            Tool::MixtureDesign(_) => "Mixture",
             Tool::FactorialEffects(_) => "Effects",
             Tool::SplitPlotDesign(_) => "SplitPlot",
             Tool::SplitPlotEffects(_) => "SplitEffects",
@@ -2563,9 +2574,11 @@ impl Project {
                 | Tool::Manhattan(_)
                 | Tool::KaplanMeier(_)
                 | Tool::LifeDist(_)
+                | Tool::LifeDistArbitrary(_)
                 | Tool::Stability(_)
                 | Tool::RandomForest(_)
                 | Tool::FactorialDesign(_)
+                | Tool::MixtureDesign(_)
                 | Tool::FactorialEffects(_)
                 | Tool::SplitPlotDesign(_)
                 | Tool::SplitPlotEffects(_)
@@ -2767,6 +2780,12 @@ impl Project {
                 notes = out.notes;
                 xy_graph = out.graph;
             }
+            Tool::MixtureDesign(spec) => {
+                let out = doe::run_mixture(spec)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
             Tool::FactorialDesign(spec) => {
                 let out = doe::run_design(spec)?;
                 table = out.table;
@@ -2789,6 +2808,13 @@ impl Project {
             }
             Tool::Stability(spec) => {
                 let out = stability::run(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::LifeDistArbitrary(spec) => {
+                let out = lifedist::run_arbitrary(spec, sheet, &request.columns, request.rows)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;

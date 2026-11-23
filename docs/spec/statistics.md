@@ -2138,6 +2138,28 @@ Checked against numpy and scipy (`tools/doe-ref.py`, `crates/calc/tests/doe_refe
 full designs and two fractions with aliases) to 1e-10. Split-plot designs (hard-to-change factors, whole-plot error),
 fold-over, Plackett-Burman, response surfaces, half-normal plots and higher-order interactions are not built.
 
+## 45a Mixture designs (T386, Origin 2026b's "mixture designs with several totals"; not measured)
+
+Origin 2016 has no design of experiments; the designs are the textbook ones (Cornell, *Experiments with
+Mixtures*; `sheaf_calc::mixture`). Statistics > Design of Experiments > Mixture Design... (CLI `analyze
+mixture-design --components Q [--centroid-design] [--degree M] [--axial] [--centroid] [--replicates R]
+[--totals T1,T2] [--lower L1,L2,..] [--no-randomize] [--seed S]`; `Tool::MixtureDesign`):
+
+- Blends in pseudo-components `z` (each at least 0, summing to 1): the simplex lattice {q, m} takes every
+  `z` whose parts are multiples of `1/m` (in order from the first vertex); the simplex centroid takes, for
+  every non-empty subset of the components (by size), equal parts of the subset (`2^q - 1` blends).
+  Optional axial check blends: `(1 + q)/(2q)` of one component and `1/(2q)` of each other; optional
+  overall centroid `1/q` each, added only when missing.
+- Amounts: `x_i = L_i + (T - sum L) z_i` for each total `T` (several totals repeat the design once per
+  total, in the order given) and lower bounds `L_i` (0 by default; their sum must stay below every
+  total). Replicates repeat everything; the run order is the factorial designs' seeded shuffle.
+- Point types: Vertex, Binary blend, Blend of k, Overall centroid, Axial check blend.
+- Output: a table row (components, blends, totals, replicates, runs), a note with the design and the
+  bounds, and a new sheet: Run order (X), Standard order, Total, Point type (label), the components A,
+  B, ... and an empty Response. 2 to 10 components, lattice degree 1 to 10, at most 10000 runs.
+- Not built: upper bounds (extreme-vertex designs), mixture-process variables, the mixture model fits
+  (Scheffe polynomials); longer factor names (the other part of Origin's note) apply to the letters here.
+
 ## 46 Two-level split-plot designs and effects (T382, Origin 2027 Quality app; not measured)
 
 Origin 2027's two-level split-plot experiments are not part of Origin 2016, so this is Sheaf's own, on section 45.
@@ -2164,6 +2186,26 @@ Statistics > Two-Level Experiments:
 Checked against numpy and scipy (`tools/splitplot-ref.py`, `crates/calc/tests/splitplot_reference.rs`: two designs
 with whole-plot random effects) to 1e-10. Restricted maximum likelihood for unbalanced plots, fractional split-plot
 designs, split-split-plot designs and variance components are not built.
+
+## 47 Distribution analysis with arbitrary censoring (T384, Origin 2026b; not measured)
+
+Origin 2026b's distribution analysis with arbitrary censoring is not part of Origin 2016, so this is Sheaf's own,
+extending section 37. Statistics > Survival Analysis > Distribution Analysis (Arbitrary Censoring)...
+(`Tool::LifeDistArbitrary`, `sheaf analyze lifedist-interval --y START,END [--distribution
+weibull|lognormal|exponential|normal] [--no-graph]`): each row is the window in which a unit failed. Equal start and end
+mean an exact failure (`ln f(t)`), an empty end that it was still working at the start (right-censored, `ln S(t)`), an
+empty start that it failed before the end (left-censored, `ln F(t)`), otherwise that it failed between them
+(interval-censored, `ln(F(b) - F(a))`, taken from the nearer tail); rows with both cells empty are left out and a start
+after its end is refused. Times must be above 0 for the positive distributions (an interval may start at 0). The
+likelihood is maximized by Nelder-Mead on `(ln shape, ln scale)`, `(mu, ln sigma)` or `ln theta`, starting from the
+right-censored fit (section 37) of a pseudo sample (exact times, interval midpoints, left times halved) and restarted
+until it stops improving; with only exact and right-censored rows it gives section 37's fit. The result sheet
+`LifeIntervalN` has one row (N, Exact, Right-, Left- and Interval-censored counts, Parameter 1 and 2, Log-likelihood,
+AIC, Mean, Median); a new graph draws the fitted distribution function and survival in percent. Checked against scipy
+(`tools/interval-censor-ref.py`, `crates/calc/tests/interval_censor_reference.rs`: the log-likelihood at scipy's
+optimum to 1e-10, Sheaf's maximum no lower, parameters to 1e-5; scipy's own `fit(CensoredData)` agrees to 1e-3).
+Nonparametric (Turnbull) estimates, probability plots with interval data, frequency columns and life-data regression
+are not built.
 
 ## 5 Where results go (ADR 0005)
 

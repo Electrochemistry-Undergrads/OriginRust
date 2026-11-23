@@ -6,10 +6,20 @@ use eframe::egui;
 use sheaf_core::analysis::{
     AcfSpec, AdfTerms, ArimaSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty,
     ChangePointSpec, DecomposeModel, DecomposeSpec, ExpSmoothSpec, FactorialDesignSpec, FactorialEffectsSpec,
-    ForestTask, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistSpec, ManhattanSpec, PcaSpec,
-    PivotPeriod, PivotStat, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec, RocSpec, SmoothModel,
-    SplitPlotDesignSpec, SplitPlotEffectsSpec, StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec, Tool,
+    ForestTask, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistArbitrarySpec, LifeDistSpec,
+    ManhattanSpec, MixtureDesignSpec, MixtureKind, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec, RandomForestSpec,
+    RareChartKind, RareChartSpec, RocSpec, SmoothModel, SplitPlotDesignSpec, SplitPlotEffectsSpec, StabilitySpec,
+    StationaritySpec, TDistribution, TimePivotSpec, Tool,
 };
+
+/// Comma-separated numbers typed in a box (T386); empty text is no number.
+fn numbers(text: &str, what: &str) -> Result<Vec<f64>, String> {
+    text.split([',', ';'])
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map(|t| t.parse::<f64>().map_err(|_| format!("the {what} '{t}' is not a number")))
+        .collect()
+}
 
 /// What the windows keep between frames.
 #[derive(Default)]
@@ -28,6 +38,10 @@ pub struct MultiOptions {
     arima: ArimaSpec,
     forest: RandomForestSpec,
     design: FactorialDesignSpec,
+    /// Mixture Design (T386), with its totals and lower bounds as typed (comma separated).
+    mixture: MixtureDesignSpec,
+    mixture_totals: Option<String>,
+    mixture_lower: Option<String>,
     factorial: FactorialEffectsSpec,
     split_design: SplitPlotDesignSpec,
     split_effects: SplitPlotEffectsSpec,
@@ -35,6 +49,7 @@ pub struct MultiOptions {
     capability: CapabilitySpec,
     stability: StabilitySpec,
     life: LifeDistSpec,
+    life_any: LifeDistArbitrarySpec,
     /// The value of the Manual penalty while another penalty is chosen.
     manual_penalty: Option<f64>,
     /// The quantiles as typed (comma separated), read when the tool runs.
@@ -89,6 +104,7 @@ impl MultiOptions {
                 Ok(Tool::QuantReg(QuantRegSpec { quantiles, ..self.quantreg.clone() }))
             }
             AnalysisKind::TimePivot => Ok(Tool::TimePivot(self.timepivot)),
+            AnalysisKind::LifeDistArbitrary => Ok(Tool::LifeDistArbitrary(self.life_any)),
             AnalysisKind::LifeDist => {
                 if self.life.censor.trim().is_empty() {
                     return Err("give the censoring value".to_string());
@@ -117,6 +133,19 @@ impl MultiOptions {
             }
             AnalysisKind::Stationarity => Ok(Tool::Stationarity(self.stationarity)),
             AnalysisKind::FactorialDesign => Ok(Tool::FactorialDesign(self.design)),
+            AnalysisKind::MixtureDesign => {
+                let mut spec = self.mixture.clone();
+                if let Some(t) = &self.mixture_totals {
+                    spec.totals = numbers(t, "total")?;
+                    if spec.totals.is_empty() {
+                        spec.totals = vec![1.0];
+                    }
+                }
+                if let Some(t) = &self.mixture_lower {
+                    spec.lower = numbers(t, "lower bound")?;
+                }
+                Ok(Tool::MixtureDesign(spec))
+            }
             AnalysisKind::FactorialEffects => Ok(Tool::FactorialEffects(self.factorial)),
             AnalysisKind::SplitPlotDesign => Ok(Tool::SplitPlotDesign(self.split_design)),
             AnalysisKind::SplitPlotEffects => Ok(Tool::SplitPlotEffects(self.split_effects)),
@@ -261,6 +290,22 @@ impl MultiOptions {
                     "The exact solution of each quantile (the sum of check losses is as small as it can be); no standard errors.",
                 );
             }
+            AnalysisKind::LifeDistArbitrary => {
+                ui.label("The chosen columns are the start and the end of each failure window: equal for an exact failure, an empty end if it was still working, an empty start if it failed before the end.");
+                let s = &mut self.life_any;
+                ui.horizontal(|ui| {
+                    ui.label("Distribution");
+                    for (d, name) in [
+                        (LifeDist::Weibull, "Weibull"),
+                        (LifeDist::Lognormal, "Lognormal"),
+                        (LifeDist::Exponential, "Exponential"),
+                        (LifeDist::Normal, "Normal"),
+                    ] {
+                        ui.radio_value(&mut s.dist, d, name);
+                    }
+                });
+                ui.checkbox(&mut s.graph, "Fitted CDF and survival graph");
+            }
             AnalysisKind::LifeDist => {
                 let s = &mut self.life;
                 ui.label("The chosen columns are the time and the censor column.");
@@ -370,6 +415,43 @@ impl MultiOptions {
                     ui.add(egui::DragValue::new(&mut s.sigma).speed(0.05).range(0.5..=6.0));
                 });
                 ui.checkbox(&mut s.graph, "Control chart per column");
+            }
+            AnalysisKind::MixtureDesign => {
+                ui.label("The design goes to a new sheet; the chosen column only says which book.");
+                let s = &mut self.mixture;
+                ui.horizontal(|ui| {
+                    ui.label("Components");
+                    ui.add(egui::DragValue::new(&mut s.components).range(2..=10));
+                    ui.radio_value(&mut s.kind, MixtureKind::SimplexLattice, "Simplex lattice, degree");
+                    ui.add_enabled(
+                        s.kind == MixtureKind::SimplexLattice,
+                        egui::DragValue::new(&mut s.degree).range(1..=10),
+                    );
+                    ui.radio_value(&mut s.kind, MixtureKind::SimplexCentroid, "Simplex centroid");
+                });
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut s.axial, "Axial check blends");
+                    ui.checkbox(&mut s.centroid, "Overall centroid");
+                    ui.label("Replicates");
+                    ui.add(egui::DragValue::new(&mut s.replicates).range(1..=100));
+                });
+                let totals = self
+                    .mixture_totals
+                    .get_or_insert_with(|| s.totals.iter().map(|t| t.to_string()).collect::<Vec<_>>().join(", "));
+                ui.horizontal(|ui| {
+                    ui.label("Totals (one design per total)");
+                    ui.add(egui::TextEdit::singleline(totals).desired_width(140.0));
+                });
+                let lower = self.mixture_lower.get_or_insert_with(String::new);
+                ui.horizontal(|ui| {
+                    ui.label("Lower bounds A, B, ... (empty: 0)");
+                    ui.add(egui::TextEdit::singleline(lower).desired_width(140.0));
+                });
+                let s = &mut self.mixture;
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut s.randomize, "Randomize the run order, seed");
+                    ui.add_enabled(s.randomize, egui::DragValue::new(&mut s.seed));
+                });
             }
             AnalysisKind::FactorialDesign => {
                 ui.label("The design goes to a new sheet; the chosen column only says which book.");

@@ -3475,6 +3475,41 @@ pub enum AnalyzeTool {
         #[arg(long, default_value_t = 1)]
         seed: u64,
     },
+    /// Mixture design: a simplex lattice {q, m} or simplex centroid design (optionally with axial check blends and
+    /// the overall centroid) for one or more totals and lower bounds, in a new sheet; --y only says which book.
+    MixtureDesign {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Number of components q.
+        #[arg(long, default_value_t = 3)]
+        components: usize,
+        /// Simplex centroid instead of the simplex lattice.
+        #[arg(long)]
+        centroid_design: bool,
+        /// Lattice degree m.
+        #[arg(long, default_value_t = 2)]
+        degree: usize,
+        /// Add the axial check blends.
+        #[arg(long)]
+        axial: bool,
+        /// Add the overall centroid.
+        #[arg(long)]
+        centroid: bool,
+        #[arg(long, default_value_t = 1)]
+        replicates: usize,
+        /// The totals the components add up to, comma separated (one design per total).
+        #[arg(long, value_delimiter = ',', default_value = "1")]
+        totals: Vec<f64>,
+        /// Lower bound of each component, comma separated (default all 0).
+        #[arg(long, value_delimiter = ',')]
+        lower: Vec<f64>,
+        /// Keep the standard order instead of shuffling the runs.
+        #[arg(long)]
+        no_randomize: bool,
+        /// Seed of the run order.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+    },
     /// Factorial effects: --y FACTOR[,FACTOR..],RESPONSE; effects of the main factors and two-factor interactions,
     /// t tests when there is an error estimate, Lenth's margin otherwise, with an effects graph.
     FactorialEffects {
@@ -3669,6 +3704,18 @@ pub enum AnalyzeTool {
         /// Significance level of the poolability tests.
         #[arg(long, default_value_t = 0.25)]
         alpha: f64,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
+    /// Distribution analysis with arbitrary censoring: --y START,END; equal = exact, empty end = right-censored, empty
+    /// start = left-censored, otherwise interval-censored; Weibull, lognormal, exponential or normal maximum likelihood.
+    LifedistInterval {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// weibull, lognormal, exponential or normal.
+        #[arg(long, default_value = "weibull")]
+        distribution: String,
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,

@@ -1687,6 +1687,7 @@ fn plot_menu() -> Vec<Entry> {
                 item("Sunburst Plot", Cmd::Plot(Template::Sunburst)),
                 item("Sankey Diagram", Cmd::Plot(Template::Sankey)),
                 item("Alluvial Diagram", Cmd::Plot(Template::Alluvial)),
+                item("Network Plot", Cmd::Plot(Template::Network)),
                 item("Cause-and-Effect Diagram", Cmd::Plot(Template::Fishbone)),
             ],
         ),
@@ -2110,6 +2111,7 @@ fn statistics_menu() -> Vec<Entry> {
             vec![
                 item("Kaplan-Meier Estimator...", Cmd::Analyze(AnalysisKind::KaplanMeier)),
                 item("Distribution Overview Plot...", Cmd::Analyze(AnalysisKind::LifeDist)),
+                item("Distribution Analysis (Arbitrary Censoring)...", Cmd::Analyze(AnalysisKind::LifeDistArbitrary)),
             ],
         ),
         sub(
@@ -2143,6 +2145,7 @@ fn statistics_menu() -> Vec<Entry> {
             "T&wo-Level Experiments",
             vec![
                 item("Factorial Design...", Cmd::Analyze(AnalysisKind::FactorialDesign)),
+                item("Mixture Design...", Cmd::Analyze(AnalysisKind::MixtureDesign)),
                 item("Factorial Effects...", Cmd::Analyze(AnalysisKind::FactorialEffects)),
                 item("Split-Plot Design...", Cmd::Analyze(AnalysisKind::SplitPlotDesign)),
                 item("Split-Plot Effects...", Cmd::Analyze(AnalysisKind::SplitPlotEffects)),

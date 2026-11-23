@@ -2081,6 +2081,9 @@ pub enum PlotKind {
     /// A Sankey diagram (Origin 2020, T379): the plot's Y column is the flow, the source and target columns of its
     /// [`SankeyStyle`] the nodes (graphing spec 14.32).
     Sankey,
+    /// A network plot (Origin 2021b, T383): nodes and edges from the source and target columns of the plot's
+    /// [`SankeyStyle`], weighted by its Y column (1 per row when that is not numeric) (graphing spec 14.33).
+    Network,
     /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
     /// from 12 o'clock, each labelled with its share. The layer draws no axes.
     Pie,

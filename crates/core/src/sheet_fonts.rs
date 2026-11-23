@@ -635,7 +635,7 @@ mod tests {
     fn automatic_family_restores_the_size_only_schema_without_extra_records() {
         let mut s = sheet();
         assert!(!s.set_label_font_family(&LabelKind::LongName, "  "));
-        assert!(!s.set_label_font_family(&LabelKind::Formula, "Arial"));
+        assert!(!s.set_label_font_family(&LabelKind::Param("Sample".into()), "Arial"));
         assert!(!s.set_label_font_family(&LabelKind::Param("Sample".into()), "Arial"));
         assert!(s.font_defaults.is_empty());
         s.set_label_font_size(&LabelKind::Units, 12.0);

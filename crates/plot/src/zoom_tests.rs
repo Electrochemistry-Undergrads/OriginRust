@@ -52,7 +52,7 @@ fn the_lower_layer_shows_the_region_of_the_rectangle_and_follows_it() {
 }
 
 /// Data > Analysis Markers (T135): Hide removes the markers, Show Partial Ranges keeps only markers that
-/// leave rows out, and the size sets the I-beam's height.
+/// leave rows out, and the size sets the length of the bar at the point (T390: Origin's red full-height lines).
 #[test]
 fn analysis_markers_hide_partial_and_size() {
     use sheaf_core::data_markers::{MarkerShow, MarkerSize};
@@ -65,7 +65,7 @@ fn analysis_markers_hide_partial_and_size() {
     let plain = count(&p);
     assert!(p.mark_data_range(g, 0, 0));
     let marked = count(&p);
-    assert_eq!(marked, plain + 2, "two I-beams over the whole range");
+    assert_eq!(marked, plain + 2, "two markers over the whole range");
     p.graph_mut(g).unwrap().set_marker_display(Some(MarkerShow::PartialRanges), None);
     assert_eq!(count(&p), plain, "markers over every row are not a partial range");
     p.graph_mut(g).unwrap().set_data_markers(0, 0, 2, 9);
@@ -75,13 +75,17 @@ fn analysis_markers_hide_partial_and_size() {
     p.graph_mut(g).unwrap().set_marker_display(Some(MarkerShow::All), None);
     let s = layout::build_scene(&p, g, &FixedMetrics).unwrap();
     let beam = s.layers[0].plots.iter().rev().find_map(|it| match it {
-        scene::Item::Path { d, fill: None, stroke: Some(st) } if st.width == 1.0 => {
+        scene::Item::Path { d, fill: None, stroke: Some(st) }
+            if st.width == 1.0 && st.color == sheaf_core::Color::rgb(255, 0, 0) =>
+        {
             Some(d.split(['M', 'L', ' ']).filter_map(|t| t.parse::<f64>().ok()).collect::<Vec<_>>())
         }
         _ => None,
     });
     let beam = beam.unwrap();
-    assert!(((beam[3] - beam[1]) - 36.0).abs() < 1e-9, "Large is 36 pt: {beam:?}");
+    // M x top L x bottom M x-h y L x+h y: the line spans the frame, the bar is a third of Large's 36 pt.
+    assert!(beam[0] == beam[2] && beam[3] - beam[1] > 300.0, "a vertical line across the layer: {beam:?}");
+    assert!(((beam[6] - beam[4]) - 12.0).abs() < 1e-9, "Large's bar is 12 pt: {beam:?}");
 }
 
 /// Graph > New Table (T136): a table label is a grid whose rectangle is the clickable object.

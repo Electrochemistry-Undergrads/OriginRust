@@ -120,7 +120,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T115](T115-smith-chart.md) | Plot > Specialized > Smith Chart | M | done 2026-11-16 (graphing 37), measured by T385 (Origin COM unregistered); left: measure and match |
 | [T116](T116-kernel-density-2d.md) | Plot > Statistics > 2D Kernel Density | M | done 2026-11-16 (graphing 38); grid and bandwidths measured and matched by T289; left: contour drawing, points shown, method choice |
 | [T117](T117-piper.md) | Plot > Specialized > Piper | M | done 2026-11-16 (graphing 39), measured by T389 (Origin COM unregistered); left: measure and match |
-| [T118](T118-data-markers.md) | Graph Data menu: Set Display Range, Reset to Full Range, Mark Data Range, Clear Data Markers (B3 slice) | M | done 2026-11-16 (graphing 40), not measured (Origin COM unregistered); left: measure and match |
+| [T118](T118-data-markers.md) | Graph Data menu: Set Display Range, Reset to Full Range, Mark Data Range, Clear Data Markers (B3 slice) | M | done 2026-11-16 (graphing 40), marker look measured by T390 (Origin COM unregistered); left: measure and match |
 | [T119](T119-add-function-graph.md) | Graph > Add Function Graph... (B3 slice) | S | done 2026-11-16 (graphing 41), not measured (Origin COM unregistered); left: measure and match |
 | [T120](T120-conditional-heatmap.md) | Worksheet > Conditional Formatting > Conditional Heatmap... (B7 slice) | M | done 2026-11-17 (gui-look "Conditional Heatmap"), not measured; left: Other Colors mixing, Load Palette |
 | [T121](T121-conditional-outliers-pareto.md) | Conditional Formatting > Conditional Outliers and Conditional Pareto (B7 slice) | S | done 2026-11-17 (gui-look "Conditional Pareto and Conditional Outliers"), not measured |
@@ -420,6 +420,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T39](T39-plot-sort-x.md) | Line plots connected in X order without sorting the sheet | M | done 2026-11-15 (graphing 18.9, `plot-sort-x`, macOS); left: Origin's effect on symbols, fills, missing values, ties and splines unmeasured |
 | [T385](T385-smith-measure.md) | Measure Smith Chart against Origin (grid, labels, line plot) | S | done 2026-11-22 (graphing 37) |
 | [T389](T389-piper-measure.md) | Measure Piper diagram against Origin (grids, side labels, titles, sample symbols) | S | done 2026-11-23 (graphing 39) |
+| [T390](T390-markers-measure.md) | Measure graph Data > Mark Data Range against Origin (red lines across the layer) | S | done 2026-11-23 (graphing 40) |
 | [T40](T40-graphical-summary.md) | Graphical Summary: statistics, CIs, Anderson-Darling and charts per variable/group | L | done 2026-11-15 (statistics.md 22); left: three other arrangements, Origin layout unmeasured |
 | [T41](T41-rug-plot.md) | Rug plots: Axis dialog Rug tab and Scatter + Rug template | M | done 2026-11-15 (graphing 18.10); left: Origin defaults unmeasured, rug hit-testing |
 | [T42](T42-window-switcher.md) | Window Switcher: Ctrl+Tab through child windows with previews | M | done 2026-11-15 (`window-switcher`, macOS) |

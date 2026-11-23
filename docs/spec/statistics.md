@@ -2263,7 +2263,7 @@ outlier wells and Western blot densitometry are not built.
 
 ## 51 Monte Carlo simulation (T393, Origin 2027's Monte Carlo app; Sheaf's own, not measured)
 
-Statistics > Monte Carlo Simulation (Random Variates)... (CLI `analyze monte-carlo FILE --y Y --input NAME=DIST(...) [--input ...]
+Statistics > Monte Carlo Simulation (Randomize Inputs)... (CLI `analyze monte-carlo FILE --y Y --input NAME=DIST(...) [--input ...]
 --formula EXPR [--samples N] [--seed S] [--lsl L] [--usl U]`; `Tool::MonteCarlo`, `sheaf_calc::montecarlo`):
 
 - **Inputs**, one per line in the window: `name = normal(mean, sd)`, `uniform(low, high)`, `lognormal(mu, sigma)`

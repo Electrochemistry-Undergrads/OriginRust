@@ -2,6 +2,7 @@
 //! and the geometry of the other kinds.
 
 use super::*;
+use sheaf_core::graph::LayerElementScale;
 use sheaf_core::layers::NewLayerKind;
 use sheaf_core::template::Template;
 
@@ -39,4 +40,47 @@ fn every_kind_of_layer_renders() {
         let svg = super::tests::svg_of(&p, g);
         assert!(svg.contains("<svg"), "{kind:?}");
     }
+}
+
+#[test]
+fn element_scale_reflows_fonts_and_pens_in_the_scene_without_editing_the_source() {
+    use crate::scene::Item;
+
+    let (mut p, g) = with_inset(NewLayerKind::InsetWithData);
+    let layer = &mut p.graph_mut(g).unwrap().layers[1];
+    layer.x_axis.title = Some("Inset Axis".into());
+    layer.x_axis.title_font.size_pt = 20.0;
+    layer.plots[0].line.width_pt = 4.0;
+    let render = |p: &Project| {
+        let scene = graph_scene(p, g).unwrap();
+        let layer = &scene.layers[1];
+        let font = layer.overlay.iter().find_map(|item| match item {
+            Item::Text(t) if t.text == "Inset Axis" => Some(t.size),
+            _ => None,
+        });
+        let pen = layer.plots.iter().find_map(|item| match item {
+            Item::Path { stroke: Some(s), .. } => Some(s.width),
+            _ => None,
+        });
+        assert_eq!(layer.clip, layout_geometry(p, g).unwrap()[1].frame);
+        (font.unwrap(), pen.unwrap())
+    };
+    assert_eq!(render(&p), (20.0, 4.0));
+    p.graph_mut(g).unwrap().layers[1].element_scale = LayerElementScale::Fixed(0.75);
+    assert_eq!(render(&p), (15.0, 3.0));
+    p.graph_mut(g).unwrap().layers[0].frame.width *= 0.5;
+    assert_eq!(render(&p), (15.0, 3.0));
+
+    p.graph_mut(g).unwrap().layers[1].element_scale = LayerElementScale::WithLayerFrame;
+    let check_auto = |p: &Project| {
+        let (font, pen) = render(p);
+        let expected = LayerElementScale::WithLayerFrame.factor(p.graph(g).unwrap().page_frame(1));
+        assert_eq!((font, pen), (20.0 * expected, 4.0 * expected));
+        font
+    };
+    let before = check_auto(&p);
+    p.graph_mut(g).unwrap().layers[0].frame.width *= 2.0;
+    assert!(check_auto(&p) > before);
+    let layer = &p.graph(g).unwrap().layers[1];
+    assert_eq!((layer.x_axis.title_font.size_pt, layer.plots[0].line.width_pt), (20.0, 4.0));
 }

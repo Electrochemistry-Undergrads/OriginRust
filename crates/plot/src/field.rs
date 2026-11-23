@@ -465,7 +465,9 @@ fn draw_cells(out: &mut Vec<Item>, field: &FieldPlot, grid: &FieldGrid, geom: &L
             }
             let color = match band {
                 Ok(k) => band_color(field.palette, k, n),
-                Err(above) => out_of_range_color(field.palette, above),
+                Err(above) => {
+                    field.above_color.filter(|_| above).unwrap_or_else(|| out_of_range_color(field.palette, above))
+                }
             };
             let (left, right) = (across(cols[i]).0, across(cols[end - 1]).1);
             if [left, right, top, bottom].iter().all(|v| v.is_finite()) {
@@ -721,7 +723,7 @@ fn draw_scale(out: &mut Vec<Item>, field: &FieldPlot, grid: &FieldGrid, geom: &L
     // The cells beyond the scale.
     out.push(Item::Rect {
         rect: Rect { x: bar_x, y: f.y, w: bar_w, h: end },
-        fill: Some(out_of_range_color(field.palette, true)),
+        fill: Some(field.above_color.unwrap_or_else(|| out_of_range_color(field.palette, true))),
         stroke: None,
     });
     out.push(Item::Rect {

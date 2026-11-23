@@ -3343,6 +3343,27 @@ the sheet's first two text columns; in the app the selected text columns, else t
   the weight column with a warning.
 - Not done: directed arrows, node grouping colours, other layouts, label collision avoidance, Origin's Plot Details.
 
+### 14.34 Chord diagram (T402, Origin 2021 feature, Sheaf's look, not measured)
+
+Plot > Categorical > Chord Diagram and `sheaf plot FILE -t chord [--group SOURCE,TARGET] [-y WEIGHT]`
+(`PlotKind::Chord`, `Template::Chord`, `Project::plot_chord`; layout `sheaf_calc::chord`, drawing
+`crates/plot/src/chord.rs`): the same columns as a network plot (14.33), kept in `Plot::sankey` (source, target);
+every row is a flow from the source's name to the target's, of the weight column's value or 1.
+
+- Nodes are the names in order of first appearance. Rows of the same source and target are one flow (summed); A to
+  B and B to A are two flows. Empty names and missing or non-positive weights are left out; a row from a name to
+  itself is a flow that leaves and returns to its own arc.
+- Each node's arc takes a share of the circle in proportion to its outgoing plus incoming flows, clockwise from
+  the top in node order, with 2 degree gaps (smaller with so many nodes that the gaps would take over half the
+  circle). Within an arc the outgoing flows come first (by target), then the incoming ones (by source).
+- The ring of arcs is drawn from 0.40 to 0.43 of the frame's shorter side from its centre, each arc in the layer
+  palette's colour (node order) with a white outline. Each flow is a ribbon from its part of the source's arc to
+  its part of the target's, curving through the centre, in the source's colour at 65 % opacity. Names sit 4 pt
+  outside the middle of their arcs in the X axis tick font at 0.8 of its size (on the left half ending there). No
+  axes, no legend. The `.opj` writer saves a column plot of the weight column with a warning.
+- Not done: a matrix as the input, directed arrow heads, ticks and values round the ring, label rotation, Origin's
+  Plot Details.
+
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
 Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin. Where the current online help **[W]** and Origin disagree, Origin decides.
@@ -4009,8 +4030,33 @@ is the default for Sheaf projects to preserve existing rendering when a saved
 file predates the option. The Display tab's Apply and Undo update the working
 preview, and OK commits the page choice in one project Undo step. The `.sheaf`
 file and the Origin project companion save the choice. Sheaf's raw `.opj` writer
-reports the omitted flag when exporting the composite choice. Scale Elements
-remains open.
+reports the omitted flag when exporting the composite choice.
+
+**Scale Elements** changes the selected layers. In Origin 2016, a stock Line
+layer started at 68.16 × 71.83% of the page with `layer.fixed=0` and
+`layer.factor=1`. Halving only its width kept factor 1. Halving only its
+height gave 0.65, and halving both sides gave 0.46. Fixed Factor 0.75
+survived a resize. The axis title and legend still reported their authored
+22 pt sizes. The two prominent EMF font heights changed from 91 and 75
+units at factor 1 to 42 and 34 at 0.46 and to 69 and 56 at 0.75. The
+curve pen changed from 7 units to 3 and 5. Restoring the auto-scaled
+stock frame restored the original font heights and pen widths.
+[Origin Display tab](https://docs.originlab.com/origin-help/laymanage-displaytab/) · [LabTalk layer properties](https://docs.originlab.com/labtalk/ref/layer-obj/)
+
+Sheaf's **Scale with Layer Frame** fits the measured factors with the
+square root of the nominal frame area divided by 0.7554. The area uses page
+fractions, including the parent frame for a linked layer. For frames narrower
+than 68.5% and shorter than 71%, it rounds the factor to hundredths with a
+minimum of 0.10. At either threshold it uses 1. These bounds and the area
+formula are a fit to the measured cases. **Fixed Factor** accepts 0.05 through
+20 and stays constant through resize. The default is Fixed Factor 1 to
+preserve existing Sheaf graphs. The factor scales supported axis, legend,
+free-text and data-label fonts, axis lines, ticks and grids, and plot pens,
+symbols and error caps through the shared scene layout. The authored sizes
+stay available for editing. Apply stages the selected layers, Undo restores
+the previous preview, and OK commits one project Undo step. The `.sheaf`
+file and `.opj.sheaf` companion store the mode. Bare `.opj` reports the
+omission and writes the authored styles.
 
 **Fit Page to Layers** (`pfit2l`; Margin Control Border (default) or Tight, Border Width 5, Adjust
 Direction Height and Width (default), Height Only, Width Only), measured on the stock page: the
@@ -5784,7 +5830,7 @@ Implemented in `crates/core/src/multi_y.rs` (plans, options), `Template::Multi3Y
 
 - **Templates** take the frames, sides, offsets and colours of the table in 21.5 (`MultiYKind::plan`). Layer 1 is the root with the bottom X axis; every other layer is linked to it with a straight X scale and its own Y scale, covers it and shows only its Y axis. The box is open, the Y axes have no titles, each axis takes its plot's colour, one legend in layer 1 lists every plot. **Provisional deviation:** layer 3 of Y-YY is linked to layer 1, not to layer 2 (Sheaf links only to an unlinked layer; the X range is the same either way).
 - **Columns** go to layer *i* mod *N* (21.5), N = 3 or 4. Fewer columns than layers still make every layer (Origin did the same, no message); the empty layers draw their axis with a 0 to 1 scale. No column at all is refused ("a multiple Y axes graph needs at least one Y column"). `--y2` and `--panels` are refused with these templates.
-- **Colours**: the layer's colour first, then Origin's colour list without it, so a second plot in the layer takes the next colour. The stock legend anchors, logical font sizes and background are measured and implemented in 21.12; shared spacing and extra-column membership remain provisional.
+- **Colours**: the layer's colour first, then Origin's colour list without it, so a second plot in the layer takes the next colour. Section 21.12 records the stock legend anchors, font sizes, spacing and membership.
 - **Multiple Y Axes...** follows 21.6: Plot Type (Line, Scatter, Line + Symbol; Custom is not offered), Number of Left/Right Y Axes with Auto (floor(N/2) left, rest right), Add Middle Y Axis (-50 %), Number of Plots in Each Layer (the sum must equal the number of columns, a layer cannot be empty), Link Axis Color to Plot, Show Y Title, Show Top X Axis (line and ticks only; tick labels on the top axis are not drawn), Y Axes Gap (Auto 10, and 14 when Y titles or the top X axis are on: which of the options causes it is **unmeasured**, Sheaf uses titles or top X; `axiscolor:=0` alone is unmeasured). The first frame is centred with the outward offsets by the formula of 21.6; one Y column makes an ordinary graph with a left axis and the frame at 17.91 %. A count of axes that does not fit the number of layers is reported in the dialog and nothing is made. The Preview button and `hide` are not built.
 - **Files**: `.sheaf` keeps `offset_pct` and the layer links. The `.opj` writer writes one ordinary layer per Y axis but no axis position; the save names "the position of a Y axis away from the frame" so the `.opj.sheaf` companion keeps it (ADR 0008). CLI and MCP have the four template names only; the Multiple Y Axes options are in the app.
 - Goldens: `crates/plot/tests/golden/multi-y-3ys-y-yy.svg`, `-3ys-y-y-y`, `-4ys-y-yyy`, `-4ys-yy-yy` and `multi-y-multiple-axes.svg`.
@@ -5833,13 +5879,35 @@ annotation rectangle using its top-left plus half its width/height, and warns th
 anchor was written as a fixed position. A bare native reopen therefore has the existing
 centre-based representation; the companion restores dynamic top-left placement.
 
-This closes the provisional **anchor/font/background** defaults in 21.11. It does not
-establish exact native row spacing, padding or symbol lengths: those still use Sheaf's
-shared legend metrics. Native raw template text references the first plot of each layer,
-but the five-column export showed additional labels not explained by the raw text readback;
-extra-column legend membership and empty-layer row translation remain follow-ups. The
-existing automatic graph-wide legend contents are unchanged. No layer assignment, axes,
-links, dialog-plan defaults or worksheet behavior is changed here.
+**Legend entries and spacing (Origin 2016, 2026-11-23).** A fresh set of 24 EMF exports
+used independently named selections of 1, 2, N, 5, 6 and 8 Y columns for each N-axis template.
+`layer -c` confirmed the round-robin plot assignments. The visible legend starts with the
+first plot of each populated layer, followed by the extra plots in the first layer. With
+eight plots, both three-axis templates show selection positions 1, 2, 3, 4 and 7. Both
+four-axis templates show positions 1, 2, 3, 4 and 5. Empty layers contribute no row. The
+raw legend text reports only the first-plot references even after export.
+[Origin legend substitution notation](https://docs.originlab.com/labtalk/ref/legend-substitution-notation/)
+
+Twelve more exports checked plot visibility and edits in one template of each size.
+Hiding the first plot of layer 2 removes its row until it is shown again. Removing
+that plot promotes the next plot in layer 2. Adding a plot to layer 1 appends a row.
+Adding one to layer 2 leaves the selected rows as they were.
+
+| Stock template | Font height (EMF units) | Baseline step | Sample length | Gap after sample |
+|---|---:|---:|---:|---:|
+| 3Ys Y-YY | 91 | 111 | 202 | 25 |
+| 3Ys Y-Y-Y | 90 | 109 | 198 | 25 |
+| 4Ys Y-YYY | 80 | 98 | 178 | 22 |
+| 4Ys YY-YY | 84 | 103 | 188 | 23 |
+
+The eight-plot exports provide the sample and gap measurements. The baseline step is
+constant in the multirow exports of each template. Sheaf uses the measured membership
+rule and ratios of 1.22 font heights for the baseline step, 2.22 for the line sample and
+0.275 for the gap. An explicitly edited legend can refer to any visible plot by its
+layer and plot number. Existing graphs and independently constructed Multiple Y Axes
+plans use ordinary legend defaults. The Sheaf project and OPJ companion save the stock
+legend settings. A bare OPJ export writes the selected rows as text references, using
+`@LG` for the plot's column name and units.
 
 ### 21.13 Reversible layer visibility (T61 follow-up, 2026-11-16)
 

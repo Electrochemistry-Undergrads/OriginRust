@@ -61,6 +61,25 @@ fn graph_with(p: &mut Project, template: Template, plots: &[(usize, usize)], f: 
 }
 
 #[test]
+fn stock_multi_y_legend_in_opj_keeps_selected_rows_and_their_order() {
+    let mut p = source();
+    let book = p.workbooks().next().unwrap().id;
+    let c = ids(&p);
+    let extra = p.add_column(book, 0, Designation::Y, nums(vec![1.0; 11])).unwrap();
+    let last = p.add_column(book, 0, Designation::Y, nums(vec![2.0; 11])).unwrap();
+    let id = p.plot_columns(Template::Multi3YYy, &[c[1], c[2], c[3], extra, last]).unwrap();
+    p.graph_mut(id).unwrap().layers[1].plots[0].visible = false;
+
+    let out = write_named(&p, "g", TIME).unwrap();
+    assert!(out.warnings.iter().any(|w| w.contains("stock multi-Y legend's current rows")));
+    let imported = read_opj_from(Cursor::new(&out.bytes), Path::new("stock-legend.opj")).unwrap();
+    let text = imported.graphs[0].layers[0].legend.text.as_deref().unwrap();
+    let rows: Vec<_> = text.lines().collect();
+    assert_eq!(rows, [r"\l(1.1) %(1.1,@LG)", r"\l(3.1) %(3.1,@LG)", r"\l(1.2) %(1.2,@LG)"]);
+    assert_eq!(imported.graphs[0].layers[0].legend.scope, LegendScope::Graph);
+}
+
+#[test]
 fn an_underlined_title_is_written_with_origins_underline_markup() {
     // T293: as bold is written as \b(..).
     let mut p = source();

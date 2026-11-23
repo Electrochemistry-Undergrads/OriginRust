@@ -59,6 +59,7 @@ mod qc_plot;
 pub mod smith;
 mod space3d;
 pub use space3d::space3d_scales;
+mod chord;
 mod network;
 mod sankey;
 mod stack;
@@ -496,7 +497,8 @@ pub fn place_zoom_regions(project: &mut Project, graph: WindowId) {
 }
 
 pub fn layout_geometry(project: &Project, graph: WindowId) -> Result<Vec<LayerGeometry>, PlotError> {
-    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
+    let styled = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?.scaled_layer_elements();
+    let g = styled.as_ref();
     let pds = data::collect_graph(project, g);
     Ok(layout::graph_geometry(project, g, &pds, SystemFonts::shared()))
 }
@@ -572,11 +574,13 @@ pub fn legend_text(project: &Project, graph: WindowId, layer: usize) -> Result<S
 /// The automatic text of the legend of layer `layer`, which "Refresh legend" goes back to.
 pub fn legend_automatic_text(project: &Project, graph: WindowId, layer: usize) -> Result<String, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
-    if layer >= g.layers.len() {
-        return Err(PlotError::NoSuchLayer(layer));
-    }
-    let counts: Vec<usize> = g.layers.iter().map(|l| data::collect(project, l).plots.len()).collect();
-    Ok(sheaf_core::graph::Legend::automatic_text(&legend::ids(g, layer, &|j| counts[j])))
+    let l = g.layers.get(layer).ok_or(PlotError::NoSuchLayer(layer))?;
+    let ids = g.legend_ids_by_slot(layer, |j| {
+        let member = &g.layers[j];
+        let data = data::collect(project, member);
+        legend::plot_slots(member, &data.plots, l.legend.stock_multi_y)
+    });
+    Ok(l.legend.default_text(layer, &ids))
 }
 
 /// The scene of a graph, with the pickable objects that [`hit::hit_test`] looks at, measured

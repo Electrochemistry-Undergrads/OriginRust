@@ -33,7 +33,8 @@ use sheaf_core::{Project, WindowId};
 
 /// Builds the scene of a graph.
 pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasurer) -> Result<Scene, PlotError> {
-    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
+    let styled = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?.scaled_layer_elements();
+    let g = styled.as_ref();
     let pds: Vec<LayerData> = data::collect_graph(project, g);
     let geoms = graph_geometry(project, g, &pds, m);
     let x_titles = title_places(project, g, &geoms, &pds, Dim::X, m);
@@ -81,7 +82,8 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
         {
             let entries: Vec<&PlotData> = g.same_frame(i).into_iter().flat_map(|j| pds[j].plots.iter()).collect();
             let start = last.overlay.len();
-            let ids = legend::ids(g, i, &|j| pds[j].plots.len());
+            let ids = g
+                .legend_ids_by_slot(i, |j| legend::plot_slots(&g.layers[j], &pds[j].plots, layer.legend.stock_multi_y));
             draw_legend(
                 &mut last.overlay,
                 project,
@@ -91,7 +93,7 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
                 &ids,
                 &edge_ticks(g, i),
                 m,
-                &layer.plots,
+                (i, &layer.plots),
             );
             hit::record(&mut last.objects, &last.overlay, start, ObjectKind::Legend, i, ItemList::Overlay, &[], m);
         }
@@ -1201,8 +1203,18 @@ fn draw_legend_and_labels(
         if layer.legend.scope == LegendScope::Layer {
             let entries: Vec<&PlotData> = pds.iter().collect();
             let start = out.len();
-            let ids: Vec<String> = (1..=entries.len()).map(|k| k.to_string()).collect();
-            draw_legend(out, project, &layer.legend, f, &entries, &ids, &edge_ticks(g, index), m, &layer.plots);
+            let ids = g.legend_ids_by_slot(index, |_| legend::plot_slots(layer, pds, layer.legend.stock_multi_y));
+            draw_legend(
+                out,
+                project,
+                &layer.legend,
+                f,
+                &entries,
+                &ids,
+                &edge_ticks(g, index),
+                m,
+                (index, &layer.plots),
+            );
             rec(objects, out, start, ObjectKind::Legend, &[]);
         }
     };
@@ -1230,12 +1242,13 @@ fn draw_legend_and_labels(
                 frame: false,
                 background: None,
                 columns: 1,
+                stock_multi_y: false,
                 text: Some(label.text.clone()),
                 ..layer.legend.clone()
             };
             let entries: Vec<&PlotData> = pds.iter().collect();
             let ids: Vec<String> = (1..=entries.len()).map(|k| k.to_string()).collect();
-            draw_legend(out, project, &lg, f, &entries, &ids, &edge_ticks(g, index), m, &layer.plots);
+            draw_legend(out, project, &lg, f, &entries, &ids, &edge_ticks(g, index), m, (index, &layer.plots));
             rec(objects, out, start, ObjectKind::Label(k), &[]);
             continue;
         }
@@ -2124,7 +2137,7 @@ struct LegendRow {
 
 /// Draws legend `lg` inside frame `f`: one row per entry line (the automatic text has one
 /// line per plot), in `lg.columns` columns filled top to bottom. `ids` name the entries as
-/// `\l(n)` and `%(n)` refer to them. `owner_plots` supplies the layer-local colors for `\cpN`.
+/// `\l(n)` and `%(n)` refer to them. `owner` identifies the legend's layer and its plot colors.
 #[allow(clippy::too_many_arguments)]
 fn draw_legend(
     out: &mut Vec<Item>,
@@ -2135,7 +2148,7 @@ fn draw_legend(
     ids: &[String],
     ticks: &EdgeTicks,
     m: &dyn TextMeasurer,
-    owner_plots: &[Plot],
+    owner: (usize, &[Plot]),
 ) {
     // A parallel plot's legend lists its groups, not its axes (`parallel::draw_legend`).
     if !lg.visible || entries.is_empty() || entries.iter().any(|pd| pd.plot.kind.is_parallel()) {
@@ -2145,16 +2158,16 @@ fn draw_legend(
         crate::legend_anchor::place(out, m, f, (x, y), |out, position| {
             let mut legend = lg.clone();
             legend.position = position;
-            draw_legend(out, project, &legend, f, entries, ids, ticks, m, owner_plots);
+            draw_legend(out, project, &legend, f, entries, ids, ticks, m, owner);
         });
         return;
     }
     let fs = lg.font.size_pt;
-    let sample = 2.2 * fs;
-    let gap = 0.5 * fs;
+    let (sample, gap, row_step) = if lg.stock_multi_y { (2.22, 0.275, 1.22) } else { (2.2, 0.5, 1.3) };
+    let (sample, gap, row_h) = (sample * fs, gap * fs, row_step * fs);
     let pad = 0.4 * fs;
-    let row_h = 1.3 * fs;
     let col_gap = fs;
+    let (owner_layer, owner_plots) = owner;
     let plot_color = |slot| owner_plots.get(slot).map(crate::rug::plot_color);
     let segments = |t: &str| crate::markup::plot_segments(t, &|name| m.expand_inline_family(name), &plot_color);
     let text_width = |t: &str| text::segments_width(m, &segments(t), &lg.font, fs);
@@ -2164,11 +2177,11 @@ fn draw_legend(
         pd.plot.kind.is_stacked_column() || pd.plot.kind.is_floating() || pd.plot.kind == PlotKind::Bar
     });
     let text = lg.text.clone().unwrap_or_else(|| {
-        if reversed {
+        if reversed && !lg.stock_multi_y {
             let rev: Vec<String> = ids.iter().rev().cloned().collect();
             Legend::automatic_text(&rev)
         } else {
-            Legend::automatic_text(ids)
+            lg.default_text(owner_layer, ids)
         }
     });
     let mut rows = Vec::new();

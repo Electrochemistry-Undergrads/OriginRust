@@ -240,15 +240,29 @@ impl Graph {
     /// `l.p` (layer and plot, both from 1) when the legend lists the plots of several layers; they
     /// are what `\l(n)` and `%(n)` in the legend text refer to ([`Legend::text`]).
     pub fn legend_ids(&self, index: usize, plots_in: &dyn Fn(usize) -> usize) -> Vec<String> {
+        self.legend_ids_by_slot(index, |layer| 0..plots_in(layer))
+    }
+
+    /// The legend ID for each selected zero-based plot slot, in layer and slot order.
+    pub fn legend_ids_by_slot<I: IntoIterator<Item = usize>>(
+        &self,
+        index: usize,
+        slots_in: impl Fn(usize) -> I,
+    ) -> Vec<String> {
         let Some(layer) = self.layers.get(index) else { return Vec::new() };
         if layer.legend.scope == LegendScope::Graph {
             let layers = self.same_frame(index);
             if layers.len() > 1 {
-                return layers.iter().flat_map(|&l| (1..=plots_in(l)).map(move |k| format!("{}.{k}", l + 1))).collect();
+                return layers
+                    .into_iter()
+                    .flat_map(|l| slots_in(l).into_iter().map(move |slot| format!("{}.{}", l + 1, slot + 1)))
+                    .collect();
             }
-            return layers.first().map_or_else(Vec::new, |&l| (1..=plots_in(l)).map(|k| k.to_string()).collect());
+            return layers
+                .first()
+                .map_or_else(Vec::new, |&l| slots_in(l).into_iter().map(|slot| (slot + 1).to_string()).collect());
         }
-        (1..=plots_in(index)).map(|k| k.to_string()).collect()
+        slots_in(index).into_iter().map(|slot| (slot + 1).to_string()).collect()
     }
 
     /// The panels of the graph, in layer order: every layer except those drawn in the frame of an
@@ -405,6 +419,9 @@ pub struct Layer {
     /// Layer Management's independent rectangle around the plot frame.
     #[serde(default, skip_serializing_if = "LayerBorder::is_default")]
     pub border: LayerBorder,
+    /// Render scale for the layer's styled elements.
+    #[serde(default, skip_serializing_if = "LayerElementScale::is_default")]
+    pub element_scale: LayerElementScale,
     /// The Group tab of the layer's plots: edit mode and increments (the colour increment is
     /// [`Layer::palette`]'s mode).
     #[serde(default, skip_serializing_if = "GroupStyle::is_default")]
@@ -509,6 +526,10 @@ pub struct FieldPlot {
     pub line: LineStyle,
     pub label_font: Font,
     pub scale: ColorScale,
+    /// The colour of values above the scale when it is not the palette's (Origin 2016's ternary contour
+    /// paints them light gray, measured by T401).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub above_color: Option<Color>,
 }
 
 impl FieldPlot {
@@ -2091,6 +2112,10 @@ pub enum PlotKind {
     /// A network plot (Origin 2021b, T383): nodes and edges from the source and target columns of the plot's
     /// [`SankeyStyle`], weighted by its Y column (1 per row when that is not numeric) (graphing spec 14.33).
     Network,
+    /// A chord diagram (Origin 2021, T402): arcs round a circle for the names of the source and target columns of
+    /// the plot's [`SankeyStyle`], ribbons for the flows between them, weighted by its Y column (1 per row when that
+    /// is not numeric) (graphing spec 14.34).
+    Chord,
     /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
     /// from 12 o'clock, each labelled with its share. The layer draws no axes.
     Pie,
@@ -2878,6 +2903,9 @@ pub struct Legend {
     /// list.
     #[serde(default = "one_column", skip_serializing_if = "is_one_column")]
     pub columns: u32,
+    /// Use the stock 3Ys/4Ys legend's measured spacing and first-plot membership.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub stock_multi_y: bool,
     /// The legend text in Origin's notation, one entry per line: `\l(n)` draws the symbol of
     /// plot n, `%(n)` is its name, any other text is shown as it is (with the label markup). `n`
     /// counts the plots the legend lists (`l.p`, layer and plot, when it lists several layers).

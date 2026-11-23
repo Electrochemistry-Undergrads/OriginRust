@@ -296,7 +296,7 @@ fn bounds(frames: &[Frame]) -> Frame {
 
 /// Multiplies every font size of a layer (axis titles and tick labels, the legend, the text labels
 /// and the plots' data labels) by `factor`: the text factor of a merged layer.
-fn scale_text(layer: &mut crate::graph::Layer, factor: f64) {
+pub(crate) fn scale_text(layer: &mut crate::graph::Layer, factor: f64) {
     if (factor - 1.0).abs() < 1e-12 {
         return;
     }

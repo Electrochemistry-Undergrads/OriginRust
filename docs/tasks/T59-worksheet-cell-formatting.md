@@ -136,6 +136,12 @@ corner, new column headings, row numbers and label captions. The grid and
 print use the colors, and Excel reports their omission (GUI 3 and workbook
 model 13b).
 
+Standard color probe. Origin 2016 produced pixel-identical worksheet
+regions after the scripted Standard palette assignment in both application
+orders. The specific category palettes changed the worksheet as expected.
+Standard text and fill controls in the interactive Format tab remain to be
+verified (GUI 3).
+
 **Size:** L. **Branch:** `cell-format` (model/dialog), `codex/t59-format-toolbar` (toolbar/font geometry), `codex/t59-worksheet-controls` (underline/fill/keys), `codex/t59-worksheet-dialog` (dialog measurements/More entry), `codex/t59-custom-colors` (one-off RGB chooser), `codex/t59-classic-colors` (24 Classic worksheet presets), `codex/t59-xlsx-formats` (Excel cell styles). **Priority:** P0, wave 1.
 **Spec:** [workbook model](../spec/workbook-model.md), new Cell formats section;
 [GUI](../spec/gui-look.md) 3. **Inventory:** the worksheet-wide `T59` menu location now opens the bounded Data-font dialog; the three unsupported text-control choices are B5.

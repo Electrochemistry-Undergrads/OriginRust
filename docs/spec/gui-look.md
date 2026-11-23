@@ -937,6 +937,15 @@ grid draws selection colors on selected headings, and print uses the
 worksheet palette. Worksheet images omit these headings. Excel reports
 that heading colors are omitted.
 
+**Standard color probe (T59).** In Origin 2016, assigning red text and yellow
+fill with `wproperties` > TextControl > Standard yielded pixel-identical
+worksheet regions. The probe applied Standard both before and after
+explicit Data, Column Labels and Column Header palettes. Those palettes
+visibly changed their cells and headings, and manual colors on A1 held.
+The worksheet had numeric data, a blank cell and populated labels. Whether
+the Format tab's Standard controls can change worksheet colors remains open.
+[Origin Worksheet Properties settings](https://docs.originlab.com/x-function/ref/wproperties/)
+
 Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
 The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,
 Dynamic Merge, per-cell numeric display/precision selectors and a Font selector. In this new book,

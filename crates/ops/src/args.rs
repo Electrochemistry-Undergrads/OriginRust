@@ -3449,6 +3449,33 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Random forest: --y PREDICTOR[,PREDICTOR..],RESPONSE; a seeded forest of CART trees, out-of-bag error,
+    /// predictor importance, out-of-bag predictions (and a confusion matrix for classes).
+    Randomforest {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// auto (classes for a text response), classification or regression.
+        #[arg(long, default_value = "auto")]
+        task: String,
+        /// Number of trees.
+        #[arg(long, default_value_t = 100)]
+        trees: usize,
+        /// Predictors tried at each node (0: sqrt p for classes, p/3 for values).
+        #[arg(long, default_value_t = 0)]
+        mtry: usize,
+        /// Smallest leaf (0: 1 for classes, 5 for values).
+        #[arg(long, default_value_t = 0)]
+        min_leaf: usize,
+        /// Depth limit (0: none).
+        #[arg(long, default_value_t = 0)]
+        max_depth: usize,
+        /// Seed of the random draws.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// ARIMA forecast: ARIMA(p, d, q) of each --y column by conditional least squares, forecasts with confidence
     /// bands, with a graph.
     Arima {

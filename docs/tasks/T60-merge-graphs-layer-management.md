@@ -21,10 +21,14 @@ test threads. The desktop Display/RGB preview and independent PNG export were in
 Border-colour measurement follow-up (`codex/t60-layer-border-display`, 2026-11-16):
 Origin's Border Fill Color and Border Color use a separate rectangle expanded beyond the
 plot frame by four layer-relative margins. Independent accepted red fill/outline exports
-and property controls are recorded in graphing 15.7d. Existing Sheaf background/frame-border
-fields cannot represent this geometry or independent fill, so both controls remain disabled.
-A separate rectangle/fill/outline model, renderer and persistence are prerequisites; no Rust
-or enabled inventory changes are made by this measurement slice.
+and property controls are recorded in graphing 15.7d. The measurement identified the need
+for separate storage and rendering for the expanded rectangle.
+
+**Layer Management Display borders (2026-11-22).** Border Fill Color and Border Color draw a
+separate rectangle using the four Border Dimensions outsets. Selected layers retain mixed
+values until edited. Apply updates the preview, and OK commits one undo step. Graphing 15.7d
+records the export geometry and `.sheaf` / companion storage. Drawing Order and Scale
+Elements remain open.
 
 Folder-source follow-up (`codex/t60-merge-folder-choices`, 2026-11-16): All in Active Folder
 and All in Active Folder (Recursive) use the captured Explorer folder. Fresh Native folder

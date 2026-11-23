@@ -402,6 +402,9 @@ pub struct Layer {
     /// A gradient from that colour and a border line around the frame (the rest of the Background tab).
     #[serde(default, skip_serializing_if = "BackgroundStyle::is_default")]
     pub background_style: BackgroundStyle,
+    /// Layer Management's independent rectangle around the plot frame.
+    #[serde(default, skip_serializing_if = "LayerBorder::is_default")]
+    pub border: LayerBorder,
     /// The Group tab of the layer's plots: edit mode and increments (the colour increment is
     /// [`Layer::palette`]'s mode).
     #[serde(default, skip_serializing_if = "GroupStyle::is_default")]
@@ -540,6 +543,37 @@ impl Layer {
         } else if let Some(need_w) = xy_ratio_height(h, span_y, span_x, 1.0 / ratio) {
             self.frame.width = need_w / page.0;
         }
+    }
+}
+
+/// Layer Management > Display border, expressed as outsets from the plot frame.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LayerBorder {
+    pub fill: Option<Color>,
+    pub outline: Option<Color>,
+    /// Left, top, right and bottom, as percentages of the layer width or height.
+    pub dimensions_pct: [f64; 4],
+}
+
+impl Default for LayerBorder {
+    fn default() -> Self {
+        Self { fill: None, outline: None, dimensions_pct: [16.6, 10.0, 12.4, 15.2] }
+    }
+}
+
+impl LayerBorder {
+    pub const MAX_OUTSET_PERCENT: f64 = 1000.0;
+
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// Border frame as fractions of the plot frame, including the outward offsets.
+    pub fn relative_frame(self) -> Frame {
+        let [left, top, right, bottom] = self
+            .dimensions_pct
+            .map(|pct| if pct.is_finite() { pct.clamp(0.0, Self::MAX_OUTSET_PERCENT) / 100.0 } else { 0.0 });
+        Frame { left: -left, top: -top, width: 1.0 + left + right, height: 1.0 + top + bottom }
     }
 }
 

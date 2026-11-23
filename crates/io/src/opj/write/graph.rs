@@ -335,6 +335,12 @@ impl Writer {
         if !layer.background_style.is_default() {
             notes.push("the gradient and border of a layer's background were not written".into());
         }
+        if !layer.border.is_default() {
+            notes.push(
+                "layer management border colours and dimensions were not written (the companion file keeps them)"
+                    .into(),
+            );
+        }
         if !layer.group_style.is_default() {
             notes.push("the Group tab of a layer (edit mode, increments, subgroups) was not written".into());
         }

@@ -3306,8 +3306,15 @@ column plot of the flow with a warning.
   nodes in the order of the other end, filled with the source node's palette colour at 40 % opacity; nodes are boxes
   in the layer palette's colours with a darker 0.5 pt outline; names are written right of their nodes (left of the
   last stage's) in the X axis tick font at 0.8 of its size. No axes, no legend.
-- Not done: alluvial diagrams (categories across stages of the same rows), node reordering, value labels, the Plot
-  Details pages of Origin's Sankey plot.
+- Not done: node reordering, value labels, the Plot Details pages of Origin's Sankey plot.
+- **Alluvial diagram (T381):** Plot > Categorical > Alluvial Diagram and `sheaf plot FILE -t alluvial [--group
+  A,B,C] [-y WEIGHT]` (`Template::Alluvial`, `Project::plot_alluvial`, `SankeyStyle::stages`): the category columns
+  are the stages, left to right (default: every text column of the sheet; in the app the selected text columns,
+  else the sheet's). Every row flows through its cells, from each stage to the next; a node is a (stage, value)
+  pair, so the same value in two columns makes two nodes, each in its column's stage. A row weighs its value in
+  the weight column (`-y`, or the last selected numeric column), else 1 (counts; the plot's Y column is then the
+  first stage). An empty cell breaks the row's flow at that stage. Drawn as the Sankey diagram above. A file of
+  text only needs `--header-lines 1 --long-name-line 1` on import, or its header row becomes a flow.
 
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 

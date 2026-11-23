@@ -2,12 +2,15 @@
 use super::cell_format::optional_color;
 use super::frame::{DialogButton, ok_cancel_apply};
 use eframe::egui;
-use sheaf_core::cellformat::{CategoryColors, LabelKind};
+use sheaf_core::cellformat::{CategoryColors, LabelColors, LabelKind};
 use sheaf_core::color::Color;
 use sheaf_core::sheet_fonts::ColumnLabelFont;
 use sheaf_core::{Document, WindowId};
 
 const DATA: usize = 0;
+const LONG_NAME: usize = 1;
+const UNITS: usize = 2;
+const COMMENTS: usize = 3;
 const BULK: usize = 4;
 const COLUMN_HEADER: usize = 5;
 const ROW_HEADER: usize = 6;
@@ -59,9 +62,18 @@ impl WorksheetFontsDialog {
                 size_pt: defaults.formula_size_pt,
             },
         ];
-        let mut colors = [CategoryColors::default(); CATEGORIES.len()];
-        colors[DATA] = worksheet.data_colors;
-        colors[BULK] = worksheet.column_label_colors;
+        let labels = worksheet.label_colors;
+        let colors = [
+            worksheet.data_colors,
+            labels.long_name,
+            labels.units,
+            labels.comments,
+            worksheet.column_label_colors,
+            CategoryColors::default(),
+            CategoryColors::default(),
+            CategoryColors::default(),
+            labels.formula,
+        ];
         let mut fonts: Vec<_> = sheaf_plot::SystemFonts::shared()
             .database()
             .faces()
@@ -110,6 +122,12 @@ impl WorksheetFontsDialog {
             let sheet = &mut p.workbook_mut(self.book).unwrap().sheets[self.sheet];
             sheet.data_colors = self.shown_colors[DATA];
             sheet.column_label_colors = self.shown_colors[BULK];
+            sheet.label_colors = LabelColors {
+                long_name: self.shown_colors[LONG_NAME],
+                units: self.shown_colors[UNITS],
+                comments: self.shown_colors[COMMENTS],
+                formula: self.shown_colors[FORMULA],
+            };
             if self.shown[DATA] != self.base[DATA] {
                 sheet.set_data_font_override(self.shown[DATA].clone());
             }
@@ -126,9 +144,9 @@ impl WorksheetFontsDialog {
                 sheet.set_standard_font(self.shown[STANDARD].clone());
             }
             for (i, kind) in [
-                (1, LabelKind::LongName),
-                (2, LabelKind::Units),
-                (3, LabelKind::Comments),
+                (LONG_NAME, LabelKind::LongName),
+                (UNITS, LabelKind::Units),
+                (COMMENTS, LabelKind::Comments),
                 (FORMULA, LabelKind::Formula),
             ] {
                 if self.shown[i].size_pt != self.base[i].size_pt {
@@ -216,18 +234,26 @@ impl WorksheetFontsDialog {
                         shown.size_pt = (size > 0.0).then_some(size.max(4.0));
                     }
                     ui.end_row();
-                    let color_ids = match self.category {
-                        DATA => Some(("Data text color", "Data fill color")),
-                        BULK => Some(("Column Labels text color", "Column Labels fill color")),
-                        _ => None,
-                    };
-                    if let Some((text_id, fill_id)) = color_ids {
+                    if matches!(self.category, DATA | LONG_NAME | UNITS | COMMENTS | BULK | FORMULA) {
+                        let category = CATEGORIES[self.category];
                         let colors = &mut self.shown_colors[self.category];
                         ui.label("Text Color");
-                        optional_color(ui, &mut colors.text_color, "Use color", Color::BLACK, text_id);
+                        optional_color(
+                            ui,
+                            &mut colors.text_color,
+                            "Use color",
+                            Color::BLACK,
+                            &format!("{category} text color"),
+                        );
                         ui.end_row();
                         ui.label("Fill Color");
-                        optional_color(ui, &mut colors.fill, "Use fill", Color::rgb(255, 255, 153), fill_id);
+                        optional_color(
+                            ui,
+                            &mut colors.fill,
+                            "Use fill",
+                            Color::rgb(255, 255, 153),
+                            &format!("{category} fill color"),
+                        );
                         ui.end_row();
                     }
                 });

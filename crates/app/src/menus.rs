@@ -2144,6 +2144,13 @@ fn statistics_menu() -> Vec<Entry> {
         item("Random Forest (Machine Learnin&g)...", Cmd::Analyze(AnalysisKind::RandomForest)),
         item("Monte Carlo Simulation (Random &Variates)...", Cmd::Analyze(AnalysisKind::MonteCarlo)),
         sub(
+            "Quantitati&ve PCR",
+            vec![
+                item("Relative Quantification...", Cmd::Analyze(AnalysisKind::Qpcr)),
+                item("Standard Curve...", Cmd::Analyze(AnalysisKind::QpcrCurve)),
+            ],
+        ),
+        sub(
             "T&wo-Level Experiments",
             vec![
                 item("Factorial Design...", Cmd::Analyze(AnalysisKind::FactorialDesign)),

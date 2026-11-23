@@ -5,7 +5,7 @@ HANDOFF C / origin-2026-2027-gaps "Monte Carlo simulation workflow". Inputs with
 lognormal, triangular, constant) drawn with a seed, an output formula, the draws in a new sheet, summary and
 percentiles, specification limits (share outside, Cp, Cpk) and Spearman sensitivity per input.
 Statistics > Monte Carlo Simulation (Random Variates)..., CLI `analyze monte-carlo`.
-**Size:** M. **Spec:** `docs/spec/statistics.md` 50.
+**Size:** M. **Spec:** `docs/spec/statistics.md` 51.
 
 ## Tests
 

@@ -1304,6 +1304,19 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 curve: !no_graph,
             })),
         ),
+        AnalyzeTool::Qpcr { target, control, e_target, e_reference, confidence, no_graph } => (
+            target,
+            Job::Tool(Tool::Qpcr(analysis::QpcrSpec {
+                control,
+                e_target,
+                e_reference,
+                confidence: confidence / 100.0,
+                graph: !no_graph,
+            })),
+        ),
+        AnalyzeTool::QpcrCurve { target, no_graph } => {
+            (target, Job::Tool(Tool::QpcrCurve(analysis::QpcrCurveSpec { graph: !no_graph })))
+        }
         AnalyzeTool::Lifereg { target, distribution, censor, frequency } => {
             let dist = match distribution.to_ascii_lowercase().as_str() {
                 "weibull" => analysis::LifeDist::Weibull,

@@ -1,6 +1,6 @@
 # T225: Plot > Contour/Heat Map > Polar Contour (B14 slice)
 
-**Status:** done 2026-11-20 (Claude Windows "obj-align"), **not measured**.
+**Status:** done 2026-11-20 (Claude Windows "obj-align"), **not measured**. T399 (2026-11-23) measured Origin 2016 and copied it: north up clockwise, no level lines, reversed rainbow, radius from the smallest radius, the fill closed round the circle.
 **Size:** S. **Source:** greyed inventory package B14 ("Polar Contour theta(X) r(Y)" and
 "r(X) theta(Y)").
 **Spec:** `docs/spec/matrices.md` 7k.

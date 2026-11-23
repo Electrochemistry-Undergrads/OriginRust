@@ -957,7 +957,13 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
     stack_bars(&mut plots);
     place_bars(&mut plots, &layer.bars);
     attach_waterfall_colors(project, layer, &mut plots);
-    let field = layer.field.as_ref().and_then(|f| crate::field::resolve(project, f));
+    let mut field = layer.field.as_ref().and_then(|f| crate::field::resolve(project, f));
+    // A polar contour closes round the circle, as Origin 2016's does (T399).
+    if let (Some(grid), Some(polar)) = (field.as_mut(), layer.coords.polar())
+        && !polar.radar
+    {
+        grid.wrap_full_circle(polar.radius == sheaf_core::graph::RadiusColumn::Y);
+    }
     LayerData { plots, members, bracket_step: std::cell::Cell::new(0.0), field }
 }
 

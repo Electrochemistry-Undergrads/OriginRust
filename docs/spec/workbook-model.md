@@ -689,6 +689,11 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   resolves from manual cell formatting, then the individual row, then
   Column Labels. New columns inherit the same defaults. Export and project
   persistence follow the Column Labels color rules.
+- **Heading colors (T59).** Optional `label_colors.column_header` and
+  `label_colors.row_header` store text and fill independently of the heading
+  fonts. The column fill also covers the select-all corner. Row colors cover
+  numbers and label captions. The grid and print use these styles, worksheet
+  images crop the headings, and Excel reports their omission.
 - **Vertical alignment.** The 2016 selected-A1 Format Cells and Worksheet Properties Data
   Format/Size probes (GUI 3, 2026-11-16) found no vertical text-alignment control in those
   inspected routes. Other routes and mutation semantics remain unestablished; this probe

@@ -175,6 +175,21 @@ fn worksheet_label_default_sizes_export_independently_without_styling_data_blank
 }
 
 #[test]
+fn formula_label_font_is_reported_when_xlsx_omits_the_formula_row() {
+    let mut a = column(1, vec![2.0, 3.0]);
+    a.formula = Some("i+1".into());
+    let mut s = Worksheet { columns: vec![a], ..Worksheet::new("Formula label") };
+    let output = Output::new("formula-label-omitted");
+    let (before_xml, before_styles, _) = output.export(&s, &plain());
+
+    s.set_label_font_size(&LabelKind::Formula, 18.0);
+    let (xml, styles, warnings) = output.export(&s, &plain());
+    assert_eq!(xml, before_xml);
+    assert_eq!(styles, before_styles);
+    assert!(warnings.iter().any(|w| w.contains("label rows omitted")));
+}
+
+#[test]
 fn worksheet_default_fonts_reach_values_and_blanks_below_manual_formats() {
     use sheaf_core::sheet_fonts::WorksheetFont;
     let mut a = column(1, vec![1.234, f64::NAN, 3.0]);

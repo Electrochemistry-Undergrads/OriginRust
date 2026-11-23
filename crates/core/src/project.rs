@@ -400,6 +400,8 @@ pub enum ProjectError {
     FishboneColumns,
     #[error("a Sankey diagram needs a source and a target column (text) and a numeric value column; select them")]
     SankeyColumns,
+    #[error("an alluvial diagram needs two or more category columns (its stages); select them")]
+    AlluvialColumns,
     #[error("a sunburst plot cannot have a right Y axis; use one Y axis or another template")]
     SunburstNoRightAxis,
     #[error(
@@ -1391,6 +1393,20 @@ impl Project {
         if template == Template::Fishbone {
             return self.plot_fishbone(ys, crate::fishbone::DEFAULT_EFFECT);
         }
+        if template == Template::Alluvial {
+            // The columns of text are the stages, in order; the last numeric one, if any, weights the rows.
+            let value = ys.iter().rev().copied().find(|y| self.numeric(*y).is_some());
+            let mut stages: Vec<ColumnId> = ys.iter().copied().filter(|y| self.numeric(*y).is_none()).collect();
+            if stages.len() < 2
+                && let Some(v) = value
+            {
+                stages = self
+                    .locate(v)
+                    .map(|(_, sheet, _)| sheet.columns.iter().filter(|c| !c.data.is_numeric()).map(|c| c.id).collect())
+                    .unwrap_or_default();
+            }
+            return self.plot_alluvial(&stages, value);
+        }
         if template == Template::Sankey {
             // The first two columns of text are the source and the target, the last numeric one the flow.
             let value =
@@ -1877,6 +1893,32 @@ impl Project {
         Ok(graph)
     }
 
+    /// An alluvial diagram (T381): the rows flow through their cells of `stages`, left to right, weighted by
+    /// `value` or, without one, counted (the plot's Y column is then the first stage, which is not numeric).
+    pub fn plot_alluvial(&mut self, stages: &[ColumnId], value: Option<ColumnId>) -> Result<WindowId, ProjectError> {
+        for c in stages.iter().chain(value.as_ref()) {
+            self.column(*c).ok_or(ProjectError::NoSuchColumn(*c))?;
+        }
+        if stages.len() < 2 {
+            return Err(ProjectError::AlluvialColumns);
+        }
+        let y = value.unwrap_or(stages[0]);
+        let long_name = self.locate(y).map(|(b, _, _)| b.title_for_graph());
+        let graph = self.add_graph(Template::Alluvial);
+        self.add_plot(graph, 0, y)?;
+        if let Some(g) = self.graph_mut(graph) {
+            if let Some(l) = g.layers.first_mut() {
+                for p in &mut l.plots {
+                    p.sankey.stages = stages.to_vec();
+                }
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        Ok(graph)
+    }
+
     pub fn plot_sunburst(&mut self, categories: &[ColumnId], value: ColumnId) -> Result<WindowId, ProjectError> {
         for c in categories.iter().chain([&value]) {
             self.column(*c).ok_or(ProjectError::NoSuchColumn(*c))?;
@@ -2022,7 +2064,7 @@ impl Project {
         if template == Template::Fishbone {
             return Err(ProjectError::FishboneColumns);
         }
-        if template == Template::Sankey {
+        if matches!(template, Template::Sankey | Template::Alluvial) {
             return Err(ProjectError::SankeyColumns);
         }
         if matches!(template, Template::GroupedColumns | Template::GroupedBox) {

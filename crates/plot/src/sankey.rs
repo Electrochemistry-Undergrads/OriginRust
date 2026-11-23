@@ -15,7 +15,7 @@ use crate::data::PlotData;
 use crate::fonts::TextMeasurer;
 use crate::scene::{Item, Stroke, line_to, move_to};
 use crate::text::{self, ASCENT, DESCENT};
-use sheaf_calc::sankey::{Sankey, layout};
+use sheaf_calc::sankey::{Sankey, layout, layout_in_stages};
 use sheaf_core::graph::{Font, Layer, SankeyStyle};
 use sheaf_core::{Color, Project};
 
@@ -35,14 +35,18 @@ pub(crate) struct SankeyData {
 impl SankeyData {
     /// The flows of the rows `pd` shows: names from the style's columns, values from the plot's Y.
     pub fn new(project: &Project, layer: &Layer, pd: &PlotData) -> Option<SankeyData> {
-        let SankeyStyle { source, target } = &pd.plot.sankey;
-        let (source, target) = (project.column((*source)?)?, project.column((*target)?)?);
-        let rows: Vec<(String, String, f64)> = pd
-            .rows()
-            .filter(|r| !pd.mask.is_some_and(|m| m.contains(r)))
-            .map(|r| (source.cell_text(r), target.cell_text(r), pd.y.get(r).copied().unwrap_or(f64::NAN)))
-            .collect();
-        let sankey = layout(&rows);
+        let SankeyStyle { source, target, stages } = &pd.plot.sankey;
+        let visible: Vec<usize> = pd.rows().filter(|r| !pd.mask.is_some_and(|m| m.contains(r))).collect();
+        let sankey = if stages.is_empty() {
+            let (source, target) = (project.column((*source)?)?, project.column((*target)?)?);
+            let rows: Vec<(String, String, f64)> = visible
+                .iter()
+                .map(|&r| (source.cell_text(r), target.cell_text(r), pd.y.get(r).copied().unwrap_or(f64::NAN)))
+                .collect();
+            layout(&rows)
+        } else {
+            alluvial(project, pd, stages, &visible)?
+        };
         if sankey.nodes.is_empty() {
             return None;
         }
@@ -52,6 +56,46 @@ impl SankeyData {
         font.size_pt *= LABEL_SCALE;
         Some(SankeyData { sankey, colors, font })
     }
+}
+
+/// The separator between a stage number and a name in the node keys of an alluvial diagram.
+const STAGE_SEP: char = '\u{1f}';
+
+/// An alluvial diagram (T381): every row flows through its cells of the stage columns, a node per (stage, name),
+/// weighted by the plot's Y value, or 1 when its Y column is not numeric.
+fn alluvial(project: &Project, pd: &PlotData, stages: &[sheaf_core::ColumnId], rows: &[usize]) -> Option<Sankey> {
+    let columns: Vec<_> = stages.iter().filter_map(|id| project.column(*id)).collect();
+    if columns.len() < 2 {
+        return None;
+    }
+    let counts = project.numeric(pd.plot.y).is_none();
+    // Counted, the plot has no numbers to give its rows: every row of the stage columns counts.
+    let all: Vec<usize>;
+    let rows = if counts {
+        all = (0..columns.iter().map(|c| c.len()).max().unwrap_or(0)).collect();
+        &all[..]
+    } else {
+        rows
+    };
+    let mut flows = Vec::new();
+    for &r in rows {
+        let weight = if counts { 1.0 } else { pd.y.get(r).copied().unwrap_or(f64::NAN) };
+        for (i, pair) in columns.windows(2).enumerate() {
+            let (a, b) = (pair[0].cell_text(r), pair[1].cell_text(r));
+            if a.trim().is_empty() || b.trim().is_empty() {
+                continue;
+            }
+            flows.push((format!("{i}{STAGE_SEP}{a}"), format!("{}{STAGE_SEP}{b}", i + 1), weight));
+        }
+    }
+    let stage_of = |key: &str| key.split_once(STAGE_SEP).and_then(|(s, _)| s.parse().ok());
+    let mut sankey = layout_in_stages(&flows, &stage_of);
+    for n in &mut sankey.nodes {
+        if let Some((_, name)) = n.name.split_once(STAGE_SEP) {
+            n.name = name.to_string();
+        }
+    }
+    Some(sankey)
 }
 
 fn darker(c: Color) -> Color {
@@ -134,5 +178,25 @@ mod tests {
         }
         // No axes: no tick labels such as "0".
         assert!(!svg.contains(">0<"));
+    }
+
+    #[test]
+    fn an_alluvial_diagram_counts_rows_through_its_stages_and_keeps_names_apart_per_stage() {
+        let mut p = Project::new();
+        let b = p.add_workbook("");
+        let text = |v: &[&str]| ColumnData::text(v.iter().map(|s| s.to_string()).collect());
+        // "x" appears in both stages: two nodes, not one.
+        let a = p.add_column(b, 0, Designation::Y, text(&["x", "x", "y"])).unwrap();
+        let c = p.add_column(b, 0, Designation::Y, text(&["x", "z", "z"])).unwrap();
+        let g = p.plot_columns(Template::Alluvial, &[a, c]).unwrap();
+        let svg = crate::render_svg(&p, g).unwrap();
+        assert_eq!(svg.matches(" C ").count(), 6, "three flows: x-x, x-z, y-z");
+        assert_eq!(svg.matches(">x<").count(), 2, "x on the left and x on the right");
+        let graph = p.graph(g).unwrap();
+        let data = crate::data::collect(&p, &graph.layers[0]);
+        let sd = data.plots[0].sankey.as_deref().unwrap();
+        assert_eq!((sd.sankey.stages, sd.sankey.nodes.len()), (2, 4));
+        let weight: f64 = sd.sankey.links.iter().map(|l| l.value).sum();
+        assert_eq!(weight, 3.0, "one per row");
     }
 }

@@ -181,6 +181,8 @@ pub enum AnalysisKind {
     RandomForest,
     /// Statistics > Two-Level Experiments > Factorial Design (T380; options in `multivariate_options.rs`).
     FactorialDesign,
+    /// Statistics > Design of Experiments > Mixture Design (T386).
+    MixtureDesign,
     /// Statistics > Two-Level Experiments > Factorial Effects (T380; options in `multivariate_options.rs`).
     FactorialEffects,
     /// Statistics > Two-Level Experiments > Split-Plot Design (T382; options in `multivariate_options.rs`).
@@ -347,6 +349,7 @@ impl AnalysisKind {
             AnalysisKind::Arima => "ARIMA Forecast...",
             AnalysisKind::RandomForest => "Random Forest...",
             AnalysisKind::FactorialDesign => "Two-Level Factorial Design...",
+            AnalysisKind::MixtureDesign => "Mixture Design...",
             AnalysisKind::FactorialEffects => "Factorial Effects...",
             AnalysisKind::SplitPlotDesign => "Split-Plot Design...",
             AnalysisKind::SplitPlotEffects => "Split-Plot Effects...",
@@ -462,6 +465,7 @@ impl AnalysisKind {
             "arima" => AnalysisKind::Arima,
             "randomforest" => AnalysisKind::RandomForest,
             "factorialdesign" => AnalysisKind::FactorialDesign,
+            "mixturedesign" => AnalysisKind::MixtureDesign,
             "factorialeffects" => AnalysisKind::FactorialEffects,
             "splitplotdesign" => AnalysisKind::SplitPlotDesign,
             "splitploteffects" => AnalysisKind::SplitPlotEffects,
@@ -2358,6 +2362,7 @@ impl AnalysisDialog {
             | AnalysisKind::Arima
             | AnalysisKind::RandomForest
             | AnalysisKind::FactorialDesign
+            | AnalysisKind::MixtureDesign
             | AnalysisKind::FactorialEffects
             | AnalysisKind::SplitPlotDesign
             | AnalysisKind::SplitPlotEffects
@@ -3692,6 +3697,7 @@ impl AnalysisDialog {
             | AnalysisKind::Arima
             | AnalysisKind::RandomForest
             | AnalysisKind::FactorialDesign
+            | AnalysisKind::MixtureDesign
             | AnalysisKind::FactorialEffects
             | AnalysisKind::SplitPlotDesign
             | AnalysisKind::SplitPlotEffects
@@ -3903,6 +3909,7 @@ impl AnalysisDialog {
             | AnalysisKind::Arima
             | AnalysisKind::RandomForest
             | AnalysisKind::FactorialDesign
+            | AnalysisKind::MixtureDesign
             | AnalysisKind::FactorialEffects
             | AnalysisKind::SplitPlotDesign
             | AnalysisKind::SplitPlotEffects
@@ -4044,6 +4051,9 @@ impl AnalysisDialog {
                 "Estimate split-plot effects, each tested against the error of its stratum"
             }
             AnalysisKind::FactorialDesign => "Make a two-level full or fractional factorial design with its run order",
+            AnalysisKind::MixtureDesign => {
+                "Make a simplex lattice or simplex centroid mixture design for one or more totals"
+            }
             AnalysisKind::FactorialEffects => {
                 "Estimate the effects of two-level factors and their interactions on a response"
             }
@@ -4211,6 +4221,9 @@ impl AnalysisDialog {
             }
             AnalysisKind::FactorialDesign => {
                 "The design in a new sheet: run and standard order, the coded factor levels and an empty response column"
+            }
+            AnalysisKind::MixtureDesign => {
+                "The design in a new sheet: run and standard order, total, point type, the component amounts and an empty response"
             }
             AnalysisKind::FactorialEffects => {
                 "One row per term (coefficient, effect, t test or Lenth activity) in a new sheet, and an effects graph"

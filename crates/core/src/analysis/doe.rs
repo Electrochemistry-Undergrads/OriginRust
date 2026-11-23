@@ -8,6 +8,7 @@ use super::statistics::num;
 use super::*;
 use crate::graph::{PlotKind, ScaleKind};
 use calc::doe::{design, effects, letter, split_plot_design, split_plot_effects};
+use calc::mixture::{MixtureKind, MixtureOptions, mixture_design};
 
 /// What [`Tool::FactorialDesign`] makes (it reads no data; the results go next to the chosen sheet).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -114,6 +115,60 @@ pub(super) fn run_design(spec: &FactorialDesignSpec) -> Result<Output, AnalysisE
         column_of("Standard order", Designation::Y, d.standard.iter().map(|s| *s as f64).collect()),
     ];
     for j in 0..spec.factors {
+        on_sheet.push(column_of(&letter(j).to_string(), Designation::Y, d.runs.iter().map(|r| r[j]).collect()));
+    }
+    on_sheet.push(column_of("Response", Designation::Y, vec![f64::NAN; n]));
+    Ok(Output { table: Some(table), on_sheet, notes, graph: None, more_graphs: Vec::new() })
+}
+
+/// Statistics > Design of Experiments > Mixture Design (T386): the design in a new sheet (run and
+/// standard order, total, point type, the amounts of the components A, B, ... and an empty response).
+pub(super) fn run_mixture(spec: &MixtureOptions) -> Result<Output, AnalysisError> {
+    let d = mixture_design(spec).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
+    let n = d.runs.len();
+    let q = spec.components;
+    let label = match spec.kind {
+        MixtureKind::SimplexLattice => format!("{{{q}, {}}} simplex lattice", spec.degree),
+        MixtureKind::SimplexCentroid => format!("{q}-component simplex centroid"),
+    };
+    let mut table = ResultTable::new(&["Components", "Blends", "Totals", "Replicates", "Runs"]);
+    table.push_row(
+        label.clone(),
+        vec![q as f64, d.blend_count as f64, spec.totals.len() as f64, spec.replicates as f64, n as f64],
+        vec![String::new(); 5],
+    );
+    let totals: Vec<String> = spec.totals.iter().map(|t| t.to_string()).collect();
+    let extra = match (spec.axial, spec.centroid) {
+        (true, true) => " with axial check blends and the overall centroid",
+        (true, false) => " with axial check blends",
+        (false, true) => " with the overall centroid",
+        (false, false) => "",
+    };
+    let mut notes = vec![format!(
+        "{label}{extra}: {} blends, total{} {}, {} replicate(s), {n} runs; {}.",
+        d.blend_count,
+        if totals.len() == 1 { "" } else { "s" },
+        totals.join(", "),
+        spec.replicates,
+        if spec.randomize { format!("run order shuffled with seed {}", spec.seed) } else { "standard order".into() }
+    )];
+    if spec.lower.iter().any(|l| *l > 0.0) {
+        let bounds: Vec<String> = spec.lower.iter().enumerate().map(|(i, l)| format!("{} >= {l}", letter(i))).collect();
+        notes.push(format!("Lower bounds {} (the blends are pseudo-components).", bounds.join(", ")));
+    }
+    let mut on_sheet = vec![
+        column_of("Run order", Designation::X, (1..=n).map(|i| i as f64).collect()),
+        column_of("Standard order", Designation::Y, d.standard.iter().map(|s| *s as f64).collect()),
+        column_of("Total", Designation::Y, d.total.clone()),
+        SheetColumn {
+            designation: Designation::Label,
+            long_name: "Point type".into(),
+            units: String::new(),
+            comments: String::new(),
+            data: ColumnData::text(d.point_type.clone()),
+        },
+    ];
+    for j in 0..q {
         on_sheet.push(column_of(&letter(j).to_string(), Designation::Y, d.runs.iter().map(|r| r[j]).collect()));
     }
     on_sheet.push(column_of("Response", Designation::Y, vec![f64::NAN; n]));
@@ -380,6 +435,35 @@ pub(super) fn run_split_effects(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// T386: a {3, 2} simplex lattice with the centroid for two totals goes to a new sheet.
+    #[test]
+    fn a_mixture_design_sheet() {
+        let mut p = Project::new();
+        let book = p.add_workbook("doe");
+        let host = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.0])).unwrap();
+        let spec = MixtureOptions { centroid: true, totals: vec![1.0, 50.0], randomize: false, ..Default::default() };
+        let out =
+            p.analyze(&Request { columns: vec![host], rows: RowRange::All, tool: Tool::MixtureDesign(spec) }).unwrap();
+        assert!(
+            out.notes[0].starts_with("{3, 2} simplex lattice with the overall centroid: 7 blends, totals 1, 50"),
+            "{:?}",
+            out.notes
+        );
+        assert_eq!(out.table.as_ref().unwrap().rows[0].1[4], 14.0);
+        let ws = &p.workbook(book).unwrap().sheets[out.new_sheet.unwrap()];
+        let names: Vec<&str> = ws.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names, ["Run order", "Standard order", "Total", "Point type", "A", "B", "C", "Response"]);
+        assert_eq!(ws.columns[3].cell_text(0), "Vertex");
+        assert_eq!(ws.columns[3].cell_text(6), "Overall centroid");
+        let row = 7 + 3; // the second total's binary blend after the three vertices
+        let amounts: Vec<f64> = (4..7).map(|c| ws.columns[c].numeric().unwrap()[row]).collect();
+        assert_eq!(amounts.iter().sum::<f64>(), 50.0);
+        let bad = MixtureOptions { components: 1, ..Default::default() };
+        assert!(
+            p.analyze(&Request { columns: vec![host], rows: RowRange::All, tool: Tool::MixtureDesign(bad) }).is_err()
+        );
+    }
 
     #[test]
     fn a_design_sheet_and_its_effects() {

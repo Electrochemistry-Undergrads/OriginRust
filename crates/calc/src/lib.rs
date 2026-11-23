@@ -54,6 +54,8 @@ pub mod lifedata;
 pub mod lifereg;
 pub mod manip;
 pub mod minverse;
+pub mod mixture;
+pub mod network;
 pub mod nonparam;
 pub mod normality;
 pub mod normalize;

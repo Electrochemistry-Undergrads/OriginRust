@@ -2091,6 +2091,10 @@ pub enum PlotKind {
     /// A network plot (Origin 2021b, T383): nodes and edges from the source and target columns of the plot's
     /// [`SankeyStyle`], weighted by its Y column (1 per row when that is not numeric) (graphing spec 14.33).
     Network,
+    /// A chord diagram (Origin 2021, T402): arcs round a circle for the names of the source and target columns of
+    /// the plot's [`SankeyStyle`], ribbons for the flows between them, weighted by its Y column (1 per row when that
+    /// is not numeric) (graphing spec 14.34).
+    Chord,
     /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
     /// from 12 o'clock, each labelled with its share. The layer draws no axes.
     Pie,

@@ -3343,6 +3343,27 @@ the sheet's first two text columns; in the app the selected text columns, else t
   the weight column with a warning.
 - Not done: directed arrows, node grouping colours, other layouts, label collision avoidance, Origin's Plot Details.
 
+### 14.34 Chord diagram (T402, Origin 2021 feature, Sheaf's look, not measured)
+
+Plot > Categorical > Chord Diagram and `sheaf plot FILE -t chord [--group SOURCE,TARGET] [-y WEIGHT]`
+(`PlotKind::Chord`, `Template::Chord`, `Project::plot_chord`; layout `sheaf_calc::chord`, drawing
+`crates/plot/src/chord.rs`): the same columns as a network plot (14.33), kept in `Plot::sankey` (source, target);
+every row is a flow from the source's name to the target's, of the weight column's value or 1.
+
+- Nodes are the names in order of first appearance. Rows of the same source and target are one flow (summed); A to
+  B and B to A are two flows. Empty names and missing or non-positive weights are left out; a row from a name to
+  itself is a flow that leaves and returns to its own arc.
+- Each node's arc takes a share of the circle in proportion to its outgoing plus incoming flows, clockwise from
+  the top in node order, with 2 degree gaps (smaller with so many nodes that the gaps would take over half the
+  circle). Within an arc the outgoing flows come first (by target), then the incoming ones (by source).
+- The ring of arcs is drawn from 0.40 to 0.43 of the frame's shorter side from its centre, each arc in the layer
+  palette's colour (node order) with a white outline. Each flow is a ribbon from its part of the source's arc to
+  its part of the target's, curving through the centre, in the source's colour at 65 % opacity. Names sit 4 pt
+  outside the middle of their arcs in the X axis tick font at 0.8 of its size (on the left half ending there). No
+  axes, no legend. The `.opj` writer saves a column plot of the weight column with a warning.
+- Not done: a matrix as the input, directed arrow heads, ticks and values round the ring, label rotation, Origin's
+  Plot Details.
+
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
 Use: several panels on one page, most often a vertical stack of cyclic voltammograms or XRD patterns that share the potential or 2-theta axis, with the X tick labels shown only under the bottom panel. Status: researched on 2026-11-12 from the definition files of Origin's plotting functions (variable names and defaults only), the public help pages on stacked and multi-panel graphs, and three Origin runs through COM on our own synthetic data (scripts and pictures in `re-workspace/scratch/graph-p0/`, git-ignored). Tags as in section 12; **[COM]** is behaviour seen in Origin. Where the current online help **[W]** and Origin disagree, Origin decides.

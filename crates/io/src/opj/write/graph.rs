@@ -775,6 +775,12 @@ impl Writer {
                     .into(),
             );
         }
+        if has(&|k| k == PlotKind::Chord) {
+            notes.push(
+                "chord diagrams were written as column plots of their weight column; their arcs and ribbons were not written"
+                    .into(),
+            );
+        }
         if has(&|k| k == PlotKind::Sankey) {
             notes.push(
                 "Sankey diagrams were written as column plots of their flow column; their nodes and bands were not written"
@@ -874,6 +880,7 @@ impl Writer {
                 | PlotKind::Sunburst
                 | PlotKind::Sankey
                 | PlotKind::Network
+                | PlotKind::Chord
                 | PlotKind::Pie
                 | PlotKind::Pie3D
                 | PlotKind::PieBw => CurveKind::Column,

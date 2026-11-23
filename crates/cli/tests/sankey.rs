@@ -105,3 +105,23 @@ fn treemaps_and_sunbursts_of_text_columns_count_the_rows() {
         assert!(project.numeric(plot.y).is_none(), "{template}: counted");
     }
 }
+
+#[test]
+fn a_chord_diagram_takes_its_ends_and_an_optional_weight() {
+    let dir = std::env::temp_dir().join(format!("sheaf-cli-chord-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("trade.csv");
+    std::fs::write(&csv, "From,To,Trade\nAnn,Bob,3\nBob,Ann,1\nCy,Ann,2\n").unwrap();
+    let (png, saved) = (dir.join("c.png"), dir.join("c.sheaf"));
+    let (c, p, s) = (csv.to_str().unwrap(), png.to_str().unwrap(), saved.to_str().unwrap());
+    let (ok, e) = sheaf(&["plot", c, "-t", "chord", "-y", "Trade", "-o", p, "--save", s]);
+    assert!(ok, "{e}");
+    let project = sheaf_io::project_file::load(&saved).unwrap();
+    let plot = &project.graphs().next().unwrap().layers[0].plots[0];
+    assert_eq!(plot.kind, sheaf_core::graph::PlotKind::Chord);
+    assert_eq!(project.column(plot.y).unwrap().long_name, "Trade");
+    assert_eq!(project.column(plot.sankey.source.unwrap()).unwrap().long_name, "From");
+    let (ok, e) = sheaf(&["plot", c, "-t", "chord", "--group", "From", "-o", p]);
+    assert!(!ok && e.contains("a chord diagram needs a source and a target"), "{e}");
+}

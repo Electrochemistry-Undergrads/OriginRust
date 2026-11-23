@@ -374,9 +374,11 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
         panel_graph(project, template_from(a.template.as_deref(), suggested)?, p, a)?
     } else if a.overlay {
         overlay_files(project, template_from(a.template.as_deref(), suggested)?, a)?
-    } else if template_from(a.template.as_deref(), suggested)? == Template::Network {
-        // A network plot (T383): --group names the source and target columns (default: the sheet's first two
-        // text columns), -y the weight column (default: none, every row counts 1).
+    } else if matches!(template_from(a.template.as_deref(), suggested)?, Template::Network | Template::Chord) {
+        // A network plot (T383) or a chord diagram (T402): --group names the source and target columns (default:
+        // the sheet's first two text columns), -y the weight column (default: none, every row counts 1).
+        let template = template_from(a.template.as_deref(), suggested)?;
+        let what = if template == Template::Chord { "a chord diagram" } else { "a network plot" };
         let book = pick_book(project, a.book.as_deref())?;
         let sheet = pick_sheet(project, book, a.sheet.as_deref())?;
         let ends: Vec<ColumnId> = match a.group.as_deref() {
@@ -390,14 +392,18 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
                 .unwrap_or_default(),
         };
         let [source, target, ..] = ends[..] else {
-            bail!("a network plot needs a source and a target column: --group SOURCE,TARGET (or two text columns)")
+            bail!("{what} needs a source and a target column: --group SOURCE,TARGET (or two text columns)")
         };
         let weight = match a.y.as_slice() {
             [] => None,
             [one] => Some(named_columns(project, book, sheet, std::slice::from_ref(one))?[0]),
-            _ => bail!("a network plot takes one -y column (the weight of each edge)"),
+            _ => bail!("{what} takes one -y column (the weight of each row)"),
         };
-        project.plot_network(source, target, weight)?
+        if template == Template::Chord {
+            project.plot_chord(source, target, weight)?
+        } else {
+            project.plot_network(source, target, weight)?
+        }
     } else if template_from(a.template.as_deref(), suggested)? == Template::Alluvial {
         // An alluvial diagram (T381): --group names the stage columns (default: every text column of the
         // sheet), -y the weight column (default: none, every row counts 1).

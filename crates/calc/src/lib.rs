@@ -19,6 +19,7 @@ pub mod bin2d;
 pub mod binscatter;
 pub mod capability;
 pub mod changepoint;
+pub mod chord;
 pub mod coherence;
 pub mod correlation;
 pub mod crosstab;

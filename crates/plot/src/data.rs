@@ -121,6 +121,8 @@ pub(crate) struct PlotData<'a> {
     pub sankey: Option<Box<crate::sankey::SankeyData>>,
     /// What a network plot draws (T383); `None` for other kinds.
     pub network: Option<Box<crate::network::NetworkData>>,
+    /// What a chord diagram draws (T402); `None` for other kinds.
+    pub chord: Option<Box<crate::chord::ChordData>>,
     /// The colour mapping of a waterfall curve; `None` when the layer has none.
     pub wf: Option<WaterfallColors>,
     /// The rows of a 3D ribbon (T161); `None` for other plots.
@@ -629,7 +631,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         // So does an alluvial diagram without a weight column (T381): its Y column is a stage of text.
         let counted = matches!(plot.stat, Some(StatPlot::Pareto | StatPlot::ParetoCumulative))
             || (plot.kind == PlotKind::Sankey && !plot.sankey.stages.is_empty())
-            || plot.kind == PlotKind::Network
+            || matches!(plot.kind, PlotKind::Network | PlotKind::Chord)
             || (matches!(plot.kind, PlotKind::Treemap | PlotKind::Sunburst) && project.numeric(plot.y).is_none());
         let Some(y) = project.numeric(plot.y).or_else(|| counted.then_some(&[][..])) else { continue };
         // A Y column with a sampling interval stands at its own X (T84), even beside an X column:
@@ -713,6 +715,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             sunburst: None,
             sankey: None,
             network: None,
+            chord: None,
             wf: None,
             ribbon: None,
             surface: None,
@@ -776,6 +779,15 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             PlotKind::Treemap => {
                 pd.treemap = crate::treemap::TreemapData::new(project, layer, &pd).map(Box::new);
                 // A treemap has no points on any axis.
+                pd.end = pd.start;
+                pd.mask = None;
+                pd.err = None;
+                pd.xerr = None;
+                pd.base = None;
+            }
+            PlotKind::Chord => {
+                pd.chord = crate::chord::ChordData::new(project, layer, &pd).map(Box::new);
+                // A chord diagram has no points on any axis.
                 pd.end = pd.start;
                 pd.mask = None;
                 pd.err = None;

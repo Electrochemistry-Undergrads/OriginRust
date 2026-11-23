@@ -235,6 +235,8 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T383](T383-network-plot.md) | Plot > Categorical > Network Plot and sheaf plot -t network | M | done 2026-11-22 (graphing 14.33), not measured |
 | [T392](T392-nested-frequency.md) | Nested frequency charts: treemap and sunburst of text columns count the rows | S | done 2026-11-23 (graphing 14.27), not measured |
 | [T396](T396-named-cells.md) | Named cells: Define Name... on a data cell, formulas read the name | S | done 2026-11-23 (expression-language), not measured |
+| [T400](T400-named-ranges.md) | Named ranges: Define Name... on selected cells of a column, mean(Name) | S | done 2026-11-23 (expression-language), not measured |
+| [T402](T402-chord-diagram.md) | Plot > Categorical > Chord Diagram and sheaf plot -t chord | S | done 2026-11-23 (graphing 14.34), not measured |
 | [T233](T233-batch-summary.md) | File > Batch Processing: Summary Sheet, Dataset Identifier, Delete Intermediate Books (a Batch Summary book stacking one sheet of every book) | S | done 2026-11-20 (workbook-model 13p), not measured; left: Origin's layout and identifier choices |
 | [T235](T235-batch-cli.md) | sheaf batch: Batch Processing without a window (template, summary, --summary-csv), core Project::batch_process shared with the window | S | done 2026-11-20 (workbook-model 13p); MCP: T238 |
 | [T238](T238-batch-mcp.md) | MCP batch_process: the shared batch run (books, summary, delete) on the session project, one undo step attached | S | done 2026-11-20 (mcp.md 5.1); left: read options |

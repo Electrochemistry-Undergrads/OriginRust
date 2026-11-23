@@ -1485,6 +1485,35 @@ fn manhattan_plot_runs_from_the_command_line() {
     assert!(ok && out.contains("3 groups"), "the group from the X column: {err} {out}");
 }
 
+/// Distribution analysis with arbitrary censoring (spec `statistics.md` section 47, T384).
+#[test]
+fn distribution_analysis_with_arbitrary_censoring_runs_from_the_command_line() {
+    let dir = scratch("lifedist_interval");
+    let path = dir.join("ic.csv");
+    std::fs::write(&path, "id,start,stop\n1,,10\n2,10,20\n3,20,30\n4,5,5\n5,30,\n6,12,18\n7,8,15\n").unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "lifedist-interval", file, "--y", "start,stop"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("Weibull fit to 7 rows (1 exact, 1 right-, 1 left-, 4 interval-censored)")
+            && out.contains("LifeInterval1"),
+        "{out}"
+    );
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "lifedist-interval",
+        file,
+        "--y",
+        "start,stop",
+        "--distribution",
+        "exponential",
+        "--no-graph",
+    ]);
+    assert!(ok && out.contains("exponential fit"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "lifedist-interval", file, "--y", "start,stop", "--distribution", "gamma"]);
+    assert!(!ok && err.contains("--distribution"), "{err}");
+}
+
 /// Distribution overview of right-censored data (spec `statistics.md` section 37, T366).
 #[test]
 fn distribution_overview_runs_from_the_command_line() {

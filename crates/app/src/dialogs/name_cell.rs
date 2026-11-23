@@ -1,5 +1,6 @@
-//! A data cell's Define Name... (T396): names the cell so that formulas of its workbook can read it. The window
-//! only asks; the app defines the name. Rules: `docs/spec/expression-language.md`, "Named cells".
+//! A data cell's Define Name... (T396): names the cell so that formulas of its workbook can read it, or the
+//! selected cells of its column (a named range, T400). The window only asks; the app defines the name. Rules:
+//! `docs/spec/expression-language.md`, "Named cells".
 
 use eframe::egui;
 use sheaf_core::ColumnId;
@@ -16,14 +17,22 @@ pub enum NameCellOutcome {
 pub struct NameCellDialog {
     pub column: ColumnId,
     pub row: usize,
+    /// The last row of a named range (T400); `row` for one cell.
+    pub last: usize,
     pub name: String,
     /// Why the last OK did not work.
     pub problem: Option<String>,
 }
 
 impl NameCellDialog {
-    pub fn new(column: ColumnId, row: usize, current: Option<&str>) -> Self {
-        NameCellDialog { column, row, name: current.unwrap_or_default().to_string(), problem: None }
+    pub fn new(column: ColumnId, row: usize, last: usize, current: Option<&str>) -> Self {
+        NameCellDialog {
+            column,
+            row,
+            last: last.max(row),
+            name: current.unwrap_or_default().to_string(),
+            problem: None,
+        }
     }
 
     pub fn show(&mut self, ctx: &egui::Context) -> NameCellOutcome {
@@ -39,10 +48,19 @@ impl NameCellDialog {
                     let label = ui.label("Name");
                     ui.add(egui::TextEdit::singleline(&mut self.name).desired_width(160.0)).labelled_by(label.id);
                 });
-                ui.weak(format!(
-                    "Row {} of this column. Formulas of this workbook read the name as the cell's value.",
-                    self.row + 1
-                ));
+                if self.last > self.row {
+                    ui.weak(format!(
+                        "Rows {} to {} of this column. Formulas of this workbook use the name as these cells, \
+                         in functions such as mean(Name) or total(Name).",
+                        self.row + 1,
+                        self.last + 1
+                    ));
+                } else {
+                    ui.weak(format!(
+                        "Row {} of this column. Formulas of this workbook read the name as the cell's value.",
+                        self.row + 1
+                    ));
+                }
                 if let Some(p) = &self.problem {
                     ui.colored_label(ui.visuals().error_fg_color, p);
                 }

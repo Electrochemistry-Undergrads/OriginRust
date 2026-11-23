@@ -3994,7 +3994,23 @@ values until edited. Undo reverts the last preview Apply and OK makes one docume
 entry. A native `.sheaf` file or the `.opj.sheaf` companion stores colours and dimensions.
 The writer reports the omission from bare `.opj`. The existing Background tab and View >
 Show > Frame still use the plot rectangle. Sheaf's overlap ordering and numeric input bounds
-are implementation choices. Drawing Order and Scale Elements remain open.
+are implementation choices.
+
+The **Drawing Order** setting applies to the graph page. An Origin 2016 two-layer
+Line graph reported `page.cntrl=0` by default. With a white inset, that setting
+left 1,704 red pixels in its 700 × 535 export. Setting `page.cntrl=4` reduced
+that count to 833, then removing the inset background restored it to 1,699.
+The changed pixels lay around the inset. [Origin Display tab](https://docs.originlab.com/origin-help/laymanage-displaytab/) · [LabTalk page properties](https://docs.originlab.com/labtalk/ref/page-obj/)
+
+In Sheaf, Draw Composite paints the visible layer fills before the layers' data,
+axes and other foreground items. Draw Layer by Layer paints an entire layer
+before the next layer, so a later opaque fill can cover earlier data. The latter
+is the default for Sheaf projects to preserve existing rendering when a saved
+file predates the option. The Display tab's Apply and Undo update the working
+preview, and OK commits the page choice in one project Undo step. The `.sheaf`
+file and the Origin project companion save the choice. Sheaf's raw `.opj` writer
+reports the omitted flag when exporting the composite choice. Scale Elements
+remains open.
 
 **Fit Page to Layers** (`pfit2l`; Margin Control Border (default) or Tight, Border Width 5, Adjust
 Direction Height and Width (default), Height Only, Width Only), measured on the stock page: the

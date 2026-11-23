@@ -1,5 +1,5 @@
 use super::*;
-use sheaf_core::graph::{AxisSide, Frame, LayerBorder, ScaleKind, ScaleLink, TickDirection};
+use sheaf_core::graph::{AxisSide, Frame, LayerBorder, LayerDrawingOrder, ScaleKind, ScaleLink, TickDirection};
 
 /// The sample project with Graph1 made of `layers` independent layers (copies of its first one).
 fn with_layers(tag: &str, layers: usize) -> Harness<'static, SheafApp> {
@@ -607,6 +607,72 @@ fn display_border_edit_is_scoped_renders_outside_the_frame_and_round_trips() {
     }
     menu(&mut h, "Edit", "Undo Layer Management");
     assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn drawing_order_is_page_wide_and_commits_only_after_apply_and_ok() {
+    let mut h = with_layers("lm-drawing-order", 2);
+    let before = project(&h).clone();
+    let id = graph(&h).id;
+    let choose_composite = |h: &mut Harness<'static, SheafApp>| {
+        click(h, "Drawing Order");
+        click(h, "Draw Composite");
+    };
+    open(&mut h);
+    click(&mut h, "Display");
+    assert!(h.get_by_label("Background Color").accesskit_node().is_disabled());
+    choose_composite(&mut h);
+    click(&mut h, "Apply");
+    assert_eq!(project(&h), &before);
+    click(&mut h, "Undo");
+    assert!(h.get_by_label("Apply").accesskit_node().is_disabled());
+    choose_composite(&mut h);
+    click(&mut h, "Apply");
+    click(&mut h, "Cancel");
+    assert_eq!(project(&h), &before);
+
+    open(&mut h);
+    click(&mut h, "Layer2");
+    click(&mut h, "Display");
+    choose_composite(&mut h);
+    click(&mut h, "Apply");
+    click(&mut h, "OK");
+    let mut expected = before.clone();
+    expected.graph_mut(id).unwrap().page.style.layer_drawing_order = LayerDrawingOrder::Composite;
+    assert_eq!(project(&h), &expected);
+    let folder = save_dir("lm-drawing-order");
+    for extension in ["sheaf", "opj"] {
+        let saved = sheaf_io::save::save_project(project(&h), &folder.join(format!("order.{extension}"))).unwrap();
+        if extension == "opj" {
+            assert!(saved.warnings.iter().any(|warning| warning.contains("layer drawing order flag")));
+        }
+        let reopened = sheaf_io::open_project(&saved.path).unwrap();
+        assert_eq!(
+            reopened.project.graphs().next().unwrap().page.style.layer_drawing_order,
+            LayerDrawingOrder::Composite
+        );
+    }
+    menu(&mut h, "Edit", "Undo Layer Management");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn drawing_order_rejects_a_page_order_changed_behind_the_preview() {
+    let mut h = with_layers("lm-drawing-order-stale", 2);
+    let id = graph(&h).id;
+    open(&mut h);
+    click(&mut h, "Display");
+    click(&mut h, "Drawing Order");
+    click(&mut h, "Draw Composite");
+    click(&mut h, "Apply");
+    h.state_mut().doc.apply("Independent drawing order", |p| {
+        p.graph_mut(id).unwrap().page.style.layer_drawing_order = LayerDrawingOrder::Composite;
+    });
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().layer_management.is_some());
+    assert!(h.query_by_label_contains("drawing order changed").is_some());
+    assert_eq!(h.state().doc.undo_label(), Some("Independent drawing order"));
 }
 
 #[test]

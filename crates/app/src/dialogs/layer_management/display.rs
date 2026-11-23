@@ -2,11 +2,13 @@
 
 use eframe::egui;
 use sheaf_core::Color;
-use sheaf_core::graph::{Graph, LayerBorder};
+use sheaf_core::graph::{Graph, LayerBorder, LayerDrawingOrder};
 
 use crate::object_format::PALETTE;
 
 const DIMENSION_LABELS: [&str; 4] = ["Left Border", "Top Border", "Right Border", "Bottom Border"];
+const DRAWING_ORDERS: [(LayerDrawingOrder, &str); 2] =
+    [(LayerDrawingOrder::Composite, "Draw Composite"), (LayerDrawingOrder::LayerByLayer, "Draw Layer by Layer")];
 
 #[derive(Clone, Copy, Default, PartialEq)]
 enum Tab {
@@ -21,16 +23,27 @@ pub(super) struct DisplayDraft {
     tab: Tab,
     colors: [ColorDraft; 3],
     dimensions: [DimensionDraft; 4],
+    drawing_order: Option<LayerDrawingOrder>,
 }
 
 #[derive(Default)]
 pub(super) struct DisplayChanges {
     colors: [Option<Option<Color>>; 3],
     dimensions: [Option<f64>; 4],
+    drawing_order: Option<LayerDrawingOrder>,
 }
 
 impl DisplayChanges {
+    fn has_change(&self) -> bool {
+        self.drawing_order.is_some()
+            || self.colors.iter().any(Option::is_some)
+            || self.dimensions.iter().any(Option::is_some)
+    }
+
     pub(super) fn write(self, graph: &mut Graph, selection: &[usize]) {
+        if let Some(order) = self.drawing_order {
+            graph.page.style.layer_drawing_order = order;
+        }
         for &i in selection {
             let layer = &mut graph.layers[i];
             for (dst, change) in
@@ -52,6 +65,7 @@ impl DisplayChanges {
 impl DisplayDraft {
     pub(super) fn invalidate(&mut self) {
         self.selection = None;
+        self.drawing_order = None;
     }
 
     pub(super) fn show(&mut self, ui: &mut egui::Ui, graph: &Graph, selection: &[usize]) -> Option<DisplayChanges> {
@@ -67,10 +81,24 @@ impl DisplayDraft {
                 DimensionDraft::new(common(layers.clone().map(|l| l.border.dimensions_pct[i])))
             });
         }
+        let original = graph.page.style.layer_drawing_order;
+        let mut order = self.drawing_order.unwrap_or(original);
         ui.horizontal(|ui| {
-            ui.label("Drawing Order");
-            ui.add_enabled(false, egui::Button::new("Draw Composite"));
+            let label = ui.label("Drawing Order");
+            egui::ComboBox::from_id_salt("lm_drawing_order")
+                .selected_text(match order {
+                    LayerDrawingOrder::Composite => "Draw Composite",
+                    LayerDrawingOrder::LayerByLayer => "Draw Layer by Layer",
+                })
+                .show_ui(ui, |ui| {
+                    for (value, name) in DRAWING_ORDERS {
+                        ui.selectable_value(&mut order, value, name);
+                    }
+                })
+                .response
+                .labelled_by(label.id);
         });
+        self.drawing_order = (order != original).then_some(order);
         ui.group(|ui| {
             ui.strong("Option");
             ui.radio_value(&mut self.tab, Tab::Color, "Color");
@@ -79,14 +107,19 @@ impl DisplayDraft {
         });
         let changes = ui
             .add_enabled_ui(!selection.is_empty(), |ui| match self.tab {
-                Tab::Color => self.show_colors(ui),
+                Tab::Color => Some(self.show_colors(ui)),
                 Tab::Dimensions => self.show_dimensions(ui),
             })
-            .inner;
+            .inner
+            .map(|mut changes| {
+                changes.drawing_order = self.drawing_order;
+                changes
+            })
+            .filter(DisplayChanges::has_change);
         if ui.add_enabled(changes.is_some(), egui::Button::new("Apply")).clicked() { changes } else { None }
     }
 
-    fn show_colors(&mut self, ui: &mut egui::Ui) -> Option<DisplayChanges> {
+    fn show_colors(&mut self, ui: &mut egui::Ui) -> DisplayChanges {
         ui.group(|ui| {
             ui.strong("Color");
             for (draft, (label, channels)) in self.colors.iter_mut().zip([
@@ -98,7 +131,7 @@ impl DisplayDraft {
             }
         });
         let colors = self.colors.each_ref().map(ColorDraft::change);
-        colors.iter().any(Option::is_some).then_some(DisplayChanges { colors, ..DisplayChanges::default() })
+        DisplayChanges { colors, ..DisplayChanges::default() }
     }
 
     fn show_dimensions(&mut self, ui: &mut egui::Ui) -> Option<DisplayChanges> {
@@ -128,7 +161,7 @@ impl DisplayDraft {
                 *change = Some(value);
             }
         }
-        dimensions.iter().any(Option::is_some).then_some(DisplayChanges { dimensions, ..DisplayChanges::default() })
+        Some(DisplayChanges { dimensions, ..DisplayChanges::default() })
     }
 }
 

@@ -346,6 +346,9 @@ impl Writer {
                     .into(),
             );
         }
+        if !layer.element_scale.is_default() {
+            notes.push("layer management element scaling was not written (the companion file keeps it)".into());
+        }
         if !layer.group_style.is_default() {
             notes.push("the Group tab of a layer (edit mode, increments, subgroups) was not written".into());
         }

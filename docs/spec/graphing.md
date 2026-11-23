@@ -4030,8 +4030,33 @@ is the default for Sheaf projects to preserve existing rendering when a saved
 file predates the option. The Display tab's Apply and Undo update the working
 preview, and OK commits the page choice in one project Undo step. The `.sheaf`
 file and the Origin project companion save the choice. Sheaf's raw `.opj` writer
-reports the omitted flag when exporting the composite choice. Scale Elements
-remains open.
+reports the omitted flag when exporting the composite choice.
+
+**Scale Elements** changes the selected layers. In Origin 2016, a stock Line
+layer started at 68.16 × 71.83% of the page with `layer.fixed=0` and
+`layer.factor=1`. Halving only its width kept factor 1. Halving only its
+height gave 0.65, and halving both sides gave 0.46. Fixed Factor 0.75
+survived a resize. The axis title and legend still reported their authored
+22 pt sizes. The two prominent EMF font heights changed from 91 and 75
+units at factor 1 to 42 and 34 at 0.46 and to 69 and 56 at 0.75. The
+curve pen changed from 7 units to 3 and 5. Restoring the auto-scaled
+stock frame restored the original font heights and pen widths.
+[Origin Display tab](https://docs.originlab.com/origin-help/laymanage-displaytab/) · [LabTalk layer properties](https://docs.originlab.com/labtalk/ref/layer-obj/)
+
+Sheaf's **Scale with Layer Frame** fits the measured factors with the
+square root of the nominal frame area divided by 0.7554. The area uses page
+fractions, including the parent frame for a linked layer. For frames narrower
+than 68.5% and shorter than 71%, it rounds the factor to hundredths with a
+minimum of 0.10. At either threshold it uses 1. These bounds and the area
+formula are a fit to the measured cases. **Fixed Factor** accepts 0.05 through
+20 and stays constant through resize. The default is Fixed Factor 1 to
+preserve existing Sheaf graphs. The factor scales supported axis, legend,
+free-text and data-label fonts, axis lines, ticks and grids, and plot pens,
+symbols and error caps through the shared scene layout. The authored sizes
+stay available for editing. Apply stages the selected layers, Undo restores
+the previous preview, and OK commits one project Undo step. The `.sheaf`
+file and `.opj.sheaf` companion store the mode. Bare `.opj` reports the
+omission and writes the authored styles.
 
 **Fit Page to Layers** (`pfit2l`; Margin Control Border (default) or Tight, Border Width 5, Adjust
 Direction Height and Width (default), Height Only, Width Only), measured on the stock page: the

@@ -241,7 +241,7 @@ fn sheet_image_scene(sheet: &Worksheet) -> Result<Scene, PlotError> {
     let table = SheetTable::with_image_metrics(sheet, style, &worksheet_line_height);
     let pages = table.pages(1.0e9, 1.0e9);
     let slot = pages.first().ok_or_else(|| PlotError::Size("the sheet has nothing to draw".into()))?;
-    let (dx, dy) = (style.rownum_w, style.row_h);
+    let (dx, dy) = table.heading_extent();
     let head_fill = Color::rgb(222, 222, 222);
     let mut ops = Vec::new();
     let (mut w, mut h) = (0.0_f64, 0.0_f64);
@@ -285,6 +285,24 @@ mod tests {
     use sheaf_core::column::{Column, ColumnData, Designation};
     use sheaf_core::ids::ColumnId;
     use sheaf_core::page_setup::{Margins, Orientation, Paper};
+
+    #[test]
+    fn standard_font_scales_worksheet_image_content_without_showing_the_headings() {
+        let mut ws = Worksheet::new("Sheet1");
+        ws.columns.push(Column::new(ColumnId(1), "A", Designation::Y, ColumnData::numeric(vec![10.0])));
+        let (width, height) = sheet_image_size(&ws).unwrap();
+        ws.set_standard_font(sheaf_core::sheet_fonts::ColumnLabelFont {
+            family: "Courier New".into(),
+            size_pt: Some(18.0),
+        });
+        let (scaled_width, scaled_height) = sheet_image_size(&ws).unwrap();
+        assert_eq!(scaled_width, 2.0 * width);
+        assert!(scaled_height > height);
+        let svg = sheet_image_svg(&ws).unwrap();
+        assert!(svg.contains("Courier New"));
+        assert!(svg.contains(">10</text>"));
+        assert!(!svg.contains("A(Y1)"));
+    }
 
     #[test]
     fn the_worksheet_image_has_the_labels_and_cells_but_no_heads_numbers_or_grid() {

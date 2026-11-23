@@ -28,6 +28,7 @@ pub mod datetime;
 pub mod dependents;
 pub mod extract;
 pub mod fill_pattern;
+pub mod fishbone;
 pub mod fit_page;
 pub mod fitting;
 pub mod format;

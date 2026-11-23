@@ -210,6 +210,33 @@ exclusive; `y2` and `graph` are exclusive; `overlay_files` excludes `book` and `
 are checked as the CLI checks them: width and height 0.1 to 100 inches, finite axis limits that
 differ, colors parsed by `Color::parse`.
 
+**`merge_graphs`** arranges two or more graphs in the current project using the same layout as
+Merge Graph Windows. Give `graphs` as an ordered list of distinct graph names, or set
+`all_graphs: true` to use project order.
+
+```json
+{"graphs": ["Graph1", "Graph2"], "cols": 1, "gap": [5, 0],
+ "share_x": true, "hide_inner": true}
+```
+
+`rows` and `cols` default to the automatic grid. `gap` sets [horizontal, vertical] spacing
+(default [5, 5]) and `margins` sets [left, right, top, bottom] (default [15, 10, 10, 15]), both
+in percent of the page. `page_size` sets [width, height] in inches (default [11.41, 7.973]).
+`portrait` turns the longer side upright. `text_scale` takes `"auto"` (default), `"keep"`, or a
+multiplier from 0.05 to 20. `keep_aspect` preserves each panel's aspect ratio.
+
+`group_sources` defaults to true and gives each source one cell. With false, each independent
+layer and its linked layers take one cell. `rearrange: false` preserves the original frames.
+`add_extra_layers` fills vacant cells with independent blank layers. `link` links later panels
+to the first in position where their existing links permit it. `share_x` also shares the first
+panel's X scale. `hide_inner` hides ticks, labels and titles at touching inner edges.
+
+Result `{graph, layers, sources, removed_sources, warnings}`. Source graph windows are kept
+by default. `remove_sources: true` removes them as part of the same edit after a successful
+merge. Plots in the merged graph use the original worksheet columns. Attached, each successful
+call is one Undo step. Pass the new graph name to `export_graph` to render it. Common Scale
+and panel labels are available in the desktop Merge Graph Windows dialog.
+
 **`export_graph`**
 `{graph?, graphs?: [string], all_graphs?, path?, format?: "png|svg|pdf|eps|tiff|emf|jpg|bmp", dpi?, width?, height?, margin?, return_image?}`.
 `format` defaults to the extension of `path`, else `png`. `dpi` defaults to 300, range 36 to 1200;
@@ -662,7 +689,7 @@ with writer shutdown deliberately omitted.
 | --- | --- |
 | `list_contents`, `read_columns`, `export_graph`, `export_data` | Run on a copy of the live project. No undo step. `export_*` write only under the roots, never replace a file, and never touch the protected set (section 11.11). |
 | `list_analysis_tools`, `list_fit_models`, `list_simulate_functions` | Run at once, even while a dialog is open. They do not read the project. |
-| `import_files`, `set_column_values`, `plot`, `analyze`, `sort_sheet`, `filter_sheet`, `fit`, `simulate_curve`, `simulate_surface`, `batch_process` | `mutates`: run inside `Document::edit`. One undo step, named as in section 11.8. |
+| `import_files`, `set_column_values`, `plot`, `merge_graphs`, `analyze`, `sort_sheet`, `filter_sheet`, `fit`, `simulate_curve`, `simulate_surface`, `batch_process` | `mutates`: run inside `Document::edit`. One undo step, named as in section 11.8. |
 | `new_project`, `open_project`, `save_project` | `headless_only`: refused (section 11.5). |
 
 Resource operations run on a copy of the live project, like the reads.

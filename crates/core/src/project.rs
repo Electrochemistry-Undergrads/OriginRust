@@ -396,6 +396,8 @@ pub enum ProjectError {
     SunburstNeedsCategory,
     #[error("a sunburst plot needs a numeric value column; select one")]
     SunburstNeedsValue,
+    #[error("a cause-and-effect diagram needs one or more category columns; select them")]
+    FishboneColumns,
     #[error("a sunburst plot cannot have a right Y axis; use one Y axis or another template")]
     SunburstNoRightAxis,
     #[error(
@@ -1383,6 +1385,9 @@ impl Project {
             let groups: Vec<ColumnId> = ys.iter().copied().filter(|c| *c != y).collect();
             return self.plot_indexed(template, &groups, y);
         }
+        if template == Template::Fishbone {
+            return self.plot_fishbone(ys, crate::fishbone::DEFAULT_EFFECT);
+        }
         if template == Template::Sunburst {
             // Like the treemap: the columns of text are the rings, in selection order (else those of the value
             // column's sheet); the value is the last numeric column.
@@ -1965,6 +1970,9 @@ impl Project {
         }
         if template == Template::Sunburst {
             return Err(ProjectError::SunburstNoRightAxis);
+        }
+        if template == Template::Fishbone {
+            return Err(ProjectError::FishboneColumns);
         }
         if matches!(template, Template::GroupedColumns | Template::GroupedBox) {
             return Err(ProjectError::IndexedNoRightAxis);

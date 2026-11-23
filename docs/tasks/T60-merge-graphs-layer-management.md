@@ -5,7 +5,7 @@
 Merge Graph Windows (core `merge.rs`, dialog, `sheaf merge-graphs`), Layer Management (Arrange,
 Size/Position, Link; core `layer_manage.rs`), Fit Page to Layers (dialog and Format item). Fit Layer to
 Graph did nothing measurable in Origin and is tagged `N`. Remaining work includes independent
-opposite-axis styling, the rest of Layer Management Display, and an MCP tool for merging.
+opposite-axis styling and the rest of Layer Management Display.
 See T61 for Layer Management Add.
 **Size:** L, merge then management.
 Background-colour follow-up (`codex/t60-layer-display`, 2026-11-16): Display > Color >
@@ -129,6 +129,11 @@ with the 2016 dialog are recorded in graphing 15.7d.
 types, primary edges, ticks, titles, tick labels and formulas, and mirrored lines and ticks. Apply
 preserves mixed settings until edited and keeps straight scale links in force. Graphing 15.7d
 records the Origin 2016 controls, documented multiple-layer behavior and Sheaf's mirrored-edge limits.
+
+**Merge graphs through MCP (2026-11-22).** The `merge_graphs` tool accepts a list of graph names
+or all graphs in project order, uses the existing merge engine, and returns the new graph name
+for export. Attached, creating the graph and optionally removing the source windows is one
+Undo step. See [MCP graph tools](../spec/mcp.md#52-graphs-and-export).
 
 **Branch:** `merge-graphs`. **Priority:** P0, wave 2, owner's stacked-figure priority.
 **Spec:** [graphing](../spec/graphing.md) 15 (add Merge Graph Windows and Layer Management

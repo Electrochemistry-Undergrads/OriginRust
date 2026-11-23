@@ -645,7 +645,8 @@ All of this is **[S]** unless it says otherwise.
   the error, which the window shows under the row. Only a missing file starts an empty store. A damaged entry (no name, no settings,
   a bad or repeated name) is skipped and the others are kept.
 - **Two instances.** Changes take a lock file, read the file again, apply the change and write it atomically
-  (as the recent files, `recent-files.md`), so themes saved by another running instance are not lost.
+  (as the recent files, `recent-files.md`, including its wait and refusal rule), so themes saved by another
+  running instance are not lost.
   The `<last used>` of the instance that confirms last wins.
 - **Command line** (`crates/ops/src/themes.rs`, flags in `ReadOptions`, so every command that reads a data file
   has them: `import`, `info`, `plot`, `export`, `fit` and `analyze ...`; the MCP server does not

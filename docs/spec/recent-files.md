@@ -113,8 +113,11 @@ entries are dropped; each list is cut to 15; unknown keys are ignored. Reading t
 - **Merging two instances.** Every change (`recent::update` and the helpers over it) takes an
   exclusive lock on `recent.json.lock` next to the file, re-reads the file, applies the change, writes
   the file and releases the lock. So an entry another instance added since this one last read is
-  kept. The wait for the lock is 2 seconds; after that the change goes on without it (a hung
-  instance must not block the others). The file is written to a temporary file and renamed, so a
+  kept. The wait for the lock is 60 seconds (2 until T230, 10 until T378); when another instance
+  still holds it after that, the change is refused with "another Sheaf is still changing this settings
+  file; nothing was written, try again" rather than written without the lock, which lost the other
+  writer's change under heavy load (T378). Only when the lock file cannot be made or the file system
+  cannot lock does the change go on without a lock. The file is written to a temporary file and renamed, so a
   crash never leaves half a file. The lock file stays in the folder and is empty.
 - **Removing.** `remove` drops a file from all four lists, whatever its spelling, also after the file has
   been deleted. The app calls it when a click finds the file missing or not a regular file.

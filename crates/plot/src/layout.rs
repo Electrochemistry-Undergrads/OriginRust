@@ -33,7 +33,8 @@ use sheaf_core::{Project, WindowId};
 
 /// Builds the scene of a graph.
 pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasurer) -> Result<Scene, PlotError> {
-    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
+    let styled = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?.scaled_layer_elements();
+    let g = styled.as_ref();
     let pds: Vec<LayerData> = data::collect_graph(project, g);
     let geoms = graph_geometry(project, g, &pds, m);
     let x_titles = title_places(project, g, &geoms, &pds, Dim::X, m);

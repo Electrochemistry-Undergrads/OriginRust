@@ -2111,6 +2111,7 @@ fn statistics_menu() -> Vec<Entry> {
                 item("Kaplan-Meier Estimator...", Cmd::Analyze(AnalysisKind::KaplanMeier)),
                 item("Distribution Overview Plot...", Cmd::Analyze(AnalysisKind::LifeDist)),
                 item("Distribution Analysis (Arbitrary Censoring)...", Cmd::Analyze(AnalysisKind::LifeDistArbitrary)),
+                item("Life Data Regression...", Cmd::Analyze(AnalysisKind::LifeRegression)),
             ],
         ),
         sub(

@@ -2207,6 +2207,26 @@ optimum to 1e-10, Sheaf's maximum no lower, parameters to 1e-5; scipy's own `fit
 Nonparametric (Turnbull) estimates, probability plots with interval data, frequency columns and life-data regression
 are not built.
 
+## 48 Life data regression (T391, Origin 2026b; not measured)
+
+Origin 2026b's regression with life data is not part of Origin 2016, so this is Sheaf's own: accelerated failure time
+models. Statistics > Survival Analysis > Life Data Regression... (`Tool::LifeRegression`, `sheaf analyze lifereg --y
+COV[,COV..],TIME,CENSOR [--distribution weibull|lognormal|exponential] [--censor 1]`): the chosen columns are numeric
+covariates, then the time (above 0) and the censor column (a case is right-censored when its cell equals the censoring
+value, as for the Kaplan-Meier estimator); rows with a missing value are left out. The model is `ln T = b0 + b1 x1 +
+... + sigma W` with `W` the standard smallest extreme value (Weibull, shape `1 / sigma`), the standard normal
+(lognormal) or the extreme value with `sigma = 1` (exponential); a failure adds `-ln sigma - ln t + ln g(z)` and a
+censored time `ln G(z)`, `z = (ln t - x'b) / sigma`, so without covariates the fit is the distribution fit of section
+37. It is maximized by Newton's method on `(b, ln sigma)` with the analytic gradient and a central-difference Hessian
+(only uphill steps, else a gradient step, halving until the likelihood rises), from the least-squares line of the
+failures' log times. Standard errors come from the inverse of the observed information, z = b / SE with normal
+two-sided probabilities, and the scale's error by the delta method. The result sheet `LifeRegN` has one row per term
+(Intercept, each covariate, Scale (sigma)) with Coefficient, Standard error, z and Prob>|z|; the notes give the
+log-likelihood, AIC and, for the Weibull, the shape. Checked against numpy/scipy (`tools/lifereg-ref.py`,
+`crates/calc/tests/lifereg_reference.rs`: 60 rows, two covariates, three distributions) to 1e-7 (standard errors
+1e-5). Proportional hazards (Cox) regression, interval-censored regression, text (factor) covariates and prediction
+of percentiles are not built.
+
 ## 5 Where results go (ADR 0005)
 
 Every run is one `Project::analyze` call and one undo step named after the test ("Two-sample t-test",

@@ -7,9 +7,9 @@ use sheaf_core::analysis::{
     AcfSpec, AdfTerms, ArimaSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty,
     ChangePointSpec, DecomposeModel, DecomposeSpec, ExpSmoothSpec, FactorialDesignSpec, FactorialEffectsSpec,
     ForestTask, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistArbitrarySpec, LifeDistSpec,
-    ManhattanSpec, MixtureDesignSpec, MixtureKind, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec, RandomForestSpec,
-    RareChartKind, RareChartSpec, RocSpec, SmoothModel, SplitPlotDesignSpec, SplitPlotEffectsSpec, StabilitySpec,
-    StationaritySpec, TDistribution, TimePivotSpec, Tool,
+    LifeRegressionSpec, ManhattanSpec, MixtureDesignSpec, MixtureKind, PcaSpec, PivotPeriod, PivotStat, QuantRegSpec,
+    RandomForestSpec, RareChartKind, RareChartSpec, RocSpec, SmoothModel, SplitPlotDesignSpec, SplitPlotEffectsSpec,
+    StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec, Tool,
 };
 
 /// Comma-separated numbers typed in a box (T386); empty text is no number.
@@ -50,6 +50,7 @@ pub struct MultiOptions {
     stability: StabilitySpec,
     life: LifeDistSpec,
     life_any: LifeDistArbitrarySpec,
+    life_reg: LifeRegressionSpec,
     /// The value of the Manual penalty while another penalty is chosen.
     manual_penalty: Option<f64>,
     /// The quantiles as typed (comma separated), read when the tool runs.
@@ -105,6 +106,12 @@ impl MultiOptions {
             }
             AnalysisKind::TimePivot => Ok(Tool::TimePivot(self.timepivot)),
             AnalysisKind::LifeDistArbitrary => Ok(Tool::LifeDistArbitrary(self.life_any)),
+            AnalysisKind::LifeRegression => {
+                if self.life_reg.censor.trim().is_empty() {
+                    return Err("give the censoring value".to_string());
+                }
+                Ok(Tool::LifeRegression(self.life_reg.clone()))
+            }
             AnalysisKind::LifeDist => {
                 if self.life.censor.trim().is_empty() {
                     return Err("give the censoring value".to_string());
@@ -289,6 +296,24 @@ impl MultiOptions {
                 ui.weak(
                     "The exact solution of each quantile (the sum of check losses is as small as it can be); no standard errors.",
                 );
+            }
+            AnalysisKind::LifeRegression => {
+                ui.label("The chosen columns are the covariates, then the time and the censor column.");
+                let s = &mut self.life_reg;
+                ui.horizontal(|ui| {
+                    ui.label("Censoring value");
+                    ui.add(egui::TextEdit::singleline(&mut s.censor).desired_width(80.0));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Distribution");
+                    for (d, name) in [
+                        (LifeDist::Weibull, "Weibull"),
+                        (LifeDist::Lognormal, "Lognormal"),
+                        (LifeDist::Exponential, "Exponential"),
+                    ] {
+                        ui.radio_value(&mut s.dist, d, name);
+                    }
+                });
             }
             AnalysisKind::LifeDistArbitrary => {
                 ui.label("The chosen columns are the start and the end of each failure window: equal for an exact failure, an empty end if it was still working, an empty start if it failed before the end.");

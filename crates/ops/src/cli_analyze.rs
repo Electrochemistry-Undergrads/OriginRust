@@ -1304,6 +1304,15 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 curve: !no_graph,
             })),
         ),
+        AnalyzeTool::Lifereg { target, distribution, censor } => {
+            let dist = match distribution.to_ascii_lowercase().as_str() {
+                "weibull" => analysis::LifeDist::Weibull,
+                "lognormal" => analysis::LifeDist::Lognormal,
+                "exponential" => analysis::LifeDist::Exponential,
+                other => bail!("--distribution takes weibull, lognormal or exponential, not {other:?}"),
+            };
+            (target, Job::Tool(Tool::LifeRegression(analysis::LifeRegressionSpec { dist, censor })))
+        }
         AnalyzeTool::LifedistInterval { target, distribution, no_graph } => {
             let dist = match distribution.to_ascii_lowercase().as_str() {
                 "weibull" => analysis::LifeDist::Weibull,

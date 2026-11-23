@@ -8132,9 +8132,9 @@ fn define_name_on_a_cell_lets_formulas_read_it() {
     settle(&mut h);
     assert!(h.state().name_cell.is_some(), "the window opened");
     // A reserved name is refused and the window says why.
-    h.state_mut().apply(Action::SetCellName { column: b, row: 1, name: "j".into() }, &ctx);
+    h.state_mut().apply(Action::SetCellName { column: b, row: 1, last: 1, name: "j".into() }, &ctx);
     assert!(h.state().name_cell.as_ref().unwrap().problem.is_some());
-    h.state_mut().apply(Action::SetCellName { column: b, row: 1, name: "Rate".into() }, &ctx);
+    h.state_mut().apply(Action::SetCellName { column: b, row: 1, last: 1, name: "Rate".into() }, &ctx);
     settle(&mut h);
     assert!(h.state().name_cell.is_none(), "OK closes");
     assert_eq!(project(&h).name_of_cell(b, 1), Some("Rate"));
@@ -8142,6 +8142,38 @@ fn define_name_on_a_cell_lets_formulas_read_it() {
     // The sample's B is 2.5, 4.5, 6.5, 8.5: Rate is 4.5.
     h.state_mut().doc.edit("formula", |p| p.set_column_values(c, "Rate*2", Some(0..1))).unwrap();
     assert_eq!(project(&h).numeric(c).unwrap()[0], 9.0);
+}
+
+#[test]
+fn define_name_on_selected_cells_of_a_column_names_the_range() {
+    // T400: rows 2 to 4 of B selected, right-click inside, Define Name...: the window covers the three rows.
+    let mut h = start(vec![data_file("named-range")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let (b, c) = (column_id(&h, "B"), column_id(&h, "C"));
+    let book = project(&h).workbooks().next().unwrap().id;
+    let sheet = project(&h).workbook(book).unwrap().sheets[0].clone();
+    h.state_mut().books.get_mut(&book).unwrap().select_cells(&sheet, (1, 1), (1, 3));
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::DefineName { column: b, row: 2 }, &ctx);
+    settle(&mut h);
+    let d = h.state().name_cell.as_ref().expect("the window opened");
+    assert_eq!((d.row, d.last), (1, 3));
+    h.get_by_label("Name").focus();
+    h.get_by_label("Name").type_text("Upper");
+    settle(&mut h);
+    h.get_by_label("OK").click();
+    settle(&mut h);
+    assert!(h.state().name_cell.is_none(), "OK closes");
+    assert_eq!(project(&h).name_of_range(b, 1, 3), Some("Upper"));
+    assert_eq!(h.state().doc.undo_label(), Some("Define Name Upper"));
+    // The sample's B is 2.5, 4.5, 6.5, 8.5: the mean of rows 2 to 4 is 6.5.
+    h.state_mut().doc.edit("formula", |p| p.set_column_values(c, "mean(Upper)", Some(0..1))).unwrap();
+    assert_eq!(project(&h).numeric(c).unwrap()[0], 6.5);
+    // A selection over two columns names only the clicked cell.
+    h.state_mut().books.get_mut(&book).unwrap().select_cells(&sheet, (1, 1), (2, 3));
+    h.state_mut().apply(Action::DefineName { column: b, row: 2 }, &ctx);
+    let d = h.state().name_cell.as_ref().unwrap();
+    assert_eq!((d.row, d.last), (2, 2));
 }
 
 #[test]

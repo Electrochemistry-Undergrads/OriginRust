@@ -42,6 +42,21 @@ impl Default for LifeDistArbitrarySpec {
     }
 }
 
+/// What [`Tool::LifeRegression`] does: the chosen columns are the covariates, then the time and the censor column.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LifeRegressionSpec {
+    /// Weibull, lognormal or exponential.
+    pub dist: LifeDist,
+    /// The value of the censor column that marks a censored case (default 1).
+    pub censor: String,
+}
+
+impl Default for LifeRegressionSpec {
+    fn default() -> Self {
+        LifeRegressionSpec { dist: LifeDist::Weibull, censor: "1".into() }
+    }
+}
+
 fn column_of(name: &str, comments: &str, designation: Designation, values: Vec<f64>) -> SheetColumn {
     SheetColumn {
         designation,
@@ -248,6 +263,99 @@ pub(super) fn run(
     Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph, more_graphs }.shift_graphs(shift))
 }
 
+pub(super) fn run_regression(
+    spec: &LifeRegressionSpec,
+    sheet: &Worksheet,
+    columns: &[ColumnId],
+    rows: RowRange,
+) -> Result<Output, AnalysisError> {
+    let censor = spec.censor.trim();
+    if censor.is_empty() {
+        return Err(AnalysisError::BadOption("give the value of the censor column that marks a censored case".into()));
+    }
+    if columns.len() < 3 {
+        return Err(AnalysisError::BadOption(
+            "life-data regression takes the covariate column(s), then the time and the censor column".into(),
+        ));
+    }
+    let column = |id: ColumnId| sheet.column(id).ok_or(AnalysisError::NoSuchColumn(id));
+    let read = |c: &Column| -> Result<Vec<f64>, AnalysisError> {
+        sheet.values_of(c).map(|v| v.into_owned()).ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))
+    };
+    let k = columns.len() - 2;
+    let xcs: Vec<&Column> = columns[..k].iter().map(|id| column(*id)).collect::<Result<_, _>>()?;
+    let tc = column(columns[k])?;
+    let cc = column(columns[k + 1])?;
+    let x_all: Vec<Vec<f64>> = xcs.iter().map(|c| read(c)).collect::<Result<_, _>>()?;
+    let t_all = read(tc)?;
+    let n = x_all.iter().map(Vec::len).chain([t_all.len(), cc.data.len()]).max().unwrap_or(0);
+    if n == 0 {
+        return Err(AnalysisError::Empty(tc.short_name.clone()));
+    }
+    let (first, last) = resolve_rows(rows, &tc.short_name, &[], n)?;
+    let censor_number = censor.parse::<f64>().ok();
+    let (mut x, mut t, mut failed) = (Vec::new(), Vec::new(), Vec::new());
+    for r in first..=last {
+        let row: Vec<f64> = x_all.iter().map(|c| c.get(r).copied().unwrap_or(f64::NAN)).collect();
+        let v = t_all.get(r).copied().unwrap_or(f64::NAN);
+        if !v.is_finite() || row.iter().any(|a| !a.is_finite()) || cell_left_out(sheet, cc, r) {
+            continue;
+        }
+        let Some(is_censored) = cell_equals(cc, r, censor, censor_number) else { continue };
+        x.push(row);
+        t.push(v);
+        failed.push(!is_censored);
+    }
+    let fit = calc::lifereg::life_regression(&x, &t, &failed, spec.dist)
+        .map_err(|e| AnalysisError::BadOption(e.to_string()))?;
+    let mut table = ResultTable::new(&["Coefficient", "Standard error", "z", "Prob>|z|"]);
+    table.push_row(
+        "Intercept".into(),
+        vec![fit.coefficients[0], fit.se[0], fit.z[0], fit.p[0]],
+        vec![String::new(); 4],
+    );
+    for (i, c) in xcs.iter().enumerate() {
+        table.push_row(
+            column_label(c),
+            vec![fit.coefficients[i + 1], fit.se[i + 1], fit.z[i + 1], fit.p[i + 1]],
+            vec![String::new(); 4],
+        );
+    }
+    table.push_row("Scale (sigma)".into(), vec![fit.scale, fit.scale_se, f64::NAN, f64::NAN], vec![String::new(); 4]);
+    let free = fit.coefficients.len() + usize::from(spec.dist != LifeDist::Exponential);
+    let mut notes = vec![format!(
+        "{} accelerated failure time model of ln {} on {} covariate(s): {} rows, {} failures; log-likelihood {}, AIC {}.",
+        spec.dist.name(),
+        column_label(tc),
+        k,
+        fit.n,
+        fit.failures,
+        num(fit.log_likelihood),
+        num(2.0 * free as f64 - 2.0 * fit.log_likelihood)
+    )];
+    notes.push(match spec.dist {
+        LifeDist::Weibull => format!(
+            "Coefficients act on log time (exp(b) multiplies the life); Weibull shape = 1 / scale = {}.",
+            num(1.0 / fit.scale)
+        ),
+        LifeDist::Exponential => {
+            "Coefficients act on log time (exp(b) multiplies the mean life); the scale is fixed at 1.".into()
+        }
+        _ => "Coefficients act on log time (exp(b) multiplies the median life).".into(),
+    });
+    let mut sheet_cols = vec![SheetColumn {
+        designation: Designation::Label,
+        long_name: "Term".into(),
+        units: String::new(),
+        comments: String::new(),
+        data: ColumnData::text(table.rows.iter().map(|(l, _)| l.clone()).collect()),
+    }];
+    for (i, h) in table.headers.iter().enumerate() {
+        sheet_cols.push(column_of(h, "", Designation::Y, table.rows.iter().map(|(_, v)| v[i]).collect()));
+    }
+    Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph: None, more_graphs: Vec::new() })
+}
+
 pub(super) fn run_arbitrary(
     spec: &LifeDistArbitrarySpec,
     sheet: &Worksheet,
@@ -431,6 +539,27 @@ mod tests {
         assert!(out.new_graph.is_none() && out.notes[0].contains("Weibull fit to 5 cases"), "{:?}", out.notes);
         assert!(p.analyze(&request(vec![t], LifeDistSpec::default())).is_err());
         assert!(p.analyze(&request(vec![t, c], LifeDistSpec { censor: " ".into(), ..Default::default() })).is_err());
+    }
+
+    #[test]
+    fn a_covariate_shortens_life_in_the_regression() {
+        let mut p = Project::new();
+        let book = p.add_workbook("lr");
+        let x: Vec<f64> = (0..20).map(|i| f64::from(i % 2)).collect();
+        let t: Vec<f64> =
+            (0..20).map(|i| (2.0 - 0.8 * f64::from(i % 2) + 0.3 * (f64::from(i) * 1.3).sin()).exp()).collect();
+        let c: Vec<f64> = (0..20).map(|i| if i % 7 == 3 { 1.0 } else { 0.0 }).collect();
+        let cols: Vec<ColumnId> = [x, t, c]
+            .into_iter()
+            .map(|v| p.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap())
+            .collect();
+        let out = p
+            .analyze(&Request { columns: cols, rows: RowRange::All, tool: Tool::LifeRegression(Default::default()) })
+            .unwrap();
+        let t = out.table.as_ref().unwrap();
+        assert_eq!(t.rows.len(), 3, "intercept, covariate, scale");
+        assert!((t.rows[1].1[0] + 0.8).abs() < 0.2, "{:?}", t.rows[1]);
+        assert!(out.notes[0].contains("20 rows, 17 failures"), "{:?}", out.notes);
     }
 
     #[test]

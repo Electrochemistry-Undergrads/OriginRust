@@ -51,6 +51,7 @@ pub mod kde;
 pub mod kmeans;
 pub mod levelcross;
 pub mod lifedata;
+pub mod lifereg;
 pub mod manip;
 pub mod minverse;
 pub mod mixture;

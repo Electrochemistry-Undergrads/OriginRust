@@ -3708,6 +3708,18 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Life data regression: --y COVARIATE[,COVARIATE..],TIME,CENSOR; an accelerated failure time model (Weibull,
+    /// lognormal or exponential) of log time on the covariates with right censoring.
+    Lifereg {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// weibull, lognormal or exponential.
+        #[arg(long, default_value = "weibull")]
+        distribution: String,
+        /// The value of the censor column that marks a censored case.
+        #[arg(long, default_value = "1")]
+        censor: String,
+    },
     /// Distribution analysis with arbitrary censoring: --y START,END; equal = exact, empty end = right-censored, empty
     /// start = left-censored, otherwise interval-censored; Weibull, lognormal, exponential or normal maximum likelihood.
     LifedistInterval {

@@ -104,6 +104,12 @@ pub trait Host {
     fn row(&self) -> usize {
         0
     }
+
+    /// A named range of cells (T400): the column and the first and last rows (1-based, inclusive) that `name`
+    /// stands for, so that `mean(Name)` means `mean(col(A)[first:last])`. The default knows no ranges.
+    fn named_range(&self, _name: &str) -> Option<(ColumnRef, usize, usize)> {
+        None
+    }
 }
 
 /// A host built from plain data: named variables and columns that are borrowed slices.
@@ -121,6 +127,7 @@ pub trait Host {
 pub struct SimpleHost<'a> {
     vars: Vec<(String, f64)>,
     cols: Vec<(ColumnRef, &'a [f64])>,
+    ranges: Vec<(String, ColumnRef, usize, usize)>,
     row: usize,
 }
 
@@ -174,6 +181,13 @@ impl<'a> SimpleHost<'a> {
         self.column(ColumnRef::Long(name.to_string()), data)
     }
 
+    /// Adds a named range: `name` stands for rows `first..=last` (1-based) of `col` (T400).
+    #[must_use]
+    pub fn range(mut self, name: &str, col: ColumnRef, first: usize, last: usize) -> Self {
+        self.ranges.push((name.to_string(), col, first, last));
+        self
+    }
+
     /// Sets the 0-based row used by [`Expr::eval`].
     #[must_use]
     pub fn at_row(mut self, row: usize) -> Self {
@@ -211,6 +225,10 @@ impl Host for SimpleHost<'_> {
 
     fn row(&self) -> usize {
         self.row
+    }
+
+    fn named_range(&self, name: &str) -> Option<(ColumnRef, usize, usize)> {
+        self.ranges.iter().find(|(n, ..)| n.eq_ignore_ascii_case(name)).map(|(_, c, a, b)| (c.clone(), *a, *b))
     }
 }
 
@@ -390,6 +408,34 @@ impl Expr {
     }
 }
 
+/// The column, and the rows if limited, of a statistics or vector function's first argument: `col(A)`,
+/// `col(A)[1:10]` or the name of a named range (T400).
+type ColumnArg<'h> = (Col<'h>, Option<(Box<C<'h>>, Box<C<'h>>)>);
+
+fn build_column_arg<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node) -> Result<ColumnArg<'h>, ExprError> {
+    let b = |n: &Node| build(host, seeds, n).map(Box::new);
+    match &n.kind {
+        Kind::Range { base, from, to, .. } => Ok((build_col(host, base)?, Some((b(from)?, b(to)?)))),
+        Kind::Var { name, pos } => {
+            let Some((r, first, last)) = host.named_range(name) else {
+                return Err(ExprError::at(
+                    *pos,
+                    format!("'{name}' is not a named range; give a column such as col(A) or col(A)[1:10]"),
+                ));
+            };
+            if !host.has_column(&r) {
+                return Err(ExprError::at(*pos, format!("the column of the named range '{name}' is gone")));
+            }
+            let col = match host.column_data(&r) {
+                Some(d) => Col::Slice(d),
+                None => Col::Cell(r),
+            };
+            Ok((col, Some((Box::new(C::Num(first as f64)), Box::new(C::Num(last as f64))))))
+        }
+        _ => Ok((build_col(host, n)?, None)),
+    }
+}
+
 fn build_col<'h>(host: &'h dyn Host, n: &Node) -> Result<Col<'h>, ExprError> {
     let Kind::Col { r, pos } = &n.kind else {
         return Err(ExprError::general("internal error: expected a column reference"));
@@ -429,6 +475,14 @@ fn build_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node) -> Result<C<
         Kind::Var { name, pos } => match host.variable(name) {
             Some(v) => C::Num(v),
             None if name == "i" => C::Row,
+            None if host.named_range(name).is_some() => {
+                return Err(ExprError::at(
+                    *pos,
+                    format!(
+                        "'{name}' names a range of cells; use it in a function of a column such as mean({name}) or total({name})"
+                    ),
+                ));
+            }
             None if host.names_column(name) => {
                 return Err(ExprError::at(
                     *pos,
@@ -460,6 +514,14 @@ fn build_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node) -> Result<C<
         Kind::Call { func, args, .. } => match *func {
             Func::U(f) => C::U(f, b(&args[0])?),
             Func::B(f) => C::B(f, b(&args[0])?, b(&args[1])?),
+            // `max(Name)` of a named range is its largest value, as `max(col(A)[1:10])` (T400).
+            Func::MinMax { max }
+                if args.len() == 1
+                    && matches!(&args[0].kind, Kind::Var { name, .. } if host.named_range(name).is_some()) =>
+            {
+                let (col, range) = build_column_arg(host, seeds, &args[0])?;
+                C::Agg { kind: if max { Agg::Max } else { Agg::Min }, col, range }
+            }
             Func::MinMax { max } => {
                 let list = args.iter().map(|a| build(host, seeds, a)).collect::<Result<Vec<_>, _>>()?;
                 if list.len() == 1 {
@@ -484,20 +546,13 @@ fn build_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node) -> Result<C<
             }
             Func::Vec(kind) => {
                 let arg = args.get(1).map(b).transpose()?;
-                let cache = OnceCell::new();
-                match &args[0].kind {
-                    Kind::Range { base, from, to, .. } => {
-                        C::Vector { kind, col: build_col(host, base)?, range: Some((b(from)?, b(to)?)), arg, cache }
-                    }
-                    _ => C::Vector { kind, col: build_col(host, &args[0])?, range: None, arg, cache },
-                }
+                let (col, range) = build_column_arg(host, seeds, &args[0])?;
+                C::Vector { kind, col, range, arg, cache: OnceCell::new() }
             }
-            Func::Agg(kind) => match &args[0].kind {
-                Kind::Range { base, from, to, .. } => {
-                    C::Agg { kind, col: build_col(host, base)?, range: Some((b(from)?, b(to)?)) }
-                }
-                _ => C::Agg { kind, col: build_col(host, &args[0])?, range: None },
-            },
+            Func::Agg(kind) => {
+                let (col, range) = build_column_arg(host, seeds, &args[0])?;
+                C::Agg { kind, col, range }
+            }
         },
     };
     Ok(fold(host, c))

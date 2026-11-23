@@ -321,7 +321,7 @@ fn f4_data_colors_keep_drafts_across_categories_and_restore_with_undo() {
     click(&mut h, "Use color");
     click(&mut h, "Use fill");
     category(&mut h, "Data", "Standard");
-    assert!(h.query_by_label("Use fill").is_none());
+    assert!(h.query_by_label("Use fill").is_some());
     assert_eq!(project(&h), &before);
     click(&mut h, "OK");
 
@@ -331,6 +331,40 @@ fn f4_data_colors_keep_drafts_across_categories_and_restore_with_undo() {
     assert!(s.cell_formats.is_empty());
     assert_eq!(s.cell_format_at(s.columns[0].id, 999_999).fill, Some(yellow));
     assert_eq!(h.state().doc.undo_label(), Some("Worksheet colors"));
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn f4_standard_colors_keep_their_draft_and_clear_independently() {
+    use sheaf_core::cellformat::CategoryColors;
+    use sheaf_core::color::Color;
+
+    let mut h = start_sheet("worksheet-standard-colors");
+    let before = project(&h).clone();
+    open(&mut h);
+    category(&mut h, "Data", "Standard");
+    click(&mut h, "Use fill");
+    click(&mut h, "Use color");
+    category(&mut h, "Standard", "Data");
+    assert_eq!(project(&h), &before);
+    click(&mut h, "Apply");
+    let yellow = Color::rgb(255, 255, 153);
+    let s = sheet(&h);
+    assert_eq!(s.standard_colors, CategoryColors { text_color: Some(Color::BLACK), fill: Some(yellow) });
+    assert!(s.data_colors.is_empty());
+    assert_eq!(s.cell_format_at(s.columns[0].id, 0).fill, Some(yellow));
+    assert_eq!(s.label_color_defaults(&LabelKind::LongName).fill, None);
+    assert!(h.output().shapes.iter().any(|shape| {
+        matches!(&shape.shape, egui::Shape::Rect(rect) if rect.fill == egui::Color32::from_rgb(255, 255, 153))
+    }));
+
+    category(&mut h, "Data", "Standard");
+    click(&mut h, "Use fill");
+    click(&mut h, "OK");
+    assert_eq!(sheet(&h).standard_colors, CategoryColors { text_color: Some(Color::BLACK), fill: None });
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(sheet(&h).standard_colors.fill, Some(yellow));
     menu(&mut h, "Edit", "Undo");
     assert_eq!(project(&h), &before);
 }
@@ -346,7 +380,7 @@ fn f4_column_label_colors_keep_a_separate_draft_and_repaint_the_grid() {
     category(&mut h, "Data", "Column Labels");
     click(&mut h, "Use fill");
     category(&mut h, "Column Labels", "Standard");
-    assert!(h.query_by_label("Use fill").is_none());
+    assert!(h.query_by_label("Use fill").is_some());
     assert_eq!(project(&h), &before);
     click(&mut h, "OK");
 

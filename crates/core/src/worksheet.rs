@@ -61,6 +61,9 @@ pub struct Worksheet {
     /// Category fonts under per-range formatting (T59); absent in older project files.
     #[serde(default, skip_serializing_if = "crate::sheet_fonts::WorksheetFonts::is_empty")]
     pub font_defaults: crate::sheet_fonts::WorksheetFonts,
+    /// Standard text color for data and label cells and Standard fill for data cells (T59).
+    #[serde(default, skip_serializing_if = "crate::cellformat::CategoryColors::is_empty")]
+    pub standard_colors: crate::cellformat::CategoryColors,
     /// Worksheet Properties colors for data cells (T59).
     #[serde(default, skip_serializing_if = "crate::cellformat::DataColors::is_empty")]
     pub data_colors: crate::cellformat::DataColors,
@@ -222,6 +225,7 @@ impl Worksheet {
             notes: Vec::new(),
             cell_formats: Vec::new(),
             font_defaults: Default::default(),
+            standard_colors: Default::default(),
             data_colors: Default::default(),
             column_label_colors: Default::default(),
             label_colors: Default::default(),

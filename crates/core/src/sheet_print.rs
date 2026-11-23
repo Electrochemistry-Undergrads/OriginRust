@@ -876,6 +876,30 @@ mod tests {
     }
 
     #[test]
+    fn worksheet_standard_colors_print_data_fill_and_data_and_label_text() {
+        use crate::cellformat::CategoryColors;
+
+        let mut ws = sheet();
+        let yellow = Color::rgb(255, 255, 0);
+        ws.standard_colors = CategoryColors { text_color: Some(Color::RED), fill: Some(yellow) };
+        let table = SheetTable::new(&ws, PrintStyle::default());
+        let (pages, _) = table.pages_for(&setup());
+        let ops = table.draw_page(&pages[0], 1);
+        let data_top = table.head_height();
+        let fills = ops.iter().filter_map(|op| match op {
+            PrintOp::Fill { y, color, .. } if *color == yellow => Some(*y),
+            _ => None,
+        });
+        let first_fill = fills.reduce(f64::min);
+        assert_eq!(first_fill, Some(data_top));
+        let heading = head_name(&ws, 0);
+        for (text, expected) in [("Index", Some(Color::RED)), ("t1", Some(Color::RED)), (heading.as_str(), None)] {
+            let PrintOp::Text { fmt, .. } = text_op(&ops, text) else { unreachable!() };
+            assert_eq!(fmt.color, expected, "{text}");
+        }
+    }
+
+    #[test]
     fn worksheet_heading_colors_reach_the_printed_heads_and_captions() {
         use crate::cellformat::CategoryColors;
 

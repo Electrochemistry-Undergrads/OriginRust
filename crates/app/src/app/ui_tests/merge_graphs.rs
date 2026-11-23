@@ -57,6 +57,35 @@ fn ok_merges_three_graphs_into_one_new_graph_in_one_undo_step() {
 }
 
 #[test]
+fn roman_panel_labels_follow_the_dialog_draft_and_source_order() {
+    let mut h = with_graphs("merge-roman", 4);
+    let before = project(&h).clone();
+    open(&mut h);
+    click(&mut h, "Arrange Settings");
+    click(&mut h, "Spacing (in % of Page Dimension)");
+    click(&mut h, "Add Label");
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("None")).click();
+    settle(&mut h);
+    click(&mut h, "I, II, III");
+    click(&mut h, "Preview");
+    let preview = "4 source graphs, 4 layers";
+    assert!(h.query_by_label(preview).is_some());
+
+    h.get(By::new().role(egui::accesskit::Role::ComboBox).value("I, II, III")).click();
+    settle(&mut h);
+    click(&mut h, "i, ii, iii");
+    assert!(h.query_by_label(preview).is_none());
+    assert_eq!(project(&h), &before);
+    click(&mut h, "OK");
+
+    let merged = project(&h).graphs().last().unwrap();
+    let labels: Vec<_> = merged.layers.iter().map(|layer| layer.labels[0].text.as_str()).collect();
+    assert_eq!(labels, ["i", "ii", "iii", "iv"]);
+    menu(&mut h, "Edit", "Undo Merge Graph Windows");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
 fn without_keep_source_graphs_the_sources_go_and_one_undo_brings_them_back() {
     let mut h = with_graphs("merge-nokeep", 3);
     open(&mut h);

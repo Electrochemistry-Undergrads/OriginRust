@@ -231,6 +231,10 @@ impl Project {
         let name = self.unique_name("Graph");
         let mut g = FieldTemplate::ContourFill.new_ternary_graph(id, &name, FieldSource::Ternary { a, b, c, z });
         g.long_name = long;
+        // Origin 2016 paints values above a ternary contour's scale light gray (measured, T401).
+        if let Some(f) = g.layers[0].field.as_mut() {
+            f.above_color = Some(crate::Color::rgb(192, 192, 192));
+        }
         self.windows.push(Window::Graph(g));
         Ok(id)
     }

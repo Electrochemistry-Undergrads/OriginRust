@@ -8,9 +8,46 @@
 //! there.
 
 use crate::color::Color;
-use crate::graph::Dash;
+use crate::graph::{Dash, Frame};
 use crate::ids::ColumnId;
 use serde::{Deserialize, Serialize};
+
+/// Layer Management > Display > Scale Elements.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LayerElementScale {
+    WithLayerFrame,
+    Fixed(f64),
+}
+
+impl Default for LayerElementScale {
+    fn default() -> Self {
+        Self::Fixed(1.0)
+    }
+}
+
+impl LayerElementScale {
+    pub const FIXED_RANGE: std::ops::RangeInclusive<f64> = 0.05..=20.0;
+
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// Resolve against the nominal frame, in page fractions, before text layout.
+    pub fn factor(self, frame: Frame) -> f64 {
+        match self {
+            Self::Fixed(factor) if Self::FIXED_RANGE.contains(&factor) => factor,
+            Self::WithLayerFrame
+                if frame.width > 0.0 && frame.height > 0.0 && frame.width < 0.685 && frame.height < 0.71 =>
+            {
+                // Fit the measured Origin 2016 area curve and round to hundredths.
+                let factor = (frame.width * frame.height).sqrt() / 0.7554;
+                ((factor * 100.0).round() / 100.0).max(0.1)
+            }
+            _ => 1.0,
+        }
+    }
+}
 
 fn is_default<T: Default + PartialEq>(v: &T) -> bool {
     *v == T::default()

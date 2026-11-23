@@ -1307,6 +1307,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
                 background: None,
                 scope: LegendScope::Layer,
                 columns: 1,
+                stock_multi_y: false,
                 text: None,
             },
             labels: Vec::new(),
@@ -1340,6 +1341,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             background: None,
             background_style: BackgroundStyle::default(),
             border: Default::default(),
+            element_scale: LayerElementScale::default(),
             group_style: GroupStyle::default(),
             display: LayerDisplay::default(),
             xy_ratio: None,
@@ -1494,6 +1496,7 @@ fn cyclic_voltammetry(id: WindowId, name: &str) -> Graph {
         background: None,
         scope: LegendScope::Layer,
         columns: 1,
+        stock_multi_y: false,
         text: None,
     };
     g
@@ -1891,6 +1894,7 @@ pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
     y.minor_grid = None;
     l.legend.visible = false;
     l.legend.scope = LegendScope::Layer;
+    l.legend.stock_multi_y = false;
     let colors = &mut l.palette.colors;
     match l.palette.mode {
         PaletteMode::Cycle => {
@@ -2819,6 +2823,7 @@ impl FieldTemplate {
                 font: Font::new(DEFAULT_FONT, 8.0),
                 title_font: Font::new(DEFAULT_FONT, 12.0),
             },
+            above_color: None,
         });
         g
     }

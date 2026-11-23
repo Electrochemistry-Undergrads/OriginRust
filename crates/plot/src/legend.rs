@@ -1,7 +1,8 @@
 //! The text of a legend: Origin's notation with `\l(n)` for the symbol of plot n and `%(n)` for
 //! its name, and the ids those numbers refer to.
 
-use sheaf_core::graph::Graph;
+use crate::data::PlotData;
+use sheaf_core::graph::Layer;
 
 /// One piece of a legend line.
 #[derive(Clone, Debug, PartialEq)]
@@ -102,10 +103,10 @@ pub(crate) fn separation_percent(line: &str) -> Option<u32> {
     number.parse().ok()
 }
 
-/// The ids of the plots the legend of layer `index` lists, given the number of drawable plots of
-/// each layer (see [`Graph::legend_ids`]).
-pub(crate) fn ids(g: &Graph, index: usize, plots_in: &dyn Fn(usize) -> usize) -> Vec<String> {
-    g.legend_ids(index, plots_in)
+/// Ordinary legends number the drawable plots consecutively. Stock multi-Y legends
+/// preserve model slots so that hiding a first plot does not change its layer's other rows.
+pub(crate) fn plot_slots(layer: &Layer, plots: &[PlotData], stock_multi_y: bool) -> Vec<usize> {
+    if stock_multi_y { layer.stock_legend_plot_slots(plots.iter().map(|p| p.plot)) } else { (0..plots.len()).collect() }
 }
 
 /// The entry that `id` names among `ids`: an exact match, or else a plain number counts the

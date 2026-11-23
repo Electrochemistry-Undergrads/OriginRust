@@ -1377,7 +1377,14 @@ fn layer_tab(
     }
     let link = graph.layers[l].link.map(|k| k.parent);
     // The ids that `\l(n)` and `%(n)` in the legend text refer to.
-    let legend_ids = graph.legend_ids(l, &|j| graph.layers[j].plots.iter().filter(|p| p.visible).count());
+    let stock_multi_y = graph.layers[l].legend.stock_multi_y;
+    let legend_ids = if stock_multi_y {
+        graph.legend_ids_by_slot(l, |j| {
+            graph.layers[j].plots.iter().enumerate().filter(|(_, p)| p.visible).map(|(slot, _)| slot)
+        })
+    } else {
+        graph.legend_ids(l, &|j| graph.layers[j].plots.iter().filter(|p| p.visible).count())
+    };
     let page = (graph.page.width_pt, graph.page.height_pt);
     let layer = &mut graph.layers[l];
     match tab {
@@ -1486,7 +1493,7 @@ fn layer_tab(
             }
             group_box(ui, "Border", |ui| look::border_ui(ui, "bg_border", &mut layer.background_style.border));
         }
-        DetailTab::Legend => legend_ui(ui, &mut layer.legend, &legend_ids),
+        DetailTab::Legend => legend_ui(ui, &mut layer.legend, l, &legend_ids),
         _ => {
             ui.label(format!(
                 "{} plot(s) in this layer. Select one in the tree to change its look.",
@@ -1734,7 +1741,7 @@ fn stack_tab(ui: &mut egui::Ui, layer: &mut Layer) {
     }
 }
 
-fn legend_ui(ui: &mut egui::Ui, legend: &mut Legend, ids: &[String]) {
+fn legend_ui(ui: &mut egui::Ui, legend: &mut Legend, layer: usize, ids: &[String]) {
     grid(ui, "legend_props", |ui| {
         ui.label("Show legend");
         ui.checkbox(&mut legend.visible, "");
@@ -1790,7 +1797,7 @@ fn legend_ui(ui: &mut egui::Ui, legend: &mut Legend, ids: &[String]) {
         ui.end_row();
         ui.label("Text");
         ui.vertical(|ui| {
-            let automatic = Legend::automatic_text(ids);
+            let automatic = legend.default_text(layer, ids);
             let mut text = legend.text.clone().unwrap_or_else(|| automatic.clone());
             let shown = ui.add(egui::TextEdit::multiline(&mut text).desired_rows(3).desired_width(260.0));
             if shown.changed() {

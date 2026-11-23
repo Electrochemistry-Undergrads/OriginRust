@@ -74,6 +74,60 @@ const GREEN: (u8, u8, u8) = (0, 128, 0);
 const ORANGE: (u8, u8, u8) = (255, 128, 0);
 const MAGENTA: (u8, u8, u8) = (255, 0, 255);
 
+/// Origin 2016's automatic stock legend lists the first plot from each layer before
+/// appending the other plots in the legend's own layer (graphing 21.12).
+pub(crate) fn stock_legend_order(owner: usize, ids: &[String]) -> Vec<usize> {
+    let owner = (owner + 1).to_string();
+    let mut first = Vec::new();
+    let mut extras = Vec::new();
+    for (i, id) in ids.iter().enumerate() {
+        match id.split_once('.') {
+            None | Some((_, "1")) => first.push(i),
+            Some((layer, _)) if layer == owner => extras.push(i),
+            Some(_) => {}
+        }
+    }
+    first.extend(extras);
+    first
+}
+
+impl Layer {
+    /// Model slots of the plotted subset, in model order. A hidden plot keeps its slot
+    /// when a stock legend looks up the first plot of a linked layer.
+    pub fn stock_legend_plot_slots<'a>(&'a self, drawn: impl IntoIterator<Item = &'a Plot>) -> Vec<usize> {
+        let mut drawn = drawn.into_iter().peekable();
+        self.plots
+            .iter()
+            .enumerate()
+            .filter_map(|(slot, plot)| {
+                if drawn.peek().is_some_and(|&next| std::ptr::eq(plot, next)) {
+                    let _ = drawn.next();
+                    Some(slot)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+}
+
+impl Legend {
+    /// Indices into the supplied drawable plot IDs in automatic legend order.
+    pub fn automatic_entry_order(&self, owner: usize, ids: &[String]) -> Vec<usize> {
+        if self.stock_multi_y { stock_legend_order(owner, ids) } else { (0..ids.len()).collect() }
+    }
+
+    /// The reconstructible legend text, including each selected plot's symbol and label.
+    pub fn default_text(&self, owner: usize, ids: &[String]) -> String {
+        if !self.stock_multi_y {
+            return Self::automatic_text(ids);
+        }
+        let indices = self.automatic_entry_order(owner, ids);
+        let displayed: Vec<_> = indices.into_iter().map(|index| ids[index].as_str()).collect();
+        Self::automatic_text(&displayed)
+    }
+}
+
 impl MultiYKind {
     pub const ALL: [MultiYKind; 4] =
         [MultiYKind::ThreeYYy, MultiYKind::ThreeYYY, MultiYKind::FourYYyy, MultiYKind::FourYyYy];
@@ -92,6 +146,7 @@ impl MultiYKind {
         graph.layers[0].legend.font.size_pt = if *self == Self::FourYyYy { 20.0 } else { 22.0 };
         graph.layers[0].legend.background = None;
         graph.layers[0].legend.frame = false;
+        graph.layers[0].legend.stock_multi_y = true;
     }
 
     /// The measured frame, axes and colours (graphing spec 21.5).
@@ -345,6 +400,15 @@ mod tests {
 
     fn opts() -> MultiYOptions {
         MultiYOptions::default()
+    }
+
+    #[test]
+    fn stock_legend_keeps_first_plots_then_adds_the_owners_extras() {
+        let ids = ["4.1", "4.2", "4.3", "5.1", "5.2", "5.3", "6.1", "6.2"].map(str::to_owned);
+        assert_eq!(stock_legend_order(3, &ids), [0, 3, 6, 1, 2]);
+        assert_eq!(stock_legend_order(3, &ids[3..]), [0, 3]);
+        let single_layer = ["1", "2", "3"].map(str::to_owned);
+        assert_eq!(stock_legend_order(3, &single_layer), [0, 1, 2]);
     }
 
     #[test]

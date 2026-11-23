@@ -229,6 +229,8 @@ pub enum Template {
     Network,
     /// Chord diagram (Origin 2021, T402): arcs and ribbons of a source and a target column.
     Chord,
+    /// UpSet plot (Origin 2027, T403): set sizes and intersections of membership columns.
+    UpSet,
     /// Cause-and-effect (fishbone) diagram (Origin 2026, T375): the chosen columns are the categories, their
     /// cells the causes; drawn as line and text objects in one layer without axes.
     Fishbone,
@@ -247,7 +249,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 106] = [
+    pub const ALL: [Template; 107] = [
         Template::Line,
         Template::Scatter3d,
         Template::Trajectory3d,
@@ -309,6 +311,7 @@ impl Template {
         Template::Alluvial,
         Template::Network,
         Template::Chord,
+        Template::UpSet,
         Template::Fishbone,
         Template::Bubble,
         Template::ColorMapped,
@@ -464,6 +467,7 @@ impl Template {
             Template::Alluvial => "alluvial",
             Template::Network => "network",
             Template::Chord => "chord",
+            Template::UpSet => "upset",
             Template::Fishbone => "fishbone",
         }
     }
@@ -575,6 +579,7 @@ impl Template {
             Template::Alluvial => "Alluvial Diagram",
             Template::Network => "Network Plot",
             Template::Chord => "Chord Diagram",
+            Template::UpSet => "UpSet Plot",
             Template::Fishbone => "Cause-and-Effect Diagram",
         }
     }
@@ -815,9 +820,13 @@ impl Template {
                 }
                 g
             }
-            Template::Network | Template::Chord => {
+            Template::Network | Template::Chord | Template::UpSet => {
                 // Nodes and edges fill the layer's frame: no axes, no legend (the names are beside the nodes).
-                let kind = if *self == Template::Chord { PlotKind::Chord } else { PlotKind::Network };
+                let kind = match self {
+                    Template::Chord => PlotKind::Chord,
+                    Template::UpSet => PlotKind::UpSet,
+                    _ => PlotKind::Network,
+                };
                 let mut g = general(id, name, kind);
                 for l in &mut g.layers {
                     l.x_axis.side = AxisSide::Hidden;
@@ -1965,7 +1974,8 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 106);
+        assert_eq!(Template::ALL.len(), 107);
+        assert_eq!(Template::from_name("UpSet"), Some(Template::UpSet));
         assert_eq!(Template::from_name("chord"), Some(Template::Chord));
         assert_eq!(Template::from_name("network"), Some(Template::Network));
         assert_eq!(Template::from_name("alluvial"), Some(Template::Alluvial));

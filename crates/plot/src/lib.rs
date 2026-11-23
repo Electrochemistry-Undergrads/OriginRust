@@ -74,6 +74,7 @@ pub mod ticks;
 mod ticks_scales;
 mod treemap;
 pub(crate) mod trend;
+mod upset;
 mod vector;
 mod vector_plot;
 mod violin;

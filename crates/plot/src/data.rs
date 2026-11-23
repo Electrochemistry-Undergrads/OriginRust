@@ -123,6 +123,8 @@ pub(crate) struct PlotData<'a> {
     pub network: Option<Box<crate::network::NetworkData>>,
     /// What a chord diagram draws (T402); `None` for other kinds.
     pub chord: Option<Box<crate::chord::ChordData>>,
+    /// What an UpSet plot draws (T403); `None` for other kinds.
+    pub upset: Option<Box<crate::upset::UpSetData>>,
     /// The colour mapping of a waterfall curve; `None` when the layer has none.
     pub wf: Option<WaterfallColors>,
     /// The rows of a 3D ribbon (T161); `None` for other plots.
@@ -631,7 +633,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
         // So does an alluvial diagram without a weight column (T381): its Y column is a stage of text.
         let counted = matches!(plot.stat, Some(StatPlot::Pareto | StatPlot::ParetoCumulative))
             || (plot.kind == PlotKind::Sankey && !plot.sankey.stages.is_empty())
-            || matches!(plot.kind, PlotKind::Network | PlotKind::Chord)
+            || matches!(plot.kind, PlotKind::Network | PlotKind::Chord | PlotKind::UpSet)
             || (matches!(plot.kind, PlotKind::Treemap | PlotKind::Sunburst) && project.numeric(plot.y).is_none());
         let Some(y) = project.numeric(plot.y).or_else(|| counted.then_some(&[][..])) else { continue };
         // A Y column with a sampling interval stands at its own X (T84), even beside an X column:
@@ -716,6 +718,7 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             sankey: None,
             network: None,
             chord: None,
+            upset: None,
             wf: None,
             ribbon: None,
             surface: None,
@@ -779,6 +782,15 @@ pub(crate) fn collect<'a>(project: &'a Project, layer: &'a Layer) -> LayerData<'
             PlotKind::Treemap => {
                 pd.treemap = crate::treemap::TreemapData::new(project, layer, &pd).map(Box::new);
                 // A treemap has no points on any axis.
+                pd.end = pd.start;
+                pd.mask = None;
+                pd.err = None;
+                pd.xerr = None;
+                pd.base = None;
+            }
+            PlotKind::UpSet => {
+                pd.upset = crate::upset::UpSetData::new(project, layer, &pd).map(Box::new);
+                // An UpSet plot has no points on any axis.
                 pd.end = pd.start;
                 pd.mask = None;
                 pd.err = None;

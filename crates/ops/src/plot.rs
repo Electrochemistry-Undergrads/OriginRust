@@ -374,6 +374,19 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
         panel_graph(project, template_from(a.template.as_deref(), suggested)?, p, a)?
     } else if a.overlay {
         overlay_files(project, template_from(a.template.as_deref(), suggested)?, a)?
+    } else if template_from(a.template.as_deref(), suggested)? == Template::UpSet {
+        // An UpSet plot (T403): -y names the set columns (default: every column of the sheet holding only 0 and 1).
+        let book = pick_book(project, a.book.as_deref())?;
+        let sheet = pick_sheet(project, book, a.sheet.as_deref())?;
+        let sets: Vec<ColumnId> = if a.y.is_empty() {
+            project.workbook(book).map(|b| sheaf_core::project::flag_columns(&b.sheets[sheet])).unwrap_or_default()
+        } else {
+            named_columns(project, book, sheet, &a.y)?
+        };
+        if sets.len() < 2 {
+            bail!("an UpSet plot needs two or more set columns: -y A -y B ... (or columns of only 0 and 1)");
+        }
+        project.plot_upset(&sets)?
     } else if matches!(template_from(a.template.as_deref(), suggested)?, Template::Network | Template::Chord) {
         // A network plot (T383) or a chord diagram (T402): --group names the source and target columns (default:
         // the sheet's first two text columns), -y the weight column (default: none, every row counts 1).

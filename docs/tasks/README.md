@@ -65,7 +65,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | Brief | Wave | Size | Scope and dependency |
 |---|---|---|---|
 | [T58](T58-graph-text-formatting.md) | 1, P0 | L | Renderer and graph Format toolbar/shared dispatch published in slices; selected-object font toolbar has all 24 Classic and custom RGB colours, and shared label/title/legend selection editor has installed-family/paired-script insertion plus all 24 Classic and custom RGB colours; documented prime escapes render through the shared text path (7.11); graph font/fill/line and shared text-editor Custom RGB wells share a private profile pool with worksheet controls (7.12); remaining native measurements, special escape aliases and named/project palettes stay open |
-| [T59](T59-worksheet-cell-formatting.md) | 1, P0 | L | Cell fonts, styles and colours, shared RGB wells, and Worksheet Properties fonts for Standard, Data, Column Labels, Long Name, Units, Comments, Column Header, Row Header and F(x)=, plus Data and Column Labels text and fill colours (GUI 3). Left: colours for other categories and other controls, and vertical alignment pending a supported worksheet route. Worksheet text controls are B5 |
+| [T59](T59-worksheet-cell-formatting.md) | 1, P0 | L | Cell fonts, styles and colours, shared RGB wells, and Worksheet Properties fonts for Standard, Data, Column Labels, Long Name, Units, Comments, Column Header, Row Header and F(x)=. Text and fill colours cover Data, Column Labels, Long Name, Units, Comments and F(x)= (GUI 3). Left: Standard and heading colours, other controls, and vertical alignment pending a supported worksheet route. Worksheet text controls are B5 |
 | [T60](T60-merge-graphs-layer-management.md) | 2, P0 | L | Merge Graph Windows (dialog, CLI and MCP, manual/Auto preview, source filters and grouping, panel labels and letter/number enumeration, extra grid layers, Common Scale), Layer Management (Arrange with Common Scale and extra grid layers, Size/Position, Link, Axes with primary and mirrored edges, Display colors and border dimensions), Fit Page to Layers. Left: source-name and Roman labels, independent opposite-axis styling, Display Drawing Order and Scale Elements |
 | [T61](T61-layers-and-multi-y.md) | 2, P0 | L | Nine Add Layer kinds, insets, Delete Layer, Layer Properties, displaced Y axes and Move to Layer, 3Ys/4Ys templates and Multiple Y Axes (graphing 21). Hide Layer and Hide Other Layers (21.13–14), New Layer (Axes) preset dialog (21.15), layer-icon switches (21.16) and Layer Management Add with scale selection and linked parent (21.17). Left: User Defined and Auto Offset in the preset dialog, Custom Formula and Discrete scales, and template legend spacing/membership |
 | [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Done 2026-11-15 (unmeasured Sheaf rules, graphing 13.15-13.17): Offset Grouped Data menu with Cumulative, Stacked Histograms, waterfall Y/Z colour mapping |
@@ -134,7 +134,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T133](T133-sample-projects.md) | File / Help > Open Sample Projects (B12 slice) | S | done 2026-11-18 (gui-look "Sample Projects"); Sheaf's own synthetic samples |
 | [T134](T134-options.md) | Tools > Options... (B13 slice: Open/Close autosave, File Locations) | S | done 2026-11-18 (gui-look "Options"), not measured; left: Origin's other tabs |
 | [T135](T135-analysis-markers.md) | Graph Data > Analysis Markers (B3 slice) | S | done 2026-11-18 (graphing "Analysis markers"), not measured; left: Lock Position, measure and match |
-| [T136](T136-graph-table.md) | Graph > New Table (B3 slice) | S | done 2026-11-18 (graphing "Tables"), not measured; left: table styles, cell formats, links |
+| [T136](T136-graph-table.md) | Graph > New Table (B3 slice) | S | done 2026-11-18 (graphing "Tables"), window measured by T395; left: table styles, cell formats, links |
 | [T137](T137-label-order.md) | Text label Bring to the front / Push to the back (B2 slice) | S | done 2026-11-18 (graphing "Text label order"), not measured; left: order across object kinds |
 | [T138](T138-rise-time-gadget.md) | Gadgets > Rise Time (B9 slice) | S | done 2026-11-18 (graphing "Rise Time gadget"), not measured; left: settings dialog, output, measure |
 | [T139](T139-intersect-gadget.md) | Gadgets > Intersect (B9 slice) | S | done 2026-11-18 (graphing "Intersect gadget"), not measured; left: settings, output, measure |
@@ -325,10 +325,13 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T316](T316-interval-pareto-measure.md) | Copy Origin 2016's measured Pareto chart and interval plot title | S | done 2026-11-21 (graphing 14.29) |
 | [T318](T318-baseline-als-dataset.md) | Peak Analyzer baselines Use Existing Dataset and Asymmetric Least Squares Smoothing (window, CLI) | M | done 2026-11-21; ALS not measured (Pro) |
 | [T319](T319-pareto-binned.md) | Pareto Chart - Binned Data as Origin 2016 (ParetoBin sheet, sort, same chart) | S | done 2026-11-21 (graphing 14.29) |
+| [T397](T397-qpcr.md) | qPCR relative quantification (ddCt, Pfaffl) and standard-curve efficiency (Origin 2027 assay apps) | S | done 2026-11-23 (statistics 50) |
+| [T394](T394-life-data-frequency.md) | Frequency (count) column for the life-data tools (Origin 2026b) | S | done 2026-11-23 (statistics 49) |
 | [T391](T391-life-data-regression.md) | Life data regression: Weibull, lognormal and exponential AFT models with censoring (Origin 2026b) | S | done 2026-11-23 (statistics 48) |
 | [T384](T384-arbitrary-censoring.md) | Life-data distribution analysis with exact, right-, left- and interval-censored rows (Origin 2026b) | S | done 2026-11-22 (statistics 47) |
 | [T382](T382-split-plot.md) | Two-level split-plot designs and two-stratum effects (Origin 2027 Quality app) | S | done 2026-11-22 (statistics 46) |
 | [T386](T386-mixture-designs.md) | Mixture designs: simplex lattice and centroid for one or more totals, lower bounds (window, CLI) | M | done 2026-11-22 (Sheaf's own) |
+| [T393](T393-monte-carlo.md) | Monte Carlo simulation: input distributions through a formula, summary, capability, sensitivity (window, CLI) | M | done 2026-11-23 (Sheaf's own) |
 | [T380](T380-two-level-factorial.md) | Two-level full and fractional factorial designs and their effects (base for 2027 split-plot) | M | done 2026-11-22 (statistics 45) |
 | [T377](T377-random-forest.md) | Random forest: seeded CART forests for classes and values, OOB error, importance (Origin 2026b) | M | done 2026-11-22 (statistics 44) |
 | [T376](T376-arima.md) | ARIMA(p,d,q) by conditional least squares with forecast bands (Origin 2024b Time Series app) | S | done 2026-11-22 (statistics 43) |
@@ -423,6 +426,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T385](T385-smith-measure.md) | Measure Smith Chart against Origin (grid, labels, line plot) | S | done 2026-11-22 (graphing 37) |
 | [T389](T389-piper-measure.md) | Measure Piper diagram against Origin (grids, side labels, titles, sample symbols) | S | done 2026-11-23 (graphing 39) |
 | [T390](T390-markers-measure.md) | Measure graph Data > Mark Data Range against Origin (red lines across the layer) | S | done 2026-11-23 (graphing 40) |
+| [T395](T395-table-measure.md) | Measure Graph > New Table against Origin (5 x 8 default, up to 9) | S | done 2026-11-23 (graphing Tables) |
 | [T40](T40-graphical-summary.md) | Graphical Summary: statistics, CIs, Anderson-Darling and charts per variable/group | L | done 2026-11-15 (statistics.md 22); left: three other arrangements, Origin layout unmeasured |
 | [T41](T41-rug-plot.md) | Rug plots: Axis dialog Rug tab and Scatter + Rug template | M | done 2026-11-15 (graphing 18.10); left: Origin defaults unmeasured, rug hit-testing |
 | [T42](T42-window-switcher.md) | Window Switcher: Ctrl+Tab through child windows with previews | M | done 2026-11-15 (`window-switcher`, macOS) |

@@ -863,6 +863,7 @@ mod tests {
             color: Color::BLACK,
             show_opposite: false,
             opposite_ticks: false,
+            opposite_offset_pct: None,
             major_grid: None,
             minor_grid: None,
             side: Default::default(),

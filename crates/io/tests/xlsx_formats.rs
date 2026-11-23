@@ -220,6 +220,31 @@ fn worksheet_column_label_colors_export_for_label_values_and_blanks_only() {
 }
 
 #[test]
+fn individual_label_colors_export_on_their_rows_and_report_the_omitted_formula() {
+    let mut a = column(1, vec![1.0, 2.0]);
+    a.long_name = "Signal".into();
+    a.units = "V".into();
+    a.formula = Some("i".into());
+    let mut s = Worksheet { columns: vec![a], ..Worksheet::new("Individual colors") };
+    s.label_colors.long_name.text_color = Some(Color::BLUE);
+    s.label_colors.units.fill = Some(Color::rgb(22, 33, 44));
+    let output = Output::new("worksheet-individual-label-colors");
+    let options = ExcelExportOptions { long_names: true, units: true, ..plain() };
+
+    let (before_xml, before_styles, before_warnings) = output.export(&s, &options);
+    assert!(font(style(&before_xml, &before_styles, "A1"), &before_styles).contains("FF0000FF"));
+    assert!(fill(style(&before_xml, &before_styles, "A2"), &before_styles).contains("FF16212C"));
+    assert!(!fill(style(&before_xml, &before_styles, "A3"), &before_styles).contains("FF16212C"));
+    assert!(!before_warnings.iter().any(|w| w.contains("label rows omitted")));
+
+    s.label_colors.formula.fill = Some(Color::RED);
+    let (xml, styles, warnings) = output.export(&s, &options);
+    assert_eq!(xml, before_xml);
+    assert_eq!(styles, before_styles);
+    assert!(warnings.iter().any(|w| w.contains("label rows omitted")));
+}
+
+#[test]
 fn formula_label_font_is_reported_when_xlsx_omits_the_formula_row() {
     let mut a = column(1, vec![2.0, 3.0]);
     a.formula = Some("i+1".into());

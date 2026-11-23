@@ -67,6 +67,9 @@ pub struct Worksheet {
     /// Worksheet Properties colors for the Column Labels category (T59).
     #[serde(default, skip_serializing_if = "crate::cellformat::CategoryColors::is_empty")]
     pub column_label_colors: crate::cellformat::CategoryColors,
+    /// Worksheet Properties colors for individual column label rows (T59).
+    #[serde(default, skip_serializing_if = "crate::cellformat::LabelColors::is_empty")]
+    pub label_colors: crate::cellformat::LabelColors,
     /// Set on the report sheet of a one-way ANOVA with a means comparison and of a two-sample t-test: the groups
     /// the report was made from, so that "Multiple Comparisons Plot" (T64) can draw them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -221,6 +224,7 @@ impl Worksheet {
             font_defaults: Default::default(),
             data_colors: Default::default(),
             column_label_colors: Default::default(),
+            label_colors: Default::default(),
             comparison_source: None,
             notes_text: None,
             graph_sheet: None,

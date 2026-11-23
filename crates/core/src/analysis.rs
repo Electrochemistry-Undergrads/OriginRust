@@ -69,7 +69,9 @@ pub use expsmooth::{ExpSmoothSpec, SmoothModel};
 pub use forest::{ForestTask, RandomForestSpec};
 pub use lifedist::{LifeDist, LifeDistArbitrarySpec, LifeDistSpec, LifeRegressionSpec};
 pub use manhattan::ManhattanSpec;
+pub use montecarlo::{MONTE_CARLO_MAX, MonteCarloSpec};
 pub use multivariate::{KmeansSpec, PcaSpec};
+pub use qpcr::{QpcrCurveSpec, QpcrSpec};
 pub use quantreg::QuantRegSpec;
 pub use rarechart::{GLimits, RareChartKind, RareChartSpec, TDistribution};
 pub use roc::RocSpec;
@@ -77,6 +79,7 @@ pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::PlotScores;
 /// What [`Tool::MixtureDesign`] makes (T386).
 pub use sheaf_calc::mixture::{MixtureKind, MixtureOptions as MixtureDesignSpec};
+pub use sheaf_calc::montecarlo::{InputDist, parse_input as parse_monte_carlo_input};
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
 pub use sheaf_calc::{CwtWavelet, Wavelet, WaveletExtension};
 pub use sheaf_fit::simulate::Spacing as SimulateSpacing;
@@ -1188,6 +1191,11 @@ pub enum Tool {
     /// Statistics > Survival Analysis > Life Data Regression (T391, `docs/spec/statistics.md` section 48): covariates,
     /// then the time and the censor column.
     LifeRegression(LifeRegressionSpec),
+    /// Statistics > qPCR > Relative Quantification (T397, `docs/spec/statistics.md` section 50): group, target Ct and
+    /// reference Ct columns.
+    Qpcr(QpcrSpec),
+    /// Statistics > qPCR > Standard Curve (T397): quantity and Ct columns of a dilution series.
+    QpcrCurve(QpcrCurveSpec),
     /// Statistics > Stability Study (T368, `docs/spec/statistics.md` section 38): time, response and, optionally,
     /// batch columns.
     Stability(StabilitySpec),
@@ -1211,6 +1219,8 @@ pub enum Tool {
     FactorialDesign(FactorialDesignSpec),
     /// Mixture design: simplex lattice or centroid for one or more totals (T386).
     MixtureDesign(MixtureDesignSpec),
+    /// Monte Carlo simulation: inputs drawn from distributions through a formula (T393).
+    MonteCarlo(MonteCarloSpec),
     /// Statistics > Design of Experiments > Factorial Effects (T380): factor columns, then the response.
     FactorialEffects(FactorialEffectsSpec),
     /// Statistics > Two-Level Experiments > Split-Plot Design (T382): reads no data; the design goes to a new sheet.
@@ -1354,6 +1364,8 @@ impl Tool {
             Tool::LifeDist(_) => "Distribution overview",
             Tool::LifeDistArbitrary(_) => "Distribution analysis (arbitrary censoring)",
             Tool::LifeRegression(_) => "Life data regression",
+            Tool::Qpcr(_) => "qPCR relative quantification",
+            Tool::QpcrCurve(_) => "qPCR standard curve",
             Tool::Stability(_) => "Stability study",
             Tool::Decompose(_) => "Seasonal decomposition",
             Tool::Stationarity(_) => "Stationarity tests",
@@ -1362,6 +1374,7 @@ impl Tool {
             Tool::RandomForest(_) => "Random forest",
             Tool::FactorialDesign(_) => "Two-level factorial design",
             Tool::MixtureDesign(_) => "Mixture design",
+            Tool::MonteCarlo(_) => "Monte Carlo simulation",
             Tool::FactorialEffects(_) => "Factorial effects",
             Tool::SplitPlotDesign(_) => "Split-plot design",
             Tool::SplitPlotEffects(_) => "Split-plot effects",
@@ -1453,6 +1466,8 @@ impl Tool {
             Tool::LifeDist(_) => "LifeDist",
             Tool::LifeDistArbitrary(_) => "LifeInterval",
             Tool::LifeRegression(_) => "LifeReg",
+            Tool::Qpcr(_) => "qPCR",
+            Tool::QpcrCurve(_) => "qPCRCurve",
             Tool::Stability(_) => "Stability",
             Tool::Decompose(_) => "Decompose",
             Tool::Stationarity(_) => "Stationarity",
@@ -1461,6 +1476,7 @@ impl Tool {
             Tool::RandomForest(_) => "RandomForest",
             Tool::FactorialDesign(_) => "Design",
             Tool::MixtureDesign(_) => "Mixture",
+            Tool::MonteCarlo(_) => "MonteCarlo",
             Tool::FactorialEffects(_) => "Effects",
             Tool::SplitPlotDesign(_) => "SplitPlot",
             Tool::SplitPlotEffects(_) => "SplitEffects",
@@ -2393,9 +2409,11 @@ mod forest;
 mod lifedist;
 mod manhattan;
 mod manip;
+mod montecarlo;
 mod multivariate;
 mod partcorr;
 mod power;
+mod qpcr;
 mod quantreg;
 mod rarechart;
 mod rmanova;
@@ -2581,10 +2599,13 @@ impl Project {
                 | Tool::LifeDist(_)
                 | Tool::LifeDistArbitrary(_)
                 | Tool::LifeRegression(_)
+                | Tool::Qpcr(_)
+                | Tool::QpcrCurve(_)
                 | Tool::Stability(_)
                 | Tool::RandomForest(_)
                 | Tool::FactorialDesign(_)
                 | Tool::MixtureDesign(_)
+                | Tool::MonteCarlo(_)
                 | Tool::FactorialEffects(_)
                 | Tool::SplitPlotDesign(_)
                 | Tool::SplitPlotEffects(_)
@@ -2786,6 +2807,12 @@ impl Project {
                 notes = out.notes;
                 xy_graph = out.graph;
             }
+            Tool::MonteCarlo(spec) => {
+                let out = montecarlo::run(spec)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+            }
             Tool::MixtureDesign(spec) => {
                 let out = doe::run_mixture(spec)?;
                 table = out.table;
@@ -2814,6 +2841,20 @@ impl Project {
             }
             Tool::Stability(spec) => {
                 let out = stability::run(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::Qpcr(spec) => {
+                let out = qpcr::run(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::QpcrCurve(spec) => {
+                let out = qpcr::run_curve(spec, sheet, &request.columns, request.rows)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;

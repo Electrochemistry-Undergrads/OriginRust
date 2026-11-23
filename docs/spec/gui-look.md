@@ -913,6 +913,19 @@ categories and commit together on Apply or OK. Manual formatting resolves
 each property first. The grid, print and worksheet images use the result.
 XLSX applies the colors to the exported label cells and reports omissions.
 
+**Individual label colors (T59).** Origin 2016 `wproperties` changed each of
+Long Name, Units, Comments and F(x)= independently. Their text and fill colors
+took precedence over Column Labels in both application orders, including in
+new columns. The parameter row retained the Column Labels colors. Manual
+colors on Long Name and Units cells took precedence before and after the
+category changes. [Origin Worksheet Properties Format tab](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
+
+Sheaf exposes text and fill controls for the four rows in Worksheet
+Properties. Clearing either control restores that property's Column Labels
+default. The picker, saved RGB wells, Apply and Undo are shared with the
+other categories. Excel writes the resolved colors for exported labels and
+reports styles omitted with the formula row.
+
 Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
 The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,
 Dynamic Merge, per-cell numeric display/precision selectors and a Font selector. In this new book,

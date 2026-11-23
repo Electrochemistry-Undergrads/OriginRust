@@ -5933,6 +5933,7 @@ impl SheafApp {
                 | AnalysisKind::PoissonTwo
                 | AnalysisKind::FactorialDesign
                 | AnalysisKind::MixtureDesign
+                | AnalysisKind::MonteCarlo
                 | AnalysisKind::SplitPlotDesign
         );
         let columns: Vec<ColumnId> = if host_only {
@@ -5946,7 +5947,7 @@ impl SheafApp {
                 // Categorical columns are not Y columns: start with the first two of the sheet.
                 let all = project.workbook(book).and_then(|b| b.sheets.get(sheet)).map(|s| &s.columns);
                 all.map(|c| c.iter().take(2).map(|c| c.id).collect()).unwrap_or_default()
-            } else if kind == AnalysisKind::RandomForest {
+            } else if matches!(kind, AnalysisKind::RandomForest | AnalysisKind::Qpcr) {
                 // The response (last) may be a text column of classes, which an import makes a Label column: every
                 // Y and Label column of the sheet, in order (T377).
                 let all = project.workbook(book).and_then(|b| b.sheets.get(sheet)).map(|s| &s.columns);
@@ -5964,6 +5965,7 @@ impl SheafApp {
                     | AnalysisKind::RmAnova1
                     | AnalysisKind::RmAnova2
                     | AnalysisKind::RandomForest
+                    | AnalysisKind::Qpcr
             );
             columns
                 .into_iter()

@@ -891,11 +891,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     }
 
     // Cell formats: the per-column index is rebuilt only when the document changed.
-    if sheet.cell_formats.is_empty()
-        && sheet.font_defaults.is_empty()
-        && sheet.data_colors.is_empty()
-        && sheet.column_label_colors.is_empty()
-    {
+    if sheet.cell_formats.is_empty() && sheet.font_defaults.is_empty() && !sheet.has_category_colors() {
         state.fmt_cache = None;
     } else if !state.fmt_cache.as_ref().is_some_and(|c| c.revision == doc.revision() && c.sheet == sheet_index) {
         state.fmt_cache = Some(FormatCache {

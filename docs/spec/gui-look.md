@@ -811,7 +811,7 @@ The compact layout, draft policy and manual-label precedence are Sheaf choices; 
 priority remains unverified against Native. Existing derived label heights remain in use.
 Family-only edits keep point-size overrides absent. Automatic clears only the category family.
 The value then comes from the next category or the existing Arial fallback.
-The native Font apply-mask checkbox is omitted. The individual F(x)= category remains disabled. Other worksheet tabs and category color and text controls
+The native Font apply-mask checkbox is omitted. Other worksheet tabs and category color and text controls
 remain open. The [official Format tab reference](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
 and [wproperties reference](https://docs.originlab.com/x-function/ref/wproperties/) describe the
 current interface; the 2016 observations above come from the local synthetic probes.
@@ -868,6 +868,20 @@ Data. Grid widths and base row heights scale by the Standard point size divided
 by 9. Taller effective text can grow its row further. Print and worksheet
 images apply the same relative sizing to their own base geometry. The image
 contains only label and data cells.
+
+**Formula label font (T59).** In Origin 2016, setting `wproperties` Apply To to
+`F(x)=` and its font size to 18 enlarged the formula text in the F(x) row.
+The row caption, values, and other label cells kept their sizes. The formula
+size still applied after setting Column Labels to 12 pt, and the reverse
+order gave the same result. A new column displaying a formula also used
+18 pt. Origin kept the label row height fixed during these changes.
+[Worksheet Properties Format tab](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
+
+In Sheaf, F4 > F(x)= sets the formula label cells' family and size. Manual
+formatting wins per property, followed by F(x)=, Column Labels and Standard.
+Automatic family and Default size clear the corresponding override. The grid,
+print and worksheet images use the resolved font. Excel reports that it omits
+the styled formula label row.
 
 Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
 The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,

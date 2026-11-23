@@ -266,6 +266,37 @@ fn standard_font_scales_the_grid_and_data_can_reset_to_it() {
     assert!((heading_center(&h) - before_x).abs() < 0.5);
 }
 
+#[test]
+fn f4_formula_font_overrides_label_defaults_and_undo_restores_the_sheet() {
+    let mut h = start_sheet("worksheet-formula-label-font");
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Seed formula", |p| {
+        let sheet = p.workbook_mut(book).unwrap().sheet_mut();
+        sheet.columns[0].long_name = "Alpha".into();
+        sheet.columns[1].formula = Some("i+1".into());
+        sheet.view.formula = true;
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    assert_eq!(painted_size(&h, "i+1"), [12.0]);
+
+    open(&mut h);
+    category(&mut h, "Data", "Column Labels");
+    size(&mut h, "12");
+    category(&mut h, "Column Labels", "F(x)=");
+    size(&mut h, "18");
+    click(&mut h, "OK");
+    assert_eq!(painted_size(&h, "Alpha"), [16.0]);
+    assert_eq!(painted_size(&h, "i+1"), [24.0]);
+    assert_eq!(painted_size(&h, "4.5"), [12.0]);
+    assert_eq!(sheet(&h).columns, before.workbook(book).unwrap().sheet().columns);
+    assert!(sheet(&h).cell_formats.is_empty());
+
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+    assert_eq!(painted_size(&h, "i+1"), [12.0]);
+}
+
 fn label_family_fixture() -> String {
     let names: Vec<_> = sheaf_plot::SystemFonts::shared()
         .database()

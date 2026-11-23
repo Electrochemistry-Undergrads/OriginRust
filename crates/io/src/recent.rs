@@ -28,10 +28,11 @@ pub const MAX_COMMANDS: usize = 10;
 /// The name of the file in the settings folder.
 pub const FILE_NAME: &str = "recent.json";
 
-/// How long [`update`] waits for another instance to finish its change before going on without the
-/// lock. Ten seconds (T230: two were too short when many writers queued on a busy machine, and going
-/// on without the lock can lose the other writer's change).
-const LOCK_WAIT: Duration = Duration::from_secs(10);
+/// How long [`update`] waits for another instance to finish its change. Sixty seconds (T230: two were too
+/// short when many writers queued on a busy machine; T378: ten were too short as well). When the lock is
+/// still busy after that the change is refused with an error, not written without the lock, which would
+/// lose the other writer's change.
+const LOCK_WAIT: Duration = Duration::from_secs(60);
 
 /// Whether two spellings that differ only in letter case name the same file (Windows and macOS).
 const FOLD_CASE: bool = cfg!(any(windows, target_os = "macos"));
@@ -242,14 +243,14 @@ impl RecentList {
     }
 }
 
-/// Changes the lists in the file at `path`: waits for the file lock (up to ten seconds, then goes on
-/// without it), reads the file as it is now, applies `change`, writes the file and returns the new
-/// lists. Entries another instance added in the meantime are kept.
+/// Changes the lists in the file at `path`: waits for the file lock (see [`lock`]), reads the file as it
+/// is now, applies `change`, writes the file and returns the new lists. Entries another instance added in
+/// the meantime are kept.
 pub fn update(path: &Path, change: impl FnOnce(&mut RecentList)) -> Result<RecentList, IoError> {
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent).map_err(|e| IoError::io(parent, e))?;
     }
-    let _lock = lock(path);
+    let _lock = lock(path)?;
     let mut list = RecentList::load(path);
     change(&mut list);
     list.save(path)?;
@@ -408,19 +409,39 @@ fn push(list: &mut Vec<PathBuf>, path: PathBuf) {
     list.truncate(MAX_ENTRIES);
 }
 
-/// Holds the lock file next to the lists; dropping it lets the next instance in.
-pub(crate) fn lock(path: &Path) -> Option<std::fs::File> {
-    let name = path.file_name()?.to_string_lossy().into_owned();
+/// Takes the lock file next to `path`; dropping the returned file lets the next instance in.
+///
+/// - `Ok(Some(file))`: the lock is held.
+/// - `Ok(None)`: the lock file cannot be made or this file system cannot lock it; the change goes on
+///   without a lock rather than not at all.
+/// - `Err`: another writer still holds the lock after [`LOCK_WAIT`]; the change must not be written
+///   (T378: going on without the lock then lost that writer's change under heavy load).
+pub(crate) fn lock(path: &Path) -> Result<Option<std::fs::File>, IoError> {
+    lock_within(path, LOCK_WAIT)
+}
+
+/// [`lock`] with its own wait.
+fn lock_within(path: &Path, wait: Duration) -> Result<Option<std::fs::File>, IoError> {
+    let Some(name) = path.file_name().map(|n| n.to_string_lossy().into_owned()) else { return Ok(None) };
     let lock_path = path.with_file_name(format!("{name}.lock"));
-    let file = OpenOptions::new().create(true).truncate(false).write(true).open(lock_path).ok()?;
+    let Ok(file) = OpenOptions::new().create(true).truncate(false).write(true).open(&lock_path) else {
+        return Ok(None);
+    };
     let start = Instant::now();
     loop {
         match file.try_lock() {
-            Ok(()) => return Some(file),
-            Err(TryLockError::WouldBlock) if start.elapsed() < LOCK_WAIT => {
+            Ok(()) => return Ok(Some(file)),
+            Err(TryLockError::WouldBlock) if start.elapsed() < wait => {
                 std::thread::sleep(Duration::from_millis(10));
             }
-            Err(_) => return None,
+            Err(TryLockError::WouldBlock) => {
+                let e = std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "another Sheaf is still changing this settings file; nothing was written, try again",
+                );
+                return Err(IoError::io(&lock_path, e));
+            }
+            Err(TryLockError::Error(_)) => return Ok(None),
         }
     }
 }

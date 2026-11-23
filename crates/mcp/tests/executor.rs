@@ -3,6 +3,8 @@
 
 use serde_json::{Value, json};
 use sheaf_core::column::{ColumnData, Designation, RecalcMode};
+use sheaf_core::graph::{ScaleLink, TickDirection};
+use sheaf_core::template::Template;
 use sheaf_core::{Document, Project};
 use sheaf_mcp::Server;
 use sheaf_mcp::exec::{Policy, Session, run_on_document};
@@ -119,6 +121,90 @@ fn project_with_formula_column() -> Project {
     p.column_mut(b).unwrap().short_name = "B".into();
     p.set_column_values_with(b, "col(A)*2", None, RecalcMode::Auto).unwrap();
     p
+}
+
+fn project_with_merge_sources() -> Project {
+    let mut p = project_with_formula_column();
+    let book = p.workbooks().next().unwrap().id;
+    let b = p.workbook(book).unwrap().sheets[0].columns[1].id;
+    let c = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![9.0, 5.0, 8.0])).unwrap();
+    p.plot_columns(Template::Line, &[b]).unwrap();
+    p.plot_columns(Template::Scatter, &[c]).unwrap();
+    p
+}
+
+#[test]
+fn merge_graphs_creates_an_exportable_stack_in_source_order() {
+    let d = Dirs::new("merge-graphs");
+    let before = project_with_merge_sources();
+    let sources: Vec<_> = before.graphs().cloned().collect();
+    sheaf_io::save::save_project(&before, &d.root.join("source.sheaf")).unwrap();
+    let mut s = Server::new(d.roots());
+    ok(&headless(&mut s, "open_project", json!({"path": "source.sheaf"})));
+    let result = ok(&headless(
+        &mut s,
+        "merge_graphs",
+        json!({
+            "graphs": ["graph2", "Graph1"], "rows": 3, "cols": 1, "gap": [5, 0], "share_x": true,
+            "hide_inner": true, "add_extra_layers": true, "text_scale": "keep"
+        }),
+    ));
+    assert_eq!(
+        result,
+        json!({"graph": "Graph3", "layers": 3, "sources": ["Graph2", "Graph1"], "removed_sources": false, "warnings": []})
+    );
+    assert_eq!(s.project().graphs().take(2).cloned().collect::<Vec<_>>(), sources);
+    let merged = s.project().graphs().last().unwrap();
+    assert_eq!(merged.layers[0].plots, sources[1].layers[0].plots);
+    assert_eq!(merged.layers[1].plots, sources[0].layers[0].plots);
+    let link = merged.valid_link(1).unwrap();
+    assert_eq!((link.parent, link.x), (0, ScaleLink::Straight));
+    assert_eq!(merged.layers[0].x_axis.major_tick, TickDirection::None);
+    assert!(merged.layers[2].plots.is_empty() && merged.layers[2].link.is_none());
+    assert!(merged.absolute_frame(1).unwrap().top > merged.absolute_frame(0).unwrap().top);
+    ok(&headless(&mut s, "export_graph", json!({"graph": "Graph3", "path": "stack.svg"})));
+    assert!(std::fs::read_to_string(d.root.join("stack.svg")).unwrap().contains("<svg"));
+}
+
+#[test]
+fn attached_merge_rejects_bad_input_and_removes_sources_in_one_undo_step() {
+    let d = Dirs::new("merge-graphs-undo");
+    let mut c = Caller::new(Document::new(project_with_merge_sources()), Policy::attached(d.roots()));
+    let before = c.doc.project().clone();
+    for request in [
+        json!({}),
+        json!({"all_graphs": true, "graphs": ["Graph1", "Graph2"]}),
+        json!({"graphs": ["Graph1"]}),
+        json!({"graphs": ["Graph1", "graph1"]}),
+        json!({"graphs": ["Graph1", "missing"]}),
+        json!({"all_graphs": true, "rows": 1, "cols": 1}),
+        json!({"all_graphs": true, "margins": [1, 2]}),
+        json!({"all_graphs": true, "text_scale": 21}),
+    ] {
+        refused(&c.call("merge_graphs", request));
+        assert_eq!(c.doc.project(), &before);
+        assert_eq!(c.doc.revision(), 0);
+        assert!(c.doc.undo_label().is_none());
+    }
+    let result = ok(&c.call(
+        "merge_graphs",
+        json!({"all_graphs": true, "remove_sources": true, "page_size": [9, 6], "portrait": true, "text_scale": 0.5}),
+    ));
+    assert_eq!(result["sources"], json!(["Graph1", "Graph2"]));
+    assert_eq!(result["removed_sources"], true);
+    assert_eq!(c.doc.project().graphs().count(), 1);
+    let merged = c.doc.project().graphs().next().unwrap();
+    assert_eq!((merged.page.width_pt, merged.page.height_pt), (6.0 * 72.0, 9.0 * 72.0));
+    let stock = before.graphs().next().unwrap().layers[0].x_axis.title_font.size_pt;
+    assert_eq!(merged.layers[0].x_axis.title_font.size_pt, 0.5 * stock);
+    assert!(c.doc.project().workbooks().eq(before.workbooks()));
+    assert_eq!(c.doc.undo_label(), Some("AI: merge_graphs"));
+    let after = c.doc.project().clone();
+    c.doc.undo();
+    assert_eq!(c.doc.project(), &before);
+    assert!(c.doc.undo_label().is_none());
+    c.doc.redo();
+    assert_eq!(c.doc.project(), &after);
 }
 
 #[test]
@@ -328,8 +414,9 @@ fn attached_the_tools_that_open_replace_or_save_are_refused_and_hidden() {
     let all: Vec<String> = sheaf_mcp::tools::list().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect();
     let shown: Vec<String> =
         sheaf_mcp::tools::list_attached().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect();
-    assert_eq!(all.len(), 20);
-    assert_eq!(shown.len(), 17);
+    assert_eq!(all.len(), 21);
+    assert_eq!(shown.len(), 18);
+    assert!(shown.iter().any(|name| name == "merge_graphs"));
     for hidden in ["new_project", "open_project", "save_project"] {
         assert!(all.iter().any(|n| n == hidden) && !shown.iter().any(|n| n == hidden), "{hidden}");
     }

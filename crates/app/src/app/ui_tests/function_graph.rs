@@ -63,3 +63,41 @@ fn file_new_function_plot_makes_its_graph_on_ok_in_one_undo_step() {
     settle(&mut h);
     assert_eq!(project(&h).graphs().count(), 0, "one undo step takes the graph and its function away");
 }
+
+#[test]
+fn graph_slicer_shows_the_ticked_values_in_one_undo_step() {
+    // T406: Graph > Graph Slicer... on a line of Y whose sheet has a group column.
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let mut graph = sheaf_core::WindowId(0);
+    h.state_mut().doc.apply("data", |p| {
+        let b = p.add_workbook("");
+        let groups = ["a", "b", "a", "c"].iter().map(|s| s.to_string()).collect();
+        p.add_column(b, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::text(groups)).unwrap();
+        let y = p
+            .add_column(b, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0]))
+            .unwrap();
+        graph = p.plot_columns(sheaf_core::template::Template::Line, &[y]).unwrap();
+    });
+    settle(&mut h);
+    h.state_mut().apply(Action::GraphSlicer { graph }, &ctx);
+    settle(&mut h);
+    {
+        let d = h.state_mut().graph_slicer.as_mut().expect("the slicer window");
+        let names: Vec<&str> = d.values.iter().map(|v| v.0.as_str()).collect();
+        assert_eq!(names, ["a", "b", "c"], "the text column is chosen first");
+        d.values[1].1 = false;
+    }
+    h.get_by_label("OK").click();
+    settle(&mut h);
+    assert!(h.state().graph_slicer.is_none());
+    assert_eq!(h.state().doc.undo_label(), Some("Graph Slicer"));
+    let s = project(&h).graph(graph).unwrap().slicer.clone().expect("a slicer");
+    assert_eq!(s.values, ["a", "c"]);
+    // Remove Slicer clears it.
+    h.state_mut().apply(Action::GraphSlicer { graph }, &ctx);
+    settle(&mut h);
+    h.get_by_label("Remove Slicer").click();
+    settle(&mut h);
+    assert!(project(&h).graph(graph).unwrap().slicer.is_none());
+}

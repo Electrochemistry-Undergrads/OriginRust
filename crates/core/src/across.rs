@@ -23,6 +23,8 @@ pub enum AcrossScope {
     /// Every sheet of every workbook in this project folder (the path of folder indices from the root, as in
     /// [`Project::folder_of`]) and its subfolders (T412). The root folder holds every workbook.
     Folder(Vec<usize>),
+    /// These sheets, as (workbook, sheet index) pairs, chosen one by one (T418); missing ones are passed over.
+    Sheets(Vec<(WindowId, usize)>),
 }
 
 /// The column to add.
@@ -84,8 +86,13 @@ impl Project {
                 AcrossScope::Workbook(id) => b.id == *id,
                 AcrossScope::Project => true,
                 AcrossScope::Folder(_) => in_folder.as_ref().is_none_or(|w| w.contains(&b.id)),
+                AcrossScope::Sheets(list) => list.iter().any(|(id, _)| *id == b.id),
             })
             .flat_map(|b| (0..b.sheets.len()).map(move |s| (b.id, s)))
+            .filter(|t| match &scope {
+                AcrossScope::Sheets(list) => list.contains(t),
+                _ => true,
+            })
             .collect();
         if targets.is_empty() {
             return Err(AcrossError::NoSheets);
@@ -235,5 +242,21 @@ mod tests {
         assert_eq!(p.workbook(a).unwrap().sheets[0].columns.last().unwrap().id, made[0]);
         assert_eq!(p.numeric(made[0]).unwrap(), [2.0, 3.0, 4.0]);
         assert!(p.add_column_across_sheets(AcrossScope::Folder(vec![0, 0]), &spec).is_err(), "an empty folder");
+    }
+
+    #[test]
+    fn chosen_sheets_get_the_column_and_the_others_do_not() {
+        let (mut p, a, b) = project();
+        let made = p
+            .add_column_across_sheets(AcrossScope::Sheets(vec![(b, 0), (a, 1), (a, 9)]), &AcrossColumn::default())
+            .unwrap();
+        assert_eq!(made.len(), 2, "sheet 10 of A does not exist");
+        assert_eq!(p.workbook(a).unwrap().sheets[0].columns.len(), 2, "sheet 1 of A was not chosen");
+        assert_eq!(p.workbook(a).unwrap().sheets[1].columns.len(), 3);
+        assert_eq!(p.workbook(b).unwrap().sheets[0].columns.len(), 3);
+        assert!(matches!(
+            p.add_column_across_sheets(AcrossScope::Sheets(vec![]), &AcrossColumn::default()),
+            Err(AcrossError::NoSheets)
+        ));
     }
 }

@@ -8,8 +8,8 @@ as one undo step. Not in Origin 2016, so the layout is Sheaf's own.
 
 ## Left
 
-- Freeform (lasso) regions, several regions at once, stacked-plot offsets, masking or deleting the points in the
-  region instead of copying them.
+- Freeform (lasso) regions, several regions at once, stacked-plot offsets, deleting the points in the region (masking
+  them: done in T413).
 
 ## Tests
 

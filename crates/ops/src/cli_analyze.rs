@@ -1330,6 +1330,9 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             };
             (target, Job::Tool(Tool::LifeRegression(analysis::LifeRegressionSpec { dist, censor, frequency })))
         }
+        AnalyzeTool::Turnbull { target, no_graph, frequency } => {
+            (target, Job::Tool(Tool::Turnbull(analysis::TurnbullSpec { graph: !no_graph, frequency })))
+        }
         AnalyzeTool::LifedistInterval { target, distribution, no_graph, frequency } => {
             let dist = match distribution.to_ascii_lowercase().as_str() {
                 "weibull" => analysis::LifeDist::Weibull,

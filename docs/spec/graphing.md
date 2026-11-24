@@ -1285,6 +1285,22 @@ caption and add height within the same entry's column. The sample is drawn once 
 the first line. The frame encloses the actual measured widths and heights. This is
 Sheaf's frame-based allocation rule.
 
+**Legend line-break tokens (T58).** Assigning `legend.text$` in Origin 2016 expanded
+`%(CRLF)`, `%(CR)` and `%(LF)` into line breaks. Lowercase, mixed case and spaces
+around the keyword worked. In the 22-point Arial EMFs the first and third rows with
+samples started at X 2581, and the unsampled second row started at the column left,
+X 2379. The 2019 release separately added the token to Custom Legend Translation,
+where the help example aligns the continuation with the sampled row's text.
+[LabTalk string substitution](https://docs.originlab.com/labtalk/guide/string-substitution/), [Origin 2019 release note](https://www.originlab.com/ReleaseNotes/detail.aspx?id=20193ORG-18328), [legend FAQ](https://docs.originlab.com/quick-help/customize-legend/)
+
+Sheaf expands the three tokens in authored legend text before resolving plot
+samples and metadata. Case and whitespace inside the token follow the measured
+script rules. Each new line follows the ordinary legend row layout, including
+column assignment and the omission of the final empty row. Protected `\h(...)`,
+literal `\v(...)` and wrapped `\ww(...)` spans keep the token text. Values read
+from worksheet metadata are resolved after this pass. The raw authored legend
+continues to be saved with its tokens.
+
 **Plot-colored graph text (T58).** `\cpN(text)` uses the color of the Nth plot in the
 text object's layer. Repainting the graph after a style change resolves the color again.
 Nested styles, literal blocks and glyph decorations follow the existing text rules.
@@ -3941,8 +3957,9 @@ the OK button to apply the changes in preview graph to source graph."; Undo, OK 
 page right-click and layer icon menu, the icon's layer selected): the layer list allows several
 layers. Add, Arrange, Size/Position, Link, Axes and Display work on a copy shown as
 numbered frames on a page-shaped preview. Undo takes back the last Apply. OK writes the copy in one
-undo step. Cancel and Escape discard it. The Align/Custom links, the Units combo of Link and the
-reposition-parent tick are disabled. Arrange with no selection takes every layer; "Treat Linked
+undo step. Cancel and Escape discard it. Link displays Custom Formula expressions set in New
+Layer (Axes), section 21.15. Align, the Units combo and the reposition-parent switch are disabled.
+Arrange with no selection takes every layer; "Treat Linked
 Layers as a group" places a layer with the layers linked to it as one unit; Link Layers links the
 later units to the first in position only. Sheaf choices (not measured): Move in "% of Reference
 Layer" counts from the reference layer's top left corner, a pixel is 1/96 in, the reference layer
@@ -4832,8 +4849,9 @@ Measured with `tools/origin-ref/origin-dialog.ps1` on a graph whose second layer
   None (a new link starts unlinked).
 
 Sheaf (`graph_details.rs` `link_tab`, `Graph::set_link`): the same tab for every layer after the first, with
-None and Straight; Align and Custom are drawn greyed with their boxes (Sheaf has no formula links). Link to
-lists None and the earlier layers that are not linked themselves (Sheaf follows one level of links); a layer
+None and Straight and a read-only display of Custom Formula expressions set in New Layer (Axes),
+section 21.15. Align is greyed. Link to lists None and the earlier layers eligible to be parents
+(Sheaf follows one level of links); a layer
 that others are linked to cannot be linked. Changing the link keeps the layer where it is on the page: its
 frame is converted between fractions of the page and of the parent's frame.
 
@@ -6112,7 +6130,29 @@ line, ticks, tick labels and a title. The edges share the resolved scale and use
 label and title settings, including the default title from the first plot or the placeholder
 on an empty layer. Auto Offset calculates the distance independently for each edge. The paired
 axis settings are saved in the Sheaf project and the OPJ companion. A plain OPJ export warns
-that the facing edge's tick labels, title and offset are omitted. Custom Formula remains disabled.
+that the facing edge's tick labels, title and offset are omitted.
+
+**Custom Formula scale links (Origin 2016, 2026-11-23).** A linked top-X child with
+`layer.x.link=2` and endpoint expressions `X1+10` and `X2+50` reported From 12 and To 64
+over a parent X scale of 2–14. Both expression properties read back as entered.
+The `layadd` reference documents custom endpoint inputs for both dimensions. The 2016
+`layadd` custom arguments used in the probe were rejected, so the recorded limits come from
+the linked layer properties. [Axis link properties](https://docs.originlab.com/labtalk/ref/layer-axis-obj/)
+and [layadd endpoint inputs](https://docs.originlab.com/x-function/ref/layadd/).
+
+Sheaf's User Defined controls offer Custom Formula for either dimension once a parent is
+selected. From and To start with the corresponding parent endpoints. Expressions can use
+`X1`, `X2`, `Y1` and `Y2` (also lowercase) for the parent's current limits in drawn order.
+The child resolves its own ticks and scale type within the resulting interval, including
+decreasing ranges. Automatic parent limits still include the parent and straight-linked
+data. Formula-linked data affect the child only. Polar angle and ternary axes use fixed coordinate limits.
+
+OK rejects expressions that fail to produce two distinct finite limits in the child scale's
+domain. An existing formula pair that becomes invalid after a parent change temporarily
+uses the child's independent limits. Those rules and preserving the child's displayed limits
+when its parent is deleted are Sheaf choices. The existing Link tabs display saved formulas
+and allow switching to their existing link choices. Create is one Undo step. Sheaf project
+files and OPJ companions keep the formulas. Plain OPJ export warns that it omits them.
 
 ---
 
@@ -7675,4 +7715,25 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
   - hiding points behind each other (points are drawn in row order);
   - surfaces from matrices, a colour scale for colour map surfaces, and 3D OpenGL settings.
   - The Data Reader shows the view's coordinates, not X, Y and Z.
+
+## Graph Slicer: Graph > Graph Slicer... (T406, 2026-11-23; Origin 2025's Graph Slicer, base slice, Sheaf's own)
+
+Origin 2025 added a Graph Slicer that filters the plots from a common source sheet at page, layer or plot scope.
+Origin 2016 has none, so nothing here is measured.
+
+- **The window "Graph Slicer":** Slice by: a column of the sheet the graph's first plot comes from (the first text
+  column to start with, or the graph's slicer column). The column's distinct values are listed in the order of
+  their first cell, each with a tick (all ticked), with Select All and Clear All. OK is disabled with nothing
+  ticked. OK applies the slicer (one undo step, "Graph Slicer"). Remove Slicer takes it off ("Remove Graph
+  Slicer"). Cancel and Esc change nothing.
+- **Effect (page scope):** every plot of the graph whose Y column is in the slicer column's sheet draws only the
+  rows whose cell in the slicer column holds a ticked value. The other rows are left out as the worksheet filter
+  leaves rows out (lines join across them). Plots from other sheets are not sliced. The worksheet itself is not
+  filtered.
+- **When it is worked out:** when it is applied, as the worksheet filter; editing the column later does not change
+  the rows until the slicer is applied again.
+- **Model:** `Graph::slicer` (`sheaf_core::slicer::GraphSlicer`: the column, the shown values and the row filter),
+  saved with the project; `Project::set_graph_slicer`, `clear_graph_slicer`, `slicer_values`.
+- **Not built:** layer and plot scope, several slicer columns, extracting the selected subset to a sheet, plots whose
+  values are computed (histograms, box charts) reading the slicer, and the slicer in .opj files.
 

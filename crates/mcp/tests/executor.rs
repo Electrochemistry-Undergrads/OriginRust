@@ -158,7 +158,7 @@ fn merge_graphs_creates_an_exportable_stack_in_source_order() {
     assert_eq!(merged.layers[0].plots, sources[1].layers[0].plots);
     assert_eq!(merged.layers[1].plots, sources[0].layers[0].plots);
     let link = merged.valid_link(1).unwrap();
-    assert_eq!((link.parent, link.x), (0, ScaleLink::Straight));
+    assert_eq!((link.parent, &link.x), (0, &ScaleLink::Straight));
     assert_eq!(merged.layers[0].x_axis.major_tick, TickDirection::None);
     assert!(merged.layers[2].plots.is_empty() && merged.layers[2].link.is_none());
     assert!(merged.absolute_frame(1).unwrap().top > merged.absolute_frame(0).unwrap().top);

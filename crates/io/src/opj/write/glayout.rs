@@ -179,7 +179,7 @@ pub(super) fn layer_header(l: &LayerSpec) -> Vec<u8> {
     for (i, v) in outer.iter().enumerate() {
         put(&mut h, 0x79 + 2 * i, &v.to_le_bytes());
     }
-    if let Some(link) = l.link {
+    if let Some(link) = &l.link {
         h[LINK_PARENT_AT] = link.parent;
         h[LINK_INDEX_AT] = link.index;
         h[LINK_UNIT_AT] = LINK_UNIT;

@@ -161,7 +161,7 @@ fn changed<T: PartialEq + Clone>(value: &Option<T>, original: &Option<T>) -> Opt
 }
 
 fn scale_linked(graph: &Graph, layer: usize, vertical: bool) -> bool {
-    graph.valid_link(layer).is_some_and(|link| (if vertical { link.y } else { link.x }) == ScaleLink::Straight)
+    graph.valid_link(layer).is_some_and(|link| *(if vertical { &link.y } else { &link.x }) == ScaleLink::Straight)
 }
 
 pub(super) fn apply(graph: &mut Graph, selection: &[usize], changes: &[AxisSettings; 2]) {

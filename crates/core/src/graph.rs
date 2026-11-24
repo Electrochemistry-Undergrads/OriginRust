@@ -21,6 +21,9 @@ pub struct Graph {
     pub long_name: String,
     pub page: Page,
     pub layers: Vec<Layer>,
+    /// Graph > Graph Slicer (T406): the rows the plots from one sheet show.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slicer: Option<crate::slicer::GraphSlicer>,
 }
 
 impl Graph {
@@ -137,13 +140,14 @@ impl Graph {
     /// the list and is not linked itself. A layer with an invalid link (to itself, to a later or
     /// missing layer, or to a linked layer) is drawn as an independent layer.
     pub fn link_parent(&self, index: usize) -> Option<usize> {
-        let link = self.layers.get(index)?.link?;
+        let link = self.layers.get(index)?.link.as_ref()?;
         (link.parent < index && self.layers[link.parent].link.is_none()).then_some(link.parent)
     }
 
     /// The link of layer `index` when it is valid (see [`Graph::link_parent`]).
-    pub fn valid_link(&self, index: usize) -> Option<LayerLink> {
-        self.link_parent(index).and(self.layers[index].link)
+    pub fn valid_link(&self, index: usize) -> Option<&LayerLink> {
+        self.link_parent(index)?;
+        self.layers[index].link.as_ref()
     }
 
     /// The layer that layer `index` follows: its parent when validly linked, else itself.
@@ -210,7 +214,7 @@ impl Graph {
             None => self.layers[index].frame,
         };
         let layer = &mut self.layers[index];
-        let (x, y) = layer.link.map_or((ScaleLink::None, ScaleLink::None), |k| (k.x, k.y));
+        let (x, y) = layer.link.take().map_or((ScaleLink::None, ScaleLink::None), |k| (k.x, k.y));
         layer.link = parent.map(|parent| LayerLink { parent, x, y });
         let frame = match parent {
             Some(p) => on_page.relative_to(self.layers[p].frame),
@@ -222,7 +226,7 @@ impl Graph {
 
     /// Whether another layer is linked to layer `index`.
     pub fn has_children(&self, index: usize) -> bool {
-        self.layers.iter().enumerate().any(|(i, l)| i != index && l.link.is_some_and(|k| k.parent == index))
+        self.layers.iter().enumerate().any(|(i, l)| i != index && l.link.as_ref().is_some_and(|k| k.parent == index))
     }
 
     /// The layers of layer `index`'s group that are drawn in the same frame as it (the same
@@ -1072,7 +1076,7 @@ fn is_zero(v: &f64) -> bool {
 }
 
 /// How a layer follows its parent layer.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LayerLink {
     /// Index of the parent in [`Graph::layers`]; it must be smaller than the layer's own index.
     pub parent: usize,
@@ -1083,7 +1087,7 @@ pub struct LayerLink {
 }
 
 /// How one axis scale of a linked layer relates to the parent's.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ScaleLink {
     /// The layer's own scale.
@@ -1092,6 +1096,8 @@ pub enum ScaleLink {
     /// Exactly the parent's scale: limits, scale type, ticks and direction. The automatic range
     /// covers the data of the parent and of every layer linked this way.
     Straight,
+    /// The child's own scale with endpoints computed from the parent's visible limits.
+    Custom { from: String, to: String },
 }
 
 /// Which edge of the frame an axis is drawn on.
@@ -3516,7 +3522,14 @@ mod tests {
                 ..base.clone()
             })
             .collect();
-        Graph { id: WindowId(1), name: "G".into(), long_name: String::new(), page: Page::inches(6.4, 4.8), layers }
+        Graph {
+            id: WindowId(1),
+            name: "G".into(),
+            long_name: String::new(),
+            page: Page::inches(6.4, 4.8),
+            layers,
+            slicer: None,
+        }
     }
 
     #[test]

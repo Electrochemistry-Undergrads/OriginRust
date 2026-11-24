@@ -505,7 +505,7 @@ fn panels(n: usize, x: ScaleLink, y: ScaleLink) -> Project {
         let mut panel = p.graph(id).unwrap().layers[0].clone();
         panel.plots.clear();
         panel.frame = Frame { left: 0.0, top: -1.2 * k as f64, width: 1.0, height: 1.0 };
-        panel.link = Some(LayerLink { parent: 0, x, y });
+        panel.link = Some(LayerLink { parent: 0, x: x.clone(), y: y.clone() });
         p.graph_mut(id).unwrap().layers.push(panel);
         p.add_plot_xy(id, k, Some(c[0]), c[1 + k], None).unwrap();
     }
@@ -520,7 +520,7 @@ fn panels_keep_their_link_their_frames_and_their_linked_scales() {
         (ScaleLink::Straight, ScaleLink::Straight),
         (ScaleLink::None, ScaleLink::None),
     ] {
-        let mut p = panels(3, x, y);
+        let mut p = panels(3, x.clone(), y.clone());
         let graph_ids: Vec<_> = p.graphs().map(|g| g.id).collect();
         for id in graph_ids {
             for layer in &mut p.graph_mut(id).unwrap().layers {
@@ -535,7 +535,7 @@ fn panels_keep_their_link_their_frames_and_their_linked_scales() {
         assert_eq!(got.len(), 3);
         assert_eq!(got[0].link, None);
         for k in 1..3 {
-            assert_eq!(got[k].link, Some(LayerLink { parent: 0, x, y }), "{x:?} {y:?} layer {k}");
+            assert_eq!(got[k].link, Some(LayerLink { parent: 0, x: x.clone(), y: y.clone() }), "{x:?} {y:?} layer {k}");
             let (g, w) = (got[k].frame, want[k].frame);
             assert!(
                 (g.left - w.left).abs() < 0.01

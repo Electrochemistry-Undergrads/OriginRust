@@ -42,8 +42,8 @@ fn stack_menu_builds_linked_portrait_panels_only_on_ok_and_undo_redo_are_one_ste
     assert!(g.page.width_pt < g.page.height_pt);
     assert_eq!(g.layers.iter().map(|l| l.plots[0].y).collect::<Vec<_>>(), ys);
     assert!(g.page_frame(0).top > g.page_frame(1).top);
-    assert_eq!(g.layers[1].link.unwrap().x, ScaleLink::Straight);
-    assert_eq!(g.layers[1].link.unwrap().y, ScaleLink::None);
+    assert_eq!(g.layers[1].link.as_ref().unwrap().x, ScaleLink::Straight);
+    assert_eq!(g.layers[1].link.as_ref().unwrap().y, ScaleLink::None);
     assert!(g.layers[0].x_axis.show_tick_labels);
     assert!(!g.layers[1].x_axis.show_tick_labels);
     assert!(
@@ -104,7 +104,7 @@ fn stack_keeps_selected_rows_and_applies_gap_margin_and_independent_axes() {
     assert!(
         g.layers.iter().all(|l| l.link.is_none() && l.x_axis.show_tick_labels),
         "{:?}",
-        g.layers.iter().map(|l| (l.link, l.x_axis.show_tick_labels)).collect::<Vec<_>>()
+        g.layers.iter().map(|l| (l.link.clone(), l.x_axis.show_tick_labels)).collect::<Vec<_>>()
     );
     assert!(g.layers.iter().flat_map(|l| &l.plots).all(|p| p.rows == Some((1, 3))));
     let f = g.page_frame(0);
@@ -122,9 +122,9 @@ fn stack_position_only_links_keep_independent_scales_and_page_frames() {
     click(&mut h, "None");
     click(&mut h, "OK");
     let g = project(&h).graphs().last().unwrap();
-    let link = g.layers[1].link.unwrap();
+    let link = g.layers[1].link.as_ref().unwrap();
     assert_eq!(link.parent, 0);
-    assert_eq!((link.x, link.y), (ScaleLink::None, ScaleLink::None));
+    assert_eq!((&link.x, &link.y), (&ScaleLink::None, &ScaleLink::None));
     assert!(g.layers.iter().all(|l| l.x_axis.show_tick_labels));
     assert!((g.page_frame(0).top - 0.5).abs() < 1e-9);
     assert!((g.page_frame(1).top - 0.1).abs() < 1e-9);

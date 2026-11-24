@@ -476,3 +476,37 @@ fn window_comments_of_books_go_in_the_opj_itself() {
     let opened = open_project(&opj).unwrap();
     assert_eq!(opened.project.window_comments(opened.project.windows[0].id()), "calibrated");
 }
+
+#[test]
+fn custom_scale_links_round_trip_in_native_and_opj_companion_saves() {
+    use sheaf_core::graph::ScaleLink;
+    use sheaf_core::layers::UserDefinedLayer;
+
+    let dir = scratch("custom-scale-link");
+    let mut project = project_with_graph();
+    let id = project.graphs().next().unwrap().id;
+    let graph = project.graph_mut(id).unwrap();
+    let x = ScaleLink::Custom { from: "X1+10".into(), to: "X2+50".into() };
+    graph
+        .add_user_defined_layer(
+            UserDefinedLayer { parent: Some(0), x_link: x.clone(), y_link: ScaleLink::Straight, ..Default::default() },
+            0,
+            false,
+        )
+        .unwrap();
+
+    let native = dir.join("lab.sheaf");
+    let saved = save_project(&project, &native).unwrap();
+    assert!(saved.main_written && saved.companion.is_none());
+    let opened = open_project(&native).unwrap().project;
+    assert_eq!(opened.graph(id).unwrap().valid_link(1).unwrap().x, x);
+
+    let opj = dir.join("lab.opj");
+    let saved = save_project(&project, &opj).unwrap();
+    assert!(saved.main_written && saved.companion.is_some());
+    assert!(saved.warnings.iter().any(|warning| warning.contains("axis link formulas")), "{:?}", saved.warnings);
+    let opened = open_project(&opj).unwrap().project;
+    let link = opened.graph(id).unwrap().valid_link(1).unwrap();
+    assert_eq!(link.x, x);
+    assert_eq!(link.y, ScaleLink::Straight);
+}

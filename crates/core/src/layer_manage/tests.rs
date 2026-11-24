@@ -191,7 +191,7 @@ fn linked_layers_get_frames_relative_to_their_parent_when_not_grouped() {
         assert_frame(p, cells[k].left, cells[k].top, cells[k].width, cells[k].height);
     }
     // Layer 3 is still linked to layer 1 and stores a fraction of it.
-    assert_eq!(g.layers[2].link.unwrap().parent, 0);
+    assert_eq!(g.layers[2].link.as_ref().unwrap().parent, 0);
     assert!(g.layers[2].frame.top > 1.0);
 }
 
@@ -241,7 +241,7 @@ fn a_double_y_graph_arranged_as_a_group_keeps_its_right_axis_over_the_left() {
     assert_frame(g.page_frame(0), 0.15, 0.10, 0.75, 0.75);
     assert_eq!(g.page_frame(0), g.page_frame(1));
     assert_eq!(g.layers[1].y_axis.side, AxisSide::Opposite);
-    assert_eq!(g.layers[1].link.unwrap().parent, 0);
+    assert_eq!(g.layers[1].link.as_ref().unwrap().parent, 0);
 }
 
 #[test]
@@ -258,8 +258,8 @@ fn link_layers_in_the_arrangement_follow_the_first_with_no_shared_scale() {
     g.arrange_layers(&[], &ArrangeOptions { link: true, ..rows(3) }).unwrap();
     assert!(g.layers[0].link.is_none());
     for k in 1..3 {
-        let link = g.layers[k].link.unwrap();
-        assert_eq!((link.parent, link.x, link.y), (0, ScaleLink::None, ScaleLink::None));
+        let link = g.layers[k].link.as_ref().unwrap();
+        assert_eq!((link.parent, &link.x, &link.y), (0, &ScaleLink::None, &ScaleLink::None));
         let cells = rows(3).layout().frames().unwrap();
         let p = g.page_frame(k);
         assert_frame(p, cells[k].left, cells[k].top, cells[k].width, cells[k].height);
@@ -348,7 +348,7 @@ fn move_to_page_and_reference_positions() {
 fn moving_a_linked_layer_keeps_it_linked() {
     let mut g = linked_graph();
     g.move_layers(&[3], 0, SizeUnit::ReferencePercent, 25.0, 75.0).unwrap();
-    assert_eq!(g.layers[3].link.unwrap().parent, 0);
+    assert_eq!(g.layers[3].link.as_ref().unwrap().parent, 0);
     assert_frame(g.page_frame(3), 0.2, 0.4, 0.4, 0.2);
     assert_frame(g.layers[3].frame, 0.25, 0.75, 1.0, 0.5);
 }
@@ -417,7 +417,7 @@ fn reorder_remaps_links_to_the_swapped_layers() {
     g.layers[1].x_axis.title = Some("two".into());
     g.swap_layers(1, 2, true).unwrap();
     assert_eq!(g.layers[2].x_axis.title.as_deref(), Some("two"));
-    assert_eq!(g.layers[3].link.unwrap().parent, 2);
+    assert_eq!(g.layers[3].link.as_ref().unwrap().parent, 2);
     assert_eq!(g.link_parent(3), Some(2));
 }
 
@@ -429,7 +429,7 @@ fn reorder_that_would_put_a_parent_after_its_child_is_refused() {
     assert_eq!(g, before);
     // Without reorder the same swap is fine (positions only).
     g.swap_layers(0, 2, false).unwrap();
-    assert_eq!(g.layers[2].link.unwrap().parent, 0);
+    assert_eq!(g.layers[2].link.as_ref().unwrap().parent, 0);
     // A double-Y graph: the left layer cannot move behind its right layer.
     let mut d = double_y();
     assert_eq!(d.swap_layers(0, 1, true), Err(LayerError::ReorderLinks));
@@ -450,9 +450,9 @@ fn link_keeps_position_and_sets_scale_links() {
     let page = g.page_frame(1);
     g.link_layers(&[1, 2], Some(0), ScaleLink::Straight, ScaleLink::None).unwrap();
     assert_eq!(g.page_frame(1), page);
-    let link = g.layers[1].link.unwrap();
-    assert_eq!((link.parent, link.x, link.y), (0, ScaleLink::Straight, ScaleLink::None));
-    assert_eq!(g.layers[2].link.unwrap().x, ScaleLink::Straight);
+    let link = g.layers[1].link.as_ref().unwrap();
+    assert_eq!((link.parent, &link.x, &link.y), (0, &ScaleLink::Straight, &ScaleLink::None));
+    assert_eq!(g.layers[2].link.as_ref().unwrap().x, ScaleLink::Straight);
     // unlinking keeps the place on the page too
     g.link_layers(&[1], None, ScaleLink::None, ScaleLink::None).unwrap();
     assert!(g.layers[1].link.is_none());

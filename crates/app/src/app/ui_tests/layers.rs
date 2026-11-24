@@ -28,7 +28,7 @@ fn new_layer_menu_adds_the_layer_makes_it_active_and_is_one_undo_step() {
     assert_eq!(graph_ui(&h).active_layer, 1, "the new layer is active");
     assert_eq!(h.state().doc.undo_label(), Some("Create"));
     let g = project(&h).graphs().next().unwrap();
-    assert_eq!(g.layers[1].link.unwrap().parent, 0);
+    assert_eq!(g.layers[1].link.as_ref().unwrap().parent, 0);
     menu(&mut h, "Edit", "Undo Create");
     assert_eq!(layers(&h), 1);
     h.key_press_modifiers(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Z);

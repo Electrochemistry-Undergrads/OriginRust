@@ -387,7 +387,7 @@ fn group_geometry(
     let rl = &g.layers[root];
     // Does layer `i` use the root's scale on this axis?
     let shares = |i: usize, dim: Dim| {
-        i == root || g.valid_link(i).is_some_and(|l| (if dim == Dim::X { l.x } else { l.y }) == ScaleLink::Straight)
+        i == root || g.valid_link(i).is_some_and(|l| *(if dim == Dim::X { &l.x } else { &l.y }) == ScaleLink::Straight)
     };
     let shared = |dim: Dim, axis: &Axis| {
         let sources: Vec<&data::PlotData> =
@@ -431,6 +431,16 @@ fn group_geometry(
     } else {
         (shared(Dim::X, &rl.x_axis), shared(Dim::Y, &rl.y_axis))
     };
+    let child_axis = |i: usize, dim: Dim, axis: &Axis| {
+        let limits = g.valid_link(i).and_then(|link| {
+            let scale_link = if dim == Dim::X { &link.x } else { &link.y };
+            scale_link.formula_limits(root_x.endpoints(), root_y.endpoints(), axis.scale)
+        });
+        match limits {
+            Some((from, to)) => own(i, dim, &Axis { min: Some(from), max: Some(to), reverse: false, ..axis.clone() }),
+            None => own(i, dim, axis),
+        }
+    };
     let axes: Vec<(ResolvedAxis, ResolvedAxis)> = members
         .iter()
         .map(|&i| {
@@ -443,9 +453,9 @@ fn group_geometry(
             } else if shares(i, Dim::X) {
                 root_x.clone()
             } else {
-                own(i, Dim::X, &l.x_axis)
+                child_axis(i, Dim::X, &l.x_axis)
             };
-            let y = if shares(i, Dim::Y) { root_y.clone() } else { own(i, Dim::Y, &l.y_axis) };
+            let y = if shares(i, Dim::Y) { root_y.clone() } else { child_axis(i, Dim::Y, &l.y_axis) };
             // A zoom layer (T112) shows the extent of the root's region rectangle.
             if i != root
                 && let Some(r) = l.zoom.and_then(|k| rl.shapes.get(k))

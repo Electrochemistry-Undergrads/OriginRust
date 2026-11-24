@@ -10,7 +10,7 @@ use super::statistics::num;
 use super::*;
 use crate::graph::{PlotKind, ScaleKind};
 pub use calc::capability::CapModel;
-use calc::capability::{capability, fitted_cdf};
+use calc::capability::{CapOptions, capability_with, fitted_cdf};
 
 /// What [`Tool::Capability`] does.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -21,15 +21,30 @@ pub struct CapabilitySpec {
     pub subgroup: usize,
     pub model: CapModel,
     pub graph: bool,
+    /// Box-Cox: this lambda instead of the maximum-likelihood one (T419).
+    pub lambda: Option<f64>,
+    /// The target for Cpm (T419).
+    pub target: Option<f64>,
+    /// The confidence level of the Pp and Ppk intervals (T425).
+    pub confidence: f64,
 }
 
 impl Default for CapabilitySpec {
     fn default() -> Self {
-        CapabilitySpec { lsl: None, usl: None, subgroup: 1, model: CapModel::Normal, graph: true }
+        CapabilitySpec {
+            lsl: None,
+            usl: None,
+            subgroup: 1,
+            model: CapModel::Normal,
+            graph: true,
+            lambda: None,
+            target: None,
+            confidence: 0.95,
+        }
     }
 }
 
-const HEADERS: [&str; 21] = [
+const HEADERS: [&str; 27] = [
     "N",
     "Mean",
     "StdDev (overall)",
@@ -51,6 +66,12 @@ const HEADERS: [&str; 21] = [
     "PPM total (expected within)",
     "Fitted parameter 1",
     "Fitted parameter 2",
+    "Cpm",
+    "Box-Cox lambda",
+    "Pp lower",
+    "Pp upper",
+    "Ppk lower",
+    "Ppk upper",
 ];
 
 fn column_of(name: &str, comments: &str, designation: Designation, values: Vec<f64>) -> SheetColumn {
@@ -69,7 +90,8 @@ pub(super) fn run(spec: &CapabilitySpec, inputs: &[Input<'_>]) -> Result<Output,
     let mut on_sheet = Vec::new();
     let mut graphs = Vec::new();
     for input in inputs {
-        let c = capability(input.ys(), spec.lsl, spec.usl, spec.subgroup, spec.model)
+        let options = CapOptions { lambda: spec.lambda, target: spec.target, confidence: spec.confidence };
+        let c = capability_with(input.ys(), spec.lsl, spec.usl, spec.subgroup, spec.model, options)
             .map_err(|e| AnalysisError::BadOption(format!("{}: {e}", input.label)))?;
         let values = vec![
             c.n as f64,
@@ -93,6 +115,12 @@ pub(super) fn run(spec: &CapabilitySpec, inputs: &[Input<'_>]) -> Result<Output,
             c.expected_within.total,
             c.params[0],
             c.params[1],
+            c.cpm,
+            c.lambda,
+            c.pp_ci.0,
+            c.pp_ci.1,
+            c.ppk_ci.0,
+            c.ppk_ci.1,
         ];
         let mut units = vec![String::new(); values.len()];
         for u in &mut units[1..4] {
@@ -104,6 +132,24 @@ pub(super) fn run(spec: &CapabilitySpec, inputs: &[Input<'_>]) -> Result<Output,
                 "{}: {} values, mean {}, within sigma {} ({}), overall sigma {}; Cpk {}, Ppk {}; expected {} PPM outside (overall).",
                 input.label,
                 c.n,
+                num(c.mean),
+                num(c.sd_within),
+                if spec.subgroup == 1 {
+                    "moving range of 2".to_string()
+                } else {
+                    format!("R bar / d2 of subgroups of {}", spec.subgroup)
+                },
+                num(c.sd_overall),
+                num(c.cpk),
+                num(c.ppk),
+                num(c.expected_overall.total)
+            ),
+            CapModel::BoxCox => format!(
+                "{}: {} values, Box-Cox lambda {} ({}); on that scale mean {}, within sigma {} ({}), overall sigma {}; Cpk {}, Ppk {}; expected {} PPM outside (overall).",
+                input.label,
+                c.n,
+                num(c.lambda),
+                if spec.lambda.is_some() { "given" } else { "maximum likelihood" },
                 num(c.mean),
                 num(c.sd_within),
                 if spec.subgroup == 1 {
@@ -199,11 +245,28 @@ pub(super) fn run(spec: &CapabilitySpec, inputs: &[Input<'_>]) -> Result<Output,
         }
     }
     notes.push(match spec.model {
+        CapModel::BoxCox => {
+            "Box-Cox: the values and limits are transformed by (x^lambda - 1) / lambda (ln x for lambda 0) and Cp, Cpk, Pp and Ppk are the normal ones on that scale (a limit at or below 0 without a transform is left out).".to_string()
+        }
         CapModel::Normal => {
             "Cp = (USL - LSL) / 6 s, CPL = (mean - LSL) / 3 s, CPU = (USL - mean) / 3 s with the within s; Pp, PPL, PPU and Ppk the same with the overall s.".to_string()
         }
         _ => "Percentile method: Pp = (USL - LSL) / (x99.865 - x0.135), PPL = (median - LSL) / (median - x0.135), PPU = (USL - median) / (x99.865 - median); within indices are not defined.".to_string(),
     });
+    if matches!(spec.model, CapModel::Normal | CapModel::BoxCox) {
+        notes.push(format!(
+            "{} % intervals: Pp from the chi-square distribution of the overall s (n - 1 df), Ppk by Bissell's approximation{}.",
+            num(100.0 * spec.confidence),
+            if spec.model == CapModel::BoxCox { ", on the Box-Cox scale" } else { "" }
+        ));
+    }
+    if spec.target.is_some() {
+        notes.push(match spec.model {
+            CapModel::Lognormal | CapModel::Weibull => "Cpm is not defined for the percentile method.".to_string(),
+            _ => "Cpm = (USL - LSL) / 6 sqrt(s^2 + (mean - target)^2) with the overall s (both limits needed)."
+                .to_string(),
+        });
+    }
     let mut sheet = vec![SheetColumn {
         designation: Designation::Label,
         long_name: "Data".into(),
@@ -267,5 +330,24 @@ mod tests {
         assert!(t.rows[0].1[7].is_nan() && t.rows[0].1[11] > 1.0, "{:?}", t.rows[0].1);
         assert!(out.new_graph.is_none());
         assert!(p.analyze(&request(vec![y], CapabilitySpec::default())).is_err(), "no limits");
+
+        // Box-Cox with lambda 1 and a target: the normal indices, and Cpm.
+        let spec = CapabilitySpec {
+            lsl: Some(5.0),
+            usl: Some(20.0),
+            model: CapModel::BoxCox,
+            lambda: Some(1.0),
+            target: Some(12.0),
+            ..Default::default()
+        };
+        let out = p.analyze(&request(vec![y], spec)).unwrap();
+        let t = out.table.as_ref().unwrap();
+        assert!((t.rows[0].1[7] - 7.0 / (3.0 * sw)).abs() < 1e-9 && t.rows[0].1[22] == 1.0, "{:?}", t.rows[0].1);
+        assert!(t.rows[0].1[21] > 0.0 && out.notes[0].contains("Box-Cox lambda 1 (given)"), "{:?}", out.notes);
+        let cols = super::super::dist::plot_columns(&p, out.new_graph.unwrap());
+        assert_eq!(cols[1].1, "Fitted Box-Cox");
+        let r = &t.rows[0].1;
+        assert!(r[23] < r[8] && r[8] < r[24] && r[25] < r[11] && r[11] < r[26], "the intervals hold Pp and Ppk: {r:?}");
+        assert!(out.notes.iter().any(|n| n.starts_with("95 % intervals")), "{:?}", out.notes);
     }
 }

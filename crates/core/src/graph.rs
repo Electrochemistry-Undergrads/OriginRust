@@ -27,6 +27,9 @@ pub struct Graph {
     /// Graph > Browser Graph (T410): the datasets one plot steps through.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub browser: Option<crate::browser::GraphBrowser>,
+    /// Plot > Specialized > Time Series Explorer (T416): the interval the zoom layer shows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub explorer: Option<crate::explorer::SeriesExplorer>,
 }
 
 impl Graph {
@@ -2921,6 +2924,9 @@ pub struct Legend {
     pub visible: bool,
     pub position: LegendPosition,
     pub font: Font,
+    /// Inherit the plot sample's color for legend text before inline color overrides.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub text_color_follows_plot: bool,
     /// Draw a box around the legend.
     pub frame: bool,
     pub background: Option<Color>,
@@ -3544,6 +3550,7 @@ mod tests {
             layers,
             slicer: None,
             browser: None,
+            explorer: None,
         }
     }
 

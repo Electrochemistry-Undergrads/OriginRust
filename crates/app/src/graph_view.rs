@@ -192,6 +192,9 @@ pub struct GraphTexture {
     view_key: (ViewMode, i32, i32),
 }
 
+/// Seconds between two intervals when a Time Series Explorer plays (T416).
+const EXPLORER_STEP_SECS: f64 = 1.0;
+
 #[derive(Default)]
 pub struct GraphUi {
     pub texture: Option<GraphTexture>,
@@ -241,6 +244,8 @@ pub struct GraphUi {
     pub scale: ScaleState,
     /// The zoom and scroll of this window (view state only; not saved with the project).
     pub zoom: Zoom,
+    /// Time Series Explorer (T416): playing, with the time (seconds) of the last step.
+    pub explorer_play: Option<f64>,
     /// The window rectangle and the page size (points) of the last frame, for the view commands.
     frame: Option<(Rect, Vec2)>,
     /// What the Data menu tool is dragging.
@@ -676,6 +681,49 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             }
             ui.label(b.caption(doc.project()));
         });
+    }
+    // Time Series Explorer (T416): the bar that steps the zoom band through the intervals, or plays them.
+    if let Some(e) = graph.explorer {
+        let now = ui.input(|i| i.time);
+        let last = e.current + 1 >= e.intervals;
+        ui.horizontal(|ui| {
+            if ui.add_enabled(e.current > 0, egui::Button::new("Previous")).clicked() {
+                actions.push(Action::ExploreInterval { graph: graph_id, to: e.current - 1 });
+            }
+            if ui.add_enabled(!last, egui::Button::new("Next")).clicked() {
+                actions.push(Action::ExploreInterval { graph: graph_id, to: e.current + 1 });
+            }
+            if state.explorer_play.is_some() {
+                if ui.button("Pause").clicked() {
+                    state.explorer_play = None;
+                }
+            } else if ui.button("Play").clicked() {
+                // Play from the last interval starts again at the first.
+                if last {
+                    actions.push(Action::ExploreInterval { graph: graph_id, to: 0 });
+                }
+                state.explorer_play = Some(now);
+            }
+            ui.label(e.caption());
+            ui.label("Intervals");
+            let mut n = e.intervals;
+            if ui.add(egui::DragValue::new(&mut n).range(2..=1000)).changed() && n != e.intervals {
+                actions.push(Action::ExplorerIntervals { graph: graph_id, intervals: n });
+            }
+        });
+        if let Some(t) = state.explorer_play {
+            if now - t >= EXPLORER_STEP_SECS {
+                if last {
+                    state.explorer_play = None;
+                } else {
+                    actions.push(Action::ExploreInterval { graph: graph_id, to: e.current + 1 });
+                    state.explorer_play = Some(now);
+                }
+            }
+            ui.ctx().request_repaint_after(std::time::Duration::from_secs_f64(EXPLORER_STEP_SECS));
+        }
+    } else {
+        state.explorer_play = None;
     }
     // Set Active Layer By Layer Icon Only (T183): what a click inside the page activates is undone below.
     let icon_only = graph.page.style.activate_by_icon_only;
@@ -1833,6 +1881,8 @@ fn menu_for(
                     layer,
                     applies(sheaf_core::layer_scale::LayerScaleKind::Color),
                     applies(sheaf_core::layer_scale::LayerScaleKind::Bubble),
+                    l.filter(|l| !l.plots.iter().any(|p| p.kind.is_parallel()))
+                        .map(|l| l.legend.text_color_follows_plot),
                 )
             }
             ObjectKind::Label(k) => menus::graph_label_menu(layer, k),
@@ -1968,6 +2018,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::OrderLegend { layer, .. }
         | GraphOp::OrderTitle { layer, .. }
         | GraphOp::LegendBehindData { layer, .. }
+        | GraphOp::LegendTextColorFollowsPlot { layer, .. }
         | GraphOp::ReconstructLegend { layer }
         | GraphOp::UpdateLegend { layer }
         | GraphOp::HideTitle { layer, .. }
@@ -2163,6 +2214,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             }
         }
         GraphOp::LegendBehindData { behind, .. } => l.legend.behind_data = behind,
+        GraphOp::LegendTextColorFollowsPlot { enabled, .. } => l.legend.text_color_follows_plot = enabled,
         GraphOp::ReconstructLegend { .. } => l.legend.text = None,
         GraphOp::HideTitle { y, .. } => {
             let a = if y { &mut l.y_axis } else { &mut l.x_axis };

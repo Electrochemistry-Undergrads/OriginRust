@@ -438,6 +438,44 @@ fn automatic_legend_position_survives_native_and_companion_saves() {
 }
 
 #[test]
+fn legend_follow_plot_color_survives_sheaf_bare_opj_and_companion_saves() {
+    use sheaf_core::{Color, graph::LegendPosition};
+    let dir = scratch("legend-follow-plot");
+    let mut p = workbook_project();
+    let column = p.workbooks().next().unwrap().sheet().columns[1].id;
+    let graph = p.plot_columns(Template::Line, &[column]).unwrap();
+    let layer = &mut p.graph_mut(graph).unwrap().layers[0];
+    layer.plots[0].line.color = Color::BLUE;
+    let legend = &mut layer.legend;
+    legend.position = LegendPosition::TopRight;
+    legend.background = None;
+    legend.text_color_follows_plot = true;
+
+    let opj = dir.join("bare.opj");
+    let out = save_project(&p, &opj).unwrap();
+    assert!(out.main_written && out.companion.is_none(), "{:?}", out.warnings);
+    let raw = crate::opj::read_opj(&opj).unwrap();
+    assert!(raw.graphs[0].layers[0].legend.text_color_follows_plot);
+    assert_eq!(raw.graphs[0].layers[0].plots[0].line.color, Color::BLUE);
+
+    p.graph_mut(graph).unwrap().layers[0].legend.font.color = Color::RED;
+    let sheaf = dir.join("legend.sheaf");
+    save_project(&p, &sheaf).unwrap();
+    assert_eq!(open_project(&sheaf).unwrap().project, p);
+    let opj = dir.join("legend.opj");
+    let out = save_project(&p, &opj).unwrap();
+    assert!(out.warnings.iter().any(|w| w.contains("fixed legend text colour")), "{:?}", out.warnings);
+    let reopened = open_project(&opj).unwrap();
+    assert!(reopened.companion_used);
+    assert_eq!(reopened.project, p);
+
+    p.graph_mut(graph).unwrap().layers[0].legend.visible = false;
+    let out = save_project(&p, &opj).unwrap();
+    assert!(out.warnings.iter().any(|w| w.contains("legend's text color mode")), "{:?}", out.warnings);
+    assert_eq!(open_project(&opj).unwrap().project, p);
+}
+
+#[test]
 fn a_project_without_data_reloads_with_its_columns_and_no_values_in_both_formats() {
     let mut p = project_with_graph();
     p.add_graph(Template::Line); // a graph without plots as well

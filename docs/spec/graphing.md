@@ -1319,6 +1319,26 @@ expansion. Ordinary inline style spans continue across a tab. When a row also co
 wrapped captions, the width budget reserves
 one interval per tab before placing the captions and resolving the actual stops.
 
+**Legend Text Color Follows Plot (T58).** Origin 2016 changed a fixed magenta legend
+to red, green and blue captions matching the line samples when `legend -tt` set its
+color to `-9`. Each new row started in the first plot's color, including text-only
+rows. After each `\l(n)` sample, the caption used that plot's color across tabs
+and metadata substitutions. The `%(n)` name reference itself supplied no color, and
+an explicit `\c6(...)` still drew magenta. Recoloring an ungrouped line from black
+to cyan changed its caption without another legend command.
+[Origin FAQ 726](https://docs.originlab.com/quick-help/same-text-and-symbol-color-in-legend/)
+
+In Sheaf, right-click an ordinary legend and choose **Legend > Text Color Follows
+Plot** to toggle the setting as one undoable edit. Each row starts with the first
+resolved entry's color. Each resolved sample supplies the base color until the next
+sample or row. Scatter and Line+Symbol use the symbol edge color. Columns, area
+plots and lines with filled samples use the fill, as in the measured Origin 2016
+EMFs. Sheaf uses the line color for vector samples. Inline colors take
+precedence. Turning the option off restores the saved fixed text color. Copy
+Format Styles and All carry the setting. The native OPJ legend stores the follow
+mode, and the companion retains a nondefault fixed color for later use or the
+mode for a hidden legend (opj-format 10.8).
+
 **Plot-colored graph text (T58).** `\cpN(text)` uses the color of the Nth plot in the
 text object's layer. Repainting the graph after a style change resolves the color again.
 Nested styles, literal blocks and glyph decorations follow the existing text rules.
@@ -7836,3 +7856,25 @@ here is measured.
   `Project::set_graph_browser`, `browse_graph`, `clear_graph_browser`, `browser_items`.
 - **Not built:** several browsed plots per graph, browsing across workbooks, picking a dataset from a list, keyboard
   stepping, the browser in .opj files and in the CLI/MCP.
+
+## Time Series Explorer: Plot > Specialized > Time Series Explorer (T416, 2026-11-24; Origin 2024b's, Sheaf's own)
+
+Origin 2024b added a Time Series Explorer that shows the whole series with a detail panel for a chosen interval and
+steps or plays through successive intervals. Origin 2016 has none, so nothing here is measured.
+
+- **The graph:** the Zoom graph of section 34 (template `time-series-explorer`, `sheaf plot -t
+  time-series-explorer`): every selected curve in both layers. The upper layer's X axis runs exactly from the
+  smallest to the largest X of its curves (the row numbers when a curve has no X column), so that equal fractions
+  of the frame are equal X intervals. The region is a band the full height of the upper layer covering interval 1
+  of 10; the lower layer shows the band, so it keeps the upper layer's Y range and successive intervals compare on
+  one scale.
+- **The bar above the graph:** Previous and Next (disabled at the first and last interval), Play / Pause, the caption
+  `Interval k of n` and Intervals, the count (2 to 1000). Play steps one interval a second and stops at the last one;
+  Play on the last interval starts again at the first. Changing the count shows the interval that holds the start of
+  the one shown before. Consecutive steps on a graph make one undo step ("Explore Interval"), as do consecutive
+  changes of the count ("Explorer Intervals").
+- **Model:** `Graph::explorer` (`sheaf_core::explorer::SeriesExplorer`: the count and the interval shown), saved with
+  the project; `Project::plot_time_series_explorer`, `explore_interval`, `set_explorer_intervals`. Moving the band by
+  hand moves the detail as in any Zoom graph; the next step puts it back on an interval.
+- **Not built:** a detail Y axis that rescales to each interval, intervals of a set length (a day, a week), overlapping
+  steps, the playback speed, and picking an interval by clicking the upper layer.

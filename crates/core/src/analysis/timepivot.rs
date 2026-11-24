@@ -127,6 +127,47 @@ impl PivotStat {
     }
 }
 
+/// A second grouping within each period (T420): the hour of the day, the day of the week or the month of the year.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PivotBy {
+    HourOfDay,
+    DayOfWeek,
+    MonthOfYear,
+}
+
+impl PivotBy {
+    pub const ALL: [PivotBy; 3] = [PivotBy::HourOfDay, PivotBy::DayOfWeek, PivotBy::MonthOfYear];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            PivotBy::HourOfDay => "Hour of Day",
+            PivotBy::DayOfWeek => "Day of Week",
+            PivotBy::MonthOfYear => "Month of Year",
+        }
+    }
+
+    /// The group of `v`: 0 to 23 (hour), 0 (Monday) to 6 (Sunday), 0 (January) to 11.
+    pub fn of(self, v: f64) -> u32 {
+        let p = datetime::parts(v);
+        match self {
+            PivotBy::HourOfDay => p.hour,
+            PivotBy::DayOfWeek => datetime::weekday(v),
+            PivotBy::MonthOfYear => p.month - 1,
+        }
+    }
+
+    /// How group `g` is written: `14:00`, `Mon`, `Jan`.
+    pub fn label(self, g: u32) -> String {
+        const DAYS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        match self {
+            PivotBy::HourOfDay => format!("{g:02}:00"),
+            PivotBy::DayOfWeek => DAYS.get(g as usize).copied().unwrap_or("?").to_string(),
+            PivotBy::MonthOfYear => MONTHS.get(g as usize).copied().unwrap_or("?").to_string(),
+        }
+    }
+}
+
 /// What [`Tool::TimePivot`] does.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct TimePivotSpec {
@@ -137,6 +178,8 @@ pub struct TimePivotSpec {
     /// The month (1 to 12) a fiscal year starts in, for months, quarters and years (T404); 0 and 1 both mean
     /// January, the calendar year.
     pub fiscal_start: u32,
+    /// A second grouping within each period (T420): one result column per group that has values.
+    pub by: Option<PivotBy>,
 }
 
 impl TimePivotSpec {
@@ -250,8 +293,10 @@ pub(super) struct PivotOut {
 }
 
 pub(super) fn run(spec: &TimePivotSpec, inputs: &[Input<'_>]) -> Result<PivotOut, AnalysisError> {
-    // Period start -> one list of values per input.
-    let mut groups: std::collections::BTreeMap<i64, (f64, Vec<Vec<f64>>)> = std::collections::BTreeMap::new();
+    // Period start -> per input, the values of each second group (all in group 0 without one).
+    type ByGroup = std::collections::BTreeMap<u32, Vec<f64>>;
+    let mut groups: std::collections::BTreeMap<i64, (f64, Vec<ByGroup>)> = std::collections::BTreeMap::new();
+    let mut present: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
     // Days and weeks of several units count from the earliest date-time with a value.
     let first = inputs
         .iter()
@@ -267,8 +312,10 @@ pub(super) fn run(spec: &TimePivotSpec, inputs: &[Input<'_>]) -> Result<PivotOut
             let start = spec.start(*x, first);
             // Keys in whole milliseconds, so equal starts meet exactly.
             let key = (start * 86_400_000.0).round() as i64;
-            let entry = groups.entry(key).or_insert_with(|| (start, vec![Vec::new(); inputs.len()]));
-            entry.1[k].push(*y);
+            let g = spec.by.map_or(0, |b| b.of(*x));
+            present.insert(g);
+            let entry = groups.entry(key).or_insert_with(|| (start, vec![ByGroup::new(); inputs.len()]));
+            entry.1[k].entry(g).or_default().push(*y);
         }
     }
     if groups.is_empty() {
@@ -276,25 +323,54 @@ pub(super) fn run(spec: &TimePivotSpec, inputs: &[Input<'_>]) -> Result<PivotOut
             "no row has a date-time X and a value: the X column must hold dates or date-times".into(),
         ));
     }
+    // Without a second grouping: the statistic and N per input; with one: the statistic per input and group.
     let mut headers = vec!["Period start".to_string()];
+    let mut units = vec![String::new()];
     for input in inputs {
-        headers.push(format!("{} of {}", spec.stat.name(), input.name));
-        headers.push(format!("N of {}", input.name));
+        match spec.by {
+            None => {
+                headers.push(format!("{} of {}", spec.stat.name(), input.name));
+                headers.push(format!("N of {}", input.name));
+                units.extend([input.units.clone(), input.units.clone()]);
+            }
+            Some(by) => {
+                for g in &present {
+                    headers.push(format!("{} of {} ({})", spec.stat.name(), input.name, by.label(*g)));
+                    units.push(input.units.clone());
+                }
+            }
+        }
     }
     let header_refs: Vec<&str> = headers.iter().map(String::as_str).collect();
     let mut table = ResultTable::new(&header_refs);
     for (start, values) in groups.values_mut() {
         let mut row = vec![*start];
         for v in values.iter_mut() {
-            row.push(if v.is_empty() { f64::NAN } else { spec.stat.of(v) });
-            row.push(v.len() as f64);
+            match spec.by {
+                None => {
+                    let all = v.entry(0).or_default();
+                    row.push(if all.is_empty() { f64::NAN } else { spec.stat.of(all) });
+                    row.push(all.len() as f64);
+                }
+                Some(_) => {
+                    for g in &present {
+                        row.push(match v.get_mut(g) {
+                            Some(vals) if !vals.is_empty() => spec.stat.of(vals),
+                            _ => f64::NAN,
+                        });
+                    }
+                }
+            }
         }
         table.push_row(spec.label(*start), row, vec![String::new(); headers.len()]);
     }
+    let by_note =
+        spec.by.map_or(String::new(), |b| format!(", by {} ({} group(s))", b.name().to_lowercase(), present.len()));
     let notes = vec![format!(
-        "{} per {} of {} column(s): {} period(s), periods without a value left out.",
+        "{} per {}{} of {} column(s): {} period(s), periods without a value left out.",
         spec.stat.name(),
         spec.describe(),
+        by_note,
         inputs.len(),
         table.rows.len()
     )];
@@ -309,7 +385,7 @@ pub(super) fn run(spec: &TimePivotSpec, inputs: &[Input<'_>]) -> Result<PivotOut
         on_sheet.push(SheetColumn {
             designation: if i == 0 { Designation::X } else { Designation::Y },
             long_name: h.clone(),
-            units: if i == 0 { String::new() } else { inputs[(i - 1) / 2].units.clone() },
+            units: units[i].clone(),
             comments: String::new(),
             data: ColumnData::numeric(table.rows.iter().map(|(_, v)| v[i]).collect()),
         });
@@ -386,6 +462,25 @@ mod tests {
         // 0 and 1 are one period.
         assert_eq!(spec(PivotPeriod::Hour, 0).start(v, first), PivotPeriod::Hour.start(v));
         assert_eq!(spec(PivotPeriod::Minute, 15).describe(), "15 minutes");
+    }
+
+    #[test]
+    fn a_second_grouping_gives_a_column_per_group_with_values() {
+        // T420: per month, by day of the week. 2026-01-05 is a Monday.
+        let mut p = Project::new();
+        let book = p.add_workbook("by");
+        let xs = vec![at(2026, 1, 5, 9, 0), at(2026, 1, 12, 9, 0), at(2026, 1, 6, 9, 0), at(2026, 2, 2, 9, 0)];
+        p.add_column(book, 0, Designation::X, ColumnData::numeric(xs)).unwrap();
+        let y = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 3.0, 10.0, 7.0])).unwrap();
+        let spec = TimePivotSpec { period: PivotPeriod::Month, by: Some(PivotBy::DayOfWeek), ..Default::default() };
+        let request = Request { columns: vec![y], rows: RowRange::All, tool: Tool::TimePivot(spec) };
+        let out = p.analyze(&request).unwrap();
+        let t = out.table.as_ref().unwrap();
+        assert_eq!(t.headers, ["Period start", "Mean of B (Mon)", "Mean of B (Tue)"]);
+        assert_eq!((t.rows[0].1[1], t.rows[0].1[2]), (2.0, 10.0), "January: Mondays 1 and 3, Tuesday 10");
+        assert!(t.rows[1].1[2].is_nan(), "no Tuesday in February's data");
+        assert_eq!(PivotBy::HourOfDay.label(7), "07:00");
+        assert_eq!(PivotBy::MonthOfYear.of(at(2026, 12, 1, 0, 0)), 11);
     }
 
     #[test]

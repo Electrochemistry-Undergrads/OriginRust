@@ -27,6 +27,7 @@ pub mod data_markers;
 pub mod data_range;
 pub mod datetime;
 pub mod dependents;
+pub mod explorer;
 pub mod extract;
 pub mod fill_pattern;
 pub mod fishbone;

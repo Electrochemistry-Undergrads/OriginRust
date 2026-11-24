@@ -1319,6 +1319,26 @@ expansion. Ordinary inline style spans continue across a tab. When a row also co
 wrapped captions, the width budget reserves
 one interval per tab before placing the captions and resolving the actual stops.
 
+**Legend Text Color Follows Plot (T58).** Origin 2016 changed a fixed magenta legend
+to red, green and blue captions matching the line samples when `legend -tt` set its
+color to `-9`. Each new row started in the first plot's color, including text-only
+rows. After each `\l(n)` sample, the caption used that plot's color across tabs
+and metadata substitutions. The `%(n)` name reference itself supplied no color, and
+an explicit `\c6(...)` still drew magenta. Recoloring an ungrouped line from black
+to cyan changed its caption without another legend command.
+[Origin FAQ 726](https://docs.originlab.com/quick-help/same-text-and-symbol-color-in-legend/)
+
+In Sheaf, right-click an ordinary legend and choose **Legend > Text Color Follows
+Plot** to toggle the setting as one undoable edit. Each row starts with the first
+resolved entry's color. Each resolved sample supplies the base color until the next
+sample or row. Scatter and Line+Symbol use the symbol edge color. Columns, area
+plots and lines with filled samples use the fill, as in the measured Origin 2016
+EMFs. Sheaf uses the line color for vector samples. Inline colors take
+precedence. Turning the option off restores the saved fixed text color. Copy
+Format Styles and All carry the setting. The native OPJ legend stores the follow
+mode, and the companion retains a nondefault fixed color for later use or the
+mode for a hidden legend (opj-format 10.8).
+
 **Plot-colored graph text (T58).** `\cpN(text)` uses the color of the Nth plot in the
 text object's layer. Repainting the graph after a style change resolves the color again.
 Nested styles, literal blocks and glyph decorations follow the existing text rules.
@@ -6197,8 +6217,8 @@ measured.
 Add offers the nine layer presets and X and Y scale choices. Bottom-X Left-Y creates an independent
 layer. The linked presets accept an independent layer from the preview as their parent, defaulting
 to the opening layer's root or the first eligible layer. A straight-linked scale displays the
-parent's type. Independent scales start at Linear and offer the ten built-in types and Custom
-Formula. Discrete remains open. Apply adds a layer to the numbered preview. Undo, OK and Cancel
+parent's type. Independent scales start at Linear and offer the ten built-in types, Custom Formula
+and Discrete. Apply adds a layer to the numbered preview. Undo, OK and Cancel
 follow 15.7d.
 
 **Custom Formula scale (Origin 2016, 2026-11-23 and 2026-11-24).** Setting `layer.x.type=11`
@@ -6223,6 +6243,24 @@ If a previously saved pair becomes invalid following a range change, the axis te
 draws linearly with the current limits and retains the pair for later valid ranges. The Axis
 dialog displays the saved formulas. Sheaf saves and OPJ companions keep the expressions.
 A bare OPJ writes the axis as Linear and warns.
+
+**Discrete scale (Origin 2016, 2026-11-24).** LabTalk type 12 spaced the five X values
+10, 11, 15, 22 and 23 at equal intervals in an EMF. With limits 8 to 25 and increment 1,
+the tick labels were 8, 9, 10, 11, 15, 22, 23, 24 and 25. A second plot's X value of 13
+landed halfway between 11 and 15. The Y values 1, 3, 4, 9 and 14 also drew at equal intervals
+with Y type 12. Descending source values produced the same positions, and adjacent equal
+values shared a position. An unsorted series fell back to linear spacing. The saved project
+used OPJ scale byte 11 on both axes.
+
+Sheaf offers Discrete on independent Cartesian dimensions in Add and on the Axis Scale tab.
+The first plot supplies the positions. Each coordinate between its values is interpolated
+linearly and either end uses the adjacent interval to extend the mapping. Limits and
+coordinate reading remain in data units. Sheaf labels the visible source values, thinning
+them above 200, and applies the major and minor tick settings to the range outside the first
+plot. Origin can also thin the interior labels with its increment and layout rules. With
+fewer than two distinct finite values or a change of direction in the first plot, Sheaf draws
+linearly and keeps the scale type for later data changes. Sheaf files and bare OPJ files
+preserve the choice. [Origin's Scale tab](https://docs.originlab.com/origin-help/axesref-scale/).
 
 Inset With Data copies all plots from the chosen parent and uses automatic independent ranges.
 The [Origin Add tab](https://docs.originlab.com/origin-help/laymanage-addtab/) documents copying
@@ -7806,3 +7844,25 @@ here is measured.
   `Project::set_graph_browser`, `browse_graph`, `clear_graph_browser`, `browser_items`.
 - **Not built:** several browsed plots per graph, browsing across workbooks, picking a dataset from a list, keyboard
   stepping, the browser in .opj files and in the CLI/MCP.
+
+## Time Series Explorer: Plot > Specialized > Time Series Explorer (T416, 2026-11-24; Origin 2024b's, Sheaf's own)
+
+Origin 2024b added a Time Series Explorer that shows the whole series with a detail panel for a chosen interval and
+steps or plays through successive intervals. Origin 2016 has none, so nothing here is measured.
+
+- **The graph:** the Zoom graph of section 34 (template `time-series-explorer`, `sheaf plot -t
+  time-series-explorer`): every selected curve in both layers. The upper layer's X axis runs exactly from the
+  smallest to the largest X of its curves (the row numbers when a curve has no X column), so that equal fractions
+  of the frame are equal X intervals. The region is a band the full height of the upper layer covering interval 1
+  of 10; the lower layer shows the band, so it keeps the upper layer's Y range and successive intervals compare on
+  one scale.
+- **The bar above the graph:** Previous and Next (disabled at the first and last interval), Play / Pause, the caption
+  `Interval k of n` and Intervals, the count (2 to 1000). Play steps one interval a second and stops at the last one;
+  Play on the last interval starts again at the first. Changing the count shows the interval that holds the start of
+  the one shown before. Consecutive steps on a graph make one undo step ("Explore Interval"), as do consecutive
+  changes of the count ("Explorer Intervals").
+- **Model:** `Graph::explorer` (`sheaf_core::explorer::SeriesExplorer`: the count and the interval shown), saved with
+  the project; `Project::plot_time_series_explorer`, `explore_interval`, `set_explorer_intervals`. Moving the band by
+  hand moves the detail as in any Zoom graph; the next step puts it back on an interval.
+- **Not built:** a detail Y axis that rescales to each interval, intervals of a set length (a day, a week), overlapping
+  steps, the playback speed, and picking an interval by clicking the upper layer.

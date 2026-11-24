@@ -292,6 +292,7 @@ mod tests {
             step: 1.0,
             scale,
             formula: None,
+            discrete: None,
             major: Vec::new(),
             minor: Vec::new(),
             labels: Vec::new(),

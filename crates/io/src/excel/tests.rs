@@ -95,6 +95,33 @@ fn a_formula_cell_gives_its_stored_value_and_one_without_gives_a_warning() {
 }
 
 #[test]
+fn a_same_row_formula_column_keeps_its_formula() {
+    // T417: B2 =A2*2 ... B5 =A5*2 is the column formula col(A)*2, recalculated automatically; its values as stored.
+    let r = read("basic.xlsx");
+    let cached = &r.workbook.sheets[1].columns[1];
+    assert_eq!(cached.formula.as_deref(), Some("col(A)*2"));
+    assert_eq!(cached.recalc, sheaf_core::column::RecalcMode::Auto);
+    assert_eq!(numbers(cached), [2.0, 4.0, 6.0, 8.0]);
+    // Without stored values the formula is kept too (its cells stay missing until it runs).
+    assert_eq!(r.workbook.sheets[2].columns[1].formula.as_deref(), Some("col(A)*3"));
+    assert!(r.workbook.sheets[1].columns[0].formula.is_none());
+}
+
+#[test]
+fn formulas_that_are_not_one_same_row_formula_keep_only_their_values() {
+    let r = read("formulas.xlsx");
+    let cols = &r.workbook.sheets[0].columns;
+    assert_eq!(cols[1].formula.as_deref(), Some("col(A)^2+sqrt(col(A))"));
+    // A running sum (a range), a fixed cell ($G$1), a formula that differs by row, a typed value among formulas.
+    for c in &cols[2..=5] {
+        assert!(c.formula.is_none(), "{}", c.long_name);
+        let short = &c.short_name;
+        assert!(warned(&r, &format!("column {short}: its Excel formulas")), "{:?}", r.warnings);
+    }
+    assert!(warned(&r, "(the first is C2: =SUM($A$2:A2))"), "{:?}", r.warnings);
+}
+
+#[test]
 fn a_legacy_xls_file_reads_like_an_xlsx_file() {
     let r = read("legacy.xls");
     let old = &r.workbook.sheets[0];

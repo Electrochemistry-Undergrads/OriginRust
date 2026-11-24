@@ -26,6 +26,8 @@ pub struct ResolvedAxis {
     pub scale: ScaleKind,
     /// The validated transform for a Custom Formula scale.
     pub formula: Option<ResolvedFormula>,
+    /// The first plot's coordinates and transformed limits for a Discrete scale.
+    pub discrete: Option<ResolvedDiscrete>,
     /// Major tick values inside the limits.
     pub major: Vec<f64>,
     /// Minor tick values inside the limits (never equal to a major tick).
@@ -49,6 +51,26 @@ pub struct ResolvedFormula {
     transform: Arc<FormulaTransform>,
     start: f64,
     span: f64,
+}
+
+/// A piecewise linear mapping from data values to equally spaced positions.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResolvedDiscrete {
+    values: Arc<[f64]>,
+    start: f64,
+    span: f64,
+}
+
+impl ResolvedDiscrete {
+    fn position(values: &[f64], v: f64) -> f64 {
+        let i = values.partition_point(|&x| x <= v).saturating_sub(1).min(values.len() - 2);
+        i as f64 + (v - values[i]) / (values[i + 1] - values[i])
+    }
+
+    fn value(&self, position: f64) -> f64 {
+        let i = (position as usize).min(self.values.len() - 2);
+        self.values[i] + (position - i as f64) * (self.values[i + 1] - self.values[i])
+    }
 }
 
 /// A break of an axis with its place on the axis, positions as fractions of the axis length from the
@@ -133,6 +155,9 @@ impl ResolvedAxis {
         if let Some(formula) = &self.formula {
             return formula.span.abs();
         }
+        if let Some(discrete) = &self.discrete {
+            return discrete.span;
+        }
         match self.scale {
             ScaleKind::Linear => (self.max - self.min).abs(),
             ScaleKind::Log10 => (self.max.log10() - self.min.log10()).abs(),
@@ -149,6 +174,9 @@ impl ResolvedAxis {
                 return f64::NAN;
             }
             return unit;
+        }
+        if let Some(discrete) = &self.discrete {
+            return (ResolvedDiscrete::position(&discrete.values, v) - discrete.start) / discrete.span;
         }
         match self.scale {
             ScaleKind::Linear => (v - self.min) / (self.max - self.min),
@@ -190,6 +218,13 @@ impl ResolvedAxis {
                 return self.max;
             }
             return formula.transform.inverse(formula.start + u * formula.span).unwrap_or(f64::NAN);
+        }
+        if let Some(discrete) = &self.discrete {
+            return match u {
+                0.0 => self.min,
+                1.0 => self.max,
+                _ => discrete.value(discrete.start + u * discrete.span),
+            };
         }
         match self.scale {
             ScaleKind::Linear => self.min + u * (self.max - self.min),
@@ -287,6 +322,32 @@ pub fn resolve_axis(axis: &Axis, data_min_max: Option<(f64, f64)>) -> ResolvedAx
 /// [`resolve_axis`] for data whose lower and/or upper end is the base of column plots, which an
 /// automatic linear range does not pad (`free` is `(low, high)`: whether the end gets the margin).
 pub fn resolve_axis_edges(axis: &Axis, data_min_max: Option<(f64, f64)>, free: (bool, bool)) -> ResolvedAxis {
+    resolve_axis_with_values(axis, data_min_max, free, None)
+}
+
+/// Resolve Discrete from the coordinates of the first plot, in its worksheet order.
+pub(crate) fn resolve_discrete(
+    axis: &Axis,
+    data_min_max: Option<(f64, f64)>,
+    free: (bool, bool),
+    values: impl Iterator<Item = f64>,
+) -> ResolvedAxis {
+    let mut values: Vec<_> = values.filter(|v| v.is_finite()).collect();
+    values.dedup();
+    if values.first() > values.last() {
+        values.reverse();
+    }
+    let discrete = (values.len() >= 2 && values.windows(2).all(|p| p[0] < p[1] && (p[1] - p[0]).is_finite()))
+        .then(|| Arc::from(values));
+    resolve_axis_with_values(axis, data_min_max, free, discrete)
+}
+
+fn resolve_axis_with_values(
+    axis: &Axis,
+    data_min_max: Option<(f64, f64)>,
+    free: (bool, bool),
+    discrete: Option<Arc<[f64]>>,
+) -> ResolvedAxis {
     // Two finite limits so far apart that their span overflows cannot be drawn: ignore them.
     if let (Some(a), Some(b)) = (axis.min, axis.max)
         && a.is_finite()
@@ -296,7 +357,7 @@ pub fn resolve_axis_edges(axis: &Axis, data_min_max: Option<(f64, f64)>, free: (
         let mut open = axis.clone();
         open.min = None;
         open.max = None;
-        return resolve_axis_edges(&open, data_min_max, free);
+        return resolve_axis_with_values(&open, data_min_max, free, discrete);
     }
     // Both limits fixed with the lower one above the upper one: a reversed axis.
     // Resolve it with the limits swapped and mark it.
@@ -307,13 +368,13 @@ pub fn resolve_axis_edges(axis: &Axis, data_min_max: Option<(f64, f64)>, free: (
             swapped.min = Some(b);
             swapped.max = Some(a);
             swapped.reverse = false;
-            let mut r = resolve_axis_edges(&swapped, data_min_max, free);
+            let mut r = resolve_axis_with_values(&swapped, data_min_max, free, discrete);
             r.reversed = !axis.reverse;
             return r;
         }
     }
     let mut r = match axis.scale {
-        ScaleKind::Linear | ScaleKind::CustomFormula => resolve_linear(axis, data_min_max, free),
+        ScaleKind::Linear | ScaleKind::CustomFormula | ScaleKind::Discrete => resolve_linear(axis, data_min_max, free),
         ScaleKind::Log10 => resolve_log(axis, data_min_max),
         _ => crate::ticks_scales::resolve_other(axis, data_min_max),
     };
@@ -323,6 +384,9 @@ pub fn resolve_axis_edges(axis: &Axis, data_min_max: Option<(f64, f64)>, free: (
     {
         r.scale = ScaleKind::CustomFormula;
         r.formula = Some(ResolvedFormula { transform: Arc::new(transform), start, span: end - start });
+    }
+    if let Some(values) = discrete {
+        apply_discrete(axis, &mut r, values);
     }
     r.reversed ^= axis.reverse;
     apply_break(axis, &mut r);
@@ -334,6 +398,34 @@ pub fn resolve_axis_edges(axis: &Axis, data_min_max: Option<(f64, f64)>, free: (
         }
     }
     r
+}
+
+/// Use the first plot for ticks within its data range and ordinary ticks on either extension.
+fn apply_discrete(axis: &Axis, r: &mut ResolvedAxis, values: Arc<[f64]>) {
+    let start = ResolvedDiscrete::position(&values, r.min);
+    let span = ResolvedDiscrete::position(&values, r.max) - start;
+    if !span.is_finite() || span <= 0.0 {
+        return;
+    }
+    let outside = |v: f64| v < values[0] || v > values[values.len() - 1];
+    let visible = &values[values.partition_point(|&v| v < r.min)..values.partition_point(|&v| v <= r.max)];
+    let stride = visible.len().div_ceil(CATEGORY_TICKS_MAX as usize).max(1);
+    let mut ticks: Vec<_> = r.major.iter().copied().zip(r.labels.drain(..)).filter(|(v, _)| outside(*v)).collect();
+    let selected: Vec<_> = visible.iter().copied().step_by(stride).collect();
+    let label_step = match axis.tick_format {
+        TickFormat::Auto => {
+            selected.iter().map(|&v| auto_decimals(v)).max().map_or(r.step, |d| 10_f64.powi(-(d as i32)))
+        }
+        TickFormat::DateTime(_) => selected.windows(2).map(|p| p[1] - p[0]).fold(r.step, f64::min),
+        _ => r.step,
+    };
+    let labels = linear_labels(axis, &selected, label_step);
+    ticks.extend(selected.into_iter().zip(labels));
+    ticks.sort_by(|a, b| a.0.total_cmp(&b.0));
+    (r.major, r.labels) = ticks.into_iter().unzip();
+    r.minor.retain(|&v| outside(v));
+    r.scale = ScaleKind::Discrete;
+    r.discrete = Some(ResolvedDiscrete { values, start, span });
 }
 
 /// Adds the special ticks of `axis` that lie inside the limits (and outside a break), with their labels.
@@ -622,6 +714,7 @@ fn resolve_linear(axis: &Axis, data: Option<(f64, f64)>, free: (bool, bool)) -> 
         step,
         scale: ScaleKind::Linear,
         formula: None,
+        discrete: None,
         major,
         minor,
         labels,
@@ -719,6 +812,7 @@ fn resolve_log(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAxis {
             step,
             scale: ScaleKind::Log10,
             formula: None,
+            discrete: None,
             major,
             minor: Vec::new(),
             labels,
@@ -756,6 +850,7 @@ fn resolve_log(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAxis {
         step: pow10(k),
         scale: ScaleKind::Log10,
         formula: None,
+        discrete: None,
         major,
         minor,
         labels,

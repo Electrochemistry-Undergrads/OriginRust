@@ -57,7 +57,7 @@ fn the_menu_adds_a_scale_in_one_undo_step_that_a_click_selects_and_delete_remove
 fn the_legend_menu_enables_the_scales_that_apply() {
     use crate::menus::{Cmd, Entry, graph_legend_menu};
     let enabled = |can_color, can_bubble| {
-        let items: Vec<(String, bool)> = graph_legend_menu(0, can_color, can_bubble)
+        let items: Vec<(String, bool)> = graph_legend_menu(0, can_color, can_bubble, Some(false))
             .into_iter()
             .filter_map(|e| match e {
                 Entry::Item(i) if i.label.contains("Scale") => {

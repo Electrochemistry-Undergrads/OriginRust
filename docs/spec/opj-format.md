@@ -454,7 +454,7 @@ The page units were found by exporting a graph at Origin's default 300 dots per 
 |---|---|---|
 | `0x0F`, `0x17`, `0x1F` | 3 x f64 | X axis start, end and major step |
 | `0x37` | u8 | X minor ticks (1 on a linear axis, 8 on a logarithmic one) |
-| `0x38` | u8 | X scale type: 0 linear, 1 base-10 logarithm (others [pub]: 2 probability, 3 probit, 4 reciprocal, 5 offset reciprocal, 6 logit, 7 natural log, 8 base-2 log) |
+| `0x38` | u8 | X scale type: 0 linear, 1 base-10 logarithm (others [pub]: 2 probability, 3 probit, 4 reciprocal, 5 offset reciprocal, 6 logit, 7 natural log, 8 base-2 log). Discrete is 11 (T61, measured in Origin 2016 for X and Y). |
 | `0x3A`, `0x42`, `0x4A` | 3 x f64 | Y axis start, end and major step |
 | `0x62`, `0x63` | u8, u8 | Y minor ticks, Y scale type |
 | `0x71` | 4 x u16 | layer frame: left, top, right, bottom, in the page units of 10.1 |
@@ -570,6 +570,13 @@ colours. The reader takes `0x2A` = `FC FF FF FF` as "no frame" and anything else
 seen. The other frame kinds of the Frame tab (shadow, marble and so on) were not produced and their bytes are unknown,
 so they read as a plain frame and are written as one. The background colour is not read or written.
 A legend in a file with no legend object keeps Sheaf's template default (no frame, graphing.md 6.4).
+
+Origin 2016 saved **Text Color Follows Plot** with legend header byte `0x33` set to `F7` and
+the four bytes starting at `0x6B` set to `F7 FF FF FF`. The style block and raw text matched the fixed-color
+control. Setting magenta restored `05` and `05 00 00 00` at those offsets. Sheaf reads the four-byte
+code and writes both fields. Origin 2016 reopened a Sheaf-written OPJ with the mode active and
+exported the caption in the blue line's color. The companion retains a nondefault fixed color
+while this mode is active, or the mode when there is no legend annotation to write.
 
 ### 10.9 Plot groups [obs]
 

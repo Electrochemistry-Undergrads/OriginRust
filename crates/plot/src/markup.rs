@@ -5,6 +5,7 @@
 //! and `\cN(..)` indexed or RGB text color.
 //! `\=(sub,sup)` places paired scripts in one shared column. `\ab(..)`, `\ad(..)`, and
 //! `\at(..)` draw a bar, dot, or tilde above a span.
+//! `\sc` adds a conditional space, optionally before a parenthesized span.
 //! Escapes nest. A backslash
 //! that does not start one of these escapes is literal. The two prime escapes insert
 //! Unicode prime characters through the same styled glyph path.
@@ -130,7 +131,7 @@ struct ParseOptions<'a> {
 fn parse_segments(text: &str, options: &ParseOptions<'_>) -> Vec<Segment> {
     let chars: Vec<char> = text.chars().collect();
     let mut pos = 0;
-    let mut out = Vec::new();
+    let mut out = ParsedText::default();
     let base = Style {
         bold: false,
         italic: false,
@@ -143,12 +144,47 @@ fn parse_segments(text: &str, options: &ParseOptions<'_>) -> Vec<Segment> {
         rise: 0.0,
     };
     parse_seq(&chars, &mut pos, base, false, 0, &mut out, options);
-    out
+    out.segments
 }
 
 /// The text without any markup.
 pub fn plain(text: &str) -> String {
     parse(text).into_iter().map(|r| r.text).collect()
+}
+
+/// A conditional space is emitted only when another visible span follows it on the same line.
+#[derive(Default)]
+struct ParsedText {
+    segments: Vec<Segment>,
+    pending_space: Option<Style>,
+    after_text: bool,
+}
+
+impl ParsedText {
+    fn conditional_space(&mut self, style: &Style) {
+        if self.after_text && self.pending_space.is_none() {
+            self.pending_space = Some(style.clone());
+        }
+    }
+
+    fn before(&mut self, visible: bool) {
+        if let Some(style) = self.pending_space.take()
+            && visible
+        {
+            push(&mut self.segments, ' ', &style);
+        }
+        self.after_text = visible;
+    }
+
+    fn character(&mut self, c: char, style: &Style) {
+        self.before(!c.is_whitespace());
+        push(&mut self.segments, c, style);
+    }
+
+    fn span(&mut self, segment: Segment) {
+        self.before(true);
+        self.segments.push(segment);
+    }
 }
 
 fn push(out: &mut Vec<Segment>, c: char, st: &Style) {
@@ -387,7 +423,7 @@ fn parse_seq(
     st: Style,
     in_escape: bool,
     depth: usize,
-    out: &mut Vec<Segment>,
+    out: &mut ParsedText,
     options: &ParseOptions<'_>,
 ) {
     let mut parens = 0usize;
@@ -396,12 +432,22 @@ fn parse_seq(
         if options.label_separators && depth == 0 && (*pos == 0 || chars[*pos - 1] == '\n') {
             let line: String = chars[*pos..].iter().take_while(|&&c| c != '\n').collect();
             if let Some(percent) = crate::legend::separation_percent(&line) {
-                out.push(Segment::LineGap(percent));
+                out.before(false);
+                out.segments.push(Segment::LineGap(percent));
                 // A valid separator contains only ASCII syntax and digits, plus optional
                 // whitespace. Count characters because the parser indexes Unicode scalars.
                 *pos += line.chars().count();
                 continue;
             }
+        }
+        if c == '\\' && depth < MAX_DEPTH && chars.get(*pos + 1..*pos + 3) == Some(&['s', 'c']) {
+            out.conditional_space(&st);
+            *pos += 3;
+            if chars.get(*pos) == Some(&'(') {
+                *pos += 1;
+                parse_seq(chars, pos, st.clone(), true, depth + 1, out, options);
+            }
+            continue;
         }
         if c == '\\'
             && depth < MAX_DEPTH
@@ -411,10 +457,11 @@ fn parse_seq(
             match esc {
                 Escape::Styled(inner) => parse_seq(chars, pos, inner, true, depth + 1, out, options),
                 Escape::Accent(kind) => {
-                    let mut content = Vec::new();
-                    parse_seq(chars, pos, st.clone(), true, depth + 1, &mut content, options);
+                    let mut inner = ParsedText::default();
+                    parse_seq(chars, pos, st.clone(), true, depth + 1, &mut inner, options);
+                    let content = inner.segments;
                     if !content.is_empty() {
-                        out.push(Segment::Accent { kind, content, scale: st.scale, color: st.color });
+                        out.span(Segment::Accent { kind, content, scale: st.scale, color: st.color });
                     }
                 }
                 Escape::Pair => {
@@ -438,39 +485,39 @@ fn parse_seq(
                     // Keep these pair measurements separate from the older standalone scripts.
                     let branch = |chars: &[char], rise: f64| {
                         let inner = Style { scale: st.scale * 0.6, rise: st.rise + rise * st.scale, ..st.clone() };
-                        let mut out = Vec::new();
+                        let mut out = ParsedText::default();
                         parse_seq(chars, &mut 0, inner, false, depth + 1, &mut out, options);
-                        out
+                        out.segments
                     };
                     let sub = branch(lower, -0.35);
                     let sup = branch(upper, 0.49);
                     if !sub.is_empty() || !sup.is_empty() {
-                        out.push(Segment::Pair { sub, sup });
+                        out.span(Segment::Pair { sub, sup });
                     }
                 }
                 Escape::Literal => {
                     let plain = Style { greek: false, ..st.clone() };
-                    take_enclosed(chars, pos).chars().for_each(|c| push(out, c, &plain));
+                    take_enclosed(chars, pos).chars().for_each(|c| out.character(c, &plain));
                 }
                 Escape::Unicode => {
                     let code = take_enclosed(chars, pos);
                     let ch =
                         u32::from_str_radix(code.trim(), 16).ok().and_then(char::from_u32).filter(|c| !c.is_control());
                     match ch {
-                        Some(ch) => push(out, ch, &Style { greek: false, ..st.clone() }),
-                        None => format!("\\x({code})").chars().for_each(|c| push(out, c, &st)),
+                        Some(ch) => out.character(ch, &Style { greek: false, ..st.clone() }),
+                        None => format!("\\x({code})").chars().for_each(|c| out.character(c, &st)),
                     }
                 }
                 Escape::Prime(ch) => {
                     take_enclosed(chars, pos);
-                    push(out, ch, &Style { greek: false, ..st.clone() });
+                    out.character(ch, &Style { greek: false, ..st.clone() });
                 }
                 Escape::Decimal => {
                     let code = take_enclosed(chars, pos);
                     let ch = code.trim().parse::<u32>().ok().and_then(char::from_u32).filter(|c| !c.is_control());
                     match ch {
-                        Some(ch) => push(out, ch, &Style { greek: false, ..st.clone() }),
-                        None => format!("\\({code})").chars().for_each(|c| push(out, c, &st)),
+                        Some(ch) => out.character(ch, &Style { greek: false, ..st.clone() }),
+                        None => format!("\\({code})").chars().for_each(|c| out.character(c, &st)),
                     }
                 }
             }
@@ -487,7 +534,7 @@ fn parse_seq(
                 parens -= 1;
             }
         }
-        push(out, c, &st);
+        out.character(c, &st);
         *pos += 1;
     }
 }
@@ -594,6 +641,25 @@ mod tests {
         assert_eq!(r[0].text, "f(x)");
         assert!(r[0].bold);
         assert_eq!(r[1].text, " y");
+    }
+
+    #[test]
+    fn conditional_spaces_join_visible_text_and_keep_authored_whitespace() {
+        assert_eq!(plain(r"A\sc\sc()\sc(B (C))\sc"), "A B (C)");
+        assert_eq!(plain(r"\sc(A)\sc\scB"), "A B");
+        assert_eq!(plain(r"A  \sc\scB\sc  C"), "A  B  C");
+        assert_eq!(plain("A\\sc\n\\scB"), "A\nB");
+        assert_eq!(plain(r"A\v(\sc)\h(\sc(B))"), r"A\sc\sc(B)");
+    }
+
+    #[test]
+    fn conditional_spaces_use_the_first_escaping_style_across_empty_spans() {
+        let runs = parse(r"\b(A\sc)\i(\sc)\u(\sc(B))");
+        assert_eq!(runs.len(), 2);
+        assert_eq!(runs[0].text, "A ");
+        assert!(runs[0].bold && !runs[0].italic && !runs[0].underline);
+        assert_eq!(runs[1].text, "B");
+        assert!(runs[1].underline && !runs[1].bold && !runs[1].italic);
     }
 
     #[test]

@@ -404,6 +404,8 @@ pub enum ProjectError {
     AlluvialColumns,
     #[error("a network plot or a chord diagram needs a source and a target column; select them")]
     NetworkColumns,
+    #[error("an UpSet plot needs two or more set columns (1 or 0 in each row for in or out of the set); select them")]
+    UpSetColumns,
     #[error("{0}")]
     BadName(String),
     #[error("a sunburst plot cannot have a right Y axis; use one Y axis or another template")]
@@ -1400,6 +1402,16 @@ impl Project {
         if template == Template::Fishbone {
             return self.plot_fishbone(ys, crate::fishbone::DEFAULT_EFFECT);
         }
+        if template == Template::UpSet {
+            // The columns are the sets; one column stands for the flag columns of its sheet.
+            let mut sets = ys.to_vec();
+            if sets.len() < 2
+                && let Some((_, sheet, _)) = ys.first().and_then(|y| self.locate(*y))
+            {
+                sets = flag_columns(sheet);
+            }
+            return self.plot_upset(&sets);
+        }
         if matches!(template, Template::Network | Template::Chord) {
             // The first two columns of text are the ends of the edges; the last numeric one, if any, weighs them.
             let weight = ys.iter().rev().copied().find(|y| self.numeric(*y).is_some());
@@ -1964,6 +1976,37 @@ impl Project {
         self.plot_links(Template::Chord, source, target, weight)
     }
 
+    /// An UpSet plot (T403) of the set columns `sets` (two or more): a row is in a set when its cell holds a
+    /// number other than 0 or text other than empty, 0, false or no. The plot's Y column is the first set.
+    pub fn plot_upset(&mut self, sets: &[ColumnId]) -> Result<WindowId, ProjectError> {
+        for c in sets {
+            self.column(*c).ok_or(ProjectError::NoSuchColumn(*c))?;
+        }
+        let mut unique: Vec<ColumnId> = Vec::new();
+        for c in sets {
+            if !unique.contains(c) {
+                unique.push(*c);
+            }
+        }
+        if unique.len() < 2 {
+            return Err(ProjectError::UpSetColumns);
+        }
+        let long_name = self.locate(unique[0]).map(|(b, _, _)| b.title_for_graph());
+        let graph = self.add_graph(Template::UpSet);
+        self.add_plot(graph, 0, unique[0])?;
+        if let Some(g) = self.graph_mut(graph) {
+            if let Some(l) = g.layers.first_mut() {
+                for p in &mut l.plots {
+                    p.sankey.stages = unique.clone();
+                }
+            }
+            if let Some(name) = long_name {
+                g.long_name = name;
+            }
+        }
+        Ok(graph)
+    }
+
     /// A network plot or a chord diagram of the rows of `source` and `target`.
     fn plot_links(
         &mut self,
@@ -2143,7 +2186,10 @@ impl Project {
         if template == Template::Fishbone {
             return Err(ProjectError::FishboneColumns);
         }
-        if matches!(template, Template::Sankey | Template::Alluvial | Template::Network | Template::Chord) {
+        if matches!(
+            template,
+            Template::Sankey | Template::Alluvial | Template::Network | Template::Chord | Template::UpSet
+        ) {
             return Err(ProjectError::SankeyColumns);
         }
         if matches!(template, Template::GroupedColumns | Template::GroupedBox) {
@@ -2468,6 +2514,21 @@ fn style_pareto(g: &mut crate::graph::Graph, right: usize) {
         p.decor.labels.enable = true;
         p.decor.labels.position = crate::graph::LabelPosition::Above;
     }
+}
+
+/// The columns of `sheet` that hold membership flags (T403): numeric, with at least one value, every value 0 or 1
+/// (missing cells allowed).
+pub fn flag_columns(sheet: &Worksheet) -> Vec<ColumnId> {
+    sheet
+        .columns
+        .iter()
+        .filter(|c| {
+            c.numeric().is_some_and(|v| {
+                v.iter().any(|x| !x.is_nan()) && v.iter().all(|x| x.is_nan() || *x == 0.0 || *x == 1.0)
+            })
+        })
+        .map(|c| c.id)
+        .collect()
 }
 
 #[cfg(test)]

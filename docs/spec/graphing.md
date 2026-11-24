@@ -6096,7 +6096,29 @@ line, ticks, tick labels and a title. The edges share the resolved scale and use
 label and title settings, including the default title from the first plot or the placeholder
 on an empty layer. Auto Offset calculates the distance independently for each edge. The paired
 axis settings are saved in the Sheaf project and the OPJ companion. A plain OPJ export warns
-that the facing edge's tick labels, title and offset are omitted. Custom Formula remains disabled.
+that the facing edge's tick labels, title and offset are omitted.
+
+**Custom Formula scale links (Origin 2016, 2026-11-23).** A linked top-X child with
+`layer.x.link=2` and endpoint expressions `X1+10` and `X2+50` reported From 12 and To 64
+over a parent X scale of 2–14. Both expression properties read back as entered.
+The `layadd` reference documents custom endpoint inputs for both dimensions. The 2016
+`layadd` custom arguments used in the probe were rejected, so the recorded limits come from
+the linked layer properties. [Axis link properties](https://docs.originlab.com/labtalk/ref/layer-axis-obj/)
+and [layadd endpoint inputs](https://docs.originlab.com/x-function/ref/layadd/).
+
+Sheaf's User Defined controls offer Custom Formula for either dimension once a parent is
+selected. From and To start with the corresponding parent endpoints. Expressions can use
+`X1`, `X2`, `Y1` and `Y2` (also lowercase) for the parent's current limits in drawn order.
+The child resolves its own ticks and scale type within the resulting interval, including
+decreasing ranges. Automatic parent limits still include the parent and straight-linked
+data. Formula-linked data affect the child only. Polar angle and ternary axes use fixed coordinate limits.
+
+OK rejects expressions that fail to produce two distinct finite limits in the child scale's
+domain. An existing formula pair that becomes invalid after a parent change temporarily
+uses the child's independent limits. Those rules and preserving the child's displayed limits
+when its parent is deleted are Sheaf choices. The existing Link tabs display saved formulas
+and allow switching to their existing link choices. Create is one Undo step. Sheaf project
+files and OPJ companions keep the formulas. Plain OPJ export warns that it omits them.
 
 ---
 

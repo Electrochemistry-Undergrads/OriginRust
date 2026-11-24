@@ -1297,6 +1297,20 @@ fn anova2_refuses_dunnett_and_an_x_range() {
     assert!(!ok && err.contains("no X column to limit"), "{err}");
 }
 
+/// Power of the proportion and variance tests (spec `statistics.md` section 12.1, T415; scipy's numbers from
+/// `tools/power-rate-ref.py`).
+#[test]
+fn power_of_proportion_and_variance_tests_runs_from_the_command_line() {
+    let run = |args: &[&str]| sheaf(&[&["analyze", "power"], args].concat());
+    let (ok, out, err) = run(&["--test", "one-proportion", "--mean1", "0.6", "--mean2", "0.5", "--sizes", "100"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("One-proportion test") && out.contains("0.516"), "{out}");
+    let (ok, out, err) = run(&["--test", "two-variances", "--mean1", "2", "--mean2", "1", "--powers", "0.8"]);
+    assert!(ok && out.contains("Two-sample variance test") && out.contains("per group"), "{err} {out}");
+    let (ok, _, err) = run(&["--test", "two-proportions", "--sizes", "10"]);
+    assert!(!ok && err.contains("between 0 and 1"), "{err}");
+}
+
 #[test]
 fn power_needs_no_file_and_prints_origins_numbers() {
     // Two samples, means 5 and 6, sd 1.5, n = 10 per group: Origin gives 0.2921101.

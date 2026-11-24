@@ -1752,6 +1752,10 @@ pub fn power_spec(a: AnalyzeTool) -> Result<(analysis::PowerSpec, Option<PathBuf
             PowerTestArg::TwoSample => analysis::PowerKind::TwoSampleT,
             PowerTestArg::Paired => analysis::PowerKind::PairedT,
             PowerTestArg::Anova => analysis::PowerKind::Anova,
+            PowerTestArg::OneProportion => analysis::PowerKind::OneProportion,
+            PowerTestArg::TwoProportions => analysis::PowerKind::TwoProportions,
+            PowerTestArg::OneVariance => analysis::PowerKind::OneVariance,
+            PowerTestArg::TwoVariances => analysis::PowerKind::TwoVariances,
         },
         goal: if sizes.is_empty() {
             analysis::PowerGoal::SampleSize(powers)

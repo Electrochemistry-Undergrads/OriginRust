@@ -8069,6 +8069,26 @@ fn go_to_window_moves_the_cursor_to_the_typed_cell() {
     assert_eq!(book_ui(&h).sel, Sel::Cells { anchor: (0, 2), end: (0, 2) });
 }
 
+/// Statistics > Power and Sample Size > the proportion and variance tests (T415): the window hides the standard
+/// deviation, names the inputs and OK writes a workbook.
+#[test]
+fn power_of_a_proportion_test_from_the_menu() {
+    let mut h = start(vec![data_file("power_prop")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    menu_path(&mut h, &["Statistics", "Power and Sample Size", "Two-Proportion Test..."]);
+    assert!(has_label(&h, "Proportion 2") && !has_label(&h, "Standard deviation"));
+    let books = project(&h).workbooks().count();
+    click(&mut h, "OK");
+    assert!(h.state().power.is_none(), "OK runs and closes");
+    assert_eq!(project(&h).workbooks().count(), books + 1);
+    let b = project(&h).workbooks().last().unwrap();
+    let p = b.sheets[0].columns[1].numeric().unwrap();
+    // 0.6 and 0.5 with 50, 100 and 200 per group: powers rise.
+    assert!(p[0] < p[1] && p[1] < p[2] && p[2] < 1.0, "{p:?}");
+    menu_path(&mut h, &["Statistics", "Power and Sample Size", "One-Sample Variance Test..."]);
+    assert!(has_label(&h, "Hypothesized variance"));
+}
+
 #[test]
 fn power_and_sample_size_menu_opens_a_dialog_that_makes_a_workbook() {
     let mut h = start(vec![data_file("power")]);

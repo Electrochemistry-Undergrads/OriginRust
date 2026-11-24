@@ -6,7 +6,7 @@ use sheaf_core::cellformat::{CategoryColors, LabelColors, LabelKind};
 use sheaf_core::color::Color;
 use sheaf_core::sheet_fonts::ColumnLabelFont;
 use sheaf_core::sheet_view::SheetView;
-use sheaf_core::{Document, WindowId};
+use sheaf_core::{Document, Project, WindowId, Worksheet};
 
 const DATA: usize = 0;
 const LONG_NAME: usize = 1;
@@ -20,6 +20,27 @@ const FORMULA: usize = 8;
 const CATEGORIES: [&str; 9] =
     ["Data", "Long Name", "Units", "Comments", "Column Labels", "Column Header", "Row Header", "Standard", "F(x)="];
 
+const MAX_SIZE_ROWS: usize = 1_048_576;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PropertiesTab {
+    Format,
+    View,
+    Size,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct SheetSize {
+    rows: usize,
+    columns: usize,
+}
+
+impl SheetSize {
+    fn new(sheet: &Worksheet) -> Self {
+        Self { rows: crate::grid::shown_rows(sheet), columns: sheet.columns.len() }
+    }
+}
+
 pub struct WorksheetFontsDialog {
     book: WindowId,
     sheet: usize,
@@ -31,7 +52,9 @@ pub struct WorksheetFontsDialog {
     shown_colors: [CategoryColors; CATEGORIES.len()],
     base_view: SheetView,
     shown_view: SheetView,
-    view_tab: bool,
+    tab: PropertiesTab,
+    base_size: SheetSize,
+    shown_size: SheetSize,
     category: usize,
     fonts: Vec<String>,
     font_search: String,
@@ -42,6 +65,7 @@ impl WorksheetFontsDialog {
         let b = doc.project().workbook(book)?;
         let sheet = b.active_sheet.min(b.sheets.len().checked_sub(1)?);
         let worksheet = &b.sheets[sheet];
+        let size = SheetSize::new(worksheet);
         let defaults = &worksheet.font_defaults;
         let base = [
             defaults.data.clone().unwrap_or_default(),
@@ -96,7 +120,9 @@ impl WorksheetFontsDialog {
             shown_colors: colors,
             base_view: worksheet.view,
             shown_view: worksheet.view,
-            view_tab: false,
+            tab: PropertiesTab::Format,
+            base_size: size,
+            shown_size: size,
             category: DATA,
             fonts,
             font_search: String::new(),
@@ -113,7 +139,40 @@ impl WorksheetFontsDialog {
     }
 
     fn changed(&self) -> bool {
-        self.shown != self.base || self.shown_colors != self.base_colors || self.shown_view != self.base_view
+        self.shown != self.base
+            || self.shown_colors != self.base_colors
+            || self.shown_view != self.base_view
+            || self.shown_size != self.base_size
+    }
+
+    fn rows_locked(&self, sheet: &Worksheet) -> bool {
+        self.shown_size.rows < self.base_size.rows
+            && sheet
+                .columns
+                .iter()
+                .take(self.shown_size.columns)
+                .any(|column| column.is_locked() && column.len() > self.shown_size.rows)
+    }
+
+    fn resize(&self, project: &mut Project) {
+        let sheet = &project.workbook(self.book).unwrap().sheets[self.sheet];
+        let removed: Vec<_> = sheet.columns.iter().skip(self.shown_size.columns).map(|column| column.id).collect();
+        crate::app::delete_columns(project, &removed);
+        let added = self.shown_size.columns.saturating_sub(self.base_size.columns);
+        if added > 0 {
+            project
+                .insert_columns(self.book, self.sheet, self.base_size.columns, added)
+                .expect("worksheet still exists");
+        }
+        let shrinking_rows = self.shown_size.rows < self.base_size.rows;
+        if shrinking_rows {
+            let sheet = &mut project.workbook_mut(self.book).unwrap().sheets[self.sheet];
+            let columns: Vec<_> = (0..sheet.columns.len()).collect();
+            sheet.delete_rows(&columns, self.shown_size.rows..self.base_size.rows);
+        }
+        if shrinking_rows || !removed.is_empty() {
+            let _ = project.reapply_row_filter(self.book, self.sheet);
+        }
     }
 
     fn apply(&mut self, doc: &mut Document) {
@@ -122,17 +181,29 @@ impl WorksheetFontsDialog {
         }
         let mut layout = self.shown_view;
         layout.show_missing_as_blank = self.base_view.show_missing_as_blank;
-        let label =
-            match (self.shown != self.base, self.shown_colors != self.base_colors, self.shown_view != self.base_view) {
-                (true, false, false) => "Worksheet font",
-                (false, true, false) => "Worksheet colors",
-                (false, false, true) if layout == self.base_view => "Worksheet missing display",
-                (false, false, true) => "Worksheet view",
-                _ => "Worksheet formatting",
-            };
+        let label = match (
+            self.shown != self.base,
+            self.shown_colors != self.base_colors,
+            self.shown_view != self.base_view,
+            self.shown_size != self.base_size,
+        ) {
+            (true, false, false, false) => "Worksheet font",
+            (false, true, false, false) => "Worksheet colors",
+            (false, false, true, false) if layout == self.base_view => "Worksheet missing display",
+            (false, false, true, false) => "Worksheet view",
+            (false, false, false, true) => "Worksheet size",
+            _ => "Worksheet formatting",
+        };
         doc.apply(label, |p| {
+            if self.shown_size != self.base_size {
+                self.resize(p);
+            }
             let sheet = &mut p.workbook_mut(self.book).unwrap().sheets[self.sheet];
             sheet.view = self.shown_view;
+            if self.shown_size.rows != self.base_size.rows {
+                // Origin clears a zero-row sheet and leaves two blank rows.
+                sheet.view.allocated_rows = Some(if self.shown_size.rows == 0 { 2 } else { self.shown_size.rows });
+            }
             sheet.standard_colors = self.shown_colors[STANDARD];
             sheet.data_colors = self.shown_colors[DATA];
             sheet.column_label_colors = self.shown_colors[BULK];
@@ -175,7 +246,11 @@ impl WorksheetFontsDialog {
         });
         self.base = self.shown.clone();
         self.base_colors = self.shown_colors;
-        self.base_view = self.shown_view;
+        let sheet = &doc.project().workbook(self.book).unwrap().sheets[self.sheet];
+        self.base_view = sheet.view;
+        self.shown_view = sheet.view;
+        self.base_size = SheetSize::new(sheet);
+        self.shown_size = self.base_size;
         self.revision = doc.revision();
     }
 
@@ -191,6 +266,22 @@ impl WorksheetFontsDialog {
         ui.checkbox(&mut view.column_grid, "Column Grid");
         ui.checkbox(&mut view.row_grid, "Row Grid");
         ui.checkbox(&mut view.page_breaks, "Page Break Preview Lines");
+    }
+
+    fn show_size(&mut self, ui: &mut egui::Ui, sheet: &Worksheet) {
+        let row_limit = MAX_SIZE_ROWS.max(self.base_size.rows);
+        let column_limit = self.base_size.columns.saturating_add(crate::app::MAX_ADDED_COLUMNS);
+        egui::Grid::new("worksheet_size_grid").num_columns(2).show(ui, |ui| {
+            let rows = ui.label("Row Number");
+            ui.add(egui::DragValue::new(&mut self.shown_size.rows).range(0..=row_limit)).labelled_by(rows.id);
+            ui.end_row();
+            let columns = ui.label("Column Number");
+            ui.add(egui::DragValue::new(&mut self.shown_size.columns).range(0..=column_limit)).labelled_by(columns.id);
+            ui.end_row();
+        });
+        if self.shown_size.rows < sheet.row_count() || self.shown_size.columns < self.base_size.columns {
+            ui.label("Applying this size removes trailing rows or columns.");
+        }
     }
 
     fn show_format(&mut self, ui: &mut egui::Ui) {
@@ -278,8 +369,11 @@ impl WorksheetFontsDialog {
         if !self.current(doc) {
             return false;
         }
+        let sheet = &doc.project().workbook(self.book).unwrap().sheets[self.sheet];
+        let has_grid = !sheet.is_notes() && sheet.graph_sheet.is_none();
         let mut open = true;
         let mut pressed = None;
+        let mut rows_locked = false;
         egui::Window::new("Worksheet Properties")
             .id(egui::Id::new("worksheet_fonts"))
             .open(&mut open)
@@ -289,21 +383,28 @@ impl WorksheetFontsDialog {
             .collapsible(false)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.selectable_value(&mut self.view_tab, false, "Format");
-                    ui.selectable_value(&mut self.view_tab, true, "View");
+                    ui.selectable_value(&mut self.tab, PropertiesTab::Format, "Format");
+                    ui.selectable_value(&mut self.tab, PropertiesTab::View, "View");
+                    if has_grid {
+                        ui.selectable_value(&mut self.tab, PropertiesTab::Size, "Size");
+                    }
                 });
                 ui.separator();
-                if self.view_tab {
-                    self.show_view(ui);
-                } else {
-                    self.show_format(ui);
+                match self.tab {
+                    PropertiesTab::Format => self.show_format(ui),
+                    PropertiesTab::View => self.show_view(ui),
+                    PropertiesTab::Size => self.show_size(ui, sheet),
+                }
+                rows_locked = self.rows_locked(sheet);
+                if rows_locked {
+                    ui.label("A locked column extends beyond the requested row count.");
                 }
                 ui.add_space(6.0);
                 ui.allocate_ui_with_layout(
                     egui::vec2(340.0, ui.spacing().interact_size.y),
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
-                        pressed = ok_cancel_apply(ui, self.changed());
+                        pressed = ok_cancel_apply(ui, self.changed() && !rows_locked);
                     },
                 );
             });
@@ -311,6 +412,7 @@ impl WorksheetFontsDialog {
             return false;
         }
         match pressed {
+            Some(DialogButton::Ok) if rows_locked => true,
             Some(DialogButton::Ok) => {
                 self.apply(doc);
                 false

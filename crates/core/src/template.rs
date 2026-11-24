@@ -227,6 +227,10 @@ pub enum Template {
     Alluvial,
     /// Network plot (Origin 2021b, T383): nodes and edges of a source and a target column.
     Network,
+    /// Chord diagram (Origin 2021, T402): arcs and ribbons of a source and a target column.
+    Chord,
+    /// UpSet plot (Origin 2027, T403): set sizes and intersections of membership columns.
+    UpSet,
     /// Cause-and-effect (fishbone) diagram (Origin 2026, T375): the chosen columns are the categories, their
     /// cells the causes; drawn as line and text objects in one layer without axes.
     Fishbone,
@@ -245,7 +249,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 105] = [
+    pub const ALL: [Template; 107] = [
         Template::Line,
         Template::Scatter3d,
         Template::Trajectory3d,
@@ -306,6 +310,8 @@ impl Template {
         Template::Sankey,
         Template::Alluvial,
         Template::Network,
+        Template::Chord,
+        Template::UpSet,
         Template::Fishbone,
         Template::Bubble,
         Template::ColorMapped,
@@ -460,6 +466,8 @@ impl Template {
             Template::Sankey => "sankey",
             Template::Alluvial => "alluvial",
             Template::Network => "network",
+            Template::Chord => "chord",
+            Template::UpSet => "upset",
             Template::Fishbone => "fishbone",
         }
     }
@@ -570,6 +578,8 @@ impl Template {
             Template::Sankey => "Sankey Diagram",
             Template::Alluvial => "Alluvial Diagram",
             Template::Network => "Network Plot",
+            Template::Chord => "Chord Diagram",
+            Template::UpSet => "UpSet Plot",
             Template::Fishbone => "Cause-and-Effect Diagram",
         }
     }
@@ -810,9 +820,14 @@ impl Template {
                 }
                 g
             }
-            Template::Network => {
+            Template::Network | Template::Chord | Template::UpSet => {
                 // Nodes and edges fill the layer's frame: no axes, no legend (the names are beside the nodes).
-                let mut g = general(id, name, PlotKind::Network);
+                let kind = match self {
+                    Template::Chord => PlotKind::Chord,
+                    Template::UpSet => PlotKind::UpSet,
+                    _ => PlotKind::Network,
+                };
+                let mut g = general(id, name, kind);
                 for l in &mut g.layers {
                     l.x_axis.side = AxisSide::Hidden;
                     l.y_axis.side = AxisSide::Hidden;
@@ -1326,6 +1341,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
             background: None,
             background_style: BackgroundStyle::default(),
             border: Default::default(),
+            element_scale: LayerElementScale::default(),
             group_style: GroupStyle::default(),
             display: LayerDisplay::default(),
             xy_ratio: None,
@@ -1962,7 +1978,9 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 105);
+        assert_eq!(Template::ALL.len(), 107);
+        assert_eq!(Template::from_name("UpSet"), Some(Template::UpSet));
+        assert_eq!(Template::from_name("chord"), Some(Template::Chord));
         assert_eq!(Template::from_name("network"), Some(Template::Network));
         assert_eq!(Template::from_name("alluvial"), Some(Template::Alluvial));
         assert_eq!(Template::from_name("sankey"), Some(Template::Sankey));

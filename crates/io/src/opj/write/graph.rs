@@ -346,6 +346,9 @@ impl Writer {
                     .into(),
             );
         }
+        if !layer.element_scale.is_default() {
+            notes.push("layer management element scaling was not written (the companion file keeps it)".into());
+        }
         if !layer.group_style.is_default() {
             notes.push("the Group tab of a layer (edit mode, increments, subgroups) was not written".into());
         }
@@ -798,6 +801,18 @@ impl Writer {
                     .into(),
             );
         }
+        if has(&|k| k == PlotKind::UpSet) {
+            notes.push(
+                "UpSet plots were written as column plots of their first set column; their intersections were not written"
+                    .into(),
+            );
+        }
+        if has(&|k| k == PlotKind::Chord) {
+            notes.push(
+                "chord diagrams were written as column plots of their weight column; their arcs and ribbons were not written"
+                    .into(),
+            );
+        }
         if has(&|k| k == PlotKind::Sankey) {
             notes.push(
                 "Sankey diagrams were written as column plots of their flow column; their nodes and bands were not written"
@@ -897,6 +912,8 @@ impl Writer {
                 | PlotKind::Sunburst
                 | PlotKind::Sankey
                 | PlotKind::Network
+                | PlotKind::Chord
+                | PlotKind::UpSet
                 | PlotKind::Pie
                 | PlotKind::Pie3D
                 | PlotKind::PieBw => CurveKind::Column,

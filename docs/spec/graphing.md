@@ -2878,7 +2878,7 @@ Origin's documented facts (Origin 2027 help, not measured; no Origin was at hand
   `tools/hexbin-ref.py`, which also checks a numpy brute force; matplotlib 3.11.2, numpy 2.5.4; these are not Origin
   numbers) and hand cases in `hexbin.rs`; `hexbin_tests.rs` (regular hexagons on a square and a wide frame, colours,
   colour scale, autoscale, corners inside the clip over seeds and bin counts, log axis, shared colour scale); core template/serde test; CLI test; UI menu, Plot Details and derived-axis tests; `.opj` warning test.
-- Not done: XYZ and matrix input, Binned Scatter, UpSet, a hexbin toolbar button, colour map choice, a tick count
+- Not done: XYZ and matrix input, Binned Scatter, a hexbin toolbar button, colour map choice, a tick count
   setting, Origin's real defaults, outlines, hover read-out of bin counts.
 
 ### 14.25 Parallel Plot and Parallel Index (T49)
@@ -3355,6 +3355,47 @@ the sheet's first two text columns; in the app the selected text columns, else t
   the circles in the X axis tick font at 0.8 of its size. No axes, no legend. The `.opj` writer saves a column plot of
   the weight column with a warning.
 - Not done: directed arrows, node grouping colours, other layouts, label collision avoidance, Origin's Plot Details.
+
+### 14.34 Chord diagram (T402, Origin 2021 feature, Sheaf's look, not measured)
+
+Plot > Categorical > Chord Diagram and `sheaf plot FILE -t chord [--group SOURCE,TARGET] [-y WEIGHT]`
+(`PlotKind::Chord`, `Template::Chord`, `Project::plot_chord`; layout `sheaf_calc::chord`, drawing
+`crates/plot/src/chord.rs`): the same columns as a network plot (14.33), kept in `Plot::sankey` (source, target);
+every row is a flow from the source's name to the target's, of the weight column's value or 1.
+
+- Nodes are the names in order of first appearance. Rows of the same source and target are one flow (summed); A to
+  B and B to A are two flows. Empty names and missing or non-positive weights are left out; a row from a name to
+  itself is a flow that leaves and returns to its own arc.
+- Each node's arc takes a share of the circle in proportion to its outgoing plus incoming flows, clockwise from
+  the top in node order, with 2 degree gaps (smaller with so many nodes that the gaps would take over half the
+  circle). Within an arc the outgoing flows come first (by target), then the incoming ones (by source).
+- The ring of arcs is drawn from 0.40 to 0.43 of the frame's shorter side from its centre, each arc in the layer
+  palette's colour (node order) with a white outline. Each flow is a ribbon from its part of the source's arc to
+  its part of the target's, curving through the centre, in the source's colour at 65 % opacity. Names sit 4 pt
+  outside the middle of their arcs in the X axis tick font at 0.8 of its size (on the left half ending there). No
+  axes, no legend. The `.opj` writer saves a column plot of the weight column with a warning.
+- Not done: a matrix as the input, directed arrow heads, ticks and values round the ring, label rotation, Origin's
+  Plot Details.
+
+### 14.35 UpSet plot (T403, Origin 2027 feature, Sheaf's look, not measured)
+
+Plot > Categorical > UpSet Plot and `sheaf plot FILE -t upset [-y SET ...]` (`PlotKind::UpSet`, `Template::UpSet`,
+`Project::plot_upset`; counts `sheaf_calc::upset`, drawing `crates/plot/src/upset.rs`): two or more set columns,
+kept in `Plot::sankey.stages` (the plot's Y column is the first). Default sets: the selected columns (app) or the `-y`
+columns (CLI), else every column of the sheet holding only 0 and 1 (`sheaf_core::project::flag_columns`).
+
+- A row is in a set when its cell holds a number other than 0, or text other than empty, `0`, `false` or `no`
+  (letter case ignored). Masked rows and rows in no set are left out.
+- Intersections are exclusive: a row counts once, for the exact sets it is in. They are sorted by size (largest
+  first; ties by fewest sets, then set order); at most 40 are shown. A set's size counts all its rows.
+- Layout in the layer's frame: the dot matrix in the lower 38 % (a row per set in column order, a column per
+  intersection), every other row on a light grey band; the intersection bars above it with their counts; the set
+  names left of the matrix (X axis tick font at 0.8 of its size) and the set-size bars left of the names, growing
+  leftwards, with the sizes at their ends. Bars and member dots dark grey (64), other dots light grey (210), the
+  member dots of a column joined by a 2 pt line. No axes, no legend. The `.opj` writer saves a column plot of the
+  first set column with a warning.
+- Not done: list-style input (a column of members per set), sorting and limiting choices, colouring by set or
+  degree, axes with ticks for the two bar charts, Origin's Plot Details.
 
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 
@@ -4022,8 +4063,33 @@ is the default for Sheaf projects to preserve existing rendering when a saved
 file predates the option. The Display tab's Apply and Undo update the working
 preview, and OK commits the page choice in one project Undo step. The `.sheaf`
 file and the Origin project companion save the choice. Sheaf's raw `.opj` writer
-reports the omitted flag when exporting the composite choice. Scale Elements
-remains open.
+reports the omitted flag when exporting the composite choice.
+
+**Scale Elements** changes the selected layers. In Origin 2016, a stock Line
+layer started at 68.16 × 71.83% of the page with `layer.fixed=0` and
+`layer.factor=1`. Halving only its width kept factor 1. Halving only its
+height gave 0.65, and halving both sides gave 0.46. Fixed Factor 0.75
+survived a resize. The axis title and legend still reported their authored
+22 pt sizes. The two prominent EMF font heights changed from 91 and 75
+units at factor 1 to 42 and 34 at 0.46 and to 69 and 56 at 0.75. The
+curve pen changed from 7 units to 3 and 5. Restoring the auto-scaled
+stock frame restored the original font heights and pen widths.
+[Origin Display tab](https://docs.originlab.com/origin-help/laymanage-displaytab/) · [LabTalk layer properties](https://docs.originlab.com/labtalk/ref/layer-obj/)
+
+Sheaf's **Scale with Layer Frame** fits the measured factors with the
+square root of the nominal frame area divided by 0.7554. The area uses page
+fractions, including the parent frame for a linked layer. For frames narrower
+than 68.5% and shorter than 71%, it rounds the factor to hundredths with a
+minimum of 0.10. At either threshold it uses 1. These bounds and the area
+formula are a fit to the measured cases. **Fixed Factor** accepts 0.05 through
+20 and stays constant through resize. The default is Fixed Factor 1 to
+preserve existing Sheaf graphs. The factor scales supported axis, legend,
+free-text and data-label fonts, axis lines, ticks and grids, and plot pens,
+symbols and error caps through the shared scene layout. The authored sizes
+stay available for editing. Apply stages the selected layers, Undo restores
+the previous preview, and OK commits one project Undo step. The `.sheaf`
+file and `.opj.sheaf` companion store the mode. Bare `.opj` reports the
+omission and writes the authored styles.
 
 **Fit Page to Layers** (`pfit2l`; Margin Control Border (default) or Tight, Border Width 5, Adjust
 Direction Height and Width (default), Height Only, Width Only), measured on the stock page: the

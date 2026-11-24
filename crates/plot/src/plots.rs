@@ -100,6 +100,14 @@ pub(crate) fn draw_plot(
         crate::sunburst::draw_sunburst(out, pd, geom, m);
         return;
     }
+    if plot.kind == PlotKind::UpSet {
+        crate::upset::draw_upset(out, pd, geom, m);
+        return;
+    }
+    if plot.kind == PlotKind::Chord {
+        crate::chord::draw_chord(out, pd, geom, m);
+        return;
+    }
     if plot.kind == PlotKind::Network {
         crate::network::draw_network(out, pd, geom, m);
         return;

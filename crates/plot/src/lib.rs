@@ -59,6 +59,7 @@ mod qc_plot;
 pub mod smith;
 mod space3d;
 pub use space3d::space3d_scales;
+mod chord;
 mod network;
 mod sankey;
 mod stack;
@@ -73,6 +74,7 @@ pub mod ticks;
 mod ticks_scales;
 mod treemap;
 pub(crate) mod trend;
+mod upset;
 mod vector;
 mod vector_plot;
 mod violin;
@@ -496,7 +498,8 @@ pub fn place_zoom_regions(project: &mut Project, graph: WindowId) {
 }
 
 pub fn layout_geometry(project: &Project, graph: WindowId) -> Result<Vec<LayerGeometry>, PlotError> {
-    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
+    let styled = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?.scaled_layer_elements();
+    let g = styled.as_ref();
     let pds = data::collect_graph(project, g);
     Ok(layout::graph_geometry(project, g, &pds, SystemFonts::shared()))
 }

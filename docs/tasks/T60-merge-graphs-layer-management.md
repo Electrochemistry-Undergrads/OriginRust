@@ -5,7 +5,7 @@
 Merge Graph Windows (core `merge.rs`, dialog, `sheaf merge-graphs`), Layer Management (Arrange,
 Size/Position, Link; core `layer_manage.rs`), Fit Page to Layers (dialog and Format item). Fit Layer to
 Graph did nothing measurable in Origin and is tagged `N`. Remaining work includes independent
-opposite-axis styling and the rest of Layer Management Display.
+opposite-axis styling.
 See T61 for Layer Management Add.
 **Size:** L, merge then management.
 Background-colour follow-up (`codex/t60-layer-display`, 2026-11-16): Display > Color >
@@ -27,8 +27,7 @@ for separate storage and rendering for the expanded rectangle.
 **Layer Management Display borders (2026-11-22).** Border Fill Color and Border Color draw a
 separate rectangle using the four Border Dimensions outsets. Selected layers retain mixed
 values until edited. Apply updates the preview, and OK commits one undo step. Graphing 15.7d
-records the export geometry and `.sheaf` / companion storage. Drawing Order and Scale
-Elements remain open.
+records the export geometry and `.sheaf` / companion storage.
 
 Folder-source follow-up (`codex/t60-merge-folder-choices`, 2026-11-16): All in Active Folder
 and All in Active Folder (Recursive) use the captured Explorer folder. Fresh Native folder
@@ -140,6 +139,11 @@ records the Origin 2016 controls, documented multiple-layer behavior and Sheaf's
 Draw Composite or Draw Layer by Layer. The working preview, Undo and saved
 project share the choice. Graphing 15.7d records the opaque and transparent inset
 exports in Origin 2016 and Sheaf's legacy default.
+
+**Layer Management Scale Elements (2026-11-23).** Display sets Scale with
+Layer Frame or Fixed Factor on selected layers. The scene and hit geometry use
+the resolved factor, and saved styles retain the original sizes. Graphing
+15.7d records the Origin 2016 frame and EMF measurements and the Sheaf fit.
 
 **Merge graphs through MCP (2026-11-22).** The `merge_graphs` tool accepts a list of graph names
 or all graphs in project order, uses the existing merge engine, and returns the new graph name

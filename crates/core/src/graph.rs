@@ -419,6 +419,9 @@ pub struct Layer {
     /// Layer Management's independent rectangle around the plot frame.
     #[serde(default, skip_serializing_if = "LayerBorder::is_default")]
     pub border: LayerBorder,
+    /// Render scale for the layer's styled elements.
+    #[serde(default, skip_serializing_if = "LayerElementScale::is_default")]
+    pub element_scale: LayerElementScale,
     /// The Group tab of the layer's plots: edit mode and increments (the colour increment is
     /// [`Layer::palette`]'s mode).
     #[serde(default, skip_serializing_if = "GroupStyle::is_default")]
@@ -2109,6 +2112,13 @@ pub enum PlotKind {
     /// A network plot (Origin 2021b, T383): nodes and edges from the source and target columns of the plot's
     /// [`SankeyStyle`], weighted by its Y column (1 per row when that is not numeric) (graphing spec 14.33).
     Network,
+    /// A chord diagram (Origin 2021, T402): arcs round a circle for the names of the source and target columns of
+    /// the plot's [`SankeyStyle`], ribbons for the flows between them, weighted by its Y column (1 per row when that
+    /// is not numeric) (graphing spec 14.34).
+    Chord,
+    /// An UpSet plot (Origin 2027, T403): the set columns of the plot's [`SankeyStyle`] (`stages`) hold a membership
+    /// flag per row; drawn as intersection bars over a dot matrix with set-size bars (graphing spec 14.35).
+    UpSet,
     /// A pie chart of the plot's Y column (Origin's plot type 225): one slice per row, clockwise
     /// from 12 o'clock, each labelled with its share. The layer draws no axes.
     Pie,

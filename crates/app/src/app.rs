@@ -31,6 +31,8 @@ pub(crate) struct ColumnAcross {
     pub folder: bool,
     /// Insert right after this column of each sheet (T412); empty: at the end.
     pub after: String,
+    /// The sheets chosen one by one (T418), as (workbook, sheet index); when set it wins over the other choices.
+    pub chosen: Option<Vec<(WindowId, usize)>>,
     pub problem: Option<String>,
 }
 
@@ -45,6 +47,7 @@ impl ColumnAcross {
             project: false,
             folder: false,
             after: String::new(),
+            chosen: None,
             problem: None,
         }
     }
@@ -6488,6 +6491,15 @@ impl SheafApp {
     /// Column > Add Column to All Sheets... (T359): one column, with an optional formula, at the end of every sheet
     /// of the workbook (or of every workbook), as one undo step.
     fn column_across_frame(&mut self, ctx: &egui::Context) {
+        // Every sheet of every workbook, for choosing them one by one (T418).
+        let all_sheets: Vec<((WindowId, usize), String)> = self
+            .doc
+            .project()
+            .workbooks()
+            .flat_map(|b| {
+                b.sheets.iter().enumerate().map(move |(i, s)| ((b.id, i), format!("{} / {}", b.name, s.name)))
+            })
+            .collect();
         let Some(d) = &mut self.column_across else { return };
         let mut open = true;
         let mut pressed = None;
@@ -6525,14 +6537,34 @@ impl SheafApp {
                     ui.end_row();
                     ui.label("Sheets");
                     ui.vertical(|ui| {
-                        if ui.radio(!d.project && !d.folder, "Every sheet of this workbook").clicked() {
-                            (d.project, d.folder) = (false, false);
+                        let chosen = d.chosen.is_some();
+                        if ui.radio(!chosen && !d.project && !d.folder, "Every sheet of this workbook").clicked() {
+                            (d.project, d.folder, d.chosen) = (false, false, None);
                         }
-                        if ui.radio(d.folder, "Every sheet of every workbook in this folder").clicked() {
-                            (d.project, d.folder) = (false, true);
+                        if ui.radio(!chosen && d.folder, "Every sheet of every workbook in this folder").clicked() {
+                            (d.project, d.folder, d.chosen) = (false, true, None);
                         }
-                        if ui.radio(d.project && !d.folder, "Every sheet of every workbook").clicked() {
-                            (d.project, d.folder) = (true, false);
+                        if ui.radio(!chosen && d.project && !d.folder, "Every sheet of every workbook").clicked() {
+                            (d.project, d.folder, d.chosen) = (true, false, None);
+                        }
+                        if ui.radio(chosen, "Only the ticked sheets").clicked() && !chosen {
+                            // Start from the sheets of this workbook.
+                            let book = d.book;
+                            d.chosen = Some(all_sheets.iter().map(|(k, _)| *k).filter(|(b, _)| *b == book).collect());
+                        }
+                        if let Some(list) = &mut d.chosen {
+                            egui::ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
+                                for (key, label) in &all_sheets {
+                                    let mut on = list.contains(key);
+                                    if ui.checkbox(&mut on, label).changed() {
+                                        if on {
+                                            list.push(*key);
+                                        } else {
+                                            list.retain(|k| k != key);
+                                        }
+                                    }
+                                }
+                            });
                         }
                     });
                     ui.end_row();
@@ -6554,7 +6586,9 @@ impl SheafApp {
                     after: Some(d.after.trim().to_string()).filter(|a| !a.is_empty()),
                     ..Default::default()
                 };
-                let scope = if d.folder {
+                let scope = if let Some(list) = &d.chosen {
+                    sheaf_core::across::AcrossScope::Sheets(list.clone())
+                } else if d.folder {
                     sheaf_core::across::AcrossScope::Folder(self.doc.project().folder_of(d.book))
                 } else if d.project {
                     sheaf_core::across::AcrossScope::Project

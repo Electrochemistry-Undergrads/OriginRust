@@ -4497,8 +4497,12 @@ region").
 
 Mask Data in Region and Unmask Data in Region (T413, same menu) mask or unmask the Y cells of those points (the
 plots' Y columns, rows found the same way, masked rows included), as one undo step ("Mask data in region" / "Unmask
-data in region"); the status line counts the cells changed, and nothing happens when none would change. Freeform
-regions and several regions at once are not built.
+data in region"); the status line counts the cells changed, and nothing happens when none would change.
+
+Several regions (T422): when the layer has two or more drawn rectangles or ellipses, the menu of each also has
+Extract Data in All Regions, Mask Data in All Regions and Unmask Data in All Regions, which work on the points inside
+any of them (a point inside two overlapping regions counts once; `sheaf_plot::region::points_in_shapes`). Freeform
+regions are not built.
 
 ### 17.13 Cause-and-effect (fishbone) diagram (T375, Origin 2026 feature, Sheaf's layout, not measured)
 

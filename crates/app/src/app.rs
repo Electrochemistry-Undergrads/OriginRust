@@ -2948,8 +2948,16 @@ impl SheafApp {
                 self.sort = SortDialog::nested_in_rows(self.doc.project(), book, columns, rows);
             }
             Action::PivotTable { book, columns } => self.pivot = PivotDialog::new(&self.doc, book, columns),
-            Action::ExtractRegion { graph, layer, shape } => self.extract_region(graph, layer, shape),
-            Action::MaskRegion { graph, layer, shape, mask } => self.mask_region(graph, layer, shape, mask),
+            Action::ExtractRegion { graph, layer, shape } => self.extract_region(graph, layer, vec![shape]),
+            Action::MaskRegion { graph, layer, shape, mask } => self.mask_region(graph, layer, vec![shape], mask),
+            Action::ExtractAllRegions { graph, layer } => {
+                let shapes = sheaf_plot::region::region_shapes(self.doc.project(), graph, layer);
+                self.extract_region(graph, layer, shapes)
+            }
+            Action::MaskAllRegions { graph, layer, mask } => {
+                let shapes = sheaf_plot::region::region_shapes(self.doc.project(), graph, layer);
+                self.mask_region(graph, layer, shapes, mask)
+            }
             Action::MultiPeakFit { graph, y, layer } => {
                 let graph = match graph {
                     Some(g) => Some(g),
@@ -6350,8 +6358,8 @@ impl SheafApp {
 
     /// Mask / Unmask Data in Region (T413): the Y cells of the layer's data points inside the drawn rectangle or
     /// ellipse are masked (or unmasked), as one undo step.
-    fn mask_region(&mut self, graph: WindowId, layer: usize, shape: usize, mask: bool) {
-        let found = match sheaf_plot::region::points_in_shape(self.doc.project(), graph, layer, shape) {
+    fn mask_region(&mut self, graph: WindowId, layer: usize, shapes: Vec<usize>, mask: bool) {
+        let found = match sheaf_plot::region::points_in_shapes(self.doc.project(), graph, layer, &shapes) {
             Ok(Some(found)) => found,
             Ok(None) => return self.warn("Only a rectangle or an ellipse marks a region"),
             Err(e) => return self.warn(e.to_string()),
@@ -6389,8 +6397,8 @@ impl SheafApp {
 
     /// Extract Data in Region (T355): the data points of the layer inside the drawn rectangle or ellipse go to a
     /// new workbook, three columns per plot with points inside (X, Y and the source row), as one undo step.
-    fn extract_region(&mut self, graph: WindowId, layer: usize, shape: usize) {
-        let found = match sheaf_plot::region::points_in_shape(self.doc.project(), graph, layer, shape) {
+    fn extract_region(&mut self, graph: WindowId, layer: usize, shapes: Vec<usize>) {
+        let found = match sheaf_plot::region::points_in_shapes(self.doc.project(), graph, layer, &shapes) {
             Ok(Some(found)) => found,
             Ok(None) => return self.warn("Only a rectangle or an ellipse marks a region"),
             Err(e) => return self.warn(e.to_string()),

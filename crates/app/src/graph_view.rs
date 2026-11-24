@@ -1888,7 +1888,18 @@ fn menu_for(
                 let region = graph.layers.get(layer).and_then(|l| l.shapes.get(k)).is_some_and(|s| {
                     matches!(s.kind, sheaf_core::shape::ShapeKind::Rectangle | sheaf_core::shape::ShapeKind::Ellipse)
                 });
-                menus::graph_shape_menu(layer, k, region)
+                let regions = graph.layers.get(layer).map_or(0, |l| {
+                    l.shapes
+                        .iter()
+                        .filter(|s| {
+                            matches!(
+                                s.kind,
+                                sheaf_core::shape::ShapeKind::Rectangle | sheaf_core::shape::ShapeKind::Ellipse
+                            )
+                        })
+                        .count()
+                });
+                menus::graph_shape_menu(layer, k, region, regions)
             }
             ObjectKind::Slope(k) => menus::graph_slope_menu(layer, k),
             ObjectKind::StraightLine(k) => menus::graph_straight_line_menu(layer, k),

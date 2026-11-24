@@ -4865,6 +4865,32 @@ fn a_drawn_rectangle_extracts_the_data_points_inside_it() {
     click(&mut h, "Unmask Data in Region");
     assert!(project(&h).column(y).unwrap().mask.is_empty());
     assert_eq!(h.state().doc.undo_label(), Some("Unmask data in region"));
+    // T422: a second region offers the All Regions entries; masking them masks the points of both.
+    let at = on(&h, 0, ObjectKind::Shape(0));
+    right_click_at(&mut h, at);
+    assert!(h.query_by_label("Mask Data in All Regions").is_none(), "one region only");
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    h.state_mut().doc.apply("Second region", |p| {
+        let mut e = sheaf_core::shape::Shape::new(sheaf_core::shape::ShapeKind::Ellipse, (0.75, 0.05), (0.95, 0.25));
+        e.fill = Some(sheaf_core::Color::rgb(255, 220, 200));
+        p.graph_mut(gid).unwrap().layers[0].shapes.push(e);
+    });
+    settle(&mut h);
+    pause(&mut h);
+    let at = on(&h, 0, ObjectKind::Shape(0));
+    right_click_at(&mut h, at);
+    click(&mut h, "Mask Data in All Regions");
+    assert_eq!(project(&h).column(y).unwrap().mask.iter().copied().collect::<Vec<_>>(), [3, 4, 5, 6, 8, 9]);
+    let books = project(&h).workbooks().count();
+    let at = on(&h, 0, ObjectKind::Shape(0));
+    right_click_at(&mut h, at);
+    click(&mut h, "Extract Data in All Regions");
+    assert_eq!(project(&h).workbooks().count(), books + 1);
+    assert_eq!(
+        project(&h).workbooks().last().unwrap().sheet().columns[0].numeric().unwrap(),
+        [3.0, 4.0, 5.0, 6.0, 8.0, 9.0]
+    );
 }
 
 #[test]

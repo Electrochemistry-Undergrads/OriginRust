@@ -22,6 +22,8 @@ const CURVE_UNITS_PER_POINT: f64 = 500.0;
 // Window header.
 const PAGE_WIDTH_AT: usize = 0x23;
 const PAGE_HEIGHT_AT: usize = 0x25;
+pub(super) const AXIS_LAYER_ICONS_AT: usize = 0x69;
+pub(super) const AXIS_LAYER_ICONS_BIT: u8 = 0x80;
 // Layer header.
 const LAYER_KIND_AT: usize = 0x02;
 const LAYER_GRAPH_BIT: u8 = 0x01;
@@ -178,6 +180,8 @@ pub(crate) fn build(w: &Window, column_of_set: &HashMap<usize, ColumnId>, warnin
     } else {
         notes.push("the page size could not be read; a default size was used".into());
     }
+    graph.page.style.axis_layer_icons =
+        w.header.get(AXIS_LAYER_ICONS_AT).is_some_and(|flags| flags & AXIS_LAYER_ICONS_BIT != 0);
     let template = graph.layers.remove(0);
     for (k, layer) in w.layers.iter().enumerate() {
         graph.layers.push(build_layer(layer, k == 0, &template, &graph.page, column_of_set, &mut notes));

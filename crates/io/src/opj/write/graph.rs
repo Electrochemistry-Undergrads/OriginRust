@@ -274,8 +274,12 @@ impl Writer {
             notes.push("the page background colour was not written (Origin's page is white)".into());
         }
         let style = &graph.page.style;
-        let default_with_order = PageStyle { layer_drawing_order: style.layer_drawing_order, ..PageStyle::default() };
-        if *style != default_with_order {
+        let supported_style = PageStyle {
+            layer_drawing_order: style.layer_drawing_order,
+            axis_layer_icons: style.axis_layer_icons,
+            ..PageStyle::default()
+        };
+        if *style != supported_style {
             notes.push("the page's border, layer icons, window title choice and comments were not written".into());
         }
         if style.layer_drawing_order != LayerDrawingOrder::default() {
@@ -286,6 +290,7 @@ impl Writer {
             label: &label,
             ordinal: self.written_windows,
             page,
+            axis_layer_icons: style.axis_layer_icons,
             time: self.time,
             serial: 3u8.wrapping_add(self.graphs as u8),
             place: self.place,

@@ -72,6 +72,28 @@ mod tests {
     }
 
     #[test]
+    fn worksheet_png_uses_the_saved_cell_measurements() {
+        use sheaf_core::sheet_view::CellMeasurements;
+
+        let mut sheet = sheet();
+        let extent = |sheet: &Worksheet| {
+            let png = sheet_image_bytes(sheet, "png", 96.0).unwrap();
+            let reader = png::Decoder::new(Cursor::new(png)).read_info().unwrap();
+            (reader.info().width, reader.info().height)
+        };
+        let before = extent(&sheet);
+        sheet.view.cell_measurements = CellMeasurements { row_height: Some(200), column_width: Some(200) };
+        let after = extent(&sheet);
+        assert!((i64::from(after.0) - 2 * i64::from(before.0)).abs() <= 2);
+        assert!(after.1 > before.1 && after.1 < 2 * before.1, "the label rows retain their height");
+
+        sheet.view.cell_measurements.row_height = Some(10);
+        let short = extent(&sheet);
+        sheet.columns[0].data = ColumnData::numeric(Vec::new());
+        assert!(short.1 > extent(&sheet).1, "rows still occupy space when their text is clipped");
+    }
+
+    #[test]
     fn worksheet_rasters_have_the_same_dimensions_as_the_existing_png() {
         let sheet = sheet();
         let png = super::super::sheet_image_png(&sheet, 96.).unwrap();

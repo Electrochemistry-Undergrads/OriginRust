@@ -718,6 +718,12 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   font and label visibility. The stored measurements follow Standard
   font scaling and are independent of the View heading switches. Print
   and worksheet images use their own geometry.
+- **Body measurements (T59).** Sparse `view.cell_measurements` stores
+  explicit All Rows Height and All Columns Width percentages. Row height
+  applies to data rows, including sparse future rows. An All Columns Width
+  edit clears individual width settings and supplies the width of new
+  columns. A later Standard point-size edit restores automatic body sizes.
+  The grid, print and worksheet images use these settings.
 - **Vertical alignment.** The 2016 selected-A1 Format Cells and Worksheet Properties Data
   Format/Size probes (GUI 3, 2026-11-16) found no vertical text-alignment control in those
   inspected routes. Other routes and mutation semantics remain unestablished; this probe

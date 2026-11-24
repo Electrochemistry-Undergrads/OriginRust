@@ -189,6 +189,7 @@ pub struct BookUi {
     h_view: f32,
     /// Standard point-size scale of the table's cached widths.
     standard_scale: Option<f32>,
+    bulk_column_width: Option<u16>,
     /// Width of each scrolling column at the default Standard size.
     col_px: HashMap<ColumnId, f32>,
     /// Widths given to frozen columns by dragging, at the default Standard size.
@@ -210,6 +211,10 @@ pub struct BookUi {
 impl BookUi {
     fn width_scale(&self) -> f32 {
         self.standard_scale.unwrap_or(1.0)
+    }
+
+    fn minimum_drag_width(&self) -> f32 {
+        if self.bulk_column_width.is_some() { 8.0 } else { 30.0 * self.width_scale() }
     }
 
     /// The sheet rows after which Page Break Preview Lines draw a line (T185), once the sheet was shown.
@@ -600,12 +605,13 @@ fn float_room(sheet: &Worksheet, position: usize, r: usize, state: &BookUi) -> f
 fn column_px(state: &BookUi, column: &Column) -> f32 {
     let base = match column.width {
         Some(chars) => column_pixels(chars),
-        None => state
-            .frozen_widths
-            .get(&column.id)
-            .or_else(|| state.col_px.get(&column.id))
-            .copied()
-            .unwrap_or(COLUMN_WIDTH),
+        None => {
+            state.frozen_widths.get(&column.id).or_else(|| state.col_px.get(&column.id)).copied().unwrap_or_else(|| {
+                state
+                    .bulk_column_width
+                    .map_or(COLUMN_WIDTH, |p| (COLUMN_WIDTH * f32::from(p) / 100.0).round() / state.width_scale())
+            })
+        }
     };
     (base * state.width_scale()).max(8.0)
 }
@@ -629,7 +635,8 @@ pub fn frozen_split(
     header_height: f32,
     width_of: &dyn Fn(&Column) -> f32,
 ) -> (usize, Vec<usize>) {
-    let row_height = ROW_HEIGHT * sheet.font_defaults.size_scale();
+    let row_height = crate::worksheet_layout::fixed_row_height(sheet)
+        .unwrap_or_else(|| ROW_HEIGHT * sheet.font_defaults.size_scale());
     let room = ((body_size.y - header_height) / row_height).floor() as i64 - 3;
     let rows = usize::from(sheet.frozen.rows).min(data_rows).min(room.max(0) as usize);
     let mut used = row_header_width(sheet);
@@ -1008,6 +1015,15 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
 
     let scale = sheet.font_defaults.size_scale();
     let scale_changed = state.standard_scale.replace(scale) != Some(scale);
+    let bulk_width = sheet.view.cell_measurements.column_width;
+    let bulk_width_changed = state.bulk_column_width != bulk_width;
+    state.bulk_column_width = bulk_width;
+    if bulk_width_changed {
+        for column in &sheet.columns {
+            state.col_px.remove(&column.id);
+            state.frozen_widths.remove(&column.id);
+        }
+    }
     let rows = shown_rows(sheet);
     // With an active filter the grid shows only the rows that pass, with their own numbers.
     let shown: Option<Vec<usize>> = sheet.shown_rows(rows);
@@ -1125,13 +1141,15 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                             }
                             Some(_) => table.column(TableColumn::exact(column_px(state, column)).clip(true)),
                             None => table.column(
-                                TableColumn::initial(column_px(state, column)).at_least(30.0 * scale).clip(true),
+                                TableColumn::initial(column_px(state, column))
+                                    .at_least(state.minimum_drag_width())
+                                    .clip(true),
                             ),
                         };
                     }
                     // One empty column at the end as a target for "add column".
                     table = table.column(TableColumn::remainder().at_least(40.0));
-                    if scale_changed {
+                    if scale_changed || bulk_width_changed {
                         table.reset();
                     }
                     if state.reveal > 0
@@ -2198,7 +2216,7 @@ fn frozen_resize(ui: &mut egui::Ui, state: &mut BookUi, column: &Column, head: R
         // Never wider than leaves the block within the cap, or the column would leave the block.
         let room = state.frozen_max_w - (state.frozen_w - head.width());
         let scale = state.width_scale();
-        let min_width = 30.0 * scale;
+        let min_width = state.minimum_drag_width();
         let width = (head.width() + response.drag_delta().x).max(min_width).min(room.max(min_width) - 0.01);
         state.frozen_widths.insert(column.id, width / scale);
         ui.ctx().request_repaint();

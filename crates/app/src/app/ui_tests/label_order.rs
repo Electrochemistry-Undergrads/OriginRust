@@ -38,7 +38,7 @@ fn labels_move_to_the_top_or_bottom_and_stay_selected() {
 #[test]
 fn the_legend_menu_orders_the_legend_and_puts_it_behind_the_data() {
     // T152: the legend's Bring to the front / Push to the back and front / back of data.
-    let menu = menus::graph_legend_menu(0, false, false);
+    let menu = menus::graph_legend_menu(0, false, false, Some(false));
     for (label, op) in [
         ("Bring to the front", GraphOp::OrderLegend { layer: 0, front: true }),
         ("Push to the back", GraphOp::OrderLegend { layer: 0, front: false }),
@@ -80,4 +80,41 @@ fn an_axis_title_menu_brings_it_to_the_front() {
     settle(&mut h);
     assert!(project(&h).graph(graph).unwrap().layers[0].y_axis.title_on_top);
     assert_eq!(h.state().doc.undo_label(), Some("Bring axis title to front"));
+}
+
+#[test]
+fn the_legend_menu_toggles_follow_plot_color_with_undo() {
+    let mut h = start(vec![data_file("legend-follow-plot")]);
+    let ctx = h.ctx.clone();
+    let graph = project(&h).graphs().next().unwrap().id;
+    let legend = |h: &Harness<'static, SheafApp>| project(h).graph(graph).unwrap().layers[0].legend.clone();
+    let before = legend(&h);
+    for enabled in [true, false] {
+        let current = legend(&h);
+        assert_ne!(current.text_color_follows_plot, enabled);
+        let menu = menus::graph_legend_menu(0, false, false, Some(current.text_color_follows_plot));
+        let cmd = menu
+            .iter()
+            .find_map(|entry| match entry {
+                menus::Entry::Submenu(sub) if sub.label == "Legend" => {
+                    sub.entries.iter().find_map(|entry| match entry {
+                        menus::Entry::Item(item) if item.label == "Text Color Follows Plot" => item.cmd.as_ref(),
+                        _ => None,
+                    })
+                }
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(*cmd, menus::Cmd::GraphEdit(GraphOp::LegendTextColorFollowsPlot { layer: 0, enabled }));
+        let action = menus::resolve(cmd, &h.state().menu_context()).unwrap();
+        h.state_mut().apply(action, &ctx);
+        settle(&mut h);
+        assert_eq!(legend(&h).text_color_follows_plot, enabled);
+        assert_eq!(h.state().doc.undo_label(), Some("Text Color Follows Plot"));
+    }
+    assert_eq!(legend(&h), before);
+    h.state_mut().doc.undo();
+    assert!(legend(&h).text_color_follows_plot);
+    h.state_mut().doc.undo();
+    assert_eq!(legend(&h), before);
 }

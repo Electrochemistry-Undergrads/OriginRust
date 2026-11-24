@@ -26,6 +26,10 @@ pub(crate) fn automatic_column_header_height(ctx: &egui::Context, sheet: &Worksh
     height(ctx, sheet.font_defaults.column_header_style(), base) as f32
 }
 
+pub(crate) fn fixed_row_height(sheet: &Worksheet) -> Option<f32> {
+    sheet.view.cell_measurements.row_height.map(|p| (crate::grid::ROW_HEIGHT * f32::from(p) / 100.0).round().max(1.0))
+}
+
 impl Layout {
     pub fn new(
         ctx: &egui::Context,
@@ -38,8 +42,16 @@ impl Layout {
         let measure = |font: ResolvedStyle<'_>| height(ctx, font, base);
         let row_header_shown = sheet.view.row_header && sheet.view.header_measurements.row_width != Some(0);
         let row_header_height = if row_header_shown { measure(sheet.font_defaults.row_header_style()) } else { base };
-        let rows = RowHeights::new(sheet, index, row_header_height, measure);
-        let rows = shown.map_or_else(|| rows.clone(), |s| rows.shown(s));
+        let rows = fixed_row_height(sheet).map_or_else(
+            || {
+                let rows = RowHeights::new(sheet, index, row_header_height, measure);
+                match shown {
+                    Some(shown) => rows.shown(shown),
+                    None => rows,
+                }
+            },
+            |height| RowHeights::constant(f64::from(height)),
+        );
         let labels = labels
             .iter()
             .map(|l| {

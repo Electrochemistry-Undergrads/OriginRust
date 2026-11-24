@@ -242,11 +242,16 @@ fn sheet_image_scene(sheet: &Worksheet) -> Result<Scene, PlotError> {
     let pages = table.pages(1.0e9, 1.0e9);
     let slot = pages.first().ok_or_else(|| PlotError::Size("the sheet has nothing to draw".into()))?;
     let (dx, dy) = table.heading_extent();
+    let fixed_rows = sheet.view.cell_measurements.row_height.is_some();
     let mut ops = Vec::new();
     let (mut w, mut h) = (0.0_f64, 0.0_f64);
     for op in table.draw_page(slot, 1) {
         match op {
-            PrintOp::Line { .. } => {}
+            PrintOp::Line { y2, .. } => {
+                if fixed_rows {
+                    h = h.max(y2 - dy);
+                }
+            }
             PrintOp::Fill { x, y, w, h, .. } if x + w <= dx || y + h <= dy => {}
             PrintOp::Fill { x, y, w: fw, h: fh, color } => {
                 w = w.max(x + fw - dx);

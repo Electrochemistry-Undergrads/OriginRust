@@ -1845,7 +1845,17 @@ midnight, the Monday of the week, the first of the month, of the quarter (Januar
 year. Rows whose X is not a date or whose Y is missing are left out, and so are periods without a value. The result
 sheet `TimePivotN` has a Period label ("2026-11-22", "Week of 2026-11-16", "2026-11", "2026 Q4", "2026", or the date
 and time for minutes and hours), the period start as a number (X), and per column "<Stat> of <column>" and
-"N of <column>". Fiscal calendars, custom intervals and a second grouping are not built.
+"N of <column>".
+
+Custom intervals and fiscal years (T404; `--every N`, `--fiscal-start MONTH`; the options window's Every and
+Fiscal year starts in): a group can be N periods long. Minutes and hours count from midnight, so the groups start
+again each day (15 minutes: :00, :15, :30, :45); days and weeks count from the first day (Monday) of the data;
+months and quarters start again with each year, the last group of a year shorter when N does not divide it (5
+months: January, June, November); years count from year 0, so 10 years are decades. A fiscal year starting in
+another month moves the months, quarters and years with it and is named by the calendar year it ends in: with
+October, quarters are "FY2027 Q1" (October to December 2026) and years "FY2027" (October 2026 to September 2027);
+months keep their calendar names. The note and the Period column's comment say the group ("12 hours", "fiscal
+quarter (from October)"). A second grouping is not built.
 
 ## 33 Manhattan plot (T362, Origin 2017 app; not measured)
 
@@ -2224,7 +2234,7 @@ two-sided probabilities, and the scale's error by the delta method. The result s
 (Intercept, each covariate, Scale (sigma)) with Coefficient, Standard error, z and Prob>|z|; the notes give the
 log-likelihood, AIC and, for the Weibull, the shape. Checked against numpy/scipy (`tools/lifereg-ref.py`,
 `crates/calc/tests/lifereg_reference.rs`: 60 rows, two covariates, three distributions) to 1e-7 (standard errors
-1e-5). Proportional hazards (Cox) regression, interval-censored regression, text (factor) covariates and prediction
+1e-5). Proportional hazards (Cox) regression is section 52; interval-censored regression, text (factor) covariates and prediction
 of percentiles are not built.
 
 ## 49 Frequency columns of the life-data tools (T394, Origin 2026b; not measured)
@@ -2281,6 +2291,25 @@ Statistics > Monte Carlo Simulation (Randomize Inputs)... (CLI `analyze monte-ca
   output follows most.
 - Not built: optimizing controllable inputs against tolerances (the last step of Origin's workflow),
   correlated inputs, histograms of the output.
+
+## 52 Cox proportional hazards (T408, Origin 2026b; not measured)
+
+Origin 2026b's reliability and survival tools add Cox regression, which Origin 2016 does not have, so this is
+Sheaf's own. Statistics > Survival Analysis > Cox Proportional Hazards... (`Tool::Cox`, `sheaf analyze cox --y
+COV[,COV..],TIME,CENSOR [--censor 1] [--confidence 95] [--no-graph]`, `sheaf_calc::cox`): the chosen columns are
+numeric covariates, then the time and the censor column (a case is right-censored when its cell equals the censoring
+value, as for the Kaplan-Meier estimator); rows with a missing value are left out. The hazard is `h0(t) exp(x'b)`; `b`
+maximizes Breslow's partial likelihood (tied failure times share one risk set) by Newton's method from 0, halving a
+step until the likelihood rises; a covariate that separates the failures (`|b| * range > 25`) is refused as not
+converging. Standard errors come from the inverse of the information at the fit, z = b / SE with normal two-sided
+probabilities, hazard ratios `exp(b)` with the interval `exp(b +- z SE)`. The likelihood-ratio, Wald and score tests
+of all coefficients = 0 use chi-square with one degree of freedom per covariate. The result sheet `CoxN` has one row
+per covariate with Coefficient, Standard error, z, Prob>|z|, Hazard ratio, HR lower and HR upper (the level in the
+name), then Time and Survival at the means: Breslow's baseline survival at the covariate means as steps, which the
+graph plots. The notes give the cases, events, log-likelihoods and the three tests. Checked against numpy/scipy
+(`tools/cox-ref.py`, `crates/calc/tests/cox_reference.rs`: 70 rows with ties, three covariates and one) to 1e-8.
+Efron ties, strata, time-varying covariates, text (factor) covariates, residuals and the proportional-hazards check
+are not built.
 
 ## 5 Where results go (ADR 0005)
 

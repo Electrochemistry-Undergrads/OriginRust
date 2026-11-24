@@ -67,7 +67,7 @@ pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
 pub use doe::{FactorialDesignSpec, FactorialEffectsSpec, SplitPlotDesignSpec, SplitPlotEffectsSpec};
 pub use expsmooth::{ExpSmoothSpec, SmoothModel};
 pub use forest::{ForestTask, RandomForestSpec};
-pub use lifedist::{LifeDist, LifeDistArbitrarySpec, LifeDistSpec, LifeRegressionSpec};
+pub use lifedist::{CoxSpec, LifeDist, LifeDistArbitrarySpec, LifeDistSpec, LifeRegressionSpec};
 pub use manhattan::ManhattanSpec;
 pub use montecarlo::{MONTE_CARLO_MAX, MonteCarloSpec};
 pub use multivariate::{KmeansSpec, PcaSpec};
@@ -1191,6 +1191,9 @@ pub enum Tool {
     /// Statistics > Survival Analysis > Life Data Regression (T391, `docs/spec/statistics.md` section 48): covariates,
     /// then the time and the censor column.
     LifeRegression(LifeRegressionSpec),
+    /// Statistics > Survival Analysis > Cox Proportional Hazards (T408, `docs/spec/statistics.md` section 52):
+    /// covariates, then the time and the censor column.
+    Cox(CoxSpec),
     /// Statistics > qPCR > Relative Quantification (T397, `docs/spec/statistics.md` section 50): group, target Ct and
     /// reference Ct columns.
     Qpcr(QpcrSpec),
@@ -1364,6 +1367,7 @@ impl Tool {
             Tool::LifeDist(_) => "Distribution overview",
             Tool::LifeDistArbitrary(_) => "Distribution analysis (arbitrary censoring)",
             Tool::LifeRegression(_) => "Life data regression",
+            Tool::Cox(_) => "Cox proportional hazards",
             Tool::Qpcr(_) => "qPCR relative quantification",
             Tool::QpcrCurve(_) => "qPCR standard curve",
             Tool::Stability(_) => "Stability study",
@@ -1466,6 +1470,7 @@ impl Tool {
             Tool::LifeDist(_) => "LifeDist",
             Tool::LifeDistArbitrary(_) => "LifeInterval",
             Tool::LifeRegression(_) => "LifeReg",
+            Tool::Cox(_) => "Cox",
             Tool::Qpcr(_) => "qPCR",
             Tool::QpcrCurve(_) => "qPCRCurve",
             Tool::Stability(_) => "Stability",
@@ -2599,6 +2604,7 @@ impl Project {
                 | Tool::LifeDist(_)
                 | Tool::LifeDistArbitrary(_)
                 | Tool::LifeRegression(_)
+                | Tool::Cox(_)
                 | Tool::Qpcr(_)
                 | Tool::QpcrCurve(_)
                 | Tool::Stability(_)
@@ -2855,6 +2861,13 @@ impl Project {
             }
             Tool::QpcrCurve(spec) => {
                 let out = qpcr::run_curve(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
+            }
+            Tool::Cox(spec) => {
+                let out = lifedist::run_cox(spec, sheet, &request.columns, request.rows)?;
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;

@@ -149,6 +149,7 @@ fn fresh_axis(from: &crate::graph::Axis, side: AxisSide) -> crate::graph::Axis {
     a.show_opposite = false;
     a.opposite_ticks = false;
     a.opposite_offset_pct = None;
+    a.opposite_style = Default::default();
     a.major_grid = None;
     a.minor_grid = None;
     a.offset_pct = 0.0;

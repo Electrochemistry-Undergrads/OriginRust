@@ -204,6 +204,8 @@ pub enum AnalysisKind {
     LifeDistArbitrary,
     /// Statistics > Survival Analysis > Life Data Regression (T391; options in `multivariate_options.rs`).
     LifeRegression,
+    /// Statistics > Survival Analysis > Cox Proportional Hazards (T408; options in `multivariate_options.rs`).
+    Cox,
     /// Statistics > Quantitative PCR > Relative Quantification (T397; options in `multivariate_options.rs`).
     Qpcr,
     /// Statistics > Quantitative PCR > Standard Curve (T397; options in `multivariate_options.rs`).
@@ -366,6 +368,7 @@ impl AnalysisKind {
             AnalysisKind::LifeDist => "Distribution Overview Plot...",
             AnalysisKind::LifeDistArbitrary => "Distribution Analysis (Arbitrary Censoring)...",
             AnalysisKind::LifeRegression => "Life Data Regression...",
+            AnalysisKind::Cox => "Cox Proportional Hazards...",
             AnalysisKind::Qpcr => "Relative Quantification...",
             AnalysisKind::QpcrCurve => "Standard Curve...",
             AnalysisKind::KaplanMeier => "Kaplan-Meier Estimator...",
@@ -485,6 +488,7 @@ impl AnalysisKind {
             "lifedist" => AnalysisKind::LifeDist,
             "lifedistinterval" => AnalysisKind::LifeDistArbitrary,
             "lifereg" => AnalysisKind::LifeRegression,
+            "cox" => AnalysisKind::Cox,
             "qpcr" => AnalysisKind::Qpcr,
             "qpcrcurve" => AnalysisKind::QpcrCurve,
             "kaplanmeier" => AnalysisKind::KaplanMeier,
@@ -2385,6 +2389,7 @@ impl AnalysisDialog {
             | AnalysisKind::LifeDist
             | AnalysisKind::LifeDistArbitrary
             | AnalysisKind::LifeRegression
+            | AnalysisKind::Cox
             | AnalysisKind::Qpcr
             | AnalysisKind::QpcrCurve
             | AnalysisKind::KaplanMeier
@@ -3723,6 +3728,7 @@ impl AnalysisDialog {
             | AnalysisKind::LifeDist
             | AnalysisKind::LifeDistArbitrary
             | AnalysisKind::LifeRegression
+            | AnalysisKind::Cox
             | AnalysisKind::Qpcr
             | AnalysisKind::QpcrCurve
             | AnalysisKind::KaplanMeier
@@ -3938,6 +3944,7 @@ impl AnalysisDialog {
             | AnalysisKind::LifeDist
             | AnalysisKind::LifeDistArbitrary
             | AnalysisKind::LifeRegression
+            | AnalysisKind::Cox
             | AnalysisKind::Qpcr
             | AnalysisKind::QpcrCurve
             | AnalysisKind::SubtractLine
@@ -4059,6 +4066,7 @@ impl AnalysisDialog {
             AnalysisKind::Qpcr => "Compare gene expression between sample groups from Ct values (ddCt, Pfaffl)",
             AnalysisKind::QpcrCurve => "Find the amplification efficiency from a dilution series",
             AnalysisKind::LifeRegression => "See how covariates stretch or shorten lifetimes, with censored times",
+            AnalysisKind::Cox => "See how covariates raise or lower the hazard, without assuming a life distribution",
             AnalysisKind::LifeDist => {
                 "Fit a life distribution to failure times with right-censored cases and see it four ways"
             }
@@ -4226,6 +4234,9 @@ impl AnalysisDialog {
             }
             AnalysisKind::QpcrCurve => {
                 "Slope, R^2, amplification factor and efficiency in a new sheet, and the standard curve graph"
+            }
+            AnalysisKind::Cox => {
+                "One row per covariate (coefficient, z test, hazard ratio with its interval) in a new sheet, and the survival graph"
             }
             AnalysisKind::LifeRegression => {
                 "One row per coefficient (with standard error, z and probability) and the scale in a new sheet"

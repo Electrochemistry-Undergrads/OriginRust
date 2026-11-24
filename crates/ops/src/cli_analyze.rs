@@ -1317,6 +1317,10 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         AnalyzeTool::QpcrCurve { target, no_graph } => {
             (target, Job::Tool(Tool::QpcrCurve(analysis::QpcrCurveSpec { graph: !no_graph })))
         }
+        AnalyzeTool::Cox { target, censor, confidence, no_graph } => (
+            target,
+            Job::Tool(Tool::Cox(analysis::CoxSpec { censor, confidence: confidence / 100.0, graph: !no_graph })),
+        ),
         AnalyzeTool::Lifereg { target, distribution, censor, frequency } => {
             let dist = match distribution.to_ascii_lowercase().as_str() {
                 "weibull" => analysis::LifeDist::Weibull,
@@ -1589,7 +1593,13 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         AnalyzeTool::Manhattan { target, threshold, no_graph } => {
             (target, Job::Tool(Tool::Manhattan(analysis::ManhattanSpec { threshold, graph: !no_graph })))
         }
-        AnalyzeTool::Timepivot { target, period, stat } => {
+        AnalyzeTool::Timepivot { target, period, stat, every, fiscal_start } => {
+            if every == 0 {
+                bail!("--every must be at least 1");
+            }
+            if !(1..=12).contains(&fiscal_start) {
+                bail!("--fiscal-start must be a month from 1 to 12 (got {fiscal_start})");
+            }
             let period = match analysis::PivotPeriod::ALL
                 .into_iter()
                 .find(|p| p.name().eq_ignore_ascii_case(period.trim()))
@@ -1606,7 +1616,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 "median" => analysis::PivotStat::Median,
                 other => bail!("--stat must be sum, mean, count, min, max or median (got \"{other}\")"),
             };
-            (target, Job::Tool(Tool::TimePivot(analysis::TimePivotSpec { period, stat })))
+            (target, Job::Tool(Tool::TimePivot(analysis::TimePivotSpec { period, stat, every, fiscal_start })))
         }
         AnalyzeTool::Binscatter { target, bins, equal_width, no_graph } => {
             if bins == 0 {

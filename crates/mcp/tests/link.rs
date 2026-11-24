@@ -825,7 +825,9 @@ fn turning_the_link_off_with_clients_connected_is_prompt_and_leaves_no_files() {
         eventually("both clients", || a.server.connections().len() == 2);
         assert!(dir.join(discovery::INFO_NAME).exists());
         let (took, _scratch) = a.stop_keep();
-        assert!(took < Duration::from_millis(1500), "{took:?}");
+        // Bounded by stop_wait (1 s) and some overhead; under a full workspace run the overhead reached 0.9 s
+        // (T405), so allow 2 s of it: a link that waited for its clients would still take far longer.
+        assert!(took < Duration::from_millis(3000), "{took:?}");
         for name in [discovery::INFO_NAME, "mcp.sock"] {
             assert!(!dir.join(name).exists(), "{name} was removed");
         }

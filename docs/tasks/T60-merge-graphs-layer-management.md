@@ -4,8 +4,7 @@
 15.7c, 15.7d; probes `tools/origin-ref/merge-graph-*.lines.txt`, `fit-page-to-layers.lines.txt`):
 Merge Graph Windows (core `merge.rs`, dialog, `sheaf merge-graphs`), Layer Management (Arrange,
 Size/Position, Link; core `layer_manage.rs`), Fit Page to Layers (dialog and Format item). Fit Layer to
-Graph did nothing measurable in Origin and is tagged `N`. Remaining work includes independent
-opposite-axis styling.
+Graph did nothing measurable in Origin and is tagged `N`.
 See T61 for Layer Management Add.
 **Size:** L, merge then management.
 Background-colour follow-up (`codex/t60-layer-display`, 2026-11-16): Display > Color >
@@ -144,6 +143,12 @@ exports in Origin 2016 and Sheaf's legacy default.
 Layer Frame or Fixed Factor on selected layers. The scene and hit geometry use
 the resolved factor, and saved styles retain the original sizes. Graphing
 15.7d records the Origin 2016 frame and EMF measurements and the Sheaf fit.
+
+**Layer Management opposite-axis styling (2026-11-23).** Axes sets the
+facing edge's tick direction, title and label visibility, and numeric label
+formula independently of the primary edge. The edges share the scale.
+Graphing 15.7d records the Origin 2016 exports and compatibility with
+existing mirrored and paired axes.
 
 **Merge graphs through MCP (2026-11-22).** The `merge_graphs` tool accepts a list of graph names
 or all graphs in project order, uses the existing merge engine, and returns the new graph name

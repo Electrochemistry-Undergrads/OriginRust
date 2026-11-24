@@ -1285,6 +1285,22 @@ caption and add height within the same entry's column. The sample is drawn once 
 the first line. The frame encloses the actual measured widths and heights. This is
 Sheaf's frame-based allocation rule.
 
+**Legend line-break tokens (T58).** Assigning `legend.text$` in Origin 2016 expanded
+`%(CRLF)`, `%(CR)` and `%(LF)` into line breaks. Lowercase, mixed case and spaces
+around the keyword worked. In the 22-point Arial EMFs the first and third rows with
+samples started at X 2581, and the unsampled second row started at the column left,
+X 2379. The 2019 release separately added the token to Custom Legend Translation,
+where the help example aligns the continuation with the sampled row's text.
+[LabTalk string substitution](https://docs.originlab.com/labtalk/guide/string-substitution/), [Origin 2019 release note](https://www.originlab.com/ReleaseNotes/detail.aspx?id=20193ORG-18328), [legend FAQ](https://docs.originlab.com/quick-help/customize-legend/)
+
+Sheaf expands the three tokens in authored legend text before resolving plot
+samples and metadata. Case and whitespace inside the token follow the measured
+script rules. Each new line follows the ordinary legend row layout, including
+column assignment and the omission of the final empty row. Protected `\h(...)`,
+literal `\v(...)` and wrapped `\ww(...)` spans keep the token text. Values read
+from worksheet metadata are resolved after this pass. The raw authored legend
+continues to be saved with its tokens.
+
 **Plot-colored graph text (T58).** `\cpN(text)` uses the color of the Nth plot in the
 text object's layer. Repainting the graph after a style change resolves the color again.
 Nested styles, literal blocks and glyph decorations follow the existing text rules.

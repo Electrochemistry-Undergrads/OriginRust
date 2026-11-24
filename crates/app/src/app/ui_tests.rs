@@ -4852,6 +4852,19 @@ fn a_drawn_rectangle_extracts_the_data_points_inside_it() {
     assert_eq!(cols[2].long_name, "Source row");
     assert_eq!(cols[2].numeric().unwrap(), [4.0, 5.0, 6.0, 7.0]);
     assert_eq!(cols[1].long_name, "y");
+    // T413: the same region masks the four points' Y cells, then unmasks them.
+    show_window(&mut h, "Graph1 - diag");
+    let at = on(&h, 0, ObjectKind::Shape(0));
+    right_click_at(&mut h, at);
+    click(&mut h, "Mask Data in Region");
+    assert_eq!(h.state().doc.undo_label(), Some("Mask data in region"));
+    let y = graph(&h).layers[0].plots[0].y;
+    assert_eq!(project(&h).column(y).unwrap().mask.iter().copied().collect::<Vec<_>>(), [3, 4, 5, 6]);
+    let at = on(&h, 0, ObjectKind::Shape(0));
+    right_click_at(&mut h, at);
+    click(&mut h, "Unmask Data in Region");
+    assert!(project(&h).column(y).unwrap().mask.is_empty());
+    assert_eq!(h.state().doc.undo_label(), Some("Unmask data in region"));
 }
 
 #[test]

@@ -1223,6 +1223,13 @@ pub enum Action {
         layer: usize,
         shape: usize,
     },
+    /// Masks (`mask`) or unmasks the Y cells of the data points inside a drawn rectangle or ellipse (T413).
+    MaskRegion {
+        graph: WindowId,
+        layer: usize,
+        shape: usize,
+        mask: bool,
+    },
     /// Moves the legend to a new centre (fractions of the layer frame): it becomes manually
     /// placed; one undo step.
     MoveLegend {

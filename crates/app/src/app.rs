@@ -2909,6 +2909,7 @@ impl SheafApp {
             }
             Action::PivotTable { book, columns } => self.pivot = PivotDialog::new(&self.doc, book, columns),
             Action::ExtractRegion { graph, layer, shape } => self.extract_region(graph, layer, shape),
+            Action::MaskRegion { graph, layer, shape, mask } => self.mask_region(graph, layer, shape, mask),
             Action::MultiPeakFit { graph, y, layer } => {
                 let graph = match graph {
                     Some(g) => Some(g),
@@ -6280,6 +6281,45 @@ impl SheafApp {
             self.panels.reveal(PanelId::Results);
             self.say(report.message);
         }
+    }
+
+    /// Mask / Unmask Data in Region (T413): the Y cells of the layer's data points inside the drawn rectangle or
+    /// ellipse are masked (or unmasked), as one undo step.
+    fn mask_region(&mut self, graph: WindowId, layer: usize, shape: usize, mask: bool) {
+        let found = match sheaf_plot::region::points_in_shape(self.doc.project(), graph, layer, shape) {
+            Ok(Some(found)) => found,
+            Ok(None) => return self.warn("Only a rectangle or an ellipse marks a region"),
+            Err(e) => return self.warn(e.to_string()),
+        };
+        let Some(l) = self.doc.project().graph(graph).and_then(|g| g.layers.get(layer)) else { return };
+        let cells: Vec<(ColumnId, Vec<usize>)> = found.iter().map(|f| (l.plots[f.plot].y, f.rows.clone())).collect();
+        let changed: usize = cells
+            .iter()
+            .map(|(y, rows)| {
+                let masked = self.doc.project().column(*y).map(|c| rows.iter().filter(|r| c.mask.contains(r)).count());
+                let masked = masked.unwrap_or(0);
+                if mask { rows.len() - masked } else { masked }
+            })
+            .sum();
+        if changed == 0 {
+            let what = if found.is_empty() { "No data points inside the object" } else { "Nothing to change" };
+            return self.say(what.to_string());
+        }
+        let label = if mask { "Mask data in region" } else { "Unmask data in region" };
+        self.doc.apply(label, |p| {
+            for (y, rows) in &cells {
+                if let Some(c) = p.column_mut(*y) {
+                    for r in rows {
+                        if mask {
+                            c.mask.insert(*r);
+                        } else {
+                            c.mask.remove(r);
+                        }
+                    }
+                }
+            }
+        });
+        self.say(format!("{} {changed} data point(s) in the region", if mask { "Masked" } else { "Unmasked" }));
     }
 
     /// Extract Data in Region (T355): the data points of the layer inside the drawn rectangle or ellipse go to a

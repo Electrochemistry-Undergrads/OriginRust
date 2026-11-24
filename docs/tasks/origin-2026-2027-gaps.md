@@ -60,7 +60,7 @@ outputs or UI behavior.
 | Plot-only X sorting | 2023 | Done (T39). Sort points by X for line connections while preserving worksheet row order. | [2023][o23] |
 | Built-in equation rendering | 2023b | Render LaTeX equations in graph labels and worksheet metadata, carry metadata equations into legends and axis titles, and retain vector output on export. | [2023b][o23b] |
 | Time Series Explorer | 2024b | View the full series and a detail panel for a chosen interval. Step or play through successive intervals. | [2024b][o24b] |
-| Extract data from regions on a graph | 2024b | Rectangle and ellipse done (T355: a drawn object's menu, Extract Data in Region; freeform and several regions remain). Draw one or more rectangular, oval or freeform regions and output the enclosed observations to a worksheet. | [2024b][o24b] |
+| Extract data from regions on a graph | 2024b | Rectangle and ellipse done (T355: a drawn object's menu, Extract Data in Region; T413: Mask / Unmask Data in Region); freeform and several regions remain. Draw one or more rectangular, oval or freeform regions and output the enclosed observations to a worksheet. | [2024b][o24b] |
 | Graph Slicer | 2025 / 2025b | Page scope done (T406: Graph > Graph Slicer..., one category column, tick the values shown); layer and plot scope and extracting the subset remain. Filter plots from a common source sheet at page, layer or plot scope and extract the selected subset. | [2025][o25] · [2025b][o25b] |
 | Treemap | 2025b | Done (T50). Show hierarchical magnitudes as nested rectangles sized by values. | [2025b][o25b] |
 | On-graph trendlines | 2025b | Done (T43). Add a fitted trend or moving average directly to a plot with its own editable label and curve settings. | [2025b][o25b] |

@@ -3864,6 +3864,12 @@ pub enum AnalyzeTool {
         /// sum, mean, count, min, max or median.
         #[arg(long, default_value = "mean")]
         stat: String,
+        /// How many periods make one group (15 with --period minute: quarter hours).
+        #[arg(long, default_value_t = 1)]
+        every: u32,
+        /// The month (1 to 12) a fiscal year starts in, for months, quarters and years.
+        #[arg(long, default_value_t = 1)]
+        fiscal_start: u32,
     },
     /// Binned scatter: X cut into bins of equal width or equal counts; the mean, SD, SE and count of each --y
     /// column's Y per bin; makes a graph of the data with the bin means.

@@ -819,7 +819,36 @@ impl MultiOptions {
                         }
                     });
                 });
-                ui.weak("Weeks start on Monday; periods without a value are left out.");
+                // Custom intervals and fiscal years (T404).
+                ui.horizontal(|ui| {
+                    let label = ui.label("Every");
+                    let mut n = s.n();
+                    ui.add(egui::DragValue::new(&mut n).range(1..=1000)).labelled_by(label.id);
+                    s.every = n;
+                    ui.label(format!("{}(s)", s.period.name().to_lowercase()));
+                });
+                const MONTHS: [&str; 12] =
+                    ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                let fiscal = matches!(s.period, PivotPeriod::Month | PivotPeriod::Quarter | PivotPeriod::Year);
+                ui.add_enabled_ui(fiscal, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Fiscal year starts in");
+                        let mut m = s.first_month();
+                        egui::ComboBox::from_id_salt("timepivot_fiscal").selected_text(MONTHS[m as usize - 1]).show_ui(
+                            ui,
+                            |ui| {
+                                for (i, name) in MONTHS.iter().enumerate() {
+                                    ui.selectable_value(&mut m, i as u32 + 1, *name);
+                                }
+                            },
+                        );
+                        s.fiscal_start = m;
+                    });
+                });
+                ui.weak(
+                    "Weeks start on Monday; minutes and hours count from midnight, days and weeks from the first day \
+                     of the data; a fiscal year is named by the year it ends in; periods without a value are left out.",
+                );
             }
             AnalysisKind::BinScatter => {
                 ui.label("Every chosen column is binned against its X column (or the row number).");

@@ -268,7 +268,7 @@ fn a_double_y_source_stays_together_in_its_cell_with_its_link() {
     assert_pct(&m.layers[1].frame, 15.0, 50.0, 75.0, 35.0);
     assert_eq!(m.link_parent(2), Some(1));
     assert_eq!(m.layers[2].frame, src.layers[1].frame, "a linked layer keeps its place in its parent");
-    assert_eq!(m.layers[2].link.unwrap().x, src.layers[1].link.unwrap().x);
+    assert_eq!(m.layers[2].link.as_ref().unwrap().x, src.layers[1].link.as_ref().unwrap().x);
     assert_eq!(m.panels(), vec![0, 1]);
 }
 
@@ -377,8 +377,8 @@ fn linking_follows_the_first_layer_in_position_and_share_x_adds_the_scale() {
     let id = p.merge_graphs(&MergeOptions { rows: Some(3), cols: Some(1), link: true, ..opts(&gs) }).unwrap();
     let m = p.graph(id).unwrap().clone();
     for layer in &m.layers[1..3] {
-        let link = layer.link.unwrap();
-        assert_eq!((link.parent, link.x, link.y), (0, ScaleLink::None, ScaleLink::None));
+        let link = layer.link.as_ref().unwrap();
+        assert_eq!((link.parent, &link.x, &link.y), (0, &ScaleLink::None, &ScaleLink::None));
     }
     // Origin: layer 2 at (0, 123, 100, 100) percent of layer 1
     let f = m.layers[1].frame;
@@ -387,7 +387,7 @@ fn linking_follows_the_first_layer_in_position_and_share_x_adds_the_scale() {
     assert_pct(&m.page_frame(2), 15.0, 63.333, 75.0, 21.667);
     let shared = p.merge_graphs(&MergeOptions { rows: Some(3), cols: Some(1), share_x: true, ..opts(&gs) }).unwrap();
     let s = p.graph(shared).unwrap();
-    assert_eq!(s.layers[2].link.unwrap().x, ScaleLink::Straight);
+    assert_eq!(s.layers[2].link.as_ref().unwrap().x, ScaleLink::Straight);
 }
 
 #[test]

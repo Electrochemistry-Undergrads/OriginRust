@@ -182,6 +182,7 @@ enum Pending {
 
 /// More new windows than this at once are not all opened.
 const MAX_TABS_AT_ONCE: usize = 8;
+pub(crate) const MAX_ADDED_COLUMNS: usize = 1000;
 
 struct RenameDialog {
     window: WindowId,
@@ -330,6 +331,7 @@ pub struct SheafApp {
     /// Plot > Statistics > Run Chart's window (T270).
     run_chart: Option<crate::dialogs::run_chart::RunChartDialog>,
     function_graph: Option<crate::dialogs::function_graph::FunctionGraphDialog>,
+    pub(crate) graph_slicer: Option<crate::dialogs::graph_slicer::GraphSlicerDialog>,
     /// The open function window is File > New > Function Plot's: OK makes the graph (T213).
     function_graph_new: bool,
     /// The Audit Log window is open (T131).
@@ -530,6 +532,7 @@ impl SheafApp {
             grouped_hist: None,
             run_chart: None,
             function_graph: None,
+            graph_slicer: None,
             function_graph_new: false,
             audit_log: false,
             fit_builder: None,
@@ -2557,6 +2560,12 @@ impl SheafApp {
             Action::FolderProperties(path) => {
                 if let Some(f) = explorer::folder_at(&self.doc.project().root, &path) {
                     self.folder_props = Some(crate::dialogs::folder_props::FolderPropsDialog::new(path, f));
+                }
+            }
+            Action::GraphSlicer { graph } => {
+                match crate::dialogs::graph_slicer::GraphSlicerDialog::new(self.doc.project(), graph) {
+                    Some(d) => self.graph_slicer = Some(d),
+                    None => self.warn("The graph plots no worksheet column to slice"),
                 }
             }
             Action::AddFunctionGraph { graph, layer } => {
@@ -5042,6 +5051,31 @@ impl SheafApp {
     }
 
     /// Graph > Add Function Graph... (T119): OK adds the curve; an expression error keeps the window open.
+    fn show_graph_slicer(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::graph_slicer::SlicerOutcome;
+        let Some(d) = &mut self.graph_slicer else { return };
+        match d.show(ctx, self.doc.project()) {
+            SlicerOutcome::Open => {}
+            SlicerOutcome::Closed => self.graph_slicer = None,
+            SlicerOutcome::Apply { graph, column, values } => {
+                match self.doc.edit("Graph Slicer", |p| p.set_graph_slicer(graph, column, values)) {
+                    Ok(()) => {
+                        self.graph_slicer = None;
+                        self.say("Sliced the graph".to_string());
+                    }
+                    Err(e) => self.warn(e.to_string()),
+                }
+            }
+            SlicerOutcome::Remove { graph } => {
+                self.graph_slicer = None;
+                let _ = self
+                    .doc
+                    .edit("Remove Graph Slicer", |p| Ok::<_, std::convert::Infallible>(p.clear_graph_slicer(graph)));
+                self.say("Removed the graph slicer".to_string());
+            }
+        }
+    }
+
     fn show_function_graph(&mut self, ctx: &egui::Context) {
         use crate::dialogs::function_graph::FunctionOutcome;
         let Some(d) = &mut self.function_graph else { return };
@@ -8032,6 +8066,7 @@ impl SheafApp {
         self.show_grouped_hist(ctx);
         self.show_run_chart(ctx);
         self.show_function_graph(ctx);
+        self.show_graph_slicer(ctx);
         self.show_audit_log(ctx);
         self.show_fit_builder(ctx);
         self.show_sample_projects(ctx);
@@ -8290,7 +8325,7 @@ impl SheafApp {
             egui::Window::new("Add New Columns").open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     let label = ui.label("Number of columns to add");
-                    ui.add(egui::DragValue::new(count).range(1..=1000)).labelled_by(label.id);
+                    ui.add(egui::DragValue::new(count).range(1..=MAX_ADDED_COLUMNS)).labelled_by(label.id);
                 });
                 ui.horizontal(|ui| {
                     if ui.button("OK").clicked() {
@@ -8966,7 +9001,7 @@ fn duplicate_sheet(p: &mut Project, book: WindowId, sheet: usize) {
     }
 }
 
-fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
+pub(crate) fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
     if columns.is_empty() {
         return;
     }

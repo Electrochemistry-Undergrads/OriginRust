@@ -2009,8 +2009,11 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
     }
     if let GraphOp::DeleteLayer { layer } = op {
         if let Some(r) = resolved {
-            let ranges: Vec<_> =
-                r.iter().map(|l| ((l.x.min, l.x.max, l.x.step), (l.y.min, l.y.max, l.y.step))).collect();
+            let range = |axis: &sheaf_plot::ticks::ResolvedAxis| {
+                let (from, to) = axis.endpoints();
+                (from, to, axis.step)
+            };
+            let ranges: Vec<_> = r.iter().map(|l| (range(&l.x), range(&l.y))).collect();
             g.freeze_linked_ranges(layer, &ranges);
         }
         let _ = g.delete_layer(layer);

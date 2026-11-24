@@ -180,7 +180,7 @@ fn role_of(graph: &Graph, index: usize) -> Role {
     match right_parent(graph, index) {
         Some((parent, x_straight)) => Role::RightY { parent, x_straight },
         None if graph.link_parent(index).is_some() => {
-            let link = graph.layers[index].link.expect("a valid link exists");
+            let link = graph.valid_link(index).expect("a valid link exists");
             Role::Panel { parent: link.parent, x: link.x == ScaleLink::Straight, y: link.y == ScaleLink::Straight }
         }
         None => Role::Plain {
@@ -345,6 +345,11 @@ impl Writer {
                 "layer management border colours and dimensions were not written (the companion file keeps them)"
                     .into(),
             );
+        }
+        if layer.link.as_ref().is_some_and(|link| {
+            matches!(link.x, ScaleLink::Custom { .. }) || matches!(link.y, ScaleLink::Custom { .. })
+        }) {
+            notes.push("axis link formulas were not written (the .opj.sheaf companion keeps them)".into());
         }
         if !layer.element_scale.is_default() {
             notes.push("layer management element scaling was not written (the companion file keeps it)".into());

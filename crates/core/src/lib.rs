@@ -81,6 +81,7 @@ pub mod sheet_print;
 pub mod sheet_tab;
 pub mod sheet_view;
 pub mod sheetops;
+pub mod slicer;
 pub mod stack;
 pub mod stock;
 pub mod straight_line;

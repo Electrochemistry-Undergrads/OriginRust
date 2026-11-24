@@ -96,6 +96,9 @@ pub struct SheetView {
     /// None uses Sheaf's original grid and print defaults (T59).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_missing_as_blank: Option<bool>,
+    /// The row capacity chosen in Worksheet Properties. Data can extend beyond it (T59).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allocated_rows: Option<usize>,
 }
 
 impl Default for SheetView {
@@ -115,6 +118,7 @@ impl Default for SheetView {
             page_breaks: false,
             categories: false,
             show_missing_as_blank: None,
+            allocated_rows: None,
         }
     }
 }
@@ -183,6 +187,18 @@ impl Worksheet {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn allocated_rows_roundtrip_without_counting_as_data() {
+        let mut sheet = Worksheet::new("Sheet1");
+        let before = serde_json::to_string(&sheet).unwrap();
+        assert!(!before.contains("allocated_rows"));
+        sheet.view.allocated_rows = Some(1_000_000);
+        let saved = serde_json::to_string(&sheet).unwrap();
+        let back: Worksheet = serde_json::from_str(&saved).unwrap();
+        assert_eq!(back.view.allocated_rows, Some(1_000_000));
+        assert_eq!(back.row_count(), 0);
+    }
 
     #[test]
     fn everything_shows_on_a_new_sheet_and_toggles() {

@@ -4430,7 +4430,7 @@ fn stacked_histograms_make_one_panel_per_column_from_the_top_with_shared_bins_an
     let hist = graph.layers[0].plots[0].hist;
     assert!(hist.begin.is_some() && hist.end.is_some() && hist.bin_size.is_some());
     // One shared X scale: the panels after the first are linked to it.
-    assert!(graph.layers[1..].iter().all(|l| l.link.is_some_and(|k| k.parent == 0)));
+    assert!(graph.layers[1..].iter().all(|l| l.link.as_ref().is_some_and(|k| k.parent == 0)));
     // The bins cover all three columns (5 to 28), and the counts of a panel add up to its rows.
     assert!(hist.begin.unwrap() <= 5.0 && hist.end.unwrap() >= 29.0, "{hist:?}");
     let data: Vec<_> = graph.layers.iter().map(|l| data::collect(&p, l).plots).collect();

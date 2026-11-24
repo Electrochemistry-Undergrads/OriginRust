@@ -351,6 +351,8 @@ pub enum Cmd {
     BatchPlot(bool),
     /// Graph > Add Function Graph... (T119).
     AddFunctionGraph,
+    /// Graph > Graph Slicer... (T406).
+    GraphSlicer,
     /// View > View Windows (T100).
     ViewWindows(sheaf_core::project::ViewWindows),
     /// An axis's Save Format as Theme... (T102).
@@ -2236,6 +2238,7 @@ fn graph_menu() -> Vec<Entry> {
         item("Add Text...", Cmd::AddText),
         new_layer_menu(),
         item("Merge Graph Windows...", Cmd::MergeGraphs),
+        item("Grap&h Slicer...", Cmd::GraphSlicer),
         sep(),
         keyed("Rescale to Show All", ctrl(Key::R), Cmd::Rescale),
         sub(
@@ -3625,6 +3628,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SystemTemplates => Action::SystemTemplates { book: book?, columns: c.selected.to_vec() },
         Cmd::BatchPlot(columns) => Action::BatchPlot { graph: c.graph.ok_or(NEED_GRAPH)?, columns: *columns },
         Cmd::AddFunctionGraph => Action::AddFunctionGraph { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
+        Cmd::GraphSlicer => Action::GraphSlicer { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::Reimport(choose) => {
             let book = book?;
             c.imported.then_some(()).ok_or(NOT_IMPORTED)?;

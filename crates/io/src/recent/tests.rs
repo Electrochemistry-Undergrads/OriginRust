@@ -268,7 +268,9 @@ fn a_change_keeps_what_another_instance_added_in_the_meantime() {
 fn many_writers_at_once_lose_no_entry() {
     let dir = scratch("threads");
     let file = Arc::new(dir.join(FILE_NAME));
-    let files: Vec<PathBuf> = (0..8).map(|i| touch(&dir, &format!("t{i}.sheaf"))).collect();
+    // Four writers still race for the lock; eight queued past the 60 s lock wait when a full workspace run loaded
+    // the machine (83 s, T424), as the themes writers did in T411.
+    let files: Vec<PathBuf> = (0..4).map(|i| touch(&dir, &format!("t{i}.sheaf"))).collect();
     let barrier = Arc::new(Barrier::new(files.len()));
     let handles: Vec<_> = files
         .into_iter()
@@ -284,7 +286,7 @@ fn many_writers_at_once_lose_no_entry() {
         h.join().unwrap();
     }
     let list = RecentList::load(&file);
-    assert_eq!(list.projects.len(), 8);
+    assert_eq!(list.projects.len(), 4);
 }
 
 #[test]

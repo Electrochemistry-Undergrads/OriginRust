@@ -3856,6 +3856,9 @@ pub enum AnalyzeTool {
         /// The target for Cpm (with both limits).
         #[arg(long, allow_negative_numbers = true)]
         cpm_target: Option<f64>,
+        /// Confidence level of the Pp and Ppk intervals, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        confidence: f64,
         /// Do not make the graphs.
         #[arg(long)]
         no_graph: bool,

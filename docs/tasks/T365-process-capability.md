@@ -9,7 +9,7 @@ million for a lognormal or Weibull fit, with a histogram, the fitted curve and t
 
 ## Left
 
-- Box-Cox and Cpm with a target are T419. Johnson transformations, confidence intervals of the indices, a pooled-deviation
+- Box-Cox and Cpm with a target are T419, intervals of Pp and Ppk T425. Johnson transformations, intervals of Cp, Cpk and Cpm, a pooled-deviation
   within estimate.
 
 ## Tests

@@ -25,6 +25,8 @@ pub struct CapabilitySpec {
     pub lambda: Option<f64>,
     /// The target for Cpm (T419).
     pub target: Option<f64>,
+    /// The confidence level of the Pp and Ppk intervals (T425).
+    pub confidence: f64,
 }
 
 impl Default for CapabilitySpec {
@@ -37,11 +39,12 @@ impl Default for CapabilitySpec {
             graph: true,
             lambda: None,
             target: None,
+            confidence: 0.95,
         }
     }
 }
 
-const HEADERS: [&str; 23] = [
+const HEADERS: [&str; 27] = [
     "N",
     "Mean",
     "StdDev (overall)",
@@ -65,6 +68,10 @@ const HEADERS: [&str; 23] = [
     "Fitted parameter 2",
     "Cpm",
     "Box-Cox lambda",
+    "Pp lower",
+    "Pp upper",
+    "Ppk lower",
+    "Ppk upper",
 ];
 
 fn column_of(name: &str, comments: &str, designation: Designation, values: Vec<f64>) -> SheetColumn {
@@ -83,7 +90,7 @@ pub(super) fn run(spec: &CapabilitySpec, inputs: &[Input<'_>]) -> Result<Output,
     let mut on_sheet = Vec::new();
     let mut graphs = Vec::new();
     for input in inputs {
-        let options = CapOptions { lambda: spec.lambda, target: spec.target };
+        let options = CapOptions { lambda: spec.lambda, target: spec.target, confidence: spec.confidence };
         let c = capability_with(input.ys(), spec.lsl, spec.usl, spec.subgroup, spec.model, options)
             .map_err(|e| AnalysisError::BadOption(format!("{}: {e}", input.label)))?;
         let values = vec![
@@ -110,6 +117,10 @@ pub(super) fn run(spec: &CapabilitySpec, inputs: &[Input<'_>]) -> Result<Output,
             c.params[1],
             c.cpm,
             c.lambda,
+            c.pp_ci.0,
+            c.pp_ci.1,
+            c.ppk_ci.0,
+            c.ppk_ci.1,
         ];
         let mut units = vec![String::new(); values.len()];
         for u in &mut units[1..4] {
@@ -242,6 +253,13 @@ pub(super) fn run(spec: &CapabilitySpec, inputs: &[Input<'_>]) -> Result<Output,
         }
         _ => "Percentile method: Pp = (USL - LSL) / (x99.865 - x0.135), PPL = (median - LSL) / (median - x0.135), PPU = (USL - median) / (x99.865 - median); within indices are not defined.".to_string(),
     });
+    if matches!(spec.model, CapModel::Normal | CapModel::BoxCox) {
+        notes.push(format!(
+            "{} % intervals: Pp from the chi-square distribution of the overall s (n - 1 df), Ppk by Bissell's approximation{}.",
+            num(100.0 * spec.confidence),
+            if spec.model == CapModel::BoxCox { ", on the Box-Cox scale" } else { "" }
+        ));
+    }
     if spec.target.is_some() {
         notes.push(match spec.model {
             CapModel::Lognormal | CapModel::Weibull => "Cpm is not defined for the percentile method.".to_string(),
@@ -328,5 +346,8 @@ mod tests {
         assert!(t.rows[0].1[21] > 0.0 && out.notes[0].contains("Box-Cox lambda 1 (given)"), "{:?}", out.notes);
         let cols = super::super::dist::plot_columns(&p, out.new_graph.unwrap());
         assert_eq!(cols[1].1, "Fitted Box-Cox");
+        let r = &t.rows[0].1;
+        assert!(r[23] < r[8] && r[8] < r[24] && r[25] < r[11] && r[11] < r[26], "the intervals hold Pp and Ppk: {r:?}");
+        assert!(out.notes.iter().any(|n| n.starts_with("95 % intervals")), "{:?}", out.notes);
     }
 }

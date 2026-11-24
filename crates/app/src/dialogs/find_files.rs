@@ -186,4 +186,22 @@ mod tests {
         assert!(all.iter().any(|f| f.error.is_some()), "a file that cannot be read is listed with its error");
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn the_text_of_a_notes_window_is_found_in_a_saved_project() {
+        // T407: Find in Project Files searches notes windows too.
+        let dir = std::env::temp_dir().join(format!("sheaf-find-notes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut p = sheaf_core::Project::new();
+        let id = p.add_notes();
+        p.notes_mut(id).unwrap().text = "calibrated against the platinum reference".into();
+        let path = dir.join("notes.sheaf");
+        sheaf_io::project_file::save(&p, &path).unwrap();
+        let spec = FindSpec { text: "platinum".into(), ..FindSpec::default() };
+        let found = search_files(&dir, false, &spec);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].path, path);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

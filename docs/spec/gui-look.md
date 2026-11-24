@@ -1865,4 +1865,6 @@ Whole Word and Data in Cells (on). Find All opens every `.sheaf`, `.opj` and `.o
 long names, comments, units, data cells, text on graphs); the files with hits are listed with their count (a file
 that cannot be read is listed with the reason), and the chosen file's first 20 hits are shown under it. Open closes
 the window and opens that project (asking to save first when the open project has unsaved changes). Notes windows
-are not searched, and a large folder is read in the foreground.
+are searched too (T407: their short and long names and their text, one hit each, element "Notes"; Find in Project's
+Notes Windows option, on by default, Sheaf's own since Origin 2016's Find in Project has none). A large folder is read
+in the foreground.

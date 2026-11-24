@@ -8129,6 +8129,54 @@ fn plot_categorical_network_joins_the_sheets_first_two_text_columns() {
 }
 
 #[test]
+fn plot_categorical_upset_plot_uses_the_selected_columns_or_the_flag_columns() {
+    // T403: with nothing selected, the sheet's columns of only 0 and 1 are the sets.
+    let mut h = start(vec![data_file("upset")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = project(&h).workbooks().next().unwrap().id;
+    let (a, b) = h.state_mut().doc.apply("flags", |p| {
+        let a =
+            p.add_column(book, 0, sheaf_core::Designation::Y, ColumnData::numeric(vec![1.0, 0.0, 1.0, 1.0])).unwrap();
+        let b =
+            p.add_column(book, 0, sheaf_core::Designation::Y, ColumnData::numeric(vec![0.0, 1.0, 1.0, 0.0])).unwrap();
+        (a, b)
+    });
+    let graphs = project(&h).graphs().count();
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::PlotColumns { book, columns: vec![], template: Template::UpSet }, &ctx);
+    settle(&mut h);
+    assert_eq!(project(&h).graphs().count(), graphs + 1);
+    let plot = &project(&h).graphs().last().unwrap().layers[0].plots[0];
+    assert_eq!(plot.kind, sheaf_core::graph::PlotKind::UpSet);
+    assert_eq!(plot.sankey.stages, [a, b]);
+    // The menu entry is there.
+    show_window(&mut h, "Book1 - sample.csv");
+    menu_path(&mut h, &["Plot", "Categorical", "UpSet Plot"]);
+    assert_eq!(project(&h).graphs().count(), graphs + 2);
+}
+
+#[test]
+fn plot_categorical_chord_diagram_joins_the_sheets_first_two_text_columns() {
+    // T402: the same columns as a network plot, drawn as arcs and ribbons.
+    let mut h = start(vec![data_file("chord")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let book = project(&h).workbooks().next().unwrap().id;
+    let text = |v: &[&str]| ColumnData::text(v.iter().map(|s| s.to_string()).collect());
+    let (s, t) = h.state_mut().doc.apply("text", |p| {
+        let s = p.add_column(book, 0, sheaf_core::Designation::Y, text(&["a", "a", "b", "c"])).unwrap();
+        let t = p.add_column(book, 0, sheaf_core::Designation::Y, text(&["b", "c", "c", "a"])).unwrap();
+        (s, t)
+    });
+    let graphs = project(&h).graphs().count();
+    menu_path(&mut h, &["Plot", "Categorical", "Chord Diagram"]);
+    assert_eq!(project(&h).graphs().count(), graphs + 1);
+    let plot = &project(&h).graphs().last().unwrap().layers[0].plots[0];
+    assert_eq!(plot.kind, sheaf_core::graph::PlotKind::Chord);
+    assert_eq!((plot.sankey.source, plot.sankey.target), (Some(s), Some(t)));
+    assert!(h.state().status.contains("Chord Diagram"), "{}", h.state().status);
+}
+
+#[test]
 fn a_sunburst_of_selected_text_columns_counts_the_rows() {
     let mut h = start(vec![data_file("nested-freq")]);
     show_window(&mut h, "Book1 - sample.csv");

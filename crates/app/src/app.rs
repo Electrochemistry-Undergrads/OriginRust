@@ -4591,9 +4591,28 @@ impl SheafApp {
     }
 
     fn plot_columns(&mut self, book: WindowId, columns: Vec<ColumnId>, template: Template) {
-        // A network plot (T383): the first two selected columns of text are the ends of the edges (else the first
-        // two of the active sheet), the last selected numeric one weighs them (else every row counts 1).
-        if template == Template::Network {
+        // An UpSet plot (T403): the selected columns are the sets (else the 0/1 columns of the active sheet).
+        if template == Template::UpSet {
+            let project = self.doc.project();
+            let sets = if columns.len() >= 2 {
+                columns
+            } else {
+                project
+                    .workbook(book)
+                    .and_then(|b| b.sheets.get(b.active_sheet))
+                    .map(sheaf_core::project::flag_columns)
+                    .unwrap_or_default()
+            };
+            match self.doc.edit("Plot columns", |p| p.plot_upset(&sets)) {
+                Ok(_) => self.say(format!("UpSet plot of {} sets", sets.len())),
+                Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+            }
+            return;
+        }
+        // A network plot (T383) or a chord diagram (T402): the first two selected columns of text are the ends of
+        // the edges (else the first two of the active sheet), the last selected numeric one weighs them (else every
+        // row counts 1).
+        if matches!(template, Template::Network | Template::Chord) {
             let project = self.doc.project();
             let is_text = |id: &ColumnId| project.column(*id).is_some_and(|c| !c.data.is_numeric());
             let mut ends: Vec<ColumnId> = columns.iter().copied().filter(is_text).collect();
@@ -4606,11 +4625,14 @@ impl SheafApp {
             }
             let weight = columns.iter().rev().copied().find(|id| project.numeric(*id).is_some());
             let made = match ends[..] {
+                [source, target, ..] if template == Template::Chord => {
+                    self.doc.edit("Plot columns", |p| p.plot_chord(source, target, weight))
+                }
                 [source, target, ..] => self.doc.edit("Plot columns", |p| p.plot_network(source, target, weight)),
                 _ => Err(sheaf_core::project::ProjectError::NetworkColumns),
             };
             match made {
-                Ok(_) => self.say("Network plot".to_string()),
+                Ok(_) => self.say(template.label().to_string()),
                 Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
             }
             return;

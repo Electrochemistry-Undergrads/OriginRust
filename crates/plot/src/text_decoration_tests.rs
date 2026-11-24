@@ -562,3 +562,31 @@ fn legend_protected_text_exports_literal_references_and_expands_the_remaining_ro
     assert!(svg.contains(r"> \L(1) %(1)</text>"));
     assert!(svg.contains(">Series</text>"));
 }
+
+#[test]
+fn legend_conditional_spaces_follow_expanded_metadata_in_text_and_frame_width() {
+    let mut project = Project::new();
+    let book = project.add_workbook("");
+    project.add_column(book, 0, Designation::X, ColumnData::numeric(vec![0.0, 1.0])).unwrap();
+    let y = project.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+    let column = project.column_mut(y).unwrap();
+    column.long_name = "Series".into();
+    column.units = "mA".into();
+    let graph = project.add_graph(sheaf_core::template::Template::Line);
+    project.add_plot(graph, 0, y).unwrap();
+
+    let svg = |project: &mut Project, text: &str| {
+        let legend = &mut project.graph_mut(graph).unwrap().layers[0].legend;
+        legend.frame = true;
+        legend.text = Some(text.into());
+        let scene = crate::layout::build_scene(project, graph, &FixedMetrics).unwrap();
+        crate::svg::write_svg(&scene)
+    };
+    let conditional = r"\l(1) \b(%(1,@LL)\sc%(1,@LC)\sc%(1,@LP)\sc(%(1,@LU)))";
+    for (comments, expected) in [("", r"\l(1) \b(Series mA)"), ("Sample", r"\l(1) \b(Series Sample mA)")] {
+        project.column_mut(y).unwrap().comments = comments.into();
+        assert_eq!(svg(&mut project, conditional), svg(&mut project, expected));
+    }
+    project.column_mut(y).unwrap().units.clear();
+    assert_eq!(svg(&mut project, conditional), svg(&mut project, r"\l(1) \b(Series Sample)"));
+}

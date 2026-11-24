@@ -41,6 +41,62 @@ fn painted_size(h: &Harness<'static, SheafApp>, text: &str) -> Vec<f32> {
     sizes
 }
 
+fn properties_tab(h: &mut Harness<'static, SheafApp>, tab: &str) {
+    h.get(By::new().role(egui::accesskit::Role::Window).label("Worksheet Properties")).get_by_label(tab).click();
+    settle(h);
+}
+
+#[test]
+fn f4_view_switches_share_the_corner_settings_and_apply_with_format() {
+    let mut h = start_sheet("worksheet-properties-view");
+    let before = project(&h).clone();
+    let heading = sheaf_core::sheet_print::head_name(sheet(&h), 0);
+
+    open(&mut h);
+    size(&mut h, "14");
+    properties_tab(&mut h, "View");
+    for control in ["Row Labels for Column Label Rows", "Column Header", "Column Grid", "Page Break Preview Lines"] {
+        click(&mut h, control);
+    }
+    assert_eq!(project(&h), &before);
+    click(&mut h, "Apply");
+
+    let sheet = sheet(&h);
+    assert!(!sheet.view.row_labels && !sheet.view.column_header && !sheet.view.column_grid);
+    assert!(sheet.view.row_header && sheet.view.row_grid && sheet.view.page_breaks);
+    assert_eq!(sheet.font_defaults.data.as_ref().unwrap().size_pt, Some(14.0));
+    assert!(h.query_by_label("Long Name").is_none());
+    assert!(h.query_by_label(&heading).is_none());
+    assert_eq!(h.state().doc.undo_label(), Some("Worksheet formatting"));
+    let revision = h.state().doc.revision();
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.revision(), revision);
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn f4_view_cancel_preserves_independent_heading_and_grid_choices() {
+    let mut h = start_sheet("worksheet-properties-view-cancel");
+    let before = project(&h).clone();
+    open(&mut h);
+    properties_tab(&mut h, "View");
+    click(&mut h, "Row Header");
+    click(&mut h, "Row Grid");
+    click(&mut h, "Cancel");
+    assert_eq!(project(&h), &before);
+
+    open(&mut h);
+    properties_tab(&mut h, "View");
+    click(&mut h, "Row Header");
+    click(&mut h, "Row Grid");
+    click(&mut h, "OK");
+    let view = sheet(&h).view;
+    assert!(view.row_labels && view.column_header && view.column_grid);
+    assert!(!view.row_header && !view.row_grid && !view.page_breaks);
+    assert_eq!(h.state().doc.undo_label(), Some("Worksheet view"));
+}
+
 #[test]
 fn f4_applies_to_data_without_a_selection_and_rebuilds_the_grid_cache() {
     let mut h = start_sheet("worksheet-fonts-f4");
@@ -333,6 +389,43 @@ fn f4_data_colors_keep_drafts_across_categories_and_restore_with_undo() {
     assert_eq!(h.state().doc.undo_label(), Some("Worksheet colors"));
     menu(&mut h, "Edit", "Undo");
     assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn f4_data_missing_display_controls_numeric_markers_and_can_be_undone() {
+    use sheaf_core::ColumnData;
+
+    let mut h = start_sheet("worksheet-missing-display");
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Seed cells", |p| {
+        let sheet = p.workbook_mut(book).unwrap().sheet_mut();
+        sheet.columns[0].data = ColumnData::numeric(vec![42.0, f64::NAN, 0.0]);
+        sheet.columns[1].data = ColumnData::text(vec!["--".into()]);
+    });
+    settle(&mut h);
+    assert_eq!(painted_size(&h, "--").len(), 1);
+
+    open(&mut h);
+    category(&mut h, "Data", "Standard");
+    assert!(h.query_by_label("Show Missing as Blank").is_none());
+    category(&mut h, "Standard", "Data");
+    click(&mut h, "Show Missing as Blank");
+    click(&mut h, "Show Missing as Blank");
+    assert_eq!(sheet(&h).view.show_missing_as_blank, None);
+    click(&mut h, "Apply");
+    assert_eq!(sheet(&h).view.show_missing_as_blank, Some(false));
+    assert_eq!(painted_size(&h, "--").len(), 2);
+
+    click(&mut h, "Show Missing as Blank");
+    click(&mut h, "OK");
+    assert_eq!(sheet(&h).view.show_missing_as_blank, Some(true));
+    assert_eq!(painted_size(&h, "--").len(), 1);
+    assert!(sheet(&h).columns[0].numeric().unwrap()[1].is_nan());
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(painted_size(&h, "--").len(), 2);
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(sheet(&h).view.show_missing_as_blank, None);
+    assert_eq!(painted_size(&h, "--").len(), 1);
 }
 
 #[test]

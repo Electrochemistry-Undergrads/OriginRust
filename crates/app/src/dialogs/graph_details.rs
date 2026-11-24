@@ -205,6 +205,8 @@ fn kind_name(k: PlotKind) -> &'static str {
         PlotKind::Sunburst => "Sunburst",
         PlotKind::Sankey => "Sankey",
         PlotKind::Network => "Network",
+        PlotKind::Chord => "Chord",
+        PlotKind::UpSet => "UpSet",
         PlotKind::Pie => "Pie",
         PlotKind::Pie3D => "3D Color Pie",
         PlotKind::PieBw => "2D B&W Pie",

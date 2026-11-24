@@ -2400,11 +2400,9 @@ fn body_cell(
     }
     // A cell outside the column's data range (Set As Begin / Set As End) shows blank, as in Origin.
     let in_range = column.data_range.is_none_or(|d| d.contains(r));
-    let text = if r < column.len() && in_range { column.shown_text(r) } else { String::new() };
+    let text = if r < column.len() && in_range { sheet.view.data_text(column, r, true) } else { String::new() };
     let numeric = column.data.is_numeric();
-    // A missing number shows as an empty cell, as in Origin.
     let is_text_cell = column.data.text_cell(r).is_some();
-    let text = if numeric && !is_text_cell && text == "--" { String::new() } else { text };
     let response = ui.interact(rect, ui.id().with(("cell", column.id.0, r)), Sense::CLICK | Sense::DRAG);
 
     // Pressing selects the cell (Shift extends the block); dragging over other cells extends it.

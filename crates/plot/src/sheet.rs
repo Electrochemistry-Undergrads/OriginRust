@@ -299,6 +299,19 @@ mod tests {
     }
 
     #[test]
+    fn worksheet_image_applies_missing_display_to_numeric_markers() {
+        let mut ws = Worksheet::new("Sheet1");
+        ws.columns.push(Column::new(ColumnId(1), "A", Designation::Y, ColumnData::numeric(vec![0.0, f64::NAN, 1.0])));
+        ws.columns.push(Column::new(ColumnId(2), "B", Designation::Label, ColumnData::text(vec!["--".into()])));
+        let count = |sheet: &Worksheet| sheet_image_svg(sheet).unwrap().matches(">--</text>").count();
+        assert_eq!(count(&ws), 2);
+        ws.view.show_missing_as_blank = Some(true);
+        assert_eq!(count(&ws), 1);
+        ws.view.show_missing_as_blank = Some(false);
+        assert_eq!(count(&ws), 2);
+    }
+
+    #[test]
     fn worksheet_image_preserves_column_label_colors() {
         let mut ws = Worksheet::new("Sheet1");
         let mut column = Column::new(ColumnId(1), "A", Designation::Y, ColumnData::numeric(vec![10.0]));

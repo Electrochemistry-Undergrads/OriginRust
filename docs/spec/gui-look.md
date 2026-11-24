@@ -954,6 +954,34 @@ colors. Clearing either Standard control restores the ordinary fallback for
 that property. The grid, print and worksheet images use the resolved styles.
 Excel writes the styles in the current rectangle and exported label rows.
 
+**Show Missing as Blank (T59).** Origin 2016 exposes this checkbox under
+Data. The probe created numeric missing values in two columns with `0/0`.
+The Data setting hid their `--` markers in the worksheet, PNG export and
+multipage PDF. Clearing it restored the grid markers. Zero, literal `--`
+text, and unused rows kept their appearance. A scripted Standard assignment
+gave pixel-identical worksheet regions. The current Format-tab help lists
+both Data and Standard.
+[Origin Worksheet Properties Format tab](https://docs.originlab.com/origin-help/wksproperties-dialog-format-tab/)
+
+In Sheaf, the Data checkbox starts indeterminate until a sheet has a saved
+choice. The default hides numeric markers in the grid and shows them in
+print and worksheet images. Check the box to hide the markers in all three
+views, or clear it to show them. Apply and OK save the choice for the sheet
+and Undo restores the previous setting.
+
+**Worksheet Properties View switches (T59).** Origin 2016 shows groups for
+row labels, headers and grid lines. The `wproperties` probe confirmed that
+hiding row labels removes the label-row captions and keeps data row numbers.
+Column and row headings hide independently, as do the two grid directions.
+The page-break display adds blue print bounds. Restoring all settings
+returned the worksheet region to its original pixels.
+[Origin Worksheet Properties View tab](https://docs.originlab.com/origin-help/wksproperties-dialog-view-tab/)
+[Origin worksheet properties settings](https://docs.originlab.com/x-function/ref/wproperties/)
+
+In Sheaf, Worksheet Properties opens on Format. Its View tab edits the same
+six switches as the worksheet corner menu. Apply and OK commit View and
+Format drafts in one Undo step.
+
 Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
 The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,
 Dynamic Merge, per-cell numeric display/precision selectors and a Font selector. In this new book,

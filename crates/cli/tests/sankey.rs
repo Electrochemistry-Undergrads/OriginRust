@@ -105,3 +105,45 @@ fn treemaps_and_sunbursts_of_text_columns_count_the_rows() {
         assert!(project.numeric(plot.y).is_none(), "{template}: counted");
     }
 }
+
+#[test]
+fn a_chord_diagram_takes_its_ends_and_an_optional_weight() {
+    let dir = std::env::temp_dir().join(format!("sheaf-cli-chord-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("trade.csv");
+    std::fs::write(&csv, "From,To,Trade\nAnn,Bob,3\nBob,Ann,1\nCy,Ann,2\n").unwrap();
+    let (png, saved) = (dir.join("c.png"), dir.join("c.sheaf"));
+    let (c, p, s) = (csv.to_str().unwrap(), png.to_str().unwrap(), saved.to_str().unwrap());
+    let (ok, e) = sheaf(&["plot", c, "-t", "chord", "-y", "Trade", "-o", p, "--save", s]);
+    assert!(ok, "{e}");
+    let project = sheaf_io::project_file::load(&saved).unwrap();
+    let plot = &project.graphs().next().unwrap().layers[0].plots[0];
+    assert_eq!(plot.kind, sheaf_core::graph::PlotKind::Chord);
+    assert_eq!(project.column(plot.y).unwrap().long_name, "Trade");
+    assert_eq!(project.column(plot.sankey.source.unwrap()).unwrap().long_name, "From");
+    let (ok, e) = sheaf(&["plot", c, "-t", "chord", "--group", "From", "-o", p]);
+    assert!(!ok && e.contains("a chord diagram needs a source and a target"), "{e}");
+}
+
+#[test]
+fn an_upset_plot_takes_the_flag_columns_or_the_named_ones() {
+    let dir = std::env::temp_dir().join(format!("sheaf-cli-upset-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("sets.csv");
+    std::fs::write(&csv, "Id,A,B,C\n10,1,0,1\n11,1,1,0\n12,0,1,1\n13,1,0,0\n").unwrap();
+    let (png, saved) = (dir.join("u.png"), dir.join("u.sheaf"));
+    let (c, p, s) = (csv.to_str().unwrap(), png.to_str().unwrap(), saved.to_str().unwrap());
+    // Without -y: every column of only 0 and 1 (not Id).
+    let (ok, e) = sheaf(&["plot", c, "-t", "upset", "-o", p, "--save", s]);
+    assert!(ok, "{e}");
+    let project = sheaf_io::project_file::load(&saved).unwrap();
+    let plot = &project.graphs().next().unwrap().layers[0].plots[0];
+    assert_eq!(plot.kind, sheaf_core::graph::PlotKind::UpSet);
+    let names: Vec<&str> =
+        plot.sankey.stages.iter().map(|id| project.column(*id).unwrap().long_name.as_str()).collect();
+    assert_eq!(names, ["A", "B", "C"]);
+    let (ok, e) = sheaf(&["plot", c, "-t", "upset", "-y", "A", "-o", p]);
+    assert!(!ok && e.contains("two or more set columns"), "{e}");
+}

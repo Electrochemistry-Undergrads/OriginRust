@@ -472,7 +472,7 @@ impl<'a> SheetTable<'a> {
             ));
             for (k, &c) in cols.iter().enumerate() {
                 let column = &self.sheet.columns[self.cols[c]];
-                let text = column.shown_text(self.rows[r]);
+                let text = self.sheet.view.data_text(column, self.rows[r], false);
                 if text.is_empty() {
                     continue;
                 }
@@ -763,6 +763,39 @@ mod tests {
         let has = |s: &str| ops.iter().any(|o| matches!(o, PrintOp::Text { text, .. } if text == s));
         assert!(has("0.84147"), "five decimals as the grid shows");
         assert!(has("t40"));
+    }
+
+    #[test]
+    fn missing_display_preserves_literal_dashes_and_legacy_output() {
+        let mut ws = sheet();
+        ws.columns[1].data = ColumnData::numeric(vec![0.0, f64::NAN, 1.0]);
+        ws.columns[2].data = ColumnData::text(vec!["--".into()]);
+        let drawn_markers = |sheet: &Worksheet| {
+            let table = SheetTable::new(sheet, PrintStyle::default());
+            let (pages, _) = table.pages_for(&setup());
+            table
+                .draw_page(&pages[0], 1)
+                .iter()
+                .filter(|op| matches!(op, PrintOp::Text { text, .. } if text == "--"))
+                .count()
+        };
+        let legacy = serde_json::to_string(&ws.view).unwrap();
+        assert!(!legacy.contains("show_missing_as_blank"));
+        assert_eq!(drawn_markers(&ws), 2);
+
+        ws.view.show_missing_as_blank = Some(true);
+        let saved = serde_json::to_string(&ws.view).unwrap();
+        ws.view = serde_json::from_str(&saved).unwrap();
+        assert_eq!(ws.view.show_missing_as_blank, Some(true));
+        assert_eq!(drawn_markers(&ws), 1);
+        assert_eq!(ws.view.data_text(&ws.columns[1], 0, false), "0");
+        assert_eq!(ws.view.data_text(&ws.columns[1], 2, false), "1");
+        assert_eq!(ws.view.data_text(&ws.columns[1], 3, false), "");
+
+        ws.view.show_missing_as_blank = Some(false);
+        assert_eq!(drawn_markers(&ws), 2);
+        ws.view = serde_json::from_str(&legacy).unwrap();
+        assert_eq!(ws.view.show_missing_as_blank, None);
     }
 
     fn styled() -> crate::cellformat::CellFormat {

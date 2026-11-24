@@ -57,6 +57,67 @@ fn size_count(h: &mut Harness<'static, SheafApp>, field: &str, value: usize) {
 }
 
 #[test]
+fn f4_size_header_measurements_resize_the_grid_and_undo() {
+    let mut h = start_sheet("worksheet-header-measurements");
+    let before = project(&h).clone();
+    let heading = sheaf_core::sheet_print::head_name(sheet(&h), 0);
+    let center = h.get_by_label(&heading).rect().center();
+
+    open(&mut h);
+    properties_tab(&mut h, "Size");
+    size_count(&mut h, "Column Header Height", 300);
+    size_count(&mut h, "Row Header Width", 200);
+    assert_eq!(project(&h), &before);
+    click(&mut h, "Apply");
+
+    let measurements = sheet(&h).view.header_measurements;
+    assert_eq!(measurements.column_height, Some(300));
+    assert_eq!(measurements.row_width, Some(200));
+    assert_eq!(sheet(&h).view.allocated_rows, None);
+    let delta = h.get_by_label(&heading).rect().center() - center;
+    assert!((delta.x - 50.0).abs() < 1.0, "{delta:?}");
+    assert!((delta.y - 16.0).abs() < 1.0, "{delta:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Worksheet size"));
+
+    size_count(&mut h, "Column Header Height", 0);
+    size_count(&mut h, "Row Header Width", 0);
+    click(&mut h, "Cancel");
+    assert_eq!(sheet(&h).view.header_measurements, measurements);
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn f4_size_zero_hides_headings_and_explicit_sizes_apply_after_font_scaling() {
+    let mut h = start_sheet("worksheet-header-measurements-font");
+    let heading = sheaf_core::sheet_print::head_name(sheet(&h), 0);
+    open(&mut h);
+    properties_tab(&mut h, "Size");
+    size_count(&mut h, "Column Header Height", 0);
+    size_count(&mut h, "Row Header Width", 160);
+    click(&mut h, "Apply");
+    assert!(h.query_by_label(&heading).is_none());
+    assert!(sheet(&h).view.column_header);
+
+    properties_tab(&mut h, "Format");
+    category(&mut h, "Data", "Standard");
+    size(&mut h, "18");
+    properties_tab(&mut h, "Size");
+    size_count(&mut h, "Column Header Height", 200);
+    click(&mut h, "Apply");
+    let measurements = sheet(&h).view.header_measurements;
+    assert_eq!(measurements.column_height, Some(200));
+    assert_eq!(measurements.row_width, Some(320));
+    assert!(h.query_by_label(&heading).is_some());
+
+    size_count(&mut h, "Row Header Width", 0);
+    click(&mut h, "OK");
+    assert_eq!(sheet(&h).view.header_measurements.row_width, Some(0));
+    assert!(sheet(&h).view.row_header);
+    assert!(h.query_by_label("Long Name").is_none());
+}
+
+#[test]
 fn f4_size_grows_sparse_rows_and_appends_empty_columns() {
     let mut h = start_sheet("worksheet-size-grow");
     let before = project(&h).clone();

@@ -8,7 +8,12 @@ Management Add. Auto Offset Overlapped Axes works for the five linked full-frame
 offset setting, so Sheaf keeps that preset's control disabled. User Defined now supports
 edge selection, an optional parent and independent or straight X and Y links (21.15).
 Paired opposite axes draw tick labels and titles, with separate automatic offsets on each
-edge of the same frame. Custom scales remain open.
+edge of the same frame. Custom Formula scale links accept independent From and To expressions
+for X and Y in the New Layer (Axes) dialog (21.15). Origin 2016 returned 12–64 over parent
+X limits of 2–14 for `X1+10` and `X2+50`. Sheaf resolves each linked interval from the
+current parent, preserves formulas in Sheaf files and OPJ companions, and warns on bare
+OPJ export. The separate nonlinear Custom Formula and Discrete scale types remain open
+in Layer Management Add (21.17).
 **Size:** L, three slices.
 Legend-anchor follow-up (`codex/multi-y-template-legends`): the four stock templates use
 measured top-left positions above the frame, Arial 22 pt (YY-YY: 20 pt), and no frame or background.
@@ -48,8 +53,8 @@ Preset Open Dialog follow-up (`codex/t61-add-layer-dialog`, merged 2026-11-19 by
 open New Layer (Axes) with the existing nine kinds and Activate New Layer. The official layadd
 contract supports these controls; no new live Native measurement is claimed. Existing layer
 helpers, links, geometry, history and saves are reused. Input graph/parent capture and
-revision/generation rejection are explicit Sheaf policies. User Defined, automatic overlap
-offsets and custom scale expressions remain disabled; no model/backend/IO contract changes.
+revision/generation rejection are explicit Sheaf policies. Later 21.15 follow-ups enabled
+User Defined, automatic overlap offsets and custom endpoint links.
 
 Layer Management Add follow-up (2026-11-22, graphing 21.17): the nine presets can be applied to
 the preview with a parent layer and independent X and Y scale choices. Inset With Data copies every

@@ -1375,7 +1375,7 @@ fn layer_tab(
         link_tab(ui, graph, l);
         return;
     }
-    let link = graph.layers[l].link.map(|k| k.parent);
+    let link = graph.layers[l].link.as_ref().map(|k| k.parent);
     // The ids that `\l(n)` and `%(n)` in the legend text refer to.
     let stock_multi_y = graph.layers[l].legend.stock_multi_y;
     let legend_ids = if stock_multi_y {
@@ -1570,9 +1570,9 @@ fn add_plot_ui(ui: &mut egui::Ui, layer: &mut Layer, sources: &[Source], from: &
 
 /// Origin's Link Axes Scales tab (measured, graphing spec 18.4): Link to (None or an earlier
 /// layer), then an X Axis Link and a Y Axis Link group with None, Straight (1 to 1), Align and
-/// Custom. Sheaf has None and Straight; Align and Custom are shown greyed with their boxes.
+/// Custom. Formulas created in New Layer (Axes) are shown here.
 fn link_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize) {
-    let current = graph.layers[l].link.map(|k| k.parent);
+    let current = graph.layers[l].link.as_ref().map(|k| k.parent);
     let name = |p: Option<usize>| p.map_or_else(|| "None".to_string(), |p| format!("Layer{}", p + 1));
     let children = graph.has_children(l);
     ui.horizontal(|ui| {
@@ -1604,16 +1604,11 @@ fn link_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize) {
         for (col, axis) in cols.iter_mut().zip(["X", "Y"]) {
             group_box(col, &format!("{axis} Axis Link"), |ui| {
                 ui.add_enabled_ui(linked, |ui| {
-                    let mut value = layer.link.map_or(ScaleLink::None, |k| if axis == "X" { k.x } else { k.y });
-                    ui.radio_value(&mut value, ScaleLink::None, "None");
-                    ui.radio_value(&mut value, ScaleLink::Straight, "Straight (1 to 1)");
-                    if let Some(k) = layer.link.as_mut() {
-                        if axis == "X" {
-                            k.x = value;
-                        } else {
-                            k.y = value;
-                        }
-                    }
+                    let mut none = ScaleLink::None;
+                    let value =
+                        layer.link.as_mut().map_or(&mut none, |k| if axis == "X" { &mut k.x } else { &mut k.y });
+                    ui.radio_value(value, ScaleLink::None, "None");
+                    ui.radio_value(value, ScaleLink::Straight, "Straight (1 to 1)");
                     let not_yet = "Not in Sheaf yet: the scale is a formula of the parent's";
                     ui.add_enabled(false, egui::RadioButton::new(false, "Align")).on_disabled_hover_text(not_yet);
                     let boxes = |ui: &mut egui::Ui, labels: &[String]| {
@@ -1629,8 +1624,15 @@ fn link_tab(ui: &mut egui::Ui, graph: &mut Graph, l: usize) {
                         }
                     };
                     boxes(ui, &[axis.to_string()]);
-                    ui.add_enabled(false, egui::RadioButton::new(false, "Custom")).on_disabled_hover_text(not_yet);
-                    boxes(ui, &[format!("{axis}1"), format!("{axis}2")]);
+                    let custom = matches!(value, ScaleLink::Custom { .. });
+                    ui.add_enabled(false, egui::RadioButton::new(custom, "Custom"))
+                        .on_disabled_hover_text("Set endpoint formulas in New Layer (Axes).");
+                    if let ScaleLink::Custom { from, to } = value {
+                        ui.label(format!("{axis}1 = {from}"));
+                        ui.label(format!("{axis}2 = {to}"));
+                    } else {
+                        boxes(ui, &[format!("{axis}1"), format!("{axis}2")]);
+                    }
                 });
             });
         }

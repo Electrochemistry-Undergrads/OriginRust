@@ -182,6 +182,7 @@ enum Pending {
 
 /// More new windows than this at once are not all opened.
 const MAX_TABS_AT_ONCE: usize = 8;
+pub(crate) const MAX_ADDED_COLUMNS: usize = 1000;
 
 struct RenameDialog {
     window: WindowId,
@@ -8324,7 +8325,7 @@ impl SheafApp {
             egui::Window::new("Add New Columns").open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     let label = ui.label("Number of columns to add");
-                    ui.add(egui::DragValue::new(count).range(1..=1000)).labelled_by(label.id);
+                    ui.add(egui::DragValue::new(count).range(1..=MAX_ADDED_COLUMNS)).labelled_by(label.id);
                 });
                 ui.horizontal(|ui| {
                     if ui.button("OK").clicked() {
@@ -9000,7 +9001,7 @@ fn duplicate_sheet(p: &mut Project, book: WindowId, sheet: usize) {
     }
 }
 
-fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
+pub(crate) fn delete_columns(project: &mut Project, columns: &[ColumnId]) {
     if columns.is_empty() {
         return;
     }

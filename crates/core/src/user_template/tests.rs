@@ -165,7 +165,7 @@ fn a_double_y_template_puts_the_columns_on_the_left_and_right_axes_in_turn() {
     assert_eq!(layers[0].plots.iter().map(|q| q.y).collect::<Vec<_>>(), [ys[0], ys[2]]);
     assert_eq!(layers[1].plots.iter().map(|q| q.y).collect::<Vec<_>>(), [ys[1]]);
     assert_eq!(layers[1].y_axis.title.as_deref(), Some("right"));
-    assert_eq!(layers[1].link.unwrap().parent, 0);
+    assert_eq!(layers[1].link.as_ref().unwrap().parent, 0);
 
     let one = p.plot_with_user_template(&t, &ys[..1]).unwrap();
     let layers = &p.graph(one).unwrap().layers;

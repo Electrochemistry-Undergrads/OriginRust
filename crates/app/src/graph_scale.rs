@@ -86,8 +86,8 @@ pub fn rect_to_ends(g: &LayerGeometry, a: (f64, f64), b: (f64, f64)) -> Option<(
 /// The axis that holds the limits shown by axis `y` of layer `layer`: the layer's own, or the
 /// parent's where the layer follows it with a straight link.
 fn owner(graph: &Graph, layer: usize, y: bool) -> usize {
-    match graph.layers.get(layer).and_then(|l| l.link) {
-        Some(k) if (if y { k.y } else { k.x }) == ScaleLink::Straight => k.parent,
+    match graph.valid_link(layer) {
+        Some(k) if *(if y { &k.y } else { &k.x }) == ScaleLink::Straight => k.parent,
         _ => layer,
     }
 }

@@ -95,8 +95,8 @@ fn y2_puts_columns_on_a_right_axis_with_its_own_limits_and_title() {
     let p = load(&saved);
     let g = graph(&p);
     assert_eq!(g.layers.len(), 2);
-    let link = g.layers[1].link.expect("linked");
-    assert_eq!((link.parent, link.x, link.y), (0, ScaleLink::Straight, ScaleLink::None));
+    let link = g.layers[1].link.as_ref().expect("linked");
+    assert_eq!((link.parent, &link.x, &link.y), (0, &ScaleLink::Straight, &ScaleLink::None));
     let y2 = &g.layers[1].y_axis;
     assert_eq!((y2.min, y2.max, y2.title.as_deref()), (Some(-1.0), Some(1.0), Some("Charge")));
     assert_eq!(layer_columns(&p, 0), ["Bv"]);

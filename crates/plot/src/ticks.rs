@@ -62,6 +62,11 @@ impl ResolvedBreak {
 }
 
 impl ResolvedAxis {
+    /// Axis limits in the direction they are drawn.
+    pub fn endpoints(&self) -> (f64, f64) {
+        if self.reversed { (self.max, self.min) } else { (self.min, self.max) }
+    }
+
     /// The ticks that carry a label and the label: the major ticks, then the minor ones when the axis
     /// writes their labels.
     pub fn labelled(&self) -> impl Iterator<Item = (f64, &String)> {

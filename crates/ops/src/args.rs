@@ -3767,6 +3767,21 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Cox proportional hazards: --y COVARIATE[,COVARIATE..],TIME,CENSOR; coefficients, hazard ratios with intervals,
+    /// likelihood-ratio, Wald and score tests, and the survival at the covariate means.
+    Cox {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The value of the censor column that marks a censored case.
+        #[arg(long, default_value = "1")]
+        censor: String,
+        /// Confidence level of the hazard-ratio intervals, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        confidence: f64,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Life data regression: --y COVARIATE[,COVARIATE..],TIME,CENSOR; an accelerated failure time model (Weibull,
     /// lognormal or exponential) of log time on the covariates with right censoring.
     Lifereg {
@@ -3849,6 +3864,12 @@ pub enum AnalyzeTool {
         /// sum, mean, count, min, max or median.
         #[arg(long, default_value = "mean")]
         stat: String,
+        /// How many periods make one group (15 with --period minute: quarter hours).
+        #[arg(long, default_value_t = 1)]
+        every: u32,
+        /// The month (1 to 12) a fiscal year starts in, for months, quarters and years.
+        #[arg(long, default_value_t = 1)]
+        fiscal_start: u32,
     },
     /// Binned scatter: X cut into bins of equal width or equal counts; the mean, SD, SE and count of each --y
     /// column's Y per bin; makes a graph of the data with the bin means.

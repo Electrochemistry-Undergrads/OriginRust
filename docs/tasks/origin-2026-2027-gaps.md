@@ -21,7 +21,7 @@ outputs or UI behavior.
 | Named cells and ranges | 2022 | Named cells done (T396: data cell Define Name..., formulas read the name, expression-language "Named cells"); named ranges of one column done (T400: Define Name on selected cells, `mean(Name)`); blocks of several columns and a name manager open. | [2022][o22] |
 | Cell notes | 2022 | Done (T36). Attach a comment to an individual data cell, show an indicator and read the note in place. | [2022][o22] |
 | Worksheet frozen panes | 2023 | Done (T34). Keep selected data rows or columns visible while scrolling the data area. | [2023][o23] |
-| Time Series Pivot | 2025 | Calendar periods done (T358: Worksheet > Time Series Pivot, minute to year, six statistics); custom intervals and fiscal years done (T404: every N periods, fiscal year start month); a second grouping remains. Aggregate timestamped records by calendar intervals and a second period grouping, including fiscal calendars and custom intervals. | [2025][o25] |
+| Time Series Pivot | 2025 | Calendar periods done (T358: Worksheet > Time Series Pivot, minute to year, six statistics); custom intervals and fiscal years done (T404: every N periods, fiscal year start month); a second grouping done (T420: hour of day, day of week or month of year). Aggregate timestamped records by calendar intervals and a second period grouping, including fiscal calendars and custom intervals. | [2025][o25] |
 | Project Browser | 2025b | Search a project-wide list of sheets, columns, graphs and folders, preview matches and apply metadata edits to multiple selections. | [2025b][o25b] |
 | Window Switcher | 2025b | Done (T42). Cycle through open child windows with keyboard shortcuts and previews. | [2025b][o25b] |
 | Interactive formula references | 2025b | Insert a cell, column or range into the formula being edited by clicking or dragging in the sheet. | [2025b][o25b] |
@@ -30,7 +30,7 @@ outputs or UI behavior.
 | Find in Project Files | 2026 / 2026b | Done for names, labels, comments, units, cells and graph text (T361: File > Find in Project Files...); notes windows done (T407); background searching remains. Search a collection of saved projects for text in metadata, graph labels, notes and data cells, then open the matching project. | [2026][o26] · [2026b][o26b] |
 | Repeat Last Action and Duplicate Operation | 2026 | Analyses done (T360: Analysis > Repeat Last Analysis on the new selection; T414: on all sheets of the workbook); plotting actions remain. Repeat the last plotting action on another selection, reopen the last tool dialog and apply a configured analysis to other sheets. | [2026][o26] |
 | Mirror Columns and sheets | 2026b | Create a live reference to source data elsewhere in a project with a single stored copy. Inspect the source and destination relationships. | [2026b][o26b] |
-| Insert columns across sheets | 2026b | Workbook and project scope done (T359: Column > Add Column to All Sheets..., with a formula); folder scope and insertion after a named column done (T412). Add or insert a matching column and its formula in multiple related sheets across a workbook, folder or project. | [2026b][o26b] |
+| Insert columns across sheets | 2026b | Workbook and project scope done (T359: Column > Add Column to All Sheets..., with a formula); folder scope and insertion after a named column done (T412); sheets chosen one by one done (T418). Add or insert a matching column and its formula in multiple related sheets across a workbook, folder or project. | [2026b][o26b] |
 | Sticky Notes | 2027 | Add searchable, collapsible notes to graph windows, workbooks and individual sheets with indicators and color choices. | [2027][o27] |
 | Workbook operation tree | 2027 | Group analysis operations with their result sheets in Object Manager. Navigate to inputs or outputs, edit operation parameters and change recalculation mode from the tree. | [2027][o27] |
 
@@ -42,7 +42,7 @@ outputs or UI behavior.
 | Data Connectors and periodic refresh | 2019b / 2026 | Keep a linked source and its selected data subset in the workbook. Reload the link on a configurable, pausable timer and optionally keep linked data out of the saved project. | [2019b][o19b] · [2026][o26] |
 | Linked HTML/Markdown analysis reports | 2019b | Build a report embedding live links to result values, metadata and figures. Reuse the report with batch analysis and export it as a web page. | [2019b][o19b] |
 | Import PDF Tables | 2021 App | Extract table cells from a PDF into worksheets. | [2021][o21] |
-| Formula-preserving Excel and Sheets import | 2026 | Import Excel cell expressions or paste spreadsheet formulas as editable calculations. Surface unsupported formulas in the affected cells. | [2026][o26] |
+| Formula-preserving Excel and Sheets import | 2026 | Same-row column formulas done (T417: an Excel column of one same-row formula imports as its column formula, others warn); pasted spreadsheet formulas and per-cell formulas remain. Import Excel cell expressions or paste spreadsheet formulas as editable calculations. Surface unsupported formulas in the affected cells. | [2026][o26] |
 | GraphPad Prism connector | 2026b App | Import Prism project or template data and map it to structured tables that preserve group and replicate roles. | [2026b][o26b] |
 
 ## Graphing and data exploration

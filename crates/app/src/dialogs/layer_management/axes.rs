@@ -1,6 +1,13 @@
 //! Axis settings that can be shared across the selected preview layers.
 use eframe::egui;
-use sheaf_core::graph::{Axis, AxisSide, Coords, Graph, ScaleKind, ScaleLink, TickDirection};
+use sheaf_core::graph::{Axis, AxisSide, Coords, Graph, OppositeAxisStyle, ScaleKind, ScaleLink, TickDirection};
+
+const TICK_DIRECTIONS: [(TickDirection, &str); 4] = [
+    (TickDirection::Both, "In & Out"),
+    (TickDirection::In, "In"),
+    (TickDirection::Out, "Out"),
+    (TickDirection::None, "None"),
+];
 
 #[derive(Clone, Default, PartialEq)]
 pub(super) struct AxisSettings {
@@ -11,7 +18,7 @@ pub(super) struct AxisSettings {
     labels: Option<bool>,
     formula: Option<String>,
     opposite_line: Option<bool>,
-    opposite_ticks: Option<bool>,
+    opposite_style: OppositeAxisStyle,
 }
 
 #[derive(Default)]
@@ -69,7 +76,12 @@ impl AxisSettings {
             labels: common(axes.clone().map(|(axis, _)| axis.show_tick_labels)),
             formula: common(axes.clone().map(|(axis, _)| &axis.tick_label_formula)).cloned(),
             opposite_line: common(axes.clone().map(|(axis, _)| axis.show_opposite)),
-            opposite_ticks: common(axes.map(|(axis, _)| axis.opposite_ticks)),
+            opposite_style: OppositeAxisStyle {
+                tick_direction: common(axes.clone().flat_map(|(axis, _)| axis.opposite_tick_directions())),
+                show_title: common(axes.clone().map(|(axis, _)| axis.opposite_title_visible())),
+                show_tick_labels: common(axes.clone().map(|(axis, _)| axis.opposite_labels_visible())),
+                tick_label_formula: common(axes.map(|(axis, _)| axis.opposite_formula())).map(str::to_owned),
+            },
         }
     }
 
@@ -82,7 +94,18 @@ impl AxisSettings {
             labels: changed(&self.labels, &original.labels),
             formula: changed(&self.formula, &original.formula),
             opposite_line: changed(&self.opposite_line, &original.opposite_line),
-            opposite_ticks: changed(&self.opposite_ticks, &original.opposite_ticks),
+            opposite_style: OppositeAxisStyle {
+                tick_direction: changed(&self.opposite_style.tick_direction, &original.opposite_style.tick_direction),
+                show_title: changed(&self.opposite_style.show_title, &original.opposite_style.show_title),
+                show_tick_labels: changed(
+                    &self.opposite_style.show_tick_labels,
+                    &original.opposite_style.show_tick_labels,
+                ),
+                tick_label_formula: changed(
+                    &self.opposite_style.tick_label_formula,
+                    &original.opposite_style.tick_label_formula,
+                ),
+            },
         }
     }
 
@@ -111,8 +134,19 @@ impl AxisSettings {
         if let Some(line) = self.opposite_line {
             axis.show_opposite = line;
         }
-        if let Some(ticks) = self.opposite_ticks {
-            axis.opposite_ticks = ticks;
+        let style = &self.opposite_style;
+        if let Some(direction) = style.tick_direction {
+            axis.opposite_ticks = direction != TickDirection::None;
+            axis.opposite_style.tick_direction = Some(direction);
+        }
+        if style.show_title.is_some() {
+            axis.opposite_style.show_title = style.show_title;
+        }
+        if style.show_tick_labels.is_some() {
+            axis.opposite_style.show_tick_labels = style.show_tick_labels;
+        }
+        if style.tick_label_formula.is_some() {
+            axis.opposite_style.tick_label_formula.clone_from(&style.tick_label_formula);
         }
     }
 }
@@ -162,33 +196,10 @@ fn axis_controls(ui: &mut egui::Ui, axis: &str, edges: [&str; 2], draft: &mut Ax
         );
         ui.end_row();
         ui.add_enabled_ui(draft.side != Some(AxisSide::Hidden), |ui| {
-            combo(
-                ui,
-                &format!("{axis} Tick"),
-                &mut draft.ticks,
-                "Mixed",
-                [
-                    (TickDirection::Both, "In & Out"),
-                    (TickDirection::In, "In"),
-                    (TickDirection::Out, "Out"),
-                    (TickDirection::None, "None"),
-                ],
-            );
+            combo(ui, &format!("{axis} Tick"), &mut draft.ticks, "Mixed", TICK_DIRECTIONS);
         });
         ui.end_row();
-        let label = ui.label(format!("{axis} Formula"));
-        ui.horizontal(|ui| {
-            let mut formula = draft.formula.clone().unwrap_or_default();
-            let hint = if draft.formula.is_none() { "Mixed" } else { "x" };
-            let edit = egui::TextEdit::singleline(&mut formula).hint_text(hint).desired_width(105.0);
-            if ui.add(edit).labelled_by(label.id).changed() {
-                draft.formula = Some(formula);
-            }
-            if draft.formula.is_none() && ui.small_button("Clear").clicked() {
-                draft.formula = Some(String::new());
-            }
-        });
-        ui.end_row();
+        formula_control(ui, format!("{axis} Formula"), &mut draft.formula);
     });
     ui.horizontal(|ui| {
         checkbox(ui, format!("{axis} Title"), &mut draft.title);
@@ -196,8 +207,40 @@ fn axis_controls(ui: &mut egui::Ui, axis: &str, edges: [&str; 2], draft: &mut Ax
     });
     ui.horizontal(|ui| {
         checkbox(ui, format!("{axis} Opposite Line"), &mut draft.opposite_line);
-        checkbox(ui, format!("{axis} Opposite Ticks"), &mut draft.opposite_ticks);
+        checkbox(ui, format!("{axis} Opposite Title"), &mut draft.opposite_style.show_title);
+        checkbox(ui, format!("{axis} Opposite Tick Label"), &mut draft.opposite_style.show_tick_labels);
     });
+    egui::Grid::new(("lm_axis_opposite", axis)).num_columns(2).show(ui, |ui| {
+        let can_choose_ticks =
+            draft.opposite_line != Some(false) || draft.opposite_style.tick_direction != Some(TickDirection::None);
+        ui.add_enabled_ui(can_choose_ticks && draft.side != Some(AxisSide::Hidden), |ui| {
+            combo(
+                ui,
+                &format!("{axis} Opposite Ticks"),
+                &mut draft.opposite_style.tick_direction,
+                "Mixed",
+                TICK_DIRECTIONS,
+            );
+        });
+        ui.end_row();
+        formula_control(ui, format!("{axis} Opposite Formula"), &mut draft.opposite_style.tick_label_formula);
+    });
+}
+
+fn formula_control(ui: &mut egui::Ui, name: String, value: &mut Option<String>) {
+    let label = ui.label(name);
+    ui.horizontal(|ui| {
+        let mut formula = value.clone().unwrap_or_default();
+        let hint = if value.is_none() { "Mixed" } else { "x" };
+        let edit = egui::TextEdit::singleline(&mut formula).hint_text(hint).desired_width(105.0);
+        if ui.add(edit).labelled_by(label.id).changed() {
+            *value = Some(formula);
+        }
+        if value.is_none() && ui.small_button("Clear").clicked() {
+            *value = Some(String::new());
+        }
+    });
+    ui.end_row();
 }
 
 fn combo<'a, T: Copy + PartialEq>(

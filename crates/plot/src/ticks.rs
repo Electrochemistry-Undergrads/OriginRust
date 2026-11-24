@@ -4,6 +4,7 @@
 use sheaf_core::autorange::{self, LogTicks};
 use sheaf_core::datetime::{self, DatePattern, TimePattern};
 use sheaf_core::graph::{AutoRange, Axis, AxisBreak, ScaleKind, TickFormat};
+use std::borrow::Cow;
 
 /// The multiplication sign used in scientific tick labels.
 const TIMES: char = '\u{d7}';
@@ -284,7 +285,7 @@ pub fn resolve_axis_edges(axis: &Axis, data_min_max: Option<(f64, f64)>, free: (
     r.reversed ^= axis.reverse;
     apply_break(axis, &mut r);
     add_special_ticks(axis, &mut r);
-    apply_label_formula(axis, &mut r);
+    apply_label_formula(axis, &mut r, axis.tick_label_formula.trim(), false);
     if !axis.tick_prefix.is_empty() || !axis.tick_suffix.is_empty() {
         for label in r.labels.iter_mut().filter(|l| !l.is_empty()) {
             *label = format!("{}{label}{}", axis.tick_prefix, axis.tick_suffix);
@@ -313,10 +314,20 @@ fn add_special_ticks(axis: &Axis, r: &mut ResolvedAxis) {
     }
 }
 
-/// Writes the tick labels from the formula of `axis` (an expression of `x`, the tick value), and the
-/// labels of the minor ticks when the axis has them. Special ticks with their own text keep it.
-fn apply_label_formula(axis: &Axis, r: &mut ResolvedAxis) {
-    let formula = axis.tick_label_formula.trim();
+/// Apply a facing formula to the shared positions. An empty override shows the numeric tick values.
+pub(crate) fn opposite_labels<'a>(axis: &Axis, resolved: &'a ResolvedAxis) -> Cow<'a, ResolvedAxis> {
+    let Some(formula) = axis.opposite_style.tick_label_formula.as_deref() else {
+        return Cow::Borrowed(resolved);
+    };
+    let formula = formula.trim();
+    let mut facing = resolved.clone();
+    apply_label_formula(axis, &mut facing, if formula.is_empty() { "x" } else { formula }, true);
+    Cow::Owned(facing)
+}
+
+/// Writes labels from an expression of the tick value. Special ticks with their own text keep it.
+/// When relabelling one edge, decorate only replacement labels because inherited labels already have affixes.
+fn apply_label_formula(axis: &Axis, r: &mut ResolvedAxis, formula: &str, with_affixes: bool) {
     let eps = 1e-9 * (r.max - r.min).abs();
     let own: Vec<bool> = r
         .major
@@ -345,7 +356,12 @@ fn apply_label_formula(axis: &Axis, r: &mut ResolvedAxis) {
     };
     for (i, l) in write(&r.major).into_iter().enumerate() {
         if !own[i] {
-            r.labels[i] = l;
+            r.labels[i] =
+                if with_affixes && !l.is_empty() && (!axis.tick_prefix.is_empty() || !axis.tick_suffix.is_empty()) {
+                    format!("{}{l}{}", axis.tick_prefix, axis.tick_suffix)
+                } else {
+                    l
+                };
         }
     }
     if axis.minor_tick_labels && !r.minor.is_empty() {
@@ -864,6 +880,7 @@ mod tests {
             show_opposite: false,
             opposite_ticks: false,
             opposite_offset_pct: None,
+            opposite_style: Default::default(),
             major_grid: None,
             minor_grid: None,
             side: Default::default(),

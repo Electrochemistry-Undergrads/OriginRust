@@ -3,7 +3,7 @@
 //! ranges like any other axis.
 
 use super::*;
-use sheaf_core::graph::{AxisSide, ScaleLink};
+use sheaf_core::graph::{AxisSide, OppositeAxisStyle, ScaleLink, TickDirection};
 use sheaf_core::layers::{NewLayerKind, UserDefinedLayer};
 use sheaf_core::template::Template;
 
@@ -221,6 +221,86 @@ fn paired_axes_draw_pickable_labels_and_titles_at_separate_offsets() {
     }
     let b = margin::drawn_bounds(&scene, &FixedMetrics, None).unwrap();
     assert!(b.x < left && b.x + b.w > right && b.y < top && b.y + b.h > bottom, "{b:?}");
+}
+
+#[test]
+fn opposite_axis_style_sets_its_own_tick_direction_and_labels() {
+    let (x, shape) = super::tests::golden_data();
+    let (mut p, g) = super::tests::project(Template::Line, x, vec![shape(1.0)]);
+    let axis = &mut p.graph_mut(g).unwrap().layers[0].x_axis;
+    axis.min = Some(0.0);
+    axis.max = Some(5.0);
+    axis.major_step = Some(1.0);
+    axis.minor_ticks = 0;
+    axis.major_tick = TickDirection::Out;
+    axis.tick_color = Some(sheaf_core::Color::RED);
+    axis.show_opposite = true;
+    axis.opposite_ticks = true;
+    axis.title = Some("Facing Title".into());
+    axis.show_title = false;
+    axis.opposite_style = OppositeAxisStyle {
+        tick_direction: Some(TickDirection::In),
+        show_title: Some(true),
+        show_tick_labels: Some(true),
+        tick_label_formula: Some("10*x+100".into()),
+    };
+
+    for show_line in [true, false] {
+        p.graph_mut(g).unwrap().layers[0].x_axis.show_opposite = show_line;
+        let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+        let layer = &scene.layers[0];
+        let frame = layer.clip;
+        let bottom = frame.y + frame.h;
+        assert!(layer.overlay.iter().any(|i| matches!(i, scene::Item::Text(t) if t.text == "100" && t.y < frame.y)));
+        assert!(layer.overlay.iter().any(|i| matches!(i, scene::Item::Text(t) if t.text == "0" && t.y > bottom)));
+        let titles: Vec<_> = layer
+            .overlay
+            .iter()
+            .filter_map(|i| match i {
+                scene::Item::Text(t) if t.text == "Facing Title" => Some(t.y),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(titles.len(), 1);
+        assert!(titles[0] < frame.y);
+
+        let ticks: Vec<_> = layer
+            .overlay
+            .iter()
+            .filter_map(|i| match i {
+                scene::Item::Path { d, stroke: Some(s), .. } if s.color == sheaf_core::Color::RED => {
+                    Some(hit::path_points(d))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(ticks.len(), if show_line { 2 } else { 1 });
+        for [(ax, ay), (bx, by)] in ticks[0].as_chunks::<2>().0 {
+            assert_eq!(ax, bx);
+            assert!((*ay).min(*by) >= bottom - 0.002 && (*ay).max(*by) > bottom + 0.002);
+        }
+        if show_line {
+            for [(ax, ay), (bx, by)] in ticks[1].as_chunks::<2>().0 {
+                assert_eq!(ax, bx);
+                assert!((*ay).min(*by) >= frame.y - 0.002 && (*ay).max(*by) > frame.y + 0.002);
+            }
+        }
+    }
+
+    let axis = &mut p.graph_mut(g).unwrap().layers[0].x_axis;
+    axis.tick_label_formula = "x+20".into();
+    axis.tick_prefix = "[".into();
+    axis.tick_suffix = "]".into();
+    axis.opposite_style.tick_label_formula = Some(String::new());
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    let layer = &scene.layers[0];
+    assert!(layer.overlay.iter().any(|i| matches!(i, scene::Item::Text(t) if t.text == "[0]" && t.y < layer.clip.y)));
+    assert!(
+        layer
+            .overlay
+            .iter()
+            .any(|i| matches!(i, scene::Item::Text(t) if t.text == "[20]" && t.y > layer.clip.y + layer.clip.h))
+    );
 }
 
 #[test]

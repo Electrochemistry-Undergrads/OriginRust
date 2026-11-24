@@ -1,6 +1,7 @@
 use super::*;
 use sheaf_core::graph::{
-    AxisSide, Frame, LayerBorder, LayerDrawingOrder, LayerElementScale, ScaleKind, ScaleLink, TickDirection,
+    AxisSide, Frame, LayerBorder, LayerDrawingOrder, LayerElementScale, OppositeAxisStyle, ScaleKind, ScaleLink,
+    TickDirection,
 };
 
 /// The sample project with Graph1 made of `layers` independent layers (copies of its first one).
@@ -381,6 +382,61 @@ fn axes_apply_only_the_changed_settings_to_selected_layers() {
         assert_eq!(y.show_title, original[i].y_axis.show_title);
     }
     assert!(sheaf_plot::render_svg(project(&h), id).unwrap().contains("<svg"));
+    menu(&mut h, "Edit", "Undo Layer Management");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn axes_facing_style_changes_only_the_explicit_settings_and_round_trips() {
+    let mut h = with_layers("lm-opposite-axis-style", 3);
+    let id = graph(&h).id;
+    h.state_mut().doc.apply("Existing facing style", |p| {
+        let layers = &mut p.graph_mut(id).unwrap().layers;
+        layers[1].x_axis.opposite_style.show_title = Some(true);
+        layers[1].x_axis.opposite_style.tick_label_formula = Some("x+100".into());
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    for action in ["Cancel", "OK"] {
+        open(&mut h);
+        click(&mut h, "Layer1");
+        click(&mut h, "Layer2");
+        click(&mut h, "Axes");
+        assert!(h.get_by_label("Apply").accesskit_node().is_disabled());
+        click(&mut h, "X Opposite Line");
+        click(&mut h, "X Opposite Ticks");
+        click(&mut h, "In");
+        click(&mut h, "X Opposite Tick Label");
+        click(&mut h, "X Opposite Formula");
+        h.event(egui::Event::Text("x+200".into()));
+        settle(&mut h);
+        click(&mut h, "Apply");
+        assert_eq!(project(&h), &before);
+        click(&mut h, action);
+    }
+
+    let mut expected = before.clone();
+    for layer in &mut expected.graph_mut(id).unwrap().layers[..2] {
+        let axis = &mut layer.x_axis;
+        axis.show_opposite = true;
+        axis.opposite_ticks = true;
+        axis.opposite_style = OppositeAxisStyle {
+            tick_direction: Some(TickDirection::In),
+            show_tick_labels: Some(true),
+            tick_label_formula: Some("x+200".into()),
+            ..axis.opposite_style.clone()
+        };
+    }
+    assert_eq!(project(&h), &expected);
+    let folder = save_dir("lm-opposite-axis-style");
+    for extension in ["sheaf", "opj"] {
+        let saved = sheaf_io::save::save_project(project(&h), &folder.join(format!("facing.{extension}"))).unwrap();
+        if extension == "opj" {
+            assert!(saved.warnings.iter().any(|warning| warning.contains("opposite X axis style")));
+        }
+        let reopened = sheaf_io::open_project(&saved.path).unwrap();
+        assert_eq!(reopened.project.graph(id), expected.graph(id));
+    }
     menu(&mut h, "Edit", "Undo Layer Management");
     assert_eq!(project(&h), &before);
 }

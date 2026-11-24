@@ -30,6 +30,7 @@ use sheaf_core::graph::{
     PlotKind, ScaleLink, StatPlot, TickDirection,
 };
 use sheaf_core::{Project, WindowId};
+use std::borrow::Cow;
 
 /// Builds the scene of a graph.
 pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasurer) -> Result<Scene, PlotError> {
@@ -569,21 +570,24 @@ impl LabelEdges {
         LabelEdges { left: f64::INFINITY, right: f64::NEG_INFINITY, top: f64::INFINITY, bottom: f64::NEG_INFINITY };
 }
 
-/// Lay out the labels and title on the facing side using the shared scale and style.
-fn paired_axis(axis: &Axis) -> Option<Axis> {
-    let offset_pct = axis.opposite_offset_pct?;
-    if !(axis.show_opposite || axis.opposite_ticks) || axis.side == AxisSide::Hidden {
+/// Lay out the labels and title on the facing side using the shared data scale.
+fn paired_axis<'a>(axis: &Axis, resolved: &'a ResolvedAxis) -> Option<(Axis, Cow<'a, ResolvedAxis>)> {
+    let show_title = axis.opposite_title_visible();
+    let show_labels = axis.opposite_labels_visible();
+    let visible_edge = (axis.show_opposite || axis.opposite_ticks_shown())
+        && (axis.opposite_offset_pct.is_some() || !axis.opposite_style.is_default());
+    if axis.side == AxisSide::Hidden || !(visible_edge || show_title || show_labels) {
         return None;
     }
     let mut other = axis.clone();
     other.side = if axis.side == AxisSide::Opposite { AxisSide::Normal } else { AxisSide::Opposite };
-    other.offset_pct = offset_pct;
+    other.offset_pct = axis.opposite_offset_pct.unwrap_or_default();
     other.rug = axis.rug_opposite.clone();
-    if !axis.opposite_ticks {
-        other.major_tick = TickDirection::None;
-        other.minor_tick = TickDirection::None;
-    }
-    Some(other)
+    other.show_title = show_title;
+    other.show_tick_labels = show_labels;
+    [other.major_tick, other.minor_tick] = axis.opposite_tick_directions();
+    let labels = if show_labels { crate::ticks::opposite_labels(axis, resolved) } else { Cow::Borrowed(resolved) };
+    Some((other, labels))
 }
 
 /// Widens `e` by the tick labels and titles of one layer laid out at frame `f`.
@@ -623,12 +627,12 @@ fn label_edges(
         return;
     }
     let pairs = !waterfall && layer.coords.is_cartesian();
-    let x_pair = (pairs && layer.display.show_x_axes).then(|| paired_axis(xa)).flatten();
-    for axis in [Some(xa), x_pair.as_ref()].into_iter().flatten() {
+    let x_pair = (pairs && layer.display.show_x_axes).then(|| paired_axis(xa, x)).flatten();
+    for (axis, labels) in std::iter::once((xa, x)).chain(x_pair.as_ref().map(|(a, r)| (a, r.as_ref()))) {
         if axis.side == AxisSide::Hidden {
             continue;
         }
-        let edge = draw_x_labels(&mut scratch, axis, x, f, &axis.tick_font, m);
+        let edge = draw_x_labels(&mut scratch, axis, labels, f, &axis.tick_font, m);
         let size = if axis.show_title { axis.title_font.size_pt } else { 0.0 };
         if axis.side == AxisSide::Opposite {
             e.top = e.top.min(edge - 0.6 * size - (ASCENT + DESCENT) * size);
@@ -664,12 +668,12 @@ fn label_edges(
             e.right = e.right.max(f.x + f.w + room);
         }
     }
-    let y_pair = (pairs && layer.display.show_y_axes).then(|| paired_axis(ya)).flatten();
-    for axis in [Some(ya), y_pair.as_ref()].into_iter().flatten() {
+    let y_pair = (pairs && layer.display.show_y_axes).then(|| paired_axis(ya, y)).flatten();
+    for (axis, labels) in std::iter::once((ya, y)).chain(y_pair.as_ref().map(|(a, r)| (a, r.as_ref()))) {
         if axis.side == AxisSide::Hidden {
             continue;
         }
-        let edge = draw_y_labels(&mut scratch, axis, y, f, &axis.tick_font, m);
+        let edge = draw_y_labels(&mut scratch, axis, labels, f, &axis.tick_font, m);
         let size = if axis.show_title { axis.title_font.size_pt } else { 0.0 };
         if axis.side == AxisSide::Opposite {
             e.right = e.right.max(edge + 0.6 * size + (ASCENT + DESCENT) * size);
@@ -691,17 +695,17 @@ fn label_edges(
 fn band_base(layer: &Layer, x: &ResolvedAxis, f: Rect, m: &dyn TextMeasurer) -> f64 {
     let xa = &layer.x_axis;
     let top;
-    let xa = if xa.side == AxisSide::Opposite {
-        xa
+    let (xa, labels) = if xa.side == AxisSide::Opposite {
+        (xa, x)
     } else if layer.display.show_x_axes
-        && let Some(axis) = paired_axis(xa)
+        && let Some(pair) = paired_axis(xa, x)
     {
-        top = axis;
-        &top
+        top = pair;
+        (&top.0, top.1.as_ref())
     } else {
         return f.y;
     };
-    let above = draw_x_labels(&mut Vec::new(), xa, x, f, &xa.tick_font, m);
+    let above = draw_x_labels(&mut Vec::new(), xa, labels, f, &xa.tick_font, m);
     let size = xa.title_font.size_pt;
     let edge = if xa.show_title { above - 0.6 * size - (ASCENT + DESCENT) * size } else { above };
     edge.min(f.y)
@@ -1086,7 +1090,9 @@ fn layer_scene(
     // The edge each axis line is drawn on, as a box of no height or width.
     let x_line = Rect { y: crate::axis_offset::x_line_y(xa, f), h: 0.0, ..f };
     let y_line = Rect { x: crate::axis_offset::y_line_x(ya, f), w: 0.0, ..f };
-    let (x_pair, y_pair) = (paired_axis(xa), paired_axis(ya));
+    let paint_pairs = waterfall.is_none() && layer.coords.is_cartesian();
+    let x_pair = paint_pairs.then(|| paired_axis(xa, &geom.x)).flatten();
+    let y_pair = paint_pairs.then(|| paired_axis(ya, &geom.y)).flatten();
     let x_lines = [x_line, Rect { y: crate::axis_offset::opposite_line(xa, f, true).0, ..x_line }];
     let y_lines = [y_line, Rect { x: crate::axis_offset::opposite_line(ya, f, false).0, ..y_line }];
     let spans = |r: &ResolvedAxis| r.gaps.iter().map(|g| g.span(r.reversed)).collect::<Vec<_>>();
@@ -1108,11 +1114,11 @@ fn layer_scene(
     crate::rug::draw(out, layer, xa, ya, geom, pds, xp.line, yp.line);
     let start = out.len();
     let x_edge = (xa.side != AxisSide::Hidden).then(|| draw_x_labels(out, xa, &geom.x, f, &xp.labels, m));
-    let x_pair_edge = x_pair.as_ref().map(|axis| draw_x_labels(out, axis, &geom.x, f, &xp.labels, m));
+    let x_pair_edge = x_pair.as_ref().map(|(axis, labels)| draw_x_labels(out, axis, labels, f, &xp.labels, m));
     rec(objects, out, start, ObjectKind::XAxis, &[]);
     let start = out.len();
     let y_edge = (ya.side != AxisSide::Hidden).then(|| draw_y_labels(out, ya, &geom.y, f, &yp.labels, m));
-    let y_pair_edge = y_pair.as_ref().map(|axis| draw_y_labels(out, axis, &geom.y, f, &yp.labels, m));
+    let y_pair_edge = y_pair.as_ref().map(|(axis, labels)| draw_y_labels(out, axis, labels, f, &yp.labels, m));
     rec(objects, out, start, ObjectKind::YAxis, &[]);
     let plot_color = |slot| layer.plots.get(slot).map(crate::rug::plot_color);
     let place_title = |out: &mut Vec<Item>, title: &str, font: &Font, pos, angle| {
@@ -1132,7 +1138,7 @@ fn layer_scene(
         }
     }
     rec(objects, out, start, ObjectKind::XTitle, &[]);
-    if let Some((axis, edge)) = x_pair.as_ref().zip(x_pair_edge) {
+    if let Some(((axis, _), edge)) = x_pair.as_ref().zip(x_pair_edge) {
         let start = out.len();
         draw_x_title(out, project, axis, f, pds, edge, &xp.title, &place_title);
         rec(objects, out, start, ObjectKind::XTitle, &[]);
@@ -1150,7 +1156,7 @@ fn layer_scene(
         }
     }
     rec(objects, out, start, ObjectKind::YTitle, &[]);
-    if let Some((axis, edge)) = y_pair.as_ref().zip(y_pair_edge) {
+    if let Some(((axis, _), edge)) = y_pair.as_ref().zip(y_pair_edge) {
         let start = out.len();
         draw_y_title(out, project, axis, f, pds, edge, &yp.title, &place_title);
         rec(objects, out, start, ObjectKind::YTitle, &[]);
@@ -1628,11 +1634,11 @@ fn draw_ticks(out: &mut Vec<Item>, axis: &Axis, resolved: &ResolvedAxis, f: Rect
         (false, AxisSide::Normal) => (f.x, 1.0),
         (false, AxisSide::Opposite) => (f.x + f.w, -1.0),
     };
-    let side = |out: &mut Vec<Item>, (line_pos, inward): (f64, f64)| {
+    let side = |out: &mut Vec<Item>, (line_pos, inward): (f64, f64), [major, minor]: [TickDirection; 2]| {
         let mut d = String::new();
         let sets = [
-            (&resolved.major, axis.major_tick, axis.major_tick_len_pt),
-            (&resolved.minor, axis.minor_tick, if axis.minor_ticks > 0 { axis.minor_tick_len_pt } else { 0.0 }),
+            (&resolved.major, major, axis.major_tick_len_pt),
+            (&resolved.minor, minor, if axis.minor_ticks > 0 { axis.minor_tick_len_pt } else { 0.0 }),
         ];
         for (values, dir, len) in sets {
             let Some((a, b)) = tick_span(dir, len) else { continue };
@@ -1658,9 +1664,9 @@ fn draw_ticks(out: &mut Vec<Item>, axis: &Axis, resolved: &ResolvedAxis, f: Rect
             out.push(Item::Path { d, fill: None, stroke: Some(stroke) });
         }
     };
-    side(out, main);
-    if axis.opposite_ticks {
-        side(out, other);
+    side(out, main, [axis.major_tick, axis.minor_tick]);
+    if axis.opposite_ticks_shown() {
+        side(out, other, axis.opposite_tick_directions());
     }
 }
 
@@ -2097,10 +2103,10 @@ fn edge_ticks(g: &Graph, index: usize) -> EdgeTicks {
     // `across` is `None` when the axis draws no ticks on the edge across (a waterfall never does).
     fn axis(a: &Axis, main: &mut Option<f64>, across: Option<&mut Option<f64>>) {
         let inward =
-            if matches!(a.major_tick, TickDirection::In | TickDirection::Both) { a.major_tick_len_pt } else { 0.0 };
-        add(main, inward);
-        if let Some(across) = across.filter(|_| a.opposite_ticks) {
-            add(across, inward);
+            |tick| if matches!(tick, TickDirection::In | TickDirection::Both) { a.major_tick_len_pt } else { 0.0 };
+        add(main, inward(a.major_tick));
+        if let Some(across) = across.filter(|_| a.opposite_ticks_shown()) {
+            add(across, inward(a.opposite_tick_directions()[0]));
         }
     }
     let mut e = EdgeTicks::default();
@@ -2127,11 +2133,14 @@ enum Cell {
     Sample(usize),
     /// Text with the label markup, and its width in points.
     Text(String, f64),
+    /// Literal caption lines and their maximum width. Starts with one unwrapped caption.
+    Wrapped(Vec<String>, f64),
 }
 
 struct LegendRow {
     cells: Vec<Cell>,
     width: f64,
+    line_count: usize,
     separation_before: f64,
 }
 
@@ -2210,6 +2219,12 @@ fn draw_legend(
                         pending.push_str(&legend_name(project, entries[k].plot, option));
                     }
                 }
+                legend::Part::Wrap(text) => {
+                    if !text.trim().is_empty() {
+                        flush(&mut pending, &mut cells, &mut after_symbol);
+                        cells.push(Cell::Wrapped(vec![text.to_string()], 0.0));
+                    }
+                }
                 legend::Part::Symbol(id) => {
                     flush(&mut pending, &mut cells, &mut after_symbol);
                     if let Some(k) = legend::resolve(ids, id) {
@@ -2232,29 +2247,47 @@ fn draw_legend(
         for (i, c) in cells.iter().enumerate() {
             width += match c {
                 Cell::Sample(_) => sample,
-                Cell::Text(_, w) => *w + if i > 0 && matches!(cells[i - 1], Cell::Sample(_)) { gap } else { 0.0 },
+                Cell::Text(_, w) | Cell::Wrapped(_, w) => {
+                    *w + if i > 0 && matches!(cells[i - 1], Cell::Sample(_)) { gap } else { 0.0 }
+                }
             };
         }
-        rows.push(LegendRow { cells, width, separation_before: std::mem::take(&mut separation_before) });
+        rows.push(LegendRow { cells, width, line_count: 1, separation_before: std::mem::take(&mut separation_before) });
     }
     if rows.is_empty() {
         return;
     }
     let per_col = rows.len().div_ceil((lg.columns.max(1) as usize).min(rows.len()));
     let n_cols = rows.len().div_ceil(per_col);
+    let column_budget = (f.w - 2.0 * pad - col_gap * (n_cols - 1) as f64) / n_cols as f64;
+    for row in &mut rows {
+        let wraps = row.cells.iter().filter(|cell| matches!(cell, Cell::Wrapped(..))).count();
+        if wraps > 0 {
+            let available = (column_budget - row.width).max(0.0) / wraps as f64;
+            for cell in &mut row.cells {
+                if let Cell::Wrapped(lines, width) = cell {
+                    (*lines, *width) = legend::wrap_literal(&lines[0], available, |s| m.width(s, &lg.font, fs));
+                    row.width += *width;
+                    row.line_count = row.line_count.max(lines.len());
+                }
+            }
+        }
+    }
     let mut col_w = Vec::with_capacity(n_cols);
     let mut row_centers = Vec::with_capacity(rows.len());
     let mut content_height: f64 = 0.0;
     for column in rows.chunks(per_col) {
         let mut extra = 0.0;
+        let mut lines = 0;
         for (i, row) in column.iter().enumerate() {
             if i > 0 {
                 extra += row.separation_before;
             }
-            row_centers.push(row_h * (i as f64 + 0.5) + extra);
+            row_centers.push(row_h * (lines as f64 + 0.5) + extra);
+            lines += row.line_count;
         }
         col_w.push(column.iter().map(|row| row.width).fold(0.0, f64::max));
-        content_height = content_height.max(row_h * column.len() as f64 + extra);
+        content_height = content_height.max(row_h * lines as f64 + extra);
     }
     let w = 2.0 * pad + col_w.iter().sum::<f64>() + col_gap * (n_cols - 1) as f64;
     let h = 2.0 * pad + content_height;
@@ -2381,6 +2414,16 @@ fn draw_legend(
                     }
                     text::place_segments(out, m, &segments(t), &lg.font, fs, (x, baseline), Anchor::Start, 0.0);
                     x += w;
+                    after_symbol = false;
+                }
+                Cell::Wrapped(lines, width) => {
+                    if after_symbol {
+                        x += gap;
+                    }
+                    for (i, line) in lines.iter().enumerate() {
+                        text::place_literal(out, m, line, &lg.font, (x, baseline + i as f64 * row_h));
+                    }
+                    x += width;
                     after_symbol = false;
                 }
             }

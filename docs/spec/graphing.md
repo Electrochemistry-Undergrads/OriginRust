@@ -1269,6 +1269,22 @@ spaces disappear. Literal and protected spans keep the escape characters. For ex
 `\b(%(1,@LL)\sc%(1,@LC)\sc(%(1,@LU)))` draws the bold long name and units with one
 space when Comments are empty. The legend frame is sized from the resulting runs.
 
+**Literal legend captions (T58).** The current escape table shows `\ww(text)`
+wrapping a literal caption inside the legend's allocated text box. Our Origin 2016
+EMFs drew `ww(...)` on one line. LabTalk box-width writes of 20 and 35 were rejected,
+and the caption text and measured legend dimensions matched the width-zero control.
+[Origin escape sequences](https://docs.originlab.com/origin-help/escape-sequences/), [graph legend help](https://docs.originlab.com/origin-help/legend-colorscale/)
+
+Sheaf supports a balanced, top-level `\ww(text)` on a legend entry. Wrapped text
+uses the legend font, keeps its contents literal and breaks at whitespace. A word
+wider than its allocation stays whole. The layer frame supplies the total width
+budget, divided among the legend's columns after padding and column gaps. Each
+entry reserves its sample and ordinary text widths before dividing the remaining
+space among its wrapped captions. Continuation lines align with the start of the
+caption and add height within the same entry's column. The sample is drawn once on
+the first line. The frame encloses the actual measured widths and heights. This is
+Sheaf's frame-based allocation rule.
+
 **Plot-colored graph text (T58).** `\cpN(text)` uses the color of the Nth plot in the
 text object's layer. Repainting the graph after a style change resolves the color again.
 Nested styles, literal blocks and glyph decorations follow the existing text rules.
@@ -3964,11 +3980,15 @@ to drive the affected dialog did not produce a fresh geometry measurement.
 Sheaf uses the sizing rules measured for Merge Graph Windows.
 [Origin Arrange tab](https://docs.originlab.com/origin-help/laymanage-arrangetab/)
 
-**Modify Axes** (T60, 2026-11-22). Select one or more Cartesian layers and use the Axes tab to
-change X or Y scale type, move or hide the primary axis, set its tick direction, show its title
-and tick labels, or enter a numeric tick-label formula of `x`. Opposite Line and Opposite Ticks
-control the mirrored edge. The tick direction applies to both major and minor ticks. The mirrored
-edge shares the primary tick direction and has no separate title, labels or formula in Sheaf.
+**Modify Axes** (T60, 2026-11-22 through 2026-11-23). Select one or more Cartesian layers and use
+the Axes tab to change X or Y scale type, move or hide the primary axis, set its tick direction,
+show its title and tick labels, or enter a numeric tick-label formula of `x`. Opposite Line,
+Opposite Ticks, Opposite Title, Opposite Tick Label and Opposite Formula set the edge facing it.
+For the usual bottom and left primary edges, these settings affect the top and right.
+The facing edge shares the dimension's resolved scale, title text and fonts.
+Tick direction applies to both major and minor ticks on the chosen edge.
+The facing title and labels may remain visible with the facing line hidden.
+Clearing an authored facing formula displays the numeric tick values on that edge.
 
 Apply changes the chosen settings in the preview. A mixed value stays as it was on each layer
 until explicitly edited. Scale type applies to independent axes only. Straight-linked axes keep
@@ -3976,12 +3996,19 @@ their parent scale while remaining eligible for display edits. Scale changes ret
 limits and use Sheaf's normal axis resolution. The preview remains a numbered frame view. Undo
 restores the settings loaded into the tab, and OK writes the preview as one document edit.
 
-The captured Origin 2016 controls show independent Bottom, Left, Top and Right sections with Axis,
-Tick, Title, Tick Label and Formula. The documentation demonstrates changing the Y scale for a
-multi-layer selection. Sheaf uses its primary and mirrored axis representation for these edits.
-The Origin 2016 capture establishes the controls. Live Apply behavior was not read back.
+Origin 2016 shows Bottom, Left, Top and Right controls for line, tick direction, title, labels
+and formula. A single Line layer was exported with bottom major ticks pointing out and top
+major ticks pointing in. The EMF bottom axis was at y = 2053 with ticks ending at 2087,
+and the top axis was at y = 285 with ticks ending at 319. The top formula `x*10+100`
+showed 100 through 150 while bottom labels showed 0 through 5. The right formula `x+200`
+showed 200 through 210 while left labels showed 0 through 10. Hiding the top line removed its
+ticks and kept its title and labels. Hiding the right labels retained the right title.
 [Origin Axes tab](https://docs.originlab.com/origin-help/laymanage-axestab/),
-[Origin Layer Management quick start](https://docs.originlab.com/origin-help/layer-management-quick-start/)
+[LabTalk axis and label settings](https://docs.originlab.com/labtalk/ref/layer-axis-obj/)
+
+Sheaf retains the inherited settings for existing mirrored and paired axes until an override
+is edited. The independent display settings survive in `.sheaf` and `.opj.sheaf`. Bare
+`.opj` reports the omitted facing style.
 
 **Display > Color > Background Color** (T60 follow-up, measured in Origin 2016 on
 2026-11-16): the stock layer starts at None (`layer.color=0`). The palette has None,

@@ -5790,6 +5790,29 @@ fn the_statistics_menu_quantifies_qpcr() {
     assert_eq!(h.state().doc.undo_label(), Some("qPCR relative quantification"));
 }
 
+/// Statistics > Survival Analysis > Cox Proportional Hazards... (T408): a group covariate, time and censor columns give
+/// the hazard ratio and a survival graph; one undo step.
+#[test]
+fn the_survival_menu_fits_a_cox_model() {
+    let mut text = String::from("id,group,months,cens\n");
+    for i in 0..30 {
+        let g = i % 2;
+        let t = (5.0 + f64::from(i * 7 % 11)) / (1.0 + f64::from(g));
+        text.push_str(&format!("{i},{g},{t},{}\n", i32::from(i % 9 == 4)));
+    }
+    let data = csv_file("cox", "c", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - c.csv");
+    menu_path(&mut h, &["Statistics", "Survival Analysis", "Cox Proportional Hazards..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Hazard-ratio confidence"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
+    let (sheet, hr) = result_column(&h, "Hazard ratio");
+    assert!(sheet.starts_with("Cox"), "{sheet}");
+    assert!(hr[0] > 1.5, "{hr:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Cox proportional hazards"));
+}
+
 /// Statistics > Survival Analysis > Life Data Regression... (T391): covariate, time and censor columns give the
 /// coefficients; one undo step.
 #[test]
@@ -6160,6 +6183,8 @@ fn the_worksheet_menu_makes_a_time_series_pivot() {
     show_window(&mut h, "Book1 - tp.csv");
     menu_path(&mut h, &["Worksheet", "Time Series Pivot..."]);
     assert!(h.state().analysis.is_some() && has_label(&h, "Period"));
+    // Custom intervals and fiscal years (T404).
+    assert!(has_label(&h, "Every") && has_label(&h, "Fiscal year starts in"));
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none());
     let (sheet, means) = result_column(&h, "Mean of v");

@@ -342,6 +342,11 @@ as one space between visible values. Legend frame measurements and exports use t
 same runs. Graphing 7.11 records the current documentation and the Origin 2016 EMF
 probe, which drew the escape literally.
 
+Literal legend captions use `\ww(text)` and wrap within a width budget derived from the
+layer frame. Continuation lines are left-aligned, retain their entry's legend column and
+expand the frame without repeating the sample. Graphing 7.11 records the current
+documentation, the single-line Origin 2016 probe and Sheaf's width rule.
+
 ## Origin facts
 
 Recorded in gui-look 1/4 and the command map: the font box says "Default: Arial", the selected

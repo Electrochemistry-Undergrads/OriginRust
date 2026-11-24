@@ -2120,6 +2120,7 @@ fn statistics_menu() -> Vec<Entry> {
                 item("Distribution Overview Plot...", Cmd::Analyze(AnalysisKind::LifeDist)),
                 item("Distribution Analysis (Arbitrary Censoring)...", Cmd::Analyze(AnalysisKind::LifeDistArbitrary)),
                 item("Life Data Regression...", Cmd::Analyze(AnalysisKind::LifeRegression)),
+                item("Cox Proportional Hazards...", Cmd::Analyze(AnalysisKind::Cox)),
             ],
         ),
         sub(

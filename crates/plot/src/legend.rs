@@ -9,6 +9,8 @@ use sheaf_core::graph::Layer;
 pub(crate) enum Part<'a> {
     /// Literal text (with the label markup).
     Text(&'a str),
+    /// `\ww(text)`: a wrapped caption whose contents are kept literal.
+    Wrap(&'a str),
     /// `\l(id)`: the line and symbol sample of a plot.
     Symbol(&'a str),
     /// `%(id)` or `%(id, option)`: the name of a plot, or what the option names (`@LL` the long
@@ -19,7 +21,7 @@ pub(crate) enum Part<'a> {
 /// Whether `text` refers to a plot with `\l(n)` or `%(n)` on any line: a free text label with such a
 /// reference is drawn with the legend's line layout (T178).
 pub(crate) fn has_plot_refs(text: &str) -> bool {
-    lines(text).iter().any(|l| parse_line(l).iter().any(|p| !matches!(p, Part::Text(_))))
+    lines(text).iter().any(|l| parse_line(l).iter().any(|p| matches!(p, Part::Symbol(_) | Part::Name(..))))
 }
 
 /// Splits one legend line into its pieces. An escape that is not closed, or that holds anything
@@ -28,6 +30,7 @@ pub(crate) fn parse_line(line: &str) -> Vec<Part<'_>> {
     let mut out = Vec::new();
     let mut text_from = 0;
     let mut i = 0;
+    let mut parens = 0usize;
     let bytes = line.as_bytes();
     while i < bytes.len() {
         let rest = &line[i..];
@@ -35,11 +38,28 @@ pub(crate) fn parse_line(line: &str) -> Vec<Part<'_>> {
             i += skip;
             continue;
         }
+        if parens == 0
+            && let Some(body) = rest.strip_prefix("\\ww(")
+        {
+            let Some(close) = closing_parenthesis(body) else { break };
+            if text_from < i {
+                out.push(Part::Text(&line[text_from..i]));
+            }
+            out.push(Part::Wrap(&body[..close]));
+            i += 5 + close;
+            text_from = i;
+            continue;
+        }
         let (kind, skip) = if rest.starts_with("\\l(") || rest.starts_with("\\L(") {
             (0, 3)
         } else if rest.starts_with("%(") {
             (1, 2)
         } else {
+            match bytes[i] {
+                b'(' => parens += 1,
+                b')' => parens = parens.saturating_sub(1),
+                _ => {}
+            }
             i += rest.chars().next().map_or(1, char::len_utf8);
             continue;
         };
@@ -70,6 +90,10 @@ pub(crate) fn parse_line(line: &str) -> Vec<Part<'_>> {
 /// Leaves a protected block whole so the markup renderer can draw its literal contents.
 fn literal_block_len(rest: &str) -> Option<usize> {
     let body = rest.strip_prefix("\\h(").or_else(|| rest.strip_prefix("\\v("))?;
+    Some(closing_parenthesis(body).map_or(rest.len(), |i| i + 4))
+}
+
+fn closing_parenthesis(body: &str) -> Option<usize> {
     let mut depth = 1;
     for (i, byte) in body.bytes().enumerate() {
         if byte == b'(' {
@@ -77,11 +101,42 @@ fn literal_block_len(rest: &str) -> Option<usize> {
         } else if byte == b')' {
             depth -= 1;
             if depth == 0 {
-                return Some(i + 4);
+                return Some(i);
             }
         }
     }
-    Some(rest.len())
+    None
+}
+
+/// Wraps a literal caption at whitespace and returns its lines and maximum measured width.
+/// A word wider than the available space is kept whole.
+pub(crate) fn wrap_literal(text: &str, available: f64, measure: impl Fn(&str) -> f64) -> (Vec<String>, f64) {
+    let text = text.trim();
+    let mut lines = Vec::new();
+    let mut widest: f64 = 0.0;
+    let (mut line_start, mut word_start, mut last_word_end) = (0, 0, 0);
+    let mut current_width = 0.0;
+    for part in text.split_inclusive(char::is_whitespace) {
+        let word_end = word_start + part.trim_end().len();
+        if word_end > word_start {
+            let width = measure(&text[line_start..word_end]);
+            if width > available && word_start > line_start {
+                lines.push(text[line_start..last_word_end].to_string());
+                widest = widest.max(current_width);
+                line_start = word_start;
+                current_width = measure(&text[line_start..word_end]);
+            } else {
+                current_width = width;
+            }
+            last_word_end = word_end;
+        }
+        word_start += part.len();
+    }
+    if !text.is_empty() {
+        lines.push(text[line_start..].to_string());
+        widest = widest.max(current_width);
+    }
+    (lines, widest)
 }
 
 /// The lines of a legend text (CR LF, LF or CR end a line); a final empty line is dropped.
@@ -158,5 +213,26 @@ mod tests {
         assert_eq!(parse_line(&line), [Part::Text(protected), Part::Symbol("1"), Part::Text(" "), Part::Name("2", "")],);
         let open = r"\h(Text %(1)";
         assert_eq!(parse_line(open), [Part::Text(open)]);
+    }
+
+    #[test]
+    fn wrapped_captions_are_balanced_and_protect_literal_plot_references() {
+        let text = r"\l(1) \ww(α (%(2)) \l(3)) %(1)";
+        assert_eq!(
+            parse_line(text),
+            [Part::Symbol("1"), Part::Text(" "), Part::Wrap(r"α (%(2)) \l(3)"), Part::Text(" "), Part::Name("1", "")],
+        );
+        assert!(!has_plot_refs(r"\ww(%(2))"));
+        let protected = r"\v(\ww(text))";
+        let unclosed = r"\ww(caption %(1)";
+        assert_eq!(parse_line(protected), [Part::Text(protected)]);
+        assert_eq!(parse_line(unclosed), [Part::Text(unclosed)]);
+    }
+
+    #[test]
+    fn literal_wrap_keeps_internal_spacing_and_does_not_split_long_words() {
+        let (lines, width) = wrap_literal("élan  A Longword tail", 7.0, |text| text.chars().count() as f64);
+        assert_eq!(lines, ["élan  A", "Longword", "tail"]);
+        assert_eq!(width, 8.0);
     }
 }

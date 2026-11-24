@@ -1269,6 +1269,22 @@ spaces disappear. Literal and protected spans keep the escape characters. For ex
 `\b(%(1,@LL)\sc%(1,@LC)\sc(%(1,@LU)))` draws the bold long name and units with one
 space when Comments are empty. The legend frame is sized from the resulting runs.
 
+**Literal legend captions (T58).** The current escape table shows `\ww(text)`
+wrapping a literal caption inside the legend's allocated text box. Our Origin 2016
+EMFs drew `ww(...)` on one line. LabTalk box-width writes of 20 and 35 were rejected,
+and the caption text and measured legend dimensions matched the width-zero control.
+[Origin escape sequences](https://docs.originlab.com/origin-help/escape-sequences/), [graph legend help](https://docs.originlab.com/origin-help/legend-colorscale/)
+
+Sheaf supports a balanced, top-level `\ww(text)` on a legend entry. Wrapped text
+uses the legend font, keeps its contents literal and breaks at whitespace. A word
+wider than its allocation stays whole. The layer frame supplies the total width
+budget, divided among the legend's columns after padding and column gaps. Each
+entry reserves its sample and ordinary text widths before dividing the remaining
+space among its wrapped captions. Continuation lines align with the start of the
+caption and add height within the same entry's column. The sample is drawn once on
+the first line. The frame encloses the actual measured widths and heights. This is
+Sheaf's frame-based allocation rule.
+
 **Plot-colored graph text (T58).** `\cpN(text)` uses the color of the Nth plot in the
 text object's layer. Repainting the graph after a style change resolves the color again.
 Nested styles, literal blocks and glyph decorations follow the existing text rules.

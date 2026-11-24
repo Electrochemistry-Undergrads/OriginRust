@@ -390,6 +390,7 @@ impl BookUi {
     /// Drops what no longer exists (after undo, deleting columns, ...).
     fn repair(&mut self, sheet: &Worksheet) {
         self.selected.retain(|id| sheet.column(*id).is_some());
+        let last_row = sheet.view.allocated_rows.map_or(usize::MAX, |_| shown_rows(sheet) - 1);
         match self.sel.clone() {
             Sel::Label { column, row } if sheet.column(column).is_none() || !label_rows(sheet).contains(&row) => {
                 self.clear_selection();
@@ -399,9 +400,16 @@ impl BookUi {
                 let last = sheet.columns.len().saturating_sub(1);
                 if sheet.columns.is_empty() {
                     self.clear_selection();
-                } else if anchor.0 > last || end.0 > last {
-                    self.select_cells(sheet, (anchor.0.min(last), anchor.1), (end.0.min(last), end.1));
+                } else if anchor.0 > last || end.0 > last || anchor.1 > last_row || end.1 > last_row {
+                    self.select_cells(
+                        sheet,
+                        (anchor.0.min(last), anchor.1.min(last_row)),
+                        (end.0.min(last), end.1.min(last_row)),
+                    );
                 }
+            }
+            Sel::Rows { anchor, end } if anchor > last_row || end > last_row => {
+                self.select_rows(anchor.min(last_row), end.min(last_row));
             }
             Sel::All => {
                 if sheet.columns.is_empty() {
@@ -418,7 +426,7 @@ impl BookUi {
             self.editing = None;
         }
         if let Some((id, row, _)) = &self.editing
-            && (!sheet.row_shown(*row) || sheet.column(*id).is_none_or(|c| c.hidden))
+            && (*row > last_row || !sheet.row_shown(*row) || sheet.column(*id).is_none_or(|c| c.hidden))
         {
             self.editing = None;
         }
@@ -531,9 +539,13 @@ const SPARE_ROWS: usize = 30;
 /// The rows a new (empty) sheet shows: Origin 2016's `newbook` has 32 (`wks.nrows`, T295).
 const NEW_SHEET_ROWS: usize = 32;
 
-/// How many rows the grid shows: the data and the spare rows, and at least a new sheet's 32.
-fn shown_rows(sheet: &Worksheet) -> usize {
-    sheet.row_count().saturating_add(SPARE_ROWS).max(NEW_SHEET_ROWS)
+/// How many rows the grid shows, including any explicitly allocated blank rows.
+pub(crate) fn shown_rows(sheet: &Worksheet) -> usize {
+    let used = sheet.row_count();
+    match sheet.view.allocated_rows {
+        Some(rows) => rows.max(used).max(1),
+        None => used.saturating_add(SPARE_ROWS).max(NEW_SHEET_ROWS),
+    }
 }
 const TAB_BAR_HEIGHT: f32 = 20.0;
 

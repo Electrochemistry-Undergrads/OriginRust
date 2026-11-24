@@ -270,6 +270,8 @@ pub struct SheafApp {
     comparison_plot: Option<ComparisonPlotDialog>,
     multi_y: Option<MultiYDialog>,
     set_values: Option<SetValuesDialog>,
+    /// Each workbook's selection while Set Column Values is open (T423): a new selection is a picked reference.
+    formula_pick: Option<std::collections::HashMap<WindowId, (crate::grid::Sel, Vec<ColumnId>, usize)>>,
     analysis: Option<AnalysisDialog>,
     fit: Option<FitDialog>,
     fit_more: Option<FitMoreDialog>,
@@ -493,6 +495,7 @@ impl SheafApp {
             comparison_plot: None,
             multi_y: None,
             set_values: None,
+            formula_pick: None,
             analysis: None,
             fit: None,
             fit_more: None,
@@ -6669,6 +6672,63 @@ impl SheafApp {
         }
     }
 
+    /// Interactive formula references (T423): while Set Column Values is open, a new selection in a sheet (one
+    /// column, one cell, or cells of one column) is inserted into the formula at its cursor as `col(B)`, `col(B)[3]`
+    /// or `col(B)[2:5]`, with `Sheet2!` or `[Book2]Sheet1!` in front when it is not on the window's sheet.
+    fn pick_formula_reference(&mut self, ctx: &egui::Context) {
+        let Some(d) = &self.set_values else {
+            self.formula_pick = None;
+            return;
+        };
+        let now: std::collections::HashMap<WindowId, (crate::grid::Sel, Vec<ColumnId>, usize)> = self
+            .books
+            .iter()
+            .map(|(id, b)| {
+                let sheet = self.doc.project().workbook(*id).map_or(0, |w| w.active_sheet);
+                (*id, (b.sel.clone(), b.selected.clone(), sheet))
+            })
+            .collect();
+        let Some(before) = self.formula_pick.replace(now.clone()) else { return };
+        let target = d.target();
+        let project = self.doc.project();
+        let Some((home_book, home_sheet, _)) = project.locate(target) else { return };
+        let home = (home_book.id, home_sheet as *const sheaf_core::Worksheet);
+        let mut picked: Option<String> = None;
+        for (book, (sel, selected, sheet_index)) in &now {
+            if before.get(book) == Some(&(sel.clone(), selected.clone(), *sheet_index)) {
+                continue;
+            }
+            let Some(wb) = project.workbook(*book) else { continue };
+            let Some(sheet) = wb.sheets.get(*sheet_index) else { continue };
+            let (column, rows) = match sel {
+                crate::grid::Sel::Columns if selected.len() == 1 => (sheet.column(selected[0]), None),
+                crate::grid::Sel::Cells { anchor, end } if anchor.0 == end.0 => {
+                    let (lo, hi) = (anchor.1.min(end.1), anchor.1.max(end.1));
+                    (sheet.columns.get(anchor.0), Some((lo + 1, hi + 1)))
+                }
+                _ => continue,
+            };
+            let Some(column) = column else { continue };
+            let mut text = String::new();
+            if (wb.id, sheet as *const sheaf_core::Worksheet) != home {
+                if wb.id != home.0 {
+                    text.push_str(&format!("[{}]", wb.name));
+                }
+                text.push_str(&format!("{}!", sheet.name));
+            }
+            text.push_str(&format!("col({})", column.short_name));
+            match rows {
+                Some((a, b)) if a == b => text.push_str(&format!("[{a}]")),
+                Some((a, b)) => text.push_str(&format!("[{a}:{b}]")),
+                None => {}
+            }
+            picked = Some(text);
+        }
+        if let (Some(text), Some(d)) = (picked, &mut self.set_values) {
+            d.insert_reference(ctx, &text);
+        }
+    }
+
     /// Analysis > Repeat Last Analysis on All Sheets (T414): the last tool, with the same options, on the Y columns of
     /// every sheet the workbook has when the command starts (not the sheets the runs add), as one undo step. A sheet
     /// without Y columns, or where the tool fails, is skipped and named.
@@ -7912,6 +7972,7 @@ impl SheafApp {
         {
             self.straight_line_dialog = None;
         }
+        self.pick_formula_reference(ctx);
         if let Some(d) = &mut self.set_values
             && !d.show(ctx, &mut self.doc)
         {

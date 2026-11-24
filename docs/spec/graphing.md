@@ -6158,9 +6158,32 @@ measured.
 Add offers the nine layer presets and X and Y scale choices. Bottom-X Left-Y creates an independent
 layer. The linked presets accept an independent layer from the preview as their parent, defaulting
 to the opening layer's root or the first eligible layer. A straight-linked scale displays the
-parent's type. Independent scales start at Linear and offer the ten types supported by Sheaf.
-Custom Formula and Discrete appeared in the Origin 2016 capture, with no corresponding Sheaf
-scale type. Apply adds a layer to the numbered preview. Undo, OK and Cancel follow 15.7d.
+parent's type. Independent scales start at Linear and offer the ten built-in types and Custom
+Formula. Discrete remains open. Apply adds a layer to the numbered preview. Undo, OK and Cancel
+follow 15.7d.
+
+**Custom Formula scale (Origin 2016, 2026-11-23 and 2026-11-24).** Setting `layer.x.type=11`
+gave empty `formula$` and `invformula$` properties at first. For X limits 1 to 5 and increment 1,
+the EMFs labelled 1 through 5 under each transform. The tick at 2 lay 25% of the way along
+the linear axis, 12.5% with `x*x` and `sqrt(x)`, and about 43.1% with `ln(x)` and `exp(x)`.
+The plotted sample at X=2 moved by the same amount. A decreasing pair `-x` and `-x` kept
+ascending data values along the axis. A Y run using `x*x` and `sqrt(x)` also kept its data-space
+tick values and changed their positions. Setting From to 0 on the log formula was accepted by
+LabTalk but the EMF's tick positions collapsed. [Origin's Scale tab](https://docs.originlab.com/origin-help/axesref-scale/)
+and [LabTalk axis properties](https://docs.originlab.com/labtalk/ref/layer-axis-obj/).
+
+In Sheaf's Add tab, Custom Formula on an independent Cartesian dimension exposes its Direct
+Formula, Inverse Formula, From and To. Both expressions use `x` as their input, including on Y.
+The default expressions are `x` and `x`. Empty limits use the layer's usual automatic range.
+Apply checks that the two expressions agree as inverses at sampled points across the resulting
+range and that the direct mapping changes strictly in one direction. An invalid pair or range
+leaves the preview and its Undo history intact. Ticks keep their usual data values and use
+the direct formula for positions. Coordinate reading and Scale In use the inverse.
+
+If a previously saved pair becomes invalid following a range change, the axis temporarily
+draws linearly with the current limits and retains the pair for later valid ranges. The Axis
+dialog displays the saved formulas. Sheaf saves and OPJ companions keep the expressions.
+A bare OPJ writes the axis as Linear and warns.
 
 Inset With Data copies all plots from the chosen parent and uses automatic independent ranges.
 The [Origin Add tab](https://docs.originlab.com/origin-help/laymanage-addtab/) documents copying

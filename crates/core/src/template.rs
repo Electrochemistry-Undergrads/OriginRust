@@ -1210,6 +1210,7 @@ pub const ORIGIN_PAGE_IN: (f64, f64) = (10.72, 8.205);
 fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
     Axis {
         scale: ScaleKind::Linear,
+        custom_scale: None,
         min: None,
         max: None,
         auto_range: AutoRange::Nice,

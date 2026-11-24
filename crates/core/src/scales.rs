@@ -21,7 +21,7 @@ pub const LOGIT_TICKS: [f64; 13] = [0.01, 0.1, 1.0, 5.0, 10.0, 25.0, 50.0, 75.0,
 pub const WEIBULL_TICKS: [f64; 11] = [0.001, 0.01, 0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 90.0, 99.0, 99.9];
 
 impl ScaleKind {
-    /// Every scale, in the order of the axis dialog's list.
+    /// Built-in scales in the order of the axis dialog's list.
     pub const ALL: [ScaleKind; 10] = [
         ScaleKind::Linear,
         ScaleKind::Log10,
@@ -48,14 +48,16 @@ impl ScaleKind {
             ScaleKind::Probit => "Probit",
             ScaleKind::Logit => "Logit",
             ScaleKind::Weibull => "Weibull",
+            ScaleKind::CustomFormula => "Custom Formula",
         }
     }
 
     /// The scale type byte of the `.opj` layer header (opj-format.md section 10.2); one less than
-    /// the number `layer.x.type` has in LabTalk.
+    /// the number `layer.x.type` has in LabTalk for the built-in scales.
+    /// An axis with custom formulas is written as Linear in a bare OPJ.
     pub fn file_code(self) -> u8 {
         match self {
-            ScaleKind::Linear => 0,
+            ScaleKind::Linear | ScaleKind::CustomFormula => 0,
             ScaleKind::Log10 => 1,
             ScaleKind::Probability => 2,
             ScaleKind::Probit => 3,
@@ -104,7 +106,7 @@ impl ScaleKind {
             return false;
         }
         match self {
-            ScaleKind::Linear => true,
+            ScaleKind::Linear | ScaleKind::CustomFormula => true,
             ScaleKind::Log10 | ScaleKind::Ln | ScaleKind::Log2 | ScaleKind::Reciprocal => v > 0.0,
             ScaleKind::OffsetReciprocal => v + RECIPROCAL_OFFSET > 0.0,
             _ => v > 0.0 && v < 100.0,
@@ -118,7 +120,7 @@ impl ScaleKind {
             return f64::NAN;
         }
         match self {
-            ScaleKind::Linear => v,
+            ScaleKind::Linear | ScaleKind::CustomFormula => v,
             ScaleKind::Log10 => v.log10(),
             ScaleKind::Ln => v.ln(),
             ScaleKind::Log2 => v.log2(),
@@ -134,7 +136,7 @@ impl ScaleKind {
     /// The inverse of [`ScaleKind::forward`].
     pub fn inverse(self, t: f64) -> f64 {
         match self {
-            ScaleKind::Linear => t,
+            ScaleKind::Linear | ScaleKind::CustomFormula => t,
             ScaleKind::Log10 => 10f64.powf(t),
             ScaleKind::Ln => t.exp(),
             ScaleKind::Log2 => t.exp2(),
@@ -174,6 +176,116 @@ impl crate::graph::ScaleLink {
         let (from, to) = (eval(from)?, eval(to)?);
         let span = to - from;
         (scale.accepts(from) && scale.accepts(to) && span.is_finite() && span != 0.0).then_some((from, to))
+    }
+}
+
+/// The one-dimensional transform and its inverse for a Custom Formula axis.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CustomScale {
+    pub direct: String,
+    pub inverse: String,
+}
+
+impl Default for CustomScale {
+    fn default() -> Self {
+        Self { direct: "x".into(), inverse: "x".into() }
+    }
+}
+
+impl CustomScale {
+    /// Parse both expressions once for layout and coordinate conversion.
+    pub fn compile(&self) -> Option<FormulaTransform> {
+        let direct = sheaf_expr::Expr::parse(&self.direct).ok()?;
+        let inverse = sheaf_expr::Expr::parse(&self.inverse).ok()?;
+        direct
+            .variables()
+            .into_iter()
+            .chain(inverse.variables())
+            .all(|variable| variable.eq_ignore_ascii_case("x"))
+            .then_some(FormulaTransform { direct, inverse })
+    }
+}
+
+/// Parsed formulas for an axis transform, which can be shared through a layout pass.
+#[derive(Clone, Debug)]
+pub struct FormulaTransform {
+    direct: sheaf_expr::Expr,
+    inverse: sheaf_expr::Expr,
+}
+
+impl PartialEq for FormulaTransform {
+    fn eq(&self, other: &Self) -> bool {
+        self.direct.source() == other.direct.source() && self.inverse.source() == other.inverse.source()
+    }
+}
+
+impl FormulaTransform {
+    /// Move from data values into the space in which the axis is drawn.
+    pub fn forward(&self, x: f64) -> Option<f64> {
+        Self::value(&self.direct, x)
+    }
+
+    /// Move from axis space back to a data value.
+    pub fn inverse(&self, x: f64) -> Option<f64> {
+        Self::value(&self.inverse, x)
+    }
+
+    fn value(expr: &sheaf_expr::Expr, x: f64) -> Option<f64> {
+        if !x.is_finite() {
+            return None;
+        }
+        expr.eval(&AxisVariable(x)).ok().filter(|v| v.is_finite())
+    }
+
+    /// Transform the two limits and check monotonicity and inverse agreement at points across
+    /// the interval. Decreasing formulas give decreasing transformed limits.
+    pub fn limits(&self, min: f64, max: f64) -> Option<(f64, f64)> {
+        let width = max - min;
+        if !width.is_finite() || width <= 0.0 {
+            return None;
+        }
+        let (lo, hi) = (self.forward(min)?, self.forward(max)?);
+        let span = hi - lo;
+        if span == 0.0 || !span.is_finite() {
+            return None;
+        }
+        let agrees = |x: f64, t: f64| self.inverse(t).is_some_and(|again| (again - x).abs() <= 1e-9 * x.abs().max(1.0));
+        if !agrees(min, lo) || !agrees(max, hi) {
+            return None;
+        }
+        let mut prev_x = min;
+        let mut prev_t = lo;
+        for i in 1..32 {
+            let x = min + width * (f64::from(i) / 32.0);
+            if x <= prev_x || x >= max {
+                continue;
+            }
+            let t = self.forward(x)?;
+            let increasing = prev_t < t && t < hi;
+            let decreasing = hi < t && t < prev_t;
+            if !(if span > 0.0 { increasing } else { decreasing }) || !agrees(x, t) {
+                return None;
+            }
+            prev_x = x;
+            prev_t = t;
+        }
+        Some((lo, hi))
+    }
+}
+
+struct AxisVariable(f64);
+
+impl sheaf_expr::Host for AxisVariable {
+    fn variable(&self, name: &str) -> Option<f64> {
+        name.eq_ignore_ascii_case("x").then_some(self.0)
+    }
+
+    fn cell(&self, _col: &sheaf_expr::ColumnRef, _row: usize) -> Option<f64> {
+        None
+    }
+
+    fn has_column(&self, _col: &sheaf_expr::ColumnRef) -> bool {
+        false
     }
 }
 
@@ -331,7 +443,7 @@ pub fn auto_range(kind: ScaleKind, lo: f64, hi: f64, margin_pct: f64) -> Option<
     let (tlo, thi) = (kind.forward(lo), kind.forward(hi));
     let pad = m * (thi - tlo);
     match kind {
-        ScaleKind::Linear | ScaleKind::Log10 => None,
+        ScaleKind::Linear | ScaleKind::Log10 | ScaleKind::CustomFormula => None,
         ScaleKind::Ln | ScaleKind::Log2 => {
             let b = kind.log_base()?;
             if m == 0.0 {
@@ -446,6 +558,18 @@ mod tests {
         for p in [1e-6, 0.001, 0.02, 0.3, 0.5, 0.7, 0.975, 0.999] {
             assert!(close(norm_cdf(norm_inv(p)), p), "p = {p}");
         }
+    }
+
+    #[test]
+    fn nonlinear_custom_scale_checks_inverse_agreement_inside_the_limits() {
+        let definition = CustomScale { direct: "x*x".into(), inverse: "x".into() };
+        let formula = definition.compile().unwrap();
+        assert_eq!(formula.inverse(0.0), Some(0.0));
+        assert_eq!(formula.inverse(1.0), Some(1.0));
+        assert!(formula.limits(0.0, 1.0).is_none());
+
+        let definition = CustomScale { inverse: "sqrt(x)".into(), ..definition };
+        assert_eq!(definition.compile().unwrap().limits(0.0, 1.0), Some((0.0, 1.0)));
     }
 
     #[test]

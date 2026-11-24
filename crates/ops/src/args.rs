@@ -3847,9 +3847,15 @@ pub enum AnalyzeTool {
         /// Subgroup size for the within deviation (1: moving ranges of individual values).
         #[arg(long, default_value_t = 1)]
         subgroup: usize,
-        /// normal, lognormal or weibull.
+        /// normal, lognormal, weibull or boxcox (normal after a Box-Cox transformation).
         #[arg(long, default_value = "normal")]
         model: String,
+        /// Box-Cox: this lambda instead of the maximum-likelihood one.
+        #[arg(long, allow_negative_numbers = true)]
+        lambda: Option<f64>,
+        /// The target for Cpm (with both limits).
+        #[arg(long, allow_negative_numbers = true)]
+        cpm_target: Option<f64>,
         /// Do not make the graphs.
         #[arg(long)]
         no_graph: bool,

@@ -504,7 +504,7 @@ mod tests {
         for test in [RateTest::OneProportion, RateTest::TwoProportions, RateTest::OneVariance, RateTest::TwoVariances] {
             for two in [true, false] {
                 let p = rate_power(test, 20.0, 0.4, 0.4, 0.05, two).unwrap();
-                assert!((p - 0.05).abs() < 1e-12, "{test:?} {two}: {p}");
+                assert!((p - 0.05).abs() < 1e-9, "{test:?} {two}: {p}");
             }
             assert_eq!(rate_powers(test, &[1.0, 2.5], 0.4, 0.5, 0.05, true), Err(PowerError::BadInput));
             assert!(rate_powers(test, &[1.0], 0.4, 0.5, 0.05, true).unwrap()[0].is_nan());

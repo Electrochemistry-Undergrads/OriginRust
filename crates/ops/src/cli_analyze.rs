@@ -1317,9 +1317,14 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         AnalyzeTool::QpcrCurve { target, no_graph } => {
             (target, Job::Tool(Tool::QpcrCurve(analysis::QpcrCurveSpec { graph: !no_graph })))
         }
-        AnalyzeTool::Cox { target, censor, confidence, no_graph } => (
+        AnalyzeTool::Cox { target, censor, confidence, frequency, no_graph } => (
             target,
-            Job::Tool(Tool::Cox(analysis::CoxSpec { censor, confidence: confidence / 100.0, graph: !no_graph })),
+            Job::Tool(Tool::Cox(analysis::CoxSpec {
+                censor,
+                confidence: confidence / 100.0,
+                graph: !no_graph,
+                frequency,
+            })),
         ),
         AnalyzeTool::Lifereg { target, distribution, censor, frequency } => {
             let dist = match distribution.to_ascii_lowercase().as_str() {
@@ -1708,6 +1713,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             breslow,
             tarone_ware,
             band,
+            frequency,
             no_graph,
         } => (
             target,
@@ -1721,6 +1727,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 tarone_ware,
                 curve: !no_graph,
                 band,
+                frequency,
             })),
         ),
         AnalyzeTool::GraphSummary { target, groups, level, arrangement } => {

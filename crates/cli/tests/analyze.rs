@@ -2135,6 +2135,32 @@ fn kaplan_meier_runs_from_the_command_line() {
     assert!(out.contains("Log-rank test: chi-square 0.2542") && out.contains("Breslow test"), "{out}");
     let (ok, _, err) = sheaf(&["analyze", "kaplan-meier", file, "--y", "time"]);
     assert!(!ok && err.contains("two or three columns"), "{err}");
+    // A frequency column last counts each row that often (T429): the same output as the copied rows.
+    let freq = dir.join("freq.csv");
+    std::fs::write(
+        &freq,
+        "time,censor,group,n\n3,0,1,1\n5,0,2,1\n5,1,1,2\n6,0,2,1\n8,0,1,1\n8,0,2,3\n9,1,2,1\n12,0,1,1\n",
+    )
+    .unwrap();
+    let dup = dir.join("dup.csv");
+    std::fs::write(
+        &dup,
+        "time,censor,group\n3,0,1\n5,0,2\n5,1,1\n5,1,1\n6,0,2\n8,0,1\n8,0,2\n8,0,2\n8,0,2\n9,1,2\n12,0,1\n",
+    )
+    .unwrap();
+    let run = |f: &std::path::Path, y: &str, extra: &[&str]| {
+        let (ok, out, err) =
+            sheaf(&[&["analyze", "kaplan-meier", f.to_str().unwrap(), "--y", y, "--no-graph"], extra].concat());
+        assert!(ok, "{err}");
+        out.lines().filter(|l| l.contains("Log-rank")).map(str::to_string).collect::<Vec<_>>()
+    };
+    assert_eq!(
+        run(&freq, "time,censor,group,n", &["--frequency", "--log-rank"]),
+        run(&dup, "time,censor,group", &["--log-rank"])
+    );
+    let (ok, out, err) =
+        sheaf(&["analyze", "cox", freq.to_str().unwrap(), "--y", "group,time,censor,n", "--frequency", "--no-graph"]);
+    assert!(ok && out.contains("11 cases"), "{err} {out}");
 }
 
 /// Graphical summary (spec `statistics.md` section 22): grouped input gives a table block and a graph per group.

@@ -3805,6 +3805,9 @@ pub enum AnalyzeTool {
         /// Confidence level of the hazard-ratio intervals, in percent.
         #[arg(long, default_value_t = 95.0)]
         confidence: f64,
+        /// The last --y column holds each row's frequency (count).
+        #[arg(long)]
+        frequency: bool,
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,
@@ -4022,6 +4025,9 @@ pub enum AnalyzeTool {
         /// Add the confidence limits of the curves to the graph.
         #[arg(long)]
         band: bool,
+        /// The last --y column holds each row's frequency (count).
+        #[arg(long)]
+        frequency: bool,
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,

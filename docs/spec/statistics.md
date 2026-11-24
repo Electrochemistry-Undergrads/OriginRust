@@ -2323,7 +2323,9 @@ the last chosen column holds how many units each row stands for. A row of freque
 of it (the fits, counts, plotting positions and graphs are those of the written-out rows); a frequency of 0 leaves
 the row out, a missing, negative or fractional one is refused, and the frequencies may add up to at most 1,000,000
 rows. Checked by fitting the same data written out row by row (`crates/core/src/analysis/lifedist.rs`,
-`crates/cli/tests/analyze.rs`).
+`crates/cli/tests/analyze.rs`). T429 adds the same frequency column to the Kaplan-Meier estimator (section 20; after
+the optional group column, `analyze kaplan-meier --frequency`) and Cox regression (section 52, `analyze cox
+--frequency`); the Turnbull estimate (section 53) has it from the start.
 
 ## 50 qPCR relative quantification and standard curves (T397, Origin 2027 Pro assay apps; not measured)
 

@@ -379,6 +379,7 @@ impl MultiOptions {
                     }
                 });
                 ui.checkbox(&mut s.graph, "Survival at the covariate means");
+                ui.checkbox(&mut s.frequency, "Last column: frequency (count) of each row");
             }
             AnalysisKind::LifeRegression => {
                 ui.label("The chosen columns are the covariates, then the time and the censor column.");
@@ -1045,6 +1046,7 @@ impl MultiOptions {
                 ui.checkbox(&mut s.tarone_ware, "Tarone-Ware");
                 ui.checkbox(&mut s.curve, "Survival curves (new graph, censored cases marked)");
                 ui.add_enabled(s.curve, egui::Checkbox::new(&mut s.band, "Add confidence limits to the graph"));
+                ui.checkbox(&mut s.frequency, "Last column: frequency (count) of each row");
                 ui.weak(
                     "Product-limit estimate with Greenwood standard errors. Quartile limits come from the linear                      limits of the curve; the mean is cut off at the largest time.",
                 );

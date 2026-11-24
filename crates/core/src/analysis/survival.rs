@@ -35,6 +35,8 @@ pub struct KaplanMeierSpec {
     pub curve: bool,
     /// Add the confidence limits of the curve to the graph.
     pub band: bool,
+    /// The last chosen column holds each row's frequency (count) (T429).
+    pub frequency: bool,
 }
 
 impl Default for KaplanMeierSpec {
@@ -49,6 +51,7 @@ impl Default for KaplanMeierSpec {
             tarone_ware: false,
             curve: true,
             band: false,
+            frequency: false,
         }
     }
 }
@@ -98,9 +101,10 @@ pub(super) fn run(
     if !(spec.confidence > 0.0 && spec.confidence < 100.0) {
         return Err(AnalysisError::BadOption("the confidence level must lie between 0 and 100 percent".into()));
     }
+    let (columns, counts) = super::lifedist::split_frequency(sheet, columns, spec.frequency)?;
     if columns.len() < 2 || columns.len() > 3 {
         return Err(AnalysisError::BadOption(
-            "the Kaplan-Meier estimator takes two or three columns: time, censor and, optionally, group".into(),
+            "the Kaplan-Meier estimator takes two or three columns: time, censor and, optionally, group (and the frequency last)".into(),
         ));
     }
     if matches!(rows, RowRange::XBetween(..)) {
@@ -121,6 +125,7 @@ pub(super) fn run(
     // Cases per group, in the order of the group labels (numbers by value, otherwise as text).
     let mut cases: Vec<(String, Vec<f64>, Vec<bool>)> = Vec::new();
     let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut total = 0usize;
     for row in first..=last {
         let t = times.get(row).copied().unwrap_or(f64::NAN);
         // A masked or filtered censor or group cell leaves the case out, as a masked time does (T255).
@@ -138,11 +143,12 @@ pub(super) fn run(
             },
             None => column_label(time_col),
         };
-        match index.get(&label) {
-            Some(&k) => {
-                cases[k].1.push(t);
-                cases[k].2.push(is_censored);
-            }
+        let copies = super::lifedist::count_of(&counts, row)?;
+        if copies == 0 {
+            continue;
+        }
+        let k = match index.get(&label) {
+            Some(&k) => k,
             None => {
                 if cases.len() >= MAX_GROUPS {
                     return Err(AnalysisError::BadOption(format!(
@@ -150,9 +156,16 @@ pub(super) fn run(
                     )));
                 }
                 index.insert(label.clone(), cases.len());
-                cases.push((label, vec![t], vec![is_censored]));
+                cases.push((label, Vec::new(), Vec::new()));
+                cases.len() - 1
             }
+        };
+        for _ in 0..copies {
+            cases[k].1.push(t);
+            cases[k].2.push(is_censored);
         }
+        total += copies;
+        super::lifedist::check_total(total)?;
     }
     if cases.is_empty() {
         return Err(AnalysisError::Empty(time_col.short_name.clone()));

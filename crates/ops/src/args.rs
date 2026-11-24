@@ -3656,6 +3656,15 @@ pub enum AnalyzeTool {
         /// Steps to forecast.
         #[arg(long, default_value_t = 10)]
         horizon: usize,
+        /// Damp the trend, with the damping factor fitted in [0.8, 0.98] (or given by --phi).
+        #[arg(long)]
+        damped: bool,
+        /// The damping factor, in (0, 1] (implies --damped).
+        #[arg(long)]
+        phi: Option<f64>,
+        /// Level of the prediction intervals, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        confidence: f64,
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,

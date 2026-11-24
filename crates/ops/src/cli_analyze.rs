@@ -1538,7 +1538,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 graph: !no_graph,
             })),
         ),
-        AnalyzeTool::Forecast { target, model, period, constants, horizon, no_graph } => {
+        AnalyzeTool::Forecast { target, model, period, constants, horizon, damped, phi, confidence, no_graph } => {
             let model = match model.to_ascii_lowercase().as_str() {
                 "simple" => analysis::SmoothModel::Simple,
                 "holt" => analysis::SmoothModel::Holt,
@@ -1570,6 +1570,12 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     constants,
                     horizon,
                     graph: !no_graph,
+                    damping: match (damped, phi) {
+                        (_, Some(p)) => analysis::Damping::Given(p),
+                        (true, None) => analysis::Damping::Fitted,
+                        (false, None) => analysis::Damping::None,
+                    },
+                    confidence: confidence / 100.0,
                 })),
             )
         }

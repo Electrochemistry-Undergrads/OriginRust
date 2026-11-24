@@ -5,11 +5,11 @@ use super::analysis::AnalysisKind;
 use eframe::egui;
 use sheaf_core::analysis::{
     AcfSpec, AdfTerms, ArimaSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty,
-    ChangePointSpec, CoxSpec, DecomposeModel, DecomposeSpec, ExpSmoothSpec, FactorialDesignSpec, FactorialEffectsSpec,
-    ForestTask, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistArbitrarySpec, LifeDistSpec,
-    LifeRegressionSpec, ManhattanSpec, MixtureDesignSpec, MixtureKind, MonteCarloSpec, PcaSpec, PivotBy, PivotPeriod,
-    PivotStat, QpcrCurveSpec, QpcrSpec, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec, RocSpec,
-    SmoothModel, SplitPlotDesignSpec, SplitPlotEffectsSpec, StabilitySpec, StationaritySpec, TDistribution,
+    ChangePointSpec, CoxSpec, Damping, DecomposeModel, DecomposeSpec, ExpSmoothSpec, FactorialDesignSpec,
+    FactorialEffectsSpec, ForestTask, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistArbitrarySpec,
+    LifeDistSpec, LifeRegressionSpec, ManhattanSpec, MixtureDesignSpec, MixtureKind, MonteCarloSpec, PcaSpec, PivotBy,
+    PivotPeriod, PivotStat, QpcrCurveSpec, QpcrSpec, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec,
+    RocSpec, SmoothModel, SplitPlotDesignSpec, SplitPlotEffectsSpec, StabilitySpec, StationaritySpec, TDistribution,
     TimePivotSpec, Tool, TurnbullSpec,
 };
 
@@ -764,6 +764,32 @@ impl MultiOptions {
                 ui.horizontal(|ui| {
                     ui.label("Steps to forecast");
                     ui.add(egui::DragValue::new(&mut s.horizon).range(1..=100_000));
+                });
+                if s.model == SmoothModel::Simple {
+                    s.damping = Damping::None;
+                } else {
+                    ui.horizontal(|ui| {
+                        let mut damped = s.damping != Damping::None;
+                        if ui.checkbox(&mut damped, "Damped trend").changed() {
+                            s.damping = if damped { Damping::Fitted } else { Damping::None };
+                        }
+                        if damped {
+                            let mut given = matches!(s.damping, Damping::Given(_));
+                            if ui.checkbox(&mut given, "Damping factor (else fitted)").changed() {
+                                s.damping = if given { Damping::Given(0.9) } else { Damping::Fitted };
+                            }
+                            if let Damping::Given(p) = &mut s.damping {
+                                ui.add(egui::DragValue::new(p).speed(0.01).range(0.01..=1.0));
+                            }
+                        }
+                    });
+                }
+                ui.horizontal(|ui| {
+                    ui.label("Prediction interval level");
+                    let mut pct = s.confidence * 100.0;
+                    if ui.add(egui::DragValue::new(&mut pct).speed(0.1).range(50.0..=99.99).suffix(" %")).changed() {
+                        s.confidence = pct / 100.0;
+                    }
                 });
                 ui.checkbox(&mut s.graph, "Graph of the data, one-step forecasts and forecasts");
             }

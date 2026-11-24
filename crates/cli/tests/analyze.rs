@@ -1928,6 +1928,14 @@ fn exponential_smoothing_forecast_runs_from_the_command_line() {
     assert!(ok && out.contains("simple smoothing, given alpha = 0.5"), "{err} {out}");
     let (ok, _, err) = sheaf(&["analyze", "forecast", file, "--y", "v", "--constants", "0.5"]);
     assert!(!ok && err.contains("takes 2 constant"), "{err}");
+    // Damped trend and prediction intervals (T427).
+    let (ok, out, err) =
+        sheaf(&["analyze", "forecast", file, "--y", "v", "--damped", "--confidence", "80", "--no-graph"]);
+    assert!(ok && out.contains("damped (phi") && out.contains("80 % prediction intervals"), "{err} {out}");
+    let (ok, out, err) = sheaf(&["analyze", "forecast", file, "--y", "v", "--phi", "0.9", "--no-graph"]);
+    assert!(ok && out.contains("damped (phi 0.9)"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "forecast", file, "--y", "v", "--model", "simple", "--damped"]);
+    assert!(!ok && err.contains("damping factor"), "{err}");
 }
 
 /// Stationarity tests (spec `statistics.md` section 41, T372).

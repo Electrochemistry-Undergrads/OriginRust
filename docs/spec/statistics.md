@@ -2105,7 +2105,7 @@ response surfaces), finite-sample critical values, the Phillips-Perron test and 
 Origin's Time Series Analysis app (2024b Pro) is not part of Origin 2016, so this is Sheaf's own, with the classical
 recursions and statsmodels' "legacy-heuristic" initial states. Statistics > Exponential Smoothing Forecast...
 (`Tool::ExpSmooth`, `sheaf analyze forecast --y COL[,COL..] [--model simple|holt|additive|multiplicative] [--period
-12] [--constants a[,b[,g]]] [--horizon 10] [--no-graph]`): every chosen column is a series of its own, in row order,
+12] [--constants a[,b[,g]]] [--horizon 10] [--damped] [--phi P] [--confidence 95] [--no-graph]`): every chosen column is a series of its own, in row order,
 complete in the chosen rows (simple needs 2 values, Holt 3, Holt-Winters two periods; multiplicative needs values
 above 0).
 
@@ -2117,13 +2117,27 @@ above 0).
 - The forecast `h` steps on is `l + h b (+ s)` (or `(l + h b) s`) with the season of that step.
 - Without `--constants` the constants are fitted on `[0, 1]` by least squares of the one-step errors (Nelder-Mead
   kept inside the box, from a grid of starts and once more from the best).
+- **Damped trend** (T427; Holt and Holt-Winters; the window's "Damped trend"): the trend enters as `phi b`, so the
+  one-step forecast is `l + phi b (+ s)`, `l' = a (y - s) + (1 - a)(l + phi b)`, `b' = beta (l' - l) + (1 - beta) phi
+  b`, `s' = gamma (y - l - phi b) + (1 - gamma) s`, and `h` steps on `l + (phi + ... + phi^h) b (+ s)`. `phi` is given
+  (`--phi`, in (0, 1]) or fitted with the free constants in [0.8, 0.98] (`--damped`); the sheet's Phi (damping)
+  column shows it.
+- **Prediction intervals** (T427; `--confidence`, 95 % by default): written as `l' = l + phi b + a e`, `b' = phi b + a
+  beta e`, `s' = s + gamma e` (`e` the one-step error) the recursions are the additive-error state space models,
+  whose `h`-step forecast variance is `sigma^2 (1 + sum_{j<h} c_j^2)`, `c_j = a (1 + beta (phi + ... + phi^j)) +
+  gamma [m divides j]`, with `sigma^2 = SSE / n`; the limits are the forecast `-+ z(1 - a/2) sigma_h`. The
+  multiplicative season has no closed form: its limit columns stay empty.
 
 The result sheet `ForecastN` has one row per column (Alpha, Beta, Gamma, SSE, RMSE, Final level, Final trend) and,
-per column, the X, the data, the one-step forecasts, the residuals, the forecast X (the last X step continued) and the
-forecasts; a new graph per column draws the data, the one-step forecasts and the forecasts. At fixed constants the
+per column, the X, the data, the one-step forecasts, the residuals, the forecast X (the last X step continued), the
+forecasts and the Lower and Upper limits (`Lower 95%`); a new graph per column draws the data, the one-step forecasts,
+the forecasts and the two limits. At fixed constants the
 fitted values, SSE, final states and forecasts are checked against numpy, and the fitted SSE against scipy's best
 (L-BFGS-B from many starts and Powell), in `tools/expsmooth-ref.py` and `crates/calc/tests/expsmooth_reference.rs`.
-Prediction intervals, damped trends, the ETS state-space likelihood and ARIMA are not built.
+Damping and intervals against numpy/scipy (`tools/expsmooth-pi-ref.py`, `crates/calc/tests/expsmooth_pi_reference.rs`:
+five cases at fixed constants to 1e-9, where the script confirms each interval variance by simulating the model
+forward 200 000 times; fitted damping no worse than scipy's L-BFGS-B best). The ETS likelihood (AIC model choice),
+multiplicative-error models and intervals for the multiplicative season are not built.
 
 ## 43 ARIMA forecast (T376, Origin 2024b Time Series Analysis app; not measured)
 

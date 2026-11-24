@@ -440,6 +440,36 @@ fn set_column_values_fills_the_column_from_a_formula() {
 }
 
 #[test]
+fn choosing_a_column_or_a_cell_while_setting_values_inserts_its_reference() {
+    // T423: with Set Column Values open, a click on B's header inserts col(B); a click on one of its cells col(B)[2].
+    let mut h = start(vec![data_file("pick")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Set Column Values...");
+    settle(&mut h);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let sheet = project(&h).workbook(book).unwrap().sheet().clone();
+    let b = sheet.column_by_name("B").unwrap().id;
+    // What a click on B's header and then on B's second cell leave selected.
+    {
+        let ui = h.state_mut().books.get_mut(&book).unwrap();
+        (ui.sel, ui.selected) = (Sel::Columns, vec![b]);
+    }
+    settle(&mut h);
+    assert_eq!(h.state().set_values.as_ref().unwrap().formula(), "col(B)");
+    h.event(egui::Event::Text(" + ".to_string()));
+    settle(&mut h);
+    h.state_mut().books.get_mut(&book).unwrap().select_cells(&sheet, (1, 1), (1, 1));
+    settle(&mut h);
+    assert_eq!(h.state().set_values.as_ref().unwrap().formula(), "col(B) + col(B)[2]");
+    h.state_mut().books.get_mut(&book).unwrap().select_cells(&sheet, (0, 0), (1, 2));
+    settle(&mut h);
+    assert_eq!(h.state().set_values.as_ref().unwrap().formula(), "col(B) + col(B)[2]", "two columns: nothing");
+    click(&mut h, "OK");
+    assert_eq!(column(&h, "C"), [7.0, 9.0, 11.0, 13.0], "B + B[2] = B + 4.5");
+}
+
+#[test]
 fn an_auto_column_follows_an_edited_source_cell_and_a_manual_one_waits_to_be_recalculated() {
     let mut h = start(vec![data_file("recalc")]);
     show_window(&mut h, "Book1 - sample.csv");

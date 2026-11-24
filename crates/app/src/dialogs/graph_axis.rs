@@ -202,6 +202,7 @@ fn far_edge_page(ui: &mut egui::Ui, axis: &mut Axis, tab: AxisTab, vertical: boo
 fn copy_axis_look(dst: &mut Axis, src: &Axis) {
     let keep = Axis {
         scale: dst.scale,
+        custom_scale: dst.custom_scale.clone(),
         min: dst.min,
         max: dst.max,
         auto_range: dst.auto_range,
@@ -377,6 +378,16 @@ fn scale_tab(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis>
             }
         });
         ui.end_row();
+        if axis.scale == ScaleKind::CustomFormula
+            && let Some(formula) = &axis.custom_scale
+        {
+            ui.label("Direct Formula");
+            ui.label(&formula.direct);
+            ui.end_row();
+            ui.label("Inverse Formula");
+            ui.label(&formula.inverse);
+            ui.end_row();
+        }
         ui.label("Rescale");
         egui::ComboBox::from_id_salt(format!("{id}_auto"))
             .selected_text(match axis.auto_range {
@@ -410,7 +421,7 @@ fn scale_tab(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis>
             optional_number(ui, &mut axis.major_step, resolved.map(|r| r.step), speed);
             ui.end_row();
             ui.label("First Tick");
-            ui.add_enabled_ui(axis.scale == ScaleKind::Linear, |ui| {
+            ui.add_enabled_ui(matches!(axis.scale, ScaleKind::Linear | ScaleKind::CustomFormula), |ui| {
                 optional_number(
                     ui,
                     &mut axis.first_tick,
@@ -842,6 +853,9 @@ mod tests {
         src.scale = ScaleKind::Ln;
         src.title = Some("src".into());
         let mut dst = g.layers[0].y_axis.clone();
+        let formula = sheaf_core::scales::CustomScale { direct: "x*x".into(), inverse: "sqrt(x)".into() };
+        dst.scale = ScaleKind::CustomFormula;
+        dst.custom_scale = Some(formula.clone());
         dst.min = Some(3.0);
         dst.title = Some("dst".into());
         dst.offset_pct = 2.0;
@@ -849,7 +863,8 @@ mod tests {
         dst.opposite_style.tick_label_formula = Some("x*10".into());
         copy_axis_look(&mut dst, &src);
         assert_eq!((dst.line_width_pt, dst.tick_color), (2.5, Some(Color::rgb(255, 0, 0))));
-        assert_eq!((dst.scale, dst.min, dst.title.as_deref()), (ScaleKind::Linear, Some(3.0), Some("dst")));
+        assert_eq!((dst.scale, dst.min, dst.title.as_deref()), (ScaleKind::CustomFormula, Some(3.0), Some("dst")));
+        assert_eq!(dst.custom_scale, Some(formula));
         assert_eq!((dst.offset_pct, dst.opposite_offset_pct), (2.0, Some(4.0)));
         assert_eq!(dst.opposite_style.tick_label_formula.as_deref(), Some("x*10"));
     }

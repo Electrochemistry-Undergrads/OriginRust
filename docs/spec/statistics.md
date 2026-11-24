@@ -2214,8 +2214,8 @@ until it stops improving; with only exact and right-censored rows it gives secti
 AIC, Mean, Median); a new graph draws the fitted distribution function and survival in percent. Checked against scipy
 (`tools/interval-censor-ref.py`, `crates/calc/tests/interval_censor_reference.rs`: the log-likelihood at scipy's
 optimum to 1e-10, Sheaf's maximum no lower, parameters to 1e-5; scipy's own `fit(CensoredData)` agrees to 1e-3).
-Nonparametric (Turnbull) estimates, probability plots with interval data, frequency columns and life-data regression
-are not built.
+Nonparametric (Turnbull) estimates are section 53, frequency columns section 49 and life-data regression section 48;
+probability plots with interval data are not built.
 
 ## 48 Life data regression (T391, Origin 2026b; not measured)
 
@@ -2310,6 +2310,28 @@ graph plots. The notes give the cases, events, log-likelihoods and the three tes
 (`tools/cox-ref.py`, `crates/calc/tests/cox_reference.rs`: 70 rows with ties, three covariates and one) to 1e-8.
 Efron ties, strata, time-varying covariates, text (factor) covariates, residuals and the proportional-hazards check
 are not built.
+
+## 53 Turnbull nonparametric estimate with arbitrary censoring (T409, Origin 2026b; not measured)
+
+Origin 2026b's reliability tools estimate the failure distribution of arbitrarily censored data without a model; not
+in Origin 2016, so this is Sheaf's own. Statistics > Survival Analysis > Nonparametric Analysis (Arbitrary
+Censoring)... (`Tool::Turnbull`, `sheaf analyze turnbull --y START,END [--frequency] [--no-graph]`,
+`sheaf_calc::turnbull`): the rows are read as in section 47 (equal = exact `[t, t]`, empty end = right-censored
+`(t, inf)`, empty start = left-censored `(-inf, t]`, otherwise `(start, end]`), with an optional frequency column last
+(section 49). The estimate puts its mass on the Turnbull intervals: a left end of some row followed, in the sorted ends,
+by a right end of some row (at equal times an exact row's closed left end sorts before a right end, and a right end
+before an open left end). The probabilities maximize `sum ln P(row)` by the self-consistency (EM) iteration, stopped
+when every interval's mean of `[row covers it] / P(row)` is at most `1 + 1e-12` (the Kuhn-Tucker condition; at most
+200 000 iterations, else a note says so); with exact and right-censored rows only this is the Kaplan-Meier estimator.
+The result sheet `TurnbullN` has one row per interval, labelled `[5, 5]`, `(10, 20]`, `(-inf, 10]` or `(30, inf)`,
+with Lower, Upper (missing when infinite), Probability, Survival (after the interval) and Cumulative failure, then
+Time and Survival for the graph: flat between intervals and straight across each (the estimate says how much
+probability falls in an interval, not where in it). The notes give the counts by censoring, the number of intervals,
+the log-likelihood and the iterations. Checked against numpy/scipy (`tools/turnbull-ref.py`,
+`crates/calc/tests/turnbull_reference.rs`: a 12-row case with every kind of row and 80 rows of inspections, watched
+units and irregular windows; intervals from the definition pair by pair, probabilities from a dense iteration, the
+maximum confirmed by SLSQP): intervals exactly, log-likelihood to 1e-9, probabilities to 1e-6. Standard errors and
+confidence bands, probability plots with interval data and the comparison of groups are not built.
 
 ## 5 Where results go (ADR 0005)
 

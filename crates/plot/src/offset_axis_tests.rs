@@ -657,3 +657,47 @@ fn custom_scale_link_tracks_parent_endpoints_and_keeps_own_ticks() {
     graph.layers[i].link.as_mut().unwrap().x = ScaleLink::Custom { from: "1/(X1-30)".into(), to: "X2".into() };
     assert_eq!(geoms(&p, g)[i].x.endpoints(), (1.0, 7.0));
 }
+
+#[test]
+fn nonlinear_custom_scale_maps_origin_ticks_and_round_trips_coordinates() {
+    use sheaf_core::graph::ScaleKind;
+    use sheaf_core::scales::CustomScale;
+
+    let (mut p, g) =
+        super::tests::project(Template::Line, vec![1.0, 2.0, 3.0, 4.0, 5.0], vec![vec![2.0, 4.0, 6.0, 8.0, 10.0]]);
+    // Tick X positions from the Origin 2016 EMFs, with the first tick's X subtracted.
+    let measured = [
+        ("x*x", "sqrt(x)", [0.0, 274.0, 731.0, 1370.0, 2192.0]),
+        ("ln(x)", "exp(x)", [0.0, 944.0, 1496.0, 1888.0, 2192.0]),
+        ("-x", "-x", [0.0, 548.0, 1096.0, 1644.0, 2192.0]),
+    ];
+    for (direct, inverse, positions) in measured {
+        let axis = &mut p.graph_mut(g).unwrap().layers[0].x_axis;
+        axis.scale = ScaleKind::CustomFormula;
+        axis.custom_scale = Some(CustomScale { direct: direct.into(), inverse: inverse.into() });
+        axis.min = Some(1.0);
+        axis.max = Some(5.0);
+        axis.major_step = Some(1.0);
+        let geometry = geoms(&p, g);
+        let x_axis = &geometry[0].x;
+        assert_eq!(x_axis.scale, ScaleKind::CustomFormula);
+        assert_eq!(x_axis.major, [1.0, 2.0, 3.0, 4.0, 5.0]);
+        for (&value, location) in x_axis.major.iter().zip(positions) {
+            let unit = x_axis.to_unit(value);
+            assert!((unit - location / 2192.0).abs() < 0.0006, "{direct} {value}: {unit}");
+            assert!((x_axis.from_unit(unit) - value).abs() < 1e-9);
+        }
+        if direct == "x*x" {
+            assert!((x_axis.scale_span() - 24.0).abs() < 1e-9);
+            assert!(x_axis.to_unit(-3.0).is_nan());
+        }
+    }
+
+    let axis = &mut p.graph_mut(g).unwrap().layers[0].x_axis;
+    axis.custom_scale = Some(CustomScale { direct: "ln(x)".into(), inverse: "exp(x)".into() });
+    axis.min = Some(0.0);
+    let geometry = geoms(&p, g);
+    assert_eq!(geometry[0].x.scale, ScaleKind::Linear);
+    assert_eq!(geometry[0].x.endpoints(), (0.0, 5.0));
+    assert!((geometry[0].x.to_unit(3.0) - 0.6).abs() < 1e-9);
+}

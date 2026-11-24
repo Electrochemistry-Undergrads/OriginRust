@@ -171,7 +171,12 @@ fn inherit_font<'a>(mut style: ResolvedStyle<'a>, fallback: ResolvedStyle<'a>) -
 
 impl Worksheet {
     pub fn set_standard_font(&mut self, font: ColumnLabelFont) -> bool {
-        set_category_font(&mut self.font_defaults.standard, font)
+        let previous_scale = self.font_defaults.size_scale();
+        if !set_category_font(&mut self.font_defaults.standard, font) {
+            return false;
+        }
+        self.view.header_measurements.scale(self.font_defaults.size_scale() / previous_scale);
+        true
     }
 
     /// Changes the common font under the independent column-label categories.

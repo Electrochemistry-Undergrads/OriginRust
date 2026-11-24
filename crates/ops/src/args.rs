@@ -3797,6 +3797,18 @@ pub enum AnalyzeTool {
         #[arg(long)]
         frequency: bool,
     },
+    /// Turnbull's nonparametric estimate with arbitrary censoring: --y START,END (as lifedist-interval); the probability
+    /// of failing in each Turnbull interval and the survival after it.
+    Turnbull {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+        /// The last --y column holds each row's frequency (count).
+        #[arg(long)]
+        frequency: bool,
+    },
     /// Distribution analysis with arbitrary censoring: --y START,END; equal = exact, empty end = right-censored, empty
     /// start = left-censored, otherwise interval-censored; Weibull, lognormal, exponential or normal maximum likelihood.
     LifedistInterval {

@@ -288,7 +288,8 @@ pub(crate) fn resolve_dim(
         crate::ticks::resolve_category(axis, range)
     } else {
         let mut drawn = if dim == Dim::X { data::date_axis(axis, sources.iter().copied()) } else { None };
-        let linear = axis.scale == sheaf_core::graph::ScaleKind::Linear;
+        let linear =
+            matches!(axis.scale, sheaf_core::graph::ScaleKind::Linear | sheaf_core::graph::ScaleKind::CustomFormula);
         let mut free = (true, true);
         let bars: Vec<&data::PlotData> = sources.iter().copied().filter(|pd| pd.bar.is_some()).collect();
         if linear && let (Some((lo, hi)), Some(pd)) = (range, bars.first()) {

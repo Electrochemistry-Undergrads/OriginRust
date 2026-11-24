@@ -1320,6 +1320,8 @@ pub enum ScaleKind {
     Logit,
     /// Percent values placed by `ln(-ln(1 - p))`.
     Weibull,
+    /// A nonlinear scale defined by the axis' direct and inverse formulas.
+    CustomFormula,
 }
 
 /// How an axis picks its limits when `min`/`max` are not fixed.
@@ -1387,6 +1389,9 @@ impl Font {
 pub struct Axis {
     #[serde(default)]
     pub scale: ScaleKind,
+    /// Direct and inverse transforms when the scale type is Custom Formula.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_scale: Option<crate::scales::CustomScale>,
     /// Fixed lower limit; `None` means automatic.
     pub min: Option<f64>,
     /// Fixed upper limit; `None` means automatic.

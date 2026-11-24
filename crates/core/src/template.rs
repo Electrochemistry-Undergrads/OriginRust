@@ -1300,6 +1300,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
         long_name: String::new(),
         slicer: None,
         explorer: None,
+        sticky: None,
         browser: None,
         page: Page::inches(ORIGIN_PAGE_IN.0, ORIGIN_PAGE_IN.1),
         layers: vec![Layer {

@@ -820,6 +820,8 @@ pub enum Cmd {
     /// Window > Arrange Icons (T257).
     ArrangeIcons,
     WindowProperties,
+    /// Window > Sticky Note (T421): on the window, or on the workbook's active sheet.
+    StickyNote(bool),
     About,
 }
 
@@ -2497,6 +2499,14 @@ fn window_menu(kind: WindowKind) -> Vec<Entry> {
             ],
         )),
         WindowKind::Workbook => v.push(grey("Sp&lit")),
+        WindowKind::None | WindowKind::Matrix | WindowKind::Layout => {}
+    }
+    match kind {
+        WindowKind::Graph => v.push(item("Stic&ky Note", Cmd::StickyNote(false))),
+        WindowKind::Workbook => v.extend([
+            item("Stic&ky Note on Book", Cmd::StickyNote(false)),
+            item("Sticky &Note on Sheet", Cmd::StickyNote(true)),
+        ]),
         WindowKind::None | WindowKind::Matrix | WindowKind::Layout => {}
     }
     v.extend([
@@ -4201,6 +4211,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::TileVertically => Action::TileVertically,
         Cmd::ArrangeIcons => Action::ArrangeIcons,
         Cmd::WindowProperties => Action::RenameWindow(c.active.ok_or(NEED_WINDOW)?),
+        Cmd::StickyNote(sheet) => Action::AddStickyNote { window: c.active.ok_or(NEED_WINDOW)?, sheet: *sheet },
         Cmd::About => Action::About,
     })
 }

@@ -106,6 +106,7 @@ impl FindProjectDialog {
                         ui.checkbox(&mut self.spec.data_cells, "Data in Cells (1st Matched in Column)");
                         ui.checkbox(&mut self.spec.graph_text, "Text Objects on Graphs");
                     });
+                    ui.checkbox(&mut self.spec.notes, "Notes Windows");
                 });
                 if go && !self.spec.text.is_empty() {
                     self.search(project, active_folder);

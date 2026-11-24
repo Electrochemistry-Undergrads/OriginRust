@@ -67,6 +67,8 @@ pub struct FindSpec {
     pub column_formula: bool,
     pub data_cells: bool,
     pub graph_text: bool,
+    /// Notes windows: their names and text (T407; Sheaf's own, Origin 2026 searches notes in project files).
+    pub notes: bool,
 }
 
 impl Default for FindSpec {
@@ -88,6 +90,7 @@ impl Default for FindSpec {
             column_formula: false,
             data_cells: false,
             graph_text: true,
+            notes: true,
         }
     }
 }
@@ -328,6 +331,24 @@ pub fn find_in_project(project: &Project, spec: &FindSpec, active_folder: &[usiz
             }
         }
     }
+    // Notes windows (T407): their short and long names and their text, one hit each.
+    if spec.notes {
+        for (n, folder) in project.notes().filter_map(|n| folder_for(n.id).map(|folder| (n, folder))) {
+            for (attr, text) in
+                [("Short Name", n.name.as_str()), ("Long Name", n.long_name.as_str()), ("Text", n.text.as_str())]
+            {
+                if spec.matches(text) {
+                    hits.push(FindHit {
+                        range: format!("[{}]", n.name),
+                        element: "Notes",
+                        attribute: attr,
+                        folder: folder.to_string(),
+                        target: FindTarget::Window(n.id),
+                    });
+                }
+            }
+        }
+    }
     hits
 }
 
@@ -384,6 +405,21 @@ mod tests {
                 (format!("[{b}]Sheet1!B\"Current density\""), "Column", "Long Name"),
             ]
         );
+    }
+
+    #[test]
+    fn notes_windows_are_searched_by_name_and_text_unless_switched_off() {
+        let mut p = project();
+        let id = p.add_notes();
+        let n = p.notes_mut(id).unwrap();
+        n.long_name = "Lab log".into();
+        n.text = "Day 1\nThe baseline drifted after the second sweep".into();
+        let name = n.name.clone();
+        assert_eq!(find(&p, text("drifted")), [(format!("[{name}]"), "Notes", "Text")]);
+        assert_eq!(find(&p, text("lab")), [(format!("[{name}]"), "Notes", "Long Name")]);
+        let hits = find_in_project(&p, &text("drifted"), &[]);
+        assert_eq!(hits[0].target, FindTarget::Window(id));
+        assert!(find(&p, FindSpec { notes: false, ..text("drifted") }).is_empty());
     }
 
     #[test]

@@ -14,4 +14,4 @@ subfolders, and After Column puts the new column right after a named column of e
 
 ## Left
 
-- Picking the sheets one by one.
+- Picking the sheets one by one: done in T418.

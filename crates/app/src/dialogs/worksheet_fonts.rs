@@ -41,11 +41,11 @@ impl SheetSize {
     }
 }
 
-fn header_measurement(ui: &mut egui::Ui, name: &str, percent: &mut Option<u16>, automatic_px: f32, base_px: f32) {
+fn measurement(ui: &mut egui::Ui, name: &str, percent: &mut Option<u16>, automatic: u16, minimum: u16) {
     let label = ui.label(name);
-    let mut value = percent.unwrap_or_else(|| (100.0 * automatic_px / base_px).round() as u16);
+    let mut value = percent.unwrap_or(automatic);
     let limit = 10_000.max(value);
-    let response = ui.add(egui::DragValue::new(&mut value).range(0..=limit).suffix("%")).labelled_by(label.id);
+    let response = ui.add(egui::DragValue::new(&mut value).range(minimum..=limit).suffix("%")).labelled_by(label.id);
     if response.changed() {
         *percent = Some(value);
     }
@@ -190,17 +190,20 @@ impl WorksheetFontsDialog {
         if !self.changed() || !self.current(doc) {
             return;
         }
-        let measurements = self.shown_view.header_measurements;
-        let previous = self.base_view.header_measurements;
+        let headers = self.shown_view.header_measurements;
+        let previous_headers = self.base_view.header_measurements;
+        let cells = self.shown_view.cell_measurements;
+        let previous_cells = self.base_view.cell_measurements;
         let mut view = self.shown_view;
-        view.header_measurements = previous;
+        view.header_measurements = previous_headers;
+        view.cell_measurements = previous_cells;
         let mut layout = view;
         layout.show_missing_as_blank = self.base_view.show_missing_as_blank;
         let label = match (
             self.shown != self.base,
             self.shown_colors != self.base_colors,
             view != self.base_view,
-            self.shown_size != self.base_size || measurements != previous,
+            self.shown_size != self.base_size || headers != previous_headers || cells != previous_cells,
         ) {
             (true, false, false, false) => "Worksheet font",
             (false, true, false, false) => "Worksheet colors",
@@ -250,11 +253,20 @@ impl WorksheetFontsDialog {
                 sheet.set_standard_font(self.shown[STANDARD].clone());
             }
             // Explicit measurements use the displayed units even when applying a font change.
-            if measurements.column_height != previous.column_height {
-                sheet.view.header_measurements.column_height = measurements.column_height;
+            if headers.column_height != previous_headers.column_height {
+                sheet.view.header_measurements.column_height = headers.column_height;
             }
-            if measurements.row_width != previous.row_width {
-                sheet.view.header_measurements.row_width = measurements.row_width;
+            if headers.row_width != previous_headers.row_width {
+                sheet.view.header_measurements.row_width = headers.row_width;
+            }
+            if cells.row_height != previous_cells.row_height {
+                sheet.view.cell_measurements.row_height = cells.row_height;
+            }
+            if cells.column_width != previous_cells.column_width {
+                sheet.view.cell_measurements.column_width = cells.column_width;
+                for column in &mut sheet.columns {
+                    column.width = None;
+                }
             }
             for (i, kind) in [
                 (LONG_NAME, LabelKind::LongName),
@@ -311,22 +323,28 @@ impl WorksheetFontsDialog {
 
         ui.separator();
         ui.label("Worksheet Measurement");
-        let measurements = &mut self.shown_view.header_measurements;
+        let headers = &mut self.shown_view.header_measurements;
+        let cells = &mut self.shown_view.cell_measurements;
+        let standard = (100.0 * sheet.font_defaults.size_scale()).round() as u16;
         egui::Grid::new("worksheet_measurement_grid").num_columns(2).show(ui, |ui| {
-            header_measurement(
+            let height = crate::worksheet_layout::automatic_column_header_height(ui.ctx(), sheet);
+            let width = crate::grid::automatic_row_header_width(sheet);
+            measurement(
                 ui,
                 "Column Header Height",
-                &mut measurements.column_height,
-                crate::worksheet_layout::automatic_column_header_height(ui.ctx(), sheet),
-                crate::grid::ROW_HEIGHT,
+                &mut headers.column_height,
+                (100.0 * height / crate::grid::ROW_HEIGHT).round() as u16,
+                0,
             );
-            header_measurement(
+            measurement(
                 ui,
                 "Row Header Width",
-                &mut measurements.row_width,
-                crate::grid::automatic_row_header_width(sheet),
-                crate::grid::COLUMN_WIDTH,
+                &mut headers.row_width,
+                (100.0 * width / crate::grid::COLUMN_WIDTH).round() as u16,
+                0,
             );
+            measurement(ui, "All Rows Height", &mut cells.row_height, standard, 1);
+            measurement(ui, "All Columns Width", &mut cells.column_width, standard, 1);
         });
     }
 

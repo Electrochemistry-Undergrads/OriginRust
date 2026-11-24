@@ -701,3 +701,46 @@ fn nonlinear_custom_scale_maps_origin_ticks_and_round_trips_coordinates() {
     assert_eq!(geometry[0].x.endpoints(), (0.0, 5.0));
     assert!((geometry[0].x.to_unit(3.0) - 0.6).abs() < 1e-9);
 }
+
+#[test]
+fn discrete_scale_uses_first_plot_and_interpolates_in_data_coordinates() {
+    use sheaf_core::graph::ScaleKind;
+
+    let xs = [10.0, 11.0, 15.0, 22.0, 23.0];
+    let ys = [1.0, 3.0, 4.0, 9.0, 14.0];
+    let (mut p, id) =
+        super::tests::project(Template::Line, xs.to_vec(), vec![ys.to_vec(), vec![2.0, 4.0, 6.0, 8.0, 10.0]]);
+    let layer = &mut p.graph_mut(id).unwrap().layers[0];
+    for (axis, min, max) in [(&mut layer.x_axis, 8.0, 25.0), (&mut layer.y_axis, 1.0, 14.0)] {
+        axis.scale = ScaleKind::Discrete;
+        axis.min = Some(min);
+        axis.max = Some(max);
+        axis.major_step = Some(1.0);
+        axis.minor_ticks = 0;
+    }
+    let geometry = geoms(&p, id);
+    let (x, y) = (&geometry[0].x, &geometry[0].y);
+    assert_eq!(x.major, [8.0, 9.0, 10.0, 11.0, 15.0, 22.0, 23.0, 24.0, 25.0]);
+    assert_eq!(x.labels, ["8", "9", "10", "11", "15", "22", "23", "24", "25"]);
+    assert_eq!(y.major, ys);
+    // The first plot's EMF line points are 274 units apart in a 2192-unit frame.
+    for (index, value) in xs.into_iter().enumerate() {
+        assert_eq!(x.to_unit(value), (index + 2) as f64 / 8.0);
+    }
+    assert_eq!(x.to_unit(13.0), 3.5 / 8.0);
+    assert_eq!(x.from_unit(3.5 / 8.0), 13.0);
+    for (index, value) in ys.into_iter().enumerate() {
+        assert_eq!(y.to_unit(value), index as f64 / 4.0);
+    }
+
+    let axis = &mut p.graph_mut(id).unwrap().layers[0].x_axis;
+    axis.min = Some(20.0);
+    axis.max = Some(12.0);
+    let geometry = geoms(&p, id);
+    let x = &geometry[0].x;
+    assert_eq!(x.endpoints(), (20.0, 12.0));
+    assert_eq!(x.major, [15.0]);
+    assert_eq!(x.from_unit(0.0), 20.0);
+    assert_eq!(x.from_unit(1.0), 12.0);
+    assert!((x.from_unit(x.to_unit(13.0)) - 13.0).abs() < 1e-12);
+}

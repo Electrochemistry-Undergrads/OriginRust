@@ -95,13 +95,14 @@ pub fn dialog_body(
                     rug_tab(ui, axis, far, cartesian, &names, id);
                     return;
                 }
+                let cartesian = layer.coords.is_cartesian();
                 let (axis, id) = if *vertical { (&mut layer.y_axis, "y") } else { (&mut layer.x_axis, "x") };
                 if by_edge && far {
                     far_edge_page(ui, axis, *tab, *vertical, id);
                     return;
                 }
                 match *tab {
-                    AxisTab::Scale => scale_tab(ui, axis, resolved, id),
+                    AxisTab::Scale => scale_tab(ui, axis, resolved, id, cartesian),
                     AxisTab::TickLabels => tick_labels_tab(ui, axis, *vertical, columns, id),
                     AxisTab::Title => title_tab(ui, axis, id),
                     AxisTab::Grids => grids_tab(ui, axis, id),
@@ -361,7 +362,7 @@ fn breaks_tab(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis
     });
 }
 
-fn scale_tab(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis>, id: &str) {
+fn scale_tab(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis>, id: &str, cartesian: bool) {
     let span = resolved.map(|r| (r.max - r.min).abs()).unwrap_or(1.0);
     let speed = (span / 200.0).max(1e-12);
     grid(ui, &format!("{id}_scale"), |ui| {
@@ -372,11 +373,14 @@ fn scale_tab(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis>
         optional_number(ui, &mut axis.max, resolved.map(|r| r.max), speed);
         ui.end_row();
         ui.label("Type");
-        egui::ComboBox::from_id_salt(format!("{id}_type")).selected_text(axis.scale.label()).show_ui(ui, |ui| {
-            for kind in ScaleKind::ALL {
-                ui.selectable_value(&mut axis.scale, kind, kind.label());
-            }
-        });
+        egui::ComboBox::from_id_salt(format!("{id}_type")).selected_text(axis.scale.label()).height(300.0).show_ui(
+            ui,
+            |ui| {
+                for kind in ScaleKind::ALL.into_iter().chain(cartesian.then_some(ScaleKind::Discrete)) {
+                    ui.selectable_value(&mut axis.scale, kind, kind.label());
+                }
+            },
+        );
         ui.end_row();
         if axis.scale == ScaleKind::CustomFormula
             && let Some(formula) = &axis.custom_scale
@@ -421,14 +425,17 @@ fn scale_tab(ui: &mut egui::Ui, axis: &mut Axis, resolved: Option<&ResolvedAxis>
             optional_number(ui, &mut axis.major_step, resolved.map(|r| r.step), speed);
             ui.end_row();
             ui.label("First Tick");
-            ui.add_enabled_ui(matches!(axis.scale, ScaleKind::Linear | ScaleKind::CustomFormula), |ui| {
-                optional_number(
-                    ui,
-                    &mut axis.first_tick,
-                    resolved.map(|r| r.major.first().copied().unwrap_or(r.min)),
-                    speed,
-                );
-            });
+            ui.add_enabled_ui(
+                matches!(axis.scale, ScaleKind::Linear | ScaleKind::CustomFormula | ScaleKind::Discrete),
+                |ui| {
+                    optional_number(
+                        ui,
+                        &mut axis.first_tick,
+                        resolved.map(|r| r.major.first().copied().unwrap_or(r.min)),
+                        speed,
+                    );
+                },
+            );
             ui.end_row();
         });
     });

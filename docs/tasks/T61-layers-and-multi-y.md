@@ -1,6 +1,6 @@
 # T61: Layers, insets and three/four Y axes
 
-**Status:** in progress. Layer creation, deletion, insets, layer properties, axis offsets,
+**Status:** done. Layer creation, deletion, insets, layer properties, axis offsets,
 Move to Layer, multi-Y templates and the Multiple Y Axes dialog are implemented. Graphing
 21.13–21.17 records layer visibility, the New Layer (Axes) dialog, icon switches and Layer
 Management Add. Auto Offset Overlapped Axes works for the five linked full-frame presets
@@ -15,7 +15,9 @@ current parent, preserves formulas in Sheaf files and OPJ companions, and warns 
 OPJ export. Layer Management Add offers a separate nonlinear Custom Formula scale for
 independent Cartesian axes (21.17). Direct and inverse expressions govern drawing and
 coordinate reading, with tick values in data units. Origin 2016 EMFs measured that behavior
-for squared, log and decreasing transforms. Discrete remains open.
+for squared, log and decreasing transforms. Discrete spaces the first plot’s distinct values
+evenly on either independent Cartesian dimension, with linear extensions and OPJ round-trip
+support (21.17).
 **Size:** L, three slices.
 Legend-anchor follow-up (`codex/multi-y-template-legends`): the four stock templates use
 measured top-left positions above the frame, Arial 22 pt (YY-YY: 20 pt), and no frame or background.

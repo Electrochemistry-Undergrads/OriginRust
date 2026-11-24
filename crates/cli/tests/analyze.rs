@@ -1485,6 +1485,14 @@ fn time_series_pivot_runs_from_the_command_line() {
     assert!(ok && out.contains("FY2026 Q2") && out.contains("1 period(s)"), "{err} {out}");
     let (ok, _, err) = sheaf(&["analyze", "timepivot", file, "--y", "v", "--fiscal-start", "13"]);
     assert!(!ok && err.contains("--fiscal-start"), "{err}");
+    // A second grouping (T420): per month, by weekday (Mon 5 Jan, Tue 6 Jan, Sun 1 Feb).
+    let (ok, out, err) = sheaf(&["analyze", "timepivot", file, "--y", "v", "--period", "month", "--by", "weekday"]);
+    assert!(
+        ok && out.contains("Mean of v (Mon)") && out.contains("(Sun)") && out.contains("3 group(s)"),
+        "{err} {out}"
+    );
+    let (ok, _, err) = sheaf(&["analyze", "timepivot", file, "--y", "v", "--by", "fortnight"]);
+    assert!(!ok && err.contains("--by"), "{err}");
 }
 
 /// Manhattan plot (spec `statistics.md` section 33, T362).

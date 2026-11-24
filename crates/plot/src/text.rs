@@ -90,7 +90,7 @@ pub(crate) fn segments_width(m: &dyn TextMeasurer, segments: &[Segment], font: &
             Segment::Text(r) => m.width(&r.text, &run_font(font, r), size * r.scale),
             Segment::Pair { sub, sup } => segments_width(m, sub, font, size).max(segments_width(m, sup, font, size)),
             Segment::Accent { content, .. } => segments_width(m, content, font, size),
-            Segment::LineGap(_) => 0.0,
+            Segment::LineGap(_) | Segment::Tab => 0.0,
         })
         .sum()
 }
@@ -104,7 +104,7 @@ fn ink_top(segments: &[Segment]) -> f64 {
             Segment::Accent { kind, content, scale, .. } => {
                 ink_top(content) + scale * (ACCENT_GAP + accent_height(*kind))
             }
-            Segment::LineGap(_) => f64::NEG_INFINITY,
+            Segment::LineGap(_) | Segment::Tab => f64::NEG_INFINITY,
         })
         .fold(f64::NEG_INFINITY, f64::max)
 }
@@ -148,7 +148,7 @@ fn visit_ink(
                 }
                 cursor += width;
             }
-            Segment::LineGap(_) => {}
+            Segment::LineGap(_) | Segment::Tab => {}
         }
     }
 }

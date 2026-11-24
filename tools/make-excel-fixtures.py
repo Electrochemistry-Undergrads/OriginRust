@@ -241,9 +241,29 @@ def origin_kinds():
         c.number_format = "[h]:mm:ss"
     save(wb, "origin-kinds.xlsx")
 
+
+def formulas():
+    """T417: a same-row formula column (kept as a column formula) beside formulas that cannot be kept: a running sum
+    over a range, a fixed cell ($G$1), a formula that changes by row, and a typed value among formulas."""
+    wb = new_book()
+    ws = wb.active
+    ws.title = "Mixed"
+    ws.append(["x", "sq", "run", "scaled", "mixed", "typed"])
+    cached = {}
+    for r in range(2, 6):
+        x = r - 1
+        ws.append([x, f"=A{r}^2+SQRT(A{r})", f"=SUM($A$2:A{r})", f"=A{r}*$G$1", f"=A{r}*{r}", 7 if r == 3 else f"=A{r}+1"])
+        cached.update({f"B{r}": x * x + x**0.5, f"C{r}": x * (x + 1) // 2, f"D{r}": x * 10, f"E{r}": x * r})
+        if r != 3:
+            cached[f"F{r}"] = x + 1
+    ws["G1"] = 10
+    save(wb, "formulas.xlsx")
+    patch_cached("formulas.xlsx", "xl/worksheets/sheet1.xml", cached)
+
+
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
-    for fn in (basic, legacy, date1904, leap1900, merged, hidden, charts, mixed, leading, origin_kinds):
+    for fn in (basic, legacy, date1904, leap1900, merged, hidden, charts, mixed, leading, origin_kinds, formulas):
         fn()
     for p in sorted(OUT.iterdir()):
         size = p.stat().st_size

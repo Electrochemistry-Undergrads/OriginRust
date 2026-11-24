@@ -1424,6 +1424,14 @@ pub enum PowerTestArg {
     TwoSample,
     Paired,
     Anova,
+    /// One proportion (--mean1) against a hypothesized one (--mean2), normal approximation.
+    OneProportion,
+    /// Two proportions (--mean1, --mean2), normal approximation.
+    TwoProportions,
+    /// One variance (--mean1) against a hypothesized one (--mean2), chi-square.
+    OneVariance,
+    /// Two variances (--mean1, --mean2), F.
+    TwoVariances,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -2878,8 +2886,8 @@ pub enum AnalyzeTool {
         #[command(flatten)]
         plot: ComparisonPlotArgs,
     },
-    /// Power or sample size of a t test or the one-way ANOVA (Origin's Power and Sample Size tools). Needs no
-    /// data file: give --sizes to get the power of those sample sizes, or --powers to get the smallest sample
+    /// Power or sample size of a t test, the one-way ANOVA, or a proportion or variance test (Origin's Power and Sample
+    /// Size tools). Needs no data file: give --sizes to get the power of those sample sizes, or --powers to get the smallest sample
     /// sizes (per group for two samples and the ANOVA) that reach those powers.
     Power {
         #[arg(long, value_enum, default_value_t = PowerTestArg::TwoSample)]
@@ -2891,7 +2899,8 @@ pub enum AnalyzeTool {
         #[arg(long, value_delimiter = ',')]
         powers: Vec<f64>,
         /// t tests: the mean (first group), or the mean of the sample; with --mean2 the hypothesized or second
-        /// mean (paired: the mean difference with --mean2 0).
+        /// mean (paired: the mean difference with --mean2 0). Proportion and variance tests: the proportion or
+        /// variance, with --mean2 the hypothesized or second one.
         #[arg(long, default_value_t = 0.0, allow_negative_numbers = true)]
         mean1: f64,
         #[arg(long, default_value_t = 1.0, allow_negative_numbers = true)]
@@ -3882,6 +3891,9 @@ pub enum AnalyzeTool {
         /// The month (1 to 12) a fiscal year starts in, for months, quarters and years.
         #[arg(long, default_value_t = 1)]
         fiscal_start: u32,
+        /// A second grouping within each period: hour, weekday or month (one column per group).
+        #[arg(long)]
+        by: Option<String>,
     },
     /// Binned scatter: X cut into bins of equal width or equal counts; the mean, SD, SE and count of each --y
     /// column's Y per bin; makes a graph of the data with the bin means.

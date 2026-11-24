@@ -245,6 +245,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T413](T413-region-mask.md) | Mask / Unmask Data in Region on a drawn rectangle or ellipse | S | done 2026-11-24 (graphing 17.12), not measured |
 | [T414](T414-repeat-all-sheets.md) | Analysis > Repeat Last Analysis on All Sheets | S | done 2026-11-24 (gui-look), not measured |
 | [T418](T418-across-pick.md) | Add Column to All Sheets: only the ticked sheets | S | done 2026-11-24 (workbook-model 13q), not measured |
+| [T420](T420-pivot-by.md) | Time Series Pivot: a second grouping (hour, weekday, month) | S | done 2026-11-24 (statistics 32), not measured |
 | [T233](T233-batch-summary.md) | File > Batch Processing: Summary Sheet, Dataset Identifier, Delete Intermediate Books (a Batch Summary book stacking one sheet of every book) | S | done 2026-11-20 (workbook-model 13p), not measured; left: Origin's layout and identifier choices |
 | [T235](T235-batch-cli.md) | sheaf batch: Batch Processing without a window (template, summary, --summary-csv), core Project::batch_process shared with the window | S | done 2026-11-20 (workbook-model 13p); MCP: T238 |
 | [T238](T238-batch-mcp.md) | MCP batch_process: the shared batch run (books, summary, delete) on the session project, one undo step attached | S | done 2026-11-20 (mcp.md 5.1); left: read options |
@@ -340,6 +341,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T394](T394-life-data-frequency.md) | Frequency (count) column for the life-data tools (Origin 2026b) | S | done 2026-11-23 (statistics 49) |
 | [T408](T408-cox.md) | Cox proportional hazards regression with Breslow ties, hazard ratios and tests (Origin 2026b) | S | done 2026-11-23 (statistics 52) |
 | [T391](T391-life-data-regression.md) | Life data regression: Weibull, lognormal and exponential AFT models with censoring (Origin 2026b) | S | done 2026-11-23 (statistics 48) |
+| [T415](T415-power-proportions-variances.md) | Power and sample size of the proportion and variance tests | S | done 2026-11-24 (statistics 12.1) |
 | [T409](T409-turnbull.md) | Turnbull nonparametric estimate with exact, right-, left- and interval-censored rows (Origin 2026b) | S | done 2026-11-23 (statistics 53) |
 | [T384](T384-arbitrary-censoring.md) | Life-data distribution analysis with exact, right-, left- and interval-censored rows (Origin 2026b) | S | done 2026-11-22 (statistics 47) |
 | [T382](T382-split-plot.md) | Two-level split-plot designs and two-stratum effects (Origin 2027 Quality app) | S | done 2026-11-22 (statistics 46) |

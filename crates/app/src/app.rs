@@ -4591,6 +4591,24 @@ impl SheafApp {
     }
 
     fn plot_columns(&mut self, book: WindowId, columns: Vec<ColumnId>, template: Template) {
+        // An UpSet plot (T403): the selected columns are the sets (else the 0/1 columns of the active sheet).
+        if template == Template::UpSet {
+            let project = self.doc.project();
+            let sets = if columns.len() >= 2 {
+                columns
+            } else {
+                project
+                    .workbook(book)
+                    .and_then(|b| b.sheets.get(b.active_sheet))
+                    .map(sheaf_core::project::flag_columns)
+                    .unwrap_or_default()
+            };
+            match self.doc.edit("Plot columns", |p| p.plot_upset(&sets)) {
+                Ok(_) => self.say(format!("UpSet plot of {} sets", sets.len())),
+                Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+            }
+            return;
+        }
         // A network plot (T383) or a chord diagram (T402): the first two selected columns of text are the ends of
         // the edges (else the first two of the active sheet), the last selected numeric one weighs them (else every
         // row counts 1).

@@ -2865,7 +2865,7 @@ Origin's documented facts (Origin 2027 help, not measured; no Origin was at hand
   `tools/hexbin-ref.py`, which also checks a numpy brute force; matplotlib 3.11.2, numpy 2.5.4; these are not Origin
   numbers) and hand cases in `hexbin.rs`; `hexbin_tests.rs` (regular hexagons on a square and a wide frame, colours,
   colour scale, autoscale, corners inside the clip over seeds and bin counts, log axis, shared colour scale); core template/serde test; CLI test; UI menu, Plot Details and derived-axis tests; `.opj` warning test.
-- Not done: XYZ and matrix input, Binned Scatter, UpSet, a hexbin toolbar button, colour map choice, a tick count
+- Not done: XYZ and matrix input, Binned Scatter, a hexbin toolbar button, colour map choice, a tick count
   setting, Origin's real defaults, outlines, hover read-out of bin counts.
 
 ### 14.25 Parallel Plot and Parallel Index (T49)
@@ -3363,6 +3363,26 @@ every row is a flow from the source's name to the target's, of the weight column
   axes, no legend. The `.opj` writer saves a column plot of the weight column with a warning.
 - Not done: a matrix as the input, directed arrow heads, ticks and values round the ring, label rotation, Origin's
   Plot Details.
+
+### 14.35 UpSet plot (T403, Origin 2027 feature, Sheaf's look, not measured)
+
+Plot > Categorical > UpSet Plot and `sheaf plot FILE -t upset [-y SET ...]` (`PlotKind::UpSet`, `Template::UpSet`,
+`Project::plot_upset`; counts `sheaf_calc::upset`, drawing `crates/plot/src/upset.rs`): two or more set columns,
+kept in `Plot::sankey.stages` (the plot's Y column is the first). Default sets: the selected columns (app) or the `-y`
+columns (CLI), else every column of the sheet holding only 0 and 1 (`sheaf_core::project::flag_columns`).
+
+- A row is in a set when its cell holds a number other than 0, or text other than empty, `0`, `false` or `no`
+  (letter case ignored). Masked rows and rows in no set are left out.
+- Intersections are exclusive: a row counts once, for the exact sets it is in. They are sorted by size (largest
+  first; ties by fewest sets, then set order); at most 40 are shown. A set's size counts all its rows.
+- Layout in the layer's frame: the dot matrix in the lower 38 % (a row per set in column order, a column per
+  intersection), every other row on a light grey band; the intersection bars above it with their counts; the set
+  names left of the matrix (X axis tick font at 0.8 of its size) and the set-size bars left of the names, growing
+  leftwards, with the sizes at their ends. Bars and member dots dark grey (64), other dots light grey (210), the
+  member dots of a column joined by a 2 pt line. No axes, no legend. The `.opj` writer saves a column plot of the
+  first set column with a warning.
+- Not done: list-style input (a column of members per set), sorting and limiting choices, colouring by set or
+  degree, axes with ticks for the two bar charts, Origin's Plot Details.
 
 ## 15. Multi-panel graphs (P0, GP-PAN-01)
 

@@ -66,7 +66,7 @@ outputs or UI behavior.
 | On-graph trendlines | 2025b | Done (T43). Add a fitted trend or moving average directly to a plot with its own editable label and curve settings. | [2025b][o25b] |
 | Cause-and-effect and nested frequency charts | 2026 | Fishbone diagram done (T375: Plot > Categorical > Cause-and-Effect Diagram, `sheaf plot -t fishbone`); nested frequency charts done as counted treemaps and sunburst doughnuts (T392, graphing 14.27); frequency columns and bars come from Discrete Frequency. | [2026][o26] |
 | Slope Annotation | 2026b | Done (T52). Mark a slope directly on a graph with a data-linked annotation. | [2026b][o26b] |
-| Hexbin, binned scatter and UpSet plots | 2027 | Hexbin done (T45); binned scatter done (T356, Statistics > Descriptive Statistics > Binned Scatter); UpSet remains. Summarize dense XY data in hexagonal bins or binned scatter points. Visualize sizes of set intersections. | [2027][o27] |
+| Hexbin, binned scatter and UpSet plots | 2027 | Hexbin done (T45); binned scatter done (T356, Statistics > Descriptive Statistics > Binned Scatter); UpSet done (T403: Plot > Categorical > UpSet Plot, `sheaf plot -t upset`, graphing 14.35). Summarize dense XY data in hexagonal bins or binned scatter points. Visualize sizes of set intersections. | [2027][o27] |
 
 ## Analysis and statistics
 

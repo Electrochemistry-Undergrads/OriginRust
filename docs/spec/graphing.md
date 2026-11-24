@@ -7824,3 +7824,25 @@ here is measured.
   `Project::set_graph_browser`, `browse_graph`, `clear_graph_browser`, `browser_items`.
 - **Not built:** several browsed plots per graph, browsing across workbooks, picking a dataset from a list, keyboard
   stepping, the browser in .opj files and in the CLI/MCP.
+
+## Time Series Explorer: Plot > Specialized > Time Series Explorer (T416, 2026-11-24; Origin 2024b's, Sheaf's own)
+
+Origin 2024b added a Time Series Explorer that shows the whole series with a detail panel for a chosen interval and
+steps or plays through successive intervals. Origin 2016 has none, so nothing here is measured.
+
+- **The graph:** the Zoom graph of section 34 (template `time-series-explorer`, `sheaf plot -t
+  time-series-explorer`): every selected curve in both layers. The upper layer's X axis runs exactly from the
+  smallest to the largest X of its curves (the row numbers when a curve has no X column), so that equal fractions
+  of the frame are equal X intervals. The region is a band the full height of the upper layer covering interval 1
+  of 10; the lower layer shows the band, so it keeps the upper layer's Y range and successive intervals compare on
+  one scale.
+- **The bar above the graph:** Previous and Next (disabled at the first and last interval), Play / Pause, the caption
+  `Interval k of n` and Intervals, the count (2 to 1000). Play steps one interval a second and stops at the last one;
+  Play on the last interval starts again at the first. Changing the count shows the interval that holds the start of
+  the one shown before. Consecutive steps on a graph make one undo step ("Explore Interval"), as do consecutive
+  changes of the count ("Explorer Intervals").
+- **Model:** `Graph::explorer` (`sheaf_core::explorer::SeriesExplorer`: the count and the interval shown), saved with
+  the project; `Project::plot_time_series_explorer`, `explore_interval`, `set_explorer_intervals`. Moving the band by
+  hand moves the detail as in any Zoom graph; the next step puts it back on an interval.
+- **Not built:** a detail Y axis that rescales to each interval, intervals of a set length (a day, a week), overlapping
+  steps, the playback speed, and picking an interval by clicking the upper layer.

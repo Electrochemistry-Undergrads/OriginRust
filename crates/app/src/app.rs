@@ -2584,6 +2584,21 @@ impl SheafApp {
                     self.warn(e.to_string());
                 }
             }
+            Action::ExploreInterval { graph, to } => {
+                // Steps one after another (Play included) make one undo step.
+                let token = 0x7416_0000_0000 + graph.0;
+                if let Err(e) = self.doc.apply_merging("Explore Interval", token, |p| p.explore_interval(graph, to)) {
+                    self.warn(e.to_string());
+                }
+            }
+            Action::ExplorerIntervals { graph, intervals } => {
+                let token = 0x7416_1000_0000 + graph.0;
+                if let Err(e) =
+                    self.doc.apply_merging("Explorer Intervals", token, |p| p.set_explorer_intervals(graph, intervals))
+                {
+                    self.warn(e.to_string());
+                }
+            }
             Action::GraphSlicer { graph } => {
                 match crate::dialogs::graph_slicer::GraphSlicerDialog::new(self.doc.project(), graph) {
                     Some(d) => self.graph_slicer = Some(d),

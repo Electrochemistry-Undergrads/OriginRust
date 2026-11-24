@@ -2133,11 +2133,14 @@ enum Cell {
     Sample(usize),
     /// Text with the label markup, and its width in points.
     Text(String, f64),
+    /// Literal caption lines and their maximum width. Starts with one unwrapped caption.
+    Wrapped(Vec<String>, f64),
 }
 
 struct LegendRow {
     cells: Vec<Cell>,
     width: f64,
+    line_count: usize,
     separation_before: f64,
 }
 
@@ -2216,6 +2219,12 @@ fn draw_legend(
                         pending.push_str(&legend_name(project, entries[k].plot, option));
                     }
                 }
+                legend::Part::Wrap(text) => {
+                    if !text.trim().is_empty() {
+                        flush(&mut pending, &mut cells, &mut after_symbol);
+                        cells.push(Cell::Wrapped(vec![text.to_string()], 0.0));
+                    }
+                }
                 legend::Part::Symbol(id) => {
                     flush(&mut pending, &mut cells, &mut after_symbol);
                     if let Some(k) = legend::resolve(ids, id) {
@@ -2238,29 +2247,47 @@ fn draw_legend(
         for (i, c) in cells.iter().enumerate() {
             width += match c {
                 Cell::Sample(_) => sample,
-                Cell::Text(_, w) => *w + if i > 0 && matches!(cells[i - 1], Cell::Sample(_)) { gap } else { 0.0 },
+                Cell::Text(_, w) | Cell::Wrapped(_, w) => {
+                    *w + if i > 0 && matches!(cells[i - 1], Cell::Sample(_)) { gap } else { 0.0 }
+                }
             };
         }
-        rows.push(LegendRow { cells, width, separation_before: std::mem::take(&mut separation_before) });
+        rows.push(LegendRow { cells, width, line_count: 1, separation_before: std::mem::take(&mut separation_before) });
     }
     if rows.is_empty() {
         return;
     }
     let per_col = rows.len().div_ceil((lg.columns.max(1) as usize).min(rows.len()));
     let n_cols = rows.len().div_ceil(per_col);
+    let column_budget = (f.w - 2.0 * pad - col_gap * (n_cols - 1) as f64) / n_cols as f64;
+    for row in &mut rows {
+        let wraps = row.cells.iter().filter(|cell| matches!(cell, Cell::Wrapped(..))).count();
+        if wraps > 0 {
+            let available = (column_budget - row.width).max(0.0) / wraps as f64;
+            for cell in &mut row.cells {
+                if let Cell::Wrapped(lines, width) = cell {
+                    (*lines, *width) = legend::wrap_literal(&lines[0], available, |s| m.width(s, &lg.font, fs));
+                    row.width += *width;
+                    row.line_count = row.line_count.max(lines.len());
+                }
+            }
+        }
+    }
     let mut col_w = Vec::with_capacity(n_cols);
     let mut row_centers = Vec::with_capacity(rows.len());
     let mut content_height: f64 = 0.0;
     for column in rows.chunks(per_col) {
         let mut extra = 0.0;
+        let mut lines = 0;
         for (i, row) in column.iter().enumerate() {
             if i > 0 {
                 extra += row.separation_before;
             }
-            row_centers.push(row_h * (i as f64 + 0.5) + extra);
+            row_centers.push(row_h * (lines as f64 + 0.5) + extra);
+            lines += row.line_count;
         }
         col_w.push(column.iter().map(|row| row.width).fold(0.0, f64::max));
-        content_height = content_height.max(row_h * column.len() as f64 + extra);
+        content_height = content_height.max(row_h * lines as f64 + extra);
     }
     let w = 2.0 * pad + col_w.iter().sum::<f64>() + col_gap * (n_cols - 1) as f64;
     let h = 2.0 * pad + content_height;
@@ -2387,6 +2414,16 @@ fn draw_legend(
                     }
                     text::place_segments(out, m, &segments(t), &lg.font, fs, (x, baseline), Anchor::Start, 0.0);
                     x += w;
+                    after_symbol = false;
+                }
+                Cell::Wrapped(lines, width) => {
+                    if after_symbol {
+                        x += gap;
+                    }
+                    for (i, line) in lines.iter().enumerate() {
+                        text::place_literal(out, m, line, &lg.font, (x, baseline + i as f64 * row_h));
+                    }
+                    x += width;
                     after_symbol = false;
                 }
             }

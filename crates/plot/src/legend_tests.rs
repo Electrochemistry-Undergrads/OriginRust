@@ -195,6 +195,39 @@ fn columns_fill_top_to_bottom_and_widen_the_legend() {
 }
 
 #[test]
+fn wrapped_legend_captions_share_the_sample_and_keep_their_column_slots() {
+    let (mut p, g) = project(3);
+    let graph = p.graph_mut(g).unwrap();
+    let layer = &mut graph.layers[0];
+    layer.frame.width = 440.0 / graph.page.width_pt;
+    layer.legend.columns = 2;
+    layer.legend.text = Some(
+        r"\l(1) \ww(Alpha beta élan gamma delta %(2))
+\sep:50
+\l(2) %(2)
+\l(3) %(3)"
+            .into(),
+    );
+
+    let s = scene(&p, g);
+    let (text, samples) = legend_items(&s);
+    let captions: Vec<_> = text.iter().map(|t| t.2.as_str()).collect();
+    assert_eq!(captions, ["Alpha beta", "élan gamma", "delta %(2)", "Series 2", "Series 3"]);
+    assert_eq!(samples, 3);
+    assert!(text[..4].iter().all(|t| t.0 == text[0].0));
+    assert_eq!(text[4].1, text[0].1);
+    assert!(text[4].0 > text[0].0);
+
+    let row_h = 1.3 * 22.0;
+    assert!((text[2].1 - text[0].1 - 2.0 * row_h).abs() < 1e-9);
+    assert!((text[3].1 - text[2].1 - row_h - 11.0).abs() < 1e-9);
+    let frame = automatic_legend_box(&p, g);
+    assert!((frame.h - 4.0 * row_h - (0.8 + 0.5) * 22.0).abs() < 1e-9);
+    assert!(frame.w < 440.0);
+    assert!(crate::svg::write_svg(&s).contains(">delta %(2)</text>"));
+}
+
+#[test]
 fn the_legend_of_a_double_y_graph_names_plots_by_layer_and_plot() {
     let mut p = Project::new();
     let book = p.add_workbook("data");

@@ -176,6 +176,22 @@ pub fn place(
     place_segments(items, m, &runs, font, size, (x, y), anchor, rotate_ccw);
 }
 
+/// Places one line of literal text, retaining the base font and its decorations.
+pub(crate) fn place_literal(items: &mut Vec<Item>, m: &dyn TextMeasurer, text: &str, font: &Font, at: (f64, f64)) {
+    let run = Run {
+        text: text.to_owned(),
+        bold: false,
+        italic: false,
+        underline: false,
+        strikeout: false,
+        color: None,
+        family: None,
+        scale: 1.0,
+        rise: 0.0,
+    };
+    place_segments(items, m, &[Segment::Text(run)], font, font.size_pt, at, Anchor::Start, 0.0);
+}
+
 /// Lays out free graph labels from the first line's baseline, including explicit extra gaps.
 pub(crate) fn place_label(
     items: &mut Vec<Item>,

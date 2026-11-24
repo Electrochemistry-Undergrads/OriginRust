@@ -557,7 +557,7 @@ impl Writer {
                 &axis.title_font,
                 &frame_pt,
                 page,
-                false,
+                None,
                 notes,
             ));
         }
@@ -587,7 +587,7 @@ impl Writer {
                 &l.font,
                 &frame_pt,
                 page,
-                false,
+                None,
                 notes,
             ));
         }
@@ -604,7 +604,11 @@ impl Writer {
                 entries.push(((k + 1).to_string(), r.plot));
             }
         }
-        if layer.legend.visible && !entries.is_empty() {
+        let writes_legend = layer.legend.visible && !entries.is_empty();
+        if layer.legend.text_color_follows_plot && !writes_legend {
+            notes.push("the hidden or empty legend's text color mode is kept in the .opj.sheaf companion".into());
+        }
+        if writes_legend {
             // The legend's own text when it has one (its `\l(n)` and `%(n)` count the plots the
             // legend lists, as here), otherwise a line per plot.
             let (lines, longest): (Vec<String>, usize) = match &layer.legend.text {
@@ -700,7 +704,7 @@ impl Writer {
                 &layer.legend.font,
                 &frame_pt,
                 page,
-                layer.legend.frame,
+                Some(&layer.legend),
                 notes,
             ));
         }
@@ -1057,7 +1061,7 @@ impl Writer {
         font: &Font,
         frame: &FramePt,
         page: (u16, u16),
-        legend_frame: bool,
+        legend: Option<&Legend>,
         notes: &mut Vec<String>,
     ) -> Vec<u8> {
         let (bytes, lossy) = encode_cp1252(text);
@@ -1077,13 +1081,21 @@ impl Writer {
             if frame.width > 0.0 { (centre.0 - size.0 / 2.0 - frame.left) / frame.width } else { 0.0 },
             if frame.height > 0.0 { (centre.1 - size.1 / 2.0 - frame.top) / frame.height } else { 0.0 },
         );
-        let color = if palette_position(font.color).is_some() {
-            nearest_position(font.color)
+        let color = if legend.is_some_and(|legend| legend.text_color_follows_plot) {
+            if font.color != Color::BLACK {
+                notes.push(
+                    "the fixed legend text colour is kept in the .opj.sheaf companion while text follows the plots"
+                        .into(),
+                );
+            }
+            Code::AUTO
+        } else if let Some(position) = palette_position(font.color) {
+            Code::index(position)
         } else {
             notes.push(
                 "a text colour that is not in Origin's colour list was written as the nearest listed colour".into(),
             );
-            nearest_position(font.color)
+            Code::index(nearest_position(font.color))
         };
         let spec = AnnSpec {
             kind,
@@ -1095,7 +1107,7 @@ impl Writer {
             angle,
             color,
             extent: (unit_u16(text_extent.0), unit_u16(text_extent.1)),
-            frame: legend_frame,
+            frame: legend.is_some_and(|legend| legend.frame),
             serial: self.next_serial().min(u32::from(u16::MAX)) as u16,
         };
         annotation(&spec)

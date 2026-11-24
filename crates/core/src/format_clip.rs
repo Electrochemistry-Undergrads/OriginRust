@@ -166,6 +166,8 @@ impl GraphFormat {
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct LegendStyles {
     font: Font,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    text_color_follows_plot: bool,
     frame: bool,
     background: Option<Color>,
     /// The clipboard holds the styles above (false for a Dimensions copy; older formats hold them).
@@ -197,7 +199,7 @@ struct LegendText {
 /// What a legend's Copy Format or Paste Format To chooses (T179 added Dimensions and All).
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum LegendPart {
-    /// Font, frame and background.
+    /// Font, plot color following, frame and background.
     Styles,
     /// Position and number of columns.
     Dimensions,
@@ -272,6 +274,7 @@ pub fn copy_legend(graph: &Graph, layer: usize, part: LegendPart) -> Option<Form
     legend.visible.then(|| {
         FormatClip::LegendStyles(LegendStyles {
             font: legend.font.clone(),
+            text_color_follows_plot: part != LegendPart::Dimensions && legend.text_color_follows_plot,
             frame: legend.frame,
             background: legend.background,
             styles: part != LegendPart::Dimensions,
@@ -522,6 +525,7 @@ pub fn paste_legend(graph: &mut Graph, layer: usize, clip: &FormatClip, part: Le
     }
     if f.styles && part != LegendPart::Dimensions {
         legend.font.clone_from(&f.font);
+        legend.text_color_follows_plot = f.text_color_follows_plot;
         legend.frame = f.frame;
         legend.background = f.background;
     }
@@ -993,6 +997,7 @@ mod tests {
             l.position = crate::graph::LegendPosition::Manual { x: 0.3, y: 0.7 };
             l.columns = 2;
             l.text = Some("first entry".into());
+            l.text_color_follows_plot = true;
         }
         let paste = |part: LegendPart, with: LegendPart| {
             let clip = copy_legend(&src, 0, part).unwrap();
@@ -1002,11 +1007,14 @@ mod tests {
         };
         let base = dst.layers[0].legend.clone();
         let d = paste(LegendPart::Dimensions, LegendPart::All);
+        assert!(!d.text_color_follows_plot);
         assert_eq!((d.position, d.columns), (src.layers[0].legend.position, 2));
         assert_eq!((&d.font, &d.text), (&base.font, &base.text), "a Dimensions copy holds no styles or text");
         let a = paste(LegendPart::All, LegendPart::All);
+        assert!(a.text_color_follows_plot);
         assert_eq!((&a.font, a.columns, &a.text), (&src.layers[0].legend.font, 2, &src.layers[0].legend.text));
         let s = paste(LegendPart::All, LegendPart::Styles);
+        assert!(s.text_color_follows_plot);
         assert_eq!((&s.font, s.position, &s.text), (&src.layers[0].legend.font, base.position, &base.text));
         let only = paste(LegendPart::Styles, LegendPart::All);
         assert_eq!((only.columns, &only.text), (base.columns, &base.text), "a Styles copy holds only styles");
@@ -1015,6 +1023,6 @@ mod tests {
             "font": base.font, "frame": true, "background": null}}))
         .unwrap();
         let FormatClip::LegendStyles(o) = &old else { panic!("a legend clipboard") };
-        assert!(o.has_styles() && !o.has_dimensions());
+        assert!(o.has_styles() && !o.has_dimensions() && !o.text_color_follows_plot);
     }
 }

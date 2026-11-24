@@ -1881,6 +1881,8 @@ fn menu_for(
                     layer,
                     applies(sheaf_core::layer_scale::LayerScaleKind::Color),
                     applies(sheaf_core::layer_scale::LayerScaleKind::Bubble),
+                    l.filter(|l| !l.plots.iter().any(|p| p.kind.is_parallel()))
+                        .map(|l| l.legend.text_color_follows_plot),
                 )
             }
             ObjectKind::Label(k) => menus::graph_label_menu(layer, k),
@@ -2016,6 +2018,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
         | GraphOp::OrderLegend { layer, .. }
         | GraphOp::OrderTitle { layer, .. }
         | GraphOp::LegendBehindData { layer, .. }
+        | GraphOp::LegendTextColorFollowsPlot { layer, .. }
         | GraphOp::ReconstructLegend { layer }
         | GraphOp::UpdateLegend { layer }
         | GraphOp::HideTitle { layer, .. }
@@ -2211,6 +2214,7 @@ pub fn apply_op(project: &mut Project, graph: WindowId, op: GraphOp, resolved: O
             }
         }
         GraphOp::LegendBehindData { behind, .. } => l.legend.behind_data = behind,
+        GraphOp::LegendTextColorFollowsPlot { enabled, .. } => l.legend.text_color_follows_plot = enabled,
         GraphOp::ReconstructLegend { .. } => l.legend.text = None,
         GraphOp::HideTitle { y, .. } => {
             let a = if y { &mut l.y_axis } else { &mut l.x_axis };

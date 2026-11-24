@@ -60,6 +60,7 @@ pub mod multi_y;
 pub mod named;
 pub mod notes;
 pub mod notes_window;
+mod opposite_axis;
 pub mod page_setup;
 pub mod panels;
 pub mod piper;

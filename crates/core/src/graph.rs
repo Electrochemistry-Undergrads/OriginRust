@@ -9,6 +9,7 @@
 use crate::color::Color;
 pub use crate::graph_style::*;
 use crate::ids::{ColumnId, WindowId};
+pub use crate::opposite_axis::OppositeAxisStyle;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1414,6 +1415,9 @@ pub struct Axis {
     /// main axis' tick labels and title. `None` keeps the ordinary line-and-ticks mirror.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opposite_offset_pct: Option<f64>,
+    /// Independent display settings for the facing edge in Layer Management.
+    #[serde(default, skip_serializing_if = "OppositeAxisStyle::is_default")]
+    pub opposite_style: OppositeAxisStyle,
     pub major_grid: Option<LineStyle>,
     pub minor_grid: Option<LineStyle>,
     /// The edge the axis is drawn on. With [`AxisSide::Opposite`], `show_opposite` and

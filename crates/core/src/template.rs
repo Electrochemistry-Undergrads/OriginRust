@@ -1210,6 +1210,7 @@ pub const ORIGIN_PAGE_IN: (f64, f64) = (10.72, 8.205);
 fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
     Axis {
         scale: ScaleKind::Linear,
+        custom_scale: None,
         min: None,
         max: None,
         auto_range: AutoRange::Nice,
@@ -1293,6 +1294,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
         name: name.to_string(),
         long_name: String::new(),
         slicer: None,
+        browser: None,
         page: Page::inches(ORIGIN_PAGE_IN.0, ORIGIN_PAGE_IN.1),
         layers: vec![Layer {
             frame: Frame { left: 0.1791, top: 0.1158, width: 0.6816, height: 0.7183 },

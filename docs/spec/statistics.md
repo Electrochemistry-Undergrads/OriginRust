@@ -392,7 +392,7 @@ tables, 386 pairs.
 ## 12 Power and sample size
 
 Origin's Statistics > Power and Sample Size tools (`PSS_tTest1`, `PSS_tTest2`, `PSS_tTestPair`, `PSS_ANOVA1`; also
-proportion and variance tests, not built). The X-Functions themselves refused every call from a script (all
+proportion and variance tests, Sheaf's own in 12.1). The X-Functions themselves refused every call from a script (all
 returned an error for any argument form we tried), so their report layout was not read; the numbers come from the
 statistics library functions they call (public functions `ocmath_tTest_powers1`, `ocmath_tTest_samplesize`,
 `ocmath_two_sample_tTest_powers1` and `_samplesize`, the `_pair` versions, `ocmath_anova_powers1` and
@@ -431,6 +431,31 @@ both tails, significance levels from 1e-8 to 0.5, effects from 0.007 to 4 standa
   `analysis::power_analysis`; `sheaf analyze power --test one-sample|two-sample|paired|anova --sizes ... | --powers ...`
   (no data file); Statistics > Power and Sample Size > the four tests (a small window; the report layout of Origin's tool
   is not copied).
+
+### 12.1 Proportion and variance tests (T415; Sheaf's own, not measured)
+
+Origin's proportion and variance power tools were not measured (their X-Functions refuse script calls, as above), so
+these are textbook powers of the tests Sheaf runs in section 21, in the same window, workbook and CLI
+(`--test one-proportion|two-proportions|one-variance|two-variances`, `--mean1` and `--mean2` the two proportions or
+variances; Statistics > Power and Sample Size > One-Proportion Test, Two-Proportion Test, One-Sample Variance Test,
+Two-Sample Variance Test, with no standard deviation box). `z` is the `1 - alpha/2` normal point (two-sided) or
+`1 - alpha` (one-sided), `n` the sample size (per group for two samples, equal groups):
+
+- **One proportion** `p` against `p0` (normal-approximation z test, standard error at `p0`): power
+  `Phi((|p - p0| sqrt n - z sqrt(p0 q0)) / sqrt(p q))`, plus `Phi((-|p - p0| sqrt n - z sqrt(p0 q0)) / sqrt(p q))` when
+  two-sided.
+- **Two proportions** `p1`, `p2` (unpooled z test, the default of section 21): the same with `sqrt(p1 q1 + p2 q2)` for
+  both standard errors.
+- **One variance** `s2` against `s02` (chi-square, `n - 1` df): with `r = s2 / s02` the statistic is `r` times a
+  chi-square, power `F(c(alpha/2) / r) + 1 - F(c(1 - alpha/2) / r)`; one-sided, the tail in the direction of `r`.
+- **Two variances** `s1`, `s2` (F with `n - 1` and `n - 1` df, `r = s1 / s2`): the same with the F distribution.
+- Equal values give power alpha; one-sided tests look in the direction of the effect, as for the t tests. Sizes must be
+  whole numbers, a size below 2 has no power, proportions lie in (0, 1) and variances above 0. Sample sizes are the
+  smallest whole number from 2 up that reaches each wanted power; a wanted power that 2 already reaches has none
+  (the note gives the power of 2).
+- Checked against scipy (`tools/power-rate-ref.py`, `crates/calc/tests/power_rate_reference.rs`: 64 cases of the four
+  tests, both kinds of test, alpha 0.01 to 0.1, sizes 2 to 1000, powers to 1e-9 and sample sizes exactly; the variance
+  powers are also confirmed by simulating the tests). Exact binomial powers and unequal group sizes are not built.
 
 ## 13 2D frequency counts and binning
 

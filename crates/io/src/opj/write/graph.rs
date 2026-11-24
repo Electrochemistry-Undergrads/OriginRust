@@ -1323,6 +1323,11 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         );
     }
     for (name, axis) in [("X", &layer.x_axis), ("Y", &layer.y_axis)] {
+        if axis.scale == ScaleKind::CustomFormula {
+            notes.push(format!(
+                "the {name} Custom Formula scale was written as Linear (the .opj.sheaf companion keeps the formulas)"
+            ));
+        }
         if !axis.opposite_style.is_default() {
             notes.push(format!("the opposite {name} axis style was not written (the .opj.sheaf companion keeps it)"));
         }

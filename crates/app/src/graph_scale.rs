@@ -291,6 +291,7 @@ mod tests {
             max,
             step: 1.0,
             scale,
+            formula: None,
             major: Vec::new(),
             minor: Vec::new(),
             labels: Vec::new(),

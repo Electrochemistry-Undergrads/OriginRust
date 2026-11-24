@@ -12,8 +12,10 @@ edge of the same frame. Custom Formula scale links accept independent From and T
 for X and Y in the New Layer (Axes) dialog (21.15). Origin 2016 returned 12–64 over parent
 X limits of 2–14 for `X1+10` and `X2+50`. Sheaf resolves each linked interval from the
 current parent, preserves formulas in Sheaf files and OPJ companions, and warns on bare
-OPJ export. The separate nonlinear Custom Formula and Discrete scale types remain open
-in Layer Management Add (21.17).
+OPJ export. Layer Management Add offers a separate nonlinear Custom Formula scale for
+independent Cartesian axes (21.17). Direct and inverse expressions govern drawing and
+coordinate reading, with tick values in data units. Origin 2016 EMFs measured that behavior
+for squared, log and decreasing transforms. Discrete remains open.
 **Size:** L, three slices.
 Legend-anchor follow-up (`codex/multi-y-template-legends`): the four stock templates use
 measured top-left positions above the frame, Arial 22 pt (YY-YY: 20 pt), and no frame or background.

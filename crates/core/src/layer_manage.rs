@@ -71,6 +71,8 @@ pub enum LayerError {
     Bounds(usize),
     #[error("a number is not valid")]
     Number,
+    #[error("The {0} scale needs direct and inverse formulas that agree across its From and To limits.")]
+    FormulaScale(&'static str),
     #[error("choose two different layers")]
     SameLayer,
     #[error("layer {0} cannot be a parent: it is linked to another layer itself")]

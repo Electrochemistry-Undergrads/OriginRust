@@ -7,9 +7,10 @@
 use std::collections::BTreeSet;
 
 use eframe::egui::{self, Color32, Sense, Stroke};
-use sheaf_core::graph::{Frame, Graph, Layer, LayerDrawingOrder, ScaleKind, ScaleLink};
+use sheaf_core::graph::{Axis, Coords, Frame, Graph, Layer, LayerDrawingOrder, ScaleKind, ScaleLink};
 use sheaf_core::layer_manage::{AlignEdge, ArrangeOptions, ArrangeOrder, LayerError, SizeUnit};
 use sheaf_core::layers::NewLayerKind;
+use sheaf_core::scales::CustomScale;
 use sheaf_core::{Document, Project, WindowId};
 
 mod axes;
@@ -71,6 +72,8 @@ pub struct LayerManagementDialog {
     add_parent: Option<usize>,
     add_x: ScaleKind,
     add_y: ScaleKind,
+    add_x_formula: AddFormula,
+    add_y_formula: AddFormula,
     arrange: ArrangeOptions,
     common_width: bool,
     common_height: bool,
@@ -116,6 +119,8 @@ impl LayerManagementDialog {
             add_parent,
             add_x: ScaleKind::Linear,
             add_y: ScaleKind::Linear,
+            add_x_formula: AddFormula::default(),
+            add_y_formula: AddFormula::default(),
             arrange: ArrangeOptions::default(),
             common_width: false,
             common_height: false,
@@ -154,7 +159,10 @@ impl LayerManagementDialog {
                 self.display.invalidate();
                 self.problem = None;
             }
-            Err(e) => self.problem = Some(e.to_string()),
+            Err(e) => {
+                (self.work.layers, self.work.page.style.layer_drawing_order) = before;
+                self.problem = Some(e.to_string());
+            }
         }
     }
 
@@ -213,7 +221,7 @@ impl LayerManagementDialog {
                         });
                         ui.separator();
                         match self.tab {
-                            Tab::Add => self.add_tab(ui),
+                            Tab::Add => self.add_tab(ui, doc.project()),
                             Tab::Arrange => self.arrange_tab(ui, doc.project()),
                             Tab::SizePosition => self.size_tab(ui),
                             Tab::Link => self.link_tab(ui),
@@ -307,7 +315,7 @@ impl LayerManagementDialog {
         });
     }
 
-    fn add_tab(&mut self, ui: &mut egui::Ui) {
+    fn add_tab(&mut self, ui: &mut egui::Ui, project: &Project) {
         ui.strong("Add Layer");
         let parents: Vec<usize> =
             self.work.layers.iter().enumerate().filter_map(|(i, layer)| layer.link.is_none().then_some(i)).collect();
@@ -344,10 +352,26 @@ impl LayerManagementDialog {
             ui.end_row();
 
             let source = parent.map(|i| &self.work.layers[i]);
+            let root = self.work.root_of(parent.or_else(|| self.selected.first().copied()).unwrap_or(0));
+            let supports_formula = self.work.layers.get(root).is_some_and(|layer| layer.coords == Coords::Cartesian);
             let x_linked = matches!(self.add_kind, NewLayerKind::RightY | NewLayerKind::LeftY | NewLayerKind::NoAxes);
             let y_linked = matches!(self.add_kind, NewLayerKind::TopX | NewLayerKind::NoAxes);
-            add_scale_combo(ui, "X Scale", &mut self.add_x, source.filter(|_| x_linked).map(|l| l.x_axis.scale));
-            add_scale_combo(ui, "Y Scale", &mut self.add_y, source.filter(|_| y_linked).map(|l| l.y_axis.scale));
+            add_scale_combo(
+                ui,
+                "X",
+                &mut self.add_x,
+                &mut self.add_x_formula,
+                source.filter(|_| x_linked).map(|l| l.x_axis.scale),
+                supports_formula,
+            );
+            add_scale_combo(
+                ui,
+                "Y",
+                &mut self.add_y,
+                &mut self.add_y_formula,
+                source.filter(|_| y_linked).map(|l| l.y_axis.scale),
+                supports_formula,
+            );
         });
         let kind = self.add_kind;
         let anchor =
@@ -356,6 +380,8 @@ impl LayerManagementDialog {
             && let Some(anchor) = anchor
         {
             let (x_scale, y_scale) = (self.add_x, self.add_y);
+            let (x_formula, y_formula) = (self.add_x_formula.clone(), self.add_y_formula.clone());
+            let id = self.graph;
             self.apply(|graph| {
                 let index = graph.add_layer(kind, anchor).ok_or(LayerError::NoSuchLayer(anchor))?;
                 if kind == NewLayerKind::InsetWithData {
@@ -363,17 +389,39 @@ impl LayerManagementDialog {
                     graph.layers[index].plots = plots;
                 }
                 let layer = &mut graph.layers[index];
-                for (axis, scale, linked) in [
-                    (&mut layer.x_axis, x_scale, layer.link.as_ref().is_some_and(|link| link.x == ScaleLink::Straight)),
-                    (&mut layer.y_axis, y_scale, layer.link.as_ref().is_some_and(|link| link.y == ScaleLink::Straight)),
+                let x_linked = layer.link.as_ref().is_some_and(|link| link.x == ScaleLink::Straight);
+                let y_linked = layer.link.as_ref().is_some_and(|link| link.y == ScaleLink::Straight);
+                for (axis, scale, formula, linked) in [
+                    (&mut layer.x_axis, x_scale, x_formula, x_linked),
+                    (&mut layer.y_axis, y_scale, y_formula, y_linked),
                 ] {
-                    if !linked {
-                        axis.scale = scale;
-                    }
                     if kind == NewLayerKind::InsetWithData {
                         axis.min = None;
                         axis.max = None;
                         axis.major_step = None;
+                    }
+                    if !linked {
+                        axis.scale = scale;
+                        axis.custom_scale = None;
+                        if scale == ScaleKind::CustomFormula {
+                            formula.apply_to(axis)?;
+                        }
+                    }
+                }
+                let custom_x = !x_linked && x_scale == ScaleKind::CustomFormula;
+                let custom_y = !y_linked && y_scale == ScaleKind::CustomFormula;
+                if custom_x || custom_y {
+                    if layer.coords != Coords::Cartesian {
+                        return Err(LayerError::FormulaScale(if custom_x { "X" } else { "Y" }));
+                    }
+                    let mut preview = project.clone();
+                    *preview.graph_mut(id).expect("the managed graph exists") = graph.clone();
+                    let geometry = sheaf_plot::layout_geometry(&preview, id).map_err(|_| LayerError::NoLayers)?;
+                    if custom_x && geometry[index].x.formula.is_none() {
+                        return Err(LayerError::FormulaScale("X"));
+                    }
+                    if custom_y && geometry[index].y.formula.is_none() {
+                        return Err(LayerError::FormulaScale("Y"));
                     }
                 }
                 Ok(())
@@ -678,20 +726,76 @@ impl LayerManagementDialog {
     }
 }
 
-fn add_scale_combo(ui: &mut egui::Ui, name: &str, scale: &mut ScaleKind, linked: Option<ScaleKind>) {
-    let label = ui.label(name);
+#[derive(Clone, Default)]
+struct AddFormula {
+    formula: CustomScale,
+    from: String,
+    to: String,
+}
+
+impl AddFormula {
+    fn apply_to(self, axis: &mut Axis) -> Result<(), LayerError> {
+        let endpoint = |text: &str| {
+            let text = text.trim();
+            if text.is_empty() {
+                Ok(None)
+            } else {
+                text.parse::<f64>().ok().filter(|v| v.is_finite()).map(Some).ok_or(LayerError::Number)
+            }
+        };
+        let (from, to) = (endpoint(&self.from)?, endpoint(&self.to)?);
+        if let (Some(from), Some(to)) = (from, to)
+            && (from == to || !(to - from).is_finite())
+        {
+            return Err(LayerError::Number);
+        }
+        axis.min = from;
+        axis.max = to;
+        axis.custom_scale = Some(self.formula);
+        Ok(())
+    }
+}
+
+fn add_scale_combo(
+    ui: &mut egui::Ui,
+    axis: &str,
+    scale: &mut ScaleKind,
+    draft: &mut AddFormula,
+    linked: Option<ScaleKind>,
+    supports_formula: bool,
+) {
+    let name = format!("{axis} Scale");
+    let label = ui.label(&name);
     ui.add_enabled_ui(linked.is_none(), |ui| {
-        egui::ComboBox::from_id_salt(name)
+        egui::ComboBox::from_id_salt(&name)
             .selected_text(linked.unwrap_or(*scale).label())
+            .height(300.0)
             .show_ui(ui, |ui| {
                 for option in ScaleKind::ALL {
                     ui.selectable_value(scale, option, option.label());
                 }
+                let option = ScaleKind::CustomFormula;
+                ui.add_enabled_ui(supports_formula, |ui| {
+                    ui.selectable_value(scale, option, option.label())
+                        .on_disabled_hover_text("Custom Formula is available on Cartesian axes.");
+                });
             })
             .response
             .labelled_by(label.id);
     });
     ui.end_row();
+    if linked.is_none() && supports_formula && *scale == ScaleKind::CustomFormula {
+        for (name, value, hint) in [
+            ("Direct Formula", &mut draft.formula.direct, "x"),
+            ("Inverse Formula", &mut draft.formula.inverse, "x"),
+            ("From", &mut draft.from, "Automatic"),
+            ("To", &mut draft.to, "Automatic"),
+        ] {
+            let label = ui.label(format!("{axis} {name}"));
+            ui.add(egui::TextEdit::singleline(value).hint_text(hint).desired_width(145.0)).labelled_by(label.id);
+            ui.end_row();
+        }
+    }
 }
 
 fn number(ui: &mut egui::Ui, name: &str, value: &mut f64, max: f64) {

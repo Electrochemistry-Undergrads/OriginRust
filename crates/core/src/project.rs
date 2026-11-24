@@ -416,6 +416,8 @@ pub enum ProjectError {
     BrowserNeedsTwo,
     #[error("the graph has no browser")]
     NoBrowser,
+    #[error("no sticky note there (notes go on graphs, workbooks and sheets)")]
+    NoStickyNote,
     #[error("the graph is no time series explorer, or has no such interval")]
     NoExplorer,
     #[error(

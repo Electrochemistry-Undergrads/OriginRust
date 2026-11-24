@@ -30,6 +30,9 @@ pub struct Graph {
     /// Plot > Specialized > Time Series Explorer (T416): the interval the zoom layer shows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub explorer: Option<crate::explorer::SeriesExplorer>,
+    /// The graph window's sticky note (T421).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sticky: Option<crate::sticky::StickyNote>,
 }
 
 impl Graph {
@@ -3548,6 +3551,7 @@ mod tests {
             slicer: None,
             browser: None,
             explorer: None,
+            sticky: None,
         }
     }
 

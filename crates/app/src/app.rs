@@ -4025,6 +4025,42 @@ impl SheafApp {
                     p.remove_window(id);
                 });
             }
+            Action::AddStickyNote { window, sheet } => {
+                use sheaf_core::sticky::NoteTarget;
+                let target = match self.doc.project().workbook(window) {
+                    Some(b) if sheet => NoteTarget::Sheet(window, b.active_sheet.min(b.sheets.len().saturating_sub(1))),
+                    _ => NoteTarget::Window(window),
+                };
+                if let Err(e) = self.doc.edit("Add Sticky Note", |p| p.add_sticky_note(target)) {
+                    self.warn(e.to_string());
+                }
+            }
+            Action::EditStickyNote { target, change } => {
+                use crate::actions::StickyChange;
+                let done = match change {
+                    StickyChange::Text(text) => {
+                        self.doc.apply_merging("Edit Sticky Note", crate::sticky_view::typing_token(target), |p| {
+                            p.edit_sticky_note(target, |n| n.text = text)
+                        })
+                    }
+                    StickyChange::Color(c) => {
+                        self.doc.edit("Sticky Note Color", |p| p.edit_sticky_note(target, |n| n.color = c))
+                    }
+                    StickyChange::Collapsed(on) => {
+                        self.doc.edit(if on { "Collapse Sticky Note" } else { "Expand Sticky Note" }, |p| {
+                            p.edit_sticky_note(target, |n| n.collapsed = on)
+                        })
+                    }
+                };
+                if let Err(e) = done {
+                    self.warn(e.to_string());
+                }
+            }
+            Action::RemoveStickyNote { target } => {
+                let _ = self
+                    .doc
+                    .edit("Delete Sticky Note", |p| Ok::<_, std::convert::Infallible>(p.remove_sticky_note(target)));
+            }
             Action::RenameWindow(id) => {
                 if let Some(w) = self.doc.project().window(id) {
                     let long_name = match w {
@@ -9341,10 +9377,21 @@ impl eframe::App for SheafApp {
                             .map(|w| WindowInfo { title: w.title(), graph: matches!(w, Window::Graph(_)) })
                     };
                     let mut content = |id: WindowId, ui: &mut egui::Ui| match doc.project().window(id) {
-                        Some(Window::Workbook(_)) => {
-                            grid::show(ui, doc, id, books.entry(id).or_default(), actions);
+                        Some(Window::Workbook(b)) => {
+                            // Sticky notes (T421): the book's, then the shown sheet's.
+                            use sheaf_core::sticky::NoteTarget;
+                            crate::sticky_view::strip(ui, doc, NoteTarget::Window(id), "Book note", actions);
+                            let sheet = b.active_sheet;
+                            crate::sticky_view::strip(ui, doc, NoteTarget::Sheet(id, sheet), "Sheet note", actions);
+                            // The grid fills its ui's whole rectangle: give it only the room below the notes.
+                            let rest = ui.available_rect_before_wrap();
+                            ui.scope_builder(egui::UiBuilder::new().max_rect(rest), |ui| {
+                                grid::show(ui, doc, id, books.entry(id).or_default(), actions);
+                            });
                         }
                         Some(Window::Graph(_)) => {
+                            use sheaf_core::sticky::NoteTarget;
+                            crate::sticky_view::strip(ui, doc, NoteTarget::Window(id), "Note", actions);
                             graph_view::show(ui, doc, id, graphs.entry(id).or_default(), actions);
                         }
                         Some(Window::Notes(_)) => {

@@ -842,3 +842,49 @@ fn display_background_requires_selection_and_unchanged_or_reverted_colors_do_not
     assert_eq!(h.state().doc.revision(), revision);
     assert_ne!(h.state().doc.undo_label(), Some("Layer Management"));
 }
+
+#[test]
+fn nonlinear_custom_scale_add_validates_before_changing_the_preview() {
+    use sheaf_core::scales::CustomScale;
+
+    let mut h = with_layers("lm-add-custom-formula", 1);
+    let id = graph(&h).id;
+    let before = project(&h).clone();
+    open(&mut h);
+    click(&mut h, "Add");
+    click(&mut h, "X Scale");
+    click(&mut h, "Custom Formula");
+    let text = |h: &mut Harness<'static, SheafApp>, label, value: &str| {
+        h.get_by_role_and_label(egui::accesskit::Role::TextInput, label).click();
+        settle(h);
+        ctrl(h, egui::Key::A);
+        h.event(egui::Event::Text(value.into()));
+        settle(h);
+    };
+    text(&mut h, "X Direct Formula", "x*x");
+    text(&mut h, "X From", "1");
+    text(&mut h, "X To", "5");
+    click(&mut h, "Apply");
+    assert!(h.query_by_label("Layer2").is_none());
+    assert!(h.query_by_label_contains("direct and inverse formulas").is_some());
+    assert_eq!(project(&h), &before);
+
+    text(&mut h, "X Inverse Formula", "sqrt(x)");
+    click(&mut h, "Apply");
+    assert!(h.query_by_label("Layer2").is_some());
+    assert_eq!(project(&h), &before);
+    click(&mut h, "Undo");
+    assert!(h.query_by_label("Layer2").is_none());
+    click(&mut h, "Apply");
+    click(&mut h, "OK");
+
+    let x = &graph(&h).layers[1].x_axis;
+    assert_eq!(x.scale, ScaleKind::CustomFormula);
+    assert_eq!(x.custom_scale, Some(CustomScale { direct: "x*x".into(), inverse: "sqrt(x)".into() }));
+    let geometry = sheaf_plot::layout_geometry(project(&h), id).unwrap();
+    assert_eq!(geometry[1].x.endpoints(), (1.0, 5.0));
+    assert_eq!(geometry[1].x.to_unit(2.0), 0.125);
+    assert_eq!(h.state().doc.undo_label(), Some("Layer Management"));
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+}

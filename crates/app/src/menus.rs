@@ -353,6 +353,8 @@ pub enum Cmd {
     AddFunctionGraph,
     /// Graph > Graph Slicer... (T406).
     GraphSlicer,
+    /// Graph > Browser Graph... (T410).
+    BrowserGraph,
     /// View > View Windows (T100).
     ViewWindows(sheaf_core::project::ViewWindows),
     /// An axis's Save Format as Theme... (T102).
@@ -507,6 +509,8 @@ pub enum Cmd {
     AddColumnAcross,
     /// Analysis > Repeat Last Analysis (T360): the last tool run from its window, on the current selection.
     RepeatAnalysis,
+    /// Analysis > Repeat Last Analysis on All Sheets (T414): on the Y columns of every sheet of the workbook.
+    RepeatAnalysisAllSheets,
     /// The Standard toolbar's Add New Columns: one column at once, as Origin's button (T305).
     AddOneColumn,
     ColumnProperties,
@@ -684,6 +688,12 @@ pub enum Cmd {
     ExtractRegion {
         layer: usize,
         shape: usize,
+    },
+    /// Masks (or unmasks) the plotted cells of the data points inside a drawn rectangle or ellipse (T413).
+    MaskRegion {
+        layer: usize,
+        shape: usize,
+        mask: bool,
     },
     /// Add Text...: a new text label in the active layer.
     AddText,
@@ -2041,6 +2051,7 @@ fn analysis_menu() -> Vec<Entry> {
         ),
         sep(),
         item("Repeat Last Analysis", Cmd::RepeatAnalysis),
+        item("Repeat Last Analysis on All Sheets", Cmd::RepeatAnalysisAllSheets),
         mru_submenu("Most Recently Used Items", MruMenu::Analysis),
     ]
 }
@@ -2243,6 +2254,7 @@ fn graph_menu() -> Vec<Entry> {
         new_layer_menu(),
         item("Merge Graph Windows...", Cmd::MergeGraphs),
         item("Grap&h Slicer...", Cmd::GraphSlicer),
+        item("Bro&wser Graph...", Cmd::BrowserGraph),
         sep(),
         keyed("Rescale to Show All", ctrl(Key::R), Cmd::Rescale),
         sub(
@@ -2993,6 +3005,8 @@ pub fn graph_shape_menu(layer: usize, shape: usize, region: bool) -> Vec<Entry> 
     // A rectangle or an ellipse marks a region whose data points can be copied out (T355).
     if region {
         entries.push(item("Extract Data in Region", Cmd::ExtractRegion { layer, shape }));
+        entries.push(item("Mask Data in Region", Cmd::MaskRegion { layer, shape, mask: true }));
+        entries.push(item("Unmask Data in Region", Cmd::MaskRegion { layer, shape, mask: false }));
         entries.push(sep());
     }
     entries.push(item("Properties...", Cmd::EditShape { layer, shape }));
@@ -3633,6 +3647,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::BatchPlot(columns) => Action::BatchPlot { graph: c.graph.ok_or(NEED_GRAPH)?, columns: *columns },
         Cmd::AddFunctionGraph => Action::AddFunctionGraph { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::GraphSlicer => Action::GraphSlicer { graph: c.graph.ok_or(NEED_GRAPH)? },
+        Cmd::BrowserGraph => Action::BrowserGraph { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::Reimport(choose) => {
             let book = book?;
             c.imported.then_some(()).ok_or(NOT_IMPORTED)?;
@@ -3750,6 +3765,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::AddColumns => Action::AddColumnsDialog(book?),
         Cmd::AddColumnAcross => Action::AddColumnAcross(book?),
+        Cmd::RepeatAnalysisAllSheets => match c.book {
+            Some(book) => Action::RepeatAnalysisAllSheets(book),
+            None if c.kind == WindowKind::Graph => return Err(ANALYSIS_ON_BOOK),
+            None => return Err(NEED_BOOK),
+        },
         Cmd::RepeatAnalysis => match (c.book, c.curve) {
             (Some(book), _) => Action::RepeatAnalysis { book, columns: c.selected.to_vec() },
             (None, Some((book, y))) if c.kind == WindowKind::Graph => Action::RepeatAnalysis { book, columns: vec![y] },
@@ -4070,6 +4090,9 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::ExtractRegion { layer, shape } => {
             Action::ExtractRegion { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape }
+        }
+        Cmd::MaskRegion { layer, shape, mask } => {
+            Action::MaskRegion { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape, mask: *mask }
         }
         Cmd::AddText => Action::AddText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: Some(c.layer), at: None },
         Cmd::EditText { layer, label } => {

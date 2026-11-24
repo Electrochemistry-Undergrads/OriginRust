@@ -41,6 +41,17 @@ impl SheetSize {
     }
 }
 
+fn header_measurement(ui: &mut egui::Ui, name: &str, percent: &mut Option<u16>, automatic_px: f32, base_px: f32) {
+    let label = ui.label(name);
+    let mut value = percent.unwrap_or_else(|| (100.0 * automatic_px / base_px).round() as u16);
+    let limit = 10_000.max(value);
+    let response = ui.add(egui::DragValue::new(&mut value).range(0..=limit).suffix("%")).labelled_by(label.id);
+    if response.changed() {
+        *percent = Some(value);
+    }
+    ui.end_row();
+}
+
 pub struct WorksheetFontsDialog {
     book: WindowId,
     sheet: usize,
@@ -179,13 +190,17 @@ impl WorksheetFontsDialog {
         if !self.changed() || !self.current(doc) {
             return;
         }
-        let mut layout = self.shown_view;
+        let measurements = self.shown_view.header_measurements;
+        let previous = self.base_view.header_measurements;
+        let mut view = self.shown_view;
+        view.header_measurements = previous;
+        let mut layout = view;
         layout.show_missing_as_blank = self.base_view.show_missing_as_blank;
         let label = match (
             self.shown != self.base,
             self.shown_colors != self.base_colors,
-            self.shown_view != self.base_view,
-            self.shown_size != self.base_size,
+            view != self.base_view,
+            self.shown_size != self.base_size || measurements != previous,
         ) {
             (true, false, false, false) => "Worksheet font",
             (false, true, false, false) => "Worksheet colors",
@@ -199,7 +214,7 @@ impl WorksheetFontsDialog {
                 self.resize(p);
             }
             let sheet = &mut p.workbook_mut(self.book).unwrap().sheets[self.sheet];
-            sheet.view = self.shown_view;
+            sheet.view = view;
             if self.shown_size.rows != self.base_size.rows {
                 // Origin clears a zero-row sheet and leaves two blank rows.
                 sheet.view.allocated_rows = Some(if self.shown_size.rows == 0 { 2 } else { self.shown_size.rows });
@@ -233,6 +248,13 @@ impl WorksheetFontsDialog {
             }
             if self.shown[STANDARD] != self.base[STANDARD] {
                 sheet.set_standard_font(self.shown[STANDARD].clone());
+            }
+            // Explicit measurements use the displayed units even when applying a font change.
+            if measurements.column_height != previous.column_height {
+                sheet.view.header_measurements.column_height = measurements.column_height;
+            }
+            if measurements.row_width != previous.row_width {
+                sheet.view.header_measurements.row_width = measurements.row_width;
             }
             for (i, kind) in [
                 (LONG_NAME, LabelKind::LongName),
@@ -286,6 +308,26 @@ impl WorksheetFontsDialog {
         if self.shown_size.rows < sheet.row_count() || self.shown_size.columns < self.base_size.columns {
             ui.label("Applying this size removes trailing rows or columns.");
         }
+
+        ui.separator();
+        ui.label("Worksheet Measurement");
+        let measurements = &mut self.shown_view.header_measurements;
+        egui::Grid::new("worksheet_measurement_grid").num_columns(2).show(ui, |ui| {
+            header_measurement(
+                ui,
+                "Column Header Height",
+                &mut measurements.column_height,
+                crate::worksheet_layout::automatic_column_header_height(ui.ctx(), sheet),
+                crate::grid::ROW_HEIGHT,
+            );
+            header_measurement(
+                ui,
+                "Row Header Width",
+                &mut measurements.row_width,
+                crate::grid::automatic_row_header_width(sheet),
+                crate::grid::COLUMN_WIDTH,
+            );
+        });
     }
 
     fn show_format(&mut self, ui: &mut egui::Ui) {

@@ -516,7 +516,7 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
 
 /// Origin's default row height and column width (about 16 px and 67 px in the pictures).
 pub(crate) const ROW_HEIGHT: f32 = 16.0;
-const COLUMN_WIDTH: f32 = 67.0;
+pub(crate) const COLUMN_WIDTH: f32 = 67.0;
 
 /// The width in pixels of a column that is `chars` characters wide (8 characters are 67 px).
 fn column_pixels(chars: u16) -> f32 {
@@ -525,13 +525,23 @@ fn column_pixels(chars: u16) -> f32 {
 /// Width of the row header together with the titles of the label rows.
 const ROW_HEADER_WIDTH: f32 = 84.0;
 
-fn row_header_width(sheet: &Worksheet) -> f32 {
-    if !sheet.view.row_header {
-        0.0
-    } else if sheet.view.row_labels && sheet.shows_view_switch(ViewSwitch::SamplingInterval) {
-        112.0 * sheet.font_defaults.size_scale()
+pub(crate) fn automatic_row_header_width(sheet: &Worksheet) -> f32 {
+    let width = if sheet.view.row_labels && sheet.shows_view_switch(ViewSwitch::SamplingInterval) {
+        112.0
     } else {
-        ROW_HEADER_WIDTH * sheet.font_defaults.size_scale()
+        ROW_HEADER_WIDTH
+    };
+    width * sheet.font_defaults.size_scale()
+}
+
+fn row_header_width(sheet: &Worksheet) -> f32 {
+    if sheet.view.row_header {
+        sheet.view.header_measurements.row_width.map_or_else(
+            || automatic_row_header_width(sheet),
+            |percent| (COLUMN_WIDTH * f32::from(percent) / 100.0).round(),
+        )
+    } else {
+        0.0
     }
 }
 /// Empty rows shown below the data so that new values can be typed in.
@@ -1106,7 +1116,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                         .striped(false)
                         .resizable(true)
                         .cell_layout(Layout::left_to_right(Align::Center))
-                        .column(TableColumn::exact(row_header_width))
+                        .column(TableColumn::exact(row_header_width).clip(true))
                         .min_scrolled_height(0.0);
                     for (position, column) in sheet.columns.iter().enumerate().filter(|(_, c)| !c.hidden) {
                         table = match column.width {
@@ -1153,7 +1163,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                         .header(header_total, |mut header| {
                             header.col(|ui| {
                                 // With frozen columns the row header is drawn by the overlay.
-                                if frozen_w > 0.0 || !sheet.view.row_header {
+                                if frozen_w > 0.0 || row_header_width == 0.0 {
                                     return;
                                 }
                                 corner_and_titles(ui, sheet, &label_rows, book_id, state, actions);
@@ -1199,17 +1209,17 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                                 });
                             }
                             header.col(|ui| {
-                                if !sheet.view.column_header {
+                                let height = layout.column_header_height();
+                                if height == 0.0 {
                                     return;
                                 }
                                 let rect = ui.max_rect();
-                                let top =
-                                    Rect::from_min_size(rect.min, vec2(rect.width(), layout.column_header_height()));
+                                let top = Rect::from_min_size(rect.min, vec2(rect.width(), height));
                                 ui.painter().rect_filled(top, 0.0, HEADER_GREY);
                                 let response = ui
                                     .interact(top, ui.id().with("add_column"), Sense::CLICK)
                                     .on_hover_text("Add a column");
-                                ui.painter().text(
+                                ui.painter().with_clip_rect(top).text(
                                     top.center(),
                                     egui::Align2::CENTER_CENTER,
                                     "+",
@@ -1231,7 +1241,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                                     drawn_rows.push((r, top, row_heights.height(i) as f32));
                                 } else {
                                     row.col(|ui| {
-                                        if sheet.view.row_header {
+                                        if row_header_width > 0.0 {
                                             row_header_cell(ui, sheet, r, false, book_id, state, actions);
                                         }
                                     });
@@ -1428,7 +1438,7 @@ fn frozen_overlay(
         let (left, top) = (inner.left(), inner.top());
         let band_top = top + fv.header_height;
         // The corner with the titles of the label rows, and the numbers of the frozen rows.
-        if sheet.view.row_header {
+        if fv.row_header_width > 0.0 {
             let corner = Rect::from_min_size(Pos2::new(left, top), vec2(fv.row_header_width, fv.header_total));
             cell_scope(ui, corner, "frozen_corner", |ui| {
                 corner_and_titles(ui, sheet, label_rows, book_id, state, actions)
@@ -1470,7 +1480,7 @@ fn frozen_overlay(
                 if y + height < below.top() || y > below.bottom() {
                     continue;
                 }
-                if sheet.view.row_header {
+                if fv.row_header_width > 0.0 {
                     let cell = Rect::from_min_size(Pos2::new(left, y), vec2(fv.row_header_width, height));
                     cell_scope(ui, cell, ("frozen_rowhead", r), |ui| {
                         row_header_cell(ui, sheet, r, true, book_id, state, actions)
@@ -1740,8 +1750,9 @@ fn corner_and_titles(
     let rect = ui.max_rect();
     ui.painter().rect_filled(rect, 0.0, HEADER_GREY);
     let line = Stroke::new(1.0_f32, LINE_HEADER);
-    if sheet.view.column_header {
-        let corner = Rect::from_min_size(rect.min, vec2(rect.width(), column_header_height(state)));
+    let height = column_header_height(state);
+    if height > 0.0 {
+        let corner = Rect::from_min_size(rect.min, vec2(rect.width(), height));
         if let Some(fill) = sheet.column_header_style().fill.map(header_color) {
             ui.painter().rect_filled(corner, 0.0, fill);
         }
@@ -1804,7 +1815,7 @@ fn header_color(color: sheaf_core::Color) -> Color32 {
 
 /// Right-aligned text in a label row's caption.
 fn title_text(ui: &mut egui::Ui, cell: Rect, text: &str, style: &ResolvedStyle<'_>) {
-    let inner = cell.shrink2(vec2(4.0, 0.0));
+    let inner = cell.shrink2(vec2((cell.width() / 2.0).min(4.0), 0.0));
     ui.scope_builder(UiBuilder::new().max_rect(inner).layout(Layout::right_to_left(Align::Center)), |ui| {
         header_text(ui, text, style.text_color.map_or(TEXT, header_color), style);
     });
@@ -1832,9 +1843,10 @@ fn column_head(
     let selected = state.selected.contains(&column.id) && matches!(state.sel, Sel::Columns | Sel::All);
     let line = Stroke::new(1.0_f32, LINE_HEADER);
 
-    if sheet.view.column_header {
+    let height = column_header_height(state);
+    if height > 0.0 {
         let style = sheet.column_header_style();
-        let head = Rect::from_min_size(rect.min, vec2(rect.width(), column_header_height(state)));
+        let head = Rect::from_min_size(rect.min, vec2(rect.width(), height));
         let head_fill = if selected {
             HEADER_DARK
         } else {
@@ -1846,6 +1858,7 @@ fn column_head(
         ui.scope_builder(
             UiBuilder::new().max_rect(head).layout(Layout::centered_and_justified(egui::Direction::LeftToRight)),
             |ui| {
+                ui.set_clip_rect(ui.clip_rect().intersect(head));
                 header_text(ui, &head_name(sheet, position), text_color, &style);
             },
         );

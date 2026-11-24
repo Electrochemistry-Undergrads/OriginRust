@@ -228,6 +228,30 @@ fn wrapped_legend_captions_share_the_sample_and_keep_their_column_slots() {
 }
 
 #[test]
+fn legend_line_break_tokens_match_raw_newlines_before_plot_substitution() {
+    let (mut p, g) = project(2);
+    let y = p.graph(g).unwrap().layers[0].plots[0].y;
+    p.column_mut(y).unwrap().long_name = "Value%(CRLF)".into();
+    let set = |p: &mut Project, text: &str| {
+        let legend = &mut p.graph_mut(g).unwrap().layers[0].legend;
+        legend.columns = 2;
+        legend.text = Some(text.into());
+    };
+
+    let authored = r"\l(1) %(1,@LL)%(CRLF)\h(Keep %(CRLF))%(CR)%(LF)%(CRLF)\l(2) %(2)";
+    set(&mut p, authored);
+    assert_eq!(legend_text(&p, g, 0).unwrap(), authored);
+    let substituted = scene(&p, g);
+    let (items, samples) = legend_items(&substituted);
+    let text: Vec<_> = items.iter().map(|item| item.2.as_str()).collect();
+    assert_eq!(text, ["Value%(CRLF)", "Keep %(CRLF)", "Series 2"]);
+    assert_eq!(samples, 2);
+
+    set(&mut p, "\\l(1) %(1,@LL)\n\\h(Keep %(CRLF))\n\n\\l(2) %(2)");
+    assert_eq!(crate::svg::write_svg(&substituted), crate::svg::write_svg(&scene(&p, g)));
+}
+
+#[test]
 fn the_legend_of_a_double_y_graph_names_plots_by_layer_and_plot() {
     let mut p = Project::new();
     let book = p.add_workbook("data");

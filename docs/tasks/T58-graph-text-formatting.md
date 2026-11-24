@@ -347,6 +347,10 @@ layer frame. Continuation lines are left-aligned, retain their entry's legend co
 expand the frame without repeating the sample. Graphing 7.11 records the current
 documentation, the single-line Origin 2016 probe and Sheaf's width rule.
 
+Custom legend text accepts `%(CRLF)`, `%(CR)` and `%(LF)` before plot substitutions.
+They use the normal legend row layout and stay literal in protected spans and worksheet
+metadata. Graphing 7.11 records the Origin 2016 raw legend controls.
+
 ## Origin facts
 
 Recorded in gui-look 1/4 and the command map: the font box says "Default: Arial", the selected

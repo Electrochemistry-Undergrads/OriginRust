@@ -635,6 +635,8 @@ pub enum Action {
     AddColumnsDialog(WindowId),
     /// Column > Add Column to All Sheets... of this workbook's window (T359).
     AddColumnAcross(WindowId),
+    /// Analysis > Repeat Last Analysis on All Sheets (T414): every sheet of this workbook.
+    RepeatAnalysisAllSheets(WindowId),
     /// Analysis > Repeat Last Analysis (T360) on these columns of `book` (none: the sheet's Y columns).
     RepeatAnalysis {
         book: WindowId,
@@ -695,6 +697,16 @@ pub enum Action {
     /// Graph > Graph Slicer...: open its window for the graph (T406).
     GraphSlicer {
         graph: WindowId,
+    },
+    /// Graph > Browser Graph...: open its window for the active layer (T410).
+    BrowserGraph {
+        graph: WindowId,
+        layer: usize,
+    },
+    /// The browser bar above a graph: show dataset `to` (T410).
+    BrowseGraph {
+        graph: WindowId,
+        to: usize,
     },
     /// Window > Duplicate (Batch Plotting): open the window that picks sheets or columns.
     BatchPlot {
@@ -1222,6 +1234,13 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
         shape: usize,
+    },
+    /// Masks (`mask`) or unmasks the Y cells of the data points inside a drawn rectangle or ellipse (T413).
+    MaskRegion {
+        graph: WindowId,
+        layer: usize,
+        shape: usize,
+        mask: bool,
     },
     /// Moves the legend to a new centre (fractions of the layer frame): it becomes manually
     /// placed; one undo step.

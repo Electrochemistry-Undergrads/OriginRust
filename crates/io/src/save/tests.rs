@@ -510,3 +510,38 @@ fn custom_scale_links_round_trip_in_native_and_opj_companion_saves() {
     assert_eq!(link.x, x);
     assert_eq!(link.y, ScaleLink::Straight);
 }
+
+#[test]
+fn nonlinear_custom_scale_preserves_formulas_in_project_and_companion() {
+    use sheaf_core::graph::ScaleKind;
+    use sheaf_core::scales::CustomScale;
+
+    let dir = scratch("nonlinear-custom-scale");
+    let mut project = project_with_graph();
+    let id = project.graphs().next().unwrap().id;
+    let axis = &mut project.graph_mut(id).unwrap().layers[0].x_axis;
+    let formula = CustomScale { direct: "x*x".into(), inverse: "sqrt(x)".into() };
+    axis.scale = ScaleKind::CustomFormula;
+    axis.custom_scale = Some(formula.clone());
+    axis.min = Some(1.0);
+    axis.max = Some(5.0);
+
+    let native = dir.join("lab.sheaf");
+    assert!(save_project(&project, &native).unwrap().main_written);
+    let reopened = open_project(&native).unwrap().project;
+    let axis = &reopened.graph(id).unwrap().layers[0].x_axis;
+    assert_eq!(axis.scale, ScaleKind::CustomFormula);
+    assert_eq!(axis.custom_scale, Some(formula.clone()));
+
+    let opj = dir.join("lab.opj");
+    let saved = save_project(&project, &opj).unwrap();
+    assert!(saved.main_written && saved.companion.is_some());
+    assert!(saved.warnings.iter().any(|warning| warning.contains("Custom Formula scale")), "{:?}", saved.warnings);
+    let opened = open_project(&opj).unwrap();
+    assert!(opened.companion_used);
+    let axis = &opened.project.graph(id).unwrap().layers[0].x_axis;
+    assert_eq!(axis.scale, ScaleKind::CustomFormula);
+    assert_eq!(axis.custom_scale, Some(formula));
+    let bare = crate::opj::read_opj(&opj).unwrap();
+    assert_eq!(bare.graphs[0].layers[0].x_axis.scale, ScaleKind::Linear);
+}

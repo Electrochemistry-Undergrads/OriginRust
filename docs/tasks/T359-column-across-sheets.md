@@ -8,7 +8,7 @@ sheet's own columns, as one undo step. Not in Origin 2016, so the rules are Shea
 
 ## Left
 
-- Folder scope, inserting at a position (beside a named column), picking the sheets one by one.
+- Picking the sheets one by one (folder scope and inserting after a named column: done in T412).
 
 ## Tests
 

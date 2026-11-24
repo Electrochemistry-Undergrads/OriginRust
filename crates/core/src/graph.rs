@@ -21,6 +21,9 @@ pub struct Graph {
     pub long_name: String,
     pub page: Page,
     pub layers: Vec<Layer>,
+    /// Graph > Graph Slicer (T406): the rows the plots from one sheet show.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slicer: Option<crate::slicer::GraphSlicer>,
 }
 
 impl Graph {
@@ -3524,7 +3527,14 @@ mod tests {
                 ..base.clone()
             })
             .collect();
-        Graph { id: WindowId(1), name: "G".into(), long_name: String::new(), page: Page::inches(6.4, 4.8), layers }
+        Graph {
+            id: WindowId(1),
+            name: "G".into(),
+            long_name: String::new(),
+            page: Page::inches(6.4, 4.8),
+            layers,
+            slicer: None,
+        }
     }
 
     #[test]

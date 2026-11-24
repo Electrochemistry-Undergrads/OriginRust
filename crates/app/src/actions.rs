@@ -692,6 +692,10 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
     },
+    /// Graph > Graph Slicer...: open its window for the graph (T406).
+    GraphSlicer {
+        graph: WindowId,
+    },
     /// Window > Duplicate (Batch Plotting): open the window that picks sheets or columns.
     BatchPlot {
         graph: WindowId,

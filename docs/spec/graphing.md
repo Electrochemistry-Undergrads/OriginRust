@@ -1285,6 +1285,22 @@ caption and add height within the same entry's column. The sample is drawn once 
 the first line. The frame encloses the actual measured widths and heights. This is
 Sheaf's frame-based allocation rule.
 
+**Legend line-break tokens (T58).** Assigning `legend.text$` in Origin 2016 expanded
+`%(CRLF)`, `%(CR)` and `%(LF)` into line breaks. Lowercase, mixed case and spaces
+around the keyword worked. In the 22-point Arial EMFs the first and third rows with
+samples started at X 2581, and the unsampled second row started at the column left,
+X 2379. The 2019 release separately added the token to Custom Legend Translation,
+where the help example aligns the continuation with the sampled row's text.
+[LabTalk string substitution](https://docs.originlab.com/labtalk/guide/string-substitution/), [Origin 2019 release note](https://www.originlab.com/ReleaseNotes/detail.aspx?id=20193ORG-18328), [legend FAQ](https://docs.originlab.com/quick-help/customize-legend/)
+
+Sheaf expands the three tokens in authored legend text before resolving plot
+samples and metadata. Case and whitespace inside the token follow the measured
+script rules. Each new line follows the ordinary legend row layout, including
+column assignment and the omission of the final empty row. Protected `\h(...)`,
+literal `\v(...)` and wrapped `\ww(...)` spans keep the token text. Values read
+from worksheet metadata are resolved after this pass. The raw authored legend
+continues to be saved with its tokens.
+
 **Plot-colored graph text (T58).** `\cpN(text)` uses the color of the Nth plot in the
 text object's layer. Repainting the graph after a style change resolves the color again.
 Nested styles, literal blocks and glyph decorations follow the existing text rules.
@@ -7722,4 +7738,25 @@ Sheaf draws a fixed view of the XYZ box in the ordinary 2D renderer, so it expor
   - hiding points behind each other (points are drawn in row order);
   - surfaces from matrices, a colour scale for colour map surfaces, and 3D OpenGL settings.
   - The Data Reader shows the view's coordinates, not X, Y and Z.
+
+## Graph Slicer: Graph > Graph Slicer... (T406, 2026-11-23; Origin 2025's Graph Slicer, base slice, Sheaf's own)
+
+Origin 2025 added a Graph Slicer that filters the plots from a common source sheet at page, layer or plot scope.
+Origin 2016 has none, so nothing here is measured.
+
+- **The window "Graph Slicer":** Slice by: a column of the sheet the graph's first plot comes from (the first text
+  column to start with, or the graph's slicer column). The column's distinct values are listed in the order of
+  their first cell, each with a tick (all ticked), with Select All and Clear All. OK is disabled with nothing
+  ticked. OK applies the slicer (one undo step, "Graph Slicer"). Remove Slicer takes it off ("Remove Graph
+  Slicer"). Cancel and Esc change nothing.
+- **Effect (page scope):** every plot of the graph whose Y column is in the slicer column's sheet draws only the
+  rows whose cell in the slicer column holds a ticked value. The other rows are left out as the worksheet filter
+  leaves rows out (lines join across them). Plots from other sheets are not sliced. The worksheet itself is not
+  filtered.
+- **When it is worked out:** when it is applied, as the worksheet filter; editing the column later does not change
+  the rows until the slicer is applied again.
+- **Model:** `Graph::slicer` (`sheaf_core::slicer::GraphSlicer`: the column, the shown values and the row filter),
+  saved with the project; `Project::set_graph_slicer`, `clear_graph_slicer`, `slicer_values`.
+- **Not built:** layer and plot scope, several slicer columns, extracting the selected subset to a sheet, plots whose
+  values are computed (histograms, box charts) reading the slicer, and the slicer in .opj files.
 

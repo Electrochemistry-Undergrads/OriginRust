@@ -139,14 +139,64 @@ pub(crate) fn wrap_literal(text: &str, available: f64, measure: impl Fn(&str) ->
     (lines, widest)
 }
 
-/// The lines of a legend text (CR LF, LF or CR end a line); a final empty line is dropped.
+/// The lines of a legend text. Authored line-break tokens are expanded before resolving plot
+/// references. CR LF, LF and CR end a line, and a final empty line is dropped.
 pub(crate) fn lines(text: &str) -> Vec<String> {
+    let expanded;
+    let text = if text.contains("%(") {
+        expanded = expand_line_breaks(text);
+        expanded.as_str()
+    } else {
+        text
+    };
     let normal = text.replace("\r\n", "\n").replace('\r', "\n");
     let mut out: Vec<String> = normal.split('\n').map(str::to_string).collect();
     if out.last().is_some_and(String::is_empty) {
         out.pop();
     }
     out
+}
+
+fn expand_line_breaks(text: &str) -> String {
+    let mut expanded = String::with_capacity(text.len());
+    for mut line in text.split_inclusive(['\r', '\n']) {
+        while let Some(start) = line.find(['%', '\\']) {
+            expanded.push_str(&line[..start]);
+            line = &line[start..];
+            let protected = literal_block_len(line).or_else(|| {
+                let body = line.strip_prefix("\\ww(")?;
+                Some(closing_parenthesis(body).map_or(line.len(), |end| end + 5))
+            });
+            if let Some(len) = protected {
+                expanded.push_str(&line[..len]);
+                line = &line[len..];
+            } else if let Some((separator, rest)) = line_break_token(line) {
+                expanded.push_str(separator);
+                line = rest;
+            } else {
+                // Both starting characters are one byte.
+                expanded.push_str(&line[..1]);
+                line = &line[1..];
+            }
+        }
+        expanded.push_str(line);
+    }
+    expanded
+}
+
+fn line_break_token(text: &str) -> Option<(&'static str, &str)> {
+    let (keyword, rest) = text.strip_prefix("%(")?.split_once(')')?;
+    let keyword = keyword.trim();
+    let separator = if keyword.eq_ignore_ascii_case("CRLF") {
+        "\r\n"
+    } else if keyword.eq_ignore_ascii_case("CR") {
+        "\r"
+    } else if keyword.eq_ignore_ascii_case("LF") {
+        "\n"
+    } else {
+        return None;
+    };
+    Some((separator, rest))
 }
 
 /// A standalone `\sep:nn` adds this percentage of font height before the next entry.
@@ -182,6 +232,20 @@ mod tests {
         assert_eq!(lines("a\r\nb\nc\rd"), vec!["a", "b", "c", "d"]);
         assert_eq!(lines("a\n\nb\n"), vec!["a", "", "b"]);
         assert!(lines("").is_empty());
+    }
+
+    #[test]
+    fn legend_line_break_tokens_act_like_authored_cr_and_lf() {
+        assert_eq!(lines("a%(crlf)b%( CR )%(lF)c%(CRLF)%(LF)d%(CRLF)"), ["a", "b", "c", "", "d"]);
+        assert_eq!(lines("α%(LF)β\r\nγ%(cr)δ"), ["α", "β", "γ", "δ"]);
+        assert_eq!(lines(r"start %(CRLFX) end %(CRLF"), ["start %(CRLFX) end %(CRLF"]);
+    }
+
+    #[test]
+    fn literal_legend_spans_protect_line_break_tokens() {
+        let text = r"\v(a%(CRLF))\h(b%(CR))\ww(c%(LF))%(CRLF)end";
+        assert_eq!(lines(text), [r"\v(a%(CRLF))\h(b%(CR))\ww(c%(LF))", "end"]);
+        assert_eq!(lines(r"\h(unclosed %(CRLF)"), [r"\h(unclosed %(CRLF)"]);
     }
 
     #[test]

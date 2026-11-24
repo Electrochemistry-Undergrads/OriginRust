@@ -9,8 +9,8 @@ survival graph. Not measured in Origin.
 
 ## Left
 
-- Turnbull nonparametric estimates and probability plots for interval data, a frequency column, life-data regression,
-  more distributions.
+- Turnbull nonparametric estimates are T409, the frequency column T394, life-data regression T391.
+- Probability plots for interval data, more distributions.
 
 ## Tests
 

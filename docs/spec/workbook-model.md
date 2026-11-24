@@ -712,6 +712,12 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   The grid includes any data extending beyond the allocation. Row and
   column reductions use the existing deletion paths.
   Project saves preserve the allocation.
+- **Header measurements (T59).** Sparse `view.header_measurements`
+  stores the worksheet's explicit column heading height and row heading
+  width in grid percentages. Automatic measurements use the worksheet's
+  font and label visibility. The stored measurements follow Standard
+  font scaling and are independent of the View heading switches. Print
+  and worksheet images use their own geometry.
 - **Vertical alignment.** The 2016 selected-A1 Format Cells and Worksheet Properties Data
   Format/Size probes (GUI 3, 2026-11-16) found no vertical text-alignment control in those
   inspected routes. Other routes and mutation semantics remain unestablished; this probe

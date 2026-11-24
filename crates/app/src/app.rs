@@ -342,6 +342,7 @@ pub struct SheafApp {
     function_graph: Option<crate::dialogs::function_graph::FunctionGraphDialog>,
     pub(crate) graph_slicer: Option<crate::dialogs::graph_slicer::GraphSlicerDialog>,
     pub(crate) browser_graph: Option<crate::dialogs::browser_graph::BrowserGraphDialog>,
+    pub(crate) flash_fill: Option<crate::dialogs::flash_fill::FlashFillDialog>,
     /// The open function window is File > New > Function Plot's: OK makes the graph (T213).
     function_graph_new: bool,
     /// The Audit Log window is open (T131).
@@ -544,6 +545,7 @@ impl SheafApp {
             function_graph: None,
             graph_slicer: None,
             browser_graph: None,
+            flash_fill: None,
             function_graph_new: false,
             audit_log: false,
             fit_builder: None,
@@ -2830,6 +2832,13 @@ impl SheafApp {
             Action::ColumnProperties(column) => {
                 self.column_props = ColumnPropsDialog::new(self.doc.project(), column);
             }
+            Action::FlashFill(column) => match self.doc.project().flash_fill(column) {
+                Ok(fill) => {
+                    self.flash_fill =
+                        Some(crate::dialogs::flash_fill::FlashFillDialog::new(self.doc.project(), column, fill));
+                }
+                Err(e) => self.warn(e.to_string()),
+            },
             Action::SetColumnValues(column) => {
                 self.set_values = SetValuesDialog::new(self.doc.project(), column);
             }
@@ -5129,6 +5138,30 @@ impl SheafApp {
     }
 
     /// Graph > Add Function Graph... (T119): OK adds the curve; an expression error keeps the window open.
+    fn show_flash_fill(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::flash_fill::FlashOutcome;
+        let Some(d) = &mut self.flash_fill else { return };
+        match d.show(ctx) {
+            FlashOutcome::Open => {}
+            FlashOutcome::Closed => self.flash_fill = None,
+            FlashOutcome::Fill { column, fill } => {
+                self.flash_fill = None;
+                match self.doc.edit("Flash Fill", |p| p.apply_flash_fill(column, &fill)) {
+                    Ok(()) => self.say("Flash Fill filled the column".to_string()),
+                    Err(e) => self.warn(e.to_string()),
+                }
+            }
+            FlashOutcome::Formula { column, formula } => {
+                self.flash_fill = None;
+                let mode = sheaf_core::column::RecalcMode::Auto;
+                match self.doc.edit("Flash Fill", |p| p.set_column_values_with(column, &formula, None, mode)) {
+                    Ok(()) => self.say(format!("Flash Fill set the formula {formula}")),
+                    Err(e) => self.warn(e.to_string()),
+                }
+            }
+        }
+    }
+
     fn show_browser_graph(&mut self, ctx: &egui::Context) {
         use crate::dialogs::browser_graph::BrowserOutcome;
         let Some(d) = &mut self.browser_graph else { return };
@@ -8310,6 +8343,7 @@ impl SheafApp {
         self.show_function_graph(ctx);
         self.show_graph_slicer(ctx);
         self.show_browser_graph(ctx);
+        self.show_flash_fill(ctx);
         self.show_audit_log(ctx);
         self.show_fit_builder(ctx);
         self.show_sample_projects(ctx);

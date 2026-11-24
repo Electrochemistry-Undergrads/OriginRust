@@ -34,6 +34,7 @@ pub mod fishbone;
 pub mod fit_marks;
 pub mod fit_page;
 pub mod fitting;
+pub mod flash_fill;
 pub mod format;
 pub mod format_clip;
 pub mod formula;

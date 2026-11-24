@@ -500,6 +500,8 @@ pub enum Cmd {
     Refresh,
     SetAs(Designation),
     SetColumnValues,
+    /// Column > Flash Fill... (T430).
+    FlashFill,
     /// Column > Set Multiple Columns Values... (Ctrl+Shift+Q): two or more selected columns.
     SetMultipleColumnsValues,
     Recalculate,
@@ -1810,6 +1812,7 @@ fn column_menu() -> Vec<Entry> {
         keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q), Cmd::SetMultipleColumnsValues),
         // Origin has this as a toolbar button and in the column's right-click menu.
         item("Re&calculate", Cmd::Recalculate),
+        item("Flash Fill...", Cmd::FlashFill),
         sub(
             "Fill Column With",
             vec![
@@ -3769,6 +3772,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SetColumnValues => {
             book?;
             Action::SetColumnValues(one()?)
+        }
+        Cmd::FlashFill => {
+            book?;
+            Action::FlashFill(one()?)
         }
         Cmd::SetMultipleColumnsValues => {
             book?;

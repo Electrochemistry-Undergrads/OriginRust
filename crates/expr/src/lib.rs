@@ -27,7 +27,7 @@ mod text;
 pub use ast::{CellReads, ColumnLabel, ColumnRef, Expr, WorksheetRef};
 pub use error::ExprError;
 pub use eval::{Compiled, Host, SimpleHost};
-pub use text::Value;
+pub use text::{Value, token, tokens};
 
 #[cfg(test)]
 mod tests;

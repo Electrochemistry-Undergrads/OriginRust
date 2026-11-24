@@ -37,6 +37,7 @@ pub mod fit_builder;
 pub mod fit_more;
 pub mod fit_organizer;
 pub mod fit_page;
+pub mod flash_fill;
 pub mod folder_props;
 pub mod frame;
 pub mod function_graph;

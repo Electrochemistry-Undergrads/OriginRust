@@ -211,3 +211,41 @@ fn sticky_notes_pin_to_a_sheet_take_text_and_collapse() {
     settle(&mut h);
     assert!(project(&h).sticky_note(target).is_none());
 }
+
+#[test]
+fn flash_fill_fills_values_or_keeps_the_formula() {
+    // T430: Column > Flash Fill... from one typed example.
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let (mut out, mut out2) = (sheaf_core::ColumnId(0), sheaf_core::ColumnId(0));
+    h.state_mut().doc.apply("data", |p| {
+        // Two books of names, each with one example beside them.
+        for k in 0..2 {
+            let b = p.add_workbook("");
+            let names = ["John Smith", "Grace Hopper", "Alan Turing"].iter().map(|s| s.to_string()).collect();
+            p.add_column(b, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::text(names)).unwrap();
+            let ex = sheaf_core::ColumnData::text(vec!["Smith, J.".into()]);
+            let c = p.add_column(b, 0, sheaf_core::Designation::Y, ex).unwrap();
+            if k == 0 { out = c } else { out2 = c }
+        }
+    });
+    settle(&mut h);
+    let cell = |h: &Harness<'static, SheafApp>, c, r| {
+        sheaf_core::indexed::level_text(project(h).column(c).unwrap(), r).unwrap_or_default()
+    };
+    h.state_mut().apply(Action::FlashFill(out), &ctx);
+    settle(&mut h);
+    h.get_by_label("Hopper, G.");
+    h.get_by_label("Fill Values").click();
+    settle(&mut h);
+    assert!(h.state().flash_fill.is_none());
+    assert_eq!(cell(&h, out, 2), "Turing, A.");
+    assert_eq!(h.state().doc.undo_label(), Some("Flash Fill"));
+    // Keep Formula: the column follows its source.
+    h.state_mut().apply(Action::FlashFill(out2), &ctx);
+    settle(&mut h);
+    h.get_by_label("Keep Formula").click();
+    settle(&mut h);
+    assert_eq!(cell(&h, out2, 1), "Hopper, G.");
+    assert!(project(&h).column(out2).unwrap().formula.as_deref().is_some_and(|f| f.starts_with("token(")));
+}

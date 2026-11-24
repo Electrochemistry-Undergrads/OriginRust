@@ -797,6 +797,8 @@ pub enum Action {
     },
     ColumnProperties(ColumnId),
     SetColumnValues(ColumnId),
+    /// Column > Flash Fill...: work out the column's rule from its typed examples and show it (T430).
+    FlashFill(ColumnId),
     /// The Set Values window for several columns of one sheet at once (Ctrl+Shift+Q).
     SetMultipleColumnsValues(Vec<ColumnId>),
     /// Recalculate these columns now. Columns without a recalculating formula are skipped.

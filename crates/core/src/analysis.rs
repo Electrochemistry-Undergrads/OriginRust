@@ -67,7 +67,7 @@ pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
 pub use doe::{FactorialDesignSpec, FactorialEffectsSpec, SplitPlotDesignSpec, SplitPlotEffectsSpec};
 pub use expsmooth::{ExpSmoothSpec, SmoothModel};
 pub use forest::{ForestTask, RandomForestSpec};
-pub use lifedist::{CoxSpec, LifeDist, LifeDistArbitrarySpec, LifeDistSpec, LifeRegressionSpec};
+pub use lifedist::{CoxSpec, LifeDist, LifeDistArbitrarySpec, LifeDistSpec, LifeRegressionSpec, TurnbullSpec};
 pub use manhattan::ManhattanSpec;
 pub use montecarlo::{MONTE_CARLO_MAX, MonteCarloSpec};
 pub use multivariate::{KmeansSpec, PcaSpec};
@@ -1188,6 +1188,9 @@ pub enum Tool {
     /// Statistics > Survival Analysis > Distribution Analysis (Arbitrary Censoring) (T384, `docs/spec/statistics.md`
     /// section 47): start and end columns.
     LifeDistArbitrary(LifeDistArbitrarySpec),
+    /// Statistics > Survival Analysis > Nonparametric Analysis (Arbitrary Censoring) (T409, `docs/spec/statistics.md`
+    /// section 53): Turnbull's estimate from start and end columns.
+    Turnbull(TurnbullSpec),
     /// Statistics > Survival Analysis > Life Data Regression (T391, `docs/spec/statistics.md` section 48): covariates,
     /// then the time and the censor column.
     LifeRegression(LifeRegressionSpec),
@@ -1366,6 +1369,7 @@ impl Tool {
             Tool::Capability(_) => "Process capability",
             Tool::LifeDist(_) => "Distribution overview",
             Tool::LifeDistArbitrary(_) => "Distribution analysis (arbitrary censoring)",
+            Tool::Turnbull(_) => "Nonparametric analysis (arbitrary censoring)",
             Tool::LifeRegression(_) => "Life data regression",
             Tool::Cox(_) => "Cox proportional hazards",
             Tool::Qpcr(_) => "qPCR relative quantification",
@@ -1469,6 +1473,7 @@ impl Tool {
             Tool::Capability(_) => "Capability",
             Tool::LifeDist(_) => "LifeDist",
             Tool::LifeDistArbitrary(_) => "LifeInterval",
+            Tool::Turnbull(_) => "Turnbull",
             Tool::LifeRegression(_) => "LifeReg",
             Tool::Cox(_) => "Cox",
             Tool::Qpcr(_) => "qPCR",
@@ -2603,6 +2608,7 @@ impl Project {
                 | Tool::KaplanMeier(_)
                 | Tool::LifeDist(_)
                 | Tool::LifeDistArbitrary(_)
+                | Tool::Turnbull(_)
                 | Tool::LifeRegression(_)
                 | Tool::Cox(_)
                 | Tool::Qpcr(_)
@@ -2878,6 +2884,13 @@ impl Project {
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;
+            }
+            Tool::Turnbull(spec) => {
+                let out = lifedist::run_turnbull(spec, sheet, &request.columns, request.rows)?;
+                table = out.table;
+                on_sheet = out.on_sheet;
+                notes = out.notes;
+                xy_graph = out.graph;
             }
             Tool::LifeDistArbitrary(spec) => {
                 let out = lifedist::run_arbitrary(spec, sheet, &request.columns, request.rows)?;

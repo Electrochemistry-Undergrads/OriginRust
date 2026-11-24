@@ -336,6 +336,12 @@ Worksheet-sourced point labels use the shared renderer for inline styles, script
 spans and plot colors. Frame and White Out widths follow the rendered text. The documented
 Label-column escape behavior and Sheaf's plot-slot rules are recorded in graphing 7.11.
 
+Conditional horizontal spacing supports bare `\sc` and grouped `\sc(text)` in the
+shared graph text parser. Missing metadata can leave consecutive escapes, which render
+as one space between visible values. Legend frame measurements and exports use the
+same runs. Graphing 7.11 records the current documentation and the Origin 2016 EMF
+probe, which drew the escape literally.
+
 ## Origin facts
 
 Recorded in gui-look 1/4 and the command map: the font box says "Default: Arial", the selected

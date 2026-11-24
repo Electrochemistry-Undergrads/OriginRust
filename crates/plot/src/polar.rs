@@ -96,6 +96,7 @@ pub(crate) fn angle_axis(axis: &Axis, unit: AngleUnit) -> ResolvedAxis {
             max: std::f64::consts::TAU,
             step: quarter,
             scale: ScaleKind::Linear,
+            formula: None,
             major,
             minor: Vec::new(),
             labels,
@@ -106,6 +107,7 @@ pub(crate) fn angle_axis(axis: &Axis, unit: AngleUnit) -> ResolvedAxis {
     }
     let fixed = Axis {
         scale: ScaleKind::Linear,
+        custom_scale: None,
         min: Some(0.0),
         max: Some(360.0),
         major_step: Some(30.0),
@@ -143,6 +145,7 @@ pub(crate) fn radar_axis(names: &[String]) -> ResolvedAxis {
         max: 360.0,
         step: 360.0 / n,
         scale: ScaleKind::Linear,
+        formula: None,
         major: (0..names.len()).map(|i| 360.0 * i as f64 / n).collect(),
         minor: Vec::new(),
         labels: names.to_vec(),

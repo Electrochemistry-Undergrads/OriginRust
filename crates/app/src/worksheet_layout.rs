@@ -21,6 +21,11 @@ fn height(ctx: &egui::Context, f: ResolvedStyle<'_>, minimum: f64) -> f64 {
     f64::from(ctx.fonts_mut(|fonts| fonts.row_height(&id)).ceil() + 2.0).max(minimum)
 }
 
+pub(crate) fn automatic_column_header_height(ctx: &egui::Context, sheet: &Worksheet) -> f32 {
+    let base = f64::from(crate::grid::ROW_HEIGHT * sheet.font_defaults.size_scale());
+    height(ctx, sheet.font_defaults.column_header_style(), base) as f32
+}
+
 impl Layout {
     pub fn new(
         ctx: &egui::Context,
@@ -31,8 +36,8 @@ impl Layout {
     ) -> Self {
         let base = f64::from(crate::grid::ROW_HEIGHT * sheet.font_defaults.size_scale());
         let measure = |font: ResolvedStyle<'_>| height(ctx, font, base);
-        let row_header_height =
-            if sheet.view.row_header { measure(sheet.font_defaults.row_header_style()) } else { base };
+        let row_header_shown = sheet.view.row_header && sheet.view.header_measurements.row_width != Some(0);
+        let row_header_height = if row_header_shown { measure(sheet.font_defaults.row_header_style()) } else { base };
         let rows = RowHeights::new(sheet, index, row_header_height, measure);
         let rows = shown.map_or_else(|| rows.clone(), |s| rows.shown(s));
         let labels = labels
@@ -51,7 +56,7 @@ impl Layout {
                 // The Sparklines row (T175) is twice as tall as a text row, Sheaf's choice.
                 let least = if matches!(l, LabelRow::Sparklines) { 2.0 * base } else { base };
                 let least =
-                    if sheet.view.row_header && sheet.view.row_labels { least.max(row_header_height) } else { least };
+                    if row_header_shown && sheet.view.row_labels { least.max(row_header_height) } else { least };
                 sheet
                     .columns
                     .iter()
@@ -60,8 +65,14 @@ impl Layout {
                     .fold(least, f64::max) as f32
             })
             .collect();
-        let column_header_height =
-            if sheet.view.column_header { measure(sheet.font_defaults.column_header_style()) as f32 } else { 0.0 };
+        let column_header_height = if sheet.view.column_header {
+            sheet.view.header_measurements.column_height.map_or_else(
+                || automatic_column_header_height(ctx, sheet),
+                |percent| (crate::grid::ROW_HEIGHT * f32::from(percent) / 100.0).round(),
+            )
+        } else {
+            0.0
+        };
         Self { rows, labels, column_header_height }
     }
 

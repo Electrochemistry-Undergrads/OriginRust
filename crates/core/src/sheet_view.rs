@@ -60,6 +60,27 @@ fn yes() -> bool {
     true
 }
 
+/// Explicit grid header sizes as percentages of the 16 px row and 67 px column.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HeaderMeasurements {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub column_height: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row_width: Option<u16>,
+}
+
+impl HeaderMeasurements {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    pub(crate) fn scale(&mut self, ratio: f32) {
+        for percent in [&mut self.column_height, &mut self.row_width].into_iter().flatten() {
+            *percent = (f32::from(*percent) * ratio).round() as u16;
+        }
+    }
+}
+
 /// The sheet's display choices. Sampling Interval is automatic until toggled.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SheetView {
@@ -99,6 +120,8 @@ pub struct SheetView {
     /// The row capacity chosen in Worksheet Properties. Data can extend beyond it (T59).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allocated_rows: Option<usize>,
+    #[serde(default, skip_serializing_if = "HeaderMeasurements::is_default")]
+    pub header_measurements: HeaderMeasurements,
 }
 
 impl Default for SheetView {
@@ -119,6 +142,7 @@ impl Default for SheetView {
             categories: false,
             show_missing_as_blank: None,
             allocated_rows: None,
+            header_measurements: HeaderMeasurements::default(),
         }
     }
 }
@@ -187,6 +211,23 @@ impl Worksheet {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn header_measurements_roundtrip_and_stay_out_of_print_geometry() {
+        use crate::sheet_print::{PrintStyle, SheetTable};
+
+        let mut sheet = Worksheet::new("Sheet1");
+        let json = serde_json::to_string(&sheet).unwrap();
+        assert!(!json.contains("header_measurements"));
+        let print_extent = SheetTable::new(&sheet, PrintStyle::default()).heading_extent();
+        sheet.view.header_measurements = HeaderMeasurements { column_height: Some(320), row_width: Some(0) };
+
+        let json = serde_json::to_string(&sheet).unwrap();
+        let saved: Worksheet = serde_json::from_str(&json).unwrap();
+        assert_eq!(saved.view.header_measurements, sheet.view.header_measurements);
+        assert!(saved.view.row_header && saved.view.column_header);
+        assert_eq!(SheetTable::new(&saved, PrintStyle::default()).heading_extent(), print_extent);
+    }
 
     #[test]
     fn allocated_rows_roundtrip_without_counting_as_data() {

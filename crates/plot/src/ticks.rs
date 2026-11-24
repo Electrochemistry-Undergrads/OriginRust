@@ -4,7 +4,9 @@
 use sheaf_core::autorange::{self, LogTicks};
 use sheaf_core::datetime::{self, DatePattern, TimePattern};
 use sheaf_core::graph::{AutoRange, Axis, AxisBreak, ScaleKind, TickFormat};
+use sheaf_core::scales::FormulaTransform;
 use std::borrow::Cow;
+use std::sync::Arc;
 
 /// The multiplication sign used in scientific tick labels.
 const TIMES: char = '\u{d7}';
@@ -20,8 +22,10 @@ pub struct ResolvedAxis {
     pub max: f64,
     /// Distance between major ticks (linear), or `10^k` for a log axis that labels every k-th decade.
     pub step: f64,
-    /// Linear or log10.
+    /// The effective numeric scale.
     pub scale: ScaleKind,
+    /// The validated transform for a Custom Formula scale.
+    pub formula: Option<ResolvedFormula>,
     /// Major tick values inside the limits.
     pub major: Vec<f64>,
     /// Minor tick values inside the limits (never equal to a major tick).
@@ -37,6 +41,14 @@ pub struct ResolvedAxis {
     pub gaps: Vec<ResolvedBreak>,
     /// Labels of the minor ticks, one per entry of `minor`; empty unless the axis writes them.
     pub minor_labels: Vec<String>,
+}
+
+/// A compiled custom axis mapping and the transformed endpoints used by this layout.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResolvedFormula {
+    transform: Arc<FormulaTransform>,
+    start: f64,
+    span: f64,
 }
 
 /// A break of an axis with its place on the axis, positions as fractions of the axis length from the
@@ -73,9 +85,7 @@ impl ResolvedAxis {
         self.major.iter().copied().zip(&self.labels).chain(self.minor.iter().copied().zip(&self.minor_labels))
     }
 
-    /// Position of `v` along the axis: 0 at `min`, 1 at `max`. Linear or
-    /// logarithmic according to the scale. Values that cannot be placed
-    /// (non-positive on a log axis) give NaN.
+    /// Position of `v` in axis coordinates. Values outside the transform's domain give NaN.
     pub fn to_unit(&self, v: f64) -> f64 {
         let u = self.to_unit_ascending(v);
         if self.reversed { 1.0 - u } else { u }
@@ -120,6 +130,9 @@ impl ResolvedAxis {
     /// The length of the axis in its own scale: `max - min` on a linear axis, the number of decades on a
     /// log10 axis, the transformed span on the others. What Origin's X:Y ratio compares (graphing 18.7a).
     pub fn scale_span(&self) -> f64 {
+        if let Some(formula) = &self.formula {
+            return formula.span.abs();
+        }
         match self.scale {
             ScaleKind::Linear => (self.max - self.min).abs(),
             ScaleKind::Log10 => (self.max.log10() - self.min.log10()).abs(),
@@ -129,6 +142,14 @@ impl ResolvedAxis {
 
     /// Position along the axis without the break.
     fn plain_unit(&self, v: f64) -> f64 {
+        if let Some(formula) = &self.formula {
+            let unit = formula.transform.forward(v).map_or(f64::NAN, |t| (t - formula.start) / formula.span);
+            // A value on another branch of the formula cannot re-enter the visible interval.
+            if (v < self.min && unit >= 0.0) || (v > self.max && unit <= 1.0) {
+                return f64::NAN;
+            }
+            return unit;
+        }
         match self.scale {
             ScaleKind::Linear => (v - self.min) / (self.max - self.min),
             ScaleKind::Log10 => {
@@ -161,6 +182,15 @@ impl ResolvedAxis {
                 None => lerp(u, last.1, last.0),
             }
         };
+        if let Some(formula) = &self.formula {
+            if u == 0.0 {
+                return self.min;
+            }
+            if u == 1.0 {
+                return self.max;
+            }
+            return formula.transform.inverse(formula.start + u * formula.span).unwrap_or(f64::NAN);
+        }
         match self.scale {
             ScaleKind::Linear => self.min + u * (self.max - self.min),
             ScaleKind::Log10 => {
@@ -283,10 +313,17 @@ pub fn resolve_axis_edges(axis: &Axis, data_min_max: Option<(f64, f64)>, free: (
         }
     }
     let mut r = match axis.scale {
-        ScaleKind::Linear => resolve_linear(axis, data_min_max, free),
+        ScaleKind::Linear | ScaleKind::CustomFormula => resolve_linear(axis, data_min_max, free),
         ScaleKind::Log10 => resolve_log(axis, data_min_max),
         _ => crate::ticks_scales::resolve_other(axis, data_min_max),
     };
+    if axis.scale == ScaleKind::CustomFormula
+        && let Some(transform) = axis.custom_scale.as_ref().and_then(|formula| formula.compile())
+        && let Some((start, end)) = transform.limits(r.min, r.max)
+    {
+        r.scale = ScaleKind::CustomFormula;
+        r.formula = Some(ResolvedFormula { transform: Arc::new(transform), start, span: end - start });
+    }
     r.reversed ^= axis.reverse;
     apply_break(axis, &mut r);
     add_special_ticks(axis, &mut r);
@@ -428,7 +465,7 @@ fn apply_break(axis: &Axis, r: &mut ResolvedAxis) {
     let inside = |v: f64| gaps.iter().any(|g| v > g.from + eps && v < g.to - eps);
     let mut ticks: Vec<(f64, String)> =
         r.major.iter().copied().zip(r.labels.iter().cloned()).filter(|(v, _)| !inside(*v)).collect();
-    if r.scale == ScaleKind::Linear {
+    if matches!(r.scale, ScaleKind::Linear | ScaleKind::CustomFormula) {
         for (k, b) in used.iter().enumerate() {
             let Some(step) = b.step_after.filter(|s| s.is_finite() && *s > 0.0) else { continue };
             let end = used.get(k + 1).map_or(r.max, |next| next.from);
@@ -584,6 +621,7 @@ fn resolve_linear(axis: &Axis, data: Option<(f64, f64)>, free: (bool, bool)) -> 
         max,
         step,
         scale: ScaleKind::Linear,
+        formula: None,
         major,
         minor,
         labels,
@@ -680,6 +718,7 @@ fn resolve_log(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAxis {
             max,
             step,
             scale: ScaleKind::Log10,
+            formula: None,
             major,
             minor: Vec::new(),
             labels,
@@ -716,6 +755,7 @@ fn resolve_log(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAxis {
         max,
         step: pow10(k),
         scale: ScaleKind::Log10,
+        formula: None,
         major,
         minor,
         labels,
@@ -863,6 +903,7 @@ mod tests {
     pub(super) fn axis() -> Axis {
         Axis {
             scale: ScaleKind::Linear,
+            custom_scale: None,
             min: None,
             max: None,
             auto_range: AutoRange::Nice,

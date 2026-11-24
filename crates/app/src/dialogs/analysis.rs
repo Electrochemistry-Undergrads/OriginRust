@@ -202,6 +202,9 @@ pub enum AnalysisKind {
     /// Statistics > Survival Analysis > Distribution Analysis (Arbitrary Censoring) (T384; options in
     /// `multivariate_options.rs`).
     LifeDistArbitrary,
+    /// Statistics > Survival Analysis > Nonparametric Analysis (Arbitrary Censoring) (T409; options in
+    /// `multivariate_options.rs`).
+    Turnbull,
     /// Statistics > Survival Analysis > Life Data Regression (T391; options in `multivariate_options.rs`).
     LifeRegression,
     /// Statistics > Survival Analysis > Cox Proportional Hazards (T408; options in `multivariate_options.rs`).
@@ -367,6 +370,7 @@ impl AnalysisKind {
             AnalysisKind::Stability => "Stability Study...",
             AnalysisKind::LifeDist => "Distribution Overview Plot...",
             AnalysisKind::LifeDistArbitrary => "Distribution Analysis (Arbitrary Censoring)...",
+            AnalysisKind::Turnbull => "Nonparametric Analysis (Arbitrary Censoring)...",
             AnalysisKind::LifeRegression => "Life Data Regression...",
             AnalysisKind::Cox => "Cox Proportional Hazards...",
             AnalysisKind::Qpcr => "Relative Quantification...",
@@ -487,6 +491,7 @@ impl AnalysisKind {
             "stability" => AnalysisKind::Stability,
             "lifedist" => AnalysisKind::LifeDist,
             "lifedistinterval" => AnalysisKind::LifeDistArbitrary,
+            "turnbull" => AnalysisKind::Turnbull,
             "lifereg" => AnalysisKind::LifeRegression,
             "cox" => AnalysisKind::Cox,
             "qpcr" => AnalysisKind::Qpcr,
@@ -2388,6 +2393,7 @@ impl AnalysisDialog {
             | AnalysisKind::Stability
             | AnalysisKind::LifeDist
             | AnalysisKind::LifeDistArbitrary
+            | AnalysisKind::Turnbull
             | AnalysisKind::LifeRegression
             | AnalysisKind::Cox
             | AnalysisKind::Qpcr
@@ -3727,6 +3733,7 @@ impl AnalysisDialog {
             | AnalysisKind::Stability
             | AnalysisKind::LifeDist
             | AnalysisKind::LifeDistArbitrary
+            | AnalysisKind::Turnbull
             | AnalysisKind::LifeRegression
             | AnalysisKind::Cox
             | AnalysisKind::Qpcr
@@ -3943,6 +3950,7 @@ impl AnalysisDialog {
             | AnalysisKind::Stability
             | AnalysisKind::LifeDist
             | AnalysisKind::LifeDistArbitrary
+            | AnalysisKind::Turnbull
             | AnalysisKind::LifeRegression
             | AnalysisKind::Cox
             | AnalysisKind::Qpcr
@@ -4060,6 +4068,9 @@ impl AnalysisDialog {
                 "Summarize values per hour, day, week, month, quarter or year of their date-time"
             }
             AnalysisKind::Manhattan => "Show p-values along grouped positions, such as chromosomes, as -log10 p",
+            AnalysisKind::Turnbull => {
+                "Estimate survival without a distribution from failures known exactly, after, before or between times"
+            }
             AnalysisKind::LifeDistArbitrary => {
                 "Fit a life distribution to failures known exactly, after, before or between times"
             }
@@ -4240,6 +4251,9 @@ impl AnalysisDialog {
             }
             AnalysisKind::LifeRegression => {
                 "One row per coefficient (with standard error, z and probability) and the scale in a new sheet"
+            }
+            AnalysisKind::Turnbull => {
+                "One row per Turnbull interval (probability, survival and cumulative failure) in a new sheet, and the survival graph"
             }
             AnalysisKind::LifeDistArbitrary => {
                 "The row counts by censoring, fitted parameters, log-likelihood, mean and median in a new sheet, and the fitted CDF and survival graph"

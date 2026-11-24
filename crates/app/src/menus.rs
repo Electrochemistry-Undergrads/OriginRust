@@ -1743,7 +1743,10 @@ fn plot_menu() -> Vec<Entry> {
                     item("Vector XYAM", Cmd::Plot(Template::VectorXyam)),
                     item("Vector XYXY", Cmd::Plot(Template::VectorXyxy)),
                 ],
-                vec![item("Zoom", Cmd::Plot(Template::Zoom))],
+                vec![
+                    item("Zoom", Cmd::Plot(Template::Zoom)),
+                    item("Time Series Explorer", Cmd::Plot(Template::TimeSeriesExplorer)),
+                ],
             ]
             .concat(),
         ),

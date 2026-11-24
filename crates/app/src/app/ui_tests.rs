@@ -5716,6 +5716,18 @@ fn repeat_last_analysis_runs_the_last_tool_on_the_new_selection() {
     let after = areas(&h);
     assert_eq!(after.len(), 2, "{after:?}");
     assert!(after.contains(&4.0), "the area under b = 2: {after:?}");
+    // T414: on every sheet the book has now: Sheet1 (a and b) and the two result sheets (their Area columns).
+    let sheets_before = project(&h).workbook(book).unwrap().sheets.len();
+    show_window(&mut h, "Book1 - ab.csv");
+    menu_path(&mut h, &["Analysis", "Repeat Last Analysis on All Sheets"]);
+    assert_eq!(h.state().doc.undo_label(), Some("Integrate"));
+    assert!(h.state().status.contains("repeated on"), "{}", h.state().status);
+    let all = areas(&h);
+    assert!(all.len() > after.len() + 1, "a and b of Sheet1 at least: {all:?}");
+    assert!(project(&h).workbook(book).unwrap().sheets.len() > sheets_before);
+    // One undo step takes all of it back.
+    h.state_mut().doc.undo();
+    assert_eq!(areas(&h), after);
 }
 
 /// Column > Add Column to All Sheets... (T359): the column and its formula land in every sheet of the workbook,

@@ -635,6 +635,8 @@ pub enum Action {
     AddColumnsDialog(WindowId),
     /// Column > Add Column to All Sheets... of this workbook's window (T359).
     AddColumnAcross(WindowId),
+    /// Analysis > Repeat Last Analysis on All Sheets (T414): every sheet of this workbook.
+    RepeatAnalysisAllSheets(WindowId),
     /// Analysis > Repeat Last Analysis (T360) on these columns of `book` (none: the sheet's Y columns).
     RepeatAnalysis {
         book: WindowId,

@@ -2454,6 +2454,7 @@ impl SheafApp {
             Action::AddColumnsDialog(book) => self.add_columns = Some((book, 1)),
             Action::AddColumnAcross(book) => self.column_across = Some(ColumnAcross::new(book)),
             Action::RepeatAnalysis { book, columns } => self.repeat_analysis(book, columns),
+            Action::RepeatAnalysisAllSheets(book) => self.repeat_analysis_all_sheets(book),
             Action::DeleteColumns(columns) => {
                 self.doc.apply("Delete columns", |p| delete_columns(p, &columns));
             }
@@ -6506,6 +6507,59 @@ impl SheafApp {
                 self.say(format!("{} repeated: {}", label.trim_end_matches("..."), report.message));
             }
             Err(e) => self.warn(format!("Could not repeat {}: {e}", label.trim_end_matches("..."))),
+        }
+    }
+
+    /// Analysis > Repeat Last Analysis on All Sheets (T414): the last tool, with the same options, on the Y columns of
+    /// every sheet the workbook has when the command starts (not the sheets the runs add), as one undo step. A sheet
+    /// without Y columns, or where the tool fails, is skipped and named.
+    fn repeat_analysis_all_sheets(&mut self, book: WindowId) {
+        let Some((tool, label)) = self.last_analysis.clone() else {
+            return self.say("No analysis to repeat yet: run one from its window first");
+        };
+        let Some(b) = self.doc.project().workbook(book) else { return };
+        let sheets: Vec<(String, Vec<ColumnId>)> = b
+            .sheets
+            .iter()
+            .map(|s| {
+                let ys = s.columns.iter().filter(|c| c.designation == Designation::Y).map(|c| c.id).collect();
+                (s.name.clone(), ys)
+            })
+            .collect();
+        let name = label.trim_end_matches("...").to_string();
+        let mut skipped: Vec<String> = Vec::new();
+        let result = self.doc.edit(tool.name(), |p| {
+            let mut runs = 0;
+            for (sheet, columns) in &sheets {
+                if columns.is_empty() {
+                    skipped.push(format!("{sheet} (no Y columns)"));
+                    continue;
+                }
+                let request = sheaf_core::analysis::Request {
+                    columns: columns.clone(),
+                    rows: sheaf_core::analysis::RowRange::All,
+                    tool: tool.clone(),
+                };
+                match p.analyze(&request) {
+                    Ok(_) => runs += 1,
+                    Err(e) => skipped.push(format!("{sheet} ({e})")),
+                }
+            }
+            if runs == 0 { Err(format!("{name} ran on no sheet")) } else { Ok(runs) }
+        });
+        match result {
+            Ok(runs) => {
+                self.panels.reveal(PanelId::Results);
+                let mut msg = format!("{name} repeated on {runs} sheet(s)");
+                if !skipped.is_empty() {
+                    msg.push_str(&format!("; skipped: {}", skipped.join(", ")));
+                }
+                self.say(msg);
+            }
+            Err(e) => {
+                let detail = if skipped.is_empty() { String::new() } else { format!(": {}", skipped.join(", ")) };
+                self.warn(format!("Could not repeat {name}: {e}{detail}"));
+            }
         }
     }
 

@@ -42,7 +42,7 @@ outputs or UI behavior.
 | Data Connectors and periodic refresh | 2019b / 2026 | Keep a linked source and its selected data subset in the workbook. Reload the link on a configurable, pausable timer and optionally keep linked data out of the saved project. | [2019b][o19b] · [2026][o26] |
 | Linked HTML/Markdown analysis reports | 2019b | Build a report embedding live links to result values, metadata and figures. Reuse the report with batch analysis and export it as a web page. | [2019b][o19b] |
 | Import PDF Tables | 2021 App | Extract table cells from a PDF into worksheets. | [2021][o21] |
-| Formula-preserving Excel and Sheets import | 2026 | Import Excel cell expressions or paste spreadsheet formulas as editable calculations. Surface unsupported formulas in the affected cells. | [2026][o26] |
+| Formula-preserving Excel and Sheets import | 2026 | Same-row column formulas done (T417: an Excel column of one same-row formula imports as its column formula, others warn); pasted spreadsheet formulas and per-cell formulas remain. Import Excel cell expressions or paste spreadsheet formulas as editable calculations. Surface unsupported formulas in the affected cells. | [2026][o26] |
 | GraphPad Prism connector | 2026b App | Import Prism project or template data and map it to structured tables that preserve group and replicate roles. | [2026b][o26b] |
 
 ## Graphing and data exploration

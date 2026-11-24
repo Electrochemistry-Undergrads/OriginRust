@@ -240,6 +240,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T403](T403-upset-plot.md) | Plot > Categorical > UpSet Plot and sheaf plot -t upset | S | done 2026-11-23 (graphing 14.35), not measured |
 | [T404](T404-pivot-intervals.md) | Time Series Pivot: every N periods and fiscal years | S | done 2026-11-23 (statistics 32), not measured |
 | [T407](T407-find-notes.md) | Find in Project (and Project Files) searches notes windows | S | done 2026-11-23 (gui-look), not measured |
+| [T417](T417-excel-formulas.md) | Excel import keeps same-row column formulas | S | done 2026-11-24 (import-excel 4), not measured |
 | [T412](T412-across-folder.md) | Add Column to All Sheets: folder scope and After Column | S | done 2026-11-24 (workbook-model 13q), not measured |
 | [T413](T413-region-mask.md) | Mask / Unmask Data in Region on a drawn rectangle or ellipse | S | done 2026-11-24 (graphing 17.12), not measured |
 | [T414](T414-repeat-all-sheets.md) | Analysis > Repeat Last Analysis on All Sheets | S | done 2026-11-24 (gui-look), not measured |

@@ -32,8 +32,10 @@ pub const FILE_NAME: &str = "recent.json";
 /// (T387). Sixty seconds (T230: two were too
 /// short when many writers queued on a busy machine; T378: ten were too short as well). When the lock is
 /// still busy after that the change is refused with an error, not written without the lock, which would
-/// lose the other writer's change.
-const LOCK_WAIT: Duration = Duration::from_secs(60);
+/// lose the other writer's change. The crate's own tests wait ten minutes (T431): their writers race on purpose
+/// while other test runs load the machine, and they check that no change is lost, not this limit (which
+/// `lock_within` is tested with directly).
+const LOCK_WAIT: Duration = if cfg!(test) { Duration::from_secs(600) } else { Duration::from_secs(60) };
 
 /// Whether two spellings that differ only in letter case name the same file (Windows and macOS).
 const FOLD_CASE: bool = cfg!(any(windows, target_os = "macos"));

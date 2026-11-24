@@ -336,6 +336,43 @@ fn f4_data_colors_keep_drafts_across_categories_and_restore_with_undo() {
 }
 
 #[test]
+fn f4_data_missing_display_controls_numeric_markers_and_can_be_undone() {
+    use sheaf_core::ColumnData;
+
+    let mut h = start_sheet("worksheet-missing-display");
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Seed cells", |p| {
+        let sheet = p.workbook_mut(book).unwrap().sheet_mut();
+        sheet.columns[0].data = ColumnData::numeric(vec![42.0, f64::NAN, 0.0]);
+        sheet.columns[1].data = ColumnData::text(vec!["--".into()]);
+    });
+    settle(&mut h);
+    assert_eq!(painted_size(&h, "--").len(), 1);
+
+    open(&mut h);
+    category(&mut h, "Data", "Standard");
+    assert!(h.query_by_label("Show Missing as Blank").is_none());
+    category(&mut h, "Standard", "Data");
+    click(&mut h, "Show Missing as Blank");
+    click(&mut h, "Show Missing as Blank");
+    assert_eq!(sheet(&h).view.show_missing_as_blank, None);
+    click(&mut h, "Apply");
+    assert_eq!(sheet(&h).view.show_missing_as_blank, Some(false));
+    assert_eq!(painted_size(&h, "--").len(), 2);
+
+    click(&mut h, "Show Missing as Blank");
+    click(&mut h, "OK");
+    assert_eq!(sheet(&h).view.show_missing_as_blank, Some(true));
+    assert_eq!(painted_size(&h, "--").len(), 1);
+    assert!(sheet(&h).columns[0].numeric().unwrap()[1].is_nan());
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(painted_size(&h, "--").len(), 2);
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(sheet(&h).view.show_missing_as_blank, None);
+    assert_eq!(painted_size(&h, "--").len(), 1);
+}
+
+#[test]
 fn f4_standard_colors_keep_their_draft_and_clear_independently() {
     use sheaf_core::cellformat::CategoryColors;
     use sheaf_core::color::Color;

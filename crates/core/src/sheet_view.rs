@@ -5,7 +5,7 @@
 //! corner menu"): a new sheet has Long Name, Units, Comments, F(x)=, Row Labels, both headers and both
 //! grids ticked. The switches belong to the sheet.
 
-use crate::Worksheet;
+use crate::{Column, Worksheet};
 use serde::{Deserialize, Serialize};
 
 /// One switch of the corner menu that Sheaf has.
@@ -93,6 +93,9 @@ pub struct SheetView {
     /// The Categories row (T187); off on a new sheet.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub categories: bool,
+    /// None uses Sheaf's original grid and print defaults (T59).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_missing_as_blank: Option<bool>,
 }
 
 impl Default for SheetView {
@@ -111,6 +114,7 @@ impl Default for SheetView {
             row_grid: true,
             page_breaks: false,
             categories: false,
+            show_missing_as_blank: None,
         }
     }
 }
@@ -118,6 +122,20 @@ impl Default for SheetView {
 impl SheetView {
     pub fn is_default(&self) -> bool {
         *self == SheetView::default()
+    }
+
+    /// The presented value of a data cell. Literal text survives a missing-value display change.
+    pub fn data_text(&self, column: &Column, row: usize, blank_by_default: bool) -> String {
+        let text = column.shown_text(row);
+        if self.show_missing_as_blank.unwrap_or(blank_by_default)
+            && text == "--"
+            && column.data.is_numeric()
+            && column.data.text_cell(row).is_none()
+        {
+            String::new()
+        } else {
+            text
+        }
     }
 
     fn slot(&mut self, s: ViewSwitch) -> Option<&mut bool> {

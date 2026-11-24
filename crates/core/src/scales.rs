@@ -49,6 +49,7 @@ impl ScaleKind {
             ScaleKind::Logit => "Logit",
             ScaleKind::Weibull => "Weibull",
             ScaleKind::CustomFormula => "Custom Formula",
+            ScaleKind::Discrete => "Discrete",
         }
     }
 
@@ -67,12 +68,13 @@ impl ScaleKind {
             ScaleKind::Ln => 7,
             ScaleKind::Log2 => 8,
             ScaleKind::Weibull => 9,
+            ScaleKind::Discrete => 11,
         }
     }
 
     /// The inverse of [`ScaleKind::file_code`].
     pub fn from_file_code(code: u8) -> Option<ScaleKind> {
-        ScaleKind::ALL.into_iter().find(|k| k.file_code() == code)
+        ScaleKind::ALL.into_iter().chain([ScaleKind::Discrete]).find(|k| k.file_code() == code)
     }
 
     /// The base of a logarithmic scale.
@@ -106,7 +108,7 @@ impl ScaleKind {
             return false;
         }
         match self {
-            ScaleKind::Linear | ScaleKind::CustomFormula => true,
+            ScaleKind::Linear | ScaleKind::CustomFormula | ScaleKind::Discrete => true,
             ScaleKind::Log10 | ScaleKind::Ln | ScaleKind::Log2 | ScaleKind::Reciprocal => v > 0.0,
             ScaleKind::OffsetReciprocal => v + RECIPROCAL_OFFSET > 0.0,
             _ => v > 0.0 && v < 100.0,
@@ -120,7 +122,7 @@ impl ScaleKind {
             return f64::NAN;
         }
         match self {
-            ScaleKind::Linear | ScaleKind::CustomFormula => v,
+            ScaleKind::Linear | ScaleKind::CustomFormula | ScaleKind::Discrete => v,
             ScaleKind::Log10 => v.log10(),
             ScaleKind::Ln => v.ln(),
             ScaleKind::Log2 => v.log2(),
@@ -136,7 +138,7 @@ impl ScaleKind {
     /// The inverse of [`ScaleKind::forward`].
     pub fn inverse(self, t: f64) -> f64 {
         match self {
-            ScaleKind::Linear | ScaleKind::CustomFormula => t,
+            ScaleKind::Linear | ScaleKind::CustomFormula | ScaleKind::Discrete => t,
             ScaleKind::Log10 => 10f64.powf(t),
             ScaleKind::Ln => t.exp(),
             ScaleKind::Log2 => t.exp2(),
@@ -443,7 +445,7 @@ pub fn auto_range(kind: ScaleKind, lo: f64, hi: f64, margin_pct: f64) -> Option<
     let (tlo, thi) = (kind.forward(lo), kind.forward(hi));
     let pad = m * (thi - tlo);
     match kind {
-        ScaleKind::Linear | ScaleKind::Log10 | ScaleKind::CustomFormula => None,
+        ScaleKind::Linear | ScaleKind::Log10 | ScaleKind::CustomFormula | ScaleKind::Discrete => None,
         ScaleKind::Ln | ScaleKind::Log2 => {
             let b = kind.log_base()?;
             if m == 0.0 {
@@ -588,6 +590,8 @@ mod tests {
         for k in ScaleKind::ALL {
             assert_eq!(ScaleKind::from_file_code(k.file_code()), Some(k));
         }
+        assert_eq!(ScaleKind::Discrete.file_code(), 11);
+        assert_eq!(ScaleKind::from_file_code(11), Some(ScaleKind::Discrete));
         assert_eq!(ScaleKind::from_file_code(40), None);
     }
 

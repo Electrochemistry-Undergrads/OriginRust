@@ -27,7 +27,7 @@ use crate::{LayerGeometry, PlotError, Rect};
 use sheaf_core::Color;
 use sheaf_core::graph::{
     Axis, AxisSide, Font, Graph, Layer, LayerDrawingOrder, Legend, LegendPosition, LegendScope, LineStyle, Page, Plot,
-    PlotKind, ScaleLink, StatPlot, TickDirection,
+    PlotKind, ScaleKind, ScaleLink, StatPlot, TickDirection,
 };
 use sheaf_core::{Project, WindowId};
 use std::borrow::Cow;
@@ -219,7 +219,10 @@ pub(crate) fn resolve_dim(
     // The extent of a heat map or contour plot counts as data (T192).
     for f in fields {
         let (lo, hi) = f.extent(dim == Dim::X);
-        if lo.is_finite() && hi.is_finite() && (axis.scale == sheaf_core::graph::ScaleKind::Linear || lo > 0.0) {
+        if lo.is_finite()
+            && hi.is_finite()
+            && (matches!(axis.scale, ScaleKind::Linear | ScaleKind::Discrete) || lo > 0.0)
+        {
             range = Some(range.map_or((lo, hi), |(a, b)| (a.min(lo), b.max(hi))));
         }
     }
@@ -287,9 +290,13 @@ pub(crate) fn resolve_dim(
     } else if dim == Dim::X && data::is_category(project, axis, first) {
         crate::ticks::resolve_category(axis, range)
     } else {
-        let mut drawn = if dim == Dim::X { data::date_axis(axis, sources.iter().copied()) } else { None };
-        let linear =
-            matches!(axis.scale, sheaf_core::graph::ScaleKind::Linear | sheaf_core::graph::ScaleKind::CustomFormula);
+        let discrete = axis.scale == ScaleKind::Discrete && layer.coords.is_cartesian();
+        let mut drawn = if dim == Dim::X {
+            data::date_axis(axis, sources.iter().copied().take(if discrete { 1 } else { sources.len() }))
+        } else {
+            None
+        };
+        let linear = matches!(axis.scale, ScaleKind::Linear | ScaleKind::CustomFormula | ScaleKind::Discrete);
         let mut free = (true, true);
         let bars: Vec<&data::PlotData> = sources.iter().copied().filter(|pd| pd.bar.is_some()).collect();
         if linear && let (Some((lo, hi)), Some(pd)) = (range, bars.first()) {
@@ -369,7 +376,16 @@ pub(crate) fn resolve_dim(
             range = Some((0.0, 100.0));
             free = (false, false);
         }
-        resolve_axis_edges(drawn.as_ref().unwrap_or(axis), range, free)
+        let drawn = drawn.as_ref().unwrap_or(axis);
+        if discrete && let Some(pd) = first {
+            let values = pd.rows().map(|row| match dim {
+                Dim::X => pd.x_at(row),
+                Dim::Y => pd.y_at(row),
+            });
+            crate::ticks::resolve_discrete(drawn, range, free, values)
+        } else {
+            resolve_axis_edges(drawn, range, free)
+        }
     };
     if let Some(column) = data::label_column(project, axis, dim, first) {
         crate::ticks::label_from_cells(&mut resolved, &data::cell_texts(column));

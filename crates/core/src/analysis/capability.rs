@@ -83,7 +83,7 @@ pub(super) fn run(spec: &CapabilitySpec, inputs: &[Input<'_>]) -> Result<Output,
     let mut on_sheet = Vec::new();
     let mut graphs = Vec::new();
     for input in inputs {
-        let options = CapOptions { lambda: spec.lambda, target: spec.target };
+        let options = CapOptions { lambda: spec.lambda, target: spec.target, ..Default::default() };
         let c = capability_with(input.ys(), spec.lsl, spec.usl, spec.subgroup, spec.model, options)
             .map_err(|e| AnalysisError::BadOption(format!("{}: {e}", input.label)))?;
         let values = vec![

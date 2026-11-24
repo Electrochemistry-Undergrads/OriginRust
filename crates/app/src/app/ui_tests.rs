@@ -5747,6 +5747,21 @@ fn add_column_to_all_sheets_reaches_every_sheet_of_the_workbook() {
     let last = |s: usize| b.sheets[s].columns.last().unwrap().clone();
     assert_eq!((last(0).long_name.as_str(), last(0).numeric().unwrap()), ("Twice", &[2.0, 4.0, 6.0][..]));
     assert_eq!(last(1).numeric().unwrap(), [20.0, 40.0]);
+    // T412: after a named column, in every book of this one's folder (the root: every book).
+    menu_path(&mut h, &["Column", "Add Column to All Sheets..."]);
+    assert!(has_label(&h, "Every sheet of every workbook in this folder") && has_label(&h, "After Column"));
+    {
+        let d = h.state_mut().column_across.as_mut().unwrap();
+        d.long_name = "Beside".into();
+        d.after = "A".into();
+        d.folder = true;
+    }
+    settle(&mut h);
+    click(&mut h, "OK");
+    assert!(h.state().column_across.is_none(), "{:?}", h.state().status);
+    let b = project(&h).workbook(book).unwrap();
+    assert_eq!(b.sheets[0].columns[1].long_name, "Beside");
+    assert_eq!(b.sheets[1].columns[1].long_name, "Beside");
 }
 
 /// Statistics > Manhattan Plot... (T362): group, position and p-value columns give the per-group table and a graph.

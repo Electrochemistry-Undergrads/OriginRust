@@ -27,6 +27,10 @@ pub(crate) struct ColumnAcross {
     pub recalc: sheaf_core::column::RecalcMode,
     /// Every workbook of the project instead of this one.
     pub project: bool,
+    /// Every workbook of this book's project folder and its subfolders (T412); wins over `project`.
+    pub folder: bool,
+    /// Insert right after this column of each sheet (T412); empty: at the end.
+    pub after: String,
     pub problem: Option<String>,
 }
 
@@ -39,6 +43,8 @@ impl ColumnAcross {
             formula: String::new(),
             recalc: sheaf_core::column::RecalcMode::None,
             project: false,
+            folder: false,
+            after: String::new(),
             problem: None,
         }
     }
@@ -6430,10 +6436,23 @@ impl SheafApp {
                         ui.radio_value(&mut d.recalc, RecalcMode::Manual, "Manual");
                     });
                     ui.end_row();
+                    ui.label("After Column");
+                    ui.text_edit_singleline(&mut d.after).on_hover_text(
+                        "Optional short or long name: the column goes right after it in each sheet that has it, \
+                         else at the end",
+                    );
+                    ui.end_row();
                     ui.label("Sheets");
                     ui.vertical(|ui| {
-                        ui.radio_value(&mut d.project, false, "Every sheet of this workbook");
-                        ui.radio_value(&mut d.project, true, "Every sheet of every workbook");
+                        if ui.radio(!d.project && !d.folder, "Every sheet of this workbook").clicked() {
+                            (d.project, d.folder) = (false, false);
+                        }
+                        if ui.radio(d.folder, "Every sheet of every workbook in this folder").clicked() {
+                            (d.project, d.folder) = (false, true);
+                        }
+                        if ui.radio(d.project && !d.folder, "Every sheet of every workbook").clicked() {
+                            (d.project, d.folder) = (true, false);
+                        }
                     });
                     ui.end_row();
                 });
@@ -6451,9 +6470,12 @@ impl SheafApp {
                     units: d.units.trim().to_string(),
                     formula: Some(d.formula.trim().to_string()).filter(|f| !f.is_empty()),
                     recalc: d.recalc,
+                    after: Some(d.after.trim().to_string()).filter(|a| !a.is_empty()),
                     ..Default::default()
                 };
-                let scope = if d.project {
+                let scope = if d.folder {
+                    sheaf_core::across::AcrossScope::Folder(self.doc.project().folder_of(d.book))
+                } else if d.project {
                     sheaf_core::across::AcrossScope::Project
                 } else {
                     sheaf_core::across::AcrossScope::Workbook(d.book)

@@ -13,9 +13,10 @@
 //!   per million are the fitted tails. The within indices are not defined (NaN).
 //!
 //! - **Box-Cox** (T419): the values (all above 0) and the limits are transformed by `y = (x^lambda - 1) / lambda`
-//!   (`ln x` for `lambda = 0`), `lambda` given or the maximum-likelihood one (the profile log-likelihood `(lambda -
-//!   1) sum ln x - n/2 ln(variance of y with divisor n)`, maximized over [-5, 5]); then the normal indices of the
-//!   transformed values against the transformed limits. A limit at or below 0 that has no transform is left out.
+//!   (`ln x` for `lambda = 0`), `lambda` given or the maximum-likelihood one, which maximizes the profile
+//!   log-likelihood `(lambda - 1) sum ln x - n/2 ln(variance of y with divisor n)` over [-5, 5]; then the normal
+//!   indices of the transformed values against the transformed limits. A limit at or below 0 that has no transform is
+//!   left out.
 //! - **Cpm** (T419) with a target `T` and both limits: `(USL - LSL) / 6 sqrt(s^2 + (mean - T)^2)` with the overall
 //!   deviation, on the Box-Cox scale for that model; not defined for the lognormal and Weibull models.
 //!

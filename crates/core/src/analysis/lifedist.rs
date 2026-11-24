@@ -63,7 +63,7 @@ impl Default for LifeRegressionSpec {
     }
 }
 
-/// What [`Tool::Cox`] does: the chosen columns are the covariates, then the time and the censor column (T406).
+/// What [`Tool::Cox`] does: the chosen columns are the covariates, then the time and the censor column (T408).
 #[derive(Debug, Clone, PartialEq)]
 pub struct CoxSpec {
     /// The value of the censor column that marks a censored case (default 1).

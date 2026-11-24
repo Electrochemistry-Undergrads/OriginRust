@@ -1,4 +1,4 @@
-//! Cox proportional hazards against an independent numpy/scipy fit, made by `tools/cox-ref.py` (T406; none of these
+//! Cox proportional hazards against an independent numpy/scipy fit, made by `tools/cox-ref.py` (T408; none of these
 //! numbers come from Origin). Tolerance 1e-8 relative (the reference optimizer's tolerance).
 
 #[path = "fixtures/cox_reference.rs"]

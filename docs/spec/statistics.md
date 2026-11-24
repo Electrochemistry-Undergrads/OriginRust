@@ -2224,7 +2224,7 @@ two-sided probabilities, and the scale's error by the delta method. The result s
 (Intercept, each covariate, Scale (sigma)) with Coefficient, Standard error, z and Prob>|z|; the notes give the
 log-likelihood, AIC and, for the Weibull, the shape. Checked against numpy/scipy (`tools/lifereg-ref.py`,
 `crates/calc/tests/lifereg_reference.rs`: 60 rows, two covariates, three distributions) to 1e-7 (standard errors
-1e-5). Proportional hazards (Cox) regression, interval-censored regression, text (factor) covariates and prediction
+1e-5). Proportional hazards (Cox) regression is section 52; interval-censored regression, text (factor) covariates and prediction
 of percentiles are not built.
 
 ## 49 Frequency columns of the life-data tools (T394, Origin 2026b; not measured)
@@ -2281,6 +2281,25 @@ Statistics > Monte Carlo Simulation (Randomize Inputs)... (CLI `analyze monte-ca
   output follows most.
 - Not built: optimizing controllable inputs against tolerances (the last step of Origin's workflow),
   correlated inputs, histograms of the output.
+
+## 52 Cox proportional hazards (T408, Origin 2026b; not measured)
+
+Origin 2026b's reliability and survival tools add Cox regression, which Origin 2016 does not have, so this is
+Sheaf's own. Statistics > Survival Analysis > Cox Proportional Hazards... (`Tool::Cox`, `sheaf analyze cox --y
+COV[,COV..],TIME,CENSOR [--censor 1] [--confidence 95] [--no-graph]`, `sheaf_calc::cox`): the chosen columns are
+numeric covariates, then the time and the censor column (a case is right-censored when its cell equals the censoring
+value, as for the Kaplan-Meier estimator); rows with a missing value are left out. The hazard is `h0(t) exp(x'b)`; `b`
+maximizes Breslow's partial likelihood (tied failure times share one risk set) by Newton's method from 0, halving a
+step until the likelihood rises; a covariate that separates the failures (`|b| * range > 25`) is refused as not
+converging. Standard errors come from the inverse of the information at the fit, z = b / SE with normal two-sided
+probabilities, hazard ratios `exp(b)` with the interval `exp(b +- z SE)`. The likelihood-ratio, Wald and score tests
+of all coefficients = 0 use chi-square with one degree of freedom per covariate. The result sheet `CoxN` has one row
+per covariate with Coefficient, Standard error, z, Prob>|z|, Hazard ratio, HR lower and HR upper (the level in the
+name), then Time and Survival at the means: Breslow's baseline survival at the covariate means as steps, which the
+graph plots. The notes give the cases, events, log-likelihoods and the three tests. Checked against numpy/scipy
+(`tools/cox-ref.py`, `crates/calc/tests/cox_reference.rs`: 70 rows with ties, three covariates and one) to 1e-8.
+Efron ties, strata, time-varying covariates, text (factor) covariates, residuals and the proportional-hazards check
+are not built.
 
 ## 5 Where results go (ADR 0005)
 

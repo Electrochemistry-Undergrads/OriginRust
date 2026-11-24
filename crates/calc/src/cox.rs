@@ -1,5 +1,5 @@
 //! Cox proportional hazards regression (for Origin 2026b's reliability and survival analysis; not in Origin 2016, so
-//! nothing here is measured in Origin; `docs/spec/statistics.md` section 51).
+//! nothing here is measured in Origin; `docs/spec/statistics.md` section 52).
 //!
 //! The hazard of a case with covariates `x` is `h0(t) exp(x'b)`. With Breslow's handling of tied times, the partial
 //! log-likelihood is `sum over failures i of [x_i'b - ln sum_{j: t_j >= t_i} exp(x_j'b)]`. It is maximized by

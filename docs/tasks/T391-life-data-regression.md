@@ -8,7 +8,8 @@ with standard errors and z tests. Not measured in Origin.
 
 ## Left
 
-- Cox proportional hazards, interval-censored regression, factor covariates, predicted percentiles and residual plots.
+- Cox proportional hazards is T408.
+- Interval-censored regression, factor covariates, predicted percentiles and residual plots.
 
 ## Tests
 

@@ -3767,6 +3767,21 @@ pub enum AnalyzeTool {
         #[arg(long)]
         no_graph: bool,
     },
+    /// Cox proportional hazards: --y COVARIATE[,COVARIATE..],TIME,CENSOR; coefficients, hazard ratios with intervals,
+    /// likelihood-ratio, Wald and score tests, and the survival at the covariate means.
+    Cox {
+        #[command(flatten)]
+        target: TargetArgs,
+        /// The value of the censor column that marks a censored case.
+        #[arg(long, default_value = "1")]
+        censor: String,
+        /// Confidence level of the hazard-ratio intervals, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        confidence: f64,
+        /// Do not make the graph.
+        #[arg(long)]
+        no_graph: bool,
+    },
     /// Life data regression: --y COVARIATE[,COVARIATE..],TIME,CENSOR; an accelerated failure time model (Weibull,
     /// lognormal or exponential) of log time on the covariates with right censoring.
     Lifereg {

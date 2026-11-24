@@ -1540,6 +1540,32 @@ fn life_data_frequency_columns_count_rows() {
     assert!(!ok && err.contains("frequency must be a whole number"), "{err}");
 }
 
+/// Cox proportional hazards (spec `statistics.md` section 52, T408).
+#[test]
+fn cox_regression_runs_from_the_command_line() {
+    let dir = scratch("cox");
+    let path = dir.join("cox.csv");
+    let mut text = String::from("id,group,months,cens\n");
+    for i in 0..30 {
+        let g = i % 2;
+        let t = (5.0 + f64::from(i * 7 % 11)) / (1.0 + f64::from(g));
+        text.push_str(&format!("{i},{g},{t},{}\n", i32::from(i % 9 == 4)));
+    }
+    std::fs::write(&path, text).unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "cox", file, "--y", "group,months,cens"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("Cox proportional hazards (Breslow ties)") && out.contains("30 cases") && out.contains("Cox1"),
+        "{out}"
+    );
+    let (ok, out, err) =
+        sheaf(&["analyze", "cox", file, "--y", "group,months,cens", "--confidence", "90", "--no-graph"]);
+    assert!(ok && out.contains("HR lower 90%"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "cox", file, "--y", "months,cens"]);
+    assert!(!ok && err.contains("covariate"), "{err}");
+}
+
 /// Life data regression (spec `statistics.md` section 48, T391).
 #[test]
 fn life_data_regression_runs_from_the_command_line() {

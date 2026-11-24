@@ -1,5 +1,5 @@
 """Prints crates/calc/tests/fixtures/cox_reference.rs: Cox proportional hazards fits (Breslow ties) for
-`sheaf_calc::cox` (T406), from numpy and scipy.
+`sheaf_calc::cox` (T408), from numpy and scipy.
 
 The partial log-likelihood, its gradient and information are written out with explicit risk sets (O(n^2), no
 sorting tricks), maximized by scipy.optimize.minimize (Newton-CG with the analytic gradient and Hessian, tight

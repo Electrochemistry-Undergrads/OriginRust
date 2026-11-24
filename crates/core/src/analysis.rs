@@ -1191,7 +1191,7 @@ pub enum Tool {
     /// Statistics > Survival Analysis > Life Data Regression (T391, `docs/spec/statistics.md` section 48): covariates,
     /// then the time and the censor column.
     LifeRegression(LifeRegressionSpec),
-    /// Statistics > Survival Analysis > Cox Proportional Hazards (T406, `docs/spec/statistics.md` section 51):
+    /// Statistics > Survival Analysis > Cox Proportional Hazards (T408, `docs/spec/statistics.md` section 52):
     /// covariates, then the time and the censor column.
     Cox(CoxSpec),
     /// Statistics > qPCR > Relative Quantification (T397, `docs/spec/statistics.md` section 50): group, target Ct and

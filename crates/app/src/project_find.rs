@@ -222,6 +222,16 @@ pub fn find_in_project(project: &Project, spec: &FindSpec, active_folder: &[usiz
                 }
             }
         }
+        // Sticky notes (T421) are searched with the notes.
+        if spec.notes && g.sticky.as_ref().is_some_and(|n| spec.matches(&n.text)) {
+            hits.push(FindHit {
+                range: format!("[{}]", g.name),
+                element: "Graph",
+                attribute: "Sticky Note",
+                folder: folder.to_string(),
+                target: FindTarget::Window(g.id),
+            });
+        }
         if spec.graph_text {
             for (i, layer) in g.layers.iter().enumerate() {
                 let at = |what: &str| format!("[{}]Layer{}!{what}", g.name, i + 1);
@@ -274,7 +284,25 @@ pub fn find_in_project(project: &Project, spec: &FindSpec, active_folder: &[usiz
                 }
             }
         }
+        if spec.notes && b.sticky.as_ref().is_some_and(|n| spec.matches(&n.text)) {
+            hits.push(FindHit {
+                range: format!("[{}]", b.name),
+                element: "Book",
+                attribute: "Sticky Note",
+                folder: folder.to_string(),
+                target: FindTarget::Window(b.id),
+            });
+        }
         for (si, s) in b.sheets.iter().enumerate() {
+            if spec.notes && s.sticky.as_ref().is_some_and(|n| spec.matches(&n.text)) {
+                hits.push(FindHit {
+                    range: format!("[{}]{}", b.name, s.name),
+                    element: "Sheet",
+                    attribute: "Sticky Note",
+                    folder: folder.to_string(),
+                    target: FindTarget::Sheet { book: b.id, sheet: si },
+                });
+            }
             if spec.sheets {
                 for (attr, text, enabled) in [
                     ("Short Name", s.name.as_str(), true),
@@ -420,6 +448,28 @@ mod tests {
         let hits = find_in_project(&p, &text("drifted"), &[]);
         assert_eq!(hits[0].target, FindTarget::Window(id));
         assert!(find(&p, FindSpec { notes: false, ..text("drifted") }).is_empty());
+    }
+
+    #[test]
+    fn sticky_notes_are_found_with_the_notes() {
+        use sheaf_core::sticky::NoteTarget;
+        let mut p = project();
+        let (g, b) = (p.graphs().next().unwrap().id, p.workbooks().next().unwrap().id);
+        for (t, text) in [
+            (NoteTarget::Window(g), "redo the fit"),
+            (NoteTarget::Window(b), "raw data, do not edit"),
+            (NoteTarget::Sheet(b, 0), "fit range 2 to 4"),
+        ] {
+            p.add_sticky_note(t).unwrap();
+            p.edit_sticky_note(t, |n| n.text = text.into()).unwrap();
+        }
+        let (gn, bn) = (p.graph(g).unwrap().name.clone(), p.workbook(b).unwrap().name.clone());
+        assert_eq!(
+            find(&p, text("fit")),
+            [(format!("[{gn}]"), "Graph", "Sticky Note"), (format!("[{bn}]Sheet1"), "Sheet", "Sticky Note")]
+        );
+        assert_eq!(find(&p, text("raw data")), [(format!("[{bn}]"), "Book", "Sticky Note")]);
+        assert!(find(&p, FindSpec { notes: false, ..text("fit") }).is_empty());
     }
 
     #[test]

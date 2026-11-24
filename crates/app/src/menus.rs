@@ -353,6 +353,8 @@ pub enum Cmd {
     AddFunctionGraph,
     /// Graph > Graph Slicer... (T406).
     GraphSlicer,
+    /// Graph > Browser Graph... (T410).
+    BrowserGraph,
     /// View > View Windows (T100).
     ViewWindows(sheaf_core::project::ViewWindows),
     /// An axis's Save Format as Theme... (T102).
@@ -2248,6 +2250,7 @@ fn graph_menu() -> Vec<Entry> {
         new_layer_menu(),
         item("Merge Graph Windows...", Cmd::MergeGraphs),
         item("Grap&h Slicer...", Cmd::GraphSlicer),
+        item("Bro&wser Graph...", Cmd::BrowserGraph),
         sep(),
         keyed("Rescale to Show All", ctrl(Key::R), Cmd::Rescale),
         sub(
@@ -3640,6 +3643,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::BatchPlot(columns) => Action::BatchPlot { graph: c.graph.ok_or(NEED_GRAPH)?, columns: *columns },
         Cmd::AddFunctionGraph => Action::AddFunctionGraph { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::GraphSlicer => Action::GraphSlicer { graph: c.graph.ok_or(NEED_GRAPH)? },
+        Cmd::BrowserGraph => Action::BrowserGraph { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::Reimport(choose) => {
             let book = book?;
             c.imported.then_some(()).ok_or(NOT_IMPORTED)?;

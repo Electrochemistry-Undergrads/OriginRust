@@ -698,6 +698,16 @@ pub enum Action {
     GraphSlicer {
         graph: WindowId,
     },
+    /// Graph > Browser Graph...: open its window for the active layer (T410).
+    BrowserGraph {
+        graph: WindowId,
+        layer: usize,
+    },
+    /// The browser bar above a graph: show dataset `to` (T410).
+    BrowseGraph {
+        graph: WindowId,
+        to: usize,
+    },
     /// Window > Duplicate (Batch Plotting): open the window that picks sheets or columns.
     BatchPlot {
         graph: WindowId,

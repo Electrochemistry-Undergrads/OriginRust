@@ -24,6 +24,9 @@ pub struct Graph {
     /// Graph > Graph Slicer (T406): the rows the plots from one sheet show.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slicer: Option<crate::slicer::GraphSlicer>,
+    /// Graph > Browser Graph (T410): the datasets one plot steps through.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browser: Option<crate::browser::GraphBrowser>,
 }
 
 impl Graph {
@@ -98,6 +101,10 @@ impl Graph {
     /// the axes, the plot choice of the rugs and the plot of the slope annotations. Every path that renumbers columns (File > Append,
     /// ...) goes through this; a new field that holds a [`ColumnId`] is added here.
     pub fn remap_columns(&mut self, f: &dyn Fn(ColumnId) -> ColumnId) {
+        if let Some(s) = &mut self.slicer {
+            s.column = f(s.column);
+        }
+        self.remap_browser(f);
         for layer in &mut self.layers {
             for p in &mut layer.plots {
                 p.y = f(p.y);
@@ -3534,6 +3541,7 @@ mod tests {
             page: Page::inches(6.4, 4.8),
             layers,
             slicer: None,
+            browser: None,
         }
     }
 

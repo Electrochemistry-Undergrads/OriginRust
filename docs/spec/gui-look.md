@@ -1035,6 +1035,17 @@ individual column after the bulk edit. The grid keeps rows at least one
 pixel tall and columns at least eight pixels wide. Printed pages and
 images suppress text too tall for a fixed data row.
 
+**Worksheet Properties Gap From Top (T59).** At the tested Origin 2016
+display scale, gaps of 1, 3, 20 and 40 points moved the grid by 2, 5,
+30 and 60 pixels. The area was white, and the Standard font size left
+it fixed. The test worksheet exported identical PNG pixels and decoded
+PDF drawing operations at zero and 20 points.
+[Origin Worksheet Properties Size tab](https://docs.originlab.com/origin-help/wksproperties-dialog-size-tab/)
+
+Sheaf accepts 0 to 255 points and keeps the gap above the scrolling
+grid. Zero removes it. The worksheet tabs stay available in short
+windows.
+
 Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
 The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,
 Dynamic Merge, per-cell numeric display/precision selectors and a Font selector. In this new book,

@@ -1714,6 +1714,7 @@ impl SheafApp {
             GraphOp::OrderLegend { front: false, .. } => "Push legend to back",
             GraphOp::LegendBehindData { behind: true, .. } => "Push legend to back of data",
             GraphOp::LegendBehindData { behind: false, .. } => "Bring legend to front of data",
+            GraphOp::LegendTextColorFollowsPlot { .. } => "Text Color Follows Plot",
             GraphOp::ReconstructLegend { .. } => "Reconstruct legend",
             GraphOp::UpdateLegend { .. } => "Update legend",
             GraphOp::HideTitle { .. } => "Delete axis title",

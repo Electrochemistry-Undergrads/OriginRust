@@ -3057,22 +3057,27 @@ pub fn graph_scale_menu(layer: usize, scale: usize) -> Vec<Entry> {
 /// The menu of the legend.
 ///
 /// Add Color Scale and Add Bubble Scale are enabled when the layer has a plot of that mapping.
-pub fn graph_legend_menu(layer: usize, can_color: bool, can_bubble: bool) -> Vec<Entry> {
+/// The text-color toggle is available for ordinary legends.
+pub fn graph_legend_menu(layer: usize, can_color: bool, can_bubble: bool, follows_plot: Option<bool>) -> Vec<Entry> {
     use sheaf_core::layer_scale::LayerScaleKind;
     let add = |label: &str, can: bool, kind| {
         if can { item(label, Cmd::GraphEdit(GraphOp::AddScale { layer, kind })) } else { grey(label) }
     };
+    let mut legend = vec![
+        item("Reconstruct Legend", Cmd::GraphEdit(GraphOp::ReconstructLegend { layer })),
+        item("Update Legend", Cmd::GraphEdit(GraphOp::UpdateLegend { layer })),
+    ];
+    if let Some(follows_plot) = follows_plot {
+        legend.push(item(
+            "Text Color Follows Plot",
+            Cmd::GraphEdit(GraphOp::LegendTextColorFollowsPlot { layer, enabled: !follows_plot }),
+        ));
+    }
+    legend.push(grey("Add Legend Title"));
     let mut menu = vec![
         item("Edit Text...", Cmd::EditLegendText { layer: Some(layer) }),
         item("Plot Details...", Cmd::GraphPropsAt { layer, tab: PropsTab::Plots, plot: None }),
-        sub(
-            "Legend",
-            vec![
-                item("Reconstruct Legend", Cmd::GraphEdit(GraphOp::ReconstructLegend { layer })),
-                item("Update Legend", Cmd::GraphEdit(GraphOp::UpdateLegend { layer })),
-                grey("Add Legend Title"),
-            ],
-        ),
+        sub("Legend", legend),
         add("Add Color Scale", can_color, LayerScaleKind::Color),
         add("Add Bubble Scale", can_bubble, LayerScaleKind::Bubble),
         sep(),
@@ -4408,6 +4413,9 @@ fn show_entries(
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleAiLink)) && c.ai_link {
+                    tick(ui, &response);
+                }
+                if matches!(it.cmd, Some(Cmd::GraphEdit(GraphOp::LegendTextColorFollowsPlot { enabled: false, .. }))) {
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleLayerIcons)) && c.layer_icons {

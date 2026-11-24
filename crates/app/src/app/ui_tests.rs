@@ -6061,6 +6061,28 @@ fn the_statistics_menu_computes_process_capability() {
     assert_eq!(h.state().doc.undo_label(), Some("Process capability"));
 }
 
+/// Statistics > Process Capability... with the Box-Cox model (T419): the window shows the lambda and Cpm target
+/// boxes, and the sheet gets the fitted lambda.
+#[test]
+fn the_statistics_menu_computes_box_cox_capability() {
+    let data = csv_file("capability_boxcox", "cap", "i,v\n1,10\n2,12\n3,11\n4,13\n5,12\n6,14\n");
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - cap.csv");
+    menu_path(&mut h, &["Statistics", "Process Capability..."]);
+    click(&mut h, "Box-Cox");
+    assert!(has_label(&h, "Lambda (else maximum likelihood)") && has_label(&h, "Target (Cpm)"));
+    click(&mut h, "Upper specification limit");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
+    let (sheet, lambda) = result_column(&h, "Box-Cox lambda");
+    assert!(sheet.starts_with("Capability") && lambda[0].is_finite() && lambda[0].abs() <= 5.0, "{lambda:?}");
+    // The Ppk interval (T425) holds Ppk.
+    let (_, ppk) = result_column(&h, "Ppk");
+    let (_, low) = result_column(&h, "Ppk lower");
+    let (_, high) = result_column(&h, "Ppk upper");
+    assert!(low[0] < ppk[0] && ppk[0] < high[0], "{low:?} {ppk:?} {high:?}");
+}
+
 /// Statistics > Rare Event Chart (G/T)... (T364): a T chart with the exponential fit, one undo step and a graph.
 #[test]
 fn the_statistics_menu_makes_a_rare_event_chart() {

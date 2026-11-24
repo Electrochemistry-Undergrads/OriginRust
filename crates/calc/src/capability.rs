@@ -12,12 +12,24 @@
 //!   LSL) / (x_med - x_lo)`, `PPU = (USL - x_med) / (x_hi - x_med)`, `Ppk = min(PPL, PPU)`; the expected parts
 //!   per million are the fitted tails. The within indices are not defined (NaN).
 //!
+//! - **Box-Cox** (T419): the values (all above 0) and the limits are transformed by `y = (x^lambda - 1) / lambda`
+//!   (`ln x` for `lambda = 0`), `lambda` given or the maximum-likelihood one, which maximizes the profile
+//!   log-likelihood `(lambda - 1) sum ln x - n/2 ln(variance of y with divisor n)` over [-5, 5]; then the normal
+//!   indices of the transformed values against the transformed limits. A limit at or below 0 that has no transform is
+//!   left out.
+//! - **Cpm** (T419) with a target `T` and both limits: `(USL - LSL) / 6 sqrt(s^2 + (mean - T)^2)` with the overall
+//!   deviation, on the Box-Cox scale for that model; not defined for the lognormal and Weibull models.
+//!
+//! - **Intervals** (T425) of the overall indices at a confidence level `1 - a` (normal and Box-Cox models, on that
+//!   scale): `Pp` exactly, `Pp sqrt(chi2(a/2, n - 1) / (n - 1))` to `Pp sqrt(chi2(1 - a/2, n - 1) / (n - 1))`;
+//!   `Ppk` by Bissell's normal approximation, `Ppk -+ z(1 - a/2) sqrt(1 / 9n + Ppk^2 / 2(n - 1))`.
+//!
 //! Either specification limit may be missing; the indices that need it are then NaN. Checked against scipy in
 //! `crates/calc/tests/capability_reference.rs` (made by `tools/capability-ref.py`).
 
 use crate::distfit::{Family, cdf, estimate, quantile};
 use crate::qc;
-use statrs::distribution::{ContinuousCDF, Normal};
+use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
 
 /// The distribution the data are taken to follow.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -26,6 +38,25 @@ pub enum CapModel {
     Normal,
     Lognormal,
     Weibull,
+    /// Normal after a Box-Cox transformation (T419).
+    BoxCox,
+}
+
+/// Choices beyond the model (T419).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CapOptions {
+    /// Box-Cox: this lambda instead of the maximum-likelihood one.
+    pub lambda: Option<f64>,
+    /// The target for Cpm.
+    pub target: Option<f64>,
+    /// The confidence level of the Pp and Ppk intervals (T425), 0.95 by default.
+    pub confidence: f64,
+}
+
+impl Default for CapOptions {
+    fn default() -> Self {
+        CapOptions { lambda: None, target: None, confidence: 0.95 }
+    }
 }
 
 impl CapModel {
@@ -34,6 +65,7 @@ impl CapModel {
             CapModel::Normal => "normal",
             CapModel::Lognormal => "lognormal",
             CapModel::Weibull => "Weibull",
+            CapModel::BoxCox => "Box-Cox",
         }
     }
 }
@@ -75,6 +107,14 @@ pub struct Capability {
     pub expected_overall: Ppm,
     /// NaN for a nonnormal model.
     pub expected_within: Ppm,
+    /// Cpm with the target (NaN without a target or a limit, or for the lognormal and Weibull models).
+    pub cpm: f64,
+    /// The Box-Cox lambda (NaN for the other models).
+    pub lambda: f64,
+    /// The confidence interval of Pp (T425; NaN where Pp is, and for the lognormal and Weibull models).
+    pub pp_ci: (f64, f64),
+    /// The confidence interval of Ppk (T425).
+    pub ppk_ci: (f64, f64),
 }
 
 /// Why the capability could not be computed.
@@ -86,6 +126,12 @@ pub enum CapabilityError {
     BadSubgroup(usize),
     NoSpread,
     NoFit(String),
+    /// Box-Cox needs every value above 0.
+    NotPositive,
+    /// A given Box-Cox lambda that is not a finite number.
+    BadLambda,
+    /// A confidence level outside (0, 1).
+    BadConfidence,
 }
 
 impl std::fmt::Display for CapabilityError {
@@ -99,6 +145,9 @@ impl std::fmt::Display for CapabilityError {
             }
             CapabilityError::NoSpread => f.write_str("the values do not vary"),
             CapabilityError::NoFit(e) => write!(f, "the distribution could not be fitted: {e}"),
+            CapabilityError::NotPositive => f.write_str("the Box-Cox transformation needs every value above 0"),
+            CapabilityError::BadLambda => f.write_str("the Box-Cox lambda must be a number"),
+            CapabilityError::BadConfidence => f.write_str("the confidence level must lie between 0 and 1"),
         }
     }
 }
@@ -111,7 +160,54 @@ pub fn fitted_cdf(model: CapModel, params: &[f64], x: f64) -> f64 {
         CapModel::Normal => Normal::new(params[0], params[1]).map_or(f64::NAN, |d| d.cdf(x)),
         CapModel::Lognormal => cdf(Family::Lognormal, params, x),
         CapModel::Weibull => cdf(Family::Weibull, params, x),
+        CapModel::BoxCox if x > 0.0 => {
+            Normal::new(params[0], params[1]).map_or(f64::NAN, |d| d.cdf(boxcox(x, params[2])))
+        }
+        CapModel::BoxCox => 0.0,
     }
+}
+
+/// The Box-Cox transform of `x` (above 0): `(x^lambda - 1) / lambda`, or `ln x` for `lambda = 0`.
+pub fn boxcox(x: f64, lambda: f64) -> f64 {
+    let l = x.ln();
+    if lambda == 0.0 { l } else { (lambda * l).exp_m1() / lambda }
+}
+
+/// The profile log-likelihood of `lambda` for values above 0 (up to a constant).
+fn boxcox_llf(x: &[f64], lambda: f64) -> f64 {
+    let n = x.len() as f64;
+    let y: Vec<f64> = x.iter().map(|v| boxcox(*v, lambda)).collect();
+    let mean = y.iter().sum::<f64>() / n;
+    let var = y.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / n;
+    (lambda - 1.0) * x.iter().map(|v| v.ln()).sum::<f64>() - n / 2.0 * var.ln()
+}
+
+/// The maximum-likelihood Box-Cox lambda of values above 0, searched in [-5, 5]: the best of a grid of 0.05, then a
+/// golden-section search around it.
+pub fn boxcox_lambda(x: &[f64]) -> f64 {
+    let grid = (-100..=100).map(|i| f64::from(i) * 0.05);
+    let best = grid.fold((0.0, f64::NEG_INFINITY), |(bl, bv), l| {
+        let v = boxcox_llf(x, l);
+        if v > bv { (l, v) } else { (bl, bv) }
+    });
+    let (mut a, mut b) = ((best.0 - 0.05).max(-5.0), (best.0 + 0.05).min(5.0));
+    let g = (5f64.sqrt() - 1.0) / 2.0;
+    let (mut c, mut d) = (b - g * (b - a), a + g * (b - a));
+    let (mut fc, mut fd) = (boxcox_llf(x, c), boxcox_llf(x, d));
+    while b - a > 1e-12 {
+        if fc > fd {
+            b = d;
+            (d, fd) = (c, fc);
+            c = b - g * (b - a);
+            fc = boxcox_llf(x, c);
+        } else {
+            a = c;
+            (c, fc) = (d, fd);
+            d = a + g * (b - a);
+            fd = boxcox_llf(x, d);
+        }
+    }
+    (a + b) / 2.0
 }
 
 /// The tail beyond three sigma, 0.00135.
@@ -151,6 +247,99 @@ pub fn capability(
     subgroup: usize,
     model: CapModel,
 ) -> Result<Capability, CapabilityError> {
+    capability_with(values, lsl, usl, subgroup, model, CapOptions::default())
+}
+
+/// The normal indices of `x` (transformed values for Box-Cox) against the limits on the same scale.
+fn normal_capability(
+    x: &[f64],
+    lsl: Option<f64>,
+    usl: Option<f64>,
+    subgroup: usize,
+    observed: Ppm,
+    target: Option<f64>,
+    confidence: f64,
+) -> Result<Capability, CapabilityError> {
+    let n = x.len();
+    let mean = x.iter().sum::<f64>() / n as f64;
+    let sd_overall = (x.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (n - 1) as f64).sqrt();
+    if sd_overall <= 0.0 {
+        return Err(CapabilityError::NoSpread);
+    }
+    let (lo, hi) = (lsl.unwrap_or(f64::NAN), usl.unwrap_or(f64::NAN));
+    let sd_within = within_sd(x, subgroup).ok_or(CapabilityError::TooFewValues)?;
+    if sd_within <= 0.0 {
+        return Err(CapabilityError::NoSpread);
+    }
+    let indices = |s: f64| {
+        let lower = (mean - lo) / (3.0 * s);
+        let upper = (hi - mean) / (3.0 * s);
+        ((hi - lo) / (6.0 * s), lower, upper, min_of(lower, upper))
+    };
+    let (cp, cpl, cpu, cpk) = indices(sd_within);
+    let (pp, ppl, ppu, ppk) = indices(sd_overall);
+    let tails = |s: f64| {
+        Ppm::of(lsl.map_or(0.0, |l| normal().cdf((l - mean) / s)), usl.map_or(0.0, |u| normal().sf((u - mean) / s)))
+    };
+    let cpm = target.map_or(f64::NAN, |t| (hi - lo) / (6.0 * (sd_overall.powi(2) + (mean - t).powi(2)).sqrt()));
+    let (pp_ci, ppk_ci) = intervals(pp, ppk, n, confidence);
+    Ok(Capability {
+        n,
+        mean,
+        sd_overall,
+        sd_within,
+        params: vec![mean, sd_overall],
+        cp,
+        cpl,
+        cpu,
+        cpk,
+        pp,
+        ppl,
+        ppu,
+        ppk,
+        observed,
+        expected_overall: tails(sd_overall),
+        expected_within: tails(sd_within),
+        cpm,
+        lambda: f64::NAN,
+        pp_ci,
+        ppk_ci,
+    })
+}
+
+/// The intervals of Pp (chi-square, exact for normal data) and Ppk (Bissell) at `confidence` from `n` values.
+fn intervals(pp: f64, ppk: f64, n: usize, confidence: f64) -> ((f64, f64), (f64, f64)) {
+    let df = (n - 1) as f64;
+    let a = 1.0 - confidence;
+    let Ok(chi) = ChiSquared::new(df) else { return ((f64::NAN, f64::NAN), (f64::NAN, f64::NAN)) };
+    let pp_ci = (pp * (chi.inverse_cdf(a / 2.0) / df).sqrt(), pp * (chi.inverse_cdf(1.0 - a / 2.0) / df).sqrt());
+    let half = normal().inverse_cdf(1.0 - a / 2.0) * (1.0 / (9.0 * n as f64) + ppk * ppk / (2.0 * df)).sqrt();
+    (pp_ci, (ppk - half, ppk + half))
+}
+
+/// The smaller of two indices, the other one when either is missing.
+fn min_of(a: f64, b: f64) -> f64 {
+    match (a.is_nan(), b.is_nan()) {
+        (true, _) => b,
+        (_, true) => a,
+        _ => a.min(b),
+    }
+}
+
+/// [`capability`] with a Box-Cox lambda and a Cpm target (T419).
+pub fn capability_with(
+    values: &[f64],
+    lsl: Option<f64>,
+    usl: Option<f64>,
+    subgroup: usize,
+    model: CapModel,
+    options: CapOptions,
+) -> Result<Capability, CapabilityError> {
+    let target = options.target.filter(|t| t.is_finite());
+    let confidence = options.confidence;
+    if !(confidence > 0.0 && confidence < 1.0) {
+        return Err(CapabilityError::BadConfidence);
+    }
     let lsl = lsl.filter(|v| v.is_finite());
     let usl = usl.filter(|v| v.is_finite());
     if lsl.is_none() && usl.is_none() {
@@ -180,49 +369,29 @@ pub fn capability(
         lsl.map_or(0.0, |l| x.iter().filter(|v| **v < l).count() as f64 / n as f64),
         usl.map_or(0.0, |u| x.iter().filter(|v| **v > u).count() as f64 / n as f64),
     );
-    let min_of = |a: f64, b: f64| match (a.is_nan(), b.is_nan()) {
-        (true, _) => b,
-        (_, true) => a,
-        _ => a.min(b),
-    };
     let nan_ppm = Ppm { below: f64::NAN, above: f64::NAN, total: f64::NAN };
     match model {
         CapModel::Normal => {
-            let sd_within = within_sd(&x, subgroup).ok_or(CapabilityError::TooFewValues)?;
-            if sd_within <= 0.0 {
-                return Err(CapabilityError::NoSpread);
+            let both = lsl.and(usl).and(target);
+            normal_capability(&x, lsl, usl, subgroup, observed, both, confidence)
+        }
+        CapModel::BoxCox => {
+            if x.iter().any(|v| *v <= 0.0) {
+                return Err(CapabilityError::NotPositive);
             }
-            let indices = |s: f64| {
-                let lower = (mean - lo) / (3.0 * s);
-                let upper = (hi - mean) / (3.0 * s);
-                ((hi - lo) / (6.0 * s), lower, upper, min_of(lower, upper))
+            let lambda = match options.lambda {
+                Some(l) if l.is_finite() => l,
+                Some(_) => return Err(CapabilityError::BadLambda),
+                None => boxcox_lambda(&x),
             };
-            let (cp, cpl, cpu, cpk) = indices(sd_within);
-            let (pp, ppl, ppu, ppk) = indices(sd_overall);
-            let tails = |s: f64| {
-                Ppm::of(
-                    lsl.map_or(0.0, |l| normal().cdf((l - mean) / s)),
-                    usl.map_or(0.0, |u| normal().sf((u - mean) / s)),
-                )
-            };
-            Ok(Capability {
-                n,
-                mean,
-                sd_overall,
-                sd_within,
-                params: vec![mean, sd_overall],
-                cp,
-                cpl,
-                cpu,
-                cpk,
-                pp,
-                ppl,
-                ppu,
-                ppk,
-                observed,
-                expected_overall: tails(sd_overall),
-                expected_within: tails(sd_within),
-            })
+            let t = |v: f64| Some(boxcox(v, lambda)).filter(|y| y.is_finite());
+            let y: Vec<f64> = x.iter().map(|v| boxcox(*v, lambda)).collect();
+            let (tl, tu) = (lsl.and_then(t), usl.and_then(t));
+            let tt = target.and_then(t).filter(|_| tl.is_some() && tu.is_some());
+            let mut c = normal_capability(&y, tl, tu, subgroup, observed, tt, confidence)?;
+            c.params.push(lambda);
+            c.lambda = lambda;
+            Ok(c)
         }
         CapModel::Lognormal | CapModel::Weibull => {
             let family = if model == CapModel::Lognormal { Family::Lognormal } else { Family::Weibull };
@@ -252,6 +421,10 @@ pub fn capability(
                 observed,
                 expected_overall,
                 expected_within: nan_ppm,
+                cpm: f64::NAN,
+                lambda: f64::NAN,
+                pp_ci: (f64::NAN, f64::NAN),
+                ppk_ci: (f64::NAN, f64::NAN),
             })
         }
     }
@@ -279,6 +452,67 @@ mod tests {
     }
 
     #[test]
+    fn box_cox_with_lambda_one_is_the_normal_capability_shifted_and_cpm_follows_the_target() {
+        let x = [10.0, 12.0, 11.0, 13.0, 12.0, 14.0];
+        let n = capability(&x, Some(5.0), Some(20.0), 1, CapModel::Normal).unwrap();
+        let opts = CapOptions { lambda: Some(1.0), target: Some(12.0), ..Default::default() };
+        let b = capability_with(&x, Some(5.0), Some(20.0), 1, CapModel::BoxCox, opts).unwrap();
+        // lambda = 1 shifts values and limits by 1: the same indices.
+        for (u, v) in
+            [(n.cp, b.cp), (n.cpk, b.cpk), (n.ppk, b.ppk), (n.expected_overall.total, b.expected_overall.total)]
+        {
+            assert!((u - v).abs() < 1e-9, "{u} {v}");
+        }
+        assert!((b.mean - (n.mean - 1.0)).abs() < 1e-12 && b.lambda == 1.0 && b.params[2] == 1.0);
+        let m = 12.0;
+        let cpm = 15.0 / (6.0 * (n.sd_overall.powi(2) + (n.mean - m).powi(2)).sqrt());
+        assert!((b.cpm - cpm).abs() < 1e-12, "{} {cpm}", b.cpm);
+        let n2 = capability_with(&x, Some(5.0), Some(20.0), 1, CapModel::Normal, opts).unwrap();
+        assert!((n2.cpm - cpm).abs() < 1e-12 && n.cpm.is_nan());
+        // One limit: no Cpm.
+        assert!(capability_with(&x, Some(5.0), None, 1, CapModel::Normal, opts).unwrap().cpm.is_nan());
+        // lambda 0 is the log; a lower limit of 0 has no log and is left out.
+        let opts = CapOptions { lambda: Some(0.0), target: None, ..Default::default() };
+        let b = capability_with(&x, Some(0.0), Some(20.0), 1, CapModel::BoxCox, opts).unwrap();
+        assert!(b.cpl.is_nan() && b.cpk == b.cpu && b.expected_overall.below == 0.0);
+        assert!((boxcox(2.0, 1e-300) - 2f64.ln()).abs() < 1e-15);
+    }
+
+    #[test]
+    fn the_box_cox_lambda_of_lognormal_values_is_near_zero() {
+        let x: Vec<f64> = (1..=40).map(|i| (f64::from(i) / 41.0 - 0.5).exp().powi(3)).collect();
+        // exp of a uniform grid cubed: the logs are evenly spread, so lambda is near 0 (not exactly: not normal).
+        let l = boxcox_lambda(&x);
+        assert!(l.abs() < 0.5, "{l}");
+        let best = boxcox_llf(&x, l);
+        assert!(boxcox_llf(&x, l + 1e-4) < best && boxcox_llf(&x, l - 1e-4) < best);
+    }
+
+    #[test]
+    fn the_intervals_widen_with_the_level_and_hold_the_estimates() {
+        let x = [10.0, 12.0, 11.0, 13.0, 12.0, 14.0, 11.5, 12.5];
+        let at = |confidence| {
+            let o = CapOptions { confidence, ..Default::default() };
+            capability_with(&x, Some(5.0), Some(20.0), 1, CapModel::Normal, o).unwrap()
+        };
+        let (c90, c99) = (at(0.90), at(0.99));
+        assert!(c90.pp_ci.0 < c90.pp && c90.pp < c90.pp_ci.1 && c90.ppk_ci.0 < c90.ppk && c90.ppk < c90.ppk_ci.1);
+        assert!(c99.pp_ci.0 < c90.pp_ci.0 && c99.ppk_ci.1 > c90.ppk_ci.1);
+        // Bissell's interval is symmetric about Ppk.
+        assert!((c90.ppk_ci.0 + c90.ppk_ci.1 - 2.0 * c90.ppk).abs() < 1e-12);
+        // One limit: Pp has no interval, Ppk (= PPU) has one.
+        let c = capability_with(&x, None, Some(20.0), 1, CapModel::Normal, CapOptions::default()).unwrap();
+        assert!(c.pp_ci.0.is_nan() && c.ppk_ci.0.is_finite());
+        let w = capability_with(&x, None, Some(20.0), 1, CapModel::Weibull, CapOptions::default()).unwrap();
+        assert!(w.ppk_ci.0.is_nan());
+        let bad = CapOptions { confidence: 1.0, ..Default::default() };
+        assert_eq!(
+            capability_with(&x, None, Some(20.0), 1, CapModel::Normal, bad),
+            Err(CapabilityError::BadConfidence)
+        );
+    }
+
+    #[test]
     fn bad_input_is_refused() {
         let x = [1.0, 2.0, 3.0];
         assert_eq!(capability(&x, None, None, 1, CapModel::Normal), Err(CapabilityError::NoLimits));
@@ -287,5 +521,11 @@ mod tests {
         assert_eq!(capability(&x, Some(0.0), None, 4, CapModel::Normal), Err(CapabilityError::TooFewValues));
         assert_eq!(capability(&[2.0; 4], Some(0.0), None, 1, CapModel::Normal), Err(CapabilityError::NoSpread));
         assert!(capability(&[-1.0, 2.0, 3.0], Some(0.0), None, 1, CapModel::Weibull).is_err());
+        assert_eq!(
+            capability(&[0.0, 2.0, 3.0], Some(1.0), None, 1, CapModel::BoxCox),
+            Err(CapabilityError::NotPositive)
+        );
+        let nan = CapOptions { lambda: Some(f64::NAN), target: None, ..Default::default() };
+        assert_eq!(capability_with(&x, Some(0.5), None, 1, CapModel::BoxCox, nan), Err(CapabilityError::BadLambda));
     }
 }

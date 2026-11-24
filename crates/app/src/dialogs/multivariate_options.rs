@@ -10,6 +10,7 @@ use sheaf_core::analysis::{
     LifeRegressionSpec, ManhattanSpec, MixtureDesignSpec, MixtureKind, MonteCarloSpec, PcaSpec, PivotPeriod, PivotStat,
     QpcrCurveSpec, QpcrSpec, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec, RocSpec, SmoothModel,
     SplitPlotDesignSpec, SplitPlotEffectsSpec, StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec, Tool,
+    TurnbullSpec,
 };
 
 /// Comma-separated numbers typed in a box (T386); empty text is no number.
@@ -56,6 +57,7 @@ pub struct MultiOptions {
     stability: StabilitySpec,
     life: LifeDistSpec,
     life_any: LifeDistArbitrarySpec,
+    turnbull: TurnbullSpec,
     life_reg: LifeRegressionSpec,
     cox: CoxSpec,
     qpcr: QpcrSpec,
@@ -115,6 +117,7 @@ impl MultiOptions {
             }
             AnalysisKind::TimePivot => Ok(Tool::TimePivot(self.timepivot)),
             AnalysisKind::LifeDistArbitrary => Ok(Tool::LifeDistArbitrary(self.life_any)),
+            AnalysisKind::Turnbull => Ok(Tool::Turnbull(self.turnbull)),
             AnalysisKind::Qpcr => Ok(Tool::Qpcr(self.qpcr.clone())),
             AnalysisKind::QpcrCurve => Ok(Tool::QpcrCurve(self.qpcr_curve)),
             AnalysisKind::Cox => {
@@ -394,6 +397,12 @@ impl MultiOptions {
                         ui.radio_value(&mut s.dist, d, name);
                     }
                 });
+                ui.checkbox(&mut s.frequency, "Last column: frequency (count) of each row");
+            }
+            AnalysisKind::Turnbull => {
+                ui.label("The chosen columns are the start and the end of each failure window: equal for an exact failure, an empty end if it was still working, an empty start if it failed before the end.");
+                let s = &mut self.turnbull;
+                ui.checkbox(&mut s.graph, "Survival graph");
                 ui.checkbox(&mut s.frequency, "Last column: frequency (count) of each row");
             }
             AnalysisKind::LifeDistArbitrary => {

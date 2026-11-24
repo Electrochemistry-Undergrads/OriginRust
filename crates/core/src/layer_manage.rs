@@ -597,8 +597,8 @@ impl Graph {
                     return Err(LayerError::Link { layer: i + 1, parent: parent.map_or(0, |p| p + 1) });
                 }
                 if let Some(link) = &mut g.layers[i].link {
-                    link.x = x;
-                    link.y = y;
+                    link.x = x.clone();
+                    link.y = y.clone();
                 }
             }
             Ok(())

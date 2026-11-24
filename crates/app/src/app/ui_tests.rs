@@ -686,8 +686,8 @@ fn the_link_axes_scales_tab_links_and_unlinks_a_layer_as_origin() {
     h.state_mut().doc.apply("Double Y", |p| {
         p.add_right_y_layer(g, 0).unwrap();
     });
-    let before = graph(&h).layers[1].link.unwrap();
-    assert_eq!((before.x, before.y), (ScaleLink::Straight, ScaleLink::None));
+    let before = graph(&h).layers[1].link.as_ref().unwrap();
+    assert_eq!((&before.x, &before.y), (&ScaleLink::Straight, &ScaleLink::None));
     open_props(&mut h, 0, PropsTab::Plots, None);
     click(&mut h, "Layer 1");
     assert!(!has_label(&h, "Link Axes Scales"), "the first layer has nothing to link to");
@@ -699,7 +699,7 @@ fn the_link_axes_scales_tab_links_and_unlinks_a_layer_as_origin() {
     h.query_all_by_label("Straight (1 to 1)").nth(1).expect("the Y side").click();
     settle(&mut h);
     click(&mut h, "Apply");
-    assert_eq!(graph(&h).layers[1].link.unwrap().y, ScaleLink::Straight);
+    assert_eq!(graph(&h).layers[1].link.as_ref().unwrap().y, ScaleLink::Straight);
     // Link to None: unlinked, at the same place on the page.
     let on_page = graph(&h).layers[1].frame.within(graph(&h).layers[0].frame);
     h.get_by_value("Layer1").click();
@@ -5834,6 +5834,25 @@ fn the_survival_menu_runs_a_life_data_regression() {
     assert!(sheet.starts_with("LifeReg"), "{sheet}");
     assert!((coef[1] + 0.8).abs() < 0.2, "the dose shortens life: {coef:?}");
     assert_eq!(h.state().doc.undo_label(), Some("Life data regression"));
+}
+
+/// Statistics > Survival Analysis > Nonparametric Analysis (Arbitrary Censoring)... (T409): start and end columns
+/// give the Turnbull intervals and a survival graph; one undo step.
+#[test]
+fn the_survival_menu_makes_a_turnbull_estimate() {
+    let data = csv_file("turnbull", "ic", "id,start,stop\n1,,10\n2,10,20\n3,20,30\n4,5,5\n5,30,\n6,12,18\n7,8,15\n");
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - ic.csv");
+    let graphs_before = project(&h).graphs().count();
+    menu_path(&mut h, &["Statistics", "Survival Analysis", "Nonparametric Analysis (Arbitrary Censoring)..."]);
+    assert!(h.state().analysis.is_some() && has_label(&h, "Survival graph"));
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
+    let (sheet, p) = result_column(&h, "Probability");
+    assert!(sheet.starts_with("Turnbull"), "{sheet}");
+    assert!((p.iter().sum::<f64>() - 1.0).abs() < 1e-9, "{p:?}");
+    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Nonparametric analysis (arbitrary censoring)"));
 }
 
 /// Statistics > Survival Analysis > Distribution Analysis (Arbitrary Censoring)... (T384): start and end columns give

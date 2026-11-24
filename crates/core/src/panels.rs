@@ -638,8 +638,8 @@ mod tests {
         let hidden: Vec<bool> = g.layers.iter().map(|l| l.x_axis.hide_end_label).collect();
         assert_eq!(hidden, vec![true, true, false]);
         assert!(g.layers.iter().all(|l| l.x_axis.show_tick_labels && !l.y_axis.hide_end_label));
-        let link = g.layers[2].link.unwrap();
-        assert_eq!((link.parent, link.x, link.y), (0, ScaleLink::None, ScaleLink::Straight));
+        let link = g.layers[2].link.as_ref().unwrap();
+        assert_eq!((link.parent, &link.x, &link.y), (0, &ScaleLink::None, &ScaleLink::Straight));
         // Without the Y link nothing is hidden.
         let mut g = graph_with(1);
         panel_layers(&mut g, &base, 3, &PanelLayout { h_gap: 0.0, ..PanelLayout::arrange(1, 3) }).unwrap();

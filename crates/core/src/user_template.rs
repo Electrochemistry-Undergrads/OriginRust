@@ -208,7 +208,7 @@ impl Project {
         }
         // Drop linked layers that have no plot and that no other layer follows, last first.
         for li in (1..graph.layers.len()).rev() {
-            let followed = graph.layers.iter().any(|l| l.link.is_some_and(|k| k.parent == li));
+            let followed = graph.layers.iter().any(|l| l.link.as_ref().is_some_and(|k| k.parent == li));
             if graph.layers[li].plots.is_empty() && graph.layers[li].link.is_some() && !followed {
                 graph.layers.remove(li);
                 for l in &mut graph.layers[li..] {

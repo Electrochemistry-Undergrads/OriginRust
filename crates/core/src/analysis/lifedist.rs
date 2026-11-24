@@ -80,6 +80,22 @@ impl Default for CoxSpec {
     }
 }
 
+/// What [`Tool::Turnbull`] does: the chosen columns are the start and the end of each failure window, as for
+/// [`Tool::LifeDistArbitrary`] (T409).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TurnbullSpec {
+    /// Make the survival graph.
+    pub graph: bool,
+    /// The last chosen column holds each row's frequency (count).
+    pub frequency: bool,
+}
+
+impl Default for TurnbullSpec {
+    fn default() -> Self {
+        TurnbullSpec { graph: true, frequency: false }
+    }
+}
+
 /// The chosen columns without the frequency column, and the frequencies by row when the last chosen column holds them
 /// (T394; `None`: every row counts once).
 fn split_frequency<'a>(
@@ -549,17 +565,19 @@ pub(super) fn run_cox(
     Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph, more_graphs: Vec::new() }.shift_graphs(shift))
 }
 
-pub(super) fn run_arbitrary(
-    spec: &LifeDistArbitrarySpec,
+/// The failure windows of the start and end columns (T384), each row as often as its frequency, and the label
+/// "start to end".
+fn failure_windows(
     sheet: &Worksheet,
     columns: &[ColumnId],
+    counts: &Option<Vec<f64>>,
     rows: RowRange,
-) -> Result<Output, AnalysisError> {
-    let (columns, counts) = split_frequency(sheet, columns, spec.frequency)?;
+    what: &str,
+) -> Result<(Vec<Obs>, String), AnalysisError> {
     let [start_id, end_id] = columns else {
-        return Err(AnalysisError::BadOption(
-            "distribution analysis with arbitrary censoring takes two columns: the start and the end of each failure window".into(),
-        ));
+        return Err(AnalysisError::BadOption(format!(
+            "{what} takes two columns: the start and the end of each failure window"
+        )));
     };
     let column = |id: ColumnId| sheet.column(id).ok_or(AnalysisError::NoSuchColumn(id));
     let sc = column(*start_id)?;
@@ -583,7 +601,7 @@ pub(super) fn run_arbitrary(
         }
         match Obs::from_columns(a, b) {
             Some(o) => {
-                for _ in 0..count_of(&counts, r)? {
+                for _ in 0..count_of(counts, r)? {
                     obs.push(o);
                 }
                 check_total(obs.len())?;
@@ -593,12 +611,125 @@ pub(super) fn run_arbitrary(
             }
         }
     }
-    let fit = fit_arbitrary(&obs, spec.dist).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
+    Ok((obs, format!("{} to {}", column_label(sc), column_label(ec))))
+}
+
+/// The counts of exact, right-, left- and interval-censored rows.
+fn censoring_counts(obs: &[Obs]) -> [f64; 4] {
     let count = |f: fn(&Obs) -> bool| obs.iter().filter(|o| f(o)).count() as f64;
-    let exact = count(|o| matches!(o, Obs::Exact(_)));
-    let right = count(|o| matches!(o, Obs::Right(_)));
-    let left = count(|o| matches!(o, Obs::Left(_)));
-    let interval = count(|o| matches!(o, Obs::Interval(..)));
+    [
+        count(|o| matches!(o, Obs::Exact(_))),
+        count(|o| matches!(o, Obs::Right(_))),
+        count(|o| matches!(o, Obs::Left(_))),
+        count(|o| matches!(o, Obs::Interval(..))),
+    ]
+}
+
+pub(super) fn run_turnbull(
+    spec: &TurnbullSpec,
+    sheet: &Worksheet,
+    columns: &[ColumnId],
+    rows: RowRange,
+) -> Result<Output, AnalysisError> {
+    let (columns, counts) = split_frequency(sheet, columns, spec.frequency)?;
+    let (obs, label) =
+        failure_windows(sheet, columns, &counts, rows, "the nonparametric analysis with arbitrary censoring")?;
+    let fit = calc::turnbull::turnbull(&obs).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
+    let [exact, right, left, interval] = censoring_counts(&obs);
+    let finite = |v: f64| if v.is_finite() { v } else { f64::NAN };
+    let mut table = ResultTable::new(&["Lower", "Upper", "Probability", "Survival", "Cumulative failure"]);
+    for j in 0..fit.probability.len() {
+        let (lo, hi) = (fit.lower[j], fit.upper[j]);
+        let name = if fit.lower_closed[j] && lo == hi {
+            format!("[{}, {}]", num(lo), num(hi))
+        } else {
+            let lo_text = if lo.is_finite() { num(lo) } else { "-inf".into() };
+            let hi_text = if hi.is_finite() { format!("{}]", num(hi)) } else { "inf)".into() };
+            format!("{}{lo_text}, {hi_text}", if fit.lower_closed[j] { "[" } else { "(" })
+        };
+        table.push_row(
+            name,
+            vec![finite(lo), finite(hi), fit.probability[j], fit.survival[j], 1.0 - fit.survival[j]],
+            vec![String::new(); 5],
+        );
+    }
+    let mut notes = vec![
+        format!(
+            "Turnbull estimate of {label} from {} rows ({exact} exact, {right} right-, {left} left-, {interval} interval-censored): {} intervals, log-likelihood {}, {} self-consistency iterations.",
+            fit.n,
+            fit.probability.len(),
+            num(fit.log_likelihood),
+            fit.iterations
+        ),
+        "The estimate gives the probability of failing in each interval, not where inside it; the graph draws the survival straight across each interval.".into(),
+    ];
+    if !fit.converged {
+        notes.push(format!(
+            "The iteration stopped after {} steps before the Kuhn-Tucker condition held to 1e-12; the probabilities are close, not exact.",
+            fit.iterations
+        ));
+    }
+    let mut sheet_cols = vec![SheetColumn {
+        designation: Designation::Label,
+        long_name: "Interval".into(),
+        units: String::new(),
+        comments: String::new(),
+        data: ColumnData::text(table.rows.iter().map(|(l, _)| l.clone()).collect()),
+    }];
+    for (i, h) in table.headers.iter().enumerate() {
+        sheet_cols.push(column_of(h, "", Designation::Y, table.rows.iter().map(|(_, v)| v[i]).collect()));
+    }
+    let shift = sheet_cols.len();
+    let mut graph = None;
+    if spec.graph {
+        // Flat between the intervals, straight across each; the curve starts at 0 (or the first time below it).
+        let lowest = fit.lower.iter().chain(&fit.upper).copied().filter(|v| v.is_finite()).fold(0.0, f64::min);
+        let (mut gx, mut gy) = (vec![lowest], vec![1.0]);
+        let mut prev = 1.0;
+        for j in 0..fit.probability.len() {
+            if fit.lower[j].is_finite() {
+                gx.push(fit.lower[j]);
+                gy.push(prev);
+            }
+            if !fit.upper[j].is_finite() {
+                break;
+            }
+            gx.push(fit.upper[j]);
+            gy.push(fit.survival[j]);
+            prev = fit.survival[j];
+        }
+        let comment = format!("Turnbull survival of {label}");
+        sheet_cols.push(column_of("Time", &comment, Designation::X, gx));
+        sheet_cols.push(column_of("Survival", &comment, Designation::Y, gy));
+        graph = Some(XyGraph {
+            plots: vec![GraphPlot {
+                x: 0,
+                y: 1,
+                kind: PlotKind::Line,
+                label: "Turnbull survival".into(),
+                line_of: None,
+            }],
+            x_scale: ScaleKind::Linear,
+            y_scale: ScaleKind::Linear,
+            x_title: "Time".into(),
+            y_title: "Survival probability".into(),
+            look: Default::default(),
+        });
+    }
+    Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph, more_graphs: Vec::new() }.shift_graphs(shift))
+}
+
+pub(super) fn run_arbitrary(
+    spec: &LifeDistArbitrarySpec,
+    sheet: &Worksheet,
+    columns: &[ColumnId],
+    rows: RowRange,
+) -> Result<Output, AnalysisError> {
+    let (columns, counts) = split_frequency(sheet, columns, spec.frequency)?;
+    let (obs, label) =
+        failure_windows(sheet, columns, &counts, rows, "distribution analysis with arbitrary censoring")?;
+    let fit = fit_arbitrary(&obs, spec.dist).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
+    let [exact, right, left, interval] = censoring_counts(&obs);
     let k = fit.params.len() as f64;
     let mut table = ResultTable::new(&[
         "N",
@@ -613,7 +744,6 @@ pub(super) fn run_arbitrary(
         "Mean",
         "Median",
     ]);
-    let label = format!("{} to {}", column_label(sc), column_label(ec));
     table.push_row(
         label.clone(),
         vec![
@@ -778,6 +908,38 @@ mod tests {
         let bad = add(&mut p, vec![1.0, 0.5, 1.0, 1.0, 1.0]);
         let spec = LifeDistSpec { frequency: true, ..Default::default() };
         assert!(p.analyze(&request(vec![tc, cc, bad], spec)).is_err(), "a fractional frequency");
+    }
+
+    #[test]
+    fn a_turnbull_estimate_reports_the_intervals_and_a_survival_graph() {
+        let mut p = Project::new();
+        let book = p.add_workbook("tb");
+        let nan = f64::NAN;
+        // Rows: failed before 10, between 10 and 20 (twice, by frequency), 20 and 30, at 5, after 30.
+        let start = vec![nan, 10.0, 20.0, 5.0, 30.0];
+        let end = vec![10.0, 20.0, 30.0, 5.0, nan];
+        let freq = vec![1.0, 2.0, 1.0, 1.0, 1.0];
+        let cols: Vec<ColumnId> = [start, end, freq]
+            .into_iter()
+            .map(|v| p.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap())
+            .collect();
+        let spec = TurnbullSpec { frequency: true, ..Default::default() };
+        let out =
+            p.analyze(&Request { columns: cols.clone(), rows: RowRange::All, tool: Tool::Turnbull(spec) }).unwrap();
+        let t = out.table.as_ref().unwrap();
+        let names: Vec<&str> = t.rows.iter().map(|(l, _)| l.as_str()).collect();
+        assert_eq!(names, ["[5, 5]", "(10, 20]", "(20, 30]", "(30, inf)"], "{:?}", out.notes);
+        // 6 rows: the left-censored row's mass goes to [5, 5], the only interval before 10.
+        assert!((t.rows[1].1[2] - 2.0 / 6.0).abs() < 1e-9 && (t.rows[0].1[2] - 2.0 / 6.0).abs() < 1e-9, "{t:?}");
+        assert!(
+            t.rows[3].1[1].is_nan()
+                && out.notes[0].contains("6 rows (1 exact, 1 right-, 1 left-, 3 interval-censored)")
+        );
+        let gc = super::super::dist::plot_columns(&p, out.new_graph.unwrap());
+        assert_eq!(gc[0].1, "Survival");
+        let two =
+            Request { columns: cols[..1].to_vec(), rows: RowRange::All, tool: Tool::Turnbull(Default::default()) };
+        assert!(p.analyze(&two).is_err());
     }
 
     #[test]

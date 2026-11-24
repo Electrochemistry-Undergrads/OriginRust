@@ -454,8 +454,10 @@ fn the_file_is_pretty_text_with_a_version() {
 #[test]
 fn two_writers_do_not_lose_each_others_themes() {
     let dir = scratch("writers");
-    let writers = 6;
-    let each = 5;
+    // Every round takes the settings lock twice; 4 writers x 3 rounds still race, and stay well inside the 60 s
+    // lock wait when the machine runs two workspace test runs at once (6 x 5 timed out there, T411).
+    let writers = 4;
+    let each = 3;
     let gate = Arc::new(Barrier::new(writers));
     let handles: Vec<_> = (0..writers)
         .map(|w| {

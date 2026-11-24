@@ -426,7 +426,7 @@ mod tests {
             assert_eq!(g.layers.len(), kind.layers());
             assert_eq!(g.layers[0].link, None);
             for l in &g.layers[1..] {
-                assert_eq!(l.link.map(|k| k.parent), Some(0));
+                assert_eq!(l.link.as_ref().map(|k| k.parent), Some(0));
                 assert_eq!(l.x_axis.side, AxisSide::Hidden);
             }
             assert!(g.layers.iter().all(|l| !l.y_axis.show_title && l.y_axis.color_follows_plot));

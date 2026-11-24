@@ -91,6 +91,7 @@ pub mod trace;
 pub mod treemap;
 pub mod treemap_tree;
 pub mod trend;
+pub mod turnbull;
 pub mod upset;
 mod util;
 pub mod vartest;

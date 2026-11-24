@@ -559,6 +559,14 @@ pub(crate) use sheaf_core::stack::row_range;
 /// [`collect`] for every layer of a graph, with the hexbin plots binned for the nominal frame of their layer.
 pub(crate) fn collect_graph<'a>(project: &'a Project, g: &'a sheaf_core::graph::Graph) -> Vec<LayerData<'a>> {
     let mut all: Vec<LayerData> = g.layers.iter().map(|layer| collect(project, layer)).collect();
+    // Graph Slicer (T406): the plots from the slicer's sheet show only its rows.
+    if g.slicer.is_some() {
+        for pd in all.iter_mut().flat_map(|d| d.plots.iter_mut()) {
+            if let Some(f) = g.slicer_filter_for(project, pd.plot.y) {
+                pd.filters.push(f);
+            }
+        }
+    }
     for (layer, d) in g.layers.iter().zip(&mut all) {
         let aspect = crate::hexbin::nominal_aspect(layer, g.page.width_pt, g.page.height_pt);
         for pd in &mut d.plots {

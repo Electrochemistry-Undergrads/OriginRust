@@ -355,6 +355,11 @@ Custom legends accept raw tabs and `%(TAB)` to place entries at horizontal stops
 The tab grid starts at each row's left edge, scales with the legend font, and
 counts trailing tabs in the frame width. Graphing 7.11 records the Arial measurements.
 
+An ordinary legend's **Legend > Text Color Follows Plot** option follows its samples
+and preserves the fixed color for when the option is turned off. Inline color
+overrides still apply. Graphing 7.11 records the Origin 2016 EMF measurements, and
+opj-format 10.8 records the native OPJ fields and companion behavior.
+
 ## Origin facts
 
 Recorded in gui-look 1/4 and the command map: the font box says "Default: Arial", the selected

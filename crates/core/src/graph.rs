@@ -2919,6 +2919,9 @@ pub struct Legend {
     pub visible: bool,
     pub position: LegendPosition,
     pub font: Font,
+    /// Inherit the plot sample's color for legend text before inline color overrides.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub text_color_follows_plot: bool,
     /// Draw a box around the legend.
     pub frame: bool,
     pub background: Option<Color>,

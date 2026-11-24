@@ -571,6 +571,13 @@ seen. The other frame kinds of the Frame tab (shadow, marble and so on) were not
 so they read as a plain frame and are written as one. The background colour is not read or written.
 A legend in a file with no legend object keeps Sheaf's template default (no frame, graphing.md 6.4).
 
+Origin 2016 saved **Text Color Follows Plot** with legend header byte `0x33` set to `F7` and
+the four bytes starting at `0x6B` set to `F7 FF FF FF`. The style block and raw text matched the fixed-color
+control. Setting magenta restored `05` and `05 00 00 00` at those offsets. Sheaf reads the four-byte
+code and writes both fields. Origin 2016 reopened a Sheaf-written OPJ with the mode active and
+exported the caption in the blue line's color. The companion retains a nondefault fixed color
+while this mode is active, or the mode when there is no legend annotation to write.
+
 ### 10.9 Plot groups [obs]
 
 Plots made by one plot command are a *group*: their curve records follow one another, the first with bit `0x20` in

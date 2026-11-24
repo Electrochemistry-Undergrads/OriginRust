@@ -888,3 +888,27 @@ fn nonlinear_custom_scale_add_validates_before_changing_the_preview() {
     menu(&mut h, "Edit", "Undo");
     assert_eq!(project(&h), &before);
 }
+
+#[test]
+fn discrete_scale_add_uses_the_inset_plots_and_undoes_the_layer() {
+    let mut h = with_layers("lm-add-discrete", 1);
+    let id = graph(&h).id;
+    let before = project(&h).clone();
+    open(&mut h);
+    click(&mut h, "Add");
+    click(&mut h, "Type");
+    click(&mut h, "Inset With Data (Linked Dimension)");
+    click(&mut h, "X Scale");
+    click(&mut h, "Discrete");
+    click(&mut h, "Apply");
+    assert!(h.query_by_label("Layer2").is_some());
+    assert_eq!(project(&h), &before);
+    click(&mut h, "OK");
+
+    assert_eq!(graph(&h).layers[1].x_axis.scale, ScaleKind::Discrete);
+    let geometry = sheaf_plot::layout_geometry(project(&h), id).unwrap();
+    assert!(geometry[1].x.discrete.is_some());
+    assert_eq!(h.state().doc.undo_label(), Some("Layer Management"));
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+}

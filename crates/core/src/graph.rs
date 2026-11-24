@@ -1315,6 +1315,8 @@ pub enum ScaleKind {
     Weibull,
     /// A nonlinear scale defined by the axis' direct and inverse formulas.
     CustomFormula,
+    /// Equal spacing between distinct coordinates of the first plot.
+    Discrete,
 }
 
 /// How an axis picks its limits when `min`/`max` are not fixed.

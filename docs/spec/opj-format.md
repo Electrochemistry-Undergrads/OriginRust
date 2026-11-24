@@ -454,7 +454,7 @@ The page units were found by exporting a graph at Origin's default 300 dots per 
 |---|---|---|
 | `0x0F`, `0x17`, `0x1F` | 3 x f64 | X axis start, end and major step |
 | `0x37` | u8 | X minor ticks (1 on a linear axis, 8 on a logarithmic one) |
-| `0x38` | u8 | X scale type: 0 linear, 1 base-10 logarithm (others [pub]: 2 probability, 3 probit, 4 reciprocal, 5 offset reciprocal, 6 logit, 7 natural log, 8 base-2 log) |
+| `0x38` | u8 | X scale type: 0 linear, 1 base-10 logarithm (others [pub]: 2 probability, 3 probit, 4 reciprocal, 5 offset reciprocal, 6 logit, 7 natural log, 8 base-2 log). Discrete is 11 (T61, measured in Origin 2016 for X and Y). |
 | `0x3A`, `0x42`, `0x4A` | 3 x f64 | Y axis start, end and major step |
 | `0x62`, `0x63` | u8, u8 | Y minor ticks, Y scale type |
 | `0x71` | 4 x u16 | layer frame: left, top, right, bottom, in the page units of 10.1 |

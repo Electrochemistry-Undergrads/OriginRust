@@ -6174,8 +6174,8 @@ measured.
 Add offers the nine layer presets and X and Y scale choices. Bottom-X Left-Y creates an independent
 layer. The linked presets accept an independent layer from the preview as their parent, defaulting
 to the opening layer's root or the first eligible layer. A straight-linked scale displays the
-parent's type. Independent scales start at Linear and offer the ten built-in types and Custom
-Formula. Discrete remains open. Apply adds a layer to the numbered preview. Undo, OK and Cancel
+parent's type. Independent scales start at Linear and offer the ten built-in types, Custom Formula
+and Discrete. Apply adds a layer to the numbered preview. Undo, OK and Cancel
 follow 15.7d.
 
 **Custom Formula scale (Origin 2016, 2026-11-23 and 2026-11-24).** Setting `layer.x.type=11`
@@ -6200,6 +6200,24 @@ If a previously saved pair becomes invalid following a range change, the axis te
 draws linearly with the current limits and retains the pair for later valid ranges. The Axis
 dialog displays the saved formulas. Sheaf saves and OPJ companions keep the expressions.
 A bare OPJ writes the axis as Linear and warns.
+
+**Discrete scale (Origin 2016, 2026-11-24).** LabTalk type 12 spaced the five X values
+10, 11, 15, 22 and 23 at equal intervals in an EMF. With limits 8 to 25 and increment 1,
+the tick labels were 8, 9, 10, 11, 15, 22, 23, 24 and 25. A second plot's X value of 13
+landed halfway between 11 and 15. The Y values 1, 3, 4, 9 and 14 also drew at equal intervals
+with Y type 12. Descending source values produced the same positions, and adjacent equal
+values shared a position. An unsorted series fell back to linear spacing. The saved project
+used OPJ scale byte 11 on both axes.
+
+Sheaf offers Discrete on independent Cartesian dimensions in Add and on the Axis Scale tab.
+The first plot supplies the positions. Each coordinate between its values is interpolated
+linearly and either end uses the adjacent interval to extend the mapping. Limits and
+coordinate reading remain in data units. Sheaf labels the visible source values, thinning
+them above 200, and applies the major and minor tick settings to the range outside the first
+plot. Origin can also thin the interior labels with its increment and layout rules. With
+fewer than two distinct finite values or a change of direction in the first plot, Sheaf draws
+linearly and keeps the scale type for later data changes. Sheaf files and bare OPJ files
+preserve the choice. [Origin's Scale tab](https://docs.originlab.com/origin-help/axesref-scale/).
 
 Inset With Data copies all plots from the chosen parent and uses automatic independent ranges.
 The [Origin Add tab](https://docs.originlab.com/origin-help/laymanage-addtab/) documents copying

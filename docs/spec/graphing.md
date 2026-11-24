@@ -1301,6 +1301,24 @@ literal `\v(...)` and wrapped `\ww(...)` spans keep the token text. Values read
 from worksheet metadata are resolved after this pass. The raw authored legend
 continues to be saved with its tokens.
 
+**Legend tab stops (T58).** Assigning `legend.text$` in Origin 2016 expanded
+`%(TAB)` into horizontal tabs. The 11, 22 and 33 point Arial EMFs placed consecutive
+stops 160, 320 and 480 logical units apart respectively. At 22 points a 300-unit
+prefix advanced to 320, a 320-unit prefix advanced to 640, and a 900-unit prefix
+advanced to 960. The measured stops were relative to the start of each row, with
+the legend sample and styled glyph widths counted before advancing. A trailing
+tab widened the frame. Bold, italic and an inline Courier New span retained their
+styles across the tab. [LabTalk string substitution](https://docs.originlab.com/labtalk/guide/string-substitution/)
+
+Sheaf treats an authored tab and case-insensitive `%(TAB)` alike. Stops are spaced at
+3.5 times the legend base font size, the normalized approximation of the Arial
+measurements. Each tab advances to the next strictly greater stop. The same
+advances size the frame and position the text and samples. Protected and wrapped
+spans keep the token text, and worksheet metadata is resolved after keyword
+expansion. Ordinary inline style spans continue across a tab. When a row also contains
+wrapped captions, the width budget reserves
+one interval per tab before placing the captions and resolving the actual stops.
+
 **Plot-colored graph text (T58).** `\cpN(text)` uses the color of the Nth plot in the
 text object's layer. Repainting the graph after a style change resolves the color again.
 Nested styles, literal blocks and glyph decorations follow the existing text rules.

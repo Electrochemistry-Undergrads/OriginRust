@@ -252,6 +252,55 @@ fn legend_line_break_tokens_match_raw_newlines_before_plot_substitution() {
 }
 
 #[test]
+fn legend_tabs_place_plot_samples_at_row_local_stops_and_extend_the_frame() {
+    let (mut p, g) = project(2);
+    let legend = &mut p.graph_mut(g).unwrap().layers[0].legend;
+    legend.text = Some(r"\l(1) A%(TAB)\l(2) B%(TAB)%(CRLF)MMMMMMMM%(TAB)C%(TAB)%(TAB)D".into());
+    for size in [11.0, 22.0, 33.0] {
+        p.graph_mut(g).unwrap().layers[0].legend.font.size_pt = size;
+        let s = scene(&p, g);
+        let (items, samples) = legend_items(&s);
+        let text: Vec<_> = items.iter().map(|item| item.2.as_str()).collect();
+        assert_eq!(text, ["A", "B", "MMMMMMMM", "C", "D"]);
+        assert_eq!(samples, 2);
+        let step = 3.5 * size;
+        assert!((items[1].0 - items[0].0 - step).abs() < 1e-9);
+        assert!((items[3].0 - items[2].0 - 2.0 * step).abs() < 1e-9);
+        assert!((items[4].0 - items[3].0 - 2.0 * step).abs() < 1e-9);
+        let svg = crate::svg::write_svg(&s);
+        assert!(!svg.contains("%(TAB)"));
+    }
+
+    p.graph_mut(g).unwrap().layers[0].legend.text = Some("A\tB".into());
+    let unpadded = automatic_legend_box(&p, g);
+    p.graph_mut(g).unwrap().layers[0].legend.text = Some("A\tB%(tab)".into());
+    let padded = automatic_legend_box(&p, g);
+    assert_eq!((padded.x, padded.y, padded.h), (unpadded.x, unpadded.y, unpadded.h));
+    assert!((padded.w - (0.8 + 7.0) * 33.0).abs() < 1e-9);
+    assert!(padded.w > unpadded.w);
+}
+
+#[test]
+fn legend_tabs_keep_inline_font_and_styles_across_the_stop() {
+    let (mut p, g) = project(1);
+    let legend = &mut p.graph_mut(g).unwrap().layers[0].legend;
+    legend.text = Some(r"\f:Courier New(\b(A%(TAB)\i(B))) C".into());
+    let s = scene(&p, g);
+    let layer = &s.layers[0];
+    let legend = layer.objects.iter().find(|object| object.kind == ObjectKind::Legend).unwrap();
+    let runs: Vec<_> = layer.overlay[legend.items.clone()]
+        .iter()
+        .filter_map(|item| if let Item::Text(text) = item { Some(text) } else { None })
+        .collect();
+    assert_eq!(runs.len(), 3);
+    assert_eq!((&*runs[0].text, &*runs[0].family, runs[0].bold, runs[0].italic), ("A", "Courier New", true, false));
+    assert_eq!((&*runs[1].text, &*runs[1].family, runs[1].bold, runs[1].italic), ("B", "Courier New", true, true));
+    assert_eq!(&runs[2].text, " C");
+    assert!(!runs[2].bold && !runs[2].italic && runs[2].family != "Courier New");
+    assert!((runs[1].x - runs[0].x - 77.0).abs() < 1e-9);
+}
+
+#[test]
 fn the_legend_of_a_double_y_graph_names_plots_by_layer_and_plot() {
     let mut p = Project::new();
     let book = p.add_workbook("data");

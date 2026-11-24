@@ -718,6 +718,12 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   font and label visibility. The stored measurements follow Standard
   font scaling and are independent of the View heading switches. Print
   and worksheet images use their own geometry.
+- **Body measurements (T59).** Sparse `view.cell_measurements` stores
+  explicit All Rows Height and All Columns Width percentages. Row height
+  applies to data rows, including sparse future rows. An All Columns Width
+  edit clears individual width settings and supplies the width of new
+  columns. A later Standard point-size edit restores automatic body sizes.
+  The grid, print and worksheet images use these settings.
 - **Vertical alignment.** The 2016 selected-A1 Format Cells and Worksheet Properties Data
   Format/Size probes (GUI 3, 2026-11-16) found no vertical text-alignment control in those
   inspected routes. Other routes and mutation semantics remain unestablished; this probe
@@ -1479,8 +1485,13 @@ Units, an optional Set Column Values formula with its Recalculate mode (None, Au
 sheet of this workbook (default) or every sheet of every workbook. OK adds one Y column at the end of each of those
 sheets (`Project::add_column_across_sheets`, `sheaf_core::across`); the formula runs in each sheet against that
 sheet's own columns (`col(B)*2` reads each sheet's B). A formula that fails in any sheet adds nothing and the window
-names the sheet. One undo step ("Add column to all sheets"). Inserting at a position, folders as a scope and
-choosing the sheets one by one are not built.
+names the sheet. One undo step ("Add column to all sheets").
+
+T412: the sheets can also be "every sheet of every workbook in this folder": the workbooks of the project folder
+holding this workbook (the first subfolder that lists it, else the root, which holds every workbook) and of its
+subfolders (`AcrossScope::Folder`, `Project::folder_of`). After Column (a short name, letter case ignored, else a long
+name) puts the new column right after that column in each sheet that has one; other sheets get it at the end.
+Choosing the sheets one by one is not built.
 
 ## 14. Suggested Rust data model (P0)
 

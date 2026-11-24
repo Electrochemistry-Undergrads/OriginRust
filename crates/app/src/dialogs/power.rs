@@ -1,5 +1,5 @@
-//! Statistics > Power and Sample Size: one window for the power of a t test or the one-way ANOVA, or the
-//! sample size that reaches a wanted power. It needs no worksheet data; the result goes to a new workbook.
+//! Statistics > Power and Sample Size: one window for the power of a t test, the one-way ANOVA or a proportion or
+//! variance test (T415), or the sample size that reaches a wanted power. It needs no worksheet data; the result goes to a new workbook.
 
 use eframe::egui;
 use egui::DragValue;
@@ -41,13 +41,18 @@ fn parse_list(text: &str) -> Result<Vec<f64>, String> {
 
 impl PowerDialog {
     pub fn new(kind: PowerKind) -> Self {
+        let (mean1, mean2) = match kind {
+            PowerKind::OneProportion | PowerKind::TwoProportions => (0.6, 0.5),
+            PowerKind::OneVariance | PowerKind::TwoVariances => (2.0, 1.0),
+            _ => (0.0, 1.0),
+        };
         PowerDialog {
             kind,
             find_size: false,
             alpha: 0.05,
             two_sided: true,
-            mean1: 0.0,
-            mean2: 1.0,
+            mean1,
+            mean2,
             sd: 1.0,
             levels: 3.0,
             css: 1.0,
@@ -105,7 +110,12 @@ impl PowerDialog {
                     PowerKind::TwoSampleT => (Some("Mean 1"), Some("Mean 2")),
                     PowerKind::PairedT => (Some("Mean of the differences"), None),
                     PowerKind::Anova => (None, None),
+                    PowerKind::OneProportion => (Some("Proportion"), Some("Hypothesized proportion")),
+                    PowerKind::TwoProportions => (Some("Proportion 1"), Some("Proportion 2")),
+                    PowerKind::OneVariance => (Some("Variance"), Some("Hypothesized variance")),
+                    PowerKind::TwoVariances => (Some("Variance 1"), Some("Variance 2")),
                 };
+                let rate = self.kind.rate_test().is_some();
                 if let Some(l) = first {
                     ui.label(l);
                     ui.add(DragValue::new(&mut self.mean1).speed(0.01));
@@ -124,13 +134,15 @@ impl PowerDialog {
                     ui.add(DragValue::new(&mut self.css).speed(0.01).range(0.0..=1e9));
                     ui.end_row();
                 }
-                ui.label(if self.kind == PowerKind::Anova {
-                    "Standard deviation (root MSE)"
-                } else {
-                    "Standard deviation"
-                });
-                ui.add(DragValue::new(&mut self.sd).speed(0.01).range(1e-12..=1e12));
-                ui.end_row();
+                if !rate {
+                    ui.label(if self.kind == PowerKind::Anova {
+                        "Standard deviation (root MSE)"
+                    } else {
+                        "Standard deviation"
+                    });
+                    ui.add(DragValue::new(&mut self.sd).speed(0.01).range(1e-12..=1e12));
+                    ui.end_row();
+                }
                 ui.label("Significance level");
                 ui.add(DragValue::new(&mut self.alpha).speed(0.001).range(0.0001..=0.5));
                 ui.end_row();
@@ -146,11 +158,7 @@ impl PowerDialog {
                     ui.label("Powers");
                     ui.add(egui::TextEdit::singleline(&mut self.powers_text).desired_width(160.0));
                 } else {
-                    ui.label(if self.kind == PowerKind::TwoSampleT || self.kind == PowerKind::Anova {
-                        "Sample sizes (per group)"
-                    } else {
-                        "Sample sizes"
-                    });
+                    ui.label(if self.kind.per_group() { "Sample sizes (per group)" } else { "Sample sizes" });
                     ui.add(egui::TextEdit::singleline(&mut self.sizes_text).desired_width(160.0));
                 }
                 ui.end_row();

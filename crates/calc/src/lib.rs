@@ -181,8 +181,8 @@ pub use poisson::{
     poisson_two,
 };
 pub use power::{
-    PowerError, PowerTest, SampleSizes, anova_power, anova_powers, anova_sample_sizes, pnf, pnt, t_power, t_powers,
-    t_sample_sizes,
+    PowerError, PowerTest, RateTest, SampleSizes, anova_power, anova_powers, anova_sample_sizes, pnf, pnt, rate_power,
+    rate_powers, rate_sample_sizes, t_power, t_powers, t_sample_sizes,
 };
 pub use rmanova::{
     Correction as RmCorrection, Multivariate as RmMultivariate, RmAnova, RmBetween, RmEffect, RmError, RmLevel, RmRow,

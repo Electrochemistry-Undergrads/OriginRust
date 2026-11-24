@@ -1,5 +1,5 @@
-//! Power and sample size (Origin's Statistics > Power and Sample Size): the power of a t test or the one-way
-//! ANOVA for a list of sample sizes, or the smallest sample sizes that reach a list of wanted powers. The
+//! Power and sample size (Origin's Statistics > Power and Sample Size): the power of a t test, the one-way ANOVA or
+//! (T415, section 12.1) a proportion or variance test for a list of sample sizes, or the smallest sample sizes that reach a list of wanted powers. The
 //! numerics are in `sheaf_calc::power`; the numbers were checked against Origin, see `docs/spec/statistics.md`
 //! section 12. These tools need no worksheet data, so they do not go through `Project::analyze`.
 
@@ -17,6 +17,14 @@ pub enum PowerKind {
     PairedT,
     /// One-way ANOVA.
     Anova,
+    /// One proportion against a hypothesized one, normal approximation (T415).
+    OneProportion,
+    /// Two proportions, normal approximation (T415).
+    TwoProportions,
+    /// One variance against a hypothesized one, chi-square (T415).
+    OneVariance,
+    /// Two variances, F (T415).
+    TwoVariances,
 }
 
 impl PowerKind {
@@ -26,7 +34,27 @@ impl PowerKind {
             PowerKind::TwoSampleT => "Two-sample t-test",
             PowerKind::PairedT => "Paired t-test",
             PowerKind::Anova => "One-way ANOVA",
+            PowerKind::OneProportion => "One-proportion test",
+            PowerKind::TwoProportions => "Two-proportion test",
+            PowerKind::OneVariance => "One-sample variance test",
+            PowerKind::TwoVariances => "Two-sample variance test",
         }
+    }
+
+    /// The proportion or variance test of this kind, if it is one.
+    pub fn rate_test(self) -> Option<calc::RateTest> {
+        match self {
+            PowerKind::OneProportion => Some(calc::RateTest::OneProportion),
+            PowerKind::TwoProportions => Some(calc::RateTest::TwoProportions),
+            PowerKind::OneVariance => Some(calc::RateTest::OneVariance),
+            PowerKind::TwoVariances => Some(calc::RateTest::TwoVariances),
+            _ => None,
+        }
+    }
+
+    /// Whether the sample sizes are per group.
+    pub fn per_group(self) -> bool {
+        matches!(self, PowerKind::TwoSampleT | PowerKind::Anova | PowerKind::TwoProportions | PowerKind::TwoVariances)
     }
 }
 
@@ -47,9 +75,11 @@ pub struct PowerSpec {
     pub alpha: f64,
     /// t tests: two-sided (default) or one-sided (upper) test.
     pub two_sided: bool,
-    /// One-sample: the mean; two-sample: the mean of the first group; paired: the mean difference.
+    /// One-sample: the mean; two-sample: the mean of the first group; paired: the mean difference; proportion and
+    /// variance tests: the (first) proportion or variance.
     pub mean1: f64,
-    /// One-sample: the hypothesized mean; two-sample: the mean of the second group; paired: 0.
+    /// One-sample: the hypothesized mean; two-sample: the mean of the second group; paired: 0; proportion and
+    /// variance tests: the hypothesized or second proportion or variance.
     pub mean2: f64,
     /// Standard deviation (pooled for two samples, of the differences for paired samples, the root of the error
     /// mean square for the ANOVA).
@@ -97,13 +127,72 @@ fn error(e: calc::PowerError) -> AnalysisError {
     AnalysisError::BadOption(e.to_string())
 }
 
+/// A proportion or variance power analysis (T415).
+fn rate_analysis(spec: &PowerSpec, test: calc::RateTest) -> Result<PowerOutput, AnalysisError> {
+    let (a, b) = (spec.mean1, spec.mean2);
+    let proportions = matches!(test, calc::RateTest::OneProportion | calc::RateTest::TwoProportions);
+    if proportions && !(a > 0.0 && a < 1.0 && b > 0.0 && b < 1.0) {
+        return Err(AnalysisError::BadOption("the proportions must lie between 0 and 1".into()));
+    }
+    if !proportions && !(a > 0.0 && b > 0.0 && a.is_finite() && b.is_finite()) {
+        return Err(AnalysisError::BadOption("the variances must be above 0".into()));
+    }
+    let mut notes = vec![
+        format!(
+            "{}: significance level {}, {} test.",
+            spec.kind.label(),
+            num(spec.alpha),
+            if spec.two_sided { "two-sided" } else { "one-sided" }
+        ),
+        match test {
+            calc::RateTest::OneProportion => {
+                format!("Proportion {} against {} (normal approximation).", num(a), num(b))
+            }
+            calc::RateTest::TwoProportions => {
+                format!("Proportions {} and {} (normal approximation, unpooled).", num(a), num(b))
+            }
+            calc::RateTest::OneVariance => {
+                format!("Variance {} against {} (ratio {}, chi-square test).", num(a), num(b), num(a / b))
+            }
+            calc::RateTest::TwoVariances => {
+                format!("Variances {} and {} (ratio {}, F test).", num(a), num(b), num(a / b))
+            }
+        },
+    ];
+    let (sizes, powers) = match &spec.goal {
+        PowerGoal::Power(sizes) => {
+            let powers = calc::rate_powers(test, sizes, a, b, spec.alpha, spec.two_sided).map_err(error)?;
+            (sizes.clone(), powers)
+        }
+        PowerGoal::SampleSize(powers) => {
+            let found = calc::rate_sample_sizes(test, powers, a, b, spec.alpha, spec.two_sided).map_err(error)?;
+            if let Some(l) = found.lowest {
+                notes.push(format!("The power of the smallest sample (2 observations) is {}.", num(l)));
+            }
+            if found.below_lowest.iter().any(|b| *b) {
+                notes.push("A wanted power that the smallest sample already reaches has no sample size.".to_string());
+            }
+            (found.sizes, powers.clone())
+        }
+    };
+    notes.push(if spec.kind.per_group() {
+        "Sample sizes are per group.".to_string()
+    } else {
+        "Sample sizes are the number of observations.".to_string()
+    });
+    Ok(PowerOutput { sizes, powers, notes })
+}
+
 /// Runs a power analysis without touching a project.
 pub fn power_analysis(spec: &PowerSpec) -> Result<PowerOutput, AnalysisError> {
+    if let Some(test) = spec.kind.rate_test() {
+        return rate_analysis(spec, test);
+    }
     let test = match spec.kind {
         PowerKind::OneSampleT => Some(calc::PowerTest::OneSample),
         PowerKind::TwoSampleT => Some(calc::PowerTest::TwoSample),
         PowerKind::PairedT => Some(calc::PowerTest::Paired),
-        PowerKind::Anova => None,
+        _ => None,
     };
     let effect = spec.mean2 - spec.mean1;
     let mut notes = vec![format!(

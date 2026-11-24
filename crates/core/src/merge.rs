@@ -358,6 +358,7 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
         page: Page { width_pt: page_w, height_pt: page_h, ..first.page.clone() },
         layers: Vec::new(),
         slicer: None,
+        browser: None,
     };
     // linking belongs to the rearranged layout (Origin's dialog puts it under Arrange Settings)
     let link = opts.rearrange && (opts.link || opts.share_x);

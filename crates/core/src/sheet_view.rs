@@ -81,6 +81,21 @@ impl HeaderMeasurements {
     }
 }
 
+/// Explicit sizes for body rows and default column widths, in grid percentages.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CellMeasurements {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row_height: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub column_width: Option<u16>,
+}
+
+impl CellMeasurements {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
 /// The sheet's display choices. Sampling Interval is automatic until toggled.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SheetView {
@@ -122,6 +137,8 @@ pub struct SheetView {
     pub allocated_rows: Option<usize>,
     #[serde(default, skip_serializing_if = "HeaderMeasurements::is_default")]
     pub header_measurements: HeaderMeasurements,
+    #[serde(default, skip_serializing_if = "CellMeasurements::is_default")]
+    pub cell_measurements: CellMeasurements,
 }
 
 impl Default for SheetView {
@@ -143,6 +160,7 @@ impl Default for SheetView {
             show_missing_as_blank: None,
             allocated_rows: None,
             header_measurements: HeaderMeasurements::default(),
+            cell_measurements: CellMeasurements::default(),
         }
     }
 }

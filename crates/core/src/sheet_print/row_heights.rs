@@ -16,6 +16,11 @@ pub struct RowHeights {
 }
 
 impl RowHeights {
+    /// Fixed row heights need only one band, even on sheets with per-cell formatting.
+    pub fn constant(height: f64) -> Self {
+        Self { bands: vec![Band { start: 0, height, top: 0.0 }] }
+    }
+
     /// Resolve at formatting boundaries, considering only displayed columns.
     pub fn new(
         sheet: &Worksheet,

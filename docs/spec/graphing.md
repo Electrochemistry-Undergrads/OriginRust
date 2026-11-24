@@ -3925,8 +3925,9 @@ the OK button to apply the changes in preview graph to source graph."; Undo, OK 
 page right-click and layer icon menu, the icon's layer selected): the layer list allows several
 layers. Add, Arrange, Size/Position, Link, Axes and Display work on a copy shown as
 numbered frames on a page-shaped preview. Undo takes back the last Apply. OK writes the copy in one
-undo step. Cancel and Escape discard it. The Align/Custom links, the Units combo of Link and the
-reposition-parent tick are disabled. Arrange with no selection takes every layer; "Treat Linked
+undo step. Cancel and Escape discard it. Link displays Custom Formula expressions set in New
+Layer (Axes), section 21.15. Align, the Units combo and the reposition-parent switch are disabled.
+Arrange with no selection takes every layer; "Treat Linked
 Layers as a group" places a layer with the layers linked to it as one unit; Link Layers links the
 later units to the first in position only. Sheaf choices (not measured): Move in "% of Reference
 Layer" counts from the reference layer's top left corner, a pixel is 1/96 in, the reference layer
@@ -4816,8 +4817,9 @@ Measured with `tools/origin-ref/origin-dialog.ps1` on a graph whose second layer
   None (a new link starts unlinked).
 
 Sheaf (`graph_details.rs` `link_tab`, `Graph::set_link`): the same tab for every layer after the first, with
-None and Straight; Align and Custom are drawn greyed with their boxes (Sheaf has no formula links). Link to
-lists None and the earlier layers that are not linked themselves (Sheaf follows one level of links); a layer
+None and Straight and a read-only display of Custom Formula expressions set in New Layer (Axes),
+section 21.15. Align is greyed. Link to lists None and the earlier layers eligible to be parents
+(Sheaf follows one level of links); a layer
 that others are linked to cannot be linked. Changing the link keeps the layer where it is on the page: its
 frame is converted between fractions of the page and of the parent's frame.
 

@@ -1317,6 +1317,10 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         AnalyzeTool::QpcrCurve { target, no_graph } => {
             (target, Job::Tool(Tool::QpcrCurve(analysis::QpcrCurveSpec { graph: !no_graph })))
         }
+        AnalyzeTool::Cox { target, censor, confidence, no_graph } => (
+            target,
+            Job::Tool(Tool::Cox(analysis::CoxSpec { censor, confidence: confidence / 100.0, graph: !no_graph })),
+        ),
         AnalyzeTool::Lifereg { target, distribution, censor, frequency } => {
             let dist = match distribution.to_ascii_lowercase().as_str() {
                 "weibull" => analysis::LifeDist::Weibull,

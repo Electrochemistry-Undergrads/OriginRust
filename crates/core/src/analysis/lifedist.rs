@@ -63,6 +63,23 @@ impl Default for LifeRegressionSpec {
     }
 }
 
+/// What [`Tool::Cox`] does: the chosen columns are the covariates, then the time and the censor column (T408).
+#[derive(Debug, Clone, PartialEq)]
+pub struct CoxSpec {
+    /// The value of the censor column that marks a censored case (default 1).
+    pub censor: String,
+    /// Confidence level of the hazard-ratio intervals (0.95).
+    pub confidence: f64,
+    /// Make the graph of the survival at the covariate means.
+    pub graph: bool,
+}
+
+impl Default for CoxSpec {
+    fn default() -> Self {
+        CoxSpec { censor: "1".into(), confidence: 0.95, graph: true }
+    }
+}
+
 /// The chosen columns without the frequency column, and the frequencies by row when the last chosen column holds them
 /// (T394; `None`: every row counts once).
 fn split_frequency<'a>(
@@ -411,6 +428,127 @@ pub(super) fn run_regression(
     Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph: None, more_graphs: Vec::new() })
 }
 
+pub(super) fn run_cox(
+    spec: &CoxSpec,
+    sheet: &Worksheet,
+    columns: &[ColumnId],
+    rows: RowRange,
+) -> Result<Output, AnalysisError> {
+    let censor = spec.censor.trim();
+    if censor.is_empty() {
+        return Err(AnalysisError::BadOption("give the value of the censor column that marks a censored case".into()));
+    }
+    if columns.len() < 3 {
+        return Err(AnalysisError::BadOption(
+            "Cox regression takes the covariate column(s), then the time and the censor column".into(),
+        ));
+    }
+    let column = |id: ColumnId| sheet.column(id).ok_or(AnalysisError::NoSuchColumn(id));
+    let read = |c: &Column| -> Result<Vec<f64>, AnalysisError> {
+        sheet.values_of(c).map(|v| v.into_owned()).ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))
+    };
+    let k = columns.len() - 2;
+    let xcs: Vec<&Column> = columns[..k].iter().map(|id| column(*id)).collect::<Result<_, _>>()?;
+    let tc = column(columns[k])?;
+    let cc = column(columns[k + 1])?;
+    let x_all: Vec<Vec<f64>> = xcs.iter().map(|c| read(c)).collect::<Result<_, _>>()?;
+    let t_all = read(tc)?;
+    let n = x_all.iter().map(Vec::len).chain([t_all.len(), cc.data.len()]).max().unwrap_or(0);
+    if n == 0 {
+        return Err(AnalysisError::Empty(tc.short_name.clone()));
+    }
+    let (first, last) = resolve_rows(rows, &tc.short_name, &[], n)?;
+    let censor_number = censor.parse::<f64>().ok();
+    let (mut x, mut t, mut failed) = (Vec::new(), Vec::new(), Vec::new());
+    for r in first..=last {
+        let row: Vec<f64> = x_all.iter().map(|c| c.get(r).copied().unwrap_or(f64::NAN)).collect();
+        let v = t_all.get(r).copied().unwrap_or(f64::NAN);
+        if !v.is_finite() || row.iter().any(|a| !a.is_finite()) || cell_left_out(sheet, cc, r) {
+            continue;
+        }
+        let Some(is_censored) = cell_equals(cc, r, censor, censor_number) else { continue };
+        x.push(row);
+        t.push(v);
+        failed.push(!is_censored);
+    }
+    let fit = calc::cox::cox(&x, &t, &failed, spec.confidence).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
+    let pct = num(100.0 * spec.confidence);
+    let low = format!("HR lower {pct}%");
+    let high = format!("HR upper {pct}%");
+    let mut table = ResultTable::new(&["Coefficient", "Standard error", "z", "Prob>|z|", "Hazard ratio", &low, &high]);
+    for (i, c) in xcs.iter().enumerate() {
+        table.push_row(
+            column_label(c),
+            vec![
+                fit.coefficients[i],
+                fit.se[i],
+                fit.z[i],
+                fit.p[i],
+                fit.hazard_ratio[i],
+                fit.hr_low[i],
+                fit.hr_high[i],
+            ],
+            vec![String::new(); 7],
+        );
+    }
+    let notes = vec![
+        format!(
+            "Cox proportional hazards (Breslow ties) of {} on {k} covariate(s): {} cases, {} events; log-likelihood {} (null {}).",
+            column_label(tc),
+            fit.n,
+            fit.events,
+            num(fit.log_likelihood),
+            num(fit.log_likelihood_null)
+        ),
+        format!(
+            "Tests of all coefficients = 0 ({k} df): likelihood ratio {} (Prob {}), Wald {} (Prob {}), score {} (Prob {}).",
+            num(fit.lr.0),
+            num(fit.lr.1),
+            num(fit.wald.0),
+            num(fit.wald.1),
+            num(fit.score.0),
+            num(fit.score.1)
+        ),
+    ];
+    let mut sheet_cols = vec![SheetColumn {
+        designation: Designation::Label,
+        long_name: "Covariate".into(),
+        units: String::new(),
+        comments: String::new(),
+        data: ColumnData::text(table.rows.iter().map(|(l, _)| l.clone()).collect()),
+    }];
+    for (i, h) in table.headers.iter().enumerate() {
+        sheet_cols.push(column_of(h, "", Designation::Y, table.rows.iter().map(|(_, v)| v[i]).collect()));
+    }
+    let shift = sheet_cols.len();
+    // The survival at the covariate means as steps: flat until each failure time, then down.
+    let (mut sx, mut sy) = (vec![0.0], vec![1.0]);
+    let mut prev = 1.0;
+    for (tk, s) in fit.times.iter().zip(&fit.survival) {
+        sx.extend([*tk, *tk]);
+        sy.extend([prev, *s]);
+        prev = *s;
+    }
+    let comment = "Baseline survival at the covariate means (Breslow)";
+    sheet_cols.push(column_of("Time", comment, Designation::X, sx));
+    sheet_cols.push(column_of("Survival at the means", comment, Designation::Y, sy));
+    let graph = spec.graph.then(|| XyGraph {
+        plots: vec![GraphPlot {
+            x: 0,
+            y: 1,
+            kind: PlotKind::Line,
+            label: "Survival at the covariate means".into(),
+            line_of: None,
+        }],
+        x_scale: ScaleKind::Linear,
+        y_scale: ScaleKind::Linear,
+        x_title: column_label(tc),
+        y_title: "Survival".into(),
+        look: Default::default(),
+    });
+    Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph, more_graphs: Vec::new() }.shift_graphs(shift))
+}
+
 pub(super) fn run_arbitrary(
     spec: &LifeDistArbitrarySpec,
     sheet: &Worksheet,
@@ -640,6 +778,27 @@ mod tests {
         let bad = add(&mut p, vec![1.0, 0.5, 1.0, 1.0, 1.0]);
         let spec = LifeDistSpec { frequency: true, ..Default::default() };
         assert!(p.analyze(&request(vec![tc, cc, bad], spec)).is_err(), "a fractional frequency");
+    }
+
+    #[test]
+    fn a_cox_model_reports_hazard_ratios_and_a_survival_graph() {
+        let mut p = Project::new();
+        let book = p.add_workbook("cox");
+        let x: Vec<f64> = (0..30).map(|i| f64::from(i % 2)).collect();
+        // Group 1 fails about twice as fast.
+        let t: Vec<f64> = (0..30).map(|i| (5.0 + f64::from(i * 7 % 11)) / (1.0 + f64::from(i % 2))).collect();
+        let c: Vec<f64> = (0..30).map(|i| if i % 9 == 4 { 1.0 } else { 0.0 }).collect();
+        let cols: Vec<ColumnId> = [x, t, c]
+            .into_iter()
+            .map(|v| p.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap())
+            .collect();
+        let out =
+            p.analyze(&Request { columns: cols, rows: RowRange::All, tool: Tool::Cox(Default::default()) }).unwrap();
+        let t = out.table.as_ref().unwrap();
+        assert!(t.rows[0].1[4] > 1.5, "the hazard ratio of group 1: {:?}", t.rows[0]);
+        assert!(out.notes[0].contains("30 cases") && out.notes[1].contains("likelihood ratio"), "{:?}", out.notes);
+        let gc = super::super::dist::plot_columns(&p, out.new_graph.unwrap());
+        assert_eq!(gc[0].1, "Survival at the means");
     }
 
     #[test]

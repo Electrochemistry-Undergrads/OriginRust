@@ -332,6 +332,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T398](T398-ec50-marks.md) | Opt-in EC50 marks on dose-response fit graphs (Origin 2027) | S | done 2026-11-23 (fitting "EC50 marks") |
 | [T397](T397-qpcr.md) | qPCR relative quantification (ddCt, Pfaffl) and standard-curve efficiency (Origin 2027 assay apps) | S | done 2026-11-23 (statistics 50) |
 | [T394](T394-life-data-frequency.md) | Frequency (count) column for the life-data tools (Origin 2026b) | S | done 2026-11-23 (statistics 49) |
+| [T408](T408-cox.md) | Cox proportional hazards regression with Breslow ties, hazard ratios and tests (Origin 2026b) | S | done 2026-11-23 (statistics 52) |
 | [T391](T391-life-data-regression.md) | Life data regression: Weibull, lognormal and exponential AFT models with censoring (Origin 2026b) | S | done 2026-11-23 (statistics 48) |
 | [T384](T384-arbitrary-censoring.md) | Life-data distribution analysis with exact, right-, left- and interval-censored rows (Origin 2026b) | S | done 2026-11-22 (statistics 47) |
 | [T382](T382-split-plot.md) | Two-level split-plot designs and two-stratum effects (Origin 2027 Quality app) | S | done 2026-11-22 (statistics 46) |

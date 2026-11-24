@@ -22,6 +22,7 @@ pub mod changepoint;
 pub mod chord;
 pub mod coherence;
 pub mod correlation;
+pub mod cox;
 pub mod crosstab;
 pub mod curvemath;
 pub mod curves;

@@ -139,12 +139,12 @@ pub(crate) fn wrap_literal(text: &str, available: f64, measure: impl Fn(&str) ->
     (lines, widest)
 }
 
-/// The lines of a legend text. Authored line-break tokens are expanded before resolving plot
-/// references. CR LF, LF and CR end a line, and a final empty line is dropped.
+/// The lines of a legend text. Authored line-break and tab tokens are expanded before resolving
+/// plot references. CR LF, LF and CR end a line, and a final empty line is dropped.
 pub(crate) fn lines(text: &str) -> Vec<String> {
     let expanded;
     let text = if text.contains("%(") {
-        expanded = expand_line_breaks(text);
+        expanded = expand_keywords(text);
         expanded.as_str()
     } else {
         text
@@ -157,7 +157,7 @@ pub(crate) fn lines(text: &str) -> Vec<String> {
     out
 }
 
-fn expand_line_breaks(text: &str) -> String {
+fn expand_keywords(text: &str) -> String {
     let mut expanded = String::with_capacity(text.len());
     for mut line in text.split_inclusive(['\r', '\n']) {
         while let Some(start) = line.find(['%', '\\']) {
@@ -170,8 +170,8 @@ fn expand_line_breaks(text: &str) -> String {
             if let Some(len) = protected {
                 expanded.push_str(&line[..len]);
                 line = &line[len..];
-            } else if let Some((separator, rest)) = line_break_token(line) {
-                expanded.push_str(separator);
+            } else if let Some((value, rest)) = keyword_token(line) {
+                expanded.push_str(value);
                 line = rest;
             } else {
                 // Both starting characters are one byte.
@@ -184,19 +184,26 @@ fn expand_line_breaks(text: &str) -> String {
     expanded
 }
 
-fn line_break_token(text: &str) -> Option<(&'static str, &str)> {
+fn keyword_token(text: &str) -> Option<(&'static str, &str)> {
     let (keyword, rest) = text.strip_prefix("%(")?.split_once(')')?;
     let keyword = keyword.trim();
-    let separator = if keyword.eq_ignore_ascii_case("CRLF") {
+    let value = if keyword.eq_ignore_ascii_case("CRLF") {
         "\r\n"
     } else if keyword.eq_ignore_ascii_case("CR") {
         "\r"
     } else if keyword.eq_ignore_ascii_case("LF") {
         "\n"
+    } else if keyword.eq_ignore_ascii_case("TAB") {
+        "\t"
     } else {
         return None;
     };
-    Some((separator, rest))
+    Some((value, rest))
+}
+
+/// The next strictly greater tab stop, measured from the start of the legend row.
+pub(crate) fn tab_advance(offset: f64, step: f64) -> f64 {
+    if step.is_finite() && step > 0.0 { ((offset / step).floor() + 1.0) * step - offset } else { 0.0 }
 }
 
 /// A standalone `\sep:nn` adds this percentage of font height before the next entry.
@@ -246,6 +253,25 @@ mod tests {
         let text = r"\v(a%(CRLF))\h(b%(CR))\ww(c%(LF))%(CRLF)end";
         assert_eq!(lines(text), [r"\v(a%(CRLF))\h(b%(CR))\ww(c%(LF))", "end"]);
         assert_eq!(lines(r"\h(unclosed %(CRLF)"), [r"\h(unclosed %(CRLF)"]);
+    }
+
+    #[test]
+    fn legend_tabs_are_tokens_and_respect_literal_spans() {
+        let text = r"\l(1) %(1)%( TaB )\h(%(TAB))%(TAB)\ww(%(TAB))";
+        let expanded = lines(text);
+        assert_eq!(
+            parse_line(&expanded[0]),
+            [
+                Part::Symbol("1"),
+                Part::Text(" "),
+                Part::Name("1", ""),
+                Part::Text("\t\\h(%(TAB))\t"),
+                Part::Wrap("%(TAB)"),
+            ]
+        );
+        assert_eq!(lines("A%(TAB)%(TAB)B%(TAB)"), ["A\t\tB\t"]);
+        assert_eq!(tab_advance(24.0, 20.0), 16.0);
+        assert_eq!(tab_advance(40.0, 20.0), 20.0);
     }
 
     #[test]

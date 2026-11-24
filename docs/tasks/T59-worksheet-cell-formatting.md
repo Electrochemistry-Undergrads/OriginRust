@@ -164,6 +164,11 @@ probes cover changing each band, zero, Standard font scaling and default
 PNG and PDF exports. Sheaf saves the explicit grid settings independently
 of View visibility (GUI 3 and workbook model 13b).
 
+Body measurements follow-up. All Rows Height and All Columns Width edit
+the body geometry used by the grid, print and worksheet images. Origin
+2016 probes cover different percentages, individual sizes, new columns,
+and Standard point-size changes (GUI 3 and workbook model 13b).
+
 **Size:** L. **Branch:** `cell-format` (model/dialog), `codex/t59-format-toolbar` (toolbar/font geometry), `codex/t59-worksheet-controls` (underline/fill/keys), `codex/t59-worksheet-dialog` (dialog measurements/More entry), `codex/t59-custom-colors` (one-off RGB chooser), `codex/t59-classic-colors` (24 Classic worksheet presets), `codex/t59-xlsx-formats` (Excel cell styles). **Priority:** P0, wave 1.
 **Spec:** [workbook model](../spec/workbook-model.md), new Cell formats section;
 [GUI](../spec/gui-look.md) 3. **Inventory:** the worksheet-wide `T59` menu location now opens the bounded Data-font dialog; the three unsupported text-control choices are B5.

@@ -1017,6 +1017,24 @@ scrolling and frozen parts of the sheet. A hidden View heading keeps its
 measurement for when it is shown again. Numbers entered with a Standard
 font change take effect after the font scales the current geometry.
 
+**Worksheet Properties body measurements (T59).** Origin 2016's All Rows
+Height changes data rows while label rows and headings retain their heights.
+All Columns Width replaces individual column sizes. The tests measured
+200% as 32 px rows and 134 px columns, and 75% as 12 px rows and 50 px
+columns. New columns inherit the width, and individual column sizing can
+override it again. Changing the Standard point size restores that size's
+automatic body dimensions. Default PNG dimensions follow the body
+geometry. A 140-row, five-column sheet exported as three PDF pages at
+the defaults, five at 200% row height, and ten with those rows and 300%
+column width.
+[Origin Worksheet Properties Size tab](https://docs.originlab.com/origin-help/wksproperties-dialog-size-tab/)
+
+Sheaf saves the two bulk sizes and applies them to the grid, printed
+pages, and worksheet images. Column Properties can set a width for an
+individual column after the bulk edit. The grid keeps rows at least one
+pixel tall and columns at least eight pixels wide. Printed pages and
+images suppress text too tall for a fixed data row.
+
 Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
 The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,
 Dynamic Merge, per-cell numeric display/precision selectors and a Font selector. In this new book,

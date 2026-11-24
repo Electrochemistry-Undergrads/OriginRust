@@ -353,7 +353,7 @@ impl LayerManagementDialog {
 
             let source = parent.map(|i| &self.work.layers[i]);
             let root = self.work.root_of(parent.or_else(|| self.selected.first().copied()).unwrap_or(0));
-            let supports_formula = self.work.layers.get(root).is_some_and(|layer| layer.coords == Coords::Cartesian);
+            let cartesian = self.work.layers.get(root).is_some_and(|layer| layer.coords.is_cartesian());
             let x_linked = matches!(self.add_kind, NewLayerKind::RightY | NewLayerKind::LeftY | NewLayerKind::NoAxes);
             let y_linked = matches!(self.add_kind, NewLayerKind::TopX | NewLayerKind::NoAxes);
             add_scale_combo(
@@ -362,7 +362,7 @@ impl LayerManagementDialog {
                 &mut self.add_x,
                 &mut self.add_x_formula,
                 source.filter(|_| x_linked).map(|l| l.x_axis.scale),
-                supports_formula,
+                cartesian,
             );
             add_scale_combo(
                 ui,
@@ -370,7 +370,7 @@ impl LayerManagementDialog {
                 &mut self.add_y,
                 &mut self.add_y_formula,
                 source.filter(|_| y_linked).map(|l| l.y_axis.scale),
-                supports_formula,
+                cartesian,
             );
         });
         let kind = self.add_kind;
@@ -762,29 +762,33 @@ fn add_scale_combo(
     scale: &mut ScaleKind,
     draft: &mut AddFormula,
     linked: Option<ScaleKind>,
-    supports_formula: bool,
+    cartesian: bool,
 ) {
+    if linked.is_none() && !cartesian && *scale == ScaleKind::Discrete {
+        *scale = ScaleKind::Linear;
+    }
     let name = format!("{axis} Scale");
     let label = ui.label(&name);
     ui.add_enabled_ui(linked.is_none(), |ui| {
         egui::ComboBox::from_id_salt(&name)
             .selected_text(linked.unwrap_or(*scale).label())
-            .height(300.0)
+            .height(330.0)
             .show_ui(ui, |ui| {
                 for option in ScaleKind::ALL {
                     ui.selectable_value(scale, option, option.label());
                 }
-                let option = ScaleKind::CustomFormula;
-                ui.add_enabled_ui(supports_formula, |ui| {
-                    ui.selectable_value(scale, option, option.label())
-                        .on_disabled_hover_text("Custom Formula is available on Cartesian axes.");
+                ui.add_enabled_ui(cartesian, |ui| {
+                    for option in [ScaleKind::CustomFormula, ScaleKind::Discrete] {
+                        ui.selectable_value(scale, option, option.label())
+                            .on_disabled_hover_text("Available on Cartesian axes.");
+                    }
                 });
             })
             .response
             .labelled_by(label.id);
     });
     ui.end_row();
-    if linked.is_none() && supports_formula && *scale == ScaleKind::CustomFormula {
+    if linked.is_none() && cartesian && *scale == ScaleKind::CustomFormula {
         for (name, value, hint) in [
             ("Direct Formula", &mut draft.formula.direct, "x"),
             ("Inverse Formula", &mut draft.formula.inverse, "x"),

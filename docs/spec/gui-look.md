@@ -982,6 +982,24 @@ In Sheaf, Worksheet Properties opens on Format. Its View tab edits the same
 six switches as the worksheet corner menu. Apply and OK commit View and
 Format drafts in one Undo step.
 
+**Worksheet Properties Size counts (T59).** Origin 2016 reported 32 allocated
+rows for a worksheet with five rows of data. With Auto Add Rows clear,
+growing to 48 rows and four columns preserved the data. Reducing either
+count removed its tail, and growing again produced blank cells. Setting
+the row count to zero cleared the data and displayed two blank rows. A
+zero column count left the worksheet without columns. Removing the longest
+column alone retained the allocation of 32 rows. With Auto Add Rows
+checked, a request for three rows retained three rows of data and the test
+window displayed 14 rows.
+[Origin Worksheet Properties Size tab](https://docs.originlab.com/origin-help/wksproperties-dialog-size-tab/)
+
+Sheaf's Size tab sets the grid allocation and column count. Added rows stay
+sparse and added columns start empty. The tab identifies reductions that
+affect stored data or columns. A retained locked column with values below
+the requested count prevents that resize. The dialog permits up to
+1,048,576 allocated rows or the current count if larger, and adds up to
+1,000 columns per Apply. Size, View and Format edits commit in one Undo step.
+
 Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
 The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,
 Dynamic Merge, per-cell numeric display/precision selectors and a Font selector. In this new book,

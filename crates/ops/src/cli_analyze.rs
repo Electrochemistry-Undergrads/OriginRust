@@ -1370,16 +1370,28 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 graph: !no_graph,
             })),
         ),
-        AnalyzeTool::Capability { target, lsl, usl, subgroup, model, no_graph } => {
+        AnalyzeTool::Capability { target, lsl, usl, subgroup, model, lambda, cpm_target, no_graph } => {
             let model = match model.to_ascii_lowercase().as_str() {
                 "normal" => analysis::CapModel::Normal,
                 "lognormal" => analysis::CapModel::Lognormal,
                 "weibull" => analysis::CapModel::Weibull,
-                other => bail!("--model takes normal, lognormal or weibull, not {other:?}"),
+                "boxcox" | "box-cox" => analysis::CapModel::BoxCox,
+                other => bail!("--model takes normal, lognormal, weibull or boxcox, not {other:?}"),
             };
+            if lambda.is_some() && model != analysis::CapModel::BoxCox {
+                bail!("--lambda goes with --model boxcox");
+            }
             (
                 target,
-                Job::Tool(Tool::Capability(analysis::CapabilitySpec { lsl, usl, subgroup, model, graph: !no_graph })),
+                Job::Tool(Tool::Capability(analysis::CapabilitySpec {
+                    lsl,
+                    usl,
+                    subgroup,
+                    model,
+                    graph: !no_graph,
+                    lambda,
+                    target: cpm_target,
+                })),
             )
         }
         AnalyzeTool::Rarechart { target, chart, limits, distribution, sigma, no_graph } => {

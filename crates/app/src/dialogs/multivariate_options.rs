@@ -495,8 +495,36 @@ impl MultiOptions {
                     ui.radio_value(&mut s.model, CapModel::Normal, "Normal");
                     ui.radio_value(&mut s.model, CapModel::Lognormal, "Lognormal");
                     ui.radio_value(&mut s.model, CapModel::Weibull, "Weibull");
+                    ui.radio_value(&mut s.model, CapModel::BoxCox, "Box-Cox");
                 });
-                if s.model == CapModel::Normal {
+                if s.model == CapModel::BoxCox {
+                    ui.horizontal(|ui| {
+                        let mut given = s.lambda.is_some();
+                        if ui.checkbox(&mut given, "Lambda (else maximum likelihood)").changed() {
+                            s.lambda = given.then_some(0.5);
+                        }
+                        if let Some(l) = &mut s.lambda {
+                            ui.add(egui::DragValue::new(l).speed(0.01).range(-5.0..=5.0));
+                        }
+                    });
+                } else {
+                    s.lambda = None;
+                }
+                if matches!(s.model, CapModel::Normal | CapModel::BoxCox) {
+                    ui.horizontal(|ui| {
+                        let mut on = s.target.is_some();
+                        if ui.checkbox(&mut on, "Target (Cpm)").changed() {
+                            s.target = on.then(|| match (s.lsl, s.usl) {
+                                (Some(l), Some(u)) => (l + u) / 2.0,
+                                _ => 0.0,
+                            });
+                        }
+                        if let Some(t) = &mut s.target {
+                            ui.add(egui::DragValue::new(t).speed(0.01));
+                        }
+                    });
+                }
+                if matches!(s.model, CapModel::Normal | CapModel::BoxCox) {
                     ui.horizontal(|ui| {
                         ui.label("Subgroup size (1: moving ranges)");
                         ui.add(egui::DragValue::new(&mut s.subgroup).range(1..=10));

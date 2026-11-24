@@ -1725,6 +1725,17 @@ fn process_capability_runs_from_the_command_line() {
     assert!(ok && out.contains("Weibull fit") && out.contains("percentile method"), "{err} {out}");
     let (ok, _, err) = sheaf(&["analyze", "capability", file, "--y", "v"]);
     assert!(!ok && err.contains("specification limit"), "{err}");
+    // Box-Cox (T419, section 36): fitted lambda, Cpm with a target.
+    let args = ["analyze", "capability", file, "--y", "v", "--lsl", "5", "--usl", "20", "--model", "boxcox"];
+    let (ok, out, err) = sheaf(&[&args[..], &["--cpm-target", "12", "--no-graph"]].concat());
+    assert!(
+        ok && out.contains("Box-Cox lambda") && out.contains("maximum likelihood") && out.contains("Cpm ="),
+        "{err} {out}"
+    );
+    let (ok, out, err) = sheaf(&[&args[..], &["--lambda", "0.5"]].concat());
+    assert!(ok && out.contains("lambda 0.5 (given)"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "capability", file, "--y", "v", "--usl", "20", "--lambda", "0.5"]);
+    assert!(!ok && err.contains("--model boxcox"), "{err}");
 }
 
 /// Rare event charts (spec `statistics.md` section 35, T364).

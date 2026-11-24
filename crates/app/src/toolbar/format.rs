@@ -224,8 +224,17 @@ fn colors(ui: &mut Ui, state: &Snapshot, actions: &mut Vec<Action>) {
     let rgb_id = ui.id().with("graph_font_rgb_draft");
     let captured = ui.data_mut(|d| d.get_temp::<Snapshot>(capture_id)).unwrap_or_else(|| state.clone());
     let color = &state.font.color;
-    let label = egui::RichText::new("A").strong().color(Color32::from_rgb(color.r, color.g, color.b));
+    let auto = state.legend_color_follows_plot == Some(true);
+    let label = egui::RichText::new("A").strong();
+    let label = if auto { label } else { label.color(Color32::from_rgb(color.r, color.g, color.b)) };
     let contents = |ui: &mut Ui| {
+        if let Some(on) = captured.legend_color_follows_plot {
+            if ui.selectable_label(on, "Font Color: Auto").clicked() {
+                actions.push(Action::FormatText(captured.request(Change::FollowPlotColor)));
+                ui.close();
+            }
+            ui.separator();
+        }
         // Shared presets; worksheet and graph-font custom choosers retain their own controls.
         for (name, color) in object_format::PALETTE {
             if ui.button(format!("Font Color: {name}")).clicked() {
@@ -291,7 +300,7 @@ fn colors(ui: &mut Ui, state: &Snapshot, actions: &mut Vec<Action>) {
         ui.data_mut(|d| d.remove::<rgb::Picker>(rgb_id));
     }
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Format toolbar: Font Color"));
-    response.on_hover_text("Font Color");
+    response.on_hover_text(if auto { "Font Color (Auto)" } else { "Font Color" });
 }
 
 /// Worksheet controls use range requests; graph-object formatting keeps its own dispatcher.

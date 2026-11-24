@@ -1,10 +1,11 @@
-//! Worksheet Properties: category defaults below manual cell/range formats (T59).
+//! Worksheet Properties: formatting defaults and display choices (T59).
 use super::cell_format::optional_color;
 use super::frame::{DialogButton, ok_cancel_apply};
 use eframe::egui;
 use sheaf_core::cellformat::{CategoryColors, LabelColors, LabelKind};
 use sheaf_core::color::Color;
 use sheaf_core::sheet_fonts::ColumnLabelFont;
+use sheaf_core::sheet_view::SheetView;
 use sheaf_core::{Document, WindowId};
 
 const DATA: usize = 0;
@@ -28,8 +29,9 @@ pub struct WorksheetFontsDialog {
     shown: [ColumnLabelFont; CATEGORIES.len()],
     base_colors: [CategoryColors; CATEGORIES.len()],
     shown_colors: [CategoryColors; CATEGORIES.len()],
-    base_missing_as_blank: Option<bool>,
-    shown_missing_as_blank: Option<bool>,
+    base_view: SheetView,
+    shown_view: SheetView,
+    view_tab: bool,
     category: usize,
     fonts: Vec<String>,
     font_search: String,
@@ -92,8 +94,9 @@ impl WorksheetFontsDialog {
             base,
             base_colors: colors,
             shown_colors: colors,
-            base_missing_as_blank: worksheet.view.show_missing_as_blank,
-            shown_missing_as_blank: worksheet.view.show_missing_as_blank,
+            base_view: worksheet.view,
+            shown_view: worksheet.view,
+            view_tab: false,
             category: DATA,
             fonts,
             font_search: String::new(),
@@ -110,28 +113,26 @@ impl WorksheetFontsDialog {
     }
 
     fn changed(&self) -> bool {
-        self.shown != self.base
-            || self.shown_colors != self.base_colors
-            || self.shown_missing_as_blank != self.base_missing_as_blank
+        self.shown != self.base || self.shown_colors != self.base_colors || self.shown_view != self.base_view
     }
 
     fn apply(&mut self, doc: &mut Document) {
         if !self.changed() || !self.current(doc) {
             return;
         }
-        let label = match (
-            self.shown != self.base,
-            self.shown_colors != self.base_colors,
-            self.shown_missing_as_blank != self.base_missing_as_blank,
-        ) {
-            (true, false, false) => "Worksheet font",
-            (false, true, false) => "Worksheet colors",
-            (false, false, true) => "Worksheet missing display",
-            _ => "Worksheet formatting",
-        };
+        let mut layout = self.shown_view;
+        layout.show_missing_as_blank = self.base_view.show_missing_as_blank;
+        let label =
+            match (self.shown != self.base, self.shown_colors != self.base_colors, self.shown_view != self.base_view) {
+                (true, false, false) => "Worksheet font",
+                (false, true, false) => "Worksheet colors",
+                (false, false, true) if layout == self.base_view => "Worksheet missing display",
+                (false, false, true) => "Worksheet view",
+                _ => "Worksheet formatting",
+            };
         doc.apply(label, |p| {
             let sheet = &mut p.workbook_mut(self.book).unwrap().sheets[self.sheet];
-            sheet.view.show_missing_as_blank = self.shown_missing_as_blank;
+            sheet.view = self.shown_view;
             sheet.standard_colors = self.shown_colors[STANDARD];
             sheet.data_colors = self.shown_colors[DATA];
             sheet.column_label_colors = self.shown_colors[BULK];
@@ -174,8 +175,103 @@ impl WorksheetFontsDialog {
         });
         self.base = self.shown.clone();
         self.base_colors = self.shown_colors;
-        self.base_missing_as_blank = self.shown_missing_as_blank;
+        self.base_view = self.shown_view;
         self.revision = doc.revision();
+    }
+
+    fn show_view(&mut self, ui: &mut egui::Ui) {
+        let view = &mut self.shown_view;
+        ui.checkbox(&mut view.row_labels, "Row Labels for Column Label Rows");
+        ui.separator();
+        ui.label("Headers");
+        ui.checkbox(&mut view.column_header, "Column Header");
+        ui.checkbox(&mut view.row_header, "Row Header");
+        ui.separator();
+        ui.label("Grid Lines");
+        ui.checkbox(&mut view.column_grid, "Column Grid");
+        ui.checkbox(&mut view.row_grid, "Row Grid");
+        ui.checkbox(&mut view.page_breaks, "Page Break Preview Lines");
+    }
+
+    fn show_format(&mut self, ui: &mut egui::Ui) {
+        egui::Grid::new("worksheet_fonts_grid").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
+            ui.label("Apply To");
+            egui::ComboBox::from_id_salt("worksheet_font_category").selected_text(CATEGORIES[self.category]).show_ui(
+                ui,
+                |ui| {
+                    for (i, name) in CATEGORIES.iter().enumerate() {
+                        ui.selectable_value(&mut self.category, i, *name);
+                    }
+                },
+            );
+            ui.end_row();
+            ui.label("Font");
+            let shown = &mut self.shown[self.category];
+            let family = if shown.family.is_empty() { "Automatic".to_owned() } else { shown.family.clone() };
+            ui.scope(|ui| {
+                egui::ComboBox::from_id_salt("worksheet_default_family")
+                    .selected_text(family)
+                    .width(180.0)
+                    .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                    .show_ui(ui, |ui| {
+                        ui.add(egui::TextEdit::singleline(&mut self.font_search).hint_text("Find font")).widget_info(
+                            || egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Worksheet font search"),
+                        );
+                        let search = self.font_search.trim().to_lowercase();
+                        if ui.selectable_value(&mut shown.family, String::new(), "Automatic").clicked() {
+                            ui.close();
+                        }
+                        for name in self.fonts.iter().filter(|name| name.to_lowercase().contains(&search)) {
+                            if ui.selectable_value(&mut shown.family, name.clone(), name).clicked() {
+                                ui.close();
+                            }
+                        }
+                    });
+            });
+            ui.end_row();
+            ui.label("Size (pt)");
+            let mut size = shown.size_pt.unwrap_or(0.0);
+            let value = egui::DragValue::new(&mut size)
+                .speed(0.25)
+                .range(0.0..=96.0)
+                .custom_formatter(|v, _| if v == 0.0 { "Default".into() } else { format!("{v:.1}") })
+                .custom_parser(|s| {
+                    let s = s.trim();
+                    if s.eq_ignore_ascii_case("default") { Some(0.0) } else { s.parse::<f64>().ok() }
+                });
+            let response = ui.add(value);
+            response
+                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, "Worksheet font size"));
+            if response.changed() {
+                shown.size_pt = (size > 0.0).then_some(size.max(4.0));
+            }
+            ui.end_row();
+            let category = CATEGORIES[self.category];
+            let colors = &mut self.shown_colors[self.category];
+            ui.label("Text Color");
+            optional_color(ui, &mut colors.text_color, "Use color", Color::BLACK, &format!("{category} text color"));
+            ui.end_row();
+            ui.label("Fill Color");
+            optional_color(
+                ui,
+                &mut colors.fill,
+                "Use fill",
+                Color::rgb(255, 255, 153),
+                &format!("{category} fill color"),
+            );
+            ui.end_row();
+            if self.category == DATA {
+                let mut blank = self.shown_view.show_missing_as_blank.unwrap_or(false);
+                let check = egui::Checkbox::new(&mut blank, "Show Missing as Blank")
+                    .indeterminate(self.shown_view.show_missing_as_blank.is_none());
+                if ui.add(check).changed() {
+                    self.shown_view.show_missing_as_blank = Some(blank);
+                }
+                ui.end_row();
+            }
+        });
+        ui.add_space(6.0);
+        ui.label("Manual cell formats take precedence over category defaults.");
     }
 
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut Document) -> bool {
@@ -192,96 +288,17 @@ impl WorksheetFontsDialog {
             .max_width(340.0)
             .collapsible(false)
             .show(ctx, |ui| {
-                ui.label("Format");
-                egui::Grid::new("worksheet_fonts_grid").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
-                    ui.label("Apply To");
-                    egui::ComboBox::from_id_salt("worksheet_font_category")
-                        .selected_text(CATEGORIES[self.category])
-                        .show_ui(ui, |ui| {
-                            for (i, name) in CATEGORIES.iter().enumerate() {
-                                ui.selectable_value(&mut self.category, i, *name);
-                            }
-                        });
-                    ui.end_row();
-                    ui.label("Font");
-                    let shown = &mut self.shown[self.category];
-                    let family = if shown.family.is_empty() { "Automatic".to_owned() } else { shown.family.clone() };
-                    ui.scope(|ui| {
-                        egui::ComboBox::from_id_salt("worksheet_default_family")
-                            .selected_text(family)
-                            .width(180.0)
-                            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-                            .show_ui(ui, |ui| {
-                                ui.add(egui::TextEdit::singleline(&mut self.font_search).hint_text("Find font"))
-                                    .widget_info(|| {
-                                        egui::WidgetInfo::labeled(
-                                            egui::WidgetType::TextEdit,
-                                            true,
-                                            "Worksheet font search",
-                                        )
-                                    });
-                                let search = self.font_search.trim().to_lowercase();
-                                if ui.selectable_value(&mut shown.family, String::new(), "Automatic").clicked() {
-                                    ui.close();
-                                }
-                                for name in self.fonts.iter().filter(|name| name.to_lowercase().contains(&search)) {
-                                    if ui.selectable_value(&mut shown.family, name.clone(), name).clicked() {
-                                        ui.close();
-                                    }
-                                }
-                            });
-                    });
-                    ui.end_row();
-                    ui.label("Size (pt)");
-                    let mut size = shown.size_pt.unwrap_or(0.0);
-                    let value = egui::DragValue::new(&mut size)
-                        .speed(0.25)
-                        .range(0.0..=96.0)
-                        .custom_formatter(|v, _| if v == 0.0 { "Default".into() } else { format!("{v:.1}") })
-                        .custom_parser(|s| {
-                            let s = s.trim();
-                            if s.eq_ignore_ascii_case("default") { Some(0.0) } else { s.parse::<f64>().ok() }
-                        });
-                    let response = ui.add(value);
-                    response.widget_info(|| {
-                        egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, "Worksheet font size")
-                    });
-                    if response.changed() {
-                        shown.size_pt = (size > 0.0).then_some(size.max(4.0));
-                    }
-                    ui.end_row();
-                    let category = CATEGORIES[self.category];
-                    let colors = &mut self.shown_colors[self.category];
-                    ui.label("Text Color");
-                    optional_color(
-                        ui,
-                        &mut colors.text_color,
-                        "Use color",
-                        Color::BLACK,
-                        &format!("{category} text color"),
-                    );
-                    ui.end_row();
-                    ui.label("Fill Color");
-                    optional_color(
-                        ui,
-                        &mut colors.fill,
-                        "Use fill",
-                        Color::rgb(255, 255, 153),
-                        &format!("{category} fill color"),
-                    );
-                    ui.end_row();
-                    if self.category == DATA {
-                        let mut blank = self.shown_missing_as_blank.unwrap_or(false);
-                        let check = egui::Checkbox::new(&mut blank, "Show Missing as Blank")
-                            .indeterminate(self.shown_missing_as_blank.is_none());
-                        if ui.add(check).changed() {
-                            self.shown_missing_as_blank = Some(blank);
-                        }
-                        ui.end_row();
-                    }
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut self.view_tab, false, "Format");
+                    ui.selectable_value(&mut self.view_tab, true, "View");
                 });
+                ui.separator();
+                if self.view_tab {
+                    self.show_view(ui);
+                } else {
+                    self.show_format(ui);
+                }
                 ui.add_space(6.0);
-                ui.label("Manual cell formats take precedence over category defaults.");
                 ui.allocate_ui_with_layout(
                     egui::vec2(340.0, ui.spacing().interact_size.y),
                     egui::Layout::right_to_left(egui::Align::Center),

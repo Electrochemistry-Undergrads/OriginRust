@@ -412,6 +412,10 @@ pub enum ProjectError {
     SunburstNoRightAxis,
     #[error("tick at least one value for the graph slicer to show")]
     SlicerNothingShown,
+    #[error("a browser graph needs at least two similar columns to step through")]
+    BrowserNeedsTwo,
+    #[error("the graph has no browser")]
+    NoBrowser,
     #[error(
         "a grouped plot of indexed data needs exactly one numeric data column (designated Y; a numeric group column must be designated X or Group); select one"
     )]

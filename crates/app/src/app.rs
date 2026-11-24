@@ -332,6 +332,7 @@ pub struct SheafApp {
     run_chart: Option<crate::dialogs::run_chart::RunChartDialog>,
     function_graph: Option<crate::dialogs::function_graph::FunctionGraphDialog>,
     pub(crate) graph_slicer: Option<crate::dialogs::graph_slicer::GraphSlicerDialog>,
+    pub(crate) browser_graph: Option<crate::dialogs::browser_graph::BrowserGraphDialog>,
     /// The open function window is File > New > Function Plot's: OK makes the graph (T213).
     function_graph_new: bool,
     /// The Audit Log window is open (T131).
@@ -533,6 +534,7 @@ impl SheafApp {
             run_chart: None,
             function_graph: None,
             graph_slicer: None,
+            browser_graph: None,
             function_graph_new: false,
             audit_log: false,
             fit_builder: None,
@@ -2560,6 +2562,19 @@ impl SheafApp {
             Action::FolderProperties(path) => {
                 if let Some(f) = explorer::folder_at(&self.doc.project().root, &path) {
                     self.folder_props = Some(crate::dialogs::folder_props::FolderPropsDialog::new(path, f));
+                }
+            }
+            Action::BrowserGraph { graph, layer } => {
+                match crate::dialogs::browser_graph::BrowserGraphDialog::new(self.doc.project(), graph, layer) {
+                    Some(d) => self.browser_graph = Some(d),
+                    None => self.warn("The layer has no plot to browse"),
+                }
+            }
+            Action::BrowseGraph { graph, to } => {
+                // Steps one after another make one undo step.
+                let token = 0x7410_0000_0000 + graph.0;
+                if let Err(e) = self.doc.apply_merging("Browse Graph", token, |p| p.browse_graph(graph, to)) {
+                    self.warn(e.to_string());
                 }
             }
             Action::GraphSlicer { graph } => {
@@ -5051,6 +5066,31 @@ impl SheafApp {
     }
 
     /// Graph > Add Function Graph... (T119): OK adds the curve; an expression error keeps the window open.
+    fn show_browser_graph(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::browser_graph::BrowserOutcome;
+        let Some(d) = &mut self.browser_graph else { return };
+        match d.show(ctx) {
+            BrowserOutcome::Open => {}
+            BrowserOutcome::Closed => self.browser_graph = None,
+            BrowserOutcome::Apply { graph, layer, plot, by } => {
+                match self.doc.edit("Browser Graph", |p| p.set_graph_browser(graph, layer, plot, by)) {
+                    Ok(n) => {
+                        self.browser_graph = None;
+                        self.say(format!("The graph browses {n} datasets"));
+                    }
+                    Err(e) => self.warn(e.to_string()),
+                }
+            }
+            BrowserOutcome::Remove { graph } => {
+                self.browser_graph = None;
+                let _ = self
+                    .doc
+                    .edit("Remove Browser", |p| Ok::<_, std::convert::Infallible>(p.clear_graph_browser(graph)));
+                self.say("Removed the graph browser".to_string());
+            }
+        }
+    }
+
     fn show_graph_slicer(&mut self, ctx: &egui::Context) {
         use crate::dialogs::graph_slicer::SlicerOutcome;
         let Some(d) = &mut self.graph_slicer else { return };
@@ -8067,6 +8107,7 @@ impl SheafApp {
         self.show_run_chart(ctx);
         self.show_function_graph(ctx);
         self.show_graph_slicer(ctx);
+        self.show_browser_graph(ctx);
         self.show_audit_log(ctx);
         self.show_fit_builder(ctx);
         self.show_sample_projects(ctx);

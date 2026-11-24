@@ -664,6 +664,19 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     if state.active_layer >= layers {
         state.active_layer = 0;
     }
+    // Browser Graph (T410): the bar that steps the browsed plot through its datasets.
+    if let Some(b) = &graph.browser {
+        ui.horizontal(|ui| {
+            let n = b.items.len();
+            if ui.add_enabled(b.current > 0, egui::Button::new("Previous")).clicked() {
+                actions.push(Action::BrowseGraph { graph: graph_id, to: b.current - 1 });
+            }
+            if ui.add_enabled(b.current + 1 < n, egui::Button::new("Next")).clicked() {
+                actions.push(Action::BrowseGraph { graph: graph_id, to: b.current + 1 });
+            }
+            ui.label(b.caption(doc.project()));
+        });
+    }
     // Set Active Layer By Layer Icon Only (T183): what a click inside the page activates is undone below.
     let icon_only = graph.page.style.activate_by_icon_only;
     let icon_plot_setup = graph.page.style.icon_double_click_plot_setup;

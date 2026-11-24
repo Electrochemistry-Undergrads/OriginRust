@@ -1845,7 +1845,17 @@ midnight, the Monday of the week, the first of the month, of the quarter (Januar
 year. Rows whose X is not a date or whose Y is missing are left out, and so are periods without a value. The result
 sheet `TimePivotN` has a Period label ("2026-11-22", "Week of 2026-11-16", "2026-11", "2026 Q4", "2026", or the date
 and time for minutes and hours), the period start as a number (X), and per column "<Stat> of <column>" and
-"N of <column>". Fiscal calendars, custom intervals and a second grouping are not built.
+"N of <column>".
+
+Custom intervals and fiscal years (T404; `--every N`, `--fiscal-start MONTH`; the options window's Every and
+Fiscal year starts in): a group can be N periods long. Minutes and hours count from midnight, so the groups start
+again each day (15 minutes: :00, :15, :30, :45); days and weeks count from the first day (Monday) of the data;
+months and quarters start again with each year, the last group of a year shorter when N does not divide it (5
+months: January, June, November); years count from year 0, so 10 years are decades. A fiscal year starting in
+another month moves the months, quarters and years with it and is named by the calendar year it ends in: with
+October, quarters are "FY2027 Q1" (October to December 2026) and years "FY2027" (October 2026 to September 2027);
+months keep their calendar names. The note and the Period column's comment say the group ("12 hours", "fiscal
+quarter (from October)"). A second grouping is not built.
 
 ## 33 Manhattan plot (T362, Origin 2017 app; not measured)
 

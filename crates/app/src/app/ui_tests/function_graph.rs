@@ -139,3 +139,32 @@ fn browser_graph_steps_through_the_columns_from_the_bar() {
     h.state_mut().doc.undo();
     assert_eq!(project(&h).graph(graph).unwrap().layers[0].plots[0].y, ys[1]);
 }
+
+#[test]
+fn time_series_explorer_steps_and_plays_from_the_bar() {
+    // T416: a Time Series Explorer of 50 points; Next, Previous, then Play and Pause.
+    let mut h = start(Vec::new());
+    let mut graph = sheaf_core::WindowId(0);
+    h.state_mut().doc.apply("data", |p| {
+        let b = p.add_workbook("");
+        let v = (0..50).map(|i| f64::from(i).sin()).collect();
+        let y = p.add_column(b, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::numeric(v)).unwrap();
+        graph = p.plot_columns(sheaf_core::template::Template::TimeSeriesExplorer, &[y]).unwrap();
+    });
+    settle(&mut h);
+    let current = |h: &Harness<'static, SheafApp>| project(h).graph(graph).unwrap().explorer.unwrap().current;
+    h.get_by_label("Next").click();
+    settle(&mut h);
+    h.get_by_label("Next").click();
+    settle(&mut h);
+    assert_eq!(current(&h), 2);
+    h.get_by_label("Previous").click();
+    settle(&mut h);
+    assert_eq!(current(&h), 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Explore Interval"));
+    h.get_by_label("Play").click();
+    settle(&mut h);
+    h.get_by_label("Pause").click();
+    settle(&mut h);
+    assert!(h.query_by_label("Play").is_some(), "paused");
+}

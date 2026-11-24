@@ -4493,7 +4493,12 @@ inside the rectangle or the ellipse inscribed in it (`sheaf_plot::region::points
 are left out and the offsets of stacked plots are not applied. The points go to a new workbook "Extracted from
 region": per plot with points inside, an X column (the plot's X name, "Row" without one), a Y column (its Y name) and a
 Disregard column "Source row" (1-based), each commented "in the region of <plot>". One undo step ("Extract data in
-region"). Freeform regions and several regions at once are not built.
+region").
+
+Mask Data in Region and Unmask Data in Region (T413, same menu) mask or unmask the Y cells of those points (the
+plots' Y columns, rows found the same way, masked rows included), as one undo step ("Mask data in region" / "Unmask
+data in region"); the status line counts the cells changed, and nothing happens when none would change. Freeform
+regions and several regions at once are not built.
 
 ### 17.13 Cause-and-effect (fishbone) diagram (T375, Origin 2026 feature, Sheaf's layout, not measured)
 
@@ -6192,9 +6197,32 @@ measured.
 Add offers the nine layer presets and X and Y scale choices. Bottom-X Left-Y creates an independent
 layer. The linked presets accept an independent layer from the preview as their parent, defaulting
 to the opening layer's root or the first eligible layer. A straight-linked scale displays the
-parent's type. Independent scales start at Linear and offer the ten types supported by Sheaf.
-Custom Formula and Discrete appeared in the Origin 2016 capture, with no corresponding Sheaf
-scale type. Apply adds a layer to the numbered preview. Undo, OK and Cancel follow 15.7d.
+parent's type. Independent scales start at Linear and offer the ten built-in types and Custom
+Formula. Discrete remains open. Apply adds a layer to the numbered preview. Undo, OK and Cancel
+follow 15.7d.
+
+**Custom Formula scale (Origin 2016, 2026-11-23 and 2026-11-24).** Setting `layer.x.type=11`
+gave empty `formula$` and `invformula$` properties at first. For X limits 1 to 5 and increment 1,
+the EMFs labelled 1 through 5 under each transform. The tick at 2 lay 25% of the way along
+the linear axis, 12.5% with `x*x` and `sqrt(x)`, and about 43.1% with `ln(x)` and `exp(x)`.
+The plotted sample at X=2 moved by the same amount. A decreasing pair `-x` and `-x` kept
+ascending data values along the axis. A Y run using `x*x` and `sqrt(x)` also kept its data-space
+tick values and changed their positions. Setting From to 0 on the log formula was accepted by
+LabTalk but the EMF's tick positions collapsed. [Origin's Scale tab](https://docs.originlab.com/origin-help/axesref-scale/)
+and [LabTalk axis properties](https://docs.originlab.com/labtalk/ref/layer-axis-obj/).
+
+In Sheaf's Add tab, Custom Formula on an independent Cartesian dimension exposes its Direct
+Formula, Inverse Formula, From and To. Both expressions use `x` as their input, including on Y.
+The default expressions are `x` and `x`. Empty limits use the layer's usual automatic range.
+Apply checks that the two expressions agree as inverses at sampled points across the resulting
+range and that the direct mapping changes strictly in one direction. An invalid pair or range
+leaves the preview and its Undo history intact. Ticks keep their usual data values and use
+the direct formula for positions. Coordinate reading and Scale In use the inverse.
+
+If a previously saved pair becomes invalid following a range change, the axis temporarily
+draws linearly with the current limits and retains the pair for later valid ranges. The Axis
+dialog displays the saved formulas. Sheaf saves and OPJ companions keep the expressions.
+A bare OPJ writes the axis as Linear and warns.
 
 Inset With Data copies all plots from the chosen parent and uses automatic independent ranges.
 The [Origin Add tab](https://docs.originlab.com/origin-help/laymanage-addtab/) documents copying
@@ -7755,3 +7783,26 @@ Origin 2016 has none, so nothing here is measured.
 - **Not built:** layer and plot scope, several slicer columns, extracting the selected subset to a sheet, plots whose
   values are computed (histograms, box charts) reading the slicer, and the slicer in .opj files.
 
+## Browser Graph: Graph > Browser Graph... (T410, 2026-11-24; Origin 2020b's Browser Graph, Sheaf's own)
+
+Origin 2020b added a Browser Graph that shows one of several similarly structured datasets at a time and switches
+between them inside the graph; Origin 2024 browses datasets on different sheets too. Origin 2016 has none, so nothing
+here is measured.
+
+- **The window "Browser Graph":** Plot: one of the active layer's plots (the first to start with, or the graph's
+  browsed plot). Browse: "The Y columns of the sheet" or "The same column in every sheet of the book". OK makes the
+  plot a browser (one undo step, "Browser Graph"); fewer than two datasets is refused with a message. Remove Browser
+  (enabled when the graph has one) takes it off and leaves the plot on the dataset it shows ("Remove Browser").
+  Cancel and Esc change nothing.
+- **The datasets:** by columns, the numeric Y columns of the plot's sheet in sheet order (the plot's own column
+  always among them); by sheets, in every sheet of the workbook the column with the plot's column's short name, else
+  the one at the same position, when it holds numbers. Each dataset takes the X column and the Y error column its
+  sheet gives it, as plotting it would.
+- **The bar above the graph:** Previous, Next (each disabled at its end of the list) and the caption, for example
+  `B (2 of 3)`, or `[Sheet2] B (2 of 3)` by sheets. A step points the plot at that dataset's columns and rescales the
+  layer's X and Y axes to it. Consecutive steps on a graph make one undo step ("Browse Graph").
+- **Model:** `Graph::browser` (`sheaf_core::browser::GraphBrowser`: what it browses by, the plot's layer and index,
+  the datasets and the one shown), saved with the project and renumbered with the graph's other columns;
+  `Project::set_graph_browser`, `browse_graph`, `clear_graph_browser`, `browser_items`.
+- **Not built:** several browsed plots per graph, browsing across workbooks, picking a dataset from a list, keyboard
+  stepping, the browser in .opj files and in the CLI/MCP.

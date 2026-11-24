@@ -101,3 +101,41 @@ fn graph_slicer_shows_the_ticked_values_in_one_undo_step() {
     settle(&mut h);
     assert!(project(&h).graph(graph).unwrap().slicer.is_none());
 }
+
+#[test]
+fn browser_graph_steps_through_the_columns_from_the_bar() {
+    // T410: Graph > Browser Graph... on a line of the middle of three Y columns, then Next and Previous.
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let mut graph = sheaf_core::WindowId(0);
+    let mut ys = Vec::new();
+    h.state_mut().doc.apply("data", |p| {
+        let b = p.add_workbook("");
+        for k in 0..3 {
+            let v = vec![k as f64, k as f64 + 1.0];
+            ys.push(p.add_column(b, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::numeric(v)).unwrap());
+        }
+        graph = p.plot_columns(sheaf_core::template::Template::Line, &[ys[1]]).unwrap();
+    });
+    settle(&mut h);
+    h.state_mut().apply(Action::BrowserGraph { graph, layer: 0 }, &ctx);
+    settle(&mut h);
+    assert!(h.state().browser_graph.is_some(), "the browser window");
+    h.get_by_label("OK").click();
+    settle(&mut h);
+    assert!(h.state().browser_graph.is_none());
+    assert_eq!(h.state().doc.undo_label(), Some("Browser Graph"));
+    assert_eq!(project(&h).graph(graph).unwrap().browser.as_ref().unwrap().items.len(), 3);
+    h.get_by_label("Next").click();
+    settle(&mut h);
+    assert_eq!(project(&h).graph(graph).unwrap().layers[0].plots[0].y, ys[2]);
+    h.get_by_label("Previous").click();
+    settle(&mut h);
+    h.get_by_label("Previous").click();
+    settle(&mut h);
+    assert_eq!(project(&h).graph(graph).unwrap().layers[0].plots[0].y, ys[0]);
+    // The steps make one undo step: one Undo goes back to the dataset the browser started on.
+    assert_eq!(h.state().doc.undo_label(), Some("Browse Graph"));
+    h.state_mut().doc.undo();
+    assert_eq!(project(&h).graph(graph).unwrap().layers[0].plots[0].y, ys[1]);
+}

@@ -56,6 +56,7 @@ pub(crate) fn resolve_other(axis: &Axis, data: Option<(f64, f64)>) -> ResolvedAx
         max,
         step,
         scale: kind,
+        formula: None,
         major,
         minor,
         labels,

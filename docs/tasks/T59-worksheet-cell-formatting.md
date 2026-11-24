@@ -158,6 +158,12 @@ columns. Origin 2016 probes cover growth, tail deletion, zero counts and
 Auto Add Rows. Sheaf uses sparse blank rows and the existing column and
 row operations with one Undo step (GUI 3 and workbook model 13b).
 
+Header measurements follow-up. Size sets Column Header Height and Row
+Header Width as percentages of a 16 px row and 67 px column. Origin 2016
+probes cover changing each band, zero, Standard font scaling and default
+PNG and PDF exports. Sheaf saves the explicit grid settings independently
+of View visibility (GUI 3 and workbook model 13b).
+
 **Size:** L. **Branch:** `cell-format` (model/dialog), `codex/t59-format-toolbar` (toolbar/font geometry), `codex/t59-worksheet-controls` (underline/fill/keys), `codex/t59-worksheet-dialog` (dialog measurements/More entry), `codex/t59-custom-colors` (one-off RGB chooser), `codex/t59-classic-colors` (24 Classic worksheet presets), `codex/t59-xlsx-formats` (Excel cell styles). **Priority:** P0, wave 1.
 **Spec:** [workbook model](../spec/workbook-model.md), new Cell formats section;
 [GUI](../spec/gui-look.md) 3. **Inventory:** the worksheet-wide `T59` menu location now opens the bounded Data-font dialog; the three unsupported text-control choices are B5.

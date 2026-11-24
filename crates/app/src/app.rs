@@ -27,6 +27,10 @@ pub(crate) struct ColumnAcross {
     pub recalc: sheaf_core::column::RecalcMode,
     /// Every workbook of the project instead of this one.
     pub project: bool,
+    /// Every workbook of this book's project folder and its subfolders (T412); wins over `project`.
+    pub folder: bool,
+    /// Insert right after this column of each sheet (T412); empty: at the end.
+    pub after: String,
     pub problem: Option<String>,
 }
 
@@ -39,6 +43,8 @@ impl ColumnAcross {
             formula: String::new(),
             recalc: sheaf_core::column::RecalcMode::None,
             project: false,
+            folder: false,
+            after: String::new(),
             problem: None,
         }
     }
@@ -332,6 +338,7 @@ pub struct SheafApp {
     run_chart: Option<crate::dialogs::run_chart::RunChartDialog>,
     function_graph: Option<crate::dialogs::function_graph::FunctionGraphDialog>,
     pub(crate) graph_slicer: Option<crate::dialogs::graph_slicer::GraphSlicerDialog>,
+    pub(crate) browser_graph: Option<crate::dialogs::browser_graph::BrowserGraphDialog>,
     /// The open function window is File > New > Function Plot's: OK makes the graph (T213).
     function_graph_new: bool,
     /// The Audit Log window is open (T131).
@@ -533,6 +540,7 @@ impl SheafApp {
             run_chart: None,
             function_graph: None,
             graph_slicer: None,
+            browser_graph: None,
             function_graph_new: false,
             audit_log: false,
             fit_builder: None,
@@ -2454,6 +2462,7 @@ impl SheafApp {
             Action::AddColumnsDialog(book) => self.add_columns = Some((book, 1)),
             Action::AddColumnAcross(book) => self.column_across = Some(ColumnAcross::new(book)),
             Action::RepeatAnalysis { book, columns } => self.repeat_analysis(book, columns),
+            Action::RepeatAnalysisAllSheets(book) => self.repeat_analysis_all_sheets(book),
             Action::DeleteColumns(columns) => {
                 self.doc.apply("Delete columns", |p| delete_columns(p, &columns));
             }
@@ -2560,6 +2569,19 @@ impl SheafApp {
             Action::FolderProperties(path) => {
                 if let Some(f) = explorer::folder_at(&self.doc.project().root, &path) {
                     self.folder_props = Some(crate::dialogs::folder_props::FolderPropsDialog::new(path, f));
+                }
+            }
+            Action::BrowserGraph { graph, layer } => {
+                match crate::dialogs::browser_graph::BrowserGraphDialog::new(self.doc.project(), graph, layer) {
+                    Some(d) => self.browser_graph = Some(d),
+                    None => self.warn("The layer has no plot to browse"),
+                }
+            }
+            Action::BrowseGraph { graph, to } => {
+                // Steps one after another make one undo step.
+                let token = 0x7410_0000_0000 + graph.0;
+                if let Err(e) = self.doc.apply_merging("Browse Graph", token, |p| p.browse_graph(graph, to)) {
+                    self.warn(e.to_string());
                 }
             }
             Action::GraphSlicer { graph } => {
@@ -2909,6 +2931,7 @@ impl SheafApp {
             }
             Action::PivotTable { book, columns } => self.pivot = PivotDialog::new(&self.doc, book, columns),
             Action::ExtractRegion { graph, layer, shape } => self.extract_region(graph, layer, shape),
+            Action::MaskRegion { graph, layer, shape, mask } => self.mask_region(graph, layer, shape, mask),
             Action::MultiPeakFit { graph, y, layer } => {
                 let graph = match graph {
                     Some(g) => Some(g),
@@ -5051,6 +5074,31 @@ impl SheafApp {
     }
 
     /// Graph > Add Function Graph... (T119): OK adds the curve; an expression error keeps the window open.
+    fn show_browser_graph(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::browser_graph::BrowserOutcome;
+        let Some(d) = &mut self.browser_graph else { return };
+        match d.show(ctx) {
+            BrowserOutcome::Open => {}
+            BrowserOutcome::Closed => self.browser_graph = None,
+            BrowserOutcome::Apply { graph, layer, plot, by } => {
+                match self.doc.edit("Browser Graph", |p| p.set_graph_browser(graph, layer, plot, by)) {
+                    Ok(n) => {
+                        self.browser_graph = None;
+                        self.say(format!("The graph browses {n} datasets"));
+                    }
+                    Err(e) => self.warn(e.to_string()),
+                }
+            }
+            BrowserOutcome::Remove { graph } => {
+                self.browser_graph = None;
+                let _ = self
+                    .doc
+                    .edit("Remove Browser", |p| Ok::<_, std::convert::Infallible>(p.clear_graph_browser(graph)));
+                self.say("Removed the graph browser".to_string());
+            }
+        }
+    }
+
     fn show_graph_slicer(&mut self, ctx: &egui::Context) {
         use crate::dialogs::graph_slicer::SlicerOutcome;
         let Some(d) = &mut self.graph_slicer else { return };
@@ -6282,6 +6330,45 @@ impl SheafApp {
         }
     }
 
+    /// Mask / Unmask Data in Region (T413): the Y cells of the layer's data points inside the drawn rectangle or
+    /// ellipse are masked (or unmasked), as one undo step.
+    fn mask_region(&mut self, graph: WindowId, layer: usize, shape: usize, mask: bool) {
+        let found = match sheaf_plot::region::points_in_shape(self.doc.project(), graph, layer, shape) {
+            Ok(Some(found)) => found,
+            Ok(None) => return self.warn("Only a rectangle or an ellipse marks a region"),
+            Err(e) => return self.warn(e.to_string()),
+        };
+        let Some(l) = self.doc.project().graph(graph).and_then(|g| g.layers.get(layer)) else { return };
+        let cells: Vec<(ColumnId, Vec<usize>)> = found.iter().map(|f| (l.plots[f.plot].y, f.rows.clone())).collect();
+        let changed: usize = cells
+            .iter()
+            .map(|(y, rows)| {
+                let masked = self.doc.project().column(*y).map(|c| rows.iter().filter(|r| c.mask.contains(r)).count());
+                let masked = masked.unwrap_or(0);
+                if mask { rows.len() - masked } else { masked }
+            })
+            .sum();
+        if changed == 0 {
+            let what = if found.is_empty() { "No data points inside the object" } else { "Nothing to change" };
+            return self.say(what.to_string());
+        }
+        let label = if mask { "Mask data in region" } else { "Unmask data in region" };
+        self.doc.apply(label, |p| {
+            for (y, rows) in &cells {
+                if let Some(c) = p.column_mut(*y) {
+                    for r in rows {
+                        if mask {
+                            c.mask.insert(*r);
+                        } else {
+                            c.mask.remove(r);
+                        }
+                    }
+                }
+            }
+        });
+        self.say(format!("{} {changed} data point(s) in the region", if mask { "Masked" } else { "Unmasked" }));
+    }
+
     /// Extract Data in Region (T355): the data points of the layer inside the drawn rectangle or ellipse go to a
     /// new workbook, three columns per plot with points inside (X, Y and the source row), as one undo step.
     fn extract_region(&mut self, graph: WindowId, layer: usize, shape: usize) {
@@ -6430,10 +6517,23 @@ impl SheafApp {
                         ui.radio_value(&mut d.recalc, RecalcMode::Manual, "Manual");
                     });
                     ui.end_row();
+                    ui.label("After Column");
+                    ui.text_edit_singleline(&mut d.after).on_hover_text(
+                        "Optional short or long name: the column goes right after it in each sheet that has it, \
+                         else at the end",
+                    );
+                    ui.end_row();
                     ui.label("Sheets");
                     ui.vertical(|ui| {
-                        ui.radio_value(&mut d.project, false, "Every sheet of this workbook");
-                        ui.radio_value(&mut d.project, true, "Every sheet of every workbook");
+                        if ui.radio(!d.project && !d.folder, "Every sheet of this workbook").clicked() {
+                            (d.project, d.folder) = (false, false);
+                        }
+                        if ui.radio(d.folder, "Every sheet of every workbook in this folder").clicked() {
+                            (d.project, d.folder) = (false, true);
+                        }
+                        if ui.radio(d.project && !d.folder, "Every sheet of every workbook").clicked() {
+                            (d.project, d.folder) = (true, false);
+                        }
                     });
                     ui.end_row();
                 });
@@ -6451,9 +6551,12 @@ impl SheafApp {
                     units: d.units.trim().to_string(),
                     formula: Some(d.formula.trim().to_string()).filter(|f| !f.is_empty()),
                     recalc: d.recalc,
+                    after: Some(d.after.trim().to_string()).filter(|a| !a.is_empty()),
                     ..Default::default()
                 };
-                let scope = if d.project {
+                let scope = if d.folder {
+                    sheaf_core::across::AcrossScope::Folder(self.doc.project().folder_of(d.book))
+                } else if d.project {
                     sheaf_core::across::AcrossScope::Project
                 } else {
                     sheaf_core::across::AcrossScope::Workbook(d.book)
@@ -6506,6 +6609,59 @@ impl SheafApp {
                 self.say(format!("{} repeated: {}", label.trim_end_matches("..."), report.message));
             }
             Err(e) => self.warn(format!("Could not repeat {}: {e}", label.trim_end_matches("..."))),
+        }
+    }
+
+    /// Analysis > Repeat Last Analysis on All Sheets (T414): the last tool, with the same options, on the Y columns of
+    /// every sheet the workbook has when the command starts (not the sheets the runs add), as one undo step. A sheet
+    /// without Y columns, or where the tool fails, is skipped and named.
+    fn repeat_analysis_all_sheets(&mut self, book: WindowId) {
+        let Some((tool, label)) = self.last_analysis.clone() else {
+            return self.say("No analysis to repeat yet: run one from its window first");
+        };
+        let Some(b) = self.doc.project().workbook(book) else { return };
+        let sheets: Vec<(String, Vec<ColumnId>)> = b
+            .sheets
+            .iter()
+            .map(|s| {
+                let ys = s.columns.iter().filter(|c| c.designation == Designation::Y).map(|c| c.id).collect();
+                (s.name.clone(), ys)
+            })
+            .collect();
+        let name = label.trim_end_matches("...").to_string();
+        let mut skipped: Vec<String> = Vec::new();
+        let result = self.doc.edit(tool.name(), |p| {
+            let mut runs = 0;
+            for (sheet, columns) in &sheets {
+                if columns.is_empty() {
+                    skipped.push(format!("{sheet} (no Y columns)"));
+                    continue;
+                }
+                let request = sheaf_core::analysis::Request {
+                    columns: columns.clone(),
+                    rows: sheaf_core::analysis::RowRange::All,
+                    tool: tool.clone(),
+                };
+                match p.analyze(&request) {
+                    Ok(_) => runs += 1,
+                    Err(e) => skipped.push(format!("{sheet} ({e})")),
+                }
+            }
+            if runs == 0 { Err(format!("{name} ran on no sheet")) } else { Ok(runs) }
+        });
+        match result {
+            Ok(runs) => {
+                self.panels.reveal(PanelId::Results);
+                let mut msg = format!("{name} repeated on {runs} sheet(s)");
+                if !skipped.is_empty() {
+                    msg.push_str(&format!("; skipped: {}", skipped.join(", ")));
+                }
+                self.say(msg);
+            }
+            Err(e) => {
+                let detail = if skipped.is_empty() { String::new() } else { format!(": {}", skipped.join(", ")) };
+                self.warn(format!("Could not repeat {name}: {e}{detail}"));
+            }
         }
     }
 
@@ -8067,6 +8223,7 @@ impl SheafApp {
         self.show_run_chart(ctx);
         self.show_function_graph(ctx);
         self.show_graph_slicer(ctx);
+        self.show_browser_graph(ctx);
         self.show_audit_log(ctx);
         self.show_fit_builder(ctx);
         self.show_sample_projects(ctx);

@@ -24,6 +24,9 @@ pub struct Graph {
     /// Graph > Graph Slicer (T406): the rows the plots from one sheet show.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slicer: Option<crate::slicer::GraphSlicer>,
+    /// Graph > Browser Graph (T410): the datasets one plot steps through.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browser: Option<crate::browser::GraphBrowser>,
 }
 
 impl Graph {
@@ -98,6 +101,10 @@ impl Graph {
     /// the axes, the plot choice of the rugs and the plot of the slope annotations. Every path that renumbers columns (File > Append,
     /// ...) goes through this; a new field that holds a [`ColumnId`] is added here.
     pub fn remap_columns(&mut self, f: &dyn Fn(ColumnId) -> ColumnId) {
+        if let Some(s) = &mut self.slicer {
+            s.column = f(s.column);
+        }
+        self.remap_browser(f);
         for layer in &mut self.layers {
             for p in &mut layer.plots {
                 p.y = f(p.y);
@@ -1313,6 +1320,8 @@ pub enum ScaleKind {
     Logit,
     /// Percent values placed by `ln(-ln(1 - p))`.
     Weibull,
+    /// A nonlinear scale defined by the axis' direct and inverse formulas.
+    CustomFormula,
 }
 
 /// How an axis picks its limits when `min`/`max` are not fixed.
@@ -1380,6 +1389,9 @@ impl Font {
 pub struct Axis {
     #[serde(default)]
     pub scale: ScaleKind,
+    /// Direct and inverse transforms when the scale type is Custom Formula.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_scale: Option<crate::scales::CustomScale>,
     /// Fixed lower limit; `None` means automatic.
     pub min: Option<f64>,
     /// Fixed upper limit; `None` means automatic.
@@ -3529,6 +3541,7 @@ mod tests {
             page: Page::inches(6.4, 4.8),
             layers,
             slicer: None,
+            browser: None,
         }
     }
 

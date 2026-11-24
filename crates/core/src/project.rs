@@ -416,6 +416,8 @@ pub enum ProjectError {
     BrowserNeedsTwo,
     #[error("the graph has no browser")]
     NoBrowser,
+    #[error("the graph is no time series explorer, or has no such interval")]
+    NoExplorer,
     #[error(
         "a grouped plot of indexed data needs exactly one numeric data column (designated Y; a numeric group column must be designated X or Group); select one"
     )]
@@ -1343,6 +1345,9 @@ impl Project {
         }
         if template == Template::Zoom {
             return self.plot_zoom(ys);
+        }
+        if template == Template::TimeSeriesExplorer {
+            return self.plot_time_series_explorer(ys);
         }
         if template == Template::QcXbarR {
             let y = *ys.first().ok_or(ProjectError::QcSubgroup(crate::qc::DEFAULT_GROUP))?;

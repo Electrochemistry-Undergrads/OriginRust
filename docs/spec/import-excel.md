@@ -161,6 +161,19 @@ A column that has a name in a label row but no value in any data row (formulas w
 value, for instance) is kept as an empty numeric column [S]. Trailing columns with neither are not
 columns.
 
+**Formulas kept as column formulas (T417, Origin 2026's formula-preserving import) [S].** A column whose
+data rows that hold a value all hold a formula, and whose formulas are one formula written for their own
+row (`B2 =A2*2`, `B3 =A3*2`, ...), keeps it as its Set Column Values formula in Sheaf's language
+(`col(A)*2`, the short names of the imported columns) with Recalculate Auto; its values stay as Excel
+stored them (missing where none was stored) until an input changes. What can be read: numbers,
+`+ - * / ^`, parentheses, same-row references to imported columns (`A2`, `$A2`) and SQRT, EXP, LN,
+LOG10, ABS, SIN, COS, TAN, ASIN, ACOS, ATAN, SINH, COSH, TANH, ROUND and PI(); a unary minus next to
+`^` is refused (Excel's `-2^2` is 4). Any other formula (another row, a `$` row, a range such as a
+running `SUM($A$2:A2)`, another sheet, text, comparisons, other functions), a formula that differs from
+row to row, or a typed value among the formulas keeps only the stored values, with a warning that names
+the column and its first formula (`column D: its Excel formulas (the first is D2: =A2*$G$1) are not one
+same-row formula Sheaf can read; only their stored values were imported`). `sheaf_io::excel::formulas`.
+
 ## 5. Header rows and layout
 
 The importer builds, for each sheet, the same table of fields that a CSV file saved by Excel would
@@ -285,7 +298,8 @@ right.
 Charts, drawings and pictures; cell styles other than the number format of date cells (and only in
 `.xlsx`); fonts, colours, borders, column widths, frozen panes; pivot tables; conditional formats and
 data validation; comments and notes; hyperlinks; defined names; VBA (`.xlsm` is read as `.xlsx`, macros
-are not kept); the shape of merged ranges; the formulas themselves (only the stored values); hidden
+are not kept); the shape of merged ranges; formulas other than one same-row formula per column (section 4;
+the others give only their stored values); hidden
 rows and columns are read as if shown; external links are not followed. A sheet that holds only a
 chart gives no data and is reported.
 
@@ -471,7 +485,10 @@ Tests: `crates/app/src/app/ui_tests/excel.rs`.
 `tools/make-excel-fixtures.py`, each below 10 kB, made up):
 
 - `a_workbook_with_header_rows_imports_numbers_text_ints_and_dates` (`basic.xlsx`),
-  `a_formula_cell_gives_its_stored_value_and_one_without_gives_a_warning`
+  `a_formula_cell_gives_its_stored_value_and_one_without_gives_a_warning`,
+  `a_same_row_formula_column_keeps_its_formula`
+- `formulas_that_are_not_one_same_row_formula_keep_only_their_values` (`formulas.xlsx`, T417), and the
+  translation rules in `crates/io/src/excel/formulas.rs`
 - `a_legacy_xls_file_reads_like_an_xlsx_file` (`legacy.xls`)
 - `the_1904_date_system_gives_the_same_dates_as_the_1900_system` (`date1904.xlsx`),
   `excels_1900_leap_year_bug_is_followed_and_the_missing_day_is_reported` (`leap1900.xlsx`)

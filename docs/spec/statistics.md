@@ -1880,7 +1880,13 @@ months: January, June, November); years count from year 0, so 10 years are decad
 another month moves the months, quarters and years with it and is named by the calendar year it ends in: with
 October, quarters are "FY2027 Q1" (October to December 2026) and years "FY2027" (October 2026 to September 2027);
 months keep their calendar names. The note and the Period column's comment say the group ("12 hours", "fiscal
-quarter (from October)"). A second grouping is not built.
+quarter (from October)").
+
+A second grouping (T420; `--by hour|weekday|month`; the options window's "Within each period, by"): within each
+period the values are grouped again by the hour of the day (00:00 to 23:00), the day of the week (Mon to Sun) or the
+month of the year (Jan to Dec); each chosen column then gets one result column per group that has values anywhere
+("Mean of v (Mon)", in group order), missing where a period has no value in that group, and no N columns. The note
+counts the groups.
 
 ## 33 Manhattan plot (T362, Origin 2017 app; not measured)
 
@@ -1937,7 +1943,8 @@ Benneyan G chart variants, are not built.
 
 Origin 2027's Quality improvement apps add nonnormal process capability; Sheaf has no Origin 2016 capability window
 to copy, so this is Sheaf's own. Statistics > Process Capability... (`Tool::Capability`, `sheaf analyze capability
---y COL[,COL..] [--lsl L] [--usl U] [--subgroup 1] [--model normal|lognormal|weibull] [--no-graph]`): every chosen
+--y COL[,COL..] [--lsl L] [--usl U] [--subgroup 1] [--model normal|lognormal|weibull|boxcox] [--lambda L]
+[--cpm-target T] [--no-graph]`): every chosen
 column is a process of its own, in row order, missing values left out; at least one limit is needed, and LSL < USL.
 
 - **Normal**: the within standard deviation is `R bar / d2` of the complete subgroups of `n` (2 to 10; a short last
@@ -1949,15 +1956,30 @@ column is a process of its own, in row order, missing values left out; at least 
   0.00135, 0.5 and 0.99865: `Pp = (USL - LSL) / (x_hi - x_lo)`, `PPL = (x_med - LSL) / (x_med - x_lo)`, `PPU = (USL
   - x_med) / (x_hi - x_med)`, `Ppk = min(PPL, PPU)`; expected parts per million from the fitted tails. The within
   indices are left empty.
+- **Box-Cox** (T419): every value must be above 0. `lambda` is given (`--lambda`, the window's Lambda box) or the
+  maximum-likelihood one: the profile log-likelihood `(lambda - 1) sum ln x - n/2 ln(variance of y, divisor n)`
+  maximized over [-5, 5] (best of a 0.05 grid, then golden section to 1e-12). Values and limits are transformed by `y
+  = (x^lambda - 1) / lambda` (`ln x` for 0); a limit at or below 0 without a transform (0 with `lambda <= 0`, or a
+  negative limit) is left out. Then the normal indices, within and overall, of the transformed values against the
+  transformed limits; Mean and StdDev are on that scale, Fitted parameters 1 and 2 its mean and deviation. Observed
+  parts per million are counted on the original values.
+- **Cpm** (T419) with a target and both limits: `(USL - LSL) / 6 sqrt(s^2 + (mean - T)^2)` with the overall deviation
+  (on the Box-Cox scale for that model, the target transformed too); empty without a target or a limit and for the
+  lognormal and Weibull models.
 
 With one limit, the indices that need the other are empty and `Cpk`/`Ppk` is the one side. Observed parts per million
 count the values strictly outside. The result sheet `CapabilityN` has one row per column (N, Mean, StdDev overall and
 within, Cp, CPL, CPU, Cpk, Pp, PPL, PPU, Ppk, observed and expected PPM, the two fitted parameters) and the graph data;
 a new graph per column draws a histogram (Sturges' bins over the data) with the fitted density scaled to counts and
-the limits as vertical lines. Checked against numpy/scipy (`tools/capability-ref.py`,
+the limits as vertical lines (the Box-Cox curve is the normal density of the transformed values carried back).
+The sheet ends with Cpm and Box-Cox lambda. Checked against numpy/scipy (`tools/capability-ref.py`,
 `crates/calc/tests/capability_reference.rs`; d2 integrated numerically there, so the within values agree to the six
-decimals of the d2 table) to 1e-9 (1e-6 for the within values, 1e-7 for the Weibull fit). Box-Cox and Johnson
-transformations, confidence intervals of the indices and the Cpm target index are not built.
+decimals of the d2 table) to 1e-9 (1e-6 for the within values, 1e-7 for the Weibull fit); Box-Cox and Cpm against
+scipy (`tools/capability-boxcox-ref.py`, `crates/calc/tests/capability_boxcox_reference.rs`: seven cases, fitted and
+given lambda, lambda above 1, a lower limit of 0, subgroups; scipy's bounded maximization of `boxcox_llf`, confirmed by
+`boxcox_normmax`): the fitted lambda to 1e-6 (the likelihood is flat at its top), and at the reference's lambda the
+indices to 1e-9 (within values and parts per million 1e-6). Johnson transformations and confidence intervals of the
+indices are not built.
 
 ## 37 Distribution Overview plot for right-censored data (T366, Origin 2026b; not measured)
 

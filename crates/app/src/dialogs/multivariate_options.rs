@@ -7,10 +7,10 @@ use sheaf_core::analysis::{
     AcfSpec, AdfTerms, ArimaSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty,
     ChangePointSpec, CoxSpec, DecomposeModel, DecomposeSpec, ExpSmoothSpec, FactorialDesignSpec, FactorialEffectsSpec,
     ForestTask, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistArbitrarySpec, LifeDistSpec,
-    LifeRegressionSpec, ManhattanSpec, MixtureDesignSpec, MixtureKind, MonteCarloSpec, PcaSpec, PivotPeriod, PivotStat,
-    QpcrCurveSpec, QpcrSpec, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec, RocSpec, SmoothModel,
-    SplitPlotDesignSpec, SplitPlotEffectsSpec, StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec, Tool,
-    TurnbullSpec,
+    LifeRegressionSpec, ManhattanSpec, MixtureDesignSpec, MixtureKind, MonteCarloSpec, PcaSpec, PivotBy, PivotPeriod,
+    PivotStat, QpcrCurveSpec, QpcrSpec, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec, RocSpec,
+    SmoothModel, SplitPlotDesignSpec, SplitPlotEffectsSpec, StabilitySpec, StationaritySpec, TDistribution,
+    TimePivotSpec, Tool, TurnbullSpec,
 };
 
 /// Comma-separated numbers typed in a box (T386); empty text is no number.
@@ -495,8 +495,36 @@ impl MultiOptions {
                     ui.radio_value(&mut s.model, CapModel::Normal, "Normal");
                     ui.radio_value(&mut s.model, CapModel::Lognormal, "Lognormal");
                     ui.radio_value(&mut s.model, CapModel::Weibull, "Weibull");
+                    ui.radio_value(&mut s.model, CapModel::BoxCox, "Box-Cox");
                 });
-                if s.model == CapModel::Normal {
+                if s.model == CapModel::BoxCox {
+                    ui.horizontal(|ui| {
+                        let mut given = s.lambda.is_some();
+                        if ui.checkbox(&mut given, "Lambda (else maximum likelihood)").changed() {
+                            s.lambda = given.then_some(0.5);
+                        }
+                        if let Some(l) = &mut s.lambda {
+                            ui.add(egui::DragValue::new(l).speed(0.01).range(-5.0..=5.0));
+                        }
+                    });
+                } else {
+                    s.lambda = None;
+                }
+                if matches!(s.model, CapModel::Normal | CapModel::BoxCox) {
+                    ui.horizontal(|ui| {
+                        let mut on = s.target.is_some();
+                        if ui.checkbox(&mut on, "Target (Cpm)").changed() {
+                            s.target = on.then(|| match (s.lsl, s.usl) {
+                                (Some(l), Some(u)) => (l + u) / 2.0,
+                                _ => 0.0,
+                            });
+                        }
+                        if let Some(t) = &mut s.target {
+                            ui.add(egui::DragValue::new(t).speed(0.01));
+                        }
+                    });
+                }
+                if matches!(s.model, CapModel::Normal | CapModel::BoxCox) {
                     ui.horizontal(|ui| {
                         ui.label("Subgroup size (1: moving ranges)");
                         ui.add(egui::DragValue::new(&mut s.subgroup).range(1..=10));
@@ -852,6 +880,17 @@ impl MultiOptions {
                             },
                         );
                         s.fiscal_start = m;
+                    });
+                });
+                // A second grouping (T420).
+                ui.horizontal(|ui| {
+                    ui.label("Within each period, by");
+                    let shown = s.by.map_or("(none)", |b| b.name());
+                    egui::ComboBox::from_id_salt("timepivot_by").selected_text(shown).show_ui(ui, |ui| {
+                        ui.selectable_value(&mut s.by, None, "(none)");
+                        for b in PivotBy::ALL {
+                            ui.selectable_value(&mut s.by, Some(b), b.name());
+                        }
                     });
                 });
                 ui.weak(

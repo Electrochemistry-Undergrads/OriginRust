@@ -77,6 +77,8 @@ pub enum Template {
     ScatterMatrix,
     /// Plot > Specialized > Zoom (T112): the whole curve with a region rectangle, and the region enlarged below.
     Zoom,
+    /// Plot > Specialized > Time Series Explorer (T416): a Zoom graph whose region steps through equal X intervals.
+    TimeSeriesExplorer,
     /// Plot > Specialized > Wind Rose - Binned Data and Wind Rose - Raw Data (T113).
     WindRoseBinned,
     WindRoseRaw,
@@ -249,7 +251,7 @@ pub enum Template {
 }
 
 impl Template {
-    pub const ALL: [Template; 107] = [
+    pub const ALL: [Template; 108] = [
         Template::Line,
         Template::Scatter3d,
         Template::Trajectory3d,
@@ -352,6 +354,7 @@ impl Template {
         Template::QcXbarR,
         Template::ScatterMatrix,
         Template::Zoom,
+        Template::TimeSeriesExplorer,
         Template::WindRoseBinned,
         Template::WindRoseRaw,
         Template::SmithChart,
@@ -399,6 +402,7 @@ impl Template {
             Template::QcXbarR => "qc-xbar-r",
             Template::ScatterMatrix => "scatter-matrix",
             Template::Zoom => "zoom",
+            Template::TimeSeriesExplorer => "time-series-explorer",
             Template::WindRoseBinned => "wind-rose-binned",
             Template::WindRoseRaw => "wind-rose-raw",
             Template::SmithChart => "smith-chart",
@@ -511,6 +515,7 @@ impl Template {
             Template::QcXbarR => "QC (X bar R) Chart",
             Template::ScatterMatrix => "Scatter Matrix",
             Template::Zoom => "Zoom",
+            Template::TimeSeriesExplorer => "Time Series Explorer",
             Template::WindRoseBinned => "Wind Rose - Binned Data",
             Template::WindRoseRaw => "Wind Rose - Raw Data",
             Template::SmithChart => "Smith Chart",
@@ -695,7 +700,7 @@ impl Template {
                 crate::scatter_matrix::template_layer(&mut g);
                 g
             }
-            Template::Zoom => zoom(id, name),
+            Template::Zoom | Template::TimeSeriesExplorer => zoom(id, name),
             Template::WindRoseBinned | Template::WindRoseRaw => wind_rose(id, name),
             Template::SmithChart => smith(id, name),
             Template::Piper => piper(id, name),
@@ -1294,6 +1299,7 @@ fn general(id: WindowId, name: &str, kind: PlotKind) -> Graph {
         name: name.to_string(),
         long_name: String::new(),
         slicer: None,
+        explorer: None,
         browser: None,
         page: Page::inches(ORIGIN_PAGE_IN.0, ORIGIN_PAGE_IN.1),
         layers: vec![Layer {
@@ -1986,7 +1992,8 @@ mod tests {
         assert_eq!(Template::from_name("floating-column"), Some(Template::FloatingColumn));
         assert_eq!(Template::from_name("pie-3d"), Some(Template::Pie3D));
         assert_eq!(Template::from_name("pie-bw"), Some(Template::PieBw));
-        assert_eq!(Template::ALL.len(), 107);
+        assert_eq!(Template::ALL.len(), 108);
+        assert_eq!(Template::from_name("time-series-explorer"), Some(Template::TimeSeriesExplorer));
         assert_eq!(Template::from_name("UpSet"), Some(Template::UpSet));
         assert_eq!(Template::from_name("chord"), Some(Template::Chord));
         assert_eq!(Template::from_name("network"), Some(Template::Network));

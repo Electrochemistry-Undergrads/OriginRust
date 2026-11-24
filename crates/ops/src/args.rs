@@ -3847,9 +3847,15 @@ pub enum AnalyzeTool {
         /// Subgroup size for the within deviation (1: moving ranges of individual values).
         #[arg(long, default_value_t = 1)]
         subgroup: usize,
-        /// normal, lognormal or weibull.
+        /// normal, lognormal, weibull or boxcox (normal after a Box-Cox transformation).
         #[arg(long, default_value = "normal")]
         model: String,
+        /// Box-Cox: this lambda instead of the maximum-likelihood one.
+        #[arg(long, allow_negative_numbers = true)]
+        lambda: Option<f64>,
+        /// The target for Cpm (with both limits).
+        #[arg(long, allow_negative_numbers = true)]
+        cpm_target: Option<f64>,
         /// Do not make the graphs.
         #[arg(long)]
         no_graph: bool,
@@ -3891,6 +3897,9 @@ pub enum AnalyzeTool {
         /// The month (1 to 12) a fiscal year starts in, for months, quarters and years.
         #[arg(long, default_value_t = 1)]
         fiscal_start: u32,
+        /// A second grouping within each period: hour, weekday or month (one column per group).
+        #[arg(long)]
+        by: Option<String>,
     },
     /// Binned scatter: X cut into bins of equal width or equal counts; the mean, SD, SE and count of each --y
     /// column's Y per bin; makes a graph of the data with the bin means.

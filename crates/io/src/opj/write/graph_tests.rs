@@ -663,6 +663,20 @@ fn other_scale_types_survive_a_round_trip() {
 }
 
 #[test]
+fn discrete_scales_survive_a_bare_opj_round_trip() {
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        let layer = &mut g.layers[0];
+        layer.x_axis.scale = ScaleKind::Discrete;
+        layer.y_axis.scale = ScaleKind::Discrete;
+    });
+    let (imp, _) = round_trip(&p);
+    let l = &imp.graphs[0].layers[0];
+    assert_eq!(l.x_axis.scale, ScaleKind::Discrete);
+    assert_eq!(l.y_axis.scale, ScaleKind::Discrete);
+}
+
+#[test]
 fn the_major_tick_length_is_written_and_read_back() {
     let mut p = source();
     graph_with(&mut p, Template::LineSymbol, &[(0, 1)], |g| {

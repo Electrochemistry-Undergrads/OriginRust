@@ -6,9 +6,9 @@
 use super::frame::{DialogButton, button_row};
 use super::graph_props::group_box;
 use eframe::egui::{self, DragValue};
-use sheaf_core::column::Storage;
+use sheaf_core::column::{DEFAULT_WIDTH, Storage};
 use sheaf_core::format::{NameStyle, NumberFormat};
-use sheaf_core::{ColumnId, Designation, Document, Project};
+use sheaf_core::{Column, ColumnId, Designation, Document, Project, Worksheet};
 
 pub struct ColumnPropsDialog {
     column: ColumnId,
@@ -46,9 +46,19 @@ enum Step {
     Next,
 }
 
+fn shown_width(sheet: &Worksheet, column: &Column) -> u32 {
+    if column.width.is_some() {
+        return u32::from(column.shown_width());
+    }
+    sheet.view.cell_measurements.column_width.map_or(u32::from(DEFAULT_WIDTH), |percent| {
+        let chars = f32::from(DEFAULT_WIDTH) * f32::from(percent) / (100.0 * sheet.font_defaults.size_scale());
+        (chars.round() as u32).clamp(1, 255)
+    })
+}
+
 impl ColumnPropsDialog {
     pub fn new(project: &Project, column: ColumnId) -> Option<Self> {
-        let c = project.column(column)?;
+        let (_, sheet, c) = project.locate(column)?;
         Some(ColumnPropsDialog {
             column,
             short_name: c.short_name.clone(),
@@ -58,7 +68,7 @@ impl ColumnPropsDialog {
             designation: c.designation,
             format: c.format,
             storage: c.storage(),
-            width: u32::from(c.shown_width()),
+            width: shown_width(sheet, c),
             apply_to_right: false,
             problem: None,
         })
@@ -80,7 +90,7 @@ impl ColumnPropsDialog {
 
     /// Whether the fields differ from what the column holds now.
     fn dirty(&self, project: &Project) -> bool {
-        let Some(c) = project.column(self.column) else {
+        let Some((_, sheet, c)) = project.locate(self.column) else {
             return false;
         };
         self.short_name.trim() != c.short_name
@@ -90,7 +100,7 @@ impl ColumnPropsDialog {
             || self.designation != c.designation
             || self.format != c.format
             || self.storage != c.storage()
-            || self.width != u32::from(c.shown_width())
+            || self.width != shown_width(sheet, c)
     }
 
     /// The title: the window and sheet that hold the column.
@@ -164,8 +174,8 @@ impl ColumnPropsDialog {
                             });
                         ui.end_row();
                         format_rows(ui, &mut self.storage, &mut self.format);
-                        ui.label("Column Width");
-                        ui.add(DragValue::new(&mut self.width).range(1..=255));
+                        let label = ui.label("Column Width");
+                        ui.add(DragValue::new(&mut self.width).range(1..=255)).labelled_by(label.id);
                         ui.end_row();
                     });
                     ui.checkbox(&mut self.apply_to_right, "Apply to all columns to the right")
@@ -227,7 +237,12 @@ impl ColumnPropsDialog {
         let (long_name, units, comments) = (self.long_name.clone(), self.units.clone(), self.comments.clone());
         let (designation, format, to_right) = (self.designation, self.format, self.apply_to_right);
         let storage = self.storage;
-        let width = (self.width as u16 != sheaf_core::column::DEFAULT_WIDTH).then_some(self.width as u16);
+        let width = match doc.project().locate(id) {
+            Some((_, sheet, column)) if sheet.view.cell_measurements.column_width.is_some() => {
+                if self.width == shown_width(sheet, column) { column.width } else { Some(self.width as u16) }
+            }
+            _ => (self.width as u16 != DEFAULT_WIDTH).then_some(self.width as u16),
+        };
         doc.apply("Change column properties", move |p| {
             if let Some(c) = p.column_mut(id) {
                 c.short_name = name;

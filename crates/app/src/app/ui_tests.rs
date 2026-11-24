@@ -5787,6 +5787,20 @@ fn add_column_to_all_sheets_reaches_every_sheet_of_the_workbook() {
     let b = project(&h).workbook(book).unwrap();
     assert_eq!(b.sheets[0].columns[1].long_name, "Beside");
     assert_eq!(b.sheets[1].columns[1].long_name, "Beside");
+    // T418: only the ticked sheets; the second sheet is unticked.
+    let counts = |h: &Harness<'static, SheafApp>| {
+        project(h).workbook(book).unwrap().sheets.iter().map(|s| s.columns.len()).collect::<Vec<_>>()
+    };
+    let before = counts(&h);
+    menu_path(&mut h, &["Column", "Add Column to All Sheets..."]);
+    click(&mut h, "Only the ticked sheets");
+    let second = format!("{} / Second", project(&h).workbook(book).unwrap().name);
+    click(&mut h, &second);
+    assert_eq!(h.state().column_across.as_ref().unwrap().chosen.as_ref().unwrap().len(), 1);
+    click(&mut h, "OK");
+    assert!(h.state().column_across.is_none(), "{:?}", h.state().status);
+    let after = counts(&h);
+    assert_eq!((after[0], after[1]), (before[0] + 1, before[1]));
 }
 
 /// Statistics > Manhattan Plot... (T362): group, position and p-value columns give the per-group table and a graph.
@@ -5989,6 +6003,23 @@ fn the_statistics_menu_computes_process_capability() {
     assert!(cp[0].is_nan() && cpk == cpu && cpk[0] < 0.0, "USL 1 lies below every value: {cpk:?}");
     assert_eq!(project(&h).graphs().count(), graphs_before + 1);
     assert_eq!(h.state().doc.undo_label(), Some("Process capability"));
+}
+
+/// Statistics > Process Capability... with the Box-Cox model (T419): the window shows the lambda and Cpm target
+/// boxes, and the sheet gets the fitted lambda.
+#[test]
+fn the_statistics_menu_computes_box_cox_capability() {
+    let data = csv_file("capability_boxcox", "cap", "i,v\n1,10\n2,12\n3,11\n4,13\n5,12\n6,14\n");
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Book1 - cap.csv");
+    menu_path(&mut h, &["Statistics", "Process Capability..."]);
+    click(&mut h, "Box-Cox");
+    assert!(has_label(&h, "Lambda (else maximum likelihood)") && has_label(&h, "Target (Cpm)"));
+    click(&mut h, "Upper specification limit");
+    click(&mut h, "OK");
+    assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
+    let (sheet, lambda) = result_column(&h, "Box-Cox lambda");
+    assert!(sheet.starts_with("Capability") && lambda[0].is_finite() && lambda[0].abs() <= 5.0, "{lambda:?}");
 }
 
 /// Statistics > Rare Event Chart (G/T)... (T364): a T chart with the exponential fit, one undo step and a graph.
@@ -6244,6 +6275,7 @@ fn the_worksheet_menu_makes_a_time_series_pivot() {
     assert!(h.state().analysis.is_some() && has_label(&h, "Period"));
     // Custom intervals and fiscal years (T404).
     assert!(has_label(&h, "Every") && has_label(&h, "Fiscal year starts in"));
+    assert!(has_label(&h, "Within each period, by"), "T420");
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none());
     let (sheet, means) = result_column(&h, "Mean of v");

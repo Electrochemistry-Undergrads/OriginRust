@@ -139,10 +139,10 @@ pub fn turnbull(obs: &[Obs]) -> Result<Turnbull, TurnbullError> {
         // grad[j] becomes the mean over rows of [row covers j] / P(row).
         let mut run = 0.0;
         let mut worst: f64 = 0.0;
-        for j in 0..m {
-            run += grad[j];
-            grad[j] = run / total;
-            worst = worst.max(grad[j] - 1.0);
+        for g in grad.iter_mut().take(m) {
+            run += *g;
+            *g = run / total;
+            worst = worst.max(*g - 1.0);
         }
         if worst <= TOL {
             converged = true;
@@ -153,9 +153,9 @@ pub fn turnbull(obs: &[Obs]) -> Result<Turnbull, TurnbullError> {
         }
         iterations += 1;
         let mut sum = 0.0;
-        for j in 0..m {
-            s[j] *= grad[j];
-            sum += s[j];
+        for (v, g) in s.iter_mut().zip(&grad) {
+            *v *= g;
+            sum += *v;
         }
         s.iter_mut().for_each(|v| *v /= sum);
     }

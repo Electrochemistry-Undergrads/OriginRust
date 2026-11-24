@@ -4475,7 +4475,12 @@ inside the rectangle or the ellipse inscribed in it (`sheaf_plot::region::points
 are left out and the offsets of stacked plots are not applied. The points go to a new workbook "Extracted from
 region": per plot with points inside, an X column (the plot's X name, "Row" without one), a Y column (its Y name) and a
 Disregard column "Source row" (1-based), each commented "in the region of <plot>". One undo step ("Extract data in
-region"). Freeform regions and several regions at once are not built.
+region").
+
+Mask Data in Region and Unmask Data in Region (T413, same menu) mask or unmask the Y cells of those points (the
+plots' Y columns, rows found the same way, masked rows included), as one undo step ("Mask data in region" / "Unmask
+data in region"); the status line counts the cells changed, and nothing happens when none would change. Freeform
+regions and several regions at once are not built.
 
 ### 17.13 Cause-and-effect (fishbone) diagram (T375, Origin 2026 feature, Sheaf's layout, not measured)
 

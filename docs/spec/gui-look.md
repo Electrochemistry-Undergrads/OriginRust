@@ -1890,6 +1890,12 @@ goes where the tool puts it, as one undo step named after the tool, and the stat
 Before any tool has run the item only says so. Plots, fits and the tools of their own windows (Multiple Peak Fit,
 the picking tools) are not repeated.
 
+Analysis > Repeat Last Analysis on All Sheets (T414, below it; Origin 2026's Duplicate Operation onto other sheets)
+runs that tool on the Y columns of every sheet the active workbook has when the command starts (sheets the runs add
+are not visited), as one undo step named after the tool. A sheet without Y columns, or where the tool fails, is
+skipped and named in the status line; when no sheet runs, nothing changes and the warning names them. From a graph
+the item asks for a workbook. Other workbooks are not visited.
+
 ### Find in Project Files (T361, 2026-11-22, not measured)
 
 Origin 2026 searches a collection of saved projects for text in metadata, graph labels, notes and data cells and opens

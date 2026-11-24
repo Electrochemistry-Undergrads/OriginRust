@@ -7,10 +7,10 @@ use sheaf_core::analysis::{
     AcfSpec, AdfTerms, ArimaSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty,
     ChangePointSpec, CoxSpec, DecomposeModel, DecomposeSpec, ExpSmoothSpec, FactorialDesignSpec, FactorialEffectsSpec,
     ForestTask, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistArbitrarySpec, LifeDistSpec,
-    LifeRegressionSpec, ManhattanSpec, MixtureDesignSpec, MixtureKind, MonteCarloSpec, PcaSpec, PivotPeriod, PivotStat,
-    QpcrCurveSpec, QpcrSpec, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec, RocSpec, SmoothModel,
-    SplitPlotDesignSpec, SplitPlotEffectsSpec, StabilitySpec, StationaritySpec, TDistribution, TimePivotSpec, Tool,
-    TurnbullSpec,
+    LifeRegressionSpec, ManhattanSpec, MixtureDesignSpec, MixtureKind, MonteCarloSpec, PcaSpec, PivotBy, PivotPeriod,
+    PivotStat, QpcrCurveSpec, QpcrSpec, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec, RocSpec,
+    SmoothModel, SplitPlotDesignSpec, SplitPlotEffectsSpec, StabilitySpec, StationaritySpec, TDistribution,
+    TimePivotSpec, Tool, TurnbullSpec,
 };
 
 /// Comma-separated numbers typed in a box (T386); empty text is no number.
@@ -852,6 +852,17 @@ impl MultiOptions {
                             },
                         );
                         s.fiscal_start = m;
+                    });
+                });
+                // A second grouping (T420).
+                ui.horizontal(|ui| {
+                    ui.label("Within each period, by");
+                    let shown = s.by.map_or("(none)", |b| b.name());
+                    egui::ComboBox::from_id_salt("timepivot_by").selected_text(shown).show_ui(ui, |ui| {
+                        ui.selectable_value(&mut s.by, None, "(none)");
+                        for b in PivotBy::ALL {
+                            ui.selectable_value(&mut s.by, Some(b), b.name());
+                        }
                     });
                 });
                 ui.weak(

@@ -243,6 +243,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T412](T412-across-folder.md) | Add Column to All Sheets: folder scope and After Column | S | done 2026-11-24 (workbook-model 13q), not measured |
 | [T413](T413-region-mask.md) | Mask / Unmask Data in Region on a drawn rectangle or ellipse | S | done 2026-11-24 (graphing 17.12), not measured |
 | [T414](T414-repeat-all-sheets.md) | Analysis > Repeat Last Analysis on All Sheets | S | done 2026-11-24 (gui-look), not measured |
+| [T420](T420-pivot-by.md) | Time Series Pivot: a second grouping (hour, weekday, month) | S | done 2026-11-24 (statistics 32), not measured |
 | [T233](T233-batch-summary.md) | File > Batch Processing: Summary Sheet, Dataset Identifier, Delete Intermediate Books (a Batch Summary book stacking one sheet of every book) | S | done 2026-11-20 (workbook-model 13p), not measured; left: Origin's layout and identifier choices |
 | [T235](T235-batch-cli.md) | sheaf batch: Batch Processing without a window (template, summary, --summary-csv), core Project::batch_process shared with the window | S | done 2026-11-20 (workbook-model 13p); MCP: T238 |
 | [T238](T238-batch-mcp.md) | MCP batch_process: the shared batch run (books, summary, delete) on the session project, one undo step attached | S | done 2026-11-20 (mcp.md 5.1); left: read options |

@@ -15,4 +15,4 @@ are written `FY2027 Q1` and `FY2027`. `TimePivotSpec::every`, `TimePivotSpec::fi
 
 ## Left
 
-- A second grouping (for example hour of day within each month), custom intervals that do not start at a unit.
+- Custom intervals that do not start at a unit (a second grouping: done in T420).

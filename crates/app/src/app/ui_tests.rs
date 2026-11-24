@@ -6244,6 +6244,7 @@ fn the_worksheet_menu_makes_a_time_series_pivot() {
     assert!(h.state().analysis.is_some() && has_label(&h, "Period"));
     // Custom intervals and fiscal years (T404).
     assert!(has_label(&h, "Every") && has_label(&h, "Fiscal year starts in"));
+    assert!(has_label(&h, "Within each period, by"), "T420");
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none());
     let (sheet, means) = result_column(&h, "Mean of v");

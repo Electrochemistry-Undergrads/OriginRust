@@ -1596,7 +1596,14 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         AnalyzeTool::Manhattan { target, threshold, no_graph } => {
             (target, Job::Tool(Tool::Manhattan(analysis::ManhattanSpec { threshold, graph: !no_graph })))
         }
-        AnalyzeTool::Timepivot { target, period, stat, every, fiscal_start } => {
+        AnalyzeTool::Timepivot { target, period, stat, every, fiscal_start, by } => {
+            let by = match by.as_deref().map(|b| b.trim().to_ascii_lowercase()) {
+                None => None,
+                Some(b) if b == "hour" => Some(analysis::PivotBy::HourOfDay),
+                Some(b) if b == "weekday" || b == "day" => Some(analysis::PivotBy::DayOfWeek),
+                Some(b) if b == "month" => Some(analysis::PivotBy::MonthOfYear),
+                Some(other) => bail!("--by must be hour, weekday or month (got \"{other}\")"),
+            };
             if every == 0 {
                 bail!("--every must be at least 1");
             }
@@ -1619,7 +1626,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 "median" => analysis::PivotStat::Median,
                 other => bail!("--stat must be sum, mean, count, min, max or median (got \"{other}\")"),
             };
-            (target, Job::Tool(Tool::TimePivot(analysis::TimePivotSpec { period, stat, every, fiscal_start })))
+            (target, Job::Tool(Tool::TimePivot(analysis::TimePivotSpec { period, stat, every, fiscal_start, by })))
         }
         AnalyzeTool::Binscatter { target, bins, equal_width, no_graph } => {
             if bins == 0 {

@@ -89,7 +89,7 @@ pub use stability::StabilitySpec;
 pub use stationarity::{AdfTerms, KpssNull, StationaritySpec};
 pub use summary::{GraphArrangement, GraphSummarySpec};
 pub use survival::KaplanMeierSpec;
-pub use timepivot::{PivotPeriod, PivotStat, TimePivotSpec};
+pub use timepivot::{PivotBy, PivotPeriod, PivotStat, TimePivotSpec};
 pub use wavelet::{
     CwtSpec, WaveletDecomposeSpec, WaveletDenoiseSpec, WaveletReconstructSpec, WaveletSmoothSpec, WaveletThresholdKind,
 };

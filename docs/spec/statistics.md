@@ -1880,7 +1880,13 @@ months: January, June, November); years count from year 0, so 10 years are decad
 another month moves the months, quarters and years with it and is named by the calendar year it ends in: with
 October, quarters are "FY2027 Q1" (October to December 2026) and years "FY2027" (October 2026 to September 2027);
 months keep their calendar names. The note and the Period column's comment say the group ("12 hours", "fiscal
-quarter (from October)"). A second grouping is not built.
+quarter (from October)").
+
+A second grouping (T420; `--by hour|weekday|month`; the options window's "Within each period, by"): within each
+period the values are grouped again by the hour of the day (00:00 to 23:00), the day of the week (Mon to Sun) or the
+month of the year (Jan to Dec); each chosen column then gets one result column per group that has values anywhere
+("Mean of v (Mon)", in group order), missing where a period has no value in that group, and no N columns. The note
+counts the groups.
 
 ## 33 Manhattan plot (T362, Origin 2017 app; not measured)
 

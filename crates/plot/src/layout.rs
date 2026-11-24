@@ -2144,8 +2144,12 @@ enum Cell {
     Sample(usize),
     /// Text with the label markup, and its width in points.
     Text(String, f64),
+    /// A text span already parsed around its tab boundaries.
+    Styled(Vec<crate::markup::Segment>, f64),
     /// Literal caption lines and their maximum width. Starts with one unwrapped caption.
     Wrapped(Vec<String>, f64),
+    /// A tab with its measured advance, including trailing blank space in the frame.
+    Tab(f64),
 }
 
 struct LegendRow {
@@ -2153,6 +2157,23 @@ struct LegendRow {
     width: f64,
     line_count: usize,
     separation_before: f64,
+}
+
+fn measure_legend_cells(cells: &mut [Cell], sample: f64, gap: f64, tab_advance: impl Fn(f64) -> f64) -> f64 {
+    let mut width = 0.0;
+    let mut after_symbol = false;
+    for cell in cells {
+        width += match cell {
+            Cell::Sample(_) => sample,
+            Cell::Text(_, w) | Cell::Styled(_, w) | Cell::Wrapped(_, w) => *w + if after_symbol { gap } else { 0.0 },
+            Cell::Tab(advance) => {
+                *advance = tab_advance(width);
+                *advance
+            }
+        };
+        after_symbol = matches!(cell, Cell::Sample(_));
+    }
+    width
 }
 
 /// Draws legend `lg` inside frame `f`: one row per entry line (the automatic text has one
@@ -2187,10 +2208,14 @@ fn draw_legend(
     let (sample, gap, row_h) = (sample * fs, gap * fs, row_step * fs);
     let pad = 0.4 * fs;
     let col_gap = fs;
+    // Origin 2016 Arial exports place stops about 3.5 base font sizes apart (graphing 7.11).
+    let tab_step = (3.5 * fs).max(0.0);
+    let tab_advance = |offset| legend::tab_advance(offset, tab_step);
     let (owner_layer, owner_plots) = owner;
     let plot_color = |slot| owner_plots.get(slot).map(crate::rug::plot_color);
     let segments = |t: &str| crate::markup::plot_segments(t, &|name| m.expand_inline_family(name), &plot_color);
     let text_width = |t: &str| text::segments_width(m, &segments(t), &lg.font, fs);
+    let outer_space = |c: char| c != '\t' && c.is_whitespace();
 
     // Piled, floating and lying bars list the last plot first (measured, spec 14.12).
     let reversed = entries.first().is_some_and(|pd| {
@@ -2215,7 +2240,7 @@ fn draw_legend(
         let mut pending = String::new();
         let mut after_symbol = false;
         let flush = |pending: &mut String, cells: &mut Vec<Cell>, after_symbol: &mut bool| {
-            let t = if *after_symbol { pending.trim_start() } else { pending.as_str() };
+            let t = if *after_symbol { pending.trim_start_matches(outer_space) } else { pending.as_str() };
             if !t.is_empty() {
                 cells.push(Cell::Text(t.to_string(), text_width(t)));
             }
@@ -2248,21 +2273,37 @@ fn draw_legend(
         }
         flush(&mut pending, &mut cells, &mut after_symbol);
         if let Some(Cell::Text(t, w)) = cells.last_mut() {
-            let trimmed = t.trim_end();
+            let trimmed = t.trim_end_matches(outer_space);
             if trimmed.len() != t.len() {
                 *t = trimmed.to_string();
                 *w = text_width(t);
             }
         }
-        let mut width = 0.0;
-        for (i, c) in cells.iter().enumerate() {
-            width += match c {
-                Cell::Sample(_) => sample,
-                Cell::Text(_, w) | Cell::Wrapped(_, w) => {
-                    *w + if i > 0 && matches!(cells[i - 1], Cell::Sample(_)) { gap } else { 0.0 }
+        if cells.iter().any(|cell| matches!(cell, Cell::Text(t, _) if t.contains('\t'))) {
+            let mut expanded = Vec::new();
+            for cell in cells {
+                if let Cell::Text(t, _) = &cell
+                    && t.contains('\t')
+                {
+                    let runs = crate::markup::legend_segments(t, &|name| m.expand_inline_family(name), &plot_color);
+                    for (i, part) in runs.split(|segment| matches!(segment, crate::markup::Segment::Tab)).enumerate() {
+                        if i > 0 {
+                            expanded.push(Cell::Tab(0.0));
+                        }
+                        if !part.is_empty() {
+                            expanded.push(Cell::Styled(part.to_vec(), text::segments_width(m, part, &lg.font, fs)));
+                        }
+                    }
+                } else {
+                    expanded.push(cell);
                 }
-            };
+            }
+            cells = expanded;
         }
+        // Reserve up to one stop per tab before assigning width to wrapped captions.
+        let wraps = cells.iter().any(|cell| matches!(cell, Cell::Wrapped(..)));
+        let width =
+            measure_legend_cells(&mut cells, sample, gap, |offset| if wraps { tab_step } else { tab_advance(offset) });
         rows.push(LegendRow { cells, width, line_count: 1, separation_before: std::mem::take(&mut separation_before) });
     }
     if rows.is_empty() {
@@ -2278,10 +2319,10 @@ fn draw_legend(
             for cell in &mut row.cells {
                 if let Cell::Wrapped(lines, width) = cell {
                     (*lines, *width) = legend::wrap_literal(&lines[0], available, |s| m.width(s, &lg.font, fs));
-                    row.width += *width;
                     row.line_count = row.line_count.max(lines.len());
                 }
             }
+            row.width = measure_legend_cells(&mut row.cells, sample, gap, tab_advance);
         }
     }
     let mut col_w = Vec::with_capacity(n_cols);
@@ -2427,6 +2468,14 @@ fn draw_legend(
                     x += w;
                     after_symbol = false;
                 }
+                Cell::Styled(runs, w) => {
+                    if after_symbol {
+                        x += gap;
+                    }
+                    text::place_segments(out, m, runs, &lg.font, fs, (x, baseline), Anchor::Start, 0.0);
+                    x += w;
+                    after_symbol = false;
+                }
                 Cell::Wrapped(lines, width) => {
                     if after_symbol {
                         x += gap;
@@ -2435,6 +2484,10 @@ fn draw_legend(
                         text::place_literal(out, m, line, &lg.font, (x, baseline + i as f64 * row_h));
                     }
                     x += width;
+                    after_symbol = false;
+                }
+                Cell::Tab(advance) => {
+                    x += advance;
                     after_symbol = false;
                 }
             }

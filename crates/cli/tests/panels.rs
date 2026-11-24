@@ -84,7 +84,8 @@ fn a_stack_puts_each_y_column_in_its_own_panel_with_the_first_at_the_bottom() {
         assert_eq!(layer_columns(&p, layer), [*name]);
     }
     assert_eq!(g.layers[0].link, None);
-    assert_eq!((g.layers[1].link, g.layers[2].link), (X_LINK, X_LINK));
+    assert_eq!(g.layers[1].link, X_LINK);
+    assert_eq!(g.layers[2].link, X_LINK);
     assert!(g.page_frame(0).top > g.page_frame(1).top, "the first panel is at the bottom");
     for layer in 0..3 {
         assert!(svg.contains(&format!("<g id=\"layer{layer}\">")));
@@ -164,7 +165,8 @@ fn grids_and_the_layout_options() {
     let (p, _) = plot_and_load(&dir, &[&data], &extra);
     let g = graph(&p);
     let link = Some(LayerLink { parent: 0, x: ScaleLink::None, y: ScaleLink::Straight });
-    assert_eq!((g.layers[1].link, g.layers[2].link), (link, link));
+    assert_eq!(g.layers[1].link, link);
+    assert_eq!(g.layers[2].link, link);
     let f: Vec<_> = (0..3).map(|i| g.page_frame(i)).collect();
     assert!((f[0].left - 0.10).abs() < 1e-9 && (f[0].width - 0.85 / 3.0).abs() < 1e-9, "{f:?}");
     assert!((f[1].left - (f[0].left + f[0].width)).abs() < 1e-9, "no gap: {f:?}");

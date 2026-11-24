@@ -93,7 +93,7 @@ impl NewLayerKind {
 }
 
 /// Axis and link choices for the User Defined option in New Layer (Axes).
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UserDefinedLayer {
     pub bottom: bool,
     pub top: bool,
@@ -120,7 +120,7 @@ impl Default for UserDefinedLayer {
 
 impl UserDefinedLayer {
     /// Auto offset applies to visible axes on a parent's frame.
-    pub fn supports_auto_offset(self) -> bool {
+    pub fn supports_auto_offset(&self) -> bool {
         self.parent.is_some() && (self.bottom || self.top || self.left || self.right)
     }
 }
@@ -269,6 +269,7 @@ impl Graph {
         } else {
             (NewLayerKind::Normal, active)
         };
+        let offset = auto_offset && options.supports_auto_offset();
         let index = self.add_layer(kind, source)?;
         let layer = &mut self.layers[index];
         if let Some(link) = &mut layer.link {
@@ -291,7 +292,7 @@ impl Graph {
         }
         layer.display.show_x_axes = true;
         layer.display.show_y_axes = true;
-        if auto_offset && options.supports_auto_offset() {
+        if offset {
             self.offset_new_layer_axes(index);
         }
         Some(index)
@@ -350,19 +351,27 @@ impl Graph {
         if on_edge && offset.is_finite() { offset } else { 0.0 }
     }
 
-    /// Gives the layers that follow layer `index` on a straight link their range as it is drawn now
-    /// (`ranges[i]` is layer i's X and Y as (min, max, step)), so that they keep it when `index` goes
+    /// Gives axes linked to layer `index` their range as drawn now (`ranges[i]` is layer i's X and
+    /// Y as (from, to, step)), so that they keep it when `index` goes
     /// away (graphing spec 21.4: x.from and x.to stay). Call before [`Graph::delete_layer`].
     pub fn freeze_linked_ranges(&mut self, index: usize, ranges: &[((f64, f64, f64), (f64, f64, f64))]) {
         for (i, layer) in self.layers.iter_mut().enumerate() {
-            let Some(link) = layer.link.filter(|l| l.parent == index) else { continue };
+            let Some(link) = layer.link.as_ref().filter(|l| l.parent == index) else { continue };
             let Some(&(x, y)) = ranges.get(i) else { continue };
-            for (axis, shared, (min, max, step)) in [(&mut layer.x_axis, link.x, x), (&mut layer.y_axis, link.y, y)] {
-                if shared == ScaleLink::Straight && axis.min.is_none() && axis.max.is_none() {
-                    axis.min = Some(min);
-                    axis.max = Some(max);
-                    axis.major_step.get_or_insert(step);
+            for (axis, link, (from, to, step)) in [(&mut layer.x_axis, &link.x, x), (&mut layer.y_axis, &link.y, y)] {
+                match link {
+                    ScaleLink::Custom { .. } => {
+                        axis.min = Some(from);
+                        axis.max = Some(to);
+                        axis.reverse = false;
+                    }
+                    ScaleLink::Straight if axis.min.is_none() && axis.max.is_none() => {
+                        axis.min = Some(from.min(to));
+                        axis.max = Some(from.max(to));
+                    }
+                    _ => continue,
                 }
+                axis.major_step.get_or_insert(step);
             }
         }
     }
@@ -381,7 +390,7 @@ impl Graph {
         }
         let places: Vec<Option<Frame>> = (0..self.layers.len()).map(|i| self.absolute_frame(i)).collect();
         for (i, layer) in self.layers.iter_mut().enumerate() {
-            let Some(link) = layer.link else { continue };
+            let Some(link) = &mut layer.link else { continue };
             if i == index {
                 continue;
             }
@@ -389,7 +398,7 @@ impl Graph {
                 layer.frame = places[i].unwrap_or(layer.frame);
                 layer.link = None;
             } else if link.parent > index {
-                layer.link = Some(LayerLink { parent: link.parent - 1, ..link });
+                link.parent -= 1;
             }
         }
         self.layers.remove(index);
@@ -425,7 +434,7 @@ mod tests {
 
     /// Every link goes to an earlier layer that is not linked itself.
     fn well_formed(g: &Graph) -> bool {
-        g.layers.iter().enumerate().all(|(i, l)| match l.link {
+        g.layers.iter().enumerate().all(|(i, l)| match &l.link {
             None => true,
             Some(k) => k.parent < i && g.layers[k.parent].link.is_none(),
         })
@@ -486,7 +495,7 @@ mod tests {
             let request = UserDefinedLayer { top: true, right: true, parent: Some(0), ..UserDefinedLayer::default() };
             for (index, (x, y)) in [(3.0, 2.0), (6.0, 4.0)].into_iter().enumerate() {
                 let saved = g.layers.clone();
-                let i = g.add_user_defined_layer(request, 0, true).unwrap();
+                let i = g.add_user_defined_layer(request.clone(), 0, true).unwrap();
                 assert_eq!(g.layers[..i], saved);
                 let layer = &g.layers[i];
                 assert_eq!((layer.x_axis.offset_pct, layer.y_axis.offset_pct), (x, y));
@@ -524,7 +533,7 @@ mod tests {
             assert_eq!((layer.x_axis.offset_pct, layer.y_axis.offset_pct), (x, y), "{w} × {h}");
             assert_eq!(g.layers[..new], before);
             assert_eq!(g.absolute_frame(new), Some(before[0].frame));
-            assert_eq!(layer.link.unwrap().parent, 0);
+            assert_eq!(layer.link.as_ref().unwrap().parent, 0);
         }
     }
 
@@ -579,10 +588,10 @@ mod tests {
             let mut g = graph();
             assert_eq!(g.add_layer(kind, 0), Some(1), "{kind:?}");
             let l = &g.layers[1];
-            assert_eq!(l.link.map(|k| (k.x, k.y)), links, "{kind:?}");
+            assert_eq!(l.link.clone().map(|k| (k.x, k.y)), links, "{kind:?}");
             assert_eq!((l.x_axis.side, l.y_axis.side), (xs, ys), "{kind:?}");
             if links.is_some() {
-                assert_eq!(l.link.unwrap().parent, 0);
+                assert_eq!(l.link.as_ref().unwrap().parent, 0);
                 let want = if kind == NewLayerKind::Inset {
                     Frame { left: 0.75, top: 0.0, width: 0.25, height: 0.25 }
                 } else {
@@ -610,10 +619,10 @@ mod tests {
         g.add_layer(NewLayerKind::Normal, 0).unwrap();
         // Layer 2 (index 1) is active: the right Y layer follows it.
         assert_eq!(g.add_layer(NewLayerKind::RightY, 1), Some(2));
-        assert_eq!(g.layers[2].link.unwrap().parent, 1);
+        assert_eq!(g.layers[2].link.as_ref().unwrap().parent, 1);
         // A linked layer cannot be a parent: an inset added while it is active follows its root.
         assert_eq!(g.add_layer(NewLayerKind::Inset, 2), Some(3));
-        assert_eq!(g.layers[3].link.unwrap().parent, 1);
+        assert_eq!(g.layers[3].link.as_ref().unwrap().parent, 1);
         assert!(well_formed(&g));
         assert_eq!(g.add_layer(NewLayerKind::TopX, 9), None);
     }
@@ -639,7 +648,7 @@ mod tests {
         assert_eq!((l.x_axis.min, l.y_axis.max), (Some(-2.5), Some(125.0)));
         assert_eq!(l.plots.len(), 1);
         assert_eq!(l.plots[0].y, cols[0]);
-        assert_eq!(l.link.map(|k| (k.x, k.y)), Some((ScaleLink::None, ScaleLink::None)));
+        assert_eq!(l.link.clone().map(|k| (k.x, k.y)), Some((ScaleLink::None, ScaleLink::None)));
         g.add_layer(NewLayerKind::Inset, 0).unwrap();
         assert!(g.layers[2].plots.is_empty() && g.layers[2].x_axis.min.is_none());
     }
@@ -667,8 +676,8 @@ mod tests {
         g.add_layer(NewLayerKind::Inset, 1).unwrap(); // 3 -> 1
         assert!(g.delete_layer(0));
         assert_eq!(g.layers.len(), 3);
-        assert_eq!(g.layers[1].link.unwrap().parent, 0);
-        assert_eq!(g.layers[2].link.unwrap().parent, 0);
+        assert_eq!(g.layers[1].link.as_ref().unwrap().parent, 0);
+        assert_eq!(g.layers[2].link.as_ref().unwrap().parent, 0);
         assert!(well_formed(&g));
     }
 
@@ -684,7 +693,7 @@ mod tests {
         let mut g = before;
         assert!(g.delete_layer(1));
         assert_eq!(g.layers.len(), 3);
-        assert_eq!(g.layers[2].link.unwrap().parent, 1, "was linked to layer 3 of 4, now to layer 2 of 3");
+        assert_eq!(g.layers[2].link.as_ref().unwrap().parent, 1, "was linked to layer 3 of 4, now to layer 2 of 3");
         assert!(well_formed(&g));
     }
 

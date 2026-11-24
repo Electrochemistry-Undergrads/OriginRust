@@ -686,8 +686,8 @@ fn the_link_axes_scales_tab_links_and_unlinks_a_layer_as_origin() {
     h.state_mut().doc.apply("Double Y", |p| {
         p.add_right_y_layer(g, 0).unwrap();
     });
-    let before = graph(&h).layers[1].link.unwrap();
-    assert_eq!((before.x, before.y), (ScaleLink::Straight, ScaleLink::None));
+    let before = graph(&h).layers[1].link.as_ref().unwrap();
+    assert_eq!((&before.x, &before.y), (&ScaleLink::Straight, &ScaleLink::None));
     open_props(&mut h, 0, PropsTab::Plots, None);
     click(&mut h, "Layer 1");
     assert!(!has_label(&h, "Link Axes Scales"), "the first layer has nothing to link to");
@@ -699,7 +699,7 @@ fn the_link_axes_scales_tab_links_and_unlinks_a_layer_as_origin() {
     h.query_all_by_label("Straight (1 to 1)").nth(1).expect("the Y side").click();
     settle(&mut h);
     click(&mut h, "Apply");
-    assert_eq!(graph(&h).layers[1].link.unwrap().y, ScaleLink::Straight);
+    assert_eq!(graph(&h).layers[1].link.as_ref().unwrap().y, ScaleLink::Straight);
     // Link to None: unlinked, at the same place on the page.
     let on_page = graph(&h).layers[1].frame.within(graph(&h).layers[0].frame);
     h.get_by_value("Layer1").click();

@@ -155,6 +155,28 @@ pub fn eval_tick_formula(formula: &str, x: f64) -> Option<f64> {
     sheaf_expr::Expr::parse(formula).ok()?.eval(&host).ok().filter(|v| v.is_finite())
 }
 
+impl crate::graph::ScaleLink {
+    /// Evaluate the child endpoints from the parent's X and Y limits in From/To order.
+    /// Returns no limits for a non-formula link or a range that cannot be drawn on the child scale.
+    pub fn formula_limits(&self, x: (f64, f64), y: (f64, f64), scale: ScaleKind) -> Option<(f64, f64)> {
+        let Self::Custom { from, to } = self else { return None };
+        let host = sheaf_expr::SimpleHost::from_vars([
+            ("X1", x.0),
+            ("X2", x.1),
+            ("Y1", y.0),
+            ("Y2", y.1),
+            ("x1", x.0),
+            ("x2", x.1),
+            ("y1", y.0),
+            ("y2", y.1),
+        ]);
+        let eval = |source| sheaf_expr::Expr::parse(source).ok()?.eval(&host).ok();
+        let (from, to) = (eval(from)?, eval(to)?);
+        let span = to - from;
+        (scale.accepts(from) && scale.accepts(to) && span.is_finite() && span != 0.0).then_some((from, to))
+    }
+}
+
 /// The standard normal distribution function (West's double-precision algorithm, error about 1e-15).
 pub fn norm_cdf(x: f64) -> f64 {
     if x.is_nan() {

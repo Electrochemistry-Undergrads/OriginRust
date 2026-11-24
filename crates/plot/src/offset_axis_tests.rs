@@ -605,3 +605,55 @@ fn axis_title_tokens_are_replaced_by_the_built_titles() {
     assert!(texts.iter().any(|t| t.contains(&want) || t.contains("shifted")), "{texts:?}");
     assert!(!texts.iter().any(|t| t.contains("%(?")), "{texts:?}");
 }
+
+#[test]
+fn custom_scale_link_tracks_parent_endpoints_and_keeps_own_ticks() {
+    let (x, shape) = super::tests::golden_data();
+    let (mut p, g) = super::tests::project(Template::Line, x, vec![shape(1.0)]);
+    let graph = p.graph_mut(g).unwrap();
+    (graph.layers[0].x_axis.min, graph.layers[0].x_axis.max) = (Some(2.0), Some(14.0));
+    (graph.layers[0].y_axis.min, graph.layers[0].y_axis.max) = (Some(3.0), Some(27.0));
+    let i = graph
+        .add_user_defined_layer(
+            UserDefinedLayer {
+                bottom: false,
+                top: true,
+                left: false,
+                right: true,
+                parent: Some(0),
+                x_link: ScaleLink::Custom { from: "X1+10".into(), to: "x2+50".into() },
+                y_link: ScaleLink::Custom { from: "Y1*2".into(), to: "y2+X1".into() },
+            },
+            0,
+            false,
+        )
+        .unwrap();
+    graph.layers[i].x_axis.major_step = Some(13.0);
+
+    let geometry = geoms(&p, g);
+    assert_eq!(geometry[0].x.endpoints(), (2.0, 14.0));
+    assert_eq!(geometry[i].x.endpoints(), (12.0, 64.0));
+    assert_eq!(geometry[i].y.endpoints(), (6.0, 29.0));
+    assert_eq!(geometry[i].x.major, [13.0, 26.0, 39.0, 52.0]);
+    let scene = layout::build_scene(&p, g, &FixedMetrics).unwrap();
+    assert!(scene.layers[i].overlay.iter().any(|item| matches!(item, scene::Item::Text(t) if t.text == "39")));
+
+    let graph = p.graph_mut(g).unwrap();
+    graph.layers[0].x_axis.min = Some(30.0);
+    graph.layers[0].x_axis.max = Some(4.0);
+    let geometry = geoms(&p, g);
+    assert_eq!(geometry[0].x.endpoints(), (30.0, 4.0));
+    assert_eq!(geometry[i].x.endpoints(), (40.0, 54.0));
+    assert_eq!(geometry[i].y.endpoints(), (6.0, 57.0));
+
+    let graph = p.graph_mut(g).unwrap();
+    graph.layers[i].link.as_mut().unwrap().x = ScaleLink::Custom { from: "X1".into(), to: "X2".into() };
+    let geometry = geoms(&p, g);
+    assert_eq!(geometry[i].x.endpoints(), (30.0, 4.0));
+
+    let graph = p.graph_mut(g).unwrap();
+    graph.layers[i].x_axis.min = Some(1.0);
+    graph.layers[i].x_axis.max = Some(7.0);
+    graph.layers[i].link.as_mut().unwrap().x = ScaleLink::Custom { from: "1/(X1-30)".into(), to: "X2".into() };
+    assert_eq!(geoms(&p, g)[i].x.endpoints(), (1.0, 7.0));
+}

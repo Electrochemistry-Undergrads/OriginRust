@@ -4,8 +4,18 @@
 //! follows the noncentral distribution that belongs to the effect. The sample size is the smallest whole number
 //! of observations (per group) whose power reaches the wanted power. The rules and the numbers Origin gave are
 //! in `docs/spec/statistics.md` section 12.
+//!
+//! **Proportions and variances** (T415; Sheaf's own, not measured in Origin): the tests Sheaf runs in section 21.
+//! One proportion, the normal-approximation z test with the standard error at the hypothesized proportion: two-sided
+//! power `Phi((|p - p0| sqrt n - z sqrt(p0 q0)) / sqrt(p q)) + Phi((-|p - p0| sqrt n - z sqrt(p0 q0)) / sqrt(p q))`
+//! with `z` the `1 - alpha/2` normal point, one-sided only the first term with `z` at `1 - alpha`. Two proportions of
+//! `n` each, the unpooled z test: the same with `sqrt(p1 q1 + p2 q2)` in both places. One variance, the chi-square
+//! test with `n - 1` df: under the alternative `(n - 1) s^2 / sigma0^2` is `r` times a chi-square, `r = sigma^2 /
+//! sigma0^2`, so the power is `F(c_lo / r) + 1 - F(c_hi / r)` at the test's critical points. Two variances of `n`
+//! each, the F test with `(n - 1, n - 1)` df and `r = sigma1^2 / sigma2^2`, the same way. One-sided tests look in
+//! the direction of the effect, as for the t tests.
 
-use statrs::distribution::{ContinuousCDF, FisherSnedecor, Normal, StudentsT};
+use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal, StudentsT};
 use statrs::function::beta::beta_reg;
 use statrs::function::gamma::ln_gamma;
 
@@ -368,9 +378,144 @@ pub fn anova_sample_sizes(
     Ok(out)
 }
 
+/// A test on proportions or variances (T415).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RateTest {
+    /// One proportion `a` against the hypothesized `b` (normal approximation).
+    OneProportion,
+    /// Two proportions `a` and `b` with `n` each (unpooled normal approximation).
+    TwoProportions,
+    /// One variance `a` against the hypothesized `b` (chi-square).
+    OneVariance,
+    /// Two variances `a` and `b` with `n` each (F).
+    TwoVariances,
+}
+
+impl RateTest {
+    fn check(self, a: f64, b: f64, alpha: f64) -> Result<(), PowerError> {
+        let ok = match self {
+            RateTest::OneProportion | RateTest::TwoProportions => a > 0.0 && a < 1.0 && b > 0.0 && b < 1.0,
+            RateTest::OneVariance | RateTest::TwoVariances => a > 0.0 && b > 0.0 && a.is_finite() && b.is_finite(),
+        };
+        if !ok || !(alpha > 0.0 && alpha < 1.0) {
+            return Err(PowerError::BadInput);
+        }
+        Ok(())
+    }
+}
+
+/// The chances that `r` times a variable of `d` falls below its `tail` point and above its `1 - tail` point.
+fn beyond<D: ContinuousCDF<f64, f64>>(d: &D, tail: f64, r: f64) -> (f64, f64) {
+    (d.cdf(d.inverse_cdf(tail) / r), d.sf(d.inverse_cdf(1.0 - tail) / r))
+}
+
+/// The power of a proportion or variance test with `n` observations (per group), `n` at least 2.
+pub fn rate_power(test: RateTest, n: f64, a: f64, b: f64, alpha: f64, two_sided: bool) -> Result<f64, PowerError> {
+    test.check(a, b, alpha)?;
+    if n.is_nan() || n < 2.0 {
+        return Err(PowerError::BadInput);
+    }
+    let tail = if two_sided { alpha / 2.0 } else { alpha };
+    match test {
+        RateTest::OneProportion | RateTest::TwoProportions => {
+            let norm = Normal::new(0.0, 1.0).expect("standard normal");
+            let z = norm.inverse_cdf(1.0 - tail);
+            let (se0, se1) = if test == RateTest::OneProportion {
+                ((b * (1.0 - b)).sqrt(), (a * (1.0 - a)).sqrt())
+            } else {
+                let s = (a * (1.0 - a) + b * (1.0 - b)).sqrt();
+                (s, s)
+            };
+            let d = (a - b).abs() * n.sqrt();
+            let upper = norm.cdf((d - z * se0) / se1);
+            Ok(if two_sided { upper + norm.cdf((-d - z * se0) / se1) } else { upper })
+        }
+        RateTest::OneVariance | RateTest::TwoVariances => {
+            let r = a / b;
+            let (below, above) = if test == RateTest::OneVariance {
+                beyond(&ChiSquared::new(n - 1.0).map_err(|_| PowerError::BadInput)?, tail, r)
+            } else {
+                beyond(&FisherSnedecor::new(n - 1.0, n - 1.0).map_err(|_| PowerError::BadInput)?, tail, r)
+            };
+            Ok(if two_sided {
+                below + above
+            } else if r >= 1.0 {
+                above
+            } else {
+                below
+            })
+        }
+    }
+}
+
+/// Powers of a proportion or variance test for a list of sample sizes (per group for two samples): whole numbers;
+/// a size below 2 gets no power (NaN), as for the t tests.
+pub fn rate_powers(
+    test: RateTest,
+    sizes: &[f64],
+    a: f64,
+    b: f64,
+    alpha: f64,
+    two_sided: bool,
+) -> Result<Vec<f64>, PowerError> {
+    if sizes.is_empty() || sizes.iter().any(|n| n.is_nan() || n.fract() != 0.0) {
+        return Err(PowerError::BadInput);
+    }
+    test.check(a, b, alpha)?;
+    sizes.iter().map(|&n| if n < 2.0 { Ok(f64::NAN) } else { rate_power(test, n, a, b, alpha, two_sided) }).collect()
+}
+
+/// Smallest sample sizes (per group) of a proportion or variance test that reach each wanted power; a wanted power
+/// that two observations already reach gets no size (NaN), and the power of two observations is given.
+pub fn rate_sample_sizes(
+    test: RateTest,
+    powers: &[f64],
+    a: f64,
+    b: f64,
+    alpha: f64,
+    two_sided: bool,
+) -> Result<SampleSizes, PowerError> {
+    test.check(a, b, alpha)?;
+    if a == b {
+        return Err(PowerError::NoEffect);
+    }
+    check_powers(powers)?;
+    let power_at = |n: f64| rate_power(test, n, a, b, alpha, two_sided).unwrap_or(f64::NAN);
+    let lowest = power_at(2.0);
+    let mut out = SampleSizes { sizes: Vec::new(), below_lowest: Vec::new(), lowest: Some(lowest) };
+    for &target in powers {
+        if target <= lowest {
+            out.sizes.push(f64::NAN);
+            out.below_lowest.push(true);
+        } else {
+            out.sizes.push(smallest_size(target, &power_at)?);
+            out.below_lowest.push(false);
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rate_tests_without_an_effect_have_the_level_as_power_and_refuse_bad_input() {
+        for test in [RateTest::OneProportion, RateTest::TwoProportions, RateTest::OneVariance, RateTest::TwoVariances] {
+            for two in [true, false] {
+                let p = rate_power(test, 20.0, 0.4, 0.4, 0.05, two).unwrap();
+                assert!((p - 0.05).abs() < 1e-12, "{test:?} {two}: {p}");
+            }
+            assert_eq!(rate_powers(test, &[1.0, 2.5], 0.4, 0.5, 0.05, true), Err(PowerError::BadInput));
+            assert!(rate_powers(test, &[1.0], 0.4, 0.5, 0.05, true).unwrap()[0].is_nan());
+            assert_eq!(rate_powers(test, &[10.0], 0.4, 0.0, 0.05, true), Err(PowerError::BadInput));
+            assert_eq!(rate_sample_sizes(test, &[0.8], 0.4, 0.5, 0.05, true).unwrap().sizes.len(), 1);
+            assert_eq!(rate_sample_sizes(test, &[1.0], 0.4, 0.5, 0.05, true), Err(PowerError::BadPower));
+        }
+        assert_eq!(rate_powers(RateTest::OneProportion, &[10.0], 1.0, 0.5, 0.05, true), Err(PowerError::BadInput));
+        // A variance above 1 is fine, a proportion is not.
+        assert!(rate_powers(RateTest::OneVariance, &[10.0], 3.0, 1.0, 0.05, true).is_ok());
+    }
 
     #[test]
     #[allow(clippy::excessive_precision)] // the digits as Origin printed them

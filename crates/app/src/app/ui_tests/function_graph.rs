@@ -168,3 +168,46 @@ fn time_series_explorer_steps_and_plays_from_the_bar() {
     settle(&mut h);
     assert!(h.query_by_label("Play").is_some(), "paused");
 }
+
+#[test]
+fn sticky_notes_pin_to_a_sheet_take_text_and_collapse() {
+    // T421: Window > Sticky Note on Sheet, typing, a colour, Collapse and Delete Note.
+    use sheaf_core::sticky::{NoteColor, NoteTarget};
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let mut book = sheaf_core::WindowId(0);
+    h.state_mut().doc.apply("data", |p| {
+        book = p.add_workbook("");
+        p.add_column(book, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::numeric(vec![1.0])).unwrap();
+    });
+    settle(&mut h);
+    h.state_mut().apply(Action::AddStickyNote { window: book, sheet: true }, &ctx);
+    settle(&mut h);
+    let target = NoteTarget::Sheet(book, 0);
+    assert!(project(&h).sticky_note(target).is_some());
+    assert_eq!(h.state().doc.undo_label(), Some("Add Sticky Note"));
+    h.get_by_label("Sheet note");
+    h.get_by_role(egui::accesskit::Role::MultilineTextInput).focus();
+    settle(&mut h);
+    h.event(egui::Event::Text("check run 3".into()));
+    settle(&mut h);
+    assert_eq!(project(&h).sticky_note(target).unwrap().text, "check run 3");
+    assert_eq!(h.state().doc.undo_label(), Some("Edit Sticky Note"));
+    h.state_mut().doc.undo();
+    assert_eq!(project(&h).sticky_note(target).unwrap().text, "", "the typing is one undo step");
+    h.state_mut().doc.redo();
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    let at = h.get_by_label("Pink").rect().center();
+    click_at(&mut h, at);
+    assert_eq!(project(&h).sticky_note(target).unwrap().color, NoteColor::Pink);
+    h.get_by_label("Collapse").click();
+    settle(&mut h);
+    assert!(project(&h).sticky_note(target).unwrap().collapsed);
+    h.get_by_label("check run 3");
+    h.get_by_label("Expand").click();
+    settle(&mut h);
+    h.get_by_label("Delete Note").click();
+    settle(&mut h);
+    assert!(project(&h).sticky_note(target).is_none());
+}

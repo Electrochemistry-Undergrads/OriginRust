@@ -71,6 +71,59 @@ fn custom_text_reorders_substitutes_and_adds_literal_text() {
 }
 
 #[test]
+fn following_plot_color_restarts_each_row_and_tracks_the_sample_between_runs() {
+    let (mut p, g) = project(3);
+    let green = Color::rgb(0, 255, 0);
+    let magenta = Color::rgb(255, 0, 255);
+    let fixed = Color::rgb(21, 61, 101);
+    let layer = &mut p.graph_mut(g).unwrap().layers[0];
+    for (plot, color) in layer.plots.iter_mut().zip([Color::RED, green, Color::BLUE]) {
+        plot.line.color = color;
+    }
+    layer.legend.font.color = fixed;
+    layer.legend.text = Some(
+        r"Heading%(CRLF)Before \l(2) Cross %(1) \c6(Override)%(TAB)\ww(Tail)%(CRLF)Only %(3)%(CRLF)\l(3) First%(TAB)\l(1) Second"
+            .into(),
+    );
+    let raw = layer.legend.text.clone();
+    let bounds = automatic_legend_box(&p, g);
+    let runs = |p: &Project| {
+        let s = scene(p, g);
+        let layer = &s.layers[0];
+        let o = layer.objects.iter().find(|o| o.kind == ObjectKind::Legend).unwrap();
+        layer.overlay[o.items.clone()]
+            .iter()
+            .filter_map(|i| match i {
+                Item::Text(t) if !t.text.trim().is_empty() => Some((t.text.trim().to_string(), t.color)),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    p.graph_mut(g).unwrap().layers[0].legend.text_color_follows_plot = true;
+    let expected = |second| {
+        [
+            ("Heading", Color::RED),
+            ("Before", Color::RED),
+            ("Cross Series 1", second),
+            ("Override", magenta),
+            ("Tail", second),
+            ("Only Series 3", Color::RED),
+            ("First", Color::BLUE),
+            ("Second", Color::RED),
+        ]
+        .map(|(text, color)| (text.to_string(), color))
+    };
+    assert_eq!(runs(&p), expected(green));
+    p.graph_mut(g).unwrap().layers[0].plots[1].line.color = Color::BLACK;
+    assert_eq!(runs(&p), expected(Color::BLACK));
+    assert_eq!(automatic_legend_box(&p, g), bounds);
+    let legend = &mut p.graph_mut(g).unwrap().layers[0].legend;
+    assert_eq!(legend.text, raw);
+    legend.text_color_follows_plot = false;
+    assert_eq!(runs(&p), expected(fixed).map(|(text, color)| (text, if color == magenta { magenta } else { fixed })));
+}
+
+#[test]
 fn legend_plot_color_styles_substituted_text_at_its_measured_size() {
     use sheaf_core::graph::LegendPosition;
 
@@ -85,6 +138,38 @@ fn legend_plot_color_styles_substituted_text_at_its_measured_size() {
     legend.text = Some(r"\l(1) \c2(\u(\b(%(2))))   ".into());
     assert_eq!(crate::svg::write_svg(&initial), crate::svg::write_svg(&scene(&p, g)));
     assert_eq!(reference_box, automatic_legend_box(&p, g));
+}
+
+#[test]
+fn the_follow_color_uses_symbol_edges_and_sample_fills() {
+    let cyan = Color::rgb(0, 255, 255);
+    for (template, expected) in [
+        (Template::Line, cyan),
+        (Template::Scatter, Color::BLUE),
+        (Template::LineSymbol, Color::BLUE),
+        (Template::Column, cyan),
+        (Template::Area, cyan),
+    ] {
+        let (mut p, g) = project_with_template(1, template);
+        let layer = &mut p.graph_mut(g).unwrap().layers[0];
+        layer.legend.text_color_follows_plot = true;
+        let plot = &mut layer.plots[0];
+        plot.line.color = Color::RED;
+        plot.symbol.color = if plot.kind.has_symbols() { Color::BLUE } else { cyan };
+        plot.symbol.fill_color = Some(cyan);
+        if template == Template::Line {
+            plot.decor.fill_under = Some(cyan);
+        }
+        let s = scene(&p, g);
+        let layer = &s.layers[0];
+        let obj = layer.objects.iter().find(|o| o.kind == ObjectKind::Legend).unwrap();
+        assert!(
+            layer.overlay[obj.items.clone()]
+                .iter()
+                .any(|i| matches!(i, Item::Text(t) if t.text == "Series 1" && t.color == expected)),
+            "{template:?}"
+        );
+    }
 }
 
 #[test]

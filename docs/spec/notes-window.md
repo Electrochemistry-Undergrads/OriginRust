@@ -28,3 +28,26 @@ documented behaviour.
   duplicated and deleted like any sheet, saved in the `.sheaf` file (the sheet's `notes_text`), and left
   out of an `.opj` with a warning (a workbook of only Notes sheets keeps one empty sheet there).
 - **Not done:** Origin's Notes formatting and its HTML mode.
+
+## Sticky Notes (T421, 2026-11-24; Origin 2027's Sticky Notes, Sheaf's own, not measured)
+
+Origin 2027 added searchable, collapsible sticky notes on graph windows, workbooks and single sheets, with colour
+choices. Origin 2016 has none.
+
+- **Adding:** Window > Sticky Note on a graph; Window > Sticky Note on Book and Sticky Note on Sheet on a workbook
+  (the sheet shown). A new note is empty, yellow and open (one undo step, "Add Sticky Note"); on a window or sheet
+  that has one, the command opens it.
+- **The strip:** a note is a strip in its colour across the top of its window: a graph's note above the page, a
+  workbook's note and then the shown sheet's note above the grid. Open, it has Collapse, its name ("Note", "Book
+  note" or "Sheet note"), five colour swatches (Yellow, Green, Blue, Pink, Orange; the note's own outlined), Delete
+  Note, and the text box below ("Type a note" when empty). Collapsed, it is one line: Expand, its name and the text's
+  first non-blank line ("(empty note)" when there is none), the indicator that the window has a note.
+- **Undo:** a run of typing in one note is one step ("Edit Sticky Note"); a colour, collapsing or expanding, and
+  Delete Note are a step each.
+- **Search:** Find in Project searches the notes' text with the notes windows (the Notes switch), as attribute
+  "Sticky Note" of the Graph, Book or Sheet.
+- **Model:** `sheaf_core::sticky::StickyNote` (text, colour, collapsed) in `Graph::sticky`, `Workbook::sticky` and
+  `Worksheet::sticky`, saved in the `.sheaf` file; a sheet's note moves with the sheet. `Project::add_sticky_note`,
+  `edit_sticky_note`, `remove_sticky_note`, `sticky_notes`.
+- **Not done:** notes on matrices and layout pages, several notes per window, placing a note inside the window, an
+  indicator in Project Explorer, and notes in `.opj` files.

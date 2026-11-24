@@ -176,6 +176,7 @@ pub fn place_workbook_with(
                     cell_images: Vec::new(),
                     cell_arrows: Vec::new(),
                     cell_links: Vec::new(),
+                    sticky: dest.sheets[t.sheet].sticky.clone(),
                 };
             }
             // Further sheets of the file (several data blocks) follow as new sheets.

@@ -1319,6 +1319,26 @@ expansion. Ordinary inline style spans continue across a tab. When a row also co
 wrapped captions, the width budget reserves
 one interval per tab before placing the captions and resolving the actual stops.
 
+**Legend Text Color Follows Plot (T58).** Origin 2016 changed a fixed magenta legend
+to red, green and blue captions matching the line samples when `legend -tt` set its
+color to `-9`. Each new row started in the first plot's color, including text-only
+rows. After each `\l(n)` sample, the caption used that plot's color across tabs
+and metadata substitutions. The `%(n)` name reference itself supplied no color, and
+an explicit `\c6(...)` still drew magenta. Recoloring an ungrouped line from black
+to cyan changed its caption without another legend command.
+[Origin FAQ 726](https://docs.originlab.com/quick-help/same-text-and-symbol-color-in-legend/)
+
+In Sheaf, right-click an ordinary legend and choose **Legend > Text Color Follows
+Plot** to toggle the setting as one undoable edit. Each row starts with the first
+resolved entry's color. Each resolved sample supplies the base color until the next
+sample or row. Scatter and Line+Symbol use the symbol edge color. Columns, area
+plots and lines with filled samples use the fill, as in the measured Origin 2016
+EMFs. Sheaf uses the line color for vector samples. Inline colors take
+precedence. Turning the option off restores the saved fixed text color. Copy
+Format Styles and All carry the setting. The native OPJ legend stores the follow
+mode, and the companion retains a nondefault fixed color for later use or the
+mode for a hidden legend (opj-format 10.8).
+
 **Plot-colored graph text (T58).** `\cpN(text)` uses the color of the Nth plot in the
 text object's layer. Repainting the graph after a style change resolves the color again.
 Nested styles, literal blocks and glyph decorations follow the existing text rules.
@@ -1523,14 +1543,26 @@ Sheaf (`sheaf_plot::render_multipage_pdf`, `crates/plot/src/multipage.rs`):
 ---
 
 
-### 9.7a Export from a workbook or with no window (T182, 2026-11-19, not measured)
+### 9.7a Export from a workbook or with no window (T182, Origin 2016 measured 2026-11-24)
 
-Outside a graph window, File > Export holds Graphs..., Graph as Image... and Multi-Page PDF... (with the
-worksheet exports). Origin's behaviour with no graph active was not measured; Sheaf opens the Export
-Graphs window on **every graph of the project** (the window's "all graphs" choice), started from the graph
-that was active most recently (it names the first file): Graphs... and Graph as Image... in PNG, Multi-Page
-PDF... in PDF with "Export as multi-page PDF file" ticked (9.7). Everything else in the window is as from a
-graph. With no graph in the project the items only say so in the status line.
+Origin 2016's workbook Export submenu defines As Image File... (`expWks`) and As Multipage PDF File...
+(`expPDFw`) in `Themes/Menus/ExportMenu.xml`. Both dialogs opened on Current Sheet, `[Book1]Sheet1`.
+With two graph windows, the graph's Export Graphs command opened `expGraph` on Active Page and named
+the active graph `GSecond` in the file-name preview. Queuing that command with the workbook active
+opened no dialog. Calling `expGraph` directly from a workbook or an empty project opened Active Page
+with an empty file-name preview and the message "Input graph is invalid".
+[Origin's expGraph reference](https://docs.originlab.com/x-function/ref/expgraph/).
+
+A separate `expGraph` script requested a project-wide multipage PDF after hiding both graphs and
+the workbook. Origin returned failure and produced no PDF in that run. The active-window control
+and the File menu with all windows hidden remain unverified because the repeat probes failed to
+start an Origin COM instance.
+
+Sheaf provides project graph shortcuts in File > Export from a workbook or with no window active.
+Graphs... and Graph as Image... open Export Graphs on **every graph of the project** in PNG.
+Multi-Page PDF... preselects PDF and ticks "Export as multi-page PDF file" (9.7). The most recently
+active graph supplies the first file name. With no graph in the project, the status line reports
+that there is no graph to export.
 
 ### 9.7b Export Graphs from a folder (T250, the order not measured for expGraph)
 

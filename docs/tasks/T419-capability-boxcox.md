@@ -8,7 +8,7 @@ Cpm index for a target (normal and Box-Cox models). Not measured in Origin.
 
 ## Left
 
-- Johnson transformations, confidence intervals of the indices, a rounded ("convenient") lambda, a pooled-deviation
+- Johnson transformations, confidence intervals of the indices (Pp and Ppk: T425), a rounded ("convenient") lambda, a pooled-deviation
   within estimate, Cpm with one limit.
 
 ## Tests

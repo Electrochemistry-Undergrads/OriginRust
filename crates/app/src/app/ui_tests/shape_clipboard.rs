@@ -233,7 +233,7 @@ fn the_3d_scatter_and_trajectory_items_make_xyz_graphs() {
 fn the_legend_is_copied_as_a_label_that_draws_its_symbols_and_cut_hides_it() {
     // T178: the legend's right-click Cut and Copy, pasted by the page's Paste.
     crate::shape_clip::clear();
-    let legend = menus::graph_legend_menu(0, false, false);
+    let legend = menus::graph_legend_menu(0, false, false, Some(false));
     for want in [menus::Cmd::CopyLegend { layer: 0, cut: true }, menus::Cmd::CopyLegend { layer: 0, cut: false }] {
         assert!(legend.iter().any(|e| matches!(e, menus::Entry::Item(i) if i.cmd.as_ref() == Some(&want))));
     }

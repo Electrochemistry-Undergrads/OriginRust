@@ -154,6 +154,8 @@ pub enum GraphOp {
     OrderTitle { layer: usize, y: bool, front: bool },
     /// The legend's Push to back of data (`behind`) / Bring to front of data (T152).
     LegendBehindData { layer: usize, behind: bool },
+    /// Text Color Follows Plot in the legend's context menu.
+    LegendTextColorFollowsPlot { layer: usize, enabled: bool },
     /// Reconstruct Legend: the legend text is made again from the plots (the automatic text).
     ReconstructLegend { layer: usize },
     /// Update Legend: custom legend text is kept; lines of plots that are gone are dropped and
@@ -285,8 +287,30 @@ pub enum ImportPick {
     Excel,
 }
 
+/// A change to a sticky note from its strip (T421).
+#[derive(Debug, Clone, PartialEq)]
+pub enum StickyChange {
+    Text(String),
+    Color(sheaf_core::sticky::NoteColor),
+    Collapsed(bool),
+}
+
 #[derive(Debug, Clone)]
 pub enum Action {
+    /// Window > Sticky Note (T421): pin a note to the window, or to the workbook's active sheet when `sheet`.
+    AddStickyNote {
+        window: WindowId,
+        sheet: bool,
+    },
+    /// A sticky note's strip: change its text, colour or collapsed state (T421).
+    EditStickyNote {
+        target: sheaf_core::sticky::NoteTarget,
+        change: StickyChange,
+    },
+    /// A sticky note's Delete Note button (T421).
+    RemoveStickyNote {
+        target: sheaf_core::sticky::NoteTarget,
+    },
     NewProject,
     /// File > New > Graph and the Standard toolbar button: an empty graph.
     NewGraph,

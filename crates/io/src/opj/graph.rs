@@ -92,6 +92,8 @@ const NO_VALUE: f64 = -1.23456789e-300;
 // Annotation: header holds the rectangle and the name, block 1 the text style, block 2 the text.
 const ANN_RECT_AT: usize = 0x03;
 const ANN_NAME_AT: usize = 0x46;
+pub(super) const ANN_COLOR_AT: usize = 0x6b;
+pub(super) const COLOR_AUTO: [u8; 4] = [0xf7, 0xff, 0xff, 0xff];
 /// The layer header byte that holds the 1-based number of the layer this one is linked to.
 const LAYER_LINK_AT: usize = 0xAB;
 const ANN_FONT_AT: usize = 0x04;
@@ -326,6 +328,7 @@ fn build_layer(
             n if n.eq_ignore_ascii_case("legend") => {
                 out.legend.visible = true;
                 out.legend.font.size_pt = size_pt;
+                out.legend.text_color_follows_plot = a.header.get(ANN_COLOR_AT..ANN_COLOR_AT + 4) == Some(&COLOR_AUTO);
                 out.legend.text = custom_legend_text(&text);
                 out.legend.frame = legend_has_frame(a);
                 let (cx, cy) = annotation_center(a, page_units);

@@ -9,6 +9,11 @@
 //! differences; their standard errors are `sigma sqrt(sum_{j<h} psi_j^2)` from the psi weights of
 //! `phi(B) (1 - B)^d y = theta(B) e`. Checked against numpy and scipy in `crates/calc/tests/arima_reference.rs`
 //! (made by `tools/arima-ref.py`).
+//!
+//! **Standard errors** (T428): the Gauss-Newton covariance `sigma^2 (J'J)^-1`, `J` the derivatives of the summed
+//! conditional errors with respect to the coefficients (exact, by differentiating the error recursion); `z = b / SE`
+//! with normal two-sided probabilities. **Order choice** (T428): every `p <= P`, `q <= Q` (with `d` and the constant
+//! as given) is fitted and the smallest AIC kept; each AIC sums its own `n - d - p` errors.
 
 /// The model order and whether it has a constant (mean of the differenced series).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,6 +46,8 @@ pub struct Arima {
     pub fitted: Vec<f64>,
     pub forecast: Vec<f64>,
     pub forecast_se: Vec<f64>,
+    /// Standard errors of `params` (T428; NaN when `J'J` is singular).
+    pub se: Vec<f64>,
 }
 
 /// Why the model could not be fitted.
@@ -99,6 +106,109 @@ pub fn css(y: &[f64], order: ArimaOrder, params: &[f64]) -> (Vec<f64>, f64) {
         ss += v * v;
     }
     (e, ss)
+}
+
+/// The standard errors of `params` (T428): `sigma2 (J'J)^-1` with `J` the exact derivatives of the summed conditional
+/// errors; NaN when `J'J` is singular.
+pub fn standard_errors(y: &[f64], order: ArimaOrder, params: &[f64], sigma2: f64) -> Vec<f64> {
+    let k = params.len();
+    let w = difference(y, order.d);
+    let (mu, phi, theta) = split(&order, params);
+    let (e, _) = css(y, order, params);
+    let c = usize::from(order.constant);
+    // d[t][i]: the derivative of e_t with respect to coefficient i (0 before t = p, as e is).
+    let mut d = vec![vec![0.0; k]; w.len()];
+    let mut jtj = vec![vec![0.0; k]; k];
+    for t in order.p..w.len() {
+        let mut row = vec![0.0; k];
+        if order.constant {
+            row[0] = -1.0 + phi.iter().sum::<f64>();
+        }
+        for i in 0..order.p {
+            row[c + i] = -(w[t - i - 1] - mu);
+        }
+        for j in 0..order.q {
+            if t > j {
+                row[c + order.p + j] = -e[t - j - 1];
+            }
+        }
+        for (j, th) in theta.iter().enumerate() {
+            if t > j {
+                for (r, prev) in row.iter_mut().zip(&d[t - j - 1]) {
+                    *r -= th * prev;
+                }
+            }
+        }
+        for a in 0..k {
+            for b in 0..k {
+                jtj[a][b] += row[a] * row[b];
+            }
+        }
+        d[t] = row;
+    }
+    match invert(jtj) {
+        Some(inv) => (0..k).map(|i| (sigma2 * inv[i][i]).sqrt()).collect(),
+        None => vec![f64::NAN; k],
+    }
+}
+
+/// The inverse of a symmetric positive definite matrix by Gauss-Jordan elimination with pivoting; `None` when singular.
+fn invert(mut a: Vec<Vec<f64>>) -> Option<Vec<Vec<f64>>> {
+    let k = a.len();
+    let scale = a.iter().flatten().fold(0.0f64, |m, v| m.max(v.abs()));
+    let mut inv: Vec<Vec<f64>> = (0..k).map(|i| (0..k).map(|j| f64::from(u8::from(i == j))).collect()).collect();
+    for col in 0..k {
+        let piv = (col..k).max_by(|&i, &j| a[i][col].abs().total_cmp(&a[j][col].abs()))?;
+        if a[piv][col].abs() <= 1e-13 * scale.max(f64::MIN_POSITIVE) {
+            return None;
+        }
+        a.swap(col, piv);
+        inv.swap(col, piv);
+        let p = a[col][col];
+        for j in 0..k {
+            a[col][j] /= p;
+            inv[col][j] /= p;
+        }
+        for i in 0..k {
+            if i != col {
+                let f = a[i][col];
+                if f != 0.0 {
+                    for j in 0..k {
+                        a[i][j] -= f * a[col][j];
+                        inv[i][j] -= f * inv[col][j];
+                    }
+                }
+            }
+        }
+    }
+    Some(inv)
+}
+
+/// Fits every ARIMA(`p`, `d`, `q`) with `p <= max_p`, `q <= max_q` and keeps the one with the smallest AIC (T428);
+/// orders too long for the series, without coefficients or without finite errors are passed over.
+pub fn fit_auto(
+    y: &[f64],
+    d: usize,
+    max_p: usize,
+    max_q: usize,
+    constant: bool,
+    h: usize,
+) -> Result<Arima, ArimaError> {
+    let mut best: Option<Arima> = None;
+    for p in 0..=max_p {
+        for q in 0..=max_q {
+            match fit(y, ArimaOrder { p, d, q, constant }, h) {
+                Ok(m) => {
+                    if best.as_ref().is_none_or(|b| m.aic < b.aic) {
+                        best = Some(m);
+                    }
+                }
+                Err(e @ ArimaError::Missing(_)) => return Err(e),
+                Err(_) => {}
+            }
+        }
+    }
+    best.ok_or(ArimaError::TooShort(y.len()))
 }
 
 /// Forecasts `h` steps of `y` and their standard errors for `params` and `sigma2`.
@@ -280,8 +390,9 @@ pub fn fit(y: &[f64], order: ArimaOrder, h: usize) -> Result<Arima, ArimaError> 
         // y_{t+d} = w-prediction + (y_{t+d} - w_t) for the d-th difference: add back the known lower differences.
         fitted[t + order.d] = y[t + order.d] - (w[t] - wpred);
     }
-    let (fc, se) = forecast(y, order, &best, sigma2, h);
-    Ok(Arima { order, params: best, ss, sigma2, aic, residuals, fitted, forecast: fc, forecast_se: se })
+    let (fc, fse) = forecast(y, order, &best, sigma2, h);
+    let se = standard_errors(y, order, &best, sigma2);
+    Ok(Arima { order, params: best, ss, sigma2, aic, residuals, fitted, forecast: fc, forecast_se: fse, se })
 }
 
 #[cfg(test)]
@@ -306,6 +417,30 @@ mod tests {
         assert!((rw.forecast[1] - 12.0).abs() < 1e-8);
         assert!((rw.forecast_se[1] / rw.forecast_se[0] - 2f64.sqrt()).abs() < 1e-12);
         assert!((rw.fitted[1] - 1.5).abs() < 1e-9, "{:?}", rw.fitted);
+    }
+
+    #[test]
+    fn the_standard_error_of_a_mean_is_sigma_over_root_n_and_auto_finds_white_noise() {
+        // ARIMA(0,0,0) with a mean: e_t = y_t - mu, J = -1, so SE = sigma / sqrt(n).
+        let y = [3.0, 5.0, 4.0, 6.0, 2.0, 4.0];
+        let order = ArimaOrder { p: 0, d: 0, q: 0, constant: true };
+        let m = fit(&y, order, 1).unwrap();
+        assert!((m.se[0] - (m.sigma2 / 6.0).sqrt()).abs() < 1e-12, "{:?}", m.se);
+        // AR(1) without a constant: J_t = -y_{t-1}, SE = sigma / sqrt(sum y_{t-1}^2).
+        let ar = ArimaOrder { p: 1, d: 0, q: 0, constant: false };
+        let se = standard_errors(&y, ar, &[0.5], 2.0);
+        let s: f64 = y[..5].iter().map(|v| v * v).sum();
+        assert!((se[0] - (2.0 / s).sqrt()).abs() < 1e-12);
+        // White noise around 10: auto picks a model no worse by AIC than every one it tried.
+        let noise: Vec<f64> = (0..60).map(|i| 10.0 + (f64::from(i) * 2.399).sin()).collect();
+        let auto = fit_auto(&noise, 0, 2, 2, true, 1).unwrap();
+        for p in 0..=2 {
+            for q in 0..=2 {
+                let m = fit(&noise, ArimaOrder { p, d: 0, q, constant: true }, 1).unwrap();
+                assert!(auto.aic <= m.aic, "({p},{q}): {} < {}", m.aic, auto.aic);
+            }
+        }
+        assert!(invert(vec![vec![1.0, 2.0], vec![2.0, 4.0]]).is_none());
     }
 
     #[test]

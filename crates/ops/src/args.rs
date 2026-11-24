@@ -3635,6 +3635,15 @@ pub enum AnalyzeTool {
         /// Confidence level of the forecast bands, in percent.
         #[arg(long, default_value_t = 95.0)]
         confidence: f64,
+        /// Choose p and q by the smallest AIC, up to --max-p and --max-q (--p and --q are then ignored).
+        #[arg(long)]
+        auto: bool,
+        /// Largest AR order tried with --auto.
+        #[arg(long, default_value_t = 3)]
+        max_p: usize,
+        /// Largest MA order tried with --auto.
+        #[arg(long, default_value_t = 3)]
+        max_q: usize,
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,

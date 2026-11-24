@@ -2143,7 +2143,7 @@ multiplicative-error models and intervals for the multiplicative season are not 
 
 Origin's Time Series Analysis app (2024b Pro) is not part of Origin 2016, so this is Sheaf's own. Statistics > ARIMA
 Forecast... (`Tool::Arima`, `sheaf analyze arima --y COL[,COL..] [--p 1] [--d 0] [--q 0] [--no-constant] [--horizon
-10] [--confidence 95] [--no-graph]`): every chosen column is a series of its own, in row order, complete in the chosen
+10] [--confidence 95] [--auto [--max-p 3] [--max-q 3]] [--no-graph]`): every chosen column is a series of its own, in row order, complete in the chosen
 rows. The series is differenced `d` times to `w`; with mean `mu` (the constant; a drift when `d = 1`) the model is
 `w_t - mu = sum phi_i (w_{t-i} - mu) + e_t + sum theta_j e_{t-j}`. The conditional sum of squares (errors before `t =
 p` taken as 0, summed from `t = p`) is minimized by Nelder-Mead from `mu = mean(w)`, `phi = theta = 0`, restarted from
@@ -2152,13 +2152,22 @@ summed errors and `AIC = m ln(2 pi sigma^2) + m + 2 (k + 1)`. The one-step predi
 the first `d + p` rows). Forecasts set future errors to 0 and undo the differences; the bands are `forecast -+ z sigma
 sqrt(sum_{j<h} psi_j^2)` with the psi weights of `phi(B) (1 - B)^d y = theta(B) e`.
 
-The result sheet `ARIMAN` has one row per coefficient (Mean or Constant (drift), AR i, MA j) and the sum of squares,
-sigma^2 and AIC per column, then per column the X, data, one-step predictions, residuals, forecast X (the last X step
+- **Coefficient standard errors** (T428): the Gauss-Newton covariance `sigma^2 (J'J)^-1`, `J` the exact derivatives
+  of the summed conditional errors with respect to the coefficients (the error recursion differentiated); `z = b /
+  SE` with normal two-sided probabilities (empty when `J'J` is singular).
+- **Order by AIC** (T428; `--auto`, the window's "Choose p and q by AIC, up to"): every `p <= P`, `q <= Q` with the
+  given `d` and constant is fitted and the smallest AIC kept; each AIC sums its own `n - d - p` errors; orders too long
+  for the series are passed over. The note names the chosen order and the search.
+
+The result sheet `ARIMAN` has one row per coefficient (Mean or Constant (drift), AR i, MA j) with Value, Standard
+error, z and Prob>|z|, and the sum of squares, sigma^2 and AIC per column, then per column the X, data, one-step predictions, residuals, forecast X (the last X step
 continued), forecasts and lower and upper band; a new graph per column draws the data, predictions, forecasts and
 bands. At given parameters the errors, forecasts and standard errors are checked against numpy, and the fitted sum
 of squares against scipy's minimum (Nelder-Mead, BFGS), in `tools/arima-ref.py` and `crates/calc/tests/arima_reference.rs`.
-Exact (Kalman) maximum likelihood, coefficient standard errors, seasonal ARIMA and automatic order choice are not
-built.
+Standard errors and order choice against numpy/scipy (`tools/arima-se-ref.py`, `crates/calc/tests/arima_se_reference.rs`:
+five models at given coefficients against complex-step derivatives to 1e-9; the AIC winner over p, q <= 2 of two
+simulated series, chosen with scipy's fits and a clear margin). Exact (Kalman) maximum likelihood and seasonal ARIMA
+are not built.
 
 ## 44 Random forest (T377, Origin 2026b Pro app; not measured)
 

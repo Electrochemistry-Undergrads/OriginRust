@@ -1901,6 +1901,23 @@ fn arima_forecast_runs_from_the_command_line() {
     assert!(ok && out.contains("ARIMA(1,1,0)") && out.contains("AR 1"), "{err} {out}");
     let (ok, _, err) = sheaf(&["analyze", "arima", file, "--y", "v", "--p", "0", "--no-constant"]);
     assert!(!ok && err.contains("nothing to fit"), "{err}");
+    // Order by AIC and coefficient standard errors (T428).
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "arima",
+        file,
+        "--y",
+        "v",
+        "--d",
+        "1",
+        "--auto",
+        "--max-p",
+        "1",
+        "--max-q",
+        "1",
+        "--no-graph",
+    ]);
+    assert!(ok && out.contains("the smallest AIC of p <= 1, q <= 1") && out.contains("Standard error"), "{err} {out}");
 }
 
 /// Exponential smoothing forecast (spec `statistics.md` section 42, T374).

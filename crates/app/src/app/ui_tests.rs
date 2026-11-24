@@ -6163,6 +6163,8 @@ fn the_statistics_menu_makes_an_arima_forecast() {
     assert!(sheet.starts_with("ARIMA"), "{sheet}");
     assert_eq!(values.len(), 5, "mean, AR 1, SS, sigma^2, AIC");
     assert!((values[0] - 10.0).abs() < 1.0, "{values:?}");
+    let (_, se) = result_column(&h, "Standard error");
+    assert!(se[0] > 0.0 && se[1] > 0.0 && se[2].is_nan(), "{se:?}");
     let (_, forecast) = result_column(&h, "Forecast");
     assert_eq!(forecast.len(), 10);
     assert_eq!(project(&h).graphs().count(), graphs_before + 1);

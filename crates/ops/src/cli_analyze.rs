@@ -1526,7 +1526,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
-        AnalyzeTool::Arima { target, p, d, q, no_constant, horizon, confidence, no_graph } => (
+        AnalyzeTool::Arima { target, p, d, q, no_constant, horizon, confidence, auto, max_p, max_q, no_graph } => (
             target,
             Job::Tool(Tool::Arima(analysis::ArimaSpec {
                 p,
@@ -1536,6 +1536,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 horizon,
                 confidence: confidence / 100.0,
                 graph: !no_graph,
+                auto: auto.then_some((max_p, max_q)),
             })),
         ),
         AnalyzeTool::Forecast { target, model, period, constants, horizon, damped, phi, confidence, no_graph } => {

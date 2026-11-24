@@ -205,7 +205,7 @@ impl MultiOptions {
             }
             AnalysisKind::Arima => {
                 let s = &self.arima;
-                if s.p + s.q == 0 && !s.constant {
+                if s.auto.is_none() && s.p + s.q == 0 && !s.constant {
                     return Err("the model has nothing to fit: give p, q or a constant".to_string());
                 }
                 Ok(Tool::Arima(*s))
@@ -720,6 +720,18 @@ impl MultiOptions {
                     ui.add(egui::DragValue::new(&mut s.d).range(0..=3));
                     ui.label("MA order q");
                     ui.add(egui::DragValue::new(&mut s.q).range(0..=20));
+                });
+                ui.horizontal(|ui| {
+                    let mut auto = s.auto.is_some();
+                    if ui.checkbox(&mut auto, "Choose p and q by AIC, up to").changed() {
+                        s.auto = auto.then_some((3, 3));
+                    }
+                    if let Some((mp, mq)) = &mut s.auto {
+                        ui.label("p");
+                        ui.add(egui::DragValue::new(mp).range(0..=10));
+                        ui.label("q");
+                        ui.add(egui::DragValue::new(mq).range(0..=10));
+                    }
                 });
                 ui.checkbox(&mut s.constant, "Constant (mean of the differenced series)");
                 ui.horizontal(|ui| {

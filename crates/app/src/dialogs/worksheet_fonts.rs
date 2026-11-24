@@ -203,6 +203,10 @@ impl WorksheetFontsDialog {
             if self.shown_size.rows != self.base_size.rows {
                 // Origin clears a zero-row sheet and leaves two blank rows.
                 sheet.view.allocated_rows = Some(if self.shown_size.rows == 0 { 2 } else { self.shown_size.rows });
+            } else if self.shown_size.columns < self.base_size.columns
+                && crate::grid::shown_rows(sheet) < self.shown_size.rows
+            {
+                sheet.view.allocated_rows = Some(self.shown_size.rows);
             }
             sheet.standard_colors = self.shown_colors[STANDARD];
             sheet.data_colors = self.shown_colors[DATA];

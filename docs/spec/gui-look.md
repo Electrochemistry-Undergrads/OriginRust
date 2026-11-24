@@ -987,7 +987,8 @@ rows for a worksheet with five rows of data. With Auto Add Rows clear,
 growing to 48 rows and four columns preserved the data. Reducing either
 count removed its tail, and growing again produced blank cells. Setting
 the row count to zero cleared the data and displayed two blank rows. A
-zero column count left the worksheet without columns. With Auto Add Rows
+zero column count left the worksheet without columns. Removing the longest
+column alone retained the allocation of 32 rows. With Auto Add Rows
 checked, a request for three rows retained three rows of data and the test
 window displayed 14 rows.
 [Origin Worksheet Properties Size tab](https://docs.originlab.com/origin-help/wksproperties-dialog-size-tab/)

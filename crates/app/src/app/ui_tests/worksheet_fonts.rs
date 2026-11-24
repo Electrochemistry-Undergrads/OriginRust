@@ -114,6 +114,28 @@ fn f4_size_shrinks_trailing_cells_and_regrowth_is_blank() {
 }
 
 #[test]
+fn f4_column_reduction_keeps_the_row_count() {
+    use sheaf_core::ColumnData;
+
+    let mut h = start_sheet("worksheet-size-column-reduction");
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Seed a longer column", |p| {
+        let sheet = p.workbook_mut(book).unwrap().sheet_mut();
+        sheet.columns[1].data = ColumnData::numeric(vec![1.0; 20]);
+    });
+    settle(&mut h);
+    let rows = crate::grid::shown_rows(sheet(&h));
+    open(&mut h);
+    properties_tab(&mut h, "Size");
+    size_count(&mut h, "Column Number", 1);
+    click(&mut h, "OK");
+    let sheet = sheet(&h);
+    assert_eq!(sheet.columns.len(), 1);
+    assert!(sheet.row_count() < 20);
+    assert_eq!(crate::grid::shown_rows(sheet), rows);
+}
+
+#[test]
 fn f4_size_respects_locked_rows_and_supports_zero_counts() {
     use sheaf_core::column::RecalcMode;
 

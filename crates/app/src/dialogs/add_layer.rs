@@ -4,7 +4,6 @@ use sheaf_core::graph::{Graph, ScaleLink};
 use sheaf_core::layers::{NewLayerKind, UserDefinedLayer};
 use sheaf_core::{Document, WindowId};
 
-#[derive(Clone, Copy)]
 pub enum LayerChoice {
     Preset(NewLayerKind),
     UserDefined(UserDefinedLayer),
@@ -26,6 +25,7 @@ pub struct AddLayerDialog {
     kind: NewLayerKind,
     user_defined: bool,
     custom: UserDefinedLayer,
+    formula_error: Option<&'static str>,
     activate: bool,
     auto_offset: bool,
 }
@@ -43,6 +43,7 @@ impl AddLayerDialog {
             kind: NewLayerKind::Normal,
             user_defined: false,
             custom: UserDefinedLayer::default(),
+            formula_error: None,
             activate: true,
             auto_offset: false,
         })
@@ -73,10 +74,9 @@ impl AddLayerDialog {
                 });
                 ui.label(format!("Source: Layer {}", self.layer + 1));
                 ui.checkbox(&mut self.user_defined, "User Defined");
-                let (choice, supports_auto_offset, auto_offset_hint) = if self.user_defined {
+                let (supports_auto_offset, auto_offset_hint) = if self.user_defined {
                     self.custom_controls(ui, graph);
                     (
-                        LayerChoice::UserDefined(self.custom),
                         self.custom.supports_auto_offset(),
                         "Choose a parent layer and show at least one axis to use auto offset.",
                     )
@@ -96,7 +96,7 @@ impl AddLayerDialog {
                         NewLayerKind::Normal => "Bottom-X Left-Y uses independent frame placement.",
                         _ => "Available for linked presets that use the full parent frame.",
                     };
-                    (LayerChoice::Preset(self.kind), self.kind.supports_auto_offset(), hint)
+                    (self.kind.supports_auto_offset(), hint)
                 };
                 ui.add_enabled(
                     supports_auto_offset,
@@ -105,12 +105,23 @@ impl AddLayerDialog {
                 .on_disabled_hover_text(auto_offset_hint);
                 ui.checkbox(&mut self.activate, "Activate New Layer");
                 ui.separator();
+                if let Some(error) = self.formula_error.filter(|_| self.user_defined && self.custom.parent.is_some()) {
+                    ui.colored_label(ui.visuals().error_fg_color, error);
+                }
                 ui.horizontal(|ui| {
                     if ui.button("OK").clicked() {
+                        self.formula_error = if self.user_defined { self.validate_formulas(doc, graph) } else { None };
+                        if self.formula_error.is_some() {
+                            return;
+                        }
                         outcome = Outcome::Add {
                             graph: self.graph,
                             layer: self.layer,
-                            choice,
+                            choice: if self.user_defined {
+                                LayerChoice::UserDefined(self.custom.clone())
+                            } else {
+                                LayerChoice::Preset(self.kind)
+                            },
                             activate: self.activate,
                             auto_offset: supports_auto_offset && self.auto_offset,
                         };
@@ -121,6 +132,36 @@ impl AddLayerDialog {
                 });
             });
         if open { outcome } else { Outcome::Closed }
+    }
+
+    fn validate_formulas(&self, doc: &Document, graph: &Graph) -> Option<&'static str> {
+        let parent = self.custom.parent?;
+        let links = [&self.custom.x_link, &self.custom.y_link];
+        let custom = links.map(|link| matches!(link, ScaleLink::Custom { .. }));
+        if !custom.into_iter().any(|is_custom| is_custom) {
+            return None;
+        }
+        let layer = &graph.layers[parent];
+        if layer.coords.ternary().is_some() || (custom[0] && layer.coords.polar().is_some()) {
+            return Some("Choose Independent or Straight for axes with fixed coordinate limits.");
+        }
+        let Ok(geometry) = sheaf_plot::layout_geometry(doc.project(), self.graph) else {
+            return Some("The parent layer's scale could not be resolved.");
+        };
+        let Some(limits) = geometry.get(parent) else {
+            return Some("The parent layer's scale could not be resolved.");
+        };
+        let x = limits.x.endpoints();
+        let y = limits.y.endpoints();
+        for (link, scale, error) in [
+            (links[0], layer.x_axis.scale, "Enter X formulas that give two different limits on the X scale."),
+            (links[1], layer.y_axis.scale, "Enter Y formulas that give two different limits on the Y scale."),
+        ] {
+            if matches!(link, ScaleLink::Custom { .. }) && link.formula_limits(x, y, scale).is_none() {
+                return Some(error);
+            }
+        }
+        None
     }
 
     fn custom_controls(&mut self, ui: &mut egui::Ui, graph: &Graph) {
@@ -145,29 +186,48 @@ impl AddLayerDialog {
                 .response
                 .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, true, "Link To"));
         });
-        if self.custom.parent.is_some() {
-            scale_link(ui, "X Scale Link", &mut self.custom.x_link);
-            scale_link(ui, "Y Scale Link", &mut self.custom.y_link);
+        if let Some(parent) = self.custom.parent {
+            let coords = graph.layers[parent].coords;
+            let can_link_y = coords.ternary().is_none();
+            scale_link(ui, "X", &mut self.custom.x_link, can_link_y && coords.polar().is_none());
+            scale_link(ui, "Y", &mut self.custom.y_link, can_link_y);
+            if [&self.custom.x_link, &self.custom.y_link].iter().any(|link| matches!(link, ScaleLink::Custom { .. })) {
+                ui.weak("X1, X2, Y1 and Y2 are the parent's From and To limits.");
+            }
         }
     }
 }
 
-fn scale_link(ui: &mut egui::Ui, label: &str, value: &mut ScaleLink) {
-    let name = |link| match link {
-        ScaleLink::None => "Independent",
-        ScaleLink::Straight => "Straight (1 to 1)",
-    };
+fn scale_link(ui: &mut egui::Ui, axis: &str, value: &mut ScaleLink, can_use_formula: bool) {
+    let label = format!("{axis} Scale Link");
+    let custom = matches!(value, ScaleLink::Custom { .. });
     ui.horizontal(|ui| {
-        ui.label(label);
-        egui::ComboBox::from_id_salt(label)
-            .selected_text(name(*value))
+        ui.label(&label);
+        egui::ComboBox::from_id_salt(&label)
+            .selected_text(match value {
+                ScaleLink::None => "Independent",
+                ScaleLink::Straight => "Straight (1 to 1)",
+                ScaleLink::Custom { .. } => "Custom Formula",
+            })
             .show_ui(ui, |ui| {
-                for link in [ScaleLink::None, ScaleLink::Straight] {
-                    ui.selectable_value(value, link, name(link));
+                ui.selectable_value(value, ScaleLink::None, "Independent");
+                ui.selectable_value(value, ScaleLink::Straight, "Straight (1 to 1)");
+                let formula = ui
+                    .add_enabled(can_use_formula, egui::Button::selectable(custom, "Custom Formula"))
+                    .on_disabled_hover_text("This axis has fixed coordinate limits.");
+                if formula.clicked() && !custom {
+                    *value = ScaleLink::Custom { from: format!("{axis}1"), to: format!("{axis}2") };
                 }
-                ui.add_enabled(false, egui::Button::selectable(false, "Custom Formula"));
             })
             .response
-            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, true, label));
+            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, true, label.as_str()));
     });
+    if let ScaleLink::Custom { from, to } = value {
+        for (end, text) in [("From", from), ("To", to)] {
+            ui.horizontal(|ui| {
+                let label = ui.label(format!("{axis} {end} Formula"));
+                ui.add(egui::TextEdit::singleline(text).desired_width(170.0)).labelled_by(label.id);
+            });
+        }
+    }
 }

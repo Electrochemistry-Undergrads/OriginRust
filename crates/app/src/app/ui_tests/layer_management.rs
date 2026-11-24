@@ -104,8 +104,8 @@ fn add_tab_uses_the_chosen_parent_and_scale_in_both_undo_paths() {
     click(&mut h, "Apply");
     click(&mut h, "OK");
     let added = &graph(&h).layers[2];
-    let link = added.link.unwrap();
-    assert_eq!((link.parent, link.x, link.y), (1, ScaleLink::Straight, ScaleLink::None));
+    let link = added.link.as_ref().unwrap();
+    assert_eq!((link.parent, &link.x, &link.y), (1, &ScaleLink::Straight, &ScaleLink::None));
     assert_eq!((added.x_axis.scale, added.y_axis.scale), (ScaleKind::Ln, ScaleKind::Log10));
     assert_eq!((added.x_axis.side, added.y_axis.side), (AxisSide::Hidden, AxisSide::Opposite));
     assert!(added.plots.is_empty());
@@ -321,7 +321,7 @@ fn linking_layer_2_to_layer_1_keeps_its_place_and_shows_in_the_grid() {
     click(&mut h, "Apply");
     click(&mut h, "OK");
     let g = graph(&h);
-    assert_eq!(g.layers[1].link.map(|l| l.parent), Some(0));
+    assert_eq!(g.layers[1].link.as_ref().map(|l| l.parent), Some(0));
     assert_eq!(g.link_parent(1), Some(0));
     let page = g.page_frame(1);
     assert!((page.left - before.left).abs() < 1e-9 && (page.width - before.width).abs() < 1e-9);

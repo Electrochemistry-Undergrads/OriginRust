@@ -706,6 +706,12 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   field absent, the grid hides numeric markers and printed or exported images
   show them. The display option preserves stored values and literal text.
   Native projects and OPJ companions carry the worksheet view setting.
+- **Worksheet size (T59).** Optional `view.allocated_rows` stores the grid
+  capacity set in Worksheet Properties. Each column still owns its actual
+  data length. With no explicit count, sheets use automatic spare rows.
+  The grid includes any data extending beyond the allocation. Row and
+  column reductions use the existing deletion paths.
+  Project saves preserve the allocation.
 - **Vertical alignment.** The 2016 selected-A1 Format Cells and Worksheet Properties Data
   Format/Size probes (GUI 3, 2026-11-16) found no vertical text-alignment control in those
   inspected routes. Other routes and mutation semantics remain unestablished; this probe

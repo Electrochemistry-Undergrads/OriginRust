@@ -246,3 +246,61 @@ fn an_inset_created_by_the_dialog_renders_and_survives_native_and_companion_save
         assert_eq!(graph(&back).layers, expected, "{extension}");
     }
 }
+
+#[test]
+fn custom_scale_link_validates_and_creates_one_undo_step() {
+    let mut h = setup("add-layer-dialog-custom-formula");
+    let id = graph(&h).id;
+    h.state_mut().doc.apply("Set parent limits", |p| {
+        let layer = &mut p.graph_mut(id).unwrap().layers[0];
+        layer.x_axis.min = Some(2.0);
+        layer.x_axis.max = Some(14.0);
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    let revision = h.state().doc.revision();
+    open(&mut h);
+    click(&mut h, "User Defined");
+    click(&mut h, "Top");
+    let choose = |h: &mut Harness<'static, SheafApp>, label, value| {
+        h.get_by_role_and_label(egui::accesskit::Role::ComboBox, label).click();
+        settle(h);
+        click(h, value);
+    };
+    choose(&mut h, "Link To", "Layer 1");
+    choose(&mut h, "X Scale Link", "Custom Formula");
+    let formula = |h: &mut Harness<'static, SheafApp>, label, value: &str| {
+        h.get_by_role_and_label(egui::accesskit::Role::TextInput, label).click();
+        settle(h);
+        ctrl(h, egui::Key::A);
+        h.event(egui::Event::Text(value.into()));
+        settle(h);
+    };
+    formula(&mut h, "X From Formula", "1/0");
+    click(&mut h, "OK");
+    assert!(h.state().add_layer_dialog.is_some());
+    assert_eq!(h.state().doc.revision(), revision);
+    assert_eq!(project(&h), &before);
+
+    formula(&mut h, "X From Formula", "X1+10");
+    formula(&mut h, "X To Formula", "X2+50");
+    click(&mut h, "OK");
+    assert!(h.state().add_layer_dialog.is_none());
+    let layer = graph(&h).valid_link(1).unwrap();
+    assert_eq!(layer.x, ScaleLink::Custom { from: "X1+10".into(), to: "X2+50".into() });
+    assert_eq!(layer.y, ScaleLink::None);
+    let geometry = sheaf_plot::layout_geometry(project(&h), id).unwrap();
+    // Origin 2016 layer.x.link.from/to readback (graphing 21.15).
+    assert_eq!(geometry[1].x.endpoints(), (12.0, 64.0));
+    assert_eq!(h.state().doc.undo_label(), Some(sheaf_core::layers::ADD_LAYER_UNDO));
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+    menu(&mut h, "Edit", "Redo");
+
+    let ctx = h.ctx.clone();
+    h.state_mut().apply(Action::GraphEdit { graph: id, op: GraphOp::DeleteLayer { layer: 0 } }, &ctx);
+    settle(&mut h);
+    assert!(graph(&h).layers[0].link.is_none());
+    let geometry = sheaf_plot::layout_geometry(project(&h), id).unwrap();
+    assert_eq!(geometry[0].x.endpoints(), (12.0, 64.0));
+}

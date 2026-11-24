@@ -5,7 +5,7 @@ use super::analysis::AnalysisKind;
 use eframe::egui;
 use sheaf_core::analysis::{
     AcfSpec, AdfTerms, ArimaSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty,
-    ChangePointSpec, DecomposeModel, DecomposeSpec, ExpSmoothSpec, FactorialDesignSpec, FactorialEffectsSpec,
+    ChangePointSpec, CoxSpec, DecomposeModel, DecomposeSpec, ExpSmoothSpec, FactorialDesignSpec, FactorialEffectsSpec,
     ForestTask, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistArbitrarySpec, LifeDistSpec,
     LifeRegressionSpec, ManhattanSpec, MixtureDesignSpec, MixtureKind, MonteCarloSpec, PcaSpec, PivotPeriod, PivotStat,
     QpcrCurveSpec, QpcrSpec, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec, RocSpec, SmoothModel,
@@ -57,6 +57,7 @@ pub struct MultiOptions {
     life: LifeDistSpec,
     life_any: LifeDistArbitrarySpec,
     life_reg: LifeRegressionSpec,
+    cox: CoxSpec,
     qpcr: QpcrSpec,
     qpcr_curve: QpcrCurveSpec,
     /// The value of the Manual penalty while another penalty is chosen.
@@ -116,6 +117,12 @@ impl MultiOptions {
             AnalysisKind::LifeDistArbitrary => Ok(Tool::LifeDistArbitrary(self.life_any)),
             AnalysisKind::Qpcr => Ok(Tool::Qpcr(self.qpcr.clone())),
             AnalysisKind::QpcrCurve => Ok(Tool::QpcrCurve(self.qpcr_curve)),
+            AnalysisKind::Cox => {
+                if self.cox.censor.trim().is_empty() {
+                    return Err("give the censoring value".to_string());
+                }
+                Ok(Tool::Cox(self.cox.clone()))
+            }
             AnalysisKind::LifeRegression => {
                 if self.life_reg.censor.trim().is_empty() {
                     return Err("give the censoring value".to_string());
@@ -353,6 +360,22 @@ impl MultiOptions {
             AnalysisKind::QpcrCurve => {
                 ui.label("The chosen columns are the quantity (copies, dilution) and the Ct.");
                 ui.checkbox(&mut self.qpcr_curve.graph, "Standard curve graph");
+            }
+            AnalysisKind::Cox => {
+                ui.label("The chosen columns are the covariates, then the time and the censor column.");
+                let s = &mut self.cox;
+                ui.horizontal(|ui| {
+                    ui.label("Censoring value");
+                    ui.add(egui::TextEdit::singleline(&mut s.censor).desired_width(80.0));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Hazard-ratio confidence");
+                    let mut pct = s.confidence * 100.0;
+                    if ui.add(egui::DragValue::new(&mut pct).speed(0.1).range(50.0..=99.99).suffix(" %")).changed() {
+                        s.confidence = pct / 100.0;
+                    }
+                });
+                ui.checkbox(&mut s.graph, "Survival at the covariate means");
             }
             AnalysisKind::LifeRegression => {
                 ui.label("The chosen columns are the covariates, then the time and the censor column.");

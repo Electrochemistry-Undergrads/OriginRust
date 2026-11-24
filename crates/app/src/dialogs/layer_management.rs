@@ -364,8 +364,8 @@ impl LayerManagementDialog {
                 }
                 let layer = &mut graph.layers[index];
                 for (axis, scale, linked) in [
-                    (&mut layer.x_axis, x_scale, layer.link.is_some_and(|link| link.x == ScaleLink::Straight)),
-                    (&mut layer.y_axis, y_scale, layer.link.is_some_and(|link| link.y == ScaleLink::Straight)),
+                    (&mut layer.x_axis, x_scale, layer.link.as_ref().is_some_and(|link| link.x == ScaleLink::Straight)),
+                    (&mut layer.y_axis, y_scale, layer.link.as_ref().is_some_and(|link| link.y == ScaleLink::Straight)),
                 ] {
                     if !linked {
                         axis.scale = scale;
@@ -551,10 +551,10 @@ impl LayerManagementDialog {
         let shown = self.selected.iter().next().copied();
         if shown != self.link_shown_for {
             self.link_shown_for = shown;
-            let link = shown.and_then(|i| self.work.layers.get(i)).and_then(|l| l.link);
+            let link = shown.and_then(|i| self.work.layers.get(i)).and_then(|l| l.link.as_ref());
             self.link_to = link.map(|k| k.parent);
-            self.link_x = link.map_or(ScaleLink::None, |k| k.x);
-            self.link_y = link.map_or(ScaleLink::None, |k| k.y);
+            self.link_x = link.map_or(ScaleLink::None, |k| k.x.clone());
+            self.link_y = link.map_or(ScaleLink::None, |k| k.y.clone());
         }
         let parents: Vec<usize> =
             (0..first.min(self.work.layers.len())).filter(|&p| self.work.layers[p].link.is_none()).collect();
@@ -592,7 +592,7 @@ impl LayerManagementDialog {
             egui::Checkbox::new(&mut false, "When dragged to reposition, also reposition parent layer"),
         );
         if ui.button("Apply").clicked() {
-            let (sel, parent, x, y) = (self.selection(), self.link_to, self.link_x, self.link_y);
+            let (sel, parent, x, y) = (self.selection(), self.link_to, self.link_x.clone(), self.link_y.clone());
             self.apply(|g| g.link_layers(&sel, parent, x, y));
         }
     }
@@ -734,21 +734,33 @@ fn optional_layer_combo(ui: &mut egui::Ui, name: &str, id: &str, value: &mut Opt
     ui.end_row();
 }
 
-/// Sheaf links an axis scale one to one or not at all; Origin's Align and Custom are not built.
+/// Retain formula links authored in New Layer (Axes).
 fn scale_combo(ui: &mut egui::Ui, name: &str, id: &str, value: &mut ScaleLink) {
     let label = ui.label(name);
     egui::ComboBox::from_id_salt(id)
         .selected_text(match value {
             ScaleLink::None => "None",
             ScaleLink::Straight => "Straight (1 to 1)",
+            ScaleLink::Custom { .. } => "Custom Formula",
         })
         .show_ui(ui, |ui| {
             ui.selectable_value(value, ScaleLink::None, "None");
             ui.selectable_value(value, ScaleLink::Straight, "Straight (1 to 1)");
             ui.add_enabled(false, egui::Button::selectable(false, "Align"));
-            ui.add_enabled(false, egui::Button::selectable(false, "Custom"));
+            ui.add_enabled(
+                false,
+                egui::Button::selectable(matches!(value, ScaleLink::Custom { .. }), "Custom Formula"),
+            );
         })
         .response
         .labelled_by(label.id);
     ui.end_row();
+    if let ScaleLink::Custom { from, to } = value {
+        ui.label("From");
+        ui.label(from.as_str());
+        ui.end_row();
+        ui.label("To");
+        ui.label(to.as_str());
+        ui.end_row();
+    }
 }

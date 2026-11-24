@@ -46,6 +46,124 @@ fn properties_tab(h: &mut Harness<'static, SheafApp>, tab: &str) {
     settle(h);
 }
 
+fn size_count(h: &mut Harness<'static, SheafApp>, field: &str, value: usize) {
+    let at = h.get(By::new().role(egui::accesskit::Role::SpinButton).label(field)).rect().center();
+    double_click_at(h, at);
+    ctrl(h, egui::Key::A);
+    h.event(egui::Event::Text(value.to_string()));
+    h.run();
+    h.key_press(egui::Key::Enter);
+    settle(h);
+}
+
+#[test]
+fn f4_size_grows_sparse_rows_and_appends_empty_columns() {
+    let mut h = start_sheet("worksheet-size-grow");
+    let before = project(&h).clone();
+    let used_rows = sheet(&h).row_count();
+    let old_columns = sheet(&h).columns.clone();
+    open(&mut h);
+    properties_tab(&mut h, "Size");
+    size_count(&mut h, "Row Number", 1_000_000);
+    size_count(&mut h, "Column Number", old_columns.len() + 2);
+    assert_eq!(project(&h), &before);
+    click(&mut h, "OK");
+
+    let sheet = sheet(&h);
+    assert_eq!(sheet.view.allocated_rows, Some(1_000_000));
+    assert_eq!(crate::grid::shown_rows(sheet), 1_000_000);
+    assert_eq!(sheet.row_count(), used_rows);
+    assert_eq!(sheet.columns.len(), old_columns.len() + 2);
+    assert_eq!(&sheet.columns[..old_columns.len()], old_columns);
+    assert!(sheet.columns[old_columns.len()..].iter().all(|c| c.is_empty()));
+    assert_eq!(h.state().doc.undo_label(), Some("Worksheet size"));
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn f4_size_shrinks_trailing_cells_and_regrowth_is_blank() {
+    let mut h = start_sheet("worksheet-size-shrink");
+    let before = project(&h).clone();
+    let deleted = sheet(&h).columns[1].id;
+    let first = sheet(&h).columns[0].numeric().unwrap()[0];
+    open(&mut h);
+    properties_tab(&mut h, "Size");
+    size_count(&mut h, "Row Number", 1);
+    size_count(&mut h, "Column Number", 1);
+    click(&mut h, "Apply");
+
+    let trimmed = sheet(&h);
+    assert_eq!(crate::grid::shown_rows(trimmed), 1);
+    assert_eq!(trimmed.columns.len(), 1);
+    assert_eq!(trimmed.columns[0].numeric().unwrap(), &[first]);
+    assert!(project(&h).column(deleted).is_none());
+    size_count(&mut h, "Row Number", 4);
+    size_count(&mut h, "Column Number", 2);
+    click(&mut h, "OK");
+
+    let grown = sheet(&h);
+    assert_eq!(crate::grid::shown_rows(grown), 4);
+    assert_eq!(grown.row_count(), 1);
+    assert_eq!(grown.columns.len(), 2);
+    assert_ne!(grown.columns[1].id, deleted);
+    assert!(grown.columns[1].is_empty());
+    menu(&mut h, "Edit", "Undo");
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn f4_column_reduction_keeps_the_row_count() {
+    use sheaf_core::ColumnData;
+
+    let mut h = start_sheet("worksheet-size-column-reduction");
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Seed a longer column", |p| {
+        let sheet = p.workbook_mut(book).unwrap().sheet_mut();
+        sheet.columns[1].data = ColumnData::numeric(vec![1.0; 20]);
+    });
+    settle(&mut h);
+    let rows = crate::grid::shown_rows(sheet(&h));
+    open(&mut h);
+    properties_tab(&mut h, "Size");
+    size_count(&mut h, "Column Number", 1);
+    click(&mut h, "OK");
+    let sheet = sheet(&h);
+    assert_eq!(sheet.columns.len(), 1);
+    assert!(sheet.row_count() < 20);
+    assert_eq!(crate::grid::shown_rows(sheet), rows);
+}
+
+#[test]
+fn f4_size_respects_locked_rows_and_supports_zero_counts() {
+    use sheaf_core::column::RecalcMode;
+
+    let mut h = start_sheet("worksheet-size-empty");
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Lock a formula", |p| {
+        let column = &mut p.workbook_mut(book).unwrap().sheet_mut().columns[0];
+        column.formula = Some("i".into());
+        column.recalc = RecalcMode::Manual;
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    open(&mut h);
+    properties_tab(&mut h, "Size");
+    size_count(&mut h, "Row Number", 0);
+    click(&mut h, "OK");
+    assert!(h.state().worksheet_fonts.is_some());
+    assert_eq!(project(&h), &before);
+    size_count(&mut h, "Column Number", 0);
+    click(&mut h, "OK");
+    let empty = sheet(&h);
+    assert_eq!(empty.columns.len(), 0);
+    assert_eq!(empty.row_count(), 0);
+    assert_eq!(crate::grid::shown_rows(empty), 2);
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+}
+
 #[test]
 fn f4_view_switches_share_the_corner_settings_and_apply_with_format() {
     let mut h = start_sheet("worksheet-properties-view");

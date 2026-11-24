@@ -10,6 +10,7 @@ pub mod batch_peaks;
 pub mod batch_plot;
 pub mod batch_process;
 pub mod bin2d_options;
+pub mod browser_graph;
 pub mod cell_format;
 pub mod cell_note;
 pub mod cell_sparkline;

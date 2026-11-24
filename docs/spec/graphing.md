@@ -7760,3 +7760,26 @@ Origin 2016 has none, so nothing here is measured.
 - **Not built:** layer and plot scope, several slicer columns, extracting the selected subset to a sheet, plots whose
   values are computed (histograms, box charts) reading the slicer, and the slicer in .opj files.
 
+## Browser Graph: Graph > Browser Graph... (T410, 2026-11-24; Origin 2020b's Browser Graph, Sheaf's own)
+
+Origin 2020b added a Browser Graph that shows one of several similarly structured datasets at a time and switches
+between them inside the graph; Origin 2024 browses datasets on different sheets too. Origin 2016 has none, so nothing
+here is measured.
+
+- **The window "Browser Graph":** Plot: one of the active layer's plots (the first to start with, or the graph's
+  browsed plot). Browse: "The Y columns of the sheet" or "The same column in every sheet of the book". OK makes the
+  plot a browser (one undo step, "Browser Graph"); fewer than two datasets is refused with a message. Remove Browser
+  (enabled when the graph has one) takes it off and leaves the plot on the dataset it shows ("Remove Browser").
+  Cancel and Esc change nothing.
+- **The datasets:** by columns, the numeric Y columns of the plot's sheet in sheet order (the plot's own column
+  always among them); by sheets, in every sheet of the workbook the column with the plot's column's short name, else
+  the one at the same position, when it holds numbers. Each dataset takes the X column and the Y error column its
+  sheet gives it, as plotting it would.
+- **The bar above the graph:** Previous, Next (each disabled at its end of the list) and the caption, for example
+  `B (2 of 3)`, or `[Sheet2] B (2 of 3)` by sheets. A step points the plot at that dataset's columns and rescales the
+  layer's X and Y axes to it. Consecutive steps on a graph make one undo step ("Browse Graph").
+- **Model:** `Graph::browser` (`sheaf_core::browser::GraphBrowser`: what it browses by, the plot's layer and index,
+  the datasets and the one shown), saved with the project and renumbered with the graph's other columns;
+  `Project::set_graph_browser`, `browse_graph`, `clear_graph_browser`, `browser_items`.
+- **Not built:** several browsed plots per graph, browsing across workbooks, picking a dataset from a list, keyboard
+  stepping, the browser in .opj files and in the CLI/MCP.

@@ -364,3 +364,20 @@ fn a_binned_pareto_sorts_the_counts_into_a_new_sheet_as_origin() {
         assert!(t.iter().any(|s| s == want), "{want} in {t:?}");
     }
 }
+
+#[test]
+fn a_graph_slicer_leaves_out_the_rows_of_unticked_values() {
+    // T406: the line plot of Y from the sliced sheet keeps the rows of groups a and c.
+    let mut p = Project::new();
+    let b = p.add_workbook("sliced");
+    let groups = ["a", "b", "a", "c", "b"].iter().map(|s| s.to_string()).collect();
+    let g_col = p.add_column(b, 0, Designation::Y, ColumnData::text(groups)).unwrap();
+    let y = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0, 5.0])).unwrap();
+    let g = p.plot_columns(Template::Line, &[y]).unwrap();
+    let rows = |p: &Project| data::collect_graph(p, p.graph(g).unwrap())[0].plots[0].rows().collect::<Vec<_>>();
+    assert_eq!(rows(&p), [0, 1, 2, 3, 4]);
+    p.set_graph_slicer(g, g_col, vec!["a".into(), "c".into()]).unwrap();
+    assert_eq!(rows(&p), [0, 2, 3]);
+    p.clear_graph_slicer(g);
+    assert_eq!(rows(&p), [0, 1, 2, 3, 4]);
+}

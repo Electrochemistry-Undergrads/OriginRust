@@ -410,6 +410,8 @@ pub enum ProjectError {
     BadName(String),
     #[error("a sunburst plot cannot have a right Y axis; use one Y axis or another template")]
     SunburstNoRightAxis,
+    #[error("tick at least one value for the graph slicer to show")]
+    SlicerNothingShown,
     #[error(
         "a grouped plot of indexed data needs exactly one numeric data column (designated Y; a numeric group column must be designated X or Group); select one"
     )]

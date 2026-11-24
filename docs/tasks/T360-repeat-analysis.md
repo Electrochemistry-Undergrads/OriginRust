@@ -8,7 +8,8 @@ window, as one undo step. Not in Origin 2016, so the rules are Sheaf's own.
 
 ## Left
 
-- Repeating plots and fits, Duplicate Operation onto other sheets or books, a keyboard shortcut.
+- Repeating plots and fits, Duplicate Operation onto other books, a keyboard shortcut (onto every sheet of the
+  workbook: done in T414).
 
 ## Tests
 

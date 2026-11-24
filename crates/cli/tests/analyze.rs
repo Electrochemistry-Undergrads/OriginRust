@@ -1600,6 +1600,23 @@ fn life_data_regression_runs_from_the_command_line() {
     assert!(!ok && err.contains("--distribution"), "{err}");
 }
 
+/// Turnbull's nonparametric estimate with arbitrary censoring (spec `statistics.md` section 53, T409).
+#[test]
+fn turnbull_estimate_runs_from_the_command_line() {
+    let dir = scratch("turnbull");
+    let path = dir.join("ic.csv");
+    std::fs::write(&path, "id,start,stop,n\n1,,10,1\n2,10,20,2\n3,20,30,1\n4,5,5,1\n5,30,,1\n6,12,18,1\n7,8,15,1\n")
+        .unwrap();
+    let file = path.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "turnbull", file, "--y", "start,stop"]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Turnbull estimate") && out.contains("7 rows") && out.contains("Turnbull1"), "{out}");
+    let (ok, out, err) = sheaf(&["analyze", "turnbull", file, "--y", "start,stop,n", "--frequency", "--no-graph"]);
+    assert!(ok && out.contains("8 rows"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "turnbull", file, "--y", "start"]);
+    assert!(!ok && err.contains("two columns"), "{err}");
+}
+
 /// Distribution analysis with arbitrary censoring (spec `statistics.md` section 47, T384).
 #[test]
 fn distribution_analysis_with_arbitrary_censoring_runs_from_the_command_line() {

@@ -1370,16 +1370,29 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 graph: !no_graph,
             })),
         ),
-        AnalyzeTool::Capability { target, lsl, usl, subgroup, model, no_graph } => {
+        AnalyzeTool::Capability { target, lsl, usl, subgroup, model, lambda, cpm_target, confidence, no_graph } => {
             let model = match model.to_ascii_lowercase().as_str() {
                 "normal" => analysis::CapModel::Normal,
                 "lognormal" => analysis::CapModel::Lognormal,
                 "weibull" => analysis::CapModel::Weibull,
-                other => bail!("--model takes normal, lognormal or weibull, not {other:?}"),
+                "boxcox" | "box-cox" => analysis::CapModel::BoxCox,
+                other => bail!("--model takes normal, lognormal, weibull or boxcox, not {other:?}"),
             };
+            if lambda.is_some() && model != analysis::CapModel::BoxCox {
+                bail!("--lambda goes with --model boxcox");
+            }
             (
                 target,
-                Job::Tool(Tool::Capability(analysis::CapabilitySpec { lsl, usl, subgroup, model, graph: !no_graph })),
+                Job::Tool(Tool::Capability(analysis::CapabilitySpec {
+                    lsl,
+                    usl,
+                    subgroup,
+                    model,
+                    graph: !no_graph,
+                    lambda,
+                    target: cpm_target,
+                    confidence: confidence / 100.0,
+                })),
             )
         }
         AnalyzeTool::Rarechart { target, chart, limits, distribution, sigma, no_graph } => {
@@ -1596,7 +1609,14 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         AnalyzeTool::Manhattan { target, threshold, no_graph } => {
             (target, Job::Tool(Tool::Manhattan(analysis::ManhattanSpec { threshold, graph: !no_graph })))
         }
-        AnalyzeTool::Timepivot { target, period, stat, every, fiscal_start } => {
+        AnalyzeTool::Timepivot { target, period, stat, every, fiscal_start, by } => {
+            let by = match by.as_deref().map(|b| b.trim().to_ascii_lowercase()) {
+                None => None,
+                Some(b) if b == "hour" => Some(analysis::PivotBy::HourOfDay),
+                Some(b) if b == "weekday" || b == "day" => Some(analysis::PivotBy::DayOfWeek),
+                Some(b) if b == "month" => Some(analysis::PivotBy::MonthOfYear),
+                Some(other) => bail!("--by must be hour, weekday or month (got \"{other}\")"),
+            };
             if every == 0 {
                 bail!("--every must be at least 1");
             }
@@ -1619,7 +1639,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 "median" => analysis::PivotStat::Median,
                 other => bail!("--stat must be sum, mean, count, min, max or median (got \"{other}\")"),
             };
-            (target, Job::Tool(Tool::TimePivot(analysis::TimePivotSpec { period, stat, every, fiscal_start })))
+            (target, Job::Tool(Tool::TimePivot(analysis::TimePivotSpec { period, stat, every, fiscal_start, by })))
         }
         AnalyzeTool::Binscatter { target, bins, equal_width, no_graph } => {
             if bins == 0 {

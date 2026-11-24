@@ -4,7 +4,7 @@
 //! graph (`graph_tables.rs`), and the fields that depend on the graph are put in on top. Offsets are
 //! into the block body.
 
-use super::super::graph::{SHOW_FRAME_AT, SHOW_FRAME_BIT};
+use super::super::graph::{ANN_COLOR_AT, COLOR_AUTO, SHOW_FRAME_AT, SHOW_FRAME_BIT};
 use super::super::strings::encode_cp1252;
 use super::graph_tables::*;
 use super::layout::{fill, framed, put, put_name};
@@ -18,7 +18,7 @@ pub(super) const UNITS_PER_INCH: f64 = 600.0;
 pub(super) struct Code(pub [u8; 4]);
 
 impl Code {
-    pub const AUTO: Code = Code([0xf7, 0xff, 0xff, 0xff]);
+    pub const AUTO: Code = Code(COLOR_AUTO);
 
     pub fn index(i: u8) -> Code {
         Code([i, 0, 0, 0])
@@ -472,7 +472,7 @@ pub(super) struct AnnSpec<'a> {
     pub size_pt: u16,
     /// Angle in tenths of a degree, counter-clockwise.
     pub angle: u16,
-    pub color: u8,
+    pub color: Code,
     /// Width and height of the text in page units.
     pub extent: (u16, u16),
     /// A box around a legend.
@@ -501,8 +501,8 @@ pub(super) fn annotation(a: &AnnSpec) -> Vec<u8> {
         // the title of a right Y axis
         h[0x42] = 0x84;
     }
-    h[0x33] = a.color;
-    h[0x6b] = a.color;
+    h[0x33] = a.color.0[0];
+    put(&mut h, ANN_COLOR_AT, &a.color.0);
     put(&mut h, 0x67, &a.serial.to_le_bytes());
     let mut b1 = vec![0u8; 102];
     fill(&mut b1, style_table);

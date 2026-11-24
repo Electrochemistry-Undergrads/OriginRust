@@ -9,6 +9,7 @@
 //! choices made are listed in `docs/spec/import-excel.md`.
 
 mod dates;
+mod formulas;
 #[cfg(test)]
 mod tests;
 mod write;
@@ -921,7 +922,7 @@ fn read_sheet(
     let a = ascii::Analysis::for_grid(records, &layout, row_lines, source_columns, ns);
 
     let mut tally = Tally::default();
-    let (sheet, mut warnings) = ascii::assemble(&a, ao, name.to_string(), |j, short, a, warnings| {
+    let (mut sheet, mut warnings) = ascii::assemble(&a, ao, name.to_string(), |j, short, a, warnings| {
         let col = used.col0 + a.source_columns[j];
         let cells: Vec<Cx> = a.row_lines.iter().map(|&r| cx(view.cell(r, col), &mut tally)).collect();
         let code = a
@@ -944,6 +945,9 @@ fn read_sheet(
             "{} cells hold Excel's non-existent date 1900-02-29; they were read as 1900-02-28",
             tally.leap_bug_dates
         ));
+    }
+    if let Some(f) = formulas {
+        keep_formulas(&mut sheet, f, &view, used.col0, &a, &mut warnings);
     }
     if let Some(f) = formulas {
         let (row0, col0) = f.start().map_or((0, 0), |(r, c)| (r as usize, c as usize));
@@ -971,6 +975,53 @@ fn read_sheet(
         rows: a.row_lines.len(),
     };
     Ok(SheetRead { sheet, layout, warnings })
+}
+
+/// Columns whose data cells all hold one same-row Excel formula keep it as their column formula (T417, see
+/// [`formulas`]); a column with formulas that cannot be kept gets a warning and keeps its stored values only.
+fn keep_formulas(
+    sheet: &mut Worksheet,
+    f: &Range<String>,
+    view: &View<'_>,
+    used_col0: usize,
+    a: &ascii::Analysis,
+    warnings: &mut Vec<String>,
+) {
+    if sheet.columns.len() != a.source_columns.len() {
+        return;
+    }
+    let (row0, col0) = f.start().map_or((0, 0), |(r, c)| (r as usize, c as usize));
+    let text_at = |r: usize, c: usize| -> Option<&str> {
+        let (r, c) = (r.checked_sub(row0)?, c.checked_sub(col0)?);
+        f.get((r, c)).map(String::as_str).filter(|t| !t.trim().is_empty())
+    };
+    let places: Vec<usize> = a.source_columns.iter().map(|s| used_col0 + s).collect();
+    let shorts: Vec<String> = sheet.columns.iter().map(|c| c.short_name.clone()).collect();
+    let name_of = |c: usize| places.iter().position(|&p| p == c).map(|j| shorts[j].clone());
+    for (j, &col) in places.iter().enumerate() {
+        let with: Vec<(usize, &str)> = a.row_lines.iter().filter_map(|&r| text_at(r, col).map(|t| (r, t))).collect();
+        let Some(&(first_row, first_text)) = with.first() else { continue };
+        let plain_values = a.row_lines.iter().any(|&r| text_at(r, col).is_none() && has_content(view.cell(r, col)));
+        let mut kept: Option<String> = None;
+        let same = !plain_values
+            && with.iter().all(|&(r, t)| match formulas::translate(t, r, &name_of) {
+                Some(e) => kept.get_or_insert_with(|| e.clone()) == &e,
+                None => false,
+            });
+        match kept.filter(|_| same) {
+            Some(expr) => {
+                let c = &mut sheet.columns[j];
+                c.formula = Some(expr);
+                c.recalc = sheaf_core::column::RecalcMode::Auto;
+            }
+            None => warnings.push(format!(
+                "column {}: its Excel formulas (the first is {}: ={}) are not one same-row formula Sheaf can read; only their stored values were imported",
+                shorts[j],
+                address(first_row, col),
+                first_text.trim().trim_start_matches('=')
+            )),
+        }
+    }
 }
 
 /// A column whose cells are all dates or times: a date (or date-time) column when the number format

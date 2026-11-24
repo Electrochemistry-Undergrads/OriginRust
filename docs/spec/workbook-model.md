@@ -716,8 +716,10 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   stores the worksheet's explicit column heading height and row heading
   width in grid percentages. Automatic measurements use the worksheet's
   font and label visibility. The stored measurements follow Standard
-  font scaling and are independent of the View heading switches. Print
-  and worksheet images use their own geometry.
+  font scaling and are independent of the View heading switches. The
+  same group saves the top gap in points when nonzero. Its height is
+  independent of the Standard font. Print and worksheet images use
+  their own geometry.
 - **Body measurements (T59).** Sparse `view.cell_measurements` stores
   explicit All Rows Height and All Columns Width percentages. Row height
   applies to data rows, including sparse future rows. An All Columns Width
@@ -1491,7 +1493,10 @@ T412: the sheets can also be "every sheet of every workbook in this folder": the
 holding this workbook (the first subfolder that lists it, else the root, which holds every workbook) and of its
 subfolders (`AcrossScope::Folder`, `Project::folder_of`). After Column (a short name, letter case ignored, else a long
 name) puts the new column right after that column in each sheet that has one; other sheets get it at the end.
-Choosing the sheets one by one is not built.
+
+T418: "Only the ticked sheets" lists every sheet of every workbook ("Book1 / Sheet1"), starting with this workbook's
+sheets ticked; OK adds the column to the ticked ones only (`AcrossScope::Sheets`), in book and sheet order. With none
+ticked the window says there are no sheets to add the column to.
 
 ## 14. Suggested Rust data model (P0)
 

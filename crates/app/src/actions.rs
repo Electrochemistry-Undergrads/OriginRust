@@ -154,6 +154,8 @@ pub enum GraphOp {
     OrderTitle { layer: usize, y: bool, front: bool },
     /// The legend's Push to back of data (`behind`) / Bring to front of data (T152).
     LegendBehindData { layer: usize, behind: bool },
+    /// Text Color Follows Plot in the legend's context menu.
+    LegendTextColorFollowsPlot { layer: usize, enabled: bool },
     /// Reconstruct Legend: the legend text is made again from the plots (the automatic text).
     ReconstructLegend { layer: usize },
     /// Update Legend: custom legend text is kept; lines of plots that are gone are dropped and

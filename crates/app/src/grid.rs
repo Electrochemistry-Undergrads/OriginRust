@@ -1013,6 +1013,15 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         return;
     }
 
+    let mut body = body;
+    // Origin 2016 reserves 1.5 grid points per gap point, independently of the Standard font.
+    let gap = (1.5 * f32::from(sheet.view.header_measurements.top_gap_pt)).round().min((body.height() - 1.0).max(0.0));
+    if gap > 0.0 {
+        let blank = Rect::from_min_size(body.min, vec2(body.width(), gap));
+        ui.painter().rect_filled(blank, 0.0, Color32::WHITE);
+        body.min.y = blank.bottom();
+    }
+
     let scale = sheet.font_defaults.size_scale();
     let scale_changed = state.standard_scale.replace(scale) != Some(scale);
     let bulk_width = sheet.view.cell_measurements.column_width;
@@ -1120,6 +1129,9 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     let mut drawn_rows: Vec<(usize, f32, f32)> = Vec::new();
     let output = ui
         .scope_builder(UiBuilder::new().max_rect(body), |ui| {
+            if gap > 0.0 {
+                ui.set_clip_rect(ui.clip_rect().intersect(body));
+            }
             egui::ScrollArea::horizontal()
                 .auto_shrink([false, false])
                 .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)

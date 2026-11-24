@@ -1272,6 +1272,7 @@ fn draw_legend_and_labels(
                 visible: true,
                 position: LegendPosition::ManualTopLeft { x: label.x, y: label.y - 0.5 * size / f.h },
                 font: label.font.clone(),
+                text_color_follows_plot: false,
                 frame: false,
                 background: None,
                 columns: 1,
@@ -2192,6 +2193,23 @@ fn measure_legend_cells(cells: &mut [Cell], sample: f64, gap: f64, tab_advance: 
     width
 }
 
+fn legend_sample_color(entry: &PlotData) -> Color {
+    let plot = entry.plot;
+    if entry.vector.is_some() {
+        plot.line.color
+    } else if plot.kind == PlotKind::Line {
+        legend_line_sample_fill(plot).unwrap_or(plot.line.color)
+    } else {
+        plot.symbol.color
+    }
+}
+
+fn legend_line_sample_fill(plot: &Plot) -> Option<Color> {
+    plot.decor
+        .fill_under
+        .filter(|_| plot.kind.has_line() && !plot.kind.is_area() && !plot.decor.fill_under_mode.is_sidelines())
+}
+
 /// Draws legend `lg` inside frame `f`: one row per entry line (the automatic text has one
 /// line per plot), in `lg.columns` columns filled top to bottom. `ids` name the entries as
 /// `\l(n)` and `%(n)` refer to them. `owner` identifies the legend's layer and its plot colors.
@@ -2381,7 +2399,10 @@ fn draw_legend(
         let stroke = lg.frame.then(|| Stroke::solid(lg.font.color, 0.75));
         out.push(Item::Rect { rect: Rect { x: x0, y: y0, w, h }, fill: lg.background, stroke });
     }
+    let row_color = if lg.text_color_follows_plot { legend_sample_color(entries[0]) } else { lg.font.color };
+    let mut font = lg.font.clone();
     for (r, row) in rows.iter().enumerate() {
+        font.color = row_color;
         let col = r / per_col;
         let col_x = x0 + pad + col_w[..col].iter().sum::<f64>() + col_gap * col as f64;
         let cy = y0 + pad + row_centers[r];
@@ -2394,6 +2415,9 @@ fn draw_legend(
                     let (sx0, sx1) = (x, x + sample);
                     let entry = entries[*k];
                     let plot = entry.plot;
+                    if lg.text_color_follows_plot {
+                        font.color = legend_sample_color(entry);
+                    }
                     x = sx1;
                     after_symbol = true;
                     if let Some(vector) = &entry.vector {
@@ -2401,11 +2425,8 @@ fn draw_legend(
                         continue;
                     }
                     // A line plot filled under its curve shows a filled box, as Origin's legend does.
-                    let filled = plot.decor.fill_under.filter(|_| {
-                        plot.kind.has_line() && !plot.kind.is_area() && !plot.decor.fill_under_mode.is_sidelines()
-                    });
                     let mut front_line = None;
-                    if let Some(fill) = filled {
+                    if let Some(fill) = legend_line_sample_fill(plot) {
                         out.push(Item::Rect {
                             rect: Rect { x: sx0, y: cy - fs / 2.0, w: sample, h: fs },
                             fill: Some(fill),
@@ -2480,7 +2501,7 @@ fn draw_legend(
                     if after_symbol {
                         x += gap;
                     }
-                    text::place_segments(out, m, &segments(t), &lg.font, fs, (x, baseline), Anchor::Start, 0.0);
+                    text::place_segments(out, m, &segments(t), &font, fs, (x, baseline), Anchor::Start, 0.0);
                     x += w;
                     after_symbol = false;
                 }
@@ -2488,7 +2509,7 @@ fn draw_legend(
                     if after_symbol {
                         x += gap;
                     }
-                    text::place_segments(out, m, runs, &lg.font, fs, (x, baseline), Anchor::Start, 0.0);
+                    text::place_segments(out, m, runs, &font, fs, (x, baseline), Anchor::Start, 0.0);
                     x += w;
                     after_symbol = false;
                 }
@@ -2497,7 +2518,7 @@ fn draw_legend(
                         x += gap;
                     }
                     for (i, line) in lines.iter().enumerate() {
-                        text::place_literal(out, m, line, &lg.font, (x, baseline + i as f64 * row_h));
+                        text::place_literal(out, m, line, &font, (x, baseline + i as f64 * row_h));
                     }
                     x += width;
                     after_symbol = false;

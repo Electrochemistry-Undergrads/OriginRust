@@ -1370,7 +1370,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 graph: !no_graph,
             })),
         ),
-        AnalyzeTool::Capability { target, lsl, usl, subgroup, model, lambda, cpm_target, no_graph } => {
+        AnalyzeTool::Capability { target, lsl, usl, subgroup, model, lambda, cpm_target, confidence, no_graph } => {
             let model = match model.to_ascii_lowercase().as_str() {
                 "normal" => analysis::CapModel::Normal,
                 "lognormal" => analysis::CapModel::Lognormal,
@@ -1391,6 +1391,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     graph: !no_graph,
                     lambda,
                     target: cpm_target,
+                    confidence: confidence / 100.0,
                 })),
             )
         }

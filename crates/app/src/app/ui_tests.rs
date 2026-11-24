@@ -6020,6 +6020,11 @@ fn the_statistics_menu_computes_box_cox_capability() {
     assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
     let (sheet, lambda) = result_column(&h, "Box-Cox lambda");
     assert!(sheet.starts_with("Capability") && lambda[0].is_finite() && lambda[0].abs() <= 5.0, "{lambda:?}");
+    // The Ppk interval (T425) holds Ppk.
+    let (_, ppk) = result_column(&h, "Ppk");
+    let (_, low) = result_column(&h, "Ppk lower");
+    let (_, high) = result_column(&h, "Ppk upper");
+    assert!(low[0] < ppk[0] && ppk[0] < high[0], "{low:?} {ppk:?} {high:?}");
 }
 
 /// Statistics > Rare Event Chart (G/T)... (T364): a T chart with the exponential fit, one undo step and a graph.

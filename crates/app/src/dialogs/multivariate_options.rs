@@ -512,6 +512,14 @@ impl MultiOptions {
                 }
                 if matches!(s.model, CapModel::Normal | CapModel::BoxCox) {
                     ui.horizontal(|ui| {
+                        ui.label("Confidence level of the Pp and Ppk intervals");
+                        let mut pct = s.confidence * 100.0;
+                        if ui.add(egui::DragValue::new(&mut pct).speed(0.1).range(50.0..=99.99).suffix(" %")).changed()
+                        {
+                            s.confidence = pct / 100.0;
+                        }
+                    });
+                    ui.horizontal(|ui| {
                         let mut on = s.target.is_some();
                         if ui.checkbox(&mut on, "Target (Cpm)").changed() {
                             s.target = on.then(|| match (s.lsl, s.usl) {

@@ -1944,7 +1944,7 @@ Benneyan G chart variants, are not built.
 Origin 2027's Quality improvement apps add nonnormal process capability; Sheaf has no Origin 2016 capability window
 to copy, so this is Sheaf's own. Statistics > Process Capability... (`Tool::Capability`, `sheaf analyze capability
 --y COL[,COL..] [--lsl L] [--usl U] [--subgroup 1] [--model normal|lognormal|weibull|boxcox] [--lambda L]
-[--cpm-target T] [--no-graph]`): every chosen
+[--cpm-target T] [--confidence 95] [--no-graph]`): every chosen
 column is a process of its own, in row order, missing values left out; at least one limit is needed, and LSL < USL.
 
 - **Normal**: the within standard deviation is `R bar / d2` of the complete subgroups of `n` (2 to 10; a short last
@@ -1966,6 +1966,11 @@ column is a process of its own, in row order, missing values left out; at least 
 - **Cpm** (T419) with a target and both limits: `(USL - LSL) / 6 sqrt(s^2 + (mean - T)^2)` with the overall deviation
   (on the Box-Cox scale for that model, the target transformed too); empty without a target or a limit and for the
   lognormal and Weibull models.
+- **Intervals** (T425) at the confidence level `1 - a` (95 % by default; the window's "Confidence level of the Pp and
+  Ppk intervals"), normal and Box-Cox models (on that scale): Pp from the chi-square distribution of the overall
+  deviation, `Pp sqrt(chi2(a/2, n - 1) / (n - 1))` to `Pp sqrt(chi2(1 - a/2, n - 1) / (n - 1))`; Ppk by Bissell's
+  approximation `Ppk -+ z(1 - a/2) sqrt(1 / 9n + Ppk^2 / 2(n - 1))`. The columns Pp lower, Pp upper, Ppk lower and Ppk
+  upper end the sheet; a note names the level.
 
 With one limit, the indices that need the other are empty and `Cpk`/`Ppk` is the one side. Observed parts per million
 count the values strictly outside. The result sheet `CapabilityN` has one row per column (N, Mean, StdDev overall and
@@ -1978,8 +1983,10 @@ decimals of the d2 table) to 1e-9 (1e-6 for the within values, 1e-7 for the Weib
 scipy (`tools/capability-boxcox-ref.py`, `crates/calc/tests/capability_boxcox_reference.rs`: seven cases, fitted and
 given lambda, lambda above 1, a lower limit of 0, subgroups; scipy's bounded maximization of `boxcox_llf`, confirmed by
 `boxcox_normmax`): the fitted lambda to 1e-6 (the likelihood is flat at its top), and at the reference's lambda the
-indices to 1e-9 (within values and parts per million 1e-6). Johnson transformations and confidence intervals of the
-indices are not built.
+indices to 1e-9 (within values and parts per million 1e-6); the intervals against scipy (`tools/capability-ci-ref.py`,
+`crates/calc/tests/capability_ci_reference.rs`: five cases, levels 90 to 99 %, one limit, eight values, Box-Cox; the
+script also simulates the Pp interval's coverage) to 1e-9. Johnson transformations and intervals of the within
+indices (Cp, Cpk) and of Cpm are not built.
 
 ## 37 Distribution Overview plot for right-censored data (T366, Origin 2026b; not measured)
 

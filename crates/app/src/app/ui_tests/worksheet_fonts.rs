@@ -41,6 +41,62 @@ fn painted_size(h: &Harness<'static, SheafApp>, text: &str) -> Vec<f32> {
     sizes
 }
 
+fn properties_tab(h: &mut Harness<'static, SheafApp>, tab: &str) {
+    h.get(By::new().role(egui::accesskit::Role::Window).label("Worksheet Properties")).get_by_label(tab).click();
+    settle(h);
+}
+
+#[test]
+fn f4_view_switches_share_the_corner_settings_and_apply_with_format() {
+    let mut h = start_sheet("worksheet-properties-view");
+    let before = project(&h).clone();
+    let heading = sheaf_core::sheet_print::head_name(sheet(&h), 0);
+
+    open(&mut h);
+    size(&mut h, "14");
+    properties_tab(&mut h, "View");
+    for control in ["Row Labels for Column Label Rows", "Column Header", "Column Grid", "Page Break Preview Lines"] {
+        click(&mut h, control);
+    }
+    assert_eq!(project(&h), &before);
+    click(&mut h, "Apply");
+
+    let sheet = sheet(&h);
+    assert!(!sheet.view.row_labels && !sheet.view.column_header && !sheet.view.column_grid);
+    assert!(sheet.view.row_header && sheet.view.row_grid && sheet.view.page_breaks);
+    assert_eq!(sheet.font_defaults.data.as_ref().unwrap().size_pt, Some(14.0));
+    assert!(h.query_by_label("Long Name").is_none());
+    assert!(h.query_by_label(&heading).is_none());
+    assert_eq!(h.state().doc.undo_label(), Some("Worksheet formatting"));
+    let revision = h.state().doc.revision();
+    click(&mut h, "OK");
+    assert_eq!(h.state().doc.revision(), revision);
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
+fn f4_view_cancel_preserves_independent_heading_and_grid_choices() {
+    let mut h = start_sheet("worksheet-properties-view-cancel");
+    let before = project(&h).clone();
+    open(&mut h);
+    properties_tab(&mut h, "View");
+    click(&mut h, "Row Header");
+    click(&mut h, "Row Grid");
+    click(&mut h, "Cancel");
+    assert_eq!(project(&h), &before);
+
+    open(&mut h);
+    properties_tab(&mut h, "View");
+    click(&mut h, "Row Header");
+    click(&mut h, "Row Grid");
+    click(&mut h, "OK");
+    let view = sheet(&h).view;
+    assert!(view.row_labels && view.column_header && view.column_grid);
+    assert!(!view.row_header && !view.row_grid && !view.page_breaks);
+    assert_eq!(h.state().doc.undo_label(), Some("Worksheet view"));
+}
+
 #[test]
 fn f4_applies_to_data_without_a_selection_and_rebuilds_the_grid_cache() {
     let mut h = start_sheet("worksheet-fonts-f4");

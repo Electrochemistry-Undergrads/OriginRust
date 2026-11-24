@@ -351,6 +351,10 @@ Custom legend text accepts `%(CRLF)`, `%(CR)` and `%(LF)` before plot substituti
 They use the normal legend row layout and stay literal in protected spans and worksheet
 metadata. Graphing 7.11 records the Origin 2016 raw legend controls.
 
+Custom legends accept raw tabs and `%(TAB)` to place entries at horizontal stops.
+The tab grid starts at each row's left edge, scales with the legend font, and
+counts trailing tabs in the frame width. Graphing 7.11 records the Arial measurements.
+
 ## Origin facts
 
 Recorded in gui-look 1/4 and the command map: the font box says "Default: Arial", the selected

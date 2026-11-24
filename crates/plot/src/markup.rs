@@ -64,9 +64,19 @@ const MAX_DEPTH: usize = 24;
 #[derive(Clone, Debug)]
 pub(crate) enum Segment {
     Text(Run),
-    Pair { sub: Vec<Segment>, sup: Vec<Segment> },
-    Accent { kind: Accent, content: Vec<Segment>, scale: f64, color: Option<Color> },
+    Pair {
+        sub: Vec<Segment>,
+        sup: Vec<Segment>,
+    },
+    Accent {
+        kind: Accent,
+        content: Vec<Segment>,
+        scale: f64,
+        color: Option<Color>,
+    },
     LineGap(u32),
+    /// Consumed by the legend row before it places any glyphs.
+    Tab,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -88,7 +98,7 @@ pub fn parse(text: &str) -> Vec<Run> {
                     flatten(sup, out);
                 }
                 Segment::Accent { content, .. } => flatten(content, out),
-                Segment::LineGap(_) => {}
+                Segment::LineGap(_) | Segment::Tab => {}
             }
         }
     }
@@ -98,7 +108,7 @@ pub fn parse(text: &str) -> Vec<Run> {
 }
 
 pub(crate) fn segments(text: &str, expand_family: &impl Fn(&str) -> Option<String>) -> Vec<Segment> {
-    parse_segments(text, &ParseOptions { expand_family, label_separators: false, plot_color: None })
+    parse_segments(text, &ParseOptions { expand_family, label_separators: false, plot_color: None, legend_tabs: false })
 }
 
 /// Parses a free label with normalized line endings and access to its layer's plot colors.
@@ -109,7 +119,12 @@ pub(crate) fn label_segments(
 ) -> Vec<Segment> {
     parse_segments(
         text,
-        &ParseOptions { expand_family, label_separators: text.contains('\n'), plot_color: Some(plot_color) },
+        &ParseOptions {
+            expand_family,
+            label_separators: text.contains('\n'),
+            plot_color: Some(plot_color),
+            legend_tabs: false,
+        },
     )
 }
 
@@ -119,19 +134,35 @@ pub(crate) fn plot_segments(
     expand_family: &impl Fn(&str) -> Option<String>,
     plot_color: &impl Fn(usize) -> Option<Color>,
 ) -> Vec<Segment> {
-    parse_segments(text, &ParseOptions { expand_family, label_separators: false, plot_color: Some(plot_color) })
+    parse_segments(
+        text,
+        &ParseOptions { expand_family, label_separators: false, plot_color: Some(plot_color), legend_tabs: false },
+    )
+}
+
+/// Parses a legend's text with tab boundaries in its inline runs.
+pub(crate) fn legend_segments(
+    text: &str,
+    expand_family: &impl Fn(&str) -> Option<String>,
+    plot_color: &impl Fn(usize) -> Option<Color>,
+) -> Vec<Segment> {
+    parse_segments(
+        text,
+        &ParseOptions { expand_family, label_separators: false, plot_color: Some(plot_color), legend_tabs: true },
+    )
 }
 
 struct ParseOptions<'a> {
     expand_family: &'a dyn Fn(&str) -> Option<String>,
     label_separators: bool,
     plot_color: Option<&'a dyn Fn(usize) -> Option<Color>>,
+    legend_tabs: bool,
 }
 
 fn parse_segments(text: &str, options: &ParseOptions<'_>) -> Vec<Segment> {
     let chars: Vec<char> = text.chars().collect();
     let mut pos = 0;
-    let mut out = ParsedText::default();
+    let mut out = ParsedText { legend_tabs: options.legend_tabs, ..ParsedText::default() };
     let base = Style {
         bold: false,
         italic: false,
@@ -158,6 +189,7 @@ struct ParsedText {
     segments: Vec<Segment>,
     pending_space: Option<Style>,
     after_text: bool,
+    legend_tabs: bool,
 }
 
 impl ParsedText {
@@ -429,6 +461,12 @@ fn parse_seq(
     let mut parens = 0usize;
     while *pos < chars.len() {
         let c = chars[*pos];
+        if c == '\t' && out.legend_tabs {
+            out.before(false);
+            out.segments.push(Segment::Tab);
+            *pos += 1;
+            continue;
+        }
         if options.label_separators && depth == 0 && (*pos == 0 || chars[*pos - 1] == '\n') {
             let line: String = chars[*pos..].iter().take_while(|&&c| c != '\n').collect();
             if let Some(percent) = crate::legend::separation_percent(&line) {

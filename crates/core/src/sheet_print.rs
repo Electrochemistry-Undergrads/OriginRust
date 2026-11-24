@@ -157,6 +157,8 @@ impl<'a> SheetTable<'a> {
         line_height: &dyn Fn(ResolvedStyle<'_>, f64) -> f64,
         heading_formats: bool,
     ) -> Self {
+        let measurements = sheet.view.cell_measurements;
+        let uniform_height = measurements.row_height.map(|p| (style.row_h * f64::from(p) / 100.0).max(0.75));
         let scale = f64::from(sheet.font_defaults.size_scale());
         style.row_h *= scale;
         style.rownum_w *= scale;
@@ -186,7 +188,10 @@ impl<'a> SheetTable<'a> {
         let column_header = ResolvedStyle { bold: true, ..column_header };
         let column_header_height = height(column_header);
         let row_header_height = height(row_header);
-        let row_heights = RowHeights::new(sheet, &formats, row_header_height, height).shown(&rows);
+        let row_heights = uniform_height.map_or_else(
+            || RowHeights::new(sheet, &formats, row_header_height, height).shown(&rows),
+            RowHeights::constant,
+        );
         let label_heights = labels
             .iter()
             .map(|l| {
@@ -271,10 +276,16 @@ impl<'a> SheetTable<'a> {
 
     /// Width in points of each printed column.
     pub fn column_widths(&self) -> Vec<f64> {
-        let k = self.style.default_col_w / f64::from(DEFAULT_WIDTH);
+        let standard = self.style.default_col_w;
+        let k = standard / f64::from(DEFAULT_WIDTH);
+        let default_width =
+            self.sheet.view.cell_measurements.column_width.map_or(standard, |p| {
+                standard / f64::from(self.sheet.font_defaults.size_scale()) * f64::from(p) / 100.0
+            });
         self.cols
             .iter()
-            .map(|&c| (f64::from(self.sheet.columns[c].shown_width()) * k).max(self.style.narrowest_col_w))
+            .map(|&c| self.sheet.columns[c].width.map_or(default_width, |width| f64::from(width) * k))
+            .map(|width| width.max(self.style.narrowest_col_w))
             .collect()
     }
 
@@ -460,16 +471,21 @@ impl<'a> SheetTable<'a> {
             ));
         }
         // Body: row numbers and the cells as the sheet shows them.
+        let fixed_height = self.sheet.view.cell_measurements.row_height.is_some();
         for &r in &rows {
             let top = row_top(r);
-            ops.push(self.cell_text(
-                0.0,
-                s.rownum_w,
-                base(top, self.row_heights.height(r), row_header_size),
-                (self.rows[r] + 1).to_string(),
-                Align::Right,
-                &self.row_header,
-            ));
+            let height = self.row_heights.height(r);
+            let fits = |size: f64| !fixed_height || height >= size;
+            if fits(row_header_size) {
+                ops.push(self.cell_text(
+                    0.0,
+                    s.rownum_w,
+                    base(top, height, row_header_size),
+                    (self.rows[r] + 1).to_string(),
+                    Align::Right,
+                    &self.row_header,
+                ));
+            }
             for (k, &c) in cols.iter().enumerate() {
                 let column = &self.sheet.columns[self.cols[c]];
                 let text = self.sheet.view.data_text(column, self.rows[r], false);
@@ -481,14 +497,10 @@ impl<'a> SheetTable<'a> {
                 let (cx, cw) = (xs[k], widths[c]);
                 let default = if numeric { Align::Right } else { Align::Left };
                 let st = self.cell_style(column, self.rows[r]);
-                ops.push(self.cell_text(
-                    cx,
-                    cw,
-                    base(top, self.row_heights.height(r), cell_size(&st)),
-                    text,
-                    default,
-                    &st,
-                ));
+                let size = cell_size(&st);
+                if fits(size) {
+                    ops.push(self.cell_text(cx, cw, base(top, height, size), text, default, &st));
+                }
             }
         }
         if s.footer_h > 0.0 {
@@ -650,6 +662,40 @@ mod tests {
 
     fn bx() -> PageBox {
         PageBox { area_w: 200.0, area_h: 100.0, head_h: 20.0, row_h: 10.0, rownum_w: 20.0 }
+    }
+
+    #[test]
+    fn saved_cell_measurements_resize_the_body_and_change_page_breaks() {
+        use crate::sheet_view::CellMeasurements;
+
+        let mut sheet = Worksheet::new("Sheet1");
+        let mut column = Column::new(ColumnId(1), "A", Designation::Y, ColumnData::numeric(vec![2.5; 4]));
+        column.long_name = "Height".into();
+        sheet.columns.push(column);
+        let style = PrintStyle::default();
+        let before = serde_json::to_string(&sheet).unwrap();
+        assert!(!before.contains("cell_measurements"));
+        let table = SheetTable::new(&sheet, style);
+        let head = table.head_height();
+        let area = (160.0, head + 64.0);
+        assert_eq!(table.pages(area.0, area.1).len(), 1);
+
+        sheet.view.cell_measurements = CellMeasurements { row_height: Some(200), column_width: Some(150) };
+        sheet.view = serde_json::from_str(&serde_json::to_string(&sheet.view).unwrap()).unwrap();
+        let table = SheetTable::new(&sheet, style);
+        assert_eq!(table.head_height(), head);
+        assert_eq!(table.column_widths(), [75.0]);
+        assert_eq!(table.row_heights.height(0), 24.0);
+        assert_eq!(table.pages(area.0, area.1).len(), 2);
+
+        sheet.columns[0].width = Some(DEFAULT_WIDTH);
+        sheet.view.cell_measurements.row_height = Some(10);
+        let table = SheetTable::new(&sheet, style);
+        assert_eq!(table.column_widths(), [50.0]);
+        let slot = &table.pages(area.0, area.1)[0];
+        let ops = table.draw_page(slot, 1);
+        assert!(ops.iter().any(|op| matches!(op, PrintOp::Text { text, .. } if text == "Height")));
+        assert!(!ops.iter().any(|op| matches!(op, PrintOp::Text { text, .. } if text == "2.5")));
     }
 
     #[test]

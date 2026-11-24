@@ -1301,6 +1301,24 @@ literal `\v(...)` and wrapped `\ww(...)` spans keep the token text. Values read
 from worksheet metadata are resolved after this pass. The raw authored legend
 continues to be saved with its tokens.
 
+**Legend tab stops (T58).** Assigning `legend.text$` in Origin 2016 expanded
+`%(TAB)` into horizontal tabs. The 11, 22 and 33 point Arial EMFs placed consecutive
+stops 160, 320 and 480 logical units apart respectively. At 22 points a 300-unit
+prefix advanced to 320, a 320-unit prefix advanced to 640, and a 900-unit prefix
+advanced to 960. The measured stops were relative to the start of each row, with
+the legend sample and styled glyph widths counted before advancing. A trailing
+tab widened the frame. Bold, italic and an inline Courier New span retained their
+styles across the tab. [LabTalk string substitution](https://docs.originlab.com/labtalk/guide/string-substitution/)
+
+Sheaf treats an authored tab and case-insensitive `%(TAB)` alike. Stops are spaced at
+3.5 times the legend base font size, the normalized approximation of the Arial
+measurements. Each tab advances to the next strictly greater stop. The same
+advances size the frame and position the text and samples. Protected and wrapped
+spans keep the token text, and worksheet metadata is resolved after keyword
+expansion. Ordinary inline style spans continue across a tab. When a row also contains
+wrapped captions, the width budget reserves
+one interval per tab before placing the captions and resolving the actual stops.
+
 **Plot-colored graph text (T58).** `\cpN(text)` uses the color of the Nth plot in the
 text object's layer. Repainting the graph after a style change resolves the color again.
 Nested styles, literal blocks and glyph decorations follow the existing text rules.
@@ -4475,7 +4493,12 @@ inside the rectangle or the ellipse inscribed in it (`sheaf_plot::region::points
 are left out and the offsets of stacked plots are not applied. The points go to a new workbook "Extracted from
 region": per plot with points inside, an X column (the plot's X name, "Row" without one), a Y column (its Y name) and a
 Disregard column "Source row" (1-based), each commented "in the region of <plot>". One undo step ("Extract data in
-region"). Freeform regions and several regions at once are not built.
+region").
+
+Mask Data in Region and Unmask Data in Region (T413, same menu) mask or unmask the Y cells of those points (the
+plots' Y columns, rows found the same way, masked rows included), as one undo step ("Mask data in region" / "Unmask
+data in region"); the status line counts the cells changed, and nothing happens when none would change. Freeform
+regions and several regions at once are not built.
 
 ### 17.13 Cause-and-effect (fishbone) diagram (T375, Origin 2026 feature, Sheaf's layout, not measured)
 
@@ -6174,8 +6197,8 @@ measured.
 Add offers the nine layer presets and X and Y scale choices. Bottom-X Left-Y creates an independent
 layer. The linked presets accept an independent layer from the preview as their parent, defaulting
 to the opening layer's root or the first eligible layer. A straight-linked scale displays the
-parent's type. Independent scales start at Linear and offer the ten built-in types and Custom
-Formula. Discrete remains open. Apply adds a layer to the numbered preview. Undo, OK and Cancel
+parent's type. Independent scales start at Linear and offer the ten built-in types, Custom Formula
+and Discrete. Apply adds a layer to the numbered preview. Undo, OK and Cancel
 follow 15.7d.
 
 **Custom Formula scale (Origin 2016, 2026-11-23 and 2026-11-24).** Setting `layer.x.type=11`
@@ -6200,6 +6223,24 @@ If a previously saved pair becomes invalid following a range change, the axis te
 draws linearly with the current limits and retains the pair for later valid ranges. The Axis
 dialog displays the saved formulas. Sheaf saves and OPJ companions keep the expressions.
 A bare OPJ writes the axis as Linear and warns.
+
+**Discrete scale (Origin 2016, 2026-11-24).** LabTalk type 12 spaced the five X values
+10, 11, 15, 22 and 23 at equal intervals in an EMF. With limits 8 to 25 and increment 1,
+the tick labels were 8, 9, 10, 11, 15, 22, 23, 24 and 25. A second plot's X value of 13
+landed halfway between 11 and 15. The Y values 1, 3, 4, 9 and 14 also drew at equal intervals
+with Y type 12. Descending source values produced the same positions, and adjacent equal
+values shared a position. An unsorted series fell back to linear spacing. The saved project
+used OPJ scale byte 11 on both axes.
+
+Sheaf offers Discrete on independent Cartesian dimensions in Add and on the Axis Scale tab.
+The first plot supplies the positions. Each coordinate between its values is interpolated
+linearly and either end uses the adjacent interval to extend the mapping. Limits and
+coordinate reading remain in data units. Sheaf labels the visible source values, thinning
+them above 200, and applies the major and minor tick settings to the range outside the first
+plot. Origin can also thin the interior labels with its increment and layout rules. With
+fewer than two distinct finite values or a change of direction in the first plot, Sheaf draws
+linearly and keeps the scale type for later data changes. Sheaf files and bare OPJ files
+preserve the choice. [Origin's Scale tab](https://docs.originlab.com/origin-help/axesref-scale/).
 
 Inset With Data copies all plots from the chosen parent and uses automatic independent ranges.
 The [Origin Add tab](https://docs.originlab.com/origin-help/laymanage-addtab/) documents copying

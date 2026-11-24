@@ -175,7 +175,11 @@ impl Worksheet {
         if !set_category_font(&mut self.font_defaults.standard, font) {
             return false;
         }
-        self.view.header_measurements.scale(self.font_defaults.size_scale() / previous_scale);
+        let scale = self.font_defaults.size_scale();
+        if scale != previous_scale {
+            self.view.header_measurements.scale(scale / previous_scale);
+            self.view.cell_measurements = Default::default();
+        }
         true
     }
 

@@ -118,6 +118,59 @@ fn f4_size_zero_hides_headings_and_explicit_sizes_apply_after_font_scaling() {
 }
 
 #[test]
+fn f4_bulk_measurements_resize_data_and_clear_individual_widths() {
+    let mut h = start_sheet("worksheet-cell-measurements");
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Seed column width", |p| {
+        p.workbook_mut(book).unwrap().sheet_mut().columns[1].width = Some(12);
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    let row_spacing =
+        |h: &Harness<'static, SheafApp>| grid_text(h, "4.5").rect().center().y - grid_text(h, "2.5").rect().center().y;
+    let before_spacing = row_spacing(&h);
+
+    open(&mut h);
+    properties_tab(&mut h, "Size");
+    size_count(&mut h, "All Rows Height", 200);
+    size_count(&mut h, "All Columns Width", 120);
+    assert_eq!(project(&h), &before);
+    click(&mut h, "Apply");
+
+    let set = sheet(&h);
+    assert_eq!(set.view.cell_measurements.row_height, Some(200));
+    assert_eq!(set.view.cell_measurements.column_width, Some(120));
+    assert_eq!(set.columns[1].width, None);
+    assert_eq!(set.row_count(), 4);
+    assert!((row_spacing(&h) - 2.0 * before_spacing).abs() < 1.0);
+    let first = sheaf_core::sheet_print::head_name(set, 0);
+    let second = sheaf_core::sheet_print::head_name(set, 1);
+    let spacing = h.get_by_label(&second).rect().center().x - h.get_by_label(&first).rect().center().x;
+    assert!((spacing - 80.0).abs() < 1.0, "{spacing}");
+    assert_eq!(h.state().doc.undo_label(), Some("Worksheet size"));
+    click(&mut h, "OK");
+
+    let column = open_column_props(&mut h, "B");
+    let width = usize::from(sheaf_core::column::DEFAULT_WIDTH);
+    size_count(&mut h, "Column Width", width);
+    click(&mut h, "OK");
+    assert_eq!(project(&h).column(column).unwrap().width, Some(width as u16));
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h).column(column).unwrap().width, None);
+
+    open(&mut h);
+    properties_tab(&mut h, "Format");
+    category(&mut h, "Data", "Standard");
+    size(&mut h, "18");
+    click(&mut h, "OK");
+    assert_eq!(sheet(&h).view.cell_measurements, Default::default());
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(sheet(&h).view.cell_measurements.column_width, Some(120));
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
 fn f4_size_grows_sparse_rows_and_appends_empty_columns() {
     let mut h = start_sheet("worksheet-size-grow");
     let before = project(&h).clone();

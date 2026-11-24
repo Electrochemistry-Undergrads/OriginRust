@@ -1304,6 +1304,9 @@ fn unwritten_layer_features(graph: &Graph, index: usize, roles: &[Role], notes: 
         );
     }
     for (name, axis) in [("X", &layer.x_axis), ("Y", &layer.y_axis)] {
+        if !axis.opposite_style.is_default() {
+            notes.push(format!("the opposite {name} axis style was not written (the .opj.sheaf companion keeps it)"));
+        }
         if axis.opposite_offset_pct.is_some() {
             notes.push(format!(
                 "the paired {name} axis' tick labels, title and offset were not written (the .opj.sheaf companion keeps them)"

@@ -1,8 +1,8 @@
 //! The body of the axis dialog: a list at the left to choose the horizontal or the vertical axis of
 //! the layer, and the tabs Scale, Tick Labels, Title, Grids, Line and Ticks, Special Ticks and
 //! Breaks, and Rug (T41). As in Origin the list names Horizontal and Vertical on the Scale and Breaks tabs and the
-//! four edges (Bottom, Top, Left, Right) on the others; the Top and Right pages only hold what Sheaf
-//! keeps for the far edge (its line and ticks). "Apply To..." copies the look of the shown axis.
+//! four edges (Bottom, Top, Left, Right) on the others. The Top and Right pages control line and
+//! tick visibility. Layer Management sets the facing edge's other display choices.
 
 use eframe::egui::{self, DragValue};
 use sheaf_core::graph::*;
@@ -191,14 +191,14 @@ fn far_edge_page(ui: &mut egui::Ui, axis: &mut Axis, tab: AxisTab, vertical: boo
     if tab == AxisTab::LineAndTicks {
         ui.checkbox(&mut axis.show_opposite, format!("Show Line on the {edge} edge"));
         ui.checkbox(&mut axis.opposite_ticks, format!("Show Ticks on the {edge} edge"))
-            .on_hover_text("Uses the tick style and length of the near axis");
+            .on_hover_text("Set the facing tick direction in Layer Management > Axes.");
         let _ = id;
     } else {
-        ui.weak(format!("Labels, title and grid lines of the {edge} edge follow the near axis; Sheaf has no separate settings for them."));
+        ui.weak("Use Graph > Layer Management > Axes to show the facing title and labels or set their formula.");
     }
 }
 
-/// What "Apply To..." copies from one axis to another: the look, not the scale, limits or title.
+/// "Apply To..." copies the axis look while preserving its scale, limits, title and facing overrides.
 fn copy_axis_look(dst: &mut Axis, src: &Axis) {
     let keep = Axis {
         scale: dst.scale,
@@ -212,6 +212,7 @@ fn copy_axis_look(dst: &mut Axis, src: &Axis) {
         side: dst.side,
         offset_pct: dst.offset_pct,
         opposite_offset_pct: dst.opposite_offset_pct,
+        opposite_style: dst.opposite_style.clone(),
         reverse: dst.reverse,
         first_tick: dst.first_tick,
         axis_breaks: dst.axis_breaks.clone(),
@@ -845,9 +846,11 @@ mod tests {
         dst.title = Some("dst".into());
         dst.offset_pct = 2.0;
         dst.opposite_offset_pct = Some(4.0);
+        dst.opposite_style.tick_label_formula = Some("x*10".into());
         copy_axis_look(&mut dst, &src);
         assert_eq!((dst.line_width_pt, dst.tick_color), (2.5, Some(Color::rgb(255, 0, 0))));
         assert_eq!((dst.scale, dst.min, dst.title.as_deref()), (ScaleKind::Linear, Some(3.0), Some("dst")));
         assert_eq!((dst.offset_pct, dst.opposite_offset_pct), (2.0, Some(4.0)));
+        assert_eq!(dst.opposite_style.tick_label_formula.as_deref(), Some("x*10"));
     }
 }

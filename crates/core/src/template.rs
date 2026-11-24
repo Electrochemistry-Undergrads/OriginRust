@@ -1217,6 +1217,7 @@ fn base_axis(title_pt: f64, tick_pt: f64) -> Axis {
         show_opposite: false,
         opposite_ticks: false,
         opposite_offset_pct: None,
+        opposite_style: OppositeAxisStyle::default(),
         major_grid: None,
         minor_grid: None,
         side: AxisSide::Normal,
@@ -1863,6 +1864,7 @@ pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
     l.frame = Frame { left: 0.0, top: 0.0, width: 1.0, height: 1.0 };
     l.x_axis.side = AxisSide::Hidden;
     l.x_axis.opposite_offset_pct = None;
+    l.x_axis.opposite_style = OppositeAxisStyle::default();
     l.x_axis.major_grid = None;
     l.x_axis.minor_grid = None;
     let y = &mut l.y_axis;
@@ -1875,6 +1877,7 @@ pub fn right_y_layer(parent: &Layer, parent_index: usize) -> Layer {
     y.show_opposite = false;
     y.opposite_ticks = false;
     y.opposite_offset_pct = None;
+    y.opposite_style = OppositeAxisStyle::default();
     y.major_grid = None;
     y.minor_grid = None;
     l.legend.visible = false;

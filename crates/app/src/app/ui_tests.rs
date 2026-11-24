@@ -6160,6 +6160,8 @@ fn the_worksheet_menu_makes_a_time_series_pivot() {
     show_window(&mut h, "Book1 - tp.csv");
     menu_path(&mut h, &["Worksheet", "Time Series Pivot..."]);
     assert!(h.state().analysis.is_some() && has_label(&h, "Period"));
+    // Custom intervals and fiscal years (T404).
+    assert!(has_label(&h, "Every") && has_label(&h, "Fiscal year starts in"));
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none());
     let (sheet, means) = result_column(&h, "Mean of v");

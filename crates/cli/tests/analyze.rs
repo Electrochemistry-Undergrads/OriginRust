@@ -1463,6 +1463,14 @@ fn time_series_pivot_runs_from_the_command_line() {
     assert!(ok && out.contains("3 period(s)"), "{err} {out}");
     let (ok, _, err) = sheaf(&["analyze", "timepivot", file, "--y", "v", "--period", "fortnight"]);
     assert!(!ok && err.contains("--period"), "{err}");
+    // Custom intervals and fiscal years (T404): 12 hours; fiscal quarters from October.
+    let (ok, out, err) = sheaf(&["analyze", "timepivot", file, "--y", "v", "--period", "hour", "--every", "12"]);
+    assert!(ok && out.contains("4 period(s)") && out.contains("12 hours"), "{err} {out}");
+    let (ok, out, err) =
+        sheaf(&["analyze", "timepivot", file, "--y", "v", "--period", "quarter", "--fiscal-start", "10"]);
+    assert!(ok && out.contains("FY2026 Q2") && out.contains("1 period(s)"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "timepivot", file, "--y", "v", "--fiscal-start", "13"]);
+    assert!(!ok && err.contains("--fiscal-start"), "{err}");
 }
 
 /// Manhattan plot (spec `statistics.md` section 33, T362).

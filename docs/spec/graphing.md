@@ -6496,14 +6496,18 @@ Use Master Items. Clearing only the latter bit in a private copy
 reproduced the effect on reopening.
 [Origin's legacy Master Page guide](https://www.originlab.com/pdfs/12_Page.pdf)
 
-In Sheaf, give a graph the short name `Master` and use the same page
-dimensions on the graphs that share its annotations. With **Use Master
-Items** checked in the graph page's Plot Details > Display, the target
-uses the Master's text and drawn shapes, including pictures, as a
-background in output. The View item also shows them in that graph's
-window, including Full Screen. The inherited objects are edited on
-Master. The screen switch starts off and is undoable. Both settings are
-saved per graph in `.sheaf` and bare OPJ.
+The View switch showed the items in Print, Page, Window and Draft View.
+Reducing Graph1's width from 6,432 to 5,500 and then 4,000 native units
+kept the shared text in its original EMF positions as the exported page
+became narrower and then portrait.
+
+In Sheaf, give a graph the short name `Master`. With **Use Master Items**
+checked in the graph page's Plot Details > Display, the target uses the
+Master's text and drawn shapes, including pictures, as a background in
+output at their original positions. The View item also shows them in
+that graph's window, including Full Screen. Edit the inherited objects
+on Master. The screen switch starts off and is undoable. Both settings
+are saved per graph in `.sheaf` and bare OPJ.
 
 ## 23. View > Zoom All and the Tools-bar Scale In / Scale Out (T69, measured 2026-11-15, Origin 2016)
 

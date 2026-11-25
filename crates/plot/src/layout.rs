@@ -35,7 +35,7 @@ use std::borrow::Cow;
 /// Builds the scene of a graph.
 pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasurer) -> Result<Scene, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
-    Ok(build_scene_with_master(project, g, project.master_graph_for(graph, &g.page), m))
+    Ok(build_scene_with_master(project, g, project.master_graph_for(g), m))
 }
 
 pub(crate) fn build_scene_with_master(
@@ -46,13 +46,8 @@ pub(crate) fn build_scene_with_master(
 ) -> Scene {
     let mut scene = build_graph_scene(project, graph, m);
     if let (Some(master), Some(first)) = (master, scene.layers.first_mut()) {
-        let mut master = Cow::Borrowed(master);
-        if master.page.width_pt != scene.width || master.page.height_pt != scene.height {
-            // Window and Draft View lay out the page at the window's aspect ratio.
-            master.to_mut().page.width_pt = scene.width;
-            master.to_mut().page.height_pt = scene.height;
-        }
-        let shared = build_graph_scene(project, &master, m);
+        // The annotations keep their physical positions when the receiving page is resized.
+        let shared = build_graph_scene(project, master, m);
         let mut items = Vec::new();
         for layer in shared.layers {
             let annotations = layer.objects.into_iter().filter(|object| {

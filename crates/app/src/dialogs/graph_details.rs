@@ -343,9 +343,8 @@ pub fn dialog_body(
                                 &mut graph.page.style.connect_across_missing,
                                 "Connect line across Missing Data",
                             );
-                            ui.checkbox(&mut graph.page.style.use_master_items, "Use Master Items").on_hover_text(
-                                "Include annotations from the project's Master graph of the same page size in output.",
-                            );
+                            ui.checkbox(&mut graph.page.style.use_master_items, "Use Master Items")
+                                .on_hover_text("Include annotations from the project's Master graph in output.");
                         }
                         DetailTab::Misc => look::misc_tab(ui, graph),
                         DetailTab::LegendsTitles => {

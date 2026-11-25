@@ -48,7 +48,7 @@ The two grid switches replace each other. Sheaf saves the selection per page
 and preserves the Object Grid flag from older projects.
 [Graphing 22.13](../spec/graphing.md#2213-view--show--layer-grid-t66-origin-2016-measured-2026-11-25)
 
-Master Items on Screen follow-up (2026-11-25): a matching graph named
+Master Items on Screen follow-up (2026-11-25): a graph named
 `Master` supplies shared text and shapes. The View switch controls the
 graph window independently of output.
 [Graphing 22.14](../spec/graphing.md#2214-view--show--master-items-on-screen-t66-origin-2016-measured-2026-11-25)

@@ -692,19 +692,13 @@ impl Project {
         })
     }
 
-    /// The named Master page used by another graph of the same page size (T66).
-    pub fn master_graph_for(&self, graph: WindowId, page: &crate::graph::Page) -> Option<&Graph> {
-        if !page.style.use_master_items {
+    /// The named Master page used by another graph (T66).
+    pub fn master_graph_for(&self, graph: &Graph) -> Option<&Graph> {
+        if !graph.page.style.use_master_items {
             return None;
         }
         match self.window_by_name("Master")? {
-            Window::Graph(master)
-                if master.id != graph
-                    && master.page.width_pt == page.width_pt
-                    && master.page.height_pt == page.height_pt =>
-            {
-                Some(master)
-            }
+            Window::Graph(master) if master.id != graph.id => Some(master),
             _ => None,
         }
     }

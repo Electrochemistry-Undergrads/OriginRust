@@ -4128,7 +4128,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ToggleMasterItemsOnScreen => Action::SetPageSwitch {
             graph: c.graph.ok_or(NEED_GRAPH)?,
             switch: crate::actions::PageSwitch::MasterItemsOnScreen,
-            on: !c.master_items_on_screen.ok_or("Enable Use Master Items and supply a matching Master page")?,
+            on: !c.master_items_on_screen.ok_or("Enable Use Master Items and supply a Master page")?,
         },
         Cmd::ToggleObjectGrid => Action::SetPageSwitch {
             graph: c.graph.ok_or(NEED_GRAPH)?,

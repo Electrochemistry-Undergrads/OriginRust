@@ -591,14 +591,10 @@ pub fn graph_scene(project: &Project, graph: WindowId) -> Result<scene::Scene, P
     layout::build_scene(project, graph, SystemFonts::shared())
 }
 
-/// Scene for a graph window. `page` is the saved page before any Window or Draft View stretching.
-pub fn graph_screen_scene(
-    project: &Project,
-    graph: WindowId,
-    page: &sheaf_core::graph::Page,
-) -> Result<scene::Scene, PlotError> {
+/// Scene for a graph window, with master annotations controlled by its View switch.
+pub fn graph_screen_scene(project: &Project, graph: WindowId) -> Result<scene::Scene, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
-    let master = if page.style.master_items_on_screen { project.master_graph_for(graph, page) } else { None };
+    let master = if g.page.style.master_items_on_screen { project.master_graph_for(g) } else { None };
     Ok(layout::build_scene_with_master(project, g, master, SystemFonts::shared()))
 }
 
@@ -615,8 +611,7 @@ fn master_annotations_stay_behind_the_graph_and_follow_the_screen_switch() {
     let source = &mut project.graph_mut(master).unwrap().layers[0];
     source.x_axis.title = Some("Master axis title".into());
     source.labels.push(TextLabel::new("Shared label", 0.3, 0.4, Font::new("Arial", 12.0)));
-    let page = project.graph(target).unwrap().page.clone();
-    let hidden = graph_screen_scene(&project, target, &page).unwrap();
+    let hidden = graph_screen_scene(&project, target).unwrap();
     let output = graph_scene(&project, target).unwrap();
     assert!(!svg::write_svg(&hidden).contains("Shared label"));
     let svg = svg::write_svg(&output);
@@ -625,12 +620,11 @@ fn master_annotations_stay_behind_the_graph_and_follow_the_screen_switch() {
     assert_eq!(output.layers[0].objects, hidden.layers[0].objects);
 
     project.graph_mut(target).unwrap().page.style.master_items_on_screen = true;
-    let saved = project.graph(target).unwrap().page.clone();
-    assert_eq!(graph_screen_scene(&project, target, &saved).unwrap(), output);
+    assert_eq!(graph_screen_scene(&project, target).unwrap(), output);
     project.graph_mut(target).unwrap().page.height_pt *= 2.0;
-    let stretched = graph_screen_scene(&project, target, &saved).unwrap();
-    assert!(svg::write_svg(&stretched).contains("Shared label"));
-    assert!(!render_svg(&project, target).unwrap().contains("Shared label"));
+    let stretched = graph_screen_scene(&project, target).unwrap();
+    assert_eq!(stretched.layers[0].grid, output.layers[0].grid);
+    assert_eq!(stretched, graph_scene(&project, target).unwrap());
 }
 
 /// The box Origin's Fit Page to Layers fits the page to (graphing spec 15.7d), as `(x, y, width,

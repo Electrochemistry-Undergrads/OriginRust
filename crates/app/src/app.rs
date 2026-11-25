@@ -7482,7 +7482,7 @@ impl SheafApp {
             page_grid: graph.and_then(|g| project.graph(g)).map(|g| g.page.style.grid).unwrap_or_default(),
             master_items_on_screen: graph.and_then(|id| {
                 let g = project.graph(id)?;
-                project.master_graph_for(id, &g.page).map(|_| g.page.style.master_items_on_screen)
+                project.master_graph_for(g).map(|_| g.page.style.master_items_on_screen)
             }),
             show_frame: graph
                 .and_then(|g| project.graph(g)?.layers.get(layer))

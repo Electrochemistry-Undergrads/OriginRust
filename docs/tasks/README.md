@@ -454,6 +454,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T41](T41-rug-plot.md) | Rug plots: Axis dialog Rug tab and Scatter + Rug template | M | done 2026-11-15 (graphing 18.10); left: Origin defaults unmeasured, rug hit-testing |
 | [T410](T410-browser-graph.md) | Graph > Browser Graph (Origin 2020b/2024: step one plot through the Y columns of its sheet or the same column of every sheet) | S | done 2026-11-24 (graphing "Browser Graph") |
 | [T416](T416-time-series-explorer.md) | Plot > Specialized > Time Series Explorer (Origin 2024b: whole series + detail of one of n X intervals; Previous / Next / Play) | S | done 2026-11-24 (graphing "Time Series Explorer") |
+| [T426](T426-faster-save.md) | Faster project save: data members deflated on several threads, same file (4.6 s -> 1.15 s on 76 MB) | S | done 2026-11-24 |
 | [T42](T42-window-switcher.md) | Window Switcher: Ctrl+Tab through child windows with previews | M | done 2026-11-15 (`window-switcher`, macOS) |
 | [T421](T421-sticky-notes.md) | Sticky Notes (Origin 2027): coloured, collapsible notes on graph windows, workbooks and sheets, found by Find in Project | S | done 2026-11-24 (notes-window.md "Sticky Notes") |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |

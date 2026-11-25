@@ -176,6 +176,8 @@ pub enum Cmd {
     ManageTemplates,
     /// File > Batch Processing... (T165).
     BatchProcessing,
+    /// Worksheet > Name Manager... (T434).
+    NameManager,
     /// A data cell's Define Name... (T396).
     DefineName {
         column: ColumnId,
@@ -341,6 +343,8 @@ pub enum Cmd {
     FindInSheets,
     /// Edit > Find in Project (F3, T95).
     FindInProject,
+    /// View > Project Browser (T433).
+    ProjectBrowser,
     /// File > Find in Project Files... (T361).
     FindInProjectFiles,
     /// File > Export > Worksheet as Image... (T97).
@@ -500,6 +504,8 @@ pub enum Cmd {
     Refresh,
     SetAs(Designation),
     SetColumnValues,
+    /// Column > Flash Fill... (T430).
+    FlashFill,
     /// Column > Set Multiple Columns Values... (Ctrl+Shift+Q): two or more selected columns.
     SetMultipleColumnsValues,
     Recalculate,
@@ -1467,6 +1473,7 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
     v.push(grey_keyed("Code Builder", alt(Key::Num4)));
     v.push(grey_keyed("Quick Help", alt(Key::Num5)));
     v.push(keyed("Project Explorer", alt(Key::Num1), Cmd::Panel(PanelId::Explorer)));
+    v.push(item("Pro&ject Browser", Cmd::ProjectBrowser));
     if kind == WindowKind::Graph {
         v.push(keyed("Object Manager", alt(Key::Num8), Cmd::Panel(PanelId::Objects)));
     }
@@ -1826,6 +1833,7 @@ fn column_menu() -> Vec<Entry> {
         keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q), Cmd::SetMultipleColumnsValues),
         // Origin has this as a toolbar button and in the column's right-click menu.
         item("Re&calculate", Cmd::Recalculate),
+        item("Flash Fill...", Cmd::FlashFill),
         sub(
             "Fill Column With",
             vec![
@@ -1927,6 +1935,7 @@ fn worksheet_menu() -> Vec<Entry> {
         ),
         item("Sort Columns by Label...", Cmd::SortByLabel),
         sep(),
+        item("Name Manager...", Cmd::NameManager),
         cond_format_menu(),
         item("Clear Worksheet...", Cmd::ClearWorksheet),
         item("Split Columns...", Cmd::Reshape(ReshapeKind::Split)),
@@ -3638,6 +3647,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::InsertCellGraph { column, row } => Action::PickCellGraph { column: *column, row: *row },
         Cmd::DefineName { column, row } => Action::DefineName { column: *column, row: *row },
+        Cmd::NameManager => Action::NameManager(book?),
         Cmd::RemoveCellGraph { column, row } => Action::SetCellGraph { column: *column, row: *row, graph: None },
         Cmd::InsertCellSparkline { column, row } => Action::PickCellSparkline { column: *column, row: *row },
         Cmd::InsertCellImage { column, row } => Action::PickCellImage { column: *column, row: *row },
@@ -3666,6 +3676,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::AcceptanceSampling => Action::AcceptanceSampling,
         Cmd::FindInSheets => Action::FindInSheets(book?),
         Cmd::FindInProject => Action::FindInProject,
+        Cmd::ProjectBrowser => Action::ProjectBrowser,
         Cmd::FindInProjectFiles => Action::FindInProjectFiles,
         Cmd::ReplaceInSheets => Action::ReplaceInSheets(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
@@ -3791,6 +3802,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SetColumnValues => {
             book?;
             Action::SetColumnValues(one()?)
+        }
+        Cmd::FlashFill => {
+            book?;
+            Action::FlashFill(one()?)
         }
         Cmd::SetMultipleColumnsValues => {
             book?;

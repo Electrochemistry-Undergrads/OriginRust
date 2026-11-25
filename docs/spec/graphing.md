@@ -7921,3 +7921,32 @@ steps or plays through successive intervals. Origin 2016 has none, so nothing he
   hand moves the detail as in any Zoom graph; the next step puts it back on an interval.
 - **Not built:** a detail Y axis that rescales to each interval, intervals of a set length (a day, a week), overlapping
   steps, the playback speed, and picking an interval by clicking the upper layer.
+
+## LaTeX math in graph text (T436, 2026-11-24; Origin 2023b's built-in equation rendering, slice 1, Sheaf's own)
+
+Origin 2023b renders LaTeX equations in graph labels. Origin 2016 has none, so nothing here is measured. Sheaf
+turns LaTeX math into the label markup of section 7 before the text is laid out, so math draws with the label's
+font, size and colour, takes part in the label's layout, and exports as vectors like any other text.
+
+- **Where:** any graph text that goes through the label markup: text labels, axis titles, tick labels from text,
+  legends. A `$...$` span is math when it holds a backslash, `^`, `_` or `{`, or when it starts with a letter and has
+  no space at either end (`$x$`, `$dE/dt$`). Other spans stay as typed (`$5 and $10`, `US$ and AU$`), a `$` before
+  `(` is a LabTalk substitution, not math, and `\$` is a dollar sign.
+- **Letters and spacing:** Latin letters in italics (a run of them in one span), digits and signs upright; spaces
+  in math are dropped; `\,` is a thin space, `\;` `\:` `\ ` a space, `\quad` and `\qquad` em spaces, `\!` nothing.
+- **Scripts:** `x^2` is `\i(x)\+(2)`, `x_i` is `\i(x)\-(\i(i))`, both on one item (`x_i^2`, either order) are a
+  paired column `\=(sub,sup)`; braces group a longer script; a script with no item before it (`s$^{-1}$`) attaches
+  to the text before the span.
+- **Characters:** Greek letters (`\alpha` to `\omega`, `\Gamma` to `\Omega`), operators and relations (`\pm`
+  `\times` `\cdot` `\leq` `\neq` `\approx` `\propto` `\infty` `\partial` `\nabla` `\sum` `\int` ...), arrows,
+  `\circ`/`\degree` °, `\AA` Å, `\hbar`, `\ell`, `\ldots`, and the escaped `\{ \} \% \$ \_ \& \#`.
+- **Structures:** `\frac{a}{b}` is written a/b, a side longer than one item in parentheses ((a+b)/c);
+  `\sqrt{x}` is √x, `\sqrt[n]{x}` a raised n before it; `\bar`/`\overline`, `\dot` and `\tilde` are the markup's
+  bar, dot and tilde accents; `\hat` and `\vec` add combining marks.
+- **Fonts:** `\mathrm{...}` and `\operatorname{...}` upright (scripts inside still work), `\text{...}` literal
+  upright text, `\mathbf{...}` bold, `\mathit{...}` italic; `\sin`, `\cos`, `\log`, `\ln`, `\exp`, `\lim`, `\max` ...
+  upright. `\left`, `\right` and the `\big` sizes are dropped and their delimiters kept; an unknown command is
+  written by its name.
+- **Not built:** stacked fractions, large operators with limits above and below, matrices, stretchy delimiters,
+  display equations on their own lines, and equations from worksheet metadata carried into legends and axis titles.
+

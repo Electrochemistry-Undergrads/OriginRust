@@ -2898,6 +2898,7 @@ impl Project {
                 on_sheet = out.on_sheet;
                 notes = out.notes;
                 xy_graph = out.graph;
+                more_xy_graphs = out.more_graphs;
             }
             Tool::LifeDist(spec) => {
                 let out = lifedist::run(spec, sheet, &request.columns, request.rows)?;

@@ -4,7 +4,8 @@ for `sheaf_calc::lifereg` (T391), from numpy and scipy.
 The log-likelihood (Weibull: smallest extreme value errors; lognormal: normal errors; exponential: extreme value with
 sigma = 1; the -ln t Jacobian included) is written with numpy and scipy.stats, maximized by scipy.optimize.minimize
 (BFGS with the analytic gradient, then Newton-CG polish), and the standard errors come from the inverse of a central-
-difference Hessian of the analytic gradient.
+difference Hessian of the analytic gradient. Percentiles at given covariates (T437): exp(x'b + sigma w_p) with the
+delta-method interval on the log scale from that covariance.
 
 Usage: python3 tools/lifereg-ref.py > crates/calc/tests/fixtures/lifereg_reference.rs
 lifelines and statsmodels are not available here; none of these numbers come from Origin.
@@ -74,7 +75,18 @@ def fit(X, lt, failed, dist):
         scale, sse = math.exp(th[k]), math.exp(th[k]) * math.sqrt(cov[k, k])
     else:
         scale, sse = 1.0, math.nan
-    return th[:k], se, scale, sse, ll
+    return th[:k], se, scale, sse, ll, th, cov
+
+
+def percentile(dist, th, cov, k, x, p, level):
+    """The p percentile life at covariates x (with the leading 1) and its interval on the log scale (T437)."""
+    w = stats.norm.ppf(p) if dist == "lognormal" else math.log(-math.log1p(-p))
+    s = math.exp(th[k]) if dist != "exponential" else 1.0
+    g = list(x) + ([s * w] if dist != "exponential" else [])
+    lp = float(np.dot(th[:k], x)) + s * w
+    se = math.sqrt(float(np.array(g) @ cov @ np.array(g)))
+    z = stats.norm.ppf(0.5 + level / 2)
+    return [math.exp(lp), se, math.exp(lp - z * se), math.exp(lp + z * se)]
 
 
 def num(v):
@@ -97,7 +109,16 @@ print("pub const T: &[f64] = &[" + ", ".join(repr(float(v)) for v in t) + "];")
 print("pub const FAILED: &[bool] = &[" + ", ".join("true" if f else "false" for f in failed) + "];")
 print("/// (distribution, coefficients, standard errors, scale, its standard error, log-likelihood)")
 print("pub const FITS: &[(&str, [f64; 3], [f64; 3], f64, f64, f64)] = &[")
+pct = []
 for dist in ("weibull", "lognormal", "exponential"):
-    b, se, sc, scse, ll = fit(X, np.log(t), failed, dist)
+    b, se, sc, scse, ll, th, cov = fit(X, np.log(t), failed, dist)
     print(f'    ("{dist}", [{", ".join(num(v) for v in b)}], [{", ".join(num(v) for v in se)}], {num(sc)}, {num(scse)}, {num(ll)}),')
+    for at, level in (([1.0, 2.0, 0.0], 0.95), ([1.0, float(x1.mean()), float(x2.mean())], 0.9)):
+        for p in (0.01, 0.1, 0.5, 0.9):
+            pct.append((dist, at[1:], p, level, percentile(dist, th, cov, 3, at, p, level)))
+print("];")
+print("/// (distribution, covariates, fraction failed, level, [percentile, se of its log, lower, upper]) (T437)")
+print("pub const PERCENTILES: &[(&str, [f64; 2], f64, f64, [f64; 4])] = &[")
+for dist, at, p, level, r in pct:
+    print(f'    ("{dist}", [{", ".join(num(v) for v in at)}], {p!r}, {level!r}, [{", ".join(num(v) for v in r)}]),')
 print("];")

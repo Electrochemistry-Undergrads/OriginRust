@@ -319,6 +319,8 @@ pub struct SheafApp {
     send_ppt: Option<crate::dialogs::send_ppt::SendPptDialog>,
     /// A data cell's Define Name... (T396).
     name_cell: Option<crate::dialogs::name_cell::NameCellDialog>,
+    /// Worksheet > Name Manager... (T434).
+    name_manager: Option<crate::dialogs::name_cell::NameManager>,
     /// A data cell's Insert Sparklines... (T200).
     cell_sparkline_picker: Option<crate::dialogs::cell_sparkline::CellSparklinePicker>,
     /// Batch Peak Analysis Using Theme... (T169).
@@ -344,6 +346,8 @@ pub struct SheafApp {
     function_graph: Option<crate::dialogs::function_graph::FunctionGraphDialog>,
     pub(crate) graph_slicer: Option<crate::dialogs::graph_slicer::GraphSlicerDialog>,
     pub(crate) browser_graph: Option<crate::dialogs::browser_graph::BrowserGraphDialog>,
+    pub(crate) flash_fill: Option<crate::dialogs::flash_fill::FlashFillDialog>,
+    pub(crate) project_browser: Option<crate::dialogs::project_browser::ProjectBrowserDialog>,
     /// The open function window is File > New > Function Plot's: OK makes the graph (T213).
     function_graph_new: bool,
     /// The Audit Log window is open (T131).
@@ -532,6 +536,7 @@ impl SheafApp {
             graph_sheet_picker: None,
             send_ppt: None,
             name_cell: None,
+            name_manager: None,
             cell_sparkline_picker: None,
             batch_peaks: None,
             fill_pattern: None,
@@ -547,6 +552,8 @@ impl SheafApp {
             function_graph: None,
             graph_slicer: None,
             browser_graph: None,
+            flash_fill: None,
+            project_browser: None,
             function_graph_new: false,
             audit_log: false,
             fit_builder: None,
@@ -2277,15 +2284,24 @@ impl SheafApp {
                 });
             }
             Action::DefineName { column, row } => {
-                // Several selected cells of this column only: they are named together (a named range, T400).
-                let (first, last) = self.selected_rows_of(column, row).unwrap_or((row, row));
-                let current = self.doc.project().name_of_range(column, first, last).map(str::to_string);
-                self.name_cell =
-                    Some(crate::dialogs::name_cell::NameCellDialog::new(column, first, last, current.as_deref()));
+                // Several selected cells of this column: a named range (T400); of several columns: a block (T432).
+                let (from, to, first, last) = self.selected_block_of(column, row).unwrap_or((column, column, row, row));
+                let current = self.doc.project().name_of_block(from, to, first, last).map(str::to_string);
+                let mut d = crate::dialogs::name_cell::NameCellDialog::new(from, first, last, current.as_deref());
+                d.last_column = (to != from).then_some(to);
+                self.name_cell = Some(d);
             }
-            Action::SetCellName { column, row, last, name } => {
+            Action::NameManager(book) => self.name_manager = Some(crate::dialogs::name_cell::NameManager { book }),
+            Action::DeleteName { book, name } => {
+                let label = format!("Delete Name {name}");
+                if self.doc.apply(&label, |p| p.delete_name(book, &name)) {
+                    self.say(format!("The name {name} was deleted"));
+                }
+            }
+            Action::SetCellName { column, row, last, last_column, name } => {
                 let label = format!("Define Name {name}");
-                match self.doc.edit(&label, |p| p.define_range(&name, column, row, last)) {
+                let to = last_column.unwrap_or(column);
+                match self.doc.edit(&label, |p| p.define_block(&name, column, to, row, last)) {
                     Ok(_) => {
                         self.name_cell = None;
                         self.say(format!("Formulas of this workbook can read {name}"));
@@ -2669,6 +2685,9 @@ impl SheafApp {
                 let folder = self.path.as_deref().and_then(|p| p.parent()).map(std::path::Path::to_path_buf);
                 self.find_files = Some(crate::dialogs::find_files::FindFilesDialog::new(folder.as_deref()));
             }
+            Action::ProjectBrowser => {
+                self.project_browser.get_or_insert_with(Default::default);
+            }
             Action::FindInProject => {
                 self.find_project = Some(crate::dialogs::find_project::FindProjectDialog::new(self.find_spec.clone()));
             }
@@ -2833,6 +2852,13 @@ impl SheafApp {
             Action::ColumnProperties(column) => {
                 self.column_props = ColumnPropsDialog::new(self.doc.project(), column);
             }
+            Action::FlashFill(column) => match self.doc.project().flash_fill(column) {
+                Ok(fill) => {
+                    self.flash_fill =
+                        Some(crate::dialogs::flash_fill::FlashFillDialog::new(self.doc.project(), column, fill));
+                }
+                Err(e) => self.warn(e.to_string()),
+            },
             Action::SetColumnValues(column) => {
                 self.set_values = SetValuesDialog::new(self.doc.project(), column);
             }
@@ -3071,23 +3097,37 @@ impl SheafApp {
             Action::WorksheetFontsDialog(book) => {
                 self.worksheet_fonts = WorksheetFontsDialog::new(&self.doc, book, self.books.get(&book));
             }
-            Action::EnsureWorksheetRows { book, sheet, rows } => {
-                // Leave an open Properties draft on its base revision. The grid will retry after it closes.
+            Action::UpdateWorksheetViewport { book, sheet, minimum_rows, fitted } => {
+                // The grid retries after Properties closes, keeping its draft on the same revision.
                 if self.worksheet_fonts.is_some() {
                     return;
                 }
-                let can_grow = self
+                let Some(worksheet) = self
                     .doc
                     .project()
                     .workbook(book)
                     .filter(|workbook| workbook.active_sheet == sheet)
                     .and_then(|workbook| workbook.sheets.get(sheet))
-                    .is_some_and(|sheet| sheet.view.automatic_rows() && rows > grid::shown_rows(sheet));
-                if can_grow {
+                else {
+                    return;
+                };
+                let grow = worksheet.view.automatic_rows() && minimum_rows > grid::shown_rows(worksheet);
+                let fitted = fitted.filter(|_| worksheet.view.fit_sheet_to_window);
+                if grow || fitted.is_some() {
                     self.doc.adjust_view(|project| {
-                        let view = &mut project.workbook_mut(book).unwrap().sheets[sheet].view;
-                        view.allocated_rows = Some(rows);
-                        view.auto_add_rows = Some(true);
+                        let worksheet = &mut project.workbook_mut(book).unwrap().sheets[sheet];
+                        if grow {
+                            worksheet.view.allocated_rows = Some(minimum_rows);
+                            worksheet.view.auto_add_rows = Some(true);
+                        }
+                        if let Some(cells) = fitted {
+                            worksheet.view.fitted_cells = cells;
+                            if cells.column_width().is_some() {
+                                for column in worksheet.columns.iter_mut().filter(|column| !column.hidden) {
+                                    column.width = None;
+                                }
+                            }
+                        }
                     });
                     ctx.request_repaint();
                 }
@@ -5165,6 +5205,46 @@ impl SheafApp {
     }
 
     /// Graph > Add Function Graph... (T119): OK adds the curve; an expression error keeps the window open.
+    fn show_project_browser(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::project_browser::BrowserOutcome;
+        let Some(d) = &mut self.project_browser else { return };
+        match d.show(ctx, self.doc.project()) {
+            BrowserOutcome::Open => {}
+            BrowserOutcome::Closed => self.project_browser = None,
+            // The browser stays open, as Find in Project does.
+            BrowserOutcome::GoTo(target) => self.go_to_found(target, ctx),
+            BrowserOutcome::Set { items, field, value } => {
+                let label = format!("Set {}", field.name());
+                let n = self.doc.apply(&label, |p| p.set_metadata(&items, field, &value));
+                self.say(format!("Set the {} of {n} item(s)", field.name()));
+            }
+        }
+    }
+
+    fn show_flash_fill(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::flash_fill::FlashOutcome;
+        let Some(d) = &mut self.flash_fill else { return };
+        match d.show(ctx) {
+            FlashOutcome::Open => {}
+            FlashOutcome::Closed => self.flash_fill = None,
+            FlashOutcome::Fill { column, fill } => {
+                self.flash_fill = None;
+                match self.doc.edit("Flash Fill", |p| p.apply_flash_fill(column, &fill)) {
+                    Ok(()) => self.say("Flash Fill filled the column".to_string()),
+                    Err(e) => self.warn(e.to_string()),
+                }
+            }
+            FlashOutcome::Formula { column, formula } => {
+                self.flash_fill = None;
+                let mode = sheaf_core::column::RecalcMode::Auto;
+                match self.doc.edit("Flash Fill", |p| p.set_column_values_with(column, &formula, None, mode)) {
+                    Ok(()) => self.say(format!("Flash Fill set the formula {formula}")),
+                    Err(e) => self.warn(e.to_string()),
+                }
+            }
+        }
+    }
+
     fn show_browser_graph(&mut self, ctx: &egui::Context) {
         use crate::dialogs::browser_graph::BrowserOutcome;
         let Some(d) = &mut self.browser_graph else { return };
@@ -5372,43 +5452,46 @@ impl SheafApp {
         }
     }
 
+    /// Activates what a Find in Project hit or a Project Browser row leads to: its folder, window, sheet or column.
+    fn go_to_found(&mut self, target: crate::project_find::FindTarget, ctx: &egui::Context) {
+        use crate::project_find::FindTarget;
+        if let Some(window) = target.window_id() {
+            let project = self.doc.project();
+            if project.window(window).is_none() {
+                return;
+            }
+            if explorer::shown_windows(project, &self.panels.explorer.folder)
+                .is_some_and(|shown| !shown.contains(&window))
+            {
+                let folder = explorer::home(&project.root, window);
+                self.apply(Action::GoToFolder(folder), ctx);
+            }
+            self.apply(Action::Focus(window), ctx);
+        }
+        match target {
+            FindTarget::Folder(path) => self.apply(Action::GoToFolder(path), ctx),
+            FindTarget::Window(_) => {}
+            FindTarget::Sheet { book, sheet } => self.apply(Action::SelectSheet { book, sheet }, ctx),
+            FindTarget::Column { book, sheet, column } => {
+                self.apply(Action::SelectSheet { book, sheet }, ctx);
+                if let Some(state) = self.books.get_mut(&book) {
+                    state.sel = Sel::Columns;
+                    state.selected = vec![column];
+                }
+            }
+        }
+    }
+
     /// Find in Project stays open when a hit activates its folder, window, sheet or column.
     fn show_find_project(&mut self, ctx: &egui::Context) {
         use crate::dialogs::find_project::FindProjectOutcome;
-        use crate::project_find::FindTarget;
         let Some(d) = &mut self.find_project else { return };
         let outcome = d.show(ctx, self.doc.project(), &self.panels.explorer.folder);
         self.find_spec = d.spec.clone();
         match outcome {
             FindProjectOutcome::Open => {}
             FindProjectOutcome::Closed => self.find_project = None,
-            FindProjectOutcome::Go(target) => {
-                if let Some(window) = target.window_id() {
-                    let project = self.doc.project();
-                    if project.window(window).is_none() {
-                        return;
-                    }
-                    if explorer::shown_windows(project, &self.panels.explorer.folder)
-                        .is_some_and(|shown| !shown.contains(&window))
-                    {
-                        let folder = explorer::home(&project.root, window);
-                        self.apply(Action::GoToFolder(folder), ctx);
-                    }
-                    self.apply(Action::Focus(window), ctx);
-                }
-                match target {
-                    FindTarget::Folder(path) => self.apply(Action::GoToFolder(path), ctx),
-                    FindTarget::Window(_) => {}
-                    FindTarget::Sheet { book, sheet } => self.apply(Action::SelectSheet { book, sheet }, ctx),
-                    FindTarget::Column { book, sheet, column } => {
-                        self.apply(Action::SelectSheet { book, sheet }, ctx);
-                        if let Some(state) = self.books.get_mut(&book) {
-                            state.sel = Sel::Columns;
-                            state.selected = vec![column];
-                        }
-                    }
-                }
-            }
+            FindProjectOutcome::Go(target) => self.go_to_found(target, ctx),
         }
     }
 
@@ -5765,6 +5848,28 @@ impl SheafApp {
         }
     }
 
+    /// Worksheet > Name Manager... (T434).
+    fn show_name_manager(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::name_cell::NameManagerOutcome;
+        let Some(m) = &mut self.name_manager else { return };
+        let Some(w) = self.doc.project().workbook(m.book) else {
+            self.name_manager = None;
+            return;
+        };
+        let names: Vec<(String, String)> = w
+            .names
+            .iter()
+            .map(|n| (n.name.clone(), w.name_reference(n).unwrap_or_else(|| "(its column is gone)".to_string())))
+            .collect();
+        let title = w.name.clone();
+        let book = m.book;
+        match m.show(ctx, &title, &names) {
+            NameManagerOutcome::Open => {}
+            NameManagerOutcome::Closed => self.name_manager = None,
+            NameManagerOutcome::Delete(name) => self.apply(Action::DeleteName { book, name }, ctx),
+        }
+    }
+
     /// A data cell's Define Name... (T396).
     fn show_name_cell(&mut self, ctx: &egui::Context) {
         use crate::dialogs::name_cell::NameCellOutcome;
@@ -5773,22 +5878,28 @@ impl SheafApp {
             NameCellOutcome::Open => {}
             NameCellOutcome::Closed => self.name_cell = None,
             NameCellOutcome::Define(name) => {
-                let (column, row, last) = (d.column, d.row, d.last);
-                self.apply(Action::SetCellName { column, row, last, name }, ctx);
+                let (column, row, last, last_column) = (d.column, d.row, d.last, d.last_column);
+                self.apply(Action::SetCellName { column, row, last, last_column, name }, ctx);
             }
         }
     }
 
     /// The first and last selected rows when the selection is several cells of `column` alone and holds
     /// `row` (T400).
-    fn selected_rows_of(&self, column: ColumnId, row: usize) -> Option<(usize, usize)> {
+    fn selected_block_of(&self, column: ColumnId, row: usize) -> Option<(ColumnId, ColumnId, usize, usize)> {
+        // T432: the selected block of cells when it holds this cell and is more than one cell: its first and last
+        // columns and rows.
         let project = self.doc.project();
         let (book, _, _) = project.locate(column)?;
         let sheet = book.sheets.get(book.active_sheet)?;
         let index = sheet.column_index(column)?;
         let target = self.books.get(&book.id)?.target(sheet)?;
         let rows = target.rows;
-        (target.columns == [index] && rows.contains(&row) && rows.len() > 1).then(|| (rows.start, rows.end - 1))
+        let (lo, hi) = (*target.columns.iter().min()?, *target.columns.iter().max()?);
+        let contiguous = target.columns.len() == hi - lo + 1;
+        let inside = contiguous && (lo..=hi).contains(&index) && rows.contains(&row);
+        let more = rows.len() > 1 || hi > lo;
+        (inside && more).then(|| (sheet.columns[lo].id, sheet.columns[hi].id, rows.start, rows.end - 1))
     }
 
     /// Send Graphs to PowerPoint... (T232): the window, then the file picker and the file.
@@ -8392,6 +8503,7 @@ impl SheafApp {
         self.show_graph_sheet_picker(ctx);
         self.show_send_ppt(ctx);
         self.show_name_cell(ctx);
+        self.show_name_manager(ctx);
         self.show_cell_sparkline_picker(ctx);
         self.show_batch_peaks(ctx);
         self.show_fill_pattern(ctx);
@@ -8406,6 +8518,8 @@ impl SheafApp {
         self.show_function_graph(ctx);
         self.show_graph_slicer(ctx);
         self.show_browser_graph(ctx);
+        self.show_flash_fill(ctx);
+        self.show_project_browser(ctx);
         self.show_audit_log(ctx);
         self.show_fit_builder(ctx);
         self.show_sample_projects(ctx);

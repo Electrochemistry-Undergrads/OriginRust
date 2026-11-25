@@ -257,6 +257,59 @@ fn f4_auto_add_rows_keeps_the_viewport_floor_and_retains_growth() {
 }
 
 #[test]
+fn f4_fit_sheet_to_window_saves_the_last_size_and_keeps_the_data() {
+    let mut h = start_sheet("worksheet-fit-to-window");
+    let book = project(&h).workbooks().next().unwrap().id;
+    h.state_mut().doc.apply("Prepare fixed worksheet", |project| {
+        let sheet = project.workbook_mut(book).unwrap().sheet_mut();
+        sheet.view.allocated_rows = Some(80);
+        for (column, width) in sheet.columns.iter_mut().zip([16, 6]) {
+            column.width = Some(width);
+        }
+    });
+    settle(&mut h);
+    let before = project(&h).clone();
+    let original = before.workbook(book).unwrap().sheet();
+
+    open(&mut h);
+    properties_tab(&mut h, "Miscellaneous");
+    click(&mut h, "Fit Sheet to Window");
+    assert_eq!(project(&h), &before);
+    click(&mut h, "OK");
+    let fitted = sheet(&h).view.fitted_cells;
+    assert!(sheet(&h).view.fit_sheet_to_window);
+    assert!(fitted.row_height().unwrap() < 16.0);
+    assert!(sheet(&h).columns.iter().all(|column| column.width.is_none()));
+    assert_eq!(sheet(&h).view.allocated_rows, Some(80));
+    assert_eq!(sheet(&h).row_count(), original.row_count());
+
+    h.state_mut().doc.mark_saved();
+    h.state_mut().workspace.toggle_maximise(book);
+    settle(&mut h);
+    let larger = sheet(&h).view.fitted_cells;
+    assert!(larger.row_height().unwrap() > fitted.row_height().unwrap());
+    assert!(larger.column_width().unwrap() > fitted.column_width().unwrap());
+    assert_eq!(sheet(&h).row_count(), original.row_count());
+    assert!(!h.state().doc.dirty);
+
+    h.state_mut().workspace.toggle_maximise(book);
+    settle(&mut h);
+    assert_eq!(sheet(&h).view.fitted_cells, fitted);
+    open(&mut h);
+    properties_tab(&mut h, "Miscellaneous");
+    click(&mut h, "Fit Sheet to Window");
+    click(&mut h, "OK");
+    assert!(!sheet(&h).view.fit_sheet_to_window);
+    h.state_mut().workspace.toggle_maximise(book);
+    settle(&mut h);
+    assert_eq!(sheet(&h).view.fitted_cells, fitted);
+    assert_eq!(sheet(&h).view.allocated_rows, Some(80));
+    for (column, original) in sheet(&h).columns.iter().zip(&original.columns) {
+        assert_eq!(column.data, original.data);
+    }
+}
+
+#[test]
 fn f4_size_grows_sparse_rows_and_appends_empty_columns() {
     let mut h = start_sheet("worksheet-size-grow");
     let before = project(&h).clone();

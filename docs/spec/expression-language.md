@@ -125,6 +125,7 @@ Origin measured with `tools/origin-ref/run-labtalk-lines.ps1` (probes `re-worksp
 | `compare(s,t[,case])` | **1 when equal**, else 0 (not an ordering); case matters unless `case` is 0 | same |
 | `exact(s,t)` | 1 when equal with case | same |
 | `NumExtract(s[,count[,decimal]])` | Origin 2026 SR1 (T265, from OriginLab's reference page; not in Origin 2016, unmeasured): the `count`-th run of number characters as text (1 the first, the default; 0 the last; empty text when there is none). Digits, and the decimal separator between two digits: the period, or the comma when `decimal` is 1. A `-` is not a sign: `NumExtract("Jan-12")` is `12`, `NumExtract("1-413-586-2013",2)` is `413`, `NumExtract("abcd12,343",1,1)` is `12,343` | wrap in `value()` for the number |
+| `token(s, n)` | Sheaf's own (T430, for Flash Fill; not an Origin function): word `n` of `s`, a word being a run of letters and digits; a negative `n` counts from the end (-1 the last); empty text for 0, a fraction or no such word. `token("Smith, John A.", 2)` is `John`, `token("2024-03-17", -1)` is `17` | used by Flash Fill's formulas |
 | `NumBreak(s[,offset[,decimal]])` | Origin 2026 SR1 (T265, as above): from the 1-based `offset` (default 1), the 1-based position of the first character whose kind (number or not) differs from the one at `offset`; 0 when none, or when `offset` is past the end. `NumBreak("Club45North")` 5, with offset 5: 7, with offset 7: 0. OriginLab's page also shows -1 for one no-change case while its Return section says 0; Sheaf gives 0 | same |
 | `value(s)` | the number in a text, missing for `Hello` | same (missing when there is no number) |
 | `text(x)`, `text(x,fmt)` | in measured General columns, `fmt` `*` or none: general; empty: `@SD` significant digits (default 14); `*n`: n significant digits; `.n`: n decimals; `E*n`: engineering with a unit prefix; a missing value is `--` | same for these forms at default settings; an omitted format on a direct numeric column/cell uses its column format; other format codes give the general form (Origin returned the code itself or an odd number) |
@@ -379,8 +380,19 @@ entry with a last row). A formula uses the name where a column with a row range 
 `mean(col(B)[2:4])`, and so are `total`, `count`, `sd`, `max(Upper)`, `cumsum(Upper)` and the other statistics
 and column functions. The range's column may be on another sheet of the workbook. On its own (`Upper * 2`) the name
 is refused: it is not one value. Rows past the column's end are not read. A selection over several columns names
-only the right-clicked cell. Defining a one-row range names a single cell again.
-Not done: blocks of several columns, project-wide names, a name manager, the `.opj` and Excel round trip.
+only the right-clicked cell (T400; since T432 it names the block, below). Defining a one-row range names a single
+cell again.
+
+Named blocks (T432, not measured): with cells of several adjacent columns selected, Define Name... names the block
+(`Project::define_block`; the name keeps its first and last column, `NamedCell::last_column`). Statistics take every
+cell of the block, column after column: `total(Corner)`, `mean`, `count`, `sd`, `max(Corner)`, `min(Corner)` and the
+others; column functions such as `cumsum(Corner)` and the name on its own are refused. A formula that uses a block
+depends on all of its columns. One column again names a range or a cell.
+Worksheet > Name Manager... (T434) lists the active workbook's names in the order they were defined with what each
+stands for (`Sheet1!B2`, `Sheet1!B2:B4`, `Sheet1!A1:C3`: short names and 1-based rows; "(its column is gone)" when
+deleted), and Delete removes one, one undo step ("Delete Name Rate"); formulas that used it then fail as with any
+unknown name.
+Not done: project-wide names, renaming in the manager, the `.opj` and Excel round trip.
 
 ## 4. Calling it from the program
 

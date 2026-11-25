@@ -6,7 +6,7 @@
 
 use super::super::graph::{
     ANN_COLOR_AT, AXIS_LAYER_ICONS_AT, AXIS_LAYER_ICONS_BIT, COLOR_AUTO, LAYER_GRID_BIT, MASTER_ITEMS_ON_SCREEN_BIT,
-    OBJECT_GRID_BIT, PAGE_GRID_AT, SHOW_FRAME_AT, SHOW_FRAME_BIT,
+    OBJECT_GRID_BIT, PAGE_GRID_AT, SHOW_FRAME_AT, SHOW_FRAME_BIT, USE_MASTER_ITEMS_AT, USE_MASTER_ITEMS_BIT,
 };
 use super::super::strings::encode_cp1252;
 use super::graph_tables::*;
@@ -50,6 +50,7 @@ pub(super) struct WindowSpec<'a> {
     pub axis_layer_icons: bool,
     pub grid: PageGrid,
     pub master_items_on_screen: bool,
+    pub use_master_items: bool,
     pub time: f64,
     /// A counter that Origin gives every window (3 for the first graph of a small project).
     pub serial: u8,
@@ -84,6 +85,10 @@ pub(super) fn window_header(w: &WindowSpec) -> Vec<u8> {
     };
     if w.master_items_on_screen {
         h[PAGE_GRID_AT] |= MASTER_ITEMS_ON_SCREEN_BIT;
+    }
+    h[USE_MASTER_ITEMS_AT] &= !USE_MASTER_ITEMS_BIT;
+    if w.use_master_items {
+        h[USE_MASTER_ITEMS_AT] |= USE_MASTER_ITEMS_BIT;
     }
     put(&mut h, 0x73, &w.time.to_le_bytes());
     put(&mut h, 0x7b, &w.time.to_le_bytes());

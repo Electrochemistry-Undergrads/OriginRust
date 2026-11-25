@@ -279,6 +279,7 @@ impl Writer {
             axis_layer_icons: style.axis_layer_icons,
             grid: style.grid,
             master_items_on_screen: style.master_items_on_screen,
+            use_master_items: style.use_master_items,
             ..PageStyle::default()
         };
         if *style != supported_style {
@@ -295,6 +296,7 @@ impl Writer {
             axis_layer_icons: style.axis_layer_icons,
             grid: style.grid,
             master_items_on_screen: style.master_items_on_screen,
+            use_master_items: style.use_master_items,
             time: self.time,
             serial: 3u8.wrapping_add(self.graphs as u8),
             place: self.place,

@@ -28,6 +28,8 @@ pub(super) const LAYER_GRID_BIT: u8 = 0x04;
 pub(super) const MASTER_ITEMS_ON_SCREEN_BIT: u8 = 0x80;
 pub(super) const AXIS_LAYER_ICONS_AT: usize = 0x69;
 pub(super) const AXIS_LAYER_ICONS_BIT: u8 = 0x80;
+pub(super) const USE_MASTER_ITEMS_AT: usize = 0x72;
+pub(super) const USE_MASTER_ITEMS_BIT: u8 = 0x80;
 // Layer header.
 const LAYER_KIND_AT: usize = 0x02;
 const LAYER_GRAPH_BIT: u8 = 0x01;
@@ -192,6 +194,8 @@ pub(crate) fn build(w: &Window, column_of_set: &HashMap<usize, ColumnId>, warnin
         _ => PageGrid::Off,
     };
     graph.page.style.master_items_on_screen = u8_at(&w.header, PAGE_GRID_AT) & MASTER_ITEMS_ON_SCREEN_BIT != 0;
+    graph.page.style.use_master_items =
+        w.header.get(USE_MASTER_ITEMS_AT).is_none_or(|flags| flags & USE_MASTER_ITEMS_BIT != 0);
     let template = graph.layers.remove(0);
     for (k, layer) in w.layers.iter().enumerate() {
         graph.layers.push(build_layer(layer, k == 0, &template, &graph.page, column_of_set, &mut notes));

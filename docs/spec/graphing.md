@@ -6488,8 +6488,12 @@ In a private project, a graph named `Master` and Graph1 had pages of
 absent from the Graph1 window at first and appeared after View > Show >
 Master Items on Screen (command 33096). Both EMF exports contained the
 same shared text. Page Properties > Display had **Use Master Items**
-checked initially. Only the screen switch changed in Graph1's saved
-window header at offset `0x34` (bit `0x80`).
+checked initially. Clearing it removed the shared text from the window
+and export, and Graph1 still omitted it after reopening. The two switches
+are saved independently. In the graph window header, bit `0x80` at
+`0x34` shows the items on screen and bit `0x80` at `0x72` enables
+Use Master Items. Clearing only the latter bit in a private copy
+reproduced the effect on reopening.
 [Origin's legacy Master Page guide](https://www.originlab.com/pdfs/12_Page.pdf)
 
 In Sheaf, give a graph the short name `Master` and use the same page
@@ -6498,9 +6502,8 @@ Items** checked in the graph page's Plot Details > Display, the target
 uses the Master's text and drawn shapes, including pictures, as a
 background in output. The View item also shows them in that graph's
 window, including Full Screen. The inherited objects are edited on
-Master. The screen switch starts off, is undoable and is saved per
-graph in `.sheaf` and bare OPJ. The Display checkbox is stored in
-`.sheaf`. The project supplies the shared items.
+Master. The screen switch starts off and is undoable. Both settings are
+saved per graph in `.sheaf` and bare OPJ.
 
 ## 23. View > Zoom All and the Tools-bar Scale In / Scale Out (T69, measured 2026-11-15, Origin 2016)
 

@@ -492,6 +492,13 @@ pub enum Action {
         page: (f64, f64),
         png: std::sync::Arc<Vec<u8>>,
     },
+    /// Worksheet > Name Manager... of this workbook (T434).
+    NameManager(WindowId),
+    /// Deletes a name of a workbook, one undo step (T434).
+    DeleteName {
+        book: WindowId,
+        name: String,
+    },
     /// A data cell's Define Name...: its window (T396).
     DefineName {
         column: ColumnId,

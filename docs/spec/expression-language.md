@@ -387,7 +387,11 @@ Named blocks (T432, not measured): with cells of several adjacent columns select
 cell of the block, column after column: `total(Corner)`, `mean`, `count`, `sd`, `max(Corner)`, `min(Corner)` and the
 others; column functions such as `cumsum(Corner)` and the name on its own are refused. A formula that uses a block
 depends on all of its columns. One column again names a range or a cell.
-Not done: project-wide names, a name manager, the `.opj` and Excel round trip.
+Worksheet > Name Manager... (T434) lists the active workbook's names in the order they were defined with what each
+stands for (`Sheet1!B2`, `Sheet1!B2:B4`, `Sheet1!A1:C3`: short names and 1-based rows; "(its column is gone)" when
+deleted), and Delete removes one, one undo step ("Delete Name Rate"); formulas that used it then fail as with any
+unknown name.
+Not done: project-wide names, renaming in the manager, the `.opj` and Excel round trip.
 
 ## 4. Calling it from the program
 

@@ -14,4 +14,4 @@ feature). Define Name... on cells of several adjacent columns names the block; s
 
 ## Left
 
-- Project-wide names, a name manager, `.opj` and Excel names.
+- Project-wide names, `.opj` and Excel names (a name manager: done in T434).

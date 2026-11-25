@@ -89,3 +89,56 @@ impl NameCellDialog {
         outcome
     }
 }
+
+/// What the Name Manager asks for (T434).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NameManagerOutcome {
+    Open,
+    Closed,
+    Delete(String),
+}
+
+/// Worksheet > Name Manager... (T434): the names of one workbook, what they stand for, and Delete.
+pub struct NameManager {
+    pub book: sheaf_core::WindowId,
+}
+
+impl NameManager {
+    /// `names` are (name, what it stands for) in the order they were defined.
+    pub fn show(&mut self, ctx: &egui::Context, title: &str, names: &[(String, String)]) -> NameManagerOutcome {
+        let mut outcome = NameManagerOutcome::Open;
+        let mut open = true;
+        egui::Window::new(format!("Name Manager - {title}"))
+            .id(egui::Id::new("name_manager"))
+            .collapsible(false)
+            .resizable(false)
+            .open(&mut open)
+            .show(ctx, |ui| {
+                if names.is_empty() {
+                    ui.label("This workbook has no names. Right-click a data cell (or select cells) and choose Define Name...");
+                } else {
+                    egui::Grid::new("name_manager_grid").striped(true).num_columns(3).show(ui, |ui| {
+                        ui.strong("Name");
+                        ui.strong("Refers To");
+                        ui.label("");
+                        ui.end_row();
+                        for (name, refers) in names {
+                            ui.label(name);
+                            ui.label(refers);
+                            if ui.button("Delete").on_hover_text(format!("Delete the name {name}")).clicked() {
+                                outcome = NameManagerOutcome::Delete(name.clone());
+                            }
+                            ui.end_row();
+                        }
+                    });
+                }
+                if ui.button("Close").clicked() {
+                    outcome = NameManagerOutcome::Closed;
+                }
+            });
+        if !open {
+            outcome = NameManagerOutcome::Closed;
+        }
+        outcome
+    }
+}

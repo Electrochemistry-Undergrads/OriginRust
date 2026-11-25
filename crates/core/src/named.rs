@@ -78,6 +78,24 @@ impl Workbook {
         self.names.iter().find(|n| n.name.eq_ignore_ascii_case(name))
     }
 
+    /// What a name stands for, as `Sheet1!B2`, `Sheet1!B2:B4` or `Sheet1!A1:C3` (short names, 1-based rows; T434);
+    /// `None` when its column is gone.
+    pub fn name_reference(&self, n: &NamedCell) -> Option<String> {
+        let sheet = self.sheets.iter().find(|s| s.columns.iter().any(|c| c.id == n.column))?;
+        let short = |id: ColumnId| sheet.columns.iter().find(|c| c.id == id).map(|c| c.short_name.clone());
+        let (first, last) = n.rows();
+        let left = short(n.column)?;
+        let right = match n.last_column.filter(|_| n.is_block()) {
+            Some(c) => short(c)?,
+            None => left.clone(),
+        };
+        Some(if first == last && left == right {
+            format!("{}!{left}{}", sheet.name, first + 1)
+        } else {
+            format!("{}!{left}{}:{right}{}", sheet.name, first + 1, last + 1)
+        })
+    }
+
     /// The columns a name reads (T432): its column, or every column of its block in sheet order.
     pub fn named_columns(&self, name: &str) -> Vec<ColumnId> {
         let Some(n) = self.named_cell(name) else { return Vec::new() };
@@ -236,6 +254,20 @@ mod tests {
         assert!(p.define_name("j", a, 0).is_err());
         assert!(p.delete_name(book, "rate"));
         let _ = b;
+    }
+
+    #[test]
+    fn a_name_says_what_it_stands_for() {
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let a = p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+        let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+        p.define_name("One", b, 1).unwrap();
+        p.define_range("Two", b, 1, 3).unwrap();
+        p.define_block("Three", a, b, 0, 2).unwrap();
+        let w = p.workbook(book).unwrap();
+        let refs: Vec<String> = w.names.iter().map(|n| w.name_reference(n).unwrap()).collect();
+        assert_eq!(refs, ["Sheet1!B2", "Sheet1!B2:B4", "Sheet1!A1:B3"]);
     }
 
     #[test]

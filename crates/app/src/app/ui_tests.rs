@@ -8454,6 +8454,19 @@ fn define_name_on_selected_cells_of_a_column_names_the_range() {
     // The sample's A is 1, 2, 3, 4 and B 2.5, 4.5, ...: the block's total is 1 + 2 + 2.5 + 4.5.
     h.state_mut().doc.edit("formula", |p| p.set_column_values(c, "total(Corner)", Some(0..1))).unwrap();
     assert_eq!(project(&h).numeric(c).unwrap()[0], 10.0);
+    // T434: the Name Manager lists both names and deletes one.
+    menu_path(&mut h, &["Worksheet", "Name Manager..."]);
+    assert!(h.state().name_manager.is_some());
+    let sheet_name = sheet.name.clone();
+    assert!(has_label(&h, &format!("{sheet_name}!B2:B4")), "the range");
+    assert!(has_label(&h, &format!("{sheet_name}!A1:B2")), "the block");
+    // The names are listed in the order they were defined: Upper, then Corner.
+    h.query_all_by_label("Delete").next().expect("a Delete button per name").click();
+    settle(&mut h);
+    assert!(project(&h).name_of_range(b, 1, 3).is_none());
+    assert_eq!(h.state().doc.undo_label(), Some("Delete Name Upper"));
+    click(&mut h, "Close");
+    assert!(h.state().name_manager.is_none());
 }
 
 #[test]

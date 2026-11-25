@@ -319,6 +319,8 @@ pub struct SheafApp {
     send_ppt: Option<crate::dialogs::send_ppt::SendPptDialog>,
     /// A data cell's Define Name... (T396).
     name_cell: Option<crate::dialogs::name_cell::NameCellDialog>,
+    /// Worksheet > Name Manager... (T434).
+    name_manager: Option<crate::dialogs::name_cell::NameManager>,
     /// A data cell's Insert Sparklines... (T200).
     cell_sparkline_picker: Option<crate::dialogs::cell_sparkline::CellSparklinePicker>,
     /// Batch Peak Analysis Using Theme... (T169).
@@ -532,6 +534,7 @@ impl SheafApp {
             graph_sheet_picker: None,
             send_ppt: None,
             name_cell: None,
+            name_manager: None,
             cell_sparkline_picker: None,
             batch_peaks: None,
             fill_pattern: None,
@@ -2283,6 +2286,13 @@ impl SheafApp {
                 let mut d = crate::dialogs::name_cell::NameCellDialog::new(from, first, last, current.as_deref());
                 d.last_column = (to != from).then_some(to);
                 self.name_cell = Some(d);
+            }
+            Action::NameManager(book) => self.name_manager = Some(crate::dialogs::name_cell::NameManager { book }),
+            Action::DeleteName { book, name } => {
+                let label = format!("Delete Name {name}");
+                if self.doc.apply(&label, |p| p.delete_name(book, &name)) {
+                    self.say(format!("The name {name} was deleted"));
+                }
             }
             Action::SetCellName { column, row, last, last_column, name } => {
                 let label = format!("Define Name {name}");
@@ -5742,6 +5752,28 @@ impl SheafApp {
         }
     }
 
+    /// Worksheet > Name Manager... (T434).
+    fn show_name_manager(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::name_cell::NameManagerOutcome;
+        let Some(m) = &mut self.name_manager else { return };
+        let Some(w) = self.doc.project().workbook(m.book) else {
+            self.name_manager = None;
+            return;
+        };
+        let names: Vec<(String, String)> = w
+            .names
+            .iter()
+            .map(|n| (n.name.clone(), w.name_reference(n).unwrap_or_else(|| "(its column is gone)".to_string())))
+            .collect();
+        let title = w.name.clone();
+        let book = m.book;
+        match m.show(ctx, &title, &names) {
+            NameManagerOutcome::Open => {}
+            NameManagerOutcome::Closed => self.name_manager = None,
+            NameManagerOutcome::Delete(name) => self.apply(Action::DeleteName { book, name }, ctx),
+        }
+    }
+
     /// A data cell's Define Name... (T396).
     fn show_name_cell(&mut self, ctx: &egui::Context) {
         use crate::dialogs::name_cell::NameCellOutcome;
@@ -8373,6 +8405,7 @@ impl SheafApp {
         self.show_graph_sheet_picker(ctx);
         self.show_send_ppt(ctx);
         self.show_name_cell(ctx);
+        self.show_name_manager(ctx);
         self.show_cell_sparkline_picker(ctx);
         self.show_batch_peaks(ctx);
         self.show_fill_pattern(ctx);

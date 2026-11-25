@@ -3644,6 +3644,18 @@ pub enum AnalyzeTool {
         /// Largest MA order tried with --auto.
         #[arg(long, default_value_t = 3)]
         max_q: usize,
+        /// Seasonal AR order P (with --period).
+        #[arg(long, default_value_t = 0)]
+        sp: usize,
+        /// Seasonal differences D (with --period).
+        #[arg(long, default_value_t = 0)]
+        sd: usize,
+        /// Seasonal MA order Q (with --period).
+        #[arg(long, default_value_t = 0)]
+        sq: usize,
+        /// The seasonal period s (points per season).
+        #[arg(long, default_value_t = 0)]
+        period: usize,
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,

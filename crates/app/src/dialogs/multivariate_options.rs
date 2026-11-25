@@ -224,7 +224,7 @@ impl MultiOptions {
             }
             AnalysisKind::Arima => {
                 let s = &self.arima;
-                if s.auto.is_none() && s.p + s.q == 0 && !s.constant {
+                if s.auto.is_none() && s.p + s.q + s.seasonal.p + s.seasonal.q == 0 && !s.constant {
                     return Err("the model has nothing to fit: give p, q or a constant".to_string());
                 }
                 Ok(Tool::Arima(*s))
@@ -776,6 +776,16 @@ impl MultiOptions {
                         ui.label("q");
                         ui.add(egui::DragValue::new(mq).range(0..=10));
                     }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Seasonal P");
+                    ui.add(egui::DragValue::new(&mut s.seasonal.p).range(0..=5));
+                    ui.label("D");
+                    ui.add(egui::DragValue::new(&mut s.seasonal.d).range(0..=2));
+                    ui.label("Q");
+                    ui.add(egui::DragValue::new(&mut s.seasonal.q).range(0..=5));
+                    ui.label("period");
+                    ui.add(egui::DragValue::new(&mut s.seasonal.period).range(0..=10_000));
                 });
                 ui.checkbox(&mut s.constant, "Constant (mean of the differenced series)");
                 ui.horizontal(|ui| {

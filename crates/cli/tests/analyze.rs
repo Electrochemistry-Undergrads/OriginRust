@@ -1940,6 +1940,35 @@ fn arima_forecast_runs_from_the_command_line() {
         "--no-graph",
     ]);
     assert!(ok && out.contains("the smallest AIC of p <= 1, q <= 1") && out.contains("Standard error"), "{err} {out}");
+    // Seasonal ARIMA (T446): a quarterly series that repeats its season plus one each year.
+    let sea = dir.join("sea.csv");
+    let mut text = String::from("t,v\n");
+    for i in 0..24 {
+        text.push_str(&format!("{i},{}\n", [1.0, 5.0, 2.0, 8.0][i % 4] + (i / 4) as f64 + 0.01 * ((i * 7) % 5) as f64));
+    }
+    std::fs::write(&sea, text).unwrap();
+    let sea = sea.to_str().unwrap();
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "arima",
+        sea,
+        "--y",
+        "v",
+        "--p",
+        "0",
+        "--sd",
+        "1",
+        "--sp",
+        "1",
+        "--period",
+        "4",
+        "--horizon",
+        "4",
+        "--no-graph",
+    ]);
+    assert!(ok && out.contains("ARIMA(0,0,0)(1,1,0)4") && out.contains("Seasonal AR 1"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "arima", sea, "--y", "v", "--sp", "1"]);
+    assert!(!ok && err.contains("seasonal period"), "{err}");
 }
 
 /// Exponential smoothing forecast (spec `statistics.md` section 42, T374).

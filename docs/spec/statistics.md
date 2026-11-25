@@ -2143,7 +2143,8 @@ multiplicative-error models and intervals for the multiplicative season are not 
 
 Origin's Time Series Analysis app (2024b Pro) is not part of Origin 2016, so this is Sheaf's own. Statistics > ARIMA
 Forecast... (`Tool::Arima`, `sheaf analyze arima --y COL[,COL..] [--p 1] [--d 0] [--q 0] [--no-constant] [--horizon
-10] [--confidence 95] [--auto [--max-p 3] [--max-q 3]] [--no-graph]`): every chosen column is a series of its own, in row order, complete in the chosen
+10] [--confidence 95] [--auto [--max-p 3] [--max-q 3]] [--sp P] [--sd D] [--sq Q] [--period s] [--no-graph]`): every
+chosen column is a series of its own, in row order, complete in the chosen
 rows. The series is differenced `d` times to `w`; with mean `mu` (the constant; a drift when `d = 1`) the model is
 `w_t - mu = sum phi_i (w_{t-i} - mu) + e_t + sum theta_j e_{t-j}`. The conditional sum of squares (errors before `t =
 p` taken as 0, summed from `t = p`) is minimized by Nelder-Mead from `mu = mean(w)`, `phi = theta = 0`, restarted from
@@ -2155,6 +2156,14 @@ sqrt(sum_{j<h} psi_j^2)` with the psi weights of `phi(B) (1 - B)^d y = theta(B) 
 - **Coefficient standard errors** (T428): the Gauss-Newton covariance `sigma^2 (J'J)^-1`, `J` the exact derivatives
   of the summed conditional errors with respect to the coefficients (the error recursion differentiated); `z = b /
   SE` with normal two-sided probabilities (empty when `J'J` is singular).
+- **Seasonal ARIMA(p,d,q)(P,D,Q)s** (T446; the window's "Seasonal P, D, Q, period"): the series is also differenced
+  `D` times at lag `s`, and the AR and MA polynomials are the products `(1 - sum phi_i B^i)(1 - sum Phi_j B^(js))`
+  and `(1 + sum theta_i B^i)(1 + sum Theta_j B^(js))` written out lag by lag; the errors before the full AR
+  polynomial's last lag `p + P s` are 0 and `sigma^2`, AIC and the one-step predictions follow from them as above
+  (the first `d + D s + p + P s` predictions are empty). Forecasts undo the seasonal, then the ordinary differences;
+  the bands use the psi weights of the full AR polynomial times `(1 - B)^d (1 - B^s)^D`. The coefficient rows add
+  Seasonal AR j and Seasonal MA j; their standard errors take `J` by central differences. A seasonal order with a
+  period below 2 is refused; `--auto` searches `p` and `q` with the seasonal part fixed.
 - **Order by AIC** (T428; `--auto`, the window's "Choose p and q by AIC, up to"): every `p <= P`, `q <= Q` with the
   given `d` and constant is fitted and the smallest AIC kept; each AIC sums its own `n - d - p` errors; orders too long
   for the series are passed over. The note names the chosen order and the search.
@@ -2166,8 +2175,11 @@ bands. At given parameters the errors, forecasts and standard errors are checked
 of squares against scipy's minimum (Nelder-Mead, BFGS), in `tools/arima-ref.py` and `crates/calc/tests/arima_reference.rs`.
 Standard errors and order choice against numpy/scipy (`tools/arima-se-ref.py`, `crates/calc/tests/arima_se_reference.rs`:
 five models at given coefficients against complex-step derivatives to 1e-9; the AIC winner over p, q <= 2 of two
-simulated series, chosen with scipy's fits and a clear margin). Exact (Kalman) maximum likelihood and seasonal ARIMA
-are not built.
+simulated series, chosen with scipy's fits and a clear margin). Seasonal ARIMA against numpy/scipy
+(`tools/sarima-ref.py`, `crates/calc/tests/sarima_reference.rs`: monthly (1,0,0)(1,1,0)12, airline (0,1,1)(0,1,1)12 and
+quarterly (1,0,1)(1,0,0)4 with a mean; errors, forecasts and bands at given coefficients to 1e-9, standard errors
+against the complex step to 1e-6, the fitted sum of squares no worse than scipy's). Exact (Kalman) maximum likelihood is
+not built.
 
 ## 44 Random forest (T377, Origin 2026b Pro app; not measured)
 

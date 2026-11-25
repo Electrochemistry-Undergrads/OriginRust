@@ -6220,7 +6220,7 @@ fn the_statistics_menu_makes_an_arima_forecast() {
     show_window(&mut h, "Book1 - ts.csv");
     let graphs_before = project(&h).graphs().count();
     menu_path(&mut h, &["Statistics", "ARIMA Forecast..."]);
-    assert!(h.state().analysis.is_some() && has_label(&h, "AR order p"));
+    assert!(h.state().analysis.is_some() && has_label(&h, "AR order p") && has_label(&h, "Seasonal P"));
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
     let (sheet, values) = result_column(&h, "Value");

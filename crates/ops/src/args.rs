@@ -3635,6 +3635,15 @@ pub enum AnalyzeTool {
         /// Confidence level of the forecast bands, in percent.
         #[arg(long, default_value_t = 95.0)]
         confidence: f64,
+        /// Choose p and q by the smallest AIC, up to --max-p and --max-q (--p and --q are then ignored).
+        #[arg(long)]
+        auto: bool,
+        /// Largest AR order tried with --auto.
+        #[arg(long, default_value_t = 3)]
+        max_p: usize,
+        /// Largest MA order tried with --auto.
+        #[arg(long, default_value_t = 3)]
+        max_q: usize,
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,
@@ -3656,6 +3665,15 @@ pub enum AnalyzeTool {
         /// Steps to forecast.
         #[arg(long, default_value_t = 10)]
         horizon: usize,
+        /// Damp the trend, with the damping factor fitted in [0.8, 0.98] (or given by --phi).
+        #[arg(long)]
+        damped: bool,
+        /// The damping factor, in (0, 1] (implies --damped).
+        #[arg(long)]
+        phi: Option<f64>,
+        /// Level of the prediction intervals, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        confidence: f64,
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,
@@ -3787,6 +3805,9 @@ pub enum AnalyzeTool {
         /// Confidence level of the hazard-ratio intervals, in percent.
         #[arg(long, default_value_t = 95.0)]
         confidence: f64,
+        /// The last --y column holds each row's frequency (count).
+        #[arg(long)]
+        frequency: bool,
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,
@@ -4004,6 +4025,9 @@ pub enum AnalyzeTool {
         /// Add the confidence limits of the curves to the graph.
         #[arg(long)]
         band: bool,
+        /// The last --y column holds each row's frequency (count).
+        #[arg(long)]
+        frequency: bool,
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,

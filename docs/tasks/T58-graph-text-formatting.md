@@ -360,6 +360,11 @@ and preserves the fixed color for when the option is turned off. Inline color
 overrides still apply. Graphing 7.11 records the Origin 2016 EMF measurements, and
 opj-format 10.8 records the native OPJ fields and companion behavior.
 
+The Format toolbar can also choose **Font Color > Auto** on an ordinary legend.
+A preset or custom color switches the legend to fixed text color as one undoable
+edit. Graphing 7.11 records the documented toolbar route and measured fixed-color
+switch.
+
 ## Origin facts
 
 Recorded in gui-look 1/4 and the command map: the font box says "Default: Arial", the selected

@@ -287,8 +287,30 @@ pub enum ImportPick {
     Excel,
 }
 
+/// A change to a sticky note from its strip (T421).
+#[derive(Debug, Clone, PartialEq)]
+pub enum StickyChange {
+    Text(String),
+    Color(sheaf_core::sticky::NoteColor),
+    Collapsed(bool),
+}
+
 #[derive(Debug, Clone)]
 pub enum Action {
+    /// Window > Sticky Note (T421): pin a note to the window, or to the workbook's active sheet when `sheet`.
+    AddStickyNote {
+        window: WindowId,
+        sheet: bool,
+    },
+    /// A sticky note's strip: change its text, colour or collapsed state (T421).
+    EditStickyNote {
+        target: sheaf_core::sticky::NoteTarget,
+        change: StickyChange,
+    },
+    /// A sticky note's Delete Note button (T421).
+    RemoveStickyNote {
+        target: sheaf_core::sticky::NoteTarget,
+    },
     NewProject,
     /// File > New > Graph and the Standard toolbar button: an empty graph.
     NewGraph,
@@ -1257,6 +1279,17 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
         shape: usize,
+        mask: bool,
+    },
+    /// Copies the data points inside any drawn rectangle or ellipse of the layer to a new workbook (T422).
+    ExtractAllRegions {
+        graph: WindowId,
+        layer: usize,
+    },
+    /// Masks or unmasks the Y cells of the data points inside any drawn rectangle or ellipse of the layer (T422).
+    MaskAllRegions {
+        graph: WindowId,
+        layer: usize,
         mask: bool,
     },
     /// Moves the legend to a new centre (fractions of the layer frame): it becomes manually

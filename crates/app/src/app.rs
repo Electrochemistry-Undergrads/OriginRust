@@ -270,6 +270,8 @@ pub struct SheafApp {
     comparison_plot: Option<ComparisonPlotDialog>,
     multi_y: Option<MultiYDialog>,
     set_values: Option<SetValuesDialog>,
+    /// Each workbook's selection while Set Column Values is open (T423): a new selection is a picked reference.
+    formula_pick: Option<std::collections::HashMap<WindowId, (crate::grid::Sel, Vec<ColumnId>, usize)>>,
     analysis: Option<AnalysisDialog>,
     fit: Option<FitDialog>,
     fit_more: Option<FitMoreDialog>,
@@ -493,6 +495,7 @@ impl SheafApp {
             comparison_plot: None,
             multi_y: None,
             set_values: None,
+            formula_pick: None,
             analysis: None,
             fit: None,
             fit_more: None,
@@ -2949,8 +2952,16 @@ impl SheafApp {
                 self.sort = SortDialog::nested_in_rows(self.doc.project(), book, columns, rows);
             }
             Action::PivotTable { book, columns } => self.pivot = PivotDialog::new(&self.doc, book, columns),
-            Action::ExtractRegion { graph, layer, shape } => self.extract_region(graph, layer, shape),
-            Action::MaskRegion { graph, layer, shape, mask } => self.mask_region(graph, layer, shape, mask),
+            Action::ExtractRegion { graph, layer, shape } => self.extract_region(graph, layer, vec![shape]),
+            Action::MaskRegion { graph, layer, shape, mask } => self.mask_region(graph, layer, vec![shape], mask),
+            Action::ExtractAllRegions { graph, layer } => {
+                let shapes = sheaf_plot::region::region_shapes(self.doc.project(), graph, layer);
+                self.extract_region(graph, layer, shapes)
+            }
+            Action::MaskAllRegions { graph, layer, mask } => {
+                let shapes = sheaf_plot::region::region_shapes(self.doc.project(), graph, layer);
+                self.mask_region(graph, layer, shapes, mask)
+            }
             Action::MultiPeakFit { graph, y, layer } => {
                 let graph = match graph {
                     Some(g) => Some(g),
@@ -4049,6 +4060,42 @@ impl SheafApp {
                     delete_columns(p, &columns);
                     p.remove_window(id);
                 });
+            }
+            Action::AddStickyNote { window, sheet } => {
+                use sheaf_core::sticky::NoteTarget;
+                let target = match self.doc.project().workbook(window) {
+                    Some(b) if sheet => NoteTarget::Sheet(window, b.active_sheet.min(b.sheets.len().saturating_sub(1))),
+                    _ => NoteTarget::Window(window),
+                };
+                if let Err(e) = self.doc.edit("Add Sticky Note", |p| p.add_sticky_note(target)) {
+                    self.warn(e.to_string());
+                }
+            }
+            Action::EditStickyNote { target, change } => {
+                use crate::actions::StickyChange;
+                let done = match change {
+                    StickyChange::Text(text) => {
+                        self.doc.apply_merging("Edit Sticky Note", crate::sticky_view::typing_token(target), |p| {
+                            p.edit_sticky_note(target, |n| n.text = text)
+                        })
+                    }
+                    StickyChange::Color(c) => {
+                        self.doc.edit("Sticky Note Color", |p| p.edit_sticky_note(target, |n| n.color = c))
+                    }
+                    StickyChange::Collapsed(on) => {
+                        self.doc.edit(if on { "Collapse Sticky Note" } else { "Expand Sticky Note" }, |p| {
+                            p.edit_sticky_note(target, |n| n.collapsed = on)
+                        })
+                    }
+                };
+                if let Err(e) = done {
+                    self.warn(e.to_string());
+                }
+            }
+            Action::RemoveStickyNote { target } => {
+                let _ = self
+                    .doc
+                    .edit("Delete Sticky Note", |p| Ok::<_, std::convert::Infallible>(p.remove_sticky_note(target)));
             }
             Action::RenameWindow(id) => {
                 if let Some(w) = self.doc.project().window(id) {
@@ -6372,8 +6419,8 @@ impl SheafApp {
 
     /// Mask / Unmask Data in Region (T413): the Y cells of the layer's data points inside the drawn rectangle or
     /// ellipse are masked (or unmasked), as one undo step.
-    fn mask_region(&mut self, graph: WindowId, layer: usize, shape: usize, mask: bool) {
-        let found = match sheaf_plot::region::points_in_shape(self.doc.project(), graph, layer, shape) {
+    fn mask_region(&mut self, graph: WindowId, layer: usize, shapes: Vec<usize>, mask: bool) {
+        let found = match sheaf_plot::region::points_in_shapes(self.doc.project(), graph, layer, &shapes) {
             Ok(Some(found)) => found,
             Ok(None) => return self.warn("Only a rectangle or an ellipse marks a region"),
             Err(e) => return self.warn(e.to_string()),
@@ -6411,8 +6458,8 @@ impl SheafApp {
 
     /// Extract Data in Region (T355): the data points of the layer inside the drawn rectangle or ellipse go to a
     /// new workbook, three columns per plot with points inside (X, Y and the source row), as one undo step.
-    fn extract_region(&mut self, graph: WindowId, layer: usize, shape: usize) {
-        let found = match sheaf_plot::region::points_in_shape(self.doc.project(), graph, layer, shape) {
+    fn extract_region(&mut self, graph: WindowId, layer: usize, shapes: Vec<usize>) {
+        let found = match sheaf_plot::region::points_in_shapes(self.doc.project(), graph, layer, &shapes) {
             Ok(Some(found)) => found,
             Ok(None) => return self.warn("Only a rectangle or an ellipse marks a region"),
             Err(e) => return self.warn(e.to_string()),
@@ -6680,6 +6727,63 @@ impl SheafApp {
                 self.say(format!("{} repeated: {}", label.trim_end_matches("..."), report.message));
             }
             Err(e) => self.warn(format!("Could not repeat {}: {e}", label.trim_end_matches("..."))),
+        }
+    }
+
+    /// Interactive formula references (T423): while Set Column Values is open, a new selection in a sheet (one
+    /// column, one cell, or cells of one column) is inserted into the formula at its cursor as `col(B)`, `col(B)[3]`
+    /// or `col(B)[2:5]`, with `Sheet2!` or `[Book2]Sheet1!` in front when it is not on the window's sheet.
+    fn pick_formula_reference(&mut self, ctx: &egui::Context) {
+        let Some(d) = &self.set_values else {
+            self.formula_pick = None;
+            return;
+        };
+        let now: std::collections::HashMap<WindowId, (crate::grid::Sel, Vec<ColumnId>, usize)> = self
+            .books
+            .iter()
+            .map(|(id, b)| {
+                let sheet = self.doc.project().workbook(*id).map_or(0, |w| w.active_sheet);
+                (*id, (b.sel.clone(), b.selected.clone(), sheet))
+            })
+            .collect();
+        let Some(before) = self.formula_pick.replace(now.clone()) else { return };
+        let target = d.target();
+        let project = self.doc.project();
+        let Some((home_book, home_sheet, _)) = project.locate(target) else { return };
+        let home = (home_book.id, home_sheet as *const sheaf_core::Worksheet);
+        let mut picked: Option<String> = None;
+        for (book, (sel, selected, sheet_index)) in &now {
+            if before.get(book) == Some(&(sel.clone(), selected.clone(), *sheet_index)) {
+                continue;
+            }
+            let Some(wb) = project.workbook(*book) else { continue };
+            let Some(sheet) = wb.sheets.get(*sheet_index) else { continue };
+            let (column, rows) = match sel {
+                crate::grid::Sel::Columns if selected.len() == 1 => (sheet.column(selected[0]), None),
+                crate::grid::Sel::Cells { anchor, end } if anchor.0 == end.0 => {
+                    let (lo, hi) = (anchor.1.min(end.1), anchor.1.max(end.1));
+                    (sheet.columns.get(anchor.0), Some((lo + 1, hi + 1)))
+                }
+                _ => continue,
+            };
+            let Some(column) = column else { continue };
+            let mut text = String::new();
+            if (wb.id, sheet as *const sheaf_core::Worksheet) != home {
+                if wb.id != home.0 {
+                    text.push_str(&format!("[{}]", wb.name));
+                }
+                text.push_str(&format!("{}!", sheet.name));
+            }
+            text.push_str(&format!("col({})", column.short_name));
+            match rows {
+                Some((a, b)) if a == b => text.push_str(&format!("[{a}]")),
+                Some((a, b)) => text.push_str(&format!("[{a}:{b}]")),
+                None => {}
+            }
+            picked = Some(text);
+        }
+        if let (Some(text), Some(d)) = (picked, &mut self.set_values) {
+            d.insert_reference(ctx, &text);
         }
     }
 
@@ -7926,6 +8030,7 @@ impl SheafApp {
         {
             self.straight_line_dialog = None;
         }
+        self.pick_formula_reference(ctx);
         if let Some(d) = &mut self.set_values
             && !d.show(ctx, &mut self.doc)
         {
@@ -9397,10 +9502,21 @@ impl eframe::App for SheafApp {
                             .map(|w| WindowInfo { title: w.title(), graph: matches!(w, Window::Graph(_)) })
                     };
                     let mut content = |id: WindowId, ui: &mut egui::Ui| match doc.project().window(id) {
-                        Some(Window::Workbook(_)) => {
-                            grid::show(ui, doc, id, books.entry(id).or_default(), actions);
+                        Some(Window::Workbook(b)) => {
+                            // Sticky notes (T421): the book's, then the shown sheet's.
+                            use sheaf_core::sticky::NoteTarget;
+                            crate::sticky_view::strip(ui, doc, NoteTarget::Window(id), "Book note", actions);
+                            let sheet = b.active_sheet;
+                            crate::sticky_view::strip(ui, doc, NoteTarget::Sheet(id, sheet), "Sheet note", actions);
+                            // The grid fills its ui's whole rectangle: give it only the room below the notes.
+                            let rest = ui.available_rect_before_wrap();
+                            ui.scope_builder(egui::UiBuilder::new().max_rect(rest), |ui| {
+                                grid::show(ui, doc, id, books.entry(id).or_default(), actions);
+                            });
                         }
                         Some(Window::Graph(_)) => {
+                            use sheaf_core::sticky::NoteTarget;
+                            crate::sticky_view::strip(ui, doc, NoteTarget::Window(id), "Note", actions);
                             graph_view::show(ui, doc, id, graphs.entry(id).or_default(), actions);
                         }
                         Some(Window::Notes(_)) => {

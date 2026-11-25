@@ -69,7 +69,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T60](T60-merge-graphs-layer-management.md) | 2, P0 | L | Merge Graph Windows (dialog, CLI and MCP, manual/Auto preview, source filters and grouping, panel labels and letter/number/Roman enumeration, source graph names, extra grid layers, Common Scale), Layer Management (Arrange with Common Scale and extra grid layers, Size/Position, Link, Axes with independent facing-edge controls, Display colors, border dimensions, page Drawing Order and Scale Elements), Fit Page to Layers |
 | [T61](T61-layers-and-multi-y.md) | 2, P0 | L | Nine Add Layer kinds, insets, Delete Layer, Layer Properties, displaced Y axes and Move to Layer, 3Ys/4Ys templates and Multiple Y Axes (graphing 21). Hide Layer and Hide Other Layers (21.13–14), New Layer (Axes) preset dialog (21.15), layer-icon switches (21.16) and Layer Management Add with scale selection and linked parent (21.17). User Defined, Auto Offset and Custom Formula endpoint links in New Layer (Axes) (21.15). Stock multi-Y legend spacing and membership (21.12). Custom Formula and Discrete scales in Layer Management Add (21.17). Done 2026-11-24 |
 | [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Done 2026-11-15 (unmeasured Sheaf rules, graphing 13.15-13.17): Offset Grouped Data menu with Cumulative, Stacked Histograms, waterfall Y/Z colour mapping |
-| [T63](T63-greyed-items-with-code-2.md) | 3, parallel | M | Existing-feature wiring; F/G/J wired, H, A, B, I and K wired 2026-11-19 (workbook-model 13c, graphing "Step and spline line plots"), C deferred to B8/T14; D and E open (D belongs to B14; E needs Origin measured) |
+| [T63](T63-greyed-items-with-code-2.md) | 3, parallel | M | Existing-feature wiring. F/G/J wired, H, A, B, I and K wired 2026-11-19 (workbook-model 13c, graphing "Step and spline line plots"). Group E wired by T182, with Origin 2016 differences measured (graphing 9.7a). C referred to B8/T14, D to B14 |
 | [T65](T65-graph-view-zoom-pan.md) | 4 (B1), P1 | M | Zoom In mode, Zoom Out, Whole Page and Zoom-Panning tool landed 2026-11-15; Standard toolbar zoom combo added 2026-11-18 (Scale In/Out and Zoom All: T69) |
 | [T66](T66-graph-view-modes.md) | 4 (B1), P1 | M | Partly done: four view modes, Layer Icons, Active Layer Only, Labels, Data, Active Layer Indicator, Frame and Full Screen (graphing 22). Four Show items and Show Data Info remain |
 | [T67](T67-add-straight-line.md) | 4 (B3), P1 | M | Done 2026-11-15: Add Straight Line (Origin's addline), dialog, CLI --vline/--hline; left: dragging (Moveable) |
@@ -199,7 +199,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T174](T174-page-axis-paste.md) | Page Paste Format To > Bottom Axes / All X Axes / All Axes with an axis format (T72 slice) | S | done 2026-11-19 (graphing 26.14), not measured; left: first-level All |
 | [T176](T176-copy-format-groups.md) | Copy Format: Symbol/Line/Fill, Text (Edit menu), Page Background (page menu) (T72 slice) | S | done 2026-11-19 (graphing 26.15), not measured; left: Legend Translation Mode |
 | [T179](T179-legend-format-all.md) | Legend Copy Format / Paste Format To: Dimensions and All (T72 slice) | S | Shipped 2026-11-19. Origin 2016 format API measured 2026-11-21 (graphing 26.16). Live menu fields remain open. |
-| [T182](T182-export-no-graph.md) | File > Export > Graphs / Graph as Image / Multi-Page PDF from a workbook or no window (T63 group E) | S | done 2026-11-19 (graphing 9.7a), not measured |
+| [T182](T182-export-no-graph.md) | File > Export > Graphs / Graph as Image / Multi-Page PDF from a workbook or no window (T63 group E) | S | done 2026-11-19, Origin 2016 differences measured 2026-11-24 (graphing 9.7a) |
 | [T183](T183-layer-icon-switches.md) | Layer icon menu: Show Active Layer Only, Set Active Layer By Layer Icon Only, Double click to open Plot Setup (T61 leftovers) | S | done 2026-11-19 (graphing 21.16), not measured |
 | [T185](T185-page-break-lines.md) | Worksheet Page Break Preview Lines (View menu, corner menu) (B6 slice) | S | done 2026-11-19 (workbook-model 13i), not measured |
 | [T187](T187-categories-row.md) | Worksheet corner Categories row (B6 slice) | S | done 2026-11-20 (workbook-model 13i), not measured |
@@ -246,6 +246,8 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T414](T414-repeat-all-sheets.md) | Analysis > Repeat Last Analysis on All Sheets | S | done 2026-11-24 (gui-look), not measured |
 | [T418](T418-across-pick.md) | Add Column to All Sheets: only the ticked sheets | S | done 2026-11-24 (workbook-model 13q), not measured |
 | [T420](T420-pivot-by.md) | Time Series Pivot: a second grouping (hour, weekday, month) | S | done 2026-11-24 (statistics 32), not measured |
+| [T422](T422-all-regions.md) | Extract / Mask / Unmask Data in All Regions of a layer | S | done 2026-11-24 (graphing 17.12), not measured |
+| [T423](T423-formula-pick.md) | Set Column Values: pick column, cell or range references in the sheet | S | done 2026-11-24 (gui-look), not measured |
 | [T233](T233-batch-summary.md) | File > Batch Processing: Summary Sheet, Dataset Identifier, Delete Intermediate Books (a Batch Summary book stacking one sheet of every book) | S | done 2026-11-20 (workbook-model 13p), not measured; left: Origin's layout and identifier choices |
 | [T235](T235-batch-cli.md) | sheaf batch: Batch Processing without a window (template, summary, --summary-csv), core Project::batch_process shared with the window | S | done 2026-11-20 (workbook-model 13p); MCP: T238 |
 | [T238](T238-batch-mcp.md) | MCP batch_process: the shared batch run (books, summary, delete) on the session project, one undo step attached | S | done 2026-11-20 (mcp.md 5.1); left: read options |
@@ -341,6 +343,9 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T394](T394-life-data-frequency.md) | Frequency (count) column for the life-data tools (Origin 2026b) | S | done 2026-11-23 (statistics 49) |
 | [T408](T408-cox.md) | Cox proportional hazards regression with Breslow ties, hazard ratios and tests (Origin 2026b) | S | done 2026-11-23 (statistics 52) |
 | [T391](T391-life-data-regression.md) | Life data regression: Weibull, lognormal and exponential AFT models with censoring (Origin 2026b) | S | done 2026-11-23 (statistics 48) |
+| [T429](T429-survival-frequency.md) | Frequency columns for the Kaplan-Meier estimator and Cox regression | S | done 2026-11-24 (statistics 49) |
+| [T428](T428-arima-se-auto.md) | ARIMA coefficient standard errors and order choice by AIC | S | done 2026-11-24 (statistics 43) |
+| [T427](T427-smoothing-intervals.md) | Exponential smoothing: damped trend and prediction intervals | S | done 2026-11-24 (statistics 42) |
 | [T425](T425-capability-intervals.md) | Confidence intervals of Pp and Ppk in Process Capability | S | done 2026-11-24 (statistics 36) |
 | [T424](T424-recent-writers-test.md) | Flaky gate: the recent-list writers test fits the lock wait under load | S | done 2026-11-24 |
 | [T419](T419-capability-boxcox.md) | Process capability with a Box-Cox transformation and the Cpm target index | S | done 2026-11-24 (statistics 36) |
@@ -452,7 +457,9 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T41](T41-rug-plot.md) | Rug plots: Axis dialog Rug tab and Scatter + Rug template | M | done 2026-11-15 (graphing 18.10); left: Origin defaults unmeasured, rug hit-testing |
 | [T410](T410-browser-graph.md) | Graph > Browser Graph (Origin 2020b/2024: step one plot through the Y columns of its sheet or the same column of every sheet) | S | done 2026-11-24 (graphing "Browser Graph") |
 | [T416](T416-time-series-explorer.md) | Plot > Specialized > Time Series Explorer (Origin 2024b: whole series + detail of one of n X intervals; Previous / Next / Play) | S | done 2026-11-24 (graphing "Time Series Explorer") |
+| [T426](T426-faster-save.md) | Faster project save: data members deflated on several threads, same file (4.6 s -> 1.15 s on 76 MB) | S | done 2026-11-24 |
 | [T42](T42-window-switcher.md) | Window Switcher: Ctrl+Tab through child windows with previews | M | done 2026-11-15 (`window-switcher`, macOS) |
+| [T421](T421-sticky-notes.md) | Sticky Notes (Origin 2027): coloured, collapsible notes on graph windows, workbooks and sheets, found by Find in Project | S | done 2026-11-24 (notes-window.md "Sticky Notes") |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |

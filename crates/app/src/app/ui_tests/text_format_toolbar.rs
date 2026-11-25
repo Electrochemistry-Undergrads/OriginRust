@@ -103,6 +103,41 @@ fn font_size_family_and_color_apply_through_the_shared_controls() {
 }
 
 #[test]
+fn legend_font_color_auto_and_fixed_colors_switch_modes_with_undo() {
+    let mut h = start_graph("legend-font-color-auto");
+    select(&mut h, ObjectKind::Legend);
+    click(&mut h, "Format toolbar: Font Color");
+    click(&mut h, "Font Color: Blue");
+    let fixed = project(&h).clone();
+    let id = graph(&h).id;
+
+    click(&mut h, "Format toolbar: Font Color");
+    click(&mut h, "Font Color: Auto");
+    let mut expected = fixed.clone();
+    expected.graph_mut(id).unwrap().layers[0].legend.text_color_follows_plot = true;
+    assert_eq!(project(&h), &expected);
+    assert_eq!(h.state().doc.undo_label(), Some("Format graph text"));
+    let revision = h.state().doc.revision();
+    click(&mut h, "Format toolbar: Font Color");
+    click(&mut h, "Font Color: Auto");
+    assert_eq!(h.state().doc.revision(), revision);
+
+    click(&mut h, "Format toolbar: Font Color");
+    click(&mut h, "Font Color: Blue");
+    assert_eq!(project(&h), &fixed);
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &expected);
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &fixed);
+    menu(&mut h, "Edit", "Redo");
+    assert_eq!(project(&h), &expected);
+
+    select(&mut h, ObjectKind::XTitle);
+    click(&mut h, "Format toolbar: Font Color");
+    assert!(h.query_by_label("Font Color: Auto").is_none());
+}
+
+#[test]
 fn labels_and_both_titles_use_only_the_selected_objects_font() {
     let mut h = start_graph("format-toolbar-targets");
     let id = graph(&h).id;
@@ -162,6 +197,13 @@ fn an_open_color_palette_cannot_follow_a_changed_selection_or_project() {
     settle(&mut h);
     click(&mut h, "Font Color: Red");
     assert_eq!(project(&h), &before, "palette keeps the target captured when opened");
+
+    select(&mut h, ObjectKind::Legend);
+    click(&mut h, "Format toolbar: Font Color");
+    h.state_mut().graphs.get_mut(&id).unwrap().selected = Some((0, ObjectKind::XTitle));
+    settle(&mut h);
+    click(&mut h, "Font Color: Auto");
+    assert_eq!(project(&h), &before);
 
     select(&mut h, ObjectKind::Legend);
     let request = h.state().text_format().unwrap().request(Change::Bold(true));

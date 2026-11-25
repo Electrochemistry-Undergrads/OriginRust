@@ -72,11 +72,13 @@ pub struct CoxSpec {
     pub confidence: f64,
     /// Make the graph of the survival at the covariate means.
     pub graph: bool,
+    /// The last chosen column holds each row's frequency (count) (T429).
+    pub frequency: bool,
 }
 
 impl Default for CoxSpec {
     fn default() -> Self {
-        CoxSpec { censor: "1".into(), confidence: 0.95, graph: true }
+        CoxSpec { censor: "1".into(), confidence: 0.95, graph: true, frequency: false }
     }
 }
 
@@ -98,7 +100,7 @@ impl Default for TurnbullSpec {
 
 /// The chosen columns without the frequency column, and the frequencies by row when the last chosen column holds them
 /// (T394; `None`: every row counts once).
-fn split_frequency<'a>(
+pub(super) fn split_frequency<'a>(
     sheet: &Worksheet,
     columns: &'a [ColumnId],
     on: bool,
@@ -115,7 +117,7 @@ fn split_frequency<'a>(
 }
 
 /// How many times row `r` counts: once without frequencies; a missing, negative or fractional frequency is refused.
-fn count_of(counts: &Option<Vec<f64>>, r: usize) -> Result<usize, AnalysisError> {
+pub(super) fn count_of(counts: &Option<Vec<f64>>, r: usize) -> Result<usize, AnalysisError> {
     let Some(v) = counts else { return Ok(1) };
     let c = v.get(r).copied().unwrap_or(f64::NAN);
     if c >= 0.0 && c.fract() == 0.0 && c <= 1e6 {
@@ -129,7 +131,7 @@ fn count_of(counts: &Option<Vec<f64>>, r: usize) -> Result<usize, AnalysisError>
 }
 
 /// The frequencies may not add up to more than a million rows.
-fn check_total(n: usize) -> Result<(), AnalysisError> {
+pub(super) fn check_total(n: usize) -> Result<(), AnalysisError> {
     if n > 1_000_000 {
         return Err(AnalysisError::BadOption("the frequencies add up to more than 1,000,000 rows".into()));
     }
@@ -454,9 +456,11 @@ pub(super) fn run_cox(
     if censor.is_empty() {
         return Err(AnalysisError::BadOption("give the value of the censor column that marks a censored case".into()));
     }
+    let (columns, counts) = split_frequency(sheet, columns, spec.frequency)?;
     if columns.len() < 3 {
         return Err(AnalysisError::BadOption(
-            "Cox regression takes the covariate column(s), then the time and the censor column".into(),
+            "Cox regression takes the covariate column(s), then the time and the censor column (and the frequency last)"
+                .into(),
         ));
     }
     let column = |id: ColumnId| sheet.column(id).ok_or(AnalysisError::NoSuchColumn(id));
@@ -483,9 +487,12 @@ pub(super) fn run_cox(
             continue;
         }
         let Some(is_censored) = cell_equals(cc, r, censor, censor_number) else { continue };
-        x.push(row);
-        t.push(v);
-        failed.push(!is_censored);
+        for _ in 0..count_of(&counts, r)? {
+            x.push(row.clone());
+            t.push(v);
+            failed.push(!is_censored);
+        }
+        check_total(t.len())?;
     }
     let fit = calc::cox::cox(&x, &t, &failed, spec.confidence).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
     let pct = num(100.0 * spec.confidence);
@@ -940,6 +947,27 @@ mod tests {
         let two =
             Request { columns: cols[..1].to_vec(), rows: RowRange::All, tool: Tool::Turnbull(Default::default()) };
         assert!(p.analyze(&two).is_err());
+    }
+
+    #[test]
+    fn a_cox_frequency_counts_a_row_as_often_as_copies_of_it() {
+        let mut p = Project::new();
+        let book = p.add_workbook("coxfreq");
+        let x = vec![0.0, 1.0, 0.0, 1.0, 1.0, 0.0];
+        let t = vec![2.0, 5.0, 7.0, 3.0, 6.0, 4.0];
+        let c = vec![0.0, 0.0, 1.0, 0.0, 0.0, 0.0];
+        let f = vec![2.0, 1.0, 1.0, 3.0, 1.0, 1.0];
+        let expand = |v: &[f64]| -> Vec<f64> { v.iter().zip(&f).flat_map(|(a, n)| vec![*a; *n as usize]).collect() };
+        let mut add = |v: Vec<f64>| p.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap();
+        let weighted = vec![add(x.clone()), add(t.clone()), add(c.clone()), add(f.clone())];
+        let copies = vec![add(expand(&x)), add(expand(&t)), add(expand(&c))];
+        let spec = CoxSpec { graph: false, frequency: true, ..Default::default() };
+        let a = p.analyze(&Request { columns: weighted, rows: RowRange::All, tool: Tool::Cox(spec) }).unwrap();
+        let plain = CoxSpec { graph: false, ..Default::default() };
+        let b = p.analyze(&Request { columns: copies, rows: RowRange::All, tool: Tool::Cox(plain) }).unwrap();
+        let values = |o: &Report| o.table.as_ref().unwrap().rows.iter().map(|r| r.1.clone()).collect::<Vec<_>>();
+        assert_eq!(values(&a), values(&b));
+        assert!(a.notes[0].contains("9 cases"), "{:?}", a.notes);
     }
 
     #[test]

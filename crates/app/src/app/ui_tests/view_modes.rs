@@ -82,7 +82,7 @@ fn layer_icons_in_the_show_menu_hides_and_shows_the_icons() {
 fn the_show_items_that_are_not_measured_stay_grey() {
     let mut h = start(vec![data_file("vm-grey")]);
     menu_path(&mut h, &["View", "Show"]);
-    for label in ["Object Grid", "Master Items on Screen"] {
+    for label in ["Layer Grid", "Master Items on Screen"] {
         assert!(h.get_by_label(label).accesskit_node().is_disabled(), "{label} is not built yet");
     }
     // T177: Labels (and Data, which shares its name with the Data menu) are live (graphing 22.8).
@@ -236,6 +236,35 @@ fn axis_layer_icons_select_the_axis_owner_and_are_saved_per_graph() {
     menu(&mut h, "Edit", "Redo");
     assert!(h.state().menu_context().axis_layer_icons);
     assert!(has_label(&h, right_badge));
+}
+
+#[test]
+fn object_grid_is_a_saved_page_switch() {
+    let mut h = start(vec![data_file("view-object-grid")]);
+    let first = graph(&h).id;
+    let other = h.state_mut().doc.apply("Second graph", |p| p.add_graph(Template::Line));
+    show_window(&mut h, "Graph1 - sample");
+    assert!(!h.state().menu_context().object_grid);
+    let picture = sheaf_plot::graph_scene(project(&h), first).unwrap();
+
+    menu_path(&mut h, &["View", "Show", "Object Grid"]);
+    assert!(h.state().menu_context().object_grid);
+    assert!(!project(&h).graph(other).unwrap().page.style.object_grid);
+    assert_eq!(h.state().doc.undo_label(), Some("Show Object Grid"));
+    assert_eq!(sheaf_plot::graph_scene(project(&h), first).unwrap(), picture);
+
+    let path = save_dir("view-object-grid").join("object-grid.sheaf");
+    sheaf_io::save::save_project(project(&h), &path).unwrap();
+    let reopened = sheaf_io::open_project(&path).unwrap().project;
+    assert!(reopened.graph(first).unwrap().page.style.object_grid);
+    assert!(!reopened.graph(other).unwrap().page.style.object_grid);
+
+    menu(&mut h, "Edit", "Undo");
+    assert!(!h.state().menu_context().object_grid);
+    menu(&mut h, "Edit", "Redo");
+    assert!(h.state().menu_context().object_grid);
+    menu_path(&mut h, &["View", "Show", "Object Grid"]);
+    assert!(!h.state().menu_context().object_grid);
 }
 
 #[test]

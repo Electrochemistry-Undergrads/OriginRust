@@ -9,7 +9,7 @@ are in [PLAN.md](PLAN.md).
 Listed at commit `23ac847` (2026-11-15, `main` after T55) in the paused cloud session;
 recounted against its package tags during recovery.
 Formatting and layer gaps were checked in source during recovery; other labels retain the
-original inventory baseline. This is not a new runtime audit. **70 greyed items: 60 in the menu bar, 0 on the toolbars, 10 in context menus.**
+original inventory baseline. This is not a new runtime audit. **69 greyed items: 59 in the menu bar, 0 on the toolbars, 10 in context menus.**
 
 ## How to read and keep this file
 
@@ -42,7 +42,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `T62` | 0 |
 | `T63` | 1 |
 | `T65` | 0 |
-| `T66` | 4 |
+| `T66` | 3 |
 | `T67` | 0 |
 | `T69` | 0 |
 | `T70` | 0 |
@@ -86,7 +86,7 @@ Generated from the tagged lines below by `python3 tools/greyed-count.py --write`
 | `N` | 20 |
 <!-- greyed-count:packages:end -->
 
-Briefs (`T`) hold 9 items, backlog packages (`B`) 41, not planned (`N`) 20.
+Briefs (`T`) hold 8 items, backlog packages (`B`) 41, not planned (`N`) 20.
 
 Counts are **locations**, not unique capabilities: the same command in a toolbar and a context
 menu counts twice; window qualifiers on one line do not multiply it. Retag items when ownership
@@ -111,7 +111,7 @@ changes. The baseline labels remain open until implementation or a documented re
 - `B16` Command Window · Code Builder
 - `N` Quick Help · Smart Hint Log
 - `B6` Actively Update Plots [Workbook]
-- `T66` Show: Object Grid · Layer Grid · Master Items on Screen [Graph]
+- `T66` Show: Layer Grid · Master Items on Screen [Graph]
 - `T66` Show Data Info [Graph]
 
 ### Plot

@@ -6445,6 +6445,24 @@ of the visible Cartesian axis lines. Each button activates the layer that owns
 its axis and works with the numbered layer row hidden. Print and export use the
 same graph scene with the switch on or off.
 
+### 22.12 View > Show > Object Grid (T66, Origin 2016, measured 2026-11-25)
+
+Command 33090 drew thin light gray lines across the graph page, behind the plots,
+axes and legend. They appeared in Page, Print, Window and Draft View. The second
+graph kept its setting, and saving and reopening kept the grid on the first graph.
+EMF exports from the same graph with the grid on and off were byte-identical.
+The flag is stored in the graph window header (opj-format 10.1).
+
+On two page sizes, the fitted Page View showed about 36 grid intervals along each
+dimension. Origin 2016 reported `system.page.objSpacing=20`. Changing it to 40
+roughly doubled the on-screen line spacing in both directions.
+[LabTalk System.Page reference](https://docs.originlab.com/labtalk/ref/system-page-obj/)
+
+Sheaf draws the object grid under the graph in the editing window. It uses 36
+equal intervals in each page dimension for the measured default density. The
+switch defaults to off, is undoable, and is saved per graph in `.sheaf` and `.opj`.
+Print and export use the normal graph scene.
+
 ## 23. View > Zoom All and the Tools-bar Scale In / Scale Out (T69, measured 2026-11-15, Origin 2016)
 
 Measured in OriginPro 2016 on our own synthetic data (X = 1 to 10, Y = 2X+1 and 20-X, Line + Symbol graph; one run with a right-Y layer from `layadd type:=righty`; one with both axes logarithmic; a 4-graph project), a 1024x768 Origin window, drags and clicks sent by `tools/origin-ref/origin-dialog.ps1 -NoDialog` with `-AfterFile` (`@DRAG`, `@CLICK`, `@DCLICK`, `@KEYDOWN`, `@SHOT`, `@CURSOR`) and the axis ends read after each action with `?layer.x.from` / `.to` / `layer.y.from` / `.to` (raw outputs and pictures are local: `re-workspace/scratch/t69/`, `*.out.txt`, `*.png`). Anything not listed is **unmeasured**.

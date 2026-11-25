@@ -91,11 +91,24 @@ pub struct CoxSpec {
     pub efron: bool,
     /// A stratum column follows the censor column (T451): risk sets and baselines within strata.
     pub strata: bool,
+    /// Also draw the survival at these covariate values, one per covariate (T457).
+    pub at: Option<Vec<f64>>,
+    /// Write the martingale, deviance and Schoenfeld residuals (T457).
+    pub residuals: bool,
 }
 
 impl Default for CoxSpec {
     fn default() -> Self {
-        CoxSpec { censor: "1".into(), confidence: 0.95, graph: true, frequency: false, efron: false, strata: false }
+        CoxSpec {
+            censor: "1".into(),
+            confidence: 0.95,
+            graph: true,
+            frequency: false,
+            efron: false,
+            strata: false,
+            at: None,
+            residuals: false,
+        }
     }
 }
 
@@ -539,6 +552,14 @@ pub(super) fn run_cox(
     };
     let k = columns.len() - extra;
     let sc = if spec.strata { Some(column(columns[k + 2])?) } else { None };
+    if let Some(at) = &spec.at
+        && at.len() != k
+    {
+        return Err(AnalysisError::BadOption(format!(
+            "give one value per covariate for the survival curve ({k}, got {})",
+            at.len()
+        )));
+    }
     let xcs: Vec<&Column> = columns[..k].iter().map(|id| column(*id)).collect::<Result<_, _>>()?;
     let tc = column(columns[k])?;
     let cc = column(columns[k + 1])?;
@@ -551,6 +572,7 @@ pub(super) fn run_cox(
     let (first, last) = resolve_rows(rows, &tc.short_name, &[], n)?;
     let censor_number = censor.parse::<f64>().ok();
     let (mut x, mut t, mut failed, mut labels) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let mut source_rows = Vec::new();
     for r in first..=last {
         let row: Vec<f64> = x_all.iter().map(|c| c.get(r).copied().unwrap_or(f64::NAN)).collect();
         let v = t_all.get(r).copied().unwrap_or(f64::NAN);
@@ -572,6 +594,7 @@ pub(super) fn run_cox(
             t.push(v);
             failed.push(!is_censored);
             labels.push(label.clone());
+            source_rows.push((r + 1) as f64);
         }
         check_total(t.len())?;
     }
@@ -672,6 +695,70 @@ pub(super) fn run_cox(
         sheet_cols.push(column_of(&time_name, comment, Designation::X, sx));
         sheet_cols.push(column_of(&surv_name, comment, Designation::Y, sy));
         plots.push(GraphPlot { x: x0, y: x0 + 1, kind: PlotKind::Line, label, line_of: None });
+    }
+    // The survival at the given covariates (T457), a curve per stratum beside the ones at the means.
+    if let Some(at) = &spec.at {
+        let place: Vec<String> =
+            xcs.iter().zip(at).map(|(c, v)| format!("{} = {}", column_label(c), num(*v))).collect();
+        let place = place.join(", ");
+        for (i, (times, survival)) in fit.survival_at(at).iter().enumerate() {
+            let (mut sx, mut sy) = (vec![0.0], vec![1.0]);
+            let mut prev = 1.0;
+            for (tk, s) in times.iter().zip(survival) {
+                sx.extend([*tk, *tk]);
+                sy.extend([prev, *s]);
+                prev = *s;
+            }
+            let tail = match sc {
+                Some(_) => format!(" ({})", names.get(i).cloned().unwrap_or_default()),
+                None => String::new(),
+            };
+            let comment = format!("Survival at {place}");
+            let x0 = sheet_cols.len() - shift;
+            sheet_cols.push(column_of(&format!("Time at the values{tail}"), &comment, Designation::X, sx));
+            sheet_cols.push(column_of(&format!("Survival at the values{tail}"), &comment, Designation::Y, sy));
+            plots.push(GraphPlot {
+                x: x0,
+                y: x0 + 1,
+                kind: PlotKind::Line,
+                label: format!("{place}{tail}"),
+                line_of: None,
+            });
+        }
+        notes.push(format!(
+            "The graph adds the survival at {place}: the curve at the means to the power exp((x - mean)'b)."
+        ));
+    }
+    // Residuals (T457): per case and per failure, on the sheet.
+    if spec.residuals {
+        let comment = "Cox residuals";
+        sheet_cols.push(column_of("Row", comment, Designation::X, source_rows.clone()));
+        sheet_cols.push(column_of("Case time", comment, Designation::Y, t.clone()));
+        sheet_cols.push(column_of("Martingale residual", comment, Designation::Y, fit.martingale.clone()));
+        sheet_cols.push(column_of("Deviance residual", comment, Designation::Y, fit.deviance.clone()));
+        sheet_cols.push(column_of(
+            "Failure row",
+            "Schoenfeld residuals",
+            Designation::X,
+            fit.schoenfeld.iter().map(|(c, _)| source_rows[*c]).collect(),
+        ));
+        sheet_cols.push(column_of(
+            "Failure time",
+            "Schoenfeld residuals",
+            Designation::Y,
+            fit.schoenfeld.iter().map(|(c, _)| t[*c]).collect(),
+        ));
+        for (j, c) in xcs.iter().enumerate() {
+            sheet_cols.push(column_of(
+                &format!("Schoenfeld {}", column_label(c)),
+                "Schoenfeld residuals",
+                Designation::Y,
+                fit.schoenfeld.iter().map(|(_, r)| r[j]).collect(),
+            ));
+        }
+        notes.push(
+            "Residuals: martingale d - H0(t) exp(x'b), deviance sign(M) sqrt(-2 (M + d ln(d - M))) per case; Schoenfeld x - the risk-set mean of x per failure.".to_string(),
+        );
     }
     let graph = spec.graph.then(|| XyGraph {
         plots,
@@ -1161,6 +1248,34 @@ mod tests {
         assert!(run(&mut p, bad).is_err());
         let bad = LifeRegressionSpec { percentiles: vec![1.0], ..Default::default() };
         assert!(run(&mut p, bad).is_err());
+    }
+
+    #[test]
+    fn cox_residuals_and_a_curve_at_given_values() {
+        let mut p = Project::new();
+        let book = p.add_workbook("coxres");
+        let x: Vec<f64> = (0..30).map(|i| f64::from(i % 2)).collect();
+        let t: Vec<f64> = (0..30).map(|i| (5.0 + f64::from(i * 7 % 11)) / (1.0 + f64::from(i % 2))).collect();
+        let c: Vec<f64> = (0..30).map(|i| if i % 9 == 4 { 1.0 } else { 0.0 }).collect();
+        let cols: Vec<ColumnId> = [x, t, c]
+            .into_iter()
+            .map(|v| p.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap())
+            .collect();
+        let spec = CoxSpec { at: Some(vec![1.0]), residuals: true, ..Default::default() };
+        let out = p.analyze(&Request { columns: cols.clone(), rows: RowRange::All, tool: Tool::Cox(spec) }).unwrap();
+        let s = &p.workbook(book).unwrap().sheets[out.new_sheet.unwrap()];
+        let col = |name: &str| s.columns.iter().find(|c| c.long_name == name).unwrap().numeric().unwrap().to_vec();
+        let m = col("Martingale residual");
+        assert_eq!(m.len(), 30);
+        assert!(m.iter().sum::<f64>().abs() < 1e-9, "Breslow martingale residuals sum to 0");
+        let sch: Vec<f64> =
+            s.columns.iter().find(|c| c.long_name.starts_with("Schoenfeld ")).unwrap().numeric().unwrap().to_vec();
+        assert!(sch.iter().sum::<f64>().abs() < 1e-7 && sch.len() == 27, "{}", sch.len());
+        assert_eq!(col("Row")[0], 1.0);
+        let gc = super::super::dist::plot_columns(&p, out.new_graph.unwrap());
+        assert_eq!(gc.len(), 2, "the curve at the means and at A = 1");
+        let bad = CoxSpec { at: Some(vec![1.0, 2.0]), ..Default::default() };
+        assert!(p.analyze(&Request { columns: cols, rows: RowRange::All, tool: Tool::Cox(bad) }).is_err());
     }
 
     #[test]

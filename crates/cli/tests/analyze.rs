@@ -1617,6 +1617,12 @@ fn cox_regression_runs_from_the_command_line() {
     let sites = sites.to_str().unwrap();
     let (ok, out, err) = sheaf(&["analyze", "cox", sites, "--y", "group,months,cens,site", "--strata", "--no-graph"]);
     assert!(ok && out.contains("3 strata: east, north, south"), "{err} {out}");
+    // Residuals and a curve at given values (T457).
+    let (ok, out, err) =
+        sheaf(&["analyze", "cox", file, "--y", "group,months,cens", "--at", "1", "--residuals", "--no-graph"]);
+    assert!(ok && out.contains("survival at B: group = 1") && out.contains("Residuals: martingale"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "cox", file, "--y", "group,months,cens", "--at", "1,2"]);
+    assert!(!ok && err.contains("one value per covariate"), "{err}");
     let (ok, _, err) = sheaf(&["analyze", "cox", file, "--y", "months,cens"]);
     assert!(!ok && err.contains("covariate"), "{err}");
 }

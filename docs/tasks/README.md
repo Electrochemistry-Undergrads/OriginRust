@@ -347,6 +347,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T394](T394-life-data-frequency.md) | Frequency (count) column for the life-data tools (Origin 2026b) | S | done 2026-11-23 (statistics 49) |
 | [T408](T408-cox.md) | Cox proportional hazards regression with Breslow ties, hazard ratios and tests (Origin 2026b) | S | done 2026-11-23 (statistics 52) |
 | [T391](T391-life-data-regression.md) | Life data regression: Weibull, lognormal and exponential AFT models with censoring (Origin 2026b) | S | done 2026-11-23 (statistics 48) |
+| [T457](T457-cox-residuals.md) | Cox residuals (martingale, deviance, Schoenfeld) and survival at given covariates | S | done 2026-11-25 (statistics 52) |
 | [T452](T452-seasonal-auto.md) | ARIMA order search over the seasonal orders too | S | done 2026-11-25 (statistics 43) |
 | [T451](T451-cox-strata.md) | Stratified Cox regression with a survival curve per stratum | S | done 2026-11-25 (statistics 52) |
 | [T447](T447-prism-import.md) | Import GraphPad Prism XML files (.pzfx) | S | done 2026-11-25 (import-prism) |

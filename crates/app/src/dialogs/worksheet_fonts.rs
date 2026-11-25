@@ -279,9 +279,11 @@ impl WorksheetFontsDialog {
             }
             if cells.row_height != previous_cells.row_height {
                 sheet.view.cell_measurements.row_height = cells.row_height;
+                sheet.view.fitted_cells.clear_row_height();
             }
             if cells.column_width != previous_cells.column_width {
                 sheet.view.cell_measurements.column_width = cells.column_width;
+                sheet.view.fitted_cells.clear_column_width();
                 for column in &mut sheet.columns {
                     column.width = None;
                 }
@@ -333,6 +335,7 @@ impl WorksheetFontsDialog {
                 Some(automatic)
             };
         }
+        ui.checkbox(&mut self.shown_view.fit_sheet_to_window, "Fit Sheet to Window");
     }
 
     fn show_size(&mut self, ui: &mut egui::Ui, sheet: &Worksheet) {

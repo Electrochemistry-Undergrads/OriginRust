@@ -7,6 +7,7 @@
 
 use crate::{Column, Worksheet};
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroU32;
 
 /// One switch of the corner menu that Sheaf has.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -103,6 +104,42 @@ impl CellMeasurements {
     }
 }
 
+/// The last fitted body sizes, in sixty-fourths of a logical grid pixel.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FittedCells {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    row: Option<NonZeroU32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    column: Option<NonZeroU32>,
+}
+
+impl FittedCells {
+    pub fn new(row_height: Option<f32>, column_width: Option<f32>) -> Self {
+        let measure = |size: f32| NonZeroU32::new((size * 64.0).floor() as u32);
+        Self { row: row_height.and_then(measure), column: column_width.and_then(measure) }
+    }
+
+    pub fn row_height(self) -> Option<f32> {
+        self.row.map(|size| size.get() as f32 / 64.0)
+    }
+
+    pub fn column_width(self) -> Option<f32> {
+        self.column.map(|size| size.get() as f32 / 64.0)
+    }
+
+    pub fn clear_row_height(&mut self) {
+        self.row = None;
+    }
+
+    pub fn clear_column_width(&mut self) {
+        self.column = None;
+    }
+
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
 /// The sheet's display choices. Sampling Interval is automatic until toggled.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SheetView {
@@ -145,6 +182,10 @@ pub struct SheetView {
     /// An explicit Miscellaneous tab setting. Older fixed allocations stay fixed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_add_rows: Option<bool>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fit_sheet_to_window: bool,
+    #[serde(default, skip_serializing_if = "FittedCells::is_default")]
+    pub fitted_cells: FittedCells,
     #[serde(default, skip_serializing_if = "HeaderMeasurements::is_default")]
     pub header_measurements: HeaderMeasurements,
     #[serde(default, skip_serializing_if = "CellMeasurements::is_default")]
@@ -170,6 +211,8 @@ impl Default for SheetView {
             show_missing_as_blank: None,
             allocated_rows: None,
             auto_add_rows: None,
+            fit_sheet_to_window: false,
+            fitted_cells: FittedCells::default(),
             header_measurements: HeaderMeasurements::default(),
             cell_measurements: CellMeasurements::default(),
         }

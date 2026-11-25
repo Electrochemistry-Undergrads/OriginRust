@@ -1061,6 +1061,22 @@ step. An explicit smaller Row Number still trims the data to the
 requested row, and Auto Add Rows keeps enough blank rows for the
 current viewport. Row Number and Auto Add Rows changes apply in one Undo step.
 
+**Worksheet Properties Fit Sheet to Window (T59).** Origin 2016 fitted
+80 rows and 12 columns after a workbook resize. The displayed cells
+took equal widths and heights. Both headings and the column label rows
+kept their sizes. Clearing Fit kept the fitted sizes, including on
+later resizes. With Auto Add Rows also enabled, maximizing extended
+a three-data-row sheet from 14 to 31 allocated rows. The native default
+PNG used the fitted dimensions, and the default PDF went from four
+pages to one in the 80-row fixture.
+[Origin Worksheet Properties Miscellaneous tab](https://docs.originlab.com/origin-help/wksproperties-dialog-misc-tab/)
+
+Sheaf applies the fit when the switch is enabled and follows later
+viewport changes. It keeps the fitted sizes when the switch is cleared.
+The stored sizes also drive worksheet image and PDF geometry.
+Scroll remains available on an axis if a long sheet reaches the
+one-pixel minimum on that axis.
+
 Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
 The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,
 Dynamic Merge, per-cell numeric display/precision selectors and a Font selector. In this new book,

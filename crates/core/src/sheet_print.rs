@@ -158,7 +158,12 @@ impl<'a> SheetTable<'a> {
         heading_formats: bool,
     ) -> Self {
         let measurements = sheet.view.cell_measurements;
-        let uniform_height = measurements.row_height.map(|p| (style.row_h * f64::from(p) / 100.0).max(0.75));
+        let uniform_height = sheet
+            .view
+            .fitted_cells
+            .row_height()
+            .map(|pixels| f64::from(pixels) * 0.75)
+            .or_else(|| measurements.row_height.map(|p| (style.row_h * f64::from(p) / 100.0).max(0.75)));
         let scale = f64::from(sheet.font_defaults.size_scale());
         style.row_h *= scale;
         style.rownum_w *= scale;
@@ -282,10 +287,13 @@ impl<'a> SheetTable<'a> {
             self.sheet.view.cell_measurements.column_width.map_or(standard, |p| {
                 standard / f64::from(self.sheet.font_defaults.size_scale()) * f64::from(p) / 100.0
             });
+        let fitted = self.sheet.view.fitted_cells.column_width().map(|pixels| f64::from(pixels) * 0.75);
         self.cols
             .iter()
-            .map(|&c| self.sheet.columns[c].width.map_or(default_width, |width| f64::from(width) * k))
-            .map(|width| width.max(self.style.narrowest_col_w))
+            .map(|&c| match self.sheet.columns[c].width {
+                Some(width) => (f64::from(width) * k).max(self.style.narrowest_col_w),
+                None => fitted.unwrap_or_else(|| default_width.max(self.style.narrowest_col_w)),
+            })
             .collect()
     }
 
@@ -471,7 +479,8 @@ impl<'a> SheetTable<'a> {
             ));
         }
         // Body: row numbers and the cells as the sheet shows them.
-        let fixed_height = self.sheet.view.cell_measurements.row_height.is_some();
+        let fixed_height = self.sheet.view.cell_measurements.row_height.is_some()
+            || self.sheet.view.fitted_cells.row_height().is_some();
         for &r in &rows {
             let top = row_top(r);
             let height = self.row_heights.height(r);
@@ -696,6 +705,32 @@ mod tests {
         let ops = table.draw_page(slot, 1);
         assert!(ops.iter().any(|op| matches!(op, PrintOp::Text { text, .. } if text == "Height")));
         assert!(!ops.iter().any(|op| matches!(op, PrintOp::Text { text, .. } if text == "2.5")));
+    }
+
+    #[test]
+    fn saved_fitted_measurements_contract_image_and_pdf_geometry() {
+        use crate::sheet_view::FittedCells;
+
+        let mut sheet = Worksheet::new("Sheet1");
+        for i in 1..=8 {
+            sheet.columns.push(Column::new(ColumnId(i), "Data", Designation::Y, ColumnData::numeric(vec![2.5; 80])));
+        }
+        let style = PrintStyle::default();
+        assert!(SheetTable::new(&sheet, style).pages(300.0, 450.0).len() > 1);
+
+        // Turning off Fit leaves its last measurements in place.
+        sheet.view.fitted_cells = FittedCells::new(Some(2.75), Some(22.5));
+        let fitted = sheet.view.fitted_cells;
+        sheet.view = serde_json::from_str(&serde_json::to_string(&sheet.view).unwrap()).unwrap();
+        assert_eq!(sheet.view.fitted_cells, fitted);
+        assert_eq!(sheet.row_count(), 80);
+        let table = SheetTable::new(&sheet, style);
+        assert_eq!(table.column_widths(), [16.875; 8]);
+        assert_eq!(table.row_heights.height(0), 2.0625);
+        assert_eq!(table.pages(300.0, 450.0).len(), 1);
+        let image = SheetTable::with_image_metrics(&sheet, style, &|_, size| size);
+        assert_eq!(image.column_widths(), table.column_widths());
+        assert_eq!(image.row_heights.height(0), table.row_heights.height(0));
     }
 
     #[test]

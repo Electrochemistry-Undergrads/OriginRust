@@ -13,7 +13,8 @@
 //!
 //! Sheaf's choices (Origin 2019 not measured here): formulas that read other formula cells are worked out in up to
 //! ten passes, so chains settle; a formula that cannot be read or run leaves its cell empty; typing a value over the
-//! cell drops its formula; moving rows or columns does not move the formulas (as cell links).
+//! cell drops its formula. A formula cell moves with its row when rows are inserted, deleted or sorted (T462; its
+//! formula text stays as typed, so its references do not follow other moved cells).
 
 use crate::cell_links::{Value, write};
 use crate::ids::ColumnId;
@@ -200,6 +201,49 @@ fn range_end(
     (l2 == letters).then_some((row2, end2))
 }
 
+impl crate::worksheet::Worksheet {
+    /// Moves the formula cells of these columns for `count` rows inserted before row `at` (T462).
+    pub(crate) fn formulas_insert_rows(&mut self, columns: &[ColumnId], at: usize, count: usize) {
+        for f in &mut self.cell_formulas {
+            if columns.contains(&f.column) && f.row >= at {
+                f.row += count;
+            }
+        }
+    }
+
+    /// Drops the formulas on the deleted `rows` of these columns and moves up those below (T462).
+    pub(crate) fn formulas_delete_rows(&mut self, columns: &[ColumnId], rows: std::ops::Range<usize>) {
+        self.cell_formulas.retain(|f| !(columns.contains(&f.column) && rows.contains(&f.row)));
+        for f in &mut self.cell_formulas {
+            if columns.contains(&f.column) && f.row >= rows.end {
+                f.row -= rows.len();
+            }
+        }
+    }
+
+    /// Puts the formula cells of these columns in the order `order` (new row i takes old row `order[i]`); formulas
+    /// on rows not in `order` are dropped (T462).
+    pub(crate) fn formulas_reorder_rows(&mut self, columns: &dyn Fn(ColumnId) -> bool, order: &[usize], rows: usize) {
+        if self.cell_formulas.is_empty() {
+            return;
+        }
+        let mut new_row = std::collections::HashMap::new();
+        for (i, src) in order.iter().enumerate() {
+            new_row.entry(*src).or_insert(i);
+        }
+        let old = std::mem::take(&mut self.cell_formulas);
+        self.cell_formulas = old
+            .into_iter()
+            .filter_map(|mut f| {
+                if columns(f.column) && f.row < rows {
+                    f.row = *new_row.get(&f.row)?;
+                }
+                Some(f)
+            })
+            .collect();
+    }
+}
+
 impl Project {
     /// The formula of a cell, if it has one.
     pub fn cell_formula(&self, column: ColumnId, row: usize) -> Option<&str> {
@@ -359,6 +403,13 @@ mod tests {
         assert_eq!(p.fill_cell_formula_down(d, 0, 2).unwrap(), 2);
         assert_eq!(p.cell_formula(d, 2), Some("A3*$A$1"));
         assert_eq!(texts(&p, d), ["1", "2", "10"]);
+        // Rows move (T462): a row inserted above moves the formula cell down; deleting it moves it back.
+        let sheet = &mut p.workbook_mut(b).unwrap().sheets[0];
+        sheet.insert_rows(&[0, 1, 2], 0, 1);
+        assert_eq!(p.cell_formula(d, 3), Some("A3*$A$1"), "row 3 became row 4");
+        let sheet = &mut p.workbook_mut(b).unwrap().sheets[0];
+        sheet.delete_rows(&[0, 1, 2], 0..1);
+        assert_eq!(p.cell_formula(d, 2), Some("A3*$A$1"));
         // Typed over: the value stays, the formula goes.
         assert!(p.drop_cell_formula(c, 0));
         assert!(p.cell_formula(c, 0).is_none());

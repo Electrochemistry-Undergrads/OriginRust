@@ -6430,6 +6430,21 @@ defaults to off in older Sheaf projects and persists in `.sheaf` and the
 settings keep their effect.
 [Origin Plot Details guide](https://docs.originlab.com/origin-help/pd-dialog-display-speed-tab/)
 
+### 22.11 View > Show > Axis Layer Icons (T66, Origin 2016, measured 2026-11-24)
+
+On a double-Y graph, command 33097 added badges labelled 1 to the left Y and bottom X
+axes and 2 to the right Y axis. Clicking the right badge made layer 2 active. Turning
+off the numbered layer row through the Layer Icons command left the badges visible.
+A second graph kept its setting and saving and reopening the OPJ kept the badges.
+The EMF exports with badges on and off drawn from the same graph had identical text
+and drawing records. The flag is stored in the graph window header (opj-format 10.1).
+
+Sheaf starts with this switch off and saves it per graph in `.sheaf` and `.opj`.
+The View menu toggle is undoable. The graph window draws the buttons at the midpoints
+of the visible Cartesian axis lines. Each button activates the layer that owns
+its axis and works with the numbered layer row hidden. Print and export use the
+same graph scene with the switch on or off.
+
 ## 23. View > Zoom All and the Tools-bar Scale In / Scale Out (T69, measured 2026-11-15, Origin 2016)
 
 Measured in OriginPro 2016 on our own synthetic data (X = 1 to 10, Y = 2X+1 and 20-X, Line + Symbol graph; one run with a right-Y layer from `layadd type:=righty`; one with both axes logarithmic; a 4-graph project), a 1024x768 Origin window, drags and clicks sent by `tools/origin-ref/origin-dialog.ps1 -NoDialog` with `-AfterFile` (`@DRAG`, `@CLICK`, `@DCLICK`, `@KEYDOWN`, `@SHOT`, `@CURSOR`) and the axis ends read after each action with `?layer.x.from` / `.to` / `layer.y.from` / `.to` (raw outputs and pictures are local: `re-workspace/scratch/t69/`, `*.out.txt`, `*.png`). Anything not listed is **unmeasured**.

@@ -198,6 +198,47 @@ fn active_layer_indicator_is_a_saved_page_switch_with_undo_and_identical_graph_o
 }
 
 #[test]
+fn axis_layer_icons_select_the_axis_owner_and_are_saved_per_graph() {
+    let mut h = start(vec![data_file("view-axis-layer-icons")]);
+    let first = graph(&h).id;
+    let other = h.state_mut().doc.apply("Two layers and a second graph", |p| {
+        let g = p.graph_mut(first).unwrap();
+        let right = g.add_layer(sheaf_core::layers::NewLayerKind::RightY, 0).unwrap();
+        g.layers[right].plots = g.layers[0].plots.clone();
+        p.add_graph(Template::Line)
+    });
+    show_window(&mut h, "Graph1 - sample");
+    menu_path(&mut h, &["View", "Show", "Layer Icons"]);
+    let picture = sheaf_plot::graph_scene(project(&h), first).unwrap();
+    let right_badge = "Select layer 2 from Y axis";
+    assert!(h.query_by_label(right_badge).is_none());
+
+    menu_path(&mut h, &["View", "Show", "Axis Layer Icons"]);
+    assert!(h.state().menu_context().axis_layer_icons);
+    assert!(!project(&h).graph(first).unwrap().page.style.layer_icons);
+    assert!(!project(&h).graph(other).unwrap().page.style.axis_layer_icons);
+    assert_eq!(sheaf_plot::graph_scene(project(&h), first).unwrap(), picture);
+    assert_eq!(h.state().doc.undo_label(), Some("Show Axis Layer Icons"));
+    assert!(has_label(&h, "Select layer 1 from X axis"));
+    assert!(has_label(&h, "Select layer 1 from Y axis"));
+    assert_eq!(h.state().graphs[&first].active_layer, 0);
+    click(&mut h, right_badge);
+    assert_eq!(h.state().graphs[&first].active_layer, 1);
+
+    let path = save_dir("view-axis-layer-icons").join("axis-icons.sheaf");
+    sheaf_io::save::save_project(project(&h), &path).unwrap();
+    let reopened = sheaf_io::open_project(&path).unwrap().project;
+    assert!(reopened.graph(first).unwrap().page.style.axis_layer_icons);
+    assert!(!reopened.graph(other).unwrap().page.style.axis_layer_icons);
+    menu(&mut h, "Edit", "Undo");
+    assert!(!h.state().menu_context().axis_layer_icons);
+    assert!(h.query_by_label(right_badge).is_none());
+    menu(&mut h, "Edit", "Redo");
+    assert!(h.state().menu_context().axis_layer_icons);
+    assert!(has_label(&h, right_badge));
+}
+
+#[test]
 fn full_screen_shows_the_reminder_first_and_escape_ends_it() {
     let mut h = start(vec![data_file("vm-full")]);
     menu_path(&mut h, &["View", "Full Screen"]);

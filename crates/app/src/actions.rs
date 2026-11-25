@@ -1540,4 +1540,5 @@ pub enum PageSwitch {
     ActivateByIconOnly,
     IconDoubleClickPlotSetup,
     ActiveLayerIndicator,
+    AxisLayerIcons,
 }

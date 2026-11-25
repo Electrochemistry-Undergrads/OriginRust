@@ -9,7 +9,7 @@ that fails shows `[link error: ...]`. Sheaf's own design (Origin 2016's Notes wi
 
 ## Left
 
-- Reusing a report over a batch of files, figures drawn inside the Preview, links to fit report values by name,
+- Reusing a report over a batch of files (figures in the Preview: T459), links to fit report values by name,
   metadata links (long name, units), and rich text (bold, lists, tables) in the HTML.
 
 ## Tests

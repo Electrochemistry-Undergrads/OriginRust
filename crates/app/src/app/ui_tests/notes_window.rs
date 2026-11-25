@@ -334,6 +334,9 @@ fn a_report_previews_its_links_and_exports_html_with_the_graph() {
     settle(&mut h);
     h.get_by_label("Peak: 7.5 mA");
     h.get_by_label("The run");
+    // The figure is the graph drawn (T459), named for screen readers.
+    let graph_name = project(&h).graphs().next().unwrap().name.clone();
+    assert!(h.query_by_label(&format!("Figure: {graph_name}")).is_some(), "the figure's picture");
     let dir = std::env::temp_dir().join(format!("sheaf-app-ui-report-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();

@@ -15,6 +15,36 @@ pub struct NotesUi {
     editing: Option<(String, String)>,
     /// Showing the resolved report instead of the text box (T439).
     pub preview: bool,
+    /// The pictures of the Preview's figures (T459): per graph, the project revision and width they were drawn for.
+    figures: std::collections::HashMap<WindowId, (u64, u32, egui::TextureHandle)>,
+}
+
+/// The widest a figure is drawn in the Preview, in points.
+const FIGURE_WIDTH: f32 = 480.0;
+
+/// Graph `graph` drawn `width` points wide, kept until the project or the width changes.
+fn figure_texture(
+    ui: &egui::Ui,
+    doc: &Document,
+    graph: WindowId,
+    width: f32,
+    cache: &mut std::collections::HashMap<WindowId, (u64, u32, egui::TextureHandle)>,
+) -> Option<egui::TextureHandle> {
+    let key = width.round() as u32;
+    if let Some((rev, w, t)) = cache.get(&graph)
+        && *rev == doc.revision()
+        && *w == key
+    {
+        return Some(t.clone());
+    }
+    let page = doc.project().graph(graph)?.page.width_pt;
+    let scale = f64::from(width) * f64::from(ui.ctx().pixels_per_point()) / page.max(1.0);
+    let scene = sheaf_plot::graph_scene(doc.project(), graph).ok()?;
+    let raster = sheaf_plot::render_scene_raster(&scene, scale).ok()?;
+    let image = egui::ColorImage::from_rgba_unmultiplied([raster.width as usize, raster.height as usize], &raster.rgba);
+    let texture = ui.ctx().load_texture(format!("report-figure-{}", graph.0), image, egui::TextureOptions::LINEAR);
+    cache.insert(graph, (doc.revision(), key, texture.clone()));
+    Some(texture)
 }
 
 /// Writes the report of Notes window `id` to `path`: Markdown for a `.md` or `.markdown` name, else HTML. Each
@@ -44,7 +74,7 @@ pub fn export_report(project: &sheaf_core::Project, id: WindowId, path: &std::pa
 }
 
 /// The report, resolved, as it will read.
-fn preview(ui: &mut egui::Ui, doc: &Document, id: WindowId) {
+fn preview(ui: &mut egui::Ui, doc: &Document, id: WindowId, state: &mut NotesUi) {
     use sheaf_core::report::ReportPart;
     let Some(notes) = doc.project().notes_window(id) else { return };
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
@@ -63,10 +93,18 @@ fn preview(ui: &mut egui::Ui, doc: &Document, id: WindowId) {
                 }
                 ReportPart::Figure { name, graph, caption } => {
                     egui::Frame::group(ui.style()).show(ui, |ui| {
-                        ui.label(match graph {
-                            Some(_) => format!("Figure: {name}"),
-                            None => format!("Figure: no graph is called {name}"),
-                        });
+                        // The graph itself (T459), as wide as the window allows up to FIGURE_WIDTH.
+                        let width = ui.available_width().clamp(120.0, FIGURE_WIDTH);
+                        match graph.and_then(|g| figure_texture(ui, doc, g, width, &mut state.figures)) {
+                            Some(t) => {
+                                let [w, h] = t.size();
+                                let size = egui::vec2(width, width * h as f32 / w.max(1) as f32);
+                                ui.add(egui::Image::new((t.id(), size)).alt_text(format!("Figure: {name}")));
+                            }
+                            None => {
+                                ui.label(format!("Figure: no graph is called {name}"));
+                            }
+                        }
                         ui.label(egui::RichText::new(caption).italics());
                     });
                 }
@@ -85,7 +123,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, id: WindowId, state: &mut NotesUi
         }
     });
     if state.preview {
-        preview(ui, doc, id);
+        preview(ui, doc, id, state);
         return;
     }
     // An undo or redo that changed the text meanwhile wins over what was typed before it.

@@ -65,12 +65,13 @@ Origin 2016's Notes window has no links. In Sheaf a Notes window's text is the r
   `[link error: <the formula's message>]` in its place. `$` or `%` not followed by `(` is plain text.
 - **Figures:** a line that is only `![caption](Graph1)` is graph Graph1 (short name, ignoring case) as a figure.
 - **Preview:** the Notes window has Edit and Preview above its text. Preview shows the report resolved, so the
-  values follow the project: `# ` lines as headings, `## ` and `### ` lines bold, a figure as a box with
-  "Figure: Graph1" (or "Figure: no graph is called X") and its caption in italics.
+  values follow the project: `# ` lines as headings, `## ` and `### ` lines bold, a figure as a box with the graph
+  drawn in it (T459; as wide as the window allows, at most 480 points, redrawn when the project changes) or "Figure:
+  no graph is called X", and its caption in italics.
 - **Export Report...:** asks for a file (Web page `.html`, or Markdown `.md`). The figures' graphs are written beside
   it as `<file name>_<graph>.png` at 150 dpi. The HTML has the window's title, `#`/`##`/`###` headings, paragraphs
   split by blank lines (lines joined with line breaks), escaped text and each figure as an image with its caption.
   The Markdown is the resolved text with the figure lines pointing at the PNG files.
-- **Not done:** reusing a report over a batch of files, figures drawn inside the Preview, links by fit-report
-  name, metadata links, and rich text in the HTML.
+- **Not done:** reusing a report over a batch of files, links by fit-report name, metadata links, and rich text in
+  the HTML.
 

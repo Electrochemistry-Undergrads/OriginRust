@@ -343,6 +343,8 @@ pub enum Cmd {
     FindInSheets,
     /// Edit > Find in Project (F3, T95).
     FindInProject,
+    /// View > Project Browser (T433).
+    ProjectBrowser,
     /// File > Find in Project Files... (T361).
     FindInProjectFiles,
     /// File > Export > Worksheet as Image... (T97).
@@ -502,6 +504,8 @@ pub enum Cmd {
     Refresh,
     SetAs(Designation),
     SetColumnValues,
+    /// Column > Flash Fill... (T430).
+    FlashFill,
     /// Column > Set Multiple Columns Values... (Ctrl+Shift+Q): two or more selected columns.
     SetMultipleColumnsValues,
     Recalculate,
@@ -647,6 +651,7 @@ pub enum Cmd {
     /// View > Show > Layer Icons.
     ToggleLayerIcons,
     ToggleActiveLayerIndicator,
+    ToggleAxisLayerIcons,
     ToggleLayerFrame,
     /// Data > Lock Position (T186): where the graph's analysis locks are drawn.
     LockPosition(sheaf_core::graph::LockPosition),
@@ -967,6 +972,7 @@ pub struct MenuContext<'a> {
     pub layer_icons: bool,
     /// Whether View > Show > Active Layer Indicator is checked for this graph.
     pub active_layer_indicator: bool,
+    pub axis_layer_icons: bool,
     /// The active Cartesian layer's plot frame. None disables the command.
     pub show_frame: Option<bool>,
     /// The active graph's Lock Position (the tick of Data > Lock Position, T186).
@@ -1465,6 +1471,7 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
     v.push(grey_keyed("Code Builder", alt(Key::Num4)));
     v.push(grey_keyed("Quick Help", alt(Key::Num5)));
     v.push(keyed("Project Explorer", alt(Key::Num1), Cmd::Panel(PanelId::Explorer)));
+    v.push(item("Pro&ject Browser", Cmd::ProjectBrowser));
     if kind == WindowKind::Graph {
         v.push(keyed("Object Manager", alt(Key::Num8), Cmd::Panel(PanelId::Objects)));
     }
@@ -1502,8 +1509,9 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
             let mut show = vec![
                 item("Layer Icons", Cmd::ToggleLayerIcons),
                 item("Active Layer Indicator", Cmd::ToggleActiveLayerIndicator),
+                item("Axis Layer Icons", Cmd::ToggleAxisLayerIcons),
             ];
-            show.extend(greys(&["Axis Layer Icons", "-", "Object Grid", "Layer Grid", "-"]));
+            show.extend(greys(&["-", "Object Grid", "Layer Grid", "-"]));
             show.push(item("Frame", Cmd::ToggleLayerFrame));
             show.push(item("Labels", Cmd::ToggleShowLabels));
             show.push(item("Data", Cmd::ToggleShowData));
@@ -1821,6 +1829,7 @@ fn column_menu() -> Vec<Entry> {
         keyed("Set Multiple Columns Values...", ctrl_shift(Key::Q), Cmd::SetMultipleColumnsValues),
         // Origin has this as a toolbar button and in the column's right-click menu.
         item("Re&calculate", Cmd::Recalculate),
+        item("Flash Fill...", Cmd::FlashFill),
         sub(
             "Fill Column With",
             vec![
@@ -3663,6 +3672,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::AcceptanceSampling => Action::AcceptanceSampling,
         Cmd::FindInSheets => Action::FindInSheets(book?),
         Cmd::FindInProject => Action::FindInProject,
+        Cmd::ProjectBrowser => Action::ProjectBrowser,
         Cmd::FindInProjectFiles => Action::FindInProjectFiles,
         Cmd::ReplaceInSheets => Action::ReplaceInSheets(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),
@@ -3788,6 +3798,10 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::SetColumnValues => {
             book?;
             Action::SetColumnValues(one()?)
+        }
+        Cmd::FlashFill => {
+            book?;
+            Action::FlashFill(one()?)
         }
         Cmd::SetMultipleColumnsValues => {
             book?;
@@ -4088,6 +4102,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             graph: c.graph.ok_or(NEED_GRAPH)?,
             switch: crate::actions::PageSwitch::ActiveLayerIndicator,
             on: !c.active_layer_indicator,
+        },
+        Cmd::ToggleAxisLayerIcons => Action::SetPageSwitch {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            switch: crate::actions::PageSwitch::AxisLayerIcons,
+            on: !c.axis_layer_icons,
         },
         Cmd::ToggleLayerFrame => Action::SetLayerFrame {
             graph: c.graph.ok_or(NEED_GRAPH)?,
@@ -4437,6 +4456,9 @@ fn show_entries(
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleActiveLayerIndicator)) && c.active_layer_indicator {
+                    tick(ui, &response);
+                }
+                if matches!(it.cmd, Some(Cmd::ToggleAxisLayerIcons)) && c.axis_layer_icons {
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleLayerFrame)) && c.show_frame == Some(true) {
@@ -4856,6 +4878,7 @@ mod tests {
             view_mode: Default::default(),
             layer_icons: true,
             active_layer_indicator: false,
+            axis_layer_icons: false,
             show_frame: None,
             lock_position: Default::default(),
             page_breaks: false,

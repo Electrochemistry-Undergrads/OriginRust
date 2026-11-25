@@ -181,6 +181,7 @@ static TABLE: &[(&str, Func)] = &[
     ("trim", Func::Str(StrFn::Trim)),
     ("find", Func::Str(StrFn::Find)),
     ("numextract", Func::Str(StrFn::NumExtract)),
+    ("token", Func::Str(StrFn::Token)),
     ("numbreak", Func::Str(StrFn::NumBreak)),
     ("search", Func::Str(StrFn::Search)),
     ("replace", Func::Str(StrFn::Replace)),

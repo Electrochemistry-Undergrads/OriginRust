@@ -1388,3 +1388,17 @@ fn a_named_block_takes_every_cell_of_its_columns_in_statistics() {
     let vector = one("cumsum(Blk)").unwrap_err().to_string();
     assert!(vector.contains("block of several columns"), "{vector}");
 }
+
+#[test]
+fn token_takes_the_nth_word_from_either_end() {
+    // T430 (Sheaf's own): words are runs of letters and digits.
+    assert_eq!(ev_text(r#"token("Smith, John A.", 2)"#), "John");
+    assert_eq!(ev_text(r#"token("Smith, John A.", -1)"#), "A");
+    assert_eq!(ev_text(r#"token("2024-03-17", 2)"#), "03");
+    assert_eq!(ev_text(r#"token("a b", 3)"#), "", "no third word");
+    assert_eq!(ev_text(r#"token("a b", 0)"#), "");
+    assert_eq!(
+        ev_text(r#"upper(left(token("ada lovelace", 1), 1)) + ". " + token("ada lovelace", -1)"#),
+        "A. lovelace"
+    );
+}

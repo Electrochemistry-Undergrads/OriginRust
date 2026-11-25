@@ -95,6 +95,8 @@ pub struct CoxSpec {
     pub at: Option<Vec<f64>>,
     /// Write the martingale, deviance and Schoenfeld residuals (T457).
     pub residuals: bool,
+    /// Test the proportional-hazards assumption (T458).
+    pub ph_test: bool,
 }
 
 impl Default for CoxSpec {
@@ -108,6 +110,7 @@ impl Default for CoxSpec {
             strata: false,
             at: None,
             residuals: false,
+            ph_test: false,
         }
     }
 }
@@ -729,6 +732,20 @@ pub(super) fn run_cox(
             "The graph adds the survival at {place}: the curve at the means to the power exp((x - mean)'b)."
         ));
     }
+    if spec.ph_test {
+        let test = fit.ph_test();
+        let each: Vec<String> = xcs
+            .iter()
+            .zip(&test.per_covariate)
+            .map(|(c, (stat, p))| format!("{} chi-square {} (Prob {})", column_label(c), num(*stat), num(*p)))
+            .collect();
+        notes.push(format!(
+            "Proportional hazards (Grambsch-Therneau, scaled Schoenfeld residuals against the rank of the failure time): {}; global chi-square {} ({k} df, Prob {}).",
+            each.join("; "),
+            num(test.global.0),
+            num(test.global.1)
+        ));
+    }
     // Residuals (T457): per case and per failure, on the sheet.
     if spec.residuals {
         let comment = "Cox residuals";
@@ -1274,6 +1291,10 @@ mod tests {
         assert_eq!(col("Row")[0], 1.0);
         let gc = super::super::dist::plot_columns(&p, out.new_graph.unwrap());
         assert_eq!(gc.len(), 2, "the curve at the means and at A = 1");
+        // The proportional-hazards test (T458).
+        let ph = CoxSpec { ph_test: true, graph: false, ..Default::default() };
+        let out = p.analyze(&Request { columns: cols.clone(), rows: RowRange::All, tool: Tool::Cox(ph) }).unwrap();
+        assert!(out.notes.iter().any(|n| n.starts_with("Proportional hazards (Grambsch-Therneau")), "{:?}", out.notes);
         let bad = CoxSpec { at: Some(vec![1.0, 2.0]), ..Default::default() };
         assert!(p.analyze(&Request { columns: cols, rows: RowRange::All, tool: Tool::Cox(bad) }).is_err());
     }

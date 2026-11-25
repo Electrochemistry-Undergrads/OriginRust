@@ -1621,6 +1621,8 @@ fn cox_regression_runs_from_the_command_line() {
     let (ok, out, err) =
         sheaf(&["analyze", "cox", file, "--y", "group,months,cens", "--at", "1", "--residuals", "--no-graph"]);
     assert!(ok && out.contains("survival at B: group = 1") && out.contains("Residuals: martingale"), "{err} {out}");
+    let (ok, out, err) = sheaf(&["analyze", "cox", file, "--y", "group,months,cens", "--ph-test", "--no-graph"]);
+    assert!(ok && out.contains("Grambsch-Therneau") && out.contains("global chi-square"), "{err} {out}");
     let (ok, _, err) = sheaf(&["analyze", "cox", file, "--y", "group,months,cens", "--at", "1,2"]);
     assert!(!ok && err.contains("one value per covariate"), "{err}");
     let (ok, _, err) = sheaf(&["analyze", "cox", file, "--y", "months,cens"]);

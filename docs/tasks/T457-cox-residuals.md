@@ -8,7 +8,7 @@ in Origin.
 
 ## Left
 
-- The proportional-hazards test on the scaled Schoenfeld residuals, score and dfbeta residuals, residual plots.
+- The proportional-hazards test is T458. Score and dfbeta residuals, residual plots.
 
 ## Tests
 

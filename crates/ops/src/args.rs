@@ -3829,6 +3829,9 @@ pub enum AnalyzeTool {
         /// Write the martingale, deviance and Schoenfeld residuals.
         #[arg(long)]
         residuals: bool,
+        /// Test the proportional-hazards assumption (Grambsch-Therneau).
+        #[arg(long)]
+        ph_test: bool,
         /// The last --y column holds each row's frequency (count).
         #[arg(long)]
         frequency: bool,

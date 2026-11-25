@@ -24,6 +24,11 @@
 //! sqrt(-2 (M + d ln(d - M)))`; the Schoenfeld residual of a failure is `x_i` minus the risk-set mean of `x` at its
 //! time (Efron: the mean of the `d` stepped means of its tie group). The survival at covariates `x` is the curve at
 //! the means raised to `exp((x - mean)'b)`.
+//!
+//! **Proportional-hazards test** (T458): Grambsch and Therneau's test on the scaled Schoenfeld residuals against `g`,
+//! the rank of the failure time among the failures (ties share their mean rank). With `U = sum (g_k - mean g) r_k`
+//! over the `d` failures, `V` the covariance of `b` and `S = sum (g_k - mean g)^2`: covariate `j` has `d (V U)_j^2 /
+//! (V_jj S)` on 1 degree of freedom, all together `d U' V U / S` on `p`.
 
 use crate::stability::invert;
 use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
@@ -58,9 +63,61 @@ pub struct Cox {
     pub deviance: Vec<f64>,
     /// Per failure, in time order within strata: the case index and its Schoenfeld residuals (one per covariate).
     pub schoenfeld: Vec<(usize, Vec<f64>)>,
+    /// The failure time of each Schoenfeld residual (T458).
+    pub schoenfeld_times: Vec<f64>,
+    /// The covariance of the coefficients, the inverse information (T458).
+    pub cov: Vec<Vec<f64>>,
+}
+
+/// The proportional-hazards test (T458): `(chi-square, p)` per covariate and for all of them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PhTest {
+    pub per_covariate: Vec<(f64, f64)>,
+    pub global: (f64, f64),
 }
 
 impl Cox {
+    /// Grambsch and Therneau's proportional-hazards test against the rank of the failure times (T458).
+    pub fn ph_test(&self) -> PhTest {
+        let p = self.coefficients.len();
+        let d = self.schoenfeld.len();
+        // Mean ranks of the failure times (ties share theirs).
+        let mut idx: Vec<usize> = (0..d).collect();
+        idx.sort_by(|&a, &b| self.schoenfeld_times[a].total_cmp(&self.schoenfeld_times[b]));
+        let mut g = vec![0.0; d];
+        let mut k = 0;
+        while k < d {
+            let mut end = k;
+            while end < d && self.schoenfeld_times[idx[end]] == self.schoenfeld_times[idx[k]] {
+                end += 1;
+            }
+            let rank = (k + end + 1) as f64 / 2.0;
+            for &i in &idx[k..end] {
+                g[i] = rank;
+            }
+            k = end;
+        }
+        let mean = g.iter().sum::<f64>() / d as f64;
+        let s: f64 = g.iter().map(|v| (v - mean).powi(2)).sum();
+        let mut u = vec![0.0; p];
+        for ((_, r), gk) in self.schoenfeld.iter().zip(&g) {
+            for j in 0..p {
+                u[j] += (gk - mean) * r[j];
+            }
+        }
+        let vu: Vec<f64> = (0..p).map(|i| (0..p).map(|j| self.cov[i][j] * u[j]).sum()).collect();
+        let df = d as f64;
+        let chi = |stat: f64, k: usize| ChiSquared::new(k as f64).map_or(f64::NAN, |c| c.sf(stat.max(0.0)));
+        let per_covariate = (0..p)
+            .map(|j| {
+                let stat = df * vu[j] * vu[j] / (self.cov[j][j] * s);
+                (stat, chi(stat, 1))
+            })
+            .collect();
+        let global = df * u.iter().zip(&vu).map(|(a, b)| a * b).sum::<f64>() / s;
+        PhTest { per_covariate, global: (global, chi(global, p)) }
+    }
+
     /// The survival curve of each stratum at covariates `x` (T457): the curve at the means to the power `exp((x -
     /// mean)'b)`.
     pub fn survival_at(&self, x: &[f64]) -> Vec<(Vec<f64>, Vec<f64>)> {
@@ -411,7 +468,9 @@ pub fn cox_stratified(
         means,
         martingale,
         deviance,
+        schoenfeld_times: schoenfeld.iter().map(|(c, _)| t[*c]).collect(),
         schoenfeld,
+        cov,
     })
 }
 

@@ -2399,7 +2399,7 @@ Statistics > Monte Carlo Simulation (Randomize Inputs)... (CLI `analyze monte-ca
 Origin 2026b's reliability and survival tools add Cox regression, which Origin 2016 does not have, so this is
 Sheaf's own. Statistics > Survival Analysis > Cox Proportional Hazards... (`Tool::Cox`, `sheaf analyze cox --y
 COV[,COV..],TIME,CENSOR[,STRATA] [--censor 1] [--confidence 95] [--ties breslow|efron] [--strata] [--at V[,V..]]
-[--residuals] [--no-graph]`,
+[--residuals] [--ph-test] [--no-graph]`,
 `sheaf_calc::cox`): the chosen columns are
 numeric covariates, then the time and the censor column (a case is right-censored when its cell equals the censoring
 value, as for the Kaplan-Meier estimator); rows with a missing value are left out. The hazard is `h0(t) exp(x'b)`; `b`
@@ -2428,8 +2428,13 @@ including `t`, Breslow's or Efron's increments) and the deviance residual `sign(
 failure (Failure row, Failure time) the Schoenfeld residual of each covariate, `x` minus the risk-set mean of `x` at its
 time (Efron: the mean of the `d` stepped means of its tie group). `--at` (the window's "Also the survival at
 covariates") adds the survival curve at those covariate values, the curve at the means raised to `exp((x - mean)'b)`,
-per stratum. Residuals checked against numpy for the six reference cases to 1e-6. Time-varying covariates, text
-(factor) covariates and the proportional-hazards test are not built.
+per stratum. Residuals checked against numpy for the six reference cases to 1e-6. **Proportional-hazards test** (T458;
+`--ph-test`, the window's "Test proportional hazards"): Grambsch and Therneau's test on the scaled Schoenfeld residuals
+against `g`, the rank of each failure time among the failures (ties share their mean rank): with `U = sum (g - mean g)
+r` over the `d` failures, `V` the coefficients' covariance and `S = sum (g - mean g)^2`, each covariate has `d (V U)_j^2
+/ (V_jj S)` on 1 df and all together `d U'VU / S` on `p` df; a note lists them. Checked against numpy/scipy for the six
+reference cases to 1e-6. Other time transforms (Kaplan-Meier, identity), time-varying covariates and text (factor)
+covariates are not built.
 
 ## 53 Turnbull nonparametric estimate with arbitrary censoring (T409, Origin 2026b; not measured)
 

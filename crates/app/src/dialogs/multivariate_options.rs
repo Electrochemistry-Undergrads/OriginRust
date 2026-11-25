@@ -413,6 +413,7 @@ impl MultiOptions {
                 });
                 ui.checkbox(&mut s.strata, "A strata column follows the censor column");
                 ui.checkbox(&mut s.residuals, "Martingale, deviance and Schoenfeld residuals");
+                ui.checkbox(&mut s.ph_test, "Test proportional hazards (Grambsch-Therneau)");
                 ui.horizontal(|ui| {
                     ui.label("Also the survival at covariates");
                     ui.add(egui::TextEdit::singleline(&mut self.cox_at).hint_text("values").desired_width(120.0));

@@ -142,6 +142,9 @@ pub struct SheetView {
     /// The row capacity chosen in Worksheet Properties. Data can extend beyond it (T59).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allocated_rows: Option<usize>,
+    /// An explicit Miscellaneous tab setting. Older fixed allocations stay fixed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_add_rows: Option<bool>,
     #[serde(default, skip_serializing_if = "HeaderMeasurements::is_default")]
     pub header_measurements: HeaderMeasurements,
     #[serde(default, skip_serializing_if = "CellMeasurements::is_default")]
@@ -166,6 +169,7 @@ impl Default for SheetView {
             categories: false,
             show_missing_as_blank: None,
             allocated_rows: None,
+            auto_add_rows: None,
             header_measurements: HeaderMeasurements::default(),
             cell_measurements: CellMeasurements::default(),
         }
@@ -175,6 +179,10 @@ impl Default for SheetView {
 impl SheetView {
     pub fn is_default(&self) -> bool {
         *self == SheetView::default()
+    }
+
+    pub fn automatic_rows(&self) -> bool {
+        self.auto_add_rows.unwrap_or(self.allocated_rows.is_none())
     }
 
     /// The presented value of a data cell. Literal text survives a missing-value display change.
@@ -253,6 +261,18 @@ mod tests {
         assert_eq!(saved.view.header_measurements, sheet.view.header_measurements);
         assert!(saved.view.row_header && saved.view.column_header);
         assert_eq!(SheetTable::new(&saved, PrintStyle::default()).heading_extent(), print_extent);
+    }
+
+    #[test]
+    fn auto_add_rows_defaults_respect_existing_allocations() {
+        let mut view: SheetView = serde_json::from_str("{}").unwrap();
+        assert!(view.automatic_rows());
+        view.allocated_rows = Some(3);
+        assert!(!view.automatic_rows());
+        view.auto_add_rows = Some(true);
+        let saved: SheetView = serde_json::from_str(&serde_json::to_string(&view).unwrap()).unwrap();
+        assert!(saved.automatic_rows());
+        assert_eq!(saved.allocated_rows, Some(3));
     }
 
     #[test]

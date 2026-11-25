@@ -3058,7 +3058,28 @@ impl SheafApp {
                 }
             }
             Action::WorksheetFontsDialog(book) => {
-                self.worksheet_fonts = WorksheetFontsDialog::new(&self.doc, book);
+                self.worksheet_fonts = WorksheetFontsDialog::new(&self.doc, book, self.books.get(&book));
+            }
+            Action::EnsureWorksheetRows { book, sheet, rows } => {
+                // Leave an open Properties draft on its base revision. The grid will retry after it closes.
+                if self.worksheet_fonts.is_some() {
+                    return;
+                }
+                let can_grow = self
+                    .doc
+                    .project()
+                    .workbook(book)
+                    .filter(|workbook| workbook.active_sheet == sheet)
+                    .and_then(|workbook| workbook.sheets.get(sheet))
+                    .is_some_and(|sheet| sheet.view.automatic_rows() && rows > grid::shown_rows(sheet));
+                if can_grow {
+                    self.doc.adjust_view(|project| {
+                        let view = &mut project.workbook_mut(book).unwrap().sheets[sheet].view;
+                        view.allocated_rows = Some(rows);
+                        view.auto_add_rows = Some(true);
+                    });
+                    ctx.request_repaint();
+                }
             }
             Action::FormatCellsDialog(book) => match self.format_target(book) {
                 Ok(target) => self.cell_format = CellFormatDialog::new(&self.doc, book, target),

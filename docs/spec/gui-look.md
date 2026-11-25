@@ -1046,6 +1046,21 @@ Sheaf accepts 0 to 255 points and keeps the gap above the scrolling
 grid. Zero removes it. The worksheet tabs stay available in short
 windows.
 
+**Worksheet Properties Auto Add Rows (T59).** In Origin 2016 a fixed
+three-row sheet kept three rows when maximised. Enabling Auto Add Rows
+through Miscellaneous increased the normal window's allocation to 14.
+Maximising an enabled sheet grew the allocation to 31 while the data
+still ended at row three. Restoring the window kept the 31-row allocation.
+The three-row sheet retained that count on Enter in its last row,
+including when Enter committed a cell edit.
+[Origin Worksheet Properties Miscellaneous tab](https://docs.originlab.com/origin-help/wksproperties-dialog-misc-tab/)
+
+Sheaf's Miscellaneous tab saves the switch per worksheet. A larger
+viewport can increase the sparse allocation without adding an Undo
+step. An explicit smaller Row Number still trims the data to the
+requested row, and Auto Add Rows keeps enough blank rows for the
+current viewport. Row Number and Auto Add Rows changes apply in one Undo step.
+
 Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
 The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,
 Dynamic Merge, per-cell numeric display/precision selectors and a Font selector. In this new book,

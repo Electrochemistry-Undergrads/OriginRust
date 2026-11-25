@@ -9,6 +9,10 @@
 //! the least-squares line of the failures' log times. Standard errors come from the inverse of the observed
 //! information; the scale's from the delta method. Checked against scipy in `crates/calc/tests/lifereg_reference.rs`
 //! (made by `tools/lifereg-ref.py`).
+//!
+//! **Percentiles** (T437): at covariates `x` the `p` percentile life is `exp(x'b + sigma w_p)`, `w_p = ln(-ln(1 - p))`
+//! (smallest extreme value) or the normal quantile (lognormal); its interval is `exp(log percentile -+ z se)` with `se^2
+//! = g' C g`, `C` the covariance of `(b, ln sigma)` and `g = (1, x, sigma w_p)` (no last term for the exponential).
 
 use crate::lifedata::LifeDist;
 use crate::stability::invert;
@@ -29,6 +33,40 @@ pub struct LifeRegression {
     pub log_likelihood: f64,
     pub n: usize,
     pub failures: usize,
+    /// The covariance of `(b, ln sigma)` (`b` alone for the exponential), the inverse observed information (T437).
+    pub cov: Vec<Vec<f64>>,
+}
+
+/// A predicted percentile life (T437).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Percentile {
+    /// The fraction failed, in (0, 1).
+    pub p: f64,
+    pub estimate: f64,
+    /// The standard error of the log percentile.
+    pub se_log: f64,
+    pub lower: f64,
+    pub upper: f64,
+}
+
+impl LifeRegression {
+    /// The `p` percentile life at covariates `x` (one value per covariate) with its `confidence` interval.
+    pub fn percentile(&self, x: &[f64], p: f64, confidence: f64) -> Percentile {
+        let w = match self.dist {
+            LifeDist::Lognormal => std_normal().inverse_cdf(p),
+            _ => (-(-p).ln_1p()).ln(),
+        };
+        let mut g: Vec<f64> = std::iter::once(1.0).chain(x.iter().copied()).collect();
+        let eta: f64 = self.coefficients.iter().zip(&g).map(|(b, v)| b * v).sum();
+        if self.dist != LifeDist::Exponential {
+            g.push(self.scale * w);
+        }
+        let log = eta + self.scale * w;
+        let var: f64 = (0..g.len()).map(|i| (0..g.len()).map(|j| g[i] * self.cov[i][j] * g[j]).sum::<f64>()).sum();
+        let se_log = var.max(0.0).sqrt();
+        let z = std_normal().inverse_cdf(0.5 + confidence / 2.0);
+        Percentile { p, estimate: log.exp(), se_log, lower: (log - z * se_log).exp(), upper: (log + z * se_log).exp() }
+    }
 }
 
 /// Why the model could not be fitted.
@@ -260,6 +298,7 @@ pub fn life_regression(
         log_likelihood: ll,
         n,
         failures,
+        cov,
     })
 }
 
@@ -286,6 +325,22 @@ mod tests {
         let e = life_regression(&none, &t, &failed, LifeDist::Exponential).unwrap();
         let pe = fit_right_censored(&t, &failed.map(|f| !f), LifeDist::Exponential).unwrap();
         assert!((e.coefficients[0] - pe.params[0].ln()).abs() < 1e-7 && e.scale == 1.0, "{:?} {:?}", e, pe.params);
+    }
+
+    #[test]
+    fn the_median_of_the_exponential_is_ln_2_times_the_mean() {
+        let t = [2.0, 4.0, 6.0, 8.0, 9.0, 3.0, 5.0];
+        let failed = [true, true, false, true, false, true, true];
+        let none: Vec<Vec<f64>> = (0..7).map(|_| Vec::new()).collect();
+        let e = life_regression(&none, &t, &failed, LifeDist::Exponential).unwrap();
+        let m = e.percentile(&[], 0.5, 0.95);
+        assert!((m.estimate - e.coefficients[0].exp() * 2f64.ln()).abs() < 1e-12);
+        // The log percentile's SE is the intercept's: the interval is symmetric on the log scale.
+        assert!((m.se_log - e.se[0]).abs() < 1e-12);
+        assert!(((m.upper / m.estimate).ln() - (m.estimate / m.lower).ln()).abs() < 1e-12);
+        let w = life_regression(&none, &t, &failed, LifeDist::Weibull).unwrap();
+        let (a, b) = (w.percentile(&[], 0.1, 0.9), w.percentile(&[], 0.1, 0.99));
+        assert!(b.lower < a.lower && a.lower < a.estimate && a.estimate < a.upper && a.upper < b.upper);
     }
 
     #[test]

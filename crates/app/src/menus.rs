@@ -351,6 +351,8 @@ pub enum Cmd {
     ExportWorksheetImage,
     /// File > Import > Re-Import Directly (false) and Re-Import... (true, choose the file) (T98).
     Reimport(bool),
+    /// File > Import > Auto Refresh... (T442).
+    AutoRefresh,
     /// Window > Duplicate (Batch Plotting) > with New Sheets/Books (false) or New Columns (true) (T99).
     BatchPlot(bool),
     /// Graph > Add Function Graph... (T119).
@@ -652,6 +654,7 @@ pub enum Cmd {
     ToggleLayerIcons,
     ToggleActiveLayerIndicator,
     ToggleAxisLayerIcons,
+    ToggleObjectGrid,
     ToggleLayerFrame,
     /// Data > Lock Position (T186): where the graph's analysis locks are drawn.
     LockPosition(sheaf_core::graph::LockPosition),
@@ -973,6 +976,7 @@ pub struct MenuContext<'a> {
     /// Whether View > Show > Active Layer Indicator is checked for this graph.
     pub active_layer_indicator: bool,
     pub axis_layer_icons: bool,
+    pub object_grid: bool,
     /// The active Cartesian layer's plot frame. None disables the command.
     pub show_frame: Option<bool>,
     /// The active graph's Lock Position (the tick of Data > Lock Position, T186).
@@ -1334,6 +1338,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                         sep(),
                         keyed("Re-Import Directly", ctrl(Key::Num4), Cmd::Reimport(false)),
                         item("Re-Import...", Cmd::Reimport(true)),
+                        item("Auto Refresh...", Cmd::AutoRefresh),
                     ]
                 },
                 vec![sub(
@@ -1510,8 +1515,10 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
                 item("Layer Icons", Cmd::ToggleLayerIcons),
                 item("Active Layer Indicator", Cmd::ToggleActiveLayerIndicator),
                 item("Axis Layer Icons", Cmd::ToggleAxisLayerIcons),
+                sep(),
+                item("Object Grid", Cmd::ToggleObjectGrid),
             ];
-            show.extend(greys(&["-", "Object Grid", "Layer Grid", "-"]));
+            show.extend(greys(&["Layer Grid", "-"]));
             show.push(item("Frame", Cmd::ToggleLayerFrame));
             show.push(item("Labels", Cmd::ToggleShowLabels));
             show.push(item("Data", Cmd::ToggleShowData));
@@ -3700,6 +3707,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             c.imported.then_some(()).ok_or(NOT_IMPORTED)?;
             Action::Reimport { book, choose: *choose }
         }
+        Cmd::AutoRefresh => {
+            let book = book?;
+            c.imported.then_some(()).ok_or(NOT_IMPORTED)?;
+            Action::AutoRefresh { book }
+        }
         Cmd::Print => Action::Print(
             c.graph.or(c.book).or(c.active.filter(|_| c.kind == WindowKind::Layout)).ok_or(NEED_PRINTABLE)?,
         ),
@@ -4108,6 +4120,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             switch: crate::actions::PageSwitch::AxisLayerIcons,
             on: !c.axis_layer_icons,
         },
+        Cmd::ToggleObjectGrid => Action::SetPageSwitch {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            switch: crate::actions::PageSwitch::ObjectGrid,
+            on: !c.object_grid,
+        },
         Cmd::ToggleLayerFrame => Action::SetLayerFrame {
             graph: c.graph.ok_or(NEED_GRAPH)?,
             layer: c.layer,
@@ -4459,6 +4476,9 @@ fn show_entries(
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleAxisLayerIcons)) && c.axis_layer_icons {
+                    tick(ui, &response);
+                }
+                if matches!(it.cmd, Some(Cmd::ToggleObjectGrid)) && c.object_grid {
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleLayerFrame)) && c.show_frame == Some(true) {
@@ -4879,6 +4899,7 @@ mod tests {
             layer_icons: true,
             active_layer_indicator: false,
             axis_layer_icons: false,
+            object_grid: false,
             show_frame: None,
             lock_position: Default::default(),
             page_breaks: false,

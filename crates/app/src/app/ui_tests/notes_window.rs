@@ -310,3 +310,113 @@ fn window_properties_list_a_books_dependents_and_a_graphs_books() {
     let book_name = project(&h).workbook(book).unwrap().name.clone();
     assert!(h.query_by_label(&format!("Plots data of: {book_name}")).is_some());
 }
+
+#[test]
+fn a_report_previews_its_links_and_exports_html_with_the_graph() {
+    // T439: a Notes window holding a cell link and a figure line.
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let mut notes = sheaf_core::WindowId(0);
+    h.state_mut().doc.apply("data", |p| {
+        let b = p.add_workbook("");
+        p.add_column(b, 0, sheaf_core::Designation::X, sheaf_core::ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+        let y =
+            p.add_column(b, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::numeric(vec![5.0, 7.5])).unwrap();
+        let g = p.plot_columns(sheaf_core::template::Template::Line, &[y]).unwrap();
+        let (book, graph) = (p.workbook(b).unwrap().name.clone(), p.graph(g).unwrap().name.clone());
+        notes = p.add_notes();
+        p.notes_mut(notes).unwrap().text = format!("# Result\nPeak: %([{book}]Sheet1,B,2) mA\n![The run]({graph})");
+    });
+    settle(&mut h);
+    h.state_mut().apply(Action::Focus(notes), &ctx);
+    settle(&mut h);
+    h.get_by_label("Preview").click();
+    settle(&mut h);
+    h.get_by_label("Peak: 7.5 mA");
+    h.get_by_label("The run");
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-report-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("run3.html");
+    h.state_mut().apply(Action::ExportReportTo { notes, path: path.clone() }, &ctx);
+    let html = std::fs::read_to_string(&path).unwrap();
+    assert!(html.contains("<h1>Result</h1>") && html.contains("Peak: 7.5 mA"));
+    let pngs: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|e| e.path().extension().is_some_and(|x| x == "png"))
+        .collect();
+    assert_eq!(pngs.len(), 1, "the figure's graph beside the page");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn auto_refresh_re_imports_a_changed_file_and_pauses_when_it_is_gone() {
+    // T442: an imported CSV, File > Import > Auto Refresh... OK (60 s, only when changed).
+    let path = data_file("auto-refresh");
+    let mut h = start(vec![path.clone()]);
+    let ctx = h.ctx.clone();
+    settle(&mut h);
+    let book = project(&h).workbooks().next().expect("the imported book").id;
+    h.state_mut().apply(Action::AutoRefresh { book }, &ctx);
+    settle(&mut h);
+    h.get_by_label("OK").click();
+    settle(&mut h);
+    assert!(project(&h).workbook(book).unwrap().refresh.is_some());
+    let rows = |h: &Harness<'static, SheafApp>| project(h).workbook(book).unwrap().sheets[0].row_count();
+    assert_eq!(rows(&h), 4);
+    // The clock started with the frames shown so far; nothing is due for about a minute.
+    let wait = h.state_mut().run_auto_refresh(0.0).expect("a clock");
+    assert!((59.0..=61.0).contains(&wait), "{wait}");
+    std::fs::write(&path, "t,up,down\n1,2.5,30.5\n2,4.5,20.5\n3,6.5,10.5\n4,8.5,0.5\n5,9.5,0.1\n").unwrap();
+    h.state_mut().run_auto_refresh(30.0);
+    assert_eq!(rows(&h), 4, "not due before 60 s");
+    h.state_mut().run_auto_refresh(61.0);
+    assert_eq!(rows(&h), 5, "re-imported once due");
+    // Unchanged: nothing is read again (the undo step stays the last re-import).
+    h.state_mut().doc.apply("mark", |p| p.workbook_mut(book).unwrap().long_name = "kept".into());
+    h.state_mut().run_auto_refresh(122.0);
+    assert_eq!(h.state().doc.undo_label(), Some("mark"));
+    // The file is gone: the refresh pauses.
+    std::fs::remove_file(&path).unwrap();
+    h.state_mut().run_auto_refresh(183.0);
+    assert!(project(&h).workbook(book).unwrap().refresh.unwrap().paused);
+    assert_eq!(h.state_mut().run_auto_refresh(244.0), None, "a paused book has no clock");
+}
+
+#[test]
+fn the_operation_tree_lists_a_books_linked_analysis_and_switches_its_mode() {
+    // T443: a Smooth run with Recalculate Manual, the Object Manager on the workbook.
+    use sheaf_core::analysis::{OutputTarget, Request, RowRange, Tool};
+    use sheaf_core::column::RecalcMode;
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let mut book = sheaf_core::WindowId(0);
+    h.state_mut().doc.apply("data", |p| {
+        book = p.add_workbook("");
+        let xs = (0..10).map(f64::from).collect();
+        p.add_column(book, 0, sheaf_core::Designation::X, sheaf_core::ColumnData::numeric(xs)).unwrap();
+        let ys = (0..10).map(|i| f64::from(i * i)).collect();
+        let y = p.add_column(book, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::numeric(ys)).unwrap();
+        let o = sheaf_calc::SmoothOptions {
+            method: sheaf_calc::SmoothMethod::AdjacentAveraging { weighted: false },
+            npts: 3,
+            boundary: sheaf_calc::Boundary::None,
+        };
+        let req = Request { columns: vec![y], rows: RowRange::All, tool: Tool::Smooth(o) };
+        p.analyze_linked(&req, &OutputTarget::NextToInput, RecalcMode::Manual).unwrap();
+    });
+    h.state_mut().apply(Action::Focus(book), &ctx);
+    h.state_mut().panels.set_pinned(PanelId::Objects, true);
+    settle(&mut h);
+    let at = h.get_by_label("Smooth (Manual)").rect().center();
+    right_click_at(&mut h, at);
+    settle(&mut h);
+    h.get_by_label("Auto").click();
+    settle(&mut h);
+    assert_eq!(project(&h).analysis_links[0].mode, RecalcMode::Auto);
+    assert_eq!(h.state().doc.undo_label(), Some("Recalculate Mode"));
+    h.get_by_label("Smooth (Auto)");
+    let book_name = project(&h).workbook(book).unwrap().name.clone();
+    h.get_by_label(&format!("Input: [{book_name}]Sheet1!B"));
+}

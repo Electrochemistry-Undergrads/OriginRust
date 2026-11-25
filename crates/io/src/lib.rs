@@ -20,6 +20,7 @@ pub mod opju;
 pub mod peak_themes;
 pub mod pptx;
 pub mod project_file;
+pub mod pzfx;
 pub mod recent;
 pub mod recovery;
 pub mod save;
@@ -176,7 +177,7 @@ pub struct Imported {
     pub path: PathBuf,
     /// The data; `workbook.source` records the file and importer.
     pub workbook: Workbook,
-    /// `"chi"`, `"ascii"` or `"excel"`.
+    /// `"chi"`, `"ascii"`, `"excel"` or `"prism"` (T447).
     pub format: &'static str,
     /// The graph template that suits the data: cyclic voltammetry for a CHI
     /// CV file, a plain line plot otherwise.
@@ -229,6 +230,22 @@ pub fn import_file_with_excel(
         return Ok(finish_chi(r, shown, path));
     }
     let text = decode_text(&bytes, path)?;
+    // A GraphPad Prism XML file (T447).
+    if kind == ImportKind::Auto && pzfx::looks_like_pzfx(&text) {
+        let file_name = path.file_name().map_or_else(|| stem.clone(), |s| s.to_string_lossy().into_owned());
+        let r = pzfx::read_pzfx(&text, &file_name).map_err(|e| name_file(e, &shown))?;
+        let mut workbook = r.workbook;
+        workbook.source = Some(ImportSource { path: shown, importer: "prism".to_string() });
+        let tables: Vec<String> = r.tables.iter().map(|(kind, name)| format!("{name} ({kind})")).collect();
+        return Ok(Imported {
+            path: path.to_path_buf(),
+            workbook,
+            format: "prism",
+            suggested_template: Template::Line,
+            meta: vec![("Tables".to_string(), tables.join(", "))],
+            warnings: r.warnings,
+        });
+    }
     let use_chi = match kind {
         ImportKind::Auto => chi::looks_like_chi(&text),
         ImportKind::Chi => true,

@@ -14,7 +14,7 @@ fn close(a: f64, b: f64, what: &str) {
 #[test]
 fn arima_matches_numpy_and_scipy() {
     for c in fixtures::CASES {
-        let order = ArimaOrder { p: c.order.0, d: c.order.1, q: c.order.2, constant: c.order.3 };
+        let order = ArimaOrder { p: c.order.0, d: c.order.1, q: c.order.2, constant: c.order.3, ..Default::default() };
         let (e, ss) = css(c.y, order, c.params);
         close(ss, c.ss, &format!("{} SS", c.name));
         for (i, (a, b)) in e.iter().zip(c.errors).enumerate() {

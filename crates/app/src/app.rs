@@ -2647,6 +2647,14 @@ impl SheafApp {
                     self.warn(e.to_string());
                 }
             }
+            Action::ExplorerLength { graph, length } => {
+                let token = 0x7453_0000_0000 + graph.0;
+                if let Err(e) =
+                    self.doc.apply_merging("Explorer Intervals", token, |p| p.set_explorer_length(graph, length))
+                {
+                    self.warn(e.to_string());
+                }
+            }
             Action::ExplorerIntervals { graph, intervals } => {
                 let token = 0x7416_1000_0000 + graph.0;
                 if let Err(e) =

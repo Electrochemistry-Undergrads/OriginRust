@@ -177,6 +177,11 @@ fn time_series_explorer_steps_and_plays_from_the_bar() {
     h.get_by_label("Pause").click();
     settle(&mut h);
     assert!(h.query_by_label("Play").is_some(), "paused");
+    // By length (T453): a tenth of the X extent to start with (49 / 10 over rows 1..50).
+    h.get_by_label("By length").click();
+    settle(&mut h);
+    let e = project(&h).graph(graph).unwrap().explorer.unwrap();
+    assert!((e.length.unwrap() - 4.9).abs() < 1e-9 && e.intervals == 10, "{e:?}");
 }
 
 #[test]

@@ -7927,8 +7927,12 @@ steps or plays through successive intervals. Origin 2016 has none, so nothing he
 - **Model:** `Graph::explorer` (`sheaf_core::explorer::SeriesExplorer`: the count and the interval shown), saved with
   the project; `Project::plot_time_series_explorer`, `explore_interval`, `set_explorer_intervals`. Moving the band by
   hand moves the detail as in any Zoom graph; the next step puts it back on an interval.
-- **Not built:** a detail Y axis that rescales to each interval, intervals of a set length (a day, a week), overlapping
-  steps, the playback speed, and picking an interval by clicking the upper layer.
+- **By length (T453):** By length on the bar splits the X extent into intervals of a set X length instead (1 for a day
+  of dates, 7 for a week), a tenth of the extent to start with, edited beside it; the count follows (as many as it
+  takes, the last one shorter) and its field is disabled. More than 1000 intervals is refused. Turning it off goes back
+  to equal parts. The shown interval is the one holding the start of the one shown before.
+- **Not built:** a detail Y axis that rescales to each interval, overlapping steps, the playback speed, and picking an
+  interval by clicking the upper layer.
 
 ## LaTeX math in graph text (T436, 2026-11-24; Origin 2023b's built-in equation rendering, slice 1, Sheaf's own)
 

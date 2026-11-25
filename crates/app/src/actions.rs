@@ -767,6 +767,11 @@ pub enum Action {
         graph: WindowId,
         to: usize,
     },
+    /// The explorer bar: intervals of X length `length`, or equal parts with `None` (T453).
+    ExplorerLength {
+        graph: WindowId,
+        length: Option<f64>,
+    },
     /// The explorer bar: split the series into `intervals` (T416).
     ExplorerIntervals {
         graph: WindowId,

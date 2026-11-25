@@ -18,6 +18,17 @@
 //! **Strata** (T451): with a stratum for each case the risk sets are taken within each stratum only; the partial
 //! log-likelihood, its gradient and information are the sums over the strata, the coefficients are shared, and each
 //! stratum has its own baseline (a survival curve at the covariate means per stratum).
+//!
+//! **Residuals and predictions** (T457): the martingale residual of case `i` is `d_i - H0(t_i) exp(x_i'b)` with its
+//! stratum's baseline cumulative hazard (at `x = 0`) up to and including `t_i`; the deviance residual is `sign(M)
+//! sqrt(-2 (M + d ln(d - M)))`; the Schoenfeld residual of a failure is `x_i` minus the risk-set mean of `x` at its
+//! time (Efron: the mean of the `d` stepped means of its tie group). The survival at covariates `x` is the curve at
+//! the means raised to `exp((x - mean)'b)`.
+//!
+//! **Proportional-hazards test** (T458): Grambsch and Therneau's test on the scaled Schoenfeld residuals against `g`,
+//! the rank of the failure time among the failures (ties share their mean rank). With `U = sum (g_k - mean g) r_k`
+//! over the `d` failures, `V` the covariance of `b` and `S = sum (g_k - mean g)^2`: covariate `j` has `d (V U)_j^2 /
+//! (V_jj S)` on 1 degree of freedom, all together `d U' V U / S` on `p`.
 
 use crate::stability::invert;
 use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
@@ -45,6 +56,75 @@ pub struct Cox {
     pub survival: Vec<f64>,
     /// The `(times, survival)` curve of each stratum, in stratum order (one curve without strata; T451).
     pub curves: Vec<(Vec<f64>, Vec<f64>)>,
+    /// The covariate means the curves are drawn at (T457).
+    pub means: Vec<f64>,
+    /// Per case, in input order: martingale and deviance residuals (T457).
+    pub martingale: Vec<f64>,
+    pub deviance: Vec<f64>,
+    /// Per failure, in time order within strata: the case index and its Schoenfeld residuals (one per covariate).
+    pub schoenfeld: Vec<(usize, Vec<f64>)>,
+    /// The failure time of each Schoenfeld residual (T458).
+    pub schoenfeld_times: Vec<f64>,
+    /// The covariance of the coefficients, the inverse information (T458).
+    pub cov: Vec<Vec<f64>>,
+}
+
+/// The proportional-hazards test (T458): `(chi-square, p)` per covariate and for all of them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PhTest {
+    pub per_covariate: Vec<(f64, f64)>,
+    pub global: (f64, f64),
+}
+
+impl Cox {
+    /// Grambsch and Therneau's proportional-hazards test against the rank of the failure times (T458).
+    pub fn ph_test(&self) -> PhTest {
+        let p = self.coefficients.len();
+        let d = self.schoenfeld.len();
+        // Mean ranks of the failure times (ties share theirs).
+        let mut idx: Vec<usize> = (0..d).collect();
+        idx.sort_by(|&a, &b| self.schoenfeld_times[a].total_cmp(&self.schoenfeld_times[b]));
+        let mut g = vec![0.0; d];
+        let mut k = 0;
+        while k < d {
+            let mut end = k;
+            while end < d && self.schoenfeld_times[idx[end]] == self.schoenfeld_times[idx[k]] {
+                end += 1;
+            }
+            let rank = (k + end + 1) as f64 / 2.0;
+            for &i in &idx[k..end] {
+                g[i] = rank;
+            }
+            k = end;
+        }
+        let mean = g.iter().sum::<f64>() / d as f64;
+        let s: f64 = g.iter().map(|v| (v - mean).powi(2)).sum();
+        let mut u = vec![0.0; p];
+        for ((_, r), gk) in self.schoenfeld.iter().zip(&g) {
+            for j in 0..p {
+                u[j] += (gk - mean) * r[j];
+            }
+        }
+        let vu: Vec<f64> = (0..p).map(|i| (0..p).map(|j| self.cov[i][j] * u[j]).sum()).collect();
+        let df = d as f64;
+        let chi = |stat: f64, k: usize| ChiSquared::new(k as f64).map_or(f64::NAN, |c| c.sf(stat.max(0.0)));
+        let per_covariate = (0..p)
+            .map(|j| {
+                let stat = df * vu[j] * vu[j] / (self.cov[j][j] * s);
+                (stat, chi(stat, 1))
+            })
+            .collect();
+        let global = df * u.iter().zip(&vu).map(|(a, b)| a * b).sum::<f64>() / s;
+        PhTest { per_covariate, global: (global, chi(global, p)) }
+    }
+
+    /// The survival curve of each stratum at covariates `x` (T457): the curve at the means to the power `exp((x -
+    /// mean)'b)`.
+    pub fn survival_at(&self, x: &[f64]) -> Vec<(Vec<f64>, Vec<f64>)> {
+        let shift: f64 = x.iter().zip(&self.means).zip(&self.coefficients).map(|((a, m), b)| (a - m) * b).sum();
+        let power = shift.exp();
+        self.curves.iter().map(|(t, s)| (t.clone(), s.iter().map(|v| v.powf(power)).collect())).collect()
+    }
 }
 
 /// Why the model could not be fitted.
@@ -289,6 +369,8 @@ pub fn cox_stratified(
     let eta_mean: f64 = means.iter().zip(&b).map(|(a, c)| a * c).sum();
     let weight = |c: usize| x[c].iter().zip(&b).map(|(a, cc)| a * cc).sum::<f64>().exp();
     let mut curves = Vec::new();
+    let mut martingale = vec![0.0; n];
+    let mut schoenfeld = Vec::new();
     for (order, _) in &groups {
         let m = order.len();
         let (mut times, mut survival) = (Vec::new(), Vec::new());
@@ -299,26 +381,71 @@ pub fn cox_stratified(
             let mut end = k;
             let mut d = 0usize;
             let mut tied = 0.0;
+            let mut tied_x = vec![0.0; p];
             while end < m && t[order[end]] == tk {
                 if failed[order[end]] {
                     d += 1;
-                    tied += weight(order[end]);
+                    let w = weight(order[end]);
+                    tied += w;
+                    for (a, v) in tied_x.iter_mut().zip(&x[order[end]]) {
+                        *a += w * v;
+                    }
                 }
                 end += 1;
             }
             if d > 0 {
                 let risk: f64 = order[k..].iter().map(|&c| weight(c)).sum();
+                let mut risk_x = vec![0.0; p];
+                for &c in &order[k..] {
+                    let w = weight(c);
+                    for (a, v) in risk_x.iter_mut().zip(&x[c]) {
+                        *a += w * v;
+                    }
+                }
                 h0 += match ties {
                     Ties::Breslow => d as f64 / risk,
                     Ties::Efron => (0..d).map(|l| 1.0 / (risk - l as f64 / d as f64 * tied)).sum(),
                 };
+                // The risk-set mean of x at this time (Efron: the mean of the stepped means).
+                let mean_x: Vec<f64> = (0..p)
+                    .map(|i| match ties {
+                        Ties::Breslow => risk_x[i] / risk,
+                        Ties::Efron => {
+                            (0..d)
+                                .map(|l| {
+                                    let f = l as f64 / d as f64;
+                                    (risk_x[i] - f * tied_x[i]) / (risk - f * tied)
+                                })
+                                .sum::<f64>()
+                                / d as f64
+                        }
+                    })
+                    .collect();
+                for &c in &order[k..end] {
+                    if failed[c] {
+                        schoenfeld.push((c, x[c].iter().zip(&mean_x).map(|(a, mu)| a - mu).collect()));
+                    }
+                }
                 times.push(tk);
                 survival.push((-h0 * eta_mean.exp()).exp());
+            }
+            // Every case at this time has the cumulative hazard up to and including it.
+            for &c in &order[k..end] {
+                martingale[c] = f64::from(u8::from(failed[c])) - h0 * weight(c);
             }
             k = end;
         }
         curves.push((times, survival));
     }
+    let deviance: Vec<f64> = martingale
+        .iter()
+        .zip(failed)
+        .map(|(mr, f)| {
+            let d = f64::from(u8::from(*f));
+            let inner = if *f { mr + d * (d - mr).ln() } else { *mr };
+            mr.signum() * (-2.0 * inner).max(0.0).sqrt()
+        })
+        .collect();
     let (times, survival) = curves.first().cloned().unwrap_or_default();
     Ok(Cox {
         hazard_ratio: b.iter().map(|v| v.exp()).collect(),
@@ -338,6 +465,12 @@ pub fn cox_stratified(
         times,
         survival,
         curves,
+        means,
+        martingale,
+        deviance,
+        schoenfeld_times: schoenfeld.iter().map(|(c, _)| t[*c]).collect(),
+        schoenfeld,
+        cov,
     })
 }
 
@@ -408,6 +541,32 @@ mod tests {
         assert_eq!(s.curves.len(), 2);
         assert_eq!(s.curves[1].0, [5.0, 6.0, 7.0, 8.0]);
         assert!(cox_stratified(&x, &t, &failed, &[0; 3], 0.95, Ties::Breslow).is_err());
+    }
+
+    #[test]
+    fn residuals_sum_as_they_should_and_curves_follow_the_covariates() {
+        let t = [1.0, 2.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+        let x: Vec<Vec<f64>> = [1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0].iter().map(|v| vec![*v]).collect();
+        let failed = [true, true, true, false, true, true, false, true];
+        for ties in [Ties::Breslow, Ties::Efron] {
+            let c = cox_with(&x, &t, &failed, 0.95, ties).unwrap();
+            // At the maximum the Schoenfeld residuals sum to the score, 0.
+            let s: f64 = c.schoenfeld.iter().map(|(_, r)| r[0]).sum();
+            assert!(s.abs() < 1e-8, "{ties:?}: {s}");
+            assert_eq!(c.schoenfeld.len(), c.events);
+            // With Breslow's baseline the martingale residuals sum to 0 (each increment is d / risk).
+            if ties == Ties::Breslow {
+                let m: f64 = c.martingale.iter().sum();
+                assert!(m.abs() < 1e-12, "{m}");
+            }
+            assert!(c.deviance.iter().zip(&c.martingale).all(|(d, m)| d.signum() == m.signum() || *m == 0.0));
+        }
+        let c = cox(&x, &t, &failed, 0.95).unwrap();
+        // At the means the curve is the curve; at x = 1 it is the means' curve to exp((1 - mean) b).
+        assert_eq!(c.survival_at(&c.means.clone())[0].1, c.survival);
+        let one = c.survival_at(&[1.0]);
+        let power = ((1.0 - c.means[0]) * c.coefficients[0]).exp();
+        assert!((one[0].1[2] - c.survival[2].powf(power)).abs() < 1e-15);
     }
 
     #[test]

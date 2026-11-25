@@ -532,6 +532,29 @@ fn graph_grids_survive_a_bare_opj_round_trip_per_graph() {
 }
 
 #[test]
+fn graph_master_items_flags_survive_a_bare_opj_round_trip_per_graph() {
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        g.page.style.master_items_on_screen = true;
+        g.page.style.grid = PageGrid::Layer;
+    });
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        g.page.style.master_items_on_screen = true;
+        g.page.style.use_master_items = false;
+    });
+    graph_with(&mut p, Template::Line, &[(0, 1)], |_| {});
+    let (imp, warnings) = round_trip(&p);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert!(imp.graphs[0].page.style.master_items_on_screen);
+    assert!(imp.graphs[0].page.style.use_master_items);
+    assert_eq!(imp.graphs[0].page.style.grid, PageGrid::Layer);
+    assert!(imp.graphs[1].page.style.master_items_on_screen);
+    assert!(!imp.graphs[1].page.style.use_master_items);
+    assert!(!imp.graphs[2].page.style.master_items_on_screen);
+    assert!(imp.graphs[2].page.style.use_master_items);
+}
+
+#[test]
 fn a_graph_before_its_workbook_still_finds_the_columns() {
     let mut p = source();
     let c = ids(&p);

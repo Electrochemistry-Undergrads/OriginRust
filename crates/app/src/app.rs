@@ -3474,6 +3474,7 @@ impl SheafApp {
                     PageSwitch::AxisLayerIcons => "Show Axis Layer Icons",
                     PageSwitch::ObjectGrid => "Show Object Grid",
                     PageSwitch::LayerGrid => "Show Layer Grid",
+                    PageSwitch::MasterItemsOnScreen => "Show Master Items on Screen",
                 };
                 self.doc.apply(label, |p| {
                     if let Some(g) = p.graph_mut(graph) {
@@ -3488,6 +3489,7 @@ impl SheafApp {
                             PageSwitch::LayerGrid => {
                                 g.page.style.grid = if on { PageGrid::Layer } else { PageGrid::Off }
                             }
+                            PageSwitch::MasterItemsOnScreen => g.page.style.master_items_on_screen = on,
                         }
                     }
                 });
@@ -4296,6 +4298,17 @@ impl SheafApp {
             }
             Action::ToggleStatusBar => self.status_bar_hidden = !self.status_bar_hidden,
             Action::ToggleFormulaBar => self.show_formula_bar = !self.show_formula_bar,
+            Action::FillFormulaDown { column, row } => {
+                let last = self.doc.project().locate(column).map_or(0, |(_, s, _)| s.row_count()).saturating_sub(1);
+                if last <= row {
+                    self.say("There are no rows with data below this cell to fill".to_string());
+                } else {
+                    match self.doc.edit("Fill Down", |p| p.fill_cell_formula_down(column, row, last)) {
+                        Ok(n) => self.say(format!("Filled the formula into {n} cell(s) below")),
+                        Err(e) => self.warn(e.to_string()),
+                    }
+                }
+            }
             Action::ToggleAiLink => self.set_link(!self.live.active()),
             Action::Quit => {
                 if self.doc.dirty {
@@ -7547,6 +7560,10 @@ impl SheafApp {
                 .is_some_and(|g| g.page.style.active_layer_indicator),
             axis_layer_icons: graph.and_then(|g| project.graph(g)).is_some_and(|g| g.page.style.axis_layer_icons),
             page_grid: graph.and_then(|g| project.graph(g)).map(|g| g.page.style.grid).unwrap_or_default(),
+            master_items_on_screen: graph.and_then(|id| {
+                let g = project.graph(id)?;
+                project.master_graph_for(g).map(|_| g.page.style.master_items_on_screen)
+            }),
             show_frame: graph
                 .and_then(|g| project.graph(g)?.layers.get(layer))
                 .filter(|l| l.coords.is_cartesian())

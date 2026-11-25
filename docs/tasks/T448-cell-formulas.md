@@ -11,8 +11,8 @@ Sheaf's own rules (Origin 2016 has neither).
 
 ## Left
 
-- References that follow rows and columns when they move, absolute/relative `$A$1` references, filling a formula
-  down, cell formulas in .opj files, a marker on formula cells, and other workbooks' cells in A1 style.
+- References that follow rows and columns when they move, cell formulas in .opj files, a marker on formula cells,
+  and other workbooks' cells in A1 style. (`$A$1` and Fill Down: T455.)
 
 ## Tests
 

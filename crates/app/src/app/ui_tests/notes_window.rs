@@ -450,6 +450,12 @@ fn a_cell_formula_is_typed_shown_in_the_formula_bar_and_follows_its_input() {
     settle(&mut h);
     h.get_by_label("B1");
     assert!(h.query_all_by_value("=A1*10").next().is_some(), "the formula in the bar");
+    // Fill Down (T455): B1's formula goes to B2 with its row shifted.
+    h.get_by_label("Fill Down").click();
+    settle(&mut h);
+    assert_eq!(project(&h).cell_formula(b, 1), Some("A2*10"));
+    assert_eq!(sheaf_core::indexed::level_text(project(&h).column(b).unwrap(), 1).as_deref(), Some("30"), "A2 is 3");
+    assert_eq!(h.state().doc.undo_label(), Some("Fill Down"));
     // A bad formula is refused and the cell keeps its formula.
     h.state_mut().apply(Action::SetCell { column: b, row: 0, text: "=A1 +* 2".into() }, &ctx);
     assert_eq!(project(&h).cell_formula(b, 0), Some("A1*10"));

@@ -80,12 +80,60 @@ fn layer_icons_in_the_show_menu_hides_and_shows_the_icons() {
 }
 
 #[test]
-fn the_show_items_that_are_not_measured_stay_grey() {
+fn master_items_on_screen_needs_a_master_page() {
     let mut h = start(vec![data_file("vm-grey")]);
     menu_path(&mut h, &["View", "Show"]);
     assert!(h.get_by_label("Master Items on Screen").accesskit_node().is_disabled());
     // T177: Labels (and Data, which shares its name with the Data menu) are live (graphing 22.8).
     assert!(!h.get_by_label("Labels").accesskit_node().is_disabled());
+}
+
+#[test]
+fn master_items_on_screen_is_independent_of_output_and_saved_per_graph() {
+    use sheaf_core::graph::{Font, TextLabel};
+
+    let mut h = start(vec![data_file("view-master-items")]);
+    let first = graph(&h).id;
+    let (master, other) = h.state_mut().doc.apply("Master page and second graph", |p| {
+        let master = p.add_graph(Template::Line);
+        p.rename_window(master, "Master").unwrap();
+        let page = p.graph(first).unwrap().page.clone();
+        let source = p.graph_mut(master).unwrap();
+        source.page = page.clone();
+        source.layers[0].labels.push(TextLabel::new("Shared annotation", 0.1, 0.1, Font::new("Arial", 12.0)));
+        let other = p.add_graph(Template::Line);
+        p.graph_mut(other).unwrap().page = page;
+        (master, other)
+    });
+    show_window(&mut h, "Graph1 - sample");
+    let output = sheaf_plot::render_svg(project(&h), first).unwrap();
+    assert!(output.contains("Shared annotation"));
+    assert_eq!(h.state().menu_context().master_items_on_screen, Some(false));
+
+    menu_path(&mut h, &["View", "Show", "Master Items on Screen"]);
+    assert_eq!(h.state().menu_context().master_items_on_screen, Some(true));
+    assert_eq!(sheaf_plot::render_svg(project(&h), first).unwrap(), output);
+    assert!(!project(&h).graph(other).unwrap().page.style.master_items_on_screen);
+    assert!(!project(&h).graph(master).unwrap().page.style.master_items_on_screen);
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(h.state().menu_context().master_items_on_screen, Some(false));
+    menu(&mut h, "Edit", "Redo");
+    assert_eq!(h.state().menu_context().master_items_on_screen, Some(true));
+
+    open_props(&mut h, 0, PropsTab::Page, None);
+    click(&mut h, "Display");
+    click(&mut h, "Use Master Items");
+    click(&mut h, "OK");
+    assert_eq!(h.state().menu_context().master_items_on_screen, None);
+    assert!(!sheaf_plot::render_svg(project(&h), first).unwrap().contains("Shared annotation"));
+    assert!(sheaf_plot::render_svg(project(&h), other).unwrap().contains("Shared annotation"));
+
+    let path = save_dir("view-master-items").join("master.sheaf");
+    sheaf_io::save::save_project(project(&h), &path).unwrap();
+    let reopened = sheaf_io::open_project(&path).unwrap().project;
+    let style = &reopened.graph(first).unwrap().page.style;
+    assert!(!style.use_master_items);
+    assert!(style.master_items_on_screen);
 }
 
 #[test]

@@ -420,6 +420,8 @@ pub enum ProjectError {
     NoStickyNote,
     #[error("{0}")]
     CellFormula(String),
+    #[error("the cell has no formula to fill down")]
+    NoCellFormula,
     #[error("the graph has no slicer")]
     NoSlicer,
     #[error("no such operation")]
@@ -694,6 +696,17 @@ impl Project {
             Window::Graph(g) => Some(g),
             Window::Workbook(_) | Window::Notes(_) | Window::Matrix(_) | Window::Layout(_) => None,
         })
+    }
+
+    /// The named Master page used by another graph (T66).
+    pub fn master_graph_for(&self, graph: &Graph) -> Option<&Graph> {
+        if !graph.page.style.use_master_items {
+            return None;
+        }
+        match self.window_by_name("Master")? {
+            Window::Graph(master) if master.id != graph.id => Some(master),
+            _ => None,
+        }
     }
 
     /// The Notes windows (T154).

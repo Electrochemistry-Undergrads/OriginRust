@@ -71,7 +71,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Done 2026-11-15 (unmeasured Sheaf rules, graphing 13.15-13.17): Offset Grouped Data menu with Cumulative, Stacked Histograms, waterfall Y/Z colour mapping |
 | [T63](T63-greyed-items-with-code-2.md) | 3, parallel | M | Existing-feature wiring. F/G/J wired, H, A, B, I and K wired 2026-11-19 (workbook-model 13c, graphing "Step and spline line plots"). Group E wired by T182, with Origin 2016 differences measured (graphing 9.7a). C referred to B8/T14, D to B14 |
 | [T65](T65-graph-view-zoom-pan.md) | 4 (B1), P1 | M | Zoom In mode, Zoom Out, Whole Page and Zoom-Panning tool landed 2026-11-15; Standard toolbar zoom combo added 2026-11-18 (Scale In/Out and Zoom All: T69) |
-| [T66](T66-graph-view-modes.md) | 4 (B1), P1 | M | Partly done: four view modes, Layer Icons, Axis Layer Icons, Object Grid, Layer Grid, Active Layer Only, Labels, Data, Active Layer Indicator, Frame and Full Screen (graphing 22). Master Items on Screen and Show Data Info remain |
+| [T66](T66-graph-view-modes.md) | 4 (B1), P1 | M | Partly done: four view modes, Layer Icons, Axis Layer Icons, Object Grid, Layer Grid, Active Layer Only, Labels, Data, Active Layer Indicator, Frame, Master Items on Screen and Full Screen (graphing 22). Show Data Info remains |
 | [T67](T67-add-straight-line.md) | 4 (B3), P1 | M | Done 2026-11-15: Add Straight Line (Origin's addline), dialog, CLI --vline/--hline; left: dragging (Moveable) |
 | [T70](T70-axis-center-fit-page-to-printer.md) | 4 (B3), P1 | S | Done 2026-11-15: axis Center, Fit Page To Printer, Format > Fit Page To Layers... opens its window |
 | [T71](T71-point-segments.md) | 4 (B4), P1 | S | Done 2026-11-15: Plot > Line + Symbol > 2 and 3 Point Segment (line connections 2 and 3) |
@@ -483,6 +483,8 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T448](T448-cell-formulas.md) | Cell formulas (=A1*10, ranges, other sheets) and the Formula Bar (Origin 2019/2021) | M | done 2026-11-25 (workbook-model 13u) |
 | [T450](T450-small-leftovers.md) | PageUp/PageDown step a Browser Graph or Time Series Explorer; sticky-note mark in Project Explorer | S | done 2026-11-25 (graphing, notes-window.md) |
 | [T453](T453-explorer-length.md) | Time Series Explorer: intervals of a set X length (rest of T416) | S | done 2026-11-25 (graphing "Time Series Explorer") |
+| [T455](T455-cell-fill-down.md) | Cell formulas: `$A$1` references and Fill Down on the Formula Bar (rest of T448) | S | done 2026-11-25 (workbook-model 13u) |
+| [T456](T456-browse-books.md) | Browser Graph across workbooks (rest of T410) | S | done 2026-11-25 (graphing "Browser Graph") |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |

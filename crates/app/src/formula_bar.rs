@@ -57,6 +57,15 @@ pub fn show(
             ui.add_enabled(false, egui::TextEdit::singleline(&mut String::new()).desired_width(f32::INFINITY));
             return;
         };
+        // Fill Down (T455): the cell's formula copied to the rows below, its relative rows shifted.
+        if doc.project().cell_formula(column, row).is_some()
+            && ui
+                .button("Fill Down")
+                .on_hover_text("Copy this formula to the rows below, as far as the sheet has data")
+                .clicked()
+        {
+            actions.push(Action::FillFormulaDown { column, row });
+        }
         let (_, _, text) = bar.editing.get_or_insert_with(|| (column, row, cell_text(doc, column, row)));
         let r = ui.add(
             egui::TextEdit::singleline(text)

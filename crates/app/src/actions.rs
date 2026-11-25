@@ -1572,6 +1572,11 @@ pub enum Action {
     Autosave,
     /// View > Status Bar: show or hide the status bar.
     ToggleStatusBar,
+    /// The Formula Bar's Fill Down: copy the cell's formula down the sheet (T455).
+    FillFormulaDown {
+        column: ColumnId,
+        row: usize,
+    },
     /// View > Formula Bar: show or hide the Formula Bar above the workbooks' grids (T448).
     ToggleFormulaBar,
     /// Tools > AI Assistants (MCP): turn the endpoint of `sheaf-mcp --attach` on or off.
@@ -1588,4 +1593,5 @@ pub enum PageSwitch {
     AxisLayerIcons,
     ObjectGrid,
     LayerGrid,
+    MasterItemsOnScreen,
 }

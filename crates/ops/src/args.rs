@@ -3823,6 +3823,15 @@ pub enum AnalyzeTool {
         /// A stratum column follows the censor column (before the frequency).
         #[arg(long)]
         strata: bool,
+        /// Also draw the survival at these covariate values, comma-separated, one per covariate.
+        #[arg(long, value_delimiter = ',', allow_negative_numbers = true)]
+        at: Option<Vec<f64>>,
+        /// Write the martingale, deviance and Schoenfeld residuals.
+        #[arg(long)]
+        residuals: bool,
+        /// Test the proportional-hazards assumption (Grambsch-Therneau).
+        #[arg(long)]
+        ph_test: bool,
         /// The last --y column holds each row's frequency (count).
         #[arg(long)]
         frequency: bool,

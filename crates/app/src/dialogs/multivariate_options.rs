@@ -63,6 +63,8 @@ pub struct MultiOptions {
     life_reg_percentiles: String,
     life_reg_at: String,
     cox: CoxSpec,
+    /// The Cox window's covariate values for an extra survival curve, as typed (T457).
+    cox_at: String,
     qpcr: QpcrSpec,
     qpcr_curve: QpcrCurveSpec,
     /// The value of the Manual penalty while another penalty is chosen.
@@ -127,7 +129,19 @@ impl MultiOptions {
                 if self.cox.censor.trim().is_empty() {
                     return Err("give the censoring value".to_string());
                 }
-                Ok(Tool::Cox(self.cox.clone()))
+                let mut spec = self.cox.clone();
+                spec.at = if self.cox_at.trim().is_empty() {
+                    None
+                } else {
+                    Some(
+                        self.cox_at
+                            .split([',', ' ', ';'])
+                            .filter(|v| !v.trim().is_empty())
+                            .map(|v| v.trim().parse::<f64>().map_err(|_| format!("'{}' is not a number", v.trim())))
+                            .collect::<Result<Vec<f64>, String>>()?,
+                    )
+                };
+                Ok(Tool::Cox(spec))
             }
             AnalysisKind::LifeRegression => {
                 if self.life_reg.censor.trim().is_empty() {
@@ -398,6 +412,12 @@ impl MultiOptions {
                     }
                 });
                 ui.checkbox(&mut s.strata, "A strata column follows the censor column");
+                ui.checkbox(&mut s.residuals, "Martingale, deviance and Schoenfeld residuals");
+                ui.checkbox(&mut s.ph_test, "Test proportional hazards (Grambsch-Therneau)");
+                ui.horizontal(|ui| {
+                    ui.label("Also the survival at covariates");
+                    ui.add(egui::TextEdit::singleline(&mut self.cox_at).hint_text("values").desired_width(120.0));
+                });
                 ui.horizontal(|ui| {
                     ui.label("Tied times");
                     ui.radio_value(&mut s.efron, false, "Breslow");

@@ -5914,7 +5914,7 @@ fn the_survival_menu_fits_a_cox_model() {
     let mut h = start(vec![data]);
     show_window(&mut h, "Book1 - c.csv");
     menu_path(&mut h, &["Statistics", "Survival Analysis", "Cox Proportional Hazards..."]);
-    assert!(h.state().analysis.is_some() && has_label(&h, "Hazard-ratio confidence"));
+    assert!(h.state().analysis.is_some() && has_label(&h, "Hazard-ratio confidence") && has_label(&h, "Tied times"));
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
     let (sheet, hr) = result_column(&h, "Hazard ratio");

@@ -397,6 +397,11 @@ impl MultiOptions {
                         s.confidence = pct / 100.0;
                     }
                 });
+                ui.horizontal(|ui| {
+                    ui.label("Tied times");
+                    ui.radio_value(&mut s.efron, false, "Breslow");
+                    ui.radio_value(&mut s.efron, true, "Efron");
+                });
                 ui.checkbox(&mut s.graph, "Survival at the covariate means");
                 ui.checkbox(&mut s.frequency, "Last column: frequency (count) of each row");
             }

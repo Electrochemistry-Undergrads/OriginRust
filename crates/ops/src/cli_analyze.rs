@@ -1317,15 +1317,23 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         AnalyzeTool::QpcrCurve { target, no_graph } => {
             (target, Job::Tool(Tool::QpcrCurve(analysis::QpcrCurveSpec { graph: !no_graph })))
         }
-        AnalyzeTool::Cox { target, censor, confidence, frequency, no_graph } => (
-            target,
-            Job::Tool(Tool::Cox(analysis::CoxSpec {
-                censor,
-                confidence: confidence / 100.0,
-                graph: !no_graph,
-                frequency,
-            })),
-        ),
+        AnalyzeTool::Cox { target, censor, confidence, ties, frequency, no_graph } => {
+            let efron = match ties.to_ascii_lowercase().as_str() {
+                "breslow" => false,
+                "efron" => true,
+                other => bail!("--ties takes breslow or efron, not {other:?}"),
+            };
+            (
+                target,
+                Job::Tool(Tool::Cox(analysis::CoxSpec {
+                    censor,
+                    confidence: confidence / 100.0,
+                    graph: !no_graph,
+                    frequency,
+                    efron,
+                })),
+            )
+        }
         AnalyzeTool::Lifereg { target, distribution, censor, frequency, percentiles, at, confidence } => {
             let dist = match distribution.to_ascii_lowercase().as_str() {
                 "weibull" => analysis::LifeDist::Weibull,

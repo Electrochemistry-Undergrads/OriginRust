@@ -2385,7 +2385,7 @@ Statistics > Monte Carlo Simulation (Randomize Inputs)... (CLI `analyze monte-ca
 
 Origin 2026b's reliability and survival tools add Cox regression, which Origin 2016 does not have, so this is
 Sheaf's own. Statistics > Survival Analysis > Cox Proportional Hazards... (`Tool::Cox`, `sheaf analyze cox --y
-COV[,COV..],TIME,CENSOR [--censor 1] [--confidence 95] [--no-graph]`, `sheaf_calc::cox`): the chosen columns are
+COV[,COV..],TIME,CENSOR [--censor 1] [--confidence 95] [--ties breslow|efron] [--no-graph]`, `sheaf_calc::cox`): the chosen columns are
 numeric covariates, then the time and the censor column (a case is right-censored when its cell equals the censoring
 value, as for the Kaplan-Meier estimator); rows with a missing value are left out. The hazard is `h0(t) exp(x'b)`; `b`
 maximizes Breslow's partial likelihood (tied failure times share one risk set) by Newton's method from 0, halving a
@@ -2397,8 +2397,12 @@ per covariate with Coefficient, Standard error, z, Prob>|z|, Hazard ratio, HR lo
 name), then Time and Survival at the means: Breslow's baseline survival at the covariate means as steps, which the
 graph plots. The notes give the cases, events, log-likelihoods and the three tests. Checked against numpy/scipy
 (`tools/cox-ref.py`, `crates/calc/tests/cox_reference.rs`: 70 rows with ties, three covariates and one) to 1e-8.
-Efron ties, strata, time-varying covariates, text (factor) covariates, residuals and the proportional-hazards check
-are not built.
+**Efron's ties** (T445; `--ties efron`, the window's "Tied times"): at a time with `d` tied failures the `l`-th of them
+(`l = 0..d-1`) sees the risk-set sums minus `l/d` of the tied failures' own sums, in the likelihood, gradient and
+information alike; the baseline hazard increment is `sum_l 1 / (S - (l/d) S_D)`; without ties it equals Breslow's.
+Checked with the same data against an independent numpy/scipy Efron fit (two more cases in `tools/cox-ref.py`) to
+1e-8. Strata, time-varying covariates, text (factor) covariates, residuals and the proportional-hazards check are not
+built.
 
 ## 53 Turnbull nonparametric estimate with arbitrary censoring (T409, Origin 2026b; not measured)
 

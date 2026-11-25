@@ -1592,6 +1592,11 @@ fn cox_regression_runs_from_the_command_line() {
     let (ok, out, err) =
         sheaf(&["analyze", "cox", file, "--y", "group,months,cens", "--confidence", "90", "--no-graph"]);
     assert!(ok && out.contains("HR lower 90%"), "{err} {out}");
+    // Efron ties (T445).
+    let (ok, out, err) = sheaf(&["analyze", "cox", file, "--y", "group,months,cens", "--ties", "efron", "--no-graph"]);
+    assert!(ok && out.contains("Cox proportional hazards (Efron ties)"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "cox", file, "--y", "group,months,cens", "--ties", "exact"]);
+    assert!(!ok && err.contains("--ties"), "{err}");
     let (ok, _, err) = sheaf(&["analyze", "cox", file, "--y", "months,cens"]);
     assert!(!ok && err.contains("covariate"), "{err}");
 }

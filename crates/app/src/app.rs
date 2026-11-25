@@ -218,6 +218,10 @@ struct SheetNameDialog {
 pub struct SheafApp {
     doc: Document,
     path: Option<PathBuf>,
+    /// Find in Project Files' Open (T449): the file and the search, to go to its first hit once it has opened.
+    jump_after_open: Option<(PathBuf, crate::project_find::FindSpec)>,
+    /// The search to run on the project just opened (T449), done on the next frame.
+    jump_now: Option<crate::project_find::FindSpec>,
     /// The Origin file the project was imported from; saving over it first keeps a `.bak` copy.
     foreign_source: Option<PathBuf>,
     workspace: Workspace,
@@ -462,6 +466,8 @@ impl SheafApp {
         let mut app = SheafApp {
             doc: Document::default(),
             path: None,
+            jump_after_open: None,
+            jump_now: None,
             foreign_source: None,
             workspace: Workspace::default(),
             known: HashSet::new(),
@@ -996,6 +1002,12 @@ impl SheafApp {
     fn load_project(&mut self, path: PathBuf) -> bool {
         match sheaf_io::open_project(&path) {
             Ok(opened) => {
+                // Opened from Find in Project Files (T449): its search runs on this project next.
+                if let Some((p, spec)) = self.jump_after_open.take()
+                    && p == path
+                {
+                    self.jump_now = Some(spec);
+                }
                 self.note_project(&path);
                 self.doc.replace(opened.project);
                 self.reset_views();
@@ -7082,12 +7094,24 @@ impl SheafApp {
 
     /// File > Find in Project Files... (T361): Open closes the window and opens the chosen project.
     fn find_files_frame(&mut self, ctx: &egui::Context) {
+        // The project opened from the window (T449): go to its first hit, as Find in Project's Go does.
+        if let Some(spec) = self.jump_now.take() {
+            let spec = crate::project_find::FindSpec { within: crate::project_find::FindScope::EntireProject, ..spec };
+            let hits = crate::project_find::find_in_project(self.doc.project(), &spec, &[]);
+            if let Some(first) = hits.first() {
+                let (n, what) = (hits.len(), format!("{} {} {}", first.element, first.attribute, first.range));
+                self.go_to_found(first.target.clone(), ctx);
+                self.say(format!("{n} hit(s) for \"{}\"; the first: {what}", spec.text));
+            }
+        }
         let Some(d) = &mut self.find_files else { return };
         match d.show(ctx) {
             crate::dialogs::find_files::FindFilesOutcome::Open => {}
             crate::dialogs::find_files::FindFilesOutcome::Closed => self.find_files = None,
             crate::dialogs::find_files::FindFilesOutcome::OpenFile(path) => {
+                let spec = self.find_files.as_ref().map(|d| d.spec.clone());
                 self.find_files = None;
+                self.jump_after_open = spec.map(|s| (path.clone(), s));
                 self.open_picked(path);
             }
         }

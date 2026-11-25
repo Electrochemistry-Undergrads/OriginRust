@@ -2163,7 +2163,8 @@ sqrt(sum_{j<h} psi_j^2)` with the psi weights of `phi(B) (1 - B)^d y = theta(B) 
   (the first `d + D s + p + P s` predictions are empty). Forecasts undo the seasonal, then the ordinary differences;
   the bands use the psi weights of the full AR polynomial times `(1 - B)^d (1 - B^s)^D`. The coefficient rows add
   Seasonal AR j and Seasonal MA j; their standard errors take `J` by central differences. A seasonal order with a
-  period below 2 is refused; `--auto` searches `p` and `q` with the seasonal part fixed.
+  period below 2 is refused. With `--auto` the given seasonal `P` and `Q` are maxima too (T452): every `P' <= P`,
+  `Q' <= Q` with the given `D` joins the AIC search of `p` and `q`.
 - **Order by AIC** (T428; `--auto`, the window's "Choose p and q by AIC, up to"): every `p <= P`, `q <= Q` with the
   given `d` and constant is fitted and the smallest AIC kept; each AIC sums its own `n - d - p` errors; orders too long
   for the series are passed over. The note names the chosen order and the search.

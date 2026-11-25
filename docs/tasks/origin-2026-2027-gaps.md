@@ -43,7 +43,7 @@ outputs or UI behavior.
 | Linked HTML/Markdown analysis reports | 2019b | Build a report embedding live links to result values, metadata and figures. Reuse the report with batch analysis and export it as a web page. | [2019b][o19b] |
 | Import PDF Tables | 2021 App | Extract table cells from a PDF into worksheets. | [2021][o21] |
 | Formula-preserving Excel and Sheets import | 2026 | Same-row column formulas done (T417: an Excel column of one same-row formula imports as its column formula, others warn); pasted spreadsheet formulas and per-cell formulas remain. Import Excel cell expressions or paste spreadsheet formulas as editable calculations. Surface unsupported formulas in the affected cells. | [2026][o26] |
-| GraphPad Prism connector | 2026b App | Import Prism project or template data and map it to structured tables that preserve group and replicate roles. | [2026b][o26b] |
+| GraphPad Prism connector | 2026b App | Base slice done (T447: Prism XML `.pzfx` files import as a sheet per table, data sets and replicates or Mean/SD/N roles as columns with Group and Role parameters, excluded values masked; `docs/spec/import-prism.md`); binary `.prism`/`.pzf` files and templates are left. Import Prism project or template data and map it to structured tables that preserve group and replicate roles. | [2026b][o26b] |
 
 ## Graphing and data exploration
 

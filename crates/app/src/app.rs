@@ -344,6 +344,8 @@ pub struct SheafApp {
     function_graph: Option<crate::dialogs::function_graph::FunctionGraphDialog>,
     pub(crate) graph_slicer: Option<crate::dialogs::graph_slicer::GraphSlicerDialog>,
     pub(crate) browser_graph: Option<crate::dialogs::browser_graph::BrowserGraphDialog>,
+    pub(crate) flash_fill: Option<crate::dialogs::flash_fill::FlashFillDialog>,
+    pub(crate) project_browser: Option<crate::dialogs::project_browser::ProjectBrowserDialog>,
     /// The open function window is File > New > Function Plot's: OK makes the graph (T213).
     function_graph_new: bool,
     /// The Audit Log window is open (T131).
@@ -547,6 +549,8 @@ impl SheafApp {
             function_graph: None,
             graph_slicer: None,
             browser_graph: None,
+            flash_fill: None,
+            project_browser: None,
             function_graph_new: false,
             audit_log: false,
             fit_builder: None,
@@ -2669,6 +2673,9 @@ impl SheafApp {
                 let folder = self.path.as_deref().and_then(|p| p.parent()).map(std::path::Path::to_path_buf);
                 self.find_files = Some(crate::dialogs::find_files::FindFilesDialog::new(folder.as_deref()));
             }
+            Action::ProjectBrowser => {
+                self.project_browser.get_or_insert_with(Default::default);
+            }
             Action::FindInProject => {
                 self.find_project = Some(crate::dialogs::find_project::FindProjectDialog::new(self.find_spec.clone()));
             }
@@ -2833,6 +2840,13 @@ impl SheafApp {
             Action::ColumnProperties(column) => {
                 self.column_props = ColumnPropsDialog::new(self.doc.project(), column);
             }
+            Action::FlashFill(column) => match self.doc.project().flash_fill(column) {
+                Ok(fill) => {
+                    self.flash_fill =
+                        Some(crate::dialogs::flash_fill::FlashFillDialog::new(self.doc.project(), column, fill));
+                }
+                Err(e) => self.warn(e.to_string()),
+            },
             Action::SetColumnValues(column) => {
                 self.set_values = SetValuesDialog::new(self.doc.project(), column);
             }
@@ -5163,6 +5177,46 @@ impl SheafApp {
     }
 
     /// Graph > Add Function Graph... (T119): OK adds the curve; an expression error keeps the window open.
+    fn show_project_browser(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::project_browser::BrowserOutcome;
+        let Some(d) = &mut self.project_browser else { return };
+        match d.show(ctx, self.doc.project()) {
+            BrowserOutcome::Open => {}
+            BrowserOutcome::Closed => self.project_browser = None,
+            // The browser stays open, as Find in Project does.
+            BrowserOutcome::GoTo(target) => self.go_to_found(target, ctx),
+            BrowserOutcome::Set { items, field, value } => {
+                let label = format!("Set {}", field.name());
+                let n = self.doc.apply(&label, |p| p.set_metadata(&items, field, &value));
+                self.say(format!("Set the {} of {n} item(s)", field.name()));
+            }
+        }
+    }
+
+    fn show_flash_fill(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::flash_fill::FlashOutcome;
+        let Some(d) = &mut self.flash_fill else { return };
+        match d.show(ctx) {
+            FlashOutcome::Open => {}
+            FlashOutcome::Closed => self.flash_fill = None,
+            FlashOutcome::Fill { column, fill } => {
+                self.flash_fill = None;
+                match self.doc.edit("Flash Fill", |p| p.apply_flash_fill(column, &fill)) {
+                    Ok(()) => self.say("Flash Fill filled the column".to_string()),
+                    Err(e) => self.warn(e.to_string()),
+                }
+            }
+            FlashOutcome::Formula { column, formula } => {
+                self.flash_fill = None;
+                let mode = sheaf_core::column::RecalcMode::Auto;
+                match self.doc.edit("Flash Fill", |p| p.set_column_values_with(column, &formula, None, mode)) {
+                    Ok(()) => self.say(format!("Flash Fill set the formula {formula}")),
+                    Err(e) => self.warn(e.to_string()),
+                }
+            }
+        }
+    }
+
     fn show_browser_graph(&mut self, ctx: &egui::Context) {
         use crate::dialogs::browser_graph::BrowserOutcome;
         let Some(d) = &mut self.browser_graph else { return };
@@ -5370,43 +5424,46 @@ impl SheafApp {
         }
     }
 
+    /// Activates what a Find in Project hit or a Project Browser row leads to: its folder, window, sheet or column.
+    fn go_to_found(&mut self, target: crate::project_find::FindTarget, ctx: &egui::Context) {
+        use crate::project_find::FindTarget;
+        if let Some(window) = target.window_id() {
+            let project = self.doc.project();
+            if project.window(window).is_none() {
+                return;
+            }
+            if explorer::shown_windows(project, &self.panels.explorer.folder)
+                .is_some_and(|shown| !shown.contains(&window))
+            {
+                let folder = explorer::home(&project.root, window);
+                self.apply(Action::GoToFolder(folder), ctx);
+            }
+            self.apply(Action::Focus(window), ctx);
+        }
+        match target {
+            FindTarget::Folder(path) => self.apply(Action::GoToFolder(path), ctx),
+            FindTarget::Window(_) => {}
+            FindTarget::Sheet { book, sheet } => self.apply(Action::SelectSheet { book, sheet }, ctx),
+            FindTarget::Column { book, sheet, column } => {
+                self.apply(Action::SelectSheet { book, sheet }, ctx);
+                if let Some(state) = self.books.get_mut(&book) {
+                    state.sel = Sel::Columns;
+                    state.selected = vec![column];
+                }
+            }
+        }
+    }
+
     /// Find in Project stays open when a hit activates its folder, window, sheet or column.
     fn show_find_project(&mut self, ctx: &egui::Context) {
         use crate::dialogs::find_project::FindProjectOutcome;
-        use crate::project_find::FindTarget;
         let Some(d) = &mut self.find_project else { return };
         let outcome = d.show(ctx, self.doc.project(), &self.panels.explorer.folder);
         self.find_spec = d.spec.clone();
         match outcome {
             FindProjectOutcome::Open => {}
             FindProjectOutcome::Closed => self.find_project = None,
-            FindProjectOutcome::Go(target) => {
-                if let Some(window) = target.window_id() {
-                    let project = self.doc.project();
-                    if project.window(window).is_none() {
-                        return;
-                    }
-                    if explorer::shown_windows(project, &self.panels.explorer.folder)
-                        .is_some_and(|shown| !shown.contains(&window))
-                    {
-                        let folder = explorer::home(&project.root, window);
-                        self.apply(Action::GoToFolder(folder), ctx);
-                    }
-                    self.apply(Action::Focus(window), ctx);
-                }
-                match target {
-                    FindTarget::Folder(path) => self.apply(Action::GoToFolder(path), ctx),
-                    FindTarget::Window(_) => {}
-                    FindTarget::Sheet { book, sheet } => self.apply(Action::SelectSheet { book, sheet }, ctx),
-                    FindTarget::Column { book, sheet, column } => {
-                        self.apply(Action::SelectSheet { book, sheet }, ctx);
-                        if let Some(state) = self.books.get_mut(&book) {
-                            state.sel = Sel::Columns;
-                            state.selected = vec![column];
-                        }
-                    }
-                }
-            }
+            FindProjectOutcome::Go(target) => self.go_to_found(target, ctx),
         }
     }
 
@@ -8403,6 +8460,8 @@ impl SheafApp {
         self.show_function_graph(ctx);
         self.show_graph_slicer(ctx);
         self.show_browser_graph(ctx);
+        self.show_flash_fill(ctx);
+        self.show_project_browser(ctx);
         self.show_audit_log(ctx);
         self.show_fit_builder(ctx);
         self.show_sample_projects(ctx);

@@ -211,3 +211,75 @@ fn sticky_notes_pin_to_a_sheet_take_text_and_collapse() {
     settle(&mut h);
     assert!(project(&h).sticky_note(target).is_none());
 }
+
+#[test]
+fn flash_fill_fills_values_or_keeps_the_formula() {
+    // T430: Column > Flash Fill... from one typed example.
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let (mut out, mut out2) = (sheaf_core::ColumnId(0), sheaf_core::ColumnId(0));
+    h.state_mut().doc.apply("data", |p| {
+        // Two books of names, each with one example beside them.
+        for k in 0..2 {
+            let b = p.add_workbook("");
+            let names = ["John Smith", "Grace Hopper", "Alan Turing"].iter().map(|s| s.to_string()).collect();
+            p.add_column(b, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::text(names)).unwrap();
+            let ex = sheaf_core::ColumnData::text(vec!["Smith, J.".into()]);
+            let c = p.add_column(b, 0, sheaf_core::Designation::Y, ex).unwrap();
+            if k == 0 { out = c } else { out2 = c }
+        }
+    });
+    settle(&mut h);
+    let cell = |h: &Harness<'static, SheafApp>, c, r| {
+        sheaf_core::indexed::level_text(project(h).column(c).unwrap(), r).unwrap_or_default()
+    };
+    h.state_mut().apply(Action::FlashFill(out), &ctx);
+    settle(&mut h);
+    h.get_by_label("Hopper, G.");
+    h.get_by_label("Fill Values").click();
+    settle(&mut h);
+    assert!(h.state().flash_fill.is_none());
+    assert_eq!(cell(&h, out, 2), "Turing, A.");
+    assert_eq!(h.state().doc.undo_label(), Some("Flash Fill"));
+    // Keep Formula: the column follows its source.
+    h.state_mut().apply(Action::FlashFill(out2), &ctx);
+    settle(&mut h);
+    h.get_by_label("Keep Formula").click();
+    settle(&mut h);
+    assert_eq!(cell(&h, out2, 1), "Hopper, G.");
+    assert!(project(&h).column(out2).unwrap().formula.as_deref().is_some_and(|f| f.starts_with("token(")));
+}
+
+#[test]
+fn project_browser_sets_units_on_ticked_columns_in_one_step() {
+    // T433: View > Project Browser, columns only, tick two, set their Units.
+    use sheaf_core::project_browser::{ItemKind, ItemRef, MetaField};
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let mut ys = Vec::new();
+    h.state_mut().doc.apply("data", |p| {
+        let b = p.add_workbook("");
+        for _ in 0..3 {
+            ys.push(
+                p.add_column(b, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::numeric(vec![1.0])).unwrap(),
+            );
+        }
+    });
+    settle(&mut h);
+    h.state_mut().apply(Action::ProjectBrowser, &ctx);
+    settle(&mut h);
+    {
+        let d = h.state_mut().project_browser.as_mut().expect("the browser");
+        d.kind = Some(ItemKind::Column);
+        d.ticked.extend([ItemRef::Column(ys[0]), ItemRef::Column(ys[2])]);
+        d.field = MetaField::Units;
+        d.value = "mA".into();
+    }
+    settle(&mut h);
+    h.get_by_label("Apply to 2 Ticked").click();
+    settle(&mut h);
+    let units: Vec<String> = ys.iter().map(|c| project(&h).column(*c).unwrap().units.clone()).collect();
+    assert_eq!(units, ["mA", "", "mA"]);
+    assert_eq!(h.state().doc.undo_label(), Some("Set Units"));
+    assert!(h.state().project_browser.is_some(), "the browser stays open");
+}

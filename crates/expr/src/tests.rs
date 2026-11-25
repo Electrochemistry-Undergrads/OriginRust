@@ -1371,3 +1371,17 @@ fn a_named_range_stands_for_rows_of_a_column() {
     // A plain scalar min(x) keeps its meaning.
     assert_eq!(Expr::parse("min(x)").unwrap().eval(&SimpleHost::new().var("x", 7.0)).unwrap(), 7.0);
 }
+
+#[test]
+fn token_takes_the_nth_word_from_either_end() {
+    // T430 (Sheaf's own): words are runs of letters and digits.
+    assert_eq!(ev_text(r#"token("Smith, John A.", 2)"#), "John");
+    assert_eq!(ev_text(r#"token("Smith, John A.", -1)"#), "A");
+    assert_eq!(ev_text(r#"token("2024-03-17", 2)"#), "03");
+    assert_eq!(ev_text(r#"token("a b", 3)"#), "", "no third word");
+    assert_eq!(ev_text(r#"token("a b", 0)"#), "");
+    assert_eq!(
+        ev_text(r#"upper(left(token("ada lovelace", 1), 1)) + ". " + token("ada lovelace", -1)"#),
+        "A. lovelace"
+    );
+}

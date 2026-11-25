@@ -676,6 +676,8 @@ pub enum Action {
     SwapColumns(ColumnId, ColumnId),
     /// Edit > Find in Project (F3): open the Find window.
     FindInProject,
+    /// View > Project Browser: open it (T433).
+    ProjectBrowser,
     /// File > Find in Project Files... (T361).
     FindInProjectFiles,
     /// File > Export > Worksheet as Image...: save the active sheet as a picture.
@@ -797,6 +799,8 @@ pub enum Action {
     },
     ColumnProperties(ColumnId),
     SetColumnValues(ColumnId),
+    /// Column > Flash Fill...: work out the column's rule from its typed examples and show it (T430).
+    FlashFill(ColumnId),
     /// The Set Values window for several columns of one sheet at once (Ctrl+Shift+Q).
     SetMultipleColumnsValues(Vec<ColumnId>),
     /// Recalculate these columns now. Columns without a recalculating formula are skipped.

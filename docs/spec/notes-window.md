@@ -51,8 +51,9 @@ choices. Origin 2016 has none.
   `edit_sticky_note`, `remove_sticky_note`, `sticky_notes`.
 - **Project Explorer (T450):** a window with a note (a graph's, a workbook's or one of its sheets') has a small square
   in the note's colour at the corner of its icon, and the note's first line ("Note: ...") in its row's tooltip.
-- **Not done:** notes on matrices and layout pages, several notes per window, placing a note inside the window, and
-  notes in `.opj` files.
+- **Matrices and layouts (T460):** Window > Sticky Note on a matrix book or a layout page pins a note to it, shown
+  as a strip ("Note") above the matrix or the page, and marked in Project Explorer like the others.
+- **Not done:** several notes per window, placing a note inside the window, and notes in `.opj` files.
 
 ## Linked reports (T439, 2026-11-25; Origin 2019b's linked HTML/Markdown reports, Sheaf's own, not measured)
 

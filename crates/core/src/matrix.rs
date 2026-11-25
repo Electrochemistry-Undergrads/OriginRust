@@ -547,6 +547,9 @@ pub struct MatrixBook {
     pub sheets: Vec<MatrixSheet>,
     #[serde(default)]
     pub active_sheet: usize,
+    /// The matrix book's sticky note (T460).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sticky: Option<crate::sticky::StickyNote>,
 }
 
 impl MatrixBook {
@@ -558,6 +561,7 @@ impl MatrixBook {
             long_name: String::new(),
             sheets: vec![MatrixSheet::new("MSheet1", data_id, DEFAULT_SIZE, DEFAULT_SIZE)],
             active_sheet: 0,
+            sticky: None,
         }
     }
 

@@ -467,3 +467,21 @@ fn a_cell_formula_is_typed_shown_in_the_formula_bar_and_follows_its_input() {
     assert!(project(&h).cell_formula(b, 0).is_none());
     assert_eq!(cell(&h), "7");
 }
+
+#[test]
+fn a_matrix_book_takes_a_sticky_note() {
+    // T460: Window > Sticky Note on a matrix book shows the note's strip above the matrix.
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let mut m = sheaf_core::WindowId(0);
+    h.state_mut().doc.apply("matrix", |p| m = p.add_matrix_book(""));
+    h.state_mut().apply(Action::Focus(m), &ctx);
+    settle(&mut h);
+    h.state_mut().apply(Action::AddStickyNote { window: m, sheet: false }, &ctx);
+    settle(&mut h);
+    assert!(project(&h).sticky_note(sheaf_core::sticky::NoteTarget::Window(m)).is_some());
+    h.get_by_label("Note");
+    h.get_by_label("Delete Note").click();
+    settle(&mut h);
+    assert!(project(&h).sticky_note(sheaf_core::sticky::NoteTarget::Window(m)).is_none());
+}

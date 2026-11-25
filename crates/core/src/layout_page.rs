@@ -110,6 +110,9 @@ pub struct LayoutPage {
     /// The page colour (Format > Layout Page..., T237 slice 6); white by default.
     #[serde(default = "white", skip_serializing_if = "is_white")]
     pub background: Color,
+    /// The layout page's sticky note (T460).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sticky: Option<crate::sticky::StickyNote>,
 }
 
 fn white() -> Color {
@@ -135,6 +138,7 @@ impl LayoutPage {
             height_pt,
             items: Vec::new(),
             background: Color::WHITE,
+            sticky: None,
         }
     }
 

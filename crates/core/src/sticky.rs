@@ -82,6 +82,8 @@ impl Project {
             NoteTarget::Window(id) => match self.window(id)? {
                 Window::Graph(g) => g.sticky.as_ref(),
                 Window::Workbook(b) => b.sticky.as_ref(),
+                Window::Matrix(m) => m.sticky.as_ref(),
+                Window::Layout(l) => l.sticky.as_ref(),
                 _ => None,
             },
             NoteTarget::Sheet(book, sheet) => self.workbook(book)?.sheets.get(sheet)?.sticky.as_ref(),
@@ -95,10 +97,13 @@ impl Project {
                 if self.graph(id).is_some() {
                     return self.graph_mut(id).map(|g| &mut g.sticky).ok_or(ProjectError::NoStickyNote);
                 }
-                match self.workbook_mut(id) {
-                    Some(b) => Ok(&mut b.sticky),
-                    None => Err(ProjectError::NoStickyNote),
+                if self.workbook(id).is_some() {
+                    return self.workbook_mut(id).map(|b| &mut b.sticky).ok_or(ProjectError::NoStickyNote);
                 }
+                if self.matrix_book(id).is_some() {
+                    return self.matrix_book_mut(id).map(|m| &mut m.sticky).ok_or(ProjectError::NoStickyNote);
+                }
+                self.layout_mut(id).map(|l| &mut l.sticky).ok_or(ProjectError::NoStickyNote)
             }
             NoteTarget::Sheet(book, sheet) => self
                 .workbook_mut(book)
@@ -140,6 +145,16 @@ impl Project {
         for g in self.graphs() {
             if let Some(n) = &g.sticky {
                 out.push((NoteTarget::Window(g.id), n));
+            }
+        }
+        for w in &self.windows {
+            let (id, note) = match w {
+                Window::Matrix(m) => (m.id, &m.sticky),
+                Window::Layout(l) => (l.id, &l.sticky),
+                _ => continue,
+            };
+            if let Some(n) = note {
+                out.push((NoteTarget::Window(id), n));
             }
         }
         for b in self.workbooks() {
@@ -193,5 +208,13 @@ mod tests {
         assert!(!p.remove_sticky_note(NoteTarget::Window(g)));
         assert!(p.edit_sticky_note(NoteTarget::Window(g), |n| n.text.clear()).is_err());
         assert_eq!(StickyNote::default().first_line(), "(empty note)");
+        // T460: a matrix book and a layout page.
+        let m = p.add_matrix_book("");
+        let l = p.add_layout();
+        for t in [NoteTarget::Window(m), NoteTarget::Window(l)] {
+            p.add_sticky_note(t).unwrap();
+            assert!(p.sticky_note(t).is_some());
+        }
+        assert_eq!(p.sticky_notes().len(), 4, "graph note removed above; book, sheet, matrix, layout");
     }
 }

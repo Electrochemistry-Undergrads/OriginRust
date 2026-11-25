@@ -6463,6 +6463,24 @@ equal intervals in each page dimension for the measured default density. The
 switch defaults to off, is undoable, and is saved per graph in `.sheaf` and `.opj`.
 Print and export use the normal graph scene.
 
+### 22.13 View > Show > Layer Grid (T66, Origin 2016, measured 2026-11-25)
+
+Command 33091 drew a light gray page-wide grid beneath the graph, with about
+25 intervals in each fitted page dimension. A test with two different-sized
+layers kept the same grid positions when the active layer changed. Switching
+from Layer Grid to Object Grid replaced the coarse grid with the finer one.
+Switching back restored the coarse grid. The second graph kept its own setting.
+The first graph kept Layer Grid after reopening its OPJ. EMF drawing records
+were the same after accounting for unused alignment bytes in text records.
+[Origin Options Page tab](https://docs.originlab.com/origin-help/options-dialog-page-tab/)
+
+Sheaf draws Layer Grid at 25 intervals per page dimension in the graph editing
+window. Object Grid and Layer Grid change the same per-page setting. Enabling
+one replaces the other in one undo step, and clicking the checked item clears
+the grid. Both settings are saved in `.sheaf` and `.opj`. Older `.sheaf` files
+with Object Grid enabled still open with that grid. Print and export use the
+normal graph scene.
+
 ## 23. View > Zoom All and the Tools-bar Scale In / Scale Out (T69, measured 2026-11-15, Origin 2016)
 
 Measured in OriginPro 2016 on our own synthetic data (X = 1 to 10, Y = 2X+1 and 20-X, Line + Symbol graph; one run with a right-Y layer from `layadd type:=righty`; one with both axes logarithmic; a 4-graph project), a 1024x768 Origin window, drags and clicks sent by `tools/origin-ref/origin-dialog.ps1 -NoDialog` with `-AfterFile` (`@DRAG`, `@CLICK`, `@DCLICK`, `@KEYDOWN`, `@SHOT`, `@CURSOR`) and the axis ends read after each action with `?layer.x.from` / `.to` / `layer.y.from` / `.to` (raw outputs and pictures are local: `re-workspace/scratch/t69/`, `*.out.txt`, `*.png`). Anything not listed is **unmeasured**.

@@ -1557,4 +1557,5 @@ pub enum PageSwitch {
     ActiveLayerIndicator,
     AxisLayerIcons,
     ObjectGrid,
+    LayerGrid,
 }

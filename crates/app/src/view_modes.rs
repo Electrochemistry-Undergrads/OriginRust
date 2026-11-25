@@ -10,6 +10,7 @@
 
 use crate::graph_zoom::MARGIN;
 use eframe::egui::{self, Color32, Key, Rect, TextureHandle, TextureOptions, Vec2, vec2};
+use sheaf_core::graph::PageGrid;
 use sheaf_core::project::ViewMode;
 use sheaf_core::{Color, Project, WindowId};
 use sheaf_plot::scene::{Item, LayerScene, ObjectKind, Scene, Stroke, line_to, move_to};
@@ -135,14 +136,12 @@ pub fn resized(project: &Project, graph: WindowId, page: Vec2) -> Project {
     p
 }
 
-/// The object grid is a page-wide underlay with roughly the density of the default Origin grid
-/// in a fitted page. It has no pickable objects.
-fn object_grid(scene: &Scene, scale: f64) -> LayerScene {
-    const INTERVALS: u32 = 36;
+/// A page-wide alignment guide without pickable objects.
+fn grid_underlay(scene: &Scene, scale: f64, intervals: u32) -> LayerScene {
     let (width, height) = (scene.width, scene.height);
     let mut path = String::new();
-    for i in 1..INTERVALS {
-        let fraction = f64::from(i) / f64::from(INTERVALS);
+    for i in 1..intervals {
+        let fraction = f64::from(i) / f64::from(intervals);
         let (x, y) = (width * fraction, height * fraction);
         move_to(&mut path, x, 0.0);
         line_to(&mut path, x, height);
@@ -169,10 +168,16 @@ pub fn raster(
     mode: ViewMode,
     scene: &mut Scene,
     scale: f64,
-    show_object_grid: bool,
+    grid: PageGrid,
 ) -> Result<sheaf_plot::Raster, sheaf_plot::PlotError> {
-    if show_object_grid {
-        scene.layers.insert(0, object_grid(scene, scale));
+    // The default Origin spacings measured in a fitted page (graphing 22.12 and 22.13).
+    let intervals = match grid {
+        PageGrid::Off => 0,
+        PageGrid::Object => 36,
+        PageGrid::Layer => 25,
+    };
+    if intervals > 0 {
+        scene.layers.insert(0, grid_underlay(scene, scale, intervals));
     }
     let raster = if mode == ViewMode::Draft {
         sheaf_plot::render_scene_raster_draft(scene, scale)
@@ -180,7 +185,7 @@ pub fn raster(
         sheaf_plot::render_scene_raster(scene, scale)
     };
     // Keep the original scene and its layer indices for picking and editing.
-    if show_object_grid {
+    if intervals > 0 {
         scene.layers.remove(0);
     }
     raster
@@ -350,7 +355,7 @@ mod tests {
     }
 
     #[test]
-    fn object_grid_is_rasterized_under_the_graph_and_leaves_the_scene_intact() {
+    fn alignment_grids_are_rasterized_under_the_graph_and_leave_the_scene_intact() {
         let page = sheaf_plot::Rect { x: 0.0, y: 0.0, w: 72.0, h: 72.0 };
         let shape = sheaf_plot::Rect { x: 20.0, y: 20.0, w: 20.0, h: 20.0 };
         let mut scene = Scene {
@@ -368,11 +373,15 @@ mod tests {
             }],
         };
         let original = scene.clone();
-        let plain = raster(ViewMode::Page, &mut scene, 1.0, false).unwrap();
-        let shown = raster(ViewMode::Page, &mut scene, 1.0, true).unwrap();
+        let plain = raster(ViewMode::Page, &mut scene, 1.0, PageGrid::Off).unwrap();
+        let object_grid = raster(ViewMode::Page, &mut scene, 1.0, PageGrid::Object).unwrap();
+        let layer_grid = raster(ViewMode::Page, &mut scene, 1.0, PageGrid::Layer).unwrap();
         let shape_pixel = 4 * (24 * 72 + 24);
-        assert_ne!(plain.rgba, shown.rgba);
-        assert_eq!(&shown.rgba[shape_pixel..shape_pixel + 4], &[0, 0, 0, 255]);
+        assert_ne!(object_grid.rgba, layer_grid.rgba);
+        for shown in [object_grid, layer_grid] {
+            assert_ne!(plain.rgba, shown.rgba);
+            assert_eq!(&shown.rgba[shape_pixel..shape_pixel + 4], &[0, 0, 0, 255]);
+        }
         assert_eq!(scene, original);
     }
 

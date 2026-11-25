@@ -382,6 +382,30 @@ pub enum LayerDrawingOrder {
     LayerByLayer,
 }
 
+/// The alignment grid shown while editing a graph page.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PageGrid {
+    #[default]
+    Off,
+    Object,
+    Layer,
+}
+
+fn read_page_grid<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<PageGrid, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StoredGrid {
+        Mode(PageGrid),
+        ObjectToggle(bool),
+    }
+    Ok(match StoredGrid::deserialize(deserializer)? {
+        StoredGrid::Mode(grid) => grid,
+        StoredGrid::ObjectToggle(true) => PageGrid::Object,
+        StoredGrid::ObjectToggle(false) => PageGrid::Off,
+    })
+}
+
 /// The settings of the page beyond its size and colour.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PageStyle {
@@ -397,9 +421,9 @@ pub struct PageStyle {
     /// Show the owning layer number alongside each axis in the graph window.
     #[serde(default, skip_serializing_if = "is_false")]
     pub axis_layer_icons: bool,
-    /// Show the page's object alignment grid in the graph window.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub object_grid: bool,
+    /// The page's object or layer alignment grid in the graph window.
+    #[serde(default, skip_serializing_if = "is_default", alias = "object_grid", deserialize_with = "read_page_grid")]
+    pub grid: PageGrid,
     /// Data > Lock Position (T186).
     #[serde(default, skip_serializing_if = "is_default")]
     pub lock_position: LockPosition,
@@ -440,7 +464,7 @@ impl Default for PageStyle {
             layer_icons: true,
             active_layer_indicator: false,
             axis_layer_icons: false,
-            object_grid: false,
+            grid: PageGrid::Off,
             lock_position: LockPosition::LayerIcon,
             title_display: TitleDisplay::Both,
             comments: String::new(),
@@ -483,13 +507,21 @@ mod tests {
     }
 
     #[test]
+    fn the_legacy_object_grid_flag_restores_the_page_grid() {
+        let shown: PageStyle = serde_json::from_str(r#"{"object_grid":true}"#).unwrap();
+        let hidden: PageStyle = serde_json::from_str(r#"{"object_grid":false}"#).unwrap();
+        assert_eq!(shown.grid, PageGrid::Object);
+        assert_eq!(hidden, PageStyle::default());
+    }
+
+    #[test]
     fn the_new_page_and_fill_settings_round_trip() {
         let page = PageStyle {
             border: Some(BorderStyle::solid(Color::BLACK, 0.5)),
             layer_icons: false,
             active_layer_indicator: true,
             axis_layer_icons: true,
-            object_grid: true,
+            grid: PageGrid::Layer,
             lock_position: LockPosition::LastPoint,
             title_display: TitleDisplay::LongName,
             comments: "notes".into(),

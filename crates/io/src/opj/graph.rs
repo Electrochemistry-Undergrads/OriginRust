@@ -22,8 +22,9 @@ const CURVE_UNITS_PER_POINT: f64 = 500.0;
 // Window header.
 const PAGE_WIDTH_AT: usize = 0x23;
 const PAGE_HEIGHT_AT: usize = 0x25;
-pub(super) const OBJECT_GRID_AT: usize = 0x34;
+pub(super) const PAGE_GRID_AT: usize = 0x34;
 pub(super) const OBJECT_GRID_BIT: u8 = 0x02;
+pub(super) const LAYER_GRID_BIT: u8 = 0x04;
 pub(super) const AXIS_LAYER_ICONS_AT: usize = 0x69;
 pub(super) const AXIS_LAYER_ICONS_BIT: u8 = 0x80;
 // Layer header.
@@ -184,7 +185,11 @@ pub(crate) fn build(w: &Window, column_of_set: &HashMap<usize, ColumnId>, warnin
     }
     graph.page.style.axis_layer_icons =
         w.header.get(AXIS_LAYER_ICONS_AT).is_some_and(|flags| flags & AXIS_LAYER_ICONS_BIT != 0);
-    graph.page.style.object_grid = w.header.get(OBJECT_GRID_AT).is_some_and(|flags| flags & OBJECT_GRID_BIT != 0);
+    graph.page.style.grid = match u8_at(&w.header, PAGE_GRID_AT) & (OBJECT_GRID_BIT | LAYER_GRID_BIT) {
+        LAYER_GRID_BIT => PageGrid::Layer,
+        OBJECT_GRID_BIT => PageGrid::Object,
+        _ => PageGrid::Off,
+    };
     let template = graph.layers.remove(0);
     for (k, layer) in w.layers.iter().enumerate() {
         graph.layers.push(build_layer(layer, k == 0, &template, &graph.page, column_of_set, &mut notes));

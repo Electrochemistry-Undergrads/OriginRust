@@ -778,7 +778,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         let stretched = mode.fills_window().then(|| view_modes::resized(doc.project(), graph_id, page_size));
         let project = stretched.as_ref().unwrap_or(doc.project());
         let drawn = sheaf_plot::graph_scene(project, graph_id).and_then(|mut scene| {
-            let raster = view_modes::raster(mode, &mut scene, scale, graph.page.style.object_grid)?;
+            let raster = view_modes::raster(mode, &mut scene, scale, graph.page.style.grid)?;
             Ok((scene, raster, sheaf_plot::layout_geometry(project, graph_id)?))
         });
         match drawn {
@@ -1766,7 +1766,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         layer_icons: true,
         active_layer_indicator: false,
         axis_layer_icons: false,
-        object_grid: false,
+        page_grid: Default::default(),
         show_frame: None,
         lock_position: Default::default(),
         page_breaks: false,

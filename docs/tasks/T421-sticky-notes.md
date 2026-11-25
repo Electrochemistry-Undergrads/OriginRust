@@ -10,8 +10,8 @@ Sheaf's own design (Origin 2016 has none).
 
 ## Left
 
-- Notes on matrices and layout pages, several notes per window, a note's place inside the window, an indicator in
-  Project Explorer, notes in .opj files.
+- Notes on matrices and layout pages, several notes per window, a note's place inside the window, notes in .opj
+  files. (The Project Explorer mark: T450.)
 
 ## Tests
 

@@ -16,12 +16,16 @@ use serde::{Deserialize, Serialize};
 pub const DEFAULT_INTERVALS: usize = 10;
 
 /// A graph's explorer (in [`Graph::explorer`]).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SeriesExplorer {
-    /// How many equal X intervals the series is split into (at least 2).
+    /// How many X intervals the series is split into (at least 2; with a `length`, as many as it takes).
     pub intervals: usize,
     /// The interval shown in the lower layer, from 0.
     pub current: usize,
+    /// Intervals of this X length (T453: 1 for a day of dates, 7 for a week) instead of equal parts; the last one
+    /// may be shorter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub length: Option<f64>,
 }
 
 impl SeriesExplorer {
@@ -36,9 +40,14 @@ impl Graph {
     fn place_explorer_band(&mut self) {
         let Some(e) = self.explorer else { return };
         let Some(k) = self.layers.get(1).and_then(|l| l.zoom) else { return };
+        // The part of the frame one interval takes: a length over the X extent, else an equal part.
+        let width = match (e.length, self.layers.first().map(|l| (l.x_axis.min, l.x_axis.max))) {
+            (Some(len), Some((Some(lo), Some(hi)))) if hi > lo && len > 0.0 => len / (hi - lo),
+            _ => 1.0 / e.intervals.max(1) as f64,
+        };
         if let Some(r) = self.layers.first_mut().and_then(|l| l.shapes.get_mut(k)) {
-            let n = e.intervals.max(1) as f64;
-            (r.x1, r.x2) = (e.current as f64 / n, (e.current + 1) as f64 / n);
+            let start = e.current as f64 * width;
+            (r.x1, r.x2) = (start.min(1.0), (start + width).min(1.0));
             (r.y1, r.y2) = (0.0, 1.0);
         }
     }
@@ -66,7 +75,7 @@ impl Project {
             g.layers[0].x_axis.min = Some(lo);
             g.layers[0].x_axis.max = Some(hi);
         }
-        g.explorer = Some(SeriesExplorer { intervals: DEFAULT_INTERVALS, current: 0 });
+        g.explorer = Some(SeriesExplorer { intervals: DEFAULT_INTERVALS, current: 0, length: None });
         g.place_explorer_band();
         Ok(id)
     }
@@ -83,6 +92,39 @@ impl Project {
         Ok(())
     }
 
+    /// Splits graph `graph`'s series into intervals of X length `length` (T453), or with `None` back into equal
+    /// parts (their last count). Too short a length (more than 1000 intervals) or a series without an X extent is
+    /// refused. The interval that holds the start of the one shown before is shown.
+    pub fn set_explorer_length(&mut self, graph: WindowId, length: Option<f64>) -> Result<(), ProjectError> {
+        let g = self.graph_mut(graph).ok_or(ProjectError::NoSuchWindow(graph))?;
+        let span = g.layers.first().and_then(|l| Some(l.x_axis.max? - l.x_axis.min?)).filter(|s| *s > 0.0);
+        let e = g.explorer.as_mut().ok_or(ProjectError::NoExplorer)?;
+        let old_width = match (e.length, span) {
+            (Some(len), Some(s)) => len / s,
+            _ => 1.0 / e.intervals.max(1) as f64,
+        };
+        let start = e.current as f64 * old_width;
+        match length {
+            Some(len) => {
+                let span = span.ok_or(ProjectError::NoExplorer)?;
+                let n = (span / len).ceil();
+                if !(len > 0.0 && n.is_finite() && n <= 1000.0) {
+                    return Err(ProjectError::ExplorerLength);
+                }
+                e.length = Some(len);
+                e.intervals = (n as usize).max(1);
+                e.current = ((start * span / len + 1e-9).floor() as usize).min(e.intervals - 1);
+            }
+            None => {
+                e.length = None;
+                e.intervals = e.intervals.clamp(2, 1000);
+                e.current = ((start * e.intervals as f64 + 1e-9).floor() as usize).min(e.intervals - 1);
+            }
+        }
+        g.place_explorer_band();
+        Ok(())
+    }
+
     /// Splits graph `graph`'s series into `intervals` (2 to 1000) and shows the interval that holds the start
     /// of the one shown before.
     pub fn set_explorer_intervals(&mut self, graph: WindowId, intervals: usize) -> Result<(), ProjectError> {
@@ -91,6 +133,7 @@ impl Project {
         let intervals = intervals.clamp(2, 1000);
         e.current = (e.current * intervals / e.intervals.max(1)).min(intervals - 1);
         e.intervals = intervals;
+        e.length = None;
         g.place_explorer_band();
         Ok(())
     }
@@ -114,7 +157,7 @@ mod tests {
         let graph = p.graph(g).unwrap();
         assert_eq!(graph.layers.len(), 2);
         assert_eq!((graph.layers[0].x_axis.min, graph.layers[0].x_axis.max), (Some(0.0), Some(100.0)));
-        assert_eq!(graph.explorer, Some(SeriesExplorer { intervals: 10, current: 0 }));
+        assert_eq!(graph.explorer, Some(SeriesExplorer { intervals: 10, current: 0, length: None }));
         let band = |p: &Project| {
             let s = &p.graph(g).unwrap().layers[0].shapes[0];
             (s.x1, s.x2, s.y1, s.y2)
@@ -127,11 +170,21 @@ mod tests {
         assert!(p.explore_interval(g, 10).is_err());
         // Four intervals: the start of interval 4 of 10 (30 %) lies in interval 2 of 4.
         p.set_explorer_intervals(g, 4).unwrap();
-        assert_eq!(p.graph(g).unwrap().explorer, Some(SeriesExplorer { intervals: 4, current: 1 }));
+        assert_eq!(p.graph(g).unwrap().explorer, Some(SeriesExplorer { intervals: 4, current: 1, length: None }));
         assert_eq!(band(&p), (0.25, 0.5, 0.0, 1.0));
         // It saves with the project.
         let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
         assert_eq!(back.graph(g).unwrap().explorer, p.graph(g).unwrap().explorer);
+        // Intervals of a set length (T453): 30 X units over 0..100 make 4, the last one 10 long.
+        p.set_explorer_length(g, Some(30.0)).unwrap();
+        let e = p.graph(g).unwrap().explorer.unwrap();
+        assert_eq!((e.intervals, e.current), (4, 0), "the start of 25..50 lies in 0..30");
+        p.explore_interval(g, 3).unwrap();
+        let (x1, x2, ..) = band(&p);
+        assert!((x1 - 0.9).abs() < 1e-12 && (x2 - 1.0).abs() < 1e-12, "{x1} {x2}");
+        assert!(p.set_explorer_length(g, Some(0.01)).is_err(), "too many intervals");
+        p.set_explorer_length(g, None).unwrap();
+        assert_eq!(p.graph(g).unwrap().explorer.unwrap().length, None);
         // A plain Zoom graph is no explorer.
         let z = p.plot_columns(Template::Zoom, &[y]).unwrap();
         assert!(p.explore_interval(z, 0).is_err());

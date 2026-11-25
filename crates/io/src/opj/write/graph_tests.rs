@@ -514,16 +514,21 @@ fn axis_layer_icons_survive_a_bare_opj_round_trip_per_graph() {
 }
 
 #[test]
-fn object_grid_survives_a_bare_opj_round_trip_per_graph() {
+fn graph_grids_survive_a_bare_opj_round_trip_per_graph() {
     let mut p = source();
-    graph_with(&mut p, Template::Line, &[(0, 1)], |g| g.page.style.object_grid = true);
-    graph_with(&mut p, Template::Line, &[(0, 1)], |g| g.page.style.axis_layer_icons = true);
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| g.page.style.grid = PageGrid::Object);
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        g.page.style.grid = PageGrid::Layer;
+        g.page.style.axis_layer_icons = true;
+    });
+    graph_with(&mut p, Template::Line, &[(0, 1)], |_| {});
     let (imp, warnings) = round_trip(&p);
     assert!(warnings.is_empty(), "{warnings:?}");
-    assert!(imp.graphs[0].page.style.object_grid);
+    assert_eq!(imp.graphs[0].page.style.grid, PageGrid::Object);
     assert!(!imp.graphs[0].page.style.axis_layer_icons);
-    assert!(!imp.graphs[1].page.style.object_grid);
+    assert_eq!(imp.graphs[1].page.style.grid, PageGrid::Layer);
     assert!(imp.graphs[1].page.style.axis_layer_icons);
+    assert_eq!(imp.graphs[2].page.style.grid, PageGrid::Off);
 }
 
 #[test]

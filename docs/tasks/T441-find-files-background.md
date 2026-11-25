@@ -14,4 +14,4 @@ stops it too.
 
 ## Left
 
-- Jumping to the hit inside the opened project.
+- Nothing (jumping to the first hit of the opened project: done in T449).

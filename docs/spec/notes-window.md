@@ -49,8 +49,10 @@ choices. Origin 2016 has none.
 - **Model:** `sheaf_core::sticky::StickyNote` (text, colour, collapsed) in `Graph::sticky`, `Workbook::sticky` and
   `Worksheet::sticky`, saved in the `.sheaf` file; a sheet's note moves with the sheet. `Project::add_sticky_note`,
   `edit_sticky_note`, `remove_sticky_note`, `sticky_notes`.
-- **Not done:** notes on matrices and layout pages, several notes per window, placing a note inside the window, an
-  indicator in Project Explorer, and notes in `.opj` files.
+- **Project Explorer (T450):** a window with a note (a graph's, a workbook's or one of its sheets') has a small square
+  in the note's colour at the corner of its icon, and the note's first line ("Note: ...") in its row's tooltip.
+- **Not done:** notes on matrices and layout pages, several notes per window, placing a note inside the window, and
+  notes in `.opj` files.
 
 ## Linked reports (T439, 2026-11-25; Origin 2019b's linked HTML/Markdown reports, Sheaf's own, not measured)
 

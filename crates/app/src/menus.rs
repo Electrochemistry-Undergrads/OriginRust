@@ -35,7 +35,7 @@ use sheaf_core::clipboard::CopyPart;
 use sheaf_core::data_range::RangeEnd;
 use sheaf_core::fill_pattern::QuickFill;
 use sheaf_core::format_clip::{AxisPart, GraphPart, LegendPart};
-use sheaf_core::graph::{LockPosition, PlotKind, Stack};
+use sheaf_core::graph::{LockPosition, PageGrid, PlotKind, Stack};
 use sheaf_core::sheetops::{MaskOp, MoveTo};
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnId, Designation, WindowId};
@@ -361,6 +361,8 @@ pub enum Cmd {
     GraphSlicer,
     /// Graph > Browser Graph... (T410).
     BrowserGraph,
+    /// Graph > Next Dataset (true) / Previous Dataset (T450): step a browser or an explorer.
+    BrowseStep(bool),
     /// View > View Windows (T100).
     ViewWindows(sheaf_core::project::ViewWindows),
     /// An axis's Save Format as Theme... (T102).
@@ -655,6 +657,7 @@ pub enum Cmd {
     ToggleActiveLayerIndicator,
     ToggleAxisLayerIcons,
     ToggleObjectGrid,
+    ToggleLayerGrid,
     ToggleLayerFrame,
     /// Data > Lock Position (T186): where the graph's analysis locks are drawn.
     LockPosition(sheaf_core::graph::LockPosition),
@@ -807,6 +810,8 @@ pub enum Cmd {
     Autosave,
     /// View > Status Bar: show or hide the status bar.
     ToggleStatusBar,
+    /// View > Formula Bar (T448).
+    ToggleFormulaBar,
     /// Tools > AI Assistants (MCP): a tick item for the endpoint of `sheaf-mcp --attach`.
     ToggleAiLink,
     /// File > Close: close (hide) the active window, as its title bar's close button does.
@@ -976,7 +981,7 @@ pub struct MenuContext<'a> {
     /// Whether View > Show > Active Layer Indicator is checked for this graph.
     pub active_layer_indicator: bool,
     pub axis_layer_icons: bool,
-    pub object_grid: bool,
+    pub page_grid: PageGrid,
     /// The active Cartesian layer's plot frame. None disables the command.
     pub show_frame: Option<bool>,
     /// The active graph's Lock Position (the tick of Data > Lock Position, T186).
@@ -1492,6 +1497,7 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
         WindowKind::Workbook => {
             v.push(sep());
             v.push(keyed("&Freeze/Unfreeze Panes", ctrl_shift(Key::F), Cmd::FreezePanes));
+            v.push(item("For&mula Bar", Cmd::ToggleFormulaBar));
             v.push(grey("Actively Update Plots"));
             v.push(item(
                 "Page Break Preview Lines",
@@ -1517,8 +1523,9 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
                 item("Axis Layer Icons", Cmd::ToggleAxisLayerIcons),
                 sep(),
                 item("Object Grid", Cmd::ToggleObjectGrid),
+                item("Layer Grid", Cmd::ToggleLayerGrid),
+                sep(),
             ];
-            show.extend(greys(&["Layer Grid", "-"]));
             show.push(item("Frame", Cmd::ToggleLayerFrame));
             show.push(item("Labels", Cmd::ToggleShowLabels));
             show.push(item("Data", Cmd::ToggleShowData));
@@ -2288,6 +2295,8 @@ fn graph_menu() -> Vec<Entry> {
         item("Merge Graph Windows...", Cmd::MergeGraphs),
         item("Grap&h Slicer...", Cmd::GraphSlicer),
         item("Bro&wser Graph...", Cmd::BrowserGraph),
+        keyed("Next &Dataset", plain_key(Key::PageDown), Cmd::BrowseStep(true)),
+        keyed("Pre&vious Dataset", plain_key(Key::PageUp), Cmd::BrowseStep(false)),
         sep(),
         keyed("Rescale to Show All", ctrl(Key::R), Cmd::Rescale),
         sub(
@@ -3702,6 +3711,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::AddFunctionGraph => Action::AddFunctionGraph { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::GraphSlicer => Action::GraphSlicer { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::BrowserGraph => Action::BrowserGraph { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
+        Cmd::BrowseStep(next) => Action::BrowseStep { graph: c.graph.ok_or(NEED_GRAPH)?, next: *next },
         Cmd::Reimport(choose) => {
             let book = book?;
             c.imported.then_some(()).ok_or(NOT_IMPORTED)?;
@@ -4123,7 +4133,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ToggleObjectGrid => Action::SetPageSwitch {
             graph: c.graph.ok_or(NEED_GRAPH)?,
             switch: crate::actions::PageSwitch::ObjectGrid,
-            on: !c.object_grid,
+            on: c.page_grid != PageGrid::Object,
+        },
+        Cmd::ToggleLayerGrid => Action::SetPageSwitch {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            switch: crate::actions::PageSwitch::LayerGrid,
+            on: c.page_grid != PageGrid::Layer,
         },
         Cmd::ToggleLayerFrame => Action::SetLayerFrame {
             graph: c.graph.ok_or(NEED_GRAPH)?,
@@ -4228,6 +4243,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Toolbars => Action::Toolbars,
         Cmd::Autosave => Action::Autosave,
         Cmd::ToggleStatusBar => Action::ToggleStatusBar,
+        Cmd::ToggleFormulaBar => Action::ToggleFormulaBar,
         Cmd::ToggleAiLink => Action::ToggleAiLink,
         Cmd::CloseWindow => Action::HideWindow(c.active.ok_or(NEED_WINDOW)?),
         Cmd::DuplicateWindow => Action::DuplicateWindow(c.active.ok_or(NEED_WINDOW)?),
@@ -4478,7 +4494,10 @@ fn show_entries(
                 if matches!(it.cmd, Some(Cmd::ToggleAxisLayerIcons)) && c.axis_layer_icons {
                     tick(ui, &response);
                 }
-                if matches!(it.cmd, Some(Cmd::ToggleObjectGrid)) && c.object_grid {
+                if matches!(it.cmd, Some(Cmd::ToggleObjectGrid)) && c.page_grid == PageGrid::Object {
+                    tick(ui, &response);
+                }
+                if matches!(it.cmd, Some(Cmd::ToggleLayerGrid)) && c.page_grid == PageGrid::Layer {
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleLayerFrame)) && c.show_frame == Some(true) {
@@ -4899,7 +4918,7 @@ mod tests {
             layer_icons: true,
             active_layer_indicator: false,
             axis_layer_icons: false,
-            object_grid: false,
+            page_grid: PageGrid::Off,
             show_frame: None,
             lock_position: Default::default(),
             page_breaks: false,

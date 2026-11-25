@@ -6463,6 +6463,24 @@ equal intervals in each page dimension for the measured default density. The
 switch defaults to off, is undoable, and is saved per graph in `.sheaf` and `.opj`.
 Print and export use the normal graph scene.
 
+### 22.13 View > Show > Layer Grid (T66, Origin 2016, measured 2026-11-25)
+
+Command 33091 drew a light gray page-wide grid beneath the graph, with about
+25 intervals in each fitted page dimension. A test with two different-sized
+layers kept the same grid positions when the active layer changed. Switching
+from Layer Grid to Object Grid replaced the coarse grid with the finer one.
+Switching back restored the coarse grid. The second graph kept its own setting.
+The first graph kept Layer Grid after reopening its OPJ. EMF drawing records
+were the same after accounting for unused alignment bytes in text records.
+[Origin Options Page tab](https://docs.originlab.com/origin-help/options-dialog-page-tab/)
+
+Sheaf draws Layer Grid at 25 intervals per page dimension in the graph editing
+window. Object Grid and Layer Grid change the same per-page setting. Enabling
+one replaces the other in one undo step, and clicking the checked item clears
+the grid. Both settings are saved in `.sheaf` and `.opj`. Older `.sheaf` files
+with Object Grid enabled still open with that grid. Print and export use the
+normal graph scene.
+
 ## 23. View > Zoom All and the Tools-bar Scale In / Scale Out (T69, measured 2026-11-15, Origin 2016)
 
 Measured in OriginPro 2016 on our own synthetic data (X = 1 to 10, Y = 2X+1 and 20-X, Line + Symbol graph; one run with a right-Y layer from `layadd type:=righty`; one with both axes logarithmic; a 4-graph project), a 1024x768 Origin window, drags and clicks sent by `tools/origin-ref/origin-dialog.ps1 -NoDialog` with `-AfterFile` (`@DRAG`, `@CLICK`, `@DCLICK`, `@KEYDOWN`, `@SHOT`, `@CURSOR`) and the axis ends read after each action with `?layer.x.from` / `.to` / `layer.y.from` / `.to` (raw outputs and pictures are local: `re-workspace/scratch/t69/`, `*.out.txt`, `*.png`). Anything not listed is **unmeasured**.
@@ -7899,11 +7917,14 @@ here is measured.
 - **The bar above the graph:** Previous, Next (each disabled at its end of the list) and the caption, for example
   `B (2 of 3)`, or `[Sheet2] B (2 of 3)` by sheets. A step points the plot at that dataset's columns and rescales the
   layer's X and Y axes to it. Consecutive steps on a graph make one undo step ("Browse Graph").
+- **Keys (T450):** Graph > Next Dataset (PageDown) and Previous Dataset (PageUp) step the active graph's browser, as
+  Next and Previous do; at the end of the list nothing happens. On a graph without a browser they step a Time Series
+  Explorer's interval, and otherwise say there is nothing to step.
 - **Model:** `Graph::browser` (`sheaf_core::browser::GraphBrowser`: what it browses by, the plot's layer and index,
   the datasets and the one shown), saved with the project and renumbered with the graph's other columns;
   `Project::set_graph_browser`, `browse_graph`, `clear_graph_browser`, `browser_items`.
-- **Not built:** several browsed plots per graph, browsing across workbooks, picking a dataset from a list, keyboard
-  stepping, the browser in .opj files and in the CLI/MCP.
+- **Not built:** several browsed plots per graph, browsing across workbooks, picking a dataset from a list, the
+  browser in .opj files and in the CLI/MCP.
 
 ## Time Series Explorer: Plot > Specialized > Time Series Explorer (T416, 2026-11-24; Origin 2024b's, Sheaf's own)
 
@@ -7924,8 +7945,12 @@ steps or plays through successive intervals. Origin 2016 has none, so nothing he
 - **Model:** `Graph::explorer` (`sheaf_core::explorer::SeriesExplorer`: the count and the interval shown), saved with
   the project; `Project::plot_time_series_explorer`, `explore_interval`, `set_explorer_intervals`. Moving the band by
   hand moves the detail as in any Zoom graph; the next step puts it back on an interval.
-- **Not built:** a detail Y axis that rescales to each interval, intervals of a set length (a day, a week), overlapping
-  steps, the playback speed, and picking an interval by clicking the upper layer.
+- **By length (T453):** By length on the bar splits the X extent into intervals of a set X length instead (1 for a day
+  of dates, 7 for a week), a tenth of the extent to start with, edited beside it; the count follows (as many as it
+  takes, the last one shorter) and its field is disabled. More than 1000 intervals is refused. Turning it off goes back
+  to equal parts. The shown interval is the one holding the start of the one shown before.
+- **Not built:** a detail Y axis that rescales to each interval, overlapping steps, the playback speed, and picking an
+  interval by clicking the upper layer.
 
 ## LaTeX math in graph text (T436, 2026-11-24; Origin 2023b's built-in equation rendering, slice 1, Sheaf's own)
 

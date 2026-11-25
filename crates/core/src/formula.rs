@@ -651,6 +651,16 @@ fn column_expr(c: &Column) -> Result<Expr, sheaf_expr::ExprError> {
 }
 
 impl Project {
+    /// The first value of formula `src` read in `column`'s sheet (cell formulas, T448).
+    pub fn evaluate_in_sheet(&self, column: ColumnId, src: &str) -> Result<Value, FormulaError> {
+        let expr = Expr::parse(src)?;
+        let host = SheetHost::at(self, column).ok_or(FormulaError::NoSuchColumn(column))?;
+        // Ranges are read as far as the sheet goes; the first row's value is the cell's.
+        let rows = host.sheet.row_count().max(1);
+        let values = expr.eval_values(&host, rows)?;
+        Ok(values.into_iter().next().unwrap_or(Value::Num(f64::NAN)))
+    }
+
     /// The text of a report link (T439): `src` is a formula read against the whole project, a worksheet cell
     /// `%([Book1]Sheet1,B,3)` or any expression over named sheets; its first value as text.
     pub fn evaluate_link(&self, src: &str) -> Result<String, FormulaError> {

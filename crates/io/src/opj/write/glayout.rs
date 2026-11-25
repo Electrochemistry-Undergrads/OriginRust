@@ -5,12 +5,13 @@
 //! into the block body.
 
 use super::super::graph::{
-    ANN_COLOR_AT, AXIS_LAYER_ICONS_AT, AXIS_LAYER_ICONS_BIT, COLOR_AUTO, OBJECT_GRID_AT, OBJECT_GRID_BIT,
+    ANN_COLOR_AT, AXIS_LAYER_ICONS_AT, AXIS_LAYER_ICONS_BIT, COLOR_AUTO, LAYER_GRID_BIT, OBJECT_GRID_BIT, PAGE_GRID_AT,
     SHOW_FRAME_AT, SHOW_FRAME_BIT,
 };
 use super::super::strings::encode_cp1252;
 use super::graph_tables::*;
 use super::layout::{fill, framed, put, put_name};
+use sheaf_core::graph::PageGrid;
 
 /// The page and frame units of a graph: 1/600 inch.
 pub(super) const UNITS_PER_INCH: f64 = 600.0;
@@ -47,7 +48,7 @@ pub(super) struct WindowSpec<'a> {
     /// Page width and height in page units.
     pub page: (u16, u16),
     pub axis_layer_icons: bool,
-    pub object_grid: bool,
+    pub grid: PageGrid,
     pub time: f64,
     /// A counter that Origin gives every window (3 for the first graph of a small project).
     pub serial: u8,
@@ -74,9 +75,12 @@ pub(super) fn window_header(w: &WindowSpec) -> Vec<u8> {
     if w.axis_layer_icons {
         h[AXIS_LAYER_ICONS_AT] |= AXIS_LAYER_ICONS_BIT;
     }
-    if w.object_grid {
-        h[OBJECT_GRID_AT] |= OBJECT_GRID_BIT;
-    }
+    h[PAGE_GRID_AT] &= !(OBJECT_GRID_BIT | LAYER_GRID_BIT);
+    h[PAGE_GRID_AT] |= match w.grid {
+        PageGrid::Off => 0,
+        PageGrid::Object => OBJECT_GRID_BIT,
+        PageGrid::Layer => LAYER_GRID_BIT,
+    };
     put(&mut h, 0x73, &w.time.to_le_bytes());
     put(&mut h, 0x7b, &w.time.to_le_bytes());
     h[0xa1] = w.serial;

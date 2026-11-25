@@ -228,16 +228,19 @@ pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), IoError>
     result
 }
 
+/// How long [`rename_over`] keeps trying while Windows refuses the rename (T454: one second ran out with eight
+/// writers on a loaded machine; a virus scanner can hold a file briefly too). The crate's own tests, whose writers
+/// race on purpose while other test runs load the machine, wait 30 s.
+const RENAME_WAIT: std::time::Duration =
+    if cfg!(test) { std::time::Duration::from_secs(30) } else { std::time::Duration::from_secs(3) };
+
 /// Renames `from` over `to`. Windows refuses (access denied) while another rename over `to` is
 /// under way, so that is tried again for a short while.
 fn rename_over(from: &Path, to: &Path) -> Result<(), IoError> {
     let start = std::time::Instant::now();
     loop {
         match std::fs::rename(from, to) {
-            Err(e)
-                if e.kind() == std::io::ErrorKind::PermissionDenied
-                    && start.elapsed() < std::time::Duration::from_secs(1) =>
-            {
+            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied && start.elapsed() < RENAME_WAIT => {
                 std::thread::sleep(std::time::Duration::from_millis(5));
             }
             r => return r.map_err(|e| IoError::io(to, e)),

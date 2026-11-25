@@ -33,6 +33,7 @@ mod custom_colors;
 mod data_tools;
 mod dialogs;
 mod format_clip_ui;
+mod formula_bar;
 mod gadget;
 mod graph_scale;
 mod graph_view;

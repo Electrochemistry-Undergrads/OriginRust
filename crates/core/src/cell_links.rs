@@ -21,7 +21,7 @@ pub struct CellLink {
 
 /// A cell's value as a link copies it.
 #[derive(Clone, Debug, PartialEq)]
-enum Value {
+pub(crate) enum Value {
     Number(f64),
     Text(String),
 }
@@ -46,7 +46,7 @@ fn same(a: &Value, b: &Value) -> bool {
 
 /// Writes `value` into a cell; false when the cell's value did not change (a text that a numeric column
 /// cannot hold stays a missing value).
-fn write(c: &mut Column, row: usize, value: &Value) -> bool {
+pub(crate) fn write(c: &mut Column, row: usize, value: &Value) -> bool {
     let before = read(c, row);
     if same(&before, value) {
         return false;

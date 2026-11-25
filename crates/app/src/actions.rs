@@ -752,6 +752,11 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
     },
+    /// Graph > Next / Previous Dataset (T450): the browser's next or previous dataset, else the explorer's interval.
+    BrowseStep {
+        graph: WindowId,
+        next: bool,
+    },
     /// The browser bar above a graph: show dataset `to` (T410).
     BrowseGraph {
         graph: WindowId,
@@ -761,6 +766,11 @@ pub enum Action {
     ExploreInterval {
         graph: WindowId,
         to: usize,
+    },
+    /// The explorer bar: intervals of X length `length`, or equal parts with `None` (T453).
+    ExplorerLength {
+        graph: WindowId,
+        length: Option<f64>,
     },
     /// The explorer bar: split the series into `intervals` (T416).
     ExplorerIntervals {
@@ -1562,6 +1572,8 @@ pub enum Action {
     Autosave,
     /// View > Status Bar: show or hide the status bar.
     ToggleStatusBar,
+    /// View > Formula Bar: show or hide the Formula Bar above the workbooks' grids (T448).
+    ToggleFormulaBar,
     /// Tools > AI Assistants (MCP): turn the endpoint of `sheaf-mcp --attach` on or off.
     ToggleAiLink,
     Quit,
@@ -1575,4 +1587,5 @@ pub enum PageSwitch {
     ActiveLayerIndicator,
     AxisLayerIcons,
     ObjectGrid,
+    LayerGrid,
 }

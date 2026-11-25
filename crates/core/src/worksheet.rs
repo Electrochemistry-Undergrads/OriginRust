@@ -100,6 +100,9 @@ pub struct Worksheet {
     /// Linked cells (Paste Link, T211, ADR 0014), at most one link per cell.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cell_links: Vec<crate::cell_links::CellLink>,
+    /// Cell formulas (T448).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cell_formulas: Vec<crate::cell_formula::CellFormula>,
     /// The sheet's sticky note (T421).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sticky: Option<crate::sticky::StickyNote>,
@@ -240,6 +243,7 @@ impl Worksheet {
             cell_images: Vec::new(),
             cell_arrows: Vec::new(),
             cell_links: Vec::new(),
+            cell_formulas: Vec::new(),
             sticky: None,
         }
     }

@@ -71,6 +71,7 @@ impl BrowserGraphDialog {
                 ui.label("Browse");
                 ui.radio_value(&mut self.by, BrowseBy::Columns, "The Y columns of the sheet");
                 ui.radio_value(&mut self.by, BrowseBy::Sheets, "The same column in every sheet of the book");
+                ui.radio_value(&mut self.by, BrowseBy::Books, "The same column of the same sheet in every book");
                 ui.separator();
                 ui.horizontal(|ui| {
                     if ui.button("OK").clicked() {

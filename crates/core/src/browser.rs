@@ -21,6 +21,8 @@ pub enum BrowseBy {
     Columns,
     /// The column in the same place in every sheet of the workbook.
     Sheets,
+    /// The column in the same place of the same sheet in every workbook (T456).
+    Books,
 }
 
 /// One dataset of a browser.
@@ -50,6 +52,7 @@ impl GraphBrowser {
         let Some(item) = self.items.get(self.current) else { return String::new() };
         let name = match project.locate(item.y) {
             Some((_, sheet, col)) if self.by == BrowseBy::Sheets => format!("[{}] {}", sheet.name, col.display_name()),
+            Some((book, _, col)) if self.by == BrowseBy::Books => format!("[{}] {}", book.name, col.display_name()),
             Some((_, _, col)) => col.display_name().to_string(),
             None => String::new(),
         };
@@ -79,6 +82,16 @@ impl Project {
             y: s.columns[i].id,
             y_error: s.y_error_for(i).map(|c| c.id),
         };
+        // The column in the same place of a sheet: the same short name, else the same position; numbers only.
+        let at = sheet.columns.iter().position(|c| c.id == y).unwrap_or(0);
+        let same_place = |s: &crate::worksheet::Worksheet| {
+            let i = s
+                .columns
+                .iter()
+                .position(|c| c.short_name.eq_ignore_ascii_case(&col.short_name))
+                .or_else(|| (at < s.columns.len()).then_some(at))?;
+            (s.columns[i].id == y || s.columns[i].data.is_numeric()).then(|| item(s, i))
+        };
         let items: Vec<BrowserItem> = match by {
             BrowseBy::Columns => sheet
                 .columns
@@ -87,17 +100,18 @@ impl Project {
                 .filter(|(_, c)| c.id == y || (c.designation == Designation::Y && c.data.is_numeric()))
                 .map(|(i, _)| item(sheet, i))
                 .collect(),
-            BrowseBy::Sheets => {
-                let at = sheet.columns.iter().position(|c| c.id == y).unwrap_or(0);
-                book.sheets
-                    .iter()
-                    .filter_map(|s| {
-                        let i = s
-                            .columns
+            BrowseBy::Sheets => book.sheets.iter().filter_map(same_place).collect(),
+            // The sheet with the same name in each workbook, else the one at the same position.
+            BrowseBy::Books => {
+                let sheet_at = book.sheets.iter().position(|s| std::ptr::eq(s, sheet)).unwrap_or(0);
+                self.workbooks()
+                    .filter_map(|b| {
+                        let s = b
+                            .sheets
                             .iter()
-                            .position(|c| c.short_name.eq_ignore_ascii_case(&col.short_name))
-                            .or_else(|| (at < s.columns.len()).then_some(at))?;
-                        (s.columns[i].id == y || s.columns[i].data.is_numeric()).then(|| item(s, i))
+                            .find(|s| s.name.eq_ignore_ascii_case(&sheet.name))
+                            .or_else(|| b.sheets.get(sheet_at))?;
+                        same_place(s)
                     })
                     .collect()
             }
@@ -215,6 +229,18 @@ mod tests {
         assert_eq!(br.items.iter().map(|i| i.y).collect::<Vec<_>>(), ys);
         assert_eq!(br.current, 1);
         assert!(br.caption(&p).starts_with("[Sheet2] "), "{}", br.caption(&p));
+        // Across workbooks (T456): the same column of Sheet1 in another book with the same layout.
+        let other = p.add_workbook("");
+        p.add_column(other, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+        let y_other = p.add_column(other, 0, Designation::Y, ColumnData::numeric(vec![7.0, 8.0])).unwrap();
+        let g3 = p.plot_columns(Template::Scatter, &[ys[0]]).unwrap();
+        p.set_graph_browser(g3, 0, 0, BrowseBy::Books).unwrap();
+        let br = p.graph(g3).unwrap().browser.clone().unwrap();
+        assert_eq!(br.items.iter().map(|i| i.y).collect::<Vec<_>>(), [ys[0], y_other]);
+        let other_name = p.workbook(other).unwrap().name.clone();
+        p.browse_graph(g3, 1).unwrap();
+        let br = p.graph(g3).unwrap().browser.clone().unwrap();
+        assert!(br.caption(&p).starts_with(&format!("[{other_name}] ")), "{}", br.caption(&p));
         // A lone column is nothing to browse.
         let other = p.add_workbook("");
         let lone = p.add_column(other, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();

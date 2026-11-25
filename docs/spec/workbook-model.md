@@ -711,7 +711,11 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   data length. With no explicit count, sheets use automatic spare rows.
   The grid includes any data extending beyond the allocation. Row and
   column reductions use the existing deletion paths.
-  Project saves preserve the allocation.
+  Project saves preserve the allocation. Optional `view.auto_add_rows`
+  controls whether a larger viewport increases the allocation. New
+  sheets start automatic, and older explicit counts stay fixed until
+  Auto Add Rows is selected. Automatic viewport growth is a view
+  adjustment and leaves the data and undo history intact.
 - **Header measurements (T59).** Sparse `view.header_measurements`
   stores the worksheet's explicit column heading height and row heading
   width in grid percentages. Automatic measurements use the worksheet's

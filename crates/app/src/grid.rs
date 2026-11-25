@@ -164,6 +164,7 @@ pub struct BookUi {
     reveal_rect: Option<Rect>,
     /// How many rows fit in the view (for Page Up and Page Down).
     page_rows: usize,
+    row_viewport: Option<RowViewport>,
     /// Destination to reveal while Go To leaves a row/column/range selection in place.
     navigation_target: Option<(usize, usize)>,
     /// The grid keeps the keyboard (after a click in it or editing a cell) unless a text field
@@ -208,7 +209,20 @@ pub struct BookUi {
     reveal_frozen_y: bool,
 }
 
+struct RowViewport {
+    generation: u64,
+    sheet: usize,
+    minimum_rows: usize,
+}
+
 impl BookUi {
+    pub(crate) fn viewport_min_rows(&self, generation: u64, sheet: usize) -> usize {
+        self.row_viewport
+            .as_ref()
+            .filter(|v| v.generation == generation && v.sheet == sheet)
+            .map_or(1, |v| v.minimum_rows)
+    }
+
     fn width_scale(&self) -> f32 {
         self.standard_scale.unwrap_or(1.0)
     }
@@ -1067,6 +1081,13 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     let layout = state.layout_cache.as_ref().expect("worksheet layout").value.clone();
     let row_heights = &layout.rows;
     let header_height = layout.head_height();
+    let body_height = f64::from((body.height() - header_height).max(0.0));
+    let full_rows = row_heights.row_at(body_height);
+    let minimum_rows = (full_rows + usize::from(row_heights.offset(full_rows) < body_height)).max(1);
+    state.row_viewport = Some(RowViewport { generation: doc.generation(), sheet: sheet_index, minimum_rows });
+    if sheet.view.automatic_rows() && minimum_rows > rows {
+        actions.push(Action::EnsureWorksheetRows { book: book_id, sheet: sheet_index, rows: minimum_rows });
+    }
 
     // Frozen panes: the first displayed rows go under the head, the first visible columns sit in
     // an overlay over the table, whose own cells for them stay empty placeholders of the same width.

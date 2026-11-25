@@ -206,6 +206,57 @@ fn f4_top_gap_moves_the_grid_and_survives_a_standard_font_edit() {
 }
 
 #[test]
+fn f4_auto_add_rows_keeps_the_viewport_floor_and_retains_growth() {
+    let mut h = start_sheet("worksheet-auto-add-rows");
+    let book = project(&h).workbooks().next().unwrap().id;
+    open(&mut h);
+    properties_tab(&mut h, "Miscellaneous");
+    click(&mut h, "Auto Add Rows");
+    properties_tab(&mut h, "Size");
+    size_count(&mut h, "Row Number", 3);
+    click(&mut h, "OK");
+    assert_eq!(sheet(&h).view.auto_add_rows, Some(false));
+    assert_eq!(sheet(&h).view.allocated_rows, Some(3));
+
+    h.state_mut().workspace.toggle_maximise(book);
+    settle(&mut h);
+    assert_eq!(sheet(&h).view.allocated_rows, Some(3));
+    h.state_mut().workspace.toggle_maximise(book);
+    settle(&mut h);
+
+    open(&mut h);
+    properties_tab(&mut h, "Miscellaneous");
+    click(&mut h, "Auto Add Rows");
+    click(&mut h, "OK");
+    assert!(sheet(&h).view.automatic_rows());
+    let enabled = sheet(&h).view.allocated_rows.unwrap();
+    assert!(enabled > 3);
+    assert_eq!(sheet(&h).row_count(), 3);
+    h.state_mut().doc.mark_saved();
+    h.state_mut().workspace.toggle_maximise(book);
+    settle(&mut h);
+    let grown = sheet(&h).view.allocated_rows.unwrap();
+    assert!(grown > enabled);
+    assert_eq!(sheet(&h).row_count(), 3);
+    assert!(!h.state().doc.dirty);
+
+    h.state_mut().workspace.toggle_maximise(book);
+    settle(&mut h);
+    assert_eq!(sheet(&h).view.allocated_rows, Some(grown));
+    open(&mut h);
+    properties_tab(&mut h, "Size");
+    size_count(&mut h, "Row Number", 2);
+    click(&mut h, "Apply");
+    assert_eq!(sheet(&h).row_count(), 2);
+    assert!(sheet(&h).view.allocated_rows.unwrap() > 2);
+    assert!(h.state().worksheet_fonts.is_some());
+    click(&mut h, "OK");
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(sheet(&h).row_count(), 3);
+    assert_eq!(sheet(&h).view.allocated_rows, Some(grown));
+}
+
+#[test]
 fn f4_size_grows_sparse_rows_and_appends_empty_columns() {
     let mut h = start_sheet("worksheet-size-grow");
     let before = project(&h).clone();
@@ -237,6 +288,8 @@ fn f4_size_shrinks_trailing_cells_and_regrowth_is_blank() {
     let deleted = sheet(&h).columns[1].id;
     let first = sheet(&h).columns[0].numeric().unwrap()[0];
     open(&mut h);
+    properties_tab(&mut h, "Miscellaneous");
+    click(&mut h, "Auto Add Rows");
     properties_tab(&mut h, "Size");
     size_count(&mut h, "Row Number", 1);
     size_count(&mut h, "Column Number", 1);
@@ -298,6 +351,8 @@ fn f4_size_respects_locked_rows_and_supports_zero_counts() {
     settle(&mut h);
     let before = project(&h).clone();
     open(&mut h);
+    properties_tab(&mut h, "Miscellaneous");
+    click(&mut h, "Auto Add Rows");
     properties_tab(&mut h, "Size");
     size_count(&mut h, "Row Number", 0);
     click(&mut h, "OK");

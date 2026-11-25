@@ -948,6 +948,11 @@ pub enum Action {
     FormatCellsDialog(WindowId),
     /// Format > Worksheet (F4): worksheet-wide Data font defaults.
     WorksheetFontsDialog(WindowId),
+    EnsureWorksheetRows {
+        book: WindowId,
+        sheet: usize,
+        rows: usize,
+    },
     /// Cell menu > Add Note... / Edit Note...: the note editor for the single selected cell.
     NoteDialog(WindowId),
     /// Cell menu > Delete Note: removes the note of the single selected cell.

@@ -7,7 +7,9 @@ tolerances); the tests (LR, Wald, score) use scipy.stats.chi2 and the baseline s
 covariate means. lifelines and statsmodels are not available here. Efron's ties (T445): at a time with tied failures
 D the l-th of them (l = 0..d-1) sees the risk set minus l/d of D's sums, written out failure time by failure time;
 the baseline hazard increment is sum_l 1 / (S - l/d S_D). Strata (T451): risk sets within each stratum, the
-likelihood summed over strata, one baseline curve per stratum.
+likelihood summed over strata, one baseline curve per stratum. Residuals (T457): martingale d_i - H0(t_i) exp(x_i'b)
+with the stratum's baseline cumulative hazard at x = 0, deviance sign(M) sqrt(-2 (M + d ln(d - M))), Schoenfeld x_i
+minus the risk-set mean (Efron: the mean of the stepped means), each written out case by case.
 
 Usage: python3 tools/cox-ref.py > crates/calc/tests/fixtures/cox_reference.rs
 None of these numbers come from Origin.
@@ -87,7 +89,39 @@ def fit(X, t, d, efron=False, st=None):
             times.append(tk)
             surv.append(math.exp(-h0 * math.exp(eta_mean)))
         curves.append((times, surv))
-    return b, se, z, pv, ll, ll0, (lr, chi(lr)), (wald, chi(wald)), (score, chi(score)), curves
+    # Residuals, case by case.
+    n = len(t)
+    H = np.zeros(n)
+    schoen = []
+    for i in range(n):
+        s = st[i]
+        tot = 0.0
+        for tk in np.unique(t[d & (st == s)]):
+            if tk > t[i]:
+                break
+            D = (t == tk) & d & (st == s)
+            dk = int(D.sum())
+            S = w[(t >= tk) & (st == s)].sum()
+            tot += sum(1 / (S - (l / dk if efron else 0.0) * w[D].sum()) for l in range(dk))
+        H[i] = tot
+    mart = d.astype(float) - H * w
+    dev = []
+    for i in range(n):
+        inner = mart[i] + (math.log(1 - mart[i]) if d[i] else 0.0)
+        dev.append(math.copysign(math.sqrt(max(-2 * inner, 0.0)), mart[i]))
+    for i in sorted(np.where(d)[0], key=lambda i: (st[i], t[i], i)):
+        s = st[i]
+        R = (t >= t[i]) & (st == s)
+        D = (t == t[i]) & d & (st == s)
+        dk = int(D.sum())
+        S0, S1 = w[R].sum(), (w[R, None] * X[R]).sum(axis=0)
+        A0, A1 = w[D].sum(), (w[D, None] * X[D]).sum(axis=0)
+        if efron:
+            mean = sum((S1 - l / dk * A1) / (S0 - l / dk * A0) for l in range(dk)) / dk
+        else:
+            mean = S1 / S0
+        schoen.append((int(i), list(X[i] - mean)))
+    return b, se, z, pv, ll, ll0, (lr, chi(lr)), (wald, chi(wald)), (score, chi(score)), curves, list(mart), dev, schoen
 
 
 def vec(v):
@@ -135,10 +169,13 @@ print("    pub tests: [(f64, f64); 3],")
 print("    pub times: &'static [f64],")
 print("    pub survival: &'static [f64],")
 print("    pub curves: &'static [(&'static [f64], &'static [f64])],")
+print("    pub martingale: &'static [f64],")
+print("    pub deviance: &'static [f64],")
+print("    pub schoenfeld: &'static [(usize, &'static [f64])],")
 print("}")
 print("pub const CASES: &[Case] = &[")
 for name, X, efron, st in cases:
-    b, se, z, pv, ll, ll0, lr, wald, score, curves = fit(X, t, d, efron, st)
+    b, se, z, pv, ll, ll0, lr, wald, score, curves, mart, dev, schoen = fit(X, t, d, efron, st)
     times, surv = curves[0]
     print("    Case {")
     print(f'        name: "{name}",')
@@ -154,5 +191,8 @@ for name, X, efron, st in cases:
     print(f"        times: {vec(times)},")
     print(f"        survival: {vec(surv)},")
     print("        curves: &[" + ", ".join(f"({vec(a)}, {vec(c)})" for a, c in curves) + "],")
+    print(f"        martingale: {vec(mart)},")
+    print(f"        deviance: {vec(dev)},")
+    print("        schoenfeld: &[" + ", ".join(f"({i}, {vec(r)})" for i, r in schoen) + "],")
     print("    },")
 print("];")

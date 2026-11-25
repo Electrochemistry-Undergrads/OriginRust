@@ -179,6 +179,7 @@ impl Worksheet {
         if scale != previous_scale {
             self.view.header_measurements.scale(scale / previous_scale);
             self.view.cell_measurements = Default::default();
+            self.view.fitted_cells = Default::default();
         }
         true
     }

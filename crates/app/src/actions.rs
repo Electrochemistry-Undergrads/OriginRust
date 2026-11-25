@@ -687,6 +687,20 @@ pub enum Action {
     FindInProject,
     /// View > Project Browser: open it (T433).
     ProjectBrowser,
+    /// The operation tree (T443): switch an analysis link to Auto or Manual, or stop it (None).
+    SetAnalysisMode {
+        index: usize,
+        mode: sheaf_core::column::RecalcMode,
+    },
+    /// Open the sheet of a column and select the column (T443).
+    GoToColumn(sheaf_core::ColumnId),
+    /// A Notes window's Export Report...: ask where, then write it (T439).
+    ExportReport(WindowId),
+    /// Write Notes window `notes`'s report to `path` (T439).
+    ExportReportTo {
+        notes: WindowId,
+        path: std::path::PathBuf,
+    },
     /// File > Find in Project Files... (T361).
     FindInProjectFiles,
     /// File > Export > Worksheet as Image...: save the active sheet as a picture.
@@ -762,6 +776,10 @@ pub enum Action {
     Reimport {
         book: WindowId,
         choose: bool,
+    },
+    /// File > Import > Auto Refresh...: open its window for the workbook (T442).
+    AutoRefresh {
+        book: WindowId,
     },
     /// The column header's Copy Columns to...: open its window for these columns.
     CopyColumnsTo(Vec<ColumnId>),
@@ -961,10 +979,12 @@ pub enum Action {
     FormatCellsDialog(WindowId),
     /// Format > Worksheet (F4): worksheet-wide Data font defaults.
     WorksheetFontsDialog(WindowId),
-    EnsureWorksheetRows {
+    /// Worksheet dimensions derived from the current workbook viewport.
+    UpdateWorksheetViewport {
         book: WindowId,
         sheet: usize,
-        rows: usize,
+        minimum_rows: usize,
+        fitted: Option<sheaf_core::sheet_view::FittedCells>,
     },
     /// Cell menu > Add Note... / Edit Note...: the note editor for the single selected cell.
     NoteDialog(WindowId),
@@ -1554,4 +1574,5 @@ pub enum PageSwitch {
     IconDoubleClickPlotSetup,
     ActiveLayerIndicator,
     AxisLayerIcons,
+    ObjectGrid,
 }

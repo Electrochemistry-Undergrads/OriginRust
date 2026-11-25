@@ -348,6 +348,10 @@ pub struct SheafApp {
     pub(crate) browser_graph: Option<crate::dialogs::browser_graph::BrowserGraphDialog>,
     pub(crate) flash_fill: Option<crate::dialogs::flash_fill::FlashFillDialog>,
     pub(crate) project_browser: Option<crate::dialogs::project_browser::ProjectBrowserDialog>,
+    pub(crate) auto_refresh: Option<crate::dialogs::auto_refresh::AutoRefreshDialog>,
+    /// Auto Refresh (T442): per workbook, when its next check is due (seconds of the UI clock) and the source
+    /// file's modification time at the last read.
+    refresh_clock: HashMap<WindowId, (f64, Option<std::time::SystemTime>)>,
     /// The open function window is File > New > Function Plot's: OK makes the graph (T213).
     function_graph_new: bool,
     /// The Audit Log window is open (T131).
@@ -554,6 +558,8 @@ impl SheafApp {
             browser_graph: None,
             flash_fill: None,
             project_browser: None,
+            auto_refresh: None,
+            refresh_clock: HashMap::new(),
             function_graph_new: false,
             audit_log: false,
             fit_builder: None,
@@ -2530,6 +2536,10 @@ impl SheafApp {
             }
             Action::ExportWorksheetImage(book) => self.export_worksheet_image(book),
             Action::Reimport { book, choose } => self.reimport(book, choose),
+            Action::AutoRefresh { book } => {
+                self.auto_refresh =
+                    self.doc.project().workbook(book).and_then(crate::dialogs::auto_refresh::AutoRefreshDialog::new);
+            }
             Action::SaveAxisTheme { .. } | Action::SaveLegendTheme { .. } => {
                 let Some(dir) = self.startup.graph_themes_dir.clone() else {
                     self.warn("Sheaf has no settings folder for graph themes");
@@ -2684,6 +2694,43 @@ impl SheafApp {
             Action::FindInProjectFiles => {
                 let folder = self.path.as_deref().and_then(|p| p.parent()).map(std::path::Path::to_path_buf);
                 self.find_files = Some(crate::dialogs::find_files::FindFilesDialog::new(folder.as_deref()));
+            }
+            Action::SetAnalysisMode { index, mode } => {
+                let label = match mode {
+                    sheaf_core::column::RecalcMode::None => "Stop Following",
+                    _ => "Recalculate Mode",
+                };
+                if let Err(e) = self.doc.edit(label, |p| p.set_analysis_mode(index, mode)) {
+                    self.warn(e.to_string());
+                }
+            }
+            Action::GoToColumn(column) => {
+                if let Some(t) = crate::dialogs::project_browser::target(
+                    self.doc.project(),
+                    sheaf_core::project_browser::ItemRef::Column(column),
+                ) {
+                    self.go_to_found(t, ctx);
+                }
+            }
+            Action::ExportReport(notes) => {
+                let name = self.doc.project().notes_window(notes).map_or_else(|| "report".into(), |n| n.name.clone());
+                let mut chooser = rfd::FileDialog::new()
+                    .set_title("Export Report")
+                    .add_filter("Web page (*.html)", &["html", "htm"])
+                    .add_filter("Markdown (*.md)", &["md", "markdown"])
+                    .set_file_name(format!("{name}.html"));
+                if let Some(dir) = self.folder() {
+                    chooser = chooser.set_directory(dir);
+                }
+                if let Some(path) = chooser.save_file() {
+                    self.apply(Action::ExportReportTo { notes, path }, ctx);
+                }
+            }
+            Action::ExportReportTo { notes, path } => {
+                match crate::notes_view::export_report(self.doc.project(), notes, &path) {
+                    Ok(n) => self.say(format!("Exported the report to {} with {n} figure(s)", path.display())),
+                    Err(e) => self.warn(format!("Could not export the report: {e}")),
+                }
             }
             Action::ProjectBrowser => {
                 self.project_browser.get_or_insert_with(Default::default);
@@ -3097,23 +3144,37 @@ impl SheafApp {
             Action::WorksheetFontsDialog(book) => {
                 self.worksheet_fonts = WorksheetFontsDialog::new(&self.doc, book, self.books.get(&book));
             }
-            Action::EnsureWorksheetRows { book, sheet, rows } => {
-                // Leave an open Properties draft on its base revision. The grid will retry after it closes.
+            Action::UpdateWorksheetViewport { book, sheet, minimum_rows, fitted } => {
+                // The grid retries after Properties closes, keeping its draft on the same revision.
                 if self.worksheet_fonts.is_some() {
                     return;
                 }
-                let can_grow = self
+                let Some(worksheet) = self
                     .doc
                     .project()
                     .workbook(book)
                     .filter(|workbook| workbook.active_sheet == sheet)
                     .and_then(|workbook| workbook.sheets.get(sheet))
-                    .is_some_and(|sheet| sheet.view.automatic_rows() && rows > grid::shown_rows(sheet));
-                if can_grow {
+                else {
+                    return;
+                };
+                let grow = worksheet.view.automatic_rows() && minimum_rows > grid::shown_rows(worksheet);
+                let fitted = fitted.filter(|_| worksheet.view.fit_sheet_to_window);
+                if grow || fitted.is_some() {
                     self.doc.adjust_view(|project| {
-                        let view = &mut project.workbook_mut(book).unwrap().sheets[sheet].view;
-                        view.allocated_rows = Some(rows);
-                        view.auto_add_rows = Some(true);
+                        let worksheet = &mut project.workbook_mut(book).unwrap().sheets[sheet];
+                        if grow {
+                            worksheet.view.allocated_rows = Some(minimum_rows);
+                            worksheet.view.auto_add_rows = Some(true);
+                        }
+                        if let Some(cells) = fitted {
+                            worksheet.view.fitted_cells = cells;
+                            if cells.column_width().is_some() {
+                                for column in worksheet.columns.iter_mut().filter(|column| !column.hidden) {
+                                    column.width = None;
+                                }
+                            }
+                        }
                     });
                     ctx.request_repaint();
                 }
@@ -3355,6 +3416,7 @@ impl SheafApp {
                     PageSwitch::IconDoubleClickPlotSetup => "Double click to open Plot Setup",
                     PageSwitch::ActiveLayerIndicator => "Show Active Layer Indicator",
                     PageSwitch::AxisLayerIcons => "Show Axis Layer Icons",
+                    PageSwitch::ObjectGrid => "Show Object Grid",
                 };
                 self.doc.apply(label, |p| {
                     if let Some(g) = p.graph_mut(graph) {
@@ -3363,6 +3425,7 @@ impl SheafApp {
                             PageSwitch::IconDoubleClickPlotSetup => g.page.style.icon_double_click_plot_setup = on,
                             PageSwitch::ActiveLayerIndicator => g.page.style.active_layer_indicator = on,
                             PageSwitch::AxisLayerIcons => g.page.style.axis_layer_icons = on,
+                            PageSwitch::ObjectGrid => g.page.style.object_grid = on,
                         }
                     }
                 });
@@ -5189,6 +5252,66 @@ impl SheafApp {
     }
 
     /// Graph > Add Function Graph... (T119): OK adds the curve; an expression error keeps the window open.
+    fn show_auto_refresh(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::auto_refresh::RefreshOutcome;
+        let Some(d) = &mut self.auto_refresh else { return };
+        match d.show(ctx) {
+            RefreshOutcome::Open => {}
+            RefreshOutcome::Closed => self.auto_refresh = None,
+            RefreshOutcome::Set { book, refresh } => {
+                self.auto_refresh = None;
+                // A new setting starts its timer afresh.
+                self.refresh_clock.remove(&book);
+                match self.doc.edit("Auto Refresh", |p| p.set_auto_refresh(book, refresh)) {
+                    Ok(()) => self.say(match refresh {
+                        Some(r) if r.paused => "Auto refresh is paused".to_string(),
+                        Some(r) => format!("The workbook re-imports its file every {} s", r.every_seconds),
+                        None => "Auto refresh stopped".to_string(),
+                    }),
+                    Err(e) => self.warn(e.to_string()),
+                }
+            }
+        }
+    }
+
+    /// Auto Refresh (T442) at `now` (seconds of the UI clock): re-imports each refreshing workbook whose check is
+    /// due, when its file changed (or always, as set). A failed read pauses the book's refresh. Returns the
+    /// seconds until the next check, when any book refreshes.
+    pub(crate) fn run_auto_refresh(&mut self, now: f64) -> Option<f64> {
+        let books = self.doc.project().refreshing_books();
+        self.refresh_clock.retain(|id, _| books.iter().any(|(b, _)| b == id));
+        let modified = |project: &sheaf_core::Project, book: WindowId| {
+            let path = project.workbook(book)?.source.as_ref()?.path.clone();
+            std::fs::metadata(path).and_then(|m| m.modified()).ok()
+        };
+        let mut due = Vec::new();
+        for &(book, r) in &books {
+            let every = f64::from(r.every_seconds);
+            let mtime = modified(self.doc.project(), book);
+            let clock = self.refresh_clock.entry(book).or_insert((now + every, mtime));
+            if now >= clock.0 {
+                clock.0 = now + every;
+                if !r.only_when_changed || mtime != clock.1 {
+                    clock.1 = mtime;
+                    due.push((book, r));
+                }
+            }
+        }
+        for (book, r) in due {
+            let Some(b) = self.doc.project().workbook(book) else { continue };
+            let Some((source, kind)) = b.source.clone().zip(reimport_kind(b)) else { continue };
+            match reimport_book(&mut self.doc, book, Path::new(&source.path), kind) {
+                Ok(rep) => self.say(format!("Auto refresh: re-imported {} ({} row(s))", source.path, rep.rows)),
+                Err(e) => {
+                    let paused = Some(sheaf_core::auto_refresh::AutoRefresh { paused: true, ..r });
+                    let _ = self.doc.edit("Auto Refresh", |p| p.set_auto_refresh(book, paused));
+                    self.warn(format!("Auto refresh paused: could not read {}: {e}", source.path));
+                }
+            }
+        }
+        self.refresh_clock.values().map(|c| c.0 - now).reduce(f64::min)
+    }
+
     fn show_project_browser(&mut self, ctx: &egui::Context) {
         use crate::dialogs::project_browser::BrowserOutcome;
         let Some(d) = &mut self.project_browser else { return };
@@ -5260,11 +5383,23 @@ impl SheafApp {
         match d.show(ctx, self.doc.project()) {
             SlicerOutcome::Open => {}
             SlicerOutcome::Closed => self.graph_slicer = None,
-            SlicerOutcome::Apply { graph, column, values } => {
-                match self.doc.edit("Graph Slicer", |p| p.set_graph_slicer(graph, column, values)) {
-                    Ok(()) => {
+            SlicerOutcome::Apply { graph, column, values, layer, extract } => {
+                let label = if extract { "Extract Slice" } else { "Graph Slicer" };
+                let done = self.doc.edit(label, |p| {
+                    p.set_graph_slicer(graph, column, values)?;
+                    p.set_graph_slicer_layer(graph, layer)?;
+                    if extract { p.extract_slice(graph).map(Some) } else { Ok(None) }
+                });
+                match done {
+                    Ok(book) => {
                         self.graph_slicer = None;
-                        self.say("Sliced the graph".to_string());
+                        match book {
+                            Some(b) => {
+                                self.apply(Action::Focus(b), ctx);
+                                self.say("Copied the rows the slicer shows to a new workbook".to_string());
+                            }
+                            None => self.say("Sliced the graph".to_string()),
+                        }
                     }
                     Err(e) => self.warn(e.to_string()),
                 }
@@ -7336,6 +7471,7 @@ impl SheafApp {
                 .and_then(|g| project.graph(g))
                 .is_some_and(|g| g.page.style.active_layer_indicator),
             axis_layer_icons: graph.and_then(|g| project.graph(g)).is_some_and(|g| g.page.style.axis_layer_icons),
+            object_grid: graph.and_then(|g| project.graph(g)).is_some_and(|g| g.page.style.object_grid),
             show_frame: graph
                 .and_then(|g| project.graph(g)?.layers.get(layer))
                 .filter(|l| l.coords.is_cartesian())
@@ -8503,6 +8639,11 @@ impl SheafApp {
         self.show_browser_graph(ctx);
         self.show_flash_fill(ctx);
         self.show_project_browser(ctx);
+        self.show_auto_refresh(ctx);
+        let now = ctx.input(|i| i.time);
+        if let Some(wait) = self.run_auto_refresh(now) {
+            ctx.request_repaint_after(std::time::Duration::from_secs_f64(wait.max(0.5)));
+        }
         self.show_audit_log(ctx);
         self.show_fit_builder(ctx);
         self.show_sample_projects(ctx);

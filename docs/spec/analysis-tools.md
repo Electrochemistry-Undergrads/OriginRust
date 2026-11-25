@@ -1934,6 +1934,24 @@ describe Origin's settings, so this follows the method of Kauppinen, Moffatt, Ma
   corrected data as before. Two Lorentzians of FWHM 2, 1.0 apart, are one peak without it and two with
   FWHM 2, K 3. Uneven X is refused with the column named.
 
+## 23. Operation tree (T443, 2026-11-25; Origin 2027's operations in Object Manager, Sheaf's own, not measured)
+
+Origin 2027 groups a workbook's analysis operations with their result sheets in Object Manager. Origin 2016 has no
+operation tree. In Sheaf the operations are the analyses that follow their input (Recalculate Auto or Manual, the
+analysis links of the tools listed at the top of `analysis_link.rs`).
+
+- **Where:** View > Object Manager with a workbook active (with a graph active it is the layers and plots, as
+  before). The book's name, then each sheet that holds results, then its operations in the order they were made: an
+  operation belongs to the sheet of its first result column. Without operations the panel says how to make one.
+- **A row:** `Smooth (Manual)`, `Smooth (Auto, waiting)` when a result waits for Recalculate; hovering shows the
+  tool's settings. Below it `Input: [Book1]Sheet1!B` for each input column and `Output: ...` for each result
+  column; clicking one opens its book and sheet with the column selected.
+- **Right-click menu:** Recalculate; Auto and Manual (the current one marked); Stop Following the Input (the link
+  is dropped and the results stay as plain data); Go to Results. Switching a waiting operation to Auto runs it at
+  once. Each change is one undo step ("Recalculate Mode", "Stop Following").
+- **Not built:** editing the parameters from the tree, operations that ran once, fit and statistics reports, and
+  moving operations between books.
+
 ## Files
 
 `tools/iir-fir-ref.py` makes the scipy numbers of section 17 (not Origin).

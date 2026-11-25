@@ -38,8 +38,13 @@ axis's layer and select it on click. Sheaf's undoable page switch and its
 screen-only badges are covered in [graphing 22.11](../spec/graphing.md#2211-view--show--axis-layer-icons-t66-origin-2016-measured-2026-11-24).
 The setting is saved per graph in Sheaf and bare OPJ projects.
 
-**Size:** M. **Inventory:** four remaining locations, Object Grid, Layer Grid,
-Master Items on Screen and Show Data Info.
+Object Grid follow-up (2026-11-25): Origin 2016 drew a page-wide alignment grid
+beneath the graph and kept it after reopening. Sheaf saves the page switch in
+`.sheaf` and bare OPJ and draws the default grid in the editing window.
+[Graphing 22.12](../spec/graphing.md#2212-view--show--object-grid-t66-origin-2016-measured-2026-11-25)
+
+**Size:** M. **Inventory:** three remaining locations, Layer Grid, Master Items
+on Screen and Show Data Info.
 The original17-location baseline also included the now-published view modes,
 Layer Icons, Active Layer Only and Full Screen entries.
 

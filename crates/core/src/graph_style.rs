@@ -397,6 +397,9 @@ pub struct PageStyle {
     /// Show the owning layer number alongside each axis in the graph window.
     #[serde(default, skip_serializing_if = "is_false")]
     pub axis_layer_icons: bool,
+    /// Show the page's object alignment grid in the graph window.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub object_grid: bool,
     /// Data > Lock Position (T186).
     #[serde(default, skip_serializing_if = "is_default")]
     pub lock_position: LockPosition,
@@ -437,6 +440,7 @@ impl Default for PageStyle {
             layer_icons: true,
             active_layer_indicator: false,
             axis_layer_icons: false,
+            object_grid: false,
             lock_position: LockPosition::LayerIcon,
             title_display: TitleDisplay::Both,
             comments: String::new(),
@@ -485,6 +489,7 @@ mod tests {
             layer_icons: false,
             active_layer_indicator: true,
             axis_layer_icons: true,
+            object_grid: true,
             lock_position: LockPosition::LastPoint,
             title_display: TitleDisplay::LongName,
             comments: "notes".into(),

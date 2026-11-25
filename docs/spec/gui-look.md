@@ -1061,6 +1061,22 @@ step. An explicit smaller Row Number still trims the data to the
 requested row, and Auto Add Rows keeps enough blank rows for the
 current viewport. Row Number and Auto Add Rows changes apply in one Undo step.
 
+**Worksheet Properties Fit Sheet to Window (T59).** Origin 2016 fitted
+80 rows and 12 columns after a workbook resize. The displayed cells
+took equal widths and heights. Both headings and the column label rows
+kept their sizes. Clearing Fit kept the fitted sizes, including on
+later resizes. With Auto Add Rows also enabled, maximizing extended
+a three-data-row sheet from 14 to 31 allocated rows. The native default
+PNG used the fitted dimensions, and the default PDF went from four
+pages to one in the 80-row fixture.
+[Origin Worksheet Properties Miscellaneous tab](https://docs.originlab.com/origin-help/wksproperties-dialog-misc-tab/)
+
+Sheaf applies the fit when the switch is enabled and follows later
+viewport changes. It keeps the fitted sizes when the switch is cleared.
+The stored sizes also drive worksheet image and PDF geometry.
+Scroll remains available on an axis if a long sheet reaches the
+one-pixel minimum on that axis.
+
 Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
 The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,
 Dynamic Merge, per-cell numeric display/precision selectors and a Font selector. In this new book,
@@ -1960,5 +1976,7 @@ long names, comments, units, data cells, text on graphs); the files with hits ar
 that cannot be read is listed with the reason), and the chosen file's first 20 hits are shown under it. Open closes
 the window and opens that project (asking to save first when the open project has unsaved changes). Notes windows
 are searched too (T407: their short and long names and their text, one hit each, element "Notes"; Find in Project's
-Notes Windows option, on by default, Sheaf's own since Origin 2016's Find in Project has none). A large folder is read
-in the foreground.
+Notes Windows option, on by default, Sheaf's own since Origin 2016's Find in Project has none). Find All searches on
+a background thread (T441): the files with hits appear as they are found, a spinner and "Searching n of N files..."
+show the progress, Stop (enabled only then) ends the search after the file in hand, and closing the window or Open
+stops it too; Find All is disabled while a search runs.

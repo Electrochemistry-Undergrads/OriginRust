@@ -5,7 +5,8 @@
 //! into the block body.
 
 use super::super::graph::{
-    ANN_COLOR_AT, AXIS_LAYER_ICONS_AT, AXIS_LAYER_ICONS_BIT, COLOR_AUTO, SHOW_FRAME_AT, SHOW_FRAME_BIT,
+    ANN_COLOR_AT, AXIS_LAYER_ICONS_AT, AXIS_LAYER_ICONS_BIT, COLOR_AUTO, OBJECT_GRID_AT, OBJECT_GRID_BIT,
+    SHOW_FRAME_AT, SHOW_FRAME_BIT,
 };
 use super::super::strings::encode_cp1252;
 use super::graph_tables::*;
@@ -46,6 +47,7 @@ pub(super) struct WindowSpec<'a> {
     /// Page width and height in page units.
     pub page: (u16, u16),
     pub axis_layer_icons: bool,
+    pub object_grid: bool,
     pub time: f64,
     /// A counter that Origin gives every window (3 for the first graph of a small project).
     pub serial: u8,
@@ -71,6 +73,9 @@ pub(super) fn window_header(w: &WindowSpec) -> Vec<u8> {
     h[AXIS_LAYER_ICONS_AT] &= !AXIS_LAYER_ICONS_BIT;
     if w.axis_layer_icons {
         h[AXIS_LAYER_ICONS_AT] |= AXIS_LAYER_ICONS_BIT;
+    }
+    if w.object_grid {
+        h[OBJECT_GRID_AT] |= OBJECT_GRID_BIT;
     }
     put(&mut h, 0x73, &w.time.to_le_bytes());
     put(&mut h, 0x7b, &w.time.to_le_bytes());

@@ -94,6 +94,16 @@ fn graph_slicer_shows_the_ticked_values_in_one_undo_step() {
     assert_eq!(h.state().doc.undo_label(), Some("Graph Slicer"));
     let s = project(&h).graph(graph).unwrap().slicer.clone().expect("a slicer");
     assert_eq!(s.values, ["a", "c"]);
+    // Extract (T444): the shown rows go to a new workbook, which becomes active.
+    let books = project(&h).workbooks().count();
+    h.state_mut().apply(Action::GraphSlicer { graph }, &ctx);
+    settle(&mut h);
+    h.get_by_label("Extract").click();
+    settle(&mut h);
+    assert_eq!(project(&h).workbooks().count(), books + 1);
+    assert_eq!(h.state().doc.undo_label(), Some("Extract Slice"));
+    let new_book = project(&h).workbooks().last().unwrap();
+    assert_eq!(new_book.sheets[0].row_count(), 3, "a, a, c");
     // Remove Slicer clears it.
     h.state_mut().apply(Action::GraphSlicer { graph }, &ctx);
     settle(&mut h);

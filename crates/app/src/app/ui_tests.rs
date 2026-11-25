@@ -5726,6 +5726,14 @@ fn find_in_project_files_lists_the_matching_projects_and_opens_one() {
     }
     settle(&mut h);
     click(&mut h, "Find All");
+    // T441: the search runs on its own thread; frames take its results in.
+    let start = std::time::Instant::now();
+    while h.state().find_files.as_ref().unwrap().running.is_some() {
+        assert!(start.elapsed() < std::time::Duration::from_secs(60), "the search ends");
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    settle(&mut h);
     let found: Vec<String> = h
         .state()
         .find_files

@@ -1,5 +1,6 @@
 //! Graph > Graph Slicer... (T406): pick a category column of the plots' source sheet and tick the values to show
-//! (`Project::set_graph_slicer`); Remove Slicer shows every row again. Rules in `sheaf_core::slicer`.
+//! (`Project::set_graph_slicer`); Remove Slicer shows every row again. Scope chooses the whole page or one layer and
+//! Extract applies the slicer and copies the rows it shows to a new workbook (T444). Rules in `sheaf_core::slicer`.
 
 use eframe::egui;
 use sheaf_core::{ColumnId, Project, WindowId};
@@ -7,7 +8,7 @@ use sheaf_core::{ColumnId, Project, WindowId};
 pub enum SlicerOutcome {
     Open,
     Closed,
-    Apply { graph: WindowId, column: ColumnId, values: Vec<String> },
+    Apply { graph: WindowId, column: ColumnId, values: Vec<String>, layer: Option<usize>, extract: bool },
     Remove { graph: WindowId },
 }
 
@@ -18,6 +19,9 @@ pub struct GraphSlicerDialog {
     pub column: usize,
     /// The chosen column's values and whether each is shown.
     pub values: Vec<(String, bool)>,
+    /// The graph's number of layers, and the scope: one layer, or `None` for the page (T444).
+    pub layers: usize,
+    pub layer: Option<usize>,
 }
 
 impl GraphSlicerDialog {
@@ -34,7 +38,8 @@ impl GraphSlicerDialog {
             .and_then(|s| columns.iter().position(|c| c.0 == s.column))
             .or_else(|| sheet.columns.iter().position(|c| !c.data.is_numeric()))
             .unwrap_or(0);
-        let mut d = GraphSlicerDialog { graph, columns, column, values: Vec::new() };
+        let layer = current.and_then(|s| s.layer);
+        let mut d = GraphSlicerDialog { graph, columns, column, values: Vec::new(), layers: g.layers.len(), layer };
         d.load(project);
         if let Some(s) = current.filter(|s| d.columns.get(d.column).is_some_and(|c| c.0 == s.column)) {
             for (v, on) in &mut d.values {
@@ -75,6 +80,18 @@ impl GraphSlicerDialog {
                         }
                     });
                 });
+                if self.layers > 1 {
+                    ui.horizontal(|ui| {
+                        ui.label("Scope");
+                        let shown = self.layer.map_or("Page".to_string(), |l| format!("Layer {}", l + 1));
+                        egui::ComboBox::from_id_salt("graph_slicer_scope").selected_text(shown).show_ui(ui, |ui| {
+                            ui.selectable_value(&mut self.layer, None, "Page");
+                            for l in 0..self.layers {
+                                ui.selectable_value(&mut self.layer, Some(l), format!("Layer {}", l + 1));
+                            }
+                        });
+                    });
+                }
                 egui::ScrollArea::vertical().max_height(240.0).show(ui, |ui| {
                     for (v, on) in &mut self.values {
                         ui.checkbox(on, v.as_str());
@@ -91,14 +108,24 @@ impl GraphSlicerDialog {
                 ui.separator();
                 ui.horizontal(|ui| {
                     let any = self.values.iter().any(|v| v.1);
-                    if ui.add_enabled(any, egui::Button::new("OK")).clicked()
-                        && let Some(c) = self.columns.get(self.column)
-                    {
-                        outcome = SlicerOutcome::Apply {
-                            graph: self.graph,
-                            column: c.0,
-                            values: self.values.iter().filter(|v| v.1).map(|v| v.0.clone()).collect(),
+                    for (label, extract) in [("OK", false), ("Extract", true)] {
+                        let button = ui.add_enabled(any, egui::Button::new(label));
+                        let button = if extract {
+                            button.on_hover_text("Apply and copy the rows shown to a new workbook")
+                        } else {
+                            button
                         };
+                        if button.clicked()
+                            && let Some(c) = self.columns.get(self.column)
+                        {
+                            outcome = SlicerOutcome::Apply {
+                                graph: self.graph,
+                                column: c.0,
+                                values: self.values.iter().filter(|v| v.1).map(|v| v.0.clone()).collect(),
+                                layer: self.layer,
+                                extract,
+                            };
+                        }
                     }
                     if ui.button("Remove Slicer").clicked() {
                         outcome = SlicerOutcome::Remove { graph: self.graph };

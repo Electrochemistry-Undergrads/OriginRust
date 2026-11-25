@@ -10,7 +10,7 @@ use crate::menus::{self, MenuContext, WindowKind};
 use eframe::egui::{self, Align, Color32, Layout, Pos2, Rect, RichText, Sense, Shape, Stroke, UiBuilder, vec2};
 use egui_extras::{Column as TableColumn, TableBuilder};
 use sheaf_core::cellformat::{HAlign, ResolvedStyle};
-use sheaf_core::sheet_view::ViewSwitch;
+use sheaf_core::sheet_view::{FittedCells, ViewSwitch};
 use sheaf_core::{Column, ColumnId, Document, FormulaState, RecalcMode, WindowId, Worksheet};
 use std::collections::HashMap;
 use std::ops::Range;
@@ -191,6 +191,8 @@ pub struct BookUi {
     /// Standard point-size scale of the table's cached widths.
     standard_scale: Option<f32>,
     bulk_column_width: Option<u16>,
+    fit_to_window: bool,
+    fitted_column_width: Option<f32>,
     /// Width of each scrolling column at the default Standard size.
     col_px: HashMap<ColumnId, f32>,
     /// Widths given to frozen columns by dragging, at the default Standard size.
@@ -228,7 +230,13 @@ impl BookUi {
     }
 
     fn minimum_drag_width(&self) -> f32 {
-        if self.bulk_column_width.is_some() { 8.0 } else { 30.0 * self.width_scale() }
+        if self.fitted_column_width.is_some() {
+            1.0
+        } else if self.bulk_column_width.is_some() {
+            8.0
+        } else {
+            30.0 * self.width_scale()
+        }
     }
 
     /// The sheet rows after which Page Break Preview Lines draw a line (T185), once the sheet was shown.
@@ -521,6 +529,7 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         layer_icons: true,
         active_layer_indicator: false,
         axis_layer_icons: false,
+        object_grid: false,
         show_frame: None,
         lock_position: Default::default(),
         page_breaks: false,
@@ -618,17 +627,19 @@ fn float_room(sheet: &Worksheet, position: usize, r: usize, state: &BookUi) -> f
 }
 
 fn column_px(state: &BookUi, column: &Column) -> f32 {
-    let base = match column.width {
-        Some(chars) => column_pixels(chars),
-        None => {
-            state.frozen_widths.get(&column.id).or_else(|| state.col_px.get(&column.id)).copied().unwrap_or_else(|| {
-                state
-                    .bulk_column_width
-                    .map_or(COLUMN_WIDTH, |p| (COLUMN_WIDTH * f32::from(p) / 100.0).round() / state.width_scale())
-            })
-        }
-    };
-    (base * state.width_scale()).max(8.0)
+    let scale = state.width_scale();
+    if let Some(width) = state.fitted_column_width.filter(|_| state.fit_to_window) {
+        return width;
+    }
+    if let Some(chars) = column.width {
+        return (column_pixels(chars) * scale).max(8.0);
+    }
+    if let Some(&width) = state.frozen_widths.get(&column.id).or_else(|| state.col_px.get(&column.id)) {
+        return (width * scale).max(if state.fitted_column_width.is_some() { 1.0 } else { 8.0 });
+    }
+    state.fitted_column_width.unwrap_or_else(|| {
+        state.bulk_column_width.map_or(COLUMN_WIDTH * scale, |p| (COLUMN_WIDTH * f32::from(p) / 100.0).round()).max(8.0)
+    })
 }
 
 /// The share of the body width that the frozen block (row header and frozen columns) may take.
@@ -648,9 +659,11 @@ pub fn frozen_split(
     data_rows: usize,
     body_size: egui::Vec2,
     header_height: f32,
+    fitted_row_height: Option<f32>,
     width_of: &dyn Fn(&Column) -> f32,
 ) -> (usize, Vec<usize>) {
-    let row_height = crate::worksheet_layout::fixed_row_height(sheet)
+    let row_height = fitted_row_height
+        .or_else(|| crate::worksheet_layout::fixed_row_height(sheet))
         .unwrap_or_else(|| ROW_HEIGHT * sheet.font_defaults.size_scale());
     let room = ((body_size.y - header_height) / row_height).floor() as i64 - 3;
     let rows = usize::from(sheet.frozen.rows).min(data_rows).min(room.max(0) as usize);
@@ -958,9 +971,18 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     let full = ui.max_rect();
     let tab_strip = Rect::from_min_max(Pos2::new(full.left(), full.bottom() - TAB_BAR_HEIGHT), full.max);
     let body = Rect::from_min_max(full.min, Pos2::new(full.right(), tab_strip.top()));
+    let fit_to_window = sheet.view.fit_sheet_to_window && sheet.graph_sheet.is_none() && sheet.notes_text.is_none();
+    let row_header_width = row_header_width(sheet);
+    let fitting_width = if fit_to_window {
+        let visible = sheet.columns.iter().filter(|column| !column.hidden).count();
+        (visible > 0).then_some((body.width() - row_header_width).max(0.0) / visible.max(1) as f32)
+    } else {
+        None
+    };
+    let fits_width = fit_to_window && fitting_width.is_none_or(|width| width >= 1.0);
     ui.painter().rect_filled(tab_strip, 0.0, HEADER_GREY);
     ui.scope_builder(UiBuilder::new().max_rect(tab_strip), |ui| {
-        sheet_tabs(ui, book, sheet_index, book_id, state, actions);
+        sheet_tabs(ui, book, sheet_index, book_id, state, actions, !fits_width);
     });
 
     // The report of a one-way ANOVA or a two-sample t-test offers its multiple comparisons plot (T64).
@@ -1042,7 +1064,12 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     let bulk_width = sheet.view.cell_measurements.column_width;
     let bulk_width_changed = state.bulk_column_width != bulk_width;
     state.bulk_column_width = bulk_width;
-    if bulk_width_changed {
+    let desired_width = fitting_width.map(|width| width.max(1.0));
+    let fitted_width = FittedCells::new(None, desired_width).column_width().or(sheet.view.fitted_cells.column_width());
+    let fit_changed = state.fit_to_window != fit_to_window || state.fitted_column_width != fitted_width;
+    state.fit_to_window = fit_to_window;
+    state.fitted_column_width = fitted_width;
+    if bulk_width_changed || fit_changed {
         for column in &sheet.columns {
             state.col_px.remove(&column.id);
             state.frozen_widths.remove(&column.id);
@@ -1080,26 +1107,52 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         });
     }
     let layout = state.layout_cache.as_ref().expect("worksheet layout").value.clone();
-    let row_heights = &layout.rows;
     let header_height = layout.head_height();
-    let body_height = f64::from((body.height() - header_height).max(0.0));
-    let full_rows = row_heights.row_at(body_height);
-    let minimum_rows = (full_rows + usize::from(row_heights.offset(full_rows) < body_height)).max(1);
+    let body_height = (body.height() - header_height).max(0.0);
+    // Automatic capacity uses the nominal geometry, even when Fit last made the rows smaller.
+    let full_rows = layout.rows.row_at(f64::from(body_height));
+    let minimum_rows =
+        full_rows.saturating_add(usize::from(layout.rows.offset(full_rows) < f64::from(body_height))).max(1);
     state.row_viewport = Some(RowViewport { generation: doc.generation(), sheet: sheet_index, minimum_rows });
-    if sheet.view.automatic_rows() && minimum_rows > rows {
-        actions.push(Action::EnsureWorksheetRows { book: book_id, sheet: sheet_index, rows: minimum_rows });
+
+    let fitting_height = body_height / rows_drawn.max(1) as f32;
+    let fits_height = fit_to_window && (rows_drawn == 0 || fitting_height >= 1.0);
+    let desired_height = (fit_to_window && rows_drawn > 0).then_some(fitting_height.max(1.0));
+    let fitted = FittedCells::new(
+        desired_height.or(sheet.view.fitted_cells.row_height()),
+        desired_width.or(sheet.view.fitted_cells.column_width()),
+    );
+    let persist_fit = fit_to_window
+        && (fitted != sheet.view.fitted_cells
+            || desired_width.is_some() && sheet.columns.iter().any(|column| !column.hidden && column.width.is_some()));
+    if sheet.view.automatic_rows() && minimum_rows > rows || persist_fit {
+        actions.push(Action::UpdateWorksheetViewport {
+            book: book_id,
+            sheet: sheet_index,
+            minimum_rows,
+            fitted: persist_fit.then_some(fitted),
+        });
+    }
+    let fitted_row_height = fitted.row_height();
+    let fitted_rows = fitted_row_height.map(|height| sheaf_core::sheet_print::RowHeights::constant(f64::from(height)));
+    let row_heights = fitted_rows.as_ref().unwrap_or(&layout.rows);
+    if fits_width {
+        state.h_offset = 0.0;
+    }
+    if fits_height {
+        state.v_offset = 0.0;
+        state.v_set = None;
     }
 
     // Frozen panes: the first displayed rows go under the head, the first visible columns sit in
     // an overlay over the table, whose own cells for them stay empty placeholders of the same width.
     let data_shown = shown.as_ref().map_or(sheet.row_count(), |s| s.iter().filter(|r| **r < sheet.row_count()).count());
     let (mut nf_rows, frozen_positions) =
-        frozen_split(sheet, data_shown, body.size(), header_height, &|c| column_px(state, c));
+        frozen_split(sheet, data_shown, body.size(), header_height, fitted_row_height, &|c| column_px(state, c));
     while nf_rows > 0 && header_height + row_heights.offset(nf_rows + 3) as f32 > body.height() {
         nf_rows -= 1;
     }
     let frozen_px: Vec<f32> = frozen_positions.iter().map(|p| column_px(state, &sheet.columns[*p])).collect();
-    let row_header_width = row_header_width(sheet);
     let frozen_w = if frozen_positions.is_empty() { 0.0 } else { row_header_width + frozen_px.iter().sum::<f32>() };
     let header_total = header_height + row_heights.offset(nf_rows) as f32;
     let frozen_rows: Vec<usize> = (0..nf_rows).map(|i| shown.as_ref().map_or(i, |s| s[i])).collect();
@@ -1151,7 +1204,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     let mut drawn_rows: Vec<(usize, f32, f32)> = Vec::new();
     let output = ui
         .scope_builder(UiBuilder::new().max_rect(body), |ui| {
-            if gap > 0.0 {
+            if gap > 0.0 || fit_to_window {
                 ui.set_clip_rect(ui.clip_rect().intersect(body));
             }
             egui::ScrollArea::horizontal()
@@ -1164,12 +1217,22 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
                     let mut table = TableBuilder::new(ui)
                         .striped(false)
-                        .resizable(true)
+                        .resizable(!fit_to_window)
                         .cell_layout(Layout::left_to_right(Align::Center))
                         .column(TableColumn::exact(row_header_width).clip(true))
                         .min_scrolled_height(0.0);
+                    if fit_to_window {
+                        // Keep the fitted table inside the workbook during egui's sizing pass.
+                        table = table.max_scroll_height((body.height() - header_total).max(0.0));
+                    }
+                    if fits_height {
+                        table = table
+                            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                            .vertical_scroll_offset(0.0);
+                    }
                     for (position, column) in sheet.columns.iter().enumerate().filter(|(_, c)| !c.hidden) {
                         table = match column.width {
+                            _ if fit_to_window => table.column(TableColumn::exact(column_px(state, column)).clip(true)),
                             _ if frozen_positions.contains(&position) => {
                                 table.column(TableColumn::exact(column_px(state, column)))
                             }
@@ -1181,9 +1244,13 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                             ),
                         };
                     }
-                    // One empty column at the end as a target for "add column".
-                    table = table.column(TableColumn::remainder().at_least(40.0));
-                    if scale_changed || bulk_width_changed {
+                    // The add-column target collapses while the data columns fill the viewport.
+                    table = table.column(if fit_to_window {
+                        TableColumn::exact(0.0)
+                    } else {
+                        TableColumn::remainder().at_least(40.0)
+                    });
+                    if scale_changed || bulk_width_changed || fit_changed {
                         table.reset();
                     }
                     if state.reveal > 0
@@ -1262,7 +1329,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
                             }
                             header.col(|ui| {
                                 let height = layout.column_header_height();
-                                if height == 0.0 {
+                                if fit_to_window || height == 0.0 {
                                     return;
                                 }
                                 let rect = ui.max_rect();
@@ -1331,7 +1398,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
     }
     // The wheel over the head and the frozen rows scrolls the body (only the sideways part of it
     // belongs to the horizontal area that holds the head).
-    if nf_rows > 0 {
+    if nf_rows > 0 && !fits_height {
         let band = Rect::from_min_size(output.inner_rect.min, vec2(output.inner_rect.width(), header_total));
         let over = ui.input(|i| i.pointer.hover_pos()).is_some_and(|p| band.contains(p));
         let dy = ui.input(|i| i.smooth_scroll_delta.y);
@@ -1352,10 +1419,10 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
         let (mut dx, mut dy) = edge_scroll(p, scroll_area, dt);
         // A drag that began in a frozen column (row) and has not left it scrolls no further.
         let (anchor_column, anchor_row) = drag_anchor(state, sheet);
-        if p.x < scroll_area.left() && anchor_column.is_some_and(|c| state.frozen_cols.contains(&c)) {
+        if fits_width || p.x < scroll_area.left() && anchor_column.is_some_and(|c| state.frozen_cols.contains(&c)) {
             dx = 0.0;
         }
-        if p.y < scroll_area.top() && anchor_row.is_some_and(|r| state.frozen_rows.contains(&r)) {
+        if fits_height || p.y < scroll_area.top() && anchor_row.is_some_and(|r| state.frozen_rows.contains(&r)) {
             dy = 0.0;
         }
         if dx != 0.0 && !state.row_drag {
@@ -1376,7 +1443,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, book_id: WindowId, state: &mut Bo
             // scrolls to the row itself. A frozen cell never scrolls along its frozen axis.
             let view = output.inner_rect;
             let left = view.left() + frozen_w;
-            if !state.reveal_frozen_x {
+            if !fits_width && !state.reveal_frozen_x {
                 if cell.left() < left - 0.5 {
                     state.h_offset = (state.h_offset - (left - cell.left())).max(0.0);
                 } else if cell.right() > view.right() {
@@ -1669,6 +1736,7 @@ fn sheet_tabs(
     book_id: WindowId,
     state: &mut BookUi,
     actions: &mut Vec<Action>,
+    show_scroll_bar: bool,
 ) {
     ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
     let bar = ui.max_rect();
@@ -1755,8 +1823,10 @@ fn sheet_tabs(
                 });
             }
         }
-        ui.add_space(6.0);
-        h_scroll_bar(ui, state);
+        if show_scroll_bar {
+            ui.add_space(6.0);
+            h_scroll_bar(ui, state);
+        }
     });
 }
 
@@ -1920,7 +1990,7 @@ fn column_head(
             state.focus(ui.ctx());
         }
         head_drag(ui, state, sheet, position, &head_response, head, overlay);
-        if overlay && column.width.is_none() {
+        if overlay && column.width.is_none() && !state.fit_to_window {
             frozen_resize(ui, state, column, head);
         }
         if head_response.double_clicked() {
@@ -3407,7 +3477,7 @@ mod tests {
     }
 
     fn split(ws: &Worksheet, data_rows: usize, w: f32, h: f32) -> (usize, Vec<usize>) {
-        frozen_split(ws, data_rows, vec2(w, h), 80.0, &|_| 67.0)
+        frozen_split(ws, data_rows, vec2(w, h), 80.0, None, &|_| 67.0)
     }
 
     #[test]

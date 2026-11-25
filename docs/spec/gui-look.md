@@ -1925,6 +1925,15 @@ are not visited), as one undo step named after the tool. A sheet without Y colum
 skipped and named in the status line; when no sheet runs, nothing changes and the warning names them. From a graph
 the item asks for a workbook. Other workbooks are not visited.
 
+### Interactive formula references (T423, 2026-11-24, not measured)
+
+Origin 2025b inserts a cell, column or range into the formula being edited by clicking or dragging in the sheet;
+Origin 2016 cannot, so this is Sheaf's own. While the Set Column Values window is open, a new selection in any
+workbook's sheet goes into the formula at its cursor: one whole column as `col(B)`, one cell as `col(B)[3]`, cells of
+one column as `col(B)[2:5]` (1-based rows). A sheet other than the window's gets `Sheet2!` in front, another
+workbook `[Book2]Sheet1!`. Selections of several columns, rows or the whole sheet insert nothing; the selection the
+sheet has when the window opens does not count.
+
 ### Find in Project Files (T361, 2026-11-22, not measured)
 
 Origin 2026 searches a collection of saved projects for text in metadata, graph labels, notes and data cells and opens

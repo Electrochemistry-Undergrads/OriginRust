@@ -117,7 +117,7 @@ use sheaf_core::clipboard::CopyOptions;
 /// Copy Page's size factor: the picture is this fraction of the page size. Origin's option is
 /// 40 % up to 2021a and 100 % from 2021b, so 40 % is the 2016 default (graphing.md 9.6).
 const COPY_PAGE_SIZE_FACTOR: f64 = 0.4;
-use sheaf_core::graph::{LabelForm, TickLabelSource};
+use sheaf_core::graph::{LabelForm, PageGrid, TickLabelSource};
 use sheaf_core::project::{Folder, Window};
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnData, ColumnId, Designation, Document, Project, WindowId};
@@ -218,6 +218,10 @@ struct SheetNameDialog {
 pub struct SheafApp {
     doc: Document,
     path: Option<PathBuf>,
+    /// Find in Project Files' Open (T449): the file and the search, to go to its first hit once it has opened.
+    jump_after_open: Option<(PathBuf, crate::project_find::FindSpec)>,
+    /// The search to run on the project just opened (T449), done on the next frame.
+    jump_now: Option<crate::project_find::FindSpec>,
     /// The Origin file the project was imported from; saving over it first keeps a `.bak` copy.
     foreign_source: Option<PathBuf>,
     workspace: Workspace,
@@ -466,6 +470,8 @@ impl SheafApp {
         let mut app = SheafApp {
             doc: Document::default(),
             path: None,
+            jump_after_open: None,
+            jump_now: None,
             foreign_source: None,
             workspace: Workspace::default(),
             known: HashSet::new(),
@@ -1002,6 +1008,12 @@ impl SheafApp {
     fn load_project(&mut self, path: PathBuf) -> bool {
         match sheaf_io::open_project(&path) {
             Ok(opened) => {
+                // Opened from Find in Project Files (T449): its search runs on this project next.
+                if let Some((p, spec)) = self.jump_after_open.take()
+                    && p == path
+                {
+                    self.jump_now = Some(spec);
+                }
                 self.note_project(&path);
                 self.doc.replace(opened.project);
                 self.reset_views();
@@ -3461,6 +3473,7 @@ impl SheafApp {
                     PageSwitch::ActiveLayerIndicator => "Show Active Layer Indicator",
                     PageSwitch::AxisLayerIcons => "Show Axis Layer Icons",
                     PageSwitch::ObjectGrid => "Show Object Grid",
+                    PageSwitch::LayerGrid => "Show Layer Grid",
                 };
                 self.doc.apply(label, |p| {
                     if let Some(g) = p.graph_mut(graph) {
@@ -3469,7 +3482,12 @@ impl SheafApp {
                             PageSwitch::IconDoubleClickPlotSetup => g.page.style.icon_double_click_plot_setup = on,
                             PageSwitch::ActiveLayerIndicator => g.page.style.active_layer_indicator = on,
                             PageSwitch::AxisLayerIcons => g.page.style.axis_layer_icons = on,
-                            PageSwitch::ObjectGrid => g.page.style.object_grid = on,
+                            PageSwitch::ObjectGrid => {
+                                g.page.style.grid = if on { PageGrid::Object } else { PageGrid::Off }
+                            }
+                            PageSwitch::LayerGrid => {
+                                g.page.style.grid = if on { PageGrid::Layer } else { PageGrid::Off }
+                            }
                         }
                     }
                 });
@@ -7121,12 +7139,24 @@ impl SheafApp {
 
     /// File > Find in Project Files... (T361): Open closes the window and opens the chosen project.
     fn find_files_frame(&mut self, ctx: &egui::Context) {
+        // The project opened from the window (T449): go to its first hit, as Find in Project's Go does.
+        if let Some(spec) = self.jump_now.take() {
+            let spec = crate::project_find::FindSpec { within: crate::project_find::FindScope::EntireProject, ..spec };
+            let hits = crate::project_find::find_in_project(self.doc.project(), &spec, &[]);
+            if let Some(first) = hits.first() {
+                let (n, what) = (hits.len(), format!("{} {} {}", first.element, first.attribute, first.range));
+                self.go_to_found(first.target.clone(), ctx);
+                self.say(format!("{n} hit(s) for \"{}\"; the first: {what}", spec.text));
+            }
+        }
         let Some(d) = &mut self.find_files else { return };
         match d.show(ctx) {
             crate::dialogs::find_files::FindFilesOutcome::Open => {}
             crate::dialogs::find_files::FindFilesOutcome::Closed => self.find_files = None,
             crate::dialogs::find_files::FindFilesOutcome::OpenFile(path) => {
+                let spec = self.find_files.as_ref().map(|d| d.spec.clone());
                 self.find_files = None;
+                self.jump_after_open = spec.map(|s| (path.clone(), s));
                 self.open_picked(path);
             }
         }
@@ -7516,7 +7546,7 @@ impl SheafApp {
                 .and_then(|g| project.graph(g))
                 .is_some_and(|g| g.page.style.active_layer_indicator),
             axis_layer_icons: graph.and_then(|g| project.graph(g)).is_some_and(|g| g.page.style.axis_layer_icons),
-            object_grid: graph.and_then(|g| project.graph(g)).is_some_and(|g| g.page.style.object_grid),
+            page_grid: graph.and_then(|g| project.graph(g)).map(|g| g.page.style.grid).unwrap_or_default(),
             show_frame: graph
                 .and_then(|g| project.graph(g)?.layers.get(layer))
                 .filter(|l| l.coords.is_cartesian())

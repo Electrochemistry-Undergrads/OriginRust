@@ -71,7 +71,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Done 2026-11-15 (unmeasured Sheaf rules, graphing 13.15-13.17): Offset Grouped Data menu with Cumulative, Stacked Histograms, waterfall Y/Z colour mapping |
 | [T63](T63-greyed-items-with-code-2.md) | 3, parallel | M | Existing-feature wiring. F/G/J wired, H, A, B, I and K wired 2026-11-19 (workbook-model 13c, graphing "Step and spline line plots"). Group E wired by T182, with Origin 2016 differences measured (graphing 9.7a). C referred to B8/T14, D to B14 |
 | [T65](T65-graph-view-zoom-pan.md) | 4 (B1), P1 | M | Zoom In mode, Zoom Out, Whole Page and Zoom-Panning tool landed 2026-11-15; Standard toolbar zoom combo added 2026-11-18 (Scale In/Out and Zoom All: T69) |
-| [T66](T66-graph-view-modes.md) | 4 (B1), P1 | M | Partly done: four view modes, Layer Icons, Axis Layer Icons, Object Grid, Active Layer Only, Labels, Data, Active Layer Indicator, Frame and Full Screen (graphing 22). Two Show items and Show Data Info remain |
+| [T66](T66-graph-view-modes.md) | 4 (B1), P1 | M | Partly done: four view modes, Layer Icons, Axis Layer Icons, Object Grid, Layer Grid, Active Layer Only, Labels, Data, Active Layer Indicator, Frame and Full Screen (graphing 22). Master Items on Screen and Show Data Info remain |
 | [T67](T67-add-straight-line.md) | 4 (B3), P1 | M | Done 2026-11-15: Add Straight Line (Origin's addline), dialog, CLI --vline/--hline; left: dragging (Moveable) |
 | [T70](T70-axis-center-fit-page-to-printer.md) | 4 (B3), P1 | S | Done 2026-11-15: axis Center, Fit Page To Printer, Format > Fit Page To Layers... opens its window |
 | [T71](T71-point-segments.md) | 4 (B4), P1 | S | Done 2026-11-15: Plot > Line + Symbol > 2 and 3 Point Segment (line connections 2 and 3) |
@@ -250,6 +250,8 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T423](T423-formula-pick.md) | Set Column Values: pick column, cell or range references in the sheet | S | done 2026-11-24 (gui-look), not measured |
 | [T432](T432-named-blocks.md) | Named blocks of several columns in statistics (mean(Name)) | S | done 2026-11-24 (expression-language), not measured |
 | [T434](T434-name-manager.md) | Worksheet > Name Manager...: the names, what they stand for, Delete | S | done 2026-11-24 (expression-language), not measured |
+| [T441](T441-find-files-background.md) | Find in Project Files searches in the background with progress and Stop | S | done 2026-11-25 (gui-look), not measured |
+| [T449](T449-find-files-jump.md) | Find in Project Files: Open goes to the first hit | S | done 2026-11-25 (gui-look), not measured |
 | [T233](T233-batch-summary.md) | File > Batch Processing: Summary Sheet, Dataset Identifier, Delete Intermediate Books (a Batch Summary book stacking one sheet of every book) | S | done 2026-11-20 (workbook-model 13p), not measured; left: Origin's layout and identifier choices |
 | [T235](T235-batch-cli.md) | sheaf batch: Batch Processing without a window (template, summary, --summary-csv), core Project::batch_process shared with the window | S | done 2026-11-20 (workbook-model 13p); MCP: T238 |
 | [T238](T238-batch-mcp.md) | MCP batch_process: the shared batch run (books, summary, delete) on the session project, one undo step attached | S | done 2026-11-20 (mcp.md 5.1); left: read options |
@@ -345,6 +347,9 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T394](T394-life-data-frequency.md) | Frequency (count) column for the life-data tools (Origin 2026b) | S | done 2026-11-23 (statistics 49) |
 | [T408](T408-cox.md) | Cox proportional hazards regression with Breslow ties, hazard ratios and tests (Origin 2026b) | S | done 2026-11-23 (statistics 52) |
 | [T391](T391-life-data-regression.md) | Life data regression: Weibull, lognormal and exponential AFT models with censoring (Origin 2026b) | S | done 2026-11-23 (statistics 48) |
+| [T447](T447-prism-import.md) | Import GraphPad Prism XML files (.pzfx) | S | done 2026-11-25 (import-prism) |
+| [T446](T446-seasonal-arima.md) | Seasonal ARIMA(p,d,q)(P,D,Q)s by conditional least squares | S | done 2026-11-25 (statistics 43) |
+| [T445](T445-cox-efron.md) | Cox regression with Efron's tie handling | S | done 2026-11-25 (statistics 52) |
 | [T438](T438-interval-probability-plot.md) | Probability plot with Turnbull points for arbitrarily censored data | S | done 2026-11-24 (statistics 47) |
 | [T437](T437-lifereg-percentiles.md) | Life data regression: predicted percentile lives with intervals | S | done 2026-11-24 (statistics 48) |
 | [T429](T429-survival-frequency.md) | Frequency columns for the Kaplan-Meier estimator and Cox regression | S | done 2026-11-24 (statistics 49) |

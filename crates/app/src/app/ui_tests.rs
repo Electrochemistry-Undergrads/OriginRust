@@ -5726,6 +5726,14 @@ fn find_in_project_files_lists_the_matching_projects_and_opens_one() {
     }
     settle(&mut h);
     click(&mut h, "Find All");
+    // T441: the search runs on its own thread; frames take its results in.
+    let start = std::time::Instant::now();
+    while h.state().find_files.as_ref().unwrap().running.is_some() {
+        assert!(start.elapsed() < std::time::Duration::from_secs(60), "the search ends");
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    settle(&mut h);
     let found: Vec<String> = h
         .state()
         .find_files
@@ -5742,6 +5750,11 @@ fn find_in_project_files_lists_the_matching_projects_and_opens_one() {
     assert!(h.state().find_files.is_none());
     let books: Vec<String> = project(&h).workbooks().map(|b| b.long_name.clone()).collect();
     assert_eq!(books, ["Cyclic voltammetry run"], "the found project is open");
+    // T449: the first hit is gone to: the book whose long name matched is the active window.
+    settle(&mut h);
+    let book = project(&h).workbooks().next().unwrap().id;
+    assert_eq!(h.state().active, Some(book));
+    assert!(h.state().status.contains("hit(s) for \"voltammetry\""), "{}", h.state().status);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -5914,7 +5927,7 @@ fn the_survival_menu_fits_a_cox_model() {
     let mut h = start(vec![data]);
     show_window(&mut h, "Book1 - c.csv");
     menu_path(&mut h, &["Statistics", "Survival Analysis", "Cox Proportional Hazards..."]);
-    assert!(h.state().analysis.is_some() && has_label(&h, "Hazard-ratio confidence"));
+    assert!(h.state().analysis.is_some() && has_label(&h, "Hazard-ratio confidence") && has_label(&h, "Tied times"));
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none(), "{:?}", h.state().analysis.as_ref().and_then(|a| a.problem()));
     let (sheet, hr) = result_column(&h, "Hazard ratio");
@@ -6220,7 +6233,7 @@ fn the_statistics_menu_makes_an_arima_forecast() {
     show_window(&mut h, "Book1 - ts.csv");
     let graphs_before = project(&h).graphs().count();
     menu_path(&mut h, &["Statistics", "ARIMA Forecast..."]);
-    assert!(h.state().analysis.is_some() && has_label(&h, "AR order p"));
+    assert!(h.state().analysis.is_some() && has_label(&h, "AR order p") && has_label(&h, "Seasonal P"));
     click(&mut h, "OK");
     assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
     let (sheet, values) = result_column(&h, "Value");

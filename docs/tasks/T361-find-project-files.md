@@ -8,8 +8,7 @@ Origin 2016, so the window is Sheaf's own.
 
 ## Left
 
-- Searching in the background with progress, jumping to the hit inside the opened project (notes windows: done in
-  T407).
+- Nothing (notes windows: T407; searching in the background: T441; going to the first hit after Open: T449).
 
 ## Tests
 

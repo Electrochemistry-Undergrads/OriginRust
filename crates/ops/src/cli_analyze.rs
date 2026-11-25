@@ -1326,14 +1326,24 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 frequency,
             })),
         ),
-        AnalyzeTool::Lifereg { target, distribution, censor, frequency } => {
+        AnalyzeTool::Lifereg { target, distribution, censor, frequency, percentiles, at, confidence } => {
             let dist = match distribution.to_ascii_lowercase().as_str() {
                 "weibull" => analysis::LifeDist::Weibull,
                 "lognormal" => analysis::LifeDist::Lognormal,
                 "exponential" => analysis::LifeDist::Exponential,
                 other => bail!("--distribution takes weibull, lognormal or exponential, not {other:?}"),
             };
-            (target, Job::Tool(Tool::LifeRegression(analysis::LifeRegressionSpec { dist, censor, frequency })))
+            (
+                target,
+                Job::Tool(Tool::LifeRegression(analysis::LifeRegressionSpec {
+                    dist,
+                    censor,
+                    frequency,
+                    percentiles: percentiles.iter().map(|p| p / 100.0).collect(),
+                    at,
+                    confidence: confidence / 100.0,
+                })),
+            )
         }
         AnalyzeTool::Turnbull { target, no_graph, frequency } => {
             (target, Job::Tool(Tool::Turnbull(analysis::TurnbullSpec { graph: !no_graph, frequency })))

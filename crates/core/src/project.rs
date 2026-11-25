@@ -698,6 +698,17 @@ impl Project {
         })
     }
 
+    /// The named Master page used by another graph (T66).
+    pub fn master_graph_for(&self, graph: &Graph) -> Option<&Graph> {
+        if !graph.page.style.use_master_items {
+            return None;
+        }
+        match self.window_by_name("Master")? {
+            Window::Graph(master) if master.id != graph.id => Some(master),
+            _ => None,
+        }
+    }
+
     /// The Notes windows (T154).
     pub fn notes(&self) -> impl Iterator<Item = &crate::notes_window::Notes> {
         self.windows.iter().filter_map(|w| match w {

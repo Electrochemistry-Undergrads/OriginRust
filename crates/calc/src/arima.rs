@@ -287,7 +287,8 @@ fn invert(mut a: Vec<Vec<f64>>) -> Option<Vec<Vec<f64>>> {
 }
 
 /// Fits every ARIMA(`p`, `d`, `q`) with `p <= max_p`, `q <= max_q` and keeps the one with the smallest AIC (T428);
-/// orders too long for the series, without coefficients or without finite errors are passed over.
+/// orders too long for the series, without coefficients or without finite errors are passed over. With a period, the
+/// seasonal `P` and `Q` of `seasonal` are maxima too: every `P' <= P`, `Q' <= Q` joins the search, `D` fixed (T452).
 pub fn fit_auto(
     y: &[f64],
     d: usize,
@@ -298,16 +299,21 @@ pub fn fit_auto(
     h: usize,
 ) -> Result<Arima, ArimaError> {
     let mut best: Option<Arima> = None;
-    for p in 0..=max_p {
-        for q in 0..=max_q {
-            match fit(y, ArimaOrder { p, d, q, constant, seasonal }, h) {
-                Ok(m) => {
-                    if best.as_ref().is_none_or(|b| m.aic < b.aic) {
-                        best = Some(m);
+    for sp in 0..=seasonal.p {
+        for sq in 0..=seasonal.q {
+            let s = Seasonal { p: sp, q: sq, ..seasonal };
+            for p in 0..=max_p {
+                for q in 0..=max_q {
+                    match fit(y, ArimaOrder { p, d, q, constant, seasonal: s }, h) {
+                        Ok(m) => {
+                            if best.as_ref().is_none_or(|b| m.aic < b.aic) {
+                                best = Some(m);
+                            }
+                        }
+                        Err(e @ (ArimaError::Missing(_) | ArimaError::BadPeriod(_))) => return Err(e),
+                        Err(_) => {}
                     }
                 }
-                Err(e @ ArimaError::Missing(_)) => return Err(e),
-                Err(_) => {}
             }
         }
     }
@@ -575,6 +581,39 @@ mod tests {
         let bad =
             ArimaOrder { p: 1, seasonal: Seasonal { p: 1, period: 1, ..Default::default() }, ..Default::default() };
         assert_eq!(fit(&y, bad, 1), Err(ArimaError::BadPeriod(1)));
+    }
+
+    #[test]
+    fn auto_searches_the_seasonal_orders_up_to_the_given_ones() {
+        // A seasonal AR(1) at period 4 around 10, with a little noise from an LCG.
+        let mut st: u64 = 99;
+        let mut y = vec![10.0; 4];
+        for t in 4..120 {
+            st = st.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let e = ((st >> 11) as f64 / (1u64 << 53) as f64 - 0.5) * 0.5;
+            let v = 10.0 + 0.8 * (y[t - 4] - 10.0) + e;
+            y.push(v);
+        }
+        let seasonal = Seasonal { p: 1, q: 1, period: 4, ..Default::default() };
+        let m = fit_auto(&y, 0, 1, 1, true, seasonal, 1).unwrap();
+        assert_eq!(m.order.seasonal.p, 1, "the seasonal AR term is found: {:?}", m.order);
+        // No order in the search beats it.
+        for sp in 0..=1 {
+            for sq in 0..=1 {
+                for p in 0..=1 {
+                    for q in 0..=1 {
+                        let s = Seasonal { p: sp, q: sq, period: 4, ..Default::default() };
+                        if let Ok(o) =
+                            fit(&y, ArimaOrder { p, q, constant: true, seasonal: s, ..Default::default() }, 1)
+                        {
+                            assert!(m.aic <= o.aic, "({p},{q})({sp},{sq}) {} < {}", o.aic, m.aic);
+                        }
+                    }
+                }
+            }
+        }
+        let bad = Seasonal { p: 1, period: 1, ..Default::default() };
+        assert_eq!(fit_auto(&y, 0, 1, 1, true, bad, 1).unwrap_err(), ArimaError::BadPeriod(1));
     }
 
     #[test]

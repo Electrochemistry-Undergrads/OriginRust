@@ -1593,4 +1593,5 @@ pub enum PageSwitch {
     AxisLayerIcons,
     ObjectGrid,
     LayerGrid,
+    MasterItemsOnScreen,
 }

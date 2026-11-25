@@ -3474,6 +3474,7 @@ impl SheafApp {
                     PageSwitch::AxisLayerIcons => "Show Axis Layer Icons",
                     PageSwitch::ObjectGrid => "Show Object Grid",
                     PageSwitch::LayerGrid => "Show Layer Grid",
+                    PageSwitch::MasterItemsOnScreen => "Show Master Items on Screen",
                 };
                 self.doc.apply(label, |p| {
                     if let Some(g) = p.graph_mut(graph) {
@@ -3488,6 +3489,7 @@ impl SheafApp {
                             PageSwitch::LayerGrid => {
                                 g.page.style.grid = if on { PageGrid::Layer } else { PageGrid::Off }
                             }
+                            PageSwitch::MasterItemsOnScreen => g.page.style.master_items_on_screen = on,
                         }
                     }
                 });
@@ -7558,6 +7560,10 @@ impl SheafApp {
                 .is_some_and(|g| g.page.style.active_layer_indicator),
             axis_layer_icons: graph.and_then(|g| project.graph(g)).is_some_and(|g| g.page.style.axis_layer_icons),
             page_grid: graph.and_then(|g| project.graph(g)).map(|g| g.page.style.grid).unwrap_or_default(),
+            master_items_on_screen: graph.and_then(|id| {
+                let g = project.graph(id)?;
+                project.master_graph_for(g).map(|_| g.page.style.master_items_on_screen)
+            }),
             show_frame: graph
                 .and_then(|g| project.graph(g)?.layers.get(layer))
                 .filter(|l| l.coords.is_cartesian())

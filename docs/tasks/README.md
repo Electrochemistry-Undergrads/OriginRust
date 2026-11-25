@@ -71,7 +71,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T62](T62-stack-offset-leftovers.md) | 2, P0 | M | Done 2026-11-15 (unmeasured Sheaf rules, graphing 13.15-13.17): Offset Grouped Data menu with Cumulative, Stacked Histograms, waterfall Y/Z colour mapping |
 | [T63](T63-greyed-items-with-code-2.md) | 3, parallel | M | Existing-feature wiring. F/G/J wired, H, A, B, I and K wired 2026-11-19 (workbook-model 13c, graphing "Step and spline line plots"). Group E wired by T182, with Origin 2016 differences measured (graphing 9.7a). C referred to B8/T14, D to B14 |
 | [T65](T65-graph-view-zoom-pan.md) | 4 (B1), P1 | M | Zoom In mode, Zoom Out, Whole Page and Zoom-Panning tool landed 2026-11-15; Standard toolbar zoom combo added 2026-11-18 (Scale In/Out and Zoom All: T69) |
-| [T66](T66-graph-view-modes.md) | 4 (B1), P1 | M | Partly done: four view modes, Layer Icons, Axis Layer Icons, Object Grid, Layer Grid, Active Layer Only, Labels, Data, Active Layer Indicator, Frame and Full Screen (graphing 22). Master Items on Screen and Show Data Info remain |
+| [T66](T66-graph-view-modes.md) | 4 (B1), P1 | M | Partly done: four view modes, Layer Icons, Axis Layer Icons, Object Grid, Layer Grid, Active Layer Only, Labels, Data, Active Layer Indicator, Frame, Master Items on Screen and Full Screen (graphing 22). Show Data Info remains |
 | [T67](T67-add-straight-line.md) | 4 (B3), P1 | M | Done 2026-11-15: Add Straight Line (Origin's addline), dialog, CLI --vline/--hline; left: dragging (Moveable) |
 | [T70](T70-axis-center-fit-page-to-printer.md) | 4 (B3), P1 | S | Done 2026-11-15: axis Center, Fit Page To Printer, Format > Fit Page To Layers... opens its window |
 | [T71](T71-point-segments.md) | 4 (B4), P1 | S | Done 2026-11-15: Plot > Line + Symbol > 2 and 3 Point Segment (line connections 2 and 3) |
@@ -347,6 +347,8 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T394](T394-life-data-frequency.md) | Frequency (count) column for the life-data tools (Origin 2026b) | S | done 2026-11-23 (statistics 49) |
 | [T408](T408-cox.md) | Cox proportional hazards regression with Breslow ties, hazard ratios and tests (Origin 2026b) | S | done 2026-11-23 (statistics 52) |
 | [T391](T391-life-data-regression.md) | Life data regression: Weibull, lognormal and exponential AFT models with censoring (Origin 2026b) | S | done 2026-11-23 (statistics 48) |
+| [T452](T452-seasonal-auto.md) | ARIMA order search over the seasonal orders too | S | done 2026-11-25 (statistics 43) |
+| [T451](T451-cox-strata.md) | Stratified Cox regression with a survival curve per stratum | S | done 2026-11-25 (statistics 52) |
 | [T447](T447-prism-import.md) | Import GraphPad Prism XML files (.pzfx) | S | done 2026-11-25 (import-prism) |
 | [T446](T446-seasonal-arima.md) | Seasonal ARIMA(p,d,q)(P,D,Q)s by conditional least squares | S | done 2026-11-25 (statistics 43) |
 | [T445](T445-cox-efron.md) | Cox regression with Efron's tie handling | S | done 2026-11-25 (statistics 52) |

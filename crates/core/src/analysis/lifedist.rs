@@ -89,11 +89,13 @@ pub struct CoxSpec {
     pub frequency: bool,
     /// Efron's handling of tied failure times instead of Breslow's (T445).
     pub efron: bool,
+    /// A stratum column follows the censor column (T451): risk sets and baselines within strata.
+    pub strata: bool,
 }
 
 impl Default for CoxSpec {
     fn default() -> Self {
-        CoxSpec { censor: "1".into(), confidence: 0.95, graph: true, frequency: false, efron: false }
+        CoxSpec { censor: "1".into(), confidence: 0.95, graph: true, frequency: false, efron: false, strata: false }
     }
 }
 
@@ -524,9 +526,10 @@ pub(super) fn run_cox(
         return Err(AnalysisError::BadOption("give the value of the censor column that marks a censored case".into()));
     }
     let (columns, counts) = split_frequency(sheet, columns, spec.frequency)?;
-    if columns.len() < 3 {
+    let extra = 2 + usize::from(spec.strata);
+    if columns.len() < extra + 1 {
         return Err(AnalysisError::BadOption(
-            "Cox regression takes the covariate column(s), then the time and the censor column (and the frequency last)"
+            "Cox regression takes the covariate column(s), then the time and the censor column (then the strata, and the frequency last)"
                 .into(),
         ));
     }
@@ -534,7 +537,8 @@ pub(super) fn run_cox(
     let read = |c: &Column| -> Result<Vec<f64>, AnalysisError> {
         sheet.values_of(c).map(|v| v.into_owned()).ok_or_else(|| AnalysisError::NotNumeric(c.short_name.clone()))
     };
-    let k = columns.len() - 2;
+    let k = columns.len() - extra;
+    let sc = if spec.strata { Some(column(columns[k + 2])?) } else { None };
     let xcs: Vec<&Column> = columns[..k].iter().map(|id| column(*id)).collect::<Result<_, _>>()?;
     let tc = column(columns[k])?;
     let cc = column(columns[k + 1])?;
@@ -546,7 +550,7 @@ pub(super) fn run_cox(
     }
     let (first, last) = resolve_rows(rows, &tc.short_name, &[], n)?;
     let censor_number = censor.parse::<f64>().ok();
-    let (mut x, mut t, mut failed) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut x, mut t, mut failed, mut labels) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for r in first..=last {
         let row: Vec<f64> = x_all.iter().map(|c| c.get(r).copied().unwrap_or(f64::NAN)).collect();
         let v = t_all.get(r).copied().unwrap_or(f64::NAN);
@@ -554,15 +558,33 @@ pub(super) fn run_cox(
             continue;
         }
         let Some(is_censored) = cell_equals(cc, r, censor, censor_number) else { continue };
+        // A row without a stratum (or a masked one) is left out.
+        let label = match sc {
+            Some(s) if cell_left_out(sheet, s, r) => continue,
+            Some(s) => match super::survival::group_cell(s, r) {
+                Some(l) => l,
+                None => continue,
+            },
+            None => String::new(),
+        };
         for _ in 0..count_of(&counts, r)? {
             x.push(row.clone());
             t.push(v);
             failed.push(!is_censored);
+            labels.push(label.clone());
         }
         check_total(t.len())?;
     }
+    // Strata in the order of their labels (numbers by value, otherwise as text).
+    let mut names: Vec<String> = labels.clone();
+    names.sort();
+    names.dedup();
+    if names.iter().all(|l| l.parse::<f64>().is_ok()) {
+        names.sort_by(|a, b| a.parse::<f64>().unwrap_or(0.0).total_cmp(&b.parse::<f64>().unwrap_or(0.0)));
+    }
+    let strata: Vec<usize> = labels.iter().map(|l| names.iter().position(|n| n == l).unwrap_or(0)).collect();
     let ties = if spec.efron { calc::cox::Ties::Efron } else { calc::cox::Ties::Breslow };
-    let fit = calc::cox::cox_with(&x, &t, &failed, spec.confidence, ties)
+    let fit = calc::cox::cox_stratified(&x, &t, &failed, &strata, spec.confidence, ties)
         .map_err(|e| AnalysisError::BadOption(e.to_string()))?;
     let pct = num(100.0 * spec.confidence);
     let low = format!("HR lower {pct}%");
@@ -583,7 +605,7 @@ pub(super) fn run_cox(
             vec![String::new(); 7],
         );
     }
-    let notes = vec![
+    let mut notes = vec![
         format!(
             "Cox proportional hazards ({} ties) of {} on {k} covariate(s): {} cases, {} events; log-likelihood {} (null {}).",
             if spec.efron { "Efron" } else { "Breslow" },
@@ -613,26 +635,46 @@ pub(super) fn run_cox(
     for (i, h) in table.headers.iter().enumerate() {
         sheet_cols.push(column_of(h, "", Designation::Y, table.rows.iter().map(|(_, v)| v[i]).collect()));
     }
-    let shift = sheet_cols.len();
-    // The survival at the covariate means as steps: flat until each failure time, then down.
-    let (mut sx, mut sy) = (vec![0.0], vec![1.0]);
-    let mut prev = 1.0;
-    for (tk, s) in fit.times.iter().zip(&fit.survival) {
-        sx.extend([*tk, *tk]);
-        sy.extend([prev, *s]);
-        prev = *s;
+    if let Some(s) = sc {
+        notes.push(format!(
+            "Stratified by {} ({} strata: {}): risk sets and baselines within each stratum, shared coefficients.",
+            column_label(s),
+            names.len(),
+            names.join(", ")
+        ));
     }
-    let comment = "Baseline survival at the covariate means (Breslow)";
-    sheet_cols.push(column_of("Time", comment, Designation::X, sx));
-    sheet_cols.push(column_of("Survival at the means", comment, Designation::Y, sy));
+    let shift = sheet_cols.len();
+    // The survival at the covariate means as steps: flat until each failure time, then down; a curve per stratum.
+    let mut plots = Vec::new();
+    for (i, (times, survival)) in fit.curves.iter().enumerate() {
+        let (mut sx, mut sy) = (vec![0.0], vec![1.0]);
+        let mut prev = 1.0;
+        for (tk, s) in times.iter().zip(survival) {
+            sx.extend([*tk, *tk]);
+            sy.extend([prev, *s]);
+            prev = *s;
+        }
+        let comment = if spec.efron {
+            "Baseline survival at the covariate means (Efron)"
+        } else {
+            "Baseline survival at the covariate means (Breslow)"
+        };
+        let x0 = sheet_cols.len() - shift;
+        let (time_name, surv_name, label) = match sc {
+            Some(_) => {
+                let n = names.get(i).cloned().unwrap_or_default();
+                (format!("Time ({n})"), format!("Survival at the means ({n})"), format!("Stratum {n}"))
+            }
+            None => {
+                ("Time".to_string(), "Survival at the means".to_string(), "Survival at the covariate means".to_string())
+            }
+        };
+        sheet_cols.push(column_of(&time_name, comment, Designation::X, sx));
+        sheet_cols.push(column_of(&surv_name, comment, Designation::Y, sy));
+        plots.push(GraphPlot { x: x0, y: x0 + 1, kind: PlotKind::Line, label, line_of: None });
+    }
     let graph = spec.graph.then(|| XyGraph {
-        plots: vec![GraphPlot {
-            x: 0,
-            y: 1,
-            kind: PlotKind::Line,
-            label: "Survival at the covariate means".into(),
-            line_of: None,
-        }],
+        plots,
         x_scale: ScaleKind::Linear,
         y_scale: ScaleKind::Linear,
         x_title: column_label(tc),
@@ -1119,6 +1161,26 @@ mod tests {
         assert!(run(&mut p, bad).is_err());
         let bad = LifeRegressionSpec { percentiles: vec![1.0], ..Default::default() };
         assert!(run(&mut p, bad).is_err());
+    }
+
+    #[test]
+    fn a_stratified_cox_model_draws_a_curve_per_stratum() {
+        let mut p = Project::new();
+        let book = p.add_workbook("coxstrata");
+        let x: Vec<f64> = (0..24).map(|i| f64::from(i % 2)).collect();
+        let t: Vec<f64> = (0..24).map(|i| (5.0 + f64::from(i * 7 % 11)) / (1.0 + f64::from(i % 2))).collect();
+        let c: Vec<f64> = (0..24).map(|i| if i % 9 == 4 { 1.0 } else { 0.0 }).collect();
+        let s: Vec<f64> = (0..24).map(|i| f64::from(i / 8)).collect();
+        let cols: Vec<ColumnId> = [x, t, c, s]
+            .into_iter()
+            .map(|v| p.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap())
+            .collect();
+        let spec = CoxSpec { strata: true, ..Default::default() };
+        let out = p.analyze(&Request { columns: cols, rows: RowRange::All, tool: Tool::Cox(spec) }).unwrap();
+        assert!(out.notes[2].contains("3 strata: 0, 1, 2"), "{:?}", out.notes);
+        let gc = super::super::dist::plot_columns(&p, out.new_graph.unwrap());
+        let names: Vec<&str> = gc.iter().map(|c| c.1.as_str()).collect();
+        assert_eq!(names, ["Survival at the means (0)", "Survival at the means (1)", "Survival at the means (2)"]);
     }
 
     #[test]

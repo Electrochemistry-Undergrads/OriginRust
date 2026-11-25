@@ -3820,6 +3820,9 @@ pub enum AnalyzeTool {
         /// Tied failure times: breslow or efron.
         #[arg(long, default_value = "breslow")]
         ties: String,
+        /// A stratum column follows the censor column (before the frequency).
+        #[arg(long)]
+        strata: bool,
         /// The last --y column holds each row's frequency (count).
         #[arg(long)]
         frequency: bool,

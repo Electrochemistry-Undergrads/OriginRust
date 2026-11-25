@@ -7,7 +7,9 @@
 //! - `Sheet2!B3` is a cell of another sheet of the same workbook;
 //! - a reference is a run of capital letters naming a column of the sheet followed by a row number, not inside quotes
 //!   and not followed by `(` (so `LOG10(x)` stays a call);
-//! - `sum(...)` is the total, as in a spreadsheet (`total`; in a column formula `sum` is Origin's running sum).
+//! - `sum(...)` is the total, as in a spreadsheet (`total`; in a column formula `sum` is Origin's running sum);
+//! - `$A$1`, `A$1` and `$A1` are the same cell as `A1`; the `$` before the row keeps it when the formula is filled
+//!   down (T455: Fill Down copies a cell's formula to the rows below with its other row numbers shifted).
 //!
 //! Sheaf's choices (Origin 2019 not measured here): formulas that read other formula cells are worked out in up to
 //! ten passes, so chains settle; a formula that cannot be read or run leaves its cell empty; typing a value over the
@@ -29,6 +31,7 @@ pub struct CellFormula {
 /// `formula` with its spreadsheet references written as column formula references. `has_column(sheet, name)` says
 /// whether a sheet (`None` the formula's own) has a column of that short name; `book` is the workbook's name.
 pub fn translate(formula: &str, book: &str, has_column: &dyn Fn(Option<&str>, &str) -> bool) -> String {
+    let formula = strip_dollars(formula);
     let chars: Vec<char> = formula.chars().collect();
     let mut out = String::new();
     let mut i = 0;
@@ -103,6 +106,81 @@ pub fn translate(formula: &str, book: &str, has_column: &dyn Fn(Option<&str>, &s
     out
 }
 
+/// `formula` without the `$` markers of its references (`$A$1` is `A1`); a `$` before anything but a capital
+/// letter or a digit (`col(A)$`, `$(...)`), after `)`, or inside quotes stays.
+fn strip_dollars(formula: &str) -> String {
+    let chars: Vec<char> = formula.chars().collect();
+    let mut out = String::new();
+    let mut quoted = false;
+    for (i, &c) in chars.iter().enumerate() {
+        if c == '"' {
+            quoted = !quoted;
+        }
+        let marker = c == '$'
+            && !quoted
+            && chars.get(i + 1).is_some_and(|n| n.is_ascii_uppercase() || n.is_ascii_digit())
+            && (i == 0 || chars[i - 1] != ')');
+        if !marker {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// `formula` with the row number of each reference moved by `offset` (Fill Down), except where `$` stands before
+/// the row. `has_column(name)` says whether the formula's sheet has a column of that short name (references to
+/// other sheets move too when that sheet has the column; the check uses the formula's own sheet).
+pub fn shift_rows(formula: &str, offset: i64, has_column: &dyn Fn(&str) -> bool) -> String {
+    let chars: Vec<char> = formula.chars().collect();
+    let word = |c: char| c.is_alphanumeric() || c == '_';
+    let mut out = String::new();
+    let mut i = 0;
+    let mut quoted = false;
+    while i < chars.len() {
+        let c = chars[i];
+        if c == '"' {
+            quoted = !quoted;
+        }
+        let starts = !quoted && (i == 0 || !(word(chars[i - 1]) || chars[i - 1] == '$'));
+        if starts {
+            // [$]LETTERS[$]DIGITS, not followed by a word character or `(`.
+            let mut k = i;
+            let col_abs = chars.get(k) == Some(&'$');
+            if col_abs {
+                k += 1;
+            }
+            let l0 = k;
+            while k < chars.len() && chars[k].is_ascii_uppercase() {
+                k += 1;
+            }
+            let letters: String = chars[l0..k].iter().collect();
+            let row_abs = chars.get(k) == Some(&'$');
+            if row_abs {
+                k += 1;
+            }
+            let d0 = k;
+            while k < chars.len() && chars[k].is_ascii_digit() {
+                k += 1;
+            }
+            let ends = k == chars.len() || !(word(chars[k]) || chars[k] == '(');
+            if !letters.is_empty() && k > d0 && ends && has_column(&letters) {
+                let row: i64 = chars[d0..k].iter().collect::<String>().parse().unwrap_or(1);
+                let row = if row_abs { row } else { (row + offset).max(1) };
+                out.push_str(&format!(
+                    "{}{letters}{}{row}",
+                    if col_abs { "$" } else { "" },
+                    if row_abs { "$" } else { "" }
+                ));
+                i = k;
+                continue;
+            }
+        }
+        out.push(c);
+        i += 1;
+    }
+    out
+}
+
 /// `row` or `first:last`.
 fn rows(first: usize, last: usize) -> String {
     if first == last { first.to_string() } else { format!("{first}:{last}") }
@@ -139,6 +217,24 @@ impl Project {
         sheet.cell_formulas.push(CellFormula { column, row, formula: formula.trim().to_string() });
         self.refresh_cell_formulas();
         Ok(())
+    }
+
+    /// Fill Down (T455): the formula of the cell of `column` at `row` copied to the rows below it up to `last`
+    /// (0-based), each with its relative row numbers shifted by its distance. Returns how many cells were filled.
+    pub fn fill_cell_formula_down(&mut self, column: ColumnId, row: usize, last: usize) -> Result<usize, ProjectError> {
+        let formula = self.cell_formula(column, row).ok_or(ProjectError::NoCellFormula)?.to_string();
+        let (_, sheet, _) = self.locate(column).ok_or(ProjectError::NoSuchColumn(column))?;
+        let names: Vec<String> = sheet.columns.iter().map(|c| c.short_name.clone()).collect();
+        let has = |n: &str| names.iter().any(|c| c == n);
+        let filled: Vec<CellFormula> = (row + 1..=last)
+            .map(|r| CellFormula { column, row: r, formula: shift_rows(&formula, (r - row) as i64, &has) })
+            .collect();
+        let n = filled.len();
+        let sheet = self.sheet_of_mut(column).ok_or(ProjectError::NoSuchColumn(column))?;
+        sheet.cell_formulas.retain(|f| !(f.column == column && f.row > row && f.row <= last));
+        sheet.cell_formulas.extend(filled);
+        self.refresh_cell_formulas();
+        Ok(n)
     }
 
     /// Drops the formula of one cell (typing a value into it); its value stays.
@@ -228,6 +324,11 @@ mod tests {
         assert_eq!(translate("Sheet2!A1 + 1", "Book1", &has), "[Book1]Sheet2!col(A)[1] + 1");
         assert_eq!(translate("LOG10(A1)", "Book1", &has), "LOG10(col(A)[1])", "a call stays a call");
         assert_eq!(translate("\"A1\" + Z9 + A0", "Book1", &has), "\"A1\" + Z9 + A0", "quotes, no column Z, row 0");
+        assert_eq!(translate("$A$1 + A$2 + $B3", "Book1", &has), "col(A)[1] + col(A)[2] + col(B)[3]", "T455");
+        assert_eq!(translate("col(A)$ + \"$A1\"", "Book1", &has), "col(A)$ + \"$A1\"", "a text suffix, quotes");
+        let cols = |n: &str| ["A", "B"].contains(&n);
+        assert_eq!(shift_rows("A1*$A$1 + B$2 + sum(A1:A3)", 2, &cols), "A3*$A$1 + B$2 + sum(A3:A5)");
+        assert_eq!(shift_rows("LOG10(A1) + Z1", 1, &cols), "LOG10(A2) + Z1", "a call and an unknown column stay");
     }
 
     #[test]
@@ -252,6 +353,12 @@ mod tests {
         // Saved with the project.
         let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
         assert_eq!(back.cell_formula(c, 0), Some("sum(A1:A3)"));
+        // Fill Down (T455): C2 = A2 * $A$1 ... down to row 3.
+        let d = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![f64::NAN; 3])).unwrap();
+        p.set_cell_formula(d, 0, "A1*$A$1").unwrap();
+        assert_eq!(p.fill_cell_formula_down(d, 0, 2).unwrap(), 2);
+        assert_eq!(p.cell_formula(d, 2), Some("A3*$A$1"));
+        assert_eq!(texts(&p, d), ["1", "2", "10"]);
         // Typed over: the value stays, the formula goes.
         assert!(p.drop_cell_formula(c, 0));
         assert!(p.cell_formula(c, 0).is_none());

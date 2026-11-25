@@ -4296,6 +4296,17 @@ impl SheafApp {
             }
             Action::ToggleStatusBar => self.status_bar_hidden = !self.status_bar_hidden,
             Action::ToggleFormulaBar => self.show_formula_bar = !self.show_formula_bar,
+            Action::FillFormulaDown { column, row } => {
+                let last = self.doc.project().locate(column).map_or(0, |(_, s, _)| s.row_count()).saturating_sub(1);
+                if last <= row {
+                    self.say("There are no rows with data below this cell to fill".to_string());
+                } else {
+                    match self.doc.edit("Fill Down", |p| p.fill_cell_formula_down(column, row, last)) {
+                        Ok(n) => self.say(format!("Filled the formula into {n} cell(s) below")),
+                        Err(e) => self.warn(e.to_string()),
+                    }
+                }
+            }
             Action::ToggleAiLink => self.set_link(!self.live.active()),
             Action::Quit => {
                 if self.doc.dirty {

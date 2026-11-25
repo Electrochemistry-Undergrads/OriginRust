@@ -420,6 +420,8 @@ pub enum ProjectError {
     NoStickyNote,
     #[error("{0}")]
     CellFormula(String),
+    #[error("the cell has no formula to fill down")]
+    NoCellFormula,
     #[error("the graph has no slicer")]
     NoSlicer,
     #[error("no such operation")]

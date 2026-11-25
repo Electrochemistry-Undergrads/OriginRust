@@ -1960,5 +1960,7 @@ long names, comments, units, data cells, text on graphs); the files with hits ar
 that cannot be read is listed with the reason), and the chosen file's first 20 hits are shown under it. Open closes
 the window and opens that project (asking to save first when the open project has unsaved changes). Notes windows
 are searched too (T407: their short and long names and their text, one hit each, element "Notes"; Find in Project's
-Notes Windows option, on by default, Sheaf's own since Origin 2016's Find in Project has none). A large folder is read
-in the foreground.
+Notes Windows option, on by default, Sheaf's own since Origin 2016's Find in Project has none). Find All searches on
+a background thread (T441): the files with hits appear as they are found, a spinner and "Searching n of N files..."
+show the progress, Stop (enabled only then) ends the search after the file in hand, and closing the window or Open
+stops it too; Find All is disabled while a search runs.

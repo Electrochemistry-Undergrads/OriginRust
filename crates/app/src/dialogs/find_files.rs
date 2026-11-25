@@ -3,6 +3,9 @@
 //! read-only and searched with the rules of Find in Project (`crate::project_find`): names, long names, comments,
 //! units, data cells and text on graphs. The files with hits are listed with their hits; Open opens the chosen file
 //! (asking first when this project has unsaved changes).
+//!
+//! Find All searches on a background thread (T441): the files appear as they are searched, a line counts them, Stop
+//! ends the search after the file in hand, and the window and the rest of the program stay responsive.
 
 use crate::project_find::{FindHit, FindScope, FindSpec, find_in_project};
 use eframe::egui;
@@ -33,18 +36,62 @@ pub fn project_files(folder: &Path, subfolders: bool) -> Vec<PathBuf> {
 
 /// Searches every project file under `folder` with `spec` (the whole of each project); files without hits are left
 /// out, files that cannot be read are kept with their error.
+/// (The window runs the same search on a thread, file by file, T441.)
+#[cfg(test)]
 pub fn search_files(folder: &Path, subfolders: bool, spec: &FindSpec) -> Vec<FileHits> {
+    project_files(folder, subfolders).into_iter().filter_map(|path| search_file(path, spec)).collect()
+}
+
+/// The hits of one project file: `None` when it has none.
+fn search_file(path: PathBuf, spec: &FindSpec) -> Option<FileHits> {
     let spec = FindSpec { within: FindScope::EntireProject, ..spec.clone() };
-    project_files(folder, subfolders)
-        .into_iter()
-        .filter_map(|path| match sheaf_io::open_project(&path) {
-            Ok(opened) => {
-                let hits = find_in_project(&opened.project, &spec, &[]);
-                (!hits.is_empty()).then_some(FileHits { path, hits, error: None })
+    match sheaf_io::open_project(&path) {
+        Ok(opened) => {
+            let hits = find_in_project(&opened.project, &spec, &[]);
+            (!hits.is_empty()).then_some(FileHits { path, hits, error: None })
+        }
+        Err(e) => Some(FileHits { path, hits: Vec::new(), error: Some(e.to_string()) }),
+    }
+}
+
+/// What the search thread reports (T441).
+enum Progress {
+    /// How many project files there are.
+    Total(usize),
+    /// One file searched: its hits when it has any.
+    File(Option<FileHits>),
+    /// The search ended (all files, or stopped).
+    Done,
+}
+
+/// A search running on its own thread (T441).
+pub struct Running {
+    rx: std::sync::mpsc::Receiver<Progress>,
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub total: Option<usize>,
+    pub searched: usize,
+}
+
+impl Running {
+    fn start(folder: PathBuf, subfolders: bool, spec: FindSpec) -> Running {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let halt = stop.clone();
+        std::thread::spawn(move || {
+            let files = project_files(&folder, subfolders);
+            let _ = tx.send(Progress::Total(files.len()));
+            for path in files {
+                if halt.load(std::sync::atomic::Ordering::Relaxed) {
+                    break;
+                }
+                if tx.send(Progress::File(search_file(path, &spec))).is_err() {
+                    return;
+                }
             }
-            Err(e) => Some(FileHits { path, hits: Vec::new(), error: Some(e.to_string()) }),
-        })
-        .collect()
+            let _ = tx.send(Progress::Done);
+        });
+        Running { rx, stop, total: None, searched: 0 }
+    }
 }
 
 pub enum FindFilesOutcome {
@@ -60,6 +107,8 @@ pub struct FindFilesDialog {
     pub spec: FindSpec,
     pub results: Option<Vec<FileHits>>,
     pub chosen: Option<usize>,
+    /// The search in progress (T441).
+    pub running: Option<Running>,
 }
 
 impl FindFilesDialog {
@@ -71,15 +120,54 @@ impl FindFilesDialog {
             spec: FindSpec { data_cells: true, column_units: true, ..FindSpec::default() },
             results: None,
             chosen: None,
+            running: None,
         }
     }
 
-    pub fn search(&mut self) {
-        self.results = Some(search_files(Path::new(self.folder.trim()), self.subfolders, &self.spec));
-        self.chosen = self.results.as_ref().and_then(|r| r.iter().position(|f| f.error.is_none()));
+    /// Starts a search on its own thread (T441); the results grow as [`poll`](Self::poll) takes them in.
+    pub fn start_search(&mut self) {
+        self.stop_search();
+        self.results = Some(Vec::new());
+        self.chosen = None;
+        self.running = Some(Running::start(PathBuf::from(self.folder.trim()), self.subfolders, self.spec.clone()));
+    }
+
+    /// Asks a running search to stop after the file in hand.
+    pub fn stop_search(&mut self) {
+        if let Some(r) = &self.running {
+            r.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    /// Takes in what the search thread found so far; `true` while it still runs.
+    pub fn poll(&mut self) -> bool {
+        let Some(r) = &mut self.running else { return false };
+        let mut done = false;
+        while let Ok(p) = r.rx.try_recv() {
+            match p {
+                Progress::Total(n) => r.total = Some(n),
+                Progress::File(found) => {
+                    r.searched += 1;
+                    if let Some(f) = found {
+                        self.results.get_or_insert_with(Vec::new).push(f);
+                    }
+                }
+                Progress::Done => done = true,
+            }
+        }
+        if self.chosen.is_none() {
+            self.chosen = self.results.as_ref().and_then(|r| r.iter().position(|f| f.error.is_none()));
+        }
+        if done {
+            self.running = None;
+        }
+        !done
     }
 
     pub fn show(&mut self, ctx: &egui::Context) -> FindFilesOutcome {
+        if self.poll() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(50));
+        }
         let mut open = true;
         let mut outcome = FindFilesOutcome::Open;
         egui::Window::new("Find in Project Files")
@@ -112,8 +200,11 @@ impl FindFilesDialog {
                 });
                 ui.horizontal(|ui| {
                     let can = !self.spec.text.trim().is_empty() && !self.folder.trim().is_empty();
-                    if ui.add_enabled(can, egui::Button::new("Find All")).clicked() {
-                        self.search();
+                    if ui.add_enabled(can && self.running.is_none(), egui::Button::new("Find All")).clicked() {
+                        self.start_search();
+                    }
+                    if ui.add_enabled(self.running.is_some(), egui::Button::new("Stop")).clicked() {
+                        self.stop_search();
                     }
                     let openable = self.chosen.is_some();
                     if ui.add_enabled(openable, egui::Button::new("Open")).clicked()
@@ -125,6 +216,15 @@ impl FindFilesDialog {
                         outcome = FindFilesOutcome::Closed;
                     }
                 });
+                if let Some(r) = &self.running {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        match r.total {
+                            Some(n) => ui.label(format!("Searching {} of {n} files...", (r.searched + 1).min(n))),
+                            None => ui.label("Listing the project files..."),
+                        };
+                    });
+                }
                 if let Some(results) = &self.results {
                     let files = results.iter().filter(|f| f.error.is_none()).count();
                     let hits: usize = results.iter().map(|f| f.hits.len()).sum();
@@ -148,6 +248,9 @@ impl FindFilesDialog {
                     });
                 }
             });
+        if !open || matches!(outcome, FindFilesOutcome::Closed | FindFilesOutcome::OpenFile(_)) {
+            self.stop_search();
+        }
         if open { outcome } else { FindFilesOutcome::Closed }
     }
 }
@@ -202,6 +305,37 @@ mod tests {
         let found = search_files(&dir, false, &spec);
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].path, path);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_background_search_finds_what_the_plain_one_finds() {
+        // T441: the thread reports the total, each file, and the end; the results match `search_files`.
+        let dir = std::env::temp_dir().join(format!("sheaf-find-files-bg-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("deeper")).unwrap();
+        save(&dir, "a.sheaf", "Voltammetry");
+        save(&dir, "b.sheaf", "Impedance");
+        save(&dir.join("deeper"), "c.sheaf", "Voltammetry");
+        let mut d = FindFilesDialog::new(Some(&dir));
+        d.spec.text = "voltammetry".into();
+        d.start_search();
+        let start = std::time::Instant::now();
+        while d.poll() {
+            assert!(start.elapsed() < std::time::Duration::from_secs(60), "the search ends");
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(d.running.is_none());
+        let plain = search_files(&dir, true, &d.spec);
+        assert_eq!(d.results.as_ref().unwrap(), &plain);
+        assert_eq!(d.chosen, Some(0));
+        // Stop before it starts: it ends without going through the files.
+        d.start_search();
+        d.stop_search();
+        while d.poll() {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(d.results.as_ref().unwrap().len() <= plain.len());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

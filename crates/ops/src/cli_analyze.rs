@@ -1317,9 +1317,14 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         AnalyzeTool::QpcrCurve { target, no_graph } => {
             (target, Job::Tool(Tool::QpcrCurve(analysis::QpcrCurveSpec { graph: !no_graph })))
         }
-        AnalyzeTool::Cox { target, censor, confidence, no_graph } => (
+        AnalyzeTool::Cox { target, censor, confidence, frequency, no_graph } => (
             target,
-            Job::Tool(Tool::Cox(analysis::CoxSpec { censor, confidence: confidence / 100.0, graph: !no_graph })),
+            Job::Tool(Tool::Cox(analysis::CoxSpec {
+                censor,
+                confidence: confidence / 100.0,
+                graph: !no_graph,
+                frequency,
+            })),
         ),
         AnalyzeTool::Lifereg { target, distribution, censor, frequency } => {
             let dist = match distribution.to_ascii_lowercase().as_str() {
@@ -1526,7 +1531,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
-        AnalyzeTool::Arima { target, p, d, q, no_constant, horizon, confidence, no_graph } => (
+        AnalyzeTool::Arima { target, p, d, q, no_constant, horizon, confidence, auto, max_p, max_q, no_graph } => (
             target,
             Job::Tool(Tool::Arima(analysis::ArimaSpec {
                 p,
@@ -1536,9 +1541,10 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 horizon,
                 confidence: confidence / 100.0,
                 graph: !no_graph,
+                auto: auto.then_some((max_p, max_q)),
             })),
         ),
-        AnalyzeTool::Forecast { target, model, period, constants, horizon, no_graph } => {
+        AnalyzeTool::Forecast { target, model, period, constants, horizon, damped, phi, confidence, no_graph } => {
             let model = match model.to_ascii_lowercase().as_str() {
                 "simple" => analysis::SmoothModel::Simple,
                 "holt" => analysis::SmoothModel::Holt,
@@ -1570,6 +1576,12 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     constants,
                     horizon,
                     graph: !no_graph,
+                    damping: match (damped, phi) {
+                        (_, Some(p)) => analysis::Damping::Given(p),
+                        (true, None) => analysis::Damping::Fitted,
+                        (false, None) => analysis::Damping::None,
+                    },
+                    confidence: confidence / 100.0,
                 })),
             )
         }
@@ -1701,6 +1713,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             breslow,
             tarone_ware,
             band,
+            frequency,
             no_graph,
         } => (
             target,
@@ -1714,6 +1727,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 tarone_ware,
                 curve: !no_graph,
                 band,
+                frequency,
             })),
         ),
         AnalyzeTool::GraphSummary { target, groups, level, arrangement } => {

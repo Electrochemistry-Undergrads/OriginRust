@@ -20,6 +20,7 @@ pub enum Change {
     Underline(bool),
     Fill(Option<Color>),
     Color(Color),
+    FollowPlotColor,
     Scale(f64),
 }
 
@@ -45,6 +46,8 @@ pub struct WorksheetStyle {
 pub struct Snapshot {
     pub target: Target,
     pub font: Font,
+    /// The automatic color state of an ordinary legend.
+    pub legend_color_follows_plot: Option<bool>,
     pub mixed: Mixed,
     pub worksheet: Option<WorksheetStyle>,
     pub generation: u64,
@@ -63,9 +66,11 @@ impl Snapshot {
     pub fn graph(doc: &Document, graph: WindowId, layer: usize, object: ObjectKind) -> Option<Self> {
         let target = Target::GraphText { graph, layer, object };
         let font = font(doc.project(), target.clone())?.clone();
+        let legend_color_follows_plot = legend_color_follows_plot(doc.project(), &target);
         Some(Self {
             target,
             font,
+            legend_color_follows_plot,
             mixed: Mixed::default(),
             worksheet: None,
             generation: doc.generation(),
@@ -115,6 +120,13 @@ fn font(project: &Project, target: Target) -> Option<&Font> {
     }
 }
 
+fn legend_color_follows_plot(project: &Project, target: &Target) -> Option<bool> {
+    let Target::GraphText { graph, layer, object: ObjectKind::Legend } = target else { return None };
+    let layer = project.graph(*graph)?.layers.get(*layer)?;
+    (layer.legend.visible && !layer.plots.iter().any(|plot| plot.kind.is_parallel()))
+        .then_some(layer.legend.text_color_follows_plot)
+}
+
 /// Reject stale frames, invalid input and no-ops before creating an undo step.
 /// The app also checks that the target is still selected and no dialog is editing it.
 pub fn apply(doc: &mut Document, request: Request) -> bool {
@@ -126,6 +138,8 @@ pub fn apply(doc: &mut Document, request: Request) -> bool {
     }
     let Some(before) = font(doc.project(), request.target.clone()) else { return false };
     let mut after = before.clone();
+    let previous_follow = legend_color_follows_plot(doc.project(), &request.target);
+    let mut follows_plot = previous_follow;
     match request.change {
         Change::Family(name) => {
             let name = name.trim();
@@ -138,10 +152,18 @@ pub fn apply(doc: &mut Document, request: Request) -> bool {
         Change::Bold(value) => after.bold = value,
         Change::Italic(value) => after.italic = value,
         Change::Underline(_) | Change::Fill(_) => return false,
-        Change::Color(color) => after.color = color,
+        Change::Color(color) => {
+            after.color = color;
+            follows_plot = previous_follow.map(|_| false);
+        }
+        Change::FollowPlotColor if previous_follow.is_some() => follows_plot = Some(true),
+        Change::FollowPlotColor => return false,
         Change::Scale(factor) => after.size_pt = (after.size_pt * factor).round(),
     }
-    if !after.size_pt.is_finite() || !(1.0..=1000.0).contains(&after.size_pt) || after == *before {
+    if !after.size_pt.is_finite()
+        || !(1.0..=1000.0).contains(&after.size_pt)
+        || (after == *before && follows_plot == previous_follow)
+    {
         return false;
     }
     doc.apply("Format graph text", |project| match request.target {
@@ -151,7 +173,12 @@ pub fn apply(doc: &mut Document, request: Request) -> bool {
             let font = match object {
                 ObjectKind::XTitle => &mut l.x_axis.title_font,
                 ObjectKind::YTitle => &mut l.y_axis.title_font,
-                ObjectKind::Legend => &mut l.legend.font,
+                ObjectKind::Legend => {
+                    if let Some(follows_plot) = follows_plot {
+                        l.legend.text_color_follows_plot = follows_plot;
+                    }
+                    &mut l.legend.font
+                }
                 ObjectKind::Label(i) => &mut l.labels[i].font,
                 _ => unreachable!("validated text target"),
             };

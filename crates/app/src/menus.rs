@@ -649,6 +649,7 @@ pub enum Cmd {
     /// View > Show > Layer Icons.
     ToggleLayerIcons,
     ToggleActiveLayerIndicator,
+    ToggleAxisLayerIcons,
     ToggleLayerFrame,
     /// Data > Lock Position (T186): where the graph's analysis locks are drawn.
     LockPosition(sheaf_core::graph::LockPosition),
@@ -697,6 +698,15 @@ pub enum Cmd {
     MaskRegion {
         layer: usize,
         shape: usize,
+        mask: bool,
+    },
+    /// The data points inside any drawn rectangle or ellipse of the layer, copied out (T422).
+    ExtractAllRegions {
+        layer: usize,
+    },
+    /// Masks (or unmasks) the data points inside any drawn rectangle or ellipse of the layer (T422).
+    MaskAllRegions {
+        layer: usize,
         mask: bool,
     },
     /// Add Text...: a new text label in the active layer.
@@ -960,6 +970,7 @@ pub struct MenuContext<'a> {
     pub layer_icons: bool,
     /// Whether View > Show > Active Layer Indicator is checked for this graph.
     pub active_layer_indicator: bool,
+    pub axis_layer_icons: bool,
     /// The active Cartesian layer's plot frame. None disables the command.
     pub show_frame: Option<bool>,
     /// The active graph's Lock Position (the tick of Data > Lock Position, T186).
@@ -1496,8 +1507,9 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
             let mut show = vec![
                 item("Layer Icons", Cmd::ToggleLayerIcons),
                 item("Active Layer Indicator", Cmd::ToggleActiveLayerIndicator),
+                item("Axis Layer Icons", Cmd::ToggleAxisLayerIcons),
             ];
-            show.extend(greys(&["Axis Layer Icons", "-", "Object Grid", "Layer Grid", "-"]));
+            show.extend(greys(&["-", "Object Grid", "Layer Grid", "-"]));
             show.push(item("Frame", Cmd::ToggleLayerFrame));
             show.push(item("Labels", Cmd::ToggleShowLabels));
             show.push(item("Data", Cmd::ToggleShowData));
@@ -3011,7 +3023,8 @@ pub fn graph_label_menu(layer: usize, label: usize) -> Vec<Entry> {
 }
 
 /// The menu of a drawn line, arrow, rectangle or ellipse.
-pub fn graph_shape_menu(layer: usize, shape: usize, region: bool) -> Vec<Entry> {
+/// `regions` counts the layer's rectangles and ellipses: with two or more, the All Regions entries are offered (T422).
+pub fn graph_shape_menu(layer: usize, shape: usize, region: bool, regions: usize) -> Vec<Entry> {
     let mut entries = vec![
         keyed("Cut", ctrl(Key::X), Cmd::CutShape { layer, shape }),
         keyed("Copy", ctrl(Key::C), Cmd::CopyShape { layer, shape }),
@@ -3026,6 +3039,11 @@ pub fn graph_shape_menu(layer: usize, shape: usize, region: bool) -> Vec<Entry> 
         entries.push(item("Extract Data in Region", Cmd::ExtractRegion { layer, shape }));
         entries.push(item("Mask Data in Region", Cmd::MaskRegion { layer, shape, mask: true }));
         entries.push(item("Unmask Data in Region", Cmd::MaskRegion { layer, shape, mask: false }));
+        if regions >= 2 {
+            entries.push(item("Extract Data in All Regions", Cmd::ExtractAllRegions { layer }));
+            entries.push(item("Mask Data in All Regions", Cmd::MaskAllRegions { layer, mask: true }));
+            entries.push(item("Unmask Data in All Regions", Cmd::MaskAllRegions { layer, mask: false }));
+        }
         entries.push(sep());
     }
     entries.push(item("Properties...", Cmd::EditShape { layer, shape }));
@@ -4081,6 +4099,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             switch: crate::actions::PageSwitch::ActiveLayerIndicator,
             on: !c.active_layer_indicator,
         },
+        Cmd::ToggleAxisLayerIcons => Action::SetPageSwitch {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            switch: crate::actions::PageSwitch::AxisLayerIcons,
+            on: !c.axis_layer_icons,
+        },
         Cmd::ToggleLayerFrame => Action::SetLayerFrame {
             graph: c.graph.ok_or(NEED_GRAPH)?,
             layer: c.layer,
@@ -4122,6 +4145,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::MaskRegion { layer, shape, mask } => {
             Action::MaskRegion { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape, mask: *mask }
+        }
+        Cmd::ExtractAllRegions { layer } => {
+            Action::ExtractAllRegions { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer }
+        }
+        Cmd::MaskAllRegions { layer, mask } => {
+            Action::MaskAllRegions { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, mask: *mask }
         }
         Cmd::AddText => Action::AddText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: Some(c.layer), at: None },
         Cmd::EditText { layer, label } => {
@@ -4423,6 +4452,9 @@ fn show_entries(
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleActiveLayerIndicator)) && c.active_layer_indicator {
+                    tick(ui, &response);
+                }
+                if matches!(it.cmd, Some(Cmd::ToggleAxisLayerIcons)) && c.axis_layer_icons {
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleLayerFrame)) && c.show_frame == Some(true) {
@@ -4842,6 +4874,7 @@ mod tests {
             view_mode: Default::default(),
             layer_icons: true,
             active_layer_indicator: false,
+            axis_layer_icons: false,
             show_frame: None,
             lock_position: Default::default(),
             page_breaks: false,

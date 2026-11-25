@@ -5,11 +5,11 @@ use super::analysis::AnalysisKind;
 use eframe::egui;
 use sheaf_core::analysis::{
     AcfSpec, AdfTerms, ArimaSpec, BinRule, BinScatterSpec, CapModel, CapabilitySpec, ChangeKind, ChangePenalty,
-    ChangePointSpec, CoxSpec, DecomposeModel, DecomposeSpec, ExpSmoothSpec, FactorialDesignSpec, FactorialEffectsSpec,
-    ForestTask, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistArbitrarySpec, LifeDistSpec,
-    LifeRegressionSpec, ManhattanSpec, MixtureDesignSpec, MixtureKind, MonteCarloSpec, PcaSpec, PivotBy, PivotPeriod,
-    PivotStat, QpcrCurveSpec, QpcrSpec, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec, RocSpec,
-    SmoothModel, SplitPlotDesignSpec, SplitPlotEffectsSpec, StabilitySpec, StationaritySpec, TDistribution,
+    ChangePointSpec, CoxSpec, Damping, DecomposeModel, DecomposeSpec, ExpSmoothSpec, FactorialDesignSpec,
+    FactorialEffectsSpec, ForestTask, GLimits, KaplanMeierSpec, KmeansSpec, KpssNull, LifeDist, LifeDistArbitrarySpec,
+    LifeDistSpec, LifeRegressionSpec, ManhattanSpec, MixtureDesignSpec, MixtureKind, MonteCarloSpec, PcaSpec, PivotBy,
+    PivotPeriod, PivotStat, QpcrCurveSpec, QpcrSpec, QuantRegSpec, RandomForestSpec, RareChartKind, RareChartSpec,
+    RocSpec, SmoothModel, SplitPlotDesignSpec, SplitPlotEffectsSpec, StabilitySpec, StationaritySpec, TDistribution,
     TimePivotSpec, Tool, TurnbullSpec,
 };
 
@@ -205,7 +205,7 @@ impl MultiOptions {
             }
             AnalysisKind::Arima => {
                 let s = &self.arima;
-                if s.p + s.q == 0 && !s.constant {
+                if s.auto.is_none() && s.p + s.q == 0 && !s.constant {
                     return Err("the model has nothing to fit: give p, q or a constant".to_string());
                 }
                 Ok(Tool::Arima(*s))
@@ -379,6 +379,7 @@ impl MultiOptions {
                     }
                 });
                 ui.checkbox(&mut s.graph, "Survival at the covariate means");
+                ui.checkbox(&mut s.frequency, "Last column: frequency (count) of each row");
             }
             AnalysisKind::LifeRegression => {
                 ui.label("The chosen columns are the covariates, then the time and the censor column.");
@@ -721,6 +722,18 @@ impl MultiOptions {
                     ui.label("MA order q");
                     ui.add(egui::DragValue::new(&mut s.q).range(0..=20));
                 });
+                ui.horizontal(|ui| {
+                    let mut auto = s.auto.is_some();
+                    if ui.checkbox(&mut auto, "Choose p and q by AIC, up to").changed() {
+                        s.auto = auto.then_some((3, 3));
+                    }
+                    if let Some((mp, mq)) = &mut s.auto {
+                        ui.label("p");
+                        ui.add(egui::DragValue::new(mp).range(0..=10));
+                        ui.label("q");
+                        ui.add(egui::DragValue::new(mq).range(0..=10));
+                    }
+                });
                 ui.checkbox(&mut s.constant, "Constant (mean of the differenced series)");
                 ui.horizontal(|ui| {
                     ui.label("Steps to forecast");
@@ -764,6 +777,32 @@ impl MultiOptions {
                 ui.horizontal(|ui| {
                     ui.label("Steps to forecast");
                     ui.add(egui::DragValue::new(&mut s.horizon).range(1..=100_000));
+                });
+                if s.model == SmoothModel::Simple {
+                    s.damping = Damping::None;
+                } else {
+                    ui.horizontal(|ui| {
+                        let mut damped = s.damping != Damping::None;
+                        if ui.checkbox(&mut damped, "Damped trend").changed() {
+                            s.damping = if damped { Damping::Fitted } else { Damping::None };
+                        }
+                        if damped {
+                            let mut given = matches!(s.damping, Damping::Given(_));
+                            if ui.checkbox(&mut given, "Damping factor (else fitted)").changed() {
+                                s.damping = if given { Damping::Given(0.9) } else { Damping::Fitted };
+                            }
+                            if let Damping::Given(p) = &mut s.damping {
+                                ui.add(egui::DragValue::new(p).speed(0.01).range(0.01..=1.0));
+                            }
+                        }
+                    });
+                }
+                ui.horizontal(|ui| {
+                    ui.label("Prediction interval level");
+                    let mut pct = s.confidence * 100.0;
+                    if ui.add(egui::DragValue::new(&mut pct).speed(0.1).range(50.0..=99.99).suffix(" %")).changed() {
+                        s.confidence = pct / 100.0;
+                    }
                 });
                 ui.checkbox(&mut s.graph, "Graph of the data, one-step forecasts and forecasts");
             }
@@ -1007,6 +1046,7 @@ impl MultiOptions {
                 ui.checkbox(&mut s.tarone_ware, "Tarone-Ware");
                 ui.checkbox(&mut s.curve, "Survival curves (new graph, censored cases marked)");
                 ui.add_enabled(s.curve, egui::Checkbox::new(&mut s.band, "Add confidence limits to the graph"));
+                ui.checkbox(&mut s.frequency, "Last column: frequency (count) of each row");
                 ui.weak(
                     "Product-limit estimate with Greenwood standard errors. Quartile limits come from the linear                      limits of the curve; the mean is cut off at the largest time.",
                 );

@@ -33,8 +33,13 @@ show-all and one-step Undo match saved complete graphs; restored PNG pixels matc
 exactly. The one owned app and guard close0. Graph-view/grid source differs only
 by one inert context default each; their engines and all other owners remain fixed.
 
-**Size:** M. **Inventory:** six remaining locations, Axis Layer Icons, Object Grid,
-Layer Grid, Frame, Master Items on Screen and Show Data Info.
+Axis Layer Icons follow-up (2026-11-24): Origin 2016 badges identify their
+axis's layer and select it on click. Sheaf's undoable page switch and its
+screen-only badges are covered in [graphing 22.11](../spec/graphing.md#2211-view--show--axis-layer-icons-t66-origin-2016-measured-2026-11-24).
+The setting is saved per graph in Sheaf and bare OPJ projects.
+
+**Size:** M. **Inventory:** four remaining locations, Object Grid, Layer Grid,
+Master Items on Screen and Show Data Info.
 The original17-location baseline also included the now-published view modes,
 Layer Icons, Active Layer Only and Full Screen entries.
 

@@ -1480,6 +1480,12 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
     }
 
     // Layer icons: after the page, so that they get the clicks on them.
+    if graph.page.style.axis_layer_icons
+        && let Some(layer) = view_modes::axis_layer_icons(ui, &painter, &t.scene, graph_id, &to_screen)
+    {
+        state.active_layer = layer;
+        actions.push(Action::ActivateLayer { graph: graph_id, layer });
+    }
     let mut icon_menu = None;
     // Plot Details > Miscellaneous can hide the icons.
     let shown_icons = if doc.project().graph(graph_id).is_some_and(|g| g.page.style.layer_icons) { layers } else { 0 };
@@ -1759,6 +1765,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         view_mode: Default::default(),
         layer_icons: true,
         active_layer_indicator: false,
+        axis_layer_icons: false,
         show_frame: None,
         lock_position: Default::default(),
         page_breaks: false,
@@ -1890,7 +1897,18 @@ fn menu_for(
                 let region = graph.layers.get(layer).and_then(|l| l.shapes.get(k)).is_some_and(|s| {
                     matches!(s.kind, sheaf_core::shape::ShapeKind::Rectangle | sheaf_core::shape::ShapeKind::Ellipse)
                 });
-                menus::graph_shape_menu(layer, k, region)
+                let regions = graph.layers.get(layer).map_or(0, |l| {
+                    l.shapes
+                        .iter()
+                        .filter(|s| {
+                            matches!(
+                                s.kind,
+                                sheaf_core::shape::ShapeKind::Rectangle | sheaf_core::shape::ShapeKind::Ellipse
+                            )
+                        })
+                        .count()
+                });
+                menus::graph_shape_menu(layer, k, region, regions)
             }
             ObjectKind::Slope(k) => menus::graph_slope_menu(layer, k),
             ObjectKind::StraightLine(k) => menus::graph_straight_line_menu(layer, k),

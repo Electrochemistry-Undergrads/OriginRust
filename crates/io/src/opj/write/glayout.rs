@@ -4,7 +4,9 @@
 //! graph (`graph_tables.rs`), and the fields that depend on the graph are put in on top. Offsets are
 //! into the block body.
 
-use super::super::graph::{ANN_COLOR_AT, COLOR_AUTO, SHOW_FRAME_AT, SHOW_FRAME_BIT};
+use super::super::graph::{
+    ANN_COLOR_AT, AXIS_LAYER_ICONS_AT, AXIS_LAYER_ICONS_BIT, COLOR_AUTO, SHOW_FRAME_AT, SHOW_FRAME_BIT,
+};
 use super::super::strings::encode_cp1252;
 use super::graph_tables::*;
 use super::layout::{fill, framed, put, put_name};
@@ -43,6 +45,7 @@ pub(super) struct WindowSpec<'a> {
     pub ordinal: usize,
     /// Page width and height in page units.
     pub page: (u16, u16),
+    pub axis_layer_icons: bool,
     pub time: f64,
     /// A counter that Origin gives every window (3 for the first graph of a small project).
     pub serial: u8,
@@ -65,6 +68,10 @@ pub(super) fn window_header(w: &WindowSpec) -> Vec<u8> {
     super::layout::set_window_state(&mut h, w.place);
     put(&mut h, 0x3d, &w.page.0.to_le_bytes());
     put(&mut h, 0x3f, &w.page.1.to_le_bytes());
+    h[AXIS_LAYER_ICONS_AT] &= !AXIS_LAYER_ICONS_BIT;
+    if w.axis_layer_icons {
+        h[AXIS_LAYER_ICONS_AT] |= AXIS_LAYER_ICONS_BIT;
+    }
     put(&mut h, 0x73, &w.time.to_le_bytes());
     put(&mut h, 0x7b, &w.time.to_le_bytes());
     h[0xa1] = w.serial;

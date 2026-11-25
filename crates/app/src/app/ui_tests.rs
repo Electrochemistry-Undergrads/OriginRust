@@ -440,6 +440,36 @@ fn set_column_values_fills_the_column_from_a_formula() {
 }
 
 #[test]
+fn choosing_a_column_or_a_cell_while_setting_values_inserts_its_reference() {
+    // T423: with Set Column Values open, a click on B's header inserts col(B); a click on one of its cells col(B)[2].
+    let mut h = start(vec![data_file("pick")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    right_click_text(&mut h, "C(Y1)");
+    click_containing(&mut h, "Set Column Values...");
+    settle(&mut h);
+    let book = project(&h).workbooks().next().unwrap().id;
+    let sheet = project(&h).workbook(book).unwrap().sheet().clone();
+    let b = sheet.column_by_name("B").unwrap().id;
+    // What a click on B's header and then on B's second cell leave selected.
+    {
+        let ui = h.state_mut().books.get_mut(&book).unwrap();
+        (ui.sel, ui.selected) = (Sel::Columns, vec![b]);
+    }
+    settle(&mut h);
+    assert_eq!(h.state().set_values.as_ref().unwrap().formula(), "col(B)");
+    h.event(egui::Event::Text(" + ".to_string()));
+    settle(&mut h);
+    h.state_mut().books.get_mut(&book).unwrap().select_cells(&sheet, (1, 1), (1, 1));
+    settle(&mut h);
+    assert_eq!(h.state().set_values.as_ref().unwrap().formula(), "col(B) + col(B)[2]");
+    h.state_mut().books.get_mut(&book).unwrap().select_cells(&sheet, (0, 0), (1, 2));
+    settle(&mut h);
+    assert_eq!(h.state().set_values.as_ref().unwrap().formula(), "col(B) + col(B)[2]", "two columns: nothing");
+    click(&mut h, "OK");
+    assert_eq!(column(&h, "C"), [7.0, 9.0, 11.0, 13.0], "B + B[2] = B + 4.5");
+}
+
+#[test]
 fn an_auto_column_follows_an_edited_source_cell_and_a_manual_one_waits_to_be_recalculated() {
     let mut h = start(vec![data_file("recalc")]);
     show_window(&mut h, "Book1 - sample.csv");
@@ -4865,6 +4895,32 @@ fn a_drawn_rectangle_extracts_the_data_points_inside_it() {
     click(&mut h, "Unmask Data in Region");
     assert!(project(&h).column(y).unwrap().mask.is_empty());
     assert_eq!(h.state().doc.undo_label(), Some("Unmask data in region"));
+    // T422: a second region offers the All Regions entries; masking them masks the points of both.
+    let at = on(&h, 0, ObjectKind::Shape(0));
+    right_click_at(&mut h, at);
+    assert!(h.query_by_label("Mask Data in All Regions").is_none(), "one region only");
+    h.key_press(egui::Key::Escape);
+    settle(&mut h);
+    h.state_mut().doc.apply("Second region", |p| {
+        let mut e = sheaf_core::shape::Shape::new(sheaf_core::shape::ShapeKind::Ellipse, (0.75, 0.05), (0.95, 0.25));
+        e.fill = Some(sheaf_core::Color::rgb(255, 220, 200));
+        p.graph_mut(gid).unwrap().layers[0].shapes.push(e);
+    });
+    settle(&mut h);
+    pause(&mut h);
+    let at = on(&h, 0, ObjectKind::Shape(0));
+    right_click_at(&mut h, at);
+    click(&mut h, "Mask Data in All Regions");
+    assert_eq!(project(&h).column(y).unwrap().mask.iter().copied().collect::<Vec<_>>(), [3, 4, 5, 6, 8, 9]);
+    let books = project(&h).workbooks().count();
+    let at = on(&h, 0, ObjectKind::Shape(0));
+    right_click_at(&mut h, at);
+    click(&mut h, "Extract Data in All Regions");
+    assert_eq!(project(&h).workbooks().count(), books + 1);
+    assert_eq!(
+        project(&h).workbooks().last().unwrap().sheet().columns[0].numeric().unwrap(),
+        [3.0, 4.0, 5.0, 6.0, 8.0, 9.0]
+    );
 }
 
 #[test]
@@ -6163,6 +6219,8 @@ fn the_statistics_menu_makes_an_arima_forecast() {
     assert!(sheet.starts_with("ARIMA"), "{sheet}");
     assert_eq!(values.len(), 5, "mean, AR 1, SS, sigma^2, AIC");
     assert!((values[0] - 10.0).abs() < 1.0, "{values:?}");
+    let (_, se) = result_column(&h, "Standard error");
+    assert!(se[0] > 0.0 && se[1] > 0.0 && se[2].is_nan(), "{se:?}");
     let (_, forecast) = result_column(&h, "Forecast");
     assert_eq!(forecast.len(), 10);
     assert_eq!(project(&h).graphs().count(), graphs_before + 1);
@@ -6189,6 +6247,9 @@ fn the_statistics_menu_makes_an_exponential_smoothing_forecast() {
     assert!(sheet.starts_with("Forecast"), "{sheet}");
     assert_eq!(forecast.len(), 10);
     assert!((forecast[9] - (5.0 + 0.5 * 29.0)).abs() < 1.0, "the trend goes on: {forecast:?}");
+    let (_, lower) = result_column(&h, "Lower 95%");
+    let (_, upper) = result_column(&h, "Upper 95%");
+    assert!(lower[9] < forecast[9] && forecast[9] < upper[9], "{lower:?} {upper:?}");
     assert_eq!(project(&h).graphs().count(), graphs_before + 1);
     assert_eq!(h.state().doc.undo_label(), Some("Exponential smoothing forecast"));
 }

@@ -270,6 +270,8 @@ pub struct SheafApp {
     comparison_plot: Option<ComparisonPlotDialog>,
     multi_y: Option<MultiYDialog>,
     set_values: Option<SetValuesDialog>,
+    /// Each workbook's selection while Set Column Values is open (T423): a new selection is a picked reference.
+    formula_pick: Option<std::collections::HashMap<WindowId, (crate::grid::Sel, Vec<ColumnId>, usize)>>,
     analysis: Option<AnalysisDialog>,
     fit: Option<FitDialog>,
     fit_more: Option<FitMoreDialog>,
@@ -495,6 +497,7 @@ impl SheafApp {
             comparison_plot: None,
             multi_y: None,
             set_values: None,
+            formula_pick: None,
             analysis: None,
             fit: None,
             fit_more: None,
@@ -2963,8 +2966,16 @@ impl SheafApp {
                 self.sort = SortDialog::nested_in_rows(self.doc.project(), book, columns, rows);
             }
             Action::PivotTable { book, columns } => self.pivot = PivotDialog::new(&self.doc, book, columns),
-            Action::ExtractRegion { graph, layer, shape } => self.extract_region(graph, layer, shape),
-            Action::MaskRegion { graph, layer, shape, mask } => self.mask_region(graph, layer, shape, mask),
+            Action::ExtractRegion { graph, layer, shape } => self.extract_region(graph, layer, vec![shape]),
+            Action::MaskRegion { graph, layer, shape, mask } => self.mask_region(graph, layer, vec![shape], mask),
+            Action::ExtractAllRegions { graph, layer } => {
+                let shapes = sheaf_plot::region::region_shapes(self.doc.project(), graph, layer);
+                self.extract_region(graph, layer, shapes)
+            }
+            Action::MaskAllRegions { graph, layer, mask } => {
+                let shapes = sheaf_plot::region::region_shapes(self.doc.project(), graph, layer);
+                self.mask_region(graph, layer, shapes, mask)
+            }
             Action::MultiPeakFit { graph, y, layer } => {
                 let graph = match graph {
                     Some(g) => Some(g),
@@ -3072,7 +3083,28 @@ impl SheafApp {
                 }
             }
             Action::WorksheetFontsDialog(book) => {
-                self.worksheet_fonts = WorksheetFontsDialog::new(&self.doc, book);
+                self.worksheet_fonts = WorksheetFontsDialog::new(&self.doc, book, self.books.get(&book));
+            }
+            Action::EnsureWorksheetRows { book, sheet, rows } => {
+                // Leave an open Properties draft on its base revision. The grid will retry after it closes.
+                if self.worksheet_fonts.is_some() {
+                    return;
+                }
+                let can_grow = self
+                    .doc
+                    .project()
+                    .workbook(book)
+                    .filter(|workbook| workbook.active_sheet == sheet)
+                    .and_then(|workbook| workbook.sheets.get(sheet))
+                    .is_some_and(|sheet| sheet.view.automatic_rows() && rows > grid::shown_rows(sheet));
+                if can_grow {
+                    self.doc.adjust_view(|project| {
+                        let view = &mut project.workbook_mut(book).unwrap().sheets[sheet].view;
+                        view.allocated_rows = Some(rows);
+                        view.auto_add_rows = Some(true);
+                    });
+                    ctx.request_repaint();
+                }
             }
             Action::FormatCellsDialog(book) => match self.format_target(book) {
                 Ok(target) => self.cell_format = CellFormatDialog::new(&self.doc, book, target),
@@ -3310,6 +3342,7 @@ impl SheafApp {
                     PageSwitch::ActivateByIconOnly => "Set Active Layer By Layer Icon Only",
                     PageSwitch::IconDoubleClickPlotSetup => "Double click to open Plot Setup",
                     PageSwitch::ActiveLayerIndicator => "Show Active Layer Indicator",
+                    PageSwitch::AxisLayerIcons => "Show Axis Layer Icons",
                 };
                 self.doc.apply(label, |p| {
                     if let Some(g) = p.graph_mut(graph) {
@@ -3317,6 +3350,7 @@ impl SheafApp {
                             PageSwitch::ActivateByIconOnly => g.page.style.activate_by_icon_only = on,
                             PageSwitch::IconDoubleClickPlotSetup => g.page.style.icon_double_click_plot_setup = on,
                             PageSwitch::ActiveLayerIndicator => g.page.style.active_layer_indicator = on,
+                            PageSwitch::AxisLayerIcons => g.page.style.axis_layer_icons = on,
                         }
                     }
                 });
@@ -6444,8 +6478,8 @@ impl SheafApp {
 
     /// Mask / Unmask Data in Region (T413): the Y cells of the layer's data points inside the drawn rectangle or
     /// ellipse are masked (or unmasked), as one undo step.
-    fn mask_region(&mut self, graph: WindowId, layer: usize, shape: usize, mask: bool) {
-        let found = match sheaf_plot::region::points_in_shape(self.doc.project(), graph, layer, shape) {
+    fn mask_region(&mut self, graph: WindowId, layer: usize, shapes: Vec<usize>, mask: bool) {
+        let found = match sheaf_plot::region::points_in_shapes(self.doc.project(), graph, layer, &shapes) {
             Ok(Some(found)) => found,
             Ok(None) => return self.warn("Only a rectangle or an ellipse marks a region"),
             Err(e) => return self.warn(e.to_string()),
@@ -6483,8 +6517,8 @@ impl SheafApp {
 
     /// Extract Data in Region (T355): the data points of the layer inside the drawn rectangle or ellipse go to a
     /// new workbook, three columns per plot with points inside (X, Y and the source row), as one undo step.
-    fn extract_region(&mut self, graph: WindowId, layer: usize, shape: usize) {
-        let found = match sheaf_plot::region::points_in_shape(self.doc.project(), graph, layer, shape) {
+    fn extract_region(&mut self, graph: WindowId, layer: usize, shapes: Vec<usize>) {
+        let found = match sheaf_plot::region::points_in_shapes(self.doc.project(), graph, layer, &shapes) {
             Ok(Some(found)) => found,
             Ok(None) => return self.warn("Only a rectangle or an ellipse marks a region"),
             Err(e) => return self.warn(e.to_string()),
@@ -6752,6 +6786,63 @@ impl SheafApp {
                 self.say(format!("{} repeated: {}", label.trim_end_matches("..."), report.message));
             }
             Err(e) => self.warn(format!("Could not repeat {}: {e}", label.trim_end_matches("..."))),
+        }
+    }
+
+    /// Interactive formula references (T423): while Set Column Values is open, a new selection in a sheet (one
+    /// column, one cell, or cells of one column) is inserted into the formula at its cursor as `col(B)`, `col(B)[3]`
+    /// or `col(B)[2:5]`, with `Sheet2!` or `[Book2]Sheet1!` in front when it is not on the window's sheet.
+    fn pick_formula_reference(&mut self, ctx: &egui::Context) {
+        let Some(d) = &self.set_values else {
+            self.formula_pick = None;
+            return;
+        };
+        let now: std::collections::HashMap<WindowId, (crate::grid::Sel, Vec<ColumnId>, usize)> = self
+            .books
+            .iter()
+            .map(|(id, b)| {
+                let sheet = self.doc.project().workbook(*id).map_or(0, |w| w.active_sheet);
+                (*id, (b.sel.clone(), b.selected.clone(), sheet))
+            })
+            .collect();
+        let Some(before) = self.formula_pick.replace(now.clone()) else { return };
+        let target = d.target();
+        let project = self.doc.project();
+        let Some((home_book, home_sheet, _)) = project.locate(target) else { return };
+        let home = (home_book.id, home_sheet as *const sheaf_core::Worksheet);
+        let mut picked: Option<String> = None;
+        for (book, (sel, selected, sheet_index)) in &now {
+            if before.get(book) == Some(&(sel.clone(), selected.clone(), *sheet_index)) {
+                continue;
+            }
+            let Some(wb) = project.workbook(*book) else { continue };
+            let Some(sheet) = wb.sheets.get(*sheet_index) else { continue };
+            let (column, rows) = match sel {
+                crate::grid::Sel::Columns if selected.len() == 1 => (sheet.column(selected[0]), None),
+                crate::grid::Sel::Cells { anchor, end } if anchor.0 == end.0 => {
+                    let (lo, hi) = (anchor.1.min(end.1), anchor.1.max(end.1));
+                    (sheet.columns.get(anchor.0), Some((lo + 1, hi + 1)))
+                }
+                _ => continue,
+            };
+            let Some(column) = column else { continue };
+            let mut text = String::new();
+            if (wb.id, sheet as *const sheaf_core::Worksheet) != home {
+                if wb.id != home.0 {
+                    text.push_str(&format!("[{}]", wb.name));
+                }
+                text.push_str(&format!("{}!", sheet.name));
+            }
+            text.push_str(&format!("col({})", column.short_name));
+            match rows {
+                Some((a, b)) if a == b => text.push_str(&format!("[{a}]")),
+                Some((a, b)) => text.push_str(&format!("[{a}:{b}]")),
+                None => {}
+            }
+            picked = Some(text);
+        }
+        if let (Some(text), Some(d)) = (picked, &mut self.set_values) {
+            d.insert_reference(ctx, &text);
         }
     }
 
@@ -7204,6 +7295,7 @@ impl SheafApp {
             active_layer_indicator: graph
                 .and_then(|g| project.graph(g))
                 .is_some_and(|g| g.page.style.active_layer_indicator),
+            axis_layer_icons: graph.and_then(|g| project.graph(g)).is_some_and(|g| g.page.style.axis_layer_icons),
             show_frame: graph
                 .and_then(|g| project.graph(g)?.layers.get(layer))
                 .filter(|l| l.coords.is_cartesian())
@@ -7998,6 +8090,7 @@ impl SheafApp {
         {
             self.straight_line_dialog = None;
         }
+        self.pick_formula_reference(ctx);
         if let Some(d) = &mut self.set_values
             && !d.show(ctx, &mut self.doc)
         {

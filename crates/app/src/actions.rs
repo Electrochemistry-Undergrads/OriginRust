@@ -952,6 +952,11 @@ pub enum Action {
     FormatCellsDialog(WindowId),
     /// Format > Worksheet (F4): worksheet-wide Data font defaults.
     WorksheetFontsDialog(WindowId),
+    EnsureWorksheetRows {
+        book: WindowId,
+        sheet: usize,
+        rows: usize,
+    },
     /// Cell menu > Add Note... / Edit Note...: the note editor for the single selected cell.
     NoteDialog(WindowId),
     /// Cell menu > Delete Note: removes the note of the single selected cell.
@@ -1280,6 +1285,17 @@ pub enum Action {
         shape: usize,
         mask: bool,
     },
+    /// Copies the data points inside any drawn rectangle or ellipse of the layer to a new workbook (T422).
+    ExtractAllRegions {
+        graph: WindowId,
+        layer: usize,
+    },
+    /// Masks or unmasks the Y cells of the data points inside any drawn rectangle or ellipse of the layer (T422).
+    MaskAllRegions {
+        graph: WindowId,
+        layer: usize,
+        mask: bool,
+    },
     /// Moves the legend to a new centre (fractions of the layer frame): it becomes manually
     /// placed; one undo step.
     MoveLegend {
@@ -1528,4 +1544,5 @@ pub enum PageSwitch {
     ActivateByIconOnly,
     IconDoubleClickPlotSetup,
     ActiveLayerIndicator,
+    AxisLayerIcons,
 }

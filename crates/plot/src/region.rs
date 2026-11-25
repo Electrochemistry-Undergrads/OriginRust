@@ -46,9 +46,35 @@ pub fn points_in_shape(
     layer: usize,
     shape: usize,
 ) -> Result<Option<Vec<RegionPoints>>, PlotError> {
+    points_in_shapes(project, graph, layer, &[shape])
+}
+
+/// The drawn rectangles and ellipses of layer `layer` (T422), in drawing order.
+pub fn region_shapes(project: &Project, graph: WindowId, layer: usize) -> Vec<usize> {
+    let Some(l) = project.graph(graph).and_then(|g| g.layers.get(layer)) else { return Vec::new() };
+    l.shapes
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| matches!(s.kind, ShapeKind::Rectangle | ShapeKind::Ellipse))
+        .map(|(k, _)| k)
+        .collect()
+}
+
+/// The data points inside any of the drawn objects `shapes` of layer `layer` (T422), each point once, in row order.
+/// `None` when one of them is not a rectangle or an ellipse, or when there are none.
+pub fn points_in_shapes(
+    project: &Project,
+    graph: WindowId,
+    layer: usize,
+    shapes: &[usize],
+) -> Result<Option<Vec<RegionPoints>>, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
     let l = g.layers.get(layer).ok_or(PlotError::NoSuchLayer(layer))?;
-    let Some(s) = l.shapes.get(shape).filter(|s| matches!(s.kind, ShapeKind::Rectangle | ShapeKind::Ellipse)) else {
+    let regions: Option<Vec<&sheaf_core::shape::Shape>> = shapes
+        .iter()
+        .map(|k| l.shapes.get(*k).filter(|s| matches!(s.kind, ShapeKind::Rectangle | ShapeKind::Ellipse)))
+        .collect();
+    let Some(regions) = regions.filter(|r| !r.is_empty()) else {
         return Ok(None);
     };
     let geometry = layout_geometry(project, graph)?;
@@ -57,7 +83,8 @@ pub fn points_in_shape(
     if f.w <= 0.0 || f.h <= 0.0 {
         return Ok(Some(Vec::new()));
     }
-    let corners = (s.x1, s.y1, s.x2, s.y2);
+    let boxes: Vec<(ShapeKind, (f64, f64, f64, f64))> =
+        regions.iter().map(|s| (s.kind, (s.x1, s.y1, s.x2, s.y2))).collect();
     let mut out = Vec::new();
     for (k, p) in l.plots.iter().enumerate() {
         let Some(ys) = project.column(p.y).and_then(|c| c.numeric()) else { continue };
@@ -76,7 +103,8 @@ pub fn points_in_shape(
             if !(px.is_finite() && py.is_finite()) {
                 continue;
             }
-            if inside(s.kind, corners, ((px - f.x) / f.w, (py - f.y) / f.h)) {
+            let at = ((px - f.x) / f.w, (py - f.y) / f.h);
+            if boxes.iter().any(|&(kind, corners)| inside(kind, corners, at)) {
                 found.rows.push(r);
                 found.x.push(x);
                 found.y.push(y);
@@ -145,5 +173,22 @@ mod tests {
         assert_eq!(points_in_shape(&p, g, 0, line).unwrap(), None);
         let empty = add(&mut p, g, ShapeKind::Rectangle, (0.9, 0.9, 0.95, 0.95));
         assert_eq!(points_in_shape(&p, g, 0, empty).unwrap(), Some(Vec::new()));
+    }
+
+    #[test]
+    fn points_inside_any_of_several_regions_are_counted_once() {
+        let (mut p, g) = project();
+        let l = &mut p.graph_mut(g).unwrap().layers[0];
+        // Two overlapping boxes around x = 2..4 and x = 3..6 (frame fractions of axes 0..10), and a line.
+        l.shapes.push(Shape::new(ShapeKind::Rectangle, (0.15, 0.95), (0.45, 0.05)));
+        l.shapes.push(Shape::new(ShapeKind::Line, (0.0, 0.0), (1.0, 1.0)));
+        l.shapes.push(Shape::new(ShapeKind::Rectangle, (0.25, 0.95), (0.65, 0.05)));
+        assert_eq!(region_shapes(&p, g, 0), [0, 2]);
+        let one = points_in_shapes(&p, g, 0, &[0]).unwrap().unwrap();
+        let both = points_in_shapes(&p, g, 0, &[0, 2]).unwrap().unwrap();
+        assert_eq!(one[0].rows, [2, 3, 4]);
+        assert_eq!(both[0].rows, [2, 3, 4, 5, 6], "the overlap once");
+        assert!(points_in_shapes(&p, g, 0, &[0, 1]).unwrap().is_none(), "a line is not a region");
+        assert!(points_in_shapes(&p, g, 0, &[]).unwrap().is_none());
     }
 }

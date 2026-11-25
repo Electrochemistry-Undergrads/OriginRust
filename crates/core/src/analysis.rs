@@ -65,7 +65,7 @@ pub use curves::{AverageSpec, IntersectSpec};
 pub use decompose::{DecomposeModel, DecomposeSpec};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
 pub use doe::{FactorialDesignSpec, FactorialEffectsSpec, SplitPlotDesignSpec, SplitPlotEffectsSpec};
-pub use expsmooth::{ExpSmoothSpec, SmoothModel};
+pub use expsmooth::{Damping, ExpSmoothSpec, SmoothModel};
 pub use forest::{ForestTask, RandomForestSpec};
 pub use lifedist::{CoxSpec, LifeDist, LifeDistArbitrarySpec, LifeDistSpec, LifeRegressionSpec, TurnbullSpec};
 pub use manhattan::ManhattanSpec;

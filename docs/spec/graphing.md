@@ -1339,6 +1339,12 @@ Format Styles and All carry the setting. The native OPJ legend stores the follow
 mode, and the companion retains a nondefault fixed color for later use or the
 mode for a hidden legend (opj-format 10.8).
 
+The Format toolbar's **Font Color > Auto** selects the same mode for the current
+ordinary legend. Choosing a fixed preset or custom color turns follow mode off and
+applies that color in the same undo step. Origin 2016 EMFs showed black and red
+captions in follow mode, then two blue captions when LabTalk set a fixed blue color.
+The toolbar entry point is documented by Origin. [Origin FAQ 726](https://docs.originlab.com/quick-help/same-text-and-symbol-color-in-legend/)
+
 **Plot-colored graph text (T58).** `\cpN(text)` uses the color of the Nth plot in the
 text object's layer. Repainting the graph after a style change resolves the color again.
 Nested styles, literal blocks and glyph decorations follow the existing text rules.
@@ -4529,8 +4535,12 @@ region").
 
 Mask Data in Region and Unmask Data in Region (T413, same menu) mask or unmask the Y cells of those points (the
 plots' Y columns, rows found the same way, masked rows included), as one undo step ("Mask data in region" / "Unmask
-data in region"); the status line counts the cells changed, and nothing happens when none would change. Freeform
-regions and several regions at once are not built.
+data in region"); the status line counts the cells changed, and nothing happens when none would change.
+
+Several regions (T422): when the layer has two or more drawn rectangles or ellipses, the menu of each also has
+Extract Data in All Regions, Mask Data in All Regions and Unmask Data in All Regions, which work on the points inside
+any of them (a point inside two overlapping regions counts once; `sheaf_plot::region::points_in_shapes`). Freeform
+regions are not built.
 
 ### 17.13 Cause-and-effect (fishbone) diagram (T375, Origin 2026 feature, Sheaf's layout, not measured)
 

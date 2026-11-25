@@ -8,7 +8,7 @@ of count k is k copies of it. Not measured in Origin.
 
 ## Left
 
-- Fractional weights (case weights), frequency columns for the Kaplan-Meier estimator and the other survival tools.
+- Frequency columns for the Kaplan-Meier estimator and Cox regression are T429. Fractional weights (case weights).
 
 ## Tests
 

@@ -495,6 +495,16 @@ impl SetValuesDialog {
         Ok(Some((a - 1)..b.max(a)))
     }
 
+    /// The column the window sets (the first of several).
+    pub fn target(&self) -> ColumnId {
+        self.column
+    }
+
+    /// Puts a column, cell or range reference picked in a sheet into the formula at the cursor (T423).
+    pub fn insert_reference(&mut self, ctx: &egui::Context, text: &str) {
+        self.insert(ctx, text);
+    }
+
     /// Puts text into the formula at the cursor.
     fn insert(&mut self, ctx: &egui::Context, text: &str) {
         let id = egui::Id::new("set_values_formula");

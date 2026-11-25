@@ -100,6 +100,9 @@ pub struct Worksheet {
     /// Linked cells (Paste Link, T211, ADR 0014), at most one link per cell.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cell_links: Vec<crate::cell_links::CellLink>,
+    /// The sheet's sticky note (T421).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sticky: Option<crate::sticky::StickyNote>,
 }
 
 /// An arrow drawn across a data cell (T205): left to right, with a head at the right end, or at both
@@ -237,6 +240,7 @@ impl Worksheet {
             cell_images: Vec::new(),
             cell_arrows: Vec::new(),
             cell_links: Vec::new(),
+            sticky: None,
         }
     }
 
@@ -423,6 +427,9 @@ pub struct Workbook {
     /// Named cells (T396): a formula of this workbook reads a name as its cell's value.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub names: Vec<crate::named::NamedCell>,
+    /// The workbook's sticky note (T421).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sticky: Option<crate::sticky::StickyNote>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -487,6 +494,7 @@ impl Workbook {
             active_sheet: 0,
             source: None,
             names: Vec::new(),
+            sticky: None,
         }
     }
 

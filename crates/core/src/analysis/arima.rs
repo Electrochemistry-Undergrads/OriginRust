@@ -8,7 +8,7 @@ use super::dist::{GraphPlot, Output, XyGraph};
 use super::statistics::num;
 use super::*;
 use crate::graph::{PlotKind, ScaleKind};
-use calc::arima::{ArimaOrder, fit};
+use calc::arima::{ArimaOrder, fit, fit_auto};
 
 /// What [`Tool::Arima`] does.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -22,11 +22,13 @@ pub struct ArimaSpec {
     /// Confidence level of the forecast bands (0.95).
     pub confidence: f64,
     pub graph: bool,
+    /// Choose `p` and `q` by AIC up to these maxima instead of using `p` and `q` (T428).
+    pub auto: Option<(usize, usize)>,
 }
 
 impl Default for ArimaSpec {
     fn default() -> Self {
-        ArimaSpec { p: 1, d: 0, q: 0, constant: true, horizon: 10, confidence: 0.95, graph: true }
+        ArimaSpec { p: 1, d: 0, q: 0, constant: true, horizon: 10, confidence: 0.95, graph: true, auto: None }
     }
 }
 
@@ -47,32 +49,43 @@ pub(super) fn run(spec: &ArimaSpec, inputs: &[Input<'_>]) -> Result<Output, Anal
     let order = ArimaOrder { p: spec.p, d: spec.d, q: spec.q, constant: spec.constant };
     let z = calc::standard_quantile(calc::Family::Normal, 1.0, 0.5 + spec.confidence / 2.0);
     let pct = num(100.0 * spec.confidence);
-    let mut table = ResultTable::new(&["Value"]);
+    let mut table = ResultTable::new(&["Value", "Standard error", "z", "Prob>|z|"]);
     let mut notes = Vec::new();
     let mut on_sheet = Vec::new();
     let mut graphs = Vec::new();
     for input in inputs {
-        let m = fit(input.ys(), order, spec.horizon)
-            .map_err(|e| AnalysisError::BadOption(format!("{}: {e}", input.label)))?;
+        let m = match spec.auto {
+            Some((max_p, max_q)) => fit_auto(input.ys(), spec.d, max_p, max_q, spec.constant, spec.horizon),
+            None => fit(input.ys(), order, spec.horizon),
+        }
+        .map_err(|e| AnalysisError::BadOption(format!("{}: {e}", input.label)))?;
+        let (p, q) = (m.order.p, m.order.q);
         let mut names = Vec::new();
         if spec.constant {
             names.push(if spec.d == 0 { "Mean".to_string() } else { "Constant (drift)".to_string() });
         }
-        names.extend((1..=spec.p).map(|i| format!("AR {i}")));
-        names.extend((1..=spec.q).map(|i| format!("MA {i}")));
-        for (name, v) in names.iter().zip(&m.params) {
-            table.push_row(format!("{}, {name}", input.label), vec![*v], vec![String::new()]);
+        names.extend((1..=p).map(|i| format!("AR {i}")));
+        names.extend((1..=q).map(|i| format!("MA {i}")));
+        for ((name, v), se) in names.iter().zip(&m.params).zip(&m.se) {
+            let z = v / se;
+            let prob = 2.0 * calc::dist_cdf(calc::Family::Normal, &[0.0, 1.0], -z.abs());
+            table.push_row(format!("{}, {name}", input.label), vec![*v, *se, z, prob], vec![String::new(); 4]);
         }
         for (name, v) in [("Sum of squares", m.ss), ("Sigma^2", m.sigma2), ("AIC", m.aic)] {
-            table.push_row(format!("{}, {name}", input.label), vec![v], vec![String::new()]);
+            let nan = f64::NAN;
+            table.push_row(format!("{}, {name}", input.label), vec![v, nan, nan, nan], vec![String::new(); 4]);
         }
         let coefs: Vec<String> = names.iter().zip(&m.params).map(|(n, v)| format!("{n} {}", num(*v))).collect();
         notes.push(format!(
-            "{}: ARIMA({},{},{}) by conditional least squares: {}; sigma^2 {}, AIC {}; {} forecast(s) from {} to {}.",
+            "{}: ARIMA({},{},{}){} by conditional least squares: {}; sigma^2 {}, AIC {}; {} forecast(s) from {} to {}.",
             input.label,
-            spec.p,
+            p,
             spec.d,
-            spec.q,
+            q,
+            match spec.auto {
+                Some((mp, mq)) => format!(" (the smallest AIC of p <= {mp}, q <= {mq})"),
+                None => String::new(),
+            },
             if coefs.is_empty() { "no coefficients".to_string() } else { coefs.join(", ") },
             num(m.sigma2),
             num(m.aic),
@@ -80,7 +93,7 @@ pub(super) fn run(spec: &ArimaSpec, inputs: &[Input<'_>]) -> Result<Output, Anal
             m.forecast.first().map_or("-".to_string(), |v| num(*v)),
             m.forecast.last().map_or("-".to_string(), |v| num(*v))
         ));
-        let comment = format!("ARIMA({},{},{}) of {}", spec.p, spec.d, spec.q, input.name);
+        let comment = format!("ARIMA({p},{},{q}) of {}", spec.d, input.name);
         let xs = input.xs().to_vec();
         let step = if xs.len() >= 2 { xs[xs.len() - 1] - xs[xs.len() - 2] } else { 1.0 };
         let step = if step.is_finite() && step != 0.0 { step } else { 1.0 };
@@ -148,6 +161,9 @@ pub(super) fn run(spec: &ArimaSpec, inputs: &[Input<'_>]) -> Result<Output, Anal
         "Forecast bands: forecast -+ {} times the standard error from the psi weights (future errors taken as 0).",
         num(z)
     ));
+    notes.push(
+        "Coefficient standard errors: sigma^2 (J'J)^-1 with J the derivatives of the conditional errors (Gauss-Newton); z = coefficient / SE with normal probabilities.".to_string(),
+    );
     let mut sheet = vec![SheetColumn {
         designation: Designation::Label,
         long_name: "Data".into(),
@@ -155,7 +171,9 @@ pub(super) fn run(spec: &ArimaSpec, inputs: &[Input<'_>]) -> Result<Output, Anal
         comments: String::new(),
         data: ColumnData::text(table.rows.iter().map(|(l, _)| l.clone()).collect()),
     }];
-    sheet.push(column_of("Value", "", Designation::Y, table.rows.iter().map(|(_, v)| v[0]).collect()));
+    for (i, h) in table.headers.iter().enumerate() {
+        sheet.push(column_of(h, "", Designation::Y, table.rows.iter().map(|(_, v)| v[i]).collect()));
+    }
     let shift = sheet.len();
     sheet.extend(on_sheet);
     let (graph, more_graphs) = if graphs.is_empty() {
@@ -192,6 +210,13 @@ mod tests {
         let g = p.graph(out.new_graph.unwrap()).unwrap();
         let fc = p.column(g.layers[0].plots[2].y).unwrap().numeric().unwrap().to_vec();
         assert!((fc[1] - 12.0).abs() < 1e-8, "{fc:?}");
+        // The drift's standard error is sigma / sqrt(n - 1) (T428).
+        let sigma2 = t.rows[2].1[0];
+        assert!((t.rows[0].1[1] - (sigma2 / 6.0).sqrt()).abs() < 1e-9, "{:?}", t.rows[0]);
+        assert!(t.rows[1].1[1].is_nan(), "no SE for the sum of squares");
+        let auto = ArimaSpec { d: 1, auto: Some((1, 1)), graph: false, horizon: 1, ..Default::default() };
+        let out = p.analyze(&request(vec![y], auto)).unwrap();
+        assert!(out.notes[0].contains("the smallest AIC of p <= 1, q <= 1"), "{:?}", out.notes);
         let none = ArimaSpec { p: 0, d: 0, q: 0, constant: false, ..Default::default() };
         assert!(p.analyze(&request(vec![y], none)).is_err());
     }

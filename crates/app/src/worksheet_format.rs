@@ -81,8 +81,15 @@ impl Cache {
         // Origin's B/I buttons follow the first selected cell even in a mixed selection.
         let font = first.font();
         let worksheet = Some(WorksheetStyle { underline: first.underline, fill: first.fill });
-        let snapshot =
-            Snapshot { target, font, mixed, worksheet, generation: doc.generation(), revision: doc.revision() };
+        let snapshot = Snapshot {
+            target,
+            font,
+            legend_color_follows_plot: None,
+            mixed,
+            worksheet,
+            generation: doc.generation(),
+            revision: doc.revision(),
+        };
         self.0.replace(Some(snapshot.clone()));
         Some(snapshot)
     }
@@ -164,6 +171,7 @@ pub fn apply(doc: &mut Document, book: WindowId, sheet: usize, target: FormatTar
         Change::Underline(value) => patch.underline = Some(value),
         Change::Fill(value) => patch.fill = Some(value.unwrap_or(Color::TRANSPARENT)),
         Change::Color(color) => patch.text_color = Some(color),
+        Change::FollowPlotColor => return false,
         Change::Family(name) => {
             let name = name.trim();
             if name.len() > 256 || name.chars().any(char::is_control) {

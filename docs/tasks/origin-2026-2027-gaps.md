@@ -99,7 +99,7 @@ Found by a web search of the release notes (search summaries, not a page-by-page
 | Mixture designs with several totals | 2026b | Done (T386, textbook simplex lattice and centroid designs for one or more totals with lower bounds: Statistics > Two-Level Experiments > Mixture Design..., `analyze mixture-design`). Design of experiments: mixture designs accept more than one total; factor names accept more characters. | [2026b notes](https://www.originlab.com/ReleaseNotes/index.aspx?c=1) |
 | Reliability and Survival Analysis app; DMD, RPC3 and Ivium connectors | 2026 | An app for reliability and survival work, and import connectors for those three instrument formats. | [2026][o26] |
 | Same sheet across several workbooks in a folder | 2027 | Sheet activation done (T277: sheet tab > Activate This Sheet in All Books in Folder, by name); the label-row system variables are left. Activate the same sheet in all workbooks of a folder at once; new system variables control rich text and dynamic merge in the long name and comments label rows. | [2027 notes](https://www.originlab.com/releasenotes/index.aspx?c=2) |
-| Faster project save | 2026 | OriginLab reports about 40% faster saving of large mixed-series projects. A performance target for Sheaf's `.sheaf` save, not a feature. | [2026][o26] |
+| Faster project save | 2026 | Done (T426: data members deflated on several threads, the file unchanged; a 76 MB project saves in 1.15 s instead of 4.6 s). OriginLab reports about 40% faster saving of large mixed-series projects. A performance target for Sheaf's `.sheaf` save, not a feature. | [2026][o26] |
 
 [o16]: https://www.originlab.com/2016
 [history]: https://www.originlab.com/index.aspx?go=SUPPORT&pid=3325

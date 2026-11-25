@@ -9,7 +9,7 @@ measured in Origin.
 
 ## Left
 
-- Prediction intervals, damped trends, the ETS likelihood (AIC model choice), ARIMA.
+- Prediction intervals and damped trends are T427. The ETS likelihood (AIC model choice), ARIMA.
 
 ## Tests
 

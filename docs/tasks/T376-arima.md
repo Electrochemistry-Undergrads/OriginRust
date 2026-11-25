@@ -8,8 +8,8 @@ the psi weights, with predictions, residuals and a graph. Not measured in Origin
 
 ## Left
 
-- Exact (Kalman filter) maximum likelihood, coefficient standard errors, seasonal ARIMA, automatic order choice
-  (AIC search), stationarity/invertibility constraints.
+- Coefficient standard errors and the AIC order search are T428. Exact (Kalman filter) maximum likelihood, seasonal
+  ARIMA, stationarity/invertibility constraints.
 
 ## Tests
 

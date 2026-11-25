@@ -27,6 +27,7 @@ enum PropertiesTab {
     Format,
     View,
     Size,
+    Miscellaneous,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -66,13 +67,14 @@ pub struct WorksheetFontsDialog {
     tab: PropertiesTab,
     base_size: SheetSize,
     shown_size: SheetSize,
+    viewport_rows: usize,
     category: usize,
     fonts: Vec<String>,
     font_search: String,
 }
 
 impl WorksheetFontsDialog {
-    pub fn new(doc: &Document, book: WindowId) -> Option<Self> {
+    pub fn new(doc: &Document, book: WindowId, grid: Option<&crate::grid::BookUi>) -> Option<Self> {
         let b = doc.project().workbook(book)?;
         let sheet = b.active_sheet.min(b.sheets.len().checked_sub(1)?);
         let worksheet = &b.sheets[sheet];
@@ -134,6 +136,7 @@ impl WorksheetFontsDialog {
             tab: PropertiesTab::Format,
             base_size: size,
             shown_size: size,
+            viewport_rows: grid.map_or(1, |grid| grid.viewport_min_rows(doc.generation(), sheet)),
             category: DATA,
             fonts,
             font_search: String::new(),
@@ -194,7 +197,10 @@ impl WorksheetFontsDialog {
         let previous_headers = self.base_view.header_measurements;
         let cells = self.shown_view.cell_measurements;
         let previous_cells = self.base_view.cell_measurements;
+        let automatic_rows = self.shown_view.automatic_rows();
+        let auto_add_rows = self.shown_view.auto_add_rows;
         let mut view = self.shown_view;
+        view.auto_add_rows = self.base_view.auto_add_rows;
         view.header_measurements = previous_headers;
         view.cell_measurements = previous_cells;
         let mut layout = view;
@@ -203,7 +209,10 @@ impl WorksheetFontsDialog {
             self.shown != self.base,
             self.shown_colors != self.base_colors,
             view != self.base_view,
-            self.shown_size != self.base_size || headers != previous_headers || cells != previous_cells,
+            self.shown_size != self.base_size
+                || headers != previous_headers
+                || cells != previous_cells
+                || auto_add_rows != self.base_view.auto_add_rows,
         ) {
             (true, false, false, false) => "Worksheet font",
             (false, true, false, false) => "Worksheet colors",
@@ -218,14 +227,22 @@ impl WorksheetFontsDialog {
             }
             let sheet = &mut p.workbook_mut(self.book).unwrap().sheets[self.sheet];
             sheet.view = view;
+            sheet.view.auto_add_rows = auto_add_rows;
             sheet.view.header_measurements.top_gap_pt = headers.top_gap_pt;
             if self.shown_size.rows != self.base_size.rows {
                 // Origin clears a zero-row sheet and leaves two blank rows.
-                sheet.view.allocated_rows = Some(if self.shown_size.rows == 0 { 2 } else { self.shown_size.rows });
-            } else if self.shown_size.columns < self.base_size.columns
-                && crate::grid::shown_rows(sheet) < self.shown_size.rows
+                let rows = if self.shown_size.rows == 0 { 2 } else { self.shown_size.rows };
+                sheet.view.allocated_rows = Some(if automatic_rows { rows.max(self.viewport_rows) } else { rows });
+            } else if automatic_rows && !self.base_view.automatic_rows() && self.shown_size.rows < self.viewport_rows {
+                sheet.view.allocated_rows = Some(self.viewport_rows);
+            } else if (auto_add_rows == Some(false) && sheet.view.allocated_rows.is_none())
+                || (self.shown_size.columns < self.base_size.columns
+                    && crate::grid::shown_rows(sheet) < self.shown_size.rows)
             {
                 sheet.view.allocated_rows = Some(self.shown_size.rows);
+            }
+            if automatic_rows && sheet.view.allocated_rows.is_some() {
+                sheet.view.auto_add_rows = Some(true);
             }
             sheet.standard_colors = self.shown_colors[STANDARD];
             sheet.data_colors = self.shown_colors[DATA];
@@ -305,6 +322,17 @@ impl WorksheetFontsDialog {
         ui.checkbox(&mut view.column_grid, "Column Grid");
         ui.checkbox(&mut view.row_grid, "Row Grid");
         ui.checkbox(&mut view.page_breaks, "Page Break Preview Lines");
+    }
+
+    fn show_miscellaneous(&mut self, ui: &mut egui::Ui) {
+        let mut automatic = self.shown_view.automatic_rows();
+        if ui.checkbox(&mut automatic, "Auto Add Rows").changed() {
+            self.shown_view.auto_add_rows = if automatic == self.base_view.automatic_rows() {
+                self.base_view.auto_add_rows
+            } else {
+                Some(automatic)
+            };
+        }
     }
 
     fn show_size(&mut self, ui: &mut egui::Ui, sheet: &Worksheet) {
@@ -455,6 +483,7 @@ impl WorksheetFontsDialog {
                     ui.selectable_value(&mut self.tab, PropertiesTab::View, "View");
                     if has_grid {
                         ui.selectable_value(&mut self.tab, PropertiesTab::Size, "Size");
+                        ui.selectable_value(&mut self.tab, PropertiesTab::Miscellaneous, "Miscellaneous");
                     }
                 });
                 ui.separator();
@@ -462,6 +491,7 @@ impl WorksheetFontsDialog {
                     PropertiesTab::Format => self.show_format(ui),
                     PropertiesTab::View => self.show_view(ui),
                     PropertiesTab::Size => self.show_size(ui, sheet),
+                    PropertiesTab::Miscellaneous => self.show_miscellaneous(ui),
                 }
                 rows_locked = self.rows_locked(sheet);
                 if rows_locked {

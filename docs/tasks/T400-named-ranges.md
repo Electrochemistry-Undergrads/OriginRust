@@ -15,4 +15,4 @@ cells of one column can be named with the data cell's Define Name...; formulas u
 
 ## Left
 
-- Blocks of several columns, project-wide names, a name manager, `.opj` and Excel names.
+- Project-wide names, a name manager, `.opj` and Excel names (blocks of several columns: done in T432).

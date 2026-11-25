@@ -319,6 +319,8 @@ pub struct SheafApp {
     send_ppt: Option<crate::dialogs::send_ppt::SendPptDialog>,
     /// A data cell's Define Name... (T396).
     name_cell: Option<crate::dialogs::name_cell::NameCellDialog>,
+    /// Worksheet > Name Manager... (T434).
+    name_manager: Option<crate::dialogs::name_cell::NameManager>,
     /// A data cell's Insert Sparklines... (T200).
     cell_sparkline_picker: Option<crate::dialogs::cell_sparkline::CellSparklinePicker>,
     /// Batch Peak Analysis Using Theme... (T169).
@@ -534,6 +536,7 @@ impl SheafApp {
             graph_sheet_picker: None,
             send_ppt: None,
             name_cell: None,
+            name_manager: None,
             cell_sparkline_picker: None,
             batch_peaks: None,
             fill_pattern: None,
@@ -2281,15 +2284,24 @@ impl SheafApp {
                 });
             }
             Action::DefineName { column, row } => {
-                // Several selected cells of this column only: they are named together (a named range, T400).
-                let (first, last) = self.selected_rows_of(column, row).unwrap_or((row, row));
-                let current = self.doc.project().name_of_range(column, first, last).map(str::to_string);
-                self.name_cell =
-                    Some(crate::dialogs::name_cell::NameCellDialog::new(column, first, last, current.as_deref()));
+                // Several selected cells of this column: a named range (T400); of several columns: a block (T432).
+                let (from, to, first, last) = self.selected_block_of(column, row).unwrap_or((column, column, row, row));
+                let current = self.doc.project().name_of_block(from, to, first, last).map(str::to_string);
+                let mut d = crate::dialogs::name_cell::NameCellDialog::new(from, first, last, current.as_deref());
+                d.last_column = (to != from).then_some(to);
+                self.name_cell = Some(d);
             }
-            Action::SetCellName { column, row, last, name } => {
+            Action::NameManager(book) => self.name_manager = Some(crate::dialogs::name_cell::NameManager { book }),
+            Action::DeleteName { book, name } => {
+                let label = format!("Delete Name {name}");
+                if self.doc.apply(&label, |p| p.delete_name(book, &name)) {
+                    self.say(format!("The name {name} was deleted"));
+                }
+            }
+            Action::SetCellName { column, row, last, last_column, name } => {
                 let label = format!("Define Name {name}");
-                match self.doc.edit(&label, |p| p.define_range(&name, column, row, last)) {
+                let to = last_column.unwrap_or(column);
+                match self.doc.edit(&label, |p| p.define_block(&name, column, to, row, last)) {
                     Ok(_) => {
                         self.name_cell = None;
                         self.say(format!("Formulas of this workbook can read {name}"));
@@ -5820,6 +5832,28 @@ impl SheafApp {
         }
     }
 
+    /// Worksheet > Name Manager... (T434).
+    fn show_name_manager(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::name_cell::NameManagerOutcome;
+        let Some(m) = &mut self.name_manager else { return };
+        let Some(w) = self.doc.project().workbook(m.book) else {
+            self.name_manager = None;
+            return;
+        };
+        let names: Vec<(String, String)> = w
+            .names
+            .iter()
+            .map(|n| (n.name.clone(), w.name_reference(n).unwrap_or_else(|| "(its column is gone)".to_string())))
+            .collect();
+        let title = w.name.clone();
+        let book = m.book;
+        match m.show(ctx, &title, &names) {
+            NameManagerOutcome::Open => {}
+            NameManagerOutcome::Closed => self.name_manager = None,
+            NameManagerOutcome::Delete(name) => self.apply(Action::DeleteName { book, name }, ctx),
+        }
+    }
+
     /// A data cell's Define Name... (T396).
     fn show_name_cell(&mut self, ctx: &egui::Context) {
         use crate::dialogs::name_cell::NameCellOutcome;
@@ -5828,22 +5862,28 @@ impl SheafApp {
             NameCellOutcome::Open => {}
             NameCellOutcome::Closed => self.name_cell = None,
             NameCellOutcome::Define(name) => {
-                let (column, row, last) = (d.column, d.row, d.last);
-                self.apply(Action::SetCellName { column, row, last, name }, ctx);
+                let (column, row, last, last_column) = (d.column, d.row, d.last, d.last_column);
+                self.apply(Action::SetCellName { column, row, last, last_column, name }, ctx);
             }
         }
     }
 
     /// The first and last selected rows when the selection is several cells of `column` alone and holds
     /// `row` (T400).
-    fn selected_rows_of(&self, column: ColumnId, row: usize) -> Option<(usize, usize)> {
+    fn selected_block_of(&self, column: ColumnId, row: usize) -> Option<(ColumnId, ColumnId, usize, usize)> {
+        // T432: the selected block of cells when it holds this cell and is more than one cell: its first and last
+        // columns and rows.
         let project = self.doc.project();
         let (book, _, _) = project.locate(column)?;
         let sheet = book.sheets.get(book.active_sheet)?;
         let index = sheet.column_index(column)?;
         let target = self.books.get(&book.id)?.target(sheet)?;
         let rows = target.rows;
-        (target.columns == [index] && rows.contains(&row) && rows.len() > 1).then(|| (rows.start, rows.end - 1))
+        let (lo, hi) = (*target.columns.iter().min()?, *target.columns.iter().max()?);
+        let contiguous = target.columns.len() == hi - lo + 1;
+        let inside = contiguous && (lo..=hi).contains(&index) && rows.contains(&row);
+        let more = rows.len() > 1 || hi > lo;
+        (inside && more).then(|| (sheet.columns[lo].id, sheet.columns[hi].id, rows.start, rows.end - 1))
     }
 
     /// Send Graphs to PowerPoint... (T232): the window, then the file picker and the file.
@@ -8446,6 +8486,7 @@ impl SheafApp {
         self.show_graph_sheet_picker(ctx);
         self.show_send_ppt(ctx);
         self.show_name_cell(ctx);
+        self.show_name_manager(ctx);
         self.show_cell_sparkline_picker(ctx);
         self.show_batch_peaks(ctx);
         self.show_fill_pattern(ctx);

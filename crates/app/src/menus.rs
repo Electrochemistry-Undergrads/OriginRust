@@ -176,6 +176,8 @@ pub enum Cmd {
     ManageTemplates,
     /// File > Batch Processing... (T165).
     BatchProcessing,
+    /// Worksheet > Name Manager... (T434).
+    NameManager,
     /// A data cell's Define Name... (T396).
     DefineName {
         column: ColumnId,
@@ -1929,6 +1931,7 @@ fn worksheet_menu() -> Vec<Entry> {
         ),
         item("Sort Columns by Label...", Cmd::SortByLabel),
         sep(),
+        item("Name Manager...", Cmd::NameManager),
         cond_format_menu(),
         item("Clear Worksheet...", Cmd::ClearWorksheet),
         item("Split Columns...", Cmd::Reshape(ReshapeKind::Split)),
@@ -3640,6 +3643,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         }
         Cmd::InsertCellGraph { column, row } => Action::PickCellGraph { column: *column, row: *row },
         Cmd::DefineName { column, row } => Action::DefineName { column: *column, row: *row },
+        Cmd::NameManager => Action::NameManager(book?),
         Cmd::RemoveCellGraph { column, row } => Action::SetCellGraph { column: *column, row: *row, graph: None },
         Cmd::InsertCellSparkline { column, row } => Action::PickCellSparkline { column: *column, row: *row },
         Cmd::InsertCellImage { column, row } => Action::PickCellImage { column: *column, row: *row },

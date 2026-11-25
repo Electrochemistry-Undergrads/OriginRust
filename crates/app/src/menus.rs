@@ -2538,7 +2538,9 @@ fn window_menu(kind: WindowKind) -> Vec<Entry> {
             item("Stic&ky Note on Book", Cmd::StickyNote(false)),
             item("Sticky &Note on Sheet", Cmd::StickyNote(true)),
         ]),
-        WindowKind::None | WindowKind::Matrix | WindowKind::Layout => {}
+        // T460: matrix books and layout pages take a note too.
+        WindowKind::Matrix | WindowKind::Layout => v.push(item("Stic&ky Note", Cmd::StickyNote(false))),
+        WindowKind::None => {}
     }
     v.extend([
         sep(),

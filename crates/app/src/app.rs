@@ -9868,10 +9868,21 @@ impl eframe::App for SheafApp {
                         // T192 slice 1 ports the matrix model, files, plots and command line; the
                         // matrix window itself comes with the next slice.
                         Some(Window::Matrix(_)) => {
-                            crate::matrix_view::show(ui, doc, id, matrices.entry(id).or_default(), actions);
+                            // Sticky note (T460), then the matrix below it.
+                            let target = sheaf_core::sticky::NoteTarget::Window(id);
+                            crate::sticky_view::strip(ui, doc, target, "Note", actions);
+                            let rest = ui.available_rect_before_wrap();
+                            ui.scope_builder(egui::UiBuilder::new().max_rect(rest), |ui| {
+                                crate::matrix_view::show(ui, doc, id, matrices.entry(id).or_default(), actions);
+                            });
                         }
                         Some(Window::Layout(_)) => {
-                            crate::layout_view::show(ui, doc, id, layouts.entry(id).or_default(), actions);
+                            let target = sheaf_core::sticky::NoteTarget::Window(id);
+                            crate::sticky_view::strip(ui, doc, target, "Note", actions);
+                            let rest = ui.available_rect_before_wrap();
+                            ui.scope_builder(egui::UiBuilder::new().max_rect(rest), |ui| {
+                                crate::layout_view::show(ui, doc, id, layouts.entry(id).or_default(), actions);
+                            });
                         }
                         None => {}
                     };

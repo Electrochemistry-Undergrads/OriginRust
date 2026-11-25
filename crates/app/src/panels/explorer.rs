@@ -586,6 +586,8 @@ fn row(
     let note = match w {
         Window::Graph(g) => g.sticky.as_ref(),
         Window::Workbook(b) => b.sticky.as_ref().or_else(|| b.sheets.iter().find_map(|s| s.sticky.as_ref())),
+        Window::Matrix(m) => m.sticky.as_ref(),
+        Window::Layout(l) => l.sticky.as_ref(),
         _ => None,
     };
     if let Some(n) = note {

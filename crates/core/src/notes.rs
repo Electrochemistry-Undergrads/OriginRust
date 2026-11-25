@@ -83,6 +83,8 @@ impl Worksheet {
 
     /// Moves the notes of these columns for `count` rows inserted before row `at`.
     pub fn notes_insert_rows(&mut self, columns: &[ColumnId], at: usize, count: usize) {
+        // Cell formulas (T462) move with their cells too.
+        self.formulas_insert_rows(columns, at, count);
         for n in &mut self.notes {
             if columns.contains(&n.column) && n.row >= at {
                 n.row += count;
@@ -95,6 +97,7 @@ impl Worksheet {
         if rows.is_empty() {
             return;
         }
+        self.formulas_delete_rows(columns, rows.clone());
         self.notes.retain(|n| !(columns.contains(&n.column) && rows.contains(&n.row)));
         for n in &mut self.notes {
             if columns.contains(&n.column) && n.row >= rows.end {
@@ -107,6 +110,7 @@ impl Worksheet {
     /// `order[i]`, as [`crate::column::Column::reorder_rows`] does); notes on rows not in `order`
     /// are dropped, notes at or beyond `rows` stay. `rows` is the sheet length the order is for.
     pub fn notes_reorder_rows(&mut self, columns: &dyn Fn(ColumnId) -> bool, order: &[usize], rows: usize) {
+        self.formulas_reorder_rows(columns, order, rows);
         if self.notes.is_empty() {
             return;
         }

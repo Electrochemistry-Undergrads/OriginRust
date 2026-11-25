@@ -1598,6 +1598,8 @@ Formula Bar. Origin 2016 has neither.
   cell's formula, or the cell as shown. Enter writes the text as if typed into the cell; leaving the box otherwise,
   or Esc, changes nothing.
 - **Saved:** the formulas are on the sheet (`Worksheet::cell_formulas`) in the `.sheaf` file.
+- **Moving rows (T462):** inserting, deleting and sorting rows move a formula cell with its row (as cell notes move);
+  a deleted row's formula goes with it. The formula text stays as typed, so its references keep naming the same rows.
 - **Not done:** references that follow moved rows and columns, filling right or into a chosen range, A1 references to
   other workbooks, a marker on formula cells, and cell formulas in `.opj` files.
 

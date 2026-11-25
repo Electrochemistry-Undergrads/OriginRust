@@ -43,8 +43,13 @@ beneath the graph and kept it after reopening. Sheaf saves the page switch in
 `.sheaf` and bare OPJ and draws the default grid in the editing window.
 [Graphing 22.12](../spec/graphing.md#2212-view--show--object-grid-t66-origin-2016-measured-2026-11-25)
 
-**Size:** M. **Inventory:** three remaining locations, Layer Grid, Master Items
-on Screen and Show Data Info.
+Layer Grid follow-up (2026-11-25): Origin 2016 drew a coarser page-wide grid.
+The two grid switches replace each other. Sheaf saves the selection per page
+and preserves the Object Grid flag from older projects.
+[Graphing 22.13](../spec/graphing.md#2213-view--show--layer-grid-t66-origin-2016-measured-2026-11-25)
+
+**Size:** M. **Inventory:** two remaining locations, Master Items on Screen
+and Show Data Info.
 The original17-location baseline also included the now-published view modes,
 Layer Icons, Active Layer Only and Full Screen entries.
 

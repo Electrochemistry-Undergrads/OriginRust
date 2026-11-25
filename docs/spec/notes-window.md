@@ -51,3 +51,24 @@ choices. Origin 2016 has none.
   `edit_sticky_note`, `remove_sticky_note`, `sticky_notes`.
 - **Not done:** notes on matrices and layout pages, several notes per window, placing a note inside the window, an
   indicator in Project Explorer, and notes in `.opj` files.
+
+## Linked reports (T439, 2026-11-25; Origin 2019b's linked HTML/Markdown reports, Sheaf's own, not measured)
+
+Origin 2019b builds reports with live links to result values, metadata and figures and exports them as web pages.
+Origin 2016's Notes window has no links. In Sheaf a Notes window's text is the report.
+
+- **Links:** `%([Book1]Sheet1,B,3)` (Origin's worksheet cell substitution, with its optional format, `,.2`) is that
+  cell; `$(formula)` is the first value of a formula read against the project, such as
+  `$(mean([Book1]Sheet1!col(B)))`. Parentheses inside quotes do not end a link. A link that cannot be read shows
+  `[link error: <the formula's message>]` in its place. `$` or `%` not followed by `(` is plain text.
+- **Figures:** a line that is only `![caption](Graph1)` is graph Graph1 (short name, ignoring case) as a figure.
+- **Preview:** the Notes window has Edit and Preview above its text. Preview shows the report resolved, so the
+  values follow the project: `# ` lines as headings, `## ` and `### ` lines bold, a figure as a box with
+  "Figure: Graph1" (or "Figure: no graph is called X") and its caption in italics.
+- **Export Report...:** asks for a file (Web page `.html`, or Markdown `.md`). The figures' graphs are written beside
+  it as `<file name>_<graph>.png` at 150 dpi. The HTML has the window's title, `#`/`##`/`###` headings, paragraphs
+  split by blank lines (lines joined with line breaks), escaped text and each figure as an image with its caption.
+  The Markdown is the resolved text with the figure lines pointing at the PNG files.
+- **Not done:** reusing a report over a batch of files, figures drawn inside the Preview, links by fit-report
+  name, metadata links, and rich text in the HTML.
+

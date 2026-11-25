@@ -8,8 +8,8 @@ Remove Slicer takes it off. Sheaf's own design (Origin 2016 has no slicer).
 
 ## Left
 
-- Layer and plot scope, several slicer columns, extracting the selected subset to a sheet, computed plots (histograms,
-  box charts) reading the slicer, the slicer in .opj files.
+- Plot scope, several slicer columns, computed plots (histograms, box charts) reading the slicer, the slicer in .opj
+  files. (Layer scope and extracting the subset were done in T444.)
 
 ## Tests
 

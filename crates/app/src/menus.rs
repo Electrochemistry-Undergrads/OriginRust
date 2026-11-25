@@ -351,6 +351,8 @@ pub enum Cmd {
     ExportWorksheetImage,
     /// File > Import > Re-Import Directly (false) and Re-Import... (true, choose the file) (T98).
     Reimport(bool),
+    /// File > Import > Auto Refresh... (T442).
+    AutoRefresh,
     /// Window > Duplicate (Batch Plotting) > with New Sheets/Books (false) or New Columns (true) (T99).
     BatchPlot(bool),
     /// Graph > Add Function Graph... (T119).
@@ -1336,6 +1338,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                         sep(),
                         keyed("Re-Import Directly", ctrl(Key::Num4), Cmd::Reimport(false)),
                         item("Re-Import...", Cmd::Reimport(true)),
+                        item("Auto Refresh...", Cmd::AutoRefresh),
                     ]
                 },
                 vec![sub(
@@ -3703,6 +3706,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             let book = book?;
             c.imported.then_some(()).ok_or(NOT_IMPORTED)?;
             Action::Reimport { book, choose: *choose }
+        }
+        Cmd::AutoRefresh => {
+            let book = book?;
+            c.imported.then_some(()).ok_or(NOT_IMPORTED)?;
+            Action::AutoRefresh { book }
         }
         Cmd::Print => Action::Print(
             c.graph.or(c.book).or(c.active.filter(|_| c.kind == WindowKind::Layout)).ok_or(NEED_PRINTABLE)?,

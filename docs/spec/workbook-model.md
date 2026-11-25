@@ -1550,6 +1550,24 @@ previews matches and edits the metadata of several at once. Origin 2016 has none
 - **Not done:** folders and matrices in the list, sorting by a column, editing a cell in place, other metadata,
   and a picture preview of a graph.
 
+## 13t. File > Import > Auto Refresh (T442, 2026-11-25; Origin 2019b Data Connectors / 2026 periodic refresh, Sheaf's own, not measured)
+
+Origin keeps a linked source in a workbook and reloads it on a configurable, pausable timer. Origin 2016 has only
+Re-Import (13l, T98). Sheaf adds a timer to Re-Import Directly.
+
+- **The window "Auto Refresh"** (File > Import, on an imported workbook, below Re-Import...): the source file; Check
+  every [N] seconds (5 to 86400; 60 for a book without a refresh); Only when the file has changed (on); Paused (off);
+  OK, Stop Refreshing (when the book refreshes), Cancel. OK and Stop Refreshing are one undo step ("Auto Refresh").
+  A book that was not imported is refused (the command is greyed, as Re-Import is).
+- **The timer:** each refreshing, unpaused book is checked N seconds after the setting is made or the window opens,
+  then every N seconds. With "only when changed" the file is read again only when its modification time differs
+  from the last read; otherwise every time. A read is Re-Import Directly (values replaced, labels kept, graphs
+  follow) and one "Re-import" undo step; the status line says what was read.
+- **Failure:** a file that cannot be read pauses the book's refresh (an "Auto Refresh" step) with a message, so a
+  missing file is not tried again until the user unpauses it.
+- **Saved:** the setting is in the workbook (`Workbook::refresh`) in the `.sheaf` file; the timer runs while the
+  project is open.
+
 ## 14. Suggested Rust data model (P0)
 
 ```

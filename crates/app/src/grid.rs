@@ -530,6 +530,7 @@ fn book_ctx(book: WindowId, state: &BookUi) -> MenuContext<'_> {
         active_layer_indicator: false,
         axis_layer_icons: false,
         page_grid: Default::default(),
+        master_items_on_screen: None,
         show_frame: None,
         lock_position: Default::default(),
         page_breaks: false,

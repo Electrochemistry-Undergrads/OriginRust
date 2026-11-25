@@ -6481,6 +6481,27 @@ the grid. Both settings are saved in `.sheaf` and `.opj`. Older `.sheaf` files
 with Object Grid enabled still open with that grid. Print and export use the
 normal graph scene.
 
+### 22.14 View > Show > Master Items on Screen (T66, Origin 2016, measured 2026-11-25)
+
+In a private project, a graph named `Master` and Graph1 had pages of
+6,432 by 4,923 native page units. A synthetic text object on Master was
+absent from the Graph1 window at first and appeared after View > Show >
+Master Items on Screen (command 33096). Both EMF exports contained the
+same shared text. Page Properties > Display had **Use Master Items**
+checked initially. Only the screen switch changed in Graph1's saved
+window header at offset `0x34` (bit `0x80`).
+[Origin's legacy Master Page guide](https://www.originlab.com/pdfs/12_Page.pdf)
+
+In Sheaf, give a graph the short name `Master` and use the same page
+dimensions on the graphs that share its annotations. With **Use Master
+Items** checked in the graph page's Plot Details > Display, the target
+uses the Master's text and drawn shapes, including pictures, as a
+background in output. The View item also shows them in that graph's
+window, including Full Screen. The inherited objects are edited on
+Master. The screen switch starts off, is undoable and is saved per
+graph in `.sheaf` and bare OPJ. The Display checkbox is stored in
+`.sheaf`. The project supplies the shared items.
+
 ## 23. View > Zoom All and the Tools-bar Scale In / Scale Out (T69, measured 2026-11-15, Origin 2016)
 
 Measured in OriginPro 2016 on our own synthetic data (X = 1 to 10, Y = 2X+1 and 20-X, Line + Symbol graph; one run with a right-Y layer from `layadd type:=righty`; one with both axes logarithmic; a 4-graph project), a 1024x768 Origin window, drags and clicks sent by `tools/origin-ref/origin-dialog.ps1 -NoDialog` with `-AfterFile` (`@DRAG`, `@CLICK`, `@DCLICK`, `@KEYDOWN`, `@SHOT`, `@CURSOR`) and the axis ends read after each action with `?layer.x.from` / `.to` / `layer.y.from` / `.to` (raw outputs and pictures are local: `re-workspace/scratch/t69/`, `*.out.txt`, `*.png`). Anything not listed is **unmeasured**.

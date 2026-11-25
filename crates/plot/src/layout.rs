@@ -34,7 +34,42 @@ use std::borrow::Cow;
 
 /// Builds the scene of a graph.
 pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasurer) -> Result<Scene, PlotError> {
-    let styled = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?.scaled_layer_elements();
+    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
+    Ok(build_scene_with_master(project, g, project.master_graph_for(graph, &g.page), m))
+}
+
+pub(crate) fn build_scene_with_master(
+    project: &Project,
+    graph: &Graph,
+    master: Option<&Graph>,
+    m: &dyn TextMeasurer,
+) -> Scene {
+    let mut scene = build_graph_scene(project, graph, m);
+    if let (Some(master), Some(first)) = (master, scene.layers.first_mut()) {
+        let mut master = Cow::Borrowed(master);
+        if master.page.width_pt != scene.width || master.page.height_pt != scene.height {
+            // Window and Draft View lay out the page at the window's aspect ratio.
+            master.to_mut().page.width_pt = scene.width;
+            master.to_mut().page.height_pt = scene.height;
+        }
+        let shared = build_graph_scene(project, &master, m);
+        let mut items = Vec::new();
+        for layer in shared.layers {
+            let annotations = layer.objects.into_iter().filter(|object| {
+                matches!(object.kind, ObjectKind::Label(_) | ObjectKind::Shape(_)) && object.list == ItemList::Overlay
+            });
+            for object in annotations {
+                items.extend_from_slice(&layer.overlay[object.items]);
+            }
+        }
+        // The first unclipped draw pass puts the shared annotations below the graph.
+        first.grid.splice(..0, items);
+    }
+    scene
+}
+
+fn build_graph_scene(project: &Project, graph: &Graph, m: &dyn TextMeasurer) -> Scene {
+    let styled = graph.scaled_layer_elements();
     let g = styled.as_ref();
     let pds: Vec<LayerData> = data::collect_graph(project, g);
     let geoms = graph_geometry(project, g, &pds, m);
@@ -125,7 +160,7 @@ pub(crate) fn build_scene(project: &Project, graph: WindowId, m: &dyn TextMeasur
         let rect = Rect { x: inset, y: inset, w: g.page.width_pt - 2.0 * inset, h: g.page.height_pt - 2.0 * inset };
         last.overlay.push(Item::Rect { rect, fill: None, stroke: Some(fill::border_stroke(border)) });
     }
-    Ok(Scene { width: g.page.width_pt, height: g.page.height_pt, background: g.page.background, layers })
+    Scene { width: g.page.width_pt, height: g.page.height_pt, background: g.page.background, layers }
 }
 
 /// Smallest distance in points kept between any label or title and the page edge.

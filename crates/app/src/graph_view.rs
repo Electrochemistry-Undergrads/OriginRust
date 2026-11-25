@@ -777,7 +777,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         let scale = f64::from(scale_key) / 50.0;
         let stretched = mode.fills_window().then(|| view_modes::resized(doc.project(), graph_id, page_size));
         let project = stretched.as_ref().unwrap_or(doc.project());
-        let drawn = sheaf_plot::graph_scene(project, graph_id).and_then(|mut scene| {
+        let drawn = sheaf_plot::graph_screen_scene(project, graph_id, &graph.page).and_then(|mut scene| {
             let raster = view_modes::raster(mode, &mut scene, scale, graph.page.style.grid)?;
             Ok((scene, raster, sheaf_plot::layout_geometry(project, graph_id)?))
         });
@@ -1767,6 +1767,7 @@ fn graph_context(graph_id: WindowId, layer: usize, tool: GraphTool) -> MenuConte
         active_layer_indicator: false,
         axis_layer_icons: false,
         page_grid: Default::default(),
+        master_items_on_screen: None,
         show_frame: None,
         lock_position: Default::default(),
         page_breaks: false,

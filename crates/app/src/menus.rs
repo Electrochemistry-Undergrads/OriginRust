@@ -654,6 +654,7 @@ pub enum Cmd {
     ToggleLayerIcons,
     ToggleActiveLayerIndicator,
     ToggleAxisLayerIcons,
+    ToggleMasterItemsOnScreen,
     ToggleObjectGrid,
     ToggleLayerGrid,
     ToggleLayerFrame,
@@ -978,6 +979,8 @@ pub struct MenuContext<'a> {
     pub active_layer_indicator: bool,
     pub axis_layer_icons: bool,
     pub page_grid: PageGrid,
+    /// Whether the active graph shows its shared annotations. None disables the command.
+    pub master_items_on_screen: Option<bool>,
     /// The active Cartesian layer's plot frame. None disables the command.
     pub show_frame: Option<bool>,
     /// The active graph's Lock Position (the tick of Data > Lock Position, T186).
@@ -1526,7 +1529,7 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
             show.push(item("Data", Cmd::ToggleShowData));
             show.push(keyed("Active Layer Only", ctrl_alt(Key::D), Cmd::ToggleActiveLayerOnly));
             show.push(sep());
-            show.push(grey("Master Items on Screen"));
+            show.push(item("Master Items on Screen", Cmd::ToggleMasterItemsOnScreen));
             v.push(sub("Show", show));
             v.push(grey("Show Data Info"));
             v.push(keyed("Full Screen", ctrl_shift(Key::J), Cmd::FullScreen));
@@ -4122,6 +4125,11 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
             switch: crate::actions::PageSwitch::AxisLayerIcons,
             on: !c.axis_layer_icons,
         },
+        Cmd::ToggleMasterItemsOnScreen => Action::SetPageSwitch {
+            graph: c.graph.ok_or(NEED_GRAPH)?,
+            switch: crate::actions::PageSwitch::MasterItemsOnScreen,
+            on: !c.master_items_on_screen.ok_or("Enable Use Master Items and supply a matching Master page")?,
+        },
         Cmd::ToggleObjectGrid => Action::SetPageSwitch {
             graph: c.graph.ok_or(NEED_GRAPH)?,
             switch: crate::actions::PageSwitch::ObjectGrid,
@@ -4483,6 +4491,9 @@ fn show_entries(
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleAxisLayerIcons)) && c.axis_layer_icons {
+                    tick(ui, &response);
+                }
+                if matches!(it.cmd, Some(Cmd::ToggleMasterItemsOnScreen)) && c.master_items_on_screen == Some(true) {
                     tick(ui, &response);
                 }
                 if matches!(it.cmd, Some(Cmd::ToggleObjectGrid)) && c.page_grid == PageGrid::Object {
@@ -4910,6 +4921,7 @@ mod tests {
             active_layer_indicator: false,
             axis_layer_icons: false,
             page_grid: PageGrid::Off,
+            master_items_on_screen: None,
             show_frame: None,
             lock_position: Default::default(),
             page_breaks: false,

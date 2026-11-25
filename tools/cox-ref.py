@@ -4,7 +4,9 @@
 The partial log-likelihood, its gradient and information are written out with explicit risk sets (O(n^2), no
 sorting tricks), maximized by scipy.optimize.minimize (Newton-CG with the analytic gradient and Hessian, tight
 tolerances); the tests (LR, Wald, score) use scipy.stats.chi2 and the baseline survival Breslow's estimator at the
-covariate means. lifelines and statsmodels are not available here.
+covariate means. lifelines and statsmodels are not available here. Efron's ties (T445): at a time with tied failures
+D the l-th of them (l = 0..d-1) sees the risk set minus l/d of D's sums, written out failure time by failure time;
+the baseline hazard increment is sum_l 1 / (S - l/d S_D).
 
 Usage: python3 tools/cox-ref.py > crates/calc/tests/fixtures/cox_reference.rs
 None of these numbers come from Origin.
@@ -26,31 +28,41 @@ def uniforms(n, seed):
     return np.array(out)
 
 
-def pl(b, X, t, d):
+def pl(b, X, t, d, efron=False):
     eta = X @ b
     w = np.exp(eta)
     ll, g, H = 0.0, np.zeros(len(b)), np.zeros((len(b), len(b)))
-    for i in np.where(d)[0]:
-        R = t >= t[i]
+    for tk in np.unique(t[d]):
+        R = t >= tk
+        D = (t == tk) & d
+        nd = int(D.sum())
         s0 = w[R].sum()
         s1 = (w[R, None] * X[R]).sum(axis=0)
         s2 = (w[R, None, None] * X[R][:, :, None] * X[R][:, None, :]).sum(axis=0)
-        ll += eta[i] - math.log(s0)
-        m = s1 / s0
-        g += X[i] - m
-        H += s2 / s0 - np.outer(m, m)
+        a0 = w[D].sum()
+        a1 = (w[D, None] * X[D]).sum(axis=0)
+        a2 = (w[D, None, None] * X[D][:, :, None] * X[D][:, None, :]).sum(axis=0)
+        ll += eta[D].sum()
+        g += X[D].sum(axis=0)
+        for l in range(nd):
+            f = l / nd if efron else 0.0
+            den = s0 - f * a0
+            m = (s1 - f * a1) / den
+            ll -= math.log(den)
+            g -= m
+            H += (s2 - f * a2) / den - np.outer(m, m)
     return ll, g, H
 
 
-def fit(X, t, d):
+def fit(X, t, d, efron=False):
     p = X.shape[1]
-    f = lambda b: -pl(b, X, t, d)[0]
-    jac = lambda b: -pl(b, X, t, d)[1]
-    hess = lambda b: pl(b, X, t, d)[2]
+    f = lambda b: -pl(b, X, t, d, efron)[0]
+    jac = lambda b: -pl(b, X, t, d, efron)[1]
+    hess = lambda b: pl(b, X, t, d, efron)[2]
     r = optimize.minimize(f, np.zeros(p), jac=jac, hess=hess, method="Newton-CG", options={"xtol": 1e-14, "maxiter": 500})
     b = r.x
-    ll, g, H = pl(b, X, t, d)
-    ll0, g0, H0 = pl(np.zeros(p), X, t, d)
+    ll, g, H = pl(b, X, t, d, efron)
+    ll0, g0, H0 = pl(np.zeros(p), X, t, d, efron)
     cov = np.linalg.inv(H)
     se = np.sqrt(np.diag(cov))
     z = b / se
@@ -63,8 +75,10 @@ def fit(X, t, d):
     w = np.exp(X @ b)
     times, surv, h0 = [], [], 0.0
     for tk in np.unique(t[d]):
-        dk = ((t == tk) & d).sum()
-        h0 += dk / w[t >= tk].sum()
+        D = (t == tk) & d
+        dk = int(D.sum())
+        S = w[t >= tk].sum()
+        h0 += sum(1 / (S - (l / dk if efron else 0.0) * w[D].sum()) for l in range(dk))
         times.append(tk)
         surv.append(math.exp(-h0 * math.exp(eta_mean)))
     return b, se, z, pv, ll, ll0, (lr, chi(lr)), (wald, chi(wald)), (score, chi(score)), times, surv
@@ -83,7 +97,13 @@ life = -np.log(u[2 * n : 3 * n]) / (0.02 * np.exp(0.03 * (age - 55) - 0.7 * trea
 cens = 20 + 60 * u[3 * n :]
 t = np.round(np.minimum(life, cens), 1)  # rounding makes ties
 d = life <= cens
-cases = [("age, treated, dose", np.column_stack([age, treated, dose])), ("treated only", treated[:, None])]
+X3 = np.column_stack([age, treated, dose])
+cases = [
+    ("age, treated, dose", X3, False),
+    ("treated only", treated[:, None], False),
+    ("age, treated, dose (Efron)", X3, True),
+    ("treated only (Efron)", treated[:, None], True),
+]
 print("// Made by tools/cox-ref.py (numpy, scipy). Do not edit.")
 print("pub const T: &[f64] = " + vec(t) + ";")
 print("pub const FAILED: &[bool] = &[" + ", ".join("true" if v else "false" for v in d) + "];")
@@ -92,6 +112,7 @@ print("pub const TREATED: &[f64] = " + vec(treated) + ";")
 print("pub const DOSE: &[f64] = " + vec(dose) + ";")
 print("pub struct Case {")
 print("    pub name: &'static str,")
+print("    pub efron: bool,")
 print("    pub b: &'static [f64],")
 print("    pub se: &'static [f64],")
 print("    pub z: &'static [f64],")
@@ -103,10 +124,11 @@ print("    pub times: &'static [f64],")
 print("    pub survival: &'static [f64],")
 print("}")
 print("pub const CASES: &[Case] = &[")
-for name, X in cases:
-    b, se, z, pv, ll, ll0, lr, wald, score, times, surv = fit(X, t, d)
+for name, X, efron in cases:
+    b, se, z, pv, ll, ll0, lr, wald, score, times, surv = fit(X, t, d, efron)
     print("    Case {")
     print(f'        name: "{name}",')
+    print(f"        efron: {'true' if efron else 'false'},")
     print(f"        b: {vec(b)},")
     print(f"        se: {vec(se)},")
     print(f"        z: {vec(z)},")

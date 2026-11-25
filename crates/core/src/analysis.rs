@@ -55,6 +55,7 @@ pub use sheaf_calc::{StftOptions, StftOutput};
 pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 
 pub use acf::AcfSpec;
+pub use arima::ArimaSeasonal;
 pub use arima::ArimaSpec;
 pub use binscatter::BinScatterSpec;
 pub use calc::binscatter::BinRule;

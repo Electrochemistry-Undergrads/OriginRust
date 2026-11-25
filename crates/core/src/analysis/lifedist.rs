@@ -87,11 +87,13 @@ pub struct CoxSpec {
     pub graph: bool,
     /// The last chosen column holds each row's frequency (count) (T429).
     pub frequency: bool,
+    /// Efron's handling of tied failure times instead of Breslow's (T445).
+    pub efron: bool,
 }
 
 impl Default for CoxSpec {
     fn default() -> Self {
-        CoxSpec { censor: "1".into(), confidence: 0.95, graph: true, frequency: false }
+        CoxSpec { censor: "1".into(), confidence: 0.95, graph: true, frequency: false, efron: false }
     }
 }
 
@@ -559,7 +561,9 @@ pub(super) fn run_cox(
         }
         check_total(t.len())?;
     }
-    let fit = calc::cox::cox(&x, &t, &failed, spec.confidence).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
+    let ties = if spec.efron { calc::cox::Ties::Efron } else { calc::cox::Ties::Breslow };
+    let fit = calc::cox::cox_with(&x, &t, &failed, spec.confidence, ties)
+        .map_err(|e| AnalysisError::BadOption(e.to_string()))?;
     let pct = num(100.0 * spec.confidence);
     let low = format!("HR lower {pct}%");
     let high = format!("HR upper {pct}%");
@@ -581,7 +585,8 @@ pub(super) fn run_cox(
     }
     let notes = vec![
         format!(
-            "Cox proportional hazards (Breslow ties) of {} on {k} covariate(s): {} cases, {} events; log-likelihood {} (null {}).",
+            "Cox proportional hazards ({} ties) of {} on {k} covariate(s): {} cases, {} events; log-likelihood {} (null {}).",
+            if spec.efron { "Efron" } else { "Breslow" },
             column_label(tc),
             fit.n,
             fit.events,

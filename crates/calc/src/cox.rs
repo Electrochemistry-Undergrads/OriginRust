@@ -9,6 +9,11 @@
 //! cumulative hazard is Breslow's `H0(t) = sum over failure times <= t of d / sum_{risk set} exp(x'b)`, and the survival
 //! at the covariate means is `exp(-H0(t) exp(mean x'b))`. Checked against an independent numpy/scipy fit in
 //! `crates/calc/tests/cox_reference.rs` (made by `tools/cox-ref.py`).
+//!
+//! **Efron's ties** (T445): at a time with `d` tied failures `D` the risk-set sum `S` is replaced, for `l = 0..d-1`, by
+//! `S - (l/d) sum_{j in D} exp(x_j'b)` (and likewise in the gradient and information sums), so the tied failures leave
+//! the risk set gradually; the baseline hazard increment is `sum_l 1 / (S - (l/d) sum_D exp(x'b))`. Without ties the
+//! two rules agree.
 
 use crate::stability::invert;
 use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
@@ -64,6 +69,16 @@ impl std::fmt::Display for CoxError {
 
 impl std::error::Error for CoxError {}
 
+/// How tied failure times enter the partial likelihood (T445).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Ties {
+    /// Every tied failure sees the whole risk set.
+    #[default]
+    Breslow,
+    /// The tied failures leave the risk set in equal steps.
+    Efron,
+}
+
 /// The partial log-likelihood, its gradient and the information matrix at `b`; `order` sorts the cases by time and
 /// `start[k]` is the first sorted index whose time equals that of sorted case `k` (the start of its risk set).
 fn evaluate(
@@ -72,6 +87,7 @@ fn evaluate(
     order: &[usize],
     start: &[usize],
     b: &[f64],
+    ties: Ties,
 ) -> (f64, Vec<f64>, Vec<Vec<f64>>) {
     let n = order.len();
     let p = b.len();
@@ -94,28 +110,57 @@ fn evaluate(
     let mut ll = 0.0;
     let mut grad = vec![0.0; p];
     let mut info = vec![vec![0.0; p]; p];
-    for k in 0..n {
-        let c = order[k];
-        if !failed[c] {
-            continue;
+    let mut k = 0;
+    while k < n {
+        // The cases tied at this time: k..end, the risk set from k on.
+        let mut end = k;
+        while end < n && start[end] == start[k] {
+            end += 1;
         }
-        let r = start[k];
-        let row = &x[c];
-        let eta: f64 = row.iter().zip(b).map(|(a, cc)| a * cc).sum();
-        ll += eta - s0[r].ln();
-        let mean: Vec<f64> = (0..p).map(|i| s1[r][i] / s0[r]).collect();
-        for i in 0..p {
-            grad[i] += row[i] - mean[i];
-            for j in 0..p {
-                info[i][j] += s2[r][i][j] / s0[r] - mean[i] * mean[j];
+        let tied: Vec<usize> = order[k..end].iter().copied().filter(|&c| failed[c]).collect();
+        let d = tied.len();
+        if d > 0 {
+            // The failures' own sums, taken out of the risk set in steps of 1/d under Efron's rule.
+            let (mut a0, mut a1, mut a2) = (0.0, vec![0.0; p], vec![vec![0.0; p]; p]);
+            for &c in &tied {
+                let row = &x[c];
+                let eta: f64 = row.iter().zip(b).map(|(a, cc)| a * cc).sum();
+                let w = eta.exp();
+                ll += eta;
+                a0 += w;
+                for i in 0..p {
+                    grad[i] += row[i];
+                    a1[i] += w * row[i];
+                    for j in 0..p {
+                        a2[i][j] += w * row[i] * row[j];
+                    }
+                }
+            }
+            for l in 0..d {
+                let f = if ties == Ties::Efron { l as f64 / d as f64 } else { 0.0 };
+                let den = s0[k] - f * a0;
+                ll -= den.ln();
+                let mean: Vec<f64> = (0..p).map(|i| (s1[k][i] - f * a1[i]) / den).collect();
+                for i in 0..p {
+                    grad[i] -= mean[i];
+                    for j in 0..p {
+                        info[i][j] += (s2[k][i][j] - f * a2[i][j]) / den - mean[i] * mean[j];
+                    }
+                }
             }
         }
+        k = end;
     }
     (ll, grad, info)
 }
 
-/// Fits the Cox model to times `t` with covariate rows `x`; `failed[i]` is false for a censored case.
+/// Fits the Cox model to times `t` with covariate rows `x`; `failed[i]` is false for a censored case. Breslow ties.
 pub fn cox(x: &[Vec<f64>], t: &[f64], failed: &[bool], confidence: f64) -> Result<Cox, CoxError> {
+    cox_with(x, t, failed, confidence, Ties::Breslow)
+}
+
+/// [`cox`] with the tie rule `ties` (T445).
+pub fn cox_with(x: &[Vec<f64>], t: &[f64], failed: &[bool], confidence: f64, ties: Ties) -> Result<Cox, CoxError> {
     let n = t.len();
     if x.len() != n || failed.len() != n || x.iter().any(|r| r.len() != x.first().map_or(0, Vec::len)) {
         return Err(CoxError::Ragged);
@@ -141,7 +186,7 @@ pub fn cox(x: &[Vec<f64>], t: &[f64], failed: &[bool], confidence: f64) -> Resul
         start[k] = if t[order[k]] == t[order[k - 1]] { start[k - 1] } else { k };
     }
     let zero = vec![0.0; p];
-    let (ll0, g0, i0) = evaluate(x, failed, &order, &start, &zero);
+    let (ll0, g0, i0) = evaluate(x, failed, &order, &start, &zero, ties);
     let mut b = zero.clone();
     let (mut ll, mut g, mut info) = (ll0, g0.clone(), i0.clone());
     for _ in 0..100 {
@@ -151,7 +196,7 @@ pub fn cox(x: &[Vec<f64>], t: &[f64], failed: &[bool], confidence: f64) -> Resul
         let mut moved = false;
         for _ in 0..40 {
             let cand: Vec<f64> = b.iter().zip(&step).map(|(a, d)| a + scale * d).collect();
-            let (lc, gc, ic) = evaluate(x, failed, &order, &start, &cand);
+            let (lc, gc, ic) = evaluate(x, failed, &order, &start, &cand, ties);
             if lc.is_finite() && lc >= ll - 1e-12 * ll.abs().max(1.0) {
                 moved = lc > ll + 1e-15 * ll.abs().max(1.0);
                 b = cand;
@@ -187,7 +232,7 @@ pub fn cox(x: &[Vec<f64>], t: &[f64], failed: &[bool], confidence: f64) -> Resul
     let wald: f64 = (0..p).map(|i| (0..p).map(|j| b[i] * info[i][j] * b[j]).sum::<f64>()).sum();
     let inv0 = invert(&i0).ok_or(CoxError::NoConvergence)?;
     let score: f64 = (0..p).map(|i| (0..p).map(|j| g0[i] * inv0[i][j] * g0[j]).sum::<f64>()).sum();
-    // Breslow baseline at the covariate means.
+    // The baseline at the covariate means (Breslow's or Efron's increments).
     let means: Vec<f64> = (0..p).map(|i| x.iter().map(|r| r[i]).sum::<f64>() / n as f64).collect();
     let eta_mean: f64 = means.iter().zip(&b).map(|(a, c)| a * c).sum();
     let mut times = Vec::new();
@@ -198,16 +243,21 @@ pub fn cox(x: &[Vec<f64>], t: &[f64], failed: &[bool], confidence: f64) -> Resul
         let tk = t[order[k]];
         let mut end = k;
         let mut d = 0usize;
+        let mut tied = 0.0;
+        let weight = |c: usize| x[c].iter().zip(&b).map(|(a, cc)| a * cc).sum::<f64>().exp();
         while end < n && t[order[end]] == tk {
             if failed[order[end]] {
                 d += 1;
+                tied += weight(order[end]);
             }
             end += 1;
         }
         if d > 0 {
-            let risk: f64 =
-                order[k..].iter().map(|&c| x[c].iter().zip(&b).map(|(a, cc)| a * cc).sum::<f64>().exp()).sum();
-            h0 += d as f64 / risk;
+            let risk: f64 = order[k..].iter().map(|&c| weight(c)).sum();
+            h0 += match ties {
+                Ties::Breslow => d as f64 / risk,
+                Ties::Efron => (0..d).map(|l| 1.0 / (risk - l as f64 / d as f64 * tied)).sum(),
+            };
             times.push(tk);
             survival.push((-h0 * eta_mean.exp()).exp());
         }
@@ -256,6 +306,30 @@ mod tests {
         assert!((c.hazard_ratio[0] - c.coefficients[0].exp()).abs() < 1e-15);
         assert_eq!(c.times.len(), 6);
         assert!(c.survival.windows(2).all(|w| w[1] < w[0]));
+    }
+
+    #[test]
+    fn efron_equals_breslow_without_ties_and_differs_with_them() {
+        let t = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+        let x: Vec<Vec<f64>> = [1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0].iter().map(|v| vec![*v]).collect();
+        let failed = [true, true, true, false, true, true, true];
+        let a = cox_with(&x, &t, &failed, 0.95, Ties::Breslow).unwrap();
+        let b = cox_with(&x, &t, &failed, 0.95, Ties::Efron).unwrap();
+        assert!(
+            (a.coefficients[0] - b.coefficients[0]).abs() < 1e-12
+                && (a.log_likelihood - b.log_likelihood).abs() < 1e-12
+        );
+        assert!((a.survival[2] - b.survival[2]).abs() < 1e-12);
+        // Two failures at the same time: Efron's likelihood is higher at b = 0 (its denominators are smaller).
+        let tied = [1.0, 1.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+        let a = cox_with(&x, &tied, &failed, 0.95, Ties::Breslow).unwrap();
+        let b = cox_with(&x, &tied, &failed, 0.95, Ties::Efron).unwrap();
+        assert!(b.log_likelihood_null > a.log_likelihood_null);
+        // By hand at b = 0: risk sets 7, 5, 4, 2, 1 (the censored 4 leaves no failure); Efron's pair: 7 and 6.
+        let breslow0 = -(2.0 * 7f64.ln() + 5f64.ln() + 3f64.ln() + 2f64.ln() + 1f64.ln());
+        let efron0 = -(7f64.ln() + 6f64.ln() + 5f64.ln() + 3f64.ln() + 2f64.ln() + 1f64.ln());
+        assert!((a.log_likelihood_null - breslow0).abs() < 1e-12, "{}", a.log_likelihood_null);
+        assert!((b.log_likelihood_null - efron0).abs() < 1e-12, "{}", b.log_likelihood_null);
     }
 
     #[test]

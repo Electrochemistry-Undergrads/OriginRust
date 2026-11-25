@@ -8,6 +8,7 @@ use super::dist::{GraphPlot, Output, XyGraph};
 use super::statistics::num;
 use super::*;
 use crate::graph::{PlotKind, ScaleKind};
+pub use calc::arima::Seasonal as ArimaSeasonal;
 use calc::arima::{ArimaOrder, fit, fit_auto};
 
 /// What [`Tool::Arima`] does.
@@ -24,11 +25,23 @@ pub struct ArimaSpec {
     pub graph: bool,
     /// Choose `p` and `q` by AIC up to these maxima instead of using `p` and `q` (T428).
     pub auto: Option<(usize, usize)>,
+    /// The seasonal orders `(P, D, Q)` and period (T446); all 0 for none.
+    pub seasonal: ArimaSeasonal,
 }
 
 impl Default for ArimaSpec {
     fn default() -> Self {
-        ArimaSpec { p: 1, d: 0, q: 0, constant: true, horizon: 10, confidence: 0.95, graph: true, auto: None }
+        ArimaSpec {
+            p: 1,
+            d: 0,
+            q: 0,
+            constant: true,
+            horizon: 10,
+            confidence: 0.95,
+            graph: true,
+            auto: None,
+            seasonal: ArimaSeasonal::default(),
+        }
     }
 }
 
@@ -46,7 +59,10 @@ pub(super) fn run(spec: &ArimaSpec, inputs: &[Input<'_>]) -> Result<Output, Anal
     if !(spec.confidence > 0.0 && spec.confidence < 1.0) {
         return Err(AnalysisError::BadOption("the confidence level must lie between 0 and 1".into()));
     }
-    let order = ArimaOrder { p: spec.p, d: spec.d, q: spec.q, constant: spec.constant };
+    let order = ArimaOrder { p: spec.p, d: spec.d, q: spec.q, constant: spec.constant, seasonal: spec.seasonal };
+    let s = spec.seasonal;
+    let seasonal_text =
+        if s.p + s.d + s.q > 0 { format!("({},{},{}){}", s.p, s.d, s.q, s.period) } else { String::new() };
     let z = calc::standard_quantile(calc::Family::Normal, 1.0, 0.5 + spec.confidence / 2.0);
     let pct = num(100.0 * spec.confidence);
     let mut table = ResultTable::new(&["Value", "Standard error", "z", "Prob>|z|"]);
@@ -55,7 +71,9 @@ pub(super) fn run(spec: &ArimaSpec, inputs: &[Input<'_>]) -> Result<Output, Anal
     let mut graphs = Vec::new();
     for input in inputs {
         let m = match spec.auto {
-            Some((max_p, max_q)) => fit_auto(input.ys(), spec.d, max_p, max_q, spec.constant, spec.horizon),
+            Some((max_p, max_q)) => {
+                fit_auto(input.ys(), spec.d, max_p, max_q, spec.constant, spec.seasonal, spec.horizon)
+            }
             None => fit(input.ys(), order, spec.horizon),
         }
         .map_err(|e| AnalysisError::BadOption(format!("{}: {e}", input.label)))?;
@@ -66,6 +84,8 @@ pub(super) fn run(spec: &ArimaSpec, inputs: &[Input<'_>]) -> Result<Output, Anal
         }
         names.extend((1..=p).map(|i| format!("AR {i}")));
         names.extend((1..=q).map(|i| format!("MA {i}")));
+        names.extend((1..=s.p).map(|i| format!("Seasonal AR {i}")));
+        names.extend((1..=s.q).map(|i| format!("Seasonal MA {i}")));
         for ((name, v), se) in names.iter().zip(&m.params).zip(&m.se) {
             let z = v / se;
             let prob = 2.0 * calc::dist_cdf(calc::Family::Normal, &[0.0, 1.0], -z.abs());
@@ -77,11 +97,12 @@ pub(super) fn run(spec: &ArimaSpec, inputs: &[Input<'_>]) -> Result<Output, Anal
         }
         let coefs: Vec<String> = names.iter().zip(&m.params).map(|(n, v)| format!("{n} {}", num(*v))).collect();
         notes.push(format!(
-            "{}: ARIMA({},{},{}){} by conditional least squares: {}; sigma^2 {}, AIC {}; {} forecast(s) from {} to {}.",
+            "{}: ARIMA({},{},{}){}{} by conditional least squares: {}; sigma^2 {}, AIC {}; {} forecast(s) from {} to {}.",
             input.label,
             p,
             spec.d,
             q,
+            seasonal_text,
             match spec.auto {
                 Some((mp, mq)) => format!(" (the smallest AIC of p <= {mp}, q <= {mq})"),
                 None => String::new(),
@@ -93,7 +114,7 @@ pub(super) fn run(spec: &ArimaSpec, inputs: &[Input<'_>]) -> Result<Output, Anal
             m.forecast.first().map_or("-".to_string(), |v| num(*v)),
             m.forecast.last().map_or("-".to_string(), |v| num(*v))
         ));
-        let comment = format!("ARIMA({p},{},{q}) of {}", spec.d, input.name);
+        let comment = format!("ARIMA({p},{},{q}){seasonal_text} of {}", spec.d, input.name);
         let xs = input.xs().to_vec();
         let step = if xs.len() >= 2 { xs[xs.len() - 1] - xs[xs.len() - 2] } else { 1.0 };
         let step = if step.is_finite() && step != 0.0 { step } else { 1.0 };

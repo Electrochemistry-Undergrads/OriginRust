@@ -250,6 +250,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T423](T423-formula-pick.md) | Set Column Values: pick column, cell or range references in the sheet | S | done 2026-11-24 (gui-look), not measured |
 | [T432](T432-named-blocks.md) | Named blocks of several columns in statistics (mean(Name)) | S | done 2026-11-24 (expression-language), not measured |
 | [T434](T434-name-manager.md) | Worksheet > Name Manager...: the names, what they stand for, Delete | S | done 2026-11-24 (expression-language), not measured |
+| [T441](T441-find-files-background.md) | Find in Project Files searches in the background with progress and Stop | S | done 2026-11-25 (gui-look), not measured |
 | [T233](T233-batch-summary.md) | File > Batch Processing: Summary Sheet, Dataset Identifier, Delete Intermediate Books (a Batch Summary book stacking one sheet of every book) | S | done 2026-11-20 (workbook-model 13p), not measured; left: Origin's layout and identifier choices |
 | [T235](T235-batch-cli.md) | sheaf batch: Batch Processing without a window (template, summary, --summary-csv), core Project::batch_process shared with the window | S | done 2026-11-20 (workbook-model 13p); MCP: T238 |
 | [T238](T238-batch-mcp.md) | MCP batch_process: the shared batch run (books, summary, delete) on the session project, one undo step attached | S | done 2026-11-20 (mcp.md 5.1); left: read options |

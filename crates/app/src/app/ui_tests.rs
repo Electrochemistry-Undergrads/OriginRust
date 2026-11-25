@@ -5750,6 +5750,11 @@ fn find_in_project_files_lists_the_matching_projects_and_opens_one() {
     assert!(h.state().find_files.is_none());
     let books: Vec<String> = project(&h).workbooks().map(|b| b.long_name.clone()).collect();
     assert_eq!(books, ["Cyclic voltammetry run"], "the found project is open");
+    // T449: the first hit is gone to: the book whose long name matched is the active window.
+    settle(&mut h);
+    let book = project(&h).workbooks().next().unwrap().id;
+    assert_eq!(h.state().active, Some(book));
+    assert!(h.state().status.contains("hit(s) for \"voltammetry\""), "{}", h.state().status);
     let _ = std::fs::remove_dir_all(&dir);
 }
 

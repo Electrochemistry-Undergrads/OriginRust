@@ -1979,4 +1979,6 @@ are searched too (T407: their short and long names and their text, one hit each,
 Notes Windows option, on by default, Sheaf's own since Origin 2016's Find in Project has none). Find All searches on
 a background thread (T441): the files with hits appear as they are found, a spinner and "Searching n of N files..."
 show the progress, Stop (enabled only then) ends the search after the file in hand, and closing the window or Open
-stops it too; Find All is disabled while a search runs.
+stops it too; Find All is disabled while a search runs. After Open, once the project has opened (also after the
+question about unsaved changes), the same search runs on it and Sheaf goes to its first hit as Find in Project's
+hit list does (T449); the status line gives the number of hits and the first one.

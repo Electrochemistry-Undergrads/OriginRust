@@ -383,3 +383,40 @@ fn auto_refresh_re_imports_a_changed_file_and_pauses_when_it_is_gone() {
     assert!(project(&h).workbook(book).unwrap().refresh.unwrap().paused);
     assert_eq!(h.state_mut().run_auto_refresh(244.0), None, "a paused book has no clock");
 }
+
+#[test]
+fn the_operation_tree_lists_a_books_linked_analysis_and_switches_its_mode() {
+    // T443: a Smooth run with Recalculate Manual, the Object Manager on the workbook.
+    use sheaf_core::analysis::{OutputTarget, Request, RowRange, Tool};
+    use sheaf_core::column::RecalcMode;
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let mut book = sheaf_core::WindowId(0);
+    h.state_mut().doc.apply("data", |p| {
+        book = p.add_workbook("");
+        let xs = (0..10).map(f64::from).collect();
+        p.add_column(book, 0, sheaf_core::Designation::X, sheaf_core::ColumnData::numeric(xs)).unwrap();
+        let ys = (0..10).map(|i| f64::from(i * i)).collect();
+        let y = p.add_column(book, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::numeric(ys)).unwrap();
+        let o = sheaf_calc::SmoothOptions {
+            method: sheaf_calc::SmoothMethod::AdjacentAveraging { weighted: false },
+            npts: 3,
+            boundary: sheaf_calc::Boundary::None,
+        };
+        let req = Request { columns: vec![y], rows: RowRange::All, tool: Tool::Smooth(o) };
+        p.analyze_linked(&req, &OutputTarget::NextToInput, RecalcMode::Manual).unwrap();
+    });
+    h.state_mut().apply(Action::Focus(book), &ctx);
+    h.state_mut().panels.set_pinned(PanelId::Objects, true);
+    settle(&mut h);
+    let at = h.get_by_label("Smooth (Manual)").rect().center();
+    right_click_at(&mut h, at);
+    settle(&mut h);
+    h.get_by_label("Auto").click();
+    settle(&mut h);
+    assert_eq!(project(&h).analysis_links[0].mode, RecalcMode::Auto);
+    assert_eq!(h.state().doc.undo_label(), Some("Recalculate Mode"));
+    h.get_by_label("Smooth (Auto)");
+    let book_name = project(&h).workbook(book).unwrap().name.clone();
+    h.get_by_label(&format!("Input: [{book_name}]Sheet1!B"));
+}

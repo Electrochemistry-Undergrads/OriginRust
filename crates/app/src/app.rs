@@ -2683,6 +2683,23 @@ impl SheafApp {
                 let folder = self.path.as_deref().and_then(|p| p.parent()).map(std::path::Path::to_path_buf);
                 self.find_files = Some(crate::dialogs::find_files::FindFilesDialog::new(folder.as_deref()));
             }
+            Action::SetAnalysisMode { index, mode } => {
+                let label = match mode {
+                    sheaf_core::column::RecalcMode::None => "Stop Following",
+                    _ => "Recalculate Mode",
+                };
+                if let Err(e) = self.doc.edit(label, |p| p.set_analysis_mode(index, mode)) {
+                    self.warn(e.to_string());
+                }
+            }
+            Action::GoToColumn(column) => {
+                if let Some(t) = crate::dialogs::project_browser::target(
+                    self.doc.project(),
+                    sheaf_core::project_browser::ItemRef::Column(column),
+                ) {
+                    self.go_to_found(t, ctx);
+                }
+            }
             Action::ExportReport(notes) => {
                 let name = self.doc.project().notes_window(notes).map_or_else(|| "report".into(), |n| n.name.clone());
                 let mut chooser = rfd::FileDialog::new()

@@ -3,6 +3,10 @@
 //! layer shows or hides all of its plots. Clicking a plot selects it, and the selection is the
 //! one of the Plot Details window while that is open on the graph; a double click opens Plot
 //! Details at that plot.
+//!
+//! On a workbook (T443) it is the operation tree: the analyses that follow their input, by the sheet that holds
+//! their results, each with its inputs and outputs; a click on a column opens it, and an operation's right-click
+//! menu recalculates it, switches it between Auto and Manual, stops it following its input or opens its results.
 
 use super::PanelData;
 use crate::actions::Action;
@@ -20,7 +24,90 @@ pub struct ObjectsState {
     pub selected: Option<(usize, Option<usize>)>,
 }
 
+/// A column as the tree names it: `[Book1]Sheet1!B`, or its short name in the sheet shown.
+fn column_label(project: &Project, id: sheaf_core::ColumnId) -> String {
+    match project.locate(id) {
+        Some((b, s, c)) => format!("[{}]{}!{}", b.name, s.name, c.short_name),
+        None => "(deleted column)".to_string(),
+    }
+}
+
+/// The operation tree of workbook `book` (T443).
+fn book_tree(ui: &mut egui::Ui, project: &Project, book: &sheaf_core::Workbook, actions: &mut Vec<Action>) {
+    use sheaf_core::column::RecalcMode;
+    let ops = project.book_operations(book.id);
+    egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
+        ui.strong(book.name.as_str());
+        if ops.is_empty() {
+            ui.label(
+                egui::RichText::new("No operations: analyses run with Recalculate Auto or Manual show here")
+                    .color(Color32::GRAY),
+            );
+            return;
+        }
+        for (si, sheet) in book.sheets.iter().enumerate() {
+            let here: Vec<_> = ops.iter().filter(|o| o.sheet == si).collect();
+            if here.is_empty() {
+                continue;
+            }
+            ui.horizontal(|ui| {
+                ui.add_space(INDENT);
+                ui.label(sheet.name.as_str());
+            });
+            for op in here {
+                let mode = match op.mode {
+                    RecalcMode::Auto => "Auto",
+                    RecalcMode::Manual => "Manual",
+                    RecalcMode::None => "None",
+                };
+                let wait = if op.pending { ", waiting" } else { "" };
+                ui.horizontal(|ui| {
+                    ui.add_space(2.0 * INDENT);
+                    let r = ui.selectable_label(false, format!("{} ({mode}{wait})", op.name));
+                    let r = r.on_hover_text(op.parameters.as_str());
+                    r.context_menu(|ui| {
+                        if ui.button("Recalculate").clicked() {
+                            actions.push(Action::Recalculate(op.outputs.clone()));
+                            ui.close();
+                        }
+                        for (m, label) in [(RecalcMode::Auto, "Auto"), (RecalcMode::Manual, "Manual")] {
+                            if ui.radio(op.mode == m, label).clicked() && op.mode != m {
+                                actions.push(Action::SetAnalysisMode { index: op.index, mode: m });
+                                ui.close();
+                            }
+                        }
+                        if ui.button("Stop Following the Input").clicked() {
+                            actions.push(Action::SetAnalysisMode { index: op.index, mode: RecalcMode::None });
+                            ui.close();
+                        }
+                        if let Some(&first) = op.outputs.first()
+                            && ui.button("Go to Results").clicked()
+                        {
+                            actions.push(Action::GoToColumn(first));
+                            ui.close();
+                        }
+                    });
+                });
+                for (what, cols) in [("Input", &op.inputs), ("Output", &op.outputs)] {
+                    for &c in cols {
+                        ui.horizontal(|ui| {
+                            ui.add_space(3.0 * INDENT);
+                            if ui.selectable_label(false, format!("{what}: {}", column_label(project, c))).clicked() {
+                                actions.push(Action::GoToColumn(c));
+                            }
+                        });
+                    }
+                }
+            }
+        }
+    });
+}
+
 pub fn show(ui: &mut egui::Ui, st: &mut ObjectsState, data: &PanelData, actions: &mut Vec<Action>) {
+    if let Some(book) = data.active.and_then(|id| data.project.workbook(id)) {
+        book_tree(ui, data.project, book, actions);
+        return;
+    }
     let Some((graph_id, graph)) = data.active.and_then(|id| data.project.graph(id).map(|g| (id, g))) else {
         ui.add_space(6.0);
         ui.label(egui::RichText::new("Activate a graph window to see its layers and plots").color(Color32::GRAY));

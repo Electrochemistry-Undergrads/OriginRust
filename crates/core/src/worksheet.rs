@@ -430,6 +430,9 @@ pub struct Workbook {
     /// The workbook's sticky note (T421).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sticky: Option<crate::sticky::StickyNote>,
+    /// File > Import > Auto Refresh (T442): re-import the source on a timer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refresh: Option<crate::auto_refresh::AutoRefresh>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -495,6 +498,7 @@ impl Workbook {
             source: None,
             names: Vec::new(),
             sticky: None,
+            refresh: None,
         }
     }
 

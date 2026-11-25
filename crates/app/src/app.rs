@@ -346,6 +346,10 @@ pub struct SheafApp {
     pub(crate) browser_graph: Option<crate::dialogs::browser_graph::BrowserGraphDialog>,
     pub(crate) flash_fill: Option<crate::dialogs::flash_fill::FlashFillDialog>,
     pub(crate) project_browser: Option<crate::dialogs::project_browser::ProjectBrowserDialog>,
+    pub(crate) auto_refresh: Option<crate::dialogs::auto_refresh::AutoRefreshDialog>,
+    /// Auto Refresh (T442): per workbook, when its next check is due (seconds of the UI clock) and the source
+    /// file's modification time at the last read.
+    refresh_clock: HashMap<WindowId, (f64, Option<std::time::SystemTime>)>,
     /// The open function window is File > New > Function Plot's: OK makes the graph (T213).
     function_graph_new: bool,
     /// The Audit Log window is open (T131).
@@ -551,6 +555,8 @@ impl SheafApp {
             browser_graph: None,
             flash_fill: None,
             project_browser: None,
+            auto_refresh: None,
+            refresh_clock: HashMap::new(),
             function_graph_new: false,
             audit_log: false,
             fit_builder: None,
@@ -2518,6 +2524,10 @@ impl SheafApp {
             }
             Action::ExportWorksheetImage(book) => self.export_worksheet_image(book),
             Action::Reimport { book, choose } => self.reimport(book, choose),
+            Action::AutoRefresh { book } => {
+                self.auto_refresh =
+                    self.doc.project().workbook(book).and_then(crate::dialogs::auto_refresh::AutoRefreshDialog::new);
+            }
             Action::SaveAxisTheme { .. } | Action::SaveLegendTheme { .. } => {
                 let Some(dir) = self.startup.graph_themes_dir.clone() else {
                     self.warn("Sheaf has no settings folder for graph themes");
@@ -5197,6 +5207,66 @@ impl SheafApp {
     }
 
     /// Graph > Add Function Graph... (T119): OK adds the curve; an expression error keeps the window open.
+    fn show_auto_refresh(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::auto_refresh::RefreshOutcome;
+        let Some(d) = &mut self.auto_refresh else { return };
+        match d.show(ctx) {
+            RefreshOutcome::Open => {}
+            RefreshOutcome::Closed => self.auto_refresh = None,
+            RefreshOutcome::Set { book, refresh } => {
+                self.auto_refresh = None;
+                // A new setting starts its timer afresh.
+                self.refresh_clock.remove(&book);
+                match self.doc.edit("Auto Refresh", |p| p.set_auto_refresh(book, refresh)) {
+                    Ok(()) => self.say(match refresh {
+                        Some(r) if r.paused => "Auto refresh is paused".to_string(),
+                        Some(r) => format!("The workbook re-imports its file every {} s", r.every_seconds),
+                        None => "Auto refresh stopped".to_string(),
+                    }),
+                    Err(e) => self.warn(e.to_string()),
+                }
+            }
+        }
+    }
+
+    /// Auto Refresh (T442) at `now` (seconds of the UI clock): re-imports each refreshing workbook whose check is
+    /// due, when its file changed (or always, as set). A failed read pauses the book's refresh. Returns the
+    /// seconds until the next check, when any book refreshes.
+    pub(crate) fn run_auto_refresh(&mut self, now: f64) -> Option<f64> {
+        let books = self.doc.project().refreshing_books();
+        self.refresh_clock.retain(|id, _| books.iter().any(|(b, _)| b == id));
+        let modified = |project: &sheaf_core::Project, book: WindowId| {
+            let path = project.workbook(book)?.source.as_ref()?.path.clone();
+            std::fs::metadata(path).and_then(|m| m.modified()).ok()
+        };
+        let mut due = Vec::new();
+        for &(book, r) in &books {
+            let every = f64::from(r.every_seconds);
+            let mtime = modified(self.doc.project(), book);
+            let clock = self.refresh_clock.entry(book).or_insert((now + every, mtime));
+            if now >= clock.0 {
+                clock.0 = now + every;
+                if !r.only_when_changed || mtime != clock.1 {
+                    clock.1 = mtime;
+                    due.push((book, r));
+                }
+            }
+        }
+        for (book, r) in due {
+            let Some(b) = self.doc.project().workbook(book) else { continue };
+            let Some((source, kind)) = b.source.clone().zip(reimport_kind(b)) else { continue };
+            match reimport_book(&mut self.doc, book, Path::new(&source.path), kind) {
+                Ok(rep) => self.say(format!("Auto refresh: re-imported {} ({} row(s))", source.path, rep.rows)),
+                Err(e) => {
+                    let paused = Some(sheaf_core::auto_refresh::AutoRefresh { paused: true, ..r });
+                    let _ = self.doc.edit("Auto Refresh", |p| p.set_auto_refresh(book, paused));
+                    self.warn(format!("Auto refresh paused: could not read {}: {e}", source.path));
+                }
+            }
+        }
+        self.refresh_clock.values().map(|c| c.0 - now).reduce(f64::min)
+    }
+
     fn show_project_browser(&mut self, ctx: &egui::Context) {
         use crate::dialogs::project_browser::BrowserOutcome;
         let Some(d) = &mut self.project_browser else { return };
@@ -8482,6 +8552,11 @@ impl SheafApp {
         self.show_browser_graph(ctx);
         self.show_flash_fill(ctx);
         self.show_project_browser(ctx);
+        self.show_auto_refresh(ctx);
+        let now = ctx.input(|i| i.time);
+        if let Some(wait) = self.run_auto_refresh(now) {
+            ctx.request_repaint_after(std::time::Duration::from_secs_f64(wait.max(0.5)));
+        }
         self.show_audit_log(ctx);
         self.show_fit_builder(ctx);
         self.show_sample_projects(ctx);

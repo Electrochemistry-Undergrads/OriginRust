@@ -11,6 +11,7 @@ pub mod across;
 pub mod analysis;
 pub mod analysis_link;
 pub mod audit;
+pub mod auto_refresh;
 pub mod autorange;
 pub mod batch_plot;
 pub mod book_template;

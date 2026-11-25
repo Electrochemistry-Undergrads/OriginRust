@@ -464,6 +464,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T433](T433-project-browser.md) | View > Project Browser (Origin 2025b): books, sheets, columns and graphs in one searchable list; preview, Go To, set Long Name/Units/Comments on many | S | done 2026-11-24 (workbook-model 13s) |
 | [T436](T436-latex-math.md) | LaTeX math in graph text, slice 1 (Origin 2023b): `$...$` spans become label markup (scripts, Greek, symbols, \frac as a/b, \sqrt) | S | done 2026-11-24 (graphing "LaTeX math in graph text") |
 | [T439](T439-linked-reports.md) | Linked reports (Origin 2019b): a Notes window with %(...)/$(...) links and ![caption](Graph) figures; Preview; export HTML or Markdown with PNGs | S | done 2026-11-25 (notes-window.md "Linked reports") |
+| [T442](T442-auto-refresh.md) | File > Import > Auto Refresh (Origin 2019b/2026): re-import the source every N s, only when changed, pausable | S | done 2026-11-25 (workbook-model 13t) |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |

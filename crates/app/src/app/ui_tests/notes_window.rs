@@ -349,3 +349,37 @@ fn a_report_previews_its_links_and_exports_html_with_the_graph() {
     assert_eq!(pngs.len(), 1, "the figure's graph beside the page");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn auto_refresh_re_imports_a_changed_file_and_pauses_when_it_is_gone() {
+    // T442: an imported CSV, File > Import > Auto Refresh... OK (60 s, only when changed).
+    let path = data_file("auto-refresh");
+    let mut h = start(vec![path.clone()]);
+    let ctx = h.ctx.clone();
+    settle(&mut h);
+    let book = project(&h).workbooks().next().expect("the imported book").id;
+    h.state_mut().apply(Action::AutoRefresh { book }, &ctx);
+    settle(&mut h);
+    h.get_by_label("OK").click();
+    settle(&mut h);
+    assert!(project(&h).workbook(book).unwrap().refresh.is_some());
+    let rows = |h: &Harness<'static, SheafApp>| project(h).workbook(book).unwrap().sheets[0].row_count();
+    assert_eq!(rows(&h), 4);
+    // The clock started with the frames shown so far; nothing is due for about a minute.
+    let wait = h.state_mut().run_auto_refresh(0.0).expect("a clock");
+    assert!((59.0..=61.0).contains(&wait), "{wait}");
+    std::fs::write(&path, "t,up,down\n1,2.5,30.5\n2,4.5,20.5\n3,6.5,10.5\n4,8.5,0.5\n5,9.5,0.1\n").unwrap();
+    h.state_mut().run_auto_refresh(30.0);
+    assert_eq!(rows(&h), 4, "not due before 60 s");
+    h.state_mut().run_auto_refresh(61.0);
+    assert_eq!(rows(&h), 5, "re-imported once due");
+    // Unchanged: nothing is read again (the undo step stays the last re-import).
+    h.state_mut().doc.apply("mark", |p| p.workbook_mut(book).unwrap().long_name = "kept".into());
+    h.state_mut().run_auto_refresh(122.0);
+    assert_eq!(h.state().doc.undo_label(), Some("mark"));
+    // The file is gone: the refresh pauses.
+    std::fs::remove_file(&path).unwrap();
+    h.state_mut().run_auto_refresh(183.0);
+    assert!(project(&h).workbook(book).unwrap().refresh.unwrap().paused);
+    assert_eq!(h.state_mut().run_auto_refresh(244.0), None, "a paused book has no clock");
+}

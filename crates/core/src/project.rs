@@ -418,6 +418,8 @@ pub enum ProjectError {
     NoBrowser,
     #[error("no sticky note there (notes go on graphs, workbooks and sheets)")]
     NoStickyNote,
+    #[error("this workbook was not imported from a file, so it has nothing to refresh from")]
+    NotImported,
     #[error("type an example of what the column should hold in one of its cells first")]
     FlashFillNoExample,
     #[error("no rule builds the examples from the other columns; type another example")]

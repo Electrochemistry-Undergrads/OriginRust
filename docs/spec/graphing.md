@@ -7951,8 +7951,11 @@ here is measured.
 - **Model:** `Graph::browser` (`sheaf_core::browser::GraphBrowser`: what it browses by, the plot's layer and index,
   the datasets and the one shown), saved with the project and renumbered with the graph's other columns;
   `Project::set_graph_browser`, `browse_graph`, `clear_graph_browser`, `browser_items`.
-- **Not built:** several browsed plots per graph, browsing across workbooks, picking a dataset from a list, the
-  browser in .opj files and in the CLI/MCP.
+- **Across workbooks (T456):** Browse "The same column of the same sheet in every book": in every workbook (project
+  order) the sheet with the plot's sheet's name, else the one at its position, and in it the column found as by
+  sheets; the caption names the book (`[Book2] B (2 of 3)`).
+- **Not built:** several browsed plots per graph, picking a dataset from a list, the browser in .opj files and in
+  the CLI/MCP.
 
 ## Time Series Explorer: Plot > Specialized > Time Series Explorer (T416, 2026-11-24; Origin 2024b's, Sheaf's own)
 

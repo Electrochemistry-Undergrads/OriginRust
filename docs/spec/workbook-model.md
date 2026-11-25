@@ -1586,14 +1586,20 @@ Formula Bar. Origin 2016 has neither.
   worked out again; formulas that read formula cells settle in up to ten passes. A formula that fails leaves its cell
   empty.
 - **Typing over:** typing a value into a formula cell drops the formula; the value typed stays.
+- **`$` and Fill Down (T455):** `$A$1`, `A$1` and `$A1` name the same cell as `A1` (a `$` after `)`, before
+  anything but a capital letter or digit, or in quotes is not a marker, so `col(A)$` and `$(...)` keep their
+  meaning). The Formula Bar has Fill Down when the current cell has a formula: the formula goes to every cell below
+  it down to the sheet's last row with data, each copy's row numbers moved by its distance except those with `$`
+  before the row (`A1*$A$1` in row 1 becomes `A3*$A$1` in row 3); a reference to a column the sheet does not have
+  is left as typed. One undo step, "Fill Down".
 - **The Formula Bar:** View > Formula Bar (on a workbook) shows or hides it for every workbook; it is off to start
   with (Sheaf's choice, so the grid keeps its place). It is a strip above each workbook's grid (below its sticky
   notes): the current cell's name (`B1`, when exactly one cell is selected), `fx`, and a text box with `=` and the
   cell's formula, or the cell as shown. Enter writes the text as if typed into the cell; leaving the box otherwise,
   or Esc, changes nothing.
 - **Saved:** the formulas are on the sheet (`Worksheet::cell_formulas`) in the `.sheaf` file.
-- **Not done:** references that follow moved rows and columns, `$A$1` absolute references, filling a formula down,
-  A1 references to other workbooks, a marker on formula cells, and cell formulas in `.opj` files.
+- **Not done:** references that follow moved rows and columns, filling right or into a chosen range, A1 references to
+  other workbooks, a marker on formula cells, and cell formulas in `.opj` files.
 
 ## 14. Suggested Rust data model (P0)
 

@@ -21,9 +21,16 @@ fn box_cox_capability_matches_scipy() {
     for (name, x, lsl, usl, n, lambda, target, r) in fixtures::CASES {
         // The fitted lambda on its own (the likelihood is flat at its top: both find it to about 1e-7), then every
         // index at the reference's lambda, so its last digits do not blur them.
-        let fitted = capability_with(x, *lsl, *usl, *n, CapModel::BoxCox, CapOptions { lambda: *lambda, target: None });
+        let fitted = capability_with(
+            x,
+            *lsl,
+            *usl,
+            *n,
+            CapModel::BoxCox,
+            CapOptions { lambda: *lambda, target: None, ..Default::default() },
+        );
         close(fitted.unwrap().lambda, r[0], 1e-6, &format!("{name} lambda"));
-        let opts = CapOptions { lambda: Some(r[0]), target: *target };
+        let opts = CapOptions { lambda: Some(r[0]), target: *target, ..Default::default() };
         let c = capability_with(x, *lsl, *usl, *n, CapModel::BoxCox, opts).unwrap();
         let within = [
             (c.sd_within, r[2], "sd within"),

@@ -4,7 +4,9 @@
 **Size:** M overall; each group S. **Branch:** `greyed-2-<group>`.
 **Priority:** wave 3, parallel lane when files do not overlap wave 1/2 claims.
 **Spec:** [command map](../spec/ui-command-map.md), [GUI](../spec/gui-look.md); T01's method.
-**Inventory:** 31 initial candidate locations; 20 remain tagged `T63` after C/F review and G/J wiring. All remaining locations are in the claimed A/B/D/E/H/I/K groups; C is deferred to B8/T14 and F/G/J are already wired. Do not rebuild those completed groups.
+**Inventory:** 31 initial candidate locations. Open Excel is the remaining location tagged
+`T63` and is referred to B14. T182 wired group E on 2026-11-19 and measured its Origin 2016
+behavior on 2026-11-24.
 **Ownership:** only the claimed group's dispatch/state/tests; no broad menus/toolbar refactor.
 
 ## Goal
@@ -28,7 +30,7 @@ before calling them Origin-compatible; otherwise preserve disabled state or docu
 | B | Horizontal Step, Vertical Step, Spline Connected (3) | Done 2026-11-19: `Template::StepHorizontal`, `StepVertical`, `SplineConnected` (the Line template with that connection); UI test in `ui_tests.rs` |
 | C | Probability Plot, Q-Q Plot (2) | Reviewed: deferred to B8/T14; documented score/confidence defaults need feature work before these entries can be wired (see review below) |
 | D | Open Excel (1) | T30 imports Excel into worksheets; Origin's item opens an Excel window. Reassign to B14 unless equivalent behaviour is established; do not relabel import as parity |
-| E | Graph as Image, Multi-Page PDF without graph active (2) | Done 2026-11-19 (T182): they open Export Graphs on every project graph (PNG; PDF with multi-page ticked), graphing 9.7a; not measured |
+| E | Graph as Image, Multi-Page PDF without graph active (2) | Done 2026-11-19 (T182). Sheaf opens Export Graphs on every project graph. Origin 2016's workbook image and multipage PDF options open the active sheet. Measured 2026-11-24 (graphing 9.7a) |
 | F | Standard/Explorer Duplicate (2) | Done: Standard toolbar uses the active window; Explorer window context item uses the clicked window; both reuse the existing duplicate command |
 | G | Object Edit Bring to Front/Send to Back (2) | T24 shape ordering; only shape selection supported today, broader object order is B2 |
 | H | Row Numbers/Uniform/Normal in menu and column context (6) | Done 2026-11-19: `Project::fill_quick` writes values (no formula) into every row of the sheet, one undo step; UI test `ui_tests/fill_pattern.rs` |

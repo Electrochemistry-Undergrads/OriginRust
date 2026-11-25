@@ -12,4 +12,4 @@ inside the object (found as for Extract Data in Region, T355) are masked or unma
 
 ## Left
 
-- Freeform regions, several regions at once, deleting the points.
+- Freeform regions, deleting the points (several regions at once: done in T422).

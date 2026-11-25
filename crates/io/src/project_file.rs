@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use sheaf_core::{ColumnData, Project, Window};
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::{BufReader, BufWriter, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use zip::result::ZipError;
 use zip::write::SimpleFileOptions;
@@ -197,49 +197,137 @@ fn write_archive(project: &Project, path: &Path, tmp: &Path, marker: Marker<'_>)
     put(&mut zip, MANIFEST, &serde_json::to_vec_pretty(&manifest).map_err(|e| json_err(MANIFEST, e))?)?;
     put(&mut zip, PROJECT, &serde_json::to_vec_pretty(project).map_err(|e| json_err(PROJECT, e))?)?;
 
+    // The data members, in the order of the windows and their columns. Deflating them is most of
+    // the time of a save (T426), so large projects compress them on several threads, each into an
+    // archive in memory, and copy the compressed members into the file in the same order: the
+    // file is the same as one written member by member.
+    let mut jobs: Vec<DataMember<'_>> = Vec::new();
     for w in &project.windows {
         if let Window::Matrix(book) = w {
-            for sheet in &book.sheets {
-                let values = sheet.values();
-                let mut bytes = Vec::with_capacity(values.len() * 8);
-                for v in values {
-                    bytes.extend_from_slice(&v.to_le_bytes());
-                }
-                put(&mut zip, &matrix_member(sheet.data_id), &bytes)?;
-            }
+            jobs.extend(book.sheets.iter().map(DataMember::Matrix));
         }
-        let Window::Workbook(book) = w else { continue };
-        for col in book.sheets.iter().flat_map(|s| &s.columns) {
-            match &col.data {
-                ColumnData::Numeric(values) => {
-                    let mut bytes = Vec::with_capacity(values.len() * 8);
-                    for v in values.iter() {
-                        bytes.extend_from_slice(&v.to_le_bytes());
-                    }
-                    put(&mut zip, &numeric_member(col.id.0), &bytes)?;
-                }
-                ColumnData::Mixed { numbers, texts } => {
-                    let mut bytes = Vec::with_capacity(numbers.len() * 8);
-                    for v in numbers.iter() {
-                        bytes.extend_from_slice(&v.to_le_bytes());
-                    }
-                    put(&mut zip, &numeric_member(col.id.0), &bytes)?;
-                    let member = mixed_member(col.id.0);
-                    let json = serde_json::to_vec(texts.as_ref()).map_err(|e| json_err(&member, e))?;
-                    put(&mut zip, &member, &json)?;
-                }
-                ColumnData::Text(values) => {
-                    let member = text_member(col.id.0);
-                    let bytes = serde_json::to_vec(values.as_ref()).map_err(|e| json_err(&member, e))?;
-                    put(&mut zip, &member, &bytes)?;
-                }
-            }
+        if let Window::Workbook(book) = w {
+            jobs.extend(book.sheets.iter().flat_map(|s| &s.columns).map(DataMember::Column));
+        }
+    }
+    let total: usize = jobs.iter().map(DataMember::size).sum();
+    let threads = if total < PARALLEL_FROM {
+        1
+    } else {
+        std::thread::available_parallelism().map_or(1, |n| n.get()).clamp(1, 8).min(jobs.len().max(1))
+    };
+    if threads <= 1 {
+        for job in &jobs {
+            job.write(&mut |name, bytes| put(&mut zip, name, bytes), &json_err)?;
+        }
+    } else {
+        let groups = split_by_size(&jobs, threads);
+        let parts: Vec<Result<Vec<u8>, IoError>> = std::thread::scope(|scope| {
+            let handles: Vec<_> = groups
+                .iter()
+                .map(|group| {
+                    scope.spawn(|| -> Result<Vec<u8>, IoError> {
+                        let mut part = ZipWriter::new(Cursor::new(Vec::new()));
+                        for job in *group {
+                            job.write(
+                                &mut |name, bytes| {
+                                    let opts = options.large_file(bytes.len() as u64 >= u64::from(u32::MAX));
+                                    part.start_file(name, opts).map_err(zip_err)?;
+                                    part.write_all(bytes).map_err(io_err)
+                                },
+                                &json_err,
+                            )?;
+                        }
+                        Ok(part.finish().map_err(zip_err)?.into_inner())
+                    })
+                })
+                .collect();
+            handles.into_iter().map(|h| h.join().expect("a save thread panicked")).collect()
+        });
+        for part in parts {
+            let archive = ZipArchive::new(Cursor::new(part?)).map_err(zip_err)?;
+            zip.merge_archive(archive).map_err(zip_err)?;
         }
     }
     let mut out = zip.finish().map_err(zip_err)?;
     out.flush().map_err(io_err)?;
     let file = out.into_inner().map_err(|e| IoError::io(path, e.into_error()))?;
     file.sync_all().map_err(io_err)
+}
+
+/// Below this many bytes of data a project is compressed on one thread (threads cost more than they
+/// save on small files).
+const PARALLEL_FROM: usize = 4 << 20;
+
+/// One window's data that goes to the archive as one or two members.
+enum DataMember<'a> {
+    Matrix(&'a sheaf_core::matrix::MatrixSheet),
+    Column(&'a sheaf_core::Column),
+}
+
+impl DataMember<'_> {
+    /// About how many bytes the member's data has (for sharing the work between threads).
+    fn size(&self) -> usize {
+        match self {
+            DataMember::Matrix(s) => s.values().len() * 8,
+            DataMember::Column(c) => match &c.data {
+                ColumnData::Numeric(v) => v.len() * 8,
+                ColumnData::Mixed { numbers, texts } => numbers.len() * 8 + texts.len() * 16,
+                ColumnData::Text(v) => v.iter().map(|t| t.len() + 3).sum(),
+            },
+        }
+    }
+
+    /// Writes the member(s) with `put(name, bytes)`.
+    fn write(
+        &self,
+        put: &mut dyn FnMut(&str, &[u8]) -> Result<(), IoError>,
+        json_err: &dyn Fn(&str, serde_json::Error) -> IoError,
+    ) -> Result<(), IoError> {
+        let doubles = |values: &[f64]| {
+            let mut bytes = Vec::with_capacity(values.len() * 8);
+            for v in values {
+                bytes.extend_from_slice(&v.to_le_bytes());
+            }
+            bytes
+        };
+        match self {
+            DataMember::Matrix(sheet) => put(&matrix_member(sheet.data_id), &doubles(sheet.values())),
+            DataMember::Column(col) => match &col.data {
+                ColumnData::Numeric(values) => put(&numeric_member(col.id.0), &doubles(values)),
+                ColumnData::Mixed { numbers, texts } => {
+                    put(&numeric_member(col.id.0), &doubles(numbers))?;
+                    let member = mixed_member(col.id.0);
+                    let json = serde_json::to_vec(texts.as_ref()).map_err(|e| json_err(&member, e))?;
+                    put(&member, &json)
+                }
+                ColumnData::Text(values) => {
+                    let member = text_member(col.id.0);
+                    let bytes = serde_json::to_vec(values.as_ref()).map_err(|e| json_err(&member, e))?;
+                    put(&member, &bytes)
+                }
+            },
+        }
+    }
+}
+
+/// Cuts `jobs` into at most `n` runs in order, of about the same total size.
+fn split_by_size<'a, 'b>(jobs: &'a [DataMember<'b>], n: usize) -> Vec<&'a [DataMember<'b>]> {
+    let total: usize = jobs.iter().map(DataMember::size).sum::<usize>().max(1);
+    let mut out = Vec::new();
+    let (mut start, mut acc) = (0, 0usize);
+    for (i, job) in jobs.iter().enumerate() {
+        acc += job.size();
+        // Close the run when it has reached its share of the total.
+        if acc * n >= total * (out.len() + 1) && out.len() + 1 < n {
+            out.push(&jobs[start..=i]);
+            start = i + 1;
+        }
+    }
+    if start < jobs.len() {
+        out.push(&jobs[start..]);
+    }
+    out
 }
 
 /// Loads a project and makes sure its identifier counter is ahead of every
@@ -487,6 +575,74 @@ mod tests {
         assert_eq!(names.len(), 1, "{names:?}");
         // Saving again over an existing file works.
         save(&p, &path).unwrap();
+    }
+
+    /// T426: a project big enough for the parallel save (several threads, merged in order) reads back
+    /// equal, with every member in the order of a one-thread save.
+    #[test]
+    fn a_large_project_saved_on_several_threads_reads_back_the_same() {
+        let dir = TempDir::new("parallel");
+        let path = dir.file("big.sheaf");
+        let mut p = sample();
+        let book = p.add_workbook("big");
+        for c in 0..6 {
+            let v: Vec<f64> = (0..120_000).map(|i| (i as f64 * 0.01 + c as f64).sin()).collect();
+            p.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap();
+        }
+        let texts: Vec<String> = (0..20_000).map(|i| format!("t{i}")).collect();
+        p.add_column(book, 0, Designation::Label, ColumnData::text(texts)).unwrap();
+        let m = p.add_matrix_book("field");
+        p.matrix_book_mut(m).unwrap().sheets[0].set_dimensions(200, 300, None).unwrap();
+        p.matrix_book_mut(m).unwrap().sheets[0].set_values("i*j").unwrap();
+        let jobs: usize = p
+            .windows
+            .iter()
+            .map(|w| match w {
+                Window::Workbook(b) => {
+                    b.sheets.iter().flat_map(|s| &s.columns).map(|c| DataMember::Column(c).size()).sum()
+                }
+                Window::Matrix(b) => b.sheets.iter().map(|s| DataMember::Matrix(s).size()).sum(),
+                _ => 0,
+            })
+            .sum();
+        assert!(jobs > PARALLEL_FROM, "the test project takes the parallel path ({jobs} bytes)");
+        save(&p, &path).unwrap();
+        let back = load(&path).unwrap();
+        same_data(&p, &back);
+        // The members are in window and column order, as one thread writes them.
+        let names: Vec<String> = {
+            let mut a = ZipArchive::new(BufReader::new(File::open(&path).unwrap())).unwrap();
+            (0..a.len()).map(|i| a.by_index(i).unwrap().name().unwrap().to_string()).collect()
+        };
+        let mut expected = vec![MANIFEST.to_string(), PROJECT.to_string()];
+        for w in &p.windows {
+            if let Window::Matrix(b) = w {
+                expected.extend(b.sheets.iter().map(|s| matrix_member(s.data_id)));
+            }
+            if let Window::Workbook(b) = w {
+                for c in b.sheets.iter().flat_map(|s| &s.columns) {
+                    match &c.data {
+                        ColumnData::Numeric(_) => expected.push(numeric_member(c.id.0)),
+                        ColumnData::Mixed { .. } => expected.extend([numeric_member(c.id.0), mixed_member(c.id.0)]),
+                        ColumnData::Text(_) => expected.push(text_member(c.id.0)),
+                    }
+                }
+            }
+        }
+        assert_eq!(names, expected);
+    }
+
+    /// The work is cut into runs in order that cover every member once.
+    #[test]
+    fn the_members_are_split_in_order_without_gaps() {
+        let p = sample();
+        let cols: Vec<&Column> = p.workbooks().flat_map(|b| b.sheets.iter().flat_map(|s| &s.columns)).collect();
+        let jobs: Vec<DataMember<'_>> = cols.iter().map(|c| DataMember::Column(c)).collect();
+        for n in 1..=5 {
+            let runs = split_by_size(&jobs, n);
+            assert!(runs.len() <= n.max(1));
+            assert_eq!(runs.iter().map(|r| r.len()).sum::<usize>(), jobs.len(), "n = {n}");
+        }
     }
 
     #[test]

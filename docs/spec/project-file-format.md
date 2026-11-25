@@ -85,6 +85,14 @@ Write to a temporary file in the same folder, then rename it over the target, so
 saving never leaves a half-written project. JSON is pretty-printed (two-space indent) so that it is
 readable and diffs are small.
 
+Deflating the data members is most of the time of a save. With more than 4 MB of data, Sheaf (T426)
+cuts the members, in order, into runs of about the same size, deflates each run on its own thread (at
+most 8, one per processor) into an archive in memory, and copies the compressed members into the file
+in the same order. The file is the same as one written member by member: the same members, order,
+compression and contents. On 8 books of 32 columns of 50 000 rows (24 numeric, 4 text, 4 Text &
+Numeric; a 76 MB file, `crates/io/tests/save_speed.rs`) a save went from 4.6 s to 1.15 s on the 8-core
+test machine; loading takes 0.6 to 0.7 s.
+
 ## Projects without data (T77)
 
 File > Save Project without Data... and File > Duplicate Project without Data use `Project::without_data()`.

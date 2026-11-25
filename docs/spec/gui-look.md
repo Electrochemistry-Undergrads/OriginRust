@@ -1035,6 +1035,17 @@ individual column after the bulk edit. The grid keeps rows at least one
 pixel tall and columns at least eight pixels wide. Printed pages and
 images suppress text too tall for a fixed data row.
 
+**Worksheet Properties Gap From Top (T59).** At the tested Origin 2016
+display scale, gaps of 1, 3, 20 and 40 points moved the grid by 2, 5,
+30 and 60 pixels. The area was white, and the Standard font size left
+it fixed. The test worksheet exported identical PNG pixels and decoded
+PDF drawing operations at zero and 20 points.
+[Origin Worksheet Properties Size tab](https://docs.originlab.com/origin-help/wksproperties-dialog-size-tab/)
+
+Sheaf accepts 0 to 255 points and keeps the gap above the scrolling
+grid. Zero removes it. The worksheet tabs stay available in short
+windows.
+
 Origin's **cell** dialog is separate: its Cell Range identifies the selected A1 in the probe.
 The visible Text tab has Rich Text, Allow Enter, Wrap Text, Float, Disable Editing, Ellipsis,
 Dynamic Merge, per-cell numeric display/precision selectors and a Font selector. In this new book,
@@ -1913,6 +1924,15 @@ runs that tool on the Y columns of every sheet the active workbook has when the 
 are not visited), as one undo step named after the tool. A sheet without Y columns, or where the tool fails, is
 skipped and named in the status line; when no sheet runs, nothing changes and the warning names them. From a graph
 the item asks for a workbook. Other workbooks are not visited.
+
+### Interactive formula references (T423, 2026-11-24, not measured)
+
+Origin 2025b inserts a cell, column or range into the formula being edited by clicking or dragging in the sheet;
+Origin 2016 cannot, so this is Sheaf's own. While the Set Column Values window is open, a new selection in any
+workbook's sheet goes into the formula at its cursor: one whole column as `col(B)`, one cell as `col(B)[3]`, cells of
+one column as `col(B)[2:5]` (1-based rows). A sheet other than the window's gets `Sheet2!` in front, another
+workbook `[Book2]Sheet1!`. Selections of several columns, rows or the whole sheet insert nothing; the selection the
+sheet has when the window opens does not count.
 
 ### Find in Project Files (T361, 2026-11-22, not measured)
 

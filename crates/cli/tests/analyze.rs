@@ -1742,6 +1742,12 @@ fn process_capability_runs_from_the_command_line() {
     );
     let (ok, out, err) = sheaf(&[&args[..], &["--lambda", "0.5"]].concat());
     assert!(ok && out.contains("lambda 0.5 (given)"), "{err} {out}");
+    // Intervals of Pp and Ppk (T425).
+    let (ok, out, err) =
+        sheaf(&["analyze", "capability", file, "--y", "v", "--lsl", "5", "--usl", "20", "--confidence", "90"]);
+    assert!(ok && out.contains("90 % intervals") && out.contains("Ppk lower"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "capability", file, "--y", "v", "--usl", "20", "--confidence", "100"]);
+    assert!(!ok && err.contains("confidence level"), "{err}");
     let (ok, _, err) = sheaf(&["analyze", "capability", file, "--y", "v", "--usl", "20", "--lambda", "0.5"]);
     assert!(!ok && err.contains("--model boxcox"), "{err}");
 }

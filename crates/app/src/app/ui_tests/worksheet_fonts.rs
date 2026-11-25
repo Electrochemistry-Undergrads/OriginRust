@@ -171,6 +171,41 @@ fn f4_bulk_measurements_resize_data_and_clear_individual_widths() {
 }
 
 #[test]
+fn f4_top_gap_moves_the_grid_and_survives_a_standard_font_edit() {
+    let mut h = start_sheet("worksheet-top-gap");
+    let before = project(&h).clone();
+    let heading = sheaf_core::sheet_print::head_name(sheet(&h), 0);
+    let heading_center = h.get_by_label(&heading).rect().center();
+    let data_center = grid_text(&h, "2.5").rect().center();
+
+    open(&mut h);
+    properties_tab(&mut h, "Size");
+    size_count(&mut h, "Gap From Top", 20);
+    assert_eq!(project(&h), &before);
+    click(&mut h, "Apply");
+
+    assert_eq!(sheet(&h).view.header_measurements.top_gap_pt, 20);
+    let heading_shift = h.get_by_label(&heading).rect().center() - heading_center;
+    let data_shift = grid_text(&h, "2.5").rect().center() - data_center;
+    assert!((heading_shift - egui::vec2(0.0, 30.0)).length() < 1.0, "{heading_shift:?}");
+    assert!((data_shift - heading_shift).length() < 1.0, "{data_shift:?}");
+    assert_eq!(h.state().doc.undo_label(), Some("Worksheet size"));
+
+    properties_tab(&mut h, "Format");
+    category(&mut h, "Data", "Standard");
+    size(&mut h, "18");
+    click(&mut h, "Apply");
+    assert_eq!(sheet(&h).view.header_measurements.top_gap_pt, 20);
+    properties_tab(&mut h, "Size");
+    size_count(&mut h, "Gap From Top", 0);
+    click(&mut h, "Cancel");
+    assert_eq!(sheet(&h).view.header_measurements.top_gap_pt, 20);
+    menu(&mut h, "Edit", "Undo");
+    menu(&mut h, "Edit", "Undo");
+    assert_eq!(project(&h), &before);
+}
+
+#[test]
 fn f4_size_grows_sparse_rows_and_appends_empty_columns() {
     let mut h = start_sheet("worksheet-size-grow");
     let before = project(&h).clone();

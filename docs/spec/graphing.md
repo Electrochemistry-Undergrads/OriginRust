@@ -1549,14 +1549,26 @@ Sheaf (`sheaf_plot::render_multipage_pdf`, `crates/plot/src/multipage.rs`):
 ---
 
 
-### 9.7a Export from a workbook or with no window (T182, 2026-11-19, not measured)
+### 9.7a Export from a workbook or with no window (T182, Origin 2016 measured 2026-11-24)
 
-Outside a graph window, File > Export holds Graphs..., Graph as Image... and Multi-Page PDF... (with the
-worksheet exports). Origin's behaviour with no graph active was not measured; Sheaf opens the Export
-Graphs window on **every graph of the project** (the window's "all graphs" choice), started from the graph
-that was active most recently (it names the first file): Graphs... and Graph as Image... in PNG, Multi-Page
-PDF... in PDF with "Export as multi-page PDF file" ticked (9.7). Everything else in the window is as from a
-graph. With no graph in the project the items only say so in the status line.
+Origin 2016's workbook Export submenu defines As Image File... (`expWks`) and As Multipage PDF File...
+(`expPDFw`) in `Themes/Menus/ExportMenu.xml`. Both dialogs opened on Current Sheet, `[Book1]Sheet1`.
+With two graph windows, the graph's Export Graphs command opened `expGraph` on Active Page and named
+the active graph `GSecond` in the file-name preview. Queuing that command with the workbook active
+opened no dialog. Calling `expGraph` directly from a workbook or an empty project opened Active Page
+with an empty file-name preview and the message "Input graph is invalid".
+[Origin's expGraph reference](https://docs.originlab.com/x-function/ref/expgraph/).
+
+A separate `expGraph` script requested a project-wide multipage PDF after hiding both graphs and
+the workbook. Origin returned failure and produced no PDF in that run. The active-window control
+and the File menu with all windows hidden remain unverified because the repeat probes failed to
+start an Origin COM instance.
+
+Sheaf provides project graph shortcuts in File > Export from a workbook or with no window active.
+Graphs... and Graph as Image... open Export Graphs on **every graph of the project** in PNG.
+Multi-Page PDF... preselects PDF and ticks "Export as multi-page PDF file" (9.7). The most recently
+active graph supplies the first file name. With no graph in the project, the status line reports
+that there is no graph to export.
 
 ### 9.7b Export Graphs from a folder (T250, the order not measured for expGraph)
 
@@ -4523,8 +4535,12 @@ region").
 
 Mask Data in Region and Unmask Data in Region (T413, same menu) mask or unmask the Y cells of those points (the
 plots' Y columns, rows found the same way, masked rows included), as one undo step ("Mask data in region" / "Unmask
-data in region"); the status line counts the cells changed, and nothing happens when none would change. Freeform
-regions and several regions at once are not built.
+data in region"); the status line counts the cells changed, and nothing happens when none would change.
+
+Several regions (T422): when the layer has two or more drawn rectangles or ellipses, the menu of each also has
+Extract Data in All Regions, Mask Data in All Regions and Unmask Data in All Regions, which work on the points inside
+any of them (a point inside two overlapping regions counts once; `sheaf_plot::region::points_in_shapes`). Freeform
+regions are not built.
 
 ### 17.13 Cause-and-effect (fishbone) diagram (T375, Origin 2026 feature, Sheaf's layout, not measured)
 

@@ -359,6 +359,7 @@ pub fn merge_graphs(sources: &[&Graph], opts: &MergeOptions) -> Result<Graph, Me
         layers: Vec::new(),
         slicer: None,
         explorer: None,
+        sticky: None,
         browser: None,
     };
     // linking belongs to the rearranged layout (Origin's dialog puts it under Arrange Settings)

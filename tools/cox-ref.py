@@ -6,7 +6,8 @@ sorting tricks), maximized by scipy.optimize.minimize (Newton-CG with the analyt
 tolerances); the tests (LR, Wald, score) use scipy.stats.chi2 and the baseline survival Breslow's estimator at the
 covariate means. lifelines and statsmodels are not available here. Efron's ties (T445): at a time with tied failures
 D the l-th of them (l = 0..d-1) sees the risk set minus l/d of D's sums, written out failure time by failure time;
-the baseline hazard increment is sum_l 1 / (S - l/d S_D).
+the baseline hazard increment is sum_l 1 / (S - l/d S_D). Strata (T451): risk sets within each stratum, the
+likelihood summed over strata, one baseline curve per stratum.
 
 Usage: python3 tools/cox-ref.py > crates/calc/tests/fixtures/cox_reference.rs
 None of these numbers come from Origin.
@@ -28,13 +29,14 @@ def uniforms(n, seed):
     return np.array(out)
 
 
-def pl(b, X, t, d, efron=False):
+def pl(b, X, t, d, efron=False, st=None):
+    st = np.zeros(len(t), dtype=int) if st is None else st
     eta = X @ b
     w = np.exp(eta)
     ll, g, H = 0.0, np.zeros(len(b)), np.zeros((len(b), len(b)))
-    for tk in np.unique(t[d]):
-        R = t >= tk
-        D = (t == tk) & d
+    for s, tk in sorted({(int(s), float(tk)) for s, tk in zip(st[d], t[d])}):
+        R = (t >= tk) & (st == s)
+        D = (t == tk) & d & (st == s)
         nd = int(D.sum())
         s0 = w[R].sum()
         s1 = (w[R, None] * X[R]).sum(axis=0)
@@ -54,15 +56,16 @@ def pl(b, X, t, d, efron=False):
     return ll, g, H
 
 
-def fit(X, t, d, efron=False):
+def fit(X, t, d, efron=False, st=None):
     p = X.shape[1]
-    f = lambda b: -pl(b, X, t, d, efron)[0]
-    jac = lambda b: -pl(b, X, t, d, efron)[1]
-    hess = lambda b: pl(b, X, t, d, efron)[2]
+    st = np.zeros(len(t), dtype=int) if st is None else st
+    f = lambda b: -pl(b, X, t, d, efron, st)[0]
+    jac = lambda b: -pl(b, X, t, d, efron, st)[1]
+    hess = lambda b: pl(b, X, t, d, efron, st)[2]
     r = optimize.minimize(f, np.zeros(p), jac=jac, hess=hess, method="Newton-CG", options={"xtol": 1e-14, "maxiter": 500})
     b = r.x
-    ll, g, H = pl(b, X, t, d, efron)
-    ll0, g0, H0 = pl(np.zeros(p), X, t, d, efron)
+    ll, g, H = pl(b, X, t, d, efron, st)
+    ll0, g0, H0 = pl(np.zeros(p), X, t, d, efron, st)
     cov = np.linalg.inv(H)
     se = np.sqrt(np.diag(cov))
     z = b / se
@@ -73,15 +76,18 @@ def fit(X, t, d, efron=False):
     chi = lambda s: stats.chi2.sf(s, p)
     eta_mean = X.mean(axis=0) @ b
     w = np.exp(X @ b)
-    times, surv, h0 = [], [], 0.0
-    for tk in np.unique(t[d]):
-        D = (t == tk) & d
-        dk = int(D.sum())
-        S = w[t >= tk].sum()
-        h0 += sum(1 / (S - (l / dk if efron else 0.0) * w[D].sum()) for l in range(dk))
-        times.append(tk)
-        surv.append(math.exp(-h0 * math.exp(eta_mean)))
-    return b, se, z, pv, ll, ll0, (lr, chi(lr)), (wald, chi(wald)), (score, chi(score)), times, surv
+    curves = []
+    for s in sorted(set(int(v) for v in st)):
+        times, surv, h0 = [], [], 0.0
+        for tk in np.unique(t[d & (st == s)]):
+            D = (t == tk) & d & (st == s)
+            dk = int(D.sum())
+            S = w[(t >= tk) & (st == s)].sum()
+            h0 += sum(1 / (S - (l / dk if efron else 0.0) * w[D].sum()) for l in range(dk))
+            times.append(tk)
+            surv.append(math.exp(-h0 * math.exp(eta_mean)))
+        curves.append((times, surv))
+    return b, se, z, pv, ll, ll0, (lr, chi(lr)), (wald, chi(wald)), (score, chi(score)), curves
 
 
 def vec(v):
@@ -98,11 +104,15 @@ cens = 20 + 60 * u[3 * n :]
 t = np.round(np.minimum(life, cens), 1)  # rounding makes ties
 d = life <= cens
 X3 = np.column_stack([age, treated, dose])
+X2 = np.column_stack([treated, dose])
+band = np.where(age < 50, 0, np.where(age < 60, 1, 2))
 cases = [
-    ("age, treated, dose", X3, False),
-    ("treated only", treated[:, None], False),
-    ("age, treated, dose (Efron)", X3, True),
-    ("treated only (Efron)", treated[:, None], True),
+    ("age, treated, dose", X3, False, None),
+    ("treated only", treated[:, None], False, None),
+    ("age, treated, dose (Efron)", X3, True, None),
+    ("treated only (Efron)", treated[:, None], True, None),
+    ("treated, dose by age band", X2, False, band),
+    ("treated, dose by age band (Efron)", X2, True, band),
 ]
 print("// Made by tools/cox-ref.py (numpy, scipy). Do not edit.")
 print("pub const T: &[f64] = " + vec(t) + ";")
@@ -110,9 +120,11 @@ print("pub const FAILED: &[bool] = &[" + ", ".join("true" if v else "false" for 
 print("pub const AGE: &[f64] = " + vec(age) + ";")
 print("pub const TREATED: &[f64] = " + vec(treated) + ";")
 print("pub const DOSE: &[f64] = " + vec(dose) + ";")
+print("pub const BAND: &[usize] = &[" + ", ".join(str(int(v)) for v in band) + "];")
 print("pub struct Case {")
 print("    pub name: &'static str,")
 print("    pub efron: bool,")
+print("    pub stratified: bool,")
 print("    pub b: &'static [f64],")
 print("    pub se: &'static [f64],")
 print("    pub z: &'static [f64],")
@@ -122,13 +134,16 @@ print("    pub ll0: f64,")
 print("    pub tests: [(f64, f64); 3],")
 print("    pub times: &'static [f64],")
 print("    pub survival: &'static [f64],")
+print("    pub curves: &'static [(&'static [f64], &'static [f64])],")
 print("}")
 print("pub const CASES: &[Case] = &[")
-for name, X, efron in cases:
-    b, se, z, pv, ll, ll0, lr, wald, score, times, surv = fit(X, t, d, efron)
+for name, X, efron, st in cases:
+    b, se, z, pv, ll, ll0, lr, wald, score, curves = fit(X, t, d, efron, st)
+    times, surv = curves[0]
     print("    Case {")
     print(f'        name: "{name}",')
     print(f"        efron: {'true' if efron else 'false'},")
+    print(f"        stratified: {'false' if st is None else 'true'},")
     print(f"        b: {vec(b)},")
     print(f"        se: {vec(se)},")
     print(f"        z: {vec(z)},")
@@ -138,5 +153,6 @@ for name, X, efron in cases:
     print(f"        tests: [({float(lr[0])!r}, {float(lr[1])!r}), ({float(wald[0])!r}, {float(wald[1])!r}), ({float(score[0])!r}, {float(score[1])!r})],")
     print(f"        times: {vec(times)},")
     print(f"        survival: {vec(surv)},")
+    print("        curves: &[" + ", ".join(f"({vec(a)}, {vec(c)})" for a, c in curves) + "],")
     print("    },")
 print("];")

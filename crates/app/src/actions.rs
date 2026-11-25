@@ -1541,4 +1541,5 @@ pub enum PageSwitch {
     IconDoubleClickPlotSetup,
     ActiveLayerIndicator,
     AxisLayerIcons,
+    ObjectGrid,
 }

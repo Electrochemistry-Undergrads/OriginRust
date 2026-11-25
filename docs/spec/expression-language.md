@@ -379,8 +379,15 @@ entry with a last row). A formula uses the name where a column with a row range 
 `mean(col(B)[2:4])`, and so are `total`, `count`, `sd`, `max(Upper)`, `cumsum(Upper)` and the other statistics
 and column functions. The range's column may be on another sheet of the workbook. On its own (`Upper * 2`) the name
 is refused: it is not one value. Rows past the column's end are not read. A selection over several columns names
-only the right-clicked cell. Defining a one-row range names a single cell again.
-Not done: blocks of several columns, project-wide names, a name manager, the `.opj` and Excel round trip.
+only the right-clicked cell (T400; since T432 it names the block, below). Defining a one-row range names a single
+cell again.
+
+Named blocks (T432, not measured): with cells of several adjacent columns selected, Define Name... names the block
+(`Project::define_block`; the name keeps its first and last column, `NamedCell::last_column`). Statistics take every
+cell of the block, column after column: `total(Corner)`, `mean`, `count`, `sd`, `max(Corner)`, `min(Corner)` and the
+others; column functions such as `cumsum(Corner)` and the name on its own are refused. A formula that uses a block
+depends on all of its columns. One column again names a range or a cell.
+Not done: project-wide names, a name manager, the `.opj` and Excel round trip.
 
 ## 4. Calling it from the program
 

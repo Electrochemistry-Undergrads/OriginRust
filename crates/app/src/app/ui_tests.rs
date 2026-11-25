@@ -8404,9 +8404,10 @@ fn define_name_on_a_cell_lets_formulas_read_it() {
     settle(&mut h);
     assert!(h.state().name_cell.is_some(), "the window opened");
     // A reserved name is refused and the window says why.
-    h.state_mut().apply(Action::SetCellName { column: b, row: 1, last: 1, name: "j".into() }, &ctx);
+    h.state_mut().apply(Action::SetCellName { column: b, row: 1, last: 1, last_column: None, name: "j".into() }, &ctx);
     assert!(h.state().name_cell.as_ref().unwrap().problem.is_some());
-    h.state_mut().apply(Action::SetCellName { column: b, row: 1, last: 1, name: "Rate".into() }, &ctx);
+    h.state_mut()
+        .apply(Action::SetCellName { column: b, row: 1, last: 1, last_column: None, name: "Rate".into() }, &ctx);
     settle(&mut h);
     assert!(h.state().name_cell.is_none(), "OK closes");
     assert_eq!(project(&h).name_of_cell(b, 1), Some("Rate"));
@@ -8441,11 +8442,18 @@ fn define_name_on_selected_cells_of_a_column_names_the_range() {
     // The sample's B is 2.5, 4.5, 6.5, 8.5: the mean of rows 2 to 4 is 6.5.
     h.state_mut().doc.edit("formula", |p| p.set_column_values(c, "mean(Upper)", Some(0..1))).unwrap();
     assert_eq!(project(&h).numeric(c).unwrap()[0], 6.5);
-    // A selection over two columns names only the clicked cell.
-    h.state_mut().books.get_mut(&book).unwrap().select_cells(&sheet, (1, 1), (2, 3));
-    h.state_mut().apply(Action::DefineName { column: b, row: 2 }, &ctx);
+    // T432: a selection over two columns names the block (A and B, rows 1 to 2).
+    let a = column_id(&h, "A");
+    h.state_mut().books.get_mut(&book).unwrap().select_cells(&sheet, (0, 0), (1, 1));
+    h.state_mut().apply(Action::DefineName { column: b, row: 1 }, &ctx);
     let d = h.state().name_cell.as_ref().unwrap();
-    assert_eq!((d.row, d.last), (2, 2));
+    assert_eq!((d.column, d.last_column, d.row, d.last), (a, Some(b), 0, 1));
+    let (column, row, last, last_column) = (d.column, d.row, d.last, d.last_column);
+    h.state_mut().apply(Action::SetCellName { column, row, last, last_column, name: "Corner".into() }, &ctx);
+    assert_eq!(project(&h).name_of_block(a, b, 0, 1), Some("Corner"));
+    // The sample's A is 1, 2, 3, 4 and B 2.5, 4.5, ...: the block's total is 1 + 2 + 2.5 + 4.5.
+    h.state_mut().doc.edit("formula", |p| p.set_column_values(c, "total(Corner)", Some(0..1))).unwrap();
+    assert_eq!(project(&h).numeric(c).unwrap()[0], 10.0);
 }
 
 #[test]

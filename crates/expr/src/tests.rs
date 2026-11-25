@@ -1371,3 +1371,20 @@ fn a_named_range_stands_for_rows_of_a_column() {
     // A plain scalar min(x) keeps its meaning.
     assert_eq!(Expr::parse("min(x)").unwrap().eval(&SimpleHost::new().var("x", 7.0)).unwrap(), 7.0);
 }
+
+#[test]
+fn a_named_block_takes_every_cell_of_its_columns_in_statistics() {
+    // T432: Blk is rows 2..3 of A and B.
+    let (a, b) = ([1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0]);
+    let cols = vec![ColumnRef::Short("A".into()), ColumnRef::Short("B".into())];
+    let host = SimpleHost::new().short("A", &a).short("B", &b).block("Blk", cols, 2, 3);
+    let one = |src: &str| Expr::parse(src).unwrap_or_else(|e| panic!("{src}: {e}")).eval(&host);
+    assert_eq!(one("total(Blk)").unwrap(), 55.0);
+    assert_eq!(one("count(blk)").unwrap(), 4.0);
+    assert_eq!(one("mean(Blk)").unwrap(), 13.75);
+    assert_eq!(one("max(Blk) - min(Blk)").unwrap(), 28.0);
+    let bare = one("Blk * 2").unwrap_err().to_string();
+    assert!(bare.contains("names a range of cells"), "{bare}");
+    let vector = one("cumsum(Blk)").unwrap_err().to_string();
+    assert!(vector.contains("block of several columns"), "{vector}");
+}

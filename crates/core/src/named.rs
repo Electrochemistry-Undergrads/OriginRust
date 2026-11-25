@@ -26,6 +26,10 @@ pub struct NamedCell {
     /// The last row (0-based, inclusive) of a named range of several cells (T400); `None` for one cell.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last: Option<usize>,
+    /// The last column of a named block of several columns (T432): the block runs from `column` to this one in
+    /// sheet order; `None` for one column.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_column: Option<ColumnId>,
 }
 
 impl NamedCell {
@@ -34,9 +38,14 @@ impl NamedCell {
         (self.row, self.last.unwrap_or(self.row).max(self.row))
     }
 
-    /// Whether the name stands for several cells.
+    /// Whether the name stands for several cells of one column.
     pub fn is_range(&self) -> bool {
-        self.last.is_some_and(|l| l > self.row)
+        self.last.is_some_and(|l| l > self.row) && !self.is_block()
+    }
+
+    /// Whether the name stands for a block of several columns (T432).
+    pub fn is_block(&self) -> bool {
+        self.last_column.is_some_and(|c| c != self.column)
     }
 }
 
@@ -69,10 +78,23 @@ impl Workbook {
         self.names.iter().find(|n| n.name.eq_ignore_ascii_case(name))
     }
 
+    /// The columns a name reads (T432): its column, or every column of its block in sheet order.
+    pub fn named_columns(&self, name: &str) -> Vec<ColumnId> {
+        let Some(n) = self.named_cell(name) else { return Vec::new() };
+        let Some(last) = n.last_column.filter(|_| n.is_block()) else { return vec![n.column] };
+        for s in &self.sheets {
+            let pos = |id: ColumnId| s.columns.iter().position(|c| c.id == id);
+            if let (Some(a), Some(b)) = (pos(n.column), pos(last)) {
+                return s.columns[a.min(b)..=a.max(b)].iter().map(|c| c.id).collect();
+            }
+        }
+        Vec::new()
+    }
+
     /// The value of the named cell `name`: its number, missing for text, an empty cell or a row past the end;
     /// `None` when there is no such name or its column is gone.
     pub fn named_value(&self, name: &str) -> Option<f64> {
-        let n = self.named_cell(name).filter(|n| !n.is_range())?;
+        let n = self.named_cell(name).filter(|n| !n.is_range() && !n.is_block())?;
         let column = self.sheets.iter().find_map(|s| s.columns.iter().find(|c| c.id == n.column))?;
         Some(column.numeric().and_then(|v| v.get(n.row).copied()).unwrap_or(f64::NAN))
     }
@@ -99,7 +121,13 @@ impl Project {
         let book = self.locate(column).map(|(b, _, _)| b.id).ok_or(ProjectError::NoSuchColumn(column))?;
         let b = self.workbook_mut(book).ok_or(ProjectError::NoSuchColumn(column))?;
         b.names.retain(|n| !n.name.eq_ignore_ascii_case(name));
-        b.names.push(NamedCell { name: name.to_string(), column, row, last: (last > row).then_some(last) });
+        b.names.push(NamedCell {
+            name: name.to_string(),
+            column,
+            row,
+            last: (last > row).then_some(last),
+            last_column: None,
+        });
         Ok(book)
     }
 
@@ -116,11 +144,60 @@ impl Project {
         self.name_of_range(column, row, row)
     }
 
+    /// Gives the block of rows `first..=last` (0-based) of the columns from `from` to `to` (one sheet, either order)
+    /// the name `name` (T432); one column names a range or a cell.
+    pub fn define_block(
+        &mut self,
+        name: &str,
+        from: ColumnId,
+        to: ColumnId,
+        first: usize,
+        last: usize,
+    ) -> Result<WindowId, ProjectError> {
+        if from == to {
+            return self.define_range(name, from, first, last);
+        }
+        check_name(name).map_err(ProjectError::BadName)?;
+        let (book, sheet, _) = self.locate(from).ok_or(ProjectError::NoSuchColumn(from))?;
+        let pos = |id: ColumnId| sheet.columns.iter().position(|c| c.id == id);
+        let (a, b) =
+            (pos(from).ok_or(ProjectError::NoSuchColumn(from))?, pos(to).ok_or(ProjectError::NoSuchColumn(to))?);
+        let (left, right) = (sheet.columns[a.min(b)].id, sheet.columns[a.max(b)].id);
+        let book = book.id;
+        let (row, last) = (first.min(last), first.max(last));
+        let w = self.workbook_mut(book).ok_or(ProjectError::NoSuchColumn(from))?;
+        w.names.retain(|n| !n.name.eq_ignore_ascii_case(name));
+        w.names.push(NamedCell {
+            name: name.to_string(),
+            column: left,
+            row,
+            last: Some(last),
+            last_column: Some(right),
+        });
+        Ok(book)
+    }
+
+    /// The name of exactly the block of rows `first..=last` of the columns `from` to `to` (T432), if it has one.
+    pub fn name_of_block(&self, from: ColumnId, to: ColumnId, first: usize, last: usize) -> Option<&str> {
+        if from == to {
+            return self.name_of_range(from, first, last);
+        }
+        let (b, sheet, _) = self.locate(from)?;
+        let pos = |id: ColumnId| sheet.columns.iter().position(|c| c.id == id);
+        let (a, z) = (pos(from)?, pos(to)?);
+        let (left, right) = (sheet.columns[a.min(z)].id, sheet.columns[a.max(z)].id);
+        let rows = (first.min(last), first.max(last));
+        b.names
+            .iter()
+            .find(|n| n.column == left && n.last_column == Some(right) && n.rows() == rows)
+            .map(|n| n.name.as_str())
+    }
+
     /// The name of exactly rows `first..=last` of `column` (T400), if they have one.
     pub fn name_of_range(&self, column: ColumnId, first: usize, last: usize) -> Option<&str> {
         let (b, _, _) = self.locate(column)?;
         let rows = (first.min(last), first.max(last));
-        b.names.iter().find(|n| n.column == column && n.rows() == rows).map(|n| n.name.as_str())
+        b.names.iter().find(|n| n.column == column && !n.is_block() && n.rows() == rows).map(|n| n.name.as_str())
     }
 }
 
@@ -159,6 +236,38 @@ mod tests {
         assert!(p.define_name("j", a, 0).is_err());
         assert!(p.delete_name(book, "rate"));
         let _ = b;
+    }
+
+    #[test]
+    fn a_named_block_feeds_statistics_and_follows_all_its_columns() {
+        // T432: rows 1..2 of B and C (named right to left) on one sheet; D sums them.
+        let mut p = Project::new();
+        let book = p.add_workbook("");
+        let a = p.add_column(book, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+        let b = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+        let c = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![10.0, 20.0, 30.0])).unwrap();
+        let d = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![])).unwrap();
+        p.define_block("Blk", c, b, 2, 1).unwrap();
+        assert_eq!(p.name_of_block(b, c, 1, 2), Some("Blk"));
+        assert_eq!(p.name_of_range(b, 1, 2), None, "not the range of B alone");
+        let w = p.workbook(book).unwrap();
+        assert_eq!(w.named_columns("blk"), [b, c]);
+        assert_eq!(w.named_value("Blk"), None);
+        p.set_column_values_with(d, "col(A) + total(Blk)", None, crate::column::RecalcMode::Auto).unwrap();
+        assert_eq!(p.numeric(d).unwrap(), [56.0, 57.0, 58.0]);
+        // A change in either column of the block recalculates.
+        let before = p.clone();
+        p.column_mut(c).unwrap().numeric_mut().unwrap()[2] = 130.0;
+        p.recalculate_since(&before);
+        assert_eq!(p.numeric(d).unwrap()[0], 156.0);
+        let before = p.clone();
+        p.column_mut(b).unwrap().numeric_mut().unwrap()[1] = 0.0;
+        p.recalculate_since(&before);
+        assert_eq!(p.numeric(d).unwrap()[0], 154.0);
+        // One column names a range again.
+        p.define_block("Blk", b, b, 0, 1).unwrap();
+        assert_eq!(p.name_of_range(b, 0, 1), Some("Blk"));
+        let _ = a;
     }
 
     #[test]

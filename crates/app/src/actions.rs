@@ -502,6 +502,8 @@ pub enum Action {
         column: ColumnId,
         row: usize,
         last: usize,
+        /// The last column of a block of several columns (T432).
+        last_column: Option<ColumnId>,
         name: String,
     },
     /// Draw an arrow across a data cell (`Some(double)`) or take it out (T205), one undo step.

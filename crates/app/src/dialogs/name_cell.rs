@@ -19,6 +19,8 @@ pub struct NameCellDialog {
     pub row: usize,
     /// The last row of a named range (T400); `row` for one cell.
     pub last: usize,
+    /// The last column of a named block of several columns (T432); `None` for one column.
+    pub last_column: Option<ColumnId>,
     pub name: String,
     /// Why the last OK did not work.
     pub problem: Option<String>,
@@ -30,6 +32,7 @@ impl NameCellDialog {
             column,
             row,
             last: last.max(row),
+            last_column: None,
             name: current.unwrap_or_default().to_string(),
             problem: None,
         }
@@ -48,7 +51,14 @@ impl NameCellDialog {
                     let label = ui.label("Name");
                     ui.add(egui::TextEdit::singleline(&mut self.name).desired_width(160.0)).labelled_by(label.id);
                 });
-                if self.last > self.row {
+                if self.last_column.is_some() {
+                    ui.weak(format!(
+                        "Rows {} to {} of the selected columns. Formulas of this workbook use the name as all these \
+                         cells, in statistics such as mean(Name) or total(Name).",
+                        self.row + 1,
+                        self.last + 1
+                    ));
+                } else if self.last > self.row {
                     ui.weak(format!(
                         "Rows {} to {} of this column. Formulas of this workbook use the name as these cells, \
                          in functions such as mean(Name) or total(Name).",

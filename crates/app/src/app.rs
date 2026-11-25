@@ -2277,15 +2277,17 @@ impl SheafApp {
                 });
             }
             Action::DefineName { column, row } => {
-                // Several selected cells of this column only: they are named together (a named range, T400).
-                let (first, last) = self.selected_rows_of(column, row).unwrap_or((row, row));
-                let current = self.doc.project().name_of_range(column, first, last).map(str::to_string);
-                self.name_cell =
-                    Some(crate::dialogs::name_cell::NameCellDialog::new(column, first, last, current.as_deref()));
+                // Several selected cells of this column: a named range (T400); of several columns: a block (T432).
+                let (from, to, first, last) = self.selected_block_of(column, row).unwrap_or((column, column, row, row));
+                let current = self.doc.project().name_of_block(from, to, first, last).map(str::to_string);
+                let mut d = crate::dialogs::name_cell::NameCellDialog::new(from, first, last, current.as_deref());
+                d.last_column = (to != from).then_some(to);
+                self.name_cell = Some(d);
             }
-            Action::SetCellName { column, row, last, name } => {
+            Action::SetCellName { column, row, last, last_column, name } => {
                 let label = format!("Define Name {name}");
-                match self.doc.edit(&label, |p| p.define_range(&name, column, row, last)) {
+                let to = last_column.unwrap_or(column);
+                match self.doc.edit(&label, |p| p.define_block(&name, column, to, row, last)) {
                     Ok(_) => {
                         self.name_cell = None;
                         self.say(format!("Formulas of this workbook can read {name}"));
@@ -5748,22 +5750,28 @@ impl SheafApp {
             NameCellOutcome::Open => {}
             NameCellOutcome::Closed => self.name_cell = None,
             NameCellOutcome::Define(name) => {
-                let (column, row, last) = (d.column, d.row, d.last);
-                self.apply(Action::SetCellName { column, row, last, name }, ctx);
+                let (column, row, last, last_column) = (d.column, d.row, d.last, d.last_column);
+                self.apply(Action::SetCellName { column, row, last, last_column, name }, ctx);
             }
         }
     }
 
     /// The first and last selected rows when the selection is several cells of `column` alone and holds
     /// `row` (T400).
-    fn selected_rows_of(&self, column: ColumnId, row: usize) -> Option<(usize, usize)> {
+    fn selected_block_of(&self, column: ColumnId, row: usize) -> Option<(ColumnId, ColumnId, usize, usize)> {
+        // T432: the selected block of cells when it holds this cell and is more than one cell: its first and last
+        // columns and rows.
         let project = self.doc.project();
         let (book, _, _) = project.locate(column)?;
         let sheet = book.sheets.get(book.active_sheet)?;
         let index = sheet.column_index(column)?;
         let target = self.books.get(&book.id)?.target(sheet)?;
         let rows = target.rows;
-        (target.columns == [index] && rows.contains(&row) && rows.len() > 1).then(|| (rows.start, rows.end - 1))
+        let (lo, hi) = (*target.columns.iter().min()?, *target.columns.iter().max()?);
+        let contiguous = target.columns.len() == hi - lo + 1;
+        let inside = contiguous && (lo..=hi).contains(&index) && rows.contains(&row);
+        let more = rows.len() > 1 || hi > lo;
+        (inside && more).then(|| (sheet.columns[lo].id, sheet.columns[hi].id, rows.start, rows.end - 1))
     }
 
     /// Send Graphs to PowerPoint... (T232): the window, then the file picker and the file.

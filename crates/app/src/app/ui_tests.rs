@@ -6219,6 +6219,8 @@ fn the_statistics_menu_makes_an_arima_forecast() {
     assert!(sheet.starts_with("ARIMA"), "{sheet}");
     assert_eq!(values.len(), 5, "mean, AR 1, SS, sigma^2, AIC");
     assert!((values[0] - 10.0).abs() < 1.0, "{values:?}");
+    let (_, se) = result_column(&h, "Standard error");
+    assert!(se[0] > 0.0 && se[1] > 0.0 && se[2].is_nan(), "{se:?}");
     let (_, forecast) = result_column(&h, "Forecast");
     assert_eq!(forecast.len(), 10);
     assert_eq!(project(&h).graphs().count(), graphs_before + 1);
@@ -6245,6 +6247,9 @@ fn the_statistics_menu_makes_an_exponential_smoothing_forecast() {
     assert!(sheet.starts_with("Forecast"), "{sheet}");
     assert_eq!(forecast.len(), 10);
     assert!((forecast[9] - (5.0 + 0.5 * 29.0)).abs() < 1.0, "the trend goes on: {forecast:?}");
+    let (_, lower) = result_column(&h, "Lower 95%");
+    let (_, upper) = result_column(&h, "Upper 95%");
+    assert!(lower[9] < forecast[9] && forecast[9] < upper[9], "{lower:?} {upper:?}");
     assert_eq!(project(&h).graphs().count(), graphs_before + 1);
     assert_eq!(h.state().doc.undo_label(), Some("Exponential smoothing forecast"));
 }

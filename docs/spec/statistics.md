@@ -2105,7 +2105,7 @@ response surfaces), finite-sample critical values, the Phillips-Perron test and 
 Origin's Time Series Analysis app (2024b Pro) is not part of Origin 2016, so this is Sheaf's own, with the classical
 recursions and statsmodels' "legacy-heuristic" initial states. Statistics > Exponential Smoothing Forecast...
 (`Tool::ExpSmooth`, `sheaf analyze forecast --y COL[,COL..] [--model simple|holt|additive|multiplicative] [--period
-12] [--constants a[,b[,g]]] [--horizon 10] [--no-graph]`): every chosen column is a series of its own, in row order,
+12] [--constants a[,b[,g]]] [--horizon 10] [--damped] [--phi P] [--confidence 95] [--no-graph]`): every chosen column is a series of its own, in row order,
 complete in the chosen rows (simple needs 2 values, Holt 3, Holt-Winters two periods; multiplicative needs values
 above 0).
 
@@ -2117,19 +2117,33 @@ above 0).
 - The forecast `h` steps on is `l + h b (+ s)` (or `(l + h b) s`) with the season of that step.
 - Without `--constants` the constants are fitted on `[0, 1]` by least squares of the one-step errors (Nelder-Mead
   kept inside the box, from a grid of starts and once more from the best).
+- **Damped trend** (T427; Holt and Holt-Winters; the window's "Damped trend"): the trend enters as `phi b`, so the
+  one-step forecast is `l + phi b (+ s)`, `l' = a (y - s) + (1 - a)(l + phi b)`, `b' = beta (l' - l) + (1 - beta) phi
+  b`, `s' = gamma (y - l - phi b) + (1 - gamma) s`, and `h` steps on `l + (phi + ... + phi^h) b (+ s)`. `phi` is given
+  (`--phi`, in (0, 1]) or fitted with the free constants in [0.8, 0.98] (`--damped`); the sheet's Phi (damping)
+  column shows it.
+- **Prediction intervals** (T427; `--confidence`, 95 % by default): written as `l' = l + phi b + a e`, `b' = phi b + a
+  beta e`, `s' = s + gamma e` (`e` the one-step error) the recursions are the additive-error state space models,
+  whose `h`-step forecast variance is `sigma^2 (1 + sum_{j<h} c_j^2)`, `c_j = a (1 + beta (phi + ... + phi^j)) +
+  gamma [m divides j]`, with `sigma^2 = SSE / n`; the limits are the forecast `-+ z(1 - a/2) sigma_h`. The
+  multiplicative season has no closed form: its limit columns stay empty.
 
 The result sheet `ForecastN` has one row per column (Alpha, Beta, Gamma, SSE, RMSE, Final level, Final trend) and,
-per column, the X, the data, the one-step forecasts, the residuals, the forecast X (the last X step continued) and the
-forecasts; a new graph per column draws the data, the one-step forecasts and the forecasts. At fixed constants the
+per column, the X, the data, the one-step forecasts, the residuals, the forecast X (the last X step continued), the
+forecasts and the Lower and Upper limits (`Lower 95%`); a new graph per column draws the data, the one-step forecasts,
+the forecasts and the two limits. At fixed constants the
 fitted values, SSE, final states and forecasts are checked against numpy, and the fitted SSE against scipy's best
 (L-BFGS-B from many starts and Powell), in `tools/expsmooth-ref.py` and `crates/calc/tests/expsmooth_reference.rs`.
-Prediction intervals, damped trends, the ETS state-space likelihood and ARIMA are not built.
+Damping and intervals against numpy/scipy (`tools/expsmooth-pi-ref.py`, `crates/calc/tests/expsmooth_pi_reference.rs`:
+five cases at fixed constants to 1e-9, where the script confirms each interval variance by simulating the model
+forward 200 000 times; fitted damping no worse than scipy's L-BFGS-B best). The ETS likelihood (AIC model choice),
+multiplicative-error models and intervals for the multiplicative season are not built.
 
 ## 43 ARIMA forecast (T376, Origin 2024b Time Series Analysis app; not measured)
 
 Origin's Time Series Analysis app (2024b Pro) is not part of Origin 2016, so this is Sheaf's own. Statistics > ARIMA
 Forecast... (`Tool::Arima`, `sheaf analyze arima --y COL[,COL..] [--p 1] [--d 0] [--q 0] [--no-constant] [--horizon
-10] [--confidence 95] [--no-graph]`): every chosen column is a series of its own, in row order, complete in the chosen
+10] [--confidence 95] [--auto [--max-p 3] [--max-q 3]] [--no-graph]`): every chosen column is a series of its own, in row order, complete in the chosen
 rows. The series is differenced `d` times to `w`; with mean `mu` (the constant; a drift when `d = 1`) the model is
 `w_t - mu = sum phi_i (w_{t-i} - mu) + e_t + sum theta_j e_{t-j}`. The conditional sum of squares (errors before `t =
 p` taken as 0, summed from `t = p`) is minimized by Nelder-Mead from `mu = mean(w)`, `phi = theta = 0`, restarted from
@@ -2138,13 +2152,22 @@ summed errors and `AIC = m ln(2 pi sigma^2) + m + 2 (k + 1)`. The one-step predi
 the first `d + p` rows). Forecasts set future errors to 0 and undo the differences; the bands are `forecast -+ z sigma
 sqrt(sum_{j<h} psi_j^2)` with the psi weights of `phi(B) (1 - B)^d y = theta(B) e`.
 
-The result sheet `ARIMAN` has one row per coefficient (Mean or Constant (drift), AR i, MA j) and the sum of squares,
-sigma^2 and AIC per column, then per column the X, data, one-step predictions, residuals, forecast X (the last X step
+- **Coefficient standard errors** (T428): the Gauss-Newton covariance `sigma^2 (J'J)^-1`, `J` the exact derivatives
+  of the summed conditional errors with respect to the coefficients (the error recursion differentiated); `z = b /
+  SE` with normal two-sided probabilities (empty when `J'J` is singular).
+- **Order by AIC** (T428; `--auto`, the window's "Choose p and q by AIC, up to"): every `p <= P`, `q <= Q` with the
+  given `d` and constant is fitted and the smallest AIC kept; each AIC sums its own `n - d - p` errors; orders too long
+  for the series are passed over. The note names the chosen order and the search.
+
+The result sheet `ARIMAN` has one row per coefficient (Mean or Constant (drift), AR i, MA j) with Value, Standard
+error, z and Prob>|z|, and the sum of squares, sigma^2 and AIC per column, then per column the X, data, one-step predictions, residuals, forecast X (the last X step
 continued), forecasts and lower and upper band; a new graph per column draws the data, predictions, forecasts and
 bands. At given parameters the errors, forecasts and standard errors are checked against numpy, and the fitted sum
 of squares against scipy's minimum (Nelder-Mead, BFGS), in `tools/arima-ref.py` and `crates/calc/tests/arima_reference.rs`.
-Exact (Kalman) maximum likelihood, coefficient standard errors, seasonal ARIMA and automatic order choice are not
-built.
+Standard errors and order choice against numpy/scipy (`tools/arima-se-ref.py`, `crates/calc/tests/arima_se_reference.rs`:
+five models at given coefficients against complex-step derivatives to 1e-9; the AIC winner over p, q <= 2 of two
+simulated series, chosen with scipy's fits and a clear margin). Exact (Kalman) maximum likelihood and seasonal ARIMA
+are not built.
 
 ## 44 Random forest (T377, Origin 2026b Pro app; not measured)
 
@@ -2300,7 +2323,9 @@ the last chosen column holds how many units each row stands for. A row of freque
 of it (the fits, counts, plotting positions and graphs are those of the written-out rows); a frequency of 0 leaves
 the row out, a missing, negative or fractional one is refused, and the frequencies may add up to at most 1,000,000
 rows. Checked by fitting the same data written out row by row (`crates/core/src/analysis/lifedist.rs`,
-`crates/cli/tests/analyze.rs`).
+`crates/cli/tests/analyze.rs`). T429 adds the same frequency column to the Kaplan-Meier estimator (section 20; after
+the optional group column, `analyze kaplan-meier --frequency`) and Cox regression (section 52, `analyze cox
+--frequency`); the Turnbull estimate (section 53) has it from the start.
 
 ## 50 qPCR relative quantification and standard curves (T397, Origin 2027 Pro assay apps; not measured)
 

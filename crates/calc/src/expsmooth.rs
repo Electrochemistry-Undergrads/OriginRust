@@ -11,7 +11,19 @@
 //!   `s' = gamma (y - l - b) + (1 - gamma) s` (or `gamma y / (l + b) + ...`).
 //!
 //! The smoothing constants are given or fitted by least squares of the one-step errors on `[0, 1]` (Nelder-Mead from
-//! several starts, kept inside the box). Checked against numpy and scipy in `crates/calc/tests/expsmooth_reference.rs`
+//! several starts, kept inside the box).
+//!
+//! **Damped trend** (T427): with a damping factor `phi` the trend enters as `phi b`: the one-step forecast is `l +
+//! phi b (+ s)`, `l' = a (y - s) + (1 - a)(l + phi b)`, `b' = beta (l' - l) + (1 - beta) phi b`, `s' = gamma (y - l -
+//! phi b) + (1 - gamma) s`, and the forecast `h` steps on is `l + (phi + ... + phi^h) b (+ s)`. `phi` is given (0 to
+//! 1) or fitted with the constants in [0.8, 0.98]; `phi = 1` is the undamped model.
+//!
+//! **Prediction intervals** (T427) of the additive models: in error-correction form the recursions are those of the
+//! additive-error state space models (`l' = l + phi b + a e`, `b' = phi b + a beta e`, `s' = s + gamma e`, `e` the
+//! one-step error), whose `h`-step forecast variance is `sigma^2 (1 + sum_{j<h} c_j^2)` with `c_j = a (1 + beta
+//! (phi + ... + phi^j)) + gamma [j a multiple of m]` (`beta`, `gamma` 0 where the model has none) and `sigma^2 =
+//! SSE / n`; the interval is the forecast `-+ z sigma_h`. The multiplicative season has no such closed form: no
+//! intervals. Checked against numpy and scipy in `crates/calc/tests/expsmooth_reference.rs`
 //! (made by `tools/expsmooth-ref.py`).
 
 /// The smoothing model.
@@ -66,6 +78,23 @@ pub struct Smoothed {
     pub seasonals: Vec<f64>,
     /// Forecasts `1..=h` steps after the last value.
     pub forecast: Vec<f64>,
+    /// The damping factor (1 without damping).
+    pub phi: f64,
+    /// The prediction interval of each forecast (NaN for the multiplicative season).
+    pub lower: Vec<f64>,
+    pub upper: Vec<f64>,
+}
+
+/// The trend damping (T427).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum Damping {
+    /// A linear trend.
+    #[default]
+    None,
+    /// `phi` fitted in [0.8, 0.98] with the free constants.
+    Fitted,
+    /// This `phi`.
+    Given(f64),
 }
 
 /// Why the series could not be smoothed.
@@ -77,6 +106,10 @@ pub enum SmoothError {
     BadPeriod(usize),
     BadConstant(f64),
     WrongConstants(usize),
+    /// A damping factor outside (0, 1], or damping a model without a trend.
+    BadDamping(f64),
+    /// A confidence level outside (0, 1).
+    BadConfidence(f64),
 }
 
 impl std::fmt::Display for SmoothError {
@@ -90,14 +123,18 @@ impl std::fmt::Display for SmoothError {
             SmoothError::BadPeriod(m) => write!(f, "the period must be at least 2 (got {m})"),
             SmoothError::BadConstant(v) => write!(f, "a smoothing constant must lie in [0, 1] (got {v})"),
             SmoothError::WrongConstants(k) => write!(f, "this model takes {k} smoothing constant(s)"),
+            SmoothError::BadDamping(v) => {
+                write!(f, "the damping factor must lie in (0, 1] and needs a trend (got {v})")
+            }
+            SmoothError::BadConfidence(v) => write!(f, "the confidence level must lie between 0 and 1 (got {v})"),
         }
     }
 }
 
 impl std::error::Error for SmoothError {}
 
-/// Runs the recursions with the constants `c`; `None` when a state stops being finite.
-fn run(y: &[f64], model: SmoothModel, m: usize, c: &[f64], h: usize) -> Option<Smoothed> {
+/// Runs the recursions with the constants `c` and damping `phi`; `None` when a state stops being finite.
+fn run(y: &[f64], model: SmoothModel, m: usize, c: &[f64], phi: f64, h: usize) -> Option<Smoothed> {
     let n = y.len();
     let (a, beta, gamma) = (c[0], c.get(1).copied().unwrap_or(0.0), c.get(2).copied().unwrap_or(0.0));
     let mult = model == SmoothModel::WintersMultiplicative;
@@ -121,33 +158,35 @@ fn run(y: &[f64], model: SmoothModel, m: usize, c: &[f64], h: usize) -> Option<S
         } else {
             0.0
         };
-        let f = if mult { (l + b) * season } else { l + b + season };
+        let f = if mult { (l + phi * b) * season } else { l + phi * b + season };
         fitted.push(f);
         sse += (v - f).powi(2);
         let new_l = match model {
             SmoothModel::Simple => a * v + (1.0 - a) * l,
-            SmoothModel::Holt => a * v + (1.0 - a) * (l + b),
-            SmoothModel::WintersAdditive => a * (v - season) + (1.0 - a) * (l + b),
-            SmoothModel::WintersMultiplicative => a * v / season + (1.0 - a) * (l + b),
+            SmoothModel::Holt => a * v + (1.0 - a) * (l + phi * b),
+            SmoothModel::WintersAdditive => a * (v - season) + (1.0 - a) * (l + phi * b),
+            SmoothModel::WintersMultiplicative => a * v / season + (1.0 - a) * (l + phi * b),
         };
         if model.seasonal() {
             s[t % m] = if mult {
-                gamma * v / (l + b) + (1.0 - gamma) * season
+                gamma * v / (l + phi * b) + (1.0 - gamma) * season
             } else {
-                gamma * (v - l - b) + (1.0 - gamma) * season
+                gamma * (v - l - phi * b) + (1.0 - gamma) * season
             };
         }
         if model != SmoothModel::Simple {
-            b = beta * (new_l - l) + (1.0 - beta) * b;
+            b = beta * (new_l - l) + (1.0 - beta) * phi * b;
         }
         l = new_l;
         if !(l.is_finite() && b.is_finite()) {
             return None;
         }
     }
+    // phi + ... + phi^k: k itself without damping.
+    let damp = |k: usize| (1..=k).map(|i| phi.powi(i as i32)).sum::<f64>();
     let forecast = (1..=h)
         .map(|k| {
-            let kf = k as f64;
+            let kf = damp(k);
             match model {
                 SmoothModel::Simple => l,
                 SmoothModel::Holt => l + kf * b,
@@ -157,7 +196,50 @@ fn run(y: &[f64], model: SmoothModel, m: usize, c: &[f64], h: usize) -> Option<S
         })
         .collect();
     let seasonals = if model.seasonal() { (0..m).map(|j| s[(n + j) % m]).collect() } else { Vec::new() };
-    Some(Smoothed { constants: c.to_vec(), fitted, sse, level: l, trend: b, seasonals, forecast })
+    Some(Smoothed {
+        constants: c.to_vec(),
+        fitted,
+        sse,
+        level: l,
+        trend: b,
+        seasonals,
+        forecast,
+        phi,
+        lower: Vec::new(),
+        upper: Vec::new(),
+    })
+}
+
+/// The prediction intervals of `s` at `confidence` (see the module notes); NaN for the multiplicative season.
+fn intervals(s: &mut Smoothed, model: SmoothModel, m: usize, confidence: f64) {
+    let h = s.forecast.len();
+    if model == SmoothModel::WintersMultiplicative {
+        s.lower = vec![f64::NAN; h];
+        s.upper = vec![f64::NAN; h];
+        return;
+    }
+    let n = s.fitted.len() as f64;
+    let sigma2 = s.sse / n;
+    let (a, beta, gamma) =
+        (s.constants[0], s.constants.get(1).copied().unwrap_or(0.0), s.constants.get(2).copied().unwrap_or(0.0));
+    let z = statrs::distribution::Normal::new(0.0, 1.0)
+        .map(|d| statrs::distribution::ContinuousCDF::inverse_cdf(&d, 0.5 + confidence / 2.0))
+        .unwrap_or(f64::NAN);
+    let (mut sum, mut damp) = (0.0, 0.0);
+    s.lower.clear();
+    s.upper.clear();
+    for k in 1..=h {
+        if k > 1 {
+            let j = k - 1;
+            damp += s.phi.powi(j as i32);
+            let season = if model == SmoothModel::WintersAdditive && j % m == 0 { gamma } else { 0.0 };
+            let c = a * (1.0 + beta * damp) + season;
+            sum += c * c;
+        }
+        let half = z * (sigma2 * (1.0 + sum)).sqrt();
+        s.lower.push(s.forecast[k - 1] - half);
+        s.upper.push(s.forecast[k - 1] + half);
+    }
 }
 
 /// Nelder-Mead on the box `[0, 1]^k` (points clamped into it) from `start`.
@@ -216,12 +298,52 @@ fn nelder_mead(f: &dyn Fn(&[f64]) -> f64, start: &[f64]) -> (Vec<f64>, f64) {
 }
 
 /// Smooths `y` with `model` (period `m` for Holt-Winters) and forecasts `h` steps; `constants` fixes the smoothing
-/// constants, `None` fits them.
+/// constants, `None` fits them. No damping; 95 % intervals.
 pub fn smooth(
     y: &[f64],
     model: SmoothModel,
     m: usize,
     constants: Option<&[f64]>,
+    h: usize,
+) -> Result<Smoothed, SmoothError> {
+    smooth_with(y, model, m, constants, Damping::None, h, 0.95)
+}
+
+/// The damping factor of a free coordinate `u` in [0, 1].
+fn phi_of(u: f64) -> f64 {
+    0.8 + 0.18 * u
+}
+
+/// [`smooth`] with a damped trend and prediction intervals at `confidence` (T427).
+pub fn smooth_with(
+    y: &[f64],
+    model: SmoothModel,
+    m: usize,
+    constants: Option<&[f64]>,
+    damping: Damping,
+    h: usize,
+    confidence: f64,
+) -> Result<Smoothed, SmoothError> {
+    if !(confidence > 0.0 && confidence < 1.0) {
+        return Err(SmoothError::BadConfidence(confidence));
+    }
+    match damping {
+        Damping::None => {}
+        Damping::Given(p) if !(p > 0.0 && p <= 1.0) => return Err(SmoothError::BadDamping(p)),
+        _ if model == SmoothModel::Simple => return Err(SmoothError::BadDamping(f64::NAN)),
+        _ => {}
+    }
+    let mut out = fit(y, model, m, constants, damping, h)?;
+    intervals(&mut out, model, m, confidence);
+    Ok(out)
+}
+
+fn fit(
+    y: &[f64],
+    model: SmoothModel,
+    m: usize,
+    constants: Option<&[f64]>,
+    damping: Damping,
     h: usize,
 ) -> Result<Smoothed, SmoothError> {
     if let Some(i) = y.iter().position(|v| !v.is_finite()) {
@@ -251,9 +373,28 @@ pub fn smooth(
         if let Some(v) = c.iter().find(|v| !(0.0..=1.0).contains(*v)) {
             return Err(SmoothError::BadConstant(*v));
         }
-        return run(y, model, m, c, h).ok_or(SmoothError::BadConstant(c[0]));
+        if damping != Damping::Fitted {
+            let phi = if let Damping::Given(p) = damping { p } else { 1.0 };
+            return run(y, model, m, c, phi, h).ok_or(SmoothError::BadConstant(c[0]));
+        }
     }
-    let sse = |c: &[f64]| run(y, model, m, c, 0).map_or(f64::INFINITY, |s| s.sse);
+    // The free coordinates: the constants unless given, then phi's when it is fitted.
+    let fixed = constants.map(<[f64]>::to_vec);
+    let free_phi = damping == Damping::Fitted;
+    let k = (if fixed.is_some() { 0 } else { k }) + usize::from(free_phi);
+    let split = |u: &[f64]| -> (Vec<f64>, f64) {
+        let c = fixed.clone().unwrap_or_else(|| u[..model.constants()].to_vec());
+        let phi = match damping {
+            Damping::Fitted => phi_of(u[u.len() - 1]),
+            Damping::Given(p) => p,
+            Damping::None => 1.0,
+        };
+        (c, phi)
+    };
+    let sse = |u: &[f64]| {
+        let (c, phi) = split(u);
+        run(y, model, m, &c, phi, 0).map_or(f64::INFINITY, |s| s.sse)
+    };
     let grid = [0.1, 0.5, 0.9];
     let mut best = (vec![0.5; k], f64::INFINITY);
     let mut starts: Vec<Vec<f64>> = vec![vec![]];
@@ -268,7 +409,8 @@ pub fn smooth(
     }
     // A last run from the best point settles it.
     let (p, _) = nelder_mead(&sse, &best.0);
-    run(y, model, m, &p, h).ok_or(SmoothError::BadConstant(p[0]))
+    let (c, phi) = split(&p);
+    run(y, model, m, &c, phi, h).ok_or(SmoothError::BadConstant(c[0]))
 }
 
 #[cfg(test)]
@@ -302,6 +444,41 @@ mod tests {
     }
 
     #[test]
+    fn damping_one_is_the_linear_trend_and_damped_forecasts_level_off() {
+        let y: Vec<f64> = (0..12).map(|i| 5.0 + 2.0 * f64::from(i) + [0.3, -0.2, 0.1][i as usize % 3]).collect();
+        let lin = smooth(&y, SmoothModel::Holt, 0, Some(&[0.4, 0.2]), 5).unwrap();
+        let one = smooth_with(&y, SmoothModel::Holt, 0, Some(&[0.4, 0.2]), Damping::Given(1.0), 5, 0.95).unwrap();
+        assert_eq!((lin.fitted.clone(), lin.forecast.clone()), (one.fitted, one.forecast));
+        let d = smooth_with(&y, SmoothModel::Holt, 0, Some(&[0.4, 0.2]), Damping::Given(0.8), 30, 0.95).unwrap();
+        let steps: Vec<f64> = d.forecast.windows(2).map(|w| w[1] - w[0]).collect();
+        assert!(steps.windows(2).all(|w| w[1] < w[0]), "the steps shrink by phi");
+        assert!((steps[1] / steps[0] - 0.8).abs() < 1e-12);
+        // Fitted phi stays in [0.8, 0.98].
+        let f = smooth_with(&y, SmoothModel::Holt, 0, None, Damping::Fitted, 3, 0.95).unwrap();
+        assert!((0.8..=0.98).contains(&f.phi), "{}", f.phi);
+    }
+
+    #[test]
+    fn intervals_widen_with_the_horizon_and_simple_smoothing_has_the_textbook_variance() {
+        let y = [3.0, 5.0, 4.0, 6.0, 5.0, 7.0, 6.0, 5.0];
+        let s = smooth_with(&y, SmoothModel::Simple, 0, Some(&[0.3]), Damping::None, 4, 0.95).unwrap();
+        let sigma = (s.sse / 8.0).sqrt();
+        let z = 1.959963984540054;
+        for h in 1..=4 {
+            // sigma^2 (1 + (h - 1) a^2).
+            let half = z * sigma * (1.0 + (h - 1) as f64 * 0.09).sqrt();
+            assert!((s.upper[h - 1] - s.forecast[h - 1] - half).abs() < 1e-9, "{h}");
+            assert!((s.forecast[h - 1] - s.lower[h - 1] - half).abs() < 1e-9);
+        }
+        let w = smooth_with(&y, SmoothModel::Holt, 0, Some(&[0.3, 0.2]), Damping::None, 4, 0.99).unwrap();
+        let widths: Vec<f64> = w.upper.iter().zip(&w.lower).map(|(u, l)| u - l).collect();
+        assert!(widths.windows(2).all(|p| p[1] > p[0]));
+        let pos: Vec<f64> = (0..16).map(|i| 10.0 + f64::from(i % 4)).collect();
+        let mul = smooth_with(&pos, SmoothModel::WintersMultiplicative, 4, None, Damping::None, 2, 0.95).unwrap();
+        assert!(mul.lower[0].is_nan());
+    }
+
+    #[test]
     fn bad_input_is_refused() {
         assert_eq!(smooth(&[1.0, 2.0], SmoothModel::Holt, 0, None, 1), Err(SmoothError::TooShort(2)));
         assert_eq!(smooth(&[1.0; 8], SmoothModel::WintersAdditive, 1, None, 1), Err(SmoothError::BadPeriod(1)));
@@ -316,6 +493,16 @@ mod tests {
         assert_eq!(
             smooth(&[1.0, 2.0, 3.0], SmoothModel::Simple, 0, Some(&[1.5]), 1),
             Err(SmoothError::BadConstant(1.5))
+        );
+        let y = [1.0, 2.0, 3.0, 4.0];
+        assert_eq!(
+            smooth_with(&y, SmoothModel::Holt, 0, None, Damping::Given(1.5), 1, 0.95),
+            Err(SmoothError::BadDamping(1.5))
+        );
+        assert!(smooth_with(&y, SmoothModel::Simple, 0, None, Damping::Fitted, 1, 0.95).is_err());
+        assert_eq!(
+            smooth_with(&y, SmoothModel::Holt, 0, None, Damping::None, 1, 1.0),
+            Err(SmoothError::BadConfidence(1.0))
         );
     }
 }

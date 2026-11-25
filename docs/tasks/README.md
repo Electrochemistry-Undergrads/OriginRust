@@ -343,6 +343,9 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T394](T394-life-data-frequency.md) | Frequency (count) column for the life-data tools (Origin 2026b) | S | done 2026-11-23 (statistics 49) |
 | [T408](T408-cox.md) | Cox proportional hazards regression with Breslow ties, hazard ratios and tests (Origin 2026b) | S | done 2026-11-23 (statistics 52) |
 | [T391](T391-life-data-regression.md) | Life data regression: Weibull, lognormal and exponential AFT models with censoring (Origin 2026b) | S | done 2026-11-23 (statistics 48) |
+| [T429](T429-survival-frequency.md) | Frequency columns for the Kaplan-Meier estimator and Cox regression | S | done 2026-11-24 (statistics 49) |
+| [T428](T428-arima-se-auto.md) | ARIMA coefficient standard errors and order choice by AIC | S | done 2026-11-24 (statistics 43) |
+| [T427](T427-smoothing-intervals.md) | Exponential smoothing: damped trend and prediction intervals | S | done 2026-11-24 (statistics 42) |
 | [T425](T425-capability-intervals.md) | Confidence intervals of Pp and Ppk in Process Capability | S | done 2026-11-24 (statistics 36) |
 | [T424](T424-recent-writers-test.md) | Flaky gate: the recent-list writers test fits the lock wait under load | S | done 2026-11-24 |
 | [T419](T419-capability-boxcox.md) | Process capability with a Box-Cox transformation and the Cpm target index | S | done 2026-11-24 (statistics 36) |

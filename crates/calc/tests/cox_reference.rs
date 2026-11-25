@@ -1,11 +1,11 @@
 //! Cox proportional hazards against an independent numpy/scipy fit, made by `tools/cox-ref.py` (T408; none of these
 //! numbers come from Origin). Tolerance 1e-8 relative (the reference optimizer's tolerance). Breslow and (T445) Efron
-//! ties.
+//! ties; (T451) strata by age band with a curve per stratum.
 
 #[path = "fixtures/cox_reference.rs"]
 mod fixtures;
 
-use sheaf_calc::cox::{Ties, cox_with};
+use sheaf_calc::cox::{Ties, cox_stratified};
 
 fn close(a: f64, b: f64, what: &str) {
     assert!((a - b).abs() <= 1e-8 * b.abs().max(1.0), "{what}: {a} vs {b}");
@@ -17,7 +17,9 @@ fn cox_matches_numpy_and_scipy() {
     for c in fixtures::CASES {
         let x: Vec<Vec<f64>> = (0..n)
             .map(|i| {
-                if c.b.len() == 3 {
+                if c.stratified {
+                    vec![fixtures::TREATED[i], fixtures::DOSE[i]]
+                } else if c.b.len() == 3 {
                     vec![fixtures::AGE[i], fixtures::TREATED[i], fixtures::DOSE[i]]
                 } else {
                     vec![fixtures::TREATED[i]]
@@ -25,7 +27,16 @@ fn cox_matches_numpy_and_scipy() {
             })
             .collect();
         let ties = if c.efron { Ties::Efron } else { Ties::Breslow };
-        let f = cox_with(&x, fixtures::T, fixtures::FAILED, 0.95, ties).unwrap();
+        let strata: Vec<usize> = if c.stratified { fixtures::BAND.to_vec() } else { vec![0; n] };
+        let f = cox_stratified(&x, fixtures::T, fixtures::FAILED, &strata, 0.95, ties).unwrap();
+        assert_eq!(f.curves.len(), c.curves.len(), "{}", c.name);
+        for (k, ((ft, fs), (ct, cs))) in f.curves.iter().zip(c.curves).enumerate() {
+            assert_eq!(ft.len(), ct.len(), "{} stratum {k}", c.name);
+            for i in 0..ft.len() {
+                close(ft[i], ct[i], &format!("{} stratum {k} time {i}", c.name));
+                close(fs[i], cs[i], &format!("{} stratum {k} survival {i}", c.name));
+            }
+        }
         for i in 0..c.b.len() {
             close(f.coefficients[i], c.b[i], &format!("{} b{i}", c.name));
             close(f.se[i], c.se[i], &format!("{} se{i}", c.name));

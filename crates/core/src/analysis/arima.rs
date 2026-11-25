@@ -60,9 +60,6 @@ pub(super) fn run(spec: &ArimaSpec, inputs: &[Input<'_>]) -> Result<Output, Anal
         return Err(AnalysisError::BadOption("the confidence level must lie between 0 and 1".into()));
     }
     let order = ArimaOrder { p: spec.p, d: spec.d, q: spec.q, constant: spec.constant, seasonal: spec.seasonal };
-    let s = spec.seasonal;
-    let seasonal_text =
-        if s.p + s.d + s.q > 0 { format!("({},{},{}){}", s.p, s.d, s.q, s.period) } else { String::new() };
     let z = calc::standard_quantile(calc::Family::Normal, 1.0, 0.5 + spec.confidence / 2.0);
     let pct = num(100.0 * spec.confidence);
     let mut table = ResultTable::new(&["Value", "Standard error", "z", "Prob>|z|"]);
@@ -78,6 +75,10 @@ pub(super) fn run(spec: &ArimaSpec, inputs: &[Input<'_>]) -> Result<Output, Anal
         }
         .map_err(|e| AnalysisError::BadOption(format!("{}: {e}", input.label)))?;
         let (p, q) = (m.order.p, m.order.q);
+        // The fitted seasonal orders (the AIC search may choose smaller ones, T452).
+        let s = m.order.seasonal;
+        let seasonal_text =
+            if s.p + s.d + s.q > 0 { format!("({},{},{}){}", s.p, s.d, s.q, s.period) } else { String::new() };
         let mut names = Vec::new();
         if spec.constant {
             names.push(if spec.d == 0 { "Mean".to_string() } else { "Constant (drift)".to_string() });
@@ -104,6 +105,10 @@ pub(super) fn run(spec: &ArimaSpec, inputs: &[Input<'_>]) -> Result<Output, Anal
             q,
             seasonal_text,
             match spec.auto {
+                Some((mp, mq)) if spec.seasonal.p + spec.seasonal.q > 0 => format!(
+                    " (the smallest AIC of p <= {mp}, q <= {mq}, P <= {}, Q <= {})",
+                    spec.seasonal.p, spec.seasonal.q
+                ),
                 Some((mp, mq)) => format!(" (the smallest AIC of p <= {mp}, q <= {mq})"),
                 None => String::new(),
             },

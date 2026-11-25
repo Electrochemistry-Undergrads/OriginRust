@@ -14,6 +14,10 @@
 //! `S - (l/d) sum_{j in D} exp(x_j'b)` (and likewise in the gradient and information sums), so the tied failures leave
 //! the risk set gradually; the baseline hazard increment is `sum_l 1 / (S - (l/d) sum_D exp(x'b))`. Without ties the
 //! two rules agree.
+//!
+//! **Strata** (T451): with a stratum for each case the risk sets are taken within each stratum only; the partial
+//! log-likelihood, its gradient and information are the sums over the strata, the coefficients are shared, and each
+//! stratum has its own baseline (a survival curve at the covariate means per stratum).
 
 use crate::stability::invert;
 use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
@@ -36,9 +40,11 @@ pub struct Cox {
     pub score: (f64, f64),
     pub n: usize,
     pub events: usize,
-    /// Distinct failure times and the survival at the covariate means just after each.
+    /// Distinct failure times and the survival at the covariate means just after each (the first stratum's).
     pub times: Vec<f64>,
     pub survival: Vec<f64>,
+    /// The `(times, survival)` curve of each stratum, in stratum order (one curve without strata; T451).
+    pub curves: Vec<(Vec<f64>, Vec<f64>)>,
 }
 
 /// Why the model could not be fitted.
@@ -161,7 +167,45 @@ pub fn cox(x: &[Vec<f64>], t: &[f64], failed: &[bool], confidence: f64) -> Resul
 
 /// [`cox`] with the tie rule `ties` (T445).
 pub fn cox_with(x: &[Vec<f64>], t: &[f64], failed: &[bool], confidence: f64, ties: Ties) -> Result<Cox, CoxError> {
+    cox_stratified(x, t, failed, &vec![0; t.len()], confidence, ties)
+}
+
+/// The sums of [`evaluate`] over the strata.
+fn evaluate_all(
+    x: &[Vec<f64>],
+    failed: &[bool],
+    groups: &[(Vec<usize>, Vec<usize>)],
+    b: &[f64],
+    ties: Ties,
+) -> (f64, Vec<f64>, Vec<Vec<f64>>) {
+    let p = b.len();
+    let (mut ll, mut grad, mut info) = (0.0, vec![0.0; p], vec![vec![0.0; p]; p]);
+    for (order, start) in groups {
+        let (l, g, h) = evaluate(x, failed, order, start, b, ties);
+        ll += l;
+        for i in 0..p {
+            grad[i] += g[i];
+            for j in 0..p {
+                info[i][j] += h[i][j];
+            }
+        }
+    }
+    (ll, grad, info)
+}
+
+/// [`cox_with`] with a stratum number for each case (T451): risk sets within strata, one baseline per stratum.
+pub fn cox_stratified(
+    x: &[Vec<f64>],
+    t: &[f64],
+    failed: &[bool],
+    strata: &[usize],
+    confidence: f64,
+    ties: Ties,
+) -> Result<Cox, CoxError> {
     let n = t.len();
+    if strata.len() != n {
+        return Err(CoxError::Ragged);
+    }
     if x.len() != n || failed.len() != n || x.iter().any(|r| r.len() != x.first().map_or(0, Vec::len)) {
         return Err(CoxError::Ragged);
     }
@@ -179,14 +223,22 @@ pub fn cox_with(x: &[Vec<f64>], t: &[f64], failed: &[bool], confidence: f64, tie
     if events <= p {
         return Err(CoxError::TooFewEvents(events));
     }
-    let mut order: Vec<usize> = (0..n).collect();
-    order.sort_by(|&a, &b| t[a].total_cmp(&t[b]).then(a.cmp(&b)));
-    let mut start = vec![0; n];
-    for k in 1..n {
-        start[k] = if t[order[k]] == t[order[k - 1]] { start[k - 1] } else { k };
-    }
+    // The cases of each stratum sorted by time, and the start of each case's tie group within its stratum.
+    let count = strata.iter().copied().max().map_or(0, |m| m + 1);
+    let groups: Vec<(Vec<usize>, Vec<usize>)> = (0..count)
+        .map(|s| {
+            let mut order: Vec<usize> = (0..n).filter(|&c| strata[c] == s).collect();
+            order.sort_by(|&a, &b| t[a].total_cmp(&t[b]).then(a.cmp(&b)));
+            let mut start = vec![0; order.len()];
+            for k in 1..order.len() {
+                start[k] = if t[order[k]] == t[order[k - 1]] { start[k - 1] } else { k };
+            }
+            (order, start)
+        })
+        .filter(|(order, _)| !order.is_empty())
+        .collect();
     let zero = vec![0.0; p];
-    let (ll0, g0, i0) = evaluate(x, failed, &order, &start, &zero, ties);
+    let (ll0, g0, i0) = evaluate_all(x, failed, &groups, &zero, ties);
     let mut b = zero.clone();
     let (mut ll, mut g, mut info) = (ll0, g0.clone(), i0.clone());
     for _ in 0..100 {
@@ -196,7 +248,7 @@ pub fn cox_with(x: &[Vec<f64>], t: &[f64], failed: &[bool], confidence: f64, tie
         let mut moved = false;
         for _ in 0..40 {
             let cand: Vec<f64> = b.iter().zip(&step).map(|(a, d)| a + scale * d).collect();
-            let (lc, gc, ic) = evaluate(x, failed, &order, &start, &cand, ties);
+            let (lc, gc, ic) = evaluate_all(x, failed, &groups, &cand, ties);
             if lc.is_finite() && lc >= ll - 1e-12 * ll.abs().max(1.0) {
                 moved = lc > ll + 1e-15 * ll.abs().max(1.0);
                 b = cand;
@@ -235,34 +287,39 @@ pub fn cox_with(x: &[Vec<f64>], t: &[f64], failed: &[bool], confidence: f64, tie
     // The baseline at the covariate means (Breslow's or Efron's increments).
     let means: Vec<f64> = (0..p).map(|i| x.iter().map(|r| r[i]).sum::<f64>() / n as f64).collect();
     let eta_mean: f64 = means.iter().zip(&b).map(|(a, c)| a * c).sum();
-    let mut times = Vec::new();
-    let mut survival = Vec::new();
-    let mut h0 = 0.0;
-    let mut k = 0;
-    while k < n {
-        let tk = t[order[k]];
-        let mut end = k;
-        let mut d = 0usize;
-        let mut tied = 0.0;
-        let weight = |c: usize| x[c].iter().zip(&b).map(|(a, cc)| a * cc).sum::<f64>().exp();
-        while end < n && t[order[end]] == tk {
-            if failed[order[end]] {
-                d += 1;
-                tied += weight(order[end]);
+    let weight = |c: usize| x[c].iter().zip(&b).map(|(a, cc)| a * cc).sum::<f64>().exp();
+    let mut curves = Vec::new();
+    for (order, _) in &groups {
+        let m = order.len();
+        let (mut times, mut survival) = (Vec::new(), Vec::new());
+        let mut h0 = 0.0;
+        let mut k = 0;
+        while k < m {
+            let tk = t[order[k]];
+            let mut end = k;
+            let mut d = 0usize;
+            let mut tied = 0.0;
+            while end < m && t[order[end]] == tk {
+                if failed[order[end]] {
+                    d += 1;
+                    tied += weight(order[end]);
+                }
+                end += 1;
             }
-            end += 1;
+            if d > 0 {
+                let risk: f64 = order[k..].iter().map(|&c| weight(c)).sum();
+                h0 += match ties {
+                    Ties::Breslow => d as f64 / risk,
+                    Ties::Efron => (0..d).map(|l| 1.0 / (risk - l as f64 / d as f64 * tied)).sum(),
+                };
+                times.push(tk);
+                survival.push((-h0 * eta_mean.exp()).exp());
+            }
+            k = end;
         }
-        if d > 0 {
-            let risk: f64 = order[k..].iter().map(|&c| weight(c)).sum();
-            h0 += match ties {
-                Ties::Breslow => d as f64 / risk,
-                Ties::Efron => (0..d).map(|l| 1.0 / (risk - l as f64 / d as f64 * tied)).sum(),
-            };
-            times.push(tk);
-            survival.push((-h0 * eta_mean.exp()).exp());
-        }
-        k = end;
+        curves.push((times, survival));
     }
+    let (times, survival) = curves.first().cloned().unwrap_or_default();
     Ok(Cox {
         hazard_ratio: b.iter().map(|v| v.exp()).collect(),
         hr_low: b.iter().zip(&se).map(|(c, s)| (c - zq * s).exp()).collect(),
@@ -280,6 +337,7 @@ pub fn cox_with(x: &[Vec<f64>], t: &[f64], failed: &[bool], confidence: f64, tie
         events,
         times,
         survival,
+        curves,
     })
 }
 
@@ -330,6 +388,26 @@ mod tests {
         let efron0 = -(7f64.ln() + 6f64.ln() + 5f64.ln() + 3f64.ln() + 2f64.ln() + 1f64.ln());
         assert!((a.log_likelihood_null - breslow0).abs() < 1e-12, "{}", a.log_likelihood_null);
         assert!((b.log_likelihood_null - efron0).abs() < 1e-12, "{}", b.log_likelihood_null);
+    }
+
+    #[test]
+    fn one_stratum_is_the_plain_model_and_strata_split_the_risk_sets() {
+        let t = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let x: Vec<Vec<f64>> = [1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0].iter().map(|v| vec![*v]).collect();
+        let failed = [true, true, true, false, true, true, true, true];
+        let plain = cox_with(&x, &t, &failed, 0.95, Ties::Breslow).unwrap();
+        let one = cox_stratified(&x, &t, &failed, &[0; 8], 0.95, Ties::Breslow).unwrap();
+        assert_eq!(plain, one);
+        assert_eq!(plain.curves.len(), 1);
+        // Two strata: at b = 0 each failure's risk set counts only its own stratum.
+        let strata = [0, 0, 0, 0, 1, 1, 1, 1];
+        let s = cox_stratified(&x, &t, &failed, &strata, 0.95, Ties::Breslow).unwrap();
+        // Stratum 0 failures at 1, 2, 3 with risk sets 4, 3, 2; stratum 1 at 5, 6, 7, 8 with 4, 3, 2, 1.
+        let null = -(4f64.ln() + 3f64.ln() + 2f64.ln() + 4f64.ln() + 3f64.ln() + 2f64.ln() + 1f64.ln());
+        assert!((s.log_likelihood_null - null).abs() < 1e-12, "{}", s.log_likelihood_null);
+        assert_eq!(s.curves.len(), 2);
+        assert_eq!(s.curves[1].0, [5.0, 6.0, 7.0, 8.0]);
+        assert!(cox_stratified(&x, &t, &failed, &[0; 3], 0.95, Ties::Breslow).is_err());
     }
 
     #[test]

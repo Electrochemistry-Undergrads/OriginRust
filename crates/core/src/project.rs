@@ -418,6 +418,8 @@ pub enum ProjectError {
     NoBrowser,
     #[error("no sticky note there (notes go on graphs, workbooks and sheets)")]
     NoStickyNote,
+    #[error("{0}")]
+    CellFormula(String),
     #[error("the graph has no slicer")]
     NoSlicer,
     #[error("no such operation")]
@@ -432,6 +434,8 @@ pub enum ProjectError {
     FlashFillNoRule,
     #[error("the graph is no time series explorer, or has no such interval")]
     NoExplorer,
+    #[error("that interval length gives no intervals or more than 1000")]
+    ExplorerLength,
     #[error(
         "a grouped plot of indexed data needs exactly one numeric data column (designated Y; a numeric group column must be designated X or Group); select one"
     )]

@@ -133,9 +133,11 @@ impl Document {
                 // Linked cells (T211) take their sources' values first, and again when the
                 // recalculation changed a source.
                 self.project.refresh_cell_links();
+                // Cell formulas (T448) follow their cells in the same step.
+                self.project.refresh_cell_formulas();
                 self.project.recalculate_since(&before);
                 self.project.update_analysis_links(&before);
-                if self.project.refresh_cell_links() {
+                if self.project.refresh_cell_links() | self.project.refresh_cell_formulas() {
                     self.project.recalculate_since(&before);
                 }
                 self.project.apply_mask_switch();

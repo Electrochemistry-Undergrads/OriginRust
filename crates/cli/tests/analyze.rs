@@ -1597,6 +1597,26 @@ fn cox_regression_runs_from_the_command_line() {
     assert!(ok && out.contains("Cox proportional hazards (Efron ties)"), "{err} {out}");
     let (ok, _, err) = sheaf(&["analyze", "cox", file, "--y", "group,months,cens", "--ties", "exact"]);
     assert!(!ok && err.contains("--ties"), "{err}");
+    // Strata (T451): three sites.
+    let sites = dir.join("sites.csv");
+    let mut text = String::from(
+        "group,months,cens,site
+",
+    );
+    for i in 0..30 {
+        let g = i % 2;
+        let t = (5.0 + f64::from(i * 7 % 11)) / (1.0 + f64::from(g));
+        text.push_str(&format!(
+            "{g},{t},{},{}
+",
+            i32::from(i % 9 == 4),
+            ["north", "south", "east"][(i / 10) as usize]
+        ));
+    }
+    std::fs::write(&sites, text).unwrap();
+    let sites = sites.to_str().unwrap();
+    let (ok, out, err) = sheaf(&["analyze", "cox", sites, "--y", "group,months,cens,site", "--strata", "--no-graph"]);
+    assert!(ok && out.contains("3 strata: east, north, south"), "{err} {out}");
     let (ok, _, err) = sheaf(&["analyze", "cox", file, "--y", "months,cens"]);
     assert!(!ok && err.contains("covariate"), "{err}");
 }

@@ -7945,11 +7945,14 @@ here is measured.
 - **The bar above the graph:** Previous, Next (each disabled at its end of the list) and the caption, for example
   `B (2 of 3)`, or `[Sheet2] B (2 of 3)` by sheets. A step points the plot at that dataset's columns and rescales the
   layer's X and Y axes to it. Consecutive steps on a graph make one undo step ("Browse Graph").
+- **Keys (T450):** Graph > Next Dataset (PageDown) and Previous Dataset (PageUp) step the active graph's browser, as
+  Next and Previous do; at the end of the list nothing happens. On a graph without a browser they step a Time Series
+  Explorer's interval, and otherwise say there is nothing to step.
 - **Model:** `Graph::browser` (`sheaf_core::browser::GraphBrowser`: what it browses by, the plot's layer and index,
   the datasets and the one shown), saved with the project and renumbered with the graph's other columns;
   `Project::set_graph_browser`, `browse_graph`, `clear_graph_browser`, `browser_items`.
-- **Not built:** several browsed plots per graph, browsing across workbooks, picking a dataset from a list, keyboard
-  stepping, the browser in .opj files and in the CLI/MCP.
+- **Not built:** several browsed plots per graph, browsing across workbooks, picking a dataset from a list, the
+  browser in .opj files and in the CLI/MCP.
 
 ## Time Series Explorer: Plot > Specialized > Time Series Explorer (T416, 2026-11-24; Origin 2024b's, Sheaf's own)
 
@@ -7970,8 +7973,12 @@ steps or plays through successive intervals. Origin 2016 has none, so nothing he
 - **Model:** `Graph::explorer` (`sheaf_core::explorer::SeriesExplorer`: the count and the interval shown), saved with
   the project; `Project::plot_time_series_explorer`, `explore_interval`, `set_explorer_intervals`. Moving the band by
   hand moves the detail as in any Zoom graph; the next step puts it back on an interval.
-- **Not built:** a detail Y axis that rescales to each interval, intervals of a set length (a day, a week), overlapping
-  steps, the playback speed, and picking an interval by clicking the upper layer.
+- **By length (T453):** By length on the bar splits the X extent into intervals of a set X length instead (1 for a day
+  of dates, 7 for a week), a tenth of the extent to start with, edited beside it; the count follows (as many as it
+  takes, the last one shorter) and its field is disabled. More than 1000 intervals is refused. Turning it off goes back
+  to equal parts. The shown interval is the one holding the start of the one shown before.
+- **Not built:** a detail Y axis that rescales to each interval, overlapping steps, the playback speed, and picking an
+  interval by clicking the upper layer.
 
 ## LaTeX math in graph text (T436, 2026-11-24; Origin 2023b's built-in equation rendering, slice 1, Sheaf's own)
 

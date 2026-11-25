@@ -251,6 +251,7 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T432](T432-named-blocks.md) | Named blocks of several columns in statistics (mean(Name)) | S | done 2026-11-24 (expression-language), not measured |
 | [T434](T434-name-manager.md) | Worksheet > Name Manager...: the names, what they stand for, Delete | S | done 2026-11-24 (expression-language), not measured |
 | [T441](T441-find-files-background.md) | Find in Project Files searches in the background with progress and Stop | S | done 2026-11-25 (gui-look), not measured |
+| [T449](T449-find-files-jump.md) | Find in Project Files: Open goes to the first hit | S | done 2026-11-25 (gui-look), not measured |
 | [T233](T233-batch-summary.md) | File > Batch Processing: Summary Sheet, Dataset Identifier, Delete Intermediate Books (a Batch Summary book stacking one sheet of every book) | S | done 2026-11-20 (workbook-model 13p), not measured; left: Origin's layout and identifier choices |
 | [T235](T235-batch-cli.md) | sheaf batch: Batch Processing without a window (template, summary, --summary-csv), core Project::batch_process shared with the window | S | done 2026-11-20 (workbook-model 13p); MCP: T238 |
 | [T238](T238-batch-mcp.md) | MCP batch_process: the shared batch run (books, summary, delete) on the session project, one undo step attached | S | done 2026-11-20 (mcp.md 5.1); left: read options |
@@ -346,6 +347,8 @@ All six are **open** (T72, measured, joins them). The older index below retains 
 | [T394](T394-life-data-frequency.md) | Frequency (count) column for the life-data tools (Origin 2026b) | S | done 2026-11-23 (statistics 49) |
 | [T408](T408-cox.md) | Cox proportional hazards regression with Breslow ties, hazard ratios and tests (Origin 2026b) | S | done 2026-11-23 (statistics 52) |
 | [T391](T391-life-data-regression.md) | Life data regression: Weibull, lognormal and exponential AFT models with censoring (Origin 2026b) | S | done 2026-11-23 (statistics 48) |
+| [T452](T452-seasonal-auto.md) | ARIMA order search over the seasonal orders too | S | done 2026-11-25 (statistics 43) |
+| [T451](T451-cox-strata.md) | Stratified Cox regression with a survival curve per stratum | S | done 2026-11-25 (statistics 52) |
 | [T447](T447-prism-import.md) | Import GraphPad Prism XML files (.pzfx) | S | done 2026-11-25 (import-prism) |
 | [T446](T446-seasonal-arima.md) | Seasonal ARIMA(p,d,q)(P,D,Q)s by conditional least squares | S | done 2026-11-25 (statistics 43) |
 | [T445](T445-cox-efron.md) | Cox regression with Efron's tie handling | S | done 2026-11-25 (statistics 52) |
@@ -475,6 +478,9 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T442](T442-auto-refresh.md) | File > Import > Auto Refresh (Origin 2019b/2026): re-import the source every N s, only when changed, pausable | S | done 2026-11-25 (workbook-model 13t) |
 | [T443](T443-operation-tree.md) | Workbook operation tree in Object Manager (Origin 2027): linked analyses by result sheet, inputs/outputs, Recalculate, Auto/Manual, stop following | S | done 2026-11-25 (analysis-tools 23) |
 | [T444](T444-slicer-scope-extract.md) | Graph Slicer: layer scope and Extract to a new workbook (rest of T406) | S | done 2026-11-25 (graphing "Graph Slicer") |
+| [T448](T448-cell-formulas.md) | Cell formulas (=A1*10, ranges, other sheets) and the Formula Bar (Origin 2019/2021) | M | done 2026-11-25 (workbook-model 13u) |
+| [T450](T450-small-leftovers.md) | PageUp/PageDown step a Browser Graph or Time Series Explorer; sticky-note mark in Project Explorer | S | done 2026-11-25 (graphing, notes-window.md) |
+| [T453](T453-explorer-length.md) | Time Series Explorer: intervals of a set X length (rest of T416) | S | done 2026-11-25 (graphing "Time Series Explorer") |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |

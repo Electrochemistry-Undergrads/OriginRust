@@ -117,7 +117,7 @@ use sheaf_core::clipboard::CopyOptions;
 /// Copy Page's size factor: the picture is this fraction of the page size. Origin's option is
 /// 40 % up to 2021a and 100 % from 2021b, so 40 % is the 2016 default (graphing.md 9.6).
 const COPY_PAGE_SIZE_FACTOR: f64 = 0.4;
-use sheaf_core::graph::{LabelForm, TickLabelSource};
+use sheaf_core::graph::{LabelForm, PageGrid, TickLabelSource};
 use sheaf_core::project::{Folder, Window};
 use sheaf_core::template::Template;
 use sheaf_core::{ColumnData, ColumnId, Designation, Document, Project, WindowId};
@@ -3429,6 +3429,7 @@ impl SheafApp {
                     PageSwitch::ActiveLayerIndicator => "Show Active Layer Indicator",
                     PageSwitch::AxisLayerIcons => "Show Axis Layer Icons",
                     PageSwitch::ObjectGrid => "Show Object Grid",
+                    PageSwitch::LayerGrid => "Show Layer Grid",
                 };
                 self.doc.apply(label, |p| {
                     if let Some(g) = p.graph_mut(graph) {
@@ -3437,7 +3438,12 @@ impl SheafApp {
                             PageSwitch::IconDoubleClickPlotSetup => g.page.style.icon_double_click_plot_setup = on,
                             PageSwitch::ActiveLayerIndicator => g.page.style.active_layer_indicator = on,
                             PageSwitch::AxisLayerIcons => g.page.style.axis_layer_icons = on,
-                            PageSwitch::ObjectGrid => g.page.style.object_grid = on,
+                            PageSwitch::ObjectGrid => {
+                                g.page.style.grid = if on { PageGrid::Object } else { PageGrid::Off }
+                            }
+                            PageSwitch::LayerGrid => {
+                                g.page.style.grid = if on { PageGrid::Layer } else { PageGrid::Off }
+                            }
                         }
                     }
                 });
@@ -7495,7 +7501,7 @@ impl SheafApp {
                 .and_then(|g| project.graph(g))
                 .is_some_and(|g| g.page.style.active_layer_indicator),
             axis_layer_icons: graph.and_then(|g| project.graph(g)).is_some_and(|g| g.page.style.axis_layer_icons),
-            object_grid: graph.and_then(|g| project.graph(g)).is_some_and(|g| g.page.style.object_grid),
+            page_grid: graph.and_then(|g| project.graph(g)).map(|g| g.page.style.grid).unwrap_or_default(),
             show_frame: graph
                 .and_then(|g| project.graph(g)?.layers.get(layer))
                 .filter(|l| l.coords.is_cartesian())

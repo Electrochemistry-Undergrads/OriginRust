@@ -1,4 +1,5 @@
 use super::*;
+use sheaf_core::graph::PageGrid;
 use sheaf_core::project::ViewMode;
 
 fn mode(h: &Harness<'static, SheafApp>) -> ViewMode {
@@ -82,9 +83,7 @@ fn layer_icons_in_the_show_menu_hides_and_shows_the_icons() {
 fn the_show_items_that_are_not_measured_stay_grey() {
     let mut h = start(vec![data_file("vm-grey")]);
     menu_path(&mut h, &["View", "Show"]);
-    for label in ["Layer Grid", "Master Items on Screen"] {
-        assert!(h.get_by_label(label).accesskit_node().is_disabled(), "{label} is not built yet");
-    }
+    assert!(h.get_by_label("Master Items on Screen").accesskit_node().is_disabled());
     // T177: Labels (and Data, which shares its name with the Data menu) are live (graphing 22.8).
     assert!(!h.get_by_label("Labels").accesskit_node().is_disabled());
 }
@@ -239,32 +238,40 @@ fn axis_layer_icons_select_the_axis_owner_and_are_saved_per_graph() {
 }
 
 #[test]
-fn object_grid_is_a_saved_page_switch() {
+fn the_object_and_layer_grids_replace_each_other_and_are_saved_per_page() {
     let mut h = start(vec![data_file("view-object-grid")]);
     let first = graph(&h).id;
     let other = h.state_mut().doc.apply("Second graph", |p| p.add_graph(Template::Line));
     show_window(&mut h, "Graph1 - sample");
-    assert!(!h.state().menu_context().object_grid);
+    assert_eq!(h.state().menu_context().page_grid, PageGrid::Off);
     let picture = sheaf_plot::graph_scene(project(&h), first).unwrap();
 
     menu_path(&mut h, &["View", "Show", "Object Grid"]);
-    assert!(h.state().menu_context().object_grid);
-    assert!(!project(&h).graph(other).unwrap().page.style.object_grid);
+    assert_eq!(h.state().menu_context().page_grid, PageGrid::Object);
     assert_eq!(h.state().doc.undo_label(), Some("Show Object Grid"));
+    menu_path(&mut h, &["View", "Show", "Layer Grid"]);
+    assert_eq!(h.state().menu_context().page_grid, PageGrid::Layer);
+    assert_eq!(h.state().doc.undo_label(), Some("Show Layer Grid"));
     assert_eq!(sheaf_plot::graph_scene(project(&h), first).unwrap(), picture);
 
-    let path = save_dir("view-object-grid").join("object-grid.sheaf");
+    let path = save_dir("view-object-grid").join("page-grid.sheaf");
     sheaf_io::save::save_project(project(&h), &path).unwrap();
     let reopened = sheaf_io::open_project(&path).unwrap().project;
-    assert!(reopened.graph(first).unwrap().page.style.object_grid);
-    assert!(!reopened.graph(other).unwrap().page.style.object_grid);
+    assert_eq!(reopened.graph(first).unwrap().page.style.grid, PageGrid::Layer);
+    assert_eq!(reopened.graph(other).unwrap().page.style.grid, PageGrid::Off);
 
     menu(&mut h, "Edit", "Undo");
-    assert!(!h.state().menu_context().object_grid);
+    assert_eq!(h.state().menu_context().page_grid, PageGrid::Object);
     menu(&mut h, "Edit", "Redo");
-    assert!(h.state().menu_context().object_grid);
+    assert_eq!(h.state().menu_context().page_grid, PageGrid::Layer);
     menu_path(&mut h, &["View", "Show", "Object Grid"]);
-    assert!(!h.state().menu_context().object_grid);
+    assert_eq!(h.state().menu_context().page_grid, PageGrid::Object);
+    menu_path(&mut h, &["View", "Show", "Object Grid"]);
+    assert_eq!(h.state().menu_context().page_grid, PageGrid::Off);
+    menu_path(&mut h, &["View", "Show", "Layer Grid"]);
+    assert_eq!(h.state().menu_context().page_grid, PageGrid::Layer);
+    menu_path(&mut h, &["View", "Show", "Layer Grid"]);
+    assert_eq!(h.state().menu_context().page_grid, PageGrid::Off);
 }
 
 #[test]

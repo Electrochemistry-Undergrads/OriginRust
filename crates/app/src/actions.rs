@@ -1562,6 +1562,8 @@ pub enum Action {
     Autosave,
     /// View > Status Bar: show or hide the status bar.
     ToggleStatusBar,
+    /// View > Formula Bar: show or hide the Formula Bar above the workbooks' grids (T448).
+    ToggleFormulaBar,
     /// Tools > AI Assistants (MCP): turn the endpoint of `sheaf-mcp --attach` on or off.
     ToggleAiLink,
     Quit,

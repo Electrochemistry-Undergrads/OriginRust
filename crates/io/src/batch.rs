@@ -176,6 +176,7 @@ pub fn place_workbook_with(
                     cell_images: Vec::new(),
                     cell_arrows: Vec::new(),
                     cell_links: Vec::new(),
+                    cell_formulas: Vec::new(),
                     sticky: dest.sheets[t.sheet].sticky.clone(),
                 };
             }

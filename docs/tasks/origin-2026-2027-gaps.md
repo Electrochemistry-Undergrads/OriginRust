@@ -17,7 +17,7 @@ outputs or UI behavior.
 
 | Feature | Release | Functionality to add | Source |
 |---|---|---|---|
-| Cell formulas and Formula Bar | 2019 / 2021 | Calculate individual cells and edit their expressions in a formula bar, alongside column-wide calculations. | [2019][o19] · [2021][o21] |
+| Cell formulas and Formula Bar | 2019 / 2021 | Done (T448: =expression in a cell with A1 references, ranges and other sheets, recalculated in every edit; Formula Bar above the grid); references that move with rows and filling down remain. Calculate individual cells and edit their expressions in a formula bar, alongside column-wide calculations. | [2019][o19] · [2021][o21] |
 | Named cells and ranges | 2022 | Named cells done (T396: data cell Define Name..., formulas read the name, expression-language "Named cells"); named ranges of one column done (T400: Define Name on selected cells, `mean(Name)`); blocks of several columns done (T432); Name Manager done (T434: Worksheet > Name Manager..., what each name stands for, Delete). | [2022][o22] |
 | Cell notes | 2022 | Done (T36). Attach a comment to an individual data cell, show an indicator and read the note in place. | [2022][o22] |
 | Worksheet frozen panes | 2023 | Done (T34). Keep selected data rows or columns visible while scrolling the data area. | [2023][o23] |

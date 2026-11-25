@@ -695,6 +695,15 @@ pub enum Cmd {
         shape: usize,
         mask: bool,
     },
+    /// The data points inside any drawn rectangle or ellipse of the layer, copied out (T422).
+    ExtractAllRegions {
+        layer: usize,
+    },
+    /// Masks (or unmasks) the data points inside any drawn rectangle or ellipse of the layer (T422).
+    MaskAllRegions {
+        layer: usize,
+        mask: bool,
+    },
     /// Add Text...: a new text label in the active layer.
     AddText,
     /// Properties of a text label (its text window).
@@ -811,6 +820,8 @@ pub enum Cmd {
     /// Window > Arrange Icons (T257).
     ArrangeIcons,
     WindowProperties,
+    /// Window > Sticky Note (T421): on the window, or on the workbook's active sheet.
+    StickyNote(bool),
     About,
 }
 
@@ -2490,6 +2501,14 @@ fn window_menu(kind: WindowKind) -> Vec<Entry> {
         WindowKind::Workbook => v.push(grey("Sp&lit")),
         WindowKind::None | WindowKind::Matrix | WindowKind::Layout => {}
     }
+    match kind {
+        WindowKind::Graph => v.push(item("Stic&ky Note", Cmd::StickyNote(false))),
+        WindowKind::Workbook => v.extend([
+            item("Stic&ky Note on Book", Cmd::StickyNote(false)),
+            item("Sticky &Note on Sheet", Cmd::StickyNote(true)),
+        ]),
+        WindowKind::None | WindowKind::Matrix | WindowKind::Layout => {}
+    }
     v.extend([
         sep(),
         keyed("&Properties...", alt(Key::Enter), Cmd::WindowProperties),
@@ -2995,7 +3014,8 @@ pub fn graph_label_menu(layer: usize, label: usize) -> Vec<Entry> {
 }
 
 /// The menu of a drawn line, arrow, rectangle or ellipse.
-pub fn graph_shape_menu(layer: usize, shape: usize, region: bool) -> Vec<Entry> {
+/// `regions` counts the layer's rectangles and ellipses: with two or more, the All Regions entries are offered (T422).
+pub fn graph_shape_menu(layer: usize, shape: usize, region: bool, regions: usize) -> Vec<Entry> {
     let mut entries = vec![
         keyed("Cut", ctrl(Key::X), Cmd::CutShape { layer, shape }),
         keyed("Copy", ctrl(Key::C), Cmd::CopyShape { layer, shape }),
@@ -3010,6 +3030,11 @@ pub fn graph_shape_menu(layer: usize, shape: usize, region: bool) -> Vec<Entry> 
         entries.push(item("Extract Data in Region", Cmd::ExtractRegion { layer, shape }));
         entries.push(item("Mask Data in Region", Cmd::MaskRegion { layer, shape, mask: true }));
         entries.push(item("Unmask Data in Region", Cmd::MaskRegion { layer, shape, mask: false }));
+        if regions >= 2 {
+            entries.push(item("Extract Data in All Regions", Cmd::ExtractAllRegions { layer }));
+            entries.push(item("Mask Data in All Regions", Cmd::MaskAllRegions { layer, mask: true }));
+            entries.push(item("Unmask Data in All Regions", Cmd::MaskAllRegions { layer, mask: false }));
+        }
         entries.push(sep());
     }
     entries.push(item("Properties...", Cmd::EditShape { layer, shape }));
@@ -4102,6 +4127,12 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::MaskRegion { layer, shape, mask } => {
             Action::MaskRegion { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, shape: *shape, mask: *mask }
         }
+        Cmd::ExtractAllRegions { layer } => {
+            Action::ExtractAllRegions { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer }
+        }
+        Cmd::MaskAllRegions { layer, mask } => {
+            Action::MaskAllRegions { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, mask: *mask }
+        }
         Cmd::AddText => Action::AddText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: Some(c.layer), at: None },
         Cmd::EditText { layer, label } => {
             Action::EditText { graph: c.graph.ok_or(NEED_GRAPH)?, layer: *layer, label: *label }
@@ -4180,6 +4211,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::TileVertically => Action::TileVertically,
         Cmd::ArrangeIcons => Action::ArrangeIcons,
         Cmd::WindowProperties => Action::RenameWindow(c.active.ok_or(NEED_WINDOW)?),
+        Cmd::StickyNote(sheet) => Action::AddStickyNote { window: c.active.ok_or(NEED_WINDOW)?, sheet: *sheet },
         Cmd::About => Action::About,
     })
 }

@@ -218,6 +218,7 @@ impl WorksheetFontsDialog {
             }
             let sheet = &mut p.workbook_mut(self.book).unwrap().sheets[self.sheet];
             sheet.view = view;
+            sheet.view.header_measurements.top_gap_pt = headers.top_gap_pt;
             if self.shown_size.rows != self.base_size.rows {
                 // Origin clears a zero-row sheet and leaves two blank rows.
                 sheet.view.allocated_rows = Some(if self.shown_size.rows == 0 { 2 } else { self.shown_size.rows });
@@ -343,6 +344,9 @@ impl WorksheetFontsDialog {
                 (100.0 * width / crate::grid::COLUMN_WIDTH).round() as u16,
                 0,
             );
+            let gap = ui.label("Gap From Top");
+            ui.add(egui::DragValue::new(&mut headers.top_gap_pt).range(0..=u8::MAX).suffix(" pt")).labelled_by(gap.id);
+            ui.end_row();
             measurement(ui, "All Rows Height", &mut cells.row_height, standard, 1);
             measurement(ui, "All Columns Width", &mut cells.column_width, standard, 1);
         });

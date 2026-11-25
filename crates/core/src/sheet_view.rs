@@ -60,13 +60,20 @@ fn yes() -> bool {
     true
 }
 
-/// Explicit grid header sizes as percentages of the 16 px row and 67 px column.
+/// Explicit grid header sizes as percentages of the 16 px row and 67 px column, and the top gap.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HeaderMeasurements {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub column_height: Option<u16>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub row_width: Option<u16>,
+    /// Gap above the worksheet grid in points, independent of the Standard font.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub top_gap_pt: u8,
+}
+
+fn is_zero(value: &u8) -> bool {
+    *value == 0
 }
 
 impl HeaderMeasurements {
@@ -238,7 +245,8 @@ mod tests {
         let json = serde_json::to_string(&sheet).unwrap();
         assert!(!json.contains("header_measurements"));
         let print_extent = SheetTable::new(&sheet, PrintStyle::default()).heading_extent();
-        sheet.view.header_measurements = HeaderMeasurements { column_height: Some(320), row_width: Some(0) };
+        sheet.view.header_measurements =
+            HeaderMeasurements { column_height: Some(320), row_width: Some(0), top_gap_pt: 20 };
 
         let json = serde_json::to_string(&sheet).unwrap();
         let saved: Worksheet = serde_json::from_str(&json).unwrap();

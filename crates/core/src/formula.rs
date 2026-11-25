@@ -637,6 +637,16 @@ fn column_expr(c: &Column) -> Result<Expr, sheaf_expr::ExprError> {
 }
 
 impl Project {
+    /// The text of a report link (T439): `src` is a formula read against the whole project, a worksheet cell
+    /// `%([Book1]Sheet1,B,3)` or any expression over named sheets; its first value as text.
+    pub fn evaluate_link(&self, src: &str) -> Result<String, FormulaError> {
+        let expr = Expr::parse(src)?;
+        let empty = Worksheet::new("");
+        let host = SheetHost { sheet: &empty, book: None, project: Some(self), j: None };
+        let values = expr.eval_values(&host, 1)?;
+        Ok(values.into_iter().next().map(Value::into_text).unwrap_or_default())
+    }
+
     /// Fills a column from a formula and remembers the formula on the column. The formula runs
     /// once ([`RecalcMode::None`]); see [`Project::set_column_values_with`] for a column that
     /// follows its inputs.

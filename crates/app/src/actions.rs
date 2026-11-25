@@ -678,6 +678,13 @@ pub enum Action {
     FindInProject,
     /// View > Project Browser: open it (T433).
     ProjectBrowser,
+    /// A Notes window's Export Report...: ask where, then write it (T439).
+    ExportReport(WindowId),
+    /// Write Notes window `notes`'s report to `path` (T439).
+    ExportReportTo {
+        notes: WindowId,
+        path: std::path::PathBuf,
+    },
     /// File > Find in Project Files... (T361).
     FindInProjectFiles,
     /// File > Export > Worksheet as Image...: save the active sheet as a picture.

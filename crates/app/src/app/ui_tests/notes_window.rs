@@ -310,3 +310,42 @@ fn window_properties_list_a_books_dependents_and_a_graphs_books() {
     let book_name = project(&h).workbook(book).unwrap().name.clone();
     assert!(h.query_by_label(&format!("Plots data of: {book_name}")).is_some());
 }
+
+#[test]
+fn a_report_previews_its_links_and_exports_html_with_the_graph() {
+    // T439: a Notes window holding a cell link and a figure line.
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let mut notes = sheaf_core::WindowId(0);
+    h.state_mut().doc.apply("data", |p| {
+        let b = p.add_workbook("");
+        p.add_column(b, 0, sheaf_core::Designation::X, sheaf_core::ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+        let y =
+            p.add_column(b, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::numeric(vec![5.0, 7.5])).unwrap();
+        let g = p.plot_columns(sheaf_core::template::Template::Line, &[y]).unwrap();
+        let (book, graph) = (p.workbook(b).unwrap().name.clone(), p.graph(g).unwrap().name.clone());
+        notes = p.add_notes();
+        p.notes_mut(notes).unwrap().text = format!("# Result\nPeak: %([{book}]Sheet1,B,2) mA\n![The run]({graph})");
+    });
+    settle(&mut h);
+    h.state_mut().apply(Action::Focus(notes), &ctx);
+    settle(&mut h);
+    h.get_by_label("Preview").click();
+    settle(&mut h);
+    h.get_by_label("Peak: 7.5 mA");
+    h.get_by_label("The run");
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-report-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("run3.html");
+    h.state_mut().apply(Action::ExportReportTo { notes, path: path.clone() }, &ctx);
+    let html = std::fs::read_to_string(&path).unwrap();
+    assert!(html.contains("<h1>Result</h1>") && html.contains("Peak: 7.5 mA"));
+    let pngs: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|e| e.path().extension().is_some_and(|x| x == "png"))
+        .collect();
+    assert_eq!(pngs.len(), 1, "the figure's graph beside the page");
+    let _ = std::fs::remove_dir_all(&dir);
+}

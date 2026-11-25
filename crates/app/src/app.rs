@@ -2673,6 +2673,26 @@ impl SheafApp {
                 let folder = self.path.as_deref().and_then(|p| p.parent()).map(std::path::Path::to_path_buf);
                 self.find_files = Some(crate::dialogs::find_files::FindFilesDialog::new(folder.as_deref()));
             }
+            Action::ExportReport(notes) => {
+                let name = self.doc.project().notes_window(notes).map_or_else(|| "report".into(), |n| n.name.clone());
+                let mut chooser = rfd::FileDialog::new()
+                    .set_title("Export Report")
+                    .add_filter("Web page (*.html)", &["html", "htm"])
+                    .add_filter("Markdown (*.md)", &["md", "markdown"])
+                    .set_file_name(format!("{name}.html"));
+                if let Some(dir) = self.folder() {
+                    chooser = chooser.set_directory(dir);
+                }
+                if let Some(path) = chooser.save_file() {
+                    self.apply(Action::ExportReportTo { notes, path }, ctx);
+                }
+            }
+            Action::ExportReportTo { notes, path } => {
+                match crate::notes_view::export_report(self.doc.project(), notes, &path) {
+                    Ok(n) => self.say(format!("Exported the report to {} with {n} figure(s)", path.display())),
+                    Err(e) => self.warn(format!("Could not export the report: {e}")),
+                }
+            }
             Action::ProjectBrowser => {
                 self.project_browser.get_or_insert_with(Default::default);
             }

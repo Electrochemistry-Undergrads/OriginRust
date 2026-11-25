@@ -72,6 +72,7 @@ pub mod project;
 pub mod project_browser;
 pub mod qc;
 pub mod reimport;
+pub mod report;
 pub mod reshape;
 pub mod rowfilter;
 pub mod runchart;

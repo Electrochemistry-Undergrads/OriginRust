@@ -1520,6 +1520,26 @@ Origin 2026 infers a text rule from an example, previews it, and fills static va
 - **Not done:** numbers and dates (only texts are matched), substrings that are not whole words, conditional
   rules, suggestions while typing, and picking the source columns.
 
+## 13s. View > Project Browser (T433, 2026-11-24; Origin 2025b's Project Browser, Sheaf's own, not measured)
+
+Origin 2025b added a Project Browser that searches a project-wide list of sheets, columns, graphs and folders,
+previews matches and edits the metadata of several at once. Origin 2016 has none.
+
+- **The list:** every workbook, then its sheets, each followed by its columns, in project order, then every graph.
+  Columns: a tick, Kind, Name (short name), Where (`[Book1]` for a sheet, `[Book1]Sheet1` for a column), Long
+  Name, Units, Comments (first line). At most 500 rows are drawn; the count above the list says how many match.
+- **Search and Show:** the search (ignoring case, as you type) keeps the rows where any of Name, Where, Long Name,
+  Units or Comments holds it; Show keeps one kind (All, Book, Sheet, Column, Graph). Tick All Shown ticks the rows
+  the list shows; Clear Ticks unticks every row.
+- **Preview and Go To:** clicking a name makes it the previewed item: a column's row count and first 5 values, a
+  sheet's columns and rows, a book's sheets, a graph's layers and plots. Go To, or a double click on a name, opens
+  the item as a Find in Project hit does (its folder, window, sheet and column); the browser stays open.
+- **Set:** Set [Long Name | Units | Comments] to [text], Apply to n Ticked: n counts the ticked items that have the
+  field (columns have all three, sheets a Long Name and Comments, books and graphs a Long Name). One undo step,
+  "Set Units" etc.
+- **Not done:** folders and matrices in the list, sorting by a column, editing a cell in place, other metadata,
+  and a picture preview of a graph.
+
 ## 14. Suggested Rust data model (P0)
 
 ```

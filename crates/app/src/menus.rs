@@ -341,6 +341,8 @@ pub enum Cmd {
     FindInSheets,
     /// Edit > Find in Project (F3, T95).
     FindInProject,
+    /// View > Project Browser (T433).
+    ProjectBrowser,
     /// File > Find in Project Files... (T361).
     FindInProjectFiles,
     /// File > Export > Worksheet as Image... (T97).
@@ -1456,6 +1458,7 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
     v.push(grey_keyed("Code Builder", alt(Key::Num4)));
     v.push(grey_keyed("Quick Help", alt(Key::Num5)));
     v.push(keyed("Project Explorer", alt(Key::Num1), Cmd::Panel(PanelId::Explorer)));
+    v.push(item("Pro&ject Browser", Cmd::ProjectBrowser));
     if kind == WindowKind::Graph {
         v.push(keyed("Object Manager", alt(Key::Num8), Cmd::Panel(PanelId::Objects)));
     }
@@ -3647,6 +3650,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::AcceptanceSampling => Action::AcceptanceSampling,
         Cmd::FindInSheets => Action::FindInSheets(book?),
         Cmd::FindInProject => Action::FindInProject,
+        Cmd::ProjectBrowser => Action::ProjectBrowser,
         Cmd::FindInProjectFiles => Action::FindInProjectFiles,
         Cmd::ReplaceInSheets => Action::ReplaceInSheets(book?),
         Cmd::ExportGraph => Action::ExportGraph(c.graph.ok_or(NEED_GRAPH)?),

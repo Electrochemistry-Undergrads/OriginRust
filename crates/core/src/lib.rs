@@ -69,6 +69,7 @@ pub mod panels;
 pub mod piper;
 pub mod pivot;
 pub mod project;
+pub mod project_browser;
 pub mod qc;
 pub mod reimport;
 pub mod reshape;

@@ -75,6 +75,7 @@ pub mod pivot;
 pub mod plot_setup;
 pub mod power;
 pub mod printing;
+pub mod project_browser;
 pub mod qc_chart;
 pub mod range_pick;
 pub mod recovery;

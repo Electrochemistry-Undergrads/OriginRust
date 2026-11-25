@@ -55,11 +55,24 @@ pub struct LifeRegressionSpec {
     pub censor: String,
     /// The last chosen column holds each row's frequency (count) (T394).
     pub frequency: bool,
+    /// Fractions failed whose percentile life is predicted (T437); empty for none.
+    pub percentiles: Vec<f64>,
+    /// The covariate values of the prediction, one per covariate; `None`: the covariate means.
+    pub at: Option<Vec<f64>>,
+    /// The level of the percentile intervals.
+    pub confidence: f64,
 }
 
 impl Default for LifeRegressionSpec {
     fn default() -> Self {
-        LifeRegressionSpec { dist: LifeDist::Weibull, censor: "1".into(), frequency: false }
+        LifeRegressionSpec {
+            dist: LifeDist::Weibull,
+            censor: "1".into(),
+            frequency: false,
+            percentiles: vec![0.1, 0.5, 0.9],
+            at: None,
+            confidence: 0.95,
+        }
     }
 }
 
@@ -396,6 +409,20 @@ pub(super) fn run_regression(
         }
         check_total(t.len())?;
     }
+    if spec.percentiles.iter().any(|p| !(*p > 0.0 && *p < 1.0)) {
+        return Err(AnalysisError::BadOption("the percentiles must lie between 0 and 100 percent".into()));
+    }
+    if !(spec.confidence > 0.0 && spec.confidence < 1.0) {
+        return Err(AnalysisError::BadOption("the confidence level must lie between 0 and 1".into()));
+    }
+    if let Some(at) = &spec.at
+        && at.len() != k
+    {
+        return Err(AnalysisError::BadOption(format!(
+            "give one value per covariate for the percentiles ({k}, got {})",
+            at.len()
+        )));
+    }
     let fit = calc::lifereg::life_regression(&x, &t, &failed, spec.dist)
         .map_err(|e| AnalysisError::BadOption(e.to_string()))?;
     let mut table = ResultTable::new(&["Coefficient", "Standard error", "z", "Prob>|z|"]);
@@ -442,6 +469,44 @@ pub(super) fn run_regression(
     }];
     for (i, h) in table.headers.iter().enumerate() {
         sheet_cols.push(column_of(h, "", Designation::Y, table.rows.iter().map(|(_, v)| v[i]).collect()));
+    }
+    if !spec.percentiles.is_empty() {
+        // At the given covariates, else at their means over the rows used (T437).
+        let at: Vec<f64> = spec
+            .at
+            .clone()
+            .unwrap_or_else(|| (0..k).map(|j| x.iter().map(|r| r[j]).sum::<f64>() / x.len() as f64).collect());
+        let pct = num(100.0 * spec.confidence);
+        let q: Vec<calc::lifereg::Percentile> =
+            spec.percentiles.iter().map(|p| fit.percentile(&at, *p, spec.confidence)).collect();
+        let place: Vec<String> =
+            xcs.iter().zip(&at).map(|(c, v)| format!("{} = {}", column_label(c), num(*v))).collect();
+        let place = if place.is_empty() { "no covariates".to_string() } else { place.join(", ") };
+        let comment =
+            format!("Percentile life at {place} ({})", if spec.at.is_some() { "given" } else { "the covariate means" });
+        sheet_cols.push(column_of("Percent", &comment, Designation::X, q.iter().map(|v| 100.0 * v.p).collect()));
+        sheet_cols.push(column_of("Percentile life", &comment, Designation::Y, q.iter().map(|v| v.estimate).collect()));
+        sheet_cols.push(column_of(
+            &format!("Lower {pct}%"),
+            &comment,
+            Designation::Y,
+            q.iter().map(|v| v.lower).collect(),
+        ));
+        sheet_cols.push(column_of(
+            &format!("Upper {pct}%"),
+            &comment,
+            Designation::Y,
+            q.iter().map(|v| v.upper).collect(),
+        ));
+        let list: Vec<String> = q
+            .iter()
+            .map(|v| format!("{} %: {} ({} to {})", num(100.0 * v.p), num(v.estimate), num(v.lower), num(v.upper)))
+            .collect();
+        notes.push(format!(
+            "Percentile life at {place} ({}), {pct} % intervals from the delta method on log time: {}.",
+            if spec.at.is_some() { "given" } else { "the covariate means" },
+            list.join("; ")
+        ));
     }
     Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph: None, more_graphs: Vec::new() })
 }
@@ -947,6 +1012,40 @@ mod tests {
         let two =
             Request { columns: cols[..1].to_vec(), rows: RowRange::All, tool: Tool::Turnbull(Default::default()) };
         assert!(p.analyze(&two).is_err());
+    }
+
+    #[test]
+    fn life_regression_percentiles_at_the_means_and_at_given_values() {
+        let mut p = Project::new();
+        let book = p.add_workbook("lrp");
+        let x: Vec<f64> = (0..20).map(|i| f64::from(i % 2)).collect();
+        let t: Vec<f64> =
+            (0..20).map(|i| (2.0 - 0.8 * f64::from(i % 2) + 0.3 * (f64::from(i) * 1.3).sin()).exp()).collect();
+        let c: Vec<f64> = (0..20).map(|i| f64::from(u8::from(i % 7 == 3))).collect();
+        let cols: Vec<ColumnId> = [x, t, c]
+            .into_iter()
+            .map(|v| p.add_column(book, 0, Designation::Y, ColumnData::numeric(v)).unwrap())
+            .collect();
+        let run = |p: &mut Project, spec: LifeRegressionSpec| {
+            p.analyze(&Request { columns: cols.clone(), rows: RowRange::All, tool: Tool::LifeRegression(spec) })
+        };
+        let out = run(&mut p, LifeRegressionSpec::default()).unwrap();
+        assert!(out.notes[2].contains("the covariate means") && out.notes[2].contains("50 %"), "{:?}", out.notes);
+        let spec = LifeRegressionSpec { at: Some(vec![1.0]), percentiles: vec![0.5], ..Default::default() };
+        let one = run(&mut p, spec).unwrap();
+        let spec = LifeRegressionSpec { at: Some(vec![0.0]), percentiles: vec![0.5], ..Default::default() };
+        let zero = run(&mut p, spec).unwrap();
+        let median = |o: &Report| {
+            let s = &p.workbook(book).unwrap().sheets[o.new_sheet.unwrap()];
+            s.columns.iter().find(|c| c.long_name == "Percentile life").unwrap().numeric().unwrap()[0]
+        };
+        // The dose coefficient is the log ratio of the medians.
+        let coef = one.table.as_ref().unwrap().rows[1].1[0];
+        assert!(((median(&one) / median(&zero)).ln() - coef).abs() < 1e-9);
+        let bad = LifeRegressionSpec { at: Some(vec![1.0, 2.0]), ..Default::default() };
+        assert!(run(&mut p, bad).is_err());
+        let bad = LifeRegressionSpec { percentiles: vec![1.0], ..Default::default() };
+        assert!(run(&mut p, bad).is_err());
     }
 
     #[test]

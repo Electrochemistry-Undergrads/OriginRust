@@ -59,6 +59,9 @@ pub struct MultiOptions {
     life_any: LifeDistArbitrarySpec,
     turnbull: TurnbullSpec,
     life_reg: LifeRegressionSpec,
+    /// The percent list and covariate values of the life-data regression's percentiles, as typed (T437).
+    life_reg_percentiles: String,
+    life_reg_at: String,
     cox: CoxSpec,
     qpcr: QpcrSpec,
     qpcr_curve: QpcrCurveSpec,
@@ -130,7 +133,23 @@ impl MultiOptions {
                 if self.life_reg.censor.trim().is_empty() {
                     return Err("give the censoring value".to_string());
                 }
-                Ok(Tool::LifeRegression(self.life_reg.clone()))
+                let numbers = |text: &str, what: &str| -> Result<Vec<f64>, String> {
+                    text.split([',', ' ', ';'])
+                        .filter(|t| !t.trim().is_empty())
+                        .map(|t| t.trim().parse::<f64>().map_err(|_| format!("{what}: '{}' is not a number", t.trim())))
+                        .collect()
+                };
+                let mut spec = self.life_reg.clone();
+                if !self.life_reg_percentiles.trim().is_empty() {
+                    spec.percentiles =
+                        numbers(&self.life_reg_percentiles, "percentiles")?.iter().map(|p| p / 100.0).collect();
+                }
+                spec.at = if self.life_reg_at.trim().is_empty() {
+                    None
+                } else {
+                    Some(numbers(&self.life_reg_at, "covariate values")?)
+                };
+                Ok(Tool::LifeRegression(spec))
             }
             AnalysisKind::LifeDist => {
                 if self.life.censor.trim().is_empty() {
@@ -399,6 +418,25 @@ impl MultiOptions {
                     }
                 });
                 ui.checkbox(&mut s.frequency, "Last column: frequency (count) of each row");
+                ui.horizontal(|ui| {
+                    ui.label("Percentile lives (%)");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.life_reg_percentiles)
+                            .hint_text("10 50 90")
+                            .desired_width(100.0),
+                    );
+                    ui.label("at covariates");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.life_reg_at).hint_text("their means").desired_width(100.0),
+                    );
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Percentile interval level");
+                    let mut pct = s.confidence * 100.0;
+                    if ui.add(egui::DragValue::new(&mut pct).speed(0.1).range(50.0..=99.99).suffix(" %")).changed() {
+                        s.confidence = pct / 100.0;
+                    }
+                });
             }
             AnalysisKind::Turnbull => {
                 ui.label("The chosen columns are the start and the end of each failure window: equal for an exact failure, an empty end if it was still working, an empty start if it failed before the end.");

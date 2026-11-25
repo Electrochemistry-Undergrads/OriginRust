@@ -1620,6 +1620,23 @@ fn life_data_regression_runs_from_the_command_line() {
     assert!(ok && out.contains("lognormal accelerated"), "{err} {out}");
     let (ok, _, err) = sheaf(&["analyze", "lifereg", file, "--y", "dose,hours,cens", "--distribution", "normal"]);
     assert!(!ok && err.contains("--distribution"), "{err}");
+    // Predicted percentiles (T437).
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "lifereg",
+        file,
+        "--y",
+        "dose,hours,cens",
+        "--percentiles",
+        "5,50",
+        "--at",
+        "1",
+        "--confidence",
+        "90",
+    ]);
+    assert!(ok && out.contains("dose = 1 (given), 90 % intervals") && out.contains("5 %:"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "lifereg", file, "--y", "dose,hours,cens", "--at", "1,2"]);
+    assert!(!ok && err.contains("one value per covariate"), "{err}");
 }
 
 /// Turnbull's nonparametric estimate with arbitrary censoring (spec `statistics.md` section 53, T409).

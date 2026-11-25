@@ -2298,7 +2298,8 @@ probability plots with interval data are not built.
 
 Origin 2026b's regression with life data is not part of Origin 2016, so this is Sheaf's own: accelerated failure time
 models. Statistics > Survival Analysis > Life Data Regression... (`Tool::LifeRegression`, `sheaf analyze lifereg --y
-COV[,COV..],TIME,CENSOR [--distribution weibull|lognormal|exponential] [--censor 1]`): the chosen columns are numeric
+COV[,COV..],TIME,CENSOR [--distribution weibull|lognormal|exponential] [--censor 1] [--percentiles 10,50,90] [--at
+V[,V..]] [--confidence 95]`): the chosen columns are numeric
 covariates, then the time (above 0) and the censor column (a case is right-censored when its cell equals the censoring
 value, as for the Kaplan-Meier estimator); rows with a missing value are left out. The model is `ln T = b0 + b1 x1 +
 ... + sigma W` with `W` the standard smallest extreme value (Weibull, shape `1 / sigma`), the standard normal
@@ -2309,9 +2310,13 @@ censored time `ln G(z)`, `z = (ln t - x'b) / sigma`, so without covariates the f
 failures' log times. Standard errors come from the inverse of the observed information, z = b / SE with normal
 two-sided probabilities, and the scale's error by the delta method. The result sheet `LifeRegN` has one row per term
 (Intercept, each covariate, Scale (sigma)) with Coefficient, Standard error, z and Prob>|z|; the notes give the
-log-likelihood, AIC and, for the Weibull, the shape. Checked against numpy/scipy (`tools/lifereg-ref.py`,
+log-likelihood, AIC and, for the Weibull, the shape. **Percentiles** (T437): at the covariate means (or the values of
+`--at`, the window's "at covariates") the `p` percentile life `exp(x'b + sigma w_p)` (`w_p = ln(-ln(1 - p))` for
+Weibull and exponential, the normal quantile for lognormal) with the interval `exp(log -+ z se)`, `se^2 = g' C g`, `C`
+the inverse observed information of `(b, ln sigma)` and `g = (1, x, sigma w_p)`; the sheet gets Percent, Percentile
+life, Lower and Upper columns (10, 50 and 90 % by default) and a note lists them. Checked against numpy/scipy (`tools/lifereg-ref.py`,
 `crates/calc/tests/lifereg_reference.rs`: 60 rows, two covariates, three distributions) to 1e-7 (standard errors
-1e-5). Proportional hazards (Cox) regression is section 52; interval-censored regression, text (factor) covariates and prediction
+1e-5; percentiles at two covariate settings to 1e-7, their intervals 1e-5). Proportional hazards (Cox) regression is section 52; interval-censored regression, text (factor) covariates and prediction
 of percentiles are not built.
 
 ## 49 Frequency columns of the life-data tools (T394, Origin 2026b; not measured)

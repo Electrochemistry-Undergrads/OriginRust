@@ -3826,6 +3826,15 @@ pub enum AnalyzeTool {
         /// The last --y column holds each row's frequency (count).
         #[arg(long)]
         frequency: bool,
+        /// Percentile lives to predict, in percent, comma-separated.
+        #[arg(long, value_delimiter = ',', default_values_t = [10.0, 50.0, 90.0])]
+        percentiles: Vec<f64>,
+        /// The covariate values of the prediction, comma-separated, one per covariate (default: their means).
+        #[arg(long, value_delimiter = ',', allow_negative_numbers = true)]
+        at: Option<Vec<f64>>,
+        /// Level of the percentile intervals, in percent.
+        #[arg(long, default_value_t = 95.0)]
+        confidence: f64,
     },
     /// Turnbull's nonparametric estimate with arbitrary censoring: --y START,END (as lifedist-interval); the probability
     /// of failing in each Turnbull interval and the survival after it.

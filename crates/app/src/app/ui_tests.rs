@@ -5944,6 +5944,11 @@ fn the_survival_menu_runs_a_life_data_regression() {
     assert!(sheet.starts_with("LifeReg"), "{sheet}");
     assert!((coef[1] + 0.8).abs() < 0.2, "the dose shortens life: {coef:?}");
     assert_eq!(h.state().doc.undo_label(), Some("Life data regression"));
+    // The default percentiles at the covariate means (T437).
+    let (_, pct) = result_column(&h, "Percent");
+    let (_, life) = result_column(&h, "Percentile life");
+    assert_eq!(pct, [10.0, 50.0, 90.0]);
+    assert!(life[0] < life[1] && life[1] < life[2], "{life:?}");
 }
 
 /// Statistics > Survival Analysis > Nonparametric Analysis (Arbitrary Censoring)... (T409): start and end columns

@@ -5355,11 +5355,23 @@ impl SheafApp {
         match d.show(ctx, self.doc.project()) {
             SlicerOutcome::Open => {}
             SlicerOutcome::Closed => self.graph_slicer = None,
-            SlicerOutcome::Apply { graph, column, values } => {
-                match self.doc.edit("Graph Slicer", |p| p.set_graph_slicer(graph, column, values)) {
-                    Ok(()) => {
+            SlicerOutcome::Apply { graph, column, values, layer, extract } => {
+                let label = if extract { "Extract Slice" } else { "Graph Slicer" };
+                let done = self.doc.edit(label, |p| {
+                    p.set_graph_slicer(graph, column, values)?;
+                    p.set_graph_slicer_layer(graph, layer)?;
+                    if extract { p.extract_slice(graph).map(Some) } else { Ok(None) }
+                });
+                match done {
+                    Ok(book) => {
                         self.graph_slicer = None;
-                        self.say("Sliced the graph".to_string());
+                        match book {
+                            Some(b) => {
+                                self.apply(Action::Focus(b), ctx);
+                                self.say("Copied the rows the slicer shows to a new workbook".to_string());
+                            }
+                            None => self.say("Sliced the graph".to_string()),
+                        }
                     }
                     Err(e) => self.warn(e.to_string()),
                 }

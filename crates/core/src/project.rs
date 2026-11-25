@@ -418,6 +418,8 @@ pub enum ProjectError {
     NoBrowser,
     #[error("no sticky note there (notes go on graphs, workbooks and sheets)")]
     NoStickyNote,
+    #[error("the graph has no slicer")]
+    NoSlicer,
     #[error("no such operation")]
     NoSuchOperation,
     #[error("{0}")]

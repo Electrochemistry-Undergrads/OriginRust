@@ -7855,8 +7855,13 @@ Origin 2016 has none, so nothing here is measured.
   the rows until the slicer is applied again.
 - **Model:** `Graph::slicer` (`sheaf_core::slicer::GraphSlicer`: the column, the shown values and the row filter),
   saved with the project; `Project::set_graph_slicer`, `clear_graph_slicer`, `slicer_values`.
-- **Not built:** layer and plot scope, several slicer columns, extracting the selected subset to a sheet, plots whose
-  values are computed (histograms, box charts) reading the slicer, and the slicer in .opj files.
+- **Scope (T444):** on a graph of several layers, Scope offers Page (every layer, the default) or Layer 1, Layer 2,
+  ...; with a layer chosen only that layer's plots are sliced. A new choice of values keeps the scope.
+- **Extract (T444):** applies the slicer like OK and copies the rows it shows of its sheet to a new workbook
+  ("<book> sliced"), every column with its designation, short and long name, units and comments, and makes that
+  workbook active. One undo step, "Extract Slice".
+- **Not built:** plot scope, several slicer columns, plots whose values are computed (histograms, box charts)
+  reading the slicer, and the slicer in .opj files.
 
 ## Browser Graph: Graph > Browser Graph... (T410, 2026-11-24; Origin 2020b's Browser Graph, Sheaf's own)
 

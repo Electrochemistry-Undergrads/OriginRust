@@ -1,5 +1,5 @@
 //! The view modes of a graph window (View > Print View, Page View, Window View, Draft View), the
-//! Show > Layer Icons switch and Full Screen (T66; clean-room: behaviour only, measured in Origin
+//! Show > Layer Icons and Axis Layer Icons switches and Full Screen (T66; behaviour measured in Origin
 //! 2016, graphing spec section 22).
 //!
 //! Print and Page View draw the page at its own size on the grey ground (the existing picture).
@@ -15,18 +15,26 @@ use sheaf_core::{Project, WindowId};
 use sheaf_plot::scene::{ObjectKind, Scene};
 use sheaf_plot::ticks::ResolvedAxis;
 
-fn primary_axis_lines(scene: &Scene, layer: usize) -> impl Iterator<Item = sheaf_plot::Rect> + '_ {
-    scene.layers.iter().flat_map(|drawn| &drawn.objects).filter(move |object| object.layer == layer).flat_map(
-        |object| {
-            object.boxes.iter().copied().filter(|bounds| match object.kind {
+fn axis_lines(scene: &Scene) -> impl Iterator<Item = (usize, sheaf_plot::Rect)> + '_ {
+    let objects = scene.layers.iter().flat_map(|drawn| &drawn.objects);
+    objects.filter(|object| matches!(object.kind, ObjectKind::XAxis | ObjectKind::YAxis)).flat_map(|object| {
+        object
+            .boxes
+            .iter()
+            .copied()
+            .filter(|bounds| match object.kind {
                 // The layout stores the primary Cartesian axis strokes as zero-height and
                 // zero-width picking boxes at their rendered positions.
                 ObjectKind::XAxis => bounds.h == 0.0 && bounds.w > 0.0,
                 ObjectKind::YAxis => bounds.w == 0.0 && bounds.h > 0.0,
                 _ => false,
             })
-        },
-    )
+            .map(|bounds| (object.layer, bounds))
+    })
+}
+
+fn primary_axis_lines(scene: &Scene, layer: usize) -> impl Iterator<Item = sheaf_plot::Rect> + '_ {
+    axis_lines(scene).filter_map(move |(owner, bounds)| (owner == layer).then_some(bounds))
 }
 
 fn axis_segments(line: sheaf_plot::Rect, axis: &ResolvedAxis) -> Vec<[(f64, f64); 2]> {
@@ -55,6 +63,44 @@ pub(crate) fn draw_active_axes(
             painter.line_segment(segment.map(to_screen), stroke);
         }
     }
+}
+
+/// Show a layer selection button on each visible Cartesian axis.
+pub(crate) fn axis_layer_icons(
+    ui: &egui::Ui,
+    painter: &egui::Painter,
+    scene: &Scene,
+    graph: WindowId,
+    to_screen: &impl Fn((f64, f64)) -> egui::Pos2,
+) -> Option<usize> {
+    let mut selected = None;
+    for (index, (layer, line)) in axis_lines(scene).enumerate() {
+        let center = to_screen((line.x + line.w / 2.0, line.y + line.h / 2.0));
+        let text =
+            painter.layout_no_wrap((layer + 1).to_string(), egui::FontId::proportional(11.0), Color32::PLACEHOLDER);
+        let badge = Rect::from_center_size(center, text.size() + vec2(7.0, 5.0));
+        let hit_area = badge.intersect(painter.clip_rect());
+        if !hit_area.is_positive() {
+            continue;
+        }
+        let id = ui.id().with(("axis_layer_icon", graph.0, index));
+        let response = ui.interact(hit_area, id, egui::Sense::click());
+        response.widget_info(|| {
+            let axis = if line.h == 0.0 { "X" } else { "Y" };
+            egui::WidgetInfo::labeled(
+                egui::WidgetType::Button,
+                response.enabled(),
+                format!("Select layer {} from {axis} axis", layer + 1),
+            )
+        });
+        let style = ui.style().interact(&response);
+        painter.rect_filled(badge, 3.0, style.bg_fill);
+        painter.galley(center - text.size() / 2.0, text, style.fg_stroke.color);
+        if response.clicked() {
+            selected = Some(layer);
+        }
+    }
+    selected
 }
 
 /// The rectangle the zoom layout works in. In Window and Draft View it is the window grown by the

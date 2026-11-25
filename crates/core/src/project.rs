@@ -418,6 +418,10 @@ pub enum ProjectError {
     NoBrowser,
     #[error("no sticky note there (notes go on graphs, workbooks and sheets)")]
     NoStickyNote,
+    #[error("type an example of what the column should hold in one of its cells first")]
+    FlashFillNoExample,
+    #[error("no rule builds the examples from the other columns; type another example")]
+    FlashFillNoRule,
     #[error("the graph is no time series explorer, or has no such interval")]
     NoExplorer,
     #[error(

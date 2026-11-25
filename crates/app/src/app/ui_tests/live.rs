@@ -69,10 +69,14 @@ fn tick_link(h: &mut Harness<'static, SheafApp>) {
     menu(h, "Tools", "AI Assistants (MCP)");
 }
 
+/// How long the live tests wait for the app (T440): 15 s ran out when other test runs loaded the machine; a hang
+/// still fails.
+const LIVE_WAIT: Duration = Duration::from_secs(60);
+
 /// Runs frames until `cond` holds.
 fn until(h: &mut Harness<'static, SheafApp>, what: &str, mut cond: impl FnMut(&Harness<'static, SheafApp>) -> bool) {
     let start = Instant::now();
-    while start.elapsed() < Duration::from_secs(15) {
+    while start.elapsed() < LIVE_WAIT {
         if cond(h) {
             return;
         }
@@ -473,7 +477,7 @@ fn the_attached_app_refuses_to_save_a_project_for_the_assistant() {
         if let Ok(line) = rx.try_recv() {
             break line.expect("a reply");
         }
-        assert!(start.elapsed() < Duration::from_secs(15), "no reply");
+        assert!(start.elapsed() < LIVE_WAIT, "no reply");
         std::thread::sleep(Duration::from_millis(5));
     };
     let reply: Value = serde_json::from_str(&line).unwrap();

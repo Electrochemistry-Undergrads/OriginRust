@@ -2397,7 +2397,8 @@ Statistics > Monte Carlo Simulation (Randomize Inputs)... (CLI `analyze monte-ca
 
 Origin 2026b's reliability and survival tools add Cox regression, which Origin 2016 does not have, so this is
 Sheaf's own. Statistics > Survival Analysis > Cox Proportional Hazards... (`Tool::Cox`, `sheaf analyze cox --y
-COV[,COV..],TIME,CENSOR [--censor 1] [--confidence 95] [--ties breslow|efron] [--no-graph]`, `sheaf_calc::cox`): the chosen columns are
+COV[,COV..],TIME,CENSOR[,STRATA] [--censor 1] [--confidence 95] [--ties breslow|efron] [--strata] [--no-graph]`,
+`sheaf_calc::cox`): the chosen columns are
 numeric covariates, then the time and the censor column (a case is right-censored when its cell equals the censoring
 value, as for the Kaplan-Meier estimator); rows with a missing value are left out. The hazard is `h0(t) exp(x'b)`; `b`
 maximizes Breslow's partial likelihood (tied failure times share one risk set) by Newton's method from 0, halving a
@@ -2413,8 +2414,13 @@ graph plots. The notes give the cases, events, log-likelihoods and the three tes
 (`l = 0..d-1`) sees the risk-set sums minus `l/d` of the tied failures' own sums, in the likelihood, gradient and
 information alike; the baseline hazard increment is `sum_l 1 / (S - (l/d) S_D)`; without ties it equals Breslow's.
 Checked with the same data against an independent numpy/scipy Efron fit (two more cases in `tools/cox-ref.py`) to
-1e-8. Strata, time-varying covariates, text (factor) covariates, residuals and the proportional-hazards check are not
-built.
+1e-8. **Strata** (T451; `--strata`, the window's "A strata column follows the censor column"): a stratum column (numbers
+or text) after the censor column; the risk sets are taken within each stratum, the partial likelihood, gradient and
+information are summed over the strata with shared coefficients, and each stratum gets its own baseline: the sheet has
+a Time (s) and Survival at the means (s) pair and the graph a curve per stratum, strata in the order of their labels.
+A row without a stratum is left out; a note names the strata. Checked against numpy/scipy (two stratified cases, three
+age bands, both tie rules, every stratum's curve) to 1e-8. Time-varying covariates, text (factor) covariates, residuals
+and the proportional-hazards check are not built.
 
 ## 53 Turnbull nonparametric estimate with arbitrary censoring (T409, Origin 2026b; not measured)
 

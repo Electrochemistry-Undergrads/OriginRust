@@ -397,6 +397,7 @@ impl MultiOptions {
                         s.confidence = pct / 100.0;
                     }
                 });
+                ui.checkbox(&mut s.strata, "A strata column follows the censor column");
                 ui.horizontal(|ui| {
                     ui.label("Tied times");
                     ui.radio_value(&mut s.efron, false, "Breslow");

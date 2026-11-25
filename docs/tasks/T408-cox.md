@@ -9,7 +9,7 @@ and the baseline survival at the covariate means as a graph. Not measured in Ori
 
 ## Left
 
-- Efron ties are T445. Strata, time-varying covariates, factor covariates, residuals (martingale, Schoenfeld) and the
+- Efron ties are T445, strata T451. Time-varying covariates, factor covariates, residuals (martingale, Schoenfeld) and the
   proportional-hazards check; survival curves at chosen covariate values.
 
 ## Tests

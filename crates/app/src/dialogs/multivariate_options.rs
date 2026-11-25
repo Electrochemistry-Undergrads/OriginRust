@@ -224,7 +224,7 @@ impl MultiOptions {
             }
             AnalysisKind::Arima => {
                 let s = &self.arima;
-                if s.auto.is_none() && s.p + s.q == 0 && !s.constant {
+                if s.auto.is_none() && s.p + s.q + s.seasonal.p + s.seasonal.q == 0 && !s.constant {
                     return Err("the model has nothing to fit: give p, q or a constant".to_string());
                 }
                 Ok(Tool::Arima(*s))
@@ -396,6 +396,11 @@ impl MultiOptions {
                     if ui.add(egui::DragValue::new(&mut pct).speed(0.1).range(50.0..=99.99).suffix(" %")).changed() {
                         s.confidence = pct / 100.0;
                     }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Tied times");
+                    ui.radio_value(&mut s.efron, false, "Breslow");
+                    ui.radio_value(&mut s.efron, true, "Efron");
                 });
                 ui.checkbox(&mut s.graph, "Survival at the covariate means");
                 ui.checkbox(&mut s.frequency, "Last column: frequency (count) of each row");
@@ -771,6 +776,16 @@ impl MultiOptions {
                         ui.label("q");
                         ui.add(egui::DragValue::new(mq).range(0..=10));
                     }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Seasonal P");
+                    ui.add(egui::DragValue::new(&mut s.seasonal.p).range(0..=5));
+                    ui.label("D");
+                    ui.add(egui::DragValue::new(&mut s.seasonal.d).range(0..=2));
+                    ui.label("Q");
+                    ui.add(egui::DragValue::new(&mut s.seasonal.q).range(0..=5));
+                    ui.label("period");
+                    ui.add(egui::DragValue::new(&mut s.seasonal.period).range(0..=10_000));
                 });
                 ui.checkbox(&mut s.constant, "Constant (mean of the differenced series)");
                 ui.horizontal(|ui| {

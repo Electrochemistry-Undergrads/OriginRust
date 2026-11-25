@@ -4,6 +4,7 @@
 pub mod acceptance;
 pub mod add_layer;
 pub mod analysis;
+pub mod auto_refresh;
 pub mod autosave;
 pub mod axis3d;
 pub mod batch_peaks;

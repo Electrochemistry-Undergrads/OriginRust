@@ -503,6 +503,17 @@ fn a_graph_without_plots_and_a_second_graph_read_back_in_order() {
 }
 
 #[test]
+fn axis_layer_icons_survive_a_bare_opj_round_trip_per_graph() {
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| g.page.style.axis_layer_icons = true);
+    graph_with(&mut p, Template::Line, &[(0, 1)], |_| {});
+    let (imp, warnings) = round_trip(&p);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert!(imp.graphs[0].page.style.axis_layer_icons);
+    assert!(!imp.graphs[1].page.style.axis_layer_icons);
+}
+
+#[test]
 fn a_graph_before_its_workbook_still_finds_the_columns() {
     let mut p = source();
     let c = ids(&p);

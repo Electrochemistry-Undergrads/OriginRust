@@ -492,6 +492,13 @@ pub enum Action {
         page: (f64, f64),
         png: std::sync::Arc<Vec<u8>>,
     },
+    /// Worksheet > Name Manager... of this workbook (T434).
+    NameManager(WindowId),
+    /// Deletes a name of a workbook, one undo step (T434).
+    DeleteName {
+        book: WindowId,
+        name: String,
+    },
     /// A data cell's Define Name...: its window (T396).
     DefineName {
         column: ColumnId,
@@ -502,6 +509,8 @@ pub enum Action {
         column: ColumnId,
         row: usize,
         last: usize,
+        /// The last column of a block of several columns (T432).
+        last_column: Option<ColumnId>,
         name: String,
     },
     /// Draw an arrow across a data cell (`Some(double)`) or take it out (T205), one undo step.
@@ -676,6 +685,8 @@ pub enum Action {
     SwapColumns(ColumnId, ColumnId),
     /// Edit > Find in Project (F3): open the Find window.
     FindInProject,
+    /// View > Project Browser: open it (T433).
+    ProjectBrowser,
     /// File > Find in Project Files... (T361).
     FindInProjectFiles,
     /// File > Export > Worksheet as Image...: save the active sheet as a picture.
@@ -797,6 +808,8 @@ pub enum Action {
     },
     ColumnProperties(ColumnId),
     SetColumnValues(ColumnId),
+    /// Column > Flash Fill...: work out the column's rule from its typed examples and show it (T430).
+    FlashFill(ColumnId),
     /// The Set Values window for several columns of one sheet at once (Ctrl+Shift+Q).
     SetMultipleColumnsValues(Vec<ColumnId>),
     /// Recalculate these columns now. Columns without a recalculating formula are skipped.
@@ -1542,4 +1555,5 @@ pub enum PageSwitch {
     ActivateByIconOnly,
     IconDoubleClickPlotSetup,
     ActiveLayerIndicator,
+    AxisLayerIcons,
 }

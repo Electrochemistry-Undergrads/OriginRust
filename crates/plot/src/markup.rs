@@ -160,7 +160,8 @@ struct ParseOptions<'a> {
 }
 
 fn parse_segments(text: &str, options: &ParseOptions<'_>) -> Vec<Segment> {
-    let chars: Vec<char> = text.chars().collect();
+    // LaTeX math in `$...$` (T436) becomes markup first.
+    let chars: Vec<char> = crate::latex::expand(text).chars().collect();
     let mut pos = 0;
     let mut out = ParsedText { legend_tabs: options.legend_tabs, ..ParsedText::default() };
     let base = Style {

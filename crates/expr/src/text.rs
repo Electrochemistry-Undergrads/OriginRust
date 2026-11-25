@@ -55,6 +55,9 @@ pub(crate) enum StrFn {
     NumExtract,
     /// `NumBreak(s[, offset, decimal])` (Origin 2026 SR1, T265): where number and text first change.
     NumBreak,
+    /// `token(s, n)` (Sheaf's own, T430 Flash Fill): the n-th word of `s`, a word being a run of letters and
+    /// digits; a negative n counts from the end (-1 the last); empty text when there is no such word.
+    Token,
     /// Internal lowering of %([Book]Sheet,column,row[,format]); evaluated against the host.
     WorksheetCell,
 }
@@ -71,6 +74,7 @@ impl StrFn {
             StrFn::Text | StrFn::Format => (1, 2),
             StrFn::WorksheetCell => (2, 3),
             StrFn::NumExtract | StrFn::NumBreak => (1, 3),
+            StrFn::Token => (2, 2),
         }
     }
 }
@@ -101,7 +105,7 @@ impl StrFn {
             StrFn::Replace => i == 0 || i == 3,
             StrFn::Substitute => i < 3,
             StrFn::Find | StrFn::Search | StrFn::Compare => i <= 1,
-            StrFn::NumExtract | StrFn::NumBreak => i == 0,
+            StrFn::NumExtract | StrFn::NumBreak | StrFn::Token => i == 0,
             _ => true,
         }
     }
@@ -132,6 +136,22 @@ fn numeric_mask(s: &[char], comma: bool) -> Vec<bool> {
                 || (s[i] == sep && i > 0 && i + 1 < s.len() && s[i - 1].is_ascii_digit() && s[i + 1].is_ascii_digit())
         })
         .collect()
+}
+
+/// The words of `s` for `token(s, n)`: its runs of letters and digits, in order.
+pub fn tokens(s: &str) -> Vec<&str> {
+    s.split(|c: char| !c.is_alphanumeric()).filter(|t| !t.is_empty()).collect()
+}
+
+/// `token(s, n)`: word `n` of `s` (1 the first, -1 the last), or empty text.
+pub fn token(s: &str, n: f64) -> String {
+    let words = tokens(s);
+    if !n.is_finite() || n.fract() != 0.0 || n == 0.0 || n.abs() > words.len() as f64 {
+        return String::new();
+    }
+    let k = n.abs() as usize;
+    let at = if n > 0.0 { k - 1 } else { words.len() - k };
+    words[at].to_string()
 }
 
 /// `NumExtract(s, count, decimal)`: the `count`-th run of number characters (1 the first, the
@@ -278,6 +298,7 @@ pub(crate) fn apply(f: StrFn, args: Vec<Value>) -> Value {
                     Value::Num(f64::from(if case { s == other } else { s.to_lowercase() == other.to_lowercase() }))
                 }
                 StrFn::Exact => Value::Num(f64::from(s == text_arg(0))),
+                StrFn::Token => Value::Text(token(&s, rest.first().map_or(1.0, Value::number))),
                 StrFn::NumExtract => {
                     Value::Text(num_extract(&s, rest.first().map_or(1.0, Value::number), flag(rest.get(1), false)))
                 }

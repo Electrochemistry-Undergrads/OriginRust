@@ -110,6 +110,12 @@ pub trait Host {
     fn named_range(&self, _name: &str) -> Option<(ColumnRef, usize, usize)> {
         None
     }
+
+    /// A named block of several columns (T432): the columns, in order, and the first and last rows (1-based,
+    /// inclusive), so that `mean(Name)` takes every cell of the block. The default knows no blocks.
+    fn named_block(&self, _name: &str) -> Option<(Vec<ColumnRef>, usize, usize)> {
+        None
+    }
 }
 
 /// A host built from plain data: named variables and columns that are borrowed slices.
@@ -128,6 +134,7 @@ pub struct SimpleHost<'a> {
     vars: Vec<(String, f64)>,
     cols: Vec<(ColumnRef, &'a [f64])>,
     ranges: Vec<(String, ColumnRef, usize, usize)>,
+    blocks: Vec<(String, Vec<ColumnRef>, usize, usize)>,
     row: usize,
 }
 
@@ -188,6 +195,13 @@ impl<'a> SimpleHost<'a> {
         self
     }
 
+    /// Adds a named block: `name` stands for rows `first..=last` (1-based) of the columns `cols` (T432).
+    #[must_use]
+    pub fn block(mut self, name: &str, cols: Vec<ColumnRef>, first: usize, last: usize) -> Self {
+        self.blocks.push((name.to_string(), cols, first, last));
+        self
+    }
+
     /// Sets the 0-based row used by [`Expr::eval`].
     #[must_use]
     pub fn at_row(mut self, row: usize) -> Self {
@@ -229,6 +243,10 @@ impl Host for SimpleHost<'_> {
 
     fn named_range(&self, name: &str) -> Option<(ColumnRef, usize, usize)> {
         self.ranges.iter().find(|(n, ..)| n.eq_ignore_ascii_case(name)).map(|(_, c, a, b)| (c.clone(), *a, *b))
+    }
+
+    fn named_block(&self, name: &str) -> Option<(Vec<ColumnRef>, usize, usize)> {
+        self.blocks.iter().find(|(n, ..)| n.eq_ignore_ascii_case(name)).map(|(_, c, a, b)| (c.clone(), *a, *b))
     }
 }
 
@@ -292,6 +310,13 @@ enum C<'h> {
         kind: Agg,
         col: Col<'h>,
         range: Option<(Box<C<'h>>, Box<C<'h>>)>,
+    },
+    /// A statistic over every cell of rows `first..=last` (1-based) of several columns: a named block (T432).
+    AggBlock {
+        kind: Agg,
+        cols: Vec<Col<'h>>,
+        first: usize,
+        last: usize,
     },
     /// Column-in, column-out; `cache` holds the whole result when nothing depends on the row.
     Vector {
@@ -412,11 +437,34 @@ impl Expr {
 /// `col(A)[1:10]` or the name of a named range (T400).
 type ColumnArg<'h> = (Col<'h>, Option<(Box<C<'h>>, Box<C<'h>>)>);
 
+/// The statistic `kind` over a named block (T432), when `n` names one.
+fn build_block<'h>(host: &'h dyn Host, kind: Agg, n: &Node) -> Option<Result<C<'h>, ExprError>> {
+    let Kind::Var { name, pos } = &n.kind else { return None };
+    let (refs, first, last) = host.named_block(name)?;
+    let mut cols = Vec::with_capacity(refs.len());
+    for r in refs {
+        if !host.has_column(&r) {
+            return Some(Err(ExprError::at(*pos, format!("a column of the named block '{name}' is gone"))));
+        }
+        cols.push(match host.column_data(&r) {
+            Some(d) => Col::Slice(d),
+            None => Col::Cell(r),
+        });
+    }
+    Some(Ok(C::AggBlock { kind, cols, first: first.max(1), last }))
+}
+
 fn build_column_arg<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node) -> Result<ColumnArg<'h>, ExprError> {
     let b = |n: &Node| build(host, seeds, n).map(Box::new);
     match &n.kind {
         Kind::Range { base, from, to, .. } => Ok((build_col(host, base)?, Some((b(from)?, b(to)?)))),
         Kind::Var { name, pos } => {
+            if host.named_block(name).is_some() {
+                return Err(ExprError::at(
+                    *pos,
+                    format!("'{name}' names a block of several columns; only statistics such as mean({name}) take it"),
+                ));
+            }
             let Some((r, first, last)) = host.named_range(name) else {
                 return Err(ExprError::at(
                     *pos,
@@ -475,7 +523,7 @@ fn build_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node) -> Result<C<
         Kind::Var { name, pos } => match host.variable(name) {
             Some(v) => C::Num(v),
             None if name == "i" => C::Row,
-            None if host.named_range(name).is_some() => {
+            None if host.named_range(name).is_some() || host.named_block(name).is_some() => {
                 return Err(ExprError::at(
                     *pos,
                     format!(
@@ -515,6 +563,9 @@ fn build_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node) -> Result<C<
             Func::U(f) => C::U(f, b(&args[0])?),
             Func::B(f) => C::B(f, b(&args[0])?, b(&args[1])?),
             // `max(Name)` of a named range is its largest value, as `max(col(A)[1:10])` (T400).
+            Func::MinMax { max } if args.len() == 1 && build_block(host, Agg::Max, &args[0]).is_some() => {
+                build_block(host, if max { Agg::Max } else { Agg::Min }, &args[0]).unwrap_or(Ok(C::Num(NA)))?
+            }
             Func::MinMax { max }
                 if args.len() == 1
                     && matches!(&args[0].kind, Kind::Var { name, .. } if host.named_range(name).is_some()) =>
@@ -549,10 +600,13 @@ fn build_inner<'h>(host: &'h dyn Host, seeds: &Cell<u64>, n: &Node) -> Result<C<
                 let (col, range) = build_column_arg(host, seeds, &args[0])?;
                 C::Vector { kind, col, range, arg, cache: OnceCell::new() }
             }
-            Func::Agg(kind) => {
-                let (col, range) = build_column_arg(host, seeds, &args[0])?;
-                C::Agg { kind, col, range }
-            }
+            Func::Agg(kind) => match build_block(host, kind, &args[0]) {
+                Some(block) => block?,
+                None => {
+                    let (col, range) = build_column_arg(host, seeds, &args[0])?;
+                    C::Agg { kind, col, range }
+                }
+            },
         },
     };
     Ok(fold(host, c))
@@ -563,7 +617,7 @@ fn fold<'h>(host: &'h dyn Host, c: C<'h>) -> C<'h> {
     let constant = match &c {
         C::Unary(_, a) | C::U(_, a) => matches!(**a, C::Num(_)),
         C::Bin(_, a, b) | C::B(_, a, b) => matches!((&**a, &**b), (C::Num(_), C::Num(_))),
-        C::Agg { range: None, .. } => true,
+        C::Agg { range: None, .. } | C::AggBlock { .. } => true,
         C::Agg { range: Some((a, b)), .. } => matches!((&**a, &**b), (C::Num(_), C::Num(_))),
         C::N(_, a) => a.iter().all(|x| matches!(x, C::Num(_))),
         _ => false,
@@ -672,6 +726,14 @@ fn ev_inner(host: &dyn Host, c: &C<'_>, row: usize) -> f64 {
             } else {
                 compute().get(row).copied().unwrap_or(NA)
             }
+        }
+        C::AggBlock { kind, cols, first, last } => {
+            let mut all = Vec::new();
+            for col in cols {
+                let len = if *kind == Agg::Rows { col.used_len(host) } else { col.len(host) };
+                all.extend(col.rows(host, *first, (*last).min(len)));
+            }
+            funcs::aggregate(*kind, &all)
         }
         C::Agg { kind, col, range } => {
             let len = if *kind == Agg::Rows { col.used_len(host) } else { col.len(host) };

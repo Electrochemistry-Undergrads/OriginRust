@@ -5944,6 +5944,11 @@ fn the_survival_menu_runs_a_life_data_regression() {
     assert!(sheet.starts_with("LifeReg"), "{sheet}");
     assert!((coef[1] + 0.8).abs() < 0.2, "the dose shortens life: {coef:?}");
     assert_eq!(h.state().doc.undo_label(), Some("Life data regression"));
+    // The default percentiles at the covariate means (T437).
+    let (_, pct) = result_column(&h, "Percent");
+    let (_, life) = result_column(&h, "Percentile life");
+    assert_eq!(pct, [10.0, 50.0, 90.0]);
+    assert!(life[0] < life[1] && life[1] < life[2], "{life:?}");
 }
 
 /// Statistics > Survival Analysis > Nonparametric Analysis (Arbitrary Censoring)... (T409): start and end columns
@@ -5981,7 +5986,10 @@ fn the_survival_menu_fits_arbitrarily_censored_data() {
     let (sheet, interval) = result_column(&h, "Interval-censored");
     assert!(sheet.starts_with("LifeInterval"), "{sheet}");
     assert_eq!(interval, [4.0]);
-    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    // The fitted curves and the probability plot with the Turnbull points (T438).
+    assert_eq!(project(&h).graphs().count(), graphs_before + 2);
+    let (_, pct) = result_column(&h, "Percent failed (Turnbull)");
+    assert!(!pct.is_empty() && pct.windows(2).all(|w| w[0] <= w[1]), "{pct:?}");
     assert_eq!(h.state().doc.undo_label(), Some("Distribution analysis (arbitrary censoring)"));
 }
 
@@ -8409,9 +8417,10 @@ fn define_name_on_a_cell_lets_formulas_read_it() {
     settle(&mut h);
     assert!(h.state().name_cell.is_some(), "the window opened");
     // A reserved name is refused and the window says why.
-    h.state_mut().apply(Action::SetCellName { column: b, row: 1, last: 1, name: "j".into() }, &ctx);
+    h.state_mut().apply(Action::SetCellName { column: b, row: 1, last: 1, last_column: None, name: "j".into() }, &ctx);
     assert!(h.state().name_cell.as_ref().unwrap().problem.is_some());
-    h.state_mut().apply(Action::SetCellName { column: b, row: 1, last: 1, name: "Rate".into() }, &ctx);
+    h.state_mut()
+        .apply(Action::SetCellName { column: b, row: 1, last: 1, last_column: None, name: "Rate".into() }, &ctx);
     settle(&mut h);
     assert!(h.state().name_cell.is_none(), "OK closes");
     assert_eq!(project(&h).name_of_cell(b, 1), Some("Rate"));
@@ -8446,11 +8455,31 @@ fn define_name_on_selected_cells_of_a_column_names_the_range() {
     // The sample's B is 2.5, 4.5, 6.5, 8.5: the mean of rows 2 to 4 is 6.5.
     h.state_mut().doc.edit("formula", |p| p.set_column_values(c, "mean(Upper)", Some(0..1))).unwrap();
     assert_eq!(project(&h).numeric(c).unwrap()[0], 6.5);
-    // A selection over two columns names only the clicked cell.
-    h.state_mut().books.get_mut(&book).unwrap().select_cells(&sheet, (1, 1), (2, 3));
-    h.state_mut().apply(Action::DefineName { column: b, row: 2 }, &ctx);
+    // T432: a selection over two columns names the block (A and B, rows 1 to 2).
+    let a = column_id(&h, "A");
+    h.state_mut().books.get_mut(&book).unwrap().select_cells(&sheet, (0, 0), (1, 1));
+    h.state_mut().apply(Action::DefineName { column: b, row: 1 }, &ctx);
     let d = h.state().name_cell.as_ref().unwrap();
-    assert_eq!((d.row, d.last), (2, 2));
+    assert_eq!((d.column, d.last_column, d.row, d.last), (a, Some(b), 0, 1));
+    let (column, row, last, last_column) = (d.column, d.row, d.last, d.last_column);
+    h.state_mut().apply(Action::SetCellName { column, row, last, last_column, name: "Corner".into() }, &ctx);
+    assert_eq!(project(&h).name_of_block(a, b, 0, 1), Some("Corner"));
+    // The sample's A is 1, 2, 3, 4 and B 2.5, 4.5, ...: the block's total is 1 + 2 + 2.5 + 4.5.
+    h.state_mut().doc.edit("formula", |p| p.set_column_values(c, "total(Corner)", Some(0..1))).unwrap();
+    assert_eq!(project(&h).numeric(c).unwrap()[0], 10.0);
+    // T434: the Name Manager lists both names and deletes one.
+    menu_path(&mut h, &["Worksheet", "Name Manager..."]);
+    assert!(h.state().name_manager.is_some());
+    let sheet_name = sheet.name.clone();
+    assert!(has_label(&h, &format!("{sheet_name}!B2:B4")), "the range");
+    assert!(has_label(&h, &format!("{sheet_name}!A1:B2")), "the block");
+    // The names are listed in the order they were defined: Upper, then Corner.
+    h.query_all_by_label("Delete").next().expect("a Delete button per name").click();
+    settle(&mut h);
+    assert!(project(&h).name_of_range(b, 1, 3).is_none());
+    assert_eq!(h.state().doc.undo_label(), Some("Delete Name Upper"));
+    click(&mut h, "Close");
+    assert!(h.state().name_manager.is_none());
 }
 
 #[test]

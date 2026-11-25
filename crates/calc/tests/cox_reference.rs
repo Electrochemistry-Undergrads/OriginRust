@@ -1,10 +1,11 @@
 //! Cox proportional hazards against an independent numpy/scipy fit, made by `tools/cox-ref.py` (T408; none of these
-//! numbers come from Origin). Tolerance 1e-8 relative (the reference optimizer's tolerance).
+//! numbers come from Origin). Tolerance 1e-8 relative (the reference optimizer's tolerance). Breslow and (T445) Efron
+//! ties.
 
 #[path = "fixtures/cox_reference.rs"]
 mod fixtures;
 
-use sheaf_calc::cox::cox;
+use sheaf_calc::cox::{Ties, cox_with};
 
 fn close(a: f64, b: f64, what: &str) {
     assert!((a - b).abs() <= 1e-8 * b.abs().max(1.0), "{what}: {a} vs {b}");
@@ -23,7 +24,8 @@ fn cox_matches_numpy_and_scipy() {
                 }
             })
             .collect();
-        let f = cox(&x, fixtures::T, fixtures::FAILED, 0.95).unwrap();
+        let ties = if c.efron { Ties::Efron } else { Ties::Breslow };
+        let f = cox_with(&x, fixtures::T, fixtures::FAILED, 0.95, ties).unwrap();
         for i in 0..c.b.len() {
             close(f.coefficients[i], c.b[i], &format!("{} b{i}", c.name));
             close(f.se[i], c.se[i], &format!("{} se{i}", c.name));

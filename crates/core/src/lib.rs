@@ -16,6 +16,7 @@ pub mod autorange;
 pub mod batch_plot;
 pub mod book_template;
 pub mod browser;
+pub mod cell_formula;
 pub mod cell_links;
 pub mod cellformat;
 pub mod clipboard;

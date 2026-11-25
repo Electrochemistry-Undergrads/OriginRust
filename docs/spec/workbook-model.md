@@ -1568,6 +1568,33 @@ Re-Import (13l, T98). Sheaf adds a timer to Re-Import Directly.
 - **Saved:** the setting is in the workbook (`Workbook::refresh`) in the `.sheaf` file; the timer runs while the
   project is open.
 
+## 13u. Cell formulas and the Formula Bar (T448, 2026-11-25; Origin 2019 / 2021, Sheaf's own rules, not measured)
+
+Origin 2019 calculates individual cells alongside column formulas and Origin 2021 edits their expressions in a
+Formula Bar. Origin 2016 has neither.
+
+- **Entering:** a cell typed (or set from the Formula Bar) as `=` and an expression keeps a cell formula; the
+  expression is checked first, and one that cannot be read is refused with a message (the cell keeps what it had).
+  It is one undo step, "Cell Formula". A cell link on the cell ends (T211).
+- **The expression:** a column formula (expression-language.md) in which a spreadsheet reference names a cell:
+  `B3` is column B (short name, capital letters) row 3, `A1:A5` rows 1 to 5 of A, `Sheet2!B3` a cell of another
+  sheet of the workbook. A reference needs the sheet to have that column, is not inside quotes and is not followed by
+  `(` (so `LOG10(x)` stays a call). `sum(...)` is the total of its range, as in a spreadsheet (`total`; in column
+  formulas `sum` is Origin's running sum). The value is the first row's result of the formula read in the cell's
+  sheet; a text result makes a text cell.
+- **Recalculation:** inside every edit's undo step, right after the cell links, every cell formula of the project is
+  worked out again; formulas that read formula cells settle in up to ten passes. A formula that fails leaves its cell
+  empty.
+- **Typing over:** typing a value into a formula cell drops the formula; the value typed stays.
+- **The Formula Bar:** View > Formula Bar (on a workbook) shows or hides it for every workbook; it is off to start
+  with (Sheaf's choice, so the grid keeps its place). It is a strip above each workbook's grid (below its sticky
+  notes): the current cell's name (`B1`, when exactly one cell is selected), `fx`, and a text box with `=` and the
+  cell's formula, or the cell as shown. Enter writes the text as if typed into the cell; leaving the box otherwise,
+  or Esc, changes nothing.
+- **Saved:** the formulas are on the sheet (`Worksheet::cell_formulas`) in the `.sheaf` file.
+- **Not done:** references that follow moved rows and columns, `$A$1` absolute references, filling a formula down,
+  A1 references to other workbooks, a marker on formula cells, and cell formulas in `.opj` files.
+
 ## 14. Suggested Rust data model (P0)
 
 ```

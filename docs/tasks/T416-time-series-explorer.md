@@ -11,8 +11,8 @@ has none).
 
 ## Left
 
-- A detail Y axis that rescales to each interval, intervals of a set length (a day, a week) rather than a count,
-  overlapping steps, playback speed, picking an interval by clicking the upper layer.
+- A detail Y axis that rescales to each interval, overlapping steps, playback speed, picking an interval by clicking
+  the upper layer. (Intervals of a set length: T453.)
 
 ## Tests
 

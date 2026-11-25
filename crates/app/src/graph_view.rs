@@ -707,8 +707,22 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             ui.label(e.caption());
             ui.label("Intervals");
             let mut n = e.intervals;
-            if ui.add(egui::DragValue::new(&mut n).range(2..=1000)).changed() && n != e.intervals {
+            let count = egui::DragValue::new(&mut n).range(2..=1000);
+            if ui.add_enabled(e.length.is_none(), count).changed() && n != e.intervals {
                 actions.push(Action::ExplorerIntervals { graph: graph_id, intervals: n });
+            }
+            // Intervals of a set X length (T453), a tenth of the X extent to start with.
+            let span = graph.layers.first().and_then(|l| Some(l.x_axis.max? - l.x_axis.min?)).unwrap_or(0.0);
+            let mut by_length = e.length.is_some();
+            if ui.add_enabled(span > 0.0, egui::Checkbox::new(&mut by_length, "By length")).changed() {
+                actions.push(Action::ExplorerLength { graph: graph_id, length: by_length.then_some(span / 10.0) });
+            }
+            if let Some(len) = e.length {
+                let mut l = len;
+                let field = egui::DragValue::new(&mut l).speed(span / 200.0).range(span / 1000.0..=span);
+                if ui.add(field).changed() && l != len {
+                    actions.push(Action::ExplorerLength { graph: graph_id, length: Some(l) });
+                }
             }
         });
         if let Some(t) = state.explorer_play {

@@ -361,6 +361,8 @@ pub enum Cmd {
     GraphSlicer,
     /// Graph > Browser Graph... (T410).
     BrowserGraph,
+    /// Graph > Next Dataset (true) / Previous Dataset (T450): step a browser or an explorer.
+    BrowseStep(bool),
     /// View > View Windows (T100).
     ViewWindows(sheaf_core::project::ViewWindows),
     /// An axis's Save Format as Theme... (T102).
@@ -808,6 +810,8 @@ pub enum Cmd {
     Autosave,
     /// View > Status Bar: show or hide the status bar.
     ToggleStatusBar,
+    /// View > Formula Bar (T448).
+    ToggleFormulaBar,
     /// Tools > AI Assistants (MCP): a tick item for the endpoint of `sheaf-mcp --attach`.
     ToggleAiLink,
     /// File > Close: close (hide) the active window, as its title bar's close button does.
@@ -1493,6 +1497,7 @@ fn view_menu(kind: WindowKind) -> Vec<Entry> {
         WindowKind::Workbook => {
             v.push(sep());
             v.push(keyed("&Freeze/Unfreeze Panes", ctrl_shift(Key::F), Cmd::FreezePanes));
+            v.push(item("For&mula Bar", Cmd::ToggleFormulaBar));
             v.push(grey("Actively Update Plots"));
             v.push(item(
                 "Page Break Preview Lines",
@@ -2290,6 +2295,8 @@ fn graph_menu() -> Vec<Entry> {
         item("Merge Graph Windows...", Cmd::MergeGraphs),
         item("Grap&h Slicer...", Cmd::GraphSlicer),
         item("Bro&wser Graph...", Cmd::BrowserGraph),
+        keyed("Next &Dataset", plain_key(Key::PageDown), Cmd::BrowseStep(true)),
+        keyed("Pre&vious Dataset", plain_key(Key::PageUp), Cmd::BrowseStep(false)),
         sep(),
         keyed("Rescale to Show All", ctrl(Key::R), Cmd::Rescale),
         sub(
@@ -3704,6 +3711,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::AddFunctionGraph => Action::AddFunctionGraph { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::GraphSlicer => Action::GraphSlicer { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::BrowserGraph => Action::BrowserGraph { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
+        Cmd::BrowseStep(next) => Action::BrowseStep { graph: c.graph.ok_or(NEED_GRAPH)?, next: *next },
         Cmd::Reimport(choose) => {
             let book = book?;
             c.imported.then_some(()).ok_or(NOT_IMPORTED)?;
@@ -4235,6 +4243,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::Toolbars => Action::Toolbars,
         Cmd::Autosave => Action::Autosave,
         Cmd::ToggleStatusBar => Action::ToggleStatusBar,
+        Cmd::ToggleFormulaBar => Action::ToggleFormulaBar,
         Cmd::ToggleAiLink => Action::ToggleAiLink,
         Cmd::CloseWindow => Action::HideWindow(c.active.ok_or(NEED_WINDOW)?),
         Cmd::DuplicateWindow => Action::DuplicateWindow(c.active.ok_or(NEED_WINDOW)?),

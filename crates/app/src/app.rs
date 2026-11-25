@@ -353,6 +353,10 @@ pub struct SheafApp {
     pub(crate) flash_fill: Option<crate::dialogs::flash_fill::FlashFillDialog>,
     pub(crate) project_browser: Option<crate::dialogs::project_browser::ProjectBrowserDialog>,
     pub(crate) auto_refresh: Option<crate::dialogs::auto_refresh::AutoRefreshDialog>,
+    /// The Formula Bar of each workbook (T448).
+    formula_bars: HashMap<WindowId, crate::formula_bar::FormulaBar>,
+    /// View > Formula Bar is on (off to start with).
+    pub(crate) show_formula_bar: bool,
     /// Auto Refresh (T442): per workbook, when its next check is due (seconds of the UI clock) and the source
     /// file's modification time at the last read.
     refresh_clock: HashMap<WindowId, (f64, Option<std::time::SystemTime>)>,
@@ -565,6 +569,8 @@ impl SheafApp {
             flash_fill: None,
             project_browser: None,
             auto_refresh: None,
+            formula_bars: HashMap::new(),
+            show_formula_bar: false,
             refresh_clock: HashMap::new(),
             function_graph_new: false,
             audit_log: false,
@@ -2622,6 +2628,23 @@ impl SheafApp {
                     None => self.warn("The layer has no plot to browse"),
                 }
             }
+            Action::BrowseStep { graph, next } => {
+                let g = self.doc.project().graph(graph);
+                let step = |current: usize, n: usize| {
+                    if next { (current + 1 < n).then_some(current + 1) } else { current.checked_sub(1) }
+                };
+                if let Some(b) = g.and_then(|g| g.browser.as_ref()) {
+                    if let Some(to) = step(b.current, b.items.len()) {
+                        self.apply(Action::BrowseGraph { graph, to }, ctx);
+                    }
+                } else if let Some(e) = g.and_then(|g| g.explorer) {
+                    if let Some(to) = step(e.current, e.intervals) {
+                        self.apply(Action::ExploreInterval { graph, to }, ctx);
+                    }
+                } else {
+                    self.warn("The graph has no browser or explorer to step: see Graph > Browser Graph...");
+                }
+            }
             Action::BrowseGraph { graph, to } => {
                 // Steps one after another make one undo step.
                 let token = 0x7410_0000_0000 + graph.0;
@@ -2633,6 +2656,14 @@ impl SheafApp {
                 // Steps one after another (Play included) make one undo step.
                 let token = 0x7416_0000_0000 + graph.0;
                 if let Err(e) = self.doc.apply_merging("Explore Interval", token, |p| p.explore_interval(graph, to)) {
+                    self.warn(e.to_string());
+                }
+            }
+            Action::ExplorerLength { graph, length } => {
+                let token = 0x7453_0000_0000 + graph.0;
+                if let Err(e) =
+                    self.doc.apply_merging("Explorer Intervals", token, |p| p.set_explorer_length(graph, length))
+                {
                     self.warn(e.to_string());
                 }
             }
@@ -2861,13 +2892,26 @@ impl SheafApp {
             Action::SetCell { column, .. } if self.doc.project().column(column).is_some_and(|c| c.is_locked()) => {
                 self.warn("That column is calculated from a formula; change the formula in Set Column Values");
             }
+            // A text starting with `=` makes a cell formula (T448).
+            Action::SetCell { column, row, text } if text.trim_start().starts_with('=') && text.trim().len() > 1 => {
+                let formula = text.trim_start()[1..].to_string();
+                let done = self.doc.edit("Cell Formula", |p| {
+                    p.drop_cell_link(column, row);
+                    p.set_cell_formula(column, row, &formula)
+                });
+                if let Err(e) = done {
+                    self.warn(format!("That cell formula cannot be read: {e}"));
+                }
+            }
             Action::SetCell { column, row, text } => {
                 let beyond_end = self.doc.project().column(column).is_none_or(|c| row >= c.len());
                 if !(beyond_end && text.trim().is_empty()) {
                     let mut understood = true;
                     self.doc.apply("Edit cell", |p| {
-                        // Typing into a linked cell replaces its value and ends the link (T211).
+                        // Typing into a linked cell replaces its value and ends the link (T211), and the formula of a
+                        // formula cell (T448).
                         p.drop_cell_link(column, row);
+                        p.drop_cell_formula(column, row);
                         if let Some(c) = p.column_mut(column) {
                             understood = c.set_cell_text(row, &text);
                         }
@@ -4251,6 +4295,7 @@ impl SheafApp {
                 self.autosave_dialog = Some(AutosaveDialog::new(self.autosave.settings, self.autosave.has_session()));
             }
             Action::ToggleStatusBar => self.status_bar_hidden = !self.status_bar_hidden,
+            Action::ToggleFormulaBar => self.show_formula_bar = !self.show_formula_bar,
             Action::ToggleAiLink => self.set_link(!self.live.active()),
             Action::Quit => {
                 if self.doc.dirty {
@@ -9760,6 +9805,8 @@ impl eframe::App for SheafApp {
                 } else {
                     let doc = &self.doc;
                     let books = &mut self.books;
+                    let formula_bars = &mut self.formula_bars;
+                    let show_formula_bar = self.show_formula_bar;
                     let graphs = &mut self.graphs;
                     let notes = &mut self.notes;
                     let matrices = &mut self.matrices;
@@ -9782,6 +9829,11 @@ impl eframe::App for SheafApp {
                             crate::sticky_view::strip(ui, doc, NoteTarget::Window(id), "Book note", actions);
                             let sheet = b.active_sheet;
                             crate::sticky_view::strip(ui, doc, NoteTarget::Sheet(id, sheet), "Sheet note", actions);
+                            // The Formula Bar (T448), when View > Formula Bar is on.
+                            if show_formula_bar {
+                                let bar = formula_bars.entry(id).or_default();
+                                crate::formula_bar::show(ui, doc, id, books.get(&id), bar, actions);
+                            }
                             // The grid fills its ui's whole rectangle: give it only the room below the notes.
                             let rest = ui.available_rect_before_wrap();
                             ui.scope_builder(egui::UiBuilder::new().max_rect(rest), |ui| {

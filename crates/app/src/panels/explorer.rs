@@ -582,6 +582,16 @@ fn row(
         let line = format!("In {}", folder.unwrap_or_default());
         tip = if tip.is_empty() { line } else { format!("{tip}\n{line}") };
     }
+    // Sticky notes (T450): the window's note, or its first sheet note, marks the row and joins the tooltip.
+    let note = match w {
+        Window::Graph(g) => g.sticky.as_ref(),
+        Window::Workbook(b) => b.sticky.as_ref().or_else(|| b.sheets.iter().find_map(|s| s.sticky.as_ref())),
+        _ => None,
+    };
+    if let Some(n) = note {
+        let line = format!("Note: {}", n.first_line());
+        tip = if tip.is_empty() { line } else { format!("{tip}\n{line}") };
+    }
     let response = if tip.is_empty() { response } else { response.on_hover_text(tip) };
     if selected {
         ui.painter().rect_filled(rect, 0.0, Color32::from_rgb(204, 228, 247));
@@ -600,6 +610,17 @@ fn row(
         if c == 0 {
             let icon = Rect::from_min_size(Pos2::new(x, rect.center().y - 7.0), Vec2::splat(14.0));
             workspace::paint_window_icon(ui.painter(), icon, graph);
+            if let Some(n) = note {
+                let c = n.color.rgb();
+                let dot = Rect::from_min_size(icon.right_bottom() - Vec2::splat(6.0), Vec2::splat(7.0));
+                ui.painter().rect_filled(dot, 1.0, Color32::from_rgb(c.r, c.g, c.b));
+                ui.painter().rect_stroke(
+                    dot,
+                    1.0,
+                    egui::Stroke::new(1.0_f32, Color32::from_gray(90)),
+                    egui::StrokeKind::Inside,
+                );
+            }
             x += 18.0;
         }
         let text = cell(w, c);

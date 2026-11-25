@@ -420,3 +420,41 @@ fn the_operation_tree_lists_a_books_linked_analysis_and_switches_its_mode() {
     let book_name = project(&h).workbook(book).unwrap().name.clone();
     h.get_by_label(&format!("Input: [{book_name}]Sheet1!B"));
 }
+
+#[test]
+fn a_cell_formula_is_typed_shown_in_the_formula_bar_and_follows_its_input() {
+    // T448: =A1*10 typed into B1; the Formula Bar shows the formula when B1 is the current cell.
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let (mut book, mut a, mut b) = (sheaf_core::WindowId(0), sheaf_core::ColumnId(0), sheaf_core::ColumnId(0));
+    h.state_mut().doc.apply("data", |p| {
+        book = p.add_workbook("");
+        a = p.add_column(book, 0, sheaf_core::Designation::X, sheaf_core::ColumnData::numeric(vec![2.0, 3.0])).unwrap();
+        b = p.add_column(book, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::numeric(vec![f64::NAN])).unwrap();
+    });
+    h.state_mut().apply(Action::Focus(book), &ctx);
+    settle(&mut h);
+    h.state_mut().apply(Action::SetCell { column: b, row: 0, text: "=A1*10".into() }, &ctx);
+    settle(&mut h);
+    let cell = |h: &Harness<'static, SheafApp>| {
+        sheaf_core::indexed::level_text(project(h).column(b).unwrap(), 0).unwrap_or_default()
+    };
+    assert_eq!(cell(&h), "20");
+    assert_eq!(h.state().doc.undo_label(), Some("Cell Formula"));
+    // An edit of A1 is followed in the same step.
+    h.state_mut().apply(Action::SetCell { column: a, row: 0, text: "5".into() }, &ctx);
+    assert_eq!(cell(&h), "50");
+    // View > Formula Bar: it names the cell and shows the formula.
+    h.state_mut().apply(Action::ToggleFormulaBar, &ctx);
+    h.state_mut().books.get_mut(&book).unwrap().sel = crate::grid::Sel::Cells { anchor: (1, 0), end: (1, 0) };
+    settle(&mut h);
+    h.get_by_label("B1");
+    assert!(h.query_all_by_value("=A1*10").next().is_some(), "the formula in the bar");
+    // A bad formula is refused and the cell keeps its formula.
+    h.state_mut().apply(Action::SetCell { column: b, row: 0, text: "=A1 +* 2".into() }, &ctx);
+    assert_eq!(project(&h).cell_formula(b, 0), Some("A1*10"));
+    // Typing a value over it drops the formula.
+    h.state_mut().apply(Action::SetCell { column: b, row: 0, text: "7".into() }, &ctx);
+    assert!(project(&h).cell_formula(b, 0).is_none());
+    assert_eq!(cell(&h), "7");
+}

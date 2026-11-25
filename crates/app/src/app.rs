@@ -3097,23 +3097,37 @@ impl SheafApp {
             Action::WorksheetFontsDialog(book) => {
                 self.worksheet_fonts = WorksheetFontsDialog::new(&self.doc, book, self.books.get(&book));
             }
-            Action::EnsureWorksheetRows { book, sheet, rows } => {
-                // Leave an open Properties draft on its base revision. The grid will retry after it closes.
+            Action::UpdateWorksheetViewport { book, sheet, minimum_rows, fitted } => {
+                // The grid retries after Properties closes, keeping its draft on the same revision.
                 if self.worksheet_fonts.is_some() {
                     return;
                 }
-                let can_grow = self
+                let Some(worksheet) = self
                     .doc
                     .project()
                     .workbook(book)
                     .filter(|workbook| workbook.active_sheet == sheet)
                     .and_then(|workbook| workbook.sheets.get(sheet))
-                    .is_some_and(|sheet| sheet.view.automatic_rows() && rows > grid::shown_rows(sheet));
-                if can_grow {
+                else {
+                    return;
+                };
+                let grow = worksheet.view.automatic_rows() && minimum_rows > grid::shown_rows(worksheet);
+                let fitted = fitted.filter(|_| worksheet.view.fit_sheet_to_window);
+                if grow || fitted.is_some() {
                     self.doc.adjust_view(|project| {
-                        let view = &mut project.workbook_mut(book).unwrap().sheets[sheet].view;
-                        view.allocated_rows = Some(rows);
-                        view.auto_add_rows = Some(true);
+                        let worksheet = &mut project.workbook_mut(book).unwrap().sheets[sheet];
+                        if grow {
+                            worksheet.view.allocated_rows = Some(minimum_rows);
+                            worksheet.view.auto_add_rows = Some(true);
+                        }
+                        if let Some(cells) = fitted {
+                            worksheet.view.fitted_cells = cells;
+                            if cells.column_width().is_some() {
+                                for column in worksheet.columns.iter_mut().filter(|column| !column.hidden) {
+                                    column.width = None;
+                                }
+                            }
+                        }
                     });
                     ctx.request_repaint();
                 }

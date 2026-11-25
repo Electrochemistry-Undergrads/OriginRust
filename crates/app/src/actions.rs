@@ -961,10 +961,12 @@ pub enum Action {
     FormatCellsDialog(WindowId),
     /// Format > Worksheet (F4): worksheet-wide Data font defaults.
     WorksheetFontsDialog(WindowId),
-    EnsureWorksheetRows {
+    /// Worksheet dimensions derived from the current workbook viewport.
+    UpdateWorksheetViewport {
         book: WindowId,
         sheet: usize,
-        rows: usize,
+        minimum_rows: usize,
+        fitted: Option<sheaf_core::sheet_view::FittedCells>,
     },
     /// Cell menu > Add Note... / Edit Note...: the note editor for the single selected cell.
     NoteDialog(WindowId),

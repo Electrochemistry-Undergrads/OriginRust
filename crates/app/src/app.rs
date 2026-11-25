@@ -2616,6 +2616,23 @@ impl SheafApp {
                     None => self.warn("The layer has no plot to browse"),
                 }
             }
+            Action::BrowseStep { graph, next } => {
+                let g = self.doc.project().graph(graph);
+                let step = |current: usize, n: usize| {
+                    if next { (current + 1 < n).then_some(current + 1) } else { current.checked_sub(1) }
+                };
+                if let Some(b) = g.and_then(|g| g.browser.as_ref()) {
+                    if let Some(to) = step(b.current, b.items.len()) {
+                        self.apply(Action::BrowseGraph { graph, to }, ctx);
+                    }
+                } else if let Some(e) = g.and_then(|g| g.explorer) {
+                    if let Some(to) = step(e.current, e.intervals) {
+                        self.apply(Action::ExploreInterval { graph, to }, ctx);
+                    }
+                } else {
+                    self.warn("The graph has no browser or explorer to step: see Graph > Browser Graph...");
+                }
+            }
             Action::BrowseGraph { graph, to } => {
                 // Steps one after another make one undo step.
                 let token = 0x7410_0000_0000 + graph.0;

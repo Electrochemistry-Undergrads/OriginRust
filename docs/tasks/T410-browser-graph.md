@@ -9,8 +9,8 @@ Remove Browser leaves the plot on the dataset it shows. Sheaf's own design (Orig
 
 ## Left
 
-- Several browsed plots per graph, browsing across workbooks, a list to pick a dataset from, keyboard stepping,
-  the browser in .opj files and in the CLI/MCP.
+- Several browsed plots per graph, browsing across workbooks, a list to pick a dataset from, the browser in .opj
+  files and in the CLI/MCP. (Keyboard stepping: T450.)
 
 ## Tests
 

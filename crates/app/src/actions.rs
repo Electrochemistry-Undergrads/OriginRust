@@ -752,6 +752,11 @@ pub enum Action {
         graph: WindowId,
         layer: usize,
     },
+    /// Graph > Next / Previous Dataset (T450): the browser's next or previous dataset, else the explorer's interval.
+    BrowseStep {
+        graph: WindowId,
+        next: bool,
+    },
     /// The browser bar above a graph: show dataset `to` (T410).
     BrowseGraph {
         graph: WindowId,

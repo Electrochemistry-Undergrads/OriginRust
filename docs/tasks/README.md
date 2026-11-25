@@ -472,6 +472,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T443](T443-operation-tree.md) | Workbook operation tree in Object Manager (Origin 2027): linked analyses by result sheet, inputs/outputs, Recalculate, Auto/Manual, stop following | S | done 2026-11-25 (analysis-tools 23) |
 | [T444](T444-slicer-scope-extract.md) | Graph Slicer: layer scope and Extract to a new workbook (rest of T406) | S | done 2026-11-25 (graphing "Graph Slicer") |
 | [T448](T448-cell-formulas.md) | Cell formulas (=A1*10, ranges, other sheets) and the Formula Bar (Origin 2019/2021) | M | done 2026-11-25 (workbook-model 13u) |
+| [T450](T450-small-leftovers.md) | PageUp/PageDown step a Browser Graph or Time Series Explorer; sticky-note mark in Project Explorer | S | done 2026-11-25 (graphing, notes-window.md) |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |

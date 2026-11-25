@@ -293,3 +293,42 @@ fn project_browser_sets_units_on_ticked_columns_in_one_step() {
     assert_eq!(h.state().doc.undo_label(), Some("Set Units"));
     assert!(h.state().project_browser.is_some(), "the browser stays open");
 }
+
+#[test]
+fn page_down_and_page_up_step_a_browser_graph() {
+    // T450: Graph > Next Dataset (PageDown) and Previous Dataset (PageUp) on the active graph.
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let mut graph = sheaf_core::WindowId(0);
+    let mut ys = Vec::new();
+    h.state_mut().doc.apply("data", |p| {
+        let b = p.add_workbook("");
+        for k in 0..3 {
+            let v = vec![k as f64, k as f64 + 1.0];
+            ys.push(p.add_column(b, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::numeric(v)).unwrap());
+        }
+        graph = p.plot_columns(sheaf_core::template::Template::Line, &[ys[0]]).unwrap();
+        p.set_graph_browser(graph, 0, 0, sheaf_core::browser::BrowseBy::Columns).unwrap();
+    });
+    h.state_mut().apply(Action::Focus(graph), &ctx);
+    settle(&mut h);
+    let y = |h: &Harness<'static, SheafApp>| project(h).graph(graph).unwrap().layers[0].plots[0].y;
+    h.key_press(egui::Key::PageDown);
+    settle(&mut h);
+    assert_eq!(y(&h), ys[1]);
+    h.key_press(egui::Key::PageDown);
+    settle(&mut h);
+    h.key_press(egui::Key::PageDown);
+    settle(&mut h);
+    assert_eq!(y(&h), ys[2], "the last dataset stays");
+    h.key_press(egui::Key::PageUp);
+    settle(&mut h);
+    assert_eq!(y(&h), ys[1]);
+    // On a Time Series Explorer the same command steps the interval.
+    let mut ts = sheaf_core::WindowId(0);
+    h.state_mut().doc.apply("explorer", |p| {
+        ts = p.plot_columns(sheaf_core::template::Template::TimeSeriesExplorer, &[ys[0]]).unwrap();
+    });
+    h.state_mut().apply(Action::BrowseStep { graph: ts, next: true }, &ctx);
+    assert_eq!(project(&h).graph(ts).unwrap().explorer.unwrap().current, 1);
+}

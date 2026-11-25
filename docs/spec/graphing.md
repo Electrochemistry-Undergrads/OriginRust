@@ -7899,11 +7899,14 @@ here is measured.
 - **The bar above the graph:** Previous, Next (each disabled at its end of the list) and the caption, for example
   `B (2 of 3)`, or `[Sheet2] B (2 of 3)` by sheets. A step points the plot at that dataset's columns and rescales the
   layer's X and Y axes to it. Consecutive steps on a graph make one undo step ("Browse Graph").
+- **Keys (T450):** Graph > Next Dataset (PageDown) and Previous Dataset (PageUp) step the active graph's browser, as
+  Next and Previous do; at the end of the list nothing happens. On a graph without a browser they step a Time Series
+  Explorer's interval, and otherwise say there is nothing to step.
 - **Model:** `Graph::browser` (`sheaf_core::browser::GraphBrowser`: what it browses by, the plot's layer and index,
   the datasets and the one shown), saved with the project and renumbered with the graph's other columns;
   `Project::set_graph_browser`, `browse_graph`, `clear_graph_browser`, `browser_items`.
-- **Not built:** several browsed plots per graph, browsing across workbooks, picking a dataset from a list, keyboard
-  stepping, the browser in .opj files and in the CLI/MCP.
+- **Not built:** several browsed plots per graph, browsing across workbooks, picking a dataset from a list, the
+  browser in .opj files and in the CLI/MCP.
 
 ## Time Series Explorer: Plot > Specialized > Time Series Explorer (T416, 2026-11-24; Origin 2024b's, Sheaf's own)
 

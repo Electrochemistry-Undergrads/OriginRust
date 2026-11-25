@@ -5986,7 +5986,10 @@ fn the_survival_menu_fits_arbitrarily_censored_data() {
     let (sheet, interval) = result_column(&h, "Interval-censored");
     assert!(sheet.starts_with("LifeInterval"), "{sheet}");
     assert_eq!(interval, [4.0]);
-    assert_eq!(project(&h).graphs().count(), graphs_before + 1);
+    // The fitted curves and the probability plot with the Turnbull points (T438).
+    assert_eq!(project(&h).graphs().count(), graphs_before + 2);
+    let (_, pct) = result_column(&h, "Percent failed (Turnbull)");
+    assert!(!pct.is_empty() && pct.windows(2).all(|w| w[0] <= w[1]), "{pct:?}");
     assert_eq!(h.state().doc.undo_label(), Some("Distribution analysis (arbitrary censoring)"));
 }
 

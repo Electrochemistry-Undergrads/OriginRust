@@ -835,7 +835,7 @@ pub(super) fn run_arbitrary(
     );
     let names = spec.dist.param_names();
     let params: Vec<String> = names.iter().zip(&fit.params).map(|(n, v)| format!("{n} {}", num(*v))).collect();
-    let notes = vec![
+    let mut notes = vec![
         format!(
             "{} fit to {} rows ({exact} exact, {right} right-, {left} left-, {interval} interval-censored): {}; log-likelihood {}, mean {}, median {}.",
             spec.dist.name(),
@@ -860,6 +860,7 @@ pub(super) fn run_arbitrary(
     let shift = sheet_cols.len();
     let mut on_sheet = Vec::new();
     let mut graph = None;
+    let mut more_graphs = Vec::new();
     if spec.graph {
         let times: Vec<f64> = obs
             .iter()
@@ -902,9 +903,76 @@ pub(super) fn run_arbitrary(
             y_title: "Percent".into(),
             look: Default::default(),
         });
+        // Probability plot (T438): the Turnbull estimate's percent failed at the upper end of each interval that holds
+        // probability, on the fitted distribution's probability axis, with the fitted line.
+        let tb = calc::turnbull::turnbull(&obs).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
+        let (px, py): (Vec<f64>, Vec<f64>) = tb
+            .upper
+            .iter()
+            .zip(&tb.survival)
+            .zip(&tb.probability)
+            .filter(|((u, s), p)| {
+                u.is_finite() && **p > 1e-9 && **s > 1e-12 && (spec.dist == LifeDist::Normal || **u > 0.0)
+            })
+            .map(|((u, s), _)| (*u, 100.0 * (1.0 - s)))
+            .unzip();
+        let normal = spec.dist == LifeDist::Normal;
+        let positive: Vec<f64> = times.iter().copied().filter(|t| *t > 0.0).collect();
+        let (a, b) = if normal {
+            (fit.quantile(0.001), fit.quantile(0.999))
+        } else {
+            let lo = positive.iter().copied().fold(f64::INFINITY, f64::min);
+            let hi = positive.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            (lo * 0.5, hi * 1.1)
+        };
+        let line: (Vec<f64>, Vec<f64>) = (0..=200)
+            .map(|i| {
+                let f = f64::from(i) / 200.0;
+                if normal { a + (b - a) * f } else { a * (b / a).powf(f) }
+            })
+            .map(|t| (t, 100.0 * fit.cdf(t)))
+            .filter(|(_, p)| (0.001..=99.999).contains(p))
+            .unzip();
+        let comment = format!("Probability plot of {label}");
+        let x1 = on_sheet.len();
+        on_sheet.push(column_of("Turnbull upper end", &comment, Designation::X, px));
+        on_sheet.push(column_of("Percent failed (Turnbull)", &comment, Designation::Y, py));
+        on_sheet.push(column_of("Line time", &comment, Designation::X, line.0));
+        on_sheet.push(column_of("Fitted percent failed", &comment, Designation::Y, line.1));
+        let (x_scale, y_scale) = match spec.dist {
+            LifeDist::Weibull | LifeDist::Exponential => (ScaleKind::Log10, ScaleKind::Weibull),
+            LifeDist::Lognormal => (ScaleKind::Log10, ScaleKind::Probability),
+            LifeDist::Normal => (ScaleKind::Linear, ScaleKind::Probability),
+        };
+        more_graphs.push(XyGraph {
+            plots: vec![
+                GraphPlot {
+                    x: x1,
+                    y: x1 + 1,
+                    kind: PlotKind::Scatter,
+                    label: "Turnbull estimate".into(),
+                    line_of: None,
+                },
+                GraphPlot {
+                    x: x1 + 2,
+                    y: x1 + 3,
+                    kind: PlotKind::Line,
+                    label: format!("Fitted {}", spec.dist.name()),
+                    line_of: None,
+                },
+            ],
+            x_scale,
+            y_scale,
+            x_title: "Time".into(),
+            y_title: "Percent failed".into(),
+            look: Default::default(),
+        });
+        notes.push(
+            "Probability plot: the Turnbull estimate's percent failed at the upper end of each interval holding probability, with the fitted line.".into(),
+        );
     }
     sheet_cols.extend(on_sheet);
-    Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph, more_graphs: Vec::new() }.shift_graphs(shift))
+    Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph, more_graphs }.shift_graphs(shift))
 }
 
 #[cfg(test)]

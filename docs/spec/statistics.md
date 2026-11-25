@@ -2288,11 +2288,16 @@ likelihood is maximized by Nelder-Mead on `(ln shape, ln scale)`, `(mu, ln sigma
 right-censored fit (section 37) of a pseudo sample (exact times, interval midpoints, left times halved) and restarted
 until it stops improving; with only exact and right-censored rows it gives section 37's fit. The result sheet
 `LifeIntervalN` has one row (N, Exact, Right-, Left- and Interval-censored counts, Parameter 1 and 2, Log-likelihood,
-AIC, Mean, Median); a new graph draws the fitted distribution function and survival in percent. Checked against scipy
+AIC, Mean, Median); a new graph draws the fitted distribution function and survival in percent, and (T438) a second
+graph is the probability plot: the Turnbull estimate (section 53) as percent failed at the upper end of each interval
+that holds probability (finite, above 0 for the positive distributions, the last one with nothing left out), on the
+fitted distribution's probability axis as in section 37 (Weibull axis and log time for Weibull and exponential,
+probability axis and log time for lognormal, probability axis for normal), with the fitted line; the sheet gets the
+columns Turnbull upper end, Percent failed (Turnbull), Line time and Fitted percent failed. Checked against scipy
 (`tools/interval-censor-ref.py`, `crates/calc/tests/interval_censor_reference.rs`: the log-likelihood at scipy's
 optimum to 1e-10, Sheaf's maximum no lower, parameters to 1e-5; scipy's own `fit(CensoredData)` agrees to 1e-3).
-Nonparametric (Turnbull) estimates are section 53, frequency columns section 49 and life-data regression section 48;
-probability plots with interval data are not built.
+Nonparametric (Turnbull) estimates are section 53 (and the probability plot's points, T438), frequency columns
+section 49 and life-data regression section 48.
 
 ## 48 Life data regression (T391, Origin 2026b; not measured)
 

@@ -277,6 +277,7 @@ impl Writer {
         let supported_style = PageStyle {
             layer_drawing_order: style.layer_drawing_order,
             axis_layer_icons: style.axis_layer_icons,
+            object_grid: style.object_grid,
             ..PageStyle::default()
         };
         if *style != supported_style {
@@ -291,6 +292,7 @@ impl Writer {
             ordinal: self.written_windows,
             page,
             axis_layer_icons: style.axis_layer_icons,
+            object_grid: style.object_grid,
             time: self.time,
             serial: 3u8.wrapping_add(self.graphs as u8),
             place: self.place,

@@ -91,6 +91,22 @@ impl<'a> SheetHost<'a> {
         Some((sheet, column))
     }
 
+    /// A reference to column `id` of this workbook: `col(k)` on this sheet, `k!col(k)` (by position) on another.
+    fn reference_to(&self, id: ColumnId) -> Option<ColumnRef> {
+        let book = self.book?;
+        let (s, sheet) = book.sheets.iter().enumerate().find(|(_, s)| s.columns.iter().any(|c| c.id == id))?;
+        let position = sheet.columns.iter().position(|c| c.id == id)? + 1;
+        Some(if std::ptr::eq(sheet, self.sheet) {
+            ColumnRef::Index(position)
+        } else {
+            ColumnRef::Scoped {
+                book: None,
+                sheet: WorksheetRef::Index(s + 1),
+                column: Box::new(ColumnRef::Index(position)),
+            }
+        })
+    }
+
     /// The column a reference means. A bare `col(j)` is a column called j (short name ignoring
     /// case, then long name) and only when the sheet has none the position of the formula column.
     fn find(&self, r: &ColumnRef) -> Option<&'a Column> {
@@ -191,19 +207,18 @@ impl Host for SheetHost<'_> {
         // A named range of the workbook (T400), as `col(k)[first:last]` on its sheet.
         let book = self.book?;
         let n = book.named_cell(name).filter(|n| n.is_range())?;
-        let (s, sheet) = book.sheets.iter().enumerate().find(|(_, s)| s.columns.iter().any(|c| c.id == n.column))?;
-        let position = sheet.columns.iter().position(|c| c.id == n.column)? + 1;
-        let column = if std::ptr::eq(sheet, self.sheet) {
-            ColumnRef::Index(position)
-        } else {
-            ColumnRef::Scoped {
-                book: None,
-                sheet: WorksheetRef::Index(s + 1),
-                column: Box::new(ColumnRef::Index(position)),
-            }
-        };
+        let column = self.reference_to(n.column)?;
         let (first, last) = n.rows();
         Some((column, first + 1, last + 1))
+    }
+
+    fn named_block(&self, name: &str) -> Option<(Vec<ColumnRef>, usize, usize)> {
+        // A named block of the workbook (T432): every column from its first to its last.
+        let book = self.book?;
+        let n = book.named_cell(name).filter(|n| n.is_block())?;
+        let refs: Option<Vec<ColumnRef>> = book.named_columns(name).into_iter().map(|c| self.reference_to(c)).collect();
+        let (first, last) = n.rows();
+        Some((refs?, first + 1, last + 1))
     }
 
     fn cell(&self, col: &ColumnRef, row: usize) -> Option<f64> {
@@ -289,13 +304,12 @@ fn resolve_deps(expr: &Expr, host: &SheetHost<'_>, me: ColumnId) -> Result<Formu
             out.push(id);
         }
     }
-    // A named cell (T396) is read from its column.
+    // A named cell (T396) is read from its column, a named block (T432) from all of its columns.
     for v in expr.variables() {
-        if let Some(n) = host.book.and_then(|b| b.named_cell(&v))
-            && n.column != me
-            && !out.contains(&n.column)
-        {
-            out.push(n.column);
+        for c in host.book.map(|b| b.named_columns(&v)).unwrap_or_default() {
+            if c != me && !out.contains(&c) {
+                out.push(c);
+            }
         }
     }
     match expr.cell_reads() {

@@ -716,6 +716,12 @@ Basic worksheet toolbar/font/row-growth behaviour was measured in Origin 2016 on
   sheets start automatic, and older explicit counts stay fixed until
   Auto Add Rows is selected. Automatic viewport growth is a view
   adjustment and leaves the data and undo history intact.
+- **Fit Sheet to Window (T59).** The worksheet stores the Miscellaneous
+  switch and the last fitted body row height and column width. The grid
+  gives displayed rows and columns equal shares of the space left by the
+  headers and labels. Turning Fit off keeps those sizes. Subsequent
+  explicit Size measurements replace them, and the worksheet image and
+  PDF paths use the saved sizes.
 - **Header measurements (T59).** Sparse `view.header_measurements`
   stores the worksheet's explicit column heading height and row heading
   width in grid percentages. Automatic measurements use the worksheet's

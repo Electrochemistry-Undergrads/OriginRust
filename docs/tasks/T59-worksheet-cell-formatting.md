@@ -179,6 +179,11 @@ while it is enabled, and an explicit smaller Row Number still trims
 the data to the requested row. Origin 2016 probes cover maximising,
 restoring and last-row Enter (GUI 3 and workbook model 13b).
 
+Fit Sheet to Window follow-up. The Miscellaneous switch sizes the
+displayed data grid against its workbook viewport. The grid and
+worksheet image and PDF paths retain the last fitted dimensions after
+the switch is cleared (GUI 3 and workbook model 13b).
+
 **Size:** L. **Branch:** `cell-format` (model/dialog), `codex/t59-format-toolbar` (toolbar/font geometry), `codex/t59-worksheet-controls` (underline/fill/keys), `codex/t59-worksheet-dialog` (dialog measurements/More entry), `codex/t59-custom-colors` (one-off RGB chooser), `codex/t59-classic-colors` (24 Classic worksheet presets), `codex/t59-xlsx-formats` (Excel cell styles). **Priority:** P0, wave 1.
 **Spec:** [workbook model](../spec/workbook-model.md), new Cell formats section;
 [GUI](../spec/gui-look.md) 3. **Inventory:** the worksheet-wide `T59` menu location now opens the bounded Data-font dialog; the three unsupported text-control choices are B5.

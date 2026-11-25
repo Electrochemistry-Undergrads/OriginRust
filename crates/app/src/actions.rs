@@ -492,6 +492,13 @@ pub enum Action {
         page: (f64, f64),
         png: std::sync::Arc<Vec<u8>>,
     },
+    /// Worksheet > Name Manager... of this workbook (T434).
+    NameManager(WindowId),
+    /// Deletes a name of a workbook, one undo step (T434).
+    DeleteName {
+        book: WindowId,
+        name: String,
+    },
     /// A data cell's Define Name...: its window (T396).
     DefineName {
         column: ColumnId,
@@ -502,6 +509,8 @@ pub enum Action {
         column: ColumnId,
         row: usize,
         last: usize,
+        /// The last column of a block of several columns (T432).
+        last_column: Option<ColumnId>,
         name: String,
     },
     /// Draw an arrow across a data cell (`Some(double)`) or take it out (T205), one undo step.
@@ -970,10 +979,12 @@ pub enum Action {
     FormatCellsDialog(WindowId),
     /// Format > Worksheet (F4): worksheet-wide Data font defaults.
     WorksheetFontsDialog(WindowId),
-    EnsureWorksheetRows {
+    /// Worksheet dimensions derived from the current workbook viewport.
+    UpdateWorksheetViewport {
         book: WindowId,
         sheet: usize,
-        rows: usize,
+        minimum_rows: usize,
+        fitted: Option<sheaf_core::sheet_view::FittedCells>,
     },
     /// Cell menu > Add Note... / Edit Note...: the note editor for the single selected cell.
     NoteDialog(WindowId),
@@ -1563,4 +1574,5 @@ pub enum PageSwitch {
     IconDoubleClickPlotSetup,
     ActiveLayerIndicator,
     AxisLayerIcons,
+    ObjectGrid,
 }

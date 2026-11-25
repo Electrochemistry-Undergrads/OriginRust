@@ -28,6 +28,7 @@ mod fill;
 mod fonts;
 mod hexbin;
 pub mod hit;
+pub mod latex;
 mod layer_scale;
 mod layout;
 mod legend;

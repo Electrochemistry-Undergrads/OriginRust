@@ -444,8 +444,9 @@ source states it [inf].
 |---|---|---|
 | `0x23` | u16 | page width in 1/600 inch (6432 for a 10.72 inch wide page) |
 | `0x25` | u16 | page height in 1/600 inch |
-| `0x34` | u8 | the page alignment grid uses `0x02` for Object Grid, `0x04` for Layer Grid and zero for off. The two bits replace each other when switching grids. The second graph's byte stayed fixed. Sheaf reads and writes both modes (graphing 22.12–22.13) [obs, T66]. |
+| `0x34` | u8 | the page alignment grid uses `0x02` for Object Grid, `0x04` for Layer Grid and zero for off. The two bits replace each other when switching grids. Bit `0x80` shows Master Items on Screen. Sheaf reads and writes these three bits (graphing 22.12–22.14) [obs, T66]. |
 | `0x69` | u8 | bit `0x80` shows Axis Layer Icons (graphing 22.11). Origin 2016 saved `0x93` on and `0x13` off in Graph1, with the byte on the second graph unchanged [obs, T66]. |
+| `0x72` | u8 | bit `0x80` enables Use Master Items. Clearing just this bit in a private copy removed the shared master text from the window and export after reopening, with the screen bit at `0x34` still set (graphing 22.14) [obs, T66]. |
 
 The page units were found by exporting a graph at Origin's default 300 dots per inch: a page of
 6432 units came out 3216 pixels wide.

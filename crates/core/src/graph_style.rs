@@ -424,6 +424,12 @@ pub struct PageStyle {
     /// The page's object or layer alignment grid in the graph window.
     #[serde(default, skip_serializing_if = "is_default", alias = "object_grid", deserialize_with = "read_page_grid")]
     pub grid: PageGrid,
+    /// Include the project's Master page annotations in this page's output.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub use_master_items: bool,
+    /// Also display the master annotations in the graph window.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub master_items_on_screen: bool,
     /// Data > Lock Position (T186).
     #[serde(default, skip_serializing_if = "is_default")]
     pub lock_position: LockPosition,
@@ -465,6 +471,8 @@ impl Default for PageStyle {
             active_layer_indicator: false,
             axis_layer_icons: false,
             grid: PageGrid::Off,
+            use_master_items: true,
+            master_items_on_screen: false,
             lock_position: LockPosition::LayerIcon,
             title_display: TitleDisplay::Both,
             comments: String::new(),
@@ -522,6 +530,8 @@ mod tests {
             active_layer_indicator: true,
             axis_layer_icons: true,
             grid: PageGrid::Layer,
+            use_master_items: false,
+            master_items_on_screen: true,
             lock_position: LockPosition::LastPoint,
             title_display: TitleDisplay::LongName,
             comments: "notes".into(),

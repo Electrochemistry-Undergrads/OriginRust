@@ -288,7 +288,7 @@ impl FullScreen {
             let stale =
                 self.texture.as_ref().is_none_or(|(rev, g, k, _)| *rev != revision || *g != self.graph || *k != key);
             if stale {
-                let scene = sheaf_plot::graph_scene(project, self.graph);
+                let scene = sheaf_plot::graph_screen_scene(project, self.graph);
                 let raster = scene.and_then(|s| sheaf_plot::render_scene_raster(&s, f64::from(key) / 50.0));
                 if let Ok(r) = raster {
                     let size = [r.width as usize, r.height as usize];

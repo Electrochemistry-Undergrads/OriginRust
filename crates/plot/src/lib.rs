@@ -591,6 +591,42 @@ pub fn graph_scene(project: &Project, graph: WindowId) -> Result<scene::Scene, P
     layout::build_scene(project, graph, SystemFonts::shared())
 }
 
+/// Scene for a graph window, with master annotations controlled by its View switch.
+pub fn graph_screen_scene(project: &Project, graph: WindowId) -> Result<scene::Scene, PlotError> {
+    let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
+    let master = if g.page.style.master_items_on_screen { project.master_graph_for(g) } else { None };
+    Ok(layout::build_scene_with_master(project, g, master, SystemFonts::shared()))
+}
+
+#[cfg(test)]
+#[test]
+fn master_annotations_stay_behind_the_graph_and_follow_the_screen_switch() {
+    use sheaf_core::graph::{Font, TextLabel};
+    use sheaf_core::template::Template;
+
+    let mut project = Project::new();
+    let target = project.add_graph(Template::Line);
+    let master = project.add_graph(Template::Line);
+    project.rename_window(master, "Master").unwrap();
+    let source = &mut project.graph_mut(master).unwrap().layers[0];
+    source.x_axis.title = Some("Master axis title".into());
+    source.labels.push(TextLabel::new("Shared label", 0.3, 0.4, Font::new("Arial", 12.0)));
+    let hidden = graph_screen_scene(&project, target).unwrap();
+    let output = graph_scene(&project, target).unwrap();
+    assert!(!svg::write_svg(&hidden).contains("Shared label"));
+    let svg = svg::write_svg(&output);
+    assert!(svg.find("Shared label").unwrap() < svg.find("class=\"plots\"").unwrap());
+    assert!(!svg.contains("Master axis title"));
+    assert_eq!(output.layers[0].objects, hidden.layers[0].objects);
+
+    project.graph_mut(target).unwrap().page.style.master_items_on_screen = true;
+    assert_eq!(graph_screen_scene(&project, target).unwrap(), output);
+    project.graph_mut(target).unwrap().page.height_pt *= 2.0;
+    let stretched = graph_screen_scene(&project, target).unwrap();
+    assert_eq!(stretched.layers[0].grid, output.layers[0].grid);
+    assert_eq!(stretched, graph_scene(&project, target).unwrap());
+}
+
 /// The box Origin's Fit Page to Layers fits the page to (graphing spec 15.7d), as `(x, y, width,
 /// height)` in page points: the frames of the layers and the boxes of the page's objects (legends,
 /// text labels, drawn shapes and slope annotations), but not the tick labels or axis titles, as

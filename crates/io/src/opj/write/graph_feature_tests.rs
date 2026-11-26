@@ -687,15 +687,60 @@ fn a_ternary_layer_is_written_as_a_scatter_plot_and_named() {
 }
 
 #[test]
-fn plot_decorations_and_a_layer_background_are_named_in_the_save_warnings() {
+fn plot_decorations_are_named_in_the_save_warnings_and_a_layer_background_is_written() {
     let mut p = source();
     line_graph(&mut p, |l| {
         l.background = Some(sheaf_core::Color::WHITE);
         l.plots[0].decor.drop.vertical.on = true;
     });
-    let (_, out) = round_trip(&p);
-    assert!(out.warnings.iter().any(|w| w.contains("layer background")), "{:?}", out.warnings);
+    let (imp, out) = round_trip(&p);
+    assert!(!out.warnings.iter().any(|w| w.contains("layer background colour")), "{:?}", out.warnings);
     assert!(out.warnings.iter().any(|w| w.contains("drop lines")), "{:?}", out.warnings);
+    assert_eq!(imp.graphs[0].layers[0].background, Some(sheaf_core::Color::WHITE));
+}
+
+#[test]
+fn a_layer_background_colour_is_written_where_origin_keeps_it() {
+    // T477, measured in Origin 2016 with `layer.color`: 2 at 0xA7, the nearest list position at 0xA8, the
+    // colour code at 0x105 (a list position, or red, green, blue and 1).
+    for (colour, position, code) in [
+        (sheaf_core::Color::rgb(255, 0, 0), 1u8, [1u8, 0, 0, 0]),
+        (sheaf_core::Color::rgb(17, 131, 213), 12, [17, 131, 213, 1]),
+    ] {
+        let mut p = source();
+        line_graph(&mut p, |l| l.background = Some(colour));
+        let (imp, out) = round_trip(&p);
+        assert_eq!(imp.graphs[0].layers[0].background, Some(colour));
+        // the graph layer header is the 361-byte block whose flag byte (0x02) is 0x1F
+        let header = out
+            .bytes
+            .windows(5)
+            .enumerate()
+            .filter(|(_, w)| *w == [0x69, 0x01, 0, 0, b'\n'])
+            .map(|(i, _)| &out.bytes[i + 5..i + 5 + 361])
+            .find(|h| h[2] == 0x1f)
+            .expect("a graph layer header");
+        assert_eq!((header[0xA7], header[0xA8]), (2, position), "{colour:?}");
+        assert_eq!(&header[0x105..0x109], &code[..], "{colour:?}");
+    }
+    // no background: Origin's 1 and "none"
+    let mut p = source();
+    line_graph(&mut p, |l| l.background = None);
+    let (imp, _) = round_trip(&p);
+    assert_eq!(imp.graphs[0].layers[0].background, None);
+}
+
+/// Writes `sheaf-layer-color.opj` (graphs with a red and an RGB layer background) into `SHEAF_OPJ_LAYER_DIR`,
+/// so Origin can be asked `layer.color` (T477).
+#[test]
+#[ignore]
+fn write_layer_color_project_for_origin() {
+    let Ok(dir) = std::env::var("SHEAF_OPJ_LAYER_DIR") else { return };
+    let mut p = source();
+    line_graph(&mut p, |l| l.background = Some(sheaf_core::Color::rgb(255, 0, 0)));
+    line_graph(&mut p, |l| l.background = Some(sheaf_core::Color::rgb(17, 131, 213)));
+    std::fs::write(std::path::Path::new(&dir).join("sheaf-layer-color.opj"), write_named(&p, "l", TIME).unwrap().bytes)
+        .unwrap();
 }
 
 #[test]

@@ -151,7 +151,15 @@ pub(super) struct LayerSpec {
     pub offsets: bool,
     /// At least one curve has an X offset too.
     pub x_offsets: bool,
+    /// The layer's background colour (T477): the colour code and the nearest position in Origin's list.
+    pub background: Option<(Code, u8)>,
 }
+
+/// The layer background (T477, measured in Origin 2016 with `layer.color`): 2 at `0xA7` for a filled
+/// layer (1 without), the nearest position in the colour list at `0xA8`, the colour code at `0x105`.
+const LAYER_FILL_AT: usize = 0xA7;
+const LAYER_FILL_POSITION_AT: usize = 0xA8;
+const LAYER_FILL_CODE_AT: usize = 0x105;
 
 /// Header bytes of a linked layer (spec section 13.12): the parent's number, the position among the
 /// layers, a unit code and a flag bit.
@@ -173,6 +181,11 @@ const X_OFFSETS_BIT: u8 = 0x20;
 pub(super) fn layer_header(l: &LayerSpec) -> Vec<u8> {
     let mut h = vec![0u8; 361];
     fill(&mut h, GRAPH_LAYER_FIELDS);
+    if let Some((code, position)) = l.background {
+        h[LAYER_FILL_AT] = 2;
+        h[LAYER_FILL_POSITION_AT] = position;
+        put(&mut h, LAYER_FILL_CODE_AT, &code.0);
+    }
     let frame_w = f64::from(l.frame[2].saturating_sub(l.frame[0]));
     let frame_h = f64::from(l.frame[3].saturating_sub(l.frame[1]));
     // (from, counts, flags, scale, minor, scale kind) of X and Y

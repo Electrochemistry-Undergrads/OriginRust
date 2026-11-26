@@ -590,7 +590,8 @@ fn display_background_rgb_renders_and_survives_native_and_companion_saves() {
     for ext in ["sheaf", "opj"] {
         let saved = sheaf_io::save::save_project(project(&h), &folder.join(format!("background.{ext}"))).unwrap();
         if ext == "opj" {
-            assert!(saved.warnings.iter().any(|w| w.contains("layer background colour")));
+            // T477: the .opj holds the layer background itself
+            assert!(!saved.warnings.iter().any(|w| w.contains("layer background colour")), "{:?}", saved.warnings);
         }
         let reopened = sheaf_io::open_project(&saved.path).unwrap();
         assert_eq!(reopened.project.graphs().next().unwrap().layers[0].background, Some(c));

@@ -5,15 +5,15 @@
 //! - Latin letters in italics, digits and signs upright; spaces are dropped, `\,` `\;` `\quad` give space;
 //! - `x^2`, `x_i`, `x_i^2` (one shared column), braces for longer scripts;
 //! - Greek letters, operators and arrows as their characters (`\alpha` α, `\pm` ±, `\infty` ∞, `\rightarrow` →);
-//! - `\frac{a}{b}` written `a/b` (parenthesised when longer than one item), `\sqrt{x}` √x, `\sqrt[n]{x}`;
+//! - `\frac{a}{b}` stacked (the markup `\fr(a,b)`: `a` over a bar over `b`, T480), `\sqrt{x}` √x, `\sqrt[n]{x}`;
 //! - `\bar`, `\dot`, `\tilde` as the markup accents, `\hat` and `\vec` as combining marks;
 //! - `\mathrm`, `\text`, `\operatorname` upright, `\mathbf` bold, `\mathit` italic; `\sin`, `\log` ... upright;
 //! - `\left`, `\right` and the `\big` sizes dropped, their delimiters kept; an unknown command is written by name.
 //!
 //! A span is math when it holds a backslash, `^`, `_` or `{`, or starts with a letter and has no space at either end
 //! (`$x$`); other spans (`$5 and $10`) are left as they are. A `$` before `(` starts a substitution, not math; `\$`
-//! is a dollar sign. Not drawn as in LaTeX: stacked fractions, large operators with limits
-//! above and below, matrices and stretchy delimiters.
+//! is a dollar sign. Not drawn as in LaTeX: large operators with limits above and below, matrices and stretchy
+//! delimiters.
 
 use std::borrow::Cow;
 
@@ -265,9 +265,10 @@ impl Parser {
                 let name = self.command();
                 match name.as_str() {
                     "frac" | "dfrac" | "tfrac" => {
+                        // T480: a stacked fraction; a comma outside parentheses in a part would end it early
                         let (a, b) = (self.argument(), self.argument());
-                        let wrap = |x: Atom| if x.single { x.markup } else { format!("({})", x.markup) };
-                        Atom { markup: format!("{}/{}", wrap(a), wrap(b)), single: false, letter: None }
+                        let part = |x: Atom| escape_outer_commas(&x.markup);
+                        Atom { markup: format!("\\fr({},{})", part(a), part(b)), single: true, letter: None }
                     }
                     "sqrt" => {
                         self.skip_spaces();
@@ -383,6 +384,26 @@ pub fn to_markup(math: &str) -> String {
     Parser { chars: math.chars().collect(), at: 0, upright: false }.sequence(None).markup
 }
 
+/// `text` with its commas outside parentheses written as `\(44)`, so that it can be one part of a
+/// two-part escape such as `\fr(num,den)` (T480).
+fn escape_outer_commas(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut nesting = 0usize;
+    for c in text.chars() {
+        match c {
+            '(' => nesting += 1,
+            ')' => nesting = nesting.saturating_sub(1),
+            _ => {}
+        }
+        if c == ',' && nesting == 0 {
+            out.push_str("\\(44)");
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -393,8 +414,9 @@ mod tests {
         assert_eq!(to_markup("E = mc^2"), r"\i(E)=\i(mc)\+(2)");
         assert_eq!(to_markup(r"x_i^{2n}"), r"\i(x)\=(\i(i),2\i(n))");
         assert_eq!(to_markup(r"\alpha + \beta \leq \infty"), "α+β≤∞");
-        assert_eq!(to_markup(r"\frac{1}{2}"), "1/2");
-        assert_eq!(to_markup(r"\frac{a+b}{c}"), r"(\i(a)+\i(b))/\i(c)");
+        assert_eq!(to_markup(r"\frac{1}{2}"), r"\fr(1,2)");
+        assert_eq!(to_markup(r"\frac{a+b}{c}"), r"\fr(\i(a)+\i(b),\i(c))");
+        assert_eq!(to_markup(r"\frac{1,5}{2}"), r"\fr(1\(44)5,2)", "a comma of a part is not the separator");
         assert_eq!(to_markup(r"\sqrt{x}"), r"√\i(x)");
         assert_eq!(to_markup(r"\sqrt[3]{x+1}"), r"\+(3)√(\i(x)+1)");
         assert_eq!(to_markup(r"\bar{x}"), r"\ab(\i(x))");

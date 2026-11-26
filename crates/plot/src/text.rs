@@ -90,10 +90,17 @@ pub(crate) fn segments_width(m: &dyn TextMeasurer, segments: &[Segment], font: &
             Segment::Text(r) => m.width(&r.text, &run_font(font, r), size * r.scale),
             Segment::Pair { sub, sup } => segments_width(m, sub, font, size).max(segments_width(m, sup, font, size)),
             Segment::Accent { content, .. } => segments_width(m, content, font, size),
+            Segment::Fraction { num, den, scale, .. } => {
+                segments_width(m, num, font, size).max(segments_width(m, den, font, size))
+                    + 2.0 * FRACTION_PAD * scale * size
+            }
             Segment::LineGap(_) | Segment::Tab => 0.0,
         })
         .sum()
 }
+
+/// Space on each side of a stacked fraction's bar beyond its longer part, in units of the text size (T480).
+const FRACTION_PAD: f64 = 0.08;
 
 fn ink_top(segments: &[Segment]) -> f64 {
     segments
@@ -104,6 +111,7 @@ fn ink_top(segments: &[Segment]) -> f64 {
             Segment::Accent { kind, content, scale, .. } => {
                 ink_top(content) + scale * (ACCENT_GAP + accent_height(*kind))
             }
+            Segment::Fraction { num, bar_rise, .. } => ink_top(num).max(*bar_rise),
             Segment::LineGap(_) | Segment::Tab => f64::NEG_INFINITY,
         })
         .fold(f64::NEG_INFINITY, f64::max)
@@ -146,6 +154,24 @@ fn visit_ink(
                         cursor,
                     );
                 }
+                cursor += width;
+            }
+            Segment::Fraction { num, den, scale, color, bar_rise } => {
+                // T480: both parts centred over one column, the bar across it
+                let (wn, wd) = (segments_width(m, num, font, size), segments_width(m, den, font, size));
+                let width = wn.max(wd) + 2.0 * FRACTION_PAD * scale * size;
+                visit_ink(num, m, font, size, cursor + (width - wn) / 2.0, visit);
+                visit_ink(den, m, font, size, cursor + (width - wd) / 2.0, visit);
+                visit(
+                    Ink::Accent {
+                        kind: Accent::Bar,
+                        rise: bar_rise * size,
+                        width,
+                        em: scale * size,
+                        color: color.unwrap_or(font.color),
+                    },
+                    cursor,
+                );
                 cursor += width;
             }
             Segment::LineGap(_) | Segment::Tab => {}

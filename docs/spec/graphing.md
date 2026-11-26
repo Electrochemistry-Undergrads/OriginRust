@@ -8012,13 +8012,17 @@ font, size and colour, takes part in the label's layout, and exports as vectors 
 - **Characters:** Greek letters (`\alpha` to `\omega`, `\Gamma` to `\Omega`), operators and relations (`\pm`
   `\times` `\cdot` `\leq` `\neq` `\approx` `\propto` `\infty` `\partial` `\nabla` `\sum` `\int` ...), arrows,
   `\circ`/`\degree` °, `\AA` Å, `\hbar`, `\ell`, `\ldots`, and the escaped `\{ \} \% \$ \_ \& \#`.
-- **Structures:** `\frac{a}{b}` is written a/b, a side longer than one item in parentheses ((a+b)/c);
+- **Structures:** `\frac{a}{b}` (and `\dfrac`, `\tfrac`) is a stacked fraction (T480, 2026-11-26): the markup escape
+  `\fr(num,den)` (Sheaf's own; a comma of a part is written `\(44)`) draws the numerator over a bar over the
+  denominator, both at 70 % of the surrounding size and centred in one column 0.08 em wider on each side than the
+  longer part; the numerator's baseline is 0.55 em up, the denominator's 0.36 em down and the bar 0.28 em up, as thick
+  as the markup's accent bar. Fractions nest; read as plain text (for example a text export of the runs) it is `a/b`;
   `\sqrt{x}` is √x, `\sqrt[n]{x}` a raised n before it; `\bar`/`\overline`, `\dot` and `\tilde` are the markup's
   bar, dot and tilde accents; `\hat` and `\vec` add combining marks.
 - **Fonts:** `\mathrm{...}` and `\operatorname{...}` upright (scripts inside still work), `\text{...}` literal
   upright text, `\mathbf{...}` bold, `\mathit{...}` italic; `\sin`, `\cos`, `\log`, `\ln`, `\exp`, `\lim`, `\max` ...
   upright. `\left`, `\right` and the `\big` sizes are dropped and their delimiters kept; an unknown command is
   written by its name.
-- **Not built:** stacked fractions, large operators with limits above and below, matrices, stretchy delimiters,
+- **Not built:** large operators with limits above and below, matrices, stretchy delimiters,
   display equations on their own lines, and equations from worksheet metadata carried into legends and axis titles.
 

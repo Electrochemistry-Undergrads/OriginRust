@@ -107,6 +107,12 @@ pub fn julian_day_now() -> f64 {
     secs / 86_400.0 + 2_440_587.5
 }
 
+/// A matrix coordinate as the text Origin keeps in the `X1` ... annotations (T472): the shortest
+/// decimal form, with an exponent for very large or small numbers.
+fn coordinate_text(v: f64) -> String {
+    if v == 0.0 || (1e-5..1e15).contains(&v.abs()) { format!("{v}") } else { format!("{v:e}") }
+}
+
 /// Where a window stands in the file: in the notes list or in the window list (T470).
 #[derive(Clone, Copy)]
 struct Entry {
@@ -224,6 +230,8 @@ struct Notes {
     analysis_links_dropped: usize,
     /// Notes windows with a long name or comments, which the file written here does not hold (T470).
     notes_labels_dropped: usize,
+    /// Matrix sheets whose X, Y or Z labels (long name, units, comments) are not written (T472).
+    matrix_labels_dropped: usize,
     /// Everything a graph holds that the file does not, one sentence each.
     graph_notes: Vec<String>,
 }
@@ -296,11 +304,21 @@ impl Writer {
         // the data-set position of every column, as the workbooks will number them
         let mut sets: HashMap<ColumnId, SetInfo> = HashMap::new();
         let mut next = 0usize;
-        for book in project.workbooks() {
-            for column in book.sheets.iter().flat_map(|s| s.columns.iter()) {
-                next += 1;
-                let (first, last) = used_range(column);
-                sets.insert(column.id, SetInfo { position: next.min(usize::from(u16::MAX)) as u16, first, last });
+        for window in &project.windows {
+            match window {
+                Window::Workbook(book) => {
+                    for column in book.sheets.iter().flat_map(|s| s.columns.iter()) {
+                        next += 1;
+                        let (first, last) = used_range(column);
+                        sets.insert(
+                            column.id,
+                            SetInfo { position: next.min(usize::from(u16::MAX)) as u16, first, last },
+                        );
+                    }
+                }
+                // T472: one data set per matrix sheet, written in window order with the columns.
+                Window::Matrix(m) => next += m.sheets.len(),
+                _ => {}
             }
         }
         for window in &project.windows {
@@ -328,15 +346,95 @@ impl Writer {
                 ));
                 Ok(())
             }
-            Window::Matrix(m) => {
-                // Matrix windows are not written yet (the companion file keeps them).
-                self.notes.graph_notes.push(format!(
-                    "matrix book '{}' is not written to the Origin project (the writer does not store matrix windows yet)",
-                    m.name
-                ));
-                Ok(())
-            }
+            Window::Matrix(m) => self.matrix_book(m),
         }
+    }
+
+    /// A matrix book (T472, `opj-format.md` 13.16): the window, one layer per sheet with its size, the
+    /// X/Y range as the annotations `X1`, `X2`, `Y1`, `Y2` when it is not Origin's 1 to 10, one column
+    /// record that points at the sheet's data set, and the data set of the numbers row by row.
+    fn matrix_book(&mut self, book: &sheaf_core::matrix::MatrixBook) -> Result<(), IoError> {
+        use sheaf_core::matrix::DEFAULT_RANGE;
+        self.check_name("matrix book name", &book.name, MAX_DATASET_NAME)?;
+        if book.sheets.len() > 1 && book.name.len() + 1 + book.sheets.len().to_string().len() > MAX_DATASET_NAME {
+            return fail(format!(
+                "the name of matrix book '{}' is too long for its {} sheets: Origin keeps at most {MAX_DATASET_NAME} bytes \
+                 for the book name, '@' and the sheet number",
+                book.name,
+                book.sheets.len()
+            ));
+        }
+        let label = self.window_label(&book.long_name, "matrix book long name")?;
+        let spec = WindowSpec {
+            name: &book.name,
+            label: &label,
+            ordinal: self.written_windows,
+            active_sheet: book.active_sheet.min(book.sheets.len().saturating_sub(1)),
+            time: self.time,
+            place: self.place,
+        };
+        self.windows.extend(framed(&layout::matrix_window_header(&spec)));
+        let mut sheet_names: HashSet<String> = HashSet::new();
+        for (index, sheet) in book.sheets.iter().enumerate() {
+            self.check_name("matrix sheet name", &sheet.name, MAX_SHEET_NAME)?;
+            if !sheet_names.insert(sheet.name.to_lowercase()) {
+                return fail(format!("matrix book '{}' has two sheets named '{}'", book.name, sheet.name));
+            }
+            if sheet.rows > usize::from(u16::MAX) || sheet.cols > usize::from(u16::MAX) {
+                return fail(format!(
+                    "matrix sheet '{}' of '{}' has {} x {} cells; Origin stores at most 65535 rows and columns",
+                    sheet.name, book.name, sheet.rows, sheet.cols
+                ));
+            }
+            if self.columns >= MAX_COLUMNS {
+                return fail(format!("a project file holds at most {MAX_COLUMNS} columns and matrix sheets"));
+            }
+            let layer = layout::MatrixLayerSpec {
+                name: &sheet.name,
+                rows: sheet.rows,
+                cols: sheet.cols,
+                index_in_book: index,
+                ordinal: self.sheets,
+            };
+            self.sheets += 1;
+            self.windows.extend(framed(&layout::matrix_layer_header(&layer)));
+            let range = (sheet.x_from, sheet.x_to, sheet.y_from, sheet.y_to);
+            if range != (DEFAULT_RANGE.0, DEFAULT_RANGE.1, DEFAULT_RANGE.0, DEFAULT_RANGE.1) {
+                for (key, v) in [("X1", sheet.x_from), ("X2", sheet.x_to), ("Y1", sheet.y_from), ("Y2", sheet.y_to)] {
+                    self.windows.extend(tail::formula_annotation(key, coordinate_text(v).as_bytes()));
+                }
+            }
+            self.windows.extend(framed(&[]));
+            // the numbers row by row, Origin's missing value for an empty cell
+            let cells = sheet.rows * sheet.cols;
+            let values = sheet.values();
+            let mut data = Vec::with_capacity(cells * 8);
+            let mut used: Option<(usize, usize)> = None;
+            for k in 0..cells {
+                let x = values.get(k).copied().filter(|x| x.is_finite());
+                if x.is_some() {
+                    used = Some(used.map_or((k, k + 1), |(f, _)| (f, k + 1)));
+                }
+                data.extend_from_slice(&x.unwrap_or(MISSING).to_le_bytes());
+            }
+            let used = used.map_or((0, 0), |(f, l)| (f as u32, l as u32));
+            let name = if index == 0 { book.name.clone() } else { format!("{}@{}", book.name, index + 1) };
+            self.datasets.extend(framed(&layout::matrix_dataset_header(&name, cells as u32, used)));
+            self.datasets.extend(framed(&data));
+            self.datasets.extend(framed(&[]));
+            self.columns += 1;
+            self.windows.extend(framed(&layout::matrix_column_record(self.columns as u16, cells as u32)));
+            self.windows.extend(framed(&[]));
+            // the end of the column records, the extra block, the three (empty) groups of axis blocks
+            for _ in 0..5 {
+                self.windows.extend(framed(&[]));
+            }
+            self.notes.matrix_labels_dropped +=
+                usize::from(!sheet.x.is_empty() || !sheet.y.is_empty() || !sheet.z.is_empty());
+        }
+        self.windows.extend(framed(&[]));
+        self.written_windows += 1;
+        Ok(())
     }
 
     /// A Notes window (T470): its name and text go into the notes list after the window list.
@@ -682,7 +780,8 @@ impl Writer {
         // Notes windows count in the notes list, the others in the window list (T470).
         let mut position: HashMap<WindowId, Entry> = HashMap::new();
         let (mut windows, mut notes) = (0u32, 0u32);
-        for w in &project.windows {
+        for w in project.windows.iter().filter(|w| !matches!(w, Window::Layout(_))) {
+            // layout pages are not written, so they take no place in the window list
             let is_notes = matches!(w, Window::Notes(_));
             let counter = if is_notes { &mut notes } else { &mut windows };
             position.insert(w.id(), Entry { notes: is_notes, at: *counter });
@@ -942,6 +1041,12 @@ impl Writer {
             warnings.push(format!(
                 "{} sheet(s) show their long name on their tab, which the project file written here does not hold; Origin shows their short names on the tabs.",
                 n.sheet_names_dropped
+            ));
+        }
+        if n.matrix_labels_dropped > 0 {
+            warnings.push(format!(
+                "{} matrix sheet(s) have X, Y or Z labels (long name, units, comments), which the project file written here does not hold.",
+                n.matrix_labels_dropped
             ));
         }
         if n.notes_labels_dropped > 0 {

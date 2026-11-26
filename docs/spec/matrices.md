@@ -235,8 +235,9 @@ that was meant to make one did not finish).
 | `matrix plot INPUT -o fig.png [-t contour|contour-lines|heatmap] [--xyz X,Y,Z] [--major N --minor N --z-min --z-max] [--lines|--no-lines] [--labels] [--no-scale] [--palette ...] [--save P]` | heat map or contour plot of a matrix or of XYZ columns |
 
 `--matrix` and `--sheet` choose a matrix window and sheet. Results are saved back to the project (or to `-o`);
-saving as `.opj` writes a companion `.opj.sheaf` because the Origin writer does not store matrices yet (it names
-each matrix as not written).
+saving as `.opj` stores the matrix books in the Origin project too (T472: sheets, size, numbers, X/Y range; the
+labels of the coordinates are left out with a warning); a companion `.opj.sheaf` is written beside it only when
+something is left out, such as those labels.
 
 ## 7a. The matrix window in the app (T192 slice 2, 2026-11-19, not measured)
 
@@ -542,5 +543,5 @@ to 0 is filled.
 - Stage 2 (app): the matrix window (cells, column and row headers with coordinates, sheet tabs), menus for matrix
   windows (Matrix, Plot > Contour, Image), dialogs (Set Values, Dimensions, Convert, Plot Details levels tab),
   New > Matrix, explorer type "Matrix", copy and paste of cells.
-- Stage 3 (`.opj`): writing matrix windows in Origin projects. Reading them is done (T471, 2026-11-26, measured in Origin
-  2016, `opj-format.md` 13.16): name, long name, sheets, size, numbers and X/Y range; their labels and palettes are not read.
+- Stage 3 (`.opj`): done for name, long name, sheets, size, numbers and X/Y range, read (T471) and written (T472), measured in
+  Origin 2016 (`opj-format.md` 13.16); the labels of the coordinates and the palettes are neither read nor written.

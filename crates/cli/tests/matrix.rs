@@ -211,12 +211,14 @@ fn plot_xyz_columns_with_and_without_a_grid() {
 }
 
 #[test]
-fn a_matrix_survives_saving_as_opj_in_the_companion_file() {
+fn a_matrix_survives_saving_as_opj() {
+    // T472: the Origin project holds the matrix itself, so no companion is needed.
     let dir = scratch("opj");
     let opj = dir.join("m.opj");
     let (good, out, err) = sheaf(&["matrix", "new", "-o", s(&opj), "--cols", "3", "--rows", "2", "--formula", "i+j"]);
     assert!(good, "{err}");
-    let companion = dir.join("m.opj.sheaf");
-    assert!(companion.exists(), "the companion keeps the matrix: {out}{err}");
-    assert_eq!(sheet0(&companion).value(1, 2), 5.0);
+    assert!(!dir.join("m.opj.sheaf").exists(), "nothing is left out of the .opj: {out}{err}");
+    let opened = sheaf_io::open_project(&opj).expect("the .opj opens");
+    let m = opened.project.matrix_books().next().expect("a matrix").sheets[0].clone();
+    assert_eq!((m.rows, m.cols, m.value(1, 2)), (2, 3, 5.0));
 }

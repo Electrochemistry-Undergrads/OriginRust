@@ -1435,4 +1435,18 @@ which gave the coordinates Origin uses.
 The reader opens each matrix book as a Sheaf matrix book with its name, long name and sheets (size, numbers, X and Y range);
 the columns' and the Z labels, the display formats and the palette are not read. A sheet whose data set holds another count
 than rows x columns gets a warning. Over the 1183 `.opj` files of `re-workspace` (13 matrix books, all saved by Origin 9.3)
-no such warning came up. The writer does not write matrices yet.
+no such warning came up.
+
+**Writing (T472).** Code: writer `write/mod.rs` (`matrix_book`), `write/layout.rs` (`matrix_window_header`, `matrix_layer_header`,
+`matrix_dataset_header`, `matrix_column_record`). Each matrix book is written in its place in the window list: the window header
+with the fixed bytes of Origin's `MXA` window (state byte `0x54`), per sheet a layer header with the fixed bytes of Origin's
+`MSheet1` layer and the size (columns at `0x2B` and `0x151`, rows at `0x52`; the columns and rows in view, at most 4 and 8, as
+doubles at `0x17` and `0x42`), the annotations `X1`, `X2`, `Y1`, `Y2` (the same header as a formula annotation, the number as
+text) when the range is not 1 to 10, one column record that points at the sheet's data set (no short name, type `0x6001`,
+`0x60` at `0x39`, last = the number of cells), an empty note, and the five empty blocks. The data set is named after the book
+(`@2` and on for later sheets), type `0x6001`, 8-byte cells, `0x94` at `0x3E`, `CA 51` at `0x71`, the missing value in the
+sampling fields, the numbers row by row (the missing value for an empty cell), and an empty mask. Its place in the data-set list
+follows the window order, so the plots of graphs keep their columns. The labels of the coordinates are not written (a warning
+says so). Verified: Origin loaded the written `sheaf-matrix.opj` (`re-workspace/scratch/t471`): `exist()` gave 5 (matrix) for
+both books, `r[2,3]` read 203 and the empty cell Origin's missing value, the second sheet's `r2[2,2]` 4, `page.nlayers` 2; `m2w`
+of the first sheet gave X 0.5, 1.1667, 1.8333, 2.5 and Y 10, 15, 20, the range written.

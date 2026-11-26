@@ -156,9 +156,22 @@ const LABEL_AT: usize = 0xC3;
 /// A window header block (spec section 4.1): the short name, the position and size on the screen,
 /// the template name `ORIGIN`, the times and the label.
 pub(super) fn window_header(w: &WindowSpec) -> Vec<u8> {
+    window_header_with(w, WINDOW_FIELDS)
+}
+
+/// The window header of a matrix book (T472): the fixed bytes of the one Origin 2016 wrote for
+/// `win -n m` (`opj-format.md` 13.16), with the name, place, times and label as for a workbook.
+pub(super) fn matrix_window_header(w: &WindowSpec) -> Vec<u8> {
+    let mut h = window_header_with(w, MATRIX_WINDOW_FIELDS);
+    h[0x32] = (h[0x32] & 0x03) | 0x54;
+    h[0x45..0x4B].fill(0);
+    h
+}
+
+fn window_header_with(w: &WindowSpec, fields: Fields) -> Vec<u8> {
     let (label, _) = encode_cp1252(w.label);
     let mut h = vec![0u8; LABEL_AT + label.len() + 1];
-    fill(&mut h, WINDOW_FIELDS);
+    fill(&mut h, fields);
     put_name(&mut h, 0x02, 25, w.name);
     // left, top, right, bottom of the window and the size of the screen it was made on; each window
     // sits 26 pixels right of and below the one before it
@@ -240,6 +253,118 @@ pub(super) fn layer_header(l: &LayerSpec) -> Vec<u8> {
     put(&mut h, 0x151, &n.to_le_bytes());
     put(&mut h, 0x101, &(802 + l.ordinal.min(60_000) as u16).to_le_bytes());
     h[0x12d] = l.index_in_book.min(255) as u8;
+    h
+}
+
+// ----- matrix books (T472) ---------------------------------------------------------------------
+
+/// The fixed bytes of a matrix window header and of a matrix sheet's layer header, as Origin 2016
+/// wrote them for `win -n m MXA` (`re-workspace/scratch/t471/mj.opj`); the fields below set the rest.
+const MATRIX_WINDOW_FIELDS: Fields = &[
+    (0x37, &[0x20]),
+    (0x3e, &[0x19, 0xc0, 0x12, 0x00, 0x02, 0x11]),
+    (0x4f, &[0x2c, 0x01, 0x46]),
+    (0x54, &[0x72]),
+    (0x57, &[0x46, 0x00, 0x46]),
+    (0x67, &[0x01, 0x00, 0x10]),
+    (0x6f, &[0xc3]),
+    (0x8b, &[0x46, 0x00, 0x46, 0x00, 0xff, 0xff, 0xff, 0xff]),
+    (0x97, &[0x11]),
+    (0x9b, &[0xfc, 0xff, 0xff, 0xff, 0x00, 0x19]),
+];
+const MATRIX_LAYER_FIELDS: Fields = &[
+    (0x02, &[0xde]),
+    (0x25, &[0xf0, 0x3f, 0x08]),
+    (0x2d, &[0x40, 0x01]),
+    (0x37, &[0x01]),
+    (0x50, &[0xf0, 0x3f]),
+    (0x56, &[0x06, 0x00, 0x40, 0x01]),
+    (0x62, &[0x01]),
+    (0x65, &[0x10, 0x10]),
+    (0x6d, &[0x0c]),
+    (0x71, &[0x24, 0x00, 0x14, 0x00, 0x41, 0x01, 0xb7]),
+    (0x82, &[0x0c, 0x28, 0x80, 0x00, 0x80, 0x05, 0x00, 0x01, 0x03]),
+    (0x91, &[0xf0, 0x3f]),
+    (0xa4, &[0x1c]),
+    (0xa7, &[0x03, 0x12]),
+    (0xae, &[0x80]),
+    (0xc0, &[0x0a, 0xd7, 0xa3, 0x3d, 0x0a, 0xd7, 0xa3, 0x3d, 0x09, 0x00, 0x11]),
+    (0xf7, &[0xb8, 0x0b]),
+    (0xfc, &[0x01, 0x00, 0x01]),
+    (0x105, &[0x12]),
+    (0x109, &[0xfc, 0xff, 0xff, 0xff]),
+    (0x119, &[0xfc, 0xff, 0xff, 0xff]),
+    (0x129, &[0x06]),
+    (0x13d, &[0x7b, 0x14, 0xae, 0x47, 0xe1, 0x7a, 0xb4, 0x3f]),
+];
+
+/// What a matrix sheet's layer header says.
+pub(super) struct MatrixLayerSpec<'a> {
+    pub name: &'a str,
+    pub rows: usize,
+    pub cols: usize,
+    pub index_in_book: usize,
+    /// 0-based position of the sheet among all sheets of the project.
+    pub ordinal: usize,
+}
+
+/// A matrix sheet's layer header (361 bytes): the flag byte `0xDE`, the columns at `0x2B` and `0x151`,
+/// the rows at `0x52`, and the columns and rows in view (at most 4 and 8, as doubles at `0x17` and `0x42`).
+pub(super) fn matrix_layer_header(l: &MatrixLayerSpec) -> Vec<u8> {
+    let mut h = vec![0u8; 361];
+    fill(&mut h, MATRIX_LAYER_FIELDS);
+    put(&mut h, 0xD0, b"Pd");
+    put_name(&mut h, 0xD2, SHEET_NAME_WIDTH, l.name);
+    let (cols, rows) = (l.cols.min(u16::MAX as usize) as u16, l.rows.min(u16::MAX as usize) as u16);
+    put(&mut h, 0x17, &f64::from(cols.min(4)).to_le_bytes());
+    put(&mut h, 0x42, &f64::from(rows.min(8)).to_le_bytes());
+    put(&mut h, 0x2b, &cols.to_le_bytes());
+    put(&mut h, 0x151, &cols.to_le_bytes());
+    put(&mut h, 0x52, &rows.to_le_bytes());
+    put(&mut h, 0x101, &(802 + l.ordinal.min(60_000) as u16).to_le_bytes());
+    h[0x12d] = l.index_in_book.min(255) as u8;
+    h
+}
+
+/// The header of a matrix sheet's data set: Origin's Numeric format (`0x6001`, 8-byte cells), `0x94` at
+/// `0x3E`, `CA 51` at `0x71` and the missing value in the two sampling fields, as Origin 2016 wrote it.
+pub(super) fn matrix_dataset_header(name: &str, cells: u32, used: (u32, u32)) -> Vec<u8> {
+    let missing = crate::opj::dataset::MISSING;
+    let mut h = dataset_header(&DatasetSpec {
+        name,
+        type_code: 0x6001,
+        cell_size: 8,
+        rows: cells,
+        first: used.0,
+        last: used.1,
+        parent: 0,
+        sampling: (missing, missing),
+    });
+    h[0x3e] = 0x94;
+    put(&mut h, 0x71, &[0xca, 0x51]);
+    h
+}
+
+/// The one column record of a matrix sheet, which points at its data set: no short name, the Y role,
+/// the type word `0x6001`, and `0x60` at `0x39` (Origin 2016, T472).
+pub(super) fn matrix_column_record(dataset: u16, cells: u32) -> Vec<u8> {
+    let mut h = column_record(&ColumnSpec {
+        dataset,
+        designation: 0,
+        short_name: "",
+        type_code: 0x6001,
+        first: 0,
+        last: cells,
+        parent: 0,
+        index: 2,
+        width: None,
+        display: None,
+        object_id: 0,
+        sampling: None,
+    });
+    h[0x1e] = 0;
+    h[0x33] = 0;
+    h[0x39] = 0x60;
     h
 }
 

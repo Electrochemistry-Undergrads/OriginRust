@@ -422,6 +422,21 @@ fn local_origin_file_gives_date_and_time_displays() {
     assert_eq!(b.sheets[0].columns[0].numeric().unwrap()[0], 2_461_355.573_032_407_4);
 }
 
+/// Origin 2016's own file with plot row ranges (T476; `re-workspace/scratch/t476/r1.opj`, local only): `GFULL`
+/// plots all 21 rows of GSrc B against A, `GRNG` rows 3 to 8 (`set %C -b 3`, `-e 8`) and `GRN2` the same through
+/// `[GSrc]1!(1,2)[3:8]`.
+#[test]
+fn local_origin_file_gives_plot_row_ranges() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../re-workspace/scratch/t476/r1.opj");
+    if !path.exists() {
+        eprintln!("opj: {} not found; skipping", path.display());
+        return;
+    }
+    let imp = read_opj(&path).unwrap();
+    let rows = |name: &str| imp.graphs.iter().find(|g| g.name == name).unwrap().layers[0].plots[0].rows;
+    assert_eq!((rows("GFULL"), rows("GRNG"), rows("GRN2")), (None, Some((2, 8)), Some((2, 8))));
+}
+
 /// Origin 2016's own file with two Notes windows (T470; `re-workspace/scratch/t470/n2.opj`, local only):
 /// `MyNotes` and `Second`, both empty, listed in the root folder before the workbook `GSrc`.
 #[test]

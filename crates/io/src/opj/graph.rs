@@ -59,6 +59,12 @@ const AXIS_AUTO_COLOR: u16 = 0xFFF7;
 const AXIS_SHOWN_BIT: u8 = 0x40;
 const AXIS_FONT_AT: usize = 0x15;
 const AXIS_FLAGS_AT: usize = 0x26;
+/// The rows a curve plots: the first and one past the last (u32 each, T476, measured in Origin 2016
+/// with `set %C -b 3` and `-e 8`, which stored 2 and 8).
+const CURVE_FIRST_ROW_AT: usize = 0x07;
+const CURVE_END_ROW_AT: usize = 0x0B;
+/// 3 in a curve that plots all rows of its data, 0 in one with a row range (T476).
+const CURVE_ALL_ROWS_AT: usize = 0x1E6;
 const AXIS_FORMAT_AT: usize = 0x25;
 /// Label type "date" in the low nibble of the format byte.
 const AXIS_DATE_LABELS: u8 = 3;
@@ -147,6 +153,13 @@ fn u8_at(b: &[u8], at: usize) -> u8 {
 fn u16_at(b: &[u8], at: usize) -> u16 {
     match b.get(at..at + 2) {
         Some(s) => u16::from_le_bytes([s[0], s[1]]),
+        None => 0,
+    }
+}
+
+fn u32_at(b: &[u8], at: usize) -> u32 {
+    match b.get(at..at + 4) {
+        Some(s) => u32::from_le_bytes([s[0], s[1], s[2], s[3]]),
         None => 0,
     }
 }
@@ -891,7 +904,10 @@ fn read_curve(
         x: column(x_set),
         y,
         y_error: None,
-        rows: None,
+        // T476: the rows plotted, first and one past the last (0x07, 0x0B); `read_opj_from` drops the
+        // range when it is all the rows of the Y data set
+        rows: (u8_at(r, CURVE_ALL_ROWS_AT) != 3)
+            .then(|| (u32_at(r, CURVE_FIRST_ROW_AT) as usize, u32_at(r, CURVE_END_ROW_AT) as usize)),
         kind,
         line: LineStyle {
             color: line_color,

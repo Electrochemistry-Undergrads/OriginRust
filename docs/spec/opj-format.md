@@ -525,6 +525,7 @@ The column records of a graph layer are its curves (515 bytes, the same size as 
 | offset | size | meaning |
 |---|---|---|
 | `0x04` | u16 | position (1-based) of the Y data set in the data-set list |
+| `0x07`, `0x0B` | u32, u32 | the rows the curve plots: the first and one past the last, 0-based (T476, measured 2026-11-26 in Origin 2016, `re-workspace/scratch/t476/r1.opj`: all 21 rows of GSrc gave 0 and 21, `set %C -b 3` and `-e 8` gave 2 and 8, and so did `plotxy` of `[GSrc]1!(1,2)[3:8]`). A curve of all rows has 3 at `0x1E6`, one with a row range 0; Origin read the range of a file Sheaf wrote back with `get %C -b` and `-e` (3 and 8) only once `0x1E6` was 0. The reader keeps a range when `0x1E6` is not 3 and the rows differ from the Y data set's used range (`0x1D`, `0x21` of its header); the writer writes the plot's rows cut to the used range |
 | `0x06` | u8 | plot group membership: bit `0x20` on the first plot of a group, bit `0x10` on the others; the other bits (`0x01`, `0x02`, `0x08`) vary between files and are not used (13.13; seen in Origin's own files as `0x21` then `0x11` for a group of line plots, `0x20` then `0x10` for two, and `0x0B`, `0x03`, `0x01`, `0x00` outside a group; graphing.md 14.7) |
 | `0x0F` | u8 | line colour as a position in the colour list (10.6); 0 when automatic |
 | `0x11` | u8 | line connection: 0 none, 1 and above a line (values 1 to 8 all drew straight lines through 8 points; the other kinds were not told apart) |
@@ -971,8 +972,8 @@ titles; line, scatter, line and symbol and column plots with colour, width, dash
 shape, size and open or filled; Y error bars; free text with size and rotation; the legend with its
 place, frame and text; categories from a text X column. Named in a warning, not written: page background
 colour, fonts other than Origin's default, text colours outside Origin's list (the nearest listed colour
-is used), grid colour, width and dash (Origin's default grid style appears), legend background colour, a
-plot's row range, symbols on every n-th point only, hidden plots, plots whose data are not columns of a
+is used), grid colour, width and dash (Origin's default grid style appears), legend background colour,
+symbols on every n-th point only (a plot's row range is written since T476, 10.5), hidden plots, plots whose data are not columns of a
 workbook, axis ranges that follow the data in a way other than Origin's own (the limits for the current
 data are written), and graphs with no layer (not written at all). Section 13.12 adds what was written later:
 stack offsets, the right Y layer of a double-Y graph with its legend, the gap of column bars, axis sides and

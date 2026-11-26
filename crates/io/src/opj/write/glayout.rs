@@ -379,8 +379,11 @@ pub(super) struct CurveSpec {
     pub y_set: u16,
     /// 1-based position of the X data set, 0 for none; for an error plot the Y data set of its curve.
     pub x_set: u16,
-    /// Position of the first value and after the last value of the Y data set.
+    /// Position of the first value and after the last value of the Y data set, or of the rows plotted.
     pub used: (u32, u32),
+    /// The curve plots a row range of its data (T476): Origin then clears the 3 at `0x1E6` that its
+    /// curves of all rows have.
+    pub ranged: bool,
     pub first: bool,
     pub line: Code,
     /// Line width in 1/500 point.
@@ -439,6 +442,9 @@ pub(super) fn curve_record(c: &CurveSpec) -> Vec<u8> {
     put(&mut r, 0x23, &c.x_set.to_le_bytes());
     put(&mut r, 0x4c, &ptype.to_le_bytes());
     put(&mut r, 0x1e2, &c.serial.to_le_bytes());
+    if c.ranged {
+        r[0x1e6] = 0;
+    }
     r[0x1e9] = 8;
     put(&mut r, X_OFFSET_AT, &c.offset.0.to_le_bytes());
     put(&mut r, Y_OFFSET_AT, &c.offset.1.to_le_bytes());

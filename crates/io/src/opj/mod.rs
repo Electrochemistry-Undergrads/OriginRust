@@ -388,11 +388,20 @@ pub fn read_opj_from<R: Read + Seek>(reader: R, path: &Path) -> Result<OpjImport
     };
     let mut workbooks = b.workbooks(&windows).map_err(from_frame)?;
     let (matrices, matrix_sets) = b.matrices(&windows).map_err(from_frame)?;
-    let graphs: Vec<sheaf_core::graph::Graph> = windows
+    let mut graphs: Vec<sheaf_core::graph::Graph> = windows
         .iter()
         .filter(|w| graph::is_graph(w))
         .map(|w| graph::build(w, &b.column_of_set, &mut b.warnings))
         .collect();
+    // T476: a plot keeps a row range only when it is not all the rows of its Y data set
+    let set_of: HashMap<ColumnId, usize> = b.column_of_set.iter().map(|(s, c)| (*c, *s)).collect();
+    for plot in graphs.iter_mut().flat_map(|g| g.layers.iter_mut()).flat_map(|l| l.plots.iter_mut()) {
+        let used = set_of.get(&plot.y).and_then(|s| b.sets.get(*s)).map(|s| (s.used.0 as usize, s.used.1 as usize));
+        plot.rows = match (plot.rows, used) {
+            (Some((first, end)), Some(used)) if first < end && (first, end) != used => Some((first, end)),
+            _ => None,
+        };
+    }
     if version_before_9(&version) {
         // Said for every such file: graphs the reader misses would otherwise go unmentioned.
         b.warnings.push(format!(

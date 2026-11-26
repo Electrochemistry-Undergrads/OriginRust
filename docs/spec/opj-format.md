@@ -1407,3 +1407,32 @@ in front of the other windows, and warns for a long name or comments, whose plac
 on a hidden Notes window). Verified: Origin loaded the written `sheaf-notes.opj` (`exist(Notes1)` and `exist(Diary)` gave 9, a Notes
 window), and saved it again with both texts byte for byte (`first line` CR LF `second line`) and `Diary` still in folder `Sub`.
 LabTalk `text$` could not set the text of a Notes window in the hidden Origin used here, so the text was checked through that round trip.
+
+### 13.16 Matrix books (reading) [orig]
+
+Code: reader `mod.rs` (`is_matrix`, `Builder::matrices`, `OpjImport::matrices`). Found on 2026-11-26 (T471) with
+`tools/origin-ref/opj-make-from-lines.ps1` (`re-workspace/scratch/t471`): `win -n m MXA`, `wks.ncols=4`, `wks.nrows=3`, a cell set
+through `range ra=[MXA]1!1; ra[1,1]=1`, `msetvalue im:=[MXA]1!1 formula:="i*100+j"` (`mj.opj`, with a second book `MXB` of two
+sheets and the long name `LongMXB`); `win -t matrix` with `matrix -ps XY 0.5 10 2.5 20` (`m1.opj`); Origin's sample window
+`Samples/Matrix Conversion and Gridding/2D Gaussian.ogm` added with `doc -a` (`mh.opj`). `m2w` turned `MXA` into XYZ columns,
+which gave the coordinates Origin uses.
+
+- **Which windows.** A matrix book is a window of the window list whose first layer has the flag byte `0xDE` at `0x02`
+  (section 10.0); each layer is a matrix sheet, named after `Pd` at `0xD0` (`MSheet1`, or `Data` for the sample).
+- **Size.** The layer header holds the number of columns at `0x2B` (and again at `0x151`) and of rows at `0x52`, as u16.
+  The window header holds no size (`0x24`/`0x26` read 4 and 3 for a 10 x 10 matrix).
+- **Numbers.** The data set named after the window (`MXA`; `MXB@2` for the second sheet, as for workbook sheets) holds
+  rows x columns numbers row by row, the first row (`i = 1`) first: `MXA` of `i*100+j` stored 101, 102, 103, 104, 201, ...
+  The type word was `0x6001` (8-byte doubles); Origin's missing value marks empty cells. A matrix that was never filled has
+  no data set; its cells are empty.
+- **Coordinates.** A sheet whose X or Y range differs from the default has annotations named `X1`, `X2`, `Y1` and `Y2` in its
+  layer, the number as text in their first block (`0.5`, `2.5`, `10`, `20` for `matrix -ps XY 0.5 10 2.5 20`; `11`, `20`, `1`,
+  `10` in the sample). `X1` is the X of the first column, `Y1` the Y of the first row. Without them the range is 1 to 10
+  whatever the size (`m2w` of the 4 x 3 `MXA` gave X 1, 4, 7, 10 and Y 1, 5.5, 10). The layer header's doubles at `0x0F`/`0x17`
+  and `0x3A`/`0x42` are 0 to the number of columns and 0 to the number of rows, not the coordinates.
+- **Long name and comments** are in the window label as for any window (section 4.2).
+
+The reader opens each matrix book as a Sheaf matrix book with its name, long name and sheets (size, numbers, X and Y range);
+the columns' and the Z labels, the display formats and the palette are not read. A sheet whose data set holds another count
+than rows x columns gets a warning. Over the 1183 `.opj` files of `re-workspace` (13 matrix books, all saved by Origin 9.3)
+no such warning came up. The writer does not write matrices yet.

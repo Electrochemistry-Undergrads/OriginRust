@@ -170,6 +170,38 @@ impl FileBuilder {
         self
     }
 
+    /// A matrix window (T471): one layer per sheet with the matrix flag byte, the size at `0x2B`
+    /// (columns) and `0x52` (rows), and an annotation per `(name, text)` (the coordinates `X1` ...).
+    pub fn matrix(&mut self, name: &str, label: &str, sheets: &[(&str, u16, u16, &[(&str, &str)])]) -> &mut Self {
+        self.windows.extend(framed(&window_header(name, label)));
+        for (sheet, cols, rows, notes) in sheets {
+            let mut header = layer_header(sheet);
+            header[0x02] = 0xDE;
+            put(&mut header, 0x2B, &cols.to_le_bytes());
+            put(&mut header, 0x52, &rows.to_le_bytes());
+            self.windows.extend(framed(&header));
+            for (key, text) in notes.iter() {
+                let mut h = vec![0u8; 123];
+                put(&mut h, 0x46, key.as_bytes());
+                self.windows.extend(framed(&h));
+                let mut t = text.as_bytes().to_vec();
+                t.resize(20, 0);
+                self.windows.extend(framed(&t));
+                self.windows.extend(framed(&[]));
+                self.windows.extend(framed(&[]));
+            }
+            self.windows.extend(framed(&[]));
+            // no column records, the extra block, three empty axis groups
+            self.windows.extend(framed(&[]));
+            self.windows.extend(framed(&[]));
+            for _ in 0..3 {
+                self.windows.extend(framed(&[]));
+            }
+        }
+        self.windows.extend(framed(&[]));
+        self
+    }
+
     pub fn build(&self) -> Vec<u8> {
         let mut v = b"CPYA 4.3168 226 W64 #\n".to_vec();
         let mut header = vec![0u8; 111];

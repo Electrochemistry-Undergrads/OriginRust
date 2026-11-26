@@ -1432,8 +1432,13 @@ which gave the coordinates Origin uses.
   and `0x3A`/`0x42` are 0 to the number of columns and 0 to the number of rows, not the coordinates.
 - **Long name and comments** are in the window label as for any window (section 4.2).
 
-The reader opens each matrix book as a Sheaf matrix book with its name, long name and sheets (size, numbers, X and Y range);
-the columns' and the Z labels, the display formats and the palette are not read. A sheet whose data set holds another count
+- **Z labels (T473).** The long name, units and comments of the cell values (`range r=1!1; r.lname$=...; r.unit$=...;
+  r.comment$=...`) are the note of the sheet's one column record, `long CR LF units CR LF comments` and a NUL, as for a workbook
+  column (`re-workspace/scratch/t471/ml.opj`). The X and Y labels were not found: LabTalk had no property for them on a hidden
+  matrix, and Origin's sample matrices hold none.
+
+The reader opens each matrix book as a Sheaf matrix book with its name, long name and sheets (size, numbers, X and Y range,
+Z labels); the X and Y labels, the display formats and the palette are not read. A sheet whose data set holds another count
 than rows x columns gets a warning. Over the 1183 `.opj` files of `re-workspace` (13 matrix books, all saved by Origin 9.3)
 no such warning came up.
 
@@ -1446,7 +1451,8 @@ text) when the range is not 1 to 10, one column record that points at the sheet'
 `0x60` at `0x39`, last = the number of cells), an empty note, and the five empty blocks. The data set is named after the book
 (`@2` and on for later sheets), type `0x6001`, 8-byte cells, `0x94` at `0x3E`, `CA 51` at `0x71`, the missing value in the
 sampling fields, the numbers row by row (the missing value for an empty cell), and an empty mask. Its place in the data-set list
-follows the window order, so the plots of graphs keep their columns. The labels of the coordinates are not written (a warning
-says so). Verified: Origin loaded the written `sheaf-matrix.opj` (`re-workspace/scratch/t471`): `exist()` gave 5 (matrix) for
+follows the window order, so the plots of graphs keep their columns. The Z labels go into the column record's note (T473);
+the X and Y labels are not written (a warning says so). Origin read the Z labels of a written file back with `r.lname$`,
+`r.unit$` and `r.comment$` (`Height`, `nm`, `scan 1`). Verified: Origin loaded the written `sheaf-matrix.opj` (`re-workspace/scratch/t471`): `exist()` gave 5 (matrix) for
 both books, `r[2,3]` read 203 and the empty cell Origin's missing value, the second sheet's `r2[2,2]` 4, `page.nlayers` 2; `m2w`
 of the first sheet gave X 0.5, 1.1667, 1.8333, 2.5 and Y 10, 15, 20, the range written.

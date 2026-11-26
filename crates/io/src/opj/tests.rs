@@ -383,6 +383,11 @@ fn local_origin_files_give_their_matrices() {
     let s = &g.sheets[0];
     assert_eq!((s.name.as_str(), s.rows, s.cols), ("Data", 10, 10));
     assert_eq!((s.x_from, s.x_to, s.y_from, s.y_to), (11.0, 20.0, 1.0, 10.0));
+    // T473: `r.lname$`, `r.unit$`, `r.comment$` of a matrix range
+    if let Ok(imp) = read_opj(&dir.join("ml.opj")) {
+        let z = &imp.matrices[0].sheets[0].z;
+        assert_eq!((z.long_name.as_str(), z.units.as_str(), z.comments.as_str()), ("ZQZLONG", "ZQZUNIT", "ZQZCOMM"));
+    }
     // `matrix -ps XY 0.5 10 2.5 20` on a 4 x 3 matrix of `i*10+j`
     if let Ok(imp) = read_opj(&dir.join("m1.opj")) {
         let s = &imp.matrices[0].sheets[0];

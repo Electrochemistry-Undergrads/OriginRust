@@ -413,7 +413,8 @@ impl<R: Read + Seek> Builder<R> {
     /// `0xDE`, one sheet per layer, the size in the layer header (columns at `0x2B`, rows at `0x52`), the
     /// numbers row by row in the data set named after the window (`MBook1`, then `MBook1@2`, ...), the X
     /// and Y range in annotations named `X1`, `X2`, `Y1` and `Y2` (as text; Origin's 1 to 10 when there are
-    /// none). Returns the books and how many data sets they took.
+    /// none), and the Z labels in the note of the sheet's one column record (T473). Returns the books and
+    /// how many data sets they took.
     fn matrices(
         &mut self,
         windows: &[window::Window],
@@ -482,7 +483,18 @@ impl<R: Read + Seek> Builder<R> {
                     }
                 }
                 match MatrixSheet::from_values(name, 0, rows, cols, values, x, y) {
-                    Ok(sheet) => book.sheets.push(sheet),
+                    Ok(mut sheet) => {
+                        // T473: the Z labels are the note of the sheet's column record, as for a column.
+                        if let Some(rec) = layer.columns.first() {
+                            let (long_name, units, comments) = strings::column_labels(&rec.note);
+                            sheet.z = sheaf_core::matrix::MatrixLabel {
+                                long_name,
+                                units,
+                                comments: comments.replace("\r\n", "\n"),
+                            };
+                        }
+                        book.sheets.push(sheet)
+                    }
                     Err(e) => self.warnings.push(format!("A matrix sheet of '{}' was left out: {e}.", w.name)),
                 }
             }

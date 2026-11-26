@@ -230,7 +230,7 @@ struct Notes {
     analysis_links_dropped: usize,
     /// Notes windows with a long name or comments, which the file written here does not hold (T470).
     notes_labels_dropped: usize,
-    /// Matrix sheets whose X, Y or Z labels (long name, units, comments) are not written (T472).
+    /// Matrix sheets whose X or Y labels (long name, units, comments) are not written (T472; the Z labels are, T473).
     matrix_labels_dropped: usize,
     /// Everything a graph holds that the file does not, one sentence each.
     graph_notes: Vec<String>,
@@ -424,13 +424,16 @@ impl Writer {
             self.datasets.extend(framed(&[]));
             self.columns += 1;
             self.windows.extend(framed(&layout::matrix_column_record(self.columns as u16, cells as u32)));
-            self.windows.extend(framed(&[]));
+            // T473: the Z labels in the record's note, as for a column (measured in Origin 2016)
+            let long = self.label_text(&sheet.z.long_name, "matrix long name")?;
+            let units = self.label_text(&sheet.z.units, "matrix units")?;
+            let comments = self.comment_text(&sheet.z.comments)?;
+            self.windows.extend(framed(&layout::column_note(&long, &units, &comments)));
             // the end of the column records, the extra block, the three (empty) groups of axis blocks
             for _ in 0..5 {
                 self.windows.extend(framed(&[]));
             }
-            self.notes.matrix_labels_dropped +=
-                usize::from(!sheet.x.is_empty() || !sheet.y.is_empty() || !sheet.z.is_empty());
+            self.notes.matrix_labels_dropped += usize::from(!sheet.x.is_empty() || !sheet.y.is_empty());
         }
         self.windows.extend(framed(&[]));
         self.written_windows += 1;
@@ -1045,7 +1048,7 @@ impl Writer {
         }
         if n.matrix_labels_dropped > 0 {
             warnings.push(format!(
-                "{} matrix sheet(s) have X, Y or Z labels (long name, units, comments), which the project file written here does not hold.",
+                "{} matrix sheet(s) have X or Y labels (long name, units, comments), which the project file written here does not hold.",
                 n.matrix_labels_dropped
             ));
         }

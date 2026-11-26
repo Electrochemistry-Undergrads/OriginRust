@@ -139,3 +139,14 @@ fn a_matrix_lays_its_cells_out_in_centred_columns_between_its_delimiters() {
     let runs = crate::markup::parse(r"\mx(2,a,b,c,d)");
     assert_eq!(runs.iter().map(|r| r.text.as_str()).collect::<String>(), "a, b; c, d");
 }
+
+#[test]
+fn a_title_takes_more_room_only_for_tall_math() {
+    // T484: plain text and scripts keep a letter's ascent and descent (Origin's measured title gap)
+    near(crate::text::tall_extent("Time (s)").0, 0.72);
+    near(crate::text::tall_extent("Time (s)").1, 0.21);
+    near(crate::text::tall_extent(r"x\+(2)").0, 0.72);
+    // a stacked fraction reaches above and below them
+    let (top, bottom) = crate::text::tall_extent(r"Rate $\frac{dN}{dt}$");
+    assert!(top > 0.72 && bottom > 0.21, "{top} {bottom}");
+}

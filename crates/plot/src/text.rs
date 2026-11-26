@@ -338,6 +338,25 @@ fn visit_ink(
     }
 }
 
+/// The room a title's text takes above and below its baseline, in units of its size (T484): a letter's ascent
+/// and descent, or more where a stacked fraction, limits, stretchy delimiters or a matrix reach further. Scripts
+/// and accents do not count, so ordinary titles keep the place measured in Origin.
+pub(crate) fn tall_extent(text: &str) -> (f64, f64) {
+    let segments = markup::segments(text, &|_| None);
+    let (mut top, mut bottom) = (ASCENT, -DESCENT);
+    for s in &segments {
+        if matches!(
+            s,
+            Segment::Fraction { .. } | Segment::Limits { .. } | Segment::Delimited { .. } | Segment::Matrix { .. }
+        ) {
+            let one = std::slice::from_ref(s);
+            top = top.max(ink_top(one));
+            bottom = bottom.min(ink_bottom(one));
+        }
+    }
+    (top, -bottom)
+}
+
 /// Width in points of marked-up `text` at `size` (the font's own size is not used).
 pub fn width(m: &dyn TextMeasurer, text: &str, font: &Font, size: f64) -> f64 {
     let segments = markup::segments(text, &|name| m.expand_inline_family(name));

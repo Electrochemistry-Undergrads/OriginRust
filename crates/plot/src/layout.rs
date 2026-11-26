@@ -2056,11 +2056,13 @@ fn draw_x_title(
     }
     let title = resolved_title(project, axis, pds, false);
     let size = axis.title_font.size_pt;
+    // T484: tall math in the title keeps the gap from its own ink
+    let (ascent, descent) = text::tall_extent(&title);
     let baseline = if axis.side == AxisSide::Opposite {
         // The text's bottom edge (baseline plus descent) faces the labels below it.
-        labels_edge - 0.6 * size - DESCENT * size
+        labels_edge - 0.6 * size - descent * size
     } else {
-        labels_edge + 0.6 * size + ASCENT * size
+        labels_edge + 0.6 * size + ascent * size
     };
     let (pos, angle) = turned_title(axis, (f.x + f.w / 2.0, baseline), 0.0);
     place(out, &title, font, pos, angle);
@@ -2084,12 +2086,13 @@ fn draw_y_title(
     }
     let title = resolved_title(project, axis, pds, true);
     let size = axis.title_font.size_pt;
+    let (ascent, descent) = text::tall_extent(&title);
     let x = if axis.side == AxisSide::Opposite {
         // The tops of the letters (the ascent side) face the labels on the left.
-        labels_edge + 0.6 * size + ASCENT * size
+        labels_edge + 0.6 * size + ascent * size
     } else {
         // The text's bottom edge (baseline plus descent) faces the axis.
-        labels_edge - 0.6 * size - DESCENT * size
+        labels_edge - 0.6 * size - descent * size
     };
     let (pos, angle) = turned_title(axis, (x, f.y + f.h / 2.0), 90.0);
     place(out, &title, font, pos, angle);

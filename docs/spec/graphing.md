@@ -8037,6 +8037,10 @@ font, size and colour, takes part in the label's layout, and exports as vectors 
   environment's stretchy delimiters. Each column is as wide as its widest cell, the cells centred, 0.8 em between columns;
   row baselines are 1.25 em apart, or further where tall cells (a fraction) would come within 0.25 em of the next row, and
   the block is centred about the fraction bar's height. Short rows get empty cells.
+- **Worksheet labels (T485):** a label-row cell (Long Name, Units, Comments, parameter rows) holding a math span is
+  drawn as the parsed runs, like a Rich Text cell: italic letters, Greek, raised and lowered scripts in the cell's font;
+  stacked structures read flat there (`a/b`, `(a, b; c, d)`). Editing shows the typed text. Graph text that takes a
+  column's labels (axis titles, legends) draws the math in full.
 - **Axis titles with tall math (T484):** an axis title keeps Origin's gap of 0.6 of its size from the tick labels, measured
   from a letter's ascent or descent; where a stacked fraction, limits, stretchy delimiters or a matrix reach further, from
   their ink (`text::tall_extent`). Scripts and accents do not count, so ordinary titles stay where Origin puts them.

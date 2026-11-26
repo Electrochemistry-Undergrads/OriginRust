@@ -8978,6 +8978,24 @@ fn reverse_order_and_the_custom_sort_windows_work_and_undo() {
 }
 
 #[test]
+fn a_label_with_latex_math_shows_its_letters_and_scripts() {
+    // T485: Origin 2023b renders LaTeX in column labels; the label row shows the math as styled runs
+    let mut h = start(vec![data_file("labelmath")]);
+    show_window(&mut h, "Book1 - sample.csv");
+    let b = project(&h).workbooks().next().unwrap().sheet().column_by_name("up").unwrap().id;
+    h.state_mut().doc.apply("Name", |p| {
+        let c = p.column_mut(b).unwrap();
+        c.long_name = r"Rate $\alpha_1$".into();
+        c.units = r"$\mu$m".into();
+    });
+    settle(&mut h);
+    assert!(h.query_by_label("Rate α1").is_some(), "the math drawn as its characters");
+    assert!(h.query_by_label("μm").is_some());
+    assert!(h.query_by_label(r"Rate $\alpha_1$").is_none(), "not the raw text");
+    assert!(crate::grid::has_math(r"$\frac{a}{b}$") && !crate::grid::has_math("Costs $5 and $10"));
+}
+
+#[test]
 fn masking_cells_marks_them_for_analysis_and_undoes() {
     use crate::actions::CellOp;
     use sheaf_core::sheetops::MaskOp;

@@ -352,6 +352,7 @@ pub struct SheafApp {
     pub(crate) browser_graph: Option<crate::dialogs::browser_graph::BrowserGraphDialog>,
     pub(crate) flash_fill: Option<crate::dialogs::flash_fill::FlashFillDialog>,
     pub(crate) project_browser: Option<crate::dialogs::project_browser::ProjectBrowserDialog>,
+    pub(crate) op_params: Option<crate::dialogs::op_params::OpParamsDialog>,
     pub(crate) auto_refresh: Option<crate::dialogs::auto_refresh::AutoRefreshDialog>,
     /// The Formula Bar of each workbook (T448).
     formula_bars: HashMap<WindowId, crate::formula_bar::FormulaBar>,
@@ -568,6 +569,7 @@ impl SheafApp {
             browser_graph: None,
             flash_fill: None,
             project_browser: None,
+            op_params: None,
             auto_refresh: None,
             formula_bars: HashMap::new(),
             show_formula_bar: false,
@@ -2755,6 +2757,16 @@ impl SheafApp {
                 if let Err(e) = self.doc.edit(label, |p| p.set_analysis_mode(index, mode)) {
                     self.warn(e.to_string());
                 }
+            }
+            Action::OperationParams(index) => {
+                let link = self.doc.project().analysis_links.get(index);
+                self.op_params = link.and_then(|l| {
+                    crate::dialogs::op_params::OpParamsDialog::new(
+                        index,
+                        sheaf_core::operations::tool_name(&l.tool),
+                        &l.tool,
+                    )
+                });
             }
             Action::GoToColumn(column) => {
                 if let Some(t) = crate::dialogs::project_browser::target(
@@ -5395,6 +5407,28 @@ impl SheafApp {
             }
         }
         self.refresh_clock.values().map(|c| c.0 - now).reduce(f64::min)
+    }
+
+    fn show_op_params(&mut self, ctx: &egui::Context) {
+        use crate::dialogs::op_params::ParamsOutcome;
+        let Some(d) = &mut self.op_params else { return };
+        match d.show(ctx) {
+            ParamsOutcome::Open => {}
+            ParamsOutcome::Closed => self.op_params = None,
+            ParamsOutcome::Apply { index, tool } => {
+                match self.doc.edit("Operation Parameters", |p| p.set_operation_tool(index, *tool)) {
+                    Ok(()) => {
+                        self.op_params = None;
+                        self.say("The operation ran again with its new settings".to_string());
+                    }
+                    Err(e) => {
+                        if let Some(d) = &mut self.op_params {
+                            d.error = Some(e.to_string());
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn show_project_browser(&mut self, ctx: &egui::Context) {
@@ -8748,6 +8782,7 @@ impl SheafApp {
         self.show_browser_graph(ctx);
         self.show_flash_fill(ctx);
         self.show_project_browser(ctx);
+        self.show_op_params(ctx);
         self.show_auto_refresh(ctx);
         let now = ctx.input(|i| i.time);
         if let Some(wait) = self.run_auto_refresh(now) {

@@ -71,6 +71,7 @@ pub mod multi_y;
 pub mod multipeak;
 pub mod multivariate_options;
 pub mod name_cell;
+pub mod op_params;
 pub mod options;
 pub mod pivot;
 pub mod plot_setup;

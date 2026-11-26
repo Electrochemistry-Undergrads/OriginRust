@@ -345,6 +345,8 @@ pub enum Cmd {
     FindInProject,
     /// View > Project Browser (T433).
     ProjectBrowser,
+    /// File > Import > PDF Tables... (T463).
+    ImportPdf,
     /// File > Find in Project Files... (T361).
     FindInProjectFiles,
     /// File > Export > Worksheet as Image... (T97).
@@ -1336,6 +1338,7 @@ fn file_menu(kind: WindowKind) -> Vec<Entry> {
                     item("&Multiple ASCII...", Cmd::ImportMultiple),
                     item("Comma &Delimited (CSV)...", Cmd::ImportCsv),
                     item("&Excel (XLS, XLSX, XLSM)...", Cmd::ImportExcel),
+                    item("&PDF Tables...", Cmd::ImportPdf),
                 ],
                 vec![item("Image...", Cmd::ImportImage), item("Binary 2D Array...", Cmd::ImportBinary2d)],
                 // Origin's graph File menu has no Re-Import items.
@@ -3687,6 +3690,7 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::ImportMultiple => Action::ImportPick(ImportPick::Multiple),
         Cmd::ImportCsv => Action::ImportPick(ImportPick::Csv),
         Cmd::ImportWizard => Action::ImportWizard,
+        Cmd::ImportPdf => Action::ImportPick(ImportPick::Pdf),
         Cmd::ImportExcel => Action::ImportPick(ImportPick::Excel),
         Cmd::GoToCell => Action::GoToCell(book?),
         Cmd::Power(kind) => Action::Power(*kind),

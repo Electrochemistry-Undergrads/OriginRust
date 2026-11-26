@@ -3324,7 +3324,9 @@ name = "sheaf-io"
 version = "0.1.0"
 dependencies = [
  "calamine",
+ "flate2",
  "image",
+ "pdf-writer",
  "rust_xlsxwriter",
  "serde",
  "serde_json",

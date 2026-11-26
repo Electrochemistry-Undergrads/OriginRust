@@ -285,6 +285,8 @@ pub enum ImportPick {
     Csv,
     /// Excel workbooks (File > Import > Excel).
     Excel,
+    /// PDF files (File > Import > PDF Tables, T463).
+    Pdf,
 }
 
 /// A change to a sticky note from its strip (T421).

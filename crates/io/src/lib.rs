@@ -17,6 +17,7 @@ pub mod graph_themes;
 pub mod image_import;
 pub mod opj;
 pub mod opju;
+pub mod pdf_tables;
 pub mod peak_themes;
 pub mod pptx;
 pub mod project_file;
@@ -228,6 +229,21 @@ pub fn import_file_with_excel(
     if kind != ImportKind::Ascii && chi_bin::looks_like_chi_bin(&bytes) {
         let r = chi_bin::parse_chi_bin(&bytes, &stem, chi_opts).map_err(|e| name_file(e, &shown))?;
         return Ok(finish_chi(r, shown, path));
+    }
+    // A PDF: the tables of its pages (T463).
+    if kind == ImportKind::Auto && pdf_tables::looks_like_pdf(&bytes) {
+        let file_name = path.file_name().map_or_else(|| stem.clone(), |s| s.to_string_lossy().into_owned());
+        let r = pdf_tables::read_pdf(&bytes, &file_name).map_err(|e| name_file(e, &shown))?;
+        let mut workbook = r.workbook;
+        workbook.source = Some(ImportSource { path: shown, importer: "pdf".to_string() });
+        return Ok(Imported {
+            path: path.to_path_buf(),
+            workbook,
+            format: "pdf",
+            suggested_template: Template::Line,
+            meta: vec![("Pages".to_string(), format!("{} read, {} with text", r.pages.0, r.pages.1))],
+            warnings: r.warnings,
+        });
     }
     let text = decode_text(&bytes, path)?;
     // A GraphPad Prism XML file (T447).

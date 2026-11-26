@@ -15,7 +15,8 @@
 //!
 //! A span is math when it holds a backslash, `^`, `_` or `{`, or starts with a letter and has no space at either end
 //! (`$x$`); other spans (`$5 and $10`) are left as they are. A `$` before `(` starts a substitution, not math; `\$`
-//! is a dollar sign. Not drawn as in LaTeX: matrices.
+//! is a dollar sign. Matrix environments (`matrix`, `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix`) become a grid of cells, `\mx(cols,cells...)`,
+//! inside stretchy delimiters (T483).
 
 use std::borrow::Cow;
 
@@ -185,6 +186,8 @@ struct Parser {
     upright: bool,
     /// Open `\left` groups: a sequence inside one ends before `\right` (T482).
     in_left: usize,
+    /// Open matrix environments: a sequence inside one ends before `&`, `\\` or `\end` (T483).
+    in_matrix: usize,
 }
 
 impl Parser {
@@ -272,6 +275,43 @@ impl Parser {
         }
     }
 
+    /// The cells of a matrix environment up to and past its `\end{...}`, as markup, row by row (T483).
+    fn matrix_rows(&mut self) -> Vec<Vec<String>> {
+        self.in_matrix += 1;
+        let mut rows = vec![Vec::new()];
+        loop {
+            let cell = self.sequence(None);
+            rows.last_mut().expect("a row").push(cell.markup);
+            self.skip_spaces();
+            if self.chars.get(self.at) == Some(&'&') {
+                self.at += 1;
+            } else if self.at_word("\\\\") {
+                self.at += 2;
+                rows.push(Vec::new());
+            } else {
+                if self.at_word("\\end") {
+                    self.at += 4;
+                    self.raw_argument();
+                }
+                break;
+            }
+        }
+        self.in_matrix -= 1;
+        // a last row left empty by a closing `\\`
+        if rows.len() > 1 && rows.last().is_some_and(|r| r.iter().all(String::is_empty)) {
+            rows.pop();
+        }
+        rows
+    }
+
+    /// The text at the cursor is `word` (a command not followed by more letters).
+    fn at_word(&self, word: &str) -> bool {
+        let w: Vec<char> = word.chars().collect();
+        self.chars.get(self.at..self.at + w.len()) == Some(&w[..])
+            && !(w.last().is_some_and(|c| c.is_ascii_alphabetic())
+                && self.chars.get(self.at + w.len()).is_some_and(|c| c.is_ascii_alphabetic()))
+    }
+
     /// The text at the cursor is `\right` (not the start of a longer command name).
     fn at_right(&self) -> bool {
         let word: Vec<char> = "\\right".chars().collect();
@@ -332,6 +372,32 @@ impl Parser {
                     "text" | "textrm" => plain(self.raw_argument()),
                     "mathbf" | "textbf" | "bf" => plain(format!("\\b({})", self.argument().markup)),
                     "mathit" | "textit" => plain(format!("\\i({})", self.raw_argument())),
+                    "begin" => {
+                        // T483: a matrix environment, its cells row by row inside delimiters of its kind
+                        let env = self.raw_argument();
+                        let kinds = match env.trim() {
+                            "pmatrix" => "pp",
+                            "bmatrix" => "bb",
+                            "Bmatrix" => "cc",
+                            "vmatrix" => "vv",
+                            "Vmatrix" => "vv",
+                            _ => "nn",
+                        };
+                        let rows = self.matrix_rows();
+                        let cols = rows.iter().map(Vec::len).max().unwrap_or(0).max(1);
+                        let mut cells = Vec::new();
+                        for row in &rows {
+                            for k in 0..cols {
+                                cells.push(escape_outer_commas(row.get(k).map_or("", String::as_str)));
+                            }
+                        }
+                        let grid = format!("\\mx({cols},{})", cells.join(","));
+                        if kinds == "nn" {
+                            plain(grid)
+                        } else {
+                            plain(format!("\\dl({kinds},{})", escape_outer_commas(&grid)))
+                        }
+                    }
                     "left" => {
                         // T482: a delimiter as tall as what it encloses, up to the matching `\right`
                         let open = self.delimiter();
@@ -379,6 +445,11 @@ impl Parser {
                 _ => {}
             }
             if self.in_left > 0 && self.at_right() {
+                break;
+            }
+            if self.in_matrix > 0
+                && (self.chars.get(self.at) == Some(&'&') || self.at_word("\\\\") || self.at_word("\\end"))
+            {
                 break;
             }
             // A script with nothing before it (`$^{-1}$`) attaches to an empty base.
@@ -438,7 +509,7 @@ impl Parser {
 
 /// LaTeX math (without the `$`s) as label markup.
 pub fn to_markup(math: &str) -> String {
-    Parser { chars: math.chars().collect(), at: 0, upright: false, in_left: 0 }.sequence(None).markup
+    Parser { chars: math.chars().collect(), at: 0, upright: false, in_left: 0, in_matrix: 0 }.sequence(None).markup
 }
 
 /// The operator markup of an atom that takes its scripts below and above it (T481): the large operators
@@ -488,6 +559,9 @@ mod tests {
         assert_eq!(to_markup(r"\left(\frac{a}{b}\right)"), r"\dl(pp,\fr(\i(a),\i(b)))");
         assert_eq!(to_markup(r"\left\{ x, y \right."), r"\dl(cn,\i(x)\(44)\i(y))");
         assert_eq!(to_markup(r"\left[a\right|"), r"\dl(bv,\i(a))");
+        assert_eq!(to_markup(r"\begin{pmatrix} a & b \\ 1 & 0 \end{pmatrix}"), r"\dl(pp,\mx(2,\i(a),\i(b),1,0))");
+        assert_eq!(to_markup(r"\begin{matrix} x \\ y \\ \end{matrix}"), r"\mx(1,\i(x),\i(y))");
+        assert_eq!(to_markup(r"\begin{bmatrix} 1 & 2 \\ 3 \end{bmatrix}"), r"\dl(bb,\mx(2,1,2,3,))");
         assert_eq!(to_markup(r"\int_0^1"), r"∫\=(0,1)", "an integral keeps its scripts beside it");
         assert_eq!(to_markup(r"\frac{1,5}{2}"), r"\fr(1\(44)5,2)", "a comma of a part is not the separator");
         assert_eq!(to_markup(r"\sqrt{x}"), r"√\i(x)");

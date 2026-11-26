@@ -15,5 +15,5 @@ with the window; an `.opj` save names them and writes the companion.
 
 ## Left
 
-- Origin's Window Properties layout and Window Title options; a Comments column in the Explorer list.
+- Origin's Window Properties layout and Window Title options; a Comments column in the Explorer list (done in T350).
   Comments in `.opj` were measured and done in T283.

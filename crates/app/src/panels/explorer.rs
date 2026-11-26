@@ -17,9 +17,10 @@ const HEAD_FILL: Color32 = Color32::from_rgb(240, 240, 243);
 const GRID: Color32 = Color32::from_rgb(222, 222, 226);
 
 /// The columns of the window list, in order.
-const COLUMNS: [&str; 4] = ["Name", "Long Name", "Short Name", "Type"];
+/// T350: Origin's Explorer also lists the window's Comments.
+const COLUMNS: [&str; 5] = ["Name", "Long Name", "Short Name", "Type", "Comments"];
 /// Share of the list width each column takes.
-const SHARES: [f32; 4] = [0.24, 0.27, 0.27, 0.22];
+const SHARES: [f32; 5] = [0.2, 0.21, 0.17, 0.14, 0.28];
 
 pub struct ExplorerState {
     /// The selected folder, as indices into the `folders` of each level; empty is the root.
@@ -309,7 +310,16 @@ fn natural(a: &str, b: &str) -> Ordering {
     }
 }
 
-/// The text of one cell of the window list.
+/// The text of one cell of the window list, the Comments column (4) included: the first line of the
+/// window's comments (T350).
+pub fn cell_text(project: &Project, w: &Window, column: usize) -> String {
+    if column == 4 {
+        return project.window_comments(w.id()).lines().next().unwrap_or("").to_string();
+    }
+    cell(w, column)
+}
+
+/// The text of one cell of the window list (the columns that the window itself holds).
 pub fn cell(w: &Window, column: usize) -> String {
     let long = match w {
         Window::Workbook(b) => &b.long_name,
@@ -336,7 +346,8 @@ fn sorted(project: &Project, mut ids: Vec<WindowId>, sort: (usize, bool)) -> Vec
         let (Some(wa), Some(wb)) = (project.window(*a), project.window(*b)) else {
             return Ordering::Equal;
         };
-        let o = natural(&cell(wa, sort.0), &cell(wb, sort.0)).then_with(|| natural(wa.name(), wb.name()));
+        let o = natural(&cell_text(project, wa, sort.0), &cell_text(project, wb, sort.0))
+            .then_with(|| natural(wa.name(), wb.name()));
         if sort.1 { o } else { o.reverse() }
     });
     ids
@@ -488,11 +499,11 @@ fn paint_folder(painter: &egui::Painter, r: Rect) {
 
 fn list(ui: &mut egui::Ui, st: &mut ExplorerState, data: &PanelData, actions: &mut Vec<Action>) {
     let width = ui.available_width();
-    let mut edges = [0.0_f32; 5];
-    for i in 0..4 {
+    let mut edges = [0.0_f32; 6];
+    for i in 0..5 {
         edges[i + 1] = edges[i] + SHARES[i] * width;
     }
-    edges[4] = width;
+    edges[5] = width;
     // T288: the search box, and whether it looks in the subfolders too.
     ui.horizontal(|ui| {
         let edit = egui::TextEdit::singleline(&mut st.search)
@@ -562,7 +573,7 @@ fn row(
     st: &mut ExplorerState,
     data: &PanelData,
     w: &Window,
-    edges: &[f32; 5],
+    edges: &[f32; 6],
     shown: &[WindowId],
     actions: &mut Vec<Action>,
 ) {
@@ -570,7 +581,7 @@ fn row(
     let graph = matches!(w, Window::Graph(_));
     let active = data.active == Some(id);
     let selected = st.is_picked(id);
-    let (rect, response) = ui.allocate_exact_size(Vec2::new(edges[4], ROW_H), Sense::click_and_drag());
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(edges[5], ROW_H), Sense::click_and_drag());
     let title = w.title();
     response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, &title));
     // T249: the window's Comments as the row's tooltip; while searching the subfolders, the folder
@@ -603,7 +614,7 @@ fn row(
     if active {
         st.bold.push(id);
     }
-    for c in 0..4 {
+    for c in 0..5 {
         let cell_rect = Rect::from_min_max(
             Pos2::new(rect.min.x + edges[c], rect.min.y),
             Pos2::new(rect.min.x + edges[c + 1], rect.max.y),
@@ -625,7 +636,7 @@ fn row(
             }
             x += 18.0;
         }
-        let text = cell(w, c);
+        let text = cell_text(data.project, w, c);
         let painter = ui.painter().with_clip_rect(cell_rect);
         let at = Pos2::new(x, rect.center().y);
         painter.text(at, Align2::LEFT_CENTER, &text, FontId::proportional(12.0), Color32::BLACK);
@@ -789,12 +800,18 @@ mod tests {
     }
 
     #[test]
-    fn the_list_cells_hold_name_long_name_short_name_and_type() {
-        let (p, a, _) = project();
-        let w = p.window(a).unwrap();
-        assert_eq!(
-            COLUMNS.iter().enumerate().map(|(i, _)| cell(w, i)).collect::<Vec<_>>(),
-            ["Book1", "alpha", "Book1", "Workbook"]
-        );
+    fn the_list_cells_hold_name_long_name_short_name_type_and_comments() {
+        let (mut p, a, b) = project();
+        let cells = |p: &Project, id| {
+            let w = p.window(id).unwrap();
+            COLUMNS.iter().enumerate().map(|(i, _)| cell_text(p, w, i)).collect::<Vec<_>>()
+        };
+        assert_eq!(cells(&p, a), ["Book1", "alpha", "Book1", "Workbook", ""]);
+        // T350: the first line of the window's comments, and the list sorts by it.
+        p.set_window_comments(a, "zeta run\nsecond line");
+        p.set_window_comments(b, "alpha run");
+        assert_eq!(cells(&p, a)[4], "zeta run");
+        assert_eq!(sorted(&p, vec![a, b], (4, true)), [b, a]);
+        assert_eq!(sorted(&p, vec![a, b], (4, false)), [a, b]);
     }
 }

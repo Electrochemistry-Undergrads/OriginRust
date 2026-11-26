@@ -54,7 +54,9 @@ impl Default for ProjectBrowserDialog {
 /// Where Go To takes an item.
 pub fn target(project: &Project, item: ItemRef) -> Option<FindTarget> {
     Some(match item {
-        ItemRef::Book(id) | ItemRef::Graph(id) => FindTarget::Window(id),
+        ItemRef::Book(id) | ItemRef::Graph(id) | ItemRef::Matrix(id) | ItemRef::MatrixSheet(id, _) => {
+            FindTarget::Window(id)
+        }
         ItemRef::Sheet(book, sheet) => FindTarget::Sheet { book, sheet },
         ItemRef::Column(column) => {
             let (b, _, _) = project.locate(column)?;
@@ -79,6 +81,12 @@ fn preview(project: &Project, item: ItemRef) -> String {
             .map(|s| format!("{} columns, {} rows", s.columns.len(), s.row_count()))
             .unwrap_or_default(),
         ItemRef::Book(b) => project.workbook(b).map(|b| format!("{} sheets", b.sheets.len())).unwrap_or_default(),
+        ItemRef::Matrix(m) => project.matrix_book(m).map(|m| format!("{} sheets", m.sheets.len())).unwrap_or_default(),
+        ItemRef::MatrixSheet(m, i) => project
+            .matrix_book(m)
+            .and_then(|m| m.sheets.get(i))
+            .map(|s| format!("{} x {} (rows x columns)", s.rows, s.cols))
+            .unwrap_or_default(),
         ItemRef::Graph(g) => project
             .graph(g)
             .map(|g| {
@@ -100,8 +108,9 @@ impl ProjectBrowserDialog {
                     1 => i.kind.name().to_string(),
                     2 => i.name.to_lowercase(),
                     3 => i.location.to_lowercase(),
-                    4 => i.long_name.to_lowercase(),
-                    5 => i.units.to_lowercase(),
+                    4 => i.folder.to_lowercase(),
+                    5 => i.long_name.to_lowercase(),
+                    6 => i.units.to_lowercase(),
                     _ => i.comments.to_lowercase(),
                 }
             };
@@ -127,7 +136,10 @@ impl ProjectBrowserDialog {
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("Search");
-                    ui.add(egui::TextEdit::singleline(&mut self.search).hint_text("name, long name, units, comments"));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.search)
+                            .hint_text("name, folder, long name, units, comments"),
+                    );
                     ui.label("Show");
                     let shown = self.kind.map_or("All", ItemKind::name);
                     egui::ComboBox::from_id_salt("project_browser_kind").selected_text(shown).show_ui(ui, |ui| {
@@ -148,10 +160,12 @@ impl ProjectBrowserDialog {
                     }
                 });
                 egui::ScrollArea::vertical().max_height(320.0).auto_shrink([false, true]).show(ui, |ui| {
-                    egui::Grid::new("project_browser_rows").striped(true).num_columns(7).show(ui, |ui| {
+                    egui::Grid::new("project_browser_rows").striped(true).num_columns(8).show(ui, |ui| {
                         // Column headers sort the list (T466): a click sorts by that column, again reverses it.
                         ui.label("");
-                        for (k, h) in ["Kind", "Name", "Where", "Long Name", "Units", "Comments"].iter().enumerate() {
+                        for (k, h) in
+                            ["Kind", "Name", "Where", "Folder", "Long Name", "Units", "Comments"].iter().enumerate()
+                        {
                             let column = k + 1;
                             let mark = match self.sort {
                                 Some((c, false)) if c == column => " \u{25B2}",
@@ -189,6 +203,7 @@ impl ProjectBrowserDialog {
                                 outcome = BrowserOutcome::GoTo(t);
                             }
                             ui.label(&info.location);
+                            ui.label(&info.folder);
                             // Long Name, Units and Comments edit in place on a double click (T466).
                             for (field, text) in [
                                 (MetaField::LongName, info.long_name.as_str()),
@@ -294,9 +309,9 @@ mod tests {
         let mut d = ProjectBrowserDialog { kind: Some(ItemKind::Column), ..Default::default() };
         let names = |d: &ProjectBrowserDialog| d.shown(&items).iter().map(|i| i.long_name.clone()).collect::<Vec<_>>();
         assert_eq!(names(&d), ["gamma", "Alpha", "beta"], "project order");
-        d.sort = Some((4, false));
+        d.sort = Some((5, false)); // Long Name, after Kind, Name, Where and Folder (T486)
         assert_eq!(names(&d), ["Alpha", "beta", "gamma"], "ignoring case");
-        d.sort = Some((4, true));
+        d.sort = Some((5, true));
         assert_eq!(names(&d), ["gamma", "beta", "Alpha"]);
     }
 }

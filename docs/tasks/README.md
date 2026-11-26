@@ -510,6 +510,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T481](T481-latex-limits.md) | LaTeX large operators and limits with their scripts below and above | S | done 2026-11-26 (graphing LaTeX math) |
 | [T482](T482-latex-delimiters.md) | Stretchy LaTeX delimiters (\left ... \right) in graph text | S | done 2026-11-26 (graphing LaTeX math) |
 | [T483](T483-latex-matrices.md) | LaTeX matrix environments in graph text (grid of cells in stretchy delimiters) | S | done 2026-11-26 (graphing LaTeX math) |
+| [T484](T484-title-tall-math.md) | Axis titles with tall math keep Origin's gap from the tick labels | S | done 2026-11-26 (graphing LaTeX math) |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |

@@ -12,7 +12,7 @@ pushes the next row away) and the block is centred about the fraction bar's heig
 
 ## Left
 
-- Axis titles are placed by their font size, so a tall matrix in a title can reach towards the tick labels.
+- Axis titles placed by their font size could reach towards the tick labels: done in T484.
 
 ## Tests
 

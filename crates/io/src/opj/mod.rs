@@ -55,6 +55,8 @@ pub struct OpjImport {
     /// The Notes windows in file order, as name and text (lines separated by `\n`); Origin's results
     /// log is left out (T470).
     pub notes: Vec<(String, String)>,
+    /// The matrix books in file order, each with its sheets (T471). Ids are placeholders.
+    pub matrices: Vec<sheaf_core::matrix::MatrixBook>,
 }
 
 /// A folder of the project explorer as the file lists it.
@@ -124,6 +126,16 @@ impl OpjImport {
             let file_name = graph.name.clone();
             let id = project.adopt_graph(graph);
             by_name.insert(file_name, id);
+        }
+        // T471: matrix books keep their names, long names and sheets.
+        for book in self.matrices {
+            let (name, active) = (book.name.clone(), book.active_sheet);
+            let id = project.adopt_matrix_book(&book.long_name, book.sheets);
+            if let Some(b) = project.matrix_book_mut(id) {
+                b.name = name.clone();
+                b.active_sheet = active.min(b.sheets.len().saturating_sub(1));
+            }
+            by_name.insert(name, id);
         }
         // T470: Notes windows keep their names and text.
         for (name, text) in self.notes {
@@ -291,6 +303,7 @@ pub fn read_opj_from<R: Read + Seek>(reader: R, path: &Path) -> Result<OpjImport
         column_of_set: HashMap::new(),
     };
     let mut workbooks = b.workbooks(&windows).map_err(from_frame)?;
+    let (matrices, matrix_sets) = b.matrices(&windows).map_err(from_frame)?;
     let graphs: Vec<sheaf_core::graph::Graph> = windows
         .iter()
         .filter(|w| graph::is_graph(w))
@@ -303,7 +316,7 @@ pub fn read_opj_from<R: Read + Seek>(reader: R, path: &Path) -> Result<OpjImport
              verified (only 9.x projects were checked), so a graph may be missing or drawn wrong."
         ));
     }
-    if workbooks.is_empty() && !b.sets.is_empty() {
+    if workbooks.is_empty() && b.sets.len() > matrix_sets {
         b.warnings.push(
             "No workbook could be matched to its columns; the columns were grouped by their stored names, \
              so sheet names, long names, units, comments and column roles are missing."
@@ -315,13 +328,13 @@ pub fn read_opj_from<R: Read + Seek>(reader: R, path: &Path) -> Result<OpjImport
     for w in &mut workbooks {
         w.source = Some(source.clone());
     }
-    b.finish_warnings(windows.len() - graphs.len(), workbooks.len());
-    if workbooks.is_empty() {
-        b.warnings.push("The project holds no workbook data (only graphs, matrices or empty workbooks).".to_string());
+    b.finish_warnings(windows.len() - graphs.len() - matrices.len(), workbooks.len());
+    if workbooks.is_empty() && matrices.is_empty() {
+        b.warnings.push("The project holds no workbook data (only graphs or empty workbooks).".to_string());
     }
     let comments =
         windows.iter().filter(|w| !w.comments.is_empty()).map(|w| (w.name.clone(), w.comments.clone())).collect();
-    Ok(OpjImport { workbooks, graphs, version, signature, folders, warnings: b.warnings, comments, notes })
+    Ok(OpjImport { workbooks, graphs, version, signature, folders, warnings: b.warnings, comments, notes, matrices })
 }
 
 /// The version number stored in the header block, as `9.3`.
@@ -394,6 +407,90 @@ impl<R: Read + Seek> Builder<R> {
                 Ok(None)
             }
         }
+    }
+
+    /// The matrix books (T471, measured in Origin 2016): a window whose first layer has the flag byte
+    /// `0xDE`, one sheet per layer, the size in the layer header (columns at `0x2B`, rows at `0x52`), the
+    /// numbers row by row in the data set named after the window (`MBook1`, then `MBook1@2`, ...), the X
+    /// and Y range in annotations named `X1`, `X2`, `Y1` and `Y2` (as text; Origin's 1 to 10 when there are
+    /// none). Returns the books and how many data sets they took.
+    fn matrices(
+        &mut self,
+        windows: &[window::Window],
+    ) -> Result<(Vec<sheaf_core::matrix::MatrixBook>, usize), FrameError> {
+        use sheaf_core::matrix::{DEFAULT_RANGE, MAX_CELLS, MatrixBook, MatrixSheet};
+        let by_name: HashMap<String, usize> =
+            self.sets.iter().enumerate().map(|(i, s)| (s.name.to_lowercase(), i)).collect();
+        let mut books = Vec::new();
+        let mut used = 0;
+        for w in windows.iter().filter(|w| is_matrix(w)) {
+            let mut book = MatrixBook::new(WindowId(0), w.name.clone(), 0);
+            book.long_name = w.label.clone();
+            book.sheets.clear();
+            for (k, layer) in w.layers.iter().enumerate() {
+                let u16_at = |at: usize| {
+                    layer.header.get(at..at + 2).map_or(0, |b| usize::from(u16::from_le_bytes([b[0], b[1]])))
+                };
+                let (cols, rows) = (u16_at(MATRIX_COLS_AT), u16_at(MATRIX_ROWS_AT));
+                let name = if layer.name.is_empty() { format!("MSheet{}", k + 1) } else { layer.name.clone() };
+                if rows == 0 || cols == 0 || rows * cols > MAX_CELLS {
+                    self.warnings.push(format!(
+                        "Matrix sheet '{}' of '{}' has no size that can be read; it was left out.",
+                        name, w.name
+                    ));
+                    continue;
+                }
+                let coordinate = |key: &str| {
+                    layer.annotations.iter().find(|a| graph::annotation_name(a) == key).and_then(|a| {
+                        strings::decode_cp1252(strings::c_bytes(&a.block1))
+                            .trim()
+                            .parse::<f64>()
+                            .ok()
+                            .filter(|v| v.is_finite())
+                    })
+                };
+                let x = (coordinate("X1").unwrap_or(DEFAULT_RANGE.0), coordinate("X2").unwrap_or(DEFAULT_RANGE.1));
+                let y = (coordinate("Y1").unwrap_or(DEFAULT_RANGE.0), coordinate("Y2").unwrap_or(DEFAULT_RANGE.1));
+                let set_name = if k == 0 { w.name.clone() } else { format!("{}@{}", w.name, k + 1) };
+                let mut values = vec![f64::NAN; rows * cols];
+                if let Some(&set) = by_name.get(&set_name.to_lowercase()) {
+                    used += 1;
+                    let info = self.sets[set].clone();
+                    let bytes = self.f.read_extent(info.data)?;
+                    match dataset::decode(&info, &bytes).map(|d| d.data) {
+                        Ok(sheaf_core::ColumnData::Numeric(v)) => {
+                            if v.len() != rows * cols {
+                                self.warnings.push(format!(
+                                    "Matrix sheet '{}' of '{}' stores {} number(s) for its {rows} x {cols} cells; the cells may be misplaced.",
+                                    name,
+                                    w.name,
+                                    v.len()
+                                ));
+                            }
+                            for (slot, x) in values.iter_mut().zip(v.iter()) {
+                                *slot = *x;
+                            }
+                        }
+                        Ok(_) => self.warnings.push(format!(
+                            "Matrix sheet '{}' of '{}' holds text, which a matrix cannot; its cells are empty.",
+                            name, w.name
+                        )),
+                        Err(reason) => self.warnings.push(format!(
+                            "Matrix sheet '{}' of '{}' could not be read ({reason}); its cells are empty.",
+                            name, w.name
+                        )),
+                    }
+                }
+                match MatrixSheet::from_values(name, 0, rows, cols, values, x, y) {
+                    Ok(sheet) => book.sheets.push(sheet),
+                    Err(e) => self.warnings.push(format!("A matrix sheet of '{}' was left out: {e}.", w.name)),
+                }
+            }
+            if !book.sheets.is_empty() {
+                books.push(book);
+            }
+        }
+        Ok((books, used))
     }
 
     fn workbooks(&mut self, windows: &[window::Window]) -> Result<Vec<Workbook>, FrameError> {
@@ -560,6 +657,17 @@ impl<R: Read + Seek> Builder<R> {
             ));
         }
     }
+}
+
+/// The flag byte (offset `0x02` of a layer header) of a matrix sheet (opj-format.md 10.0).
+const MATRIX_LAYER: u8 = 0xDE;
+/// Offsets in the layer header of a matrix sheet of its number of columns and rows (u16, T471).
+const MATRIX_COLS_AT: usize = 0x2B;
+const MATRIX_ROWS_AT: usize = 0x52;
+
+/// A matrix window: its first layer has the matrix flag byte (opj-format.md 10.0, T471).
+fn is_matrix(w: &window::Window) -> bool {
+    w.layers.first().is_some_and(|l| l.header.get(2) == Some(&MATRIX_LAYER))
 }
 
 /// Offset in a column record of the number that ties the column to the recalculation records.

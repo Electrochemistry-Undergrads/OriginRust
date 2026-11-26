@@ -136,7 +136,10 @@ pub fn open_project(path: &Path) -> Result<OpenedProject, IoError> {
         let mut warnings = std::mem::take(&mut import.warnings);
         warnings.insert(
             0,
-            format!("Imported from an Origin {} project. Workbooks and basic graphs are read.", import.version),
+            format!(
+                "Imported from an Origin {} project. Workbooks, matrices, Notes windows and basic graphs are read.",
+                import.version
+            ),
         );
         warnings.splice(1..1, extra);
         Ok(OpenedProject {

@@ -247,6 +247,7 @@ fn build(bytes: &[u8], path: &Path) -> Result<(OpjImport, Summary), IoError> {
         warnings,
         comments: Vec::new(),
         notes: Vec::new(),
+        matrices: Vec::new(),
     };
     Ok((import, summary))
 }

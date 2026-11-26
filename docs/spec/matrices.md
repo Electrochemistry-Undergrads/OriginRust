@@ -542,4 +542,5 @@ to 0 is filled.
 - Stage 2 (app): the matrix window (cells, column and row headers with coordinates, sheet tabs), menus for matrix
   windows (Matrix, Plot > Contour, Image), dialogs (Set Values, Dimensions, Convert, Plot Details levels tab),
   New > Matrix, explorer type "Matrix", copy and paste of cells.
-- Stage 3 (`.opj`): reading and writing matrix windows in Origin projects.
+- Stage 3 (`.opj`): writing matrix windows in Origin projects. Reading them is done (T471, 2026-11-26, measured in Origin
+  2016, `opj-format.md` 13.16): name, long name, sheets, size, numbers and X/Y range; their labels and palettes are not read.

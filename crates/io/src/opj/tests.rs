@@ -23,6 +23,7 @@ fn into_project_keeps_window_names_and_drops_trailing_missing_cells() {
         warnings: Vec::new(),
         comments: Vec::new(),
         notes: Vec::new(),
+        matrices: Vec::new(),
     };
     let project = import.into_project();
     let b = project.workbooks().next().unwrap();
@@ -306,6 +307,90 @@ fn collect(dir: &Path, recurse: bool, out: &mut Vec<std::path::PathBuf>) {
     }
 }
 
+#[test]
+fn matrix_books_are_read_with_their_sheets_sizes_and_coordinates() {
+    // T471: the layout measured in Origin 2016 (opj-format.md 13.16).
+    let mut fb = FileBuilder::default();
+    fb.dataset(
+        "MBook1",
+        0x6001,
+        8,
+        &doubles(&[101.0, 102.0, 103.0, 104.0, 201.0, 202.0, 203.0, 204.0, 301.0, 302.0, 303.0, 304.0]),
+    )
+    .dataset("MBook1@2", 0x6001, 8, &doubles(&[1.0, dataset::MISSING, 3.0, 4.0]))
+    .dataset("Book1_A", 0x6021, 8, &doubles(&[1.0, 2.0]));
+    fb.window("Book1", "", &[("Sheet1", &[(1, 3, "A", &[])])]);
+    fb.matrix(
+        "MBook1",
+        "Surface",
+        &[("MSheet1", 4, 3, &[]), ("Data", 2, 2, &[("X1", "11"), ("X2", "20"), ("Y1", "-0.5"), ("Y2", "1.5")])],
+    );
+    let imp = read(fb.build()).unwrap();
+    assert_eq!(imp.workbooks.len(), 1);
+    assert_eq!(imp.matrices.len(), 1);
+    assert!(!imp.warnings.iter().any(|w| w.contains("not imported")), "{:?}", imp.warnings);
+    let project = imp.into_project();
+    let m = project.matrix_books().next().unwrap();
+    assert_eq!((m.name.as_str(), m.long_name.as_str(), m.sheets.len()), ("MBook1", "Surface", 2));
+    let s = &m.sheets[0];
+    assert_eq!((s.name.as_str(), s.rows, s.cols), ("MSheet1", 3, 4));
+    assert_eq!((s.x_from, s.x_to, s.y_from, s.y_to), (1.0, 10.0, 1.0, 10.0), "Origin's default range");
+    assert_eq!((s.value(0, 1), s.value(2, 3)), (102.0, 304.0), "row by row, the first row first");
+    let d = &m.sheets[1];
+    assert_eq!((d.name.as_str(), d.rows, d.cols), ("Data", 2, 2));
+    assert_eq!((d.x_from, d.x_to, d.y_from, d.y_to), (11.0, 20.0, -0.5, 1.5));
+    assert!(d.value(0, 1).is_nan(), "Origin's missing value");
+    assert_eq!(d.value(1, 1), 4.0);
+}
+
+#[test]
+fn an_empty_matrix_has_missing_cells_and_no_fallback_workbook() {
+    let mut fb = FileBuilder::default();
+    fb.dataset("MBook2", 0x6001, 8, &doubles(&[5.0]));
+    fb.matrix("MBook1", "", &[("MSheet1", 2, 2, &[])]).matrix("MBook2", "", &[("MSheet1", 1, 1, &[])]);
+    let imp = read(fb.build()).unwrap();
+    assert!(imp.workbooks.is_empty());
+    assert!(imp.warnings.iter().all(|w| !w.contains("No workbook could be matched")), "{:?}", imp.warnings);
+    assert_eq!(imp.matrices.len(), 2);
+    assert!(imp.matrices[0].sheets[0].values().iter().all(|v| v.is_nan()));
+    assert_eq!(imp.matrices[1].sheets[0].values(), [5.0]);
+}
+
+/// Origin 2016's own files with matrices (T471; `re-workspace/scratch/t471`, local only): `mj.opj` has
+/// `MXA` (4 x 3, `i*100+j`, default coordinates) and `MXB` (long name `LongMXB`; a 2 x 3 sheet of `i+0.25`
+/// whose third column is empty, and a 32 x 32 sheet of `1000*j`); `mh.opj` has Origin's sample matrix
+/// `2D Gaussian.ogm` (10 x 10, sheet `Data`, X 11 to 20, Y 1 to 10); `m1.opj` a matrix with set coordinates.
+#[test]
+fn local_origin_files_give_their_matrices() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../re-workspace/scratch/t471");
+    if !dir.join("mj.opj").exists() || !dir.join("mh.opj").exists() {
+        eprintln!("opj: {} not found; skipping", dir.display());
+        return;
+    }
+    let p = read_opj(&dir.join("mj.opj")).unwrap().into_project();
+    let a = p.matrix_books().find(|m| m.name == "MXA").unwrap();
+    assert_eq!((a.sheets[0].rows, a.sheets[0].cols, a.sheets[0].value(1, 2)), (3, 4, 203.0));
+    assert_eq!((a.sheets[0].x_from, a.sheets[0].x_to), (1.0, 10.0));
+    let b = p.matrix_books().find(|m| m.name == "MXB").unwrap();
+    assert_eq!((b.long_name.as_str(), b.sheets.len()), ("LongMXB", 2));
+    assert_eq!((b.sheets[0].rows, b.sheets[0].cols, b.sheets[0].value(1, 0)), (2, 3, 2.25));
+    assert!(b.sheets[0].value(0, 2).is_nan());
+    assert_eq!((b.sheets[1].name.as_str(), b.sheets[1].rows, b.sheets[1].cols), ("MSheet2", 32, 32));
+    assert_eq!(b.sheets[1].value(5, 31), 32000.0);
+    assert_eq!(p.workbooks().count(), 2, "GSrc and Book1 (m2w's XYZ columns)");
+    let p = read_opj(&dir.join("mh.opj")).unwrap().into_project();
+    let g = p.matrix_books().find(|m| m.name == "MBook1").unwrap();
+    let s = &g.sheets[0];
+    assert_eq!((s.name.as_str(), s.rows, s.cols), ("Data", 10, 10));
+    assert_eq!((s.x_from, s.x_to, s.y_from, s.y_to), (11.0, 20.0, 1.0, 10.0));
+    // `matrix -ps XY 0.5 10 2.5 20` on a 4 x 3 matrix of `i*10+j`
+    if let Ok(imp) = read_opj(&dir.join("m1.opj")) {
+        let s = &imp.matrices[0].sheets[0];
+        assert_eq!((s.rows, s.cols, s.x_from, s.x_to, s.y_from, s.y_to), (3, 4, 0.5, 2.5, 10.0, 20.0));
+        assert_eq!((s.value(0, 0), s.value(2, 3)), (11.0, 34.0));
+    }
+}
+
 /// Origin 2016's own file with two Notes windows (T470; `re-workspace/scratch/t470/n2.opj`, local only):
 /// `MyNotes` and `Second`, both empty, listed in the root folder before the workbook `GSrc`.
 #[test]
@@ -556,6 +641,7 @@ fn into_project_renumbers_the_stack_offsets_with_the_columns() {
         warnings: Vec::new(),
         comments: Vec::new(),
         notes: Vec::new(),
+        matrices: Vec::new(),
     };
     let project = import.into_project();
     let layer = &project.graphs().next().unwrap().layers[0];

@@ -2145,7 +2145,12 @@ fn label_cell(
         }
     } else {
         ui.scope_builder(UiBuilder::new().max_rect(inner).layout(aligned_layout(manual.h_align, false)), |ui| {
-            formatted_text(ui, &text, color, &manual);
+            // T485: LaTeX math in a label (Origin 2023b) shows as styled runs, like a Rich Text cell
+            if has_math(&text) {
+                rich_cell_text(ui, &text, color, &manual);
+            } else {
+                formatted_text(ui, &text, color, &manual);
+            }
         });
     }
     if response.clicked() {
@@ -2169,6 +2174,11 @@ fn label_cell(
     response.context_menu(|ui| {
         menus::show_context(ui, &menus::label_cell_menu(read_only), &book_ctx(book_id, state), actions)
     });
+}
+
+/// Whether a label holds a `$...$` LaTeX math span (T485).
+pub(crate) fn has_math(text: &str) -> bool {
+    matches!(sheaf_plot::latex::expand(text), std::borrow::Cow::Owned(_))
 }
 
 /// The text a label cell is edited with (the whole comment, not just its first line).

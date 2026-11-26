@@ -1537,9 +1537,10 @@ fn axis_spec(axis: &Axis, notes: &mut Vec<String>) -> AxisBlocks {
         TickFormat::Decimal(d) => decimals = Some(d.min(15)),
         TickFormat::Scientific(d) => (scientific, decimals) = (true, Some(d.min(15))),
         TickFormat::DateTime(pattern) => {
-            // Origin offers a fixed list of date formats; only month/day/year is in it
-            date_format = Some(0);
-            if pattern != sheaf_core::datetime::DatePattern::Mdy {
+            // Origin offers a fixed list of date formats, the Date display list (T475)
+            let index = crate::opj::tick_date_index(pattern);
+            date_format = Some(index.unwrap_or(0));
+            if index.is_none() {
                 notes.push(format!(
                     "the date format {} of tick labels has no counterpart in Origin's list; month/day/year was written",
                     pattern.label()

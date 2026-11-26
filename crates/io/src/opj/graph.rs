@@ -533,8 +533,8 @@ fn tick_format(b: &[u8]) -> TickFormat {
     let fixed = kind & AXIS_FIXED_DECIMALS_BIT != 0;
     let decimals = u8_at(b, AXIS_FLAGS_AT) & 0x0F;
     if kind & 0x0F == AXIS_DATE_LABELS {
-        // dates in one of Origin's formats; the model has the patterns of `datetime`
-        return TickFormat::DateTime(sheaf_core::datetime::DatePattern::Mdy);
+        // dates in one of Origin's formats, numbered as the Date display list (T475)
+        return TickFormat::DateTime(super::tick_date_pattern(decimals));
     }
     match (kind >> 4) & 3 {
         1 => TickFormat::Scientific(if fixed { decimals } else { 0 }),

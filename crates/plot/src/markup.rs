@@ -5,7 +5,8 @@
 //! and `\cN(..)` indexed or RGB text color.
 //! `\=(sub,sup)` places paired scripts in one shared column. `\fr(num,den)` stacks a fraction: the
 //! numerator over a bar over the denominator, centred in one column (Sheaf's own escape, T480; LaTeX
-//! `\frac` in `$...$` math becomes it). `\ab(..)`, `\ad(..)`, and
+//! `\frac` in `$...$` math becomes it). `\lm(op,below,above)` centres `below` under and `above` over `op` (T481,
+//! LaTeX large operators and limits). `\ab(..)`, `\ad(..)`, and
 //! `\at(..)` draw a bar, dot, or tilde above a span.
 //! `\sc` adds a conditional space, optionally before a parenthesized span.
 //! Escapes nest. A backslash
@@ -22,6 +23,37 @@ pub const FRACTION_SCALE: f64 = 0.7;
 pub const FRACTION_NUM_RISE: f64 = 0.55;
 pub const FRACTION_DEN_DROP: f64 = 0.36;
 pub const FRACTION_BAR_RISE: f64 = 0.28;
+
+/// Limits of a large operator (T481): at this size of the surrounding text, this gap (in units of the
+/// surrounding size) from the operator's ink, which is reckoned with these ascent and descent of a glyph.
+pub const LIMIT_SCALE: f64 = 0.7;
+pub const LIMIT_GAP: f64 = 0.08;
+const LIMIT_ASCENT: f64 = 0.72;
+const LIMIT_DESCENT: f64 = 0.21;
+
+/// The glyph runs of `segments`, nested ones included.
+fn collect_runs(segments: &[Segment], out: &mut Vec<Run>) {
+    for segment in segments {
+        match segment {
+            Segment::Text(run) => out.push(run.clone()),
+            Segment::Pair { sub, sup } => {
+                collect_runs(sub, out);
+                collect_runs(sup, out);
+            }
+            Segment::Accent { content, .. } => collect_runs(content, out),
+            Segment::Fraction { num, den, .. } => {
+                collect_runs(num, out);
+                collect_runs(den, out);
+            }
+            Segment::Limits { op, below, above } => {
+                collect_runs(op, out);
+                collect_runs(below, out);
+                collect_runs(above, out);
+            }
+            Segment::LineGap(_) | Segment::Tab => {}
+        }
+    }
+}
 
 /// The text before and after the first comma that is not inside parentheses (all of it and nothing
 /// when there is none).
@@ -112,6 +144,13 @@ pub(crate) enum Segment {
         color: Option<Color>,
         bar_rise: f64,
     },
+    /// An operator with limits below and above it (T481), all three centred over one column; the limits
+    /// have their rise already applied.
+    Limits {
+        op: Vec<Segment>,
+        below: Vec<Segment>,
+        above: Vec<Segment>,
+    },
     LineGap(u32),
     /// Consumed by the legend row before it places any glyphs.
     Tab,
@@ -136,6 +175,21 @@ pub fn parse(text: &str) -> Vec<Run> {
                     flatten(sup, out);
                 }
                 Segment::Accent { content, .. } => flatten(content, out),
+                Segment::Limits { op, below, above } => {
+                    flatten(op, out);
+                    if !below.is_empty() || !above.is_empty() {
+                        let style = out.last().cloned();
+                        let mut sub = Vec::new();
+                        flatten(below, &mut sub);
+                        let mut sup = Vec::new();
+                        flatten(above, &mut sup);
+                        if let Some(last) = style {
+                            out.push(Run { text: "_".into(), ..last });
+                        }
+                        out.extend(sub);
+                        out.extend(sup);
+                    }
+                }
                 Segment::Fraction { num, den, .. } => {
                     flatten(num, out);
                     if let Some(last) = out.last().cloned() {
@@ -301,6 +355,8 @@ enum Escape {
     Pair,
     /// A stacked fraction, numerator then denominator, separated by the first outer comma (T480).
     Fraction,
+    /// An operator with its limits below and above, separated by the outer commas (T481).
+    Limits,
     /// A decorated span with one accent over its contents.
     Accent(Accent),
     /// `\v(..)` or `\h(..)`: the enclosed text is taken literally.
@@ -332,6 +388,9 @@ fn escape_at(chars: &[char], pos: usize, st: &Style, options: &ParseOptions<'_>)
     }
     if chars.get(pos + 1..pos + 4) == Some(&['f', 'r', '(']) {
         return Some((Escape::Fraction, pos + 4));
+    }
+    if chars.get(pos + 1..pos + 4) == Some(&['l', 'm', '(']) {
+        return Some((Escape::Limits, pos + 4));
     }
     if code == '(' {
         return Some((Escape::Decimal, pos + 2));
@@ -551,6 +610,32 @@ fn parse_seq(
                     let content = inner.segments;
                     if !content.is_empty() {
                         out.span(Segment::Accent { kind, content, scale: st.scale, color: st.color });
+                    }
+                }
+                Escape::Limits => {
+                    let body: Vec<char> = take_enclosed(chars, pos).chars().collect();
+                    let (op_chars, rest) = split_outer_comma(&body);
+                    let (below_chars, above_chars) = split_outer_comma(rest);
+                    let mut op_out = ParsedText::default();
+                    parse_seq(op_chars, &mut 0, st.clone(), false, depth + 1, &mut op_out, options);
+                    let op = op_out.segments;
+                    // the operator's ink from its runs, in units of the label's size
+                    let mut runs = Vec::new();
+                    collect_runs(&op, &mut runs);
+                    let top = runs.iter().map(|r| r.rise + LIMIT_ASCENT * r.scale).fold(st.rise, f64::max);
+                    let bottom = runs.iter().map(|r| r.rise - LIMIT_DESCENT * r.scale).fold(st.rise, f64::min);
+                    let scale = st.scale * LIMIT_SCALE;
+                    let branch = |chars: &[char], rise: f64| {
+                        let inner = Style { scale, rise, ..st.clone() };
+                        let mut out = ParsedText::default();
+                        parse_seq(chars, &mut 0, inner, false, depth + 1, &mut out, options);
+                        out.segments
+                    };
+                    let gap = LIMIT_GAP * st.scale;
+                    let below = branch(below_chars, bottom - gap - LIMIT_ASCENT * scale);
+                    let above = branch(above_chars, top + gap + LIMIT_DESCENT * scale);
+                    if !op.is_empty() || !below.is_empty() || !above.is_empty() {
+                        out.span(Segment::Limits { op, below, above });
                     }
                 }
                 Escape::Fraction => {

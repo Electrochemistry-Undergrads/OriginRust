@@ -5,6 +5,8 @@
 //! - Latin letters in italics, digits and signs upright; spaces are dropped, `\,` `\;` `\quad` give space;
 //! - `x^2`, `x_i`, `x_i^2` (one shared column), braces for longer scripts;
 //! - Greek letters, operators and arrows as their characters (`\alpha` α, `\pm` ±, `\infty` ∞, `\rightarrow` →);
+//! - `\sum`, `\prod`, `\bigcup` ... (at 140 %) and `\lim`, `\max`, `\min`, `\sup`, `\inf` with their scripts below and above them (the
+//!   markup `\lm(op,below,above)`, T481); `\int` keeps its scripts beside it;
 //! - `\frac{a}{b}` stacked (the markup `\fr(a,b)`: `a` over a bar over `b`, T480), `\sqrt{x}` √x, `\sqrt[n]{x}`;
 //! - `\bar`, `\dot`, `\tilde` as the markup accents, `\hat` and `\vec` as combining marks;
 //! - `\mathrm`, `\text`, `\operatorname` upright, `\mathbf` bold, `\mathit` italic; `\sin`, `\log` ... upright;
@@ -12,8 +14,7 @@
 //!
 //! A span is math when it holds a backslash, `^`, `_` or `{`, or starts with a letter and has no space at either end
 //! (`$x$`); other spans (`$5 and $10`) are left as they are. A `$` before `(` starts a substitution, not math; `\$`
-//! is a dollar sign. Not drawn as in LaTeX: large operators with limits above and below, matrices and stretchy
-//! delimiters.
+//! is a dollar sign. Not drawn as in LaTeX: matrices and stretchy delimiters.
 
 use std::borrow::Cow;
 
@@ -122,6 +123,11 @@ fn symbol(name: &str) -> Option<&'static str> {
         "nabla" => "∇",
         "sum" => "∑",
         "prod" => "∏",
+        "coprod" => "∐",
+        "bigcup" => "⋃",
+        "bigcap" => "⋂",
+        "bigoplus" => "⨁",
+        "bigotimes" => "⨂",
         "int" => "∫",
         "oint" => "∮",
         "circ" | "degree" => "°",
@@ -364,6 +370,14 @@ impl Parser {
                 }
                 None => {
                     flush(&mut out, &mut letters);
+                    // T481: a large operator or a limit function takes its scripts below and above it
+                    if (sub.is_some() || sup.is_some())
+                        && let Some(op) = limit_operator(&atom.markup)
+                    {
+                        let part = |x: Option<String>| escape_outer_commas(&x.unwrap_or_default());
+                        out.push_str(&format!("\\lm({op},{},{})", part(sub), part(sup)));
+                        continue;
+                    }
                     out.push_str(&atom.markup);
                 }
             }
@@ -382,6 +396,16 @@ impl Parser {
 /// LaTeX math (without the `$`s) as label markup.
 pub fn to_markup(math: &str) -> String {
     Parser { chars: math.chars().collect(), at: 0, upright: false }.sequence(None).markup
+}
+
+/// The operator markup of an atom that takes its scripts below and above it (T481): the large operators
+/// (drawn at 140 %) and the limit functions; `None` for anything else (`\int` keeps its scripts beside it).
+fn limit_operator(markup: &str) -> Option<String> {
+    match markup {
+        "∑" | "∏" | "∐" | "⋃" | "⋂" | "⨁" | "⨂" => Some(format!("\\p140({markup})")),
+        "lim" | "max" | "min" | "sup" | "inf" => Some(markup.to_string()),
+        _ => None,
+    }
 }
 
 /// `text` with its commas outside parentheses written as `\(44)`, so that it can be one part of a
@@ -416,6 +440,9 @@ mod tests {
         assert_eq!(to_markup(r"\alpha + \beta \leq \infty"), "α+β≤∞");
         assert_eq!(to_markup(r"\frac{1}{2}"), r"\fr(1,2)");
         assert_eq!(to_markup(r"\frac{a+b}{c}"), r"\fr(\i(a)+\i(b),\i(c))");
+        assert_eq!(to_markup(r"\sum_{i=1}^{n} x_i"), r"\lm(\p140(∑),\i(i)=1,\i(n))\i(x)\-(\i(i))");
+        assert_eq!(to_markup(r"\lim_{x\to 0}"), r"\lm(lim,\i(x)→0,)");
+        assert_eq!(to_markup(r"\int_0^1"), r"∫\=(0,1)", "an integral keeps its scripts beside it");
         assert_eq!(to_markup(r"\frac{1,5}{2}"), r"\fr(1\(44)5,2)", "a comma of a part is not the separator");
         assert_eq!(to_markup(r"\sqrt{x}"), r"√\i(x)");
         assert_eq!(to_markup(r"\sqrt[3]{x+1}"), r"\+(3)√(\i(x)+1)");

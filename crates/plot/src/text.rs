@@ -94,6 +94,9 @@ pub(crate) fn segments_width(m: &dyn TextMeasurer, segments: &[Segment], font: &
                 segments_width(m, num, font, size).max(segments_width(m, den, font, size))
                     + 2.0 * FRACTION_PAD * scale * size
             }
+            Segment::Limits { op, below, above } => segments_width(m, op, font, size)
+                .max(segments_width(m, below, font, size))
+                .max(segments_width(m, above, font, size)),
             Segment::LineGap(_) | Segment::Tab => 0.0,
         })
         .sum()
@@ -112,6 +115,7 @@ fn ink_top(segments: &[Segment]) -> f64 {
                 ink_top(content) + scale * (ACCENT_GAP + accent_height(*kind))
             }
             Segment::Fraction { num, bar_rise, .. } => ink_top(num).max(*bar_rise),
+            Segment::Limits { op, above, .. } => ink_top(op).max(ink_top(above)),
             Segment::LineGap(_) | Segment::Tab => f64::NEG_INFINITY,
         })
         .fold(f64::NEG_INFINITY, f64::max)
@@ -153,6 +157,15 @@ fn visit_ink(
                         Ink::Accent { kind: *kind, rise, width, em: scale * size, color: color.unwrap_or(font.color) },
                         cursor,
                     );
+                }
+                cursor += width;
+            }
+            Segment::Limits { op, below, above } => {
+                // T481: the operator and its limits centred over one column
+                let widths = [op, below, above].map(|s| segments_width(m, s, font, size));
+                let width = widths.iter().copied().fold(0.0, f64::max);
+                for (part, w) in [op, below, above].into_iter().zip(widths) {
+                    visit_ink(part, m, font, size, cursor + (width - w) / 2.0, visit);
                 }
                 cursor += width;
             }

@@ -1000,7 +1000,9 @@ fn keep_formulas(
     let name_of = |c: usize| places.iter().position(|&p| p == c).map(|j| shorts[j].clone());
     for (j, &col) in places.iter().enumerate() {
         let with: Vec<(usize, &str)> = a.row_lines.iter().filter_map(|&r| text_at(r, col).map(|t| (r, t))).collect();
-        let Some(&(first_row, first_text)) = with.first() else { continue };
+        if with.is_empty() {
+            continue;
+        }
         let plain_values = a.row_lines.iter().any(|&r| text_at(r, col).is_none() && has_content(view.cell(r, col)));
         let mut kept: Option<String> = None;
         let same = !plain_values
@@ -1014,12 +1016,32 @@ fn keep_formulas(
                 c.formula = Some(expr);
                 c.recalc = sheaf_core::column::RecalcMode::Auto;
             }
-            None => warnings.push(format!(
-                "column {}: its Excel formulas (the first is {}: ={}) are not one same-row formula Sheaf can read; only their stored values were imported",
-                shorts[j],
-                address(first_row, col),
-                first_text.trim().trim_start_matches('=')
-            )),
+            None => {
+                // T464: each cell keeps its own formula as a cell formula where Sheaf can read it.
+                let data_row = |r: usize| a.row_lines.iter().position(|&x| x == r);
+                let column_id = sheet.columns[j].id;
+                let mut missed = None;
+                for &(r, t) in &with {
+                    match (formulas::translate_cell(t, &data_row, &name_of), data_row(r)) {
+                        (Some(formula), Some(row)) => sheet.cell_formulas.push(sheaf_core::cell_formula::CellFormula {
+                            column: column_id,
+                            row,
+                            formula,
+                        }),
+                        _ => {
+                            missed.get_or_insert((r, t));
+                        }
+                    }
+                }
+                if let Some((r, t)) = missed {
+                    warnings.push(format!(
+                        "column {}: some of its Excel formulas (the first is {}: ={}) cannot be read as Sheaf formulas; those cells keep only their stored values",
+                        shorts[j],
+                        address(r, col),
+                        t.trim().trim_start_matches('=')
+                    ));
+                }
+            }
         }
     }
 }

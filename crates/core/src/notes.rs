@@ -65,8 +65,9 @@ impl Worksheet {
     /// Renames the columns of the notes (`map` gives the new id, or `None` when the column is
     /// gone, which drops its notes). Used wherever a sheet's columns get new ids or are deleted.
     pub fn remap_note_columns(&mut self, map: &dyn Fn(ColumnId) -> Option<ColumnId>) {
-        // The graphs in cells (T194) follow the same column changes.
+        // The graphs in cells (T194) and the cell formulas (T464) follow the same column changes.
         self.remap_cell_graph_columns(map);
+        self.remap_formula_columns(map);
         if self.notes.is_empty() {
             return;
         }

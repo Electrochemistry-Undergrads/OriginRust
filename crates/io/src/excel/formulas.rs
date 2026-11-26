@@ -28,6 +28,123 @@ const FUNCTIONS: [(&str, &str); 14] = [
     ("TANH", "tanh"),
 ];
 
+/// Excel aggregate functions over a range and their Sheaf cell-formula names (T464; `sum` is the total in a cell).
+const AGGREGATES: [(&str, &str); 4] = [("SUM", "sum"), ("AVERAGE", "mean"), ("MIN", "min"), ("MAX", "max")];
+
+/// The Sheaf cell formula (T448 syntax, without `=`) for the Excel formula `text` of a cell (T464): references name
+/// the imported columns (`column` gives the short name of a 0-based sheet column; it must be capital letters) and
+/// the data rows (`data_row` gives the 0-based data row of a 0-based sheet row); `$` markers are kept; ranges in one
+/// column; numbers, `+ - * / ^`, parentheses, commas, PI(), the functions of [`FUNCTIONS`], ROUND and SUM, AVERAGE,
+/// MIN and MAX. `None` for anything else (other sheets, text, comparisons, other functions, a header row).
+pub(crate) fn translate_cell(
+    text: &str,
+    data_row: &dyn Fn(usize) -> Option<usize>,
+    column: &dyn Fn(usize) -> Option<String>,
+) -> Option<String> {
+    let text = text.trim().trim_start_matches('=');
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    // `$?LETTERS$?DIGITS` at `i`: (cell text in Sheaf, end).
+    let reference = |i: usize| -> Option<(String, usize)> {
+        let mut k = i;
+        let col_abs = chars.get(k) == Some(&'$');
+        if col_abs {
+            k += 1;
+        }
+        let l0 = k;
+        while k < chars.len() && chars[k].is_ascii_alphabetic() {
+            k += 1;
+        }
+        let letters: String = chars[l0..k].iter().collect::<String>().to_ascii_uppercase();
+        let row_abs = chars.get(k) == Some(&'$');
+        if row_abs {
+            k += 1;
+        }
+        let d0 = k;
+        while k < chars.len() && chars[k].is_ascii_digit() {
+            k += 1;
+        }
+        if letters.is_empty() || k == d0 || chars.get(k).is_some_and(|c| c.is_ascii_alphanumeric() || *c == '(') {
+            return None;
+        }
+        let excel_row: usize = chars[d0..k].iter().collect::<String>().parse().ok()?;
+        let row = data_row(excel_row.checked_sub(1)?)? + 1;
+        let name = column(column_index(&letters)?)?;
+        if !name.chars().all(|c| c.is_ascii_uppercase()) {
+            return None;
+        }
+        let d = |abs: bool| if abs { "$" } else { "" };
+        Some((format!("{}{name}{}{row}", d(col_abs), d(row_abs)), k))
+    };
+    while i < chars.len() {
+        let c = chars[i];
+        if c.is_whitespace() {
+            out.push(' ');
+            i += 1;
+        } else if c.is_ascii_digit() || c == '.' {
+            let start = i;
+            while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.' || matches!(chars[i], 'e' | 'E')) {
+                if matches!(chars[i], 'e' | 'E') && chars.get(i + 1).is_some_and(|n| matches!(n, '+' | '-')) {
+                    i += 1;
+                }
+                i += 1;
+            }
+            let number: String = chars[start..i].iter().collect();
+            number.parse::<f64>().ok()?;
+            out.push_str(&number);
+        } else if c.is_ascii_alphabetic() || c == '$' {
+            // A function name, or a reference (with a range after `:`).
+            let start = i;
+            let mut k = i;
+            while k < chars.len() && (chars[k].is_ascii_alphanumeric() || matches!(chars[k], '_' | '.')) {
+                k += 1;
+            }
+            let word: String = chars[start..k].iter().collect::<String>().to_ascii_uppercase();
+            if c != '$' && chars[k..].iter().find(|c| !c.is_whitespace()) == Some(&'(') {
+                if word == "PI" {
+                    let rest: String = chars[k..].iter().filter(|c| !c.is_whitespace()).take(2).collect();
+                    if rest != "()" {
+                        return None;
+                    }
+                    while chars[k] != ')' {
+                        k += 1;
+                    }
+                    out.push_str("pi");
+                    i = k + 1;
+                    continue;
+                }
+                let name = match word.as_str() {
+                    "ROUND" => "round",
+                    w => FUNCTIONS.iter().chain(AGGREGATES.iter()).find(|(e, _)| *e == w)?.1,
+                };
+                out.push_str(name);
+                i = k;
+                continue;
+            }
+            let (cell, end) = reference(i)?;
+            if chars.get(end) == Some(&':') {
+                let (last, end2) = reference(end + 1)?;
+                let letters = |s: &str| s.chars().filter(|c| c.is_ascii_uppercase()).collect::<String>();
+                if letters(&cell) != letters(&last) {
+                    return None;
+                }
+                out.push_str(&format!("{cell}:{last}"));
+                i = end2;
+            } else {
+                out.push_str(&cell);
+                i = end;
+            }
+        } else if matches!(c, '+' | '-' | '*' | '/' | '^' | '(' | ')' | ',') {
+            out.push(c);
+            i += 1;
+        } else {
+            return None;
+        }
+    }
+    (!out.trim().is_empty()).then_some(out)
+}
+
 /// The 0-based column of Excel column letters (`A` 0, `Z` 25, `AA` 26).
 fn column_index(letters: &str) -> Option<usize> {
     if letters.is_empty() || letters.len() > 3 {

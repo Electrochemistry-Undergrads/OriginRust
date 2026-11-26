@@ -10,8 +10,8 @@ Each change is one undo step. Sheaf's own design (Origin 2016 has no operation t
 
 ## Left
 
-- Editing an operation's parameters from the tree (reopening its dialog on the run), operations that run once (no
-  link), fits and statistics reports, and dragging operations between books.
+- Operations that run once (no link), fits and statistics reports, and dragging operations between books.
+  (Editing an operation's parameters: T469.)
 
 ## Tests
 

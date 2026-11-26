@@ -1949,8 +1949,11 @@ analysis links of the tools listed at the top of `analysis_link.rs`).
 - **Right-click menu:** Recalculate; Auto and Manual (the current one marked); Stop Following the Input (the link
   is dropped and the results stay as plain data); Go to Results. Switching a waiting operation to Auto runs it at
   once. Each change is one undo step ("Recalculate Mode", "Stop Following").
-- **Not built:** editing the parameters from the tree, operations that ran once, fit and statistics reports, and
-  moving operations between books.
+- **Parameters... (T469):** the right-click menu's Parameters... opens a window with every setting of the
+  operation's tool as a field (the fields of its saved form: numbers, switches, and choices by their option name).
+  OK runs the operation again with them, its results replaced in place (one undo step, "Operation Parameters"); a
+  choice that is not one of the tool's options, or a run that fails, keeps the window open with the reason.
+- **Not built:** operations that ran once, fit and statistics reports, and moving operations between books.
 
 ## Files
 

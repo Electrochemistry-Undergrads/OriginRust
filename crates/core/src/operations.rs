@@ -82,6 +82,23 @@ impl Project {
         out
     }
 
+    /// Gives operation `index` new settings for its tool (T469: the operation tree's Parameters...) and runs it
+    /// again; its results are replaced in place. The tool must be the same kind (a Smooth stays a Smooth). On an error
+    /// nothing changes.
+    pub fn set_operation_tool(&mut self, index: usize, tool: LinkTool) -> Result<(), ProjectError> {
+        let link = self.analysis_links.get(index).ok_or(ProjectError::NoSuchOperation)?;
+        if std::mem::discriminant(&link.tool) != std::mem::discriminant(&tool) {
+            return Err(ProjectError::Analysis("the settings are for another tool".into()));
+        }
+        let before = self.analysis_links[index].tool.clone();
+        self.analysis_links[index].tool = tool;
+        if let Err(e) = self.recalculate_analysis(index) {
+            self.analysis_links[index].tool = before;
+            return Err(ProjectError::Analysis(e.to_string()));
+        }
+        Ok(())
+    }
+
     /// Sets operation `index` to Auto or Manual, or with [`RecalcMode::None`] stops it following its input (its
     /// results stay as data). A waiting operation set to Auto runs at once.
     pub fn set_analysis_mode(&mut self, index: usize, mode: RecalcMode) -> Result<(), ProjectError> {
@@ -140,6 +157,14 @@ mod tests {
         p.set_analysis_mode(0, RecalcMode::Auto).unwrap();
         let op = &p.book_operations(b)[0];
         assert_eq!((op.mode, op.pending), (RecalcMode::Auto, false));
+        // New settings (T469): a 5-point smooth runs again in place.
+        let outputs = p.analysis_links[0].outputs.clone();
+        let LinkTool::Smooth(mut o) = p.analysis_links[0].tool.clone() else { panic!("a smooth") };
+        o.npts = 5;
+        p.set_operation_tool(0, LinkTool::Smooth(o)).unwrap();
+        assert_eq!(p.analysis_links[0].outputs, outputs, "the same result columns");
+        assert!(matches!(p.analysis_links[0].tool, LinkTool::Smooth(SmoothOptions { npts: 5, .. })));
+        assert!(p.set_operation_tool(0, LinkTool::PolygonArea).is_err(), "another tool");
         // Stop following: the results stay as data.
         p.set_analysis_mode(0, RecalcMode::None).unwrap();
         assert!(p.book_operations(b).is_empty());

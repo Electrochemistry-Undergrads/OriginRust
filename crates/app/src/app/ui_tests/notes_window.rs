@@ -422,6 +422,20 @@ fn the_operation_tree_lists_a_books_linked_analysis_and_switches_its_mode() {
     h.get_by_label("Smooth (Auto)");
     let book_name = project(&h).workbook(book).unwrap().name.clone();
     h.get_by_label(&format!("Input: [{book_name}]Sheet1!B"));
+    // Parameters... (T469): the smooth's points become 5 and it runs again.
+    h.state_mut().apply(Action::OperationParams(0), &ctx);
+    settle(&mut h);
+    {
+        let d = h.state_mut().op_params.as_mut().expect("the parameters window");
+        let npts = d.fields.iter_mut().find(|(p, _)| p.ends_with("npts")).expect("a points field");
+        npts.1 = serde_json::Value::from(5);
+    }
+    h.get_by_label("OK").click();
+    settle(&mut h);
+    assert!(h.state().op_params.is_none());
+    assert_eq!(h.state().doc.undo_label(), Some("Operation Parameters"));
+    let sheaf_core::analysis_link::LinkTool::Smooth(o) = &project(&h).analysis_links[0].tool else { panic!() };
+    assert_eq!(o.npts, 5);
 }
 
 #[test]

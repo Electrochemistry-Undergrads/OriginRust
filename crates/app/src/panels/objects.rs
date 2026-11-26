@@ -76,6 +76,10 @@ fn book_tree(ui: &mut egui::Ui, project: &Project, book: &sheaf_core::Workbook, 
                                 ui.close();
                             }
                         }
+                        if ui.button("Parameters...").clicked() {
+                            actions.push(Action::OperationParams(op.index));
+                            ui.close();
+                        }
                         if ui.button("Stop Following the Input").clicked() {
                             actions.push(Action::SetAnalysisMode { index: op.index, mode: RecalcMode::None });
                             ui.close();

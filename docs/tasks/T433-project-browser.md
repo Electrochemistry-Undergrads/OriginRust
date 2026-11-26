@@ -10,8 +10,8 @@ Sheaf's own design (Origin 2016 has no Project Browser).
 
 ## Left
 
-- Folders and matrices in the list, sorting by a column, editing a cell in place, other metadata (user parameters,
-  sheet tab colours), and a preview picture of a graph.
+- Folders and matrices in the list, other metadata (user parameters, sheet tab colours), and a preview picture of a
+  graph. (Sorting and editing in place: T466.)
 
 ## Tests
 

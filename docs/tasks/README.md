@@ -491,6 +491,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T463](T463-pdf-tables.md) | Import PDF Tables (Origin 2021 App): text PDFs into one sheet per page, rows by baseline, columns by overlap; Sheaf's own reader | M | done 2026-11-25 (import-pdf.md) |
 | [T464](T464-excel-cell-formulas.md) | Excel per-cell formulas import as cell formulas (rest of T417, with T448) | S | done 2026-11-25 (import-excel.md) |
 | [T465](T465-repeat-last-plot.md) | Plot > Repeat Last Plot: the last Plot-menu command on the current selection | S | done 2026-11-25 (recent-lists.md) |
+| [T466](T466-browser-sort-edit.md) | Project Browser: sort by a column header, edit Long Name/Units/Comments in place (rest of T433) | S | done 2026-11-25 (workbook-model 13s) |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |

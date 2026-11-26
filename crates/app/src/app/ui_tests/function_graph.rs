@@ -337,3 +337,34 @@ fn page_down_and_page_up_step_a_browser_graph() {
     h.state_mut().apply(Action::BrowseStep { graph: ts, next: true }, &ctx);
     assert_eq!(project(&h).graph(ts).unwrap().explorer.unwrap().current, 1);
 }
+
+#[test]
+fn project_browser_edits_units_in_place() {
+    // T466: a double click on a column's Units cell edits it; Enter writes it as one undo step.
+    use sheaf_core::project_browser::ItemKind;
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let mut col = sheaf_core::ColumnId(0);
+    h.state_mut().doc.apply("data", |p| {
+        let b = p.add_workbook("");
+        col = p.add_column(b, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::numeric(vec![1.0])).unwrap();
+        p.column_mut(col).unwrap().units = "mV".into();
+    });
+    h.state_mut().apply(Action::ProjectBrowser, &ctx);
+    h.state_mut().project_browser.as_mut().unwrap().kind = Some(ItemKind::Column);
+    settle(&mut h);
+    // The grid's Units row shows mV too: the browser's cell is the last one.
+    let at = h.query_all_by_label("mV").last().expect("the browser's Units cell").rect().center();
+    double_click_at(&mut h, at);
+    settle(&mut h);
+    let editing = h.state().project_browser.as_ref().unwrap().editing.clone();
+    assert!(editing.is_some_and(|(_, f, t)| f == sheaf_core::project_browser::MetaField::Units && t == "mV"));
+    // The edit box has the keyboard: type at its end and press Enter.
+    h.key_press(egui::Key::End);
+    h.event(egui::Event::Text("V".into()));
+    settle(&mut h);
+    h.key_press(egui::Key::Enter);
+    settle(&mut h);
+    assert_eq!(project(&h).column(col).unwrap().units, "mVV");
+    assert_eq!(h.state().doc.undo_label(), Some("Set Units"));
+}

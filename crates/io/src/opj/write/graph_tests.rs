@@ -433,6 +433,58 @@ fn error_bars_text_x_and_two_layers() {
 }
 
 #[test]
+fn date_tick_formats_of_origins_list_are_written_and_read_back() {
+    // T475: Origin's date tick formats are the Date display list, numbered in the low nibble of 0x26.
+    use sheaf_core::datetime::DatePattern as D;
+    for (pattern, number) in [
+        (D::Mdy, 1),
+        (D::LongDate, 2),
+        (D::MonthDay, 3),
+        (D::MonthDayNum, 4),
+        (D::DayOnly, 5),
+        (D::WeekdayShort, 6),
+        (D::WeekdayLetter, 7),
+        (D::YearOnly, 8),
+        (D::Year2, 9),
+        (D::Yymmdd, 12),
+    ] {
+        let mut p = source();
+        graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+            g.layers[0].x_axis.tick_format = TickFormat::DateTime(pattern)
+        });
+        assert_eq!(crate::opj::tick_date_index(pattern), Some(number - 1));
+        let (imp, warnings) = round_trip(&p);
+        assert!(warnings.iter().all(|w| !w.contains("date format")), "{pattern:?}: {warnings:?}");
+        assert_eq!(imp.graphs[0].layers[0].x_axis.tick_format, TickFormat::DateTime(pattern), "{pattern:?}");
+    }
+    // a pattern past the 4 bits (Origin's 17, "Nov") is written as month/day/year with a warning
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+        g.layers[0].x_axis.tick_format = TickFormat::DateTime(D::MonthShort)
+    });
+    let (imp, warnings) = round_trip(&p);
+    assert!(warnings.iter().any(|w| w.contains("date format")), "{warnings:?}");
+    assert_eq!(imp.graphs[0].layers[0].x_axis.tick_format, TickFormat::DateTime(D::Mdy));
+}
+
+/// Writes `sheaf-date-ticks.opj` (graphs with day-of-month and yymmdd date tick labels) into
+/// `SHEAF_OPJ_TICKS_DIR`, so Origin can be asked for `layer.x.label.numFormat` (T475).
+#[test]
+#[ignore]
+fn write_date_ticks_project_for_origin() {
+    use sheaf_core::datetime::DatePattern as D;
+    let Ok(dir) = std::env::var("SHEAF_OPJ_TICKS_DIR") else { return };
+    let mut p = source();
+    for pattern in [D::DayOnly, D::Yymmdd] {
+        graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+            g.layers[0].x_axis.tick_format = TickFormat::DateTime(pattern)
+        });
+    }
+    std::fs::write(std::path::Path::new(&dir).join("sheaf-date-ticks.opj"), write_named(&p, "t", TIME).unwrap().bytes)
+        .unwrap();
+}
+
+#[test]
 fn what_the_file_cannot_hold_is_named() {
     let mut p = source();
     let other = Column::new(ColumnId(999_999), "Z", Designation::Y, nums(vec![1.0]));

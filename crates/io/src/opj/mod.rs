@@ -247,6 +247,25 @@ pub(crate) const DATE_SUBFORMATS: [sheaf_core::format::NumberFormat; 20] = {
     ]
 };
 
+/// The date pattern of Origin's date tick-label format `index` (`layer.x.label.numFormat` minus 1, the low
+/// nibble of byte `0x26` of a tick label block): the same list as the Date subformats (T475; opj-format.md
+/// 13.14 saw numbers 1 to 13 drawn as that list). A format with a time of day gives its date part;
+/// month/day/year for anything else.
+pub(crate) fn tick_date_pattern(index: u8) -> sheaf_core::datetime::DatePattern {
+    use sheaf_core::format::NumberFormat as F;
+    match DATE_SUBFORMATS.get(usize::from(index)) {
+        Some(F::Date(p) | F::DateTime(p, _)) => *p,
+        _ => sheaf_core::datetime::DatePattern::Mdy,
+    }
+}
+
+/// The date tick-label format number (minus 1) of a date pattern, when Origin's list has it within
+/// the 4 bits that hold it (T475).
+pub(crate) fn tick_date_index(p: sheaf_core::datetime::DatePattern) -> Option<u8> {
+    use sheaf_core::format::NumberFormat as F;
+    DATE_SUBFORMATS.iter().position(|f| *f == F::Date(p)).filter(|&i| i < 16).map(|i| i as u8)
+}
+
 /// The name styles of Origin's Month and Day of Week displays in the order of their subformats 1 to 3.
 const NAME_STYLES: [sheaf_core::format::NameStyle; 3] =
     [sheaf_core::format::NameStyle::Short, sheaf_core::format::NameStyle::Full, sheaf_core::format::NameStyle::Letter];

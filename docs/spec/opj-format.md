@@ -1357,10 +1357,14 @@ axis is not written (warning).
 1 texts of a column, 2 tick-indexed texts, 3 dates (LabTalk `layer.x.label.type` 4), 4 months, 5 days of the week; for dates the low
 nibble of byte `0x26` holds Origin's format number minus 1 (`layer.x.label.numFormat`). Pictures of date data showed: 1 `M/D/YYYY`,
 2 long text (`Tuesday, October 27, 2026`), 3 `Oct 27`, 4 `10/27`, 5 `27`, 6 `Tue`, 7 `T`, 8 `2026`, 9 `26`, 10 `M/D/YYYY hh:mm`,
-11 `M/D/YYYY hh:mm:ss`, 12 `yymmdd`, 13 `yymmdd hh:mm`. The model's `DatePattern::Mdy` is number 1 and is written; the other patterns
-(day first, dashes, dots, ISO, `dd-MMM-yyyy`) are not in the list and are written as number 1 with a warning. Times of day alone were not
+11 `M/D/YYYY hh:mm:ss`, 12 `yymmdd`, 13 `yymmdd hh:mm`: the list of the Date column display (workbook-model.md, T474). Since T475
+(2026-11-26) the writer writes the number of each pattern that list has within the 4 bits (month/day/year 1, the long date 2, `Oct 27` 3,
+`10/27` 4, day 5, weekday 6, its letter 7, year 8, two-digit year 9, `yymmdd` 12; Origin reported `numFormat` 5 and 12 for graphs Sheaf
+wrote with the day and `yymmdd` patterns) and the reader maps every number through the same list (a format with a time of day gives its
+date part); the other patterns (day first, dashes, dots, ISO, `dd-MMM-yyyy`, and the list's 17 to 20, past the 4 bits) are written as
+number 1 with a warning. Times of day alone were not
 found (type 6 and above showed no labels with date data). Verified with `gx-dates.opj`: `layer.x.label.type` 4, `numFormat` 1,
-and the picture shows `11/1/2025` style labels. The reader turns the date type into `DateTime(Mdy)` whatever the format number.
+and the picture shows `11/1/2025` style labels.
 
 **Window places.** The window header rectangle (left, top, right, bottom as i16 at `0x1B`) and the state bits of byte `0x32`
 (1 minimised, 2 maximised) are written from `Project::window_places` (screen points taken as workspace pixels; the cascade as before when

@@ -488,6 +488,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T459](T459-report-figures.md) | Report Preview draws its figures (rest of T439) | S | done 2026-11-25 (notes-window.md) |
 | [T460](T460-notes-matrices-layouts.md) | Sticky notes on matrix books and layout pages (rest of T421) | S | done 2026-11-25 (notes-window.md) |
 | [T462](T462-cell-formula-rows.md) | Formula cells move with their rows on insert, delete and sort (rest of T448) | S | done 2026-11-25 (workbook-model 13u) |
+| [T463](T463-pdf-tables.md) | Import PDF Tables (Origin 2021 App): text PDFs into one sheet per page, rows by baseline, columns by overlap; Sheaf's own reader | M | done 2026-11-25 (import-pdf.md) |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |

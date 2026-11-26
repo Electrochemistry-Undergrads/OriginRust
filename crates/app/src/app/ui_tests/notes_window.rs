@@ -485,3 +485,40 @@ fn a_matrix_book_takes_a_sticky_note() {
     settle(&mut h);
     assert!(project(&h).sticky_note(sheaf_core::sticky::NoteTarget::Window(m)).is_none());
 }
+
+#[test]
+fn a_pdf_table_is_imported_into_a_workbook_without_the_text_dialog() {
+    // T463: a small hand-written PDF with a 2 x 3 table, through File > Import.
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let dir = std::env::temp_dir().join(format!("sheaf-app-ui-pdf-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("table.pdf");
+    let content = "BT /F1 10 Tf 72 700 Td (Time) Tj ET BT /F1 10 Tf 200 700 Td (Current) Tj ET\n\
+        BT /F1 10 Tf 72 685 Td (1) Tj ET BT /F1 10 Tf 200 685 Td (0.5) Tj ET\n\
+        BT /F1 10 Tf 72 670 Td (2) Tj ET BT /F1 10 Tf 200 670 Td (0.75) Tj ET\n";
+    let pdf = format!(
+        "%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n\
+         2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n\
+         3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj\n\
+         4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >> endobj\n\
+         5 0 obj << /Length {} >> stream\n{content}endstream endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n",
+        content.len()
+    );
+    std::fs::write(&path, pdf).unwrap();
+    h.state_mut().apply(Action::Import(Some(path)), &ctx);
+    settle(&mut h);
+    assert!(h.state().import.is_none(), "no text import window for a PDF");
+    let book = project(&h).workbooks().last().expect("the PDF's workbook");
+    let sheet = &book.sheets[0];
+    assert_eq!(sheet.name, "Page1");
+    assert_eq!(sheet.columns.len(), 2);
+    let text = |c: usize| {
+        (0..3).map(|r| sheaf_core::indexed::level_text(&sheet.columns[c], r).unwrap_or_default()).collect::<Vec<_>>()
+    };
+    assert_eq!(text(0), ["Time", "1", "2"]);
+    assert_eq!(text(1), ["Current", "0.5", "0.75"]);
+    assert_eq!(book.source.as_ref().unwrap().importer, "pdf");
+    let _ = std::fs::remove_dir_all(&dir);
+}

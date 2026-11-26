@@ -833,6 +833,11 @@ impl SheafApp {
         }
         // Excel workbooks have their own import window and are not graphed on their own.
         let (workbooks, paths) = split_excel(paths);
+        // PDFs (T463) are read at once, without the text import window, and not graphed.
+        let (pdfs, paths): (Vec<PathBuf>, Vec<PathBuf>) = paths.into_iter().partition(|p| is_pdf(p));
+        if !pdfs.is_empty() {
+            self.import_now(pdfs, false);
+        }
         if ask {
             if !workbooks.is_empty() {
                 self.import_excel = Some(self.excel_dialog(workbooks));
@@ -843,27 +848,31 @@ impl SheafApp {
             return;
         }
         for (files, plot) in [(paths, true), (workbooks, false)] {
-            if files.is_empty() {
-                continue;
+            if !files.is_empty() {
+                self.import_now(files, plot);
             }
-            let (chi, ascii) = (sheaf_io::chi::ChiOptions::default(), sheaf_io::ascii::AsciiOptions::default());
-            let mut items = Vec::new();
-            let mut errors = Vec::new();
-            for p in &files {
-                match sheaf_io::import_file(p, sheaf_io::ImportKind::Auto, &chi, &ascii) {
-                    Ok(i) => items.push(i),
-                    Err(e) => errors.push(e.to_string()),
-                }
-            }
-            self.finish_import(ImportRequest {
-                items,
-                errors,
-                plot,
-                template: None,
-                mode: ImportMode::NewBook,
-                place: PlaceOptions::default(),
-            });
         }
+    }
+
+    /// Imports `files` with the default settings into new workbooks, graphing them when `plot`.
+    fn import_now(&mut self, files: Vec<PathBuf>, plot: bool) {
+        let (chi, ascii) = (sheaf_io::chi::ChiOptions::default(), sheaf_io::ascii::AsciiOptions::default());
+        let mut items = Vec::new();
+        let mut errors = Vec::new();
+        for p in &files {
+            match sheaf_io::import_file(p, sheaf_io::ImportKind::Auto, &chi, &ascii) {
+                Ok(i) => items.push(i),
+                Err(e) => errors.push(e.to_string()),
+            }
+        }
+        self.finish_import(ImportRequest {
+            items,
+            errors,
+            plot,
+            template: None,
+            mode: ImportMode::NewBook,
+            place: PlaceOptions::default(),
+        });
     }
 
     /// Opens a `.sheaf` project or imports an Origin `.opj` project, replacing the current one.
@@ -7999,6 +8008,8 @@ impl SheafApp {
             let mut chooser = rfd::FileDialog::new().set_title("Import data files");
             chooser = if pick == ImportPick::Excel {
                 chooser.set_title("Import Excel workbooks").add_filter("Excel workbooks", &sheaf_io::excel::EXTENSIONS)
+            } else if pick == ImportPick::Pdf {
+                chooser.set_title("Import PDF tables").add_filter("PDF files", &["pdf"])
             } else {
                 chooser.add_filter("Data files", &["txt", "csv", "tsv", "dat", "asc", "prn", "bin"])
             };
@@ -8008,10 +8019,15 @@ impl SheafApp {
             }
             match pick {
                 ImportPick::Single => chooser.pick_file().map(|f| vec![f]),
-                ImportPick::Multiple | ImportPick::Csv | ImportPick::Excel => chooser.pick_files(),
+                ImportPick::Multiple | ImportPick::Csv | ImportPick::Excel | ImportPick::Pdf => chooser.pick_files(),
             }
         });
         if let Some(files) = files {
+            // PDFs (T463) are read at once.
+            let (pdfs, files): (Vec<PathBuf>, Vec<PathBuf>) = files.into_iter().partition(|p| is_pdf(p));
+            if !pdfs.is_empty() {
+                self.import_now(pdfs, false);
+            }
             // An Excel workbook chosen with an ASCII item still goes to the Excel window.
             let (workbooks, files) = split_excel(files);
             if !workbooks.is_empty() {
@@ -10015,11 +10031,16 @@ fn sampling_from_x(project: &sheaf_core::Project, column: ColumnId) -> Option<cr
 
 /// The importer a book's source file is read again with (Re-Import, T98); `None` for a book not
 /// imported from a data file (made in Sheaf, or opened from a project).
+/// A PDF file, by its extension (T463).
+pub(crate) fn is_pdf(path: &Path) -> bool {
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
+}
+
 pub(crate) fn reimport_kind(book: &sheaf_core::Workbook) -> Option<sheaf_io::ImportKind> {
     match book.source.as_ref()?.importer.as_str() {
         "ascii" => Some(sheaf_io::ImportKind::Ascii),
         "chi" => Some(sheaf_io::ImportKind::Chi),
-        "excel" => Some(sheaf_io::ImportKind::Auto),
+        "excel" | "pdf" => Some(sheaf_io::ImportKind::Auto),
         _ => None,
     }
 }

@@ -19,6 +19,12 @@ calamine = { version = "0.38", default-features = false }
 rust_xlsxwriter = { version = "0.102", default-features = false }
 # File > Import > Image into a matrix book (T204): decoders only, no new crates beyond the lockfile.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp"] }
+# File > Import > PDF Tables (T463): inflating FlateDecode streams; already in the lockfile through zip.
+flate2 = "1.1"
+
+[dev-dependencies]
+# T463 tests write their PDFs with the writer the plot crate already uses.
+pdf-writer = "0.12"
 
 [lints]
 workspace = true

@@ -131,7 +131,7 @@ impl Project {
         let more = columns.map(|(column, values)| SlicerColumn { column, values }).collect();
         let g = self.graph_mut(graph).ok_or(ProjectError::NoSuchWindow(graph))?;
         let (layer, plot) = g.slicer.as_ref().map_or((None, None), |s| (s.layer, s.plot));
-        g.slicer = Some(GraphSlicer { column, values, filter, layer, plot, more });
+        g.slicer = Some(Box::new(GraphSlicer { column, values, filter, layer, plot, more }));
         Ok(())
     }
 

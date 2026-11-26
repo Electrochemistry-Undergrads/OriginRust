@@ -23,7 +23,7 @@ pub struct Graph {
     pub layers: Vec<Layer>,
     /// Graph > Graph Slicer (T406): the rows the plots from one sheet show.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub slicer: Option<crate::slicer::GraphSlicer>,
+    pub slicer: Option<Box<crate::slicer::GraphSlicer>>,
     /// Graph > Browser Graph (T410): the datasets one plot steps through.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub browser: Option<crate::browser::GraphBrowser>,

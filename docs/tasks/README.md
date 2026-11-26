@@ -508,6 +508,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T479](T479-freeform-region.md) | Freeform Region tool on graphs; its outline works with the region data entries | M | done 2026-11-26 (graphing 17.12) |
 | [T480](T480-latex-stacked-fractions.md) | LaTeX \frac in graph text drawn as a stacked fraction | S | done 2026-11-26 (graphing LaTeX math) |
 | [T481](T481-latex-limits.md) | LaTeX large operators and limits with their scripts below and above | S | done 2026-11-26 (graphing LaTeX math) |
+| [T482](T482-latex-delimiters.md) | Stretchy LaTeX delimiters (\left ... \right) in graph text | S | done 2026-11-26 (graphing LaTeX math) |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |

@@ -90,3 +90,31 @@ fn a_large_operator_takes_its_limits_below_and_above_centred() {
     assert_eq!(ts[0].text, "lim");
     assert!(ts.iter().skip(1).all(|t| t.y > 30.0), "the limit sits below");
 }
+
+#[test]
+fn stretchy_delimiters_span_what_they_enclose() {
+    // T482: round brackets around a stacked fraction reach above its numerator and below its denominator
+    let items = placed(r"$\left(\frac{a}{b}\right)$");
+    let ts = texts(&items);
+    assert_eq!(ts.iter().map(|t| t.text.as_str()).collect::<Vec<_>>(), ["a", "b"]);
+    let paths: Vec<&String> = items
+        .iter()
+        .filter_map(|i| if let Item::Path { d, stroke: Some(_), .. } = i { Some(d) } else { None })
+        .collect();
+    assert_eq!(paths.len(), 3, "two delimiters and the bar");
+    let ys = |d: &str| -> Vec<f64> {
+        let n: Vec<f64> =
+            d.split(|c: char| c.is_ascii_alphabetic() || c == ' ').filter_map(|s| s.parse().ok()).collect();
+        n.chunks(2).map(|p| p[1]).collect()
+    };
+    let left = ys(paths[0]);
+    let (top, bottom) = (left.iter().copied().fold(f64::MAX, f64::min), left.iter().copied().fold(f64::MIN, f64::max));
+    // the numerator's glyph top (at 70 %, ascent 0.72) and the denominator's bottom (descent 0.21)
+    assert!(top < ts[0].y - 0.72 * 14.0, "{top}");
+    assert!(bottom > ts[1].y + 0.21 * 14.0, "{bottom}");
+    // the fraction starts after the left delimiter (0.36 em of 20 pt)
+    assert!(ts[0].x > 10.0 + 0.36 * 20.0);
+    // plain text keeps the brackets
+    let runs = crate::markup::parse(r"\dl(pp,x)");
+    assert_eq!(runs.iter().map(|r| r.text.as_str()).collect::<String>(), "(x)");
+}

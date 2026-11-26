@@ -10,11 +10,12 @@
 //! - `\frac{a}{b}` stacked (the markup `\fr(a,b)`: `a` over a bar over `b`, T480), `\sqrt{x}` √x, `\sqrt[n]{x}`;
 //! - `\bar`, `\dot`, `\tilde` as the markup accents, `\hat` and `\vec` as combining marks;
 //! - `\mathrm`, `\text`, `\operatorname` upright, `\mathbf` bold, `\mathit` italic; `\sin`, `\log` ... upright;
-//! - `\left`, `\right` and the `\big` sizes dropped, their delimiters kept; an unknown command is written by name.
+//! - `\left` ... `\right` delimiters as tall as what they enclose (`\dl(lr,body)`, T482); the `\big` sizes dropped,
+//!   their delimiters kept; an unknown command is written by name.
 //!
 //! A span is math when it holds a backslash, `^`, `_` or `{`, or starts with a letter and has no space at either end
 //! (`$x$`); other spans (`$5 and $10`) are left as they are. A `$` before `(` starts a substitution, not math; `\$`
-//! is a dollar sign. Not drawn as in LaTeX: matrices and stretchy delimiters.
+//! is a dollar sign. Not drawn as in LaTeX: matrices.
 
 use std::borrow::Cow;
 
@@ -182,6 +183,8 @@ struct Parser {
     at: usize,
     /// Inside `\mathrm{...}`: letters upright.
     upright: bool,
+    /// Open `\left` groups: a sequence inside one ends before `\right` (T482).
+    in_left: usize,
 }
 
 impl Parser {
@@ -252,6 +255,30 @@ impl Parser {
         self.chars[start..self.at].iter().collect()
     }
 
+    /// The delimiter after `\left` or `\right` as the letter of the markup escape `\dl` (T482): `p` round,
+    /// `b` square, `c` curly, `v` a bar, `a` angle, `n` none (`.` or anything else).
+    fn delimiter(&mut self) -> char {
+        self.skip_spaces();
+        let Some(&c) = self.chars.get(self.at) else { return 'n' };
+        self.at += 1;
+        let name = if c == '\\' { self.command() } else { c.to_string() };
+        match name.as_str() {
+            "(" | ")" => 'p',
+            "[" | "]" | "lbrack" | "rbrack" => 'b',
+            "{" | "}" | "lbrace" | "rbrace" => 'c',
+            "|" | "vert" | "lvert" | "rvert" => 'v',
+            "langle" | "rangle" | "<" | ">" => 'a',
+            _ => 'n',
+        }
+    }
+
+    /// The text at the cursor is `\right` (not the start of a longer command name).
+    fn at_right(&self) -> bool {
+        let word: Vec<char> = "\\right".chars().collect();
+        self.chars.get(self.at..self.at + word.len()) == Some(&word[..])
+            && !self.chars.get(self.at + word.len()).is_some_and(|c| c.is_ascii_alphabetic())
+    }
+
     /// One item: a letter, a sign, a group or a command with its arguments. `None` at the end or before `}`.
     fn atom(&mut self) -> Option<Atom> {
         self.skip_spaces();
@@ -305,8 +332,21 @@ impl Parser {
                     "text" | "textrm" => plain(self.raw_argument()),
                     "mathbf" | "textbf" | "bf" => plain(format!("\\b({})", self.argument().markup)),
                     "mathit" | "textit" => plain(format!("\\i({})", self.raw_argument())),
-                    "left" | "right" | "big" | "Big" | "bigg" | "Bigg" | "bigl" | "bigr" | "Bigl" | "Bigr"
-                    | "displaystyle" => {
+                    "left" => {
+                        // T482: a delimiter as tall as what it encloses, up to the matching `\right`
+                        let open = self.delimiter();
+                        self.in_left += 1;
+                        let body = self.sequence(None);
+                        self.in_left -= 1;
+                        let close = if self.at_right() {
+                            self.at += "\\right".len();
+                            self.delimiter()
+                        } else {
+                            'n'
+                        };
+                        plain(format!("\\dl({open}{close},{})", escape_outer_commas(&body.markup)))
+                    }
+                    "right" | "big" | "Big" | "bigg" | "Bigg" | "bigl" | "bigr" | "Bigl" | "Bigr" | "displaystyle" => {
                         return self.atom();
                     }
                     n if FUNCTIONS.contains(&n) => plain(n.to_string()),
@@ -337,6 +377,9 @@ impl Parser {
                 None => break,
                 Some(&c) if Some(c) == end => break,
                 _ => {}
+            }
+            if self.in_left > 0 && self.at_right() {
+                break;
             }
             // A script with nothing before it (`$^{-1}$`) attaches to an empty base.
             let atom = if matches!(self.chars.get(self.at), Some('^' | '_')) {
@@ -395,7 +438,7 @@ impl Parser {
 
 /// LaTeX math (without the `$`s) as label markup.
 pub fn to_markup(math: &str) -> String {
-    Parser { chars: math.chars().collect(), at: 0, upright: false }.sequence(None).markup
+    Parser { chars: math.chars().collect(), at: 0, upright: false, in_left: 0 }.sequence(None).markup
 }
 
 /// The operator markup of an atom that takes its scripts below and above it (T481): the large operators
@@ -442,6 +485,9 @@ mod tests {
         assert_eq!(to_markup(r"\frac{a+b}{c}"), r"\fr(\i(a)+\i(b),\i(c))");
         assert_eq!(to_markup(r"\sum_{i=1}^{n} x_i"), r"\lm(\p140(∑),\i(i)=1,\i(n))\i(x)\-(\i(i))");
         assert_eq!(to_markup(r"\lim_{x\to 0}"), r"\lm(lim,\i(x)→0,)");
+        assert_eq!(to_markup(r"\left(\frac{a}{b}\right)"), r"\dl(pp,\fr(\i(a),\i(b)))");
+        assert_eq!(to_markup(r"\left\{ x, y \right."), r"\dl(cn,\i(x)\(44)\i(y))");
+        assert_eq!(to_markup(r"\left[a\right|"), r"\dl(bv,\i(a))");
         assert_eq!(to_markup(r"\int_0^1"), r"∫\=(0,1)", "an integral keeps its scripts beside it");
         assert_eq!(to_markup(r"\frac{1,5}{2}"), r"\fr(1\(44)5,2)", "a comma of a part is not the separator");
         assert_eq!(to_markup(r"\sqrt{x}"), r"√\i(x)");
@@ -450,7 +496,7 @@ mod tests {
         assert_eq!(to_markup(r"\mathrm{d}t"), r"d\i(t)");
         assert_eq!(to_markup(r"\text{rate}\,(\mathrm{s^{-1}})"), "rate\u{2009}(s\\+(-1))");
         assert_eq!(to_markup(r"\sin\theta"), "sinθ");
-        assert_eq!(to_markup(r"\left( x \right)"), r"(\i(x))");
+        assert_eq!(to_markup(r"\left( x \right)"), r"\dl(pp,\i(x))", "stretchy since T482");
         assert_eq!(to_markup(r"\mathbf{F}"), r"\b(\i(F))");
         assert_eq!(to_markup(r"\unknown"), "unknown");
     }

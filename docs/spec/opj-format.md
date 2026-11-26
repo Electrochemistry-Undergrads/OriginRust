@@ -462,6 +462,7 @@ The page units were found by exporting a graph at Origin's default 300 dots per 
 | `0x3A`, `0x42`, `0x4A` | 3 x f64 | Y axis start, end and major step |
 | `0x62`, `0x63` | u8, u8 | Y minor ticks, Y scale type |
 | `0x71` | 4 x u16 | layer frame: left, top, right, bottom, in the page units of 10.1 |
+| `0xA7`, `0xA8`, `0x105` | u8, u8, 4 bytes | layer background (T477, measured 2026-11-26 in Origin 2016 with `layer.color`, `re-workspace/scratch/t477`): `0xA7` is 2 for a filled layer and 1 without; `0xA8` the position of the colour (or of the nearest one) in Origin's list (red 1, yellow 6, orange 14 for `color(255,128,0)`); `0x105` the colour code as in 10.5 (a list position and three zeros, or red, green, blue and 1), `FC FF FF FF` without. The reader takes the code of a filled layer; the writer writes all three, and Origin's `layer.color` gave 2 (red) and the RGB code of `(17, 131, 213)` for a file Sheaf wrote |
 | `0x8A` | u8, bit `0x08` | Show Frame. Toggling one layer in Origin 2016 changed its byte from `0x01` to `0x09` with axes visible and from `0x03` to `0x0B` with axes hidden. Toggling off cleared the bit. Sheaf reads and writes this bit independently of the axis blocks. Origin reopened a Sheaf-written project with the frame on for the selected layer and removed the exported frame edges when toggled off (T66). |
 
 LabTalk numbers scale types from 1 (`layer.x.type`: 1 linear, 2 log10), the file from 0. The ranges

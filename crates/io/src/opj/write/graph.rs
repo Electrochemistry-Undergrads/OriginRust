@@ -345,9 +345,6 @@ impl Writer {
         if let Stack::Waterfall { dx_percent, dy_percent } = layer.stack {
             waterfall_places(project, layer, dx_percent, dy_percent, &mut places, notes);
         }
-        if layer.background.is_some() {
-            notes.push("a layer background colour was not written (the companion file keeps it)".into());
-        }
         if !layer.background_style.is_default() {
             notes.push("the gradient and border of a layer's background were not written".into());
         }
@@ -507,6 +504,7 @@ impl Writer {
             link,
             offsets,
             x_offsets,
+            background: layer.background.map(|c| (code_of(c), nearest_position(c))),
         }));
 
         // annotations: titles, free text, legend

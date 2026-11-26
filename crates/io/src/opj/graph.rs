@@ -59,6 +59,10 @@ const AXIS_AUTO_COLOR: u16 = 0xFFF7;
 const AXIS_SHOWN_BIT: u8 = 0x40;
 const AXIS_FONT_AT: usize = 0x15;
 const AXIS_FLAGS_AT: usize = 0x26;
+/// The layer background (T477, measured with `layer.color`): 2 at `0xA7` for a filled layer, the colour code
+/// at `0x105`.
+const LAYER_FILL_AT: usize = 0xA7;
+const LAYER_FILL_CODE_AT: usize = 0x105;
 /// The rows a curve plots: the first and one past the last (u32 each, T476, measured in Origin 2016
 /// with `set %C -b 3` and `-e 8`, which stored 2 and 8).
 const CURVE_FIRST_ROW_AT: usize = 0x07;
@@ -240,6 +244,8 @@ fn build_layer(
         Palette { colors: (0..PALETTE.len()).map(palette_color).collect(), mode: PaletteMode::Cycle, list: None };
     let h = &layer.header;
     out.display.show_frame = u8_at(h, SHOW_FRAME_AT) & SHOW_FRAME_BIT != 0;
+    // T477: a filled layer (2 at 0xA7) has its background colour code at 0x105
+    out.background = (u8_at(h, LAYER_FILL_AT) == 2).then(|| color_code(h, LAYER_FILL_CODE_AT)).flatten();
 
     // Frame.
     let (l, t, r, b) = (

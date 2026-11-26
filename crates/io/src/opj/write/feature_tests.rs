@@ -678,16 +678,91 @@ fn write_masked_project_for_origin() {
 }
 
 #[test]
-fn notes_windows_are_left_out_with_a_warning() {
-    // T154: Notes windows are not written to an Origin project yet.
+fn notes_windows_are_written_and_read_back_with_their_folders() {
+    // T470: Notes windows go into the notes list after the window list, as Origin 2016 writes them.
+    let mut p = Project::new();
+    let book = p.adopt_named_workbook(abcd("Book1"));
+    let a = p.add_notes();
+    let b = p.add_notes();
+    p.notes_mut(a).unwrap().text = "first line\nsecond line".into();
+    p.notes_mut(b).unwrap().name = "Diary".into();
+    p.notes_mut(b).unwrap().text = "x".into();
+    // the book and the second notes window in a folder, the first notes window in the root
+    p.root.folders.push(sheaf_core::project::Folder {
+        name: "Sub".into(),
+        windows: vec![b, book],
+        ..Default::default()
+    });
+    let out = written(&p);
+    assert!(out.warnings.iter().all(|w| !w.contains("Notes")), "{:?}", out.warnings);
+    let imp = read_back(&out.bytes);
+    assert_eq!(
+        imp.notes,
+        [("Notes1".to_string(), "first line\nsecond line".to_string()), ("Diary".to_string(), "x".to_string())]
+    );
+    assert_eq!(imp.folders.len(), 1);
+    assert_eq!(imp.folders[0].windows, ["Book1", "Diary"], "a notes entry is not taken for window 0");
+    let back = imp.into_project();
+    assert_eq!(back.notes().count(), 2);
+    let diary = back.notes().find(|n| n.name == "Diary").unwrap();
+    assert_eq!(back.root.folders[0].windows.len(), 2);
+    assert!(back.root.folders[0].windows.contains(&diary.id));
+    // the text is stored with CR LF line breaks and a terminator
+    let crlf = b"first line\r\nsecond line\0";
+    assert!(out.bytes.windows(crlf.len()).any(|w| w == crlf));
+}
+
+#[test]
+fn a_notes_window_is_three_blocks_in_front_of_the_results_log() {
+    // T470, measured in Origin 2016: an 80-byte header (window rectangle, 00 C0 CF 54 at 0x10, 1 at 0x18,
+    // the two times at 0x20 and 0x28), the name and the text, each with a terminator.
     let mut p = Project::new();
     p.adopt_named_workbook(abcd("Book1"));
     let n = p.add_notes();
-    p.notes_mut(n).unwrap().text = "hello".into();
+    p.notes_mut(n).unwrap().name = "MyNotes".into();
+    let bytes = written(&p).bytes;
+    let at = bytes.windows(8).rposition(|w| w == b"MyNotes\0").unwrap();
+    // the header block ends 5 bytes before the name block's size field
+    let name_block = at - 5;
+    let header = &bytes[name_block - 81..name_block - 1];
+    assert_eq!(&bytes[name_block - 86..name_block - 81], &[80, 0, 0, 0, b'\n']);
+    let i32_at = |k: usize| i32::from_le_bytes(header[k..k + 4].try_into().unwrap());
+    assert_eq!((i32_at(0), i32_at(4), i32_at(8), i32_at(12)), (26, 26, 551, 266), "as Origin placed its first one");
+    assert_eq!(&header[0x10..0x14], &[0x00, 0xc0, 0xcf, 0x54]);
+    assert_eq!(header[0x18], 1);
+    assert_eq!(f64::from_le_bytes(header[0x20..0x28].try_into().unwrap()), TIME);
+    // the empty text, then the results log
+    assert_eq!(&bytes[at + 9..at + 9 + 7], &[1, 0, 0, 0, b'\n', 0, b'\n']);
+    assert_eq!(&bytes[at + 16..at + 21], &[80, 0, 0, 0, b'\n']);
+    assert_eq!(&bytes[at + 21 + 81 + 5..at + 21 + 81 + 5 + 10], b"ResultsLog");
+}
+
+/// Writes `sheaf-notes.opj` (Book1, then Notes1 with two lines and Diary in folder Sub) into
+/// `SHEAF_OPJ_NOTES_DIR`, so Origin can be asked to open it (T470):
+/// `SHEAF_OPJ_NOTES_DIR=<folder> cargo test -p sheaf-io -- --ignored write_notes_project_for_origin`.
+#[test]
+#[ignore]
+fn write_notes_project_for_origin() {
+    let Ok(dir) = std::env::var("SHEAF_OPJ_NOTES_DIR") else { return };
+    let mut p = Project::new();
+    p.adopt_named_workbook(abcd("Book1"));
+    let a = p.add_notes();
+    let b = p.add_notes();
+    p.notes_mut(a).unwrap().text = "first line\nsecond line".into();
+    p.notes_mut(b).unwrap().name = "Diary".into();
+    p.notes_mut(b).unwrap().text = "in a folder".into();
+    p.root.folders.push(sheaf_core::project::Folder { name: "Sub".into(), windows: vec![b], ..Default::default() });
+    std::fs::write(Path::new(&dir).join("sheaf-notes.opj"), written(&p).bytes).unwrap();
+}
+
+#[test]
+fn a_notes_window_with_a_long_name_warns() {
+    let mut p = Project::new();
+    p.adopt_named_workbook(abcd("Book1"));
+    let n = p.add_notes();
+    p.notes_mut(n).unwrap().long_name = "Lab diary".into();
     let out = written(&p);
-    assert!(out.warnings.iter().any(|w| w.contains("1 Notes window(s) were left out")), "{:?}", out.warnings);
-    let imp = read_back(&out.bytes);
-    assert_eq!((imp.workbooks.len(), imp.graphs.len()), (1, 0), "the workbook alone");
+    assert!(out.warnings.iter().any(|w| w.contains("1 Notes window(s) have a long name")), "{:?}", out.warnings);
 }
 
 #[test]

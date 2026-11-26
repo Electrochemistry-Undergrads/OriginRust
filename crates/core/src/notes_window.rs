@@ -1,6 +1,6 @@
 //! Notes windows (T154): a window of free text in the project, as Origin's File > New > Notes makes.
-//! Origin 2016's Notes window was not measured (its COM class was unregistered); Sheaf's window keeps
-//! plain text only.
+//! Sheaf's window keeps plain text only. In `.opj` files they are read and written as Origin 2016 stores
+//! them (T470, `opj-format.md` 13.15).
 
 use crate::ids::WindowId;
 use serde::{Deserialize, Serialize};

@@ -369,8 +369,13 @@ fn the_file_ends_with_the_project_tree_and_the_attribute_records() {
 #[test]
 fn the_size_in_front_of_the_tree_matches_what_follows() {
     for n in [0usize, 1, 2, 5] {
-        let root = tail::FolderOut { name: "p".into(), windows: (0..n as u32).collect(), folders: Vec::new() };
-        let tail = tail::tail(&tail::TailSpec { root: &root, dependencies: &[], time: TIME });
+        let root = tail::FolderOut {
+            name: "p".into(),
+            windows: (0..n as u32).collect(),
+            notes: Vec::new(),
+            folders: Vec::new(),
+        };
+        let tail = tail::tail(&tail::TailSpec { root: &root, dependencies: &[], time: TIME, notes: &[] });
         // skip "\0\n", the empty block, the note (three blocks) and the empty block that closes the notes
         let mut i = 2 + 5;
         for _ in 0..3 {

@@ -246,6 +246,7 @@ fn build(bytes: &[u8], path: &Path) -> Result<(OpjImport, Summary), IoError> {
         folders: Vec::new(),
         warnings,
         comments: Vec::new(),
+        notes: Vec::new(),
     };
     Ok((import, summary))
 }

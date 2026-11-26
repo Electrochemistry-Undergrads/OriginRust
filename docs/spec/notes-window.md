@@ -18,8 +18,10 @@ documented behaviour.
     long name after it when there is one.
   - It is saved in the `.sheaf` project (`"type": "notes"` in `project.json`). With a Notes window
     active the menu bar is the one without a workbook or graph.
-- **Not written:** an Origin project written by File > Export (`.opj`) leaves Notes windows out, with
-  a warning. File > Save Window As refuses a Notes window (there is no window file for it yet). The
+- **Origin projects (T470, 2026-11-26, measured in Origin 2016):** an `.opj` written by Sheaf holds its Notes
+  windows (name, text with CR LF line breaks, folder) as Origin 2016 stores them, and opening an `.opj`
+  gives its Notes windows (Origin's results log left out); `opj-format.md` 13.15. A long name or comments
+  of a Notes window are not written (a warning says so). File > Save Window As refuses a Notes window (there is no window file for it yet). The
   AI live context reports the active Notes window's text.
 - **Notes sheets (T188, 2026-11-20, not measured):** a sheet tab's right-click Add Notes as Sheet adds a
   Notes sheet after the workbook's last sheet, named `Notes` (then `Notes2`, ...), and shows it, one undo

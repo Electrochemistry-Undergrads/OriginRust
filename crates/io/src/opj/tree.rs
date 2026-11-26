@@ -21,12 +21,25 @@ const ENTRY_OVERHEAD: usize = 68;
 /// Folders nested deeper than this are not followed.
 const MAX_DEPTH: usize = 64;
 
-/// A folder of the tree with the positions (in the window list) of the windows it lists.
+/// The kind word (the first four bytes of a folder entry) of a Notes window: its position counts in the
+/// notes list instead of the window list (T470, measured in Origin 2016; 0 for the other windows).
+pub(crate) const NOTES_ENTRY: u32 = 0x0010_0000;
+
+/// A folder of the tree with the positions (in the window list) of the windows it lists, and the
+/// positions (in the notes list) of the Notes windows it lists.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub(crate) struct TreeFolder {
     pub name: String,
     pub windows: Vec<usize>,
+    pub notes: Vec<usize>,
     pub folders: Vec<TreeFolder>,
+}
+
+/// A Notes window of the file (T470): its name and its text, lines separated by `\n`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct TreeNote {
+    pub name: String,
+    pub text: String,
 }
 
 /// One formula that recalculates: the numbers of the columns it reads and of the column it fills,
@@ -43,6 +56,9 @@ pub(crate) struct Tail {
     /// The root folder; `None` when the file has no readable tree.
     pub root: Option<TreeFolder>,
     pub recalcs: Vec<Recalc>,
+    /// The Notes windows in file order (T470); `None` for the results log, so that the positions the
+    /// folders give stay right.
+    pub notes: Vec<Option<TreeNote>>,
     /// What was wrong, when the tree was found but could not be read to its end.
     pub problem: Option<String>,
 }
@@ -63,10 +79,12 @@ fn count<R: Read + Seek>(f: &mut Frames<R>) -> FrameResult<usize> {
 pub(crate) fn scan<R: Read + Seek>(f: &mut Frames<R>, windows: usize) -> Tail {
     let mut tail = Tail::default();
     // Without the markers of the tree this is not a tail we know: say nothing.
-    if skip_to_tree(f).is_none() {
+    let Some(notes) = skip_to_tree(f) else {
         return tail;
-    }
-    match folder(f, 0, windows, &mut Vec::new()) {
+    };
+    let note_count = notes.len();
+    tail.notes = notes;
+    match folder(f, 0, (windows, note_count), &mut Vec::new(), &mut Vec::new()) {
         Ok(root) => {
             tail.root = Some(root);
             // the empty block, the block that closes the tree, then the attribute records
@@ -82,9 +100,10 @@ pub(crate) fn scan<R: Read + Seek>(f: &mut Frames<R>, windows: usize) -> Tail {
     tail
 }
 
-/// Steps over the parameters and the notes, the size block and the marker block. `None` when the
-/// bytes do not look like that.
-fn skip_to_tree<R: Read + Seek>(f: &mut Frames<R>) -> Option<()> {
+/// Steps over the parameters and the notes, the size block and the marker block, and returns the
+/// notes in file order (`None` for the results log, which keeps its place in the numbering). `None`
+/// when the bytes do not look like that.
+fn skip_to_tree<R: Read + Seek>(f: &mut Frames<R>) -> Option<Vec<Option<TreeNote>>> {
     for _ in 0..100_000 {
         let name = f.line(512).ok()?;
         if name == [0] {
@@ -92,27 +111,32 @@ fn skip_to_tree<R: Read + Seek>(f: &mut Frames<R>) -> Option<()> {
         }
         f.raw(8).ok()?;
     }
-    // an empty block, then notes (header, name, text) up to an empty block
+    // an empty block, then notes (an 80-byte header, the name, the text) up to an empty block; the
+    // results log is the last one (T470, measured in Origin 2016)
     f.block().ok()?;
+    let mut notes = Vec::new();
     for _ in 0..100_000 {
         if f.block().ok()?.is_empty() {
             break;
         }
-        f.block().ok()?;
-        f.block().ok()?;
+        let name = decode_cp1252(c_bytes(&f.block().ok()?));
+        let text = decode_cp1252(c_bytes(&f.block().ok()?)).replace("\r\n", "\n");
+        notes.push((name != "ResultsLog").then_some(TreeNote { name, text }));
     }
     let size = f.block().ok()?;
     let marker = f.block().ok()?;
-    (size.len() == 4 && marker.len() == 16 && marker.starts_with(&TREE_MARKER)).then_some(())
+    (size.len() == 4 && marker.len() == 16 && marker.starts_with(&TREE_MARKER)).then_some(notes)
 }
 
 /// One folder and everything inside it.
 fn folder<R: Read + Seek>(
     f: &mut Frames<R>,
     depth: usize,
-    windows: usize,
+    lists: (usize, usize),
     seen: &mut Vec<usize>,
+    seen_notes: &mut Vec<usize>,
 ) -> FrameResult<TreeFolder> {
+    let (windows, note_count) = lists;
     if depth > MAX_DEPTH {
         return Err(FrameError::BadDelimiter { at: f.pos() });
     }
@@ -136,6 +160,14 @@ fn folder<R: Read + Seek>(
             return Err(FrameError::BadDelimiter { at: f.pos() });
         }
         let position = u32_at(&entry, 4).unwrap_or(u32::MAX) as usize;
+        // a Notes window counts in the notes list (T470)
+        if u32_at(&entry, 0) == Some(NOTES_ENTRY) {
+            if position < note_count && !seen_notes.contains(&position) {
+                seen_notes.push(position);
+                out.notes.push(position);
+            }
+            continue;
+        }
         // a position outside the window list, or a window another folder listed first, is dropped
         if position < windows && !seen.contains(&position) {
             seen.push(position);
@@ -147,7 +179,7 @@ fn folder<R: Read + Seek>(
         return Err(FrameError::Truncated { at: f.pos() });
     }
     for _ in 0..children {
-        out.folders.push(folder(f, depth + 1, windows, seen)?);
+        out.folders.push(folder(f, depth + 1, lists, seen, seen_notes)?);
     }
     Ok(out)
 }

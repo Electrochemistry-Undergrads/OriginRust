@@ -63,19 +63,15 @@ pub fn write_file(project: &Project, path: &Path) -> Result<Vec<String>, IoError
 
 /// Like [`write`], with the project name and the time stamp given (the time is a Julian day number).
 pub fn write_named(project: &Project, name: &str, time: f64) -> Result<OpjWrite, IoError> {
-    // Notes windows (T154) are not written yet: the file gets the project without them.
-    // Notes sheets (T188) are not written either: a workbook keeps its other sheets (or one empty one).
-    let notes: Vec<WindowId> = project.notes().map(|n| n.id).collect();
+    // Notes windows are written (T470). Notes sheets (T188) are not: a workbook keeps its other sheets
+    // (or one empty one).
     let left_out = |s: &sheaf_core::Worksheet| s.is_notes() || s.graph_sheet.is_some();
     let notes_sheets: usize = project.workbooks().map(|b| b.sheets.iter().filter(|s| left_out(s)).count()).sum();
     let without;
-    let project = if notes.is_empty() && notes_sheets == 0 {
+    let project = if notes_sheets == 0 {
         project
     } else {
         let mut p = project.clone();
-        for id in &notes {
-            p.remove_window(*id);
-        }
         let books: Vec<WindowId> = p.workbooks().map(|b| b.id).collect();
         for id in books {
             if let Some(b) = p.workbook_mut(id) {
@@ -97,12 +93,6 @@ pub fn write_named(project: &Project, name: &str, time: f64) -> Result<OpjWrite,
     let mut w = Writer::new(time);
     w.project(project, name)?;
     let mut out = w.finish();
-    if !notes.is_empty() {
-        out.warnings.push(format!(
-            "{} Notes window(s) were left out: this program does not write Notes windows to an Origin project yet.",
-            notes.len()
-        ));
-    }
     if notes_sheets > 0 {
         out.warnings.push(format!(
             "{notes_sheets} Notes or graph sheet(s) were left out: this program does not write Notes sheets or graph sheets to an Origin project yet."
@@ -115,6 +105,24 @@ pub fn write_named(project: &Project, name: &str, time: f64) -> Result<OpjWrite,
 pub fn julian_day_now() -> f64 {
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |d| d.as_secs_f64());
     secs / 86_400.0 + 2_440_587.5
+}
+
+/// Where a window stands in the file: in the notes list or in the window list (T470).
+#[derive(Clone, Copy)]
+struct Entry {
+    notes: bool,
+    at: u32,
+}
+
+/// The positions in the notes list and in the window list, each ascending.
+fn split_entries(entries: Vec<Entry>) -> (Vec<u32>, Vec<u32>) {
+    let (notes, windows): (Vec<Entry>, Vec<Entry>) = entries.into_iter().partition(|e| e.notes);
+    let sorted = |v: Vec<Entry>| {
+        let mut v: Vec<u32> = v.into_iter().map(|e| e.at).collect();
+        v.sort_unstable();
+        v
+    };
+    (sorted(notes), sorted(windows))
 }
 
 fn fail<T>(reason: impl Into<String>) -> Result<T, IoError> {
@@ -214,6 +222,8 @@ struct Notes {
     cell_notes_dropped: usize,
     /// Analysis results that recalculate from their source (Recalculate Manual or Auto), not stored.
     analysis_links_dropped: usize,
+    /// Notes windows with a long name or comments, which the file written here does not hold (T470).
+    notes_labels_dropped: usize,
     /// Everything a graph holds that the file does not, one sentence each.
     graph_notes: Vec<String>,
 }
@@ -252,6 +262,8 @@ struct Writer {
     numeric_cells: bool,
     /// The Comments of the window being written (T283).
     comments: String,
+    /// The Notes windows, in the order of the project (T470).
+    notes_windows: Vec<tail::NoteOut>,
 }
 
 impl Writer {
@@ -272,6 +284,7 @@ impl Writer {
             place: None,
             numeric_cells: false,
             comments: String::new(),
+            notes_windows: Vec::new(),
         }
     }
 
@@ -306,8 +319,7 @@ impl Writer {
         match window {
             Window::Workbook(book) => self.workbook(book),
             Window::Graph(graph) => self.graph(project, graph, sets),
-            // Left out by `write_named`.
-            Window::Notes(_) => Ok(()),
+            Window::Notes(n) => self.notes_window(n),
             Window::Layout(l) => {
                 // Layout pages are not written yet (the companion file keeps them).
                 self.notes.graph_notes.push(format!(
@@ -325,6 +337,16 @@ impl Writer {
                 Ok(())
             }
         }
+    }
+
+    /// A Notes window (T470): its name and text go into the notes list after the window list.
+    fn notes_window(&mut self, n: &sheaf_core::notes_window::Notes) -> Result<(), IoError> {
+        self.check_name("Notes window name", &n.name, MAX_DATASET_NAME)?;
+        self.notes.notes_labels_dropped += usize::from(!n.long_name.trim().is_empty() || !self.comments.is_empty());
+        self.count_lossy(&n.text);
+        let text = n.text.replace("\r\n", "\n").replace('\n', "\r\n").replace('\0', " ");
+        self.notes_windows.push(tail::NoteOut { name: n.name.clone(), text: encode_cp1252(&text).0 });
+        Ok(())
     }
 
     fn workbook(&mut self, book: &Workbook) -> Result<(), IoError> {
@@ -657,24 +679,36 @@ impl Writer {
     /// the window list. Windows that no folder lists are in the root folder, as are those the root
     /// lists; a window listed by several folders stays in the first one.
     fn folder_tree(&self, project: &Project, root_name: &str) -> Result<FolderOut, IoError> {
-        let position: HashMap<WindowId, u32> =
-            project.windows.iter().enumerate().map(|(i, w)| (w.id(), i as u32)).collect();
+        // Notes windows count in the notes list, the others in the window list (T470).
+        let mut position: HashMap<WindowId, Entry> = HashMap::new();
+        let (mut windows, mut notes) = (0u32, 0u32);
+        for w in &project.windows {
+            let is_notes = matches!(w, Window::Notes(_));
+            let counter = if is_notes { &mut notes } else { &mut windows };
+            position.insert(w.id(), Entry { notes: is_notes, at: *counter });
+            *counter += 1;
+        }
         let mut claimed: HashSet<WindowId> = HashSet::new();
         let mut folders = Vec::new();
         let mut names: HashSet<String> = HashSet::new();
         for child in &project.root.folders {
             folders.push(self.folder_out(child, 1, &position, &mut claimed, &mut names, "")?);
         }
-        let windows =
-            project.windows.iter().enumerate().filter(|(_, w)| !claimed.contains(&w.id())).map(|(i, _)| i as u32);
-        Ok(FolderOut { name: root_name.to_string(), windows: windows.collect(), folders })
+        let rest: Vec<Entry> = project
+            .windows
+            .iter()
+            .filter(|w| !claimed.contains(&w.id()))
+            .filter_map(|w| position.get(&w.id()).copied())
+            .collect();
+        let (notes, windows) = split_entries(rest);
+        Ok(FolderOut { name: root_name.to_string(), windows, notes, folders })
     }
 
     fn folder_out(
         &self,
         folder: &Folder,
         depth: usize,
-        position: &HashMap<WindowId, u32>,
+        position: &HashMap<WindowId, Entry>,
         claimed: &mut HashSet<WindowId>,
         siblings: &mut HashSet<String>,
         parent: &str,
@@ -691,19 +725,19 @@ impl Writer {
         if depth > MAX_FOLDER_DEPTH {
             return fail(format!("the folder '{path}' is nested more than {MAX_FOLDER_DEPTH} levels deep"));
         }
-        let mut windows: Vec<u32> = folder
+        let listed: Vec<Entry> = folder
             .windows
             .iter()
             .filter(|id| claimed.insert(**id))
             .filter_map(|id| position.get(id).copied())
             .collect();
-        windows.sort_unstable();
+        let (notes, windows) = split_entries(listed);
         let mut names: HashSet<String> = HashSet::new();
         let mut folders = Vec::new();
         for child in &folder.folders {
             folders.push(self.folder_out(child, depth + 1, position, claimed, &mut names, &path)?);
         }
-        Ok(FolderOut { name: folder.name.clone(), windows, folders })
+        Ok(FolderOut { name: folder.name.clone(), windows, notes, folders })
     }
 
     /// A folder name that Origin can store: not empty, no control characters, nothing outside
@@ -817,7 +851,12 @@ impl Writer {
         bytes.extend(framed(&[]));
         bytes.extend(self.windows);
         bytes.extend(framed(&[]));
-        bytes.extend(tail::tail(&TailSpec { root: &self.tree, dependencies: &self.dependencies, time: self.time }));
+        bytes.extend(tail::tail(&TailSpec {
+            root: &self.tree,
+            dependencies: &self.dependencies,
+            time: self.time,
+            notes: &self.notes_windows,
+        }));
         let n = &self.notes;
         let mut warnings = Vec::new();
         warnings.extend(n.graph_notes.iter().cloned());
@@ -903,6 +942,12 @@ impl Writer {
             warnings.push(format!(
                 "{} sheet(s) show their long name on their tab, which the project file written here does not hold; Origin shows their short names on the tabs.",
                 n.sheet_names_dropped
+            ));
+        }
+        if n.notes_labels_dropped > 0 {
+            warnings.push(format!(
+                "{} Notes window(s) have a long name or comments, which the project file written here does not hold; Origin shows their short names.",
+                n.notes_labels_dropped
             ));
         }
         if n.sheet_comments_dropped > 0 {

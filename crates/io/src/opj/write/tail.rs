@@ -127,7 +127,17 @@ pub(super) struct FolderOut {
     pub name: String,
     /// Positions of the windows in the window list of the file, ascending.
     pub windows: Vec<u32>,
+    /// Positions of the Notes windows in the notes list of the file, ascending (T470).
+    pub notes: Vec<u32>,
     pub folders: Vec<FolderOut>,
+}
+
+/// A Notes window as it is written (T470): its name and its text in Windows-1252, lines separated by
+/// CR LF.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct NoteOut {
+    pub name: String,
+    pub text: Vec<u8>,
 }
 
 /// What the tail of the file says.
@@ -136,6 +146,8 @@ pub(super) struct TailSpec<'a> {
     pub root: &'a FolderOut,
     pub dependencies: &'a [Dependency],
     pub time: f64,
+    /// The Notes windows, written in front of the results log (T470).
+    pub notes: &'a [NoteOut],
 }
 
 /// A line of the tree: a 4-byte number and a newline, with no body.
@@ -167,12 +179,15 @@ fn folder(f: &FolderOut, is_root: bool, time: f64, out: &mut Vec<u8>) {
     let mut b = vec![0u8; 28];
     b[..5].copy_from_slice(&[0x4d, 0x11, 0x11, 0x11, 0x01]);
     out.extend(framed(&b));
-    out.extend(framed(&(f.windows.len() as u32).to_le_bytes()));
-    // one entry per window: an empty block, the position, an empty block
-    for w in &f.windows {
+    out.extend(framed(&((f.notes.len() + f.windows.len()) as u32).to_le_bytes()));
+    // one entry per window: an empty block, the kind and the position, an empty block; the Notes
+    // windows first, as Origin 2016 lists them (T470)
+    let kinds = f.notes.iter().map(|n| (NOTES_ENTRY, *n)).chain(f.windows.iter().map(|w| (0, *w)));
+    for (kind, at) in kinds {
         out.extend(framed(&[]));
         let mut entry = [0u8; 8];
-        entry[4..].copy_from_slice(&w.to_le_bytes());
+        entry[..4].copy_from_slice(&kind.to_le_bytes());
+        entry[4..].copy_from_slice(&at.to_le_bytes());
         out.extend(framed(&entry));
         out.extend(framed(&[]));
     }
@@ -182,12 +197,41 @@ fn folder(f: &FolderOut, is_root: bool, time: f64, out: &mut Vec<u8>) {
     }
 }
 
+/// The kind word of a folder entry that lists a Notes window (T470).
+const NOTES_ENTRY: u32 = 0x0010_0000;
+
+/// The 80-byte header of a Notes window, as Origin 2016 writes one (T470, measured): the window
+/// rectangle (left, top, right, bottom; each new window 26 pixels lower and to the right), four bytes
+/// Origin always wrote, a 1 at 0x18, and the creation and modification times.
+fn note_header(index: usize, time: f64) -> [u8; 80] {
+    let mut h = [0u8; 80];
+    let step = 26 * (index as i32 % 10 + 1);
+    for (k, v) in [step, step, step + 525, step + 240].into_iter().enumerate() {
+        h[4 * k..4 * k + 4].copy_from_slice(&v.to_le_bytes());
+    }
+    h[0x10..0x14].copy_from_slice(&[0x00, 0xc0, 0xcf, 0x54]);
+    h[0x18] = 1;
+    h[0x20..0x28].copy_from_slice(&time.to_le_bytes());
+    h[0x28..0x30].copy_from_slice(&time.to_le_bytes());
+    h
+}
+
 /// The sections after the window list (spec section 13.6): the parameter list (empty), the note
-/// windows (only the results log), the project folder tree and the project attribute records.
+/// windows (the Notes windows, then the results log), the project folder tree and the project
+/// attribute records.
 pub(super) fn tail(t: &TailSpec) -> Vec<u8> {
     let mut v = vec![0x00, b'\n'];
-    // notes: the results log that every project has
+    // notes: each Notes window (header, name, text), then the results log that every project has
     v.extend(framed(&[]));
+    for (k, n) in t.notes.iter().enumerate() {
+        v.extend(framed(&note_header(k, t.time)));
+        let (mut name, _) = encode_cp1252(&n.name);
+        name.push(0);
+        v.extend(framed(&name));
+        let mut text = n.text.clone();
+        text.push(0);
+        v.extend(framed(&text));
+    }
     v.extend(framed(&[0u8; 80]));
     v.extend(framed(b"ResultsLog\0"));
     v.extend(framed(&[0]));

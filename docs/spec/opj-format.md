@@ -319,7 +319,8 @@ files).
   One entry was seen in a small file (a name of 6 letters with value 0). The public docs describe the same
   loop, whose entries are project-wide parameters.
 - **Notes.** Each note window has a header block (80 bytes), a name block (NUL-terminated, `ResultsLog`
-  is the results log window that every project has), and a text block. Then an empty block.
+  is the results log window that every project has), and a text block. Then an empty block. The Notes
+  windows of the project come first, the results log last; section 13.15 has the fields [orig].
 - **Project tree.** The project name and the folders (names as NUL-terminated strings), each with the positions of its
   windows, and per folder a 32-byte record with two timestamps as doubles; layout in section 13.5 and, for
   nesting, section 13.11 [obs][orig].
@@ -718,7 +719,8 @@ windows:     { window header, { layer header, empty block (no annotations),
                an empty block (end of the layer list) } per workbook
              an empty block
 parameters:  the line "\0\n"
-notes:       an empty block, the results log note, an empty block
+notes:       an empty block, { header (80), name, text } per Notes window (13.15), the results log note,
+             an empty block
 tree:        the folder tree (13.5)
 records:     eight attribute records (13.6)       the file ends after the last one
 ```
@@ -827,7 +829,8 @@ line                 the number 2
 block of 36 bytes    47 11 11 11 01, then zeros
 block of 28 bytes    4D 11 11 11 01, then zeros
 block of 4 bytes     the number of windows listed (every written window, in file order)
-per window:  empty block, block of 8 bytes (u32 0, u32 index of the window), empty block
+per window:  empty block, block of 8 bytes (u32 kind, u32 index), empty block; the kind is 0 for a window
+             (index in the window list) and 0x00100000 for a Notes window (index in the notes list, 13.15)
 block of 4 bytes     the number of sub-folders: 0
 empty block
 block of 8 bytes     00 10 00 00 08 00 00 00        (closes the tree)
@@ -1376,3 +1379,31 @@ does not read places: an Origin project can list hundreds of windows, and every 
   records) is what the writer already does.
 - Hidden end tick label: twenty property names (`layer.x.label.hideEnd`, `.hideFirst`, `.hideLast`, `.endLabel`, ...) changed no byte;
   Origin's own Vertical 2 Panel template differs from a plain graph in many axis bytes, none identified as this flag.
+
+### 13.15 Notes windows [orig]
+
+Code: reader `tree.rs` (`skip_to_tree`, `folder`), `mod.rs` (`OpjImport::notes`); writer `write/tail.rs` (`note_header`, `tail`) and
+`write/mod.rs` (`notes_window`, `folder_tree`). Found on 2026-11-26 (T470) with `tools/origin-ref/opj-make-from-lines.ps1`: `win -n n MyNotes`
+and `win -n n Second` in a new project (`re-workspace/scratch/t470/n2.opj`), then a file the writer made, loaded in Origin 2016 and saved
+again (`rt.opj`).
+
+Each Notes window is three blocks in the notes list, after the window list and the parameters, in front of the results log:
+
+```
+block of 80 bytes   0x00 left, 0x04 top, 0x08 right, 0x0C bottom (i32; Origin cascades new windows by 26: 26, 26, 551, 266,
+                    then 52, 52, 577, 292, ...), 0x10 00 C0 CF 54, 0x18 the state (1; 3 on the window that was active),
+                    0x20 and 0x28 the Julian days of creation and change (f64), the rest zero
+block               the name, NUL terminated
+block               the text in Windows-1252, lines separated by CR LF, NUL terminated (a single NUL when empty)
+```
+
+The results log closes the list with an 80-byte header of zeros. A folder lists a Notes window with the kind word `0x00100000` and its
+index in the notes list (the results log counts); Origin listed the root folder of `n2.opj` as notes 0, notes 1, window 0, and kept the
+order of a loaded file, adding new windows at the end.
+
+The reader opens every Notes window but the results log as a Sheaf Notes window (name and text, CR LF read as a line break) in its
+folder. The writer writes Sheaf's Notes windows with the header above (state 1, both times the save time), lists them in their folders
+in front of the other windows, and warns for a long name or comments, whose place in the file was not found (LabTalk could not set them
+on a hidden Notes window). Verified: Origin loaded the written `sheaf-notes.opj` (`exist(Notes1)` and `exist(Diary)` gave 9, a Notes
+window), and saved it again with both texts byte for byte (`first line` CR LF `second line`) and `Diary` still in folder `Sub`.
+LabTalk `text$` could not set the text of a Notes window in the hidden Origin used here, so the text was checked through that round trip.

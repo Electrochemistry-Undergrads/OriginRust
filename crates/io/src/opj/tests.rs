@@ -22,6 +22,7 @@ fn into_project_keeps_window_names_and_drops_trailing_missing_cells() {
         signature: String::new(),
         warnings: Vec::new(),
         comments: Vec::new(),
+        notes: Vec::new(),
     };
     let project = import.into_project();
     let b = project.workbooks().next().unwrap();
@@ -305,6 +306,23 @@ fn collect(dir: &Path, recurse: bool, out: &mut Vec<std::path::PathBuf>) {
     }
 }
 
+/// Origin 2016's own file with two Notes windows (T470; `re-workspace/scratch/t470/n2.opj`, local only):
+/// `MyNotes` and `Second`, both empty, listed in the root folder before the workbook `GSrc`.
+#[test]
+fn local_origin_file_gives_its_notes_windows() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../re-workspace/scratch/t470/n2.opj");
+    if !path.exists() {
+        eprintln!("opj: {} not found; skipping", path.display());
+        return;
+    }
+    let imp = read_opj(&path).unwrap();
+    assert_eq!(imp.notes, [("MyNotes".to_string(), String::new()), ("Second".to_string(), String::new())]);
+    assert!(imp.folders.is_empty());
+    let project = imp.into_project();
+    assert_eq!(project.notes().map(|n| n.name.as_str()).collect::<Vec<_>>(), ["MyNotes", "Second"]);
+    assert_eq!(project.workbooks().count(), 1);
+}
+
 /// Origin 2016's own file with a sheet long name (T343; `re-workspace/scratch/t339/s.opj`, local only).
 #[test]
 fn local_origin_file_gives_the_sheet_long_name() {
@@ -537,6 +555,7 @@ fn into_project_renumbers_the_stack_offsets_with_the_columns() {
         signature: String::new(),
         warnings: Vec::new(),
         comments: Vec::new(),
+        notes: Vec::new(),
     };
     let project = import.into_project();
     let layer = &project.graphs().next().unwrap().layers[0];

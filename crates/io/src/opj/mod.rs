@@ -52,13 +52,16 @@ pub struct OpjImport {
     pub warnings: Vec<String>,
     /// The Comments (Window Properties) of the windows, by window name (T283).
     pub comments: Vec<(String, String)>,
+    /// The Notes windows in file order, as name and text (lines separated by `\n`); Origin's results
+    /// log is left out (T470).
+    pub notes: Vec<(String, String)>,
 }
 
 /// A folder of the project explorer as the file lists it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OpjFolder {
     pub name: String,
-    /// Names of the windows in this folder (workbooks and graphs that were imported).
+    /// Names of the windows in this folder (workbooks, graphs and Notes windows that were imported).
     pub windows: Vec<String>,
     pub folders: Vec<OpjFolder>,
 }
@@ -121,6 +124,15 @@ impl OpjImport {
             let file_name = graph.name.clone();
             let id = project.adopt_graph(graph);
             by_name.insert(file_name, id);
+        }
+        // T470: Notes windows keep their names and text.
+        for (name, text) in self.notes {
+            let id = project.add_notes();
+            if let Some(n) = project.notes_mut(id) {
+                n.name = name.clone();
+                n.text = text;
+            }
+            by_name.insert(name, id);
         }
         project.root.folders = self.folders.iter().map(|f| f.to_core(&by_name)).collect();
         for (name, text) in &self.comments {
@@ -264,7 +276,8 @@ pub fn read_opj_from<R: Read + Seek>(reader: R, path: &Path) -> Result<OpjImport
     if let Some(problem) = &tail.problem {
         warnings.push(format!("The folder tree could not be read ({problem}); every window is in the root folder."));
     }
-    let folders = tail.root.as_ref().map_or_else(Vec::new, |root| folder_list(&root.folders, &windows));
+    let folders = tail.root.as_ref().map_or_else(Vec::new, |root| folder_list(&root.folders, &windows, &tail.notes));
+    let notes: Vec<(String, String)> = tail.notes.iter().flatten().map(|n| (n.name.clone(), n.text.clone())).collect();
 
     let mut b = Builder {
         f,
@@ -308,7 +321,7 @@ pub fn read_opj_from<R: Read + Seek>(reader: R, path: &Path) -> Result<OpjImport
     }
     let comments =
         windows.iter().filter(|w| !w.comments.is_empty()).map(|w| (w.name.clone(), w.comments.clone())).collect();
-    Ok(OpjImport { workbooks, graphs, version, signature, folders, warnings: b.warnings, comments })
+    Ok(OpjImport { workbooks, graphs, version, signature, folders, warnings: b.warnings, comments, notes })
 }
 
 /// The version number stored in the header block, as `9.3`.
@@ -520,7 +533,7 @@ impl<R: Read + Seek> Builder<R> {
         let skipped_windows = windows.saturating_sub(books);
         if skipped_windows > 0 && books > 0 {
             self.warnings.push(format!(
-                "{skipped_windows} window(s) that are not workbooks or graphs (matrices, notes, layouts) were not imported."
+                "{skipped_windows} window(s) that are not workbooks or graphs (matrices, layouts) were not imported."
             ));
         }
         for (reason, n) in std::mem::take(&mut self.skipped) {
@@ -591,14 +604,20 @@ fn split_formula(text: &str) -> (&str, Option<std::ops::Range<usize>>, bool) {
     }
 }
 
-/// The folders of the tree with window positions turned into window names.
-fn folder_list(folders: &[tree::TreeFolder], windows: &[window::Window]) -> Vec<OpjFolder> {
+/// The folders of the tree with window positions turned into window names, the Notes windows after
+/// the others.
+fn folder_list(
+    folders: &[tree::TreeFolder],
+    windows: &[window::Window],
+    notes: &[Option<tree::TreeNote>],
+) -> Vec<OpjFolder> {
     folders
         .iter()
-        .map(|f| OpjFolder {
-            name: f.name.clone(),
-            windows: f.windows.iter().filter_map(|&i| windows.get(i)).map(|w| w.name.clone()).collect(),
-            folders: folder_list(&f.folders, windows),
+        .map(|f| {
+            let mut names: Vec<String> =
+                f.windows.iter().filter_map(|&i| windows.get(i)).map(|w| w.name.clone()).collect();
+            names.extend(f.notes.iter().filter_map(|&i| notes.get(i)?.as_ref()).map(|n| n.name.clone()));
+            OpjFolder { name: f.name.clone(), windows: names, folders: folder_list(&f.folders, windows, notes) }
         })
         .collect()
 }

@@ -67,3 +67,26 @@ fn latex_frac_draws_stacked_and_reads_as_a_slash_in_plain_text() {
     let items = placed(r"$\frac{1,5}{\frac{1}{2}}$");
     assert_eq!(texts(&items).iter().map(|t| t.text.as_str()).collect::<Vec<_>>(), ["1,5", "1", "2"]);
 }
+
+#[test]
+fn a_large_operator_takes_its_limits_below_and_above_centred() {
+    // T481: ∑ at 140 % (28 pt), its limits at 70 % (14 pt) centred under and over it
+    let items = placed(r"$\sum_{i=1}^{n}$");
+    let ts = texts(&items);
+    let sum = ts.iter().find(|t| t.text == "∑").unwrap();
+    near(sum.size, 28.0);
+    near(sum.y, 30.0);
+    let n = ts.iter().find(|t| t.text == "n").unwrap();
+    let one = ts.iter().find(|t| t.text == "=1").unwrap();
+    near(n.size, 14.0);
+    assert!(n.y < 30.0 - 0.72 * 28.0, "above the operator's ink: {}", n.y);
+    assert!(one.y > 30.0 + 0.21 * 28.0, "below the operator's ink: {}", one.y);
+    // the column is as wide as the widest part, here the lower limit "i=1" (23.1); "n" (7.7) centred in it
+    near(n.x, 10.0 + (23.1 - 7.7) / 2.0);
+    near(crate::text::width(&FixedMetrics, r"$\sum_{i=1}^{n}$", &Font::new("Arial", 20.0), 20.0), 23.1);
+    // a limit function keeps its size; its limit is centred under it
+    let items = placed(r"$\lim_{x\to 0}$");
+    let ts = texts(&items);
+    assert_eq!(ts[0].text, "lim");
+    assert!(ts.iter().skip(1).all(|t| t.y > 30.0), "the limit sits below");
+}

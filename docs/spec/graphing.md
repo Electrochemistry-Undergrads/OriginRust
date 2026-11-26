@@ -8023,6 +8023,11 @@ font, size and colour, takes part in the label's layout, and exports as vectors 
   upright text, `\mathbf{...}` bold, `\mathit{...}` italic; `\sin`, `\cos`, `\log`, `\ln`, `\exp`, `\lim`, `\max` ...
   upright. `\left`, `\right` and the `\big` sizes are dropped and their delimiters kept; an unknown command is
   written by its name.
-- **Not built:** large operators with limits above and below, matrices, stretchy delimiters,
+- **Limits (T481):** `\sum`, `\prod`, `\coprod`, `\bigcup`, `\bigcap`, `\bigoplus`, `\bigotimes` (drawn at 140 %) and `\lim`,
+  `\max`, `\min`, `\sup`, `\inf` take their scripts below and above them: the markup escape `\lm(op,below,above)` (Sheaf's
+  own) centres the operator and its limits over one column as wide as the widest of them; the limits are at 70 % of
+  the size, 0.08 em clear of the operator's ink (reckoned with an ascent of 0.72 em and a descent of 0.21 em). `\int`
+  keeps its scripts beside it, as LaTeX does in text.
+- **Not built:** matrices, stretchy delimiters,
   display equations on their own lines, and equations from worksheet metadata carried into legends and axis titles.
 

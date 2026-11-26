@@ -102,6 +102,14 @@ pub(crate) fn shape_items(shape: &Shape, f: Rect) -> Vec<Item> {
             let d = polygon(&[(x0, y0), (x1, y0), (x1, y1), (x0, y1)]);
             items.push(Item::Path { d, fill: shape.fill, stroke: Some(stroke) });
         }
+        ShapeKind::Region => {
+            // T479: the freeform outline, closed
+            let pts: Vec<(f64, f64)> =
+                shape.outline_points().into_iter().map(|(x, y)| (f.x + x * f.w, f.y + y * f.h)).collect();
+            if pts.len() >= 3 {
+                items.push(Item::Path { d: polygon(&pts), fill: shape.fill, stroke: Some(stroke) });
+            }
+        }
         ShapeKind::Ellipse => {
             let (cx, cy) = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
             let (rx, ry) = ((b.0 - a.0).abs() / 2.0, (b.1 - a.1).abs() / 2.0);

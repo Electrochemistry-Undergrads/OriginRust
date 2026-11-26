@@ -9780,6 +9780,78 @@ fn double_clicking_a_drawn_object_opens_its_properties() {
     assert_eq!(h.state().doc.undo_label(), Some("Edit drawn object"));
 }
 
+/// Presses at the first point, moves through the others and lets go at the last.
+fn drag_through(h: &mut Harness<'static, SheafApp>, points: &[egui::Pos2]) {
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    h.event(egui::Event::PointerMoved(points[0]));
+    h.step();
+    h.event(button(points[0], true));
+    h.step();
+    for p in &points[1..] {
+        h.event(egui::Event::PointerMoved(*p));
+        h.step();
+    }
+    h.event(button(*points.last().unwrap(), false));
+    h.step();
+    settle(h);
+}
+
+#[test]
+fn the_region_tool_draws_a_lasso_whose_points_can_be_extracted() {
+    // T479: y = x for x = 0..10 on axes 0..10; a lasso around the lower left half of the diagonal
+    let mut text = String::from("x,y\n");
+    for k in 0..=10 {
+        text.push_str(&format!("{k},{k}\n"));
+    }
+    let data = csv_file("lasso", "diag", &text);
+    let mut h = start(vec![data]);
+    show_window(&mut h, "Graph1 - diag");
+    let gid = graph(&h).id;
+    h.state_mut().doc.apply("Axes", |p| {
+        let l = &mut p.graph_mut(gid).unwrap().layers[0];
+        (l.x_axis.min, l.x_axis.max, l.y_axis.min, l.y_axis.max) = (Some(0.0), Some(10.0), Some(0.0), Some(10.0));
+        l.legend.visible = false;
+    });
+    settle(&mut h);
+    bar_button!(h, "Tools", "Region").click();
+    settle(&mut h);
+    assert_eq!(graph_ui(&h).shape_tool, Some(sheaf_core::shape::ShapeKind::Region));
+    // a triangle from just left of the top left corner, down the left edge, along the bottom to the right
+    let mut path = Vec::new();
+    for k in 0..=10 {
+        path.push(frame_point(&h, -0.02, -0.02 + 1.04 * f64::from(k) / 10.0));
+    }
+    for k in 1..=10 {
+        path.push(frame_point(&h, -0.02 + 1.04 * f64::from(k) / 10.0, 1.02));
+    }
+    for k in 1..10 {
+        let t = f64::from(k) / 10.0;
+        path.push(frame_point(&h, 1.02 - 1.04 * t, 1.02 - 1.04 * t));
+    }
+    drag_through(&mut h, &path);
+    let s = shapes(&h);
+    assert_eq!(s.len(), 1);
+    assert_eq!(s[0].kind, sheaf_core::shape::ShapeKind::Region);
+    assert!(s[0].outline.len() >= 10, "{}", s[0].outline.len());
+    assert!(graph_ui(&h).shape_tool.is_none(), "the tool returns to the Pointer");
+    assert_eq!(h.state().doc.undo_label(), Some("Add drawn object"));
+    let books = project(&h).workbooks().count();
+    pause(&mut h);
+    let at = on(&h, 0, ObjectKind::Shape(0));
+    right_click_at(&mut h, at);
+    click(&mut h, "Extract Data in Region");
+    assert_eq!(project(&h).workbooks().count(), books + 1);
+    let book = project(&h).workbooks().last().unwrap();
+    // the points below the diagonal edge; (5, 5) lies on that edge, so either way
+    let got = book.sheet().columns[0].numeric().unwrap().to_vec();
+    assert!(got.starts_with(&[0.0, 1.0, 2.0, 3.0, 4.0]) && got.iter().all(|v| *v <= 5.0), "{got:?}");
+}
+
 /// An arrow (object 0) and a rectangle (object 1), drawn with the tools.
 fn draw_arrow_and_rectangle(h: &mut Harness<'static, SheafApp>) {
     bar_button!(h, "Tools", "Arrow").click();

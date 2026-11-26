@@ -23,10 +23,14 @@ pub enum ShapeKind {
     /// A picture (the graph page's Insert Images From Files..., T216) stretched over that rectangle.
     /// Not one of the drawing tools.
     Image,
+    /// A closed freeform outline (Origin's Region tool, T479): the points of `Shape::outline`, which are
+    /// placed in the rectangle with corners `(x1, y1)` and `(x2, y2)`.
+    Region,
 }
 
 impl ShapeKind {
-    pub const ALL: [ShapeKind; 4] = [ShapeKind::Line, ShapeKind::Arrow, ShapeKind::Rectangle, ShapeKind::Ellipse];
+    pub const ALL: [ShapeKind; 5] =
+        [ShapeKind::Line, ShapeKind::Arrow, ShapeKind::Rectangle, ShapeKind::Ellipse, ShapeKind::Region];
 
     /// A line or an arrow (has two end points, not a box).
     pub fn is_linear(self) -> bool {
@@ -41,6 +45,7 @@ impl ShapeKind {
             ShapeKind::Rectangle => "Rectangle",
             ShapeKind::Ellipse => "Circle",
             ShapeKind::Image => "Picture",
+            ShapeKind::Region => "Region",
         }
     }
 }
@@ -75,6 +80,11 @@ pub struct Shape {
     /// The picture of an [`ShapeKind::Image`] object (T216); `None` for every other kind.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub picture: Option<Picture>,
+    /// The points of a [`ShapeKind::Region`] outline (T479), as fractions of the object's rectangle
+    /// (`(0, 0)` its corner `(x1, y1)`, `(1, 1)` the corner `(x2, y2)`), so that moving or resizing the
+    /// rectangle moves and stretches the outline. Empty for every other kind.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outline: Vec<(f64, f64)>,
 }
 
 /// A PNG picture kept in the project (written as base64 text), with its size in pixels.
@@ -115,7 +125,50 @@ impl Shape {
             head_at_start: false,
             group: None,
             picture: None,
+            outline: Vec::new(),
         }
+    }
+
+    /// A Region outline (T479) through `points` (fractions of the layer frame), closed from the last point
+    /// back to the first; its rectangle is the points' bounding box. `None` for fewer than three points or
+    /// points that span no area.
+    pub fn region(points: &[(f64, f64)]) -> Option<Shape> {
+        if points.len() < 3 || points.iter().any(|(x, y)| !x.is_finite() || !y.is_finite()) {
+            return None;
+        }
+        let (mut lo_x, mut hi_x, mut lo_y, mut hi_y) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
+        for &(x, y) in points {
+            (lo_x, hi_x, lo_y, hi_y) = (lo_x.min(x), hi_x.max(x), lo_y.min(y), hi_y.max(y));
+        }
+        let (w, h) = (hi_x - lo_x, hi_y - lo_y);
+        if w <= 0.0 || h <= 0.0 {
+            return None;
+        }
+        let mut s = Shape::new(ShapeKind::Region, (lo_x, lo_y), (hi_x, hi_y));
+        s.outline = points.iter().map(|&(x, y)| ((x - lo_x) / w, (y - lo_y) / h)).collect();
+        Some(s)
+    }
+
+    /// The points of a Region outline as fractions of the layer frame (empty for other kinds).
+    pub fn outline_points(&self) -> Vec<(f64, f64)> {
+        let (w, h) = (self.x2 - self.x1, self.y2 - self.y1);
+        self.outline.iter().map(|&(u, v)| (self.x1 + u * w, self.y1 + v * h)).collect()
+    }
+
+    /// Whether the frame fraction `(x, y)` is inside the Region outline (the even-odd rule, so a
+    /// self-crossing lasso leaves out the parts it encloses twice). False for other kinds.
+    pub fn outline_contains(&self, (x, y): (f64, f64)) -> bool {
+        let pts = self.outline_points();
+        let mut inside = false;
+        let mut j = pts.len().wrapping_sub(1);
+        for i in 0..pts.len() {
+            let ((xi, yi), (xj, yj)) = (pts[i], pts[j]);
+            if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi {
+                inside = !inside;
+            }
+            j = i;
+        }
+        inside
     }
 
     /// A picture object (T216) with its top left corner at `at` and `size` fractions of the frame,
@@ -237,6 +290,27 @@ mod tests {
         let back: Shape = serde_json::from_str(&json).unwrap();
         assert_eq!(back.picture, Some(pic));
         assert!(!ShapeKind::ALL.contains(&ShapeKind::Image), "not a drawing tool");
+    }
+
+    #[test]
+    fn a_region_keeps_its_outline_through_moves_and_resizes() {
+        // T479: an L-shaped lasso
+        let pts = [(0.2, 0.2), (0.6, 0.2), (0.6, 0.4), (0.4, 0.4), (0.4, 0.8), (0.2, 0.8)];
+        let mut s = Shape::region(&pts).unwrap();
+        assert_eq!((s.kind, s.x1, s.y1, s.x2, s.y2), (ShapeKind::Region, 0.2, 0.2, 0.6, 0.8));
+        assert!(s.outline_contains((0.3, 0.7)), "in the stem of the L");
+        assert!(s.outline_contains((0.5, 0.3)), "in the foot of the L");
+        assert!(!s.outline_contains((0.5, 0.6)), "in the notch");
+        s.translate(0.1, 0.0);
+        assert!(s.outline_contains((0.4, 0.7)) && !s.outline_contains((0.25, 0.7)));
+        // a resize of the rectangle stretches the outline
+        s.x2 = 1.1;
+        let p = s.outline_points();
+        assert!((p[1].0 - 1.1).abs() < 1e-12 && (p[0].0 - 0.3).abs() < 1e-12);
+        assert!(Shape::region(&[(0.1, 0.1), (0.2, 0.2)]).is_none(), "two points");
+        assert!(Shape::region(&[(0.1, 0.1), (0.2, 0.1), (0.3, 0.1)]).is_none(), "no area");
+        let back: Shape = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(back, s);
         let plain = serde_json::to_string(&Shape::new(ShapeKind::Line, (0.0, 0.0), (1.0, 1.0))).unwrap();
         assert!(!plain.contains("picture"));
     }

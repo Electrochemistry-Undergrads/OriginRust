@@ -1,5 +1,5 @@
-//! The data points inside a drawn rectangle or ellipse of a graph (T355; Origin 2024b's "extract data from regions
-//! on a graph", not in Origin 2016, so the rules are Sheaf's own; graphing spec 17.12).
+//! The data points inside a drawn rectangle, ellipse or freeform Region (T355, T479; Origin 2024b's "extract data
+//! from regions on a graph", not in Origin 2016, so the rules are Sheaf's own; graphing spec 17.12).
 //!
 //! A drawn object's corners are fractions of its layer's frame. A plot's point is inside when its place on the page
 //! (through the layer's axis scales, so log and reciprocal axes and reversed limits count) falls inside the
@@ -49,15 +49,15 @@ pub fn points_in_shape(
     points_in_shapes(project, graph, layer, &[shape])
 }
 
-/// The drawn rectangles and ellipses of layer `layer` (T422), in drawing order.
+/// Whether a drawn object marks a region: a rectangle, an ellipse or a freeform Region (T479).
+pub fn is_region(kind: ShapeKind) -> bool {
+    matches!(kind, ShapeKind::Rectangle | ShapeKind::Ellipse | ShapeKind::Region)
+}
+
+/// The drawn rectangles, ellipses and Regions of layer `layer` (T422), in drawing order.
 pub fn region_shapes(project: &Project, graph: WindowId, layer: usize) -> Vec<usize> {
     let Some(l) = project.graph(graph).and_then(|g| g.layers.get(layer)) else { return Vec::new() };
-    l.shapes
-        .iter()
-        .enumerate()
-        .filter(|(_, s)| matches!(s.kind, ShapeKind::Rectangle | ShapeKind::Ellipse))
-        .map(|(k, _)| k)
-        .collect()
+    l.shapes.iter().enumerate().filter(|(_, s)| is_region(s.kind)).map(|(k, _)| k).collect()
 }
 
 /// The data points inside any of the drawn objects `shapes` of layer `layer` (T422), each point once, in row order.
@@ -70,10 +70,8 @@ pub fn points_in_shapes(
 ) -> Result<Option<Vec<RegionPoints>>, PlotError> {
     let g = project.graph(graph).ok_or(PlotError::NoSuchGraph(graph))?;
     let l = g.layers.get(layer).ok_or(PlotError::NoSuchLayer(layer))?;
-    let regions: Option<Vec<&sheaf_core::shape::Shape>> = shapes
-        .iter()
-        .map(|k| l.shapes.get(*k).filter(|s| matches!(s.kind, ShapeKind::Rectangle | ShapeKind::Ellipse)))
-        .collect();
+    let regions: Option<Vec<&sheaf_core::shape::Shape>> =
+        shapes.iter().map(|k| l.shapes.get(*k).filter(|s| is_region(s.kind))).collect();
     let Some(regions) = regions.filter(|r| !r.is_empty()) else {
         return Ok(None);
     };
@@ -83,8 +81,7 @@ pub fn points_in_shapes(
     if f.w <= 0.0 || f.h <= 0.0 {
         return Ok(Some(Vec::new()));
     }
-    let boxes: Vec<(ShapeKind, (f64, f64, f64, f64))> =
-        regions.iter().map(|s| (s.kind, (s.x1, s.y1, s.x2, s.y2))).collect();
+
     let mut out = Vec::new();
     for (k, p) in l.plots.iter().enumerate() {
         let Some(ys) = project.column(p.y).and_then(|c| c.numeric()) else { continue };
@@ -104,7 +101,11 @@ pub fn points_in_shapes(
                 continue;
             }
             let at = ((px - f.x) / f.w, (py - f.y) / f.h);
-            if boxes.iter().any(|&(kind, corners)| inside(kind, corners, at)) {
+            let within = |s: &&sheaf_core::shape::Shape| match s.kind {
+                ShapeKind::Region => s.outline_contains(at),
+                kind => inside(kind, (s.x1, s.y1, s.x2, s.y2), at),
+            };
+            if regions.iter().any(within) {
                 found.rows.push(r);
                 found.x.push(x);
                 found.y.push(y);
@@ -124,6 +125,18 @@ mod tests {
     use sheaf_core::shape::Shape;
     use sheaf_core::template::Template;
     use sheaf_core::{ColumnData, Designation};
+
+    #[test]
+    fn a_freeform_region_takes_the_points_inside_its_outline() {
+        // T479: an outline below the frame line v = u - 0.05 (frame fractions, v down) holds the points of y = x
+        // up to x = 5: the point k sits at (k / 10, 1 - k / 10).
+        let (mut p, g) = project();
+        let tri = Shape::region(&[(-0.01, -0.06), (-0.01, 1.01), (1.01, 1.01), (1.01, 0.96)]).unwrap();
+        p.graph_mut(g).unwrap().layers[0].shapes.push(tri);
+        assert_eq!(region_shapes(&p, g, 0), [0]);
+        let found = points_in_shape(&p, g, 0, 0).unwrap().unwrap();
+        assert_eq!(found[0].x, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
+    }
 
     /// y = x for x = 0..10, axes 0..10 on both sides.
     fn project() -> (Project, WindowId) {

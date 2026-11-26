@@ -45,6 +45,8 @@ fn layer_of_hit(hit: Hit) -> Option<usize> {
 
 /// A drag shorter than this (page points) draws nothing.
 const MIN_DRAWN_PT: f64 = 3.0;
+/// The distance in page points between two kept points of a Region outline being drawn (T479).
+const LASSO_STEP_PT: f64 = 2.0;
 
 /// Where the analysis lock of each layer goes (T186): beside the layer's icon, or beside the
 /// locked plot's first or last drawn point, as the page's Lock Position says. `None` for a layer
@@ -167,6 +169,12 @@ fn draw_preview(painter: &egui::Painter, s: &Shape, to_screen: &dyn Fn((f64, f64
         ShapeKind::Rectangle | ShapeKind::Image => {
             painter.rect_stroke(Rect::from_two_pos(a, b), 0.0, stroke, egui::StrokeKind::Middle);
         }
+        ShapeKind::Region => {
+            let pts: Vec<Pos2> = s.outline_points().into_iter().map(to_screen).collect();
+            if pts.len() >= 2 {
+                painter.add(egui::Shape::closed_line(pts, stroke));
+            }
+        }
         ShapeKind::Ellipse => {
             let (c, r) = (Rect::from_two_pos(a, b).center(), Rect::from_two_pos(a, b).size() / 2.0);
             let pts = (0..48)
@@ -252,6 +260,8 @@ pub struct GraphUi {
     data: data_tools::State,
     /// An object being drawn.
     drawing: Option<Drawing>,
+    /// The points of a Region outline being drawn (T479), fractions of the layer frame.
+    lasso: Vec<(f64, f64)>,
     /// A drawn object being moved.
     shape_drag: Option<ShapeDrag>,
     resize_drag: Option<ResizeDrag>,
@@ -1200,6 +1210,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
             state.shape_tool = None;
             state.drawing = None;
+            state.lasso.clear();
         }
         if response.drag_started()
             && let Some(pos) = ui.input(|i| i.pointer.press_origin())
@@ -1208,6 +1219,7 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             if let Some(f) = t.geometry.get(layer).map(|g| g.frame).filter(|f| f.w > 0.0 && f.h > 0.0) {
                 let (px, py) = to_page(pos);
                 state.drawing = Some(Drawing { layer, kind, from: ((px - f.x) / f.w, (py - f.y) / f.h) });
+                state.lasso = vec![((px - f.x) / f.w, (py - f.y) / f.h)];
                 actions.push(Action::ActivateLayer { graph: graph_id, layer });
             }
         }
@@ -1217,21 +1229,47 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
         {
             let (px, py) = to_page(pos);
             let mut to = ((px - f.x) / f.w, (py - f.y) / f.h);
-            if ui.input(|i| i.modifiers.shift) {
-                to = shape::constrain(d.kind, d.from, to, (f.w, f.h));
-            }
-            let mut preview = Shape::new(d.kind, d.from, to);
-            preview.color = sheaf_core::Color::BLACK;
-            draw_preview(&painter, &preview, &|(x, y)| to_screen((f.x + x * f.w, f.y + y * f.h)));
-            if response.drag_stopped() {
-                state.drawing = None;
-                // A click without a drag draws nothing and leaves the tool on.
-                if ((to.0 - d.from.0) * f.w).hypot((to.1 - d.from.1) * f.h) >= MIN_DRAWN_PT {
-                    let index = graph.layers.get(d.layer).map_or(0, |l| l.shapes.len());
-                    state.shape_tool = None;
-                    state.also.clear();
-                    state.selected = Some((d.layer, ObjectKind::Shape(index)));
-                    actions.push(Action::AddShape { graph: graph_id, layer: d.layer, shape: preview });
+            if d.kind == ShapeKind::Region {
+                // T479: the outline follows the pointer; a point is kept every LASSO_STEP_PT page points
+                let last = state.lasso.last().copied().unwrap_or(d.from);
+                if ((to.0 - last.0) * f.w).hypot((to.1 - last.1) * f.h) >= LASSO_STEP_PT {
+                    state.lasso.push(to);
+                }
+                let screen: Vec<Pos2> =
+                    state.lasso.iter().map(|&(x, y)| to_screen((f.x + x * f.w, f.y + y * f.h))).collect();
+                if screen.len() >= 2 {
+                    painter.add(egui::Shape::closed_line(screen, Stroke::new(1.0_f32, Color32::from_rgb(0, 90, 200))));
+                }
+                if response.drag_stopped() {
+                    state.drawing = None;
+                    let points = std::mem::take(&mut state.lasso);
+                    let size = Shape::region(&points).map(|s| ((s.x2 - s.x1) * f.w).hypot((s.y2 - s.y1) * f.h));
+                    // A click or a scribble too small to hold anything draws nothing and leaves the tool on.
+                    if let Some(shape) = Shape::region(&points).filter(|_| size.is_some_and(|z| z >= MIN_DRAWN_PT)) {
+                        let index = graph.layers.get(d.layer).map_or(0, |l| l.shapes.len());
+                        state.shape_tool = None;
+                        state.also.clear();
+                        state.selected = Some((d.layer, ObjectKind::Shape(index)));
+                        actions.push(Action::AddShape { graph: graph_id, layer: d.layer, shape });
+                    }
+                }
+            } else {
+                if ui.input(|i| i.modifiers.shift) {
+                    to = shape::constrain(d.kind, d.from, to, (f.w, f.h));
+                }
+                let mut preview = Shape::new(d.kind, d.from, to);
+                preview.color = sheaf_core::Color::BLACK;
+                draw_preview(&painter, &preview, &|(x, y)| to_screen((f.x + x * f.w, f.y + y * f.h)));
+                if response.drag_stopped() {
+                    state.drawing = None;
+                    // A click without a drag draws nothing and leaves the tool on.
+                    if ((to.0 - d.from.0) * f.w).hypot((to.1 - d.from.1) * f.h) >= MIN_DRAWN_PT {
+                        let index = graph.layers.get(d.layer).map_or(0, |l| l.shapes.len());
+                        state.shape_tool = None;
+                        state.also.clear();
+                        state.selected = Some((d.layer, ObjectKind::Shape(index)));
+                        actions.push(Action::AddShape { graph: graph_id, layer: d.layer, shape: preview });
+                    }
                 }
             }
         }
@@ -1910,20 +1948,16 @@ fn menu_for(
             }
             ObjectKind::Label(k) => menus::graph_label_menu(layer, k),
             ObjectKind::Shape(k) => {
-                let region = graph.layers.get(layer).and_then(|l| l.shapes.get(k)).is_some_and(|s| {
-                    matches!(s.kind, sheaf_core::shape::ShapeKind::Rectangle | sheaf_core::shape::ShapeKind::Ellipse)
-                });
-                let regions = graph.layers.get(layer).map_or(0, |l| {
-                    l.shapes
-                        .iter()
-                        .filter(|s| {
-                            matches!(
-                                s.kind,
-                                sheaf_core::shape::ShapeKind::Rectangle | sheaf_core::shape::ShapeKind::Ellipse
-                            )
-                        })
-                        .count()
-                });
+                // a rectangle, an ellipse or a freeform Region marks a region (T479)
+                let region = graph
+                    .layers
+                    .get(layer)
+                    .and_then(|l| l.shapes.get(k))
+                    .is_some_and(|s| sheaf_plot::region::is_region(s.kind));
+                let regions = graph
+                    .layers
+                    .get(layer)
+                    .map_or(0, |l| l.shapes.iter().filter(|s| sheaf_plot::region::is_region(s.kind)).count());
                 menus::graph_shape_menu(layer, k, region, regions)
             }
             ObjectKind::Slope(k) => menus::graph_slope_menu(layer, k),

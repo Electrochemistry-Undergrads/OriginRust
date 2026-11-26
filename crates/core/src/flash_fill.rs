@@ -4,8 +4,8 @@
 //! its sources.
 //!
 //! A rule joins pieces, each one of: a fixed text; a whole cell of a source column; a word of one (a run of
-//! letters and digits, counted from the start or from the end) or the word's first letter; each read as it is, in
-//! upper case or in lower case. The search tries the longest pieces first, prefers a cell to a word, a word to a
+//! letters and digits, counted from the start or from the end), or its first or last one to four characters (T468);
+//! each read as it is, in upper case or in lower case. The search tries the longest pieces first, prefers a cell to a word, a word to a
 //! letter and a letter to fixed text, and a word counted from the nearer end (from the start when equal), so that
 //! "John Smith" -> "Smith, J." gives `token(col(A)$, -1) + ", " + left(token(col(A)$, 1), 1) + "."`.
 
@@ -31,6 +31,16 @@ impl Case {
     }
 }
 
+/// The part of a word a piece takes (T468: the first or last few characters as well as the whole word).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Part {
+    Whole,
+    /// The first n characters (1 is the initial).
+    First(u8),
+    /// The last n characters.
+    Last(u8),
+}
+
 /// One piece of a rule; `source` indexes the rule's source columns.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Piece {
@@ -39,12 +49,12 @@ pub enum Piece {
         source: usize,
         case: Case,
     },
-    /// Word `index` (1 the first, -1 the last); its first letter only when `initial`.
+    /// Word `index` (1 the first, -1 the last), or the part of it `part` takes.
     Word {
         source: usize,
         index: i32,
         case: Case,
-        initial: bool,
+        part: Part,
     },
 }
 
@@ -53,9 +63,14 @@ impl Piece {
         match self {
             Piece::Text(t) => t.clone(),
             Piece::Cell { source, case } => case.apply(&row[*source]),
-            Piece::Word { source, index, case, initial } => {
+            Piece::Word { source, index, case, part } => {
                 let w = token(&row[*source], f64::from(*index));
-                let w = if *initial { w.chars().take(1).collect() } else { w };
+                let n = w.chars().count();
+                let w: String = match part {
+                    Part::Whole => w,
+                    Part::First(k) => w.chars().take(*k as usize).collect(),
+                    Part::Last(k) => w.chars().skip(n.saturating_sub(*k as usize)).collect(),
+                };
                 case.apply(&w)
             }
         }
@@ -71,9 +86,14 @@ impl Piece {
         match self {
             Piece::Text(t) => format!("\"{t}\""),
             Piece::Cell { source, case } => cased(format!("col({})$", names[*source]), *case),
-            Piece::Word { source, index, case, initial } => {
+            Piece::Word { source, index, case, part } => {
                 let w = format!("token(col({})$, {index})", names[*source]);
-                cased(if *initial { format!("left({w}, 1)") } else { w }, *case)
+                let w = match part {
+                    Part::Whole => w,
+                    Part::First(k) => format!("left({w}, {k})"),
+                    Part::Last(k) => format!("right({w}, {k})"),
+                };
+                cased(w, *case)
             }
         }
     }
@@ -101,7 +121,7 @@ impl FlashRule {
 }
 
 /// How many partial rules the search may look at before it gives up.
-const BUDGET: usize = 5_000;
+const BUDGET: usize = 2_000;
 
 /// The pieces worth trying in a row: every cell, word and initial of its sources in every case, the more
 /// general first (cells, then words from the nearer end, then initials).
@@ -117,17 +137,19 @@ fn candidates(sources: usize, rows: &[&[String]]) -> Vec<Piece> {
     for source in 0..sources {
         for k in 1..=most {
             for index in [k, -k] {
-                for initial in [false, true] {
+                let parts = [Part::Whole].into_iter().chain((1..=4).map(Part::First)).chain((1..=4).map(Part::Last));
+                for part in parts {
                     for case in [Case::AsIs, Case::Upper, Case::Lower] {
-                        words.push(Piece::Word { source, index, case, initial });
+                        words.push(Piece::Word { source, index, case, part });
                     }
                 }
             }
         }
     }
-    // Whole words before initials, then the nearer end, then from the start, then as-is before cased.
+    // Whole words before parts (an initial first among them), then the nearer end, then from the start, then as-is
+    // before cased.
     words.sort_by_key(|p| match p {
-        Piece::Word { index, initial, case, .. } => (*initial, index.unsigned_abs(), *index < 0, *case as u8),
+        Piece::Word { index, part, case, .. } => (*part, index.unsigned_abs(), *index < 0, *case as u8),
         _ => unreachable!(),
     });
     out.extend(words);
@@ -282,6 +304,15 @@ mod tests {
 
     fn ex(rows: &[(&[&str], &str)]) -> Vec<(Vec<String>, String)> {
         rows.iter().map(|(s, o)| (s.iter().map(|x| x.to_string()).collect(), o.to_string())).collect()
+    }
+
+    #[test]
+    fn parts_of_words_are_read() {
+        // T468: the first two letters of a first name and the last two digits of a year.
+        let rule = infer(&ex(&[(&["John Smith", "2017"], "Jo-17")])).unwrap();
+        let names = ["A".to_string(), "B".to_string()];
+        assert_eq!(rule.formula(&names).unwrap(), r#"left(token(col(A)$, 1), 2) + "-" + right(token(col(B)$, 1), 2)"#);
+        assert_eq!(rule.apply(&["Grace Hopper".into(), "1952".into()]), "Gr-52");
     }
 
     #[test]

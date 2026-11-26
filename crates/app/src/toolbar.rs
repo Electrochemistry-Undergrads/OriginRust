@@ -174,6 +174,7 @@ pub enum Icon {
     Line,
     Rectangle,
     Circle,
+    Region,
     Slope,
     Hand,
     // 2D graphs
@@ -420,6 +421,8 @@ fn build(bar: Bar) -> Vec<Item> {
             tool(Icon::Line, "Line", Cmd::ShapeTool(ShapeKind::Line)),
             tool(Rectangle, "Rectangle", Cmd::ShapeTool(ShapeKind::Rectangle)),
             tool(Circle, "Circle", Cmd::ShapeTool(ShapeKind::Ellipse)),
+            // T479: Origin's Region tool, a freeform outline drawn by dragging
+            tool(Icon::Region, "Region", Cmd::ShapeTool(ShapeKind::Region)),
             tool(Slope, "Slope", Cmd::SlopeTool),
             tool(Hand, "Pan", Cmd::PanTool),
         ],
@@ -1082,6 +1085,22 @@ impl Pen<'_> {
                     self.dot(p, 1.3, true);
                 }
             }
+            Region => {
+                // a lasso: a closed freeform outline
+                self.closed(
+                    &[
+                        (3.0, 6.0),
+                        (6.0, 2.5),
+                        (10.5, 3.5),
+                        (13.5, 7.0),
+                        (11.0, 10.0),
+                        (12.5, 13.5),
+                        (7.0, 12.5),
+                        (3.5, 11.0),
+                    ],
+                    false,
+                );
+            }
             Slope => {
                 self.line(&[(2.5, 13.5), (13.5, 4.5)], false);
                 self.line(&[(2.5, 13.5), (13.5, 13.5), (13.5, 4.5)], true);
@@ -1343,7 +1362,7 @@ mod tests {
         assert_eq!(&tips(Bar::Tools)[..4], ["Pointer", "Scale In", "Scale Out", "Rescale"]);
         assert_eq!(
             &tips(Bar::Tools)[4..],
-            ["Data Reader", "Text", "Arrow", "Line", "Rectangle", "Circle", "Slope", "Pan"]
+            ["Data Reader", "Text", "Arrow", "Line", "Rectangle", "Circle", "Region", "Slope", "Pan"]
         );
         assert_eq!(&tips(Bar::Edit)[..3], ["Cut", "Copy", "Paste"]);
         assert_eq!(&tips(Bar::Standard)[..2], ["New Project", "New Workbook"]);

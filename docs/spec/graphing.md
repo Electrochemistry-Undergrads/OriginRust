@@ -4539,8 +4539,16 @@ data in region"); the status line counts the cells changed, and nothing happens 
 
 Several regions (T422): when the layer has two or more drawn rectangles or ellipses, the menu of each also has
 Extract Data in All Regions, Mask Data in All Regions and Unmask Data in All Regions, which work on the points inside
-any of them (a point inside two overlapping regions counts once; `sheaf_plot::region::points_in_shapes`). Freeform
-regions are not built.
+any of them (a point inside two overlapping regions counts once; `sheaf_plot::region::points_in_shapes`).
+
+Freeform regions (T479): the Tools bar's **Region** button (after Circle; Origin 2016's Tools bar has a Region tool too, not
+measured) draws a closed freeform outline by dragging: a point is kept every 2 page points along the pointer, the outline closes
+from the last point back to the first, and letting go adds it as a drawn object ("Add drawn object", the tool returns to the
+Pointer; a scribble with a box under 3 points across draws nothing). The object (`ShapeKind::Region`) keeps its points as
+fractions of its bounding box, so moving, resizing and aligning it move and stretch the outline; it has a line colour, width,
+dash and an optional fill like a rectangle and is saved in `.sheaf` files (an `.opj` names it among the drawn objects it cannot
+hold). Its menu has the region entries above, and it counts among the layer's regions for the All Regions entries; a point is
+inside by the even-odd rule (`Shape::outline_contains`), so the parts of a self-crossing lasso enclosed twice are outside.
 
 ### 17.13 Cause-and-effect (fishbone) diagram (T375, Origin 2026 feature, Sheaf's layout, not measured)
 

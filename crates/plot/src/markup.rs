@@ -6,7 +6,8 @@
 //! `\=(sub,sup)` places paired scripts in one shared column. `\fr(num,den)` stacks a fraction: the
 //! numerator over a bar over the denominator, centred in one column (Sheaf's own escape, T480; LaTeX
 //! `\frac` in `$...$` math becomes it). `\lm(op,below,above)` centres `below` under and `above` over `op` (T481,
-//! LaTeX large operators and limits). `\ab(..)`, `\ad(..)`, and
+//! LaTeX large operators and limits). `\dl(lr,body)` encloses `body` in delimiters as tall as it is, `l` and `r`
+//! one of `p` ( ), `b` [ ], `c` { }, `v` |, `a` ⟨ ⟩ or `n` none (T482, LaTeX `\left` ... `\right`). `\ab(..)`, `\ad(..)`, and
 //! `\at(..)` draw a bar, dot, or tilde above a span.
 //! `\sc` adds a conditional space, optionally before a parenthesized span.
 //! Escapes nest. A backslash
@@ -45,6 +46,7 @@ fn collect_runs(segments: &[Segment], out: &mut Vec<Run>) {
                 collect_runs(num, out);
                 collect_runs(den, out);
             }
+            Segment::Delimited { body, .. } => collect_runs(body, out),
             Segment::Limits { op, below, above } => {
                 collect_runs(op, out);
                 collect_runs(below, out);
@@ -151,6 +153,15 @@ pub(crate) enum Segment {
         below: Vec<Segment>,
         above: Vec<Segment>,
     },
+    /// A body between two delimiters drawn as tall as it is (T482): the kinds (`p`, `b`, `c`, `v`, `a`, `n`),
+    /// the size of the surrounding text and the colour of the delimiters.
+    Delimited {
+        left: char,
+        right: char,
+        body: Vec<Segment>,
+        scale: f64,
+        color: Option<Color>,
+    },
     LineGap(u32),
     /// Consumed by the legend row before it places any glyphs.
     Tab,
@@ -175,6 +186,32 @@ pub fn parse(text: &str) -> Vec<Run> {
                     flatten(sup, out);
                 }
                 Segment::Accent { content, .. } => flatten(content, out),
+                Segment::Delimited { left, right, body, .. } => {
+                    let style = out.last().cloned();
+                    let glyph = |kind: char, open: bool| match (kind, open) {
+                        ('p', true) => "(",
+                        ('p', false) => ")",
+                        ('b', true) => "[",
+                        ('b', false) => "]",
+                        ('c', true) => "{",
+                        ('c', false) => "}",
+                        ('v', _) => "|",
+                        ('a', true) => "⟨",
+                        ('a', false) => "⟩",
+                        _ => "",
+                    };
+                    let mut inner = Vec::new();
+                    flatten(body, &mut inner);
+                    let base = style.or_else(|| inner.first().cloned());
+                    let push = |text: &str, out: &mut Vec<Run>| {
+                        if let Some(b) = base.clone().filter(|_| !text.is_empty()) {
+                            out.push(Run { text: text.into(), ..b });
+                        }
+                    };
+                    push(glyph(left, true), out);
+                    out.extend(inner);
+                    push(glyph(right, false), out);
+                }
                 Segment::Limits { op, below, above } => {
                     flatten(op, out);
                     if !below.is_empty() || !above.is_empty() {
@@ -357,6 +394,8 @@ enum Escape {
     Fraction,
     /// An operator with its limits below and above, separated by the outer commas (T481).
     Limits,
+    /// Two delimiter letters, a comma and the enclosed text (T482).
+    Delimited,
     /// A decorated span with one accent over its contents.
     Accent(Accent),
     /// `\v(..)` or `\h(..)`: the enclosed text is taken literally.
@@ -391,6 +430,9 @@ fn escape_at(chars: &[char], pos: usize, st: &Style, options: &ParseOptions<'_>)
     }
     if chars.get(pos + 1..pos + 4) == Some(&['l', 'm', '(']) {
         return Some((Escape::Limits, pos + 4));
+    }
+    if chars.get(pos + 1..pos + 4) == Some(&['d', 'l', '(']) {
+        return Some((Escape::Delimited, pos + 4));
     }
     if code == '(' {
         return Some((Escape::Decimal, pos + 2));
@@ -611,6 +653,20 @@ fn parse_seq(
                     if !content.is_empty() {
                         out.span(Segment::Accent { kind, content, scale: st.scale, color: st.color });
                     }
+                }
+                Escape::Delimited => {
+                    let body: Vec<char> = take_enclosed(chars, pos).chars().collect();
+                    let (kinds, rest) = split_outer_comma(&body);
+                    let kind = |k: Option<&char>| k.copied().filter(|c| "pbcvan".contains(*c)).unwrap_or('n');
+                    let mut inner = ParsedText::default();
+                    parse_seq(rest, &mut 0, st.clone(), false, depth + 1, &mut inner, options);
+                    out.span(Segment::Delimited {
+                        left: kind(kinds.first()),
+                        right: kind(kinds.get(1)),
+                        body: inner.segments,
+                        scale: st.scale,
+                        color: st.color,
+                    });
                 }
                 Escape::Limits => {
                     let body: Vec<char> = take_enclosed(chars, pos).chars().collect();

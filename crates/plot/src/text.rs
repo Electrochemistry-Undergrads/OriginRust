@@ -94,12 +94,93 @@ pub(crate) fn segments_width(m: &dyn TextMeasurer, segments: &[Segment], font: &
                 segments_width(m, num, font, size).max(segments_width(m, den, font, size))
                     + 2.0 * FRACTION_PAD * scale * size
             }
+            Segment::Delimited { left, right, body, scale, .. } => {
+                segments_width(m, body, font, size) + (delimiter_width(*left) + delimiter_width(*right)) * scale * size
+            }
             Segment::Limits { op, below, above } => segments_width(m, op, font, size)
                 .max(segments_width(m, below, font, size))
                 .max(segments_width(m, above, font, size)),
             Segment::LineGap(_) | Segment::Tab => 0.0,
         })
         .sum()
+}
+
+/// The width of a stretchy delimiter (T482) in units of the text size; none for `n`.
+fn delimiter_width(kind: char) -> f64 {
+    match kind {
+        'n' => 0.0,
+        'v' => 0.25,
+        _ => 0.36,
+    }
+}
+
+/// How far a stretchy delimiter reaches beyond the ink of what it encloses, and its line width, in units of the
+/// text size (T482).
+const DELIMITER_OVERSHOOT: f64 = 0.06;
+const DELIMITER_STROKE: f64 = 0.06;
+
+/// The lowest ink of `segments` below the baseline, in units of the label's size (negative below it).
+fn ink_bottom(segments: &[Segment]) -> f64 {
+    segments
+        .iter()
+        .map(|segment| match segment {
+            Segment::Text(run) => run.rise - DESCENT * run.scale,
+            Segment::Pair { sub, sup } => ink_bottom(sub).min(ink_bottom(sup)),
+            Segment::Accent { content, .. } => ink_bottom(content),
+            Segment::Fraction { den, bar_rise, .. } => ink_bottom(den).min(*bar_rise),
+            Segment::Limits { op, below, .. } => ink_bottom(op).min(ink_bottom(below)),
+            Segment::Delimited { body, scale, .. } => ink_bottom(body) - DELIMITER_OVERSHOOT * scale,
+            Segment::LineGap(_) | Segment::Tab => f64::INFINITY,
+        })
+        .fold(f64::INFINITY, f64::min)
+}
+
+/// The path of a stretchy delimiter (T482) from `top` to `bottom` (page offsets below the baseline, y down) in a
+/// box `width` wide; `at` turns local (along, down) offsets into page points.
+fn delimiter_item(
+    kind: char,
+    open: bool,
+    (top, bottom): (f64, f64),
+    width: f64,
+    stroke: f64,
+    color: Color,
+    at: impl Fn(f64, f64) -> (f64, f64),
+) -> Option<Item> {
+    let h = bottom - top;
+    let mid = top + h / 2.0;
+    // the shape of an opening delimiter as (fraction of the width, page offset down); a closing one is mirrored
+    let points: Vec<(f64, f64)> = match kind {
+        'p' => (0..=16)
+            .map(|k| {
+                let t = f64::from(k) / 16.0;
+                (0.8 - 0.55 * (std::f64::consts::PI * t).sin(), top + h * t)
+            })
+            .collect(),
+        'b' => vec![(0.8, top), (0.3, top), (0.3, bottom), (0.8, bottom)],
+        'c' => vec![
+            (0.8, top),
+            (0.5, top + 0.08 * h),
+            (0.5, mid - 0.06 * h),
+            (0.2, mid),
+            (0.5, mid + 0.06 * h),
+            (0.5, bottom - 0.08 * h),
+            (0.8, bottom),
+        ],
+        'v' => vec![(0.5, top), (0.5, bottom)],
+        'a' => vec![(0.75, top), (0.25, mid), (0.75, bottom)],
+        _ => return None,
+    };
+    let mut d = String::new();
+    for (i, (u, v)) in points.into_iter().enumerate() {
+        let u = if open { u } else { 1.0 - u };
+        let (x, y) = at(u * width, v);
+        if i == 0 {
+            move_to(&mut d, x, y);
+        } else {
+            line_to(&mut d, x, y);
+        }
+    }
+    Some(Item::Path { d, fill: None, stroke: Some(Stroke::solid(color, stroke)) })
 }
 
 /// Space on each side of a stacked fraction's bar beyond its longer part, in units of the text size (T480).
@@ -116,6 +197,7 @@ fn ink_top(segments: &[Segment]) -> f64 {
             }
             Segment::Fraction { num, bar_rise, .. } => ink_top(num).max(*bar_rise),
             Segment::Limits { op, above, .. } => ink_top(op).max(ink_top(above)),
+            Segment::Delimited { body, scale, .. } => ink_top(body) + DELIMITER_OVERSHOOT * scale,
             Segment::LineGap(_) | Segment::Tab => f64::NEG_INFINITY,
         })
         .fold(f64::NEG_INFINITY, f64::max)
@@ -123,7 +205,24 @@ fn ink_top(segments: &[Segment]) -> f64 {
 
 enum Ink<'a> {
     Glyphs(&'a Run),
-    Accent { kind: Accent, rise: f64, width: f64, em: f64, color: Color },
+    /// A stretchy delimiter (T482): its kind, whether it opens, its top and bottom (in units of the label's size
+    /// above the baseline), its box width and line width in points and its colour.
+    Delimiter {
+        kind: char,
+        open: bool,
+        top: f64,
+        bottom: f64,
+        width: f64,
+        stroke: f64,
+        color: Color,
+    },
+    Accent {
+        kind: Accent,
+        rise: f64,
+        width: f64,
+        em: f64,
+        color: Color,
+    },
 }
 
 /// Visits glyph runs and accents at local horizontal offsets. Both script branches begin at the same column;
@@ -159,6 +258,22 @@ fn visit_ink(
                     );
                 }
                 cursor += width;
+            }
+            Segment::Delimited { left, right, body, scale, color } => {
+                // T482: the delimiters span the body's ink and a little more
+                let top = ink_top(body).max(ASCENT * scale) + DELIMITER_OVERSHOOT * scale;
+                let bottom = ink_bottom(body).min(-DESCENT * scale) - DELIMITER_OVERSHOOT * scale;
+                let color = color.unwrap_or(font.color);
+                let stroke = DELIMITER_STROKE * scale * size;
+                let (lw, rw) = (delimiter_width(*left) * scale * size, delimiter_width(*right) * scale * size);
+                visit(Ink::Delimiter { kind: *left, open: true, top, bottom, width: lw, stroke, color }, cursor);
+                visit_ink(body, m, font, size, cursor + lw, visit);
+                let body_width = segments_width(m, body, font, size);
+                visit(
+                    Ink::Delimiter { kind: *right, open: false, top, bottom, width: rw, stroke, color },
+                    cursor + lw + body_width,
+                );
+                cursor += lw + body_width + rw;
             }
             Segment::Limits { op, below, above } => {
                 // T481: the operator and its limits centred over one column
@@ -388,6 +503,18 @@ pub(crate) fn place_segments(
                     let dy = vertical - rise;
                     (x + dx * cos + dy * sin, y - dx * sin + dy * cos)
                 }));
+                return;
+            }
+            Ink::Delimiter { kind, open, top, bottom, width, stroke, color } => {
+                let place = |along: f64, down: f64| {
+                    let dx = cursor + along;
+                    (x + dx * cos + down * sin, y - dx * sin + down * cos)
+                };
+                if let Some(item) =
+                    delimiter_item(kind, open, (-top * size, -bottom * size), width, stroke, color, place)
+                {
+                    items.push(item);
+                }
                 return;
             }
         };

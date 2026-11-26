@@ -8021,13 +8021,17 @@ font, size and colour, takes part in the label's layout, and exports as vectors 
   bar, dot and tilde accents; `\hat` and `\vec` add combining marks.
 - **Fonts:** `\mathrm{...}` and `\operatorname{...}` upright (scripts inside still work), `\text{...}` literal
   upright text, `\mathbf{...}` bold, `\mathit{...}` italic; `\sin`, `\cos`, `\log`, `\ln`, `\exp`, `\lim`, `\max` ...
-  upright. `\left`, `\right` and the `\big` sizes are dropped and their delimiters kept; an unknown command is
+  upright. The `\big` sizes are dropped and their delimiters kept; an unknown command is
   written by its name.
 - **Limits (T481):** `\sum`, `\prod`, `\coprod`, `\bigcup`, `\bigcap`, `\bigoplus`, `\bigotimes` (drawn at 140 %) and `\lim`,
   `\max`, `\min`, `\sup`, `\inf` take their scripts below and above them: the markup escape `\lm(op,below,above)` (Sheaf's
   own) centres the operator and its limits over one column as wide as the widest of them; the limits are at 70 % of
   the size, 0.08 em clear of the operator's ink (reckoned with an ascent of 0.72 em and a descent of 0.21 em). `\int`
   keeps its scripts beside it, as LaTeX does in text.
+- **Delimiters (T482):** `\left` ... `\right` encloses what is between them in delimiters as tall as its ink plus
+  0.06 em above and below (at least a letter's height): `( )`, `[ ]`, `\{ \}`, `|` (`\vert`), `\langle \rangle`, or none for `.`; the
+  markup escape is `\dl(lr,body)` (Sheaf's own; `l`, `r` one of `p` `b` `c` `v` `a` `n`). They are drawn as lines 0.06 em wide,
+  0.36 em boxes (0.25 em for a bar); read as plain text they are the bracket characters.
 - **Not built:** matrices, stretchy delimiters,
   display equations on their own lines, and equations from worksheet metadata carried into legends and axis titles.
 

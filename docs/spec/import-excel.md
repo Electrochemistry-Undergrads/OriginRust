@@ -168,11 +168,19 @@ row (`B2 =A2*2`, `B3 =A3*2`, ...), keeps it as its Set Column Values formula in 
 stored them (missing where none was stored) until an input changes. What can be read: numbers,
 `+ - * / ^`, parentheses, same-row references to imported columns (`A2`, `$A2`) and SQRT, EXP, LN,
 LOG10, ABS, SIN, COS, TAN, ASIN, ACOS, ATAN, SINH, COSH, TANH, ROUND and PI(); a unary minus next to
-`^` is refused (Excel's `-2^2` is 4). Any other formula (another row, a `$` row, a range such as a
-running `SUM($A$2:A2)`, another sheet, text, comparisons, other functions), a formula that differs from
-row to row, or a typed value among the formulas keeps only the stored values, with a warning that names
-the column and its first formula (`column D: its Excel formulas (the first is D2: =A2*$G$1) are not one
-same-row formula Sheaf can read; only their stored values were imported`). `sheaf_io::excel::formulas`.
+`^` is refused (Excel's `-2^2` is 4).
+
+**Other formulas kept as cell formulas (T464) [S].** In a column whose formulas are not one same-row formula
+(another row, a `$` row, a range such as a running `SUM($A$2:A2)`, formulas that differ by row, a typed
+value among them), each cell's formula that Sheaf can read becomes that cell's cell formula
+(workbook-model.md 13u): references name the imported columns (their short names, which must be capital
+letters) and the data rows counted from 1 below the name rows (`$A$2` in a sheet with one name row is
+`$A$1`); `$` markers are kept; a range must stay in one column; the functions above plus SUM (the total),
+AVERAGE (`mean`), MIN and MAX. The stored values stay until the next edit recalculates the cell formulas.
+A formula that cannot be read (a cell in a name row or outside the imported columns, another sheet, text,
+comparisons, other functions) keeps only its stored value, with a warning that names the column and its
+first such formula (`column D: some of its Excel formulas (the first is D2: =A2*$G$1) cannot be read as
+Sheaf formulas; those cells keep only their stored values`). `sheaf_io::excel::formulas`.
 
 ## 5. Header rows and layout
 
@@ -487,7 +495,7 @@ Tests: `crates/app/src/app/ui_tests/excel.rs`.
 - `a_workbook_with_header_rows_imports_numbers_text_ints_and_dates` (`basic.xlsx`),
   `a_formula_cell_gives_its_stored_value_and_one_without_gives_a_warning`,
   `a_same_row_formula_column_keeps_its_formula`
-- `formulas_that_are_not_one_same_row_formula_keep_only_their_values` (`formulas.xlsx`, T417), and the
+- `formulas_that_are_not_one_same_row_formula_become_cell_formulas` (`formulas.xlsx`, T417/T464), and the
   translation rules in `crates/io/src/excel/formulas.rs`
 - `a_legacy_xls_file_reads_like_an_xlsx_file` (`legacy.xls`)
 - `the_1904_date_system_gives_the_same_dates_as_the_1900_system` (`date1904.xlsx`),

@@ -89,14 +89,21 @@ pub fn translate(formula: &str, book: &str, has_column: &dyn Fn(Option<&str>, &s
                 has_column(Some(&sheet), &letters).then_some((sheet, letters, row, end))
             })();
             if let Some((sheet, letters, row, end)) = sheet_ref {
-                let (last, end) = range_end(&chars, end, &reference, &letters).unwrap_or((row, end));
-                out.push_str(&format!("[{book}]{sheet}!col({letters})[{}]", rows(row, last)));
+                // An explicit range stays a range even over one row (`sum(A1:A1)`).
+                let (rows_text, end) = match range_end(&chars, end, &reference, &letters) {
+                    Some((last, end)) => (format!("{row}:{last}"), end),
+                    None => (rows(row, row), end),
+                };
+                out.push_str(&format!("[{book}]{sheet}!col({letters})[{rows_text}]"));
                 i = end;
                 continue;
             }
             if let Some((letters, row, end)) = reference(i).filter(|(l, _, _)| has_column(None, l)) {
-                let (last, end) = range_end(&chars, end, &reference, &letters).unwrap_or((row, end));
-                out.push_str(&format!("col({letters})[{}]", rows(row, last)));
+                let (rows_text, end) = match range_end(&chars, end, &reference, &letters) {
+                    Some((last, end)) => (format!("{row}:{last}"), end),
+                    None => (rows(row, row), end),
+                };
+                out.push_str(&format!("col({letters})[{rows_text}]"));
                 i = end;
                 continue;
             }
@@ -202,6 +209,19 @@ fn range_end(
 }
 
 impl crate::worksheet::Worksheet {
+    /// Gives the formula cells the columns' new ids (`None` drops a cell's formula), as an importer's workbook gets
+    /// fresh ids when it joins a project (T464).
+    pub(crate) fn remap_formula_columns(&mut self, map: &dyn Fn(ColumnId) -> Option<ColumnId>) {
+        let old = std::mem::take(&mut self.cell_formulas);
+        self.cell_formulas = old
+            .into_iter()
+            .filter_map(|mut f| {
+                f.column = map(f.column)?;
+                Some(f)
+            })
+            .collect();
+    }
+
     /// Moves the formula cells of these columns for `count` rows inserted before row `at` (T462).
     pub(crate) fn formulas_insert_rows(&mut self, columns: &[ColumnId], at: usize, count: usize) {
         for f in &mut self.cell_formulas {

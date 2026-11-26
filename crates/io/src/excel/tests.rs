@@ -108,17 +108,33 @@ fn a_same_row_formula_column_keeps_its_formula() {
 }
 
 #[test]
-fn formulas_that_are_not_one_same_row_formula_keep_only_their_values() {
+fn formulas_that_are_not_one_same_row_formula_become_cell_formulas() {
     let r = read("formulas.xlsx");
-    let cols = &r.workbook.sheets[0].columns;
+    let sheet = &r.workbook.sheets[0];
+    let cols = &sheet.columns;
     assert_eq!(cols[1].formula.as_deref(), Some("col(A)^2+sqrt(col(A))"));
-    // A running sum (a range), a fixed cell ($G$1), a formula that differs by row, a typed value among formulas.
+    // T464: a running sum (a range), a formula that differs by row and formulas among a typed value become cell
+    // formulas of their cells (data rows from 1); none is a column formula.
+    let cell = |c: usize, row: usize| {
+        sheet.cell_formulas.iter().find(|f| f.column == cols[c].id && f.row == row).map(|f| f.formula.as_str())
+    };
     for c in &cols[2..=5] {
         assert!(c.formula.is_none(), "{}", c.long_name);
-        let short = &c.short_name;
-        assert!(warned(&r, &format!("column {short}: its Excel formulas")), "{:?}", r.warnings);
     }
-    assert!(warned(&r, "(the first is C2: =SUM($A$2:A2))"), "{:?}", r.warnings);
+    assert_eq!(cell(2, 0), Some("sum($A$1:A1)"));
+    assert_eq!(cell(2, 3), Some("sum($A$1:A4)"));
+    assert_eq!(cell(4, 1), Some("A2*3"));
+    assert_eq!((cell(5, 0), cell(5, 1), cell(5, 2)), (Some("A1+1"), None, Some("A3+1")), "the typed 7 stays a value");
+    // A fixed cell in the name row ($G$1) has no data row: those cells keep their values, with a warning.
+    assert_eq!(cell(3, 0), None);
+    assert!(warned(&r, "column D: some of its Excel formulas (the first is D2: =A2*$G$1)"), "{:?}", r.warnings);
+    // In a project the cell formulas give Excel's values (the running sum 1, 3, 6, 10).
+    let mut p = sheaf_core::Project::new();
+    let book = p.adopt_workbook(r.workbook.clone());
+    p.refresh_cell_formulas();
+    let run = p.workbook(book).unwrap().sheets[0].columns[2].id;
+    assert_eq!(p.numeric(run).unwrap(), [1.0, 3.0, 6.0, 10.0]);
+    assert!(p.cell_formula(run, 3).is_some(), "the formulas follow the adopted column ids");
 }
 
 #[test]

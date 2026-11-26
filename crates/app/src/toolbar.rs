@@ -1362,7 +1362,7 @@ mod tests {
         assert_eq!(&tips(Bar::Tools)[..4], ["Pointer", "Scale In", "Scale Out", "Rescale"]);
         assert_eq!(
             &tips(Bar::Tools)[4..],
-            ["Data Reader", "Text", "Arrow", "Line", "Rectangle", "Circle", "Slope", "Pan"]
+            ["Data Reader", "Text", "Arrow", "Line", "Rectangle", "Circle", "Region", "Slope", "Pan"]
         );
         assert_eq!(&tips(Bar::Edit)[..3], ["Cut", "Copy", "Paste"]);
         assert_eq!(&tips(Bar::Standard)[..2], ["New Project", "New Workbook"]);

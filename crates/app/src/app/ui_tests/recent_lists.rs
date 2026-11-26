@@ -204,3 +204,24 @@ fn recent_exports_is_empty_and_greyed_at_first_and_clear_empties_it() {
     settle(&mut h);
     assert!(RecentList::load(&file).exports.is_empty());
 }
+
+#[test]
+fn repeat_last_plot_makes_the_last_plot_again_on_the_new_selection() {
+    // T465: Plot > Repeat Last Plot is greyed until a plot is made, then plots the selection the same way.
+    let (data, file) = files("repeat-plot");
+    let mut h = start_with(vec![data], file.clone(), None);
+    show_window(&mut h, "Book1 - sample.csv");
+    menu_path(&mut h, &["Plot"]);
+    assert!(!entry_enabled(&h, "Repeat Last Plot"), "no plot yet");
+    close_menus(&mut h);
+    plot_scatter_of_c(&mut h);
+    let graphs = project(&h).graphs().count();
+    show_window(&mut h, "Book1 - sample.csv");
+    click_text(&mut h, "B(Y1)");
+    menu_path(&mut h, &["Plot", "Repeat Last Plot"]);
+    settle(&mut h);
+    assert_eq!(project(&h).graphs().count(), graphs + 1, "a scatter of B");
+    let g = project(&h).graphs().last().unwrap();
+    assert_eq!(g.layers[0].plots[0].kind, sheaf_core::graph::PlotKind::Scatter);
+    assert_eq!(listed(&file, "plot").len(), 1, "the repeat itself is not listed");
+}

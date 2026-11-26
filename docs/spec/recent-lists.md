@@ -56,3 +56,12 @@ Clear Recent Exports below a separator. All **UNMEASURED**.
 `crates/app/src/mru.rs` (keys), `crates/app/src/app/ui_tests/recent_lists.rs` (a plot is listed and chosen again,
 persistence over a restart, the empty and stale states, every menu records, exports listed, opened again, missing
 window, Clear, workbook and graph bars).
+
+## Repeat Last Plot (T465, 2026-11-25; Origin 2026's repeat of the last plotting action, Sheaf's own)
+
+Plot > Repeat Last Plot (the last item of the Plot menu, Alt letter O) runs the first entry of the Plot menu's Most
+Recently Used list again, resolved against the current selection exactly as choosing that entry would: the last
+graph made from the Plot menu is made again of the columns now selected. It is greyed, with "No graph has been made
+from the Plot menu yet" as its reason, while the list is empty or its first entry is no longer in the menu. Using it
+does not add itself to the list.
+

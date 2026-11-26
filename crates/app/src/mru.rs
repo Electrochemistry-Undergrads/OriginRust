@@ -44,7 +44,7 @@ impl MruMenu {
 
 /// Whether a command is worth remembering: the menu housekeeping items are not.
 pub fn recordable(cmd: &Cmd) -> bool {
-    !matches!(cmd, Cmd::ManageTemplates | Cmd::ClearRecent(_) | Cmd::ClearRecentExports)
+    !matches!(cmd, Cmd::ManageTemplates | Cmd::ClearRecent(_) | Cmd::ClearRecentExports | Cmd::RepeatLastPlot)
 }
 
 /// Calls `f` with the key and the item of every item of `menu`'s entries, until it returns true.

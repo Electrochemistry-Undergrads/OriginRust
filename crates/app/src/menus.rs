@@ -45,6 +45,7 @@ use std::sync::OnceLock;
 /// Tooltip of an item that Sheaf does not have.
 pub const NOT_YET: &str = "Not available in Sheaf yet";
 const NEED_BOOK: &str = "Activate a workbook window first";
+const NO_PLOT_YET: &str = "No graph has been made from the Plot menu yet";
 pub const NO_COLOR_SCALE: &str = "New Color Scale needs a plot whose symbols take their colour from a Z column";
 pub const NO_CUMULATIVE: &str = "Cumulative needs a line, scatter or line + symbol plot in the layer";
 const NEED_GRAPH: &str = "Activate a graph window first";
@@ -363,6 +364,8 @@ pub enum Cmd {
     GraphSlicer,
     /// Graph > Browser Graph... (T410).
     BrowserGraph,
+    /// Plot > Repeat Last Plot (T465): the most recent Plot-menu command on the current selection.
+    RepeatLastPlot,
     /// Graph > Next Dataset (true) / Previous Dataset (T450): step a browser or an explorer.
     BrowseStep(bool),
     /// View > View Windows (T100).
@@ -1825,6 +1828,7 @@ fn plot_menu() -> Vec<Entry> {
         ),
         sep(),
         mru_submenu("Most Recently Used", MruMenu::Plot),
+        item("Repeat Last Pl&ot", Cmd::RepeatLastPlot),
     ]
 }
 
@@ -3490,6 +3494,15 @@ fn parse(label: &str) -> (String, Option<char>) {
 
 /// The action a command runs now, or the reason it cannot run.
 pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
+    // Plot > Repeat Last Plot (T465): the first entry of the Plot menu's Most Recently Used list.
+    if *cmd == Cmd::RepeatLastPlot {
+        let key = c.recent_commands.get(&MruMenu::Plot.list_name()).and_then(|v| v.first()).ok_or(NO_PLOT_YET)?;
+        let last = mru::find(bar(c.kind), MruMenu::Plot, key).and_then(|i| i.cmd.as_ref()).ok_or(NO_PLOT_YET)?;
+        if *last == Cmd::RepeatLastPlot {
+            return Err(NO_PLOT_YET);
+        }
+        return resolve(last, c);
+    }
     let book = c.book.ok_or(NEED_BOOK);
     let one = || match c.selected {
         [one] => Ok(*one),
@@ -3720,6 +3733,8 @@ pub fn resolve(cmd: &Cmd, c: &MenuContext) -> Result<Action, &'static str> {
         Cmd::AddFunctionGraph => Action::AddFunctionGraph { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
         Cmd::GraphSlicer => Action::GraphSlicer { graph: c.graph.ok_or(NEED_GRAPH)? },
         Cmd::BrowserGraph => Action::BrowserGraph { graph: c.graph.ok_or(NEED_GRAPH)?, layer: c.layer },
+        // Handled above, before the match.
+        Cmd::RepeatLastPlot => return Err(NO_PLOT_YET),
         Cmd::BrowseStep(next) => Action::BrowseStep { graph: c.graph.ok_or(NEED_GRAPH)?, next: *next },
         Cmd::Reimport(choose) => {
             let book = book?;

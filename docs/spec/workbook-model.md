@@ -1516,12 +1516,13 @@ Origin 2026 infers a text rule from an example, previews it, and fills static va
 - **Examples and sources:** the column's non-empty cells are the examples; the sources are the columns to its left
   that hold any text or number, read as the cells show them.
 - **Rules:** a rule joins pieces: fixed text, a whole source cell, a word of one (a run of letters and digits,
-  counted from the start or the end) or the word's first letter, each as is, upper case or lower case. One rule
+  counted from the start or the end) or its first or last one to four characters (T468: `Jo` of `John`, `17` of
+  `2017`, written `left(token(...), n)` and `right(token(...), n)`), each as is, upper case or lower case. One rule
   must build every example. The search tries longer pieces first, then prefers a cell to a word, a word to an
   initial and an initial to fixed text, and a word counted from the nearer end (from the start when equal). So
   `John Smith` -> `Smith, J.` gives `token(col(A)$, -1) + ", " + left(token(col(A)$, 1), 1) + "."` and
   `Mary Ann Lee` gives `Lee, M.`; a second example settles a choice (`a b` -> `b` with `c d e` -> `d` is word 2).
-  The search gives up after 5000 steps; then, as when nothing fits, the message asks for another example.
+  The search gives up after 2000 steps; then, as when nothing fits, the message asks for another example.
 - **The window "Flash Fill":** the rule as a formula ("cannot be written as a formula" when its fixed text holds a
   `"`), and a preview of the first 8 rows (sources | result, the examples marked). Fill Values writes the results
   as text, the examples as typed; a row with no source text stays empty. Keep Formula sets the formula as the

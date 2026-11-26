@@ -694,6 +694,8 @@ pub enum Action {
         index: usize,
         mode: sheaf_core::column::RecalcMode,
     },
+    /// The operation tree's Parameters...: edit operation `index`'s settings (T469).
+    OperationParams(usize),
     /// Open the sheet of a column and select the column (T443).
     GoToColumn(sheaf_core::ColumnId),
     /// A Notes window's Export Report...: ask where, then write it (T439).

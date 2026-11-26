@@ -495,6 +495,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T466](T466-browser-sort-edit.md) | Project Browser: sort by a column header, edit Long Name/Units/Comments in place (rest of T433) | S | done 2026-11-25 (workbook-model 13s) |
 | [T467](T467-slicer-plot-scope.md) | Graph Slicer plot scope (rest of T406/T444) | S | done 2026-11-25 (graphing "Graph Slicer") |
 | [T468](T468-flash-fill-parts.md) | Flash Fill reads the first/last 1-4 characters of words (rest of T430) | S | done 2026-11-25 (workbook-model 13r) |
+| [T469](T469-operation-params.md) | Operation tree: Parameters... edits a linked analysis' settings and runs it again (rest of T443) | S | done 2026-11-26 (analysis-tools 23) |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |

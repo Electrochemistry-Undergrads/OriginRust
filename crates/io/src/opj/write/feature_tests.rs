@@ -755,6 +755,75 @@ fn write_notes_project_for_origin() {
     std::fs::write(Path::new(&dir).join("sheaf-notes.opj"), written(&p).bytes).unwrap();
 }
 
+/// One Y column per Date, Time, Month and Day of Week display of Origin's lists (T474), after an X column.
+fn date_book() -> (Project, Vec<sheaf_core::format::NumberFormat>) {
+    use sheaf_core::datetime::TimePattern;
+    use sheaf_core::format::{NameStyle, NumberFormat as F};
+    let mut formats: Vec<F> = crate::opj::DATE_SUBFORMATS.to_vec();
+    formats.extend(TimePattern::ALL.iter().map(|t| F::Time(*t)));
+    for s in [NameStyle::Short, NameStyle::Full, NameStyle::Letter] {
+        formats.push(F::Month(s));
+    }
+    for s in [NameStyle::Short, NameStyle::Full, NameStyle::Letter] {
+        formats.push(F::Weekday(s));
+    }
+    let mut columns = vec![numeric("A", Designation::X, &[1.0, 2.0])];
+    for (i, f) in formats.iter().enumerate() {
+        let mut c = numeric(&format!("C{}", i + 1), Designation::Y, &[2_461_355.573_032_407_4, 0.573_032_407_4]);
+        c.format = *f;
+        columns.push(c);
+    }
+    let mut p = Project::new();
+    p.adopt_named_workbook(book("Book1", vec![("Sheet1", columns)]));
+    (p, formats)
+}
+
+#[test]
+fn date_and_time_displays_are_written_and_read_back() {
+    // T474, measured in Origin 2016: the value type at 0x1E (3 Date, 2 Time, 4 Month, 5 Day of Week) and
+    // the subformat minus 1 at 0x1F, with Origin's Numeric cells.
+    let (p, formats) = date_book();
+    let out = written(&p);
+    assert!(out.warnings.iter().all(|w| !w.contains("format")), "{:?}", out.warnings);
+    let imp = read_back(&out.bytes);
+    assert!(imp.warnings.iter().all(|w| !w.contains("day numbers")), "{:?}", imp.warnings);
+    let cols = &imp.workbooks[0].sheets[0].columns;
+    let read: Vec<sheaf_core::format::NumberFormat> = cols[1..].iter().map(|c| c.format).collect();
+    assert_eq!(read, formats);
+    assert_eq!(cols[1].numeric().unwrap()[0], 2_461_355.573_032_407_4, "the day number itself");
+}
+
+/// Writes `sheaf-dates.opj` (the book of `date_book`) into `SHEAF_OPJ_DATES_DIR`, so Origin can be asked
+/// what it shows (T474):
+/// `SHEAF_OPJ_DATES_DIR=<folder> cargo test -p sheaf-io -- --ignored write_dates_project_for_origin`.
+#[test]
+#[ignore]
+fn write_dates_project_for_origin() {
+    let Ok(dir) = std::env::var("SHEAF_OPJ_DATES_DIR") else { return };
+    std::fs::write(Path::new(&dir).join("sheaf-dates.opj"), written(&date_book().0).bytes).unwrap();
+}
+
+#[test]
+fn a_date_column_record_holds_type_and_subformat() {
+    use sheaf_core::datetime::DatePattern;
+    use sheaf_core::format::NumberFormat as F;
+    let mut p = Project::new();
+    let mut c = numeric("A", Designation::X, &[2_461_355.0]);
+    c.format = F::Date(DatePattern::MdyDash);
+    let mut iso = numeric("B", Designation::Y, &[2_461_355.0]);
+    iso.format = F::Date(DatePattern::Iso);
+    p.adopt_named_workbook(book("Book1", vec![("Sheet1", vec![c, iso])]));
+    let out = written(&p);
+    // the first column record: Date (3), subformat 20 (19), the X type word of Numeric cells
+    // the first block of 515 bytes is the first column record (a project without graphs)
+    let at = out.bytes.windows(5).position(|w| w == [0x03, 0x02, 0, 0, b'\n']).unwrap() + 5;
+    let rec = &out.bytes[at..at + 515];
+    assert_eq!((rec[0x1E], rec[0x1F]), (0x03, 19));
+    assert_eq!(u16::from_le_bytes([rec[0x25], rec[0x26]]), 0x5001);
+    // yyyy-MM-dd is not in Origin's Date list: the column keeps its numbers and the warning says so
+    assert!(out.warnings.iter().any(|w| w.contains("display format")), "{:?}", out.warnings);
+}
+
 fn matrix_project() -> Project {
     use sheaf_core::matrix::MatrixSheet;
     let mut p = Project::new();

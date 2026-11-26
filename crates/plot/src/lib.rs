@@ -166,6 +166,8 @@ mod text_decoration_tests;
 #[cfg(test)]
 mod text_font_tests;
 #[cfg(test)]
+mod text_fraction_tests;
+#[cfg(test)]
 mod text_prime_tests;
 #[cfg(test)]
 mod text_rgb_tests;

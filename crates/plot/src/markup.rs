@@ -3,7 +3,9 @@
 //! `\f:Name(..)` font switch, `\x(hhhh)` a character by its code, `\v(..)` literal text,
 //! `\h(..)` protected substitution text, `\u(..)` underline, `\s(..)` strikethrough
 //! and `\cN(..)` indexed or RGB text color.
-//! `\=(sub,sup)` places paired scripts in one shared column. `\ab(..)`, `\ad(..)`, and
+//! `\=(sub,sup)` places paired scripts in one shared column. `\fr(num,den)` stacks a fraction: the
+//! numerator over a bar over the denominator, centred in one column (Sheaf's own escape, T480; LaTeX
+//! `\frac` in `$...$` math becomes it). `\ab(..)`, `\ad(..)`, and
 //! `\at(..)` draw a bar, dot, or tilde above a span.
 //! `\sc` adds a conditional space, optionally before a parenthesized span.
 //! Escapes nest. A backslash
@@ -12,6 +14,33 @@
 
 use crate::fonts::{SystemFonts, TextMeasurer};
 use sheaf_core::Color;
+
+/// A stacked fraction (T480, Sheaf's own layout): its numerator and denominator at this size of the
+/// surrounding text, the numerator's baseline raised and the denominator's lowered by these fractions of
+/// the surrounding size, and the bar at this height (about the middle of a lower-case letter).
+pub const FRACTION_SCALE: f64 = 0.7;
+pub const FRACTION_NUM_RISE: f64 = 0.55;
+pub const FRACTION_DEN_DROP: f64 = 0.36;
+pub const FRACTION_BAR_RISE: f64 = 0.28;
+
+/// The text before and after the first comma that is not inside parentheses (all of it and nothing
+/// when there is none).
+fn split_outer_comma(body: &[char]) -> (&[char], &[char]) {
+    let mut nesting = 0usize;
+    let comma = body.iter().position(|&c| match c {
+        '(' => {
+            nesting += 1;
+            false
+        }
+        ')' => {
+            nesting = nesting.saturating_sub(1);
+            false
+        }
+        ',' => nesting == 0,
+        _ => false,
+    });
+    comma.map_or((body, &body[body.len()..]), |at| (&body[..at], &body[at + 1..]))
+}
 
 /// Scale of superscript and subscript text relative to its surroundings.
 pub const SCRIPT_SCALE: f64 = 0.65;
@@ -74,6 +103,15 @@ pub(crate) enum Segment {
         scale: f64,
         color: Option<Color>,
     },
+    /// A stacked fraction (T480): numerator and denominator with their rise already applied, the size of
+    /// the surrounding text (for the bar), the bar's colour and its rise in units of the label's size.
+    Fraction {
+        num: Vec<Segment>,
+        den: Vec<Segment>,
+        scale: f64,
+        color: Option<Color>,
+        bar_rise: f64,
+    },
     LineGap(u32),
     /// Consumed by the legend row before it places any glyphs.
     Tab,
@@ -98,6 +136,13 @@ pub fn parse(text: &str) -> Vec<Run> {
                     flatten(sup, out);
                 }
                 Segment::Accent { content, .. } => flatten(content, out),
+                Segment::Fraction { num, den, .. } => {
+                    flatten(num, out);
+                    if let Some(last) = out.last().cloned() {
+                        out.push(Run { text: "/".into(), ..last });
+                    }
+                    flatten(den, out);
+                }
                 Segment::LineGap(_) | Segment::Tab => {}
             }
         }
@@ -254,6 +299,8 @@ enum Escape {
     Styled(Style),
     /// A shared column containing subscript, then superscript, separated by the first outer comma.
     Pair,
+    /// A stacked fraction, numerator then denominator, separated by the first outer comma (T480).
+    Fraction,
     /// A decorated span with one accent over its contents.
     Accent(Accent),
     /// `\v(..)` or `\h(..)`: the enclosed text is taken literally.
@@ -282,6 +329,9 @@ fn escape_at(chars: &[char], pos: usize, st: &Style, options: &ParseOptions<'_>)
     };
     if let Some(kind) = accent {
         return Some((Escape::Accent(kind), pos + 4));
+    }
+    if chars.get(pos + 1..pos + 4) == Some(&['f', 'r', '(']) {
+        return Some((Escape::Fraction, pos + 4));
     }
     if code == '(' {
         return Some((Escape::Decimal, pos + 2));
@@ -501,6 +551,28 @@ fn parse_seq(
                     let content = inner.segments;
                     if !content.is_empty() {
                         out.span(Segment::Accent { kind, content, scale: st.scale, color: st.color });
+                    }
+                }
+                Escape::Fraction => {
+                    let body: Vec<char> = take_enclosed(chars, pos).chars().collect();
+                    let (top, bottom) = split_outer_comma(&body);
+                    let branch = |chars: &[char], rise: f64| {
+                        let inner =
+                            Style { scale: st.scale * FRACTION_SCALE, rise: st.rise + rise * st.scale, ..st.clone() };
+                        let mut out = ParsedText::default();
+                        parse_seq(chars, &mut 0, inner, false, depth + 1, &mut out, options);
+                        out.segments
+                    };
+                    let num = branch(top, FRACTION_NUM_RISE);
+                    let den = branch(bottom, -FRACTION_DEN_DROP);
+                    if !num.is_empty() || !den.is_empty() {
+                        out.span(Segment::Fraction {
+                            num,
+                            den,
+                            scale: st.scale,
+                            color: st.color,
+                            bar_rise: st.rise + FRACTION_BAR_RISE * st.scale,
+                        });
                     }
                 }
                 Escape::Pair => {

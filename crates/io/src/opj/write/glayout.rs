@@ -521,8 +521,14 @@ pub(super) struct AnnSpec<'a> {
     pub extent: (u16, u16),
     /// A box around a legend.
     pub frame: bool,
+    /// The background colour of a legend (T478); `None` for none.
+    pub fill: Option<Code>,
     pub serial: u16,
 }
+
+/// The background colour slot of a legend's style block (opj-format.md 10.8; T478, measured with
+/// `legend.fillcolor`): a colour code, `FC FF FF FF` for none.
+const LEGEND_FILL_AT: usize = 0x1a;
 
 /// The four blocks of one annotation (header, style, text, empty).
 pub(super) fn annotation(a: &AnnSpec) -> Vec<u8> {
@@ -555,12 +561,15 @@ pub(super) fn annotation(a: &AnnSpec) -> Vec<u8> {
     put(&mut b1, 0x12, &a.extent.0.to_le_bytes());
     put(&mut b1, 0x14, &a.extent.1.to_le_bytes());
     if a.kind == AnnKind::Legend && !a.frame {
-        // the legend without its box: the frame style and the background colour are "none"
+        // the legend without its box: the frame style is "none"
         h[0x29] = 0;
-        b1[0x1a..0x1e].copy_from_slice(&[0xfc, 0xff, 0xff, 0xff]);
         b1[0x28] = 0;
         b1[0x2a..0x2e].copy_from_slice(&[0xfc, 0xff, 0xff, 0xff]);
         b1[0x32..0x36].copy_from_slice(&[0, 0, 0, 0]);
+    }
+    if a.kind == AnnKind::Legend {
+        // T478: the background colour, or none
+        b1[LEGEND_FILL_AT..LEGEND_FILL_AT + 4].copy_from_slice(&a.fill.map_or([0xfc, 0xff, 0xff, 0xff], |c| c.0));
     }
     let mut text = a.text.to_vec();
     text.extend_from_slice(&[0u8; 10]);

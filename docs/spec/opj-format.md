@@ -574,7 +574,12 @@ have `0x1A` and `0x2A` set to none, `0x32` = 0 and header byte `0x29` = 1: no fr
 legend without a frame (graph_tables `ANN_LEGEND_*` with the fields cleared as in `glayout.rs`) has the text object's
 colours. The reader takes `0x2A` = `FC FF FF FF` as "no frame" and anything else as a frame, which fits every case
 seen. The other frame kinds of the Frame tab (shadow, marble and so on) were not produced and their bytes are unknown,
-so they read as a plain frame and are written as one. The background colour is not read or written.
+so they read as a plain frame and are written as one. **Background colour (T478, measured 2026-11-26):**
+`legend.fillcolor=color(yellow)` changed only `0x1A` of the style block (17 to 6), so `0x1A` is the legend's background colour
+(the code of 10.5, `FC FF FF FF` for none). The reader takes it (Origin's own white legends read as a white background); the
+writer writes Sheaf's background or none, framed or not. Origin read `legend.fillcolor` 7 (yellow), the RGB code of
+`(17, 131, 213)` and -4 (none) back from a file Sheaf wrote and drew a framed yellow box, an unframed blue box and a framed
+empty box (`re-workspace/scratch/t477/png478`).
 A legend in a file with no legend object keeps Sheaf's template default (no frame, graphing.md 6.4).
 
 Origin 2016 saved **Text Color Follows Plot** with legend header byte `0x33` set to `F7` and

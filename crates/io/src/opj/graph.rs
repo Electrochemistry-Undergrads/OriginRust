@@ -59,6 +59,8 @@ const AXIS_AUTO_COLOR: u16 = 0xFFF7;
 const AXIS_SHOWN_BIT: u8 = 0x40;
 const AXIS_FONT_AT: usize = 0x15;
 const AXIS_FLAGS_AT: usize = 0x26;
+/// The background colour of a legend's style block (T478, measured with `legend.fillcolor`).
+const LEGEND_FILL_AT: usize = 0x1A;
 /// The layer background (T477, measured with `layer.color`): 2 at `0xA7` for a filled layer, the colour code
 /// at `0x105`.
 const LAYER_FILL_AT: usize = 0xA7;
@@ -368,6 +370,8 @@ fn build_layer(
                 out.legend.text_color_follows_plot = a.header.get(ANN_COLOR_AT..ANN_COLOR_AT + 4) == Some(&COLOR_AUTO);
                 out.legend.text = custom_legend_text(&text);
                 out.legend.frame = legend_has_frame(a);
+                // T478: the background colour at 0x1A of the style block (none: no background)
+                out.legend.background = color_code(&a.block1, LEGEND_FILL_AT);
                 let (cx, cy) = annotation_center(a, page_units);
                 if frame_size.0 > 0.0 && frame_size.1 > 0.0 {
                     let x = (cx / PAGE_UNITS_PER_INCH * 72.0 - frame_pt.0) / frame_size.0;

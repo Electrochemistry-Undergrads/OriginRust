@@ -236,8 +236,8 @@ that was meant to make one did not finish).
 
 `--matrix` and `--sheet` choose a matrix window and sheet. Results are saved back to the project (or to `-o`);
 saving as `.opj` stores the matrix books in the Origin project too (T472: sheets, size, numbers, X/Y range; the
-labels of the coordinates are left out with a warning); a companion `.opj.sheaf` is written beside it only when
-something is left out, such as those labels.
+Z labels, T473; the X and Y labels are left out with a warning); a companion `.opj.sheaf` is written beside it only
+when something is left out, such as those labels.
 
 ## 7a. The matrix window in the app (T192 slice 2, 2026-11-19, not measured)
 
@@ -544,4 +544,5 @@ to 0 is filled.
   windows (Matrix, Plot > Contour, Image), dialogs (Set Values, Dimensions, Convert, Plot Details levels tab),
   New > Matrix, explorer type "Matrix", copy and paste of cells.
 - Stage 3 (`.opj`): done for name, long name, sheets, size, numbers and X/Y range, read (T471) and written (T472), measured in
-  Origin 2016 (`opj-format.md` 13.16); the labels of the coordinates and the palettes are neither read nor written.
+  Origin 2016 (`opj-format.md` 13.16), and the Z labels (T473); the X and Y labels and the palettes are neither read nor
+  written.

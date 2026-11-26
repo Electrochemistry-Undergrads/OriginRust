@@ -769,6 +769,9 @@ fn matrix_project() -> Project {
     )
     .unwrap();
     let second = MatrixSheet::from_values("Data", 0, 2, 2, vec![1.0, 2.0, 3.0, 4.0], (1.0, 10.0), (1.0, 10.0)).unwrap();
+    let mut first = first;
+    first.z =
+        sheaf_core::matrix::MatrixLabel { long_name: "Height".into(), units: "nm".into(), comments: "scan 1".into() };
     let id = p.adopt_matrix_book("Surface", vec![first, second]);
     p.matrix_book_mut(id).unwrap().name = "MBook1".into();
     p.adopt_named_workbook(abcd("Book1"));
@@ -823,12 +826,31 @@ fn a_matrix_sheet_is_written_as_origin_writes_one() {
 }
 
 #[test]
-fn a_matrix_with_labels_warns_and_a_long_book_name_is_refused() {
+fn the_z_labels_of_a_matrix_are_written_in_its_column_note() {
+    // T473, measured in Origin 2016: `r.lname$`, `r.unit$`, `r.comment$` of a matrix range are stored as
+    // `long CR LF units CR LF comments` in the note of the sheet's column record.
     let mut p = matrix_project();
     let id = p.matrix_books().next().unwrap().id;
-    p.matrix_book_mut(id).unwrap().sheets[0].z.long_name = "Height".into();
+    let z = &mut p.matrix_book_mut(id).unwrap().sheets[0].z;
+    z.long_name = "Height".into();
+    z.units = "nm".into();
+    z.comments = "scan 1\nleft side".into();
     let out = written(&p);
-    assert!(out.warnings.iter().any(|w| w.contains("1 matrix sheet(s) have X, Y or Z labels")), "{:?}", out.warnings);
+    assert!(out.warnings.iter().all(|w| !w.contains("matrix sheet")), "{:?}", out.warnings);
+    let note = b"Height\r\nnm\r\nscan 1\r\nleft side\0";
+    assert!(out.bytes.windows(note.len()).any(|w| w == note));
+    let q = read_back(&out.bytes).into_project();
+    let z = &q.matrix_books().next().unwrap().sheets[0].z;
+    assert_eq!((z.long_name.as_str(), z.units.as_str(), z.comments.as_str()), ("Height", "nm", "scan 1\nleft side"));
+}
+
+#[test]
+fn a_matrix_with_x_labels_warns_and_a_long_book_name_is_refused() {
+    let mut p = matrix_project();
+    let id = p.matrix_books().next().unwrap().id;
+    p.matrix_book_mut(id).unwrap().sheets[0].x.long_name = "Width".into();
+    let out = written(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("1 matrix sheet(s) have X or Y labels")), "{:?}", out.warnings);
     p.matrix_book_mut(id).unwrap().name = "M".repeat(23);
     assert!(refusal(&p).contains("too long for its 2 sheets"), "{}", refusal(&p));
 }

@@ -26,6 +26,9 @@ pub struct GraphSlicer {
     /// Layer scope (T444): only the plots of this layer are sliced; `None` for the whole page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layer: Option<usize>,
+    /// Plot scope (T467): only this plot (its index in the layer) of the layer scope is sliced.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plot: Option<usize>,
 }
 
 impl Graph {
@@ -35,10 +38,11 @@ impl Graph {
         project.same_sheet(s.column, y).then_some(&s.filter)
     }
 
-    /// [`Graph::slicer_filter_for`] for a plot of layer `layer`: none outside the slicer's layer scope.
-    pub fn slicer_filter_in(&self, project: &Project, layer: usize, y: ColumnId) -> Option<&RowFilter> {
+    /// [`Graph::slicer_filter_for`] for plot `plot` (its index) of layer `layer`: none outside the slicer's layer or
+    /// plot scope.
+    pub fn slicer_filter_in(&self, project: &Project, layer: usize, plot: usize, y: ColumnId) -> Option<&RowFilter> {
         let s = self.slicer.as_ref()?;
-        if s.layer.is_some_and(|l| l != layer) {
+        if s.layer.is_some_and(|l| l != layer) || (s.layer.is_some() && s.plot.is_some_and(|p| p != plot)) {
             return None;
         }
         self.slicer_filter_for(project, y)
@@ -85,8 +89,8 @@ impl Project {
             .collect();
         let filter = RowFilter { condition: String::new(), enabled: true, keep };
         let g = self.graph_mut(graph).ok_or(ProjectError::NoSuchWindow(graph))?;
-        let layer = g.slicer.as_ref().and_then(|s| s.layer);
-        g.slicer = Some(GraphSlicer { column, values, filter, layer });
+        let (layer, plot) = g.slicer.as_ref().map_or((None, None), |s| (s.layer, s.plot));
+        g.slicer = Some(GraphSlicer { column, values, filter, layer, plot });
         Ok(())
     }
 
@@ -98,6 +102,22 @@ impl Project {
         }
         let s = g.slicer.as_mut().ok_or(ProjectError::NoSlicer)?;
         s.layer = layer;
+        s.plot = None;
+        Ok(())
+    }
+
+    /// Narrows graph `graph`'s slicer to plot `plot` (its index) of its layer scope, or with `None` to every plot of
+    /// the layer (T467). A page-wide slicer has no plot scope.
+    pub fn set_graph_slicer_plot(&mut self, graph: WindowId, plot: Option<usize>) -> Result<(), ProjectError> {
+        let g = self.graph_mut(graph).ok_or(ProjectError::NoSuchWindow(graph))?;
+        let layer = g.slicer.as_ref().ok_or(ProjectError::NoSlicer)?.layer;
+        let count = layer.and_then(|l| g.layers.get(l)).map_or(0, |l| l.plots.len());
+        if plot.is_some_and(|p| layer.is_none() || p >= count) {
+            return Err(ProjectError::NoSuchPlot(plot.unwrap_or(0)));
+        }
+        if let Some(s) = g.slicer.as_mut() {
+            s.plot = plot;
+        }
         Ok(())
     }
 
@@ -168,7 +188,13 @@ mod tests {
         // Layer scope: a plot of another layer is not sliced.
         p.set_graph_slicer_layer(g, Some(0)).unwrap();
         let graph = p.graph(g).unwrap();
-        assert!(graph.slicer_filter_in(&p, 0, y).is_some() && graph.slicer_filter_in(&p, 1, y).is_none());
+        assert!(graph.slicer_filter_in(&p, 0, 0, y).is_some() && graph.slicer_filter_in(&p, 1, 0, y).is_none());
+        // Plot scope (T467): plot 0 of layer 1 only.
+        p.set_graph_slicer_plot(g, Some(0)).unwrap();
+        let graph = p.graph(g).unwrap();
+        assert!(graph.slicer_filter_in(&p, 0, 0, y).is_some() && graph.slicer_filter_in(&p, 0, 1, y).is_none());
+        assert!(p.set_graph_slicer_plot(g, Some(3)).is_err(), "no fourth plot");
+        p.set_graph_slicer_plot(g, None).unwrap();
         assert!(p.set_graph_slicer_layer(g, Some(5)).is_err());
         // It saves with the project.
         p.set_graph_slicer(g, g_col, vec!["b".into()]).unwrap();

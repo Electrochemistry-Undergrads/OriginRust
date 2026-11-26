@@ -7924,8 +7924,11 @@ Origin 2016 has none, so nothing here is measured.
 - **Extract (T444):** applies the slicer like OK and copies the rows it shows of its sheet to a new workbook
   ("<book> sliced"), every column with its designation, short and long name, units and comments, and makes that
   workbook active. One undo step, "Extract Slice".
-- **Not built:** plot scope, several slicer columns, plots whose values are computed (histograms, box charts)
-  reading the slicer, and the slicer in .opj files.
+- **Plot scope (T467):** with a layer chosen, a second list offers All plots or one plot of that layer (by its
+  legend name); with one plot chosen only that plot is sliced. Choosing Page clears it. A new choice of values keeps
+  it, as it keeps the layer.
+- **Not built:** several slicer columns, plots whose values are computed (histograms, box charts) reading the slicer,
+  and the slicer in .opj files.
 
 ## Browser Graph: Graph > Browser Graph... (T410, 2026-11-24; Origin 2020b's Browser Graph, Sheaf's own)
 

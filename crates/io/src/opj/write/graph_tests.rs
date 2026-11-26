@@ -484,6 +484,43 @@ fn write_date_ticks_project_for_origin() {
         .unwrap();
 }
 
+/// Three graphs whose legends are framed with a yellow background, unframed with an RGB background, and
+/// framed with none (T478).
+fn legend_fills() -> Project {
+    let mut p = source();
+    for (frame, fill) in [(true, Some(Color::rgb(255, 255, 0))), (false, Some(Color::rgb(17, 131, 213))), (true, None)]
+    {
+        graph_with(&mut p, Template::Line, &[(0, 1)], |g| {
+            g.layers[0].legend.frame = frame;
+            g.layers[0].legend.background = fill;
+        });
+    }
+    p
+}
+
+#[test]
+fn a_legend_background_colour_is_written_and_read_back() {
+    // T478: the colour slot at 0x1A of the legend's style block (`legend.fillcolor` in Origin 2016).
+    let (imp, warnings) = round_trip(&legend_fills());
+    assert!(warnings.iter().all(|w| !w.contains("legend background")), "{warnings:?}");
+    let read: Vec<(bool, Option<Color>)> =
+        imp.graphs.iter().map(|g| (g.layers[0].legend.frame, g.layers[0].legend.background)).collect();
+    assert_eq!(read, [(true, Some(Color::rgb(255, 255, 0))), (false, Some(Color::rgb(17, 131, 213))), (true, None)]);
+}
+
+/// Writes `sheaf-legend-fill.opj` (the graphs of `legend_fills`) into `SHEAF_OPJ_LEGEND_DIR`, so Origin can be
+/// asked `legend.fillcolor` and draw them (T478).
+#[test]
+#[ignore]
+fn write_legend_fill_project_for_origin() {
+    let Ok(dir) = std::env::var("SHEAF_OPJ_LEGEND_DIR") else { return };
+    std::fs::write(
+        std::path::Path::new(&dir).join("sheaf-legend-fill.opj"),
+        write_named(&legend_fills(), "f", TIME).unwrap().bytes,
+    )
+    .unwrap();
+}
+
 #[test]
 fn what_the_file_cannot_hold_is_named() {
     let mut p = source();
@@ -529,7 +566,6 @@ fn what_the_file_cannot_hold_is_named() {
         "minor tick length",
         "grid lines",
         "font family",
-        "legend background",
         "nearest listed colour",
         "'Courier New'",
     ] {
@@ -538,6 +574,8 @@ fn what_the_file_cannot_hold_is_named() {
     // the written graph still reads back, with the plots that could be written; the row range is kept (T476)
     assert_eq!(imp.graphs[0].layers[0].plots.len(), 1);
     assert_eq!(imp.graphs[0].layers[0].plots[0].rows, Some((2, 5)));
+    // the legend background is written since T478
+    assert_eq!(imp.graphs[0].layers[0].legend.background, Some(Color::rgb(250, 250, 250)));
 }
 
 #[test]

@@ -695,9 +695,6 @@ impl Writer {
                     (frame_pt.left + x * frame_pt.width, frame_pt.top + y * frame_pt.height)
                 }
             };
-            if layer.legend.background.is_some() {
-                notes.push("the legend background colour was not written".into());
-            }
             annotations.push(self.annotation_bytes(
                 AnnKind::Legend,
                 "Legend",
@@ -1125,6 +1122,7 @@ impl Writer {
             color,
             extent: (unit_u16(text_extent.0), unit_u16(text_extent.1)),
             frame: legend.is_some_and(|legend| legend.frame),
+            fill: legend.and_then(|legend| legend.background).map(code_of),
             serial: self.next_serial().min(u32::from(u16::MAX)) as u16,
         };
         annotation(&spec)

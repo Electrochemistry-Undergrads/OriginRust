@@ -1547,8 +1547,12 @@ previews matches and edits the metadata of several at once. Origin 2016 has none
 - **Set:** Set [Long Name | Units | Comments] to [text], Apply to n Ticked: n counts the ticked items that have the
   field (columns have all three, sheets a Long Name and Comments, books and graphs a Long Name). One undo step,
   "Set Units" etc.
-- **Not done:** folders and matrices in the list, sorting by a column, editing a cell in place, other metadata,
-  and a picture preview of a graph.
+- **Sorting (T466):** a click on a column header sorts the list by that column, ignoring case and keeping project
+  order among equal entries (a triangle marks it); a second click reverses it.
+- **Editing in place (T466):** a double click on a Long Name, Units or Comments cell of an item that has the field
+  opens a text box with the whole text; Enter writes it (one undo step, "Set Units" etc.), leaving the box otherwise
+  changes nothing.
+- **Not done:** folders and matrices in the list, other metadata, and a picture preview of a graph.
 
 ## 13t. File > Import > Auto Refresh (T442, 2026-11-25; Origin 2019b Data Connectors / 2026 periodic refresh, Sheaf's own, not measured)
 

@@ -7,7 +7,7 @@ slicer and copies the rows it shows of its sheet to a new workbook, which become
 
 ## Left
 
-- Plot scope, several slicer columns, computed plots reading the slicer, the slicer in .opj files.
+- Several slicer columns, computed plots reading the slicer, the slicer in .opj files. (Plot scope: T467.)
 
 ## Tests
 

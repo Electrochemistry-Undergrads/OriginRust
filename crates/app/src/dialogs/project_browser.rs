@@ -27,6 +27,12 @@ pub struct ProjectBrowserDialog {
     pub focus: Option<ItemRef>,
     pub field: MetaField,
     pub value: String,
+    /// Sorted by this column of the list (1 Kind ... 6 Comments; `None` project order), and descending (T466).
+    pub sort: Option<(usize, bool)>,
+    /// A cell being edited in place: the item, its field and the text typed (T466).
+    pub editing: Option<(ItemRef, MetaField, String)>,
+    /// The edit box takes the keyboard on its first frame.
+    edit_started: bool,
 }
 
 impl Default for ProjectBrowserDialog {
@@ -38,6 +44,9 @@ impl Default for ProjectBrowserDialog {
             focus: None,
             field: MetaField::LongName,
             value: String::new(),
+            sort: None,
+            editing: None,
+            edit_started: false,
         }
     }
 }
@@ -82,7 +91,26 @@ fn preview(project: &Project, item: ItemRef) -> String {
 
 impl ProjectBrowserDialog {
     fn shown<'a>(&self, items: &'a [ItemInfo]) -> Vec<&'a ItemInfo> {
-        items.iter().filter(|i| self.kind.is_none_or(|k| i.kind == k) && i.matches(&self.search)).collect()
+        let mut rows: Vec<&ItemInfo> =
+            items.iter().filter(|i| self.kind.is_none_or(|k| i.kind == k) && i.matches(&self.search)).collect();
+        // T466: sorted by the chosen column, ignoring case (a stable sort keeps project order among equals).
+        if let Some((column, descending)) = self.sort {
+            let key = |i: &ItemInfo| -> String {
+                match column {
+                    1 => i.kind.name().to_string(),
+                    2 => i.name.to_lowercase(),
+                    3 => i.location.to_lowercase(),
+                    4 => i.long_name.to_lowercase(),
+                    5 => i.units.to_lowercase(),
+                    _ => i.comments.to_lowercase(),
+                }
+            };
+            rows.sort_by_key(|i| key(i));
+            if descending {
+                rows.reverse();
+            }
+        }
+        rows
     }
 
     pub fn show(&mut self, ctx: &egui::Context, project: &Project) -> BrowserOutcome {
@@ -121,8 +149,24 @@ impl ProjectBrowserDialog {
                 });
                 egui::ScrollArea::vertical().max_height(320.0).auto_shrink([false, true]).show(ui, |ui| {
                     egui::Grid::new("project_browser_rows").striped(true).num_columns(7).show(ui, |ui| {
-                        for h in ["", "Kind", "Name", "Where", "Long Name", "Units", "Comments"] {
-                            ui.strong(h);
+                        // Column headers sort the list (T466): a click sorts by that column, again reverses it.
+                        ui.label("");
+                        for (k, h) in ["Kind", "Name", "Where", "Long Name", "Units", "Comments"].iter().enumerate() {
+                            let column = k + 1;
+                            let mark = match self.sort {
+                                Some((c, false)) if c == column => " \u{25B2}",
+                                Some((c, true)) if c == column => " \u{25BC}",
+                                _ => "",
+                            };
+                            let header = ui.add(
+                                egui::Button::new(egui::RichText::new(format!("{h}{mark}")).strong()).frame(false),
+                            );
+                            if header.clicked() {
+                                self.sort = match self.sort {
+                                    Some((c, false)) if c == column => Some((column, true)),
+                                    _ => Some((column, false)),
+                                };
+                            }
                         }
                         ui.end_row();
                         for info in rows.iter().take(MAX_ROWS) {
@@ -145,9 +189,48 @@ impl ProjectBrowserDialog {
                                 outcome = BrowserOutcome::GoTo(t);
                             }
                             ui.label(&info.location);
-                            ui.label(&info.long_name);
-                            ui.label(&info.units);
-                            ui.label(info.comments.lines().next().unwrap_or_default());
+                            // Long Name, Units and Comments edit in place on a double click (T466).
+                            for (field, text) in [
+                                (MetaField::LongName, info.long_name.as_str()),
+                                (MetaField::Units, info.units.as_str()),
+                                (MetaField::Comments, info.comments.lines().next().unwrap_or_default()),
+                            ] {
+                                let here =
+                                    self.editing.as_ref().is_some_and(|(i, f, _)| *i == info.item && *f == field);
+                                if here {
+                                    let (_, _, typed) = self.editing.as_mut().expect("checked");
+                                    let r = ui.add(egui::TextEdit::singleline(typed).desired_width(120.0));
+                                    if std::mem::take(&mut self.edit_started) {
+                                        r.request_focus();
+                                    }
+                                    if r.lost_focus() {
+                                        if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                                            outcome = BrowserOutcome::Set {
+                                                items: vec![info.item],
+                                                field,
+                                                value: typed.clone(),
+                                            };
+                                        }
+                                        self.editing = None;
+                                    }
+                                } else {
+                                    let r = ui.add(egui::Label::new(text).sense(egui::Sense::click()));
+                                    let r = if field.applies_to(info.kind) {
+                                        r.on_hover_text("Double-click to edit")
+                                    } else {
+                                        r
+                                    };
+                                    if r.double_clicked() && field.applies_to(info.kind) {
+                                        let full = match field {
+                                            MetaField::LongName => info.long_name.clone(),
+                                            MetaField::Units => info.units.clone(),
+                                            MetaField::Comments => info.comments.clone(),
+                                        };
+                                        self.editing = Some((info.item, field, full));
+                                        self.edit_started = true;
+                                    }
+                                }
+                            }
                             ui.end_row();
                         }
                     });
@@ -190,5 +273,30 @@ impl ProjectBrowserDialog {
                 }
             });
         if !open { BrowserOutcome::Closed } else { outcome }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sheaf_core::{ColumnData, Designation};
+
+    #[test]
+    fn a_header_click_sorts_by_its_column_and_again_reverses() {
+        // T466: three columns named C, A, B by long name.
+        let mut p = Project::new();
+        let b = p.add_workbook("");
+        for name in ["gamma", "Alpha", "beta"] {
+            let c = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();
+            p.column_mut(c).unwrap().long_name = name.into();
+        }
+        let items = p.project_items();
+        let mut d = ProjectBrowserDialog { kind: Some(ItemKind::Column), ..Default::default() };
+        let names = |d: &ProjectBrowserDialog| d.shown(&items).iter().map(|i| i.long_name.clone()).collect::<Vec<_>>();
+        assert_eq!(names(&d), ["gamma", "Alpha", "beta"], "project order");
+        d.sort = Some((4, false));
+        assert_eq!(names(&d), ["Alpha", "beta", "gamma"], "ignoring case");
+        d.sort = Some((4, true));
+        assert_eq!(names(&d), ["gamma", "beta", "Alpha"]);
     }
 }

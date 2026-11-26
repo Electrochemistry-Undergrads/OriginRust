@@ -8,8 +8,17 @@ use sheaf_core::{ColumnId, Project, WindowId};
 pub enum SlicerOutcome {
     Open,
     Closed,
-    Apply { graph: WindowId, column: ColumnId, values: Vec<String>, layer: Option<usize>, extract: bool },
-    Remove { graph: WindowId },
+    Apply {
+        graph: WindowId,
+        column: ColumnId,
+        values: Vec<String>,
+        layer: Option<usize>,
+        plot: Option<usize>,
+        extract: bool,
+    },
+    Remove {
+        graph: WindowId,
+    },
 }
 
 pub struct GraphSlicerDialog {
@@ -22,6 +31,9 @@ pub struct GraphSlicerDialog {
     /// The graph's number of layers, and the scope: one layer, or `None` for the page (T444).
     pub layers: usize,
     pub layer: Option<usize>,
+    /// The plots of each layer by name, and the plot scope within the chosen layer (T467).
+    pub plots: Vec<Vec<String>>,
+    pub plot: Option<usize>,
 }
 
 impl GraphSlicerDialog {
@@ -39,7 +51,18 @@ impl GraphSlicerDialog {
             .or_else(|| sheet.columns.iter().position(|c| !c.data.is_numeric()))
             .unwrap_or(0);
         let layer = current.and_then(|s| s.layer);
-        let mut d = GraphSlicerDialog { graph, columns, column, values: Vec::new(), layers: g.layers.len(), layer };
+        let plot = current.and_then(|s| s.plot);
+        let plots = g.layers.iter().map(|l| l.plots.iter().map(|p| project.plot_label(p)).collect()).collect();
+        let mut d = GraphSlicerDialog {
+            graph,
+            columns,
+            column,
+            values: Vec::new(),
+            layers: g.layers.len(),
+            layer,
+            plots,
+            plot,
+        };
         d.load(project);
         if let Some(s) = current.filter(|s| d.columns.get(d.column).is_some_and(|c| c.0 == s.column)) {
             for (v, on) in &mut d.values {
@@ -80,7 +103,7 @@ impl GraphSlicerDialog {
                         }
                     });
                 });
-                if self.layers > 1 {
+                if self.layers > 1 || self.plots.first().is_some_and(|p| p.len() > 1) {
                     ui.horizontal(|ui| {
                         ui.label("Scope");
                         let shown = self.layer.map_or("Page".to_string(), |l| format!("Layer {}", l + 1));
@@ -90,6 +113,19 @@ impl GraphSlicerDialog {
                                 ui.selectable_value(&mut self.layer, Some(l), format!("Layer {}", l + 1));
                             }
                         });
+                        // Plot scope (T467): one plot of the chosen layer.
+                        if let Some(names) = self.layer.and_then(|l| self.plots.get(l)) {
+                            let shown =
+                                self.plot.and_then(|p| names.get(p)).map_or("All plots".to_string(), Clone::clone);
+                            egui::ComboBox::from_id_salt("graph_slicer_plot").selected_text(shown).show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.plot, None, "All plots");
+                                for (k, n) in names.iter().enumerate() {
+                                    ui.selectable_value(&mut self.plot, Some(k), n);
+                                }
+                            });
+                        } else {
+                            self.plot = None;
+                        }
                     });
                 }
                 egui::ScrollArea::vertical().max_height(240.0).show(ui, |ui| {
@@ -123,6 +159,7 @@ impl GraphSlicerDialog {
                                 column: c.0,
                                 values: self.values.iter().filter(|v| v.1).map(|v| v.0.clone()).collect(),
                                 layer: self.layer,
+                                plot: self.plot.filter(|_| self.layer.is_some()),
                                 extract,
                             };
                         }

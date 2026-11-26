@@ -563,7 +563,9 @@ pub(crate) fn collect_graph<'a>(project: &'a Project, g: &'a sheaf_core::graph::
     if g.slicer.is_some() {
         for (li, d) in all.iter_mut().enumerate() {
             for pd in &mut d.plots {
-                if let Some(f) = g.slicer_filter_in(project, li, pd.plot.y) {
+                // The plot's index in its layer (hidden plots count), for a plot scope (T467).
+                let index = g.layers[li].plots.iter().position(|p| std::ptr::eq(p, pd.plot)).unwrap_or(usize::MAX);
+                if let Some(f) = g.slicer_filter_in(project, li, index, pd.plot.y) {
                     pd.filters.push(f);
                 }
             }

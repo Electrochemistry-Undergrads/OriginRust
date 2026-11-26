@@ -113,6 +113,51 @@ fn graph_slicer_shows_the_ticked_values_in_one_undo_step() {
 }
 
 #[test]
+fn graph_slicer_takes_a_second_slicer_column() {
+    // T487: group a/b and site x/y; Add Slicer Column, untick site x: group a at site y shows
+    let mut h = start(Vec::new());
+    let ctx = h.ctx.clone();
+    let mut graph = sheaf_core::WindowId(0);
+    h.state_mut().doc.apply("data", |p| {
+        let b = p.add_workbook("");
+        let text = |v: &[&str]| sheaf_core::ColumnData::text(v.iter().map(|s| s.to_string()).collect());
+        p.add_column(b, 0, sheaf_core::Designation::Y, text(&["a", "a", "b", "a"])).unwrap();
+        p.add_column(b, 0, sheaf_core::Designation::Y, text(&["x", "y", "y", "y"])).unwrap();
+        let y = p
+            .add_column(b, 0, sheaf_core::Designation::Y, sheaf_core::ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0]))
+            .unwrap();
+        graph = p.plot_columns(sheaf_core::template::Template::Line, &[y]).unwrap();
+    });
+    settle(&mut h);
+    h.state_mut().apply(Action::GraphSlicer { graph }, &ctx);
+    settle(&mut h);
+    h.state_mut().graph_slicer.as_mut().unwrap().values[1].1 = false; // group b
+    h.get_by_label("Add Slicer Column").click();
+    settle(&mut h);
+    {
+        let d = h.state_mut().graph_slicer.as_mut().unwrap();
+        assert_eq!(d.more.len(), 1, "the next column of the sheet");
+        let names: Vec<&str> = d.more[0].1.iter().map(|v| v.0.as_str()).collect();
+        assert_eq!(names, ["x", "y"]);
+        d.more[0].1[0].1 = false; // site x
+    }
+    h.get_by_label("OK").click();
+    settle(&mut h);
+    let s = project(&h).graph(graph).unwrap().slicer.clone().expect("a slicer");
+    assert_eq!(
+        (s.values.clone(), s.more.len(), s.more[0].values.clone()),
+        (vec!["a".to_string()], 1, vec!["y".to_string()])
+    );
+    assert_eq!((0..4).map(|r| s.filter.passes(r)).collect::<Vec<_>>(), [false, true, false, true]);
+    // reopening shows the second column with its ticks
+    h.state_mut().apply(Action::GraphSlicer { graph }, &ctx);
+    settle(&mut h);
+    let d = h.state().graph_slicer.as_ref().unwrap();
+    assert_eq!(d.more.len(), 1);
+    assert_eq!(d.more[0].1.iter().filter(|v| v.1).count(), 1);
+}
+
+#[test]
 fn browser_graph_steps_through_the_columns_from_the_bar() {
     // T410: Graph > Browser Graph... on a line of the middle of three Y columns, then Next and Previous.
     let mut h = start(Vec::new());

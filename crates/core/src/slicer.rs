@@ -5,8 +5,9 @@
 //! slicer is applied and kept until it is applied again.
 //!
 //! Sheaf's choices (Origin 2025 not measured here): page scope, or one layer's scope (T444; Origin also offers plot
-//! scope); one slicer column; values read as the column shows them (numbers without a trailing ".0"). Extract (T444)
-//! copies the rows the slicer shows of its sheet to a new workbook.
+//! scope); one or more slicer columns of one sheet, a row shown when every column's value is ticked (T487); values
+//! read as the column shows them (numbers without a trailing ".0"). Extract (T444) copies the rows the slicer shows
+//! of its sheet to a new workbook.
 
 use crate::graph::Graph;
 use crate::ids::{ColumnId, WindowId};
@@ -29,6 +30,17 @@ pub struct GraphSlicer {
     /// Plot scope (T467): only this plot (its index in the layer) of the layer scope is sliced.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plot: Option<usize>,
+    /// Further slicer columns of the same sheet with their values shown (T487); a row is shown when its cell
+    /// holds a shown value in every slicer column.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub more: Vec<SlicerColumn>,
+}
+
+/// A further slicer column (T487) and the values shown of it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SlicerColumn {
+    pub column: ColumnId,
+    pub values: Vec<String>,
 }
 
 impl Graph {
@@ -80,17 +92,46 @@ impl Project {
         column: ColumnId,
         values: Vec<String>,
     ) -> Result<(), ProjectError> {
-        let col = self.column(column).ok_or(ProjectError::NoSuchColumn(column))?;
-        if values.is_empty() {
-            return Err(ProjectError::SlicerNothingShown);
+        self.set_graph_slicer_columns(graph, vec![(column, values)])
+    }
+
+    /// Sets graph `graph`'s slicer on several columns of one sheet (T487): a row is shown when its cell in every
+    /// column holds one of that column's `values`. The first column is the slicer's own; a column of another sheet,
+    /// a column given twice or an empty list of values is refused.
+    pub fn set_graph_slicer_columns(
+        &mut self,
+        graph: WindowId,
+        columns: Vec<(ColumnId, Vec<String>)>,
+    ) -> Result<(), ProjectError> {
+        let Some((first, _)) = columns.first() else { return Err(ProjectError::SlicerNothingShown) };
+        let first = *first;
+        let mut keep: Option<Vec<bool>> = None;
+        for (k, (column, values)) in columns.iter().enumerate() {
+            let col = self.column(*column).ok_or(ProjectError::NoSuchColumn(*column))?;
+            if values.is_empty() {
+                return Err(ProjectError::SlicerNothingShown);
+            }
+            if k > 0 && (!self.same_sheet(first, *column) || columns[..k].iter().any(|(c, _)| c == column)) {
+                return Err(ProjectError::NoSuchColumn(*column));
+            }
+            let rows: Vec<bool> = (0..col.data.len())
+                .map(|r| crate::indexed::level_text(col, r).is_some_and(|t| values.contains(&t)))
+                .collect();
+            keep = Some(match keep {
+                None => rows,
+                // a row beyond one column's end holds no value there, so it is not shown
+                Some(before) => (0..before.len().max(rows.len()))
+                    .map(|r| before.get(r).copied().unwrap_or(false) && rows.get(r).copied().unwrap_or(false))
+                    .collect(),
+            });
         }
-        let keep: Vec<bool> = (0..col.data.len())
-            .map(|r| crate::indexed::level_text(col, r).is_some_and(|t| values.contains(&t)))
-            .collect();
-        let filter = RowFilter { condition: String::new(), enabled: true, keep };
+        let filter = RowFilter { condition: String::new(), enabled: true, keep: keep.unwrap_or_default() };
+        let mut columns = columns.into_iter();
+        let (column, values) = columns.next().expect("checked above");
+        let more = columns.map(|(column, values)| SlicerColumn { column, values }).collect();
         let g = self.graph_mut(graph).ok_or(ProjectError::NoSuchWindow(graph))?;
         let (layer, plot) = g.slicer.as_ref().map_or((None, None), |s| (s.layer, s.plot));
-        g.slicer = Some(GraphSlicer { column, values, filter, layer, plot });
+        g.slicer = Some(GraphSlicer { column, values, filter, layer, plot, more });
         Ok(())
     }
 
@@ -201,5 +242,33 @@ mod tests {
         assert_eq!(p.graph(g).unwrap().slicer.as_ref().unwrap().layer, Some(0), "a new choice keeps the scope");
         let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
         assert_eq!(back.graph(g).unwrap().slicer.as_ref().unwrap().values, ["b"]);
+    }
+
+    #[test]
+    fn several_slicer_columns_show_the_rows_ticked_in_every_one() {
+        // T487: group a/b and site x/y; show group a at site y
+        let mut p = Project::new();
+        let b = p.add_workbook("");
+        let text = |v: &[&str]| ColumnData::text(v.iter().map(|s| s.to_string()).collect());
+        let group = p.add_column(b, 0, Designation::Y, text(&["a", "a", "b", "a", "b"])).unwrap();
+        let site = p.add_column(b, 0, Designation::Y, text(&["x", "y", "y", "y", "x"])).unwrap();
+        let y = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0, 5.0])).unwrap();
+        let other = p.add_workbook("");
+        let far = p.add_column(other, 0, Designation::Y, text(&["y"])).unwrap();
+        let g = p.plot_columns(Template::Line, &[y]).unwrap();
+        p.set_graph_slicer_columns(g, vec![(group, vec!["a".into()]), (site, vec!["y".into()])]).unwrap();
+        let graph = p.graph(g).unwrap();
+        let f = graph.slicer_filter_for(&p, y).unwrap();
+        assert_eq!((0..5).map(|r| f.passes(r)).collect::<Vec<_>>(), [false, true, false, true, false]);
+        assert_eq!(graph.slicer.as_ref().unwrap().more, [SlicerColumn { column: site, values: vec!["y".into()] }]);
+        let out = p.extract_slice(g).unwrap();
+        assert_eq!(p.numeric(p.workbook(out).unwrap().sheets[0].columns[2].id).unwrap(), [2.0, 4.0]);
+        // refused: another sheet, the same column twice, nothing ticked
+        assert!(p.set_graph_slicer_columns(g, vec![(group, vec!["a".into()]), (far, vec!["y".into()])]).is_err());
+        assert!(p.set_graph_slicer_columns(g, vec![(group, vec!["a".into()]), (group, vec!["b".into()])]).is_err());
+        assert!(p.set_graph_slicer_columns(g, vec![(group, vec!["a".into()]), (site, Vec::new())]).is_err());
+        // one column again drops the others
+        p.set_graph_slicer(g, group, vec!["b".into()]).unwrap();
+        assert!(p.graph(g).unwrap().slicer.as_ref().unwrap().more.is_empty());
     }
 }

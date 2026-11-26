@@ -7935,7 +7935,13 @@ Origin 2016 has none, so nothing here is measured.
 - **Plot scope (T467):** with a layer chosen, a second list offers All plots or one plot of that layer (by its
   legend name); with one plot chosen only that plot is sliced. Choosing Page clears it. A new choice of values keeps
   it, as it keeps the layer.
-- **Not built:** several slicer columns, plots whose values are computed (histograms, box charts) reading the slicer,
+- **Several slicer columns (T487, 2026-11-26):** Add Slicer Column adds an "And by" column of the same sheet (the next
+  one not used yet) with its own ticks, all ticked, and a Remove button; changing its column lists that column's values.
+  A row is shown when its cell in every slicer column holds a ticked value (a row past a column's end holds none). OK
+  needs a tick in every column. The further columns are kept in `GraphSlicer::more` (`SlicerColumn`), applied with
+  `Project::set_graph_slicer_columns` (a column of another sheet or given twice is refused) and shown again when the
+  window reopens; Extract copies the rows they all show.
+- **Not built:** plots whose values are computed (histograms, box charts) reading the slicer,
   and the slicer in .opj files.
 
 ## Browser Graph: Graph > Browser Graph... (T410, 2026-11-24; Origin 2020b's Browser Graph, Sheaf's own)

@@ -10,8 +10,8 @@ pub enum SlicerOutcome {
     Closed,
     Apply {
         graph: WindowId,
-        column: ColumnId,
-        values: Vec<String>,
+        /// The slicer columns with their values shown, the first the slicer's own (T487).
+        columns: Vec<(ColumnId, Vec<String>)>,
         layer: Option<usize>,
         plot: Option<usize>,
         extract: bool,
@@ -34,6 +34,8 @@ pub struct GraphSlicerDialog {
     /// The plots of each layer by name, and the plot scope within the chosen layer (T467).
     pub plots: Vec<Vec<String>>,
     pub plot: Option<usize>,
+    /// Further slicer columns (T487): the column's index and its values with whether each is shown.
+    pub more: Vec<(usize, Vec<(String, bool)>)>,
 }
 
 impl GraphSlicerDialog {
@@ -62,14 +64,35 @@ impl GraphSlicerDialog {
             layer,
             plots,
             plot,
+            more: Vec::new(),
         };
         d.load(project);
         if let Some(s) = current.filter(|s| d.columns.get(d.column).is_some_and(|c| c.0 == s.column)) {
             for (v, on) in &mut d.values {
                 *on = s.values.contains(v);
             }
+            // T487: the further columns of the slicer
+            for m in &s.more {
+                if let Some(k) = d.columns.iter().position(|c| c.0 == m.column) {
+                    let values = project
+                        .slicer_values(m.column)
+                        .into_iter()
+                        .map(|v| (v.clone(), m.values.contains(&v)))
+                        .collect();
+                    d.more.push((k, values));
+                }
+            }
         }
         Some(d)
+    }
+
+    /// The columns and values the dialog applies: its own column, then the further ones (T487).
+    pub fn chosen(&self) -> Vec<(ColumnId, Vec<String>)> {
+        let ticked = |v: &[(String, bool)]| v.iter().filter(|v| v.1).map(|v| v.0.clone()).collect::<Vec<_>>();
+        let mut out: Vec<(ColumnId, Vec<String>)> =
+            self.columns.get(self.column).map(|c| (c.0, ticked(&self.values))).into_iter().collect();
+        out.extend(self.more.iter().filter_map(|(k, v)| self.columns.get(*k).map(|c| (c.0, ticked(v)))));
+        out
     }
 
     /// Reads the chosen column's values, all ticked.
@@ -141,9 +164,48 @@ impl GraphSlicerDialog {
                         self.values.iter_mut().for_each(|v| v.1 = false);
                     }
                 });
+                // T487: further slicer columns of the sheet, each with its own ticks
+                let mut drop = None;
+                for (n, (k, values)) in self.more.iter_mut().enumerate() {
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        ui.label("And by");
+                        let shown = self.columns.get(*k).map_or("", |c| c.1.as_str()).to_string();
+                        egui::ComboBox::from_id_salt(("graph_slicer_more", n)).selected_text(shown).show_ui(ui, |ui| {
+                            for (j, (id, name)) in self.columns.iter().enumerate() {
+                                if ui.selectable_label(j == *k, name).clicked() && j != *k {
+                                    *k = j;
+                                    *values = project.slicer_values(*id).into_iter().map(|v| (v, true)).collect();
+                                }
+                            }
+                        });
+                        if ui.small_button("Remove").clicked() {
+                            drop = Some(n);
+                        }
+                    });
+                    egui::ScrollArea::vertical().id_salt(("graph_slicer_more_values", n)).max_height(120.0).show(
+                        ui,
+                        |ui| {
+                            for (v, on) in values.iter_mut() {
+                                ui.checkbox(on, v.as_str());
+                            }
+                        },
+                    );
+                }
+                if let Some(n) = drop {
+                    self.more.remove(n);
+                }
+                if ui.button("Add Slicer Column").clicked() {
+                    // the next column not yet used
+                    let used: Vec<usize> = std::iter::once(self.column).chain(self.more.iter().map(|m| m.0)).collect();
+                    if let Some(k) = (0..self.columns.len()).find(|k| !used.contains(k)) {
+                        let values = project.slicer_values(self.columns[k].0).into_iter().map(|v| (v, true)).collect();
+                        self.more.push((k, values));
+                    }
+                }
                 ui.separator();
                 ui.horizontal(|ui| {
-                    let any = self.values.iter().any(|v| v.1);
+                    let any = self.values.iter().any(|v| v.1) && self.more.iter().all(|m| m.1.iter().any(|v| v.1));
                     for (label, extract) in [("OK", false), ("Extract", true)] {
                         let button = ui.add_enabled(any, egui::Button::new(label));
                         let button = if extract {
@@ -151,13 +213,10 @@ impl GraphSlicerDialog {
                         } else {
                             button
                         };
-                        if button.clicked()
-                            && let Some(c) = self.columns.get(self.column)
-                        {
+                        if button.clicked() && self.columns.get(self.column).is_some() {
                             outcome = SlicerOutcome::Apply {
                                 graph: self.graph,
-                                column: c.0,
-                                values: self.values.iter().filter(|v| v.1).map(|v| v.0.clone()).collect(),
+                                columns: self.chosen(),
                                 layer: self.layer,
                                 plot: self.plot.filter(|_| self.layer.is_some()),
                                 extract,

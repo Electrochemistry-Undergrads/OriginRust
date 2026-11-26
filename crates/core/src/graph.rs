@@ -109,6 +109,9 @@ impl Graph {
     pub fn remap_columns(&mut self, f: &dyn Fn(ColumnId) -> ColumnId) {
         if let Some(s) = &mut self.slicer {
             s.column = f(s.column);
+            for m in &mut s.more {
+                m.column = f(m.column);
+            }
         }
         self.remap_browser(f);
         for layer in &mut self.layers {

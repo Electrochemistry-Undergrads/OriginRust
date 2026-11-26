@@ -5502,10 +5502,10 @@ impl SheafApp {
         match d.show(ctx, self.doc.project()) {
             SlicerOutcome::Open => {}
             SlicerOutcome::Closed => self.graph_slicer = None,
-            SlicerOutcome::Apply { graph, column, values, layer, plot, extract } => {
+            SlicerOutcome::Apply { graph, columns, layer, plot, extract } => {
                 let label = if extract { "Extract Slice" } else { "Graph Slicer" };
                 let done = self.doc.edit(label, |p| {
-                    p.set_graph_slicer(graph, column, values)?;
+                    p.set_graph_slicer_columns(graph, columns)?;
                     p.set_graph_slicer_layer(graph, layer)?;
                     p.set_graph_slicer_plot(graph, plot)?;
                     if extract { p.extract_slice(graph).map(Some) } else { Ok(None) }

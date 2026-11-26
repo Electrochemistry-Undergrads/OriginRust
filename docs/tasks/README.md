@@ -500,6 +500,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T471](T471-opj-matrix-read.md) | Matrix books read from .opj files (sheets, size, numbers, X/Y range) | S | done 2026-11-26 (opj-format 13.16) |
 | [T472](T472-opj-matrix-write.md) | Matrix books written to .opj files (sheets, size, numbers, X/Y range) | S | done 2026-11-26 (opj-format 13.16) |
 | [T473](T473-opj-matrix-labels.md) | Z labels of matrix sheets read from and written to .opj files | S | done 2026-11-26 (opj-format 13.16) |
+| [T474](T474-opj-dates.md) | Date, time, month and day-of-week columns read from and written to .opj files | S | done 2026-11-26 (opj-format 4.3) |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |

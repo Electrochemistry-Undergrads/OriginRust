@@ -196,6 +196,9 @@ fn column_sampling(record: &[u8]) -> Option<sheaf_core::sampling::SamplingInterv
 fn column_display(record: &[u8]) -> Option<sheaf_core::format::NumberFormat> {
     use sheaf_core::format::NumberFormat as F;
     let (value_type, digits) = (*record.get(0x1E)?, *record.get(0x1F)?);
+    if let Some(f) = date_time_display(value_type, digits) {
+        return Some(f);
+    }
     if value_type & 0x0F != 0 {
         return None;
     }
@@ -211,6 +214,68 @@ fn column_display(record: &[u8]) -> Option<sheaf_core::format::NumberFormat> {
         (2, _, Some(n)) => Some(F::EngineeringSig(n)),
         (2, None, None) => Some(F::EngineeringAuto),
         (3, Some(d), _) => Some(F::DecimalGrouped(d)),
+        _ => None,
+    }
+}
+
+/// Origin's Date display list in the order of `wks.colN.subformat` 1 to 20 (workbook-model.md, measured
+/// 2026-11-13) as Sheaf formats.
+pub(crate) const DATE_SUBFORMATS: [sheaf_core::format::NumberFormat; 20] = {
+    use sheaf_core::datetime::{DatePattern as D, TimePattern as T};
+    use sheaf_core::format::NumberFormat as F;
+    [
+        F::Date(D::Mdy),
+        F::Date(D::LongDate),
+        F::Date(D::MonthDay),
+        F::Date(D::MonthDayNum),
+        F::Date(D::DayOnly),
+        F::Date(D::WeekdayShort),
+        F::Date(D::WeekdayLetter),
+        F::Date(D::YearOnly),
+        F::Date(D::Year2),
+        F::DateTime(D::Mdy, T::Hm),
+        F::DateTime(D::Mdy, T::Hms),
+        F::Date(D::Yymmdd),
+        F::DateTime(D::Yymmdd, T::Hm),
+        F::DateTime(D::Yymmdd, T::Hms),
+        F::DateTime(D::Yymmdd, T::Hhmm),
+        F::DateTime(D::Yymmdd, T::Hhmmss),
+        F::Date(D::MonthShort),
+        F::Date(D::MonthLetter),
+        F::Date(D::Quarter),
+        F::Date(D::MdyDash),
+    ]
+};
+
+/// The name styles of Origin's Month and Day of Week displays in the order of their subformats 1 to 3.
+const NAME_STYLES: [sheaf_core::format::NameStyle; 3] =
+    [sheaf_core::format::NameStyle::Short, sheaf_core::format::NameStyle::Full, sheaf_core::format::NameStyle::Letter];
+
+/// A Date, Time, Month or Day of Week column's display from the value-type byte (`0x1E`: 3 Date, 2 Time,
+/// 4 Month, 5 Day of Week in the low nibble) and the next byte (`0x1F`: the subformat minus 1), as
+/// Origin 2016 writes them (T474, measured: `wks.colN.format` 4, 3, 5, 6 with every subformat).
+fn date_time_display(value_type: u8, index: u8) -> Option<sheaf_core::format::NumberFormat> {
+    use sheaf_core::format::NumberFormat as F;
+    let i = usize::from(index);
+    match value_type & 0x0F {
+        0x03 => DATE_SUBFORMATS.get(i).copied(),
+        0x02 => sheaf_core::datetime::TimePattern::ALL.get(i).map(|t| F::Time(*t)),
+        0x04 => NAME_STYLES.get(i).map(|s| F::Month(*s)),
+        0x05 => NAME_STYLES.get(i).map(|s| F::Weekday(*s)),
+        _ => None,
+    }
+}
+
+/// The value-type and subformat bytes of a Date, Time, Month or Day of Week display (T474); `None` for
+/// a display that Origin's lists do not have (such as `dd.MM.yyyy`).
+pub(crate) fn date_time_code(f: sheaf_core::format::NumberFormat) -> Option<(u8, u8)> {
+    use sheaf_core::format::NumberFormat as F;
+    let at = |list: &[F]| list.iter().position(|x| *x == f).map(|i| i as u8);
+    match f {
+        F::Date(_) | F::DateTime(..) => at(&DATE_SUBFORMATS).map(|i| (0x03, i)),
+        F::Time(t) => sheaf_core::datetime::TimePattern::ALL.iter().position(|x| *x == t).map(|i| (0x02, i as u8)),
+        F::Month(s) => NAME_STYLES.iter().position(|x| *x == s).map(|i| (0x04, i as u8)),
+        F::Weekday(s) => NAME_STYLES.iter().position(|x| *x == s).map(|i| (0x05, i as u8)),
         _ => None,
     }
 }
@@ -559,7 +624,10 @@ impl<R: Read + Seek> Builder<R> {
                         col.format = f;
                     }
                     self.apply_formula(&mut col, layer, rec, &short);
-                    if is_time_type(rec.value_type) {
+                    // T474: a date or time column with a display Sheaf knows shows its dates
+                    let shown =
+                        rec.record.len() > 0x1F && date_time_display(rec.record[0x1E], rec.record[0x1F]).is_some();
+                    if is_time_type(rec.value_type) && !shown {
                         self.counts.time_columns += 1;
                     }
                     sheet.columns.push(col);

@@ -1114,8 +1114,12 @@ impl Writer {
 /// The value-type byte (`0x1E`: display in the high nibble, 0 = Numeric format in the low one) and the
 /// digits byte (`0x1F`: decimal places + 3, `0x80 | n` significant digits, 0 default) of a numeric
 /// display, as Origin 2016 writes them (T337, measured); `None` for the default display.
+/// Date, Time, Month and Day of Week displays (T474) give their own two bytes.
 fn numeric_display(f: sheaf_core::format::NumberFormat) -> Option<(u8, u8)> {
     use sheaf_core::format::NumberFormat as F;
+    if let Some(code) = crate::opj::date_time_code(f) {
+        return Some(code);
+    }
     let places = |d: u8| d.min(15) + 3;
     let sig = |n: u8| 0x80 | n.clamp(1, 15);
     Some(match f {

@@ -396,6 +396,32 @@ fn local_origin_files_give_their_matrices() {
     }
 }
 
+/// Origin 2016's own file with every Date, Time, Month and Day of Week display (T474;
+/// `re-workspace/scratch/t474/d1.opj`, local only): columns 1-20 Date subformats 1-20, 21-37 Time 1-17,
+/// 38-40 Month 1-3, 41-43 Day of Week 1-3.
+#[test]
+fn local_origin_file_gives_date_and_time_displays() {
+    use sheaf_core::datetime::{DatePattern, TimePattern};
+    use sheaf_core::format::{NameStyle, NumberFormat as F};
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../re-workspace/scratch/t474/d1.opj");
+    if !path.exists() {
+        eprintln!("opj: {} not found; skipping", path.display());
+        return;
+    }
+    let imp = read_opj(&path).unwrap();
+    assert!(imp.warnings.iter().all(|w| !w.contains("day numbers")), "{:?}", imp.warnings);
+    let b = imp.workbooks.iter().find(|b| b.name == "Book1").unwrap();
+    let f: Vec<F> = b.sheets[0].columns.iter().map(|c| c.format).collect();
+    assert_eq!(f[0], F::Date(DatePattern::Mdy));
+    assert_eq!(f[10], F::DateTime(DatePattern::Mdy, TimePattern::Hms));
+    assert_eq!(f[19], F::Date(DatePattern::MdyDash));
+    assert_eq!(f[20], F::Time(TimePattern::Hm));
+    assert_eq!(f[36], F::Time(TimePattern::ElapsedDhmsMicro));
+    assert_eq!((f[37], f[39]), (F::Month(NameStyle::Short), F::Month(NameStyle::Letter)));
+    assert_eq!(f[41], F::Weekday(NameStyle::Full));
+    assert_eq!(b.sheets[0].columns[0].numeric().unwrap()[0], 2_461_355.573_032_407_4);
+}
+
 /// Origin 2016's own file with two Notes windows (T470; `re-workspace/scratch/t470/n2.opj`, local only):
 /// `MyNotes` and `Second`, both empty, listed in the root folder before the workbook `GSrc`.
 #[test]

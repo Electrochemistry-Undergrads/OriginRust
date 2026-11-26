@@ -94,6 +94,10 @@ pub(crate) fn segments_width(m: &dyn TextMeasurer, segments: &[Segment], font: &
                 segments_width(m, num, font, size).max(segments_width(m, den, font, size))
                     + 2.0 * FRACTION_PAD * scale * size
             }
+            Segment::Matrix { cols, cells, scale } => {
+                matrix_columns(m, *cols, cells, font, size).iter().sum::<f64>()
+                    + (*cols as f64 - 1.0).max(0.0) * MATRIX_GAP * scale * size
+            }
             Segment::Delimited { left, right, body, scale, .. } => {
                 segments_width(m, body, font, size) + (delimiter_width(*left) + delimiter_width(*right)) * scale * size
             }
@@ -103,6 +107,19 @@ pub(crate) fn segments_width(m: &dyn TextMeasurer, segments: &[Segment], font: &
             Segment::LineGap(_) | Segment::Tab => 0.0,
         })
         .sum()
+}
+
+/// The gap between two matrix columns in units of the text size (T483).
+const MATRIX_GAP: f64 = 0.8;
+
+/// The width of each column of a matrix: its widest cell.
+fn matrix_columns(m: &dyn TextMeasurer, cols: usize, cells: &[Vec<Segment>], font: &Font, size: f64) -> Vec<f64> {
+    let mut widths = vec![0.0_f64; cols.max(1)];
+    for (k, cell) in cells.iter().enumerate() {
+        let w = segments_width(m, cell, font, size);
+        widths[k % cols.max(1)] = widths[k % cols.max(1)].max(w);
+    }
+    widths
 }
 
 /// The width of a stretchy delimiter (T482) in units of the text size; none for `n`.
@@ -130,6 +147,7 @@ fn ink_bottom(segments: &[Segment]) -> f64 {
             Segment::Fraction { den, bar_rise, .. } => ink_bottom(den).min(*bar_rise),
             Segment::Limits { op, below, .. } => ink_bottom(op).min(ink_bottom(below)),
             Segment::Delimited { body, scale, .. } => ink_bottom(body) - DELIMITER_OVERSHOOT * scale,
+            Segment::Matrix { cells, .. } => cells.iter().map(|c| ink_bottom(c)).fold(f64::INFINITY, f64::min),
             Segment::LineGap(_) | Segment::Tab => f64::INFINITY,
         })
         .fold(f64::INFINITY, f64::min)
@@ -198,6 +216,7 @@ fn ink_top(segments: &[Segment]) -> f64 {
             Segment::Fraction { num, bar_rise, .. } => ink_top(num).max(*bar_rise),
             Segment::Limits { op, above, .. } => ink_top(op).max(ink_top(above)),
             Segment::Delimited { body, scale, .. } => ink_top(body) + DELIMITER_OVERSHOOT * scale,
+            Segment::Matrix { cells, .. } => cells.iter().map(|c| ink_top(c)).fold(f64::NEG_INFINITY, f64::max),
             Segment::LineGap(_) | Segment::Tab => f64::NEG_INFINITY,
         })
         .fold(f64::NEG_INFINITY, f64::max)
@@ -258,6 +277,18 @@ fn visit_ink(
                     );
                 }
                 cursor += width;
+            }
+            Segment::Matrix { cols, cells, scale } => {
+                // T483: each cell centred in its column
+                let widths = matrix_columns(m, *cols, cells, font, size);
+                let gap = MATRIX_GAP * scale * size;
+                for (k, cell) in cells.iter().enumerate() {
+                    let c = k % (*cols).max(1);
+                    let start = cursor + widths[..c].iter().sum::<f64>() + c as f64 * gap;
+                    let w = segments_width(m, cell, font, size);
+                    visit_ink(cell, m, font, size, start + (widths[c] - w) / 2.0, visit);
+                }
+                cursor += widths.iter().sum::<f64>() + (widths.len() as f64 - 1.0).max(0.0) * gap;
             }
             Segment::Delimited { left, right, body, scale, color } => {
                 // T482: the delimiters span the body's ink and a little more

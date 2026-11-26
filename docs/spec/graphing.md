@@ -8032,6 +8032,12 @@ font, size and colour, takes part in the label's layout, and exports as vectors 
   0.06 em above and below (at least a letter's height): `( )`, `[ ]`, `\{ \}`, `|` (`\vert`), `\langle \rangle`, or none for `.`; the
   markup escape is `\dl(lr,body)` (Sheaf's own; `l`, `r` one of `p` `b` `c` `v` `a` `n`). They are drawn as lines 0.06 em wide,
   0.36 em boxes (0.25 em for a bar); read as plain text they are the bracket characters.
-- **Not built:** matrices, stretchy delimiters,
+- **Matrices (T483):** `matrix`, `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix` (`\begin{...}` cells split by `&`, rows by `\\`,
+  `\end{...}`) become a grid, the markup escape `\mx(cols,cells...)` (Sheaf's own, cells row by row), inside the
+  environment's stretchy delimiters. Each column is as wide as its widest cell, the cells centred, 0.8 em between columns;
+  row baselines are 1.25 em apart, or further where tall cells (a fraction) would come within 0.25 em of the next row, and
+  the block is centred about the fraction bar's height. Short rows get empty cells. Axis titles are placed by their font
+  size, so a tall matrix in a title can reach towards the tick labels.
+- **Not built:** stretchy delimiters,
   display equations on their own lines, and equations from worksheet metadata carried into legends and axis titles.
 

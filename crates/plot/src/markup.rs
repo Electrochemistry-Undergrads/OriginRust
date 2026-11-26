@@ -7,7 +7,8 @@
 //! numerator over a bar over the denominator, centred in one column (Sheaf's own escape, T480; LaTeX
 //! `\frac` in `$...$` math becomes it). `\lm(op,below,above)` centres `below` under and `above` over `op` (T481,
 //! LaTeX large operators and limits). `\dl(lr,body)` encloses `body` in delimiters as tall as it is, `l` and `r`
-//! one of `p` ( ), `b` [ ], `c` { }, `v` |, `a` ⟨ ⟩ or `n` none (T482, LaTeX `\left` ... `\right`). `\ab(..)`, `\ad(..)`, and
+//! one of `p` ( ), `b` [ ], `c` { }, `v` |, `a` ⟨ ⟩ or `n` none (T482, LaTeX `\left` ... `\right`). `\mx(cols,cells...)`
+//! lays out the comma-separated cells row by row in `cols` centred columns (T483, LaTeX matrix environments). `\ab(..)`, `\ad(..)`, and
 //! `\at(..)` draw a bar, dot, or tilde above a span.
 //! `\sc` adds a conditional space, optionally before a parenthesized span.
 //! Escapes nest. A backslash
@@ -24,6 +25,39 @@ pub const FRACTION_SCALE: f64 = 0.7;
 pub const FRACTION_NUM_RISE: f64 = 0.55;
 pub const FRACTION_DEN_DROP: f64 = 0.36;
 pub const FRACTION_BAR_RISE: f64 = 0.28;
+
+/// A matrix (T483): the least distance between two rows' baselines, in units of the surrounding size; the
+/// block of rows is centred about the fraction bar's height.
+pub const MATRIX_PITCH: f64 = 1.25;
+/// The least clear space between the ink of two matrix rows, in units of the surrounding size (T483).
+const MATRIX_ROW_GAP: f64 = 0.25;
+
+/// Moves every glyph and bar of `segments` up by `d` (units of the label's size).
+fn shift(segments: &mut [Segment], d: f64) {
+    for segment in segments {
+        match segment {
+            Segment::Text(run) => run.rise += d,
+            Segment::Pair { sub, sup } => {
+                shift(sub, d);
+                shift(sup, d);
+            }
+            Segment::Accent { content, .. } => shift(content, d),
+            Segment::Fraction { num, den, bar_rise, .. } => {
+                shift(num, d);
+                shift(den, d);
+                *bar_rise += d;
+            }
+            Segment::Limits { op, below, above } => {
+                shift(op, d);
+                shift(below, d);
+                shift(above, d);
+            }
+            Segment::Delimited { body, .. } => shift(body, d),
+            Segment::Matrix { cells, .. } => cells.iter_mut().for_each(|c| shift(c, d)),
+            Segment::LineGap(_) | Segment::Tab => {}
+        }
+    }
+}
 
 /// Limits of a large operator (T481): at this size of the surrounding text, this gap (in units of the
 /// surrounding size) from the operator's ink, which is reckoned with these ascent and descent of a glyph.
@@ -47,6 +81,7 @@ fn collect_runs(segments: &[Segment], out: &mut Vec<Run>) {
                 collect_runs(den, out);
             }
             Segment::Delimited { body, .. } => collect_runs(body, out),
+            Segment::Matrix { cells, .. } => cells.iter().for_each(|c| collect_runs(c, out)),
             Segment::Limits { op, below, above } => {
                 collect_runs(op, out);
                 collect_runs(below, out);
@@ -162,6 +197,13 @@ pub(crate) enum Segment {
         scale: f64,
         color: Option<Color>,
     },
+    /// A grid of cells (T483), row by row, `cols` to a row, each row's rise already applied; the size of the
+    /// surrounding text for the gaps.
+    Matrix {
+        cols: usize,
+        cells: Vec<Vec<Segment>>,
+        scale: f64,
+    },
     LineGap(u32),
     /// Consumed by the legend row before it places any glyphs.
     Tab,
@@ -186,6 +228,17 @@ pub fn parse(text: &str) -> Vec<Run> {
                     flatten(sup, out);
                 }
                 Segment::Accent { content, .. } => flatten(content, out),
+                Segment::Matrix { cols, cells, .. } => {
+                    for (k, cell) in cells.iter().cloned().enumerate() {
+                        if k > 0 {
+                            let sep = if k % cols.max(1) == 0 { "; " } else { ", " };
+                            if let Some(last) = out.last().cloned() {
+                                out.push(Run { text: sep.into(), ..last });
+                            }
+                        }
+                        flatten(cell, out);
+                    }
+                }
                 Segment::Delimited { left, right, body, .. } => {
                     let style = out.last().cloned();
                     let glyph = |kind: char, open: bool| match (kind, open) {
@@ -396,6 +449,8 @@ enum Escape {
     Limits,
     /// Two delimiter letters, a comma and the enclosed text (T482).
     Delimited,
+    /// The number of columns and the cells, separated by outer commas (T483).
+    Matrix,
     /// A decorated span with one accent over its contents.
     Accent(Accent),
     /// `\v(..)` or `\h(..)`: the enclosed text is taken literally.
@@ -433,6 +488,9 @@ fn escape_at(chars: &[char], pos: usize, st: &Style, options: &ParseOptions<'_>)
     }
     if chars.get(pos + 1..pos + 4) == Some(&['d', 'l', '(']) {
         return Some((Escape::Delimited, pos + 4));
+    }
+    if chars.get(pos + 1..pos + 4) == Some(&['m', 'x', '(']) {
+        return Some((Escape::Matrix, pos + 4));
     }
     if code == '(' {
         return Some((Escape::Decimal, pos + 2));
@@ -653,6 +711,61 @@ fn parse_seq(
                     if !content.is_empty() {
                         out.span(Segment::Accent { kind, content, scale: st.scale, color: st.color });
                     }
+                }
+                Escape::Matrix => {
+                    let body: Vec<char> = take_enclosed(chars, pos).chars().collect();
+                    let (count, mut rest) = split_outer_comma(&body);
+                    let cols: usize =
+                        count.iter().collect::<String>().trim().parse().ok().filter(|&c| c > 0).unwrap_or(1).min(64);
+                    let mut texts: Vec<&[char]> = Vec::new();
+                    while !rest.is_empty() {
+                        let (cell, tail) = split_outer_comma(rest);
+                        texts.push(cell);
+                        if tail.is_empty() && cell.len() + 1 > rest.len() {
+                            break;
+                        }
+                        rest = tail;
+                    }
+                    let rows = texts.len().div_ceil(cols).max(1);
+                    let mut cells = Vec::new();
+                    for text in &texts {
+                        let mut cell = ParsedText::default();
+                        parse_seq(text, &mut 0, st.clone(), false, depth + 1, &mut cell, options);
+                        cells.push(cell.segments);
+                    }
+                    while cells.len() < rows * cols {
+                        cells.push(Vec::new());
+                    }
+                    // each row's ink above and below its baseline (a letter's at least)
+                    let extent = |row: usize| {
+                        let mut runs = Vec::new();
+                        cells[row * cols..(row + 1) * cols].iter().for_each(|c| collect_runs(c, &mut runs));
+                        let top = runs
+                            .iter()
+                            .map(|r| r.rise + LIMIT_ASCENT * r.scale)
+                            .fold(st.rise + LIMIT_ASCENT * st.scale, f64::max);
+                        let bottom = runs
+                            .iter()
+                            .map(|r| r.rise - LIMIT_DESCENT * r.scale)
+                            .fold(st.rise - LIMIT_DESCENT * st.scale, f64::min);
+                        (top - st.rise, bottom - st.rise)
+                    };
+                    // baselines MATRIX_PITCH apart, further when tall cells would come closer than MATRIX_ROW_GAP
+                    let extents: Vec<(f64, f64)> = (0..rows).map(extent).collect();
+                    let mut baselines = vec![0.0];
+                    for r in 1..rows {
+                        let previous = baselines[r - 1];
+                        let clear = -extents[r - 1].1 + MATRIX_ROW_GAP * st.scale + extents[r].0;
+                        baselines.push(previous - clear.max(MATRIX_PITCH * st.scale));
+                    }
+                    // the block centred about the height of a fraction bar
+                    let top = extents[0].0;
+                    let bottom = baselines[rows - 1] + extents[rows - 1].1;
+                    let lift = FRACTION_BAR_RISE * st.scale - (top + bottom) / 2.0;
+                    for (k, cell) in cells.iter_mut().enumerate() {
+                        shift(cell, baselines[k / cols] + lift);
+                    }
+                    out.span(Segment::Matrix { cols, cells, scale: st.scale });
                 }
                 Escape::Delimited => {
                     let body: Vec<char> = take_enclosed(chars, pos).chars().collect();

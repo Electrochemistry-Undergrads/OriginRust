@@ -118,3 +118,24 @@ fn stretchy_delimiters_span_what_they_enclose() {
     let runs = crate::markup::parse(r"\dl(pp,x)");
     assert_eq!(runs.iter().map(|r| r.text.as_str()).collect::<String>(), "(x)");
 }
+
+#[test]
+fn a_matrix_lays_its_cells_out_in_centred_columns_between_its_delimiters() {
+    // T483: a 2 x 2 matrix in round brackets; each column as wide as its widest cell, 0.8 em between columns
+    let items = placed(r"$\begin{pmatrix} 1 & 22 \\ 333 & 4 \end{pmatrix}$");
+    let ts = texts(&items);
+    assert_eq!(ts.iter().map(|t| t.text.as_str()).collect::<Vec<_>>(), ["1", "22", "333", "4"]);
+    // the rows: the first above the second, 1.25 em apart
+    near(ts[0].y, ts[1].y);
+    near(ts[2].y - ts[0].y, 1.25 * 20.0);
+    // column 1 is "333" wide (33 pt), column 2 "22" (22 pt); "1" and "4" centred in theirs
+    let start = ts[2].x;
+    near(ts[0].x, start + (33.0 - 11.0) / 2.0);
+    near(ts[1].x, start + 33.0 + 16.0);
+    near(ts[3].x, start + 33.0 + 16.0 + (22.0 - 11.0) / 2.0);
+    // two delimiters around it
+    let paths = items.iter().filter(|i| matches!(i, Item::Path { stroke: Some(_), .. })).count();
+    assert_eq!(paths, 2);
+    let runs = crate::markup::parse(r"\mx(2,a,b,c,d)");
+    assert_eq!(runs.iter().map(|r| r.text.as_str()).collect::<String>(), "a, b; c, d");
+}

@@ -130,6 +130,23 @@ fn read(bytes: &[u8]) -> OpjImport {
     read_opj_from(Cursor::new(bytes.to_vec()), Path::new("g.opj")).unwrap()
 }
 
+#[test]
+fn a_matrix_book_in_front_of_the_workbook_keeps_the_plots_on_their_columns() {
+    // T472: a matrix sheet's data set takes a place in the data-set list, in window order.
+    let mut p = source();
+    let m = p.add_matrix_book("");
+    let at = p.windows.iter().position(|w| w.id() == m).unwrap();
+    let w = p.windows.remove(at);
+    p.windows.insert(0, w);
+    graph_with(&mut p, Template::Line, &[(0, 1), (0, 2)], |_| {});
+    let (imp, _) = round_trip(&p);
+    assert_eq!(imp.matrices.len(), 1);
+    let plots = &imp.graphs[0].layers[0].plots;
+    let names: Vec<String> = plots.iter().map(|pl| name_of(&imp, pl.y)).collect();
+    assert_eq!(names, ["B", "C"]);
+    assert_eq!(name_of(&imp, plots[0].x.unwrap()), "A");
+}
+
 fn round_trip(p: &Project) -> (OpjImport, Vec<String>) {
     let out = write_named(p, "g", TIME).unwrap();
     (read(&out.bytes), out.warnings)

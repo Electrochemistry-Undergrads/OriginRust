@@ -755,6 +755,94 @@ fn write_notes_project_for_origin() {
     std::fs::write(Path::new(&dir).join("sheaf-notes.opj"), written(&p).bytes).unwrap();
 }
 
+fn matrix_project() -> Project {
+    use sheaf_core::matrix::MatrixSheet;
+    let mut p = Project::new();
+    let first = MatrixSheet::from_values(
+        "MSheet1",
+        0,
+        3,
+        4,
+        vec![101.0, 102.0, 103.0, 104.0, 201.0, f64::NAN, 203.0, 204.0, 301.0, 302.0, 303.0, 304.0],
+        (0.5, 2.5),
+        (10.0, 20.0),
+    )
+    .unwrap();
+    let second = MatrixSheet::from_values("Data", 0, 2, 2, vec![1.0, 2.0, 3.0, 4.0], (1.0, 10.0), (1.0, 10.0)).unwrap();
+    let id = p.adopt_matrix_book("Surface", vec![first, second]);
+    p.matrix_book_mut(id).unwrap().name = "MBook1".into();
+    p.adopt_named_workbook(abcd("Book1"));
+    p.add_matrix_book("");
+    p
+}
+
+#[test]
+fn matrix_books_are_written_and_read_back() {
+    // T472: as Origin 2016 stores them (opj-format.md 13.16).
+    let p = matrix_project();
+    let out = written(&p);
+    assert!(out.warnings.iter().all(|w| !w.contains("matri")), "{:?}", out.warnings);
+    let imp = read_back(&out.bytes);
+    assert_eq!(imp.matrices.len(), 2);
+    assert_eq!(imp.workbooks.len(), 1, "the workbook's columns are not taken for the matrix's");
+    let q = imp.into_project();
+    let books: Vec<&sheaf_core::matrix::MatrixBook> = q.matrix_books().collect();
+    assert_eq!((books[0].name.as_str(), books[0].long_name.as_str(), books[0].sheets.len()), ("MBook1", "Surface", 2));
+    let (a, b) = (&books[0].sheets[0], &books[0].sheets[1]);
+    let before = p.matrix_books().next().unwrap();
+    assert_eq!((a.rows, a.cols, a.x_from, a.x_to, a.y_from, a.y_to), (3, 4, 0.5, 2.5, 10.0, 20.0));
+    assert_eq!(
+        a.values().iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+        before.sheets[0].values().iter().map(|v| v.to_bits()).collect::<Vec<_>>()
+    );
+    assert_eq!((b.name.as_str(), b.rows, b.cols, b.values()), ("Data", 2, 2, &[1.0, 2.0, 3.0, 4.0][..]));
+    assert_eq!((b.x_from, b.x_to), (1.0, 10.0));
+    // an empty 32 x 32 book: every cell missing
+    assert_eq!((books[1].sheets[0].rows, books[1].sheets[0].cols), (32, 32));
+    assert!(books[1].sheets[0].values().iter().all(|v| v.is_nan()));
+    let book1 = &q.workbooks().next().unwrap().sheets[0];
+    assert_eq!(book1.columns[0].numeric().unwrap(), &[1.0, 2.0, 3.0, 4.0, 5.0][..]);
+}
+
+#[test]
+fn a_matrix_sheet_is_written_as_origin_writes_one() {
+    let p = matrix_project();
+    let bytes = written(&p).bytes;
+    let has = |pat: &[u8]| bytes.windows(pat.len()).any(|w| w == pat);
+    // the coordinates as text annotations, only for the sheet whose range is not 1 to 10
+    assert!(has(b"X1\0") && has(b"Y2\0"));
+    assert!(has(b"0.5\0") && has(b"2.5\0"));
+    assert_eq!(bytes.windows(3).filter(|w| w == b"X1\0").count(), 1);
+    // data sets named after the book, then @2 for the second sheet
+    assert!(has(b"MBook1@2\0"));
+    // the layer header: the matrix flag, 4 columns and 3 rows
+    let at = bytes.windows(9).position(|w| w == b"PdMSheet1").unwrap() - 0xD0;
+    assert_eq!(bytes[at + 2], 0xDE);
+    assert_eq!(u16::from_le_bytes([bytes[at + 0x2B], bytes[at + 0x2C]]), 4);
+    assert_eq!(u16::from_le_bytes([bytes[at + 0x52], bytes[at + 0x53]]), 3);
+}
+
+#[test]
+fn a_matrix_with_labels_warns_and_a_long_book_name_is_refused() {
+    let mut p = matrix_project();
+    let id = p.matrix_books().next().unwrap().id;
+    p.matrix_book_mut(id).unwrap().sheets[0].z.long_name = "Height".into();
+    let out = written(&p);
+    assert!(out.warnings.iter().any(|w| w.contains("1 matrix sheet(s) have X, Y or Z labels")), "{:?}", out.warnings);
+    p.matrix_book_mut(id).unwrap().name = "M".repeat(23);
+    assert!(refusal(&p).contains("too long for its 2 sheets"), "{}", refusal(&p));
+}
+
+/// Writes `sheaf-matrix.opj` (the books of `matrix_project`) into `SHEAF_OPJ_MATRIX_DIR`, so Origin can
+/// be asked to open it (T472):
+/// `SHEAF_OPJ_MATRIX_DIR=<folder> cargo test -p sheaf-io -- --ignored write_matrix_project_for_origin`.
+#[test]
+#[ignore]
+fn write_matrix_project_for_origin() {
+    let Ok(dir) = std::env::var("SHEAF_OPJ_MATRIX_DIR") else { return };
+    std::fs::write(Path::new(&dir).join("sheaf-matrix.opj"), written(&matrix_project()).bytes).unwrap();
+}
+
 #[test]
 fn a_notes_window_with_a_long_name_warns() {
     let mut p = Project::new();

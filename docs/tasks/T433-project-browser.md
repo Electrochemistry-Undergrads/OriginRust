@@ -10,7 +10,7 @@ Sheaf's own design (Origin 2016 has no Project Browser).
 
 ## Left
 
-- Folders and matrices in the list, other metadata (user parameters, sheet tab colours), and a preview picture of a
+- Folders and matrices in the list (done in T486), other metadata (user parameters, sheet tab colours), and a preview picture of a
   graph. (Sorting and editing in place: T466.)
 
 ## Tests

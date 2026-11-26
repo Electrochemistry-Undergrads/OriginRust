@@ -1540,7 +1540,7 @@ previews matches and edits the metadata of several at once. Origin 2016 has none
   Columns: a tick, Kind, Name (short name), Where (`[Book1]` for a sheet, `[Book1]Sheet1` for a column), Long
   Name, Units, Comments (first line). At most 500 rows are drawn; the count above the list says how many match.
 - **Search and Show:** the search (ignoring case, as you type) keeps the rows where any of Name, Where, Long Name,
-  Units or Comments holds it; Show keeps one kind (All, Book, Sheet, Column, Graph). Tick All Shown ticks the rows
+  Units or Comments holds it (and Folder, T486); Show keeps one kind (All, Book, Sheet, Column, Graph, Matrix, Matrix Sheet). Tick All Shown ticks the rows
   the list shows; Clear Ticks unticks every row.
 - **Preview and Go To:** clicking a name makes it the previewed item: a column's row count and first 5 values, a
   sheet's columns and rows, a book's sheets, a graph's layers and plots. Go To, or a double click on a name, opens
@@ -1553,7 +1553,12 @@ previews matches and edits the metadata of several at once. Origin 2016 has none
 - **Editing in place (T466):** a double click on a Long Name, Units or Comments cell of an item that has the field
   opens a text box with the whole text; Enter writes it (one undo step, "Set Units" etc.), leaving the box otherwise
   changes nothing.
-- **Not done:** folders and matrices in the list, other metadata, and a picture preview of a graph.
+- **Folders and matrices (T486, 2026-11-26):** a Folder column after Where gives the project folder of the item's
+  window (`Raw/Day 2`; empty in the root folder), searched like the others and sortable. Every matrix book follows the
+  graphs, each followed by its sheets (`[MBook1]` in Where); Show has Matrix and Matrix Sheet. A matrix book has a Long
+  Name; a matrix sheet's Long Name, Units and Comments are those of its values (the Z labels), so they are set and
+  edited like a column's. The preview says a matrix book's sheets and a sheet's rows x columns; Go To opens the book.
+- **Not done:** other metadata, and a picture preview of a graph.
 
 ## 13t. File > Import > Auto Refresh (T442, 2026-11-25; Origin 2019b Data Connectors / 2026 periodic refresh, Sheaf's own, not measured)
 

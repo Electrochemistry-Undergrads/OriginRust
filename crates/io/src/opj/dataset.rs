@@ -9,6 +9,8 @@ use std::io::{Read, Seek};
 /// Offsets inside a data-set header block.
 const OFF_TYPE: usize = 0x16;
 const OFF_ROWS: usize = 0x19;
+const OFF_FIRST: usize = 0x1D;
+const OFF_LAST: usize = 0x21;
 const OFF_CELL_SIZE: usize = 0x3D;
 const OFF_FLAGS: usize = 0x3F;
 const OFF_NAME: usize = 0x58;
@@ -40,6 +42,8 @@ pub(crate) struct DataSetInfo {
     pub data: Extent,
     /// Where the mask block is (empty when nothing of the column is masked).
     pub mask: Extent,
+    /// The rows that hold values: the first and one past the last (`0x1D`, `0x21`; T476).
+    pub used: (u32, u32),
 }
 
 /// Offset of the first row's byte in a mask block, and the bytes after the last row.
@@ -108,6 +112,7 @@ pub(crate) fn parse_header(h: &[u8], data: Extent, mask: Extent) -> DataSetInfo 
         declared_rows: u32_at(OFF_ROWS),
         data,
         mask,
+        used: (u32_at(OFF_FIRST), u32_at(OFF_LAST)),
     }
 }
 
@@ -223,6 +228,7 @@ mod tests {
             declared_rows: 0,
             data: Extent { pos: 0, len: 0 },
             mask: Extent { pos: 0, len: 0 },
+            used: (0, 0),
         }
     }
 

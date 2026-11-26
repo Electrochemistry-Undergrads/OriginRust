@@ -409,9 +409,6 @@ impl Writer {
                 }
                 s
             });
-            if p.rows.is_some() {
-                notes.push("a plot's row range was not written; all rows of its columns are plotted".into());
-            }
             if p.symbol.every > 1 && p.kind.supports_skip_points() {
                 notes.push("Skip Points (symbols, drop lines, error bars and labels on every n-th point only) was not written; the companion file keeps it".into());
             }
@@ -957,10 +954,20 @@ impl Writer {
                 }
             };
             let line_color = if kind == CurveKind::Scatter { p.symbol.color } else { p.line.color };
+            // T476: a row range is written as the rows of the Y data set that the curve plots
+            let used = match r.plot.rows {
+                Some((start, end)) => {
+                    let first = (start.min(u32::MAX as usize) as u32).max(r.y.first);
+                    let last = (end.min(u32::MAX as usize) as u32).min(r.y.last);
+                    if first < last { (first, last) } else { (r.y.first, r.y.first) }
+                }
+                None => (r.y.first, r.y.last),
+            };
             let spec = CurveSpec {
                 kind,
                 y_set: r.y.position,
-                used: (r.y.first, r.y.last),
+                used,
+                ranged: used != (r.y.first, r.y.last),
                 x_set: r.x,
                 first,
                 line: code_of(line_color),
@@ -1035,6 +1042,7 @@ impl Writer {
             kind: CurveKind::Error,
             y_set: err.position,
             used: (err.first, err.last),
+            ranged: false,
             x_set: r.y.position,
             first: false,
             line: Code::index(0),

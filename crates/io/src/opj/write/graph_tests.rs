@@ -521,7 +521,6 @@ fn what_the_file_cannot_hold_is_named() {
     for needle in [
         "Graph 'Odd'",
         "page background",
-        "row range",
         "hidden plot",
         "every n-th point",
         "not a worksheet column",
@@ -536,8 +535,36 @@ fn what_the_file_cannot_hold_is_named() {
     ] {
         assert!(all.contains(needle), "{needle}: {all}");
     }
-    // the written graph still reads back, with the plots that could be written
+    // the written graph still reads back, with the plots that could be written; the row range is kept (T476)
     assert_eq!(imp.graphs[0].layers[0].plots.len(), 1);
+    assert_eq!(imp.graphs[0].layers[0].plots[0].rows, Some((2, 5)));
+}
+
+#[test]
+fn a_plot_row_range_is_written_and_read_back() {
+    // T476, measured in Origin 2016: `set %C -b 3` and `-e 8` stored 2 and 8 at 0x07 and 0x0B of the curve.
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1), (0, 2), (0, 3)], |g| {
+        g.layers[0].plots[0].rows = Some((2, 8));
+        g.layers[0].plots[1].rows = Some((0, 11));
+        g.layers[0].plots[2].rows = Some((9, 40));
+    });
+    let (imp, warnings) = round_trip(&p);
+    assert!(warnings.iter().all(|w| !w.contains("row range")), "{warnings:?}");
+    let rows: Vec<Option<(usize, usize)>> = imp.graphs[0].layers[0].plots.iter().map(|pl| pl.rows).collect();
+    assert_eq!(rows, [Some((2, 8)), None, Some((9, 11))], "all rows read as no range; a range past the data is cut");
+}
+
+/// Writes `sheaf-plot-rows.opj` (a plot of rows 3 to 8) into `SHEAF_OPJ_ROWS_DIR`, so Origin can be asked
+/// `get %C -b` and `-e` (T476).
+#[test]
+#[ignore]
+fn write_plot_rows_project_for_origin() {
+    let Ok(dir) = std::env::var("SHEAF_OPJ_ROWS_DIR") else { return };
+    let mut p = source();
+    graph_with(&mut p, Template::Line, &[(0, 1)], |g| g.layers[0].plots[0].rows = Some((2, 8)));
+    std::fs::write(std::path::Path::new(&dir).join("sheaf-plot-rows.opj"), write_named(&p, "r", TIME).unwrap().bytes)
+        .unwrap();
 }
 
 #[test]

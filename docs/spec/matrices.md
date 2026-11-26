@@ -236,7 +236,8 @@ that was meant to make one did not finish).
 
 `--matrix` and `--sheet` choose a matrix window and sheet. Results are saved back to the project (or to `-o`);
 saving as `.opj` stores the matrix books in the Origin project too (T472: sheets, size, numbers, X/Y range; the
-labels of the coordinates are left out with a warning) and writes the companion `.opj.sheaf` beside it as always.
+labels of the coordinates are left out with a warning); a companion `.opj.sheaf` is written beside it only when
+something is left out, such as those labels.
 
 ## 7a. The matrix window in the app (T192 slice 2, 2026-11-19, not measured)
 

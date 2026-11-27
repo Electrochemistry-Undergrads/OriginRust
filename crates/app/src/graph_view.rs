@@ -727,6 +727,15 @@ pub fn show(ui: &mut egui::Ui, doc: &Document, graph_id: WindowId, state: &mut G
             if ui.add_enabled(span > 0.0, egui::Checkbox::new(&mut by_length, "By length")).changed() {
                 actions.push(Action::ExplorerLength { graph: graph_id, length: by_length.then_some(span / 10.0) });
             }
+            // T488: the detail's Y axis fits each interval
+            let mut rescale = e.rescale_y;
+            if ui
+                .checkbox(&mut rescale, "Rescale Y")
+                .on_hover_text("Fit the detail's Y axis to each interval")
+                .changed()
+            {
+                actions.push(Action::ExplorerRescaleY { graph: graph_id, on: rescale });
+            }
             if let Some(len) = e.length {
                 let mut l = len;
                 let field = egui::DragValue::new(&mut l).speed(span / 200.0).range(span / 1000.0..=span);

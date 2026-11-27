@@ -776,6 +776,11 @@ pub enum Action {
         graph: WindowId,
         length: Option<f64>,
     },
+    /// The explorer bar: the detail layer's Y axis fits each interval, or keeps the whole range (T488).
+    ExplorerRescaleY {
+        graph: WindowId,
+        on: bool,
+    },
     /// The explorer bar: split the series into `intervals` (T416).
     ExplorerIntervals {
         graph: WindowId,

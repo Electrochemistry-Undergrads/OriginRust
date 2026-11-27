@@ -227,6 +227,11 @@ fn time_series_explorer_steps_and_plays_from_the_bar() {
     settle(&mut h);
     let e = project(&h).graph(graph).unwrap().explorer.unwrap();
     assert!((e.length.unwrap() - 4.9).abs() < 1e-9 && e.intervals == 10, "{e:?}");
+    // Rescale Y (T488): one undo step
+    h.get_by_label("Rescale Y").click();
+    settle(&mut h);
+    assert!(project(&h).graph(graph).unwrap().explorer.unwrap().rescale_y);
+    assert_eq!(h.state().doc.undo_label(), Some("Explorer Rescale Y"));
 }
 
 #[test]

@@ -423,6 +423,21 @@ pub(crate) fn resolve_dim(
     resolved
 }
 
+/// The smallest and largest Y of `plots` at an X from `x0` to `x1` (the row number for a plot without X), or
+/// `None` without any (T488).
+fn interval_y_extent(plots: &[data::PlotData], x0: f64, x1: f64) -> Option<(f64, f64)> {
+    let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+    for p in plots {
+        for (r, &y) in p.y.iter().enumerate() {
+            let x = p.x.as_ref().map_or((r + 1) as f64, |xs| xs.get(r).copied().unwrap_or(f64::NAN));
+            if y.is_finite() && x >= x0 && x <= x1 && p.filters.iter().all(|f| f.passes(r)) {
+                (lo, hi) = (lo.min(y), hi.max(y));
+            }
+        }
+    }
+    (hi >= lo).then_some(if hi > lo { (lo, hi) } else { (lo - 0.5, hi + 0.5) })
+}
+
 fn group_geometry(
     project: &Project,
     g: &Graph,
@@ -513,7 +528,16 @@ fn group_geometry(
                 };
                 let (x0, x1) = span(&root_x, r.x1, r.x2);
                 // Frame fractions run down from the top; axis units run up from the bottom.
-                let (y0, y1) = span(&root_y, 1.0 - r.y1, 1.0 - r.y2);
+                let (mut y0, mut y1) = span(&root_y, 1.0 - r.y1, 1.0 - r.y2);
+                // T488: a Time Series Explorer with Rescale Y fits the detail's Y axis to the interval's data
+                if g.explorer.is_some_and(|e| e.rescale_y)
+                    && let Some((lo, hi)) = interval_y_extent(&pds[i].plots, x0, x1)
+                {
+                    let (a, b, _) = sheaf_core::autorange::linear_range(lo, hi, l.y_axis.rescale_margin_pct);
+                    if b > a && a.is_finite() && b.is_finite() {
+                        (y0, y1) = (a, b);
+                    }
+                }
                 if x1 > x0 && y1 > y0 && [x0, x1, y0, y1].iter().all(|v| v.is_finite()) {
                     let fixed = |a: &Axis, lo: f64, hi: f64| Axis { min: Some(lo), max: Some(hi), ..a.clone() };
                     return (own(i, Dim::X, &fixed(&l.x_axis, x0, x1)), own(i, Dim::Y, &fixed(&l.y_axis, y0, y1)));

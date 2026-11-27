@@ -514,6 +514,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T485](T485-label-math.md) | LaTeX math in worksheet label rows drawn as styled runs | S | done 2026-11-26 (graphing LaTeX math) |
 | [T486](T486-browser-folders-matrices.md) | Project Browser lists folders and matrix books with their sheets | S | done 2026-11-26 (workbook-model 13s) |
 | [T487](T487-slicer-columns.md) | Graph Slicer with several slicer columns of one sheet | S | done 2026-11-26 (graphing Graph Slicer) |
+| [T488](T488-explorer-rescale-y.md) | Time Series Explorer Rescale Y: the detail's Y axis fits each interval | S | done 2026-11-26 (graphing Time Series Explorer) |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |

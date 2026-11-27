@@ -2406,7 +2406,8 @@ outlier wells and Western blot densitometry are not built.
 ## 51 Monte Carlo simulation (T393, Origin 2027's Monte Carlo app; Sheaf's own, not measured)
 
 Statistics > Monte Carlo Simulation (Randomize Inputs)... (CLI `analyze monte-carlo FILE --y Y --input NAME=DIST(...) [--input ...]
---formula EXPR [--samples N] [--seed S] [--lsl L] [--usl U] [--optimize NAME=LOW:HIGH ...] [--aim T]`;
+--formula EXPR [--samples N] [--seed S] [--lsl L] [--usl U] [--optimize NAME=LOW:HIGH ...] [--aim T]
+[--correlation A,B=R ...] [--no-graph]`;
 `Tool::MonteCarlo`, `sheaf_calc::montecarlo`):
 
 - **Inputs**, one per line in the window: `name = normal(mean, sd)`, `uniform(low, high)`, `lognormal(mu, sigma)`
@@ -2436,7 +2437,20 @@ Statistics > Monte Carlo Simulation (Randomize Inputs)... (CLI `analyze monte-ca
   the share outside) or the mean, SD and mean squared deviation, each with its value before; a note for a setting
   at a bound of its range; sheet columns `name at optimum` and Output at optimum. Refused: an unknown or repeated
   control, an empty range, a lognormal range reaching 0, more than 4 controls, Highest Cpk without a limit.
-- Not built: correlated inputs, histograms of the output, tolerances (input spreads) as controls.
+- **Correlated inputs** (T496; the window's Correlations `a, b = r; ...`, CLI `--correlation a,b=r`): a Gaussian
+  copula. Each row's uniforms turn into normal scores `Phi^-1(u)`, are mixed by the Cholesky factor of the
+  correlation matrix (pairs not given are 0) and turn back into uniforms `Phi(z')` before each input's inverse
+  distribution function: every input keeps its own distribution, the normal scores correlate by `r` and the ranks by
+  about `6 / pi asin(r / 2)`. An input correlated with no other keeps exactly its draws without correlations (so a
+  seed gives the same draws as before). Refused: an unknown name, a pair given twice or with itself, `|r| >= 1`, and
+  correlations that cannot hold together (the matrix is not positive definite). A note gives each pair with the rank
+  correlation of its draws. The optimization keeps the correlated draws.
+- **Histogram** (T496; on by default, `--no-graph`, the window's "Histogram of the output"): a column graph of the
+  output's counts in about `sqrt(n)` equal bins (5 to 50) over its range, with the output at the optimum counted on
+  the same bins as a second plot and the specification limits as vertical lines; the sheet gains Bin center, Count,
+  Count at optimum and `LSL X`/`LSL`, `USL X`/`USL` columns.
+- Not built: tolerances (input spreads) as controls, correlations other than through normal scores (rank
+  correlations as given, Iman-Conover).
 
 ## 52 Cox proportional hazards (T408, Origin 2026b; not measured)
 

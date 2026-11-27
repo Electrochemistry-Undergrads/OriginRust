@@ -81,7 +81,8 @@ pub use sheaf_calc::PlotScores;
 /// What [`Tool::MixtureDesign`] makes (T386).
 pub use sheaf_calc::mixture::{MixtureKind, MixtureOptions as MixtureDesignSpec};
 pub use sheaf_calc::montecarlo::{
-    InputDist, McControl, McGoal, parse_controls as parse_monte_carlo_controls, parse_input as parse_monte_carlo_input,
+    InputDist, McControl, McGoal, parse_controls as parse_monte_carlo_controls,
+    parse_correlations as parse_monte_carlo_correlations, parse_input as parse_monte_carlo_input,
 };
 pub use sheaf_calc::quantreg::SeKind as QuantRegSe;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
@@ -2828,6 +2829,7 @@ impl Project {
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;
+                xy_graph = out.graph;
             }
             Tool::MixtureDesign(spec) => {
                 let out = doe::run_mixture(spec)?;

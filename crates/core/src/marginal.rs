@@ -107,6 +107,37 @@ impl Project {
                 }
             }
         }
+        // T508: grouped histograms share their bins, the automatic bins of all the groups' values of each margin.
+        if grouped && hist {
+            for (layer, axis_x) in [(1usize, true), (2, false)] {
+                let mut all = Vec::new();
+                for &(x, y) in &pairs {
+                    all.extend_from_slice(self.numeric(if axis_x { x } else { y }).unwrap_or(&[]));
+                }
+                let opts = sheaf_calc::freq::FreqOptions {
+                    min: None,
+                    max: None,
+                    size: sheaf_calc::freq::BinSize::Auto,
+                    below: false,
+                    above: false,
+                };
+                let Some(f) = sheaf_calc::freq::freq_counts(&all, &opts) else { continue };
+                let end = f.rows.iter().map(|r| r.end).filter(|e| e.is_finite()).fold(f64::NEG_INFINITY, f64::max);
+                if !(end.is_finite() && f.bin_size > 0.0) {
+                    continue;
+                }
+                let shared = crate::graph::HistogramStyle {
+                    bin_size: Some(f.bin_size),
+                    begin: Some(f.bin_start),
+                    end: Some(end),
+                };
+                if let Some(l) = self.graph_mut(id).and_then(|g| g.layers.get_mut(layer)) {
+                    for p in &mut l.plots {
+                        p.hist = shared;
+                    }
+                }
+            }
+        }
         if let Some(g) = self.graph_mut(id) {
             g.long_name = name;
             // A box per group, at positions 1 to k: the box margins span 0.5 to k + 0.5.
@@ -181,5 +212,14 @@ mod tests {
         let h = p.plot_marginal_groups(Template::MarginalHistograms, &groups).unwrap();
         let fill = p.graph(h).unwrap().layers[1].plots[0].symbol.color;
         assert_eq!(fill.a, 128, "half transparent so the groups overlap visibly");
+        // T508: both groups' histograms of a margin share one set of bins over all the values.
+        let graph = p.graph(h).unwrap();
+        for layer in [1, 2] {
+            let (a, b) = (&graph.layers[layer].plots[0].hist, &graph.layers[layer].plots[1].hist);
+            assert_eq!(a, b, "layer {layer}");
+            assert!(a.bin_size.is_some() && a.begin.is_some() && a.end.is_some(), "{a:?}");
+        }
+        let x = &graph.layers[1].plots[0].hist;
+        assert!(x.begin.unwrap() <= 1.0 && x.end.unwrap() >= 6.0, "the bins cover every group's X: {x:?}");
     }
 }

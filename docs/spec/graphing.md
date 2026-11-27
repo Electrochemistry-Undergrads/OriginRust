@@ -7095,7 +7095,9 @@ Probed with twelve (X, Y) points selected as A(X), B(Y).
   marginal-histograms|marginal-box-charts -y Y --group G` splits the rows by the values of G into a `Grouped`
   sheet (as `--group` with XY templates, 17.10) and plots one scatter per group in the palette's colours
   (`Project::plot_marginal_groups`). Each margin gets a histogram per group in the group's colour, half
-  transparent with an outline in the colour, so overlapping bars stay visible (each group binned on its own),
+  transparent with an outline in the colour, so overlapping bars stay visible; the groups share their bins (T508:
+  the automatic bins of all the groups' values of that margin, `sheaf_calc::freq` with automatic size, written into
+  every group's histogram settings as bin size, begin and end; before T508 each group was binned on its own),
   or a box per group side by side at positions 1, 2, ... (`PlotDecor::marginal_slot`; the box margins then span
   0.5 to k + 0.5). The Y axis title is the Y column's name (and units), not the first group's value; this
   applies to every `--group` plot with one Y column. The menu items still take one Y column (no group column

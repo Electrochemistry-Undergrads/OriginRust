@@ -14,5 +14,5 @@ group's colour; `Project::plot_marginal_groups`, `PlotDecor::marginal_slot`. Wit
 
 ## Left
 
-- A group column in the Plot > Statistics windows; shared bins across groups; kernel density margins; network
-  plots.
+- A group column in the Plot > Statistics windows; kernel density margins. (Shared bins across groups: T508; network
+  plots: T383.)

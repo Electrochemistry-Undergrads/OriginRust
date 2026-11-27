@@ -1514,7 +1514,8 @@ Origin 2026 infers a text rule from an example, previews it, and fills static va
 2016 has no Flash Fill.
 
 - **Examples and sources:** the column's non-empty cells are the examples; the sources are the columns to its left
-  that hold any text or number, read as the cells show them.
+  that hold any text or number, read as text: a number as its digits, a date or time as the sheet shows it in its
+  column's format (T493; before, a date was read as its day number).
 - **Rules:** a rule joins pieces: fixed text, a whole source cell, a word of one (a run of letters and digits,
   counted from the start or the end) or its first or last one to four characters (T468: `Jo` of `John`, `17` of
   `2017`, written `left(token(...), n)` and `right(token(...), n)`), each as is, upper case or lower case. One rule
@@ -1524,12 +1525,16 @@ Origin 2026 infers a text rule from an example, previews it, and fills static va
   `Mary Ann Lee` gives `Lee, M.`; a second example settles a choice (`a b` -> `b` with `c d e` -> `d` is word 2).
   The search gives up after 2000 steps; then, as when nothing fits, the message asks for another example.
 - **The window "Flash Fill":** the rule as a formula ("cannot be written as a formula" when its fixed text holds a
-  `"`), and a preview of the first 8 rows (sources | result, the examples marked). Fill Values writes the results
-  as text, the examples as typed; a row with no source text stays empty. Keep Formula sets the formula as the
+  `"`), and a preview of the first 8 rows (sources | result, the examples marked). Fill Values writes the results,
+  the examples as typed; a row with no source text stays empty. A number or date column stays one when every other
+  result reads as a number (a date or time in a date column) as if typed into it (T493: `2017` from `run 2017 a`
+  stays a number, `1999-12-31` stays a date); a Text & Numeric column takes each result as typed; otherwise the
+  column becomes text. Keep Formula sets the formula as the
   column's formula, recalculated automatically (Set Column Values' Auto). Either is one undo step ("Flash Fill");
   Cancel and Esc change nothing.
-- **Not done:** numbers and dates (only texts are matched), substrings that are not whole words, conditional
-  rules, suggestions while typing, and picking the source columns.
+- **Not done:** arithmetic on numbers and dates (results are built from text pieces only), substrings that are not
+  the first or last characters of words, conditional rules, suggestions while typing, picking the source columns, and
+  a number result in Keep Formula (the formula gives text).
 
 ## 13s. View > Project Browser (T433, 2026-11-24; Origin 2025b's Project Browser, Sheaf's own, not measured)
 

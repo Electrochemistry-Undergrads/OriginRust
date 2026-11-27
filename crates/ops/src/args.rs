@@ -4008,6 +4008,15 @@ pub enum AnalyzeTool {
         /// Bins of equal width instead of equal counts.
         #[arg(long)]
         equal_width: bool,
+        /// Bins of this width, with edges at its multiples (instead of --bins).
+        #[arg(long, conflicts_with = "equal_width")]
+        width: Option<f64>,
+        /// Error bars on the bin means: none, sd, se or ci (95 % confidence interval).
+        #[arg(long, default_value = "none", value_parser = ["none", "sd", "se", "ci"])]
+        error: String,
+        /// Draw the least-squares line of the data.
+        #[arg(long)]
+        fit: bool,
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,

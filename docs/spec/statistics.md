@@ -1879,15 +1879,23 @@ segments start and the penalty used.
 ## 31 Binned scatter (T356, Origin 2027 feature; not measured)
 
 Origin 2027 adds binned scatter plots; Origin 2016 has none, so this is Sheaf's own. Statistics > Descriptive
-Statistics > Binned Scatter... (`Tool::BinScatter`, `sheaf analyze binscatter --y COL [--bins N] [--equal-width]
-[--no-graph]`, `sheaf_calc::binned_scatter`): every chosen column is binned against its X column (or the row
+Statistics > Binned Scatter... (`Tool::BinScatter`, `sheaf analyze binscatter --y COL [--bins N] [--equal-width |
+--width W] [--error none|sd|se|ci] [--fit] [--no-graph]`, `sheaf_calc::binned_scatter`): every chosen column is binned against its X column (or the row
 number); rows with a missing X or Y are left out. Bins of equal counts (default, 10 bins): the points in X order are
 cut into N groups whose sizes differ by at most one, the first `count % N` holding one more; a bin's X range is its
 smallest and largest X. Bins of equal width: N intervals from the smallest to the largest X (the last includes its
 right edge), empty bins left out. Each bin gives X from, X to, X mean, N, Y mean, Y SD (n - 1; blank for one point)
 and Y SE (`SD / sqrt N`). The result sheet `BinScatterN` has one row per bin ("<column>, bin k"), then, with the
 graph, the data and the bin means; a new graph shows the data as symbols and the bin means as line and symbols at
-the bins' mean X. Error bars on the means are not drawn.
+the bins' mean X (before T501 the graph's plots pointed at the label and table columns instead of the data).
+
+- **Bins of a width** (T501; `--width W`, the window's "Width"): bins `[k W, (k + 1) W)` with edges at multiples of
+  `W`, from the bin of the smallest X to that of the largest, empty bins left out; more than 10 000 bins are refused.
+- **Error bars** (T501; `--error sd|se|ci`, the window's Error bars): the bin means get Y error bars of the SD, the
+  SE or the 95 % confidence half-width `t(0.975, N - 1) SE` (blank for one point), from a Y-error column "SD|SE|95%
+  CI half-width of the bin means of <column>" on the sheet.
+- **Line** (T501; `--fit`, "Least-squares line of the data"): the least-squares line `Y = a + b X` of all the points
+  (not of the bin means), drawn over the bins' X range in the colour of the data, with a note giving it.
 
 ## 32 Time series pivot (T358, Origin 2025 feature; not measured)
 

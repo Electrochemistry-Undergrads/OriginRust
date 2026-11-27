@@ -50,6 +50,8 @@ pub(super) struct Look {
     pub symbols: Vec<(usize, crate::graph::SymbolShape, f64, Option<crate::color::Color>)>,
     /// Plots drawn with a dotted line, by index in `plots`.
     pub dotted: Vec<usize>,
+    /// Y error bars of a plot (index in `plots`) from a column of the result sheet (position) (T501).
+    pub y_errors: Vec<(usize, usize)>,
     /// The long name of the graph window (Origin: "Scree Plot", "Loading Plot", "Biplot", "Scores Plot").
     pub title: Option<String>,
     /// Draw no legend (Origin's principal component graphs have none).
@@ -75,6 +77,9 @@ impl Output {
             for p in &mut g.plots {
                 p.x += by;
                 p.y += by;
+            }
+            for (_, c) in &mut g.look.y_errors {
+                *c += by;
             }
         }
         self

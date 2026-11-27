@@ -4,8 +4,10 @@
 //! of its X values. Dense XY data then read as one point per bin.
 
 /// How X is cut into bins.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinRule {
+    /// Bins of this width with edges at its multiples (T501): `[k w, (k + 1) w)`; empty bins are left out.
+    Width(f64),
     /// `n` bins of equal width from the smallest to the largest X (the last bin includes its right edge); empty
     /// bins are left out.
     EqualWidth(usize),
@@ -38,13 +40,16 @@ pub struct Bin {
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinScatterError {
     NoBins,
+    /// A width that cuts the X range into more than 10 000 bins (T501).
+    TooManyBins,
     TooFewPoints(usize),
 }
 
 impl std::fmt::Display for BinScatterError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BinScatterError::NoBins => f.write_str("the number of bins must be at least 1"),
+            BinScatterError::NoBins => f.write_str("the number of bins must be at least 1 (a bin width above 0)"),
+            BinScatterError::TooManyBins => f.write_str("the bin width makes more than 10000 bins"),
             BinScatterError::TooFewPoints(n) => write!(f, "{n} usable points are fewer than the bins asked for"),
         }
     }
@@ -69,6 +74,27 @@ pub fn binned_scatter(x: &[f64], y: &[f64], rule: BinRule) -> Result<Vec<Bin>, B
     points.sort_by(|a, b| a.0.total_cmp(&b.0));
     match rule {
         BinRule::EqualWidth(0) | BinRule::EqualCount(0) => Err(BinScatterError::NoBins),
+        BinRule::Width(w) if !(w.is_finite() && w > 0.0) => Err(BinScatterError::NoBins),
+        BinRule::Width(_) if points.is_empty() => Err(BinScatterError::TooFewPoints(0)),
+        BinRule::Width(w) => {
+            let first = (points[0].0 / w).floor();
+            let last = (points[points.len() - 1].0 / w).floor();
+            if last - first >= 10_000.0 {
+                return Err(BinScatterError::TooManyBins);
+            }
+            let k = (last - first) as usize + 1;
+            let mut groups: Vec<Vec<(f64, f64)>> = vec![Vec::new(); k];
+            for p in &points {
+                let b = ((p.0 / w).floor() - first).clamp(0.0, (k - 1) as f64) as usize;
+                groups[b].push(*p);
+            }
+            Ok(groups
+                .iter()
+                .enumerate()
+                .filter(|(_, g)| !g.is_empty())
+                .map(|(b, g)| bin_of(g, (first + b as f64) * w, (first + b as f64 + 1.0) * w))
+                .collect())
+        }
         BinRule::EqualCount(k) if points.len() < k => Err(BinScatterError::TooFewPoints(points.len())),
         BinRule::EqualWidth(_) if points.is_empty() => Err(BinScatterError::TooFewPoints(0)),
         BinRule::EqualCount(k) => {
@@ -101,9 +127,78 @@ pub fn binned_scatter(x: &[f64], y: &[f64], rule: BinRule) -> Result<Vec<Bin>, B
     }
 }
 
+/// The error bar of a bin mean (T501).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BinError {
+    #[default]
+    None,
+    /// The standard deviation of the bin's Y values.
+    Sd,
+    /// The standard error of the mean.
+    Se,
+    /// The half-width of the 95 % confidence interval of the mean, `t(0.975, n - 1) SE`.
+    Ci95,
+}
+
+impl BinError {
+    /// The bar's half-length for `bin` (NaN for one point, or without bars).
+    pub fn of(self, bin: &Bin) -> f64 {
+        match self {
+            BinError::None => f64::NAN,
+            BinError::Sd => bin.y_sd,
+            BinError::Se => bin.y_se,
+            BinError::Ci95 => {
+                use statrs::distribution::{ContinuousCDF, StudentsT};
+                match StudentsT::new(0.0, 1.0, bin.n as f64 - 1.0) {
+                    Ok(t) if bin.n > 1 => t.inverse_cdf(0.975) * bin.y_se,
+                    _ => f64::NAN,
+                }
+            }
+        }
+    }
+}
+
+/// The least-squares line `y = a + b x` of the points (pairs with a missing value left out), `(a, b)`; NaN without two
+/// different X values (T501).
+pub fn linear_fit(x: &[f64], y: &[f64]) -> (f64, f64) {
+    let pts: Vec<(f64, f64)> =
+        x.iter().zip(y).filter(|(a, b)| a.is_finite() && b.is_finite()).map(|(a, b)| (*a, *b)).collect();
+    let n = pts.len() as f64;
+    let (mx, my) = (pts.iter().map(|p| p.0).sum::<f64>() / n, pts.iter().map(|p| p.1).sum::<f64>() / n);
+    let sxx: f64 = pts.iter().map(|p| (p.0 - mx).powi(2)).sum();
+    let sxy: f64 = pts.iter().map(|p| (p.0 - mx) * (p.1 - my)).sum();
+    if pts.len() < 2 || sxx <= 0.0 {
+        return (f64::NAN, f64::NAN);
+    }
+    let b = sxy / sxx;
+    (my - b * mx, b)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bins_of_a_width_error_bars_and_the_line() {
+        // T501: edges at multiples of the width; empty bins left out.
+        let x = [0.2, 0.9, 1.1, 3.5, 3.9, f64::NAN];
+        let y = [1.0, 3.0, 5.0, 7.0, 9.0, 0.0];
+        let b = binned_scatter(&x, &y, BinRule::Width(1.0)).unwrap();
+        assert_eq!(
+            b.iter().map(|b| (b.x_from, b.x_to, b.n)).collect::<Vec<_>>(),
+            [(0.0, 1.0, 2), (1.0, 2.0, 1), (3.0, 4.0, 2)]
+        );
+        assert_eq!(binned_scatter(&x, &y, BinRule::Width(0.0)), Err(BinScatterError::NoBins));
+        assert_eq!(binned_scatter(&x, &y, BinRule::Width(1e-6)), Err(BinScatterError::TooManyBins));
+        // Error bars: SD 1.414..., SE 1, 95 % half-width t(0.975, 1) = 12.706...
+        assert!((BinError::Sd.of(&b[0]) - 2f64.sqrt()).abs() < 1e-12);
+        assert!((BinError::Se.of(&b[0]) - 1.0).abs() < 1e-12);
+        assert!((BinError::Ci95.of(&b[0]) - 12.706204736174698).abs() < 1e-9, "{}", BinError::Ci95.of(&b[0]));
+        assert!(BinError::Ci95.of(&b[1]).is_nan() && BinError::None.of(&b[0]).is_nan());
+        // The line through (0, 1), (1, 3), (2, 5): y = 1 + 2 x.
+        assert_eq!(linear_fit(&[0.0, 1.0, 2.0, f64::NAN], &[1.0, 3.0, 5.0, 9.0]), (1.0, 2.0));
+        assert!(linear_fit(&[1.0, 1.0], &[1.0, 2.0]).0.is_nan());
+    }
 
     #[test]
     fn equal_counts_split_in_x_order_with_the_extra_points_first() {

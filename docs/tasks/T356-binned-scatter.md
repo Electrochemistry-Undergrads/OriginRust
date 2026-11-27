@@ -8,7 +8,8 @@ bin means. Not in Origin 2016, so the rules and layout are Sheaf's own.
 
 ## Left
 
-- Error bars (SD, SE or confidence) on the bin means, a fitted line through them, bins by a typed width.
+- Error bars on the bin means, a fitted line and bins by a typed width: done (T501). Lines other than straight
+  (binned regression with controls, as Stata's binscatter).
 
 ## Tests
 

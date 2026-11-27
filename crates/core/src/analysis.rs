@@ -2893,6 +2893,7 @@ impl Project {
                 table = out.table;
                 on_sheet = out.on_sheet;
                 notes = out.notes;
+                xy_graph = out.graph;
             }
             Tool::Turnbull(spec) => {
                 let out = lifedist::run_turnbull(spec, sheet, &request.columns, request.rows)?;

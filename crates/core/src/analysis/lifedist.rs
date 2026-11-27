@@ -61,6 +61,8 @@ pub struct LifeRegressionSpec {
     pub at: Option<Vec<f64>>,
     /// Further covariate settings to predict at, each one value per covariate (T504).
     pub also_at: Vec<Vec<f64>>,
+    /// A graph of the percentile lives against the first covariate over its range, the others at their means (T509).
+    pub graph: bool,
     /// The level of the percentile intervals.
     pub confidence: f64,
 }
@@ -74,6 +76,7 @@ impl Default for LifeRegressionSpec {
             percentiles: vec![0.1, 0.5, 0.9],
             at: None,
             also_at: Vec::new(),
+            graph: false,
             confidence: 0.95,
         }
     }
@@ -548,7 +551,66 @@ pub(super) fn run_regression(
             list.join("; ")
         ));
     }
-    Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph: None, more_graphs: Vec::new() })
+    // T509: the percentile lives against the first covariate, the others at their means.
+    let mut graph = None;
+    if spec.graph && k > 0 && !spec.percentiles.is_empty() {
+        let means: Vec<f64> = (0..k).map(|j| x.iter().map(|r| r[j]).sum::<f64>() / x.len() as f64).collect();
+        let (lo, hi) = x.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), r| (l.min(r[0]), h.max(r[0])));
+        let steps = 40;
+        let grid: Vec<f64> = (0..=steps).map(|i| lo + (hi - lo) * f64::from(i) / f64::from(steps)).collect();
+        let name = column_label(xcs[0]);
+        let comment = "Percentile life against the first covariate (the others at their means)";
+        let gx = sheet_cols.len();
+        sheet_cols.push(column_of(&name, comment, Designation::X, grid.clone()));
+        let pct = num(100.0 * spec.confidence);
+        let mut plots = Vec::new();
+        let mut dotted = Vec::new();
+        for p in &spec.percentiles {
+            let q: Vec<calc::lifereg::Percentile> = grid
+                .iter()
+                .map(|v| {
+                    let mut at = means.clone();
+                    at[0] = *v;
+                    fit.percentile(&at, *p, spec.confidence)
+                })
+                .collect();
+            let label = format!("{} % life", num(100.0 * p));
+            let y = sheet_cols.len();
+            sheet_cols.push(column_of(&label, comment, Designation::Y, q.iter().map(|v| v.estimate).collect()));
+            let main = plots.len();
+            plots.push(GraphPlot { x: gx, y, kind: PlotKind::Line, label: label.clone(), line_of: None });
+            for (side, values) in [
+                ("lower", q.iter().map(|v| v.lower).collect::<Vec<_>>()),
+                ("upper", q.iter().map(|v| v.upper).collect()),
+            ] {
+                let c = sheet_cols.len();
+                sheet_cols.push(column_of(&format!("{label} {pct}% {side}"), comment, Designation::Y, values));
+                dotted.push(plots.len());
+                plots.push(GraphPlot {
+                    x: gx,
+                    y: c,
+                    kind: PlotKind::Line,
+                    label: format!("{label} {pct}% {side}"),
+                    line_of: Some(main),
+                });
+            }
+        }
+        notes.push(format!(
+            "The graph draws the percentile lives against {name} from {} to {} with the other covariates at their means, \
+             their {pct} % intervals dotted.",
+            num(lo),
+            num(hi)
+        ));
+        graph = Some(XyGraph {
+            plots,
+            x_scale: ScaleKind::Linear,
+            y_scale: ScaleKind::Log10,
+            x_title: name,
+            y_title: format!("Percentile life of {}", column_label(tc)),
+            look: super::dist::Look { dotted, ..Default::default() },
+        });
+    }
+    Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph, more_graphs: Vec::new() })
 }
 
 pub(super) fn run_cox(
@@ -1299,6 +1361,15 @@ mod tests {
         assert_eq!(notes.len(), 2, "{:?}", out2.notes);
         let ws = &p.workbook(book).unwrap().sheets[out2.new_sheet.unwrap()];
         assert!(ws.columns.iter().any(|c| c.long_name == "Percentile life (2)"));
+        // T509: the percentile lives against the covariate, with dotted bands.
+        let drawn = LifeRegressionSpec { graph: true, percentiles: vec![0.1, 0.5], ..Default::default() };
+        let out3 = run(&mut p, drawn).unwrap();
+        let g = p.graph(out3.new_graph.expect("a graph")).unwrap();
+        assert_eq!(g.layers[0].plots.len(), 6, "a line and two bands per percentile");
+        assert_eq!(g.layers[0].y_axis.scale, ScaleKind::Log10);
+        let cols = super::super::dist::plot_columns(&p, out3.new_graph.unwrap());
+        assert_eq!(cols[0].1, "10 % life");
+        assert!(out3.notes.iter().any(|n| n.contains("against") && n.contains("dotted")), "{:?}", out3.notes);
         let wrong = LifeRegressionSpec { also_at: vec![vec![1.0, 2.0]], ..Default::default() };
         assert!(run(&mut p, wrong).is_err());
         let bad = LifeRegressionSpec { at: Some(vec![1.0, 2.0]), ..Default::default() };

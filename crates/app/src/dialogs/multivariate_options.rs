@@ -513,6 +513,8 @@ impl MultiOptions {
                         s.confidence = pct / 100.0;
                     }
                 });
+                // T509: the percentile lives against the first covariate.
+                ui.checkbox(&mut self.life_reg.graph, "Graph of the percentile lives against the first covariate");
             }
             AnalysisKind::Turnbull => {
                 ui.label("The chosen columns are the start and the end of each failure window: equal for an exact failure, an empty end if it was still working, an empty start if it failed before the end.");

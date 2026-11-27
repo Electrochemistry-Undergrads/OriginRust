@@ -8,8 +8,8 @@ delta-method intervals on log time (`--confidence`). Not measured in Origin.
 
 ## Left
 
-- A percentile-vs-covariate graph, interval-censored regression, factor covariates, residual plots. (Several
-  covariate settings at once: T504.)
+- Interval-censored regression, factor covariates, residual plots. (Several covariate settings at once: T504; a
+  percentile-vs-covariate graph: T509.)
 
 ## Tests
 

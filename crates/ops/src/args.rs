@@ -3920,6 +3920,9 @@ pub enum AnalyzeTool {
         /// A further covariate setting to predict at, comma-separated (repeat for each).
         #[arg(long = "also-at", value_name = "V,V..", allow_hyphen_values = true)]
         also_at: Vec<String>,
+        /// Draw the percentile lives against the first covariate (the others at their means).
+        #[arg(long)]
+        graph: bool,
         /// Level of the percentile intervals, in percent.
         #[arg(long, default_value_t = 95.0)]
         confidence: f64,

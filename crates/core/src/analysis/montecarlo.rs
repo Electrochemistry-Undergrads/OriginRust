@@ -143,7 +143,8 @@ fn optimize(spec: &MonteCarloSpec, expr: &Expr, draws: &[Vec<f64>]) -> Result<Op
         let why = failure.map(|e| format!(" ({e})")).unwrap_or_default();
         return Err(bad(format!("no setting of the controls gives an output the goal can be measured on{why}")));
     }
-    let centres: Vec<f64> = best.iter().zip(&spec.optimize).map(|(x, c)| tidy(*x, c.high - c.low)).collect();
+    let centres: Vec<f64> =
+        best.iter().zip(&spec.optimize).map(|(x, c)| tidy(*x, c.high - c.low).clamp(c.low, c.high)).collect();
     let mut moved = draws.to_vec();
     for (k, &j) in which.iter().enumerate() {
         moved[j] = spec.inputs[j].1.move_draws(&draws[j], centres[k]);

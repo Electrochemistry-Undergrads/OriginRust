@@ -5482,8 +5482,8 @@ impl SheafApp {
         match d.show(ctx) {
             BrowserOutcome::Open => {}
             BrowserOutcome::Closed => self.browser_graph = None,
-            BrowserOutcome::Apply { graph, layer, plot, by } => {
-                match self.doc.edit("Browser Graph", |p| p.set_graph_browser(graph, layer, plot, by)) {
+            BrowserOutcome::Apply { graph, layer, plot, by, all } => {
+                match self.doc.edit("Browser Graph", |p| p.set_graph_browser_all(graph, layer, plot, by, all)) {
                     Ok(n) => {
                         self.browser_graph = None;
                         self.say(format!("The graph browses {n} datasets"));

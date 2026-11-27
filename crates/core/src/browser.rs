@@ -5,8 +5,8 @@
 //! gives it; showing another one rescales the layer to it.
 //!
 //! Sheaf's choices (Origin 2020b not measured here, Origin 2016 has no browser graph): one browsed plot per
-//! graph; "the same place" is the column with the same short name, else the one at the same position; a step
-//! is an undo step, as other graph edits are.
+//! graph, or by sheet or book every plot of its layer stepping together (T489); "the same place" is the column with
+//! the same short name, else the one at the same position; a step is an undo step, as other graph edits are.
 
 use crate::column::Designation;
 use crate::graph::Graph;
@@ -44,6 +44,17 @@ pub struct GraphBrowser {
     pub items: Vec<BrowserItem>,
     /// The dataset shown.
     pub current: usize,
+    /// Further plots of the layer that step with it (T489): each plot's index and its datasets, one per dataset of
+    /// `items`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub others: Vec<BrowsedPlot>,
+}
+
+/// A further browsed plot (T489).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BrowsedPlot {
+    pub plot: usize,
+    pub items: Vec<BrowserItem>,
 }
 
 impl GraphBrowser {
@@ -64,7 +75,7 @@ impl Graph {
     /// Every column a browser lists, so that File > Append and other renumbering keep them.
     pub(crate) fn remap_browser(&mut self, f: &dyn Fn(ColumnId) -> ColumnId) {
         if let Some(b) = &mut self.browser {
-            for it in &mut b.items {
+            for it in b.items.iter_mut().chain(b.others.iter_mut().flat_map(|o| o.items.iter_mut())) {
                 it.x = it.x.map(f);
                 it.y = f(it.y);
                 it.y_error = it.y_error.map(f);
@@ -132,12 +143,38 @@ impl Project {
         plot: usize,
         by: BrowseBy,
     ) -> Result<usize, ProjectError> {
+        self.set_graph_browser_all(graph, layer, plot, by, false)
+    }
+
+    /// [`Project::set_graph_browser`], with `all` (T489, by sheet or book only) every other plot of the layer stepping
+    /// with it to its own column in the same sheet or book; a plot whose list does not line up with the browsed one
+    /// (another count, or shown at another place) is left out.
+    pub fn set_graph_browser_all(
+        &mut self,
+        graph: WindowId,
+        layer: usize,
+        plot: usize,
+        by: BrowseBy,
+        all: bool,
+    ) -> Result<usize, ProjectError> {
         let g = self.graph(graph).ok_or(ProjectError::NoSuchWindow(graph))?;
-        let y = g.layers.get(layer).and_then(|l| l.plots.get(plot)).ok_or(ProjectError::NoSuchPlot(plot))?.y;
+        let l = g.layers.get(layer).ok_or(ProjectError::NoSuchPlot(plot))?;
+        let y = l.plots.get(plot).ok_or(ProjectError::NoSuchPlot(plot))?.y;
         let (items, current) = self.browser_items(y, by)?;
         let n = items.len();
+        let mut others = Vec::new();
+        if all && by != BrowseBy::Columns {
+            for (k, p) in l.plots.iter().enumerate().filter(|(k, _)| *k != plot) {
+                if let Ok((its, at)) = self.browser_items(p.y, by)
+                    && its.len() == n
+                    && at == current
+                {
+                    others.push(BrowsedPlot { plot: k, items: its });
+                }
+            }
+        }
         let g = self.graph_mut(graph).ok_or(ProjectError::NoSuchWindow(graph))?;
-        g.browser = Some(GraphBrowser { by, layer, plot, items, current });
+        g.browser = Some(GraphBrowser { by, layer, plot, items, current, others });
         Ok(n)
     }
 
@@ -151,15 +188,21 @@ impl Project {
         let (layer, plot) = (b.layer, b.plot);
         g.layers.get(layer).and_then(|l| l.plots.get(plot)).ok_or(ProjectError::NoSuchPlot(plot))?;
         self.column(item.y).ok_or(ProjectError::NoSuchColumn(item.y))?;
+        let others: Vec<(usize, BrowserItem)> =
+            b.others.iter().filter_map(|o| Some((o.plot, *o.items.get(to)?))).collect();
         let g = self.graph_mut(graph).ok_or(ProjectError::NoSuchWindow(graph))?;
         if let Some(b) = g.browser.as_mut() {
             b.current = to;
         }
         let l = &mut g.layers[layer];
-        let p = &mut l.plots[plot];
-        p.x = item.x;
-        p.y = item.y;
-        p.y_error = item.y_error;
+        // T489: the plots stepping with it take their own datasets
+        for (k, it) in std::iter::once((plot, item)).chain(others) {
+            if let Some(p) = l.plots.get_mut(k) {
+                p.x = it.x;
+                p.y = it.y;
+                p.y_error = it.y_error;
+            }
+        }
         for a in [&mut l.x_axis, &mut l.y_axis] {
             a.min = None;
             a.max = None;
@@ -246,5 +289,37 @@ mod tests {
         let lone = p.add_column(other, 0, Designation::Y, ColumnData::numeric(vec![1.0])).unwrap();
         let g2 = p.plot_columns(Template::Line, &[lone]).unwrap();
         assert!(p.set_graph_browser(g2, 0, 0, BrowseBy::Columns).is_err());
+    }
+
+    #[test]
+    fn all_plots_of_a_layer_step_through_the_sheets_together() {
+        // T489: three sheets with X, A and B; a graph of A and B of Sheet1 browses by sheet with both plots
+        let mut p = Project::new();
+        let b = p.add_workbook("");
+        let (mut a_cols, mut b_cols) = (Vec::new(), Vec::new());
+        for s in 0..3 {
+            if s > 0 {
+                p.workbook_mut(b).unwrap().sheets.push(crate::worksheet::Worksheet::new(format!("Sheet{}", s + 1)));
+            }
+            p.add_column(b, s, Designation::X, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+            a_cols.push(p.add_column(b, s, Designation::Y, ColumnData::numeric(vec![s as f64, 1.0])).unwrap());
+            b_cols.push(p.add_column(b, s, Designation::Y, ColumnData::numeric(vec![1.0, s as f64])).unwrap());
+        }
+        let g = p.plot_columns(Template::Line, &[a_cols[0], b_cols[0]]).unwrap();
+        assert_eq!(p.set_graph_browser_all(g, 0, 0, BrowseBy::Sheets, true).unwrap(), 3);
+        let br = p.graph(g).unwrap().browser.clone().unwrap();
+        assert_eq!((br.others.len(), br.others[0].plot), (1, 1));
+        p.browse_graph(g, 2).unwrap();
+        let ys: Vec<ColumnId> = p.graph(g).unwrap().layers[0].plots.iter().map(|pl| pl.y).collect();
+        assert_eq!(ys, [a_cols[2], b_cols[2]], "both plots show Sheet3");
+        // by columns there are no plots stepping together; without `all`, one plot steps alone
+        p.set_graph_browser_all(g, 0, 0, BrowseBy::Columns, true).unwrap();
+        assert!(p.graph(g).unwrap().browser.as_ref().unwrap().others.is_empty());
+        p.set_graph_browser(g, 0, 0, BrowseBy::Sheets).unwrap();
+        assert!(p.graph(g).unwrap().browser.as_ref().unwrap().others.is_empty());
+        // it saves with the project
+        p.set_graph_browser_all(g, 0, 0, BrowseBy::Sheets, true).unwrap();
+        let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert_eq!(back.graph(g).unwrap().browser, p.graph(g).unwrap().browser);
     }
 }

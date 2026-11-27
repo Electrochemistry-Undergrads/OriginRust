@@ -7971,7 +7971,12 @@ here is measured.
 - **Across workbooks (T456):** Browse "The same column of the same sheet in every book": in every workbook (project
   order) the sheet with the plot's sheet's name, else the one at its position, and in it the column found as by
   sheets; the caption names the book (`[Book2] B (2 of 3)`).
-- **Not built:** several browsed plots per graph, picking a dataset from a list, the browser in .opj files and in
+- **All plots of the layer (T489, 2026-11-26):** with the same column in every sheet or book, Browse all plots of the
+  layer makes every plot of the layer step together: each takes its own column (found as above) of the sheet or book
+  shown, with its X and error columns. A plot whose list has another count or another place for the sheet it shows now
+  is left out (it keeps its data). Not with the Y columns of a sheet. `GraphBrowser::others`
+  (`BrowsedPlot`), `Project::set_graph_browser_all`; saved with the project.
+- **Not built:** browsed plots in several layers, picking a dataset from a list, the browser in .opj files and in
   the CLI/MCP.
 
 ## Time Series Explorer: Plot > Specialized > Time Series Explorer (T416, 2026-11-24; Origin 2024b's, Sheaf's own)

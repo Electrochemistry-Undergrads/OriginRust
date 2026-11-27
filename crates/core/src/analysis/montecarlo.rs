@@ -1,11 +1,12 @@
 //! Statistics > Monte Carlo Simulation (T393, Origin 2027's app; Sheaf's own layout, not measured): the
 //! inputs are drawn (`sheaf_calc::montecarlo`), the formula is evaluated for each draw with the inputs
 //! as variables, and the draws, the output summary, capability and sensitivity are written
-//! (`docs/spec/statistics.md` section 51).
+//! (`docs/spec/statistics.md` section 51). With controls (T490) the inputs named move their centres within ranges, the
+//! draws kept, to the setting that best meets the goal; the output there is reported too.
 
 use super::dist::Output;
 use super::*;
-use calc::montecarlo::{InputDist, draw, sensitivity, summarize};
+use calc::montecarlo::{InputDist, McControl, McGoal, draw, goal_score, search_box, sensitivity, summarize};
 
 /// What [`Tool::MonteCarlo`] runs (it reads no data; the results go next to the chosen sheet).
 #[derive(Debug, Clone, PartialEq)]
@@ -19,6 +20,10 @@ pub struct MonteCarloSpec {
     /// Specification limits of the output (either or both).
     pub lsl: Option<f64>,
     pub usl: Option<f64>,
+    /// Inputs whose centres the optimisation moves (T490; none: no optimisation).
+    pub optimize: Vec<McControl>,
+    /// What the optimisation looks for.
+    pub goal: McGoal,
 }
 
 impl Default for MonteCarloSpec {
@@ -33,12 +38,120 @@ impl Default for MonteCarloSpec {
             seed: 1,
             lsl: None,
             usl: None,
+            optimize: Vec::new(),
+            goal: McGoal::Capability,
         }
     }
 }
 
 /// Most draws of one run.
 pub const MONTE_CARLO_MAX: usize = 1_000_000;
+
+/// Most draws the optimisation's search uses (T490); the setting found is then run with all of them.
+pub const MONTE_CARLO_SEARCH_DRAWS: usize = 20_000;
+
+/// Most inputs one optimisation moves (T490).
+pub const MONTE_CARLO_MAX_CONTROLS: usize = 4;
+
+/// The formula over the first `rows` rows of the input columns.
+fn evaluate(
+    expr: &Expr,
+    inputs: &[(String, InputDist)],
+    columns: &[Vec<f64>],
+    rows: usize,
+) -> Result<Vec<f64>, String> {
+    let mut host = sheaf_expr::SimpleHost::new();
+    let mut output = Vec::with_capacity(rows);
+    for r in 0..rows {
+        for ((name, _), column) in inputs.iter().zip(columns) {
+            host.set_var(name, column[r]);
+        }
+        output.push(expr.eval(&host).map_err(|e| e.to_string())?);
+    }
+    Ok(output)
+}
+
+/// The setting found by the optimisation (T490).
+struct Optimum {
+    /// The inputs moved (indices into the spec's inputs) and their centres.
+    which: Vec<usize>,
+    centres: Vec<f64>,
+    /// Every input's draws at the setting, and the output.
+    draws: Vec<Vec<f64>>,
+    output: Vec<f64>,
+}
+
+/// `x` to about 1e-4 of `range`, so the settings read as short numbers.
+fn tidy(x: f64, range: f64) -> f64 {
+    let dec = (4 - range.log10().floor() as i32).clamp(0, 15) as usize;
+    format!("{x:.dec$}").parse().unwrap_or(x)
+}
+
+fn optimize(spec: &MonteCarloSpec, expr: &Expr, draws: &[Vec<f64>]) -> Result<Optimum, AnalysisError> {
+    let bad = |m: String| AnalysisError::BadOption(m);
+    if spec.optimize.len() > MONTE_CARLO_MAX_CONTROLS {
+        return Err(bad(format!("the optimisation moves at most {MONTE_CARLO_MAX_CONTROLS} inputs")));
+    }
+    let mut which = Vec::new();
+    for c in &spec.optimize {
+        let j = spec
+            .inputs
+            .iter()
+            .position(|(n, _)| *n == c.name)
+            .ok_or_else(|| bad(format!("the control {} is not one of the inputs", c.name)))?;
+        if which.contains(&j) {
+            return Err(bad(format!("the input {} is controlled twice", c.name)));
+        }
+        if !(c.low.is_finite() && c.high.is_finite() && c.low < c.high) {
+            return Err(bad(format!("the range of {} must run from a lower to a higher number", c.name)));
+        }
+        if matches!(spec.inputs[j].1, InputDist::Lognormal { .. }) && c.low <= 0.0 {
+            return Err(bad(format!("{} is lognormal: its centre (the median) must stay above 0", c.name)));
+        }
+        which.push(j);
+    }
+    match spec.goal {
+        McGoal::Capability if spec.lsl.is_none() && spec.usl.is_none() => {
+            return Err(bad("give a specification limit to optimise Cpk, or aim the output at a target".into()));
+        }
+        McGoal::Target(t) if !t.is_finite() => return Err(bad("the target must be a number".into())),
+        _ => {}
+    }
+    let m = spec.samples.min(MONTE_CARLO_SEARCH_DRAWS);
+    let base: Vec<Vec<f64>> = draws.iter().map(|c| c[..m].to_vec()).collect();
+    let mut columns = base.clone();
+    let lo: Vec<f64> = spec.optimize.iter().map(|c| c.low).collect();
+    let hi: Vec<f64> = spec.optimize.iter().map(|c| c.high).collect();
+    let mut failure = None;
+    let (best, score) = search_box(
+        &mut |x| {
+            for (k, &j) in which.iter().enumerate() {
+                columns[j] = spec.inputs[j].1.move_draws(&base[j], x[k]);
+            }
+            match evaluate(expr, &spec.inputs, &columns, m) {
+                Ok(out) => goal_score(spec.goal, &out, spec.lsl, spec.usl),
+                Err(e) => {
+                    failure.get_or_insert(e);
+                    f64::INFINITY
+                }
+            }
+        },
+        &lo,
+        &hi,
+    );
+    if !score.is_finite() {
+        let why = failure.map(|e| format!(" ({e})")).unwrap_or_default();
+        return Err(bad(format!("no setting of the controls gives an output the goal can be measured on{why}")));
+    }
+    let centres: Vec<f64> =
+        best.iter().zip(&spec.optimize).map(|(x, c)| tidy(*x, c.high - c.low).clamp(c.low, c.high)).collect();
+    let mut moved = draws.to_vec();
+    for (k, &j) in which.iter().enumerate() {
+        moved[j] = spec.inputs[j].1.move_draws(&draws[j], centres[k]);
+    }
+    let output = evaluate(expr, &spec.inputs, &moved, spec.samples).map_err(|e| bad(format!("the formula: {e}")))?;
+    Ok(Optimum { which, centres, draws: moved, output })
+}
 
 pub(super) fn run(spec: &MonteCarloSpec) -> Result<Output, AnalysisError> {
     let bad = |m: String| AnalysisError::BadOption(m);
@@ -61,14 +174,8 @@ pub(super) fn run(spec: &MonteCarloSpec) -> Result<Output, AnalysisError> {
     let expr = Expr::parse(&spec.formula).map_err(|e| bad(format!("the formula: {e}")))?;
     let dists: Vec<InputDist> = spec.inputs.iter().map(|(_, d)| *d).collect();
     let draws = draw(&dists, spec.samples, spec.seed).map_err(bad)?;
-    let mut host = sheaf_expr::SimpleHost::new();
-    let mut output = Vec::with_capacity(spec.samples);
-    for r in 0..spec.samples {
-        for ((name, _), column) in spec.inputs.iter().zip(&draws) {
-            host.set_var(name, column[r]);
-        }
-        output.push(expr.eval(&host).map_err(|e| bad(format!("the formula: {e}")))?);
-    }
+    let output = evaluate(&expr, &spec.inputs, &draws, spec.samples).map_err(|e| bad(format!("the formula: {e}")))?;
+    let optimum = if spec.optimize.is_empty() { None } else { Some(optimize(spec, &expr, &draws)?) };
     let out = summarize(&output, spec.lsl, spec.usl);
     let sens = sensitivity(&draws, &output);
     let mut table = ResultTable::new(&[
@@ -89,6 +196,19 @@ pub(super) fn run(spec: &MonteCarloSpec) -> Result<Output, AnalysisError> {
             row(&summarize(&draws[j], None, None), sens[j]),
             vec![String::new(); 8],
         );
+    }
+    // T490: the output and the moved inputs at the setting found.
+    let at = optimum.as_ref().map(|o| (o, summarize(&o.output, spec.lsl, spec.usl), sensitivity(&o.draws, &o.output)));
+    if let Some((o, s, sens)) = &at {
+        table.push_row("Output at the optimum".to_string(), row(s, 1.0), vec![String::new(); 8]);
+        for (k, &j) in o.which.iter().enumerate() {
+            let (name, d) = &spec.inputs[j];
+            table.push_row(
+                format!("{name} at the optimum = {}", d.centred_at(o.centres[k]).text()),
+                row(&summarize(&o.draws[j], None, None), sens[j]),
+                vec![String::new(); 8],
+            );
+        }
     }
     let mut notes =
         vec![format!("{} draws (seed {}); {} of them gave a number for the output.", spec.samples, spec.seed, out.n)];
@@ -114,6 +234,45 @@ pub(super) fn run(spec: &MonteCarloSpec) -> Result<Output, AnalysisError> {
     {
         notes.push(format!("The output follows {} most (rank correlation {r:.4}).", spec.inputs[j].0));
     }
+    if let Some((o, s, _)) = &at {
+        let ranges: Vec<String> = spec.optimize.iter().map(|c| format!("{} {} to {}", c.name, c.low, c.high)).collect();
+        let settings: Vec<String> =
+            o.which.iter().zip(&o.centres).map(|(&j, c)| format!("{} = {c}", spec.inputs[j].0)).collect();
+        let goal = match spec.goal {
+            McGoal::Capability => "the highest Cpk".to_string(),
+            McGoal::Target(t) => format!("a mean of {t} with the least spread"),
+        };
+        let result = match spec.goal {
+            McGoal::Capability => {
+                let mut t = format!("Cpk = {:.4} ({:.4} before)", s.cpk, out.cpk);
+                if s.out_of_spec.is_finite() {
+                    t.push_str(&format!(", {:.4} % of the draws outside", 100.0 * s.out_of_spec));
+                }
+                t
+            }
+            McGoal::Target(t) => format!(
+                "mean {:.4} and SD {:.4} (mean squared deviation {:.4}; {:.4} before)",
+                s.mean,
+                s.sd,
+                goal_score(spec.goal, &o.output, None, None),
+                (out.mean - t).powi(2) + out.sd.powi(2)
+            ),
+        };
+        notes.push(format!(
+            "Optimum for {goal} (centres within {}; the search used {} draws): {} {} {result}.",
+            ranges.join(", "),
+            spec.samples.min(MONTE_CARLO_SEARCH_DRAWS),
+            settings.join(", "),
+            if settings.len() == 1 { "gives" } else { "give" }
+        ));
+        for (c, x) in spec.optimize.iter().zip(&o.centres) {
+            let edge = (c.high - c.low) * 1e-4;
+            if *x <= c.low + edge || *x >= c.high - edge {
+                let which = if *x <= c.low + edge { "lower" } else { "upper" };
+                notes.push(format!("{} stops at its {which} bound {x}; a wider range may do better.", c.name));
+            }
+        }
+    }
     let mut on_sheet: Vec<SheetColumn> = spec
         .inputs
         .iter()
@@ -133,6 +292,25 @@ pub(super) fn run(spec: &MonteCarloSpec) -> Result<Output, AnalysisError> {
         comments: spec.formula.trim().to_string(),
         data: ColumnData::numeric(output),
     });
+    if let Some(o) = optimum {
+        for (k, &j) in o.which.iter().enumerate() {
+            let (name, d) = &spec.inputs[j];
+            on_sheet.push(SheetColumn {
+                designation: Designation::Y,
+                long_name: format!("{name} at optimum"),
+                units: String::new(),
+                comments: d.centred_at(o.centres[k]).text(),
+                data: ColumnData::numeric(o.draws[j].clone()),
+            });
+        }
+        on_sheet.push(SheetColumn {
+            designation: Designation::Y,
+            long_name: "Output at optimum".into(),
+            units: String::new(),
+            comments: spec.formula.trim().to_string(),
+            data: ColumnData::numeric(o.output),
+        });
+    }
     Ok(Output { table: Some(table), on_sheet, notes, graph: None, more_graphs: Vec::new() })
 }
 
@@ -155,6 +333,8 @@ mod tests {
             seed: 4,
             lsl: Some(19.0),
             usl: Some(21.0),
+            optimize: Vec::new(),
+            goal: McGoal::Capability,
         };
         let r = p
             .analyze(&Request { columns: vec![host], rows: RowRange::All, tool: Tool::MonteCarlo(spec.clone()) })
@@ -178,5 +358,74 @@ mod tests {
             .analyze(&Request { columns: vec![host], rows: RowRange::All, tool: Tool::MonteCarlo(wrong) })
             .unwrap_err();
         assert!(e.to_string().contains("depth"), "{e}");
+    }
+
+    #[test]
+    fn the_optimisation_moves_controls_to_the_best_setting() {
+        let mut p = Project::new();
+        let book = p.add_workbook("mc");
+        let host = p.add_column(book, 0, Designation::Y, ColumnData::numeric(vec![0.0])).unwrap();
+        // A gap = housing - shaft, wanted between 0.1 and 0.5: the shaft starts too wide (gap 0.05).
+        let spec = MonteCarloSpec {
+            inputs: vec![
+                ("housing".into(), InputDist::Normal { mean: 20.0, sd: 0.04 }),
+                ("shaft".into(), InputDist::Normal { mean: 19.95, sd: 0.03 }),
+            ],
+            formula: "housing - shaft".into(),
+            samples: 4000,
+            seed: 2,
+            lsl: Some(0.1),
+            usl: Some(0.5),
+            optimize: vec![McControl { name: "shaft".into(), low: 19.4, high: 19.95 }],
+            goal: McGoal::Capability,
+        };
+        let run = |p: &mut Project, s: &MonteCarloSpec| {
+            p.analyze(&Request { columns: vec![host], rows: RowRange::All, tool: Tool::MonteCarlo(s.clone()) })
+        };
+        let r = run(&mut p, &spec).unwrap();
+        let t = r.table.as_ref().unwrap();
+        assert_eq!(t.rows.len(), 5, "{:?}", t.rows.iter().map(|r| &r.0).collect::<Vec<_>>());
+        assert_eq!(t.rows[3].0, "Output at the optimum");
+        // The gap centres in the limits: shaft near 20 - 0.3.
+        assert!((t.rows[3].1[0] - 0.3).abs() < 0.01, "{:?}", t.rows[3]);
+        assert!(
+            t.rows[4].0.starts_with("shaft at the optimum = normal(19.") && t.rows[4].0.ends_with(", 0.03)"),
+            "{}",
+            t.rows[4].0
+        );
+        let note = r.notes.iter().find(|n| n.starts_with("Optimum for the highest Cpk")).expect("an optimum note");
+        assert!(note.contains("shaft = 19.") && note.contains("before)"), "{note}");
+        let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
+        let names: Vec<&str> = ws.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names, ["housing", "shaft", "Output", "shaft at optimum", "Output at optimum"]);
+        // A range that stops short of the best place says so.
+        let short = MonteCarloSpec {
+            optimize: vec![McControl { name: "shaft".into(), low: 19.8, high: 19.9 }],
+            ..spec.clone()
+        };
+        let r = run(&mut p, &short).unwrap();
+        assert!(r.notes.iter().any(|n| n.contains("shaft stops at its lower bound 19.8")), "{:?}", r.notes);
+        // Aiming at a target: the gap's mean comes to 0.2.
+        let aim = MonteCarloSpec { goal: McGoal::Target(0.2), lsl: None, usl: None, ..spec.clone() };
+        let r = run(&mut p, &aim).unwrap();
+        let t = r.table.as_ref().unwrap();
+        assert!((t.rows[3].1[0] - 0.2).abs() < 0.005, "{:?}", t.rows[3]);
+        assert!(
+            r.notes.iter().any(|n| n.starts_with("Optimum for a mean of 0.2 with the least spread")),
+            "{:?}",
+            r.notes
+        );
+        // Refusals: an unknown control, Cpk without limits, too many controls.
+        let e = run(
+            &mut p,
+            &MonteCarloSpec { optimize: vec![McControl { name: "bore".into(), low: 0.0, high: 1.0 }], ..spec.clone() },
+        )
+        .unwrap_err();
+        assert!(e.to_string().contains("bore is not one of the inputs"), "{e}");
+        let e = run(&mut p, &MonteCarloSpec { lsl: None, usl: None, ..spec.clone() }).unwrap_err();
+        assert!(e.to_string().contains("specification limit"), "{e}");
+        let many = vec![McControl { name: "shaft".into(), low: 19.0, high: 20.0 }; 5];
+        let e = run(&mut p, &MonteCarloSpec { optimize: many, ..spec }).unwrap_err();
+        assert!(e.to_string().contains("at most 4"), "{e}");
     }
 }

@@ -2376,7 +2376,8 @@ outlier wells and Western blot densitometry are not built.
 ## 51 Monte Carlo simulation (T393, Origin 2027's Monte Carlo app; Sheaf's own, not measured)
 
 Statistics > Monte Carlo Simulation (Randomize Inputs)... (CLI `analyze monte-carlo FILE --y Y --input NAME=DIST(...) [--input ...]
---formula EXPR [--samples N] [--seed S] [--lsl L] [--usl U]`; `Tool::MonteCarlo`, `sheaf_calc::montecarlo`):
+--formula EXPR [--samples N] [--seed S] [--lsl L] [--usl U] [--optimize NAME=LOW:HIGH ...] [--aim T]`;
+`Tool::MonteCarlo`, `sheaf_calc::montecarlo`):
 
 - **Inputs**, one per line in the window: `name = normal(mean, sd)`, `uniform(low, high)`, `lognormal(mu, sigma)`
   (of `ln x`), `triangular(low, mode, high)` or `constant(value)`; `#` starts a comment. Names are letters, digits
@@ -2391,8 +2392,21 @@ Statistics > Monte Carlo Simulation (Randomize Inputs)... (CLI `analyze monte-ca
   constant); notes with the number of draws and seed, the specification (share of draws outside, Cp =
   (USL - LSL)/6s with both limits, Cpk = min(USL - mean, mean - LSL)/3s or the one-sided form) and the input the
   output follows most.
-- Not built: optimizing controllable inputs against tolerances (the last step of Origin's workflow),
-  correlated inputs, histograms of the output.
+- **Optimization** (T490, the last step of Origin's workflow; Sheaf's own): Optimize centres of, `name = low:high`
+  for up to 4 inputs (`,` or `;` between them). Each input's centre (the mean of a normal, the middle of a uniform,
+  the mode of a triangular, the median `e^mu` of a lognormal, a constant's value) moves within its range, the
+  distribution keeping its shape (a lognormal is scaled), with the same random numbers throughout (common random
+  numbers), so the search sees no sampling noise. Goals: Highest Cpk (needs a limit; the score is `-Cpk`) or Mean at
+  target, least spread (the mean squared deviation `(mean - T)^2 + s^2`). The search uses the first 20 000 draws:
+  a grid (9 points a side for one or two controls, 5 for three, 3 for four), then a compass search from its best
+  point halving its steps to 1e-5 of each range; a setting whose output cannot be scored (no spread, a formula
+  error) scores worst, and none scoring is refused. The settings found are rounded to about 1e-4 of their range and
+  run with all draws: table rows Output at the optimum and `name at the optimum = dist(...)` (the moved
+  distribution, its draws' summary and rank correlation there); a note with the ranges, the settings and Cpk (and
+  the share outside) or the mean, SD and mean squared deviation, each with its value before; a note for a setting
+  at a bound of its range; sheet columns `name at optimum` and Output at optimum. Refused: an unknown or repeated
+  control, an empty range, a lognormal range reaching 0, more than 4 controls, Highest Cpk without a limit.
+- Not built: correlated inputs, histograms of the output, tolerances (input spreads) as controls.
 
 ## 52 Cox proportional hazards (T408, Origin 2026b; not measured)
 

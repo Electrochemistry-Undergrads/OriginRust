@@ -31,11 +31,31 @@ const FUNCTIONS: [(&str, &str); 14] = [
 /// Excel aggregate functions over a range and their Sheaf cell-formula names (T464; `sum` is the total in a cell).
 const AGGREGATES: [(&str, &str); 4] = [("SUM", "sum"), ("AVERAGE", "mean"), ("MIN", "min"), ("MAX", "max")];
 
+/// More Excel functions a cell formula reads (T499) and their Sheaf names: `IF`, the other range statistics (sample
+/// STDEV and VAR, population STDEVP), and `INT` (rounds down: Sheaf's `floor`), `MOD` (the divisor's sign: `rmod`),
+/// `TRUNC` (`int`), `POWER`, `SIGN`.
+const CELL_FUNCTIONS: [(&str, &str); 13] = [
+    ("IF", "if"),
+    ("MEDIAN", "median"),
+    ("STDEV", "sd"),
+    ("STDEV.S", "sd"),
+    ("STDEVP", "stddevp"),
+    ("STDEV.P", "stddevp"),
+    ("VAR", "var"),
+    ("VAR.S", "var"),
+    ("POWER", "pow"),
+    ("TRUNC", "int"),
+    ("SIGN", "sign"),
+    ("INT", "floor"),
+    ("MOD", "rmod"),
+];
+
 /// The Sheaf cell formula (T448 syntax, without `=`) for the Excel formula `text` of a cell (T464): references name
 /// the imported columns (`column` gives the short name of a 0-based sheet column; it must be capital letters) and
 /// the data rows (`data_row` gives the 0-based data row of a 0-based sheet row); `$` markers are kept; ranges in one
 /// column; numbers, `+ - * / ^`, parentheses, commas, PI(), the functions of [`FUNCTIONS`], ROUND and SUM, AVERAGE,
-/// MIN and MAX. `None` for anything else (other sheets, text, comparisons, other functions, a header row).
+/// MIN and MAX, and (T499) the comparisons `= <> < > <= >=` (written `== != < > <= >=`) and the functions of
+/// [`CELL_FUNCTIONS`]. `None` for anything else (other sheets, text, other functions, a header row).
 pub(crate) fn translate_cell(
     text: &str,
     data_row: &dyn Fn(usize) -> Option<usize>,
@@ -116,7 +136,9 @@ pub(crate) fn translate_cell(
                 }
                 let name = match word.as_str() {
                     "ROUND" => "round",
-                    w => FUNCTIONS.iter().chain(AGGREGATES.iter()).find(|(e, _)| *e == w)?.1,
+                    w => {
+                        FUNCTIONS.iter().chain(AGGREGATES.iter()).chain(CELL_FUNCTIONS.iter()).find(|(e, _)| *e == w)?.1
+                    }
                 };
                 out.push_str(name);
                 i = k;
@@ -138,6 +160,17 @@ pub(crate) fn translate_cell(
         } else if matches!(c, '+' | '-' | '*' | '/' | '^' | '(' | ')' | ',') {
             out.push(c);
             i += 1;
+        } else if matches!(c, '<' | '>' | '=') {
+            // T499: Excel's comparisons in Sheaf's spelling.
+            let two: String = chars[i..(i + 2).min(chars.len())].iter().collect();
+            let (op, len) = match two.as_str() {
+                "<>" => ("!=", 2),
+                "<=" | ">=" => (two.as_str(), 2),
+                _ if c == '=' => ("==", 1),
+                _ => (if c == '<' { "<" } else { ">" }, 1),
+            };
+            out.push_str(op);
+            i += len;
         } else {
             return None;
         }
@@ -283,6 +316,27 @@ mod tests {
         assert_eq!(t("=ROUND(C3/1e-3, 2)*PI()", 2).as_deref(), Some("round(col(C)/1e-3, 2)*pi"));
         assert_eq!(t("=-A2+D2", 1).as_deref(), Some("-col(A)+col(D)"));
         assert_eq!(t("=log10(a2)", 1).as_deref(), Some("log10(col(A))"), "letter case of names is ignored");
+    }
+
+    #[test]
+    fn cell_formulas_read_comparisons_and_more_functions() {
+        // T499: a cell formula of rows 1.. as data rows 0.. (no header).
+        let cell = |text: &str| translate_cell(text, &|r| Some(r), &names);
+        assert_eq!(cell("=IF(A2>3, B2, 0)").as_deref(), Some("if(A2>3, B2, 0)"));
+        assert_eq!(cell("=IF(A1<>B1,1,2)").as_deref(), Some("if(A1!=B1,1,2)"));
+        assert_eq!(cell("=IF(A1=B1,1,2)+(C1<=D1)+(C1>=2)").as_deref(), Some("if(A1==B1,1,2)+(C1<=D1)+(C1>=2)"));
+        assert_eq!(cell("=STDEV.S(A1:A9)/MEDIAN($B$1:$B$9)").as_deref(), Some("sd(A1:A9)/median($B$1:$B$9)"));
+        assert_eq!(
+            cell("=STDEVP(A1:A3)+VAR(A1:A3)+POWER(A1,2)").as_deref(),
+            Some("stddevp(A1:A3)+var(A1:A3)+pow(A1,2)")
+        );
+        assert_eq!(
+            cell("=INT(A1)+MOD(A1,3)+TRUNC(B1)+SIGN(C1)").as_deref(),
+            Some("floor(A1)+rmod(A1,3)+int(B1)+sign(C1)")
+        );
+        for text in ["=COUNT(A1:A3)", "=A1&\"x\"", "=VLOOKUP(A1,B1:C3,2)", "=TRUE"] {
+            assert_eq!(cell(text), None, "{text}");
+        }
     }
 
     #[test]

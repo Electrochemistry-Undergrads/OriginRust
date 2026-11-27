@@ -1617,7 +1617,11 @@ Formula Bar. Origin 2016 has neither.
   a deleted row's formula goes with it.
 - **Pasted formulas (T492, as a spreadsheet takes pasted text):** a pasted cell whose text starts with `=` becomes a
   cell formula when it can be read, with the spreadsheet names that differ replaced (`AVERAGE(` is `mean(`, `PI()` is
-  `pi`; SUM, MIN, MAX, SQRT ... are the same, any case); one that cannot be read is pasted as its text, as if typed.
+  `pi`; T499: STDEV and STDEV.S `sd`, STDEVP and STDEV.P `stddevp`, VAR.S `var`, POWER `pow`, TRUNC `int`, and the
+  comparisons `=` and `<>` written `==` and `!=`; IF, SUM, MIN, MAX, MEDIAN, VAR, SQRT ... are the same, any case;
+  INT and MOD keep Sheaf's meaning, truncation and the dividend's sign); one that cannot be read is pasted as its text,
+  as if typed. Commas inside the parentheses of a field that starts with `=` do not split the pasted text (T499), so
+  `=IF(A1>1, 2, 3)` pastes as one cell.
   The column's type is decided by the other pasted cells. Every pasted cell loses the formula it had, as a cell typed
   over does; all formulas are worked out once after the paste, so a pasted formula reads cells pasted with it. The
   status line counts the cell formulas. Pasting takes the text as it is: references are not moved for where it lands.

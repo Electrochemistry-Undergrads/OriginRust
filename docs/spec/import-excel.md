@@ -176,9 +176,11 @@ value among them), each cell's formula that Sheaf can read becomes that cell's c
 (workbook-model.md 13u): references name the imported columns (their short names, which must be capital
 letters) and the data rows counted from 1 below the name rows (`$A$2` in a sheet with one name row is
 `$A$1`); `$` markers are kept; a range must stay in one column; the functions above plus SUM (the total),
-AVERAGE (`mean`), MIN and MAX. The stored values stay until the next edit recalculates the cell formulas.
-A formula that cannot be read (a cell in a name row or outside the imported columns, another sheet, text,
-comparisons, other functions) keeps only its stored value, with a warning that names the column and its
+AVERAGE (`mean`), MIN and MAX, and (T499) the comparisons `= <> < > <= >=` (written `== != < > <= >=`), IF,
+MEDIAN, STDEV and STDEV.S (`sd`), STDEVP and STDEV.P (`stddevp`), VAR and VAR.S (`var`), POWER (`pow`), TRUNC
+(`int`), SIGN, INT (`floor`: Excel's INT rounds down) and MOD (`rmod`: the divisor's sign). The stored values stay
+until the next edit recalculates the cell formulas. A formula that cannot be read (a cell in a name row or outside
+the imported columns, another sheet, text, other functions such as COUNT, VLOOKUP, AND) keeps only its stored value, with a warning that names the column and its
 first such formula (`column D: some of its Excel formulas (the first is D2: =A2*$G$1) cannot be read as
 Sheaf formulas; those cells keep only their stored values`). `sheaf_io::excel::formulas`.
 

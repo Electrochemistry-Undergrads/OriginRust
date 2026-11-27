@@ -19,6 +19,8 @@ pub struct StationaritySpec {
     pub kpss_null: KpssNull,
     /// Autocovariances in the KPSS long-run variance; `None` takes `ceil(12 (n / 100)^(1/4))`.
     pub kpss_lags: Option<usize>,
+    /// With `kpss_lags` `None`: the lags of Hobijn et al. (T497, statsmodels' `nlags="auto"`) instead.
+    pub kpss_auto: bool,
 }
 
 fn column_of(name: &str, designation: Designation, values: Vec<f64>) -> SheetColumn {
@@ -47,11 +49,15 @@ pub(super) fn run(spec: &StationaritySpec, inputs: &[Input<'_>]) -> Result<Outpu
     for input in inputs {
         let bad = |e: calc::stationarity::StationarityError| AnalysisError::BadOption(format!("{}: {e}", input.label));
         let a = adf(input.ys(), spec.adf_terms, spec.adf_lags).map_err(bad)?;
-        let k = kpss(input.ys(), spec.kpss_null, spec.kpss_lags).map_err(bad)?;
+        let kpss_lags = match (spec.kpss_lags, spec.kpss_auto) {
+            (None, true) => Some(calc::stationarity::kpss_auto_lags(input.ys(), spec.kpss_null).map_err(bad)?),
+            (lags, _) => lags,
+        };
+        let k = kpss(input.ys(), spec.kpss_null, kpss_lags).map_err(bad)?;
         let blank = vec![String::new(); 7];
         table.push_row(
             format!("{}, ADF ({terms})", input.label),
-            vec![a.statistic, a.lags as f64, a.nobs as f64, a.critical[0], a.critical[1], a.critical[2], f64::NAN],
+            vec![a.statistic, a.lags as f64, a.nobs as f64, a.critical[0], a.critical[1], a.critical[2], a.p],
             blank.clone(),
         );
         table.push_row(
@@ -77,15 +83,16 @@ pub(super) fn run(spec: &StationaritySpec, inputs: &[Input<'_>]) -> Result<Outpu
             format!("does not reject {null} stationarity at 5%")
         };
         notes.push(format!(
-            "{}: ADF = {} with {} lag(s) {adf_says}; KPSS = {} ({p}) {kpss_says}.",
+            "{}: ADF = {} with {} lag(s) (Prob = {}) {adf_says}; KPSS = {} ({p}) {kpss_says}.",
             input.label,
             num(a.statistic),
             a.lags,
+            num(a.p),
             num(k.statistic)
         ));
     }
     notes.push(
-        "ADF critical values are MacKinnon's (2010) asymptotic ones (no p-value); the KPSS probability is interpolated in Kwiatkowski et al.'s table and held at 0.1 and 0.01.".into(),
+        "ADF critical values are MacKinnon's (2010) for the regression's points and its probability MacKinnon's (1994) approximation, as statsmodels' adfuller; the KPSS probability is interpolated in Kwiatkowski et al.'s table and held at 0.1 and 0.01.".into(),
     );
     let mut sheet = vec![SheetColumn {
         designation: Designation::Label,
@@ -133,7 +140,16 @@ mod tests {
             "{:?}",
             out.notes
         );
-        assert_eq!(t.rows[0].1[4], -2.86154);
+        // T497: the finite-sample 5 % critical value at the regression's points, and the ADF probability.
+        let nobs = t.rows[0].1[2] as usize;
+        assert_eq!(t.rows[0].1[4], calc::stationarity::adf_critical_values(AdfTerms::Constant, nobs)[1]);
+        assert!(t.rows[0].1[6] > 0.05 && t.rows[2].1[6] < 0.01, "{:?}", t.rows);
+        assert!(out.notes[0].contains("(Prob = "), "{:?}", out.notes);
+        // Automatic KPSS lags (Hobijn et al.).
+        let auto = StationaritySpec { kpss_auto: true, ..Default::default() };
+        let out = p.analyze(&request(vec![w], auto)).unwrap();
+        let lags = out.table.as_ref().unwrap().rows[1].1[1] as usize;
+        assert_eq!(lags, calc::stationarity::kpss_auto_lags(p.numeric(w).unwrap(), KpssNull::Level).unwrap());
         let spec = StationaritySpec { adf_lags: Some(200), ..Default::default() };
         assert!(p.analyze(&request(vec![w], spec)).is_err());
     }

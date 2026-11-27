@@ -1653,7 +1653,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
-        AnalyzeTool::Stationarity { target, adf_terms, adf_lags, kpss_null, kpss_lags } => {
+        AnalyzeTool::Stationarity { target, adf_terms, adf_lags, kpss_null, kpss_lags, kpss_auto } => {
             let adf_terms = match adf_terms.to_ascii_lowercase().as_str() {
                 "constant" => analysis::AdfTerms::Constant,
                 "trend" => analysis::AdfTerms::Trend,
@@ -1667,7 +1667,13 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             };
             (
                 target,
-                Job::Tool(Tool::Stationarity(analysis::StationaritySpec { adf_terms, adf_lags, kpss_null, kpss_lags })),
+                Job::Tool(Tool::Stationarity(analysis::StationaritySpec {
+                    adf_terms,
+                    adf_lags,
+                    kpss_null,
+                    kpss_lags,
+                    kpss_auto,
+                })),
             )
         }
         AnalyzeTool::Decompose { target, period, model, no_graph } => {

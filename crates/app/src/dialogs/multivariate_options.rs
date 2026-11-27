@@ -973,9 +973,16 @@ impl MultiOptions {
                     ui.radio_value(&mut s.kpss_null, KpssNull::Trend, "Trend stationary");
                 });
                 ui.horizontal(|ui| {
-                    let mut auto = s.kpss_lags.is_none();
-                    if ui.checkbox(&mut auto, "KPSS lags from the length").changed() {
-                        s.kpss_lags = if auto { None } else { Some(4) };
+                    // T497: the length rule, Hobijn et al.'s automatic rule, or a fixed number.
+                    ui.label("KPSS lags");
+                    if ui.radio(s.kpss_lags.is_none() && !s.kpss_auto, "From the length").clicked() {
+                        (s.kpss_lags, s.kpss_auto) = (None, false);
+                    }
+                    if ui.radio(s.kpss_lags.is_none() && s.kpss_auto, "Automatic (Hobijn)").clicked() {
+                        (s.kpss_lags, s.kpss_auto) = (None, true);
+                    }
+                    if ui.radio(s.kpss_lags.is_some(), "Fixed").clicked() && s.kpss_lags.is_none() {
+                        s.kpss_lags = Some(4);
                     }
                     if let Some(l) = &mut s.kpss_lags {
                         ui.add(egui::DragValue::new(l).range(0..=1000));

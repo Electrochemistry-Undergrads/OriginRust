@@ -6294,7 +6294,8 @@ fn the_statistics_menu_runs_stationarity_tests() {
     assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
     let (sheet, crit) = result_column(&h, "Critical 5%");
     assert!(sheet.starts_with("Stationarity"), "{sheet}");
-    assert_eq!(crit, [-2.86154, 0.463]);
+    // T497: MacKinnon's finite-sample 5 % value for the regression's points (a little below the asymptotic -2.86154).
+    assert!(crit[0] < -2.86154 && crit[0] > -2.9 && crit[1] == 0.463, "{crit:?}");
     assert_eq!(h.state().doc.undo_label(), Some("Stationarity tests"));
 }
 

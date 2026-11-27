@@ -9,8 +9,8 @@ measured in Origin.
 
 ## Left
 
-- ADF p-values from MacKinnon's response surfaces and finite-sample critical values (the coefficients could not be
-  checked here), Phillips-Perron, automatic KPSS bandwidth (Hobijn et al.), ARIMA.
+- ADF p-values, finite-sample critical values and automatic KPSS lags: done (T497, checked against statsmodels);
+  Phillips-Perron remains (ARIMA: T376).
 
 ## Tests
 

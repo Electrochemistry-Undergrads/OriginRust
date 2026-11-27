@@ -3722,6 +3722,9 @@ pub enum AnalyzeTool {
         /// KPSS autocovariance lags (default ceil(12 (n/100)^(1/4))).
         #[arg(long)]
         kpss_lags: Option<usize>,
+        /// KPSS lags by Hobijn et al.'s automatic rule (statsmodels' nlags="auto") instead of the length rule.
+        #[arg(long, conflicts_with = "kpss_lags")]
+        kpss_auto: bool,
     },
     /// Seasonal decomposition: trend (centred moving average), seasonal indices and residual of each --y column,
     /// additive or multiplicative, with graphs.

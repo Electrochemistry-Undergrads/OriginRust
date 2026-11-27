@@ -8,8 +8,8 @@ measured in Origin.
 
 ## Left
 
-- The Kaplan-Meier and identity time transforms, the exact score form of the test (R's cox.zph since 3.0), a plot of the
-  scaled residuals against time.
+- The exact score form of the test (R's cox.zph since 3.0), a plot of the scaled residuals against time. (The
+  Kaplan-Meier, identity and log time transforms: T503.)
 
 ## Tests
 

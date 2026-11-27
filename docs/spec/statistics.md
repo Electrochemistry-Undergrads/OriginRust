@@ -2546,8 +2546,12 @@ per stratum. Residuals checked against numpy for the six reference cases to 1e-6
 against `g`, the rank of each failure time among the failures (ties share their mean rank): with `U = sum (g - mean g)
 r` over the `d` failures, `V` the coefficients' covariance and `S = sum (g - mean g)^2`, each covariate has `d (V U)_j^2
 / (V_jj S)` on 1 df and all together `d U'VU / S` on `p` df; a note lists them. Checked against numpy/scipy for the six
-reference cases to 1e-6. Other time transforms (Kaplan-Meier, identity), time-varying covariates and text (factor)
-covariates are not built.
+reference cases to 1e-6. **Time scales** (T503, R's `cox.zph` transforms; `--ph-transform rank|km|identity|log`, the
+window's "against rank / KM / time / log time"): `g` may instead be one minus the left-continuous Kaplan-Meier
+estimate of all the cases (strata pooled, covariates ignored) just before the failure time (R's default), the failure
+time itself, or its logarithm; the statistics are the same formulas with that `g`, and the note names the scale. Rank
+stays the default. The KM scale checked by hand on a small case (`the_ph_test_takes_rs_time_transforms`; R is not
+available here). Time-varying covariates and text (factor) covariates are not built.
 
 ## 53 Turnbull nonparametric estimate with arbitrary censoring (T409, Origin 2026b; not measured)
 

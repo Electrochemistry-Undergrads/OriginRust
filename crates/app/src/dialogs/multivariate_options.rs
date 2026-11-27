@@ -446,7 +446,17 @@ impl MultiOptions {
                 });
                 ui.checkbox(&mut s.strata, "A strata column follows the censor column");
                 ui.checkbox(&mut s.residuals, "Martingale, deviance and Schoenfeld residuals");
-                ui.checkbox(&mut s.ph_test, "Test proportional hazards (Grambsch-Therneau)");
+                ui.horizontal(|ui| {
+                    use sheaf_core::analysis::PhTransform;
+                    ui.checkbox(&mut s.ph_test, "Test proportional hazards (Grambsch-Therneau) against");
+                    // T503: the time scale of the test.
+                    ui.add_enabled_ui(s.ph_test, |ui| {
+                        ui.radio_value(&mut s.ph_transform, PhTransform::Rank, "rank");
+                        ui.radio_value(&mut s.ph_transform, PhTransform::Km, "KM");
+                        ui.radio_value(&mut s.ph_transform, PhTransform::Identity, "time");
+                        ui.radio_value(&mut s.ph_transform, PhTransform::Log, "log time");
+                    });
+                });
                 ui.horizontal(|ui| {
                     ui.label("Also the survival at covariates");
                     ui.add(egui::TextEdit::singleline(&mut self.cox_at).hint_text("values").desired_width(120.0));

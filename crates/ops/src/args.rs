@@ -3868,6 +3868,9 @@ pub enum AnalyzeTool {
         /// Test the proportional-hazards assumption (Grambsch-Therneau).
         #[arg(long)]
         ph_test: bool,
+        /// The time scale of the proportional-hazards test: rank, km, identity or log.
+        #[arg(long, default_value = "rank", value_parser = ["rank", "km", "identity", "log"])]
+        ph_transform: String,
         /// The last --y column holds each row's frequency (count).
         #[arg(long)]
         frequency: bool,

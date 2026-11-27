@@ -1317,7 +1317,19 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
         AnalyzeTool::QpcrCurve { target, no_graph } => {
             (target, Job::Tool(Tool::QpcrCurve(analysis::QpcrCurveSpec { graph: !no_graph })))
         }
-        AnalyzeTool::Cox { target, censor, confidence, ties, strata, at, residuals, ph_test, frequency, no_graph } => {
+        AnalyzeTool::Cox {
+            target,
+            censor,
+            confidence,
+            ties,
+            strata,
+            at,
+            residuals,
+            ph_test,
+            ph_transform,
+            frequency,
+            no_graph,
+        } => {
             let efron = match ties.to_ascii_lowercase().as_str() {
                 "breslow" => false,
                 "efron" => true,
@@ -1335,6 +1347,12 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     at,
                     residuals,
                     ph_test,
+                    ph_transform: match ph_transform.as_str() {
+                        "km" => analysis::PhTransform::Km,
+                        "identity" => analysis::PhTransform::Identity,
+                        "log" => analysis::PhTransform::Log,
+                        _ => analysis::PhTransform::Rank,
+                    },
                 })),
             )
         }

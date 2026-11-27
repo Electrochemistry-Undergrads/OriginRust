@@ -529,6 +529,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T500](T500-proportion-power-options.md) | Power of proportion tests: exact binomial, pooled two-proportion, unequal groups | S | done 2026-11-27 (statistics 12.1) |
 | [T501](T501-binned-scatter-bars.md) | Binned Scatter: error bars, a least-squares line, bins of a width (and the graph's columns fixed) | S | done 2026-11-27 (statistics 31) |
 | [T502](T502-forest-permutation-importance.md) | Random Forest permutation importance (Breiman's, out of bag) | S | done 2026-11-27 (statistics 44) |
+| [T503](T503-cox-ph-transforms.md) | Cox proportional-hazards test on the KM, identity or log time scale | S | done 2026-11-27 (statistics 52) |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |

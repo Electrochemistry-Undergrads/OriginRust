@@ -97,6 +97,8 @@ pub struct CoxSpec {
     pub residuals: bool,
     /// Test the proportional-hazards assumption (T458).
     pub ph_test: bool,
+    /// The time scale of that test (T503): rank (default), Kaplan-Meier, identity or log.
+    pub ph_transform: calc::cox::PhTransform,
 }
 
 impl Default for CoxSpec {
@@ -111,6 +113,7 @@ impl Default for CoxSpec {
             at: None,
             residuals: false,
             ph_test: false,
+            ph_transform: calc::cox::PhTransform::Rank,
         }
     }
 }
@@ -733,14 +736,20 @@ pub(super) fn run_cox(
         ));
     }
     if spec.ph_test {
-        let test = fit.ph_test();
+        let test = fit.ph_test_with(spec.ph_transform);
+        let scale = match spec.ph_transform {
+            calc::cox::PhTransform::Rank => "the rank of the failure time",
+            calc::cox::PhTransform::Km => "1 - the Kaplan-Meier estimate before the failure time",
+            calc::cox::PhTransform::Identity => "the failure time",
+            calc::cox::PhTransform::Log => "the log of the failure time",
+        };
         let each: Vec<String> = xcs
             .iter()
             .zip(&test.per_covariate)
             .map(|(c, (stat, p))| format!("{} chi-square {} (Prob {})", column_label(c), num(*stat), num(*p)))
             .collect();
         notes.push(format!(
-            "Proportional hazards (Grambsch-Therneau, scaled Schoenfeld residuals against the rank of the failure time): {}; global chi-square {} ({k} df, Prob {}).",
+            "Proportional hazards (Grambsch-Therneau, scaled Schoenfeld residuals against {scale}): {}; global chi-square {} ({k} df, Prob {}).",
             each.join("; "),
             num(test.global.0),
             num(test.global.1)
@@ -1293,8 +1302,13 @@ mod tests {
         assert_eq!(gc.len(), 2, "the curve at the means and at A = 1");
         // The proportional-hazards test (T458).
         let ph = CoxSpec { ph_test: true, graph: false, ..Default::default() };
-        let out = p.analyze(&Request { columns: cols.clone(), rows: RowRange::All, tool: Tool::Cox(ph) }).unwrap();
+        let out =
+            p.analyze(&Request { columns: cols.clone(), rows: RowRange::All, tool: Tool::Cox(ph.clone()) }).unwrap();
         assert!(out.notes.iter().any(|n| n.starts_with("Proportional hazards (Grambsch-Therneau")), "{:?}", out.notes);
+        // T503: the Kaplan-Meier time scale.
+        let km = CoxSpec { ph_transform: calc::cox::PhTransform::Km, ..ph };
+        let out = p.analyze(&Request { columns: cols.clone(), rows: RowRange::All, tool: Tool::Cox(km) }).unwrap();
+        assert!(out.notes.iter().any(|n| n.contains("against 1 - the Kaplan-Meier estimate")), "{:?}", out.notes);
         let bad = CoxSpec { at: Some(vec![1.0, 2.0]), ..Default::default() };
         assert!(p.analyze(&Request { columns: cols, rows: RowRange::All, tool: Tool::Cox(bad) }).is_err());
     }

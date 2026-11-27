@@ -1676,13 +1676,14 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
-        AnalyzeTool::Decompose { target, period, model, no_graph } => {
+        AnalyzeTool::Decompose { target, period, model, stl, stl_seasonal, robust, no_graph } => {
             let model = match model.to_ascii_lowercase().as_str() {
                 "additive" => analysis::DecomposeModel::Additive,
                 "multiplicative" => analysis::DecomposeModel::Multiplicative,
                 other => bail!("--model takes additive or multiplicative, not {other:?}"),
             };
-            (target, Job::Tool(Tool::Decompose(analysis::DecomposeSpec { period, model, graph: !no_graph })))
+            let stl = stl.then_some(analysis::StlOptions { seasonal: stl_seasonal, robust });
+            (target, Job::Tool(Tool::Decompose(analysis::DecomposeSpec { period, model, graph: !no_graph, stl })))
         }
         AnalyzeTool::Acf { target, lags, confidence, no_graph } => (
             target,

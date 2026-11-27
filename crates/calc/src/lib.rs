@@ -85,6 +85,7 @@ pub mod stationarity;
 pub mod stats;
 pub mod stemleaf;
 pub mod stft;
+pub mod stl;
 pub mod sunburst;
 pub mod survival;
 pub mod trace;

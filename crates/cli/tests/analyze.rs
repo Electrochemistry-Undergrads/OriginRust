@@ -2105,6 +2105,13 @@ fn seasonal_decomposition_runs_from_the_command_line() {
     assert!(ok && out.contains("multiplicative decomposition"), "{err} {out}");
     let (ok, _, err) = sheaf(&["analyze", "decompose", file, "--y", "v", "--period", "9"]);
     assert!(!ok && err.contains("two full periods"), "{err}");
+    // T498: STL.
+    let (ok, out, err) =
+        sheaf(&["analyze", "decompose", file, "--y", "v", "--period", "4", "--stl", "--robust", "--no-graph"]);
+    assert!(ok && out.contains("STL (seasonal smoother 7, trend 9, low-pass 5, robust)"), "{err} {out}");
+    let (ok, _, err) =
+        sheaf(&["analyze", "decompose", file, "--y", "v", "--period", "4", "--stl", "--stl-seasonal", "4"]);
+    assert!(!ok && err.contains("odd and at least 3"), "{err}");
 }
 
 /// Autocorrelation (spec `statistics.md` section 34, T363).

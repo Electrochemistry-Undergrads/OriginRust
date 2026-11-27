@@ -124,6 +124,18 @@ fn a_chord_diagram_takes_its_ends_and_an_optional_weight() {
     assert_eq!(project.column(plot.sankey.source.unwrap()).unwrap().long_name, "From");
     let (ok, e) = sheaf(&["plot", c, "-t", "chord", "--group", "From", "-o", p]);
     assert!(!ok && e.contains("a chord diagram needs a source and a target"), "{e}");
+    // T506: a flow matrix, sources down the text column and one column per target.
+    let matrix = dir.join("matrix.csv");
+    std::fs::write(&matrix, "From,Ann,Bob\nAnn,0,3\nBob,1,0\nCy,2,0\n").unwrap();
+    let m = matrix.to_str().unwrap();
+    let (ok, e) = sheaf(&["plot", m, "-t", "chord", "--matrix", "-o", p, "--save", s]);
+    assert!(ok, "{e}");
+    let project = sheaf_io::project_file::load(&saved).unwrap();
+    let plot = &project.graphs().next().unwrap().layers[0].plots[0];
+    assert_eq!(plot.kind, sheaf_core::graph::PlotKind::Chord);
+    assert_eq!(project.numeric(plot.y).unwrap(), &[1.0, 2.0, 3.0], "Bob, Cy to Ann; Ann to Bob");
+    let (ok, e) = sheaf(&["plot", m, "-t", "network", "--matrix", "-o", p]);
+    assert!(!ok && e.contains("--matrix is for chord diagrams"), "{e}");
 }
 
 #[test]

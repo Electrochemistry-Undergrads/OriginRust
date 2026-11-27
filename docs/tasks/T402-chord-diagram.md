@@ -16,4 +16,4 @@ between them. `PlotKind::Chord`, `sheaf_calc::chord`.
 
 ## Left
 
-- A matrix as the input, arrow heads, ticks and values round the ring, label rotation, Plot Details.
+- Arrow heads, ticks and values round the ring, label rotation, Plot Details. (A matrix as the input: T506.)

@@ -532,6 +532,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T503](T503-cox-ph-transforms.md) | Cox proportional-hazards test on the KM, identity or log time scale | S | done 2026-11-27 (statistics 52) |
 | [T504](T504-lifereg-settings.md) | Life Data Regression percentiles at several covariate settings | S | done 2026-11-27 (statistics 48) |
 | [T505](T505-manhattan-look.md) | Manhattan Plot: alternating colours, a gap between groups, labels of the hits | S | done 2026-11-27 (statistics 33) |
+| [T506](T506-chord-matrix.md) | Chord Diagram from a flow matrix (sources down, targets across) | S | done 2026-11-27 (graphing 14.34) |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |

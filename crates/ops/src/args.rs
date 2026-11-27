@@ -1129,6 +1129,10 @@ pub struct PlotArgs {
     /// (Origin's plotgroup): the rows are split into a new sheet `Grouped`, the legend names the values.
     #[arg(long, value_name = "COLUMN", conflicts_with_all = ["graph", "panels"])]
     pub group: Option<String>,
+    /// Chord diagram (T506): read a flow matrix, --group the column of source names (default: the first text column)
+    /// and -y the target columns (default: every numeric column); the flows go to a new sheet ChordFlows.
+    #[arg(long)]
+    pub matrix: bool,
     /// -t fishbone (a cause-and-effect diagram): the effect's text at the head of the spine (default
     /// "Effect"). The -y columns (default: every column of the sheet) are the categories, their cells the causes.
     #[arg(long, value_name = "TEXT")]

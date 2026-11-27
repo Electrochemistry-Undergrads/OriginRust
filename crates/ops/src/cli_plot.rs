@@ -93,6 +93,7 @@ pub fn plot_spec(a: &PlotArgs) -> PlotSpec {
         overlay: a.inputs.len() > 1,
         overlay_books: Vec::new(),
         group: a.group.clone(),
+        matrix: a.matrix,
         effect: a.effect.clone(),
         style: style_spec(&a.style),
         templates_dir: user_templates_dir(a),

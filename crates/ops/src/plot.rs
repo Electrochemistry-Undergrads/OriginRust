@@ -169,6 +169,9 @@ pub struct PlotSpec {
     pub effect: Option<String>,
     /// A chord diagram from a flow matrix (T506): `group` the source names, `y` the target columns.
     pub matrix: bool,
+    /// An UpSet plot's order and number of intersections (T507).
+    pub upset_sort: sheaf_core::graph::UpSetSort,
+    pub upset_limit: usize,
     pub style: Style,
     /// The folder of the user graph templates (T56) that a template name not among the built-in ones
     /// is looked up in. `None` (MCP, and requests that do not ask) uses no user template; the command
@@ -388,7 +391,13 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
         if sets.len() < 2 {
             bail!("an UpSet plot needs two or more set columns: -y A -y B ... (or columns of only 0 and 1)");
         }
-        project.plot_upset(&sets)?
+        let g = project.plot_upset(&sets)?;
+        // T507: the order and number of the intersections.
+        if let Some(pl) = project.graph_mut(g).and_then(|gr| gr.layers.first_mut()).and_then(|l| l.plots.first_mut()) {
+            pl.sankey.upset_sort = a.upset_sort;
+            pl.sankey.upset_limit = a.upset_limit;
+        }
+        g
     } else if matches!(template_from(a.template.as_deref(), suggested)?, Template::Network | Template::Chord) {
         // A network plot (T383) or a chord diagram (T402): --group names the source and target columns (default:
         // the sheet's first two text columns), -y the weight column (default: none, every row counts 1).

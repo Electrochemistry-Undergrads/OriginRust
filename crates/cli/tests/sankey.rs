@@ -156,6 +156,13 @@ fn an_upset_plot_takes_the_flag_columns_or_the_named_ones() {
     let names: Vec<&str> =
         plot.sankey.stages.iter().map(|id| project.column(*id).unwrap().long_name.as_str()).collect();
     assert_eq!(names, ["A", "B", "C"]);
+    // T507: the order and number of intersections are saved with the plot.
+    let (ok, e) =
+        sheaf(&["plot", c, "-t", "upset", "--upset-sort", "degree", "--upset-limit", "2", "-o", p, "--save", s]);
+    assert!(ok, "{e}");
+    let project = sheaf_io::project_file::load(&saved).unwrap();
+    let plot = &project.graphs().next().unwrap().layers[0].plots[0];
+    assert_eq!((plot.sankey.upset_sort, plot.sankey.upset_limit), (sheaf_core::graph::UpSetSort::Degree, 2));
     let (ok, e) = sheaf(&["plot", c, "-t", "upset", "-y", "A", "-o", p]);
     assert!(!ok && e.contains("two or more set columns"), "{e}");
 }

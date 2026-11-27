@@ -35,7 +35,7 @@ pub(crate) struct SankeyData {
 impl SankeyData {
     /// The flows of the rows `pd` shows: names from the style's columns, values from the plot's Y.
     pub fn new(project: &Project, layer: &Layer, pd: &PlotData) -> Option<SankeyData> {
-        let SankeyStyle { source, target, stages } = &pd.plot.sankey;
+        let SankeyStyle { source, target, stages, .. } = &pd.plot.sankey;
         let visible: Vec<usize> = pd.rows().filter(|r| !pd.mask.is_some_and(|m| m.contains(r))).collect();
         let sankey = if stages.is_empty() {
             let (source, target) = (project.column((*source)?)?, project.column((*target)?)?);

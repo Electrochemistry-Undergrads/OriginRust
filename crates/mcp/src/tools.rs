@@ -1194,6 +1194,8 @@ fn plot(s: &mut Ctx, a_raw: &Value) -> Res {
         group: a.group.clone(),
         effect: None,
         matrix: false,
+        upset_sort: Default::default(),
+        upset_limit: 0,
         style: style_from(a.style, a.size.as_ref())?,
         templates_dir: None,
     };

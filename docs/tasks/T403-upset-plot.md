@@ -15,4 +15,4 @@ sets; exclusive intersection sizes as bars over a dot matrix, set sizes as bars 
 
 ## Left
 
-- List-style input, sort and limit choices, colours by set or degree, axes for the bar charts, Plot Details.
+- List-style input, colours by set or degree, axes for the bar charts, Plot Details. (Sort and limit choices: T507.)

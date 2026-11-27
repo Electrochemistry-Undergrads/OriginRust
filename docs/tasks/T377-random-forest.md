@@ -9,8 +9,8 @@ measured in Origin.
 
 ## Left
 
-- Prediction of new rows from a saved model, class probabilities, permutation importance, class weights, partial
-  dependence plots, categorical (text) predictors.
+- Prediction of new rows from a saved model, class probabilities, class weights, partial dependence plots,
+  categorical (text) predictors. (Permutation importance: T502.)
 
 ## Tests
 

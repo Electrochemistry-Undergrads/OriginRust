@@ -244,6 +244,150 @@ pub fn sensitivity(inputs: &[Vec<f64>], output: &[f64]) -> Vec<f64> {
         .collect()
 }
 
+impl InputDist {
+    /// Where the input sits (T490): the mean (normal), the middle (uniform), the mode (triangular), the median
+    /// `e^mu` (lognormal) or the value (constant).
+    pub fn centre(&self) -> f64 {
+        match *self {
+            InputDist::Normal { mean, .. } => mean,
+            InputDist::Uniform { low, high } => (low + high) / 2.0,
+            InputDist::Lognormal { mu, .. } => mu.exp(),
+            InputDist::Triangular { mode, .. } => mode,
+            InputDist::Constant(v) => v,
+        }
+    }
+
+    /// The same distribution moved to centre `c` (T490): shifted as a whole, a lognormal scaled (`c` above 0).
+    pub fn centred_at(&self, c: f64) -> InputDist {
+        let d = c - self.centre();
+        match *self {
+            InputDist::Normal { sd, .. } => InputDist::Normal { mean: c, sd },
+            InputDist::Uniform { low, high } => InputDist::Uniform { low: low + d, high: high + d },
+            InputDist::Lognormal { sigma, .. } => InputDist::Lognormal { mu: c.ln(), sigma },
+            InputDist::Triangular { low, mode, high } => {
+                InputDist::Triangular { low: low + d, mode: mode + d, high: high + d }
+            }
+            InputDist::Constant(_) => InputDist::Constant(c),
+        }
+    }
+
+    /// `draws` of this input as they fall when it is moved to centre `c` with the same random numbers (T490).
+    pub fn move_draws(&self, draws: &[f64], c: f64) -> Vec<f64> {
+        match *self {
+            InputDist::Lognormal { mu, .. } => draws.iter().map(|x| x * c / mu.exp()).collect(),
+            InputDist::Constant(_) => vec![c; draws.len()],
+            _ => {
+                let d = c - self.centre();
+                draws.iter().map(|x| x + d).collect()
+            }
+        }
+    }
+}
+
+/// What the optimisation of controllable inputs looks for (T490).
+#[derive(Debug, Clone, Copy, PartialEq, Default, serde::Serialize, serde::Deserialize)]
+pub enum McGoal {
+    /// The highest Cpk against the specification limits.
+    #[default]
+    Capability,
+    /// The output's mean at this target with the least spread: the smallest mean squared deviation
+    /// `(mean - target)^2 + s^2`.
+    Target(f64),
+}
+
+/// One input whose centre the optimisation moves, between `low` and `high` (T490).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct McControl {
+    pub name: String,
+    pub low: f64,
+    pub high: f64,
+}
+
+impl McControl {
+    /// How the control is written: `len = 9:11`.
+    pub fn text(&self) -> String {
+        format!("{} = {}:{}", self.name, self.low, self.high)
+    }
+}
+
+/// Reads controls written `name = low:high`, separated by `,`, `;` or new lines (T490).
+pub fn parse_controls(text: &str) -> Result<Vec<McControl>, String> {
+    let mut out = Vec::new();
+    for part in text.split([',', ';', '\n']).map(str::trim).filter(|p| !p.is_empty()) {
+        let (name, range) =
+            part.split_once('=').ok_or_else(|| format!("write the control '{part}' as name = low:high"))?;
+        let (lo, hi) =
+            range.split_once(':').ok_or_else(|| format!("write the range of '{}' as low:high", name.trim()))?;
+        let num = |t: &str| t.trim().parse::<f64>().map_err(|_| format!("'{}' is not a number", t.trim()));
+        let (low, high) = (num(lo)?, num(hi)?);
+        if !(low.is_finite() && high.is_finite() && low < high) {
+            return Err(format!("the range of {} must run from a lower to a higher number", name.trim()));
+        }
+        out.push(McControl { name: name.trim().to_string(), low, high });
+    }
+    Ok(out)
+}
+
+/// How far `output` is from the goal (T490): lower is better; `-Cpk` for [`McGoal::Capability`], the mean
+/// squared deviation for [`McGoal::Target`]; infinite when it cannot be told (no spread, no numbers).
+pub fn goal_score(goal: McGoal, output: &[f64], lsl: Option<f64>, usl: Option<f64>) -> f64 {
+    let s = summarize(output, lsl, usl);
+    let v = match goal {
+        McGoal::Capability => -s.cpk,
+        McGoal::Target(t) => (s.mean - t).powi(2) + if s.n < 2 { 0.0 } else { s.sd.powi(2) },
+    };
+    if v.is_finite() { v } else { f64::INFINITY }
+}
+
+/// The lowest `f` over the box `lo..hi` (T490): a grid (9 points a side for one or two variables, 5 for three,
+/// 3 for more), then a compass search from its best point that halves its steps until they are 1e-5 of each
+/// range. Deterministic; ties keep the earlier point.
+pub fn search_box(f: &mut dyn FnMut(&[f64]) -> f64, lo: &[f64], hi: &[f64]) -> (Vec<f64>, f64) {
+    let d = lo.len();
+    let k: usize = match d {
+        0 => return (Vec::new(), f(&[])),
+        1 | 2 => 9,
+        3 => 5,
+        _ => 3,
+    };
+    let mut best = (lo.to_vec(), f64::INFINITY);
+    let mut index = vec![0usize; d];
+    loop {
+        let x: Vec<f64> = (0..d).map(|j| lo[j] + (hi[j] - lo[j]) * index[j] as f64 / (k - 1) as f64).collect();
+        let v = f(&x);
+        if v < best.1 {
+            best = (x, v);
+        }
+        let Some(j) = (0..d).find(|&j| index[j] + 1 < k) else { break };
+        index[j] += 1;
+        index[..j].fill(0);
+    }
+    let mut step: Vec<f64> = (0..d).map(|j| (hi[j] - lo[j]) / (2 * (k - 1)) as f64).collect();
+    let mut rounds = 0;
+    while rounds < 10_000 && (0..d).any(|j| step[j] > 1e-5 * (hi[j] - lo[j])) {
+        rounds += 1;
+        let mut moved = false;
+        for j in 0..d {
+            for sign in [1.0, -1.0] {
+                let mut x = best.0.clone();
+                x[j] = (x[j] + sign * step[j]).clamp(lo[j], hi[j]);
+                if x[j] == best.0[j] {
+                    continue;
+                }
+                let v = f(&x);
+                if v < best.1 {
+                    best = (x, v);
+                    moved = true;
+                }
+            }
+        }
+        if !moved {
+            step.iter_mut().for_each(|s| *s /= 2.0);
+        }
+    }
+    best
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -297,5 +441,63 @@ mod tests {
         let out: Vec<f64> = (0..2000).map(|i| 5.0 * ins[0][i] + 0.2 * ins[1][i]).collect();
         let r = sensitivity(&ins, &out);
         assert!(r[0] > 0.95 && r[1].abs() < 0.2, "{r:?}");
+    }
+
+    #[test]
+    fn inputs_move_to_a_centre_with_the_same_draws() {
+        let ins = [
+            InputDist::Normal { mean: 10.0, sd: 2.0 },
+            InputDist::Uniform { low: 0.0, high: 4.0 },
+            InputDist::Triangular { low: 0.0, mode: 1.0, high: 4.0 },
+            InputDist::Lognormal { mu: 0.0, sigma: 0.5 },
+            InputDist::Constant(3.0),
+        ];
+        let d = draw(&ins, 500, 9).unwrap();
+        for (k, dist) in ins.iter().enumerate() {
+            let c = dist.centre() * 1.5 + 0.5;
+            let moved = dist.centred_at(c);
+            assert!((moved.centre() - c).abs() < 1e-12, "{moved:?}");
+            // Moving the draws is drawing the moved distribution with the same numbers.
+            let again =
+                draw(&[ins[0], ins[1], ins[2], ins[3], ins[4]].map(|x| if x == *dist { moved } else { x }), 500, 9)
+                    .unwrap();
+            let shifted = dist.move_draws(&d[k], c);
+            assert!(shifted.iter().zip(&again[k]).all(|(a, b)| (a - b).abs() < 1e-9), "{dist:?}");
+        }
+    }
+
+    #[test]
+    fn controls_are_read_and_the_box_search_finds_the_lowest_point() {
+        assert_eq!(
+            parse_controls("len = 9:11; w=1.5 : 2.5").unwrap(),
+            vec![
+                McControl { name: "len".into(), low: 9.0, high: 11.0 },
+                McControl { name: "w".into(), low: 1.5, high: 2.5 }
+            ]
+        );
+        assert!(parse_controls("len 9:11").unwrap_err().contains("name = low:high"));
+        assert!(parse_controls("len = 9").unwrap_err().contains("low:high"));
+        assert!(parse_controls("len = 11:9").unwrap_err().contains("lower to a higher"));
+        assert!(parse_controls("").unwrap().is_empty());
+        // A bowl at (0.3, -1.2) inside the box, and a slope whose lowest point is a corner.
+        let mut calls = 0;
+        let (x, v) = search_box(
+            &mut |x| {
+                calls += 1;
+                (x[0] - 0.3).powi(2) + 2.0 * (x[1] + 1.2).powi(2)
+            },
+            &[-2.0, -2.0],
+            &[2.0, 2.0],
+        );
+        assert!((x[0] - 0.3).abs() < 1e-4 && (x[1] + 1.2).abs() < 1e-4 && v < 1e-7, "{x:?} {v}");
+        assert!(calls < 1000, "{calls}");
+        let (x, _) = search_box(&mut |x| x[0] - x[1] + x[2], &[0.0, 0.0, 0.0], &[1.0, 1.0, 1.0]);
+        assert_eq!(x, [0.0, 1.0, 0.0]);
+        // Goal scores: the target goal is the mean squared deviation; Cpk turns into its negative.
+        let v = [9.0, 10.0, 11.0];
+        assert!((goal_score(McGoal::Target(10.0), &v, None, None) - 1.0).abs() < 1e-12);
+        assert!((goal_score(McGoal::Target(12.0), &v, None, None) - 5.0).abs() < 1e-12);
+        assert!((goal_score(McGoal::Capability, &v, Some(7.0), Some(13.0)) + 1.0).abs() < 1e-12);
+        assert_eq!(goal_score(McGoal::Capability, &[5.0, 5.0], Some(0.0), None), f64::INFINITY, "no spread");
     }
 }

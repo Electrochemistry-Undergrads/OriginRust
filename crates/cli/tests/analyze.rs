@@ -3065,4 +3065,46 @@ fn monte_carlo_summarises_the_output() {
     let (ok, _, err) =
         sheaf(&["analyze", "monte-carlo", file, "--y", "y", "--input", "a=gamma(1,2)", "--formula", "a"]);
     assert!(!ok && err.contains("unknown distribution"), "{err}");
+    // T490: the optimisation moves a's centre so the product (b about 2) sits in the middle of 19..23.
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "monte-carlo",
+        file,
+        "--y",
+        "y",
+        "--input",
+        "a=normal(10,0.1)",
+        "--input",
+        "b=uniform(1.9,2.1)",
+        "--formula",
+        "a*b",
+        "--samples",
+        "3000",
+        "--lsl",
+        "19",
+        "--usl",
+        "23",
+        "--optimize",
+        "a=9:12",
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Output at the optimum") && out.contains("Optimum for the highest Cpk"), "{out}");
+    assert!(out.contains("a = 10.5") && out.contains("gives Cpk"), "{out}");
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "monte-carlo",
+        file,
+        "--y",
+        "y",
+        "--input",
+        "a=normal(10,0.1)",
+        "--formula",
+        "a*2",
+        "--optimize",
+        "a=5:15",
+        "--aim",
+        "25",
+    ]);
+    assert!(ok, "{err}");
+    assert!(out.contains("Optimum for a mean of 25 with the least spread") && out.contains("a = 12.5"), "{out}");
 }

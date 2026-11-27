@@ -70,7 +70,7 @@ pub use expsmooth::{Damping, ExpSmoothSpec, SmoothModel};
 pub use forest::{ForestTask, RandomForestSpec};
 pub use lifedist::{CoxSpec, LifeDist, LifeDistArbitrarySpec, LifeDistSpec, LifeRegressionSpec, TurnbullSpec};
 pub use manhattan::ManhattanSpec;
-pub use montecarlo::{MONTE_CARLO_MAX, MonteCarloSpec};
+pub use montecarlo::{MONTE_CARLO_MAX, MONTE_CARLO_MAX_CONTROLS, MONTE_CARLO_SEARCH_DRAWS, MonteCarloSpec};
 pub use multivariate::{KmeansSpec, PcaSpec};
 pub use qpcr::{QpcrCurveSpec, QpcrSpec};
 pub use quantreg::QuantRegSpec;
@@ -80,7 +80,9 @@ pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::PlotScores;
 /// What [`Tool::MixtureDesign`] makes (T386).
 pub use sheaf_calc::mixture::{MixtureKind, MixtureOptions as MixtureDesignSpec};
-pub use sheaf_calc::montecarlo::{InputDist, parse_input as parse_monte_carlo_input};
+pub use sheaf_calc::montecarlo::{
+    InputDist, McControl, McGoal, parse_controls as parse_monte_carlo_controls, parse_input as parse_monte_carlo_input,
+};
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
 pub use sheaf_calc::{CwtWavelet, Wavelet, WaveletExtension};
 pub use sheaf_fit::simulate::Spacing as SimulateSpacing;

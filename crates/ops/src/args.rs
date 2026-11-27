@@ -3510,6 +3510,12 @@ pub enum AnalyzeTool {
         /// Upper specification limit of the output.
         #[arg(long)]
         usl: Option<f64>,
+        /// Optimize: move this input's centre between LOW and HIGH to the best setting (repeat, at most 4).
+        #[arg(long = "optimize", value_name = "NAME=LOW:HIGH")]
+        optimize: Vec<String>,
+        /// The optimisation aims the output's mean at this value with the least spread (default: the highest Cpk).
+        #[arg(long)]
+        aim: Option<f64>,
     },
     /// Mixture design: a simplex lattice {q, m} or simplex centroid design (optionally with axial check blends and
     /// the overall centroid) for one or more totals and lower bounds, in a new sheet; --y only says which book.

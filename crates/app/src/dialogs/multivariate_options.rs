@@ -47,6 +47,11 @@ pub struct MultiOptions {
     mc_inputs: Option<String>,
     mc_lsl: String,
     mc_usl: String,
+    /// The optimisation (T490): the controls as typed (`name = low:high, ...`; empty: none), and whether the
+    /// output aims at the target as typed instead of the highest Cpk.
+    mc_controls: String,
+    mc_aim: bool,
+    mc_target: String,
     mixture_totals: Option<String>,
     mixture_lower: Option<String>,
     factorial: FactorialEffectsSpec,
@@ -225,6 +230,13 @@ impl MultiOptions {
                 };
                 spec.lsl = limit(&self.mc_lsl, "lower specification limit")?;
                 spec.usl = limit(&self.mc_usl, "upper specification limit")?;
+                spec.optimize = sheaf_core::analysis::parse_monte_carlo_controls(&self.mc_controls)?;
+                spec.goal = if self.mc_aim {
+                    let t = limit(&self.mc_target, "target")?.ok_or("give the target the output aims at")?;
+                    sheaf_core::analysis::McGoal::Target(t)
+                } else {
+                    sheaf_core::analysis::McGoal::Capability
+                };
                 Ok(Tool::MonteCarlo(spec))
             }
             AnalysisKind::FactorialEffects => Ok(Tool::FactorialEffects(self.factorial)),
@@ -662,6 +674,28 @@ impl MultiOptions {
                     ui.add(egui::TextEdit::singleline(&mut self.mc_lsl).desired_width(70.0).hint_text("none"));
                     ui.label("upper");
                     ui.add(egui::TextEdit::singleline(&mut self.mc_usl).desired_width(70.0).hint_text("none"));
+                });
+                // T490: move controllable inputs' centres within ranges to the best setting.
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label("Optimize centres of");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.mc_controls)
+                            .desired_width(260.0)
+                            .hint_text("none, or name = low:high, ...")
+                            .code_editor(),
+                    );
+                });
+                ui.add_enabled_ui(!self.mc_controls.trim().is_empty(), |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Goal");
+                        ui.radio_value(&mut self.mc_aim, false, "Highest Cpk");
+                        ui.radio_value(&mut self.mc_aim, true, "Mean at target, least spread:");
+                        ui.add_enabled(
+                            self.mc_aim,
+                            egui::TextEdit::singleline(&mut self.mc_target).desired_width(70.0),
+                        );
+                    });
                 });
             }
             AnalysisKind::MixtureDesign => {
@@ -1127,5 +1161,32 @@ impl MultiOptions {
             }
             _ => unreachable!("only the multivariate tools come here"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sheaf_core::analysis::{McControl, McGoal};
+
+    #[test]
+    fn the_monte_carlo_window_reads_controls_and_the_goal() {
+        let mut o = MultiOptions::default();
+        let spec = |o: &MultiOptions| match o.tool(AnalysisKind::MonteCarlo) {
+            Ok(Tool::MonteCarlo(s)) => Ok(s),
+            Ok(_) => unreachable!(),
+            Err(e) => Err(e),
+        };
+        assert!(spec(&o).unwrap().optimize.is_empty(), "no optimisation to start with");
+        o.mc_controls = "a = 9:11, b = 1.5:2.5".into();
+        let s = spec(&o).unwrap();
+        assert_eq!(s.optimize[1], McControl { name: "b".into(), low: 1.5, high: 2.5 });
+        assert_eq!(s.goal, McGoal::Capability);
+        o.mc_aim = true;
+        assert!(spec(&o).unwrap_err().contains("target"));
+        o.mc_target = "20".into();
+        assert_eq!(spec(&o).unwrap().goal, McGoal::Target(20.0));
+        o.mc_controls = "a = 9".into();
+        assert!(spec(&o).unwrap_err().contains("low:high"));
     }
 }

@@ -8,8 +8,8 @@ standard errors. Not measured in Origin.
 
 ## Left
 
-- The search over the seasonal orders is T452. Exact (Kalman filter) maximum likelihood, stationarity/invertibility
-  constraints.
+- The search over the seasonal orders is T452. Exact (Kalman filter) maximum likelihood is T495;
+  stationarity/invertibility constraints on CSS fits remain.
 
 ## Tests
 

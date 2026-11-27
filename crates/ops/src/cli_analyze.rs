@@ -1574,6 +1574,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             sd,
             sq,
             period,
+            method,
             no_graph,
         } => (
             target,
@@ -1587,6 +1588,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 graph: !no_graph,
                 auto: auto.then_some((max_p, max_q)),
                 seasonal: analysis::ArimaSeasonal { p: sp, d: sd, q: sq, period },
+                method: if method == "ml" { analysis::ArimaMethod::Ml } else { analysis::ArimaMethod::Css },
             })),
         ),
         AnalyzeTool::Forecast { target, model, period, constants, horizon, damped, phi, confidence, no_graph } => {

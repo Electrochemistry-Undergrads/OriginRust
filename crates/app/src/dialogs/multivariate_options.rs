@@ -852,6 +852,13 @@ impl MultiOptions {
                     ui.add(egui::DragValue::new(&mut s.seasonal.period).range(0..=10_000));
                 });
                 ui.checkbox(&mut s.constant, "Constant (mean of the differenced series)");
+                // T495: how the coefficients are estimated.
+                ui.horizontal(|ui| {
+                    use sheaf_core::analysis::ArimaMethod;
+                    ui.label("Method");
+                    ui.radio_value(&mut s.method, ArimaMethod::Css, "Conditional sum of squares");
+                    ui.radio_value(&mut s.method, ArimaMethod::Ml, "Exact maximum likelihood");
+                });
                 ui.horizontal(|ui| {
                     ui.label("Steps to forecast");
                     ui.add(egui::DragValue::new(&mut s.horizon).range(0..=100_000));

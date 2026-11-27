@@ -6238,7 +6238,7 @@ fn the_statistics_menu_makes_an_arima_forecast() {
     assert!(h.state().analysis.is_none(), "{:?}", h.state().status);
     let (sheet, values) = result_column(&h, "Value");
     assert!(sheet.starts_with("ARIMA"), "{sheet}");
-    assert_eq!(values.len(), 5, "mean, AR 1, SS, sigma^2, AIC");
+    assert_eq!(values.len(), 6, "mean, AR 1, SS, sigma^2, AIC, log-likelihood (T495)");
     assert!((values[0] - 10.0).abs() < 1.0, "{values:?}");
     let (_, se) = result_column(&h, "Standard error");
     assert!(se[0] > 0.0 && se[1] > 0.0 && se[2].is_nan(), "{se:?}");

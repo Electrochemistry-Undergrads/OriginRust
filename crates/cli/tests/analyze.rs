@@ -1956,6 +1956,10 @@ fn arima_forecast_runs_from_the_command_line() {
     assert!(ok && out.contains("ARIMA(1,1,0)") && out.contains("AR 1"), "{err} {out}");
     let (ok, _, err) = sheaf(&["analyze", "arima", file, "--y", "v", "--p", "0", "--no-constant"]);
     assert!(!ok && err.contains("nothing to fit"), "{err}");
+    // T495: exact maximum likelihood.
+    let (ok, out, err) =
+        sheaf(&["analyze", "arima", file, "--y", "v", "--p", "0", "--d", "1", "--method", "ml", "--no-graph"]);
+    assert!(ok && out.contains("by exact maximum likelihood") && out.contains("Log-likelihood"), "{err} {out}");
     // Order by AIC and coefficient standard errors (T428).
     let (ok, out, err) = sheaf(&[
         "analyze",

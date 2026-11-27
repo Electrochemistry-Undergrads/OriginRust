@@ -1609,9 +1609,17 @@ Formula Bar. Origin 2016 has neither.
   or Esc, changes nothing.
 - **Saved:** the formulas are on the sheet (`Worksheet::cell_formulas`) in the `.sheaf` file.
 - **Moving rows (T462):** inserting, deleting and sorting rows move a formula cell with its row (as cell notes move);
-  a deleted row's formula goes with it. The formula text stays as typed, so its references keep naming the same rows.
-- **Not done:** references that follow moved rows and columns, filling right or into a chosen range, A1 references to
-  other workbooks, a marker on formula cells, and cell formulas in `.opj` files.
+  a deleted row's formula goes with it.
+- **References follow rows (T491, as a spreadsheet does):** inserting or deleting rows of some columns (whole rows or
+  cells shifted) rewrites every formula of the sheet whose references name those columns of this sheet (plain `B3`
+  or `ThisSheet!B3`): a reference at or below the insertion moves down by the rows inserted, one below deleted rows
+  moves up; a range (`A2:A5`) grows when rows are inserted after its first row and up to its last, and shrinks by its
+  deleted rows; a reference to a deleted cell, or a range all of whose rows were deleted, becomes `#REF!`, so the
+  formula no longer runs and its cell is empty. `$` keeps its place in the text but does not hold the reference (it
+  only matters in Fill Down). Sorting rewrites no reference.
+- **Not done:** references from other sheets that follow this sheet's rows, references that follow moved columns,
+  filling right or into a chosen range, A1 references to other workbooks, a marker on formula cells, and cell
+  formulas in `.opj` files.
 
 ## 14. Suggested Rust data model (P0)
 

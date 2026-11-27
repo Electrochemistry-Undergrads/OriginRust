@@ -13,8 +13,11 @@
 //!
 //! Sheaf's choices (Origin 2019 not measured here): formulas that read other formula cells are worked out in up to
 //! ten passes, so chains settle; a formula that cannot be read or run leaves its cell empty; typing a value over the
-//! cell drops its formula. A formula cell moves with its row when rows are inserted, deleted or sorted (T462; its
-//! formula text stays as typed, so its references do not follow other moved cells).
+//! cell drops its formula. A formula cell moves with its row when rows are inserted, deleted or sorted (T462).
+//! Its references to the sheet's own cells follow rows inserted or deleted there, as in a spreadsheet (T491): a
+//! reference below the change moves with its row, a range grows or shrinks, a reference to a deleted cell becomes
+//! `#REF!` (the formula then leaves its cell empty); `$` does not hold a reference still here, it only keeps its row in
+//! Fill Down. Sorting rewrites no reference, and references from other sheets stay as typed.
 
 use crate::cell_links::{Value, write};
 use crate::ids::ColumnId;
@@ -189,6 +192,136 @@ pub fn shift_rows(formula: &str, offset: i64, has_column: &dyn Fn(&str) -> bool)
     out
 }
 
+/// A change of a sheet's rows that references to its cells follow (T491); rows from 0.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum RowEdit {
+    /// `count` rows inserted before row `at`.
+    Insert { at: usize, count: usize },
+    /// These rows deleted.
+    Delete(std::ops::Range<usize>),
+}
+
+impl RowEdit {
+    /// Where the row numbered `r` (from 1) goes; `None` when it was deleted.
+    fn row(&self, r: usize) -> Option<usize> {
+        match self {
+            RowEdit::Insert { at, count } => Some(if r > *at { r + count } else { r }),
+            RowEdit::Delete(d) if r <= d.start => Some(r),
+            RowEdit::Delete(d) if r > d.end => Some(r - d.len()),
+            RowEdit::Delete(_) => None,
+        }
+    }
+
+    /// Where the range of rows `first..=last` (from 1) goes: rows inserted inside it make it longer, deleted rows
+    /// shorter; `None` when every row of it was deleted.
+    fn range(&self, first: usize, last: usize) -> Option<(usize, usize)> {
+        match self {
+            RowEdit::Insert { .. } => Some((self.row(first)?, self.row(last)?)),
+            RowEdit::Delete(d) => {
+                let f = self.row(first).unwrap_or(d.start + 1);
+                let l = self.row(last).unwrap_or(d.start);
+                (l >= f && l >= 1).then_some((f, l))
+            }
+        }
+    }
+}
+
+/// A reference `[$]LETTERS[$]DIGITS` at `i` (not inside a word, not followed by a word character or `(`): whether
+/// `$` stands before the letters, the letters, whether `$` stands before the row, the row (from 1) and its end.
+fn reference_at(chars: &[char], i: usize) -> Option<(bool, String, bool, usize, usize)> {
+    let word = |c: char| c.is_alphanumeric() || c == '_';
+    if i > 0 && (word(chars[i - 1]) || chars[i - 1] == '$') {
+        return None;
+    }
+    let mut k = i;
+    let col_abs = chars.get(k) == Some(&'$');
+    k += usize::from(col_abs);
+    let l0 = k;
+    while k < chars.len() && chars[k].is_ascii_uppercase() {
+        k += 1;
+    }
+    let letters: String = chars[l0..k].iter().collect();
+    let row_abs = chars.get(k) == Some(&'$');
+    k += usize::from(row_abs);
+    let d0 = k;
+    while k < chars.len() && chars[k].is_ascii_digit() {
+        k += 1;
+    }
+    if letters.is_empty() || k == d0 || (k < chars.len() && (word(chars[k]) || chars[k] == '(')) {
+        return None;
+    }
+    let row: usize = chars[d0..k].iter().collect::<String>().parse().ok()?;
+    (row >= 1).then_some((col_abs, letters, row_abs, row, k))
+}
+
+/// `formula` with its references to moved cells rewritten for `edit` (T491). `moved(sheet, letters)` says whether
+/// the column of that short name (in the sheet named, `None` the formula's own) is one whose rows changed. A
+/// reference to a deleted cell, or a range all of whose rows were deleted, becomes `#REF!`.
+pub(crate) fn move_references(formula: &str, edit: &RowEdit, moved: &dyn Fn(Option<&str>, &str) -> bool) -> String {
+    let chars: Vec<char> = formula.chars().collect();
+    let word = |c: char| c.is_alphanumeric() || c == '_';
+    let text = |abs: bool, letters: &str, row_abs: bool, row: usize| {
+        format!("{}{letters}{}{row}", if abs { "$" } else { "" }, if row_abs { "$" } else { "" })
+    };
+    let mut out = String::new();
+    let mut i = 0;
+    let mut quoted = false;
+    while i < chars.len() {
+        let c = chars[i];
+        if c == '"' {
+            quoted = !quoted;
+        }
+        if !quoted && (i == 0 || !(word(chars[i - 1]) || chars[i - 1] == '$')) {
+            // An optional `Sheet!` before the reference.
+            let bang = (i..chars.len()).take_while(|&k| word(chars[k]) || chars[k] == '!').find(|&k| chars[k] == '!');
+            let (sheet, at) = match bang {
+                Some(b) if b > i => (Some(chars[i..b].iter().collect::<String>()), b + 1),
+                _ => (None, i),
+            };
+            if let Some((ca, letters, ra, row, end)) = reference_at(&chars, at)
+                && moved(sheet.as_deref(), &letters)
+            {
+                let prefix = sheet.as_ref().map(|s| format!("{s}!")).unwrap_or_default();
+                // A range of the same column: `A1:A5`.
+                let range = (chars.get(end) == Some(&':'))
+                    .then(|| reference_at(&chars, end + 1))
+                    .flatten()
+                    .filter(|(_, l2, _, r2, _)| *l2 == letters && *r2 >= row);
+                match range {
+                    Some((ca2, _, ra2, row2, end2)) => {
+                        match edit.range(row, row2) {
+                            Some((f, l)) => out.push_str(&format!(
+                                "{prefix}{}:{}",
+                                text(ca, &letters, ra, f),
+                                text(ca2, &letters, ra2, l)
+                            )),
+                            None => out.push_str("#REF!"),
+                        }
+                        i = end2;
+                    }
+                    None => {
+                        match edit.row(row) {
+                            Some(r) => out.push_str(&format!("{prefix}{}", text(ca, &letters, ra, r))),
+                            None => out.push_str("#REF!"),
+                        }
+                        i = end;
+                    }
+                }
+                continue;
+            }
+            // Not a moved reference: copy the sheet name and the reference as they are.
+            if let Some((.., end)) = reference_at(&chars, at) {
+                out.extend(&chars[i..end]);
+                i = end;
+                continue;
+            }
+        }
+        out.push(c);
+        i += 1;
+    }
+    out
+}
+
 /// `row` or `first:last`.
 fn rows(first: usize, last: usize) -> String {
     if first == last { first.to_string() } else { format!("{first}:{last}") }
@@ -222,12 +355,30 @@ impl crate::worksheet::Worksheet {
             .collect();
     }
 
-    /// Moves the formula cells of these columns for `count` rows inserted before row `at` (T462).
+    /// Moves the formula cells of these columns for `count` rows inserted before row `at` (T462), and their
+    /// references to the cells of these columns (T491).
     pub(crate) fn formulas_insert_rows(&mut self, columns: &[ColumnId], at: usize, count: usize) {
         for f in &mut self.cell_formulas {
             if columns.contains(&f.column) && f.row >= at {
                 f.row += count;
             }
+        }
+        self.formulas_follow_rows(columns, &RowEdit::Insert { at, count });
+    }
+
+    /// Rewrites every formula's references to the cells of these columns of this sheet for `edit` (T491).
+    fn formulas_follow_rows(&mut self, columns: &[ColumnId], edit: &RowEdit) {
+        if self.cell_formulas.is_empty() {
+            return;
+        }
+        let names: Vec<String> =
+            self.columns.iter().filter(|c| columns.contains(&c.id)).map(|c| c.short_name.clone()).collect();
+        let me = self.name.clone();
+        let moved = |sheet: Option<&str>, letters: &str| {
+            sheet.is_none_or(|s| s.eq_ignore_ascii_case(&me)) && names.iter().any(|n| n == letters)
+        };
+        for f in &mut self.cell_formulas {
+            f.formula = move_references(&f.formula, edit, &moved);
         }
     }
 
@@ -239,6 +390,7 @@ impl crate::worksheet::Worksheet {
                 f.row -= rows.len();
             }
         }
+        self.formulas_follow_rows(columns, &RowEdit::Delete(rows));
     }
 
     /// Puts the formula cells of these columns in the order `order` (new row i takes old row `order[i]`); formulas
@@ -423,10 +575,11 @@ mod tests {
         assert_eq!(p.fill_cell_formula_down(d, 0, 2).unwrap(), 2);
         assert_eq!(p.cell_formula(d, 2), Some("A3*$A$1"));
         assert_eq!(texts(&p, d), ["1", "2", "10"]);
-        // Rows move (T462): a row inserted above moves the formula cell down; deleting it moves it back.
+        // Rows move (T462): a row inserted above moves the formula cell down and its references with their rows
+        // (T491); deleting it moves them back.
         let sheet = &mut p.workbook_mut(b).unwrap().sheets[0];
         sheet.insert_rows(&[0, 1, 2], 0, 1);
-        assert_eq!(p.cell_formula(d, 3), Some("A3*$A$1"), "row 3 became row 4");
+        assert_eq!(p.cell_formula(d, 3), Some("A4*$A$2"), "row 3 became row 4");
         let sheet = &mut p.workbook_mut(b).unwrap().sheets[0];
         sheet.delete_rows(&[0, 1, 2], 0..1);
         assert_eq!(p.cell_formula(d, 2), Some("A3*$A$1"));
@@ -434,5 +587,51 @@ mod tests {
         assert!(p.drop_cell_formula(c, 0));
         assert!(p.cell_formula(c, 0).is_none());
         assert!(p.set_cell_formula(c, 2, "A1 +* 2").is_err(), "not a formula");
+    }
+
+    #[test]
+    fn references_follow_inserted_and_deleted_rows() {
+        let moved = |sheet: Option<&str>, l: &str| ["A", "B"].contains(&l) && sheet.is_none_or(|s| s == "Sheet1");
+        let ins = RowEdit::Insert { at: 2, count: 2 };
+        // Rows 3 on move down 2; a range across the insertion grows; one above stays; C is not moved.
+        assert_eq!(
+            move_references("A1 + A3 + $B$5 + sum(A2:A4) + C9 + Sheet1!B3 + Sheet2!B3", &ins, &moved),
+            "A1 + A5 + $B$7 + sum(A2:A6) + C9 + Sheet1!B5 + Sheet2!B3"
+        );
+        assert_eq!(move_references("sum(A3:A4) + \"A3\" + LOG10(A3)", &ins, &moved), "sum(A5:A6) + \"A3\" + LOG10(A5)");
+        // Rows 3 and 4 deleted: below moves up, a range shrinks, a deleted cell or range is #REF!.
+        let del = RowEdit::Delete(2..4);
+        assert_eq!(
+            move_references("A2 + A3 + A6 + sum(A1:A5) + sum(A3:A6) + sum(A3:A4)", &del, &moved),
+            "A2 + #REF! + A4 + sum(A1:A3) + sum(A3:A4) + sum(#REF!)"
+        );
+        assert_eq!(move_references("sum(A1:A3)", &del, &moved), "sum(A1:A2)");
+    }
+
+    #[test]
+    fn formula_cells_keep_reading_their_inputs_when_rows_move() {
+        let mut p = Project::new();
+        let b = p.add_workbook("");
+        let a = p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0, 4.0])).unwrap();
+        let c = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![f64::NAN; 4])).unwrap();
+        p.set_cell_formula(c, 0, "A4*10").unwrap();
+        p.set_cell_formula(c, 1, "sum(A2:A4)").unwrap();
+        assert_eq!(texts(&p, c), ["40", "9", "", ""]);
+        // A whole row inserted before row 3: A4 is now A5 and the sum covers the new row too.
+        p.workbook_mut(b).unwrap().sheets[0].insert_rows(&[0, 1], 2, 1);
+        p.column_mut(a).unwrap().set_cell_text(2, "100");
+        p.refresh_cell_formulas();
+        assert_eq!(p.cell_formula(c, 0), Some("A5*10"));
+        assert_eq!(p.cell_formula(c, 1), Some("sum(A2:A5)"));
+        assert_eq!(texts(&p, c)[..2], ["40", "109"]);
+        // Cells of A only inserted: B's own cells stay, its references to A still move.
+        p.workbook_mut(b).unwrap().sheets[0].insert_rows(&[0], 0, 1);
+        assert_eq!(p.cell_formula(c, 0), Some("A6*10"));
+        // The row A6 is on deleted: that reference is lost and its cell empty; the sum shrinks.
+        p.workbook_mut(b).unwrap().sheets[0].delete_rows(&[0], 5..6);
+        p.refresh_cell_formulas();
+        assert_eq!(p.cell_formula(c, 0), Some("#REF!*10"));
+        assert_eq!(p.cell_formula(c, 1), Some("sum(A3:A5)"));
+        assert_eq!(texts(&p, c)[..2], ["", "105"]);
     }
 }

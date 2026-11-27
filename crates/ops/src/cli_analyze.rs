@@ -1450,7 +1450,19 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
-        AnalyzeTool::MonteCarlo { target, inputs, formula, samples, seed, lsl, usl, optimize, aim } => {
+        AnalyzeTool::MonteCarlo {
+            target,
+            inputs,
+            formula,
+            samples,
+            seed,
+            lsl,
+            usl,
+            optimize,
+            aim,
+            correlations,
+            no_graph,
+        } => {
             let mut parsed = Vec::new();
             for text in &inputs {
                 parsed.push(analysis::parse_monte_carlo_input(text).map_err(anyhow::Error::msg)?);
@@ -1458,6 +1470,13 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             let mut controls = Vec::new();
             for text in &optimize {
                 controls.extend(analysis::parse_monte_carlo_controls(text).map_err(anyhow::Error::msg)?);
+            }
+            let names: Vec<&str> = parsed.iter().map(|(n, _)| n.as_str()).collect();
+            let mut pairs = Vec::new();
+            for text in &correlations {
+                for (i, j, r) in analysis::parse_monte_carlo_correlations(text, &names).map_err(anyhow::Error::msg)? {
+                    pairs.push((names[i].to_string(), names[j].to_string(), r));
+                }
             }
             (
                 target,
@@ -1470,6 +1489,8 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     usl,
                     optimize: controls,
                     goal: aim.map_or(analysis::McGoal::Capability, analysis::McGoal::Target),
+                    correlations: pairs,
+                    graph: !no_graph,
                 })),
             )
         }

@@ -11,6 +11,12 @@
 //! - **Capability** against a lower and/or upper specification limit: the share of draws outside,
 //!   `Cp = (USL - LSL) / 6 s` (both limits) and `Cpk = min(USL - mean, mean - LSL) / 3 s` (either).
 //! - **Sensitivity**: Spearman's rank correlation of each input with the output.
+//! - **Correlated inputs** (T496): a Gaussian copula. The uniforms of a row turn into normal scores `z = Phi^-1(u)`,
+//!   are mixed by the Cholesky factor `L` of the correlation matrix given (`z' = L z`; pairs not given are 0) and turn
+//!   back into uniforms `Phi(z')` before each input's inverse distribution function, so every input keeps its own
+//!   distribution and the normal scores correlate as given (Spearman's rank correlation of the draws is about
+//!   `6 / pi asin(r / 2)`). An input correlated with no other keeps exactly its independent draws; a matrix that is not
+//!   positive definite is refused.
 
 use statrs::distribution::{ContinuousCDF, LogNormal, Normal};
 
@@ -164,6 +170,79 @@ pub fn draw(inputs: &[InputDist], n: usize, seed: u64) -> Result<Vec<Vec<f64>>, 
         for (j, d) in inputs.iter().enumerate() {
             out[j].push(d.at(next()));
         }
+    }
+    Ok(out)
+}
+
+/// `n` draws of every input with the normal scores of input pairs `(i, j)` correlated by `r` (T496; see the module
+/// notes). Without correlations it is [`draw`].
+pub fn draw_correlated(
+    inputs: &[InputDist],
+    n: usize,
+    seed: u64,
+    correlations: &[(usize, usize, f64)],
+) -> Result<Vec<Vec<f64>>, String> {
+    if correlations.is_empty() {
+        return draw(inputs, n, seed);
+    }
+    let k = inputs.len();
+    let mut c = nalgebra::DMatrix::<f64>::identity(k, k);
+    for &(i, j, r) in correlations {
+        if i >= k || j >= k || i == j {
+            return Err("a correlation joins two different inputs".into());
+        }
+        if !(r.is_finite() && r > -1.0 && r < 1.0) {
+            return Err(format!("a correlation must lie strictly between -1 and 1 (got {r})"));
+        }
+        c[(i, j)] = r;
+        c[(j, i)] = r;
+    }
+    let l = c
+        .clone()
+        .cholesky()
+        .ok_or("the correlations cannot all hold together (the correlation matrix is not positive definite)")?
+        .l();
+    let normal = Normal::new(0.0, 1.0).expect("the standard normal");
+    // The independent draws of a uniform input are its uniforms: recover them as `draw` makes them.
+    let uniforms = draw(&vec![InputDist::Uniform { low: 0.0, high: 1.0 }; k], n, seed)?;
+    let mut out = vec![Vec::with_capacity(n); k];
+    let mut z = nalgebra::DVector::<f64>::zeros(k);
+    for row in 0..n {
+        for (zj, u) in z.iter_mut().zip(&uniforms) {
+            *zj = normal.inverse_cdf(u[row]);
+        }
+        let mixed = &l * &z;
+        for (j, d) in inputs.iter().enumerate() {
+            // An input with no correlation keeps its own uniform exactly.
+            let u = if (0..k).all(|i| i == j || c[(i, j)] == 0.0) { uniforms[j][row] } else { normal.cdf(mixed[j]) };
+            out[j].push(d.at(u.clamp(f64::MIN_POSITIVE, 1.0 - f64::EPSILON)));
+        }
+    }
+    Ok(out)
+}
+
+/// Reads correlations written `a, b = r` (input names), separated by `;` or new lines (T496), as index pairs of
+/// `names`.
+pub fn parse_correlations(text: &str, names: &[&str]) -> Result<Vec<(usize, usize, f64)>, String> {
+    let mut out: Vec<(usize, usize, f64)> = Vec::new();
+    for part in text.split([';', '\n']).map(str::trim).filter(|p| !p.is_empty()) {
+        let (pair, r) = part.split_once('=').ok_or_else(|| format!("write the correlation '{part}' as a, b = 0.5"))?;
+        let (a, b) = pair.split_once(',').ok_or_else(|| format!("write the pair '{}' as a, b", pair.trim()))?;
+        let index = |n: &str| {
+            names.iter().position(|m| *m == n.trim()).ok_or_else(|| format!("{} is not one of the inputs", n.trim()))
+        };
+        let (i, j) = (index(a)?, index(b)?);
+        if i == j {
+            return Err(format!("{} cannot be correlated with itself", a.trim()));
+        }
+        let r: f64 = r.trim().parse().map_err(|_| format!("'{}' is not a number", r.trim()))?;
+        if !(r > -1.0 && r < 1.0) {
+            return Err(format!("the correlation of {} and {} must lie strictly between -1 and 1", a.trim(), b.trim()));
+        }
+        if out.iter().any(|&(x, y, _)| (x, y) == (i, j) || (x, y) == (j, i)) {
+            return Err(format!("{} and {} are correlated twice", a.trim(), b.trim()));
+        }
+        out.push((i, j, r));
     }
     Ok(out)
 }
@@ -441,6 +520,40 @@ mod tests {
         let out: Vec<f64> = (0..2000).map(|i| 5.0 * ins[0][i] + 0.2 * ins[1][i]).collect();
         let r = sensitivity(&ins, &out);
         assert!(r[0] > 0.95 && r[1].abs() < 0.2, "{r:?}");
+    }
+
+    #[test]
+    fn correlated_inputs_keep_their_distributions_and_correlate() {
+        let ins = [
+            InputDist::Normal { mean: 10.0, sd: 2.0 },
+            InputDist::Uniform { low: 0.0, high: 4.0 },
+            InputDist::Lognormal { mu: 0.0, sigma: 0.5 },
+        ];
+        let n = 20_000;
+        let d = draw_correlated(&ins, n, 5, &[(0, 1, 0.8)]).unwrap();
+        // Each input keeps its distribution.
+        let s: Vec<McSummary> = d.iter().map(|v| summarize(v, None, None)).collect();
+        assert!((s[0].mean - 10.0).abs() < 0.05 && (s[0].sd - 2.0).abs() < 0.05, "{:?}", s[0]);
+        assert!(s[1].min >= 0.0 && s[1].max <= 4.0 && (s[1].mean - 2.0).abs() < 0.03, "{:?}", s[1]);
+        // The normal scores correlate by 0.8 and the ranks by 6/pi asin(0.4) = 0.786, within sampling error (these
+        // independent uniforms happen to correlate by 0.012 already); the third input is untouched.
+        let nd = Normal::new(0.0, 1.0).unwrap();
+        let z1: Vec<f64> = d[1].iter().map(|v| nd.inverse_cdf(v / 4.0)).collect();
+        let r = correlation(&d[0], &z1, CorrKind::Pearson).r;
+        assert!((r - 0.8).abs() < 0.015, "{r}");
+        let rho = correlation(&d[0], &d[1], CorrKind::Spearman).r;
+        assert!((rho - 6.0 / std::f64::consts::PI * (0.4f64).asin()).abs() < 0.02, "{rho}");
+        assert_eq!(d[2], draw(&ins, n, 5).unwrap()[2], "an input correlated with no other keeps its draws");
+        assert!(correlation(&d[0], &d[2], CorrKind::Spearman).r.abs() < 0.03);
+        // Without correlations it is the plain draw; impossible matrices are refused.
+        assert_eq!(draw_correlated(&ins, 50, 5, &[]).unwrap(), draw(&ins, 50, 5).unwrap());
+        let bad = [(0, 1, 0.9), (1, 2, 0.9), (0, 2, -0.9)];
+        assert!(draw_correlated(&ins, 50, 5, &bad).unwrap_err().contains("positive definite"));
+        assert_eq!(parse_correlations("a, b = 0.8; c,a=-0.3", &["a", "b", "c"]).unwrap(), [(0, 1, 0.8), (2, 0, -0.3)]);
+        assert!(parse_correlations("a, d = 0.5", &["a", "b"]).unwrap_err().contains("d is not one of the inputs"));
+        assert!(parse_correlations("a, b = 1", &["a", "b"]).unwrap_err().contains("strictly between"));
+        assert!(parse_correlations("a, b = 0.1; b, a = 0.2", &["a", "b"]).unwrap_err().contains("twice"));
+        assert!(parse_correlations("a b = 0.1", &["a", "b"]).unwrap_err().contains("as a, b"));
     }
 
     #[test]

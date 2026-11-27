@@ -3116,4 +3116,36 @@ fn monte_carlo_summarises_the_output() {
     ]);
     assert!(ok, "{err}");
     assert!(out.contains("Optimum for a mean of 25 with the least spread") && out.contains("a = 12.5"), "{out}");
+    // T496: correlated inputs.
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "monte-carlo",
+        file,
+        "--y",
+        "y",
+        "--input",
+        "a=normal(10,0.1)",
+        "--input",
+        "b=uniform(1.9,2.1)",
+        "--formula",
+        "a*b",
+        "--correlation",
+        "a,b=0.7",
+        "--no-graph",
+    ]);
+    assert!(ok && out.contains("Correlated inputs") && out.contains("a and b 0.7"), "{err} {out}");
+    let (ok, _, err) = sheaf(&[
+        "analyze",
+        "monte-carlo",
+        file,
+        "--y",
+        "y",
+        "--input",
+        "a=normal(10,0.1)",
+        "--formula",
+        "a",
+        "--correlation",
+        "a,c=0.5",
+    ]);
+    assert!(!ok && err.contains("c is not one of the inputs"), "{err}");
 }

@@ -52,6 +52,8 @@ pub struct MultiOptions {
     mc_controls: String,
     mc_aim: bool,
     mc_target: String,
+    /// Correlations of input pairs as typed (`a, b = r; ...`, T496).
+    mc_correlations: String,
     mixture_totals: Option<String>,
     mixture_lower: Option<String>,
     factorial: FactorialEffectsSpec,
@@ -231,6 +233,12 @@ impl MultiOptions {
                 spec.lsl = limit(&self.mc_lsl, "lower specification limit")?;
                 spec.usl = limit(&self.mc_usl, "upper specification limit")?;
                 spec.optimize = sheaf_core::analysis::parse_monte_carlo_controls(&self.mc_controls)?;
+                let names: Vec<&str> = spec.inputs.iter().map(|(n, _)| n.as_str()).collect();
+                spec.correlations =
+                    sheaf_core::analysis::parse_monte_carlo_correlations(&self.mc_correlations, &names)?
+                        .into_iter()
+                        .map(|(i, j, r)| (names[i].to_string(), names[j].to_string(), r))
+                        .collect();
                 spec.goal = if self.mc_aim {
                     let t = limit(&self.mc_target, "target")?.ok_or("give the target the output aims at")?;
                     sheaf_core::analysis::McGoal::Target(t)
@@ -684,6 +692,17 @@ impl MultiOptions {
                     ui.label("upper");
                     ui.add(egui::TextEdit::singleline(&mut self.mc_usl).desired_width(70.0).hint_text("none"));
                 });
+                // T496: correlated inputs and the histogram of the output.
+                ui.horizontal(|ui| {
+                    ui.label("Correlations");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.mc_correlations)
+                            .desired_width(260.0)
+                            .hint_text("none, or a, b = 0.5; ...")
+                            .code_editor(),
+                    );
+                });
+                ui.checkbox(&mut self.monte_carlo.graph, "Histogram of the output");
                 // T490: move controllable inputs' centres within ranges to the best setting.
                 ui.separator();
                 ui.horizontal(|ui| {
@@ -1204,5 +1223,11 @@ mod tests {
         assert_eq!(spec(&o).unwrap().goal, McGoal::Target(20.0));
         o.mc_controls = "a = 9".into();
         assert!(spec(&o).unwrap_err().contains("low:high"));
+        // T496: correlations by input name.
+        o.mc_controls.clear();
+        o.mc_correlations = "a, b = 0.6".into();
+        assert_eq!(spec(&o).unwrap().correlations, [("a".to_string(), "b".to_string(), 0.6)]);
+        o.mc_correlations = "a, z = 0.6".into();
+        assert!(spec(&o).unwrap_err().contains("z is not one of the inputs"));
     }
 }

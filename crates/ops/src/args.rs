@@ -3516,6 +3516,12 @@ pub enum AnalyzeTool {
         /// The optimisation aims the output's mean at this value with the least spread (default: the highest Cpk).
         #[arg(long)]
         aim: Option<f64>,
+        /// Correlate two inputs' normal scores, as A,B=R (repeat for each pair).
+        #[arg(long = "correlation", value_name = "A,B=R")]
+        correlations: Vec<String>,
+        /// Do not make the histogram of the output.
+        #[arg(long)]
+        no_graph: bool,
     },
     /// Mixture design: a simplex lattice {q, m} or simplex centroid design (optionally with axial check blends and
     /// the overall centroid) for one or more totals and lower bounds, in a new sheet; --y only says which book.

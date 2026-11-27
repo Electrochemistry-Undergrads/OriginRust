@@ -4,9 +4,11 @@
 //! (`docs/spec/statistics.md` section 51). With controls (T490) the inputs named move their centres within ranges, the
 //! draws kept, to the setting that best meets the goal; the output there is reported too.
 
-use super::dist::Output;
+use super::dist::{GraphPlot, Output, XyGraph};
 use super::*;
-use calc::montecarlo::{InputDist, McControl, McGoal, draw, goal_score, search_box, sensitivity, summarize};
+use crate::graph::{PlotKind, ScaleKind};
+use calc::correlation::{CorrKind, correlation};
+use calc::montecarlo::{InputDist, McControl, McGoal, draw_correlated, goal_score, search_box, sensitivity, summarize};
 
 /// What [`Tool::MonteCarlo`] runs (it reads no data; the results go next to the chosen sheet).
 #[derive(Debug, Clone, PartialEq)]
@@ -24,6 +26,10 @@ pub struct MonteCarloSpec {
     pub optimize: Vec<McControl>,
     /// What the optimisation looks for.
     pub goal: McGoal,
+    /// Correlations of input pairs by name (T496; a Gaussian copula).
+    pub correlations: Vec<(String, String, f64)>,
+    /// A histogram graph of the output (T496).
+    pub graph: bool,
 }
 
 impl Default for MonteCarloSpec {
@@ -40,8 +46,28 @@ impl Default for MonteCarloSpec {
             usl: None,
             optimize: Vec::new(),
             goal: McGoal::Capability,
+            correlations: Vec::new(),
+            graph: true,
         }
     }
+}
+
+/// The bins of the output histogram (T496): about the square root of the count, 5 to 50, over the values' range.
+fn histogram(values: &[f64], bins: Option<(f64, f64, usize)>) -> (f64, f64, usize, Vec<f64>) {
+    let finite: Vec<f64> = values.iter().copied().filter(|v| v.is_finite()).collect();
+    let (lo, hi, k) = bins.unwrap_or_else(|| {
+        let (lo, hi) = finite.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| (a.min(*v), b.max(*v)));
+        let k = ((finite.len() as f64).sqrt().ceil() as usize).clamp(5, 50);
+        (lo, hi, k)
+    });
+    let w = if hi > lo { (hi - lo) / k as f64 } else { 1.0 };
+    let mut counts = vec![0.0; k];
+    for v in &finite {
+        if *v >= lo && *v <= hi {
+            counts[(((v - lo) / w) as usize).min(k - 1)] += 1.0;
+        }
+    }
+    (lo, w, k, counts)
 }
 
 /// Most draws of one run.
@@ -173,7 +199,15 @@ pub(super) fn run(spec: &MonteCarloSpec) -> Result<Output, AnalysisError> {
     }
     let expr = Expr::parse(&spec.formula).map_err(|e| bad(format!("the formula: {e}")))?;
     let dists: Vec<InputDist> = spec.inputs.iter().map(|(_, d)| *d).collect();
-    let draws = draw(&dists, spec.samples, spec.seed).map_err(bad)?;
+    // T496: correlations of input pairs, by name.
+    let names: Vec<&str> = spec.inputs.iter().map(|(n, _)| n.as_str()).collect();
+    let mut pairs = Vec::new();
+    for (a, b, r) in &spec.correlations {
+        let index =
+            |n: &str| names.iter().position(|m| *m == n).ok_or_else(|| bad(format!("{n} is not one of the inputs")));
+        pairs.push((index(a)?, index(b)?, *r));
+    }
+    let draws = draw_correlated(&dists, spec.samples, spec.seed, &pairs).map_err(bad)?;
     let output = evaluate(&expr, &spec.inputs, &draws, spec.samples).map_err(|e| bad(format!("the formula: {e}")))?;
     let optimum = if spec.optimize.is_empty() { None } else { Some(optimize(spec, &expr, &draws)?) };
     let out = summarize(&output, spec.lsl, spec.usl);
@@ -234,6 +268,16 @@ pub(super) fn run(spec: &MonteCarloSpec) -> Result<Output, AnalysisError> {
     {
         notes.push(format!("The output follows {} most (rank correlation {r:.4}).", spec.inputs[j].0));
     }
+    if !pairs.is_empty() {
+        let shown: Vec<String> = pairs
+            .iter()
+            .map(|&(i, j, r)| {
+                let rho = correlation(&draws[i], &draws[j], CorrKind::Spearman).r;
+                format!("{} and {} {r} (rank correlation of the draws {rho:.4})", names[i], names[j])
+            })
+            .collect();
+        notes.push(format!("Correlated inputs (Gaussian copula of the normal scores): {}.", shown.join(", ")));
+    }
     if let Some((o, s, _)) = &at {
         let ranges: Vec<String> = spec.optimize.iter().map(|c| format!("{} {} to {}", c.name, c.low, c.high)).collect();
         let settings: Vec<String> =
@@ -285,6 +329,12 @@ pub(super) fn run(spec: &MonteCarloSpec) -> Result<Output, AnalysisError> {
             data: ColumnData::numeric(v),
         })
         .collect();
+    // T496: the histogram of the output (and of the output at the optimum, on the same bins).
+    let hist = spec.graph.then(|| {
+        let (lo, w, k, counts) = histogram(&output, None);
+        let at_optimum = optimum.as_ref().map(|o| histogram(&o.output, Some((lo, lo + w * k as f64, k))).3);
+        (lo, w, k, counts, at_optimum)
+    });
     on_sheet.push(SheetColumn {
         designation: Designation::Y,
         long_name: "Output".into(),
@@ -311,7 +361,47 @@ pub(super) fn run(spec: &MonteCarloSpec) -> Result<Output, AnalysisError> {
             data: ColumnData::numeric(o.output),
         });
     }
-    Ok(Output { table: Some(table), on_sheet, notes, graph: None, more_graphs: Vec::new() })
+    let graph = hist.map(|(lo, w, k, counts, at_optimum)| {
+        let column = |name: &str, designation: Designation, values: Vec<f64>| SheetColumn {
+            designation,
+            long_name: name.to_string(),
+            units: String::new(),
+            comments: "Histogram of the output".into(),
+            data: ColumnData::numeric(values),
+        };
+        let top = counts.iter().chain(at_optimum.iter().flatten()).copied().fold(0.0, f64::max);
+        let x = on_sheet.len();
+        on_sheet.push(column("Bin center", Designation::X, (0..k).map(|i| lo + (i as f64 + 0.5) * w).collect()));
+        on_sheet.push(column("Count", Designation::Y, counts));
+        let mut plots = vec![GraphPlot { x, y: x + 1, kind: PlotKind::Column, label: "Output".into(), line_of: None }];
+        if let Some(c) = at_optimum {
+            let y = on_sheet.len();
+            on_sheet.push(column("Count at optimum", Designation::Y, c));
+            plots.push(GraphPlot { x, y, kind: PlotKind::Column, label: "Output at optimum".into(), line_of: None });
+        }
+        for (name, limit) in [("LSL", spec.lsl), ("USL", spec.usl)] {
+            let Some(l) = limit else { continue };
+            let lx = on_sheet.len();
+            on_sheet.push(column(&format!("{name} X"), Designation::X, vec![l, l]));
+            on_sheet.push(column(name, Designation::Y, vec![0.0, top * 1.1]));
+            plots.push(GraphPlot {
+                x: lx,
+                y: lx + 1,
+                kind: PlotKind::Line,
+                label: format!("{name} = {l}"),
+                line_of: Some(0),
+            });
+        }
+        XyGraph {
+            plots,
+            x_scale: ScaleKind::Linear,
+            y_scale: ScaleKind::Linear,
+            x_title: format!("Output = {}", spec.formula.trim()),
+            y_title: "Count".into(),
+            look: Default::default(),
+        }
+    });
+    Ok(Output { table: Some(table), on_sheet, notes, graph, more_graphs: Vec::new() })
 }
 
 #[cfg(test)]
@@ -335,6 +425,8 @@ mod tests {
             usl: Some(21.0),
             optimize: Vec::new(),
             goal: McGoal::Capability,
+            correlations: Vec::new(),
+            graph: true,
         };
         let r = p
             .analyze(&Request { columns: vec![host], rows: RowRange::All, tool: Tool::MonteCarlo(spec.clone()) })
@@ -346,8 +438,27 @@ mod tests {
         assert!(r.notes.iter().any(|n| n.contains("Cp = ") && n.contains("% of the draws outside")), "{:?}", r.notes);
         let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
         let names: Vec<&str> = ws.columns.iter().map(|c| c.long_name.as_str()).collect();
-        assert_eq!(names, ["len", "wid", "Output"]);
+        assert_eq!(names, ["len", "wid", "Output", "Bin center", "Count", "LSL X", "LSL", "USL X", "USL"]);
+        // T496: the histogram graph of the output with the limits; its counts add up to the draws.
+        let g = r.new_graph.expect("a histogram");
+        let cols = super::super::dist::plot_columns(&p, g);
+        assert_eq!(cols[0], ("Bin center".to_string(), "Count".to_string()));
+        assert_eq!(cols.len(), 3, "{cols:?}");
+        assert_eq!(ws.columns[4].numeric().unwrap().iter().sum::<f64>(), 5000.0);
         assert_eq!(ws.columns[2].numeric().unwrap().len(), 5000);
+        // Correlated inputs: the length and width rise together; a pair of unknown names is refused.
+        let tied =
+            MonteCarloSpec { correlations: vec![("len".into(), "wid".into(), 0.9)], graph: false, ..spec.clone() };
+        let c = p.analyze(&Request { columns: vec![host], rows: RowRange::All, tool: Tool::MonteCarlo(tied) }).unwrap();
+        let note = c.notes.iter().find(|n| n.starts_with("Correlated inputs")).expect("a correlation note");
+        assert!(note.contains("len and wid 0.9 (rank correlation of the draws 0.8"), "{note}");
+        assert!(c.new_graph.is_none(), "no graph asked for");
+        assert!(c.table.unwrap().rows[0].1[1] > t.rows[0].1[1], "a correlated product spreads more");
+        let wrong = MonteCarloSpec { correlations: vec![("len".into(), "depth".into(), 0.5)], ..spec.clone() };
+        let e = p
+            .analyze(&Request { columns: vec![host], rows: RowRange::All, tool: Tool::MonteCarlo(wrong) })
+            .unwrap_err();
+        assert!(e.to_string().contains("depth is not one of the inputs"), "{e}");
         // The same seed gives the same draws; a formula of an unknown name is refused.
         let again = p
             .analyze(&Request { columns: vec![host], rows: RowRange::All, tool: Tool::MonteCarlo(spec.clone()) })
@@ -378,6 +489,8 @@ mod tests {
             usl: Some(0.5),
             optimize: vec![McControl { name: "shaft".into(), low: 19.4, high: 19.95 }],
             goal: McGoal::Capability,
+            correlations: Vec::new(),
+            graph: true,
         };
         let run = |p: &mut Project, s: &MonteCarloSpec| {
             p.analyze(&Request { columns: vec![host], rows: RowRange::All, tool: Tool::MonteCarlo(s.clone()) })
@@ -397,7 +510,23 @@ mod tests {
         assert!(note.contains("shaft = 19.") && note.contains("before)"), "{note}");
         let ws = &p.workbook(book).unwrap().sheets[r.new_sheet.unwrap()];
         let names: Vec<&str> = ws.columns.iter().map(|c| c.long_name.as_str()).collect();
-        assert_eq!(names, ["housing", "shaft", "Output", "shaft at optimum", "Output at optimum"]);
+        assert_eq!(
+            names,
+            [
+                "housing",
+                "shaft",
+                "Output",
+                "shaft at optimum",
+                "Output at optimum",
+                "Bin center",
+                "Count",
+                "Count at optimum",
+                "LSL X",
+                "LSL",
+                "USL X",
+                "USL"
+            ]
+        );
         // A range that stops short of the best place says so.
         let short = MonteCarloSpec {
             optimize: vec![McControl { name: "shaft".into(), low: 19.8, high: 19.9 }],

@@ -22,4 +22,4 @@ setting before. CLI: `analyze monte-carlo ... --optimize NAME=LOW:HIGH [--aim T]
 
 ## Left
 
-- Spreads (tolerances) of inputs as controls, with a cost; correlated inputs; an output histogram graph.
+- Spreads (tolerances) of inputs as controls, with a cost. (Correlated inputs and the output histogram: T496.)

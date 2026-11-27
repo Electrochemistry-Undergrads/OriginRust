@@ -16,4 +16,4 @@ Statistics > Monte Carlo Simulation (Randomize Inputs)..., CLI `analyze monte-ca
 ## Left
 
 - Optimizing controllable inputs against tolerances: done (T490, centres; spreads as controls remain);
-  correlated inputs; an output histogram graph.
+  correlated inputs and an output histogram graph: done (T496).

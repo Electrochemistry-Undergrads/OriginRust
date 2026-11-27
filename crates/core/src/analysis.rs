@@ -78,6 +78,7 @@ pub use rarechart::{GLimits, RareChartKind, RareChartSpec, TDistribution};
 pub use roc::RocSpec;
 pub use sheaf_calc::Family as DistFamily;
 pub use sheaf_calc::PlotScores;
+pub use sheaf_calc::cox::PhTransform;
 /// What [`Tool::MixtureDesign`] makes (T386).
 pub use sheaf_calc::mixture::{MixtureKind, MixtureOptions as MixtureDesignSpec};
 pub use sheaf_calc::montecarlo::{

@@ -28,7 +28,9 @@
 //! **Proportional-hazards test** (T458): Grambsch and Therneau's test on the scaled Schoenfeld residuals against `g`,
 //! the rank of the failure time among the failures (ties share their mean rank). With `U = sum (g_k - mean g) r_k`
 //! over the `d` failures, `V` the covariance of `b` and `S = sum (g_k - mean g)^2`: covariate `j` has `d (V U)_j^2 /
-//! (V_jj S)` on 1 degree of freedom, all together `d U' V U / S` on `p`.
+//! (V_jj S)` on 1 degree of freedom, all together `d U' V U / S` on `p`. Other time scales `g` (T503, R's `cox.zph`
+//! transforms): `km`, one minus the left-continuous Kaplan-Meier estimate of all the cases (strata pooled, no
+//! covariates) just before the failure time; `identity`, the time itself; `log`, its logarithm.
 
 use crate::stability::invert;
 use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
@@ -67,6 +69,22 @@ pub struct Cox {
     pub schoenfeld_times: Vec<f64>,
     /// The covariance of the coefficients, the inverse information (T458).
     pub cov: Vec<Vec<f64>>,
+    /// The Kaplan-Meier estimate of all the cases just before each Schoenfeld residual's failure time (T503).
+    pub km_before: Vec<f64>,
+}
+
+/// The time scale of the proportional-hazards test (T503).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PhTransform {
+    /// The rank of the failure time among the failures (ties share their mean rank).
+    #[default]
+    Rank,
+    /// One minus the left-continuous Kaplan-Meier estimate (R's default).
+    Km,
+    /// The failure time.
+    Identity,
+    /// The logarithm of the failure time.
+    Log,
 }
 
 /// The proportional-hazards test (T458): `(chi-square, p)` per covariate and for all of them.
@@ -79,24 +97,42 @@ pub struct PhTest {
 impl Cox {
     /// Grambsch and Therneau's proportional-hazards test against the rank of the failure times (T458).
     pub fn ph_test(&self) -> PhTest {
+        self.ph_test_with(PhTransform::Rank)
+    }
+
+    /// The time scale `g` of each Schoenfeld residual under `transform` (T503).
+    pub fn ph_times(&self, transform: PhTransform) -> Vec<f64> {
+        let d = self.schoenfeld.len();
+        match transform {
+            PhTransform::Km => self.km_before.iter().map(|s| 1.0 - s).collect(),
+            PhTransform::Identity => self.schoenfeld_times.clone(),
+            PhTransform::Log => self.schoenfeld_times.iter().map(|t| t.ln()).collect(),
+            PhTransform::Rank => {
+                let mut idx: Vec<usize> = (0..d).collect();
+                idx.sort_by(|&a, &b| self.schoenfeld_times[a].total_cmp(&self.schoenfeld_times[b]));
+                let mut g = vec![0.0; d];
+                let mut k = 0;
+                while k < d {
+                    let mut end = k;
+                    while end < d && self.schoenfeld_times[idx[end]] == self.schoenfeld_times[idx[k]] {
+                        end += 1;
+                    }
+                    let rank = (k + end + 1) as f64 / 2.0;
+                    for &i in &idx[k..end] {
+                        g[i] = rank;
+                    }
+                    k = end;
+                }
+                g
+            }
+        }
+    }
+
+    /// [`Cox::ph_test`] on the time scale `transform` (T503).
+    pub fn ph_test_with(&self, transform: PhTransform) -> PhTest {
         let p = self.coefficients.len();
         let d = self.schoenfeld.len();
-        // Mean ranks of the failure times (ties share theirs).
-        let mut idx: Vec<usize> = (0..d).collect();
-        idx.sort_by(|&a, &b| self.schoenfeld_times[a].total_cmp(&self.schoenfeld_times[b]));
-        let mut g = vec![0.0; d];
-        let mut k = 0;
-        while k < d {
-            let mut end = k;
-            while end < d && self.schoenfeld_times[idx[end]] == self.schoenfeld_times[idx[k]] {
-                end += 1;
-            }
-            let rank = (k + end + 1) as f64 / 2.0;
-            for &i in &idx[k..end] {
-                g[i] = rank;
-            }
-            k = end;
-        }
+        let g = self.ph_times(transform);
         let mean = g.iter().sum::<f64>() / d as f64;
         let s: f64 = g.iter().map(|v| (v - mean).powi(2)).sum();
         let mut u = vec![0.0; p];
@@ -468,6 +504,24 @@ pub fn cox_stratified(
         means,
         martingale,
         deviance,
+        km_before: {
+            // T503: the Kaplan-Meier estimate of all the cases just before each failure's time.
+            let km = |at: f64| -> f64 {
+                let mut times: Vec<f64> =
+                    t.iter().zip(failed).filter(|(ti, f)| **f && **ti < at).map(|(ti, _)| *ti).collect();
+                times.sort_by(f64::total_cmp);
+                times.dedup();
+                times
+                    .iter()
+                    .map(|&tau| {
+                        let at_risk = t.iter().filter(|ti| **ti >= tau).count() as f64;
+                        let died = t.iter().zip(failed).filter(|(ti, f)| **f && **ti == tau).count() as f64;
+                        1.0 - died / at_risk
+                    })
+                    .product()
+            };
+            schoenfeld.iter().map(|(c, _)| km(t[*c])).collect()
+        },
         schoenfeld_times: schoenfeld.iter().map(|(c, _)| t[*c]).collect(),
         schoenfeld,
         cov,
@@ -477,6 +531,28 @@ pub fn cox_stratified(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_ph_test_takes_rs_time_transforms() {
+        // T503: failures at 1, 2, 3 and 5; the Kaplan-Meier estimate just before them is 1, 5/6, 4/6 and 4/9
+        // (6 at risk at 1, 5 at 2, 3 at 3, 1 at 5).
+        let x = vec![vec![0.5], vec![1.2], vec![0.3], vec![2.0], vec![0.7], vec![1.5]];
+        let t = [1.0, 2.0, 2.0, 3.0, 4.0, 5.0];
+        let failed = [true, true, false, true, false, true];
+        let m = cox(&x, &t, &failed, 0.95).unwrap();
+        assert_eq!(m.schoenfeld_times, [1.0, 2.0, 3.0, 5.0]);
+        let km = m.ph_times(PhTransform::Km);
+        for (g, want) in km.iter().zip([0.0, 1.0 / 6.0, 1.0 / 3.0, 5.0 / 9.0]) {
+            assert!((g - want).abs() < 1e-12, "{km:?}");
+        }
+        assert_eq!(m.ph_times(PhTransform::Identity), [1.0, 2.0, 3.0, 5.0]);
+        assert_eq!(m.ph_times(PhTransform::Rank), [1.0, 2.0, 3.0, 4.0]);
+        assert!((m.ph_times(PhTransform::Log)[3] - 5f64.ln()).abs() < 1e-15);
+        // Rank stays the default; the scales give their own statistics.
+        assert_eq!(m.ph_test_with(PhTransform::Rank), m.ph_test());
+        let (a, b) = (m.ph_test_with(PhTransform::Km).global, m.ph_test_with(PhTransform::Identity).global);
+        assert!(a.0.is_finite() && b.0.is_finite() && a.0 != b.0, "{a:?} {b:?}");
+    }
 
     #[test]
     fn a_binary_covariate_without_ties_matches_the_hand_likelihood() {

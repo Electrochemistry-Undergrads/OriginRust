@@ -1001,6 +1001,20 @@ impl MultiOptions {
                     ui.radio_value(&mut s.model, DecomposeModel::Additive, "Additive");
                     ui.radio_value(&mut s.model, DecomposeModel::Multiplicative, "Multiplicative");
                 });
+                // T498: STL (loess) instead of moving averages.
+                ui.horizontal(|ui| {
+                    let mut on = s.stl.is_some();
+                    if ui.checkbox(&mut on, "STL (loess), seasonal smoother").changed() {
+                        s.stl = on.then(sheaf_core::analysis::StlOptions::default);
+                    }
+                    if let Some(o) = &mut s.stl {
+                        ui.add(egui::DragValue::new(&mut o.seasonal).range(3..=999));
+                        if o.seasonal.is_multiple_of(2) {
+                            o.seasonal += 1;
+                        }
+                        ui.checkbox(&mut o.robust, "Robust");
+                    }
+                });
                 ui.checkbox(&mut s.graph, "Data with trend, seasonal and residual graphs");
             }
             AnalysisKind::Acf => {

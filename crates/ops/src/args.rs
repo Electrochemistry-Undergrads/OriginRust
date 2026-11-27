@@ -3737,6 +3737,15 @@ pub enum AnalyzeTool {
         /// additive or multiplicative.
         #[arg(long, default_value = "additive")]
         model: String,
+        /// Decompose by STL (loess) instead of moving averages (additive).
+        #[arg(long)]
+        stl: bool,
+        /// The STL seasonal smoother's length (odd, at least 3).
+        #[arg(long, default_value_t = 7)]
+        stl_seasonal: usize,
+        /// STL robustness passes against outliers.
+        #[arg(long)]
+        robust: bool,
         /// Do not make the graphs.
         #[arg(long)]
         no_graph: bool,

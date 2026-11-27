@@ -63,7 +63,7 @@ pub use calc::changepoint::{ChangeKind, Penalty as ChangePenalty};
 pub use capability::{CapModel, CapabilitySpec};
 pub use changepoint::ChangePointSpec;
 pub use curves::{AverageSpec, IntersectSpec};
-pub use decompose::{DecomposeModel, DecomposeSpec};
+pub use decompose::{DecomposeModel, DecomposeSpec, StlOptions};
 pub use dist::{DistFitSpec, ProbPlotKind, ProbPlotSpec};
 pub use doe::{FactorialDesignSpec, FactorialEffectsSpec, SplitPlotDesignSpec, SplitPlotEffectsSpec};
 pub use expsmooth::{Damping, ExpSmoothSpec, SmoothModel};

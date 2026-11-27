@@ -9,7 +9,22 @@ use super::statistics::num;
 use super::*;
 use crate::graph::{PlotKind, ScaleKind};
 pub use calc::decompose::DecomposeModel;
-use calc::decompose::decompose;
+use calc::decompose::{Decomposition, decompose};
+use calc::stl::{StlSpec, stl};
+
+/// STL instead of the classical moving averages (T498): the seasonal smoother's length (odd, at least 3) and the
+/// robust passes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StlOptions {
+    pub seasonal: usize,
+    pub robust: bool,
+}
+
+impl Default for StlOptions {
+    fn default() -> Self {
+        StlOptions { seasonal: 7, robust: false }
+    }
+}
 
 /// What [`Tool::Decompose`] does.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -19,11 +34,13 @@ pub struct DecomposeSpec {
     pub model: DecomposeModel,
     /// Make the graphs: data with trend, seasonal and residual.
     pub graph: bool,
+    /// Decompose by STL (T498, additive only) instead of the classical method.
+    pub stl: Option<StlOptions>,
 }
 
 impl Default for DecomposeSpec {
     fn default() -> Self {
-        DecomposeSpec { period: 12, model: DecomposeModel::Additive, graph: true }
+        DecomposeSpec { period: 12, model: DecomposeModel::Additive, graph: true, stl: None }
     }
 }
 
@@ -46,9 +63,40 @@ pub(super) fn run(spec: &DecomposeSpec, inputs: &[Input<'_>]) -> Result<Output, 
     let mut notes = Vec::new();
     let mut on_sheet = Vec::new();
     let mut graphs = Vec::new();
+    if spec.stl.is_some() && spec.model == DecomposeModel::Multiplicative {
+        return Err(AnalysisError::BadOption(
+            "STL decomposes additively; decompose the logarithm of the series for a multiplicative pattern".into(),
+        ));
+    }
     for input in inputs {
-        let d = decompose(input.ys(), spec.period, spec.model)
-            .map_err(|e| AnalysisError::BadOption(format!("{}: {e}", input.label)))?;
+        let bad = |e: String| AnalysisError::BadOption(format!("{}: {e}", input.label));
+        // T498: STL gives seasonal values that change from cycle to cycle; its indices are their means by position.
+        let (d, weights, method) = match spec.stl {
+            Some(o) => {
+                let s = stl(input.ys(), StlSpec { period: spec.period, seasonal: o.seasonal, robust: o.robust })
+                    .map_err(|e| bad(e.to_string()))?;
+                let indices = (0..spec.period)
+                    .map(|k| {
+                        let v: Vec<f64> = s.seasonal.iter().skip(k).step_by(spec.period).copied().collect();
+                        v.iter().sum::<f64>() / v.len() as f64
+                    })
+                    .collect();
+                let method = format!(
+                    "STL (seasonal smoother {}, trend {}, low-pass {}{})",
+                    o.seasonal,
+                    s.trend_length,
+                    s.low_pass_length,
+                    if o.robust { ", robust" } else { "" }
+                );
+                let weights = o.robust.then_some(s.weights);
+                (Decomposition { trend: s.trend, seasonal: s.seasonal, residual: s.residual, indices }, weights, method)
+            }
+            None => (
+                decompose(input.ys(), spec.period, spec.model).map_err(|e| bad(e.to_string()))?,
+                None,
+                format!("{model} decomposition"),
+            ),
+        };
         for (k, v) in d.indices.iter().enumerate() {
             let unit = if spec.model == DecomposeModel::Additive { input.units.clone() } else { String::new() };
             table.push_row(
@@ -62,14 +110,15 @@ pub(super) fn run(spec: &DecomposeSpec, inputs: &[Input<'_>]) -> Result<Output, 
         let rms = (resid.iter().map(|v| (v - centre).powi(2)).sum::<f64>() / resid.len() as f64).sqrt();
         let (lo, hi) = d.indices.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| (a.min(*v), b.max(*v)));
         notes.push(format!(
-            "{}: {model} decomposition with period {}; seasonal indices from {} to {}; residual RMS about {} is {} ({} points without a trend at the ends).",
+            "{}: {method} with period {}; seasonal indices from {} to {}{}; residual RMS about {} is {} ({} points without a trend at the ends).",
             input.label,
             spec.period,
             num(lo),
             num(hi),
+            if spec.stl.is_some() { " (mean seasonal value by position)" } else { "" },
             num(centre),
             num(rms),
-            2 * (spec.period / 2)
+            if spec.stl.is_some() { 0 } else { 2 * (spec.period / 2) }
         ));
         let comment = format!("Decomposition of {}", input.name);
         let x = on_sheet.len();
@@ -78,6 +127,9 @@ pub(super) fn run(spec: &DecomposeSpec, inputs: &[Input<'_>]) -> Result<Output, 
         on_sheet.push(column_of("Trend", &comment, Designation::Y, d.trend));
         on_sheet.push(column_of("Seasonal", &comment, Designation::Y, d.seasonal));
         on_sheet.push(column_of("Residual", &comment, Designation::Y, d.residual));
+        if let Some(w) = weights {
+            on_sheet.push(column_of("Robustness weight", &comment, Designation::Y, w));
+        }
         if spec.graph {
             let graph = |plots: Vec<GraphPlot>, y_title: &str| XyGraph {
                 plots,
@@ -150,5 +202,22 @@ mod tests {
         let cols = super::super::dist::plot_columns(&p, out.more_graphs[1]);
         assert_eq!(cols[0].1, "Residual");
         assert!(p.analyze(&request(vec![yc], DecomposeSpec { period: 9, ..Default::default() })).is_err());
+        // T498: STL, its columns the same as calc's, a weight column when robust; multiplicative refused.
+        let stl_spec = DecomposeSpec {
+            period: 4,
+            stl: Some(StlOptions { seasonal: 7, robust: true }),
+            graph: false,
+            ..Default::default()
+        };
+        let out = p.analyze(&request(vec![yc], stl_spec)).unwrap();
+        let ws = &p.workbook(book).unwrap().sheets[out.new_sheet.unwrap()];
+        let names: Vec<&str> = ws.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names[names.len() - 4..], ["Trend", "Seasonal", "Residual", "Robustness weight"]);
+        let direct = calc::stl::stl(p.numeric(yc).unwrap(), StlSpec { period: 4, seasonal: 7, robust: true }).unwrap();
+        let trend = ws.columns.iter().find(|c| c.long_name == "Trend").unwrap().numeric().unwrap().to_vec();
+        assert_eq!(trend, direct.trend);
+        assert!(out.notes[0].contains("STL (seasonal smoother 7, trend 9, low-pass 5, robust)"), "{:?}", out.notes);
+        let mult = DecomposeSpec { model: DecomposeModel::Multiplicative, ..stl_spec };
+        assert!(p.analyze(&request(vec![yc], mult)).unwrap_err().to_string().contains("additively"));
     }
 }

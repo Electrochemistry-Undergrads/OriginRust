@@ -8,7 +8,8 @@ write the indices and the three parts and draw three graphs. Not measured in Ori
 
 ## Left
 
-- STL (loess) decomposition, trend extrapolation to the ends, stationarity tests (ADF, KPSS), ARIMA.
+- STL (loess) decomposition: done (T498); trend extrapolation to the ends of the classical method remains
+  (stationarity tests: T372, T497; ARIMA: T376, T495).
 
 ## Tests
 

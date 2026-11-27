@@ -2076,7 +2076,7 @@ no Origin numbers). Statistics > Acceptance Sampling... (a window that needs no 
 Origin's Time Series Analysis app (2024b Pro) is not part of Origin 2016, so this is Sheaf's own, with the classical
 method (statsmodels' `seasonal_decompose` without trend extrapolation). Statistics > Seasonal Decomposition...
 (`Tool::Decompose`, `sheaf analyze decompose --y COL[,COL..] [--period 12] [--model additive|multiplicative]
-[--no-graph]`): every chosen column is a series of its own, in row order, complete in the chosen rows (a missing value
+[--stl [--stl-seasonal 7] [--robust]] [--no-graph]`): every chosen column is a series of its own, in row order, complete in the chosen rows (a missing value
 is refused), with at least two full periods; the multiplicative model needs values above 0. With period `m` the trend
 is the centred moving average of `m` points (odd `m`) or of `m + 1` points with half weights at the ends (even `m`),
 empty for the first and last `floor(m / 2)` rows. The detrended values `y - trend` (or `y / trend`) are averaged per
@@ -2086,7 +2086,26 @@ The residual is `y - trend - seasonal` (or `y / (trend seasonal)`).
 The result sheet `DecomposeN` has one row per series and position (Position, Seasonal index) and, per series, the X,
 the data, Trend, Seasonal and Residual columns; three new graphs per series draw the data with the trend, the seasonal
 part and the residuals. Checked against numpy (`tools/decompose-ref.py`, `crates/calc/tests/decompose_reference.rs`)
-to 1e-10. STL (loess) decomposition, trend extrapolation to the ends and stationarity tests are not built.
+to 1e-10.
+
+**STL** (T498; the window's "STL (loess), seasonal smoother" with Robust, `--stl [--stl-seasonal ns] [--robust]`;
+`sheaf_calc::stl`): Cleveland, Cleveland, McRae and Terpenning's (1990) seasonal-trend decomposition by loess, as
+statsmodels' `STL` runs their Fortran `stl`, all smoothers of degree 1 at every point. The seasonal smoother's length
+`ns` is odd and at least 3 (7 by default); the trend's `nt` is the smallest odd integer at least `1.5 m / (1 - 1.5 /
+ns)` and the low-pass filter's `nl` the smallest odd integer above `m`. Each inner pass (5; 2 when robust) smooths
+every cycle-subseries of the detrended series by loess of length `ns`, extends it by one estimated point at each end,
+takes moving averages of lengths `m`, `m` and 3 and a loess of length `nl` of the result as the low-pass part, and
+keeps the difference as the seasonal part; the trend is the loess of length `nt` of `y - seasonal`. A loess estimate
+weights the points of its window by the tricube of their distance over the distance to the window's farther end
+(widened by `floor((len - n) / 2)` for a window longer than the series) and fits a line unless the points are too
+close together. Robust: 15 outer passes, each giving the next the weights `(1 - (r / 6 MAD)^2)^2` of the residuals
+(1 below 0.001 of `6 MAD`, 0 above 0.999 of it), which multiply the loess weights. The seasonal part changes from
+cycle to cycle; the table's Seasonal index is its mean at each position, every row has a trend, the residual is `y -
+trend - seasonal`, and a robust run adds a Robustness weight column. STL is additive: the multiplicative model is
+refused with it (decompose the logarithm). Checked against statsmodels 0.15 (quarterly and monthly series, the monthly
+one with two outliers robustly, seasonal and trend at five points each to 1e-9: `stl_matches_statsmodels`,
+`re-workspace/scratch/t480/stl_ref.py`, local only). Not built: smoother degrees other than 1, jumps (every point is
+fitted), trend extrapolation of the classical method.
 
 ## 41 Stationarity tests, ADF and KPSS (T372, Origin 2024b Time Series Analysis app; not measured)
 

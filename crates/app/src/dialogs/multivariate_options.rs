@@ -165,11 +165,16 @@ impl MultiOptions {
                     spec.percentiles =
                         numbers(&self.life_reg_percentiles, "percentiles")?.iter().map(|p| p / 100.0).collect();
                 }
-                spec.at = if self.life_reg_at.trim().is_empty() {
-                    None
-                } else {
-                    Some(numbers(&self.life_reg_at, "covariate values")?)
-                };
+                // T504: several settings separated by ';' (the first one replaces the means).
+                let mut sets = self
+                    .life_reg_at
+                    .split(';')
+                    .filter(|t| !t.trim().is_empty())
+                    .map(|t| numbers(t, "covariate values"))
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into_iter();
+                spec.at = sets.next();
+                spec.also_at = sets.collect();
                 Ok(Tool::LifeRegression(spec))
             }
             AnalysisKind::LifeDist => {
@@ -496,7 +501,9 @@ impl MultiOptions {
                     );
                     ui.label("at covariates");
                     ui.add(
-                        egui::TextEdit::singleline(&mut self.life_reg_at).hint_text("their means").desired_width(100.0),
+                        egui::TextEdit::singleline(&mut self.life_reg_at)
+                            .hint_text("their means; or 1 2; 3 4")
+                            .desired_width(140.0),
                     );
                 });
                 ui.horizontal(|ui| {

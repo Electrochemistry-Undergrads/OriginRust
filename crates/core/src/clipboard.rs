@@ -335,7 +335,8 @@ pub fn transpose_table(table: Vec<Vec<String>>) -> Vec<Vec<String>> {
 }
 
 /// Splits pasted text into rows and fields. Tabs outside quoted fields take precedence over
-/// commas outside quoted fields; otherwise every line is one field. Double-quoted fields may
+/// commas outside quoted fields (and, T499, outside the parentheses of a field that starts with `=`, a pasted
+/// formula's arguments); otherwise every line is one field. Double-quoted fields may
 /// contain separators and line breaks; doubled quotes stand for one. Unclosed or non-field
 /// quotes stay literal. One line break at the very end is ignored.
 pub fn parse_table(text: &str) -> Vec<Vec<String>> {
@@ -352,12 +353,26 @@ pub fn parse_table(text: &str) -> Vec<Vec<String>> {
     rows
 }
 
+/// The depth of parentheses inside a field that starts with `=` (a pasted formula, T499), after `ch`: commas inside
+/// its parentheses (function arguments) separate nothing. `None` outside formula fields.
+fn formula_depth(depth: Option<i32>, field_start: bool, ch: char) -> Option<i32> {
+    match (depth, ch) {
+        (_, '=') if field_start => Some(0),
+        (Some(d), '(') => Some(d + 1),
+        (Some(d), ')') => Some((d - 1).max(0)),
+        (d, _) => d,
+    }
+}
+
 fn table_delimiter(text: &str) -> char {
     let mut chars = text.chars().peekable();
     let mut field_start = true;
     let mut comma = false;
+    let mut depth: Option<i32> = None;
     while let Some(ch) = chars.next() {
+        depth = formula_depth(depth, field_start, ch);
         match ch {
+            ',' if depth.is_some_and(|d| d > 0) => field_start = false,
             '"' if field_start => {
                 // Quotes after either candidate separator protect their contents, including
                 // CSV fields after the first one that contain a tab.
@@ -368,8 +383,12 @@ fn table_delimiter(text: &str) -> char {
             ',' => {
                 comma = true;
                 field_start = true;
+                depth = None;
             }
-            '\r' | '\n' => field_start = true,
+            '\r' | '\n' => {
+                field_start = true;
+                depth = None;
+            }
             _ => field_start = false,
         }
     }
@@ -409,8 +428,14 @@ fn parse_fields(text: &str, delimiter: char) -> Vec<Vec<String>> {
     let mut field = String::new();
     let mut chars = text.chars().peekable();
     let mut field_start = true;
+    let mut depth: Option<i32> = None;
     while let Some(ch) = chars.next() {
+        depth = formula_depth(depth, field_start, ch);
         match ch {
+            c if c == delimiter && depth.is_some_and(|d| d > 0) => {
+                field.push(c);
+                field_start = false;
+            }
             '"' if field_start => {
                 if let Some(value) = quoted_field(&mut chars) {
                     field.push_str(&value);
@@ -424,10 +449,12 @@ fn parse_fields(text: &str, delimiter: char) -> Vec<Vec<String>> {
                 row.push(std::mem::take(&mut field));
                 rows.push(std::mem::take(&mut row));
                 field_start = true;
+                depth = None;
             }
             c if c == delimiter => {
                 row.push(std::mem::take(&mut field));
                 field_start = true;
+                depth = None;
             }
             c => {
                 field.push(c);
@@ -715,6 +742,14 @@ mod tests {
         // Clearing the last values shortens the column.
         ws.clear_cells(&[0], 3..4);
         assert_eq!(ws.columns[0].len(), 1);
+    }
+
+    #[test]
+    fn a_pasted_formula_keeps_the_commas_of_its_arguments() {
+        // T499: commas inside the parentheses of a field that starts with = separate nothing.
+        assert_eq!(parse_table("=IF(A1>1, 2, 3)"), vec![vec!["=IF(A1>1, 2, 3)"]]);
+        assert_eq!(parse_table("=SUM(A1,B1),3\n4,5"), vec![vec!["=SUM(A1,B1)", "3"], vec!["4", "5"]]);
+        assert_eq!(parse_table("1,(2,3)"), vec![vec!["1", "(2", "3)"]], "plain CSV splits as before");
     }
 
     #[test]

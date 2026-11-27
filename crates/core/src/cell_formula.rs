@@ -322,8 +322,22 @@ pub(crate) fn move_references(formula: &str, edit: &RowEdit, moved: &dyn Fn(Opti
     out
 }
 
-/// A spreadsheet formula with the function names that differ in Sheaf's cell formulas replaced (T492):
-/// `AVERAGE(` is `mean(`, `PI()` is `pi`; other names are the same in both (any case), text in quotes stays.
+/// Spreadsheet function names that differ in Sheaf's cell formulas (T499; `AVERAGE` T492), any case. `INT` and
+/// `MOD` are left alone: Sheaf has functions of those names (`int` truncates, `mod` keeps the dividend's sign).
+const SPREADSHEET_NAMES: [(&str, &str); 8] = [
+    ("average", "mean"),
+    ("stdev", "sd"),
+    ("stdev.s", "sd"),
+    ("stdevp", "stddevp"),
+    ("stdev.p", "stddevp"),
+    ("var.s", "var"),
+    ("power", "pow"),
+    ("trunc", "int"),
+];
+
+/// A spreadsheet formula in the spelling of Sheaf's cell formulas (T492, T499): the function names of
+/// [`SPREADSHEET_NAMES`] replaced, `PI()` written `pi`, the comparisons `=` and `<>` written `==` and `!=`; other
+/// names are the same in both (any case: IF, MEDIAN, VAR, SQRT ...), text in quotes stays.
 pub fn spreadsheet_names(formula: &str) -> String {
     let chars: Vec<char> = formula.chars().collect();
     let word = |c: char| c.is_alphanumeric() || c == '_';
@@ -335,10 +349,36 @@ pub fn spreadsheet_names(formula: &str) -> String {
         if c == '"' {
             quoted = !quoted;
         }
+        if !quoted && c == '<' && chars.get(i + 1) == Some(&'>') {
+            out.push_str("!=");
+            i += 2;
+            continue;
+        }
+        // A lone `=` (not part of `==`, `<=`, `>=`, `!=`) is a comparison.
+        if !quoted
+            && c == '='
+            && chars.get(i + 1) != Some(&'=')
+            && (i == 0 || !matches!(chars[i - 1], '<' | '>' | '!' | '='))
+        {
+            out.push_str("==");
+            i += 1;
+            continue;
+        }
         if !quoted && c.is_alphabetic() && (i == 0 || !word(chars[i - 1])) {
             let mut k = i;
             while k < chars.len() && word(chars[k]) {
                 k += 1;
+            }
+            // `STDEV.S`: a dotted spreadsheet name.
+            if chars.get(k) == Some(&'.') && chars.get(k + 1).is_some_and(|c| c.is_alphabetic()) {
+                let mut e = k + 1;
+                while e < chars.len() && word(chars[e]) {
+                    e += 1;
+                }
+                let dotted: String = chars[i..e].iter().collect();
+                if SPREADSHEET_NAMES.iter().any(|(n, _)| dotted.eq_ignore_ascii_case(n)) {
+                    k = e;
+                }
             }
             let name: String = chars[i..k].iter().collect();
             let mut after = k;
@@ -346,8 +386,8 @@ pub fn spreadsheet_names(formula: &str) -> String {
                 after += 1;
             }
             if chars.get(after) == Some(&'(') {
-                if name.eq_ignore_ascii_case("average") {
-                    out.push_str("mean");
+                if let Some((_, sheaf)) = SPREADSHEET_NAMES.iter().find(|(n, _)| name.eq_ignore_ascii_case(n)) {
+                    out.push_str(sheaf);
                     i = k;
                     continue;
                 }
@@ -661,6 +701,13 @@ mod tests {
     #[test]
     fn pasted_spreadsheet_formulas_become_cell_formulas() {
         assert_eq!(spreadsheet_names("AVERAGE(A1:A3) + Pi() * average (B1:B2)"), "mean(A1:A3) + pi * mean (B1:B2)");
+        // T499: comparisons and more names; Sheaf's own spelling stays.
+        assert_eq!(spreadsheet_names("IF(A1=2, STDEV.S(B1:B3), A1<>3)"), "IF(A1==2, sd(B1:B3), A1!=3)");
+        assert_eq!(
+            spreadsheet_names("A1==2 + (A1<=1) + (A1>=1) + (A1!=1) + POWER(A1, 2)"),
+            "A1==2 + (A1<=1) + (A1>=1) + (A1!=1) + pow(A1, 2)"
+        );
+        assert_eq!(spreadsheet_names("\"a=b\" + MOD(A1, 2)"), "\"a=b\" + MOD(A1, 2)", "quotes and Sheaf's mod stay");
         assert_eq!(
             spreadsheet_names("\"AVERAGE(x)\" + MYAVERAGE(A1) + SQRT(A1)"),
             "\"AVERAGE(x)\" + MYAVERAGE(A1) + SQRT(A1)"
@@ -682,6 +729,10 @@ mod tests {
         assert_eq!(p.cell_formula(c, 0), None);
         assert_eq!(texts(&p, c)[0], "7");
         assert_eq!(p.cell_formula(c, 1), None, "not a formula");
+        // T499: IF with an Excel comparison, and a sample standard deviation.
+        p.paste_text(b, 0, 1, 0, "=IF(A1=1, STDEV(A1:A3), -1)").unwrap();
+        assert_eq!(p.cell_formula(c, 0), Some("IF(A1==1, sd(A1:A3), -1)"));
+        assert_eq!(texts(&p, c)[0], "1");
         // A pasted formula reads the cells pasted with it.
         p.paste_text(b, 0, 0, 0, "4\t=A1+1").unwrap();
         assert_eq!(texts(&p, c)[0], "5");

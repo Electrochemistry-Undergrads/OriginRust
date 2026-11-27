@@ -10,7 +10,8 @@ project, and a one-row range (`A1:A1`) stays a range.
 
 ## Left
 
-- Pasted spreadsheet formulas: done (T492); other Excel functions (IF, VLOOKUP, COUNT ...), references to other sheets, text
+- Pasted spreadsheet formulas: done (T492); IF, comparisons and the statistics functions: done (T499); other
+  Excel functions (COUNT, VLOOKUP, AND ...), the rest: (IF, VLOOKUP, COUNT ...), references to other sheets, text
   formulas.
 
 ## Tests

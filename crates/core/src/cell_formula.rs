@@ -322,6 +322,55 @@ pub(crate) fn move_references(formula: &str, edit: &RowEdit, moved: &dyn Fn(Opti
     out
 }
 
+/// A spreadsheet formula with the function names that differ in Sheaf's cell formulas replaced (T492):
+/// `AVERAGE(` is `mean(`, `PI()` is `pi`; other names are the same in both (any case), text in quotes stays.
+pub fn spreadsheet_names(formula: &str) -> String {
+    let chars: Vec<char> = formula.chars().collect();
+    let word = |c: char| c.is_alphanumeric() || c == '_';
+    let mut out = String::new();
+    let mut i = 0;
+    let mut quoted = false;
+    while i < chars.len() {
+        let c = chars[i];
+        if c == '"' {
+            quoted = !quoted;
+        }
+        if !quoted && c.is_alphabetic() && (i == 0 || !word(chars[i - 1])) {
+            let mut k = i;
+            while k < chars.len() && word(chars[k]) {
+                k += 1;
+            }
+            let name: String = chars[i..k].iter().collect();
+            let mut after = k;
+            while chars.get(after).is_some_and(|c| c.is_whitespace()) {
+                after += 1;
+            }
+            if chars.get(after) == Some(&'(') {
+                if name.eq_ignore_ascii_case("average") {
+                    out.push_str("mean");
+                    i = k;
+                    continue;
+                }
+                let mut close = after + 1;
+                while chars.get(close).is_some_and(|c| c.is_whitespace()) {
+                    close += 1;
+                }
+                if name.eq_ignore_ascii_case("pi") && chars.get(close) == Some(&')') {
+                    out.push_str("pi");
+                    i = close + 1;
+                    continue;
+                }
+            }
+            out.extend(&chars[i..k]);
+            i = k;
+            continue;
+        }
+        out.push(c);
+        i += 1;
+    }
+    out
+}
+
 /// `row` or `first:last`.
 fn rows(first: usize, last: usize) -> String {
     if first == last { first.to_string() } else { format!("{first}:{last}") }
@@ -451,6 +500,26 @@ impl Project {
         sheet.cell_formulas.extend(filled);
         self.refresh_cell_formulas();
         Ok(n)
+    }
+
+    /// Pasted spreadsheet formulas (T492): each `(column, row, formula, text)` whose formula (without `=`) can be
+    /// read, after [`spreadsheet_names`], becomes that cell's formula; the others are written as their pasted `text`,
+    /// as typed. Every cell formula is then worked out once. Returns how many became formulas.
+    pub fn paste_cell_formulas(&mut self, cells: Vec<(ColumnId, usize, String, String)>) -> usize {
+        let mut n = 0;
+        for (column, row, formula, text) in cells {
+            let formula = spreadsheet_names(&formula);
+            let readable = self.translated(column, &formula).is_some_and(|src| sheaf_expr::Expr::parse(&src).is_ok());
+            if readable && let Some(sheet) = self.sheet_of_mut(column) {
+                sheet.cell_formulas.retain(|f| !(f.column == column && f.row == row));
+                sheet.cell_formulas.push(CellFormula { column, row, formula });
+                n += 1;
+            } else if let Some(c) = self.column_mut(column) {
+                c.set_cell_text(row, &text);
+            }
+        }
+        self.refresh_cell_formulas();
+        n
     }
 
     /// Drops the formula of one cell (typing a value into it); its value stays.
@@ -587,6 +656,36 @@ mod tests {
         assert!(p.drop_cell_formula(c, 0));
         assert!(p.cell_formula(c, 0).is_none());
         assert!(p.set_cell_formula(c, 2, "A1 +* 2").is_err(), "not a formula");
+    }
+
+    #[test]
+    fn pasted_spreadsheet_formulas_become_cell_formulas() {
+        assert_eq!(spreadsheet_names("AVERAGE(A1:A3) + Pi() * average (B1:B2)"), "mean(A1:A3) + pi * mean (B1:B2)");
+        assert_eq!(
+            spreadsheet_names("\"AVERAGE(x)\" + MYAVERAGE(A1) + SQRT(A1)"),
+            "\"AVERAGE(x)\" + MYAVERAGE(A1) + SQRT(A1)"
+        );
+        let mut p = Project::new();
+        let b = p.add_workbook("");
+        let a = p.add_column(b, 0, Designation::X, ColumnData::numeric(vec![1.0, 2.0, 3.0])).unwrap();
+        let c = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![9.0; 3])).unwrap();
+        p.set_cell_formula(c, 2, "A1*1000").unwrap();
+        // Two rows into B: a formula, a number, Excel names, a formula Sheaf cannot read (stays as typed text).
+        let r = p.paste_text(b, 0, 1, 0, "=A1*10\n5\n=AVERAGE(A1:A3)+PI()-pi").unwrap();
+        assert_eq!(r.formulas, 2);
+        assert_eq!(p.cell_formula(c, 0), Some("A1*10"));
+        assert_eq!(p.cell_formula(c, 1), None);
+        assert_eq!(p.cell_formula(c, 2), Some("mean(A1:A3)+pi-pi"), "the old formula of B3 was replaced");
+        assert_eq!(texts(&p, c), ["10", "5", "2"]);
+        // A pasted value over a formula cell drops the formula; an unreadable formula is pasted as text.
+        p.paste_text(b, 0, 1, 0, "7\n=A1 +* 2").unwrap();
+        assert_eq!(p.cell_formula(c, 0), None);
+        assert_eq!(texts(&p, c)[0], "7");
+        assert_eq!(p.cell_formula(c, 1), None, "not a formula");
+        // A pasted formula reads the cells pasted with it.
+        p.paste_text(b, 0, 0, 0, "4\t=A1+1").unwrap();
+        assert_eq!(texts(&p, c)[0], "5");
+        assert_eq!(p.column(a).unwrap().numeric().unwrap()[0], 4.0);
     }
 
     #[test]

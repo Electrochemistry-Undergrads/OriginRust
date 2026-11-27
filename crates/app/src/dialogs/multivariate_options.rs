@@ -379,8 +379,17 @@ impl MultiOptions {
                 let s = &mut self.quantreg;
                 ui.checkbox(&mut s.intercept, "Fit an intercept");
                 ui.checkbox(&mut s.graph, "Graph of the data and the fitted lines (one independent column)");
+                // T494: how the standard errors are estimated.
+                ui.horizontal(|ui| {
+                    use sheaf_core::analysis::QuantRegSe;
+                    ui.label("Standard errors");
+                    ui.radio_value(&mut s.se, Some(QuantRegSe::Robust), "Robust");
+                    ui.radio_value(&mut s.se, Some(QuantRegSe::Iid), "iid");
+                    ui.radio_value(&mut s.se, None, "None");
+                });
                 ui.weak(
-                    "The exact solution of each quantile (the sum of check losses is as small as it can be); no standard errors.",
+                    "The exact solution of each quantile (the sum of check losses is as small as it can be), with kernel \
+                     standard errors as statsmodels and Stata compute them.",
                 );
             }
             AnalysisKind::Qpcr => {

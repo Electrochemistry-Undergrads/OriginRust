@@ -9,7 +9,8 @@ so nothing is measured; the result sheet and graph are Sheaf's own.
 
 ## Left
 
-- Standard errors and confidence limits of the coefficients (bootstrap or rank inversion), tests between quantiles.
+- Standard errors of the coefficients: done (T494, kernel robust or iid, with Prob>|t|); confidence limits
+  (rank inversion), bootstrap errors, tests between quantiles remain.
 - Change-point analysis (the other half of the 2019b app pair).
 
 ## Tests

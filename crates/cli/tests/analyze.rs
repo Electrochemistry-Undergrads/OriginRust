@@ -1455,6 +1455,11 @@ fn quantile_regression_runs_from_the_command_line() {
     let (ok, out, err) = sheaf(&["analyze", "quantreg", file, "--y", "x,y", "--quantiles", "0.25,0.5"]);
     assert!(ok, "{err}");
     assert!(out.contains("Pseudo R-square") && out.contains("Quantile 0.25") && out.contains("QuantReg1"), "{out}");
+    assert!(out.contains("x SE") && out.contains("Standard errors are robust"), "T494: {out}");
+    let (ok, out, err) = sheaf(&["analyze", "quantreg", file, "--y", "x,y", "--se", "iid", "--no-graph"]);
+    assert!(ok && out.contains("identically distributed"), "{err} {out}");
+    let (ok, out, err) = sheaf(&["analyze", "quantreg", file, "--y", "x,y", "--se", "none", "--no-graph"]);
+    assert!(ok && !out.contains("x SE"), "{err} {out}");
     let (ok, out, err) = sheaf(&["analyze", "quantreg", file, "--y", "x,y", "--no-intercept", "--no-graph"]);
     assert!(ok && !out.contains("Intercept"), "{err} {out}");
     let (ok, _, err) = sheaf(&["analyze", "quantreg", file, "--y", "x,y", "--quantiles", "1.2"]);

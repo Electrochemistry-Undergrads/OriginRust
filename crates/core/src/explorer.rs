@@ -26,6 +26,9 @@ pub struct SeriesExplorer {
     /// may be shorter.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub length: Option<f64>,
+    /// The detail layer's Y axis fits the data of the interval shown (T488) instead of keeping the whole range.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub rescale_y: bool,
 }
 
 impl SeriesExplorer {
@@ -75,7 +78,7 @@ impl Project {
             g.layers[0].x_axis.min = Some(lo);
             g.layers[0].x_axis.max = Some(hi);
         }
-        g.explorer = Some(SeriesExplorer { intervals: DEFAULT_INTERVALS, current: 0, length: None });
+        g.explorer = Some(SeriesExplorer { intervals: DEFAULT_INTERVALS, current: 0, length: None, rescale_y: false });
         g.place_explorer_band();
         Ok(id)
     }
@@ -125,6 +128,14 @@ impl Project {
         Ok(())
     }
 
+    /// Turns the detail layer's per-interval Y range (T488) on or off for graph `graph`'s explorer.
+    pub fn set_explorer_rescale_y(&mut self, graph: WindowId, on: bool) -> Result<(), ProjectError> {
+        let g = self.graph_mut(graph).ok_or(ProjectError::NoSuchWindow(graph))?;
+        let e = g.explorer.as_mut().ok_or(ProjectError::NoExplorer)?;
+        e.rescale_y = on;
+        Ok(())
+    }
+
     /// Splits graph `graph`'s series into `intervals` (2 to 1000) and shows the interval that holds the start
     /// of the one shown before.
     pub fn set_explorer_intervals(&mut self, graph: WindowId, intervals: usize) -> Result<(), ProjectError> {
@@ -157,7 +168,7 @@ mod tests {
         let graph = p.graph(g).unwrap();
         assert_eq!(graph.layers.len(), 2);
         assert_eq!((graph.layers[0].x_axis.min, graph.layers[0].x_axis.max), (Some(0.0), Some(100.0)));
-        assert_eq!(graph.explorer, Some(SeriesExplorer { intervals: 10, current: 0, length: None }));
+        assert_eq!(graph.explorer, Some(SeriesExplorer { intervals: 10, current: 0, length: None, rescale_y: false }));
         let band = |p: &Project| {
             let s = &p.graph(g).unwrap().layers[0].shapes[0];
             (s.x1, s.x2, s.y1, s.y2)
@@ -170,11 +181,17 @@ mod tests {
         assert!(p.explore_interval(g, 10).is_err());
         // Four intervals: the start of interval 4 of 10 (30 %) lies in interval 2 of 4.
         p.set_explorer_intervals(g, 4).unwrap();
-        assert_eq!(p.graph(g).unwrap().explorer, Some(SeriesExplorer { intervals: 4, current: 1, length: None }));
+        assert_eq!(
+            p.graph(g).unwrap().explorer,
+            Some(SeriesExplorer { intervals: 4, current: 1, length: None, rescale_y: false })
+        );
         assert_eq!(band(&p), (0.25, 0.5, 0.0, 1.0));
-        // It saves with the project.
+        // It saves with the project, Rescale Y (T488) too.
+        p.set_explorer_rescale_y(g, true).unwrap();
         let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
         assert_eq!(back.graph(g).unwrap().explorer, p.graph(g).unwrap().explorer);
+        assert!(back.graph(g).unwrap().explorer.unwrap().rescale_y);
+        p.set_explorer_rescale_y(g, false).unwrap();
         // Intervals of a set length (T453): 30 X units over 0..100 make 4, the last one 10 long.
         p.set_explorer_length(g, Some(30.0)).unwrap();
         let e = p.graph(g).unwrap().explorer.unwrap();

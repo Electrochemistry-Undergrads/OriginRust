@@ -2678,6 +2678,11 @@ impl SheafApp {
                     self.warn(e.to_string());
                 }
             }
+            Action::ExplorerRescaleY { graph, on } => {
+                if let Err(e) = self.doc.edit("Explorer Rescale Y", |p| p.set_explorer_rescale_y(graph, on)) {
+                    self.warn(e.to_string());
+                }
+            }
             Action::ExplorerIntervals { graph, intervals } => {
                 let token = 0x7416_1000_0000 + graph.0;
                 if let Err(e) =

@@ -90,6 +90,8 @@ mod data_range_tests;
 #[cfg(test)]
 mod detail_tests;
 #[cfg(test)]
+mod explorer_rescale_tests;
+#[cfg(test)]
 mod export_tests;
 #[cfg(test)]
 mod field_tests;

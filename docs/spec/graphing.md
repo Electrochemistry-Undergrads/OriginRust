@@ -7997,7 +7997,12 @@ steps or plays through successive intervals. Origin 2016 has none, so nothing he
   of dates, 7 for a week), a tenth of the extent to start with, edited beside it; the count follows (as many as it
   takes, the last one shorter) and its field is disabled. More than 1000 intervals is refused. Turning it off goes back
   to equal parts. The shown interval is the one holding the start of the one shown before.
-- **Not built:** a detail Y axis that rescales to each interval, overlapping steps, the playback speed, and picking an
+- **Rescale Y (T488, 2026-11-26):** a tick on the bar (off at first) fits the lower layer's Y axis to the data of the
+  interval shown: the smallest and largest Y of its plots at an X inside the band (filtered rows left out), widened by
+  the axis's Rescale Margin as an automatic axis is (half a unit each way when they are equal). Off keeps the whole Y
+  range so intervals compare on one scale. One undo step ("Explorer Rescale Y"); `SeriesExplorer::rescale_y`,
+  `Project::set_explorer_rescale_y`, saved with the project.
+- **Not built:** overlapping steps, the playback speed, and picking an
   interval by clicking the upper layer.
 
 ## LaTeX math in graph text (T436, 2026-11-24; Origin 2023b's built-in equation rendering, slice 1, Sheaf's own)

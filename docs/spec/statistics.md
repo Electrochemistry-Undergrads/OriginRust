@@ -2157,7 +2157,8 @@ multiplicative-error models and intervals for the multiplicative season are not 
 
 Origin's Time Series Analysis app (2024b Pro) is not part of Origin 2016, so this is Sheaf's own. Statistics > ARIMA
 Forecast... (`Tool::Arima`, `sheaf analyze arima --y COL[,COL..] [--p 1] [--d 0] [--q 0] [--no-constant] [--horizon
-10] [--confidence 95] [--auto [--max-p 3] [--max-q 3]] [--sp P] [--sd D] [--sq Q] [--period s] [--no-graph]`): every
+10] [--confidence 95] [--auto [--max-p 3] [--max-q 3]] [--sp P] [--sd D] [--sq Q] [--period s] [--method css|ml]
+[--no-graph]`): every
 chosen column is a series of its own, in row order, complete in the chosen
 rows. The series is differenced `d` times to `w`; with mean `mu` (the constant; a drift when `d = 1`) the model is
 `w_t - mu = sum phi_i (w_{t-i} - mu) + e_t + sum theta_j e_{t-j}`. The conditional sum of squares (errors before `t =
@@ -2179,6 +2180,21 @@ sqrt(sum_{j<h} psi_j^2)` with the psi weights of `phi(B) (1 - B)^d y = theta(B) 
   Seasonal AR j and Seasonal MA j; their standard errors take `J` by central differences. A seasonal order with a
   period below 2 is refused. With `--auto` the given seasonal `P` and `Q` are maxima too (T452): every `P' <= P`,
   `Q' <= Q` with the given `D` joins the AIC search of `p` and `q`.
+- **Exact maximum likelihood** (T495; `--method ml`, the window's Method "Exact maximum likelihood"; conditional
+  sum of squares stays the default): the differenced series minus `mu` in Harvey's state-space form (state length
+  `r = max(p', q' + 1)` for the full AR and MA lags), started at its stationary covariance (`P = T P T' + R R'` by
+  doubling) and run through the Kalman filter; `-2 ln L = n ln(2 pi sigma^2) + sum ln F_t + n` over all `n`
+  differenced values, `sigma^2 = sum v_t^2 / F_t / n` concentrated out, minimized by Nelder-Mead from the CSS fit (its
+  lag coefficients from 0 when that fit is not stationary; a non-stationary AR part has no likelihood, an
+  invertible MA part is not imposed). `AIC = -2 ln L + 2 (k + 1)`; Sum of squares is `sum v_t^2`. The residuals
+  are the innovations (one-step prediction errors) of every differenced value, so only the first `d + D s` predictions
+  are empty; the forecasts come from the filtered state (the bands from the psi weights, as for CSS); the standard
+  errors from the inverse Hessian of `-ln L` by central differences (statsmodels' `cov_type="approx"`, not its OPG
+  default). Checked against statsmodels 0.15's `ARIMA` (state space, on the differenced series) for ARMA(1,1) with a
+  mean, ARIMA(0,1,1) and (1,0,0)(1,0,0)4 with a mean: log-likelihood and AIC to 1e-6, coefficients and forecasts to
+  1e-4, sigma^2 to 1e-4 relative, standard errors to 0.2 % (`exact_likelihood_matches_statsmodels`,
+  `re-workspace/scratch/t480/arima_ml.py`, local only). With `--auto` every order is fitted by the method chosen.
+  The table adds a Log-likelihood row (the conditional one, `-(m ln(2 pi sigma^2) + m) / 2`, for CSS).
 - **Order by AIC** (T428; `--auto`, the window's "Choose p and q by AIC, up to"): every `p <= P`, `q <= Q` with the
   given `d` and constant is fitted and the smallest AIC kept; each AIC sums its own `n - d - p` errors; orders too long
   for the series are passed over. The note names the chosen order and the search.
@@ -2193,8 +2209,8 @@ five models at given coefficients against complex-step derivatives to 1e-9; the 
 simulated series, chosen with scipy's fits and a clear margin). Seasonal ARIMA against numpy/scipy
 (`tools/sarima-ref.py`, `crates/calc/tests/sarima_reference.rs`: monthly (1,0,0)(1,1,0)12, airline (0,1,1)(0,1,1)12 and
 quarterly (1,0,1)(1,0,0)4 with a mean; errors, forecasts and bands at given coefficients to 1e-9, standard errors
-against the complex step to 1e-6, the fitted sum of squares no worse than scipy's). Exact (Kalman) maximum likelihood is
-not built.
+against the complex step to 1e-6, the fitted sum of squares no worse than scipy's). Not built: stationarity and
+invertibility constraints on CSS fits, exact likelihood with the integrated part in the state (diffuse start).
 
 ## 44 Random forest (T377, Origin 2026b Pro app; not measured)
 

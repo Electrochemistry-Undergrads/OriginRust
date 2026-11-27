@@ -3662,6 +3662,9 @@ pub enum AnalyzeTool {
         /// The seasonal period s (points per season).
         #[arg(long, default_value_t = 0)]
         period: usize,
+        /// How the coefficients are estimated: css (conditional sum of squares) or ml (exact maximum likelihood).
+        #[arg(long, default_value = "css", value_parser = ["css", "ml"])]
+        method: String,
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,

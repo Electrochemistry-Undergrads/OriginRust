@@ -21,6 +21,30 @@
 //! last lag `p + P s` are 0. Forecasts undo the seasonal and the ordinary differences in turn, the bands use the psi
 //! weights of the full polynomials, and the standard errors take `J` by central differences (the ordinary model keeps
 //! the exact derivatives). The coefficients are `[mu?, phi.., theta.., Phi.., Theta..]`.
+//!
+//! **Exact maximum likelihood** (T495, `Method::Ml`): the differenced series minus its mean is an ARMA process in
+//! state-space form (Harvey's: state length `r = max(p', q' + 1)` for the full lags `p'`, `q'`; transition with the AR
+//! lags in its first column and ones above the diagonal; disturbance loading `(1, theta'..)`), started at its
+//! stationary covariance (`P = T P T' + R R'`, by doubling) and run through the Kalman filter with `sigma^2 = 1`. The
+//! innovations `v_t` and their variances `F_t` give `-2 ln L = n ln(2 pi sigma^2) + sum ln F_t + n` with `sigma^2 =
+//! sum v_t^2 / F_t / n` concentrated out; it is minimized by Nelder-Mead from the CSS fit (the lag coefficients from 0
+//! when that fit is not stationary; a non-stationary AR part has no likelihood). `AIC = -2 ln L + 2 (k + 1)`. The
+//! residuals are the innovations (one-step prediction errors) of every differenced value, the forecasts come from the
+//! filtered state (their standard errors from the psi weights, as for CSS), and the standard errors from the inverse
+//! of the Hessian of `-ln L` by central differences. Checked against statsmodels' `ARIMA` (state space, the same
+//! likelihood) on the differenced series in `exact_likelihood_matches_statsmodels`.
+
+use nalgebra::{DMatrix, DVector};
+
+/// How the coefficients are estimated (T495).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Method {
+    /// Conditional sum of squares (the errors before the first full lag are 0).
+    #[default]
+    Css,
+    /// Exact Gaussian maximum likelihood (Kalman filter).
+    Ml,
+}
 
 /// The seasonal part of an order (T446): `(P, D, Q)` at period `s`; all 0 for none.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -80,6 +104,10 @@ pub struct Arima {
     pub forecast_se: Vec<f64>,
     /// Standard errors of `params` (T428; NaN when `J'J` is singular).
     pub se: Vec<f64>,
+    /// How it was fitted (T495).
+    pub method: Method,
+    /// The log-likelihood: exact for `Method::Ml`, the conditional one for CSS.
+    pub loglik: f64,
 }
 
 /// Why the model could not be fitted.
@@ -298,13 +326,28 @@ pub fn fit_auto(
     seasonal: Seasonal,
     h: usize,
 ) -> Result<Arima, ArimaError> {
+    fit_auto_with(y, d, max_p, max_q, constant, seasonal, h, Method::Css)
+}
+
+/// [`fit_auto`] by `method` (T495).
+#[allow(clippy::too_many_arguments)]
+pub fn fit_auto_with(
+    y: &[f64],
+    d: usize,
+    max_p: usize,
+    max_q: usize,
+    constant: bool,
+    seasonal: Seasonal,
+    h: usize,
+    method: Method,
+) -> Result<Arima, ArimaError> {
     let mut best: Option<Arima> = None;
     for sp in 0..=seasonal.p {
         for sq in 0..=seasonal.q {
             let s = Seasonal { p: sp, q: sq, ..seasonal };
             for p in 0..=max_p {
                 for q in 0..=max_q {
-                    match fit(y, ArimaOrder { p, d, q, constant, seasonal: s }, h) {
+                    match fit_with(y, ArimaOrder { p, d, q, constant, seasonal: s }, h, method) {
                         Ok(m) => {
                             if best.as_ref().is_none_or(|b| m.aic < b.aic) {
                                 best = Some(m);
@@ -322,6 +365,14 @@ pub fn fit_auto(
 
 /// Forecasts `h` steps of `y` and their standard errors for `params` and `sigma2`.
 pub fn forecast(y: &[f64], order: ArimaOrder, params: &[f64], sigma2: f64, h: usize) -> (Vec<f64>, Vec<f64>) {
+    let n = difference(y, &order).len();
+    let (w, _) = forecast_differenced(y, order, params, h);
+    let fc = undo_differences(&levels(y, &order), w[n..].to_vec());
+    (fc, psi_standard_errors(&order, params, sigma2, h))
+}
+
+/// The differenced series followed by its `h` CSS forecasts, and the errors (0 for the future).
+fn forecast_differenced(y: &[f64], order: ArimaOrder, params: &[f64], h: usize) -> (Vec<f64>, Vec<f64>) {
     let (e, _) = css(y, order, params);
     let stack = levels(y, &order);
     let mut w = stack.last().expect("a level").0.clone();
@@ -342,8 +393,12 @@ pub fn forecast(y: &[f64], order: ArimaOrder, params: &[f64], sigma2: f64, h: us
         w.push(v);
         errs.push(0.0);
     }
-    // Undo the differences level by level (seasonal ones first): x_t = dx_t + x_{t - lag}.
-    let mut fc: Vec<f64> = w[n..].to_vec();
+    (w, errs)
+}
+
+/// Forecasts of the differenced series put back on the level of `y`, the differences undone level by level (seasonal
+/// ones first): `x_t = dx_t + x_{t - lag}`.
+fn undo_differences(stack: &[(Vec<f64>, usize)], mut fc: Vec<f64>) -> Vec<f64> {
     for lvl in (0..stack.len() - 1).rev() {
         let lag = stack[lvl + 1].1;
         let mut known = stack[lvl].0.clone();
@@ -354,7 +409,13 @@ pub fn forecast(y: &[f64], order: ArimaOrder, params: &[f64], sigma2: f64, h: us
         }
         fc = known[base..].to_vec();
     }
-    // Psi weights of phi(B)(1 - B)^d (1 - B^s)^D y = theta(B) e with the full polynomials.
+    fc
+}
+
+/// The forecast standard errors `sigma sqrt(sum_{j<h} psi_j^2)` from the psi weights of
+/// `phi(B)(1 - B)^d (1 - B^s)^D y = theta(B) e` with the full polynomials.
+fn psi_standard_errors(order: &ArimaOrder, params: &[f64], sigma2: f64, h: usize) -> Vec<f64> {
+    let (_, phi, theta) = expand(order, params);
     let mut ar = vec![1.0];
     for ph in &phi {
         ar.push(-ph);
@@ -376,15 +437,177 @@ pub fn forecast(y: &[f64], order: ArimaOrder, params: &[f64], sigma2: f64, h: us
         psi.push(v);
     }
     let mut acc = 0.0;
-    let se = psi
-        .iter()
+    psi.iter()
         .take(h)
         .map(|p| {
             acc += p * p;
             (sigma2 * acc).sqrt()
         })
-        .collect();
-    (fc, se)
+        .collect()
+}
+
+/// The Kalman filter of an ARMA process (T495): the innovations, their variances in units of `sigma^2`, the state
+/// predicted for the next value and the transition. `None` when the AR part is not stationary.
+struct Filtered {
+    v: Vec<f64>,
+    f: Vec<f64>,
+    state: DVector<f64>,
+    transition: DMatrix<f64>,
+}
+
+fn kalman(w: &[f64], mu: f64, ar: &[f64], ma: &[f64]) -> Option<Filtered> {
+    let r = ar.len().max(ma.len() + 1);
+    let tm = DMatrix::from_fn(r, r, |i, j| {
+        if j == 0 {
+            ar.get(i).copied().unwrap_or(0.0)
+        } else if i + 1 == j {
+            1.0
+        } else {
+            0.0
+        }
+    });
+    let rv = DVector::from_fn(r, |i, _| if i == 0 { 1.0 } else { ma.get(i - 1).copied().unwrap_or(0.0) });
+    let rr = &rv * rv.transpose();
+    // The stationary covariance sum_j T^j R R' T'^j, doubling the terms each pass.
+    let mut p = rr.clone();
+    let mut a = tm.clone();
+    for _ in 0..64 {
+        p = &p + &a * &p * a.transpose();
+        a = &a * &a;
+        if !a.amax().is_finite() || p.iter().any(|v| !v.is_finite()) {
+            return None;
+        }
+        if a.amax() < 1e-15 {
+            break;
+        }
+    }
+    if a.amax() > 1e-10 {
+        return None;
+    }
+    let mut st = DVector::zeros(r);
+    let (mut v, mut f) = (Vec::with_capacity(w.len()), Vec::with_capacity(w.len()));
+    for &x in w {
+        let ft = p[(0, 0)];
+        if ft.is_nan() || ft <= 0.0 {
+            return None;
+        }
+        let vt = x - mu - st[0];
+        let k = p.column(0) / ft;
+        st += &k * vt;
+        let row = p.row(0).clone_owned();
+        p -= &k * row;
+        st = &tm * &st;
+        p = &tm * &p * tm.transpose() + &rr;
+        v.push(vt);
+        f.push(ft);
+    }
+    Some(Filtered { v, f, state: st, transition: tm })
+}
+
+/// `-2 ln L` without its constant, `n ln(sum v^2 / F / n) + sum ln F`, for `params` (T495); infinite when the AR part
+/// is not stationary.
+fn ml_objective(w: &[f64], order: &ArimaOrder, params: &[f64]) -> f64 {
+    let (mu, ar, ma) = expand(order, params);
+    let Some(k) = kalman(w, mu, &ar, &ma) else { return f64::INFINITY };
+    let n = w.len() as f64;
+    let s: f64 = k.v.iter().zip(&k.f).map(|(v, f)| v * v / f).sum();
+    let lf: f64 = k.f.iter().map(|f| f.ln()).sum();
+    let out = n * (s / n).ln() + lf;
+    if out.is_finite() { out } else { f64::INFINITY }
+}
+
+/// Standard errors from the inverse of the Hessian of `-ln L = objective / 2` by central differences (T495).
+fn hessian_standard_errors(f: &dyn Fn(&[f64]) -> f64, x: &[f64]) -> Vec<f64> {
+    let k = x.len();
+    let h: Vec<f64> = x.iter().map(|v| 1e-4 * v.abs().max(1.0)).collect();
+    let at = |moves: &[(usize, f64)]| {
+        let mut p = x.to_vec();
+        for (i, s) in moves {
+            p[*i] += s;
+        }
+        f(&p)
+    };
+    let f0 = f(x);
+    let mut half = vec![vec![0.0; k]; k];
+    for i in 0..k {
+        half[i][i] = (at(&[(i, h[i])]) - 2.0 * f0 + at(&[(i, -h[i])])) / (h[i] * h[i]) / 2.0;
+        for j in 0..i {
+            let v = (at(&[(i, h[i]), (j, h[j])]) - at(&[(i, h[i]), (j, -h[j])]) - at(&[(i, -h[i]), (j, h[j])])
+                + at(&[(i, -h[i]), (j, -h[j])]))
+                / (4.0 * h[i] * h[j])
+                / 2.0;
+            half[i][j] = v;
+            half[j][i] = v;
+        }
+    }
+    match invert(half) {
+        Some(inv) => (0..k).map(|i| if inv[i][i] > 0.0 { inv[i][i].sqrt() } else { f64::NAN }).collect(),
+        None => vec![f64::NAN; k],
+    }
+}
+
+/// The exact maximum likelihood fit from the CSS coefficients `start` (T495).
+fn fit_ml(y: &[f64], order: ArimaOrder, h: usize, mut start: Vec<f64>, scale: &[f64]) -> Result<Arima, ArimaError> {
+    let w = difference(y, &order);
+    let nw = w.len();
+    let k = order.coefficients();
+    let objective = |p: &[f64]| ml_objective(&w, &order, p);
+    if !objective(&start).is_finite() {
+        // A non-stationary CSS fit: the lag coefficients start at 0.
+        start[usize::from(order.constant)..].iter_mut().for_each(|v| *v = 0.0);
+    }
+    if !objective(&start).is_finite() {
+        return Err(ArimaError::NoConvergence);
+    }
+    let (mut best, mut val) = nelder_mead(&objective, &start, scale);
+    for _ in 0..10 {
+        let small: Vec<f64> = scale.iter().map(|s| s * 0.1).collect();
+        let (p, v) = nelder_mead(&objective, &best, &small);
+        let improved = v < val - 1e-12 * val.abs().max(1.0);
+        if v < val {
+            best = p;
+            val = v;
+        }
+        if !improved {
+            break;
+        }
+    }
+    let (mu, ar, ma) = expand(&order, &best);
+    let kf = kalman(&w, mu, &ar, &ma).ok_or(ArimaError::NoConvergence)?;
+    let n = nw as f64;
+    let sigma2 = kf.v.iter().zip(&kf.f).map(|(v, f)| v * v / f).sum::<f64>() / n;
+    let lf: f64 = kf.f.iter().map(|f| f.ln()).sum();
+    let loglik = -0.5 * (n * (2.0 * std::f64::consts::PI * sigma2).ln() + lf + n);
+    let aic = -2.0 * loglik + 2.0 * (k + 1) as f64;
+    let ss = kf.v.iter().map(|v| v * v).sum();
+    let lost = order.lost();
+    let mut fitted = vec![f64::NAN; y.len()];
+    for (t, v) in kf.v.iter().enumerate() {
+        fitted[t + lost] = y[t + lost] - v;
+    }
+    let mut st = kf.state.clone();
+    let mut wf = Vec::with_capacity(h);
+    for _ in 0..h {
+        wf.push(mu + st[0]);
+        st = &kf.transition * &st;
+    }
+    let forecast = undo_differences(&levels(y, &order), wf);
+    let forecast_se = psi_standard_errors(&order, &best, sigma2, h);
+    let se = hessian_standard_errors(&objective, &best);
+    Ok(Arima {
+        order,
+        params: best,
+        ss,
+        sigma2,
+        aic,
+        residuals: kf.v,
+        fitted,
+        forecast,
+        forecast_se,
+        se,
+        method: Method::Ml,
+        loglik,
+    })
 }
 
 /// Nelder-Mead from `start` with initial steps `scale`.
@@ -441,8 +664,13 @@ fn nelder_mead(f: &dyn Fn(&[f64]) -> f64, start: &[f64], scale: &[f64]) -> (Vec<
     (pts[best].clone(), vals[best])
 }
 
-/// Fits ARIMA(`order`) to `y` and forecasts `h` steps.
+/// Fits ARIMA(`order`) to `y` by conditional sum of squares and forecasts `h` steps.
 pub fn fit(y: &[f64], order: ArimaOrder, h: usize) -> Result<Arima, ArimaError> {
+    fit_with(y, order, h, Method::Css)
+}
+
+/// Fits ARIMA(`order`) to `y` by `method` (T495) and forecasts `h` steps.
+pub fn fit_with(y: &[f64], order: ArimaOrder, h: usize, method: Method) -> Result<Arima, ArimaError> {
     if let Some(i) = y.iter().position(|v| !v.is_finite()) {
         return Err(ArimaError::Missing(i));
     }
@@ -489,6 +717,9 @@ pub fn fit(y: &[f64], order: ArimaOrder, h: usize) -> Result<Arima, ArimaError> 
     if !ss.is_finite() {
         return Err(ArimaError::NoConvergence);
     }
+    if method == Method::Ml {
+        return fit_ml(y, order, h, best, &scale);
+    }
     let m = (nw - order.ar_lags()) as f64;
     let sigma2 = ss / m;
     let aic = m * (2.0 * std::f64::consts::PI * sigma2).ln() + m + 2.0 * (k + 1) as f64;
@@ -501,12 +732,114 @@ pub fn fit(y: &[f64], order: ArimaOrder, h: usize) -> Result<Arima, ArimaError> 
     }
     let (fc, fse) = forecast(y, order, &best, sigma2, h);
     let se = standard_errors(y, order, &best, sigma2);
-    Ok(Arima { order, params: best, ss, sigma2, aic, residuals, fitted, forecast: fc, forecast_se: fse, se })
+    let loglik = -0.5 * (m * (2.0 * std::f64::consts::PI * sigma2).ln() + m);
+    Ok(Arima {
+        order,
+        params: best,
+        ss,
+        sigma2,
+        aic,
+        residuals,
+        fitted,
+        forecast: fc,
+        forecast_se: fse,
+        se,
+        method: Method::Css,
+        loglik,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn noise(n: usize) -> Vec<f64> {
+        (0..n).map(|t| ((t * 7919 + 13) % 101) as f64 / 101.0 - 0.5).collect()
+    }
+
+    #[test]
+    fn exact_likelihood_matches_statsmodels() {
+        // T495: statsmodels 0.15 ARIMA (state space, lbfgs to gtol 1e-12, cov_type "approx": the numerical Hessian) on
+        // the differenced series (re-workspace/scratch/t480/arima_ml.py). The likelihood is flat near the optimum, so
+        // the coefficients agree to 1e-4 while the log-likelihood agrees to 1e-6.
+        let e = noise(150);
+        let mut arma = Vec::new();
+        for t in 0..120 {
+            let prev_w = if t > 0 { arma[t - 1] - 5.0 } else { 0.0 };
+            let prev_e = if t > 0 { e[t - 1] } else { 0.0 };
+            arma.push(5.0 + 0.6 * prev_w + e[t] + 0.3 * prev_e);
+        }
+        let (mut walk, mut level, mut prev_e) = (Vec::new(), 0.0, 0.0);
+        for &et in &e {
+            level += et - 0.4 * prev_e;
+            prev_e = et;
+            walk.push(level);
+        }
+        let mut sar: Vec<f64> = Vec::new();
+        for t in 0..120 {
+            let mut v = 2.0 + e[t];
+            if t >= 1 {
+                v += 0.5 * (sar[t - 1] - 2.0);
+            }
+            if t >= 4 {
+                v += 0.3 * (sar[t - 4] - 2.0);
+            }
+            if t >= 5 {
+                v -= 0.15 * (sar[t - 5] - 2.0);
+            }
+            sar.push(v);
+        }
+        let cases: [(&[f64], ArimaOrder, &[f64], f64, f64, f64, &[f64], &[f64]); 3] = [
+            (
+                &arma,
+                ArimaOrder { p: 1, d: 0, q: 1, constant: true, ..Default::default() },
+                &[4.971850641566094, 0.35151569233489866, 0.03655414017989958],
+                0.06570096207235528,
+                -6.995957538482822,
+                21.991915076965643,
+                &[0.03728110936181515, 0.19794520480553998, 0.20296843205928067],
+                &[4.796784031196819, 4.910311980817415, 4.95021883662766],
+            ),
+            (
+                &walk,
+                ArimaOrder { p: 0, d: 1, q: 1, constant: false, ..Default::default() },
+                &[-0.7308985033725176],
+                0.06952717248950069,
+                -13.18688215720757,
+                30.37376431441514,
+                &[0.048042724484854506],
+                &[-0.2418393190021595; 3],
+            ),
+            (
+                &sar,
+                ArimaOrder { p: 1, d: 0, q: 0, constant: true, seasonal: Seasonal { p: 1, d: 0, q: 0, period: 4 } },
+                &[1.979679786462697, 0.16222713316351178, -0.04033776247742877],
+                0.06132918555036888,
+                -2.8015485330400924,
+                13.603097066080185,
+                &[0.02594517526826237, 0.10973948846777637, 0.11307074017730381],
+                &[1.9468273249891352, 1.9772139480329751, 1.9995611932207524],
+            ),
+        ];
+        for (y, order, params, sigma2, llf, aic, bse, fc) in cases {
+            let m = fit_with(y, order, 3, Method::Ml).unwrap();
+            let all = format!("{order:?}: {m:?}");
+            assert_eq!(m.method, Method::Ml);
+            assert!(m.params.iter().zip(params).all(|(a, b)| (a - b).abs() < 1e-4), "params {all}");
+            assert!((m.sigma2 - sigma2).abs() < 1e-4 * sigma2, "sigma2 {all}");
+            assert!((m.loglik - llf).abs() < 1e-6, "loglik {all}");
+            assert!((m.aic - aic).abs() < 1e-5, "aic {all}");
+            assert!(m.se.iter().zip(bse).all(|(a, b)| (a - b).abs() < 2e-3 * b), "se {:?} {bse:?}", m.se);
+            assert!(m.forecast.iter().zip(fc).all(|(a, b)| (a - b).abs() < 1e-4), "forecast {all}");
+            // The residuals are the innovations of every differenced value.
+            assert_eq!(m.residuals.len(), y.len() - order.d);
+        }
+        // A non-stationary series still fits (the start is pulled back to 0); CSS stays the default.
+        assert_eq!(
+            fit(&arma, ArimaOrder { p: 1, d: 0, q: 1, constant: true, ..Default::default() }, 1).unwrap().method,
+            Method::Css
+        );
+    }
 
     #[test]
     fn ar1_recursions_and_a_random_walk_forecast() {

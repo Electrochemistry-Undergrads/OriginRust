@@ -8,8 +8,9 @@ use super::dist::{GraphPlot, Output, XyGraph};
 use super::statistics::num;
 use super::*;
 use crate::graph::{PlotKind, ScaleKind};
+pub use calc::arima::Method as ArimaMethod;
 pub use calc::arima::Seasonal as ArimaSeasonal;
-use calc::arima::{ArimaOrder, fit, fit_auto};
+use calc::arima::{ArimaOrder, fit_auto_with, fit_with};
 
 /// What [`Tool::Arima`] does.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -27,6 +28,8 @@ pub struct ArimaSpec {
     pub auto: Option<(usize, usize)>,
     /// The seasonal orders `(P, D, Q)` and period (T446); all 0 for none.
     pub seasonal: ArimaSeasonal,
+    /// Conditional sum of squares (the default) or exact maximum likelihood (T495).
+    pub method: ArimaMethod,
 }
 
 impl Default for ArimaSpec {
@@ -41,6 +44,7 @@ impl Default for ArimaSpec {
             graph: true,
             auto: None,
             seasonal: ArimaSeasonal::default(),
+            method: ArimaMethod::Css,
         }
     }
 }
@@ -69,9 +73,9 @@ pub(super) fn run(spec: &ArimaSpec, inputs: &[Input<'_>]) -> Result<Output, Anal
     for input in inputs {
         let m = match spec.auto {
             Some((max_p, max_q)) => {
-                fit_auto(input.ys(), spec.d, max_p, max_q, spec.constant, spec.seasonal, spec.horizon)
+                fit_auto_with(input.ys(), spec.d, max_p, max_q, spec.constant, spec.seasonal, spec.horizon, spec.method)
             }
-            None => fit(input.ys(), order, spec.horizon),
+            None => fit_with(input.ys(), order, spec.horizon, spec.method),
         }
         .map_err(|e| AnalysisError::BadOption(format!("{}: {e}", input.label)))?;
         let (p, q) = (m.order.p, m.order.q);
@@ -92,13 +96,14 @@ pub(super) fn run(spec: &ArimaSpec, inputs: &[Input<'_>]) -> Result<Output, Anal
             let prob = 2.0 * calc::dist_cdf(calc::Family::Normal, &[0.0, 1.0], -z.abs());
             table.push_row(format!("{}, {name}", input.label), vec![*v, *se, z, prob], vec![String::new(); 4]);
         }
-        for (name, v) in [("Sum of squares", m.ss), ("Sigma^2", m.sigma2), ("AIC", m.aic)] {
+        for (name, v) in [("Sum of squares", m.ss), ("Sigma^2", m.sigma2), ("AIC", m.aic), ("Log-likelihood", m.loglik)]
+        {
             let nan = f64::NAN;
             table.push_row(format!("{}, {name}", input.label), vec![v, nan, nan, nan], vec![String::new(); 4]);
         }
         let coefs: Vec<String> = names.iter().zip(&m.params).map(|(n, v)| format!("{n} {}", num(*v))).collect();
         notes.push(format!(
-            "{}: ARIMA({},{},{}){}{} by conditional least squares: {}; sigma^2 {}, AIC {}; {} forecast(s) from {} to {}.",
+            "{}: ARIMA({},{},{}){}{} by {}: {}; sigma^2 {}, AIC {}; {} forecast(s) from {} to {}.",
             input.label,
             p,
             spec.d,
@@ -111,6 +116,10 @@ pub(super) fn run(spec: &ArimaSpec, inputs: &[Input<'_>]) -> Result<Output, Anal
                 ),
                 Some((mp, mq)) => format!(" (the smallest AIC of p <= {mp}, q <= {mq})"),
                 None => String::new(),
+            },
+            match spec.method {
+                ArimaMethod::Css => "conditional least squares",
+                ArimaMethod::Ml => "exact maximum likelihood",
             },
             if coefs.is_empty() { "no coefficients".to_string() } else { coefs.join(", ") },
             num(m.sigma2),
@@ -245,5 +254,14 @@ mod tests {
         assert!(out.notes[0].contains("the smallest AIC of p <= 1, q <= 1"), "{:?}", out.notes);
         let none = ArimaSpec { p: 0, d: 0, q: 0, constant: false, ..Default::default() };
         assert!(p.analyze(&request(vec![y], none)).is_err());
+        // T495: exact maximum likelihood, with its log-likelihood row.
+        let ml =
+            ArimaSpec { p: 0, d: 1, q: 0, horizon: 2, graph: false, method: ArimaMethod::Ml, ..Default::default() };
+        let out = p.analyze(&request(vec![y], ml)).unwrap();
+        let t = out.table.as_ref().unwrap();
+        assert!((t.rows[0].1[0] - 1.5).abs() < 1e-6, "the drift is the mean step either way: {:?}", t.rows[0]);
+        assert_eq!(t.rows[4].0, "A, Log-likelihood");
+        assert!(t.rows[4].1[0].is_finite());
+        assert!(out.notes[0].contains("by exact maximum likelihood"), "{:?}", out.notes);
     }
 }

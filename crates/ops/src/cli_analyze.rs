@@ -1858,7 +1858,23 @@ fn whole_sheet_only(target: &TargetArgs, tool: &str) -> Result<()> {
 
 /// The power tool's request (`analyze power`) and where `--export` writes the table. Needs no data.
 pub fn power_spec(a: AnalyzeTool) -> Result<(analysis::PowerSpec, Option<PathBuf>)> {
-    let AnalyzeTool::Power { test, sizes, powers, mean1, mean2, sd, levels, css, alpha, one_sided, export } = a else {
+    let AnalyzeTool::Power {
+        test,
+        sizes,
+        powers,
+        mean1,
+        mean2,
+        sd,
+        levels,
+        css,
+        alpha,
+        one_sided,
+        ratio,
+        pooled,
+        exact,
+        export,
+    } = a
+    else {
         unreachable!("called for the power tool only");
     };
     if sizes.is_empty() == powers.is_empty() {
@@ -1887,6 +1903,9 @@ pub fn power_spec(a: AnalyzeTool) -> Result<(analysis::PowerSpec, Option<PathBuf
         sd,
         levels,
         css,
+        ratio,
+        pooled,
+        exact,
     };
     Ok((spec, export))
 }

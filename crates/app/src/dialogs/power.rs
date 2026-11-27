@@ -21,6 +21,10 @@ pub struct PowerDialog {
     css: f64,
     sizes_text: String,
     powers_text: String,
+    /// T500: the second group's size over the first's, the pooled two-proportion test, the exact one-proportion test.
+    ratio: f64,
+    pooled: bool,
+    exact: bool,
     problem: Option<String>,
     undo_token: u64,
 }
@@ -58,6 +62,9 @@ impl PowerDialog {
             css: 1.0,
             sizes_text: "50 100 200".to_string(),
             powers_text: "0.9 0.95 0.99".to_string(),
+            ratio: 1.0,
+            pooled: false,
+            exact: false,
             problem: None,
             undo_token: crate::dialogs::analysis::next_undo_token(),
         }
@@ -85,6 +92,13 @@ impl PowerDialog {
             sd: self.sd,
             levels: self.levels,
             css: self.css,
+            ratio: if matches!(self.kind, PowerKind::TwoProportions | PowerKind::TwoVariances) {
+                self.ratio
+            } else {
+                1.0
+            },
+            pooled: self.pooled && self.kind == PowerKind::TwoProportions,
+            exact: self.exact && self.kind == PowerKind::OneProportion,
         })
     }
 
@@ -152,6 +166,28 @@ impl PowerDialog {
                         ui.radio_value(&mut self.two_sided, true, "2-sided");
                         ui.radio_value(&mut self.two_sided, false, "1-sided");
                     });
+                    ui.end_row();
+                }
+                // T500: the test variants and unequal groups.
+                if self.kind == PowerKind::OneProportion {
+                    ui.label("Method");
+                    ui.horizontal(|ui| {
+                        ui.radio_value(&mut self.exact, false, "Normal approximation");
+                        ui.radio_value(&mut self.exact, true, "Exact binomial");
+                    });
+                    ui.end_row();
+                }
+                if self.kind == PowerKind::TwoProportions {
+                    ui.label("Standard error");
+                    ui.horizontal(|ui| {
+                        ui.radio_value(&mut self.pooled, false, "Unpooled");
+                        ui.radio_value(&mut self.pooled, true, "Pooled");
+                    });
+                    ui.end_row();
+                }
+                if matches!(self.kind, PowerKind::TwoProportions | PowerKind::TwoVariances) {
+                    ui.label("Group 2 size / group 1 size");
+                    ui.add(DragValue::new(&mut self.ratio).speed(0.01).range(0.01..=100.0));
                     ui.end_row();
                 }
                 if self.find_size {

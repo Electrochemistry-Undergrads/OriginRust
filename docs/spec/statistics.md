@@ -455,7 +455,23 @@ Two-Sample Variance Test, with no standard deviation box). `z` is the `1 - alpha
   (the note gives the power of 2).
 - Checked against scipy (`tools/power-rate-ref.py`, `crates/calc/tests/power_rate_reference.rs`: 64 cases of the four
   tests, both kinds of test, alpha 0.01 to 0.1, sizes 2 to 1000, powers to 1e-9 and sample sizes exactly; the variance
-  powers are also confirmed by simulating the tests). Exact binomial powers and unequal group sizes are not built.
+  powers are also confirmed by simulating the tests).
+- **Options** (T500; `--exact`, `--pooled`, `--ratio R`; the window's Method, Standard error and "Group 2 size / group
+  1 size" rows, shown for the tests they belong to, refused for the others):
+  - *Exact one-proportion test*: the power of the binomial test of section 21, `sum_x P(x | n, p)` over the counts it
+    rejects at `alpha`: two-sided every count whose p-value (the probability under `p0` of the counts no more likely
+    than it, within a relative 1e-7) is at most `alpha`; one-sided the tail in the direction of the effect. The power
+    is not monotone in `n`, so the sample size is the first `n` from 2 that reaches the wanted power (searched up to
+    20 000).
+  - *Pooled two-proportion test*: the standard error under the null from `pbar = (n1 p1 + n2 p2) / (n1 + n2)`, `se0 =
+    sqrt(pbar qbar (1/n1 + 1/n2))`, with the unpooled `se1 = sqrt(p1 q1 / n1 + p2 q2 / n2)` under the alternative:
+    power `Phi((|d| - z se0) / se1) [+ Phi((-|d| - z se0) / se1)]`.
+  - *Unequal groups* (two proportions or variances): `n2 = R n1` (not rounded); the sizes are the first group's, and
+    the smallest is the one whose second group has 2; the F test takes `n1 - 1` and `n2 - 1` df.
+  - Checked against scipy's `binomtest` rejection regions (five cases, both tails, and the first `n` reaching 0.8) to
+    1e-10 and statsmodels 0.15's `power_proportions_2indep` (four cases, ratios 0.5 to 2, both kinds of test) to 1e-12
+    (`exact_pooled_and_unequal_proportion_powers_match_scipy_and_statsmodels`, `re-workspace/scratch/t480/power_ref.py`,
+    local only).
 
 ## 13 2D frequency counts and binning
 

@@ -14,6 +14,16 @@
 //! sigma0^2`, so the power is `F(c_lo / r) + 1 - F(c_hi / r)` at the test's critical points. Two variances of `n`
 //! each, the F test with `(n - 1, n - 1)` df and `r = sigma1^2 / sigma2^2`, the same way. One-sided tests look in
 //! the direction of the effect, as for the t tests.
+//!
+//! **Options** (T500, [`RateOptions`]): unequal groups, `n2 = ratio n1` (`n` is the first group's size; not rounded),
+//! for the two-sample tests: unpooled `se = sqrt(p1 q1 / n1 + p2 q2 / n2)` in both places, F with `(n1 - 1, n2 - 1)`
+//! df. The pooled two-proportion z test takes the standard error under the null from the pooled proportion `pbar =
+//! (n1 p1 + n2 p2) / (n1 + n2)`: power `Phi((|d| - z se0) / se1) [+ Phi((-|d| - z se0) / se1)]` with `se0 = sqrt(pbar
+//! qbar (1/n1 + 1/n2))` and `se1` the unpooled one (statsmodels' `power_proportions_2indep`). The exact one-proportion
+//! test (the binomial test of section 21: two-sided, every count no more likely than the observed one under `p0`,
+//! within a relative 1e-7; one-sided, the tail in the direction of the effect) has the power `sum_x P(x | n, p)` over
+//! the counts it rejects at `alpha` (p-value at most `alpha`); it is not monotone in `n`, so its sample size is the
+//! first `n` from 2 whose power reaches the target (scipy's `binomtest` rule).
 
 use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal, StudentsT};
 use statrs::function::beta::beta_reg;
@@ -404,6 +414,70 @@ impl RateTest {
     }
 }
 
+/// Variants of the proportion and variance tests (T500; see the module notes).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RateOptions {
+    /// The second group's size over the first's (two-sample tests); 1 for equal groups.
+    pub ratio: f64,
+    /// The pooled two-proportion z test.
+    pub pooled: bool,
+    /// The exact binomial test of one proportion.
+    pub exact: bool,
+}
+
+impl Default for RateOptions {
+    fn default() -> Self {
+        RateOptions { ratio: 1.0, pooled: false, exact: false }
+    }
+}
+
+/// Largest sample the exact one-proportion power is computed for, and searched up to.
+pub const MAX_EXACT_POWER_SIZE: f64 = 20_000.0;
+
+/// The power of the exact binomial test of `p0` with `n` trials when the proportion is `p` (T500).
+fn exact_binomial_power(n: usize, p: f64, p0: f64, alpha: f64, two_sided: bool) -> f64 {
+    let ln_choose = |k: usize| ln_gamma(n as f64 + 1.0) - ln_gamma(k as f64 + 1.0) - ln_gamma((n - k) as f64 + 1.0);
+    let pmf = |q: f64| -> Vec<f64> {
+        let (lq, lr) = (q.ln(), (1.0 - q).ln());
+        (0..=n).map(|k| (ln_choose(k) + k as f64 * lq + (n - k) as f64 * lr).exp()).collect()
+    };
+    let (null, alt) = (pmf(p0), pmf(p));
+    let rejects: Vec<bool> = if two_sided {
+        let mut sorted = null.clone();
+        sorted.sort_by(f64::total_cmp);
+        let mut cum = Vec::with_capacity(sorted.len());
+        let mut s = 0.0;
+        for v in &sorted {
+            s += v;
+            cum.push(s);
+        }
+        null.iter()
+            .map(|&f| {
+                let j = sorted.partition_point(|v| *v <= f * (1.0 + 1e-7));
+                j > 0 && cum[j - 1].min(1.0) <= alpha
+            })
+            .collect()
+    } else if p > p0 {
+        // Upper tail: P(X >= x).
+        let mut out = vec![false; n + 1];
+        let mut s = 0.0;
+        for x in (0..=n).rev() {
+            s += null[x];
+            out[x] = s.min(1.0) <= alpha;
+        }
+        out
+    } else {
+        let mut out = vec![false; n + 1];
+        let mut s = 0.0;
+        for x in 0..=n {
+            s += null[x];
+            out[x] = s.min(1.0) <= alpha;
+        }
+        out
+    };
+    alt.iter().zip(&rejects).filter(|(_, r)| **r).map(|(v, _)| v).sum::<f64>().min(1.0)
+}
+
 /// The chances that `r` times a variable of `d` falls below its `tail` point and above its `1 - tail` point.
 fn beyond<D: ContinuousCDF<f64, f64>>(d: &D, tail: f64, r: f64) -> (f64, f64) {
     (d.cdf(d.inverse_cdf(tail) / r), d.sf(d.inverse_cdf(1.0 - tail) / r))
@@ -411,22 +485,52 @@ fn beyond<D: ContinuousCDF<f64, f64>>(d: &D, tail: f64, r: f64) -> (f64, f64) {
 
 /// The power of a proportion or variance test with `n` observations (per group), `n` at least 2.
 pub fn rate_power(test: RateTest, n: f64, a: f64, b: f64, alpha: f64, two_sided: bool) -> Result<f64, PowerError> {
+    rate_power_with(test, n, a, b, alpha, two_sided, RateOptions::default())
+}
+
+/// [`rate_power`] with the options of `o` (T500): `n` is the first group's size.
+pub fn rate_power_with(
+    test: RateTest,
+    n: f64,
+    a: f64,
+    b: f64,
+    alpha: f64,
+    two_sided: bool,
+    o: RateOptions,
+) -> Result<f64, PowerError> {
     test.check(a, b, alpha)?;
-    if n.is_nan() || n < 2.0 {
+    if n.is_nan() || n < 2.0 || !(o.ratio.is_finite() && o.ratio > 0.0) {
+        return Err(PowerError::BadInput);
+    }
+    let n2 = n * o.ratio;
+    if matches!(test, RateTest::TwoProportions | RateTest::TwoVariances) && n2 < 2.0 {
         return Err(PowerError::BadInput);
     }
     let tail = if two_sided { alpha / 2.0 } else { alpha };
     match test {
+        RateTest::OneProportion if o.exact => {
+            if n > MAX_EXACT_POWER_SIZE || n.fract() != 0.0 {
+                return Err(PowerError::BadInput);
+            }
+            Ok(exact_binomial_power(n as usize, a, b, alpha, two_sided))
+        }
         RateTest::OneProportion | RateTest::TwoProportions => {
             let norm = Normal::new(0.0, 1.0).expect("standard normal");
             let z = norm.inverse_cdf(1.0 - tail);
+            // The standard errors of the difference under the null and the alternative.
             let (se0, se1) = if test == RateTest::OneProportion {
-                ((b * (1.0 - b)).sqrt(), (a * (1.0 - a)).sqrt())
+                ((b * (1.0 - b) / n).sqrt(), (a * (1.0 - a) / n).sqrt())
             } else {
-                let s = (a * (1.0 - a) + b * (1.0 - b)).sqrt();
-                (s, s)
+                let se1 = (a * (1.0 - a) / n + b * (1.0 - b) / n2).sqrt();
+                let se0 = if o.pooled {
+                    let pbar = (n * a + n2 * b) / (n + n2);
+                    (pbar * (1.0 - pbar) * (1.0 / n + 1.0 / n2)).sqrt()
+                } else {
+                    se1
+                };
+                (se0, se1)
             };
-            let d = (a - b).abs() * n.sqrt();
+            let d = (a - b).abs();
             let upper = norm.cdf((d - z * se0) / se1);
             Ok(if two_sided { upper + norm.cdf((-d - z * se0) / se1) } else { upper })
         }
@@ -435,7 +539,7 @@ pub fn rate_power(test: RateTest, n: f64, a: f64, b: f64, alpha: f64, two_sided:
             let (below, above) = if test == RateTest::OneVariance {
                 beyond(&ChiSquared::new(n - 1.0).map_err(|_| PowerError::BadInput)?, tail, r)
             } else {
-                beyond(&FisherSnedecor::new(n - 1.0, n - 1.0).map_err(|_| PowerError::BadInput)?, tail, r)
+                beyond(&FisherSnedecor::new(n - 1.0, n2 - 1.0).map_err(|_| PowerError::BadInput)?, tail, r)
             };
             Ok(if two_sided {
                 below + above
@@ -458,11 +562,34 @@ pub fn rate_powers(
     alpha: f64,
     two_sided: bool,
 ) -> Result<Vec<f64>, PowerError> {
+    rate_powers_with(test, sizes, a, b, alpha, two_sided, RateOptions::default())
+}
+
+/// [`rate_powers`] with the options of `o` (T500); a size whose second group falls below 2 gets no power.
+pub fn rate_powers_with(
+    test: RateTest,
+    sizes: &[f64],
+    a: f64,
+    b: f64,
+    alpha: f64,
+    two_sided: bool,
+    o: RateOptions,
+) -> Result<Vec<f64>, PowerError> {
     if sizes.is_empty() || sizes.iter().any(|n| n.is_nan() || n.fract() != 0.0) {
         return Err(PowerError::BadInput);
     }
     test.check(a, b, alpha)?;
-    sizes.iter().map(|&n| if n < 2.0 { Ok(f64::NAN) } else { rate_power(test, n, a, b, alpha, two_sided) }).collect()
+    let two = matches!(test, RateTest::TwoProportions | RateTest::TwoVariances);
+    sizes
+        .iter()
+        .map(|&n| {
+            if n < 2.0 || (two && n * o.ratio < 2.0) {
+                Ok(f64::NAN)
+            } else {
+                rate_power_with(test, n, a, b, alpha, two_sided, o)
+            }
+        })
+        .collect()
 }
 
 /// Smallest sample sizes (per group) of a proportion or variance test that reach each wanted power; a wanted power
@@ -475,13 +602,53 @@ pub fn rate_sample_sizes(
     alpha: f64,
     two_sided: bool,
 ) -> Result<SampleSizes, PowerError> {
+    rate_sample_sizes_with(test, powers, a, b, alpha, two_sided, RateOptions::default())
+}
+
+/// [`rate_sample_sizes`] with the options of `o` (T500): the sizes are the first group's; the smallest first group
+/// is the one whose second group has at least 2.
+pub fn rate_sample_sizes_with(
+    test: RateTest,
+    powers: &[f64],
+    a: f64,
+    b: f64,
+    alpha: f64,
+    two_sided: bool,
+    o: RateOptions,
+) -> Result<SampleSizes, PowerError> {
     test.check(a, b, alpha)?;
     if a == b {
         return Err(PowerError::NoEffect);
     }
+    if !(o.ratio.is_finite() && o.ratio > 0.0) {
+        return Err(PowerError::BadInput);
+    }
     check_powers(powers)?;
-    let power_at = |n: f64| rate_power(test, n, a, b, alpha, two_sided).unwrap_or(f64::NAN);
-    let lowest = power_at(2.0);
+    let two = matches!(test, RateTest::TwoProportions | RateTest::TwoVariances);
+    let first = if two { (2.0 / o.ratio).ceil().max(2.0) } else { 2.0 };
+    let power_at = |n: f64| rate_power_with(test, n, a, b, alpha, two_sided, o).unwrap_or(f64::NAN);
+    let lowest = power_at(first);
+    if test == RateTest::OneProportion && o.exact {
+        // Not monotone: the first n from 2 whose power reaches the target.
+        let mut out = SampleSizes { sizes: Vec::new(), below_lowest: Vec::new(), lowest: Some(lowest) };
+        for &target in powers {
+            if target <= lowest {
+                out.sizes.push(f64::NAN);
+                out.below_lowest.push(true);
+                continue;
+            }
+            let mut n = 2.0;
+            while n <= MAX_EXACT_POWER_SIZE && power_at(n) < target {
+                n += 1.0;
+            }
+            if n > MAX_EXACT_POWER_SIZE {
+                return Err(PowerError::NoEffect);
+            }
+            out.sizes.push(n);
+            out.below_lowest.push(false);
+        }
+        return Ok(out);
+    }
     let mut out = SampleSizes { sizes: Vec::new(), below_lowest: Vec::new(), lowest: Some(lowest) };
     for &target in powers {
         if target <= lowest {
@@ -498,6 +665,58 @@ pub fn rate_sample_sizes(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exact_pooled_and_unequal_proportion_powers_match_scipy_and_statsmodels() {
+        // T500: scipy's binomtest rejection regions and statsmodels' power_proportions_2indep
+        // (re-workspace/scratch/t480/power_ref.py).
+        let exact = RateOptions { exact: true, ..Default::default() };
+        for (n, p, p0, two, want) in [
+            (20.0, 0.7, 0.5, true, 0.4164137694694344),
+            (50.0, 0.3, 0.5, true, 0.7821932227280467),
+            (37.0, 0.62, 0.5, false, 0.4301589873936447),
+            (60.0, 0.4, 0.5, false, 0.4511063893843983),
+            (200.0, 0.55, 0.5, true, 0.26198288668465874),
+        ] {
+            let got = rate_power_with(RateTest::OneProportion, n, p, p0, 0.05, two, exact).unwrap();
+            assert!((got - want).abs() < 1e-10, "{n} {p} {p0} {two}: {got} vs {want}");
+        }
+        let s = rate_sample_sizes_with(RateTest::OneProportion, &[0.8], 0.7, 0.5, 0.05, true, exact).unwrap();
+        assert_eq!(s.sizes, [49.0], "the first n whose exact power reaches 0.8");
+        for (p1, p2, n1, ratio, two, want) in [
+            (0.6, 0.4, 50.0, 1.0, true, 0.5163234210273413),
+            (0.6, 0.4, 40.0, 2.0, true, 0.5447098732588368),
+            (0.3, 0.45, 80.0, 0.5, false, 0.49181339901936466),
+            (0.55, 0.4, 100.0, 1.5, false, 0.7554877374735751),
+        ] {
+            let o = RateOptions { ratio, pooled: true, exact: false };
+            let got = rate_power_with(RateTest::TwoProportions, n1, p1, p2, 0.05, two, o).unwrap();
+            assert!((got - want).abs() < 1e-12, "{p1} {p2} {n1} {ratio}: {got} vs {want}");
+        }
+        // Equal groups by default reproduce the T415 powers; a second group below 2 has none.
+        let plain = rate_power(RateTest::TwoProportions, 50.0, 0.6, 0.4, 0.05, true).unwrap();
+        let same =
+            rate_power_with(RateTest::TwoProportions, 50.0, 0.6, 0.4, 0.05, true, RateOptions::default()).unwrap();
+        assert!((plain - same).abs() < 1e-15);
+        let tiny = RateOptions { ratio: 0.1, ..Default::default() };
+        assert!(
+            rate_powers_with(RateTest::TwoVariances, &[10.0, 40.0], 2.0, 1.0, 0.05, true, tiny).unwrap()[0].is_nan()
+        );
+        let s = rate_sample_sizes_with(
+            RateTest::TwoProportions,
+            &[0.8],
+            0.6,
+            0.4,
+            0.05,
+            true,
+            RateOptions { ratio: 2.0, pooled: true, exact: false },
+        )
+        .unwrap();
+        let n = s.sizes[0];
+        let o = RateOptions { ratio: 2.0, pooled: true, exact: false };
+        assert!(rate_power_with(RateTest::TwoProportions, n, 0.6, 0.4, 0.05, true, o).unwrap() >= 0.8);
+        assert!(rate_power_with(RateTest::TwoProportions, n - 1.0, 0.6, 0.4, 0.05, true, o).unwrap() < 0.8);
+    }
 
     #[test]
     fn rate_tests_without_an_effect_have_the_level_as_power_and_refuse_bad_input() {

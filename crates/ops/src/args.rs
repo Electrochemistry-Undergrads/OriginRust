@@ -2920,6 +2920,15 @@ pub enum AnalyzeTool {
         /// One-sided (upper) test instead of two-sided.
         #[arg(long)]
         one_sided: bool,
+        /// Two-proportion and two-variance tests: the second group's size over the first's.
+        #[arg(long, default_value_t = 1.0)]
+        ratio: f64,
+        /// Two-proportion test: the pooled z test.
+        #[arg(long)]
+        pooled: bool,
+        /// One-proportion test: the exact binomial test.
+        #[arg(long)]
+        exact: bool,
         /// Write the table to this file (CSV or text, by extension).
         #[arg(long)]
         export: Option<std::path::PathBuf>,

@@ -17,13 +17,23 @@ pub struct ManhattanSpec {
     /// The genome-wide significance level drawn as a line (default 5e-8).
     pub threshold: f64,
     pub graph: bool,
+    /// Colour the groups in two alternating colours (T505; default) instead of the palette.
+    pub alternate: bool,
+    /// A gap between groups, in percent of the summed group spans (T505; default 0).
+    pub gap_percent: f64,
+    /// Label the points at or above the line with their position in the group (T505).
+    pub label_hits: bool,
 }
 
 impl Default for ManhattanSpec {
     fn default() -> Self {
-        ManhattanSpec { threshold: 5e-8, graph: true }
+        ManhattanSpec { threshold: 5e-8, graph: true, alternate: true, gap_percent: 0.0, label_hits: false }
     }
 }
+
+/// The two alternating group colours (T505): a dark blue and a mid grey.
+const ALTERNATE: [crate::color::Color; 2] =
+    [crate::color::Color::rgb(31, 64, 145), crate::color::Color::rgb(140, 140, 140)];
 
 fn number_column(name: &str, comments: &str, designation: Designation, values: Vec<f64>) -> SheetColumn {
     SheetColumn {
@@ -52,6 +62,9 @@ pub(super) fn run(
 ) -> Result<Output, AnalysisError> {
     if !(spec.threshold > 0.0 && spec.threshold < 1.0) {
         return Err(AnalysisError::BadOption("the significance level must lie between 0 and 1".into()));
+    }
+    if !(spec.gap_percent >= 0.0 && spec.gap_percent <= 100.0) {
+        return Err(AnalysisError::BadOption("the gap between groups must be 0 to 100 percent".into()));
     }
     let column = |id: ColumnId| sheet.column(id).ok_or(AnalysisError::NoSuchColumn(id));
     let (gc, pc, vc) = match columns {
@@ -98,6 +111,11 @@ pub(super) fn run(
         groups.sort_by(|a, b| a.0.parse::<f64>().unwrap_or(0.0).total_cmp(&b.0.parse::<f64>().unwrap_or(0.0)));
     }
     let line = -spec.threshold.log10();
+    // T505: the gap between groups, a share of the summed group spans.
+    let total: f64 = groups.iter().map(|(_, pts)| pts.iter().map(|p| p.1).fold(0.0, f64::max)).sum();
+    let gap = total * spec.gap_percent / 100.0;
+    let mut colors = Vec::new();
+    let mut labels = Vec::new();
     let mut table = ResultTable::new(&["N", "Offset", "Smallest p", "Largest -log10 p", "Above the line"]);
     let mut on_sheet = Vec::new();
     let mut plots = Vec::new();
@@ -121,8 +139,24 @@ pub(super) fn run(
         let x = on_sheet.len();
         on_sheet.push(number_column("Cumulative position", &label, Designation::X, xs));
         on_sheet.push(number_column("-log10 p", &label, Designation::Y, ys));
+        if spec.alternate {
+            colors.push((plots.len(), ALTERNATE[plots.len() % 2]));
+        }
+        if spec.label_hits && above > 0 {
+            // T505: the position of each point at or above the line, the others unlabelled.
+            labels.push((plots.len(), on_sheet.len(), crate::color::Color::BLACK));
+            on_sheet.push(SheetColumn {
+                designation: Designation::Label,
+                long_name: "Hit label".into(),
+                units: String::new(),
+                comments: label.clone(),
+                data: ColumnData::text(
+                    pts.iter().map(|p| if -p.2.log10() >= line { num(p.1) } else { String::new() }).collect(),
+                ),
+            });
+        }
         plots.push(GraphPlot { x, y: x + 1, kind: PlotKind::Scatter, label, line_of: None });
-        offset += pts.iter().map(|p| p.1).fold(0.0, f64::max);
+        offset += pts.iter().map(|p| p.1).fold(0.0, f64::max) + gap;
     }
     let x = on_sheet.len();
     on_sheet.push(number_column("Line X", "Significance line", Designation::X, vec![x_lo, x_hi]));
@@ -159,7 +193,7 @@ pub(super) fn run(
         y_scale: ScaleKind::Linear,
         x_title: format!("{} position", column_label(gc)),
         y_title: "-log10 p".into(),
-        look: Default::default(),
+        look: super::dist::Look { colors, labels, ..Default::default() },
     });
     Ok(Output { table: Some(table), on_sheet: sheet_cols, notes, graph, more_graphs: Vec::new() }.shift_graphs(shift))
 }
@@ -191,7 +225,19 @@ mod tests {
         let cols = super::super::dist::plot_columns(&p, out.new_graph.unwrap());
         assert_eq!((cols[0].0.as_str(), cols[0].1.as_str()), ("Cumulative position", "-log10 p"), "{cols:?}");
         assert_eq!(cols.last().unwrap().1, "Line Y");
-        let bad = ManhattanSpec { threshold: 0.0, graph: false };
+        // T505: two alternating colours, a gap between groups, labels of the hits.
+        let g = p.graph(out.new_graph.unwrap()).unwrap();
+        let (a, b) = (g.layers[0].plots[0].symbol.color, g.layers[0].plots[1].symbol.color);
+        assert_eq!((a, b), (ALTERNATE[0], ALTERNATE[1]));
+        let spaced = ManhattanSpec { gap_percent: 10.0, label_hits: true, ..Default::default() };
+        let out = p.analyze(&request(vec![chrom, pos, pv], spaced)).unwrap();
+        let t = out.table.as_ref().unwrap();
+        assert_eq!(t.rows[1].1[1], 100.0 + 15.0, "the gap is 10 % of 100 + 50");
+        let g = p.graph(out.new_graph.unwrap()).unwrap();
+        let labelled = &g.layers[0].plots[1].decor.labels;
+        assert!(labelled.enable, "group 2 has a hit");
+        assert!(!g.layers[0].plots[0].decor.labels.enable, "group 1 has none");
+        let bad = ManhattanSpec { threshold: 0.0, graph: false, ..Default::default() };
         assert!(p.analyze(&request(vec![chrom, pos, pv], bad)).is_err());
         assert!(p.analyze(&request(vec![chrom], ManhattanSpec::default())).is_err());
     }

@@ -8,8 +8,8 @@ Origin 2016, so the layout is Sheaf's own.
 
 ## Left
 
-- Alternating two colours by group, group names at the group centres on the X axis, labels of the top hits, a gap
-  between groups.
+- Group names at the group centres on the X axis (alternating colours, labels of the hits and a gap between groups:
+  T505).
 
 ## Tests
 

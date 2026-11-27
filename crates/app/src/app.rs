@@ -4611,6 +4611,9 @@ impl SheafApp {
                                 report.not_numbers
                             ));
                         }
+                        if report.formulas > 0 {
+                            status.push_str(&format!("; {} cell formula(s)", report.formulas));
+                        }
                         self.say(status);
                         // The pasted block becomes the selection.
                         let project = self.doc.project();

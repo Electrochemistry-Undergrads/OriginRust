@@ -1610,6 +1610,12 @@ Formula Bar. Origin 2016 has neither.
 - **Saved:** the formulas are on the sheet (`Worksheet::cell_formulas`) in the `.sheaf` file.
 - **Moving rows (T462):** inserting, deleting and sorting rows move a formula cell with its row (as cell notes move);
   a deleted row's formula goes with it.
+- **Pasted formulas (T492, as a spreadsheet takes pasted text):** a pasted cell whose text starts with `=` becomes a
+  cell formula when it can be read, with the spreadsheet names that differ replaced (`AVERAGE(` is `mean(`, `PI()` is
+  `pi`; SUM, MIN, MAX, SQRT ... are the same, any case); one that cannot be read is pasted as its text, as if typed.
+  The column's type is decided by the other pasted cells. Every pasted cell loses the formula it had, as a cell typed
+  over does; all formulas are worked out once after the paste, so a pasted formula reads cells pasted with it. The
+  status line counts the cell formulas. Pasting takes the text as it is: references are not moved for where it lands.
 - **References follow rows (T491, as a spreadsheet does):** inserting or deleting rows of some columns (whole rows or
   cells shifted) rewrites every formula of the sheet whose references name those columns of this sheet (plain `B3`
   or `ThisSheet!B3`): a reference at or below the insertion moves down by the rows inserted, one below deleted rows

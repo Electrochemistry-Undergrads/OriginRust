@@ -61,6 +61,8 @@ pub struct PasteReport {
     pub locked_columns: usize,
     /// Pasted texts that are not numbers but landed in a number column and became missing values.
     pub not_numbers: usize,
+    /// Pasted `=...` cells that became cell formulas (T492).
+    pub formulas: usize,
 }
 
 /// The shortest text that reads back as exactly this number, without a useless ".0".
@@ -444,7 +446,9 @@ impl Project {
     /// sheet; rows are added when it is longer. Numbers are stored as numbers and other text as
     /// text: a column that was empty before takes the type of what is pasted into it, a column
     /// with data keeps its type (text pasted into a number column becomes a missing value). A
-    /// column that a formula keeps up to date is not changed.
+    /// column that a formula keeps up to date is not changed. A cell whose text starts with `=` becomes a cell
+    /// formula (T492; a spreadsheet formula, see [`Project::paste_cell_formulas`]); every other pasted cell loses
+    /// the formula it had, as a cell typed over does.
     pub fn paste_text(
         &mut self,
         book: WindowId,
@@ -499,14 +503,32 @@ impl Project {
         let ws =
             self.workbook_mut(book).ok_or(ProjectError::NoSuchWindow(book))?.sheets.get_mut(sheet).expect("checked");
         let block = row..row + table.len();
+        let mut formulas = Vec::new();
+        let mut pasted = Vec::new();
         for j in 0..report.columns {
             let column = &mut ws.columns[col + j];
             if column.is_locked() {
                 report.locked_columns += 1;
                 continue;
             }
-            let cells: Vec<&str> = table.iter().map(|r| r[j].as_str()).collect();
+            pasted.push(column.id);
+            // T492: `=...` cells become cell formulas; they are pasted empty first.
+            let cells: Vec<&str> = table
+                .iter()
+                .enumerate()
+                .map(|(i, r)| match r[j].trim().strip_prefix('=').map(str::trim).filter(|f| !f.is_empty()) {
+                    Some(f) => {
+                        formulas.push((column.id, row + i, f.to_string(), r[j].clone()));
+                        ""
+                    }
+                    None => r[j].as_str(),
+                })
+                .collect();
             report.not_numbers += paste_column(column, &block, &cells);
+        }
+        ws.cell_formulas.retain(|f| !(pasted.contains(&f.column) && block.contains(&f.row)));
+        if !formulas.is_empty() {
+            report.formulas = self.paste_cell_formulas(formulas);
         }
         Ok(report)
     }

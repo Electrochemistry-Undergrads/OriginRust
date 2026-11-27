@@ -9,7 +9,7 @@ use sheaf_core::{Project, WindowId};
 pub enum BrowserOutcome {
     Open,
     Closed,
-    Apply { graph: WindowId, layer: usize, plot: usize, by: BrowseBy },
+    Apply { graph: WindowId, layer: usize, plot: usize, by: BrowseBy, all: bool },
     Remove { graph: WindowId },
 }
 
@@ -22,6 +22,8 @@ pub struct BrowserGraphDialog {
     pub by: BrowseBy,
     /// The graph has a browser already (Remove Browser is offered).
     pub has_browser: bool,
+    /// Every plot of the layer steps with it (T489, by sheet or book).
+    pub all: bool,
 }
 
 impl BrowserGraphDialog {
@@ -47,6 +49,7 @@ impl BrowserGraphDialog {
             plot: current.map_or(0, |b| b.plot),
             by: current.map_or(BrowseBy::Columns, |b| b.by),
             has_browser: current.is_some(),
+            all: current.is_some_and(|b| !b.others.is_empty()),
         })
     }
 
@@ -72,6 +75,9 @@ impl BrowserGraphDialog {
                 ui.radio_value(&mut self.by, BrowseBy::Columns, "The Y columns of the sheet");
                 ui.radio_value(&mut self.by, BrowseBy::Sheets, "The same column in every sheet of the book");
                 ui.radio_value(&mut self.by, BrowseBy::Books, "The same column of the same sheet in every book");
+                // T489: every plot of the layer steps with it to its own column of the next sheet or book
+                let several = self.plots.len() > 1 && self.by != BrowseBy::Columns;
+                ui.add_enabled(several, egui::Checkbox::new(&mut self.all, "Browse all plots of the layer"));
                 ui.separator();
                 ui.horizontal(|ui| {
                     if ui.button("OK").clicked() {
@@ -80,6 +86,7 @@ impl BrowserGraphDialog {
                             layer: self.layer,
                             plot: self.plot,
                             by: self.by,
+                            all: self.all && self.by != BrowseBy::Columns,
                         };
                     }
                     if ui.add_enabled(self.has_browser, egui::Button::new("Remove Browser")).clicked() {

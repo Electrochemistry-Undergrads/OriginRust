@@ -3898,6 +3898,9 @@ pub enum AnalyzeTool {
         /// The covariate values of the prediction, comma-separated, one per covariate (default: their means).
         #[arg(long, value_delimiter = ',', allow_negative_numbers = true)]
         at: Option<Vec<f64>>,
+        /// A further covariate setting to predict at, comma-separated (repeat for each).
+        #[arg(long = "also-at", value_name = "V,V..", allow_hyphen_values = true)]
+        also_at: Vec<String>,
         /// Level of the percentile intervals, in percent.
         #[arg(long, default_value_t = 95.0)]
         confidence: f64,

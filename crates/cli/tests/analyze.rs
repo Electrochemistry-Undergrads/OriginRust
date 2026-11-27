@@ -1697,6 +1697,10 @@ fn life_data_regression_runs_from_the_command_line() {
         "90",
     ]);
     assert!(ok && out.contains("dose = 1 (given), 90 % intervals") && out.contains("5 %:"), "{err} {out}");
+    // Several settings at once (T504).
+    let (ok, out, err) =
+        sheaf(&["analyze", "lifereg", file, "--y", "dose,hours,cens", "--at", "1", "--also-at", "2", "--also-at", "3"]);
+    assert!(ok && out.contains("dose = 2 (given)") && out.contains("dose = 3 (given)"), "{err} {out}");
     let (ok, _, err) = sheaf(&["analyze", "lifereg", file, "--y", "dose,hours,cens", "--at", "1,2"]);
     assert!(!ok && err.contains("one value per covariate"), "{err}");
 }

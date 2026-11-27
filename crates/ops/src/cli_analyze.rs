@@ -1356,7 +1356,19 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
-        AnalyzeTool::Lifereg { target, distribution, censor, frequency, percentiles, at, confidence } => {
+        AnalyzeTool::Lifereg { target, distribution, censor, frequency, percentiles, at, also_at, confidence } => {
+            let mut more = Vec::new();
+            for text in &also_at {
+                let v: Vec<f64> = text
+                    .split(',')
+                    .map(|t| {
+                        t.trim()
+                            .parse::<f64>()
+                            .map_err(|_| anyhow::anyhow!("--also-at: '{}' is not a number", t.trim()))
+                    })
+                    .collect::<Result<_, _>>()?;
+                more.push(v);
+            }
             let dist = match distribution.to_ascii_lowercase().as_str() {
                 "weibull" => analysis::LifeDist::Weibull,
                 "lognormal" => analysis::LifeDist::Lognormal,
@@ -1371,6 +1383,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     frequency,
                     percentiles: percentiles.iter().map(|p| p / 100.0).collect(),
                     at,
+                    also_at: more,
                     confidence: confidence / 100.0,
                 })),
             )

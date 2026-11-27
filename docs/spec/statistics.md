@@ -1929,15 +1929,21 @@ counts the groups.
 ## 33 Manhattan plot (T362, Origin 2017 app; not measured)
 
 Origin's Manhattan Plot app (2017 Pro) is not part of Origin 2016, so this is Sheaf's own. Statistics > Manhattan
-Plot... (`Tool::Manhattan`, `sheaf analyze manhattan --y GROUP,POS,P [--threshold 5e-8] [--no-graph]`): the chosen
+Plot... (`Tool::Manhattan`, `sheaf analyze manhattan --y GROUP,POS,P [--threshold 5e-8] [--palette] [--gap PCT]
+[--label-hits] [--no-graph]`): the chosen
 columns are the group (chromosome; numbers or text), the position and the p-value; with two chosen columns
 (position, p-value) the group is the sheet's X column for them. Rows with a missing group or position, or a p outside
 (0, 1], are left out. Numeric groups are sorted, text groups keep the order they first appear; each group's positions
-are moved by the sum of the largest positions of the groups before it (no gap), and Y is `-log10 p`. The result sheet
+are moved by the sum of the largest positions of the groups before it, plus a gap per group before it (T505;
+`--gap`, the window's "Gap between groups (%)": that percent of the summed group spans; default 0), and Y is
+`-log10 p`. The result sheet
 `ManhattanN` has one row per group (N, Offset, Smallest p, Largest -log10 p, Above the line) and, per group, the
-cumulative positions and `-log10 p`; a new graph draws each group as its own scatter (so groups take the colour list
-in turn) and the significance line at `-log10(threshold)` (default 5e-8) across the data. Alternating two colours,
-group labels at the group centres and point labels for the top hits are not built.
+cumulative positions and `-log10 p`; a new graph draws each group as its own scatter and the significance line at
+`-log10(threshold)` (default 5e-8) across the data. The groups alternate between a dark blue (31, 64, 145) and a
+mid grey (140, 140, 140) (T505; `--palette` or unticking "Two alternating colours" gives each group the next colour
+of the list instead). With `--label-hits` ("Label the points at or above the line") each point at or above the line
+is labelled at its right with its position in its group, from a "Hit label" column of the sheet. Group names at the
+group centres on the X axis are not built (the axis has no text tick labels).
 
 ## 34 Autocorrelation (T363, Origin 2024b Time Series Analysis app; not measured)
 

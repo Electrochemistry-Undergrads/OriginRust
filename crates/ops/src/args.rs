@@ -3471,6 +3471,15 @@ pub enum AnalyzeTool {
         /// The significance level drawn as a line.
         #[arg(long, default_value_t = 5e-8)]
         threshold: f64,
+        /// Colour every group from the palette instead of two alternating colours.
+        #[arg(long)]
+        palette: bool,
+        /// A gap between groups, in percent of the summed group spans.
+        #[arg(long, default_value_t = 0.0)]
+        gap: f64,
+        /// Label the points at or above the line with their position.
+        #[arg(long)]
+        label_hits: bool,
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,

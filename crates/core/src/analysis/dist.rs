@@ -81,6 +81,9 @@ impl Output {
             for (_, c) in &mut g.look.y_errors {
                 *c += by;
             }
+            for (_, c, _) in &mut g.look.labels {
+                *c += by;
+            }
         }
         self
     }

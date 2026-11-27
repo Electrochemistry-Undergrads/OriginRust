@@ -1533,6 +1533,22 @@ fn manhattan_plot_runs_from_the_command_line() {
     let (ok, out, err) =
         sheaf(&["analyze", "manhattan", file, "--y", "chrom,pos,p", "--threshold", "0.05", "--no-graph"]);
     assert!(ok && out.contains("3 at or above"), "{err} {out}");
+    // T505: a gap between groups and labels of the hits; a gap beyond 100 % is refused.
+    let (ok, out, err) = sheaf(&[
+        "analyze",
+        "manhattan",
+        file,
+        "--y",
+        "chrom,pos,p",
+        "--threshold",
+        "0.05",
+        "--gap",
+        "5",
+        "--label-hits",
+    ]);
+    assert!(ok && out.contains("Manhattan"), "{err} {out}");
+    let (ok, _, err) = sheaf(&["analyze", "manhattan", file, "--y", "chrom,pos,p", "--gap", "150"]);
+    assert!(!ok && err.contains("0 to 100 percent"), "{err}");
     // Two columns are the position and the p-value with the group from the sheet's X: chrom is X itself here.
     let (ok, _, err) = sheaf(&["analyze", "manhattan", file, "--y", "chrom,pos"]);
     assert!(!ok && err.contains("choose the group column"), "{err}");

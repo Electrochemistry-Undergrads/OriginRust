@@ -1724,9 +1724,16 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 graph: !no_graph,
             })),
         ),
-        AnalyzeTool::Manhattan { target, threshold, no_graph } => {
-            (target, Job::Tool(Tool::Manhattan(analysis::ManhattanSpec { threshold, graph: !no_graph })))
-        }
+        AnalyzeTool::Manhattan { target, threshold, palette, gap, label_hits, no_graph } => (
+            target,
+            Job::Tool(Tool::Manhattan(analysis::ManhattanSpec {
+                threshold,
+                graph: !no_graph,
+                alternate: !palette,
+                gap_percent: gap,
+                label_hits,
+            })),
+        ),
         AnalyzeTool::Timepivot { target, period, stat, every, fiscal_start, by } => {
             let by = match by.as_deref().map(|b| b.trim().to_ascii_lowercase()) {
                 None => None,

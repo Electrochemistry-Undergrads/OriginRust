@@ -1068,6 +1068,13 @@ impl MultiOptions {
                     ui.add(egui::DragValue::new(&mut s.threshold).speed(1e-9).range(1e-300..=0.999_999));
                 });
                 ui.checkbox(&mut s.graph, "Manhattan graph (one scatter per group and the line)");
+                // T505: the look of the groups.
+                ui.checkbox(&mut s.alternate, "Two alternating colours for the groups");
+                ui.horizontal(|ui| {
+                    ui.label("Gap between groups (%)");
+                    ui.add(egui::DragValue::new(&mut s.gap_percent).speed(0.5).range(0.0..=100.0));
+                });
+                ui.checkbox(&mut s.label_hits, "Label the points at or above the line with their position");
             }
             AnalysisKind::TimePivot => {
                 ui.label(

@@ -523,6 +523,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T494](T494-quantreg-standard-errors.md) | Quantile Regression standard errors and Prob>|t| (robust or iid kernel estimates) | S | done 2026-11-27 (statistics 29) |
 | [T495](T495-arima-exact-likelihood.md) | ARIMA by exact maximum likelihood (Kalman filter; checked against statsmodels) | M | done 2026-11-27 (statistics 43) |
 | [T496](T496-monte-carlo-correlations.md) | Monte Carlo Simulation: correlated inputs (Gaussian copula) and a histogram of the output | S | done 2026-11-27 (statistics 51) |
+| [T497](T497-adf-pvalues-kpss-auto.md) | Stationarity tests: ADF p-values, finite-sample critical values, automatic KPSS lags (as statsmodels) | S | done 2026-11-27 (statistics 41) |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |

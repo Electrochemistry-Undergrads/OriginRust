@@ -2060,6 +2060,9 @@ fn stationarity_tests_run_from_the_command_line() {
     let (ok, out, err) = sheaf(&["analyze", "stationarity", file, "--y", "walk"]);
     assert!(ok, "{err}");
     assert!(out.contains("does not reject a unit root at 5%") && out.contains("Stationarity1"), "{out}");
+    assert!(out.contains("(Prob = ") && out.contains("MacKinnon's (1994)"), "T497: {out}");
+    let (ok, _, err) = sheaf(&["analyze", "stationarity", file, "--y", "walk", "--kpss-auto"]);
+    assert!(ok, "{err}");
     let (ok, out, err) = sheaf(&[
         "analyze",
         "stationarity",

@@ -2093,26 +2093,33 @@ to 1e-10. STL (loess) decomposition, trend extrapolation to the ends and station
 Origin's Time Series Analysis app (2024b Pro) is not part of Origin 2016, so this is Sheaf's own, with the conventions
 of statsmodels' `adfuller` and `kpss` (nlags "legacy"). Statistics > Stationarity Tests (ADF, KPSS)...
 (`Tool::Stationarity`, `sheaf analyze stationarity --y COL[,COL..] [--adf-terms constant|trend|none] [--adf-lags P]
-[--kpss-null level|trend] [--kpss-lags L]`): every chosen column is a series of its own, in row order, complete in the
-chosen rows.
+[--kpss-null level|trend] [--kpss-lags L | --kpss-auto]`): every chosen column is a series of its own, in row order,
+complete in the chosen rows.
 
 - **ADF**: the least-squares regression of `dy_t` on `y_{t-1}`, `p` lagged differences and the chosen deterministic
   terms (a constant; a constant and time counted from 1 in the regression sample; or neither); the statistic is the t
   value of the `y_{t-1}` coefficient. Without `--adf-lags`, the orders `0..=maxlag` (`maxlag = ceil(12 (n/100)^(1/4))`,
   at most `n/2 - k - 1`) are fitted on one common sample and the smallest AIC (`-2 lnL + 2k`) wins; the chosen order is
-  then fitted on all the points it allows. Critical values at 1, 5 and 10 % are MacKinnon's (2010) asymptotic ones:
-  -3.43035, -2.86154, -2.56677 (constant); -3.95877, -3.41049, -3.12705 (trend); -2.56574, -1.94100, -1.61682
-  (none). No p-value is computed.
+  then fitted on all the points it allows. Critical values at 1, 5 and 10 % are MacKinnon's (2010) finite-sample ones
+  for the regression's `T` points, `b0 + b1/T + b2/T^2 + b3/T^3` (T497; asymptotically -3.43035, -2.86154, -2.56677
+  for a constant, -3.95877, -3.41049, -3.12705 with a trend, -2.56574, -1.94100, -1.61682 for none; before T497 these
+  asymptotic values were shown). Prob (T497) is MacKinnon's (1994) approximate p-value: `Phi(c0 + c1 tau + c2 tau^2
+  [+ c3 tau^3])` with his small-tau coefficients up to `tau*` (-1.61 constant, -2.89 trend, -1.04 none) and his
+  large-tau ones above, 0 below his smallest tau and 1 above his largest. Both as statsmodels' `adfuller` gives them.
+  The 5 % decision in the notes still compares the statistic with the 5 % critical value.
 - **KPSS**: the residuals of `y` on a constant (level) or a constant and time (trend), `eta = sum S_t^2 / (n^2 s^2)`
   with partial sums `S_t` and the Bartlett-weighted long-run variance on `l = ceil(12 (n/100)^(1/4))` lags unless
-  given. The probability is interpolated linearly in Kwiatkowski et al.'s (1992) table (level 0.347, 0.463, 0.574,
+  given; with `--kpss-auto` (the window's KPSS lags "Automatic (Hobijn)", T497) `l` is Hobijn et al.'s (1998) rule as
+  statsmodels' `nlags="auto"`: with `c = floor(n^(2/9))`, `g_i = 2 sum_t e_t e_{t-i} / n`, `s0 = sum e^2 / n + sum_{i<=c}
+  g_i` and `s1 = sum_{i<=c} i g_i`, `l = floor(1.1447 (s1/s0)^(2/3) n^(1/3))`, at most `n - 1`. The probability is interpolated linearly in Kwiatkowski et al.'s (1992) table (level 0.347, 0.463, 0.574,
   0.739; trend 0.119, 0.146, 0.176, 0.216 at 10, 5, 2.5, 1 %) and held at 0.1 and 0.01 beyond it.
 
 The result sheet `StationarityN` has an ADF and a KPSS row per column (Statistic, Lags, Points, Critical 1%, 5%, 10%,
 Prob); the notes give the 5 % decisions. The statistics, lag choices and table probabilities are checked against numpy
-(`tools/stationarity-ref.py`, `crates/calc/tests/stationarity_reference.rs`) to 1e-9; the published critical values
-are quoted, not checked here (neither statsmodels nor the tables are available locally). ADF p-values (MacKinnon's
-response surfaces), finite-sample critical values, the Phillips-Perron test and automatic KPSS bandwidths are not built.
+(`tools/stationarity-ref.py`, `crates/calc/tests/stationarity_reference.rs`) to 1e-9; the ADF p-values (seven taus,
+three term choices, to 1e-10), finite-sample critical values (to 1e-12), and the automatic KPSS lags and statistics
+against statsmodels 0.15 on three series (`adf_p_values_critical_values_and_kpss_auto_lags_match_statsmodels`,
+`re-workspace/scratch/t480/stat_ref.py`, local only). The Phillips-Perron test is not built.
 
 ## 42 Exponential smoothing forecast (T374, Origin 2024b Time Series Analysis app; not measured)
 

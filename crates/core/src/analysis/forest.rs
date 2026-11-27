@@ -161,9 +161,10 @@ pub(super) fn run(
     };
     let f = forest(&x, &target, opts).map_err(|e| AnalysisError::BadOption(e.to_string()))?;
     let names: Vec<String> = xcs.iter().map(|c| column_label(c)).collect();
-    let mut table = ResultTable::new(&["Importance"]);
-    for (name, v) in names.iter().zip(&f.importance) {
-        table.push_row(name.clone(), vec![*v], vec![String::new()]);
+    // T502: the permutation importance next to the impurity importance.
+    let mut table = ResultTable::new(&["Importance", "Permutation importance"]);
+    for ((name, v), pv) in names.iter().zip(&f.importance).zip(&f.permutation_importance) {
+        table.push_row(name.clone(), vec![*v, *pv], vec![String::new(); 2]);
     }
     let what = if classify { "out-of-bag error rate" } else { "out-of-bag mean squared error" };
     let top = names
@@ -180,6 +181,11 @@ pub(super) fn run(
         if classify { format!("{} classes", labels.len()) } else { "numeric response".to_string() },
         num(f.oob_error)
     )];
+    notes.push(format!(
+        "Importance is each predictor's share of the impurity decrease of all splits; permutation importance is the \
+         mean increase of each tree's {} when the predictor's values are shuffled among its out-of-bag rows.",
+        if classify { "out-of-bag error rate" } else { "out-of-bag mean squared error" }
+    ));
     let mut sheet_cols = vec![SheetColumn {
         designation: Designation::Label,
         long_name: "Predictor".into(),
@@ -188,6 +194,7 @@ pub(super) fn run(
         data: ColumnData::text(names.clone()),
     }];
     sheet_cols.push(number_column("Importance", Designation::Y, f.importance.clone()));
+    sheet_cols.push(number_column("Permutation importance", Designation::Y, f.permutation_importance.clone()));
     let shift = sheet_cols.len();
     let mut on_sheet = vec![number_column("Index", Designation::X, (1..=names.len()).map(|i| i as f64).collect())];
     on_sheet.push(number_column("Importance (plot)", Designation::Y, f.importance.clone()));
@@ -252,6 +259,10 @@ mod tests {
         let out = p.analyze(&request(vec![ac, bc, lc], spec)).unwrap();
         let t = out.table.as_ref().unwrap();
         assert!(t.rows[0].1[0] > 0.8, "the first predictor decides: {:?}", t.rows);
+        // T502: by permutation too.
+        assert_eq!(t.headers, ["Importance", "Permutation importance"]);
+        assert!(t.rows[0].1[1] > 0.2 && t.rows[1].1[1] < 0.1, "{:?}", t.rows);
+        assert!(out.notes[1].contains("shuffled among its out-of-bag rows"), "{:?}", out.notes);
         assert!(
             out.notes[0].contains("Classification forest of 20 trees") && out.notes[0].contains("2 classes"),
             "{:?}",

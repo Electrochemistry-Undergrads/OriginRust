@@ -119,6 +119,10 @@ pub struct Forest {
     /// Share misclassified or mean squared error, out of bag (NaN without bootstrap).
     pub oob_error: f64,
     pub importance: Vec<f64>,
+    /// Breiman's permutation importance of each predictor (T502): the mean over the trees of the increase of a
+    /// tree's out-of-bag error (share misclassified, or mean squared error) when the predictor's values are shuffled
+    /// among that tree's out-of-bag rows; NaN without bootstrap. Can be below 0 for a useless predictor.
+    pub permutation_importance: Vec<f64>,
     /// Prediction of each row by all trees.
     pub fitted: Vec<f64>,
     classes: usize,
@@ -376,6 +380,14 @@ pub fn forest(x: &[Vec<f64>], y: &Target, opts: ForestOptions) -> Result<Forest,
     let mut rng = Some(Rng(opts.seed));
     let mut trees = Vec::with_capacity(opts.trees);
     let mut oob_preds: Vec<Vec<f64>> = vec![Vec::new(); n];
+    // T502: the shuffles take their own stream, so the trees do not change.
+    let mut shuffle = Rng(opts.seed ^ 0x5DEE_CE66_D1CE_5EED);
+    let mut perm_sum = vec![0.0; p];
+    let mut perm_trees = 0usize;
+    let row_error = |pred: f64, r: usize| match y {
+        Target::Class { y, .. } => f64::from(u8::from(pred != y[r] as f64)),
+        Target::Value(y) => (pred - y[r]).powi(2),
+    };
     for _ in 0..opts.trees {
         let rows: Vec<usize> = if opts.bootstrap {
             let r = rng.as_mut().expect("the generator");
@@ -394,6 +406,32 @@ pub fn forest(x: &[Vec<f64>], y: &Target, opts: ForestOptions) -> Result<Forest,
             if !seen {
                 oob_preds[r].push(t.predict(&x[r]));
             }
+        }
+        // T502: the tree's out-of-bag error, then with each predictor shuffled among its out-of-bag rows.
+        let oob_rows: Vec<usize> = (0..n).filter(|r| !in_bag[*r]).collect();
+        if !oob_rows.is_empty() {
+            let m = oob_rows.len() as f64;
+            let base: f64 = oob_rows.iter().map(|&r| row_error(t.predict(&x[r]), r)).sum::<f64>() / m;
+            let mut row = vec![0.0; p];
+            for (j, sum) in perm_sum.iter_mut().enumerate() {
+                let mut order = oob_rows.clone();
+                for i in (1..order.len()).rev() {
+                    let k = shuffle.below(i + 1);
+                    order.swap(i, k);
+                }
+                let e: f64 = oob_rows
+                    .iter()
+                    .zip(&order)
+                    .map(|(&r, &s)| {
+                        row.copy_from_slice(&x[r]);
+                        row[j] = x[s][j];
+                        row_error(t.predict(&row), r)
+                    })
+                    .sum::<f64>()
+                    / m;
+                *sum += e - base;
+            }
+            perm_trees += 1;
         }
         trees.push(t);
     }
@@ -416,7 +454,9 @@ pub fn forest(x: &[Vec<f64>], y: &Target, opts: ForestOptions) -> Result<Forest,
     };
     let total: f64 = g.importance.iter().sum();
     let importance = g.importance.iter().map(|v| if total > 0.0 { v / total } else { 0.0 }).collect();
-    let mut f = Forest { trees, oob, oob_error, importance, fitted: Vec::new(), classes };
+    let permutation_importance =
+        perm_sum.iter().map(|s| if perm_trees > 0 { s / perm_trees as f64 } else { f64::NAN }).collect();
+    let mut f = Forest { trees, oob, oob_error, importance, permutation_importance, fitted: Vec::new(), classes };
     f.fitted = x.iter().map(|row| f.predict(row)).collect();
     Ok(f)
 }
@@ -456,6 +496,23 @@ mod tests {
         assert_ne!(a.trees, c.trees);
         let all = forest(&x, &y, ForestOptions { bootstrap: false, trees: 3, ..opts }).unwrap();
         assert!(all.oob_error.is_nan());
+        assert!(all.permutation_importance.iter().all(|v| v.is_nan()), "no out-of-bag rows");
+        // T502: shuffling the useful predictor costs about half the answers (two classes); the others cost little.
+        let pi = &a.permutation_importance;
+        assert!(pi[0] > 0.3 && pi[1].abs() < 0.05 && pi[2].abs() < 0.05, "{pi:?}");
+    }
+
+    #[test]
+    fn permutation_importance_of_a_regression_follows_the_signal() {
+        // y = 3 x0 + 0.1 x1 + noise from x2's pattern: x0 matters most, x1 a little, x2 not at all.
+        let x: Vec<Vec<f64>> =
+            (0..120).map(|i| vec![f64::from(i % 12), f64::from((i * 7) % 11), f64::from((i * 5) % 13)]).collect();
+        let y = Target::Value(x.iter().map(|r| 3.0 * r[0] + 0.1 * r[1]).collect());
+        let f = forest(&x, &y, ForestOptions { trees: 40, ..Default::default() }).unwrap();
+        let pi = &f.permutation_importance;
+        assert!(pi[0] > 10.0 * pi[1].abs().max(pi[2].abs()), "{pi:?}");
+        // Reproducible with the seed (the shuffles have their own stream, so the trees are unchanged).
+        assert_eq!(f, forest(&x, &y, ForestOptions { trees: 40, ..Default::default() }).unwrap());
     }
 
     #[test]

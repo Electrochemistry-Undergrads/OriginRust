@@ -2282,13 +2282,18 @@ Y and Label column of the sheet.
   = (s >> 11) / 2^53`, from the seed; the same seed gives the same forest.
 - Out-of-bag predictions use the trees that did not see a row; the out-of-bag error is the share misclassified or the
   mean squared error. Importance is each predictor's total impurity decrease, scaled to sum to 1.
+- **Permutation importance** (T502, Breiman's): for every tree with out-of-bag rows, its error on them (share
+  misclassified, or mean squared error) and its error with one predictor's values shuffled among those rows (a
+  Fisher-Yates shuffle from a stream of its own seeded from the forest's seed, so the trees and every other result
+  stay as they were); the predictor's permutation importance is the mean over those trees of the increase. Not
+  scaled; a useless predictor can come out slightly below 0; blank without bootstrap.
 
-The result sheet `RandomForestN` has one row per predictor (Importance), then the row numbers, the response, the
+The result sheet `RandomForestN` has one row per predictor (Importance, Permutation importance), then the row numbers, the response, the
 out-of-bag and whole-forest predictions, and for classes a confusion matrix of the out-of-bag predictions (actual
 classes down, predicted across); a new graph draws the importance as columns. Single trees and whole seeded forests
 agree exactly with an independent Python implementation of these rules (`tools/forest-ref.py`,
-`crates/calc/tests/forest_reference.rs`; scikit-learn is not available here). Permutation importance, class weights,
-probability outputs, prediction of new rows and saved models are not built.
+`crates/calc/tests/forest_reference.rs`; scikit-learn is not available here). Class weights, probability outputs,
+prediction of new rows and saved models are not built.
 
 ## 45 Two-level factorial designs and effects (T380, base of Origin 2027's split-plot designs; not measured)
 

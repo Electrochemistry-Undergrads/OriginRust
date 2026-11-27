@@ -57,7 +57,7 @@ pub use sheaf_fit::multipeak::{FitBaseline, PeakShape};
 pub use acf::AcfSpec;
 pub use arima::ArimaSpec;
 pub use arima::{ArimaMethod, ArimaSeasonal};
-pub use binscatter::BinScatterSpec;
+pub use binscatter::{BinError, BinScatterSpec};
 pub use calc::binscatter::BinRule;
 pub use calc::changepoint::{ChangeKind, Penalty as ChangePenalty};
 pub use capability::{CapModel, CapabilitySpec};
@@ -2483,8 +2483,10 @@ impl Project {
     fn xy_graph(&mut self, ids: &[ColumnId], plan: &dist::XyGraph) -> WindowId {
         let long_name = ids.first().and_then(|c| self.locate(*c)).map(|(b, _, _)| b.title_for_graph());
         let graph = self.add_graph(crate::template::Template::Scatter);
-        for p in &plan.plots {
-            self.add_plot_xy(graph, 0, Some(ids[p.x]), ids[p.y], None).expect("the graph and the new columns exist");
+        for (k, p) in plan.plots.iter().enumerate() {
+            // T501: a plot's Y error bars from a column of the sheet.
+            let err = plan.look.y_errors.iter().find(|(i, _)| *i == k).map(|(_, c)| ids[*c]);
+            self.add_plot_xy(graph, 0, Some(ids[p.x]), ids[p.y], err).expect("the graph and the new columns exist");
         }
         if let Some(g) = self.graph_mut(graph) {
             if let Some(l) = g.layers.first_mut() {

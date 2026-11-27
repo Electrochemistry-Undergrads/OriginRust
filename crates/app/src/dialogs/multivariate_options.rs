@@ -289,9 +289,13 @@ impl MultiOptions {
                 Ok(Tool::Manhattan(self.manhattan))
             }
             AnalysisKind::BinScatter => {
-                let (BinRule::EqualWidth(n) | BinRule::EqualCount(n)) = self.binscatter.rule;
-                if n == 0 {
+                if let BinRule::EqualWidth(0) | BinRule::EqualCount(0) = self.binscatter.rule {
                     return Err("the number of bins must be at least 1".to_string());
+                }
+                if let BinRule::Width(w) = self.binscatter.rule
+                    && (w.is_nan() || w <= 0.0)
+                {
+                    return Err("the bin width must be above 0".to_string());
                 }
                 Ok(Tool::BinScatter(self.binscatter))
             }
@@ -1112,21 +1116,42 @@ impl MultiOptions {
             AnalysisKind::BinScatter => {
                 ui.label("Every chosen column is binned against its X column (or the row number).");
                 let s = &mut self.binscatter;
-                let (mut n, mut width) = match s.rule {
-                    BinRule::EqualWidth(n) => (n, true),
-                    BinRule::EqualCount(n) => (n, false),
+                // 0 equal counts, 1 equal width, 2 a given width (T501).
+                let (mut n, mut how, mut w) = match s.rule {
+                    BinRule::EqualCount(n) => (n, 0, 1.0),
+                    BinRule::EqualWidth(n) => (n, 1, 1.0),
+                    BinRule::Width(w) => (10, 2, w),
                 };
                 ui.horizontal(|ui| {
-                    ui.label("Number of bins");
-                    ui.add(egui::DragValue::new(&mut n).range(1..=100_000));
+                    ui.label("Bins of");
+                    ui.radio_value(&mut how, 0, "Equal counts");
+                    ui.radio_value(&mut how, 1, "Equal width");
+                    ui.radio_value(&mut how, 2, "Width");
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Bins of");
-                    ui.radio_value(&mut width, false, "Equal counts");
-                    ui.radio_value(&mut width, true, "Equal width");
+                    if how == 2 {
+                        ui.label("Bin width");
+                        ui.add(egui::DragValue::new(&mut w).speed(0.1).range(1e-12..=1e12));
+                    } else {
+                        ui.label("Number of bins");
+                        ui.add(egui::DragValue::new(&mut n).range(1..=100_000));
+                    }
                 });
-                s.rule = if width { BinRule::EqualWidth(n) } else { BinRule::EqualCount(n) };
+                s.rule = match how {
+                    0 => BinRule::EqualCount(n),
+                    1 => BinRule::EqualWidth(n),
+                    _ => BinRule::Width(w),
+                };
                 ui.checkbox(&mut s.graph, "Graph of the data with the bin means");
+                ui.horizontal(|ui| {
+                    use sheaf_core::analysis::BinError;
+                    ui.label("Error bars");
+                    ui.radio_value(&mut s.error, BinError::None, "None");
+                    ui.radio_value(&mut s.error, BinError::Sd, "SD");
+                    ui.radio_value(&mut s.error, BinError::Se, "SE");
+                    ui.radio_value(&mut s.error, BinError::Ci95, "95% CI");
+                });
+                ui.checkbox(&mut s.fit, "Least-squares line of the data");
             }
             AnalysisKind::ChangePoint => {
                 ui.label("Every chosen column is a series of its own, in row order.");

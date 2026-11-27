@@ -2174,6 +2174,10 @@ fn binned_scatter_runs_from_the_command_line() {
     assert!(ok && out.contains("equal width"), "{err} {out}");
     let (ok, _, err) = sheaf(&["analyze", "binscatter", file, "--y", "y", "--bins", "0"]);
     assert!(!ok && err.contains("--bins"), "{err}");
+    // T501: bins of a width, error bars and the line.
+    let (ok, out, err) = sheaf(&["analyze", "binscatter", file, "--y", "y", "--width", "10", "--error", "ci", "--fit"]);
+    assert!(ok && out.contains("wide from multiples of 10") && out.contains("95% confidence interval"), "{err} {out}");
+    assert!(out.contains("least-squares line of the data"), "{out}");
 }
 
 /// Change point analysis (spec `statistics.md` section 30, T346): each --y column is a series.

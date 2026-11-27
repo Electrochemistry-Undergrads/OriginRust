@@ -1728,13 +1728,22 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
             };
             (target, Job::Tool(Tool::TimePivot(analysis::TimePivotSpec { period, stat, every, fiscal_start, by })))
         }
-        AnalyzeTool::Binscatter { target, bins, equal_width, no_graph } => {
+        AnalyzeTool::Binscatter { target, bins, equal_width, width, error, fit, no_graph } => {
             if bins == 0 {
                 bail!("--bins must be at least 1");
             }
-            let rule =
-                if equal_width { analysis::BinRule::EqualWidth(bins) } else { analysis::BinRule::EqualCount(bins) };
-            (target, Job::Tool(Tool::BinScatter(analysis::BinScatterSpec { rule, graph: !no_graph })))
+            let rule = match width {
+                Some(w) => analysis::BinRule::Width(w),
+                None if equal_width => analysis::BinRule::EqualWidth(bins),
+                None => analysis::BinRule::EqualCount(bins),
+            };
+            let error = match error.as_str() {
+                "sd" => analysis::BinError::Sd,
+                "se" => analysis::BinError::Se,
+                "ci" => analysis::BinError::Ci95,
+                _ => analysis::BinError::None,
+            };
+            (target, Job::Tool(Tool::BinScatter(analysis::BinScatterSpec { rule, graph: !no_graph, error, fit })))
         }
         AnalyzeTool::Changepoint { target, change, penalty, min_segment, no_graph } => {
             let kind = match change.trim().to_ascii_lowercase().as_str() {

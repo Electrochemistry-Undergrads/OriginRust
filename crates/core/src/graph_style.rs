@@ -933,6 +933,22 @@ pub struct SankeyStyle {
     /// or 1 when the Y column is not numeric (counts).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub stages: Vec<ColumnId>,
+    /// An UpSet plot (T507): the order of its intersections, and how many it shows (the largest; 0: up to 40).
+    #[serde(default, skip_serializing_if = "is_size_sort")]
+    pub upset_sort: sheaf_calc::upset::UpSetSort,
+    #[serde(default, skip_serializing_if = "is_zero_usize")]
+    pub upset_limit: usize,
+}
+
+/// The order of an UpSet plot's intersections (T507).
+pub use sheaf_calc::upset::UpSetSort;
+
+fn is_size_sort(s: &sheaf_calc::upset::UpSetSort) -> bool {
+    *s == sheaf_calc::upset::UpSetSort::Size
+}
+
+fn is_zero_usize(v: &usize) -> bool {
+    *v == 0
 }
 
 impl SankeyStyle {

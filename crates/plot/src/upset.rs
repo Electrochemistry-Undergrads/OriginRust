@@ -17,7 +17,7 @@ use crate::data::PlotData;
 use crate::fonts::TextMeasurer;
 use crate::scene::{Anchor, Item, Stroke, line_to, move_to};
 use crate::text::{self, ASCENT, DESCENT};
-use sheaf_calc::upset::{UpSet, count};
+use sheaf_calc::upset::{UpSet, count_with};
 use sheaf_core::graph::{Font, Layer};
 use sheaf_core::{Color, Project};
 
@@ -63,7 +63,8 @@ impl UpSetData {
                     .collect()
             })
             .collect();
-        let upset = count(&members, columns.len());
+        let s = &pd.plot.sankey;
+        let upset = count_with(&members, columns.len(), s.upset_sort, s.upset_limit);
         let names = columns.iter().map(|c| c.display_name().to_string()).collect();
         let mut font = layer.x_axis.tick_font.clone();
         font.size_pt *= LABEL_SCALE;

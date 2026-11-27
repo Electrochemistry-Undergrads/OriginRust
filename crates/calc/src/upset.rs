@@ -10,6 +10,18 @@
 /// The most intersections an UpSet plot shows.
 pub const MAX_INTERSECTIONS: usize = 40;
 
+/// How the intersections shown are ordered (T507). Which are shown does not depend on it: the largest ones.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum UpSetSort {
+    /// By size, largest first (then fewer sets first, then set order).
+    #[default]
+    Size,
+    /// By the number of sets joined, fewest first (then by size, largest first).
+    Degree,
+    /// By their sets in set order (every intersection with the first set first).
+    Sets,
+}
+
 /// One intersection: which sets (by index) and how many rows.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Intersection {
@@ -29,6 +41,12 @@ pub struct UpSet {
 /// Counts the rows of `members` (`members[row][set]`) for `sets` sets; a row shorter than `sets` is not in the
 /// sets it lacks.
 pub fn count(members: &[Vec<bool>], sets: usize) -> UpSet {
+    count_with(members, sets, UpSetSort::Size, MAX_INTERSECTIONS)
+}
+
+/// [`count`] keeping the `limit` largest intersections (1 to [`MAX_INTERSECTIONS`]; 0 for the most) in the order of
+/// `sort` (T507).
+pub fn count_with(members: &[Vec<bool>], sets: usize, sort: UpSetSort, limit: usize) -> UpSet {
     let mut set_sizes = vec![0; sets];
     let mut found: Vec<Intersection> = Vec::new();
     for row in members {
@@ -45,14 +63,46 @@ pub fn count(members: &[Vec<bool>], sets: usize) -> UpSet {
         }
     }
     found.sort_by(|a, b| b.count.cmp(&a.count).then(a.sets.len().cmp(&b.sets.len())).then(a.sets.cmp(&b.sets)));
-    let dropped = found.len().saturating_sub(MAX_INTERSECTIONS);
-    found.truncate(MAX_INTERSECTIONS);
+    let keep = if limit == 0 { MAX_INTERSECTIONS } else { limit.min(MAX_INTERSECTIONS) };
+    let dropped = found.len().saturating_sub(keep);
+    found.truncate(keep);
+    match sort {
+        UpSetSort::Size => {}
+        UpSetSort::Degree => found.sort_by(|a, b| a.sets.len().cmp(&b.sets.len()).then(b.count.cmp(&a.count))),
+        UpSetSort::Sets => found.sort_by(|a, b| a.sets.cmp(&b.sets)),
+    }
     UpSet { set_sizes, intersections: found, dropped }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn intersections_are_limited_by_size_and_ordered_as_asked() {
+        // T507: A only x3, A+B x2, B only x1, A+B+C x4.
+        let m = rows(&[
+            &[1, 0, 0],
+            &[1, 0, 0],
+            &[1, 0, 0],
+            &[1, 1, 0],
+            &[1, 1, 0],
+            &[0, 1, 0],
+            &[1, 1, 1],
+            &[1, 1, 1],
+            &[1, 1, 1],
+            &[1, 1, 1],
+        ]);
+        let sets = |u: &UpSet| u.intersections.iter().map(|i| i.sets.clone()).collect::<Vec<_>>();
+        assert_eq!(sets(&count(&m, 3)), [vec![0, 1, 2], vec![0], vec![0, 1], vec![1]]);
+        let by_degree = count_with(&m, 3, UpSetSort::Degree, 0);
+        assert_eq!(sets(&by_degree), [vec![0], vec![1], vec![0, 1], vec![0, 1, 2]]);
+        let by_sets = count_with(&m, 3, UpSetSort::Sets, 0);
+        assert_eq!(sets(&by_sets), [vec![0], vec![0, 1], vec![0, 1, 2], vec![1]]);
+        // The two largest, then in set order.
+        let two = count_with(&m, 3, UpSetSort::Sets, 2);
+        assert_eq!((sets(&two), two.dropped), (vec![vec![0], vec![0, 1, 2]], 2));
+    }
 
     fn rows(v: &[&[u8]]) -> Vec<Vec<bool>> {
         v.iter().map(|r| r.iter().map(|&x| x != 0).collect()).collect()

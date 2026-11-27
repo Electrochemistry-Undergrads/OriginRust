@@ -3475,7 +3475,8 @@ are every numeric column. `--matrix` with another template is refused.
 
 ### 14.35 UpSet plot (T403, Origin 2027 feature, Sheaf's look, not measured)
 
-Plot > Categorical > UpSet Plot and `sheaf plot FILE -t upset [-y SET ...]` (`PlotKind::UpSet`, `Template::UpSet`,
+Plot > Categorical > UpSet Plot and `sheaf plot FILE -t upset [-y SET ...] [--upset-sort size|degree|sets]
+[--upset-limit N]` (`PlotKind::UpSet`, `Template::UpSet`,
 `Project::plot_upset`; counts `sheaf_calc::upset`, drawing `crates/plot/src/upset.rs`): two or more set columns,
 kept in `Plot::sankey.stages` (the plot's Y column is the first). Default sets: the selected columns (app) or the `-y`
 columns (CLI), else every column of the sheet holding only 0 and 1 (`sheaf_core::project::flag_columns`).
@@ -3483,7 +3484,10 @@ columns (CLI), else every column of the sheet holding only 0 and 1 (`sheaf_core:
 - A row is in a set when its cell holds a number other than 0, or text other than empty, `0`, `false` or `no`
   (letter case ignored). Masked rows and rows in no set are left out.
 - Intersections are exclusive: a row counts once, for the exact sets it is in. They are sorted by size (largest
-  first; ties by fewest sets, then set order); at most 40 are shown. A set's size counts all its rows.
+  first; ties by fewest sets, then set order); at most 40 are shown. A set's size counts all its rows. Sort and limit
+  (T507; `Plot::sankey.upset_sort` and `upset_limit`, saved with the plot): the limit keeps that many of the largest
+  intersections (1 to 40; 0 or none for up to 40), and the sort orders those shown: by size (default), by degree (the
+  number of sets joined, fewest first, then size) or by their sets in set order.
 - Layout in the layer's frame: the dot matrix in the lower 38 % (a row per set in column order, a column per
   intersection), every other row on a light grey band; the intersection bars above it with their counts; the set
   names left of the matrix (X axis tick font at 0.8 of its size) and the set-size bars left of the names, growing

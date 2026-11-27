@@ -1133,6 +1133,12 @@ pub struct PlotArgs {
     /// and -y the target columns (default: every numeric column); the flows go to a new sheet ChordFlows.
     #[arg(long)]
     pub matrix: bool,
+    /// UpSet plot (T507): order the intersections by size (default), degree (sets joined) or sets (set order).
+    #[arg(long, default_value = "size", value_parser = ["size", "degree", "sets"])]
+    pub upset_sort: String,
+    /// UpSet plot (T507): show at most this many intersections, the largest (default: up to 40).
+    #[arg(long, default_value_t = 0)]
+    pub upset_limit: usize,
     /// -t fishbone (a cause-and-effect diagram): the effect's text at the head of the spine (default
     /// "Effect"). The -y columns (default: every column of the sheet) are the categories, their cells the causes.
     #[arg(long, value_name = "TEXT")]

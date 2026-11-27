@@ -94,6 +94,12 @@ pub fn plot_spec(a: &PlotArgs) -> PlotSpec {
         overlay_books: Vec::new(),
         group: a.group.clone(),
         matrix: a.matrix,
+        upset_sort: match a.upset_sort.as_str() {
+            "degree" => sheaf_core::graph::UpSetSort::Degree,
+            "sets" => sheaf_core::graph::UpSetSort::Sets,
+            _ => sheaf_core::graph::UpSetSort::Size,
+        },
+        upset_limit: a.upset_limit,
         effect: a.effect.clone(),
         style: style_spec(&a.style),
         templates_dir: user_templates_dir(a),

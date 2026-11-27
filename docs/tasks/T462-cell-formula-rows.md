@@ -7,7 +7,8 @@ with it. The formula's references are not rewritten.
 
 ## Left
 
-- References that follow moved rows and columns (rewriting A1 references), as a spreadsheet does.
+- References that follow moved rows (rewriting A1 references): done for the sheet's own cells (T491); references
+  from other sheets and moved columns remain.
 
 ## Tests
 

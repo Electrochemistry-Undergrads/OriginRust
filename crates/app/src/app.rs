@@ -4939,6 +4939,18 @@ impl SheafApp {
                     .unwrap_or_default();
             }
             let weight = columns.iter().rev().copied().find(|id| project.numeric(*id).is_some());
+            // T506: one text column and two or more numeric ones selected make a chord diagram of a flow matrix.
+            let selected_text: Vec<ColumnId> = columns.iter().copied().filter(is_text).collect();
+            let selected_numbers: Vec<ColumnId> =
+                columns.iter().copied().filter(|id| project.numeric(*id).is_some()).collect();
+            if template == Template::Chord && selected_text.len() == 1 && selected_numbers.len() >= 2 {
+                let (labels, flows) = (selected_text[0], selected_numbers);
+                match self.doc.edit("Plot columns", |p| p.plot_chord_matrix(labels, &flows)) {
+                    Ok(_) => self.say(template.label().to_string()),
+                    Err(e) => self.message = Some(("Could not make the graph".to_string(), e.to_string())),
+                }
+                return;
+            }
             let made = match ends[..] {
                 [source, target, ..] if template == Template::Chord => {
                     self.doc.edit("Plot columns", |p| p.plot_chord(source, target, weight))

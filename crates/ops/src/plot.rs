@@ -167,6 +167,8 @@ pub struct PlotSpec {
     pub group: Option<String>,
     /// A cause-and-effect diagram's effect text (T375; default "Effect").
     pub effect: Option<String>,
+    /// A chord diagram from a flow matrix (T506): `group` the source names, `y` the target columns.
+    pub matrix: bool,
     pub style: Style,
     /// The folder of the user graph templates (T56) that a template name not among the built-in ones
     /// is looked up in. `None` (MCP, and requests that do not ask) uses no user template; the command
@@ -394,28 +396,51 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
         let what = if template == Template::Chord { "a chord diagram" } else { "a network plot" };
         let book = pick_book(project, a.book.as_deref())?;
         let sheet = pick_sheet(project, book, a.sheet.as_deref())?;
-        let ends: Vec<ColumnId> = match a.group.as_deref() {
-            Some(g) => {
-                let names: Vec<String> = g.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect();
-                named_columns(project, book, sheet, &names)?
+        if a.matrix {
+            // T506: a flow matrix, sources down a text column and one numeric column per target.
+            if template != Template::Chord {
+                bail!("--matrix is for chord diagrams");
             }
-            None => project
-                .workbook(book)
-                .map(|b| b.sheets[sheet].columns.iter().filter(|c| !c.data.is_numeric()).map(|c| c.id).collect())
-                .unwrap_or_default(),
-        };
-        let [source, target, ..] = ends[..] else {
-            bail!("{what} needs a source and a target column: --group SOURCE,TARGET (or two text columns)")
-        };
-        let weight = match a.y.as_slice() {
-            [] => None,
-            [one] => Some(named_columns(project, book, sheet, std::slice::from_ref(one))?[0]),
-            _ => bail!("{what} takes one -y column (the weight of each row)"),
-        };
-        if template == Template::Chord {
-            project.plot_chord(source, target, weight)?
+            let columns = &project.workbook(book).expect("picked").sheets[sheet].columns;
+            let labels = match a.group.as_deref() {
+                Some(g) => named_columns(project, book, sheet, &[g.trim().to_string()])?[0],
+                None => columns
+                    .iter()
+                    .find(|c| !c.data.is_numeric())
+                    .map(|c| c.id)
+                    .ok_or_else(|| anyhow::anyhow!("--matrix needs a text column of source names (--group)"))?,
+            };
+            let flows: Vec<ColumnId> = if a.y.is_empty() {
+                columns.iter().filter(|c| c.data.is_numeric() && c.id != labels).map(|c| c.id).collect()
+            } else {
+                named_columns(project, book, sheet, &a.y)?
+            };
+            project.plot_chord_matrix(labels, &flows)?
         } else {
-            project.plot_network(source, target, weight)?
+            let ends: Vec<ColumnId> = match a.group.as_deref() {
+                Some(g) => {
+                    let names: Vec<String> =
+                        g.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect();
+                    named_columns(project, book, sheet, &names)?
+                }
+                None => project
+                    .workbook(book)
+                    .map(|b| b.sheets[sheet].columns.iter().filter(|c| !c.data.is_numeric()).map(|c| c.id).collect())
+                    .unwrap_or_default(),
+            };
+            let [source, target, ..] = ends[..] else {
+                bail!("{what} needs a source and a target column: --group SOURCE,TARGET (or two text columns)")
+            };
+            let weight = match a.y.as_slice() {
+                [] => None,
+                [one] => Some(named_columns(project, book, sheet, std::slice::from_ref(one))?[0]),
+                _ => bail!("{what} takes one -y column (the weight of each row)"),
+            };
+            if template == Template::Chord {
+                project.plot_chord(source, target, weight)?
+            } else {
+                project.plot_network(source, target, weight)?
+            }
         }
     } else if template_from(a.template.as_deref(), suggested)? == Template::Alluvial {
         // An alluvial diagram (T381): --group names the stage columns (default: every text column of the

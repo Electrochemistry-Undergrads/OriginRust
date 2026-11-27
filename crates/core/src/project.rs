@@ -404,6 +404,8 @@ pub enum ProjectError {
     AlluvialColumns,
     #[error("a network plot or a chord diagram needs a source and a target column; select them")]
     NetworkColumns,
+    #[error("a chord diagram from a matrix needs a column of source names and two or more numeric columns of flows")]
+    ChordMatrixColumns,
     #[error("an UpSet plot needs two or more set columns (1 or 0 in each row for in or out of the set); select them")]
     UpSetColumns,
     #[error("{0}")]
@@ -2018,6 +2020,51 @@ impl Project {
         self.plot_links(Template::Chord, source, target, weight)
     }
 
+    /// A chord diagram from a flow matrix (T506): row `r` of `labels` names a source, each column of `flows` a target
+    /// (its long name, else its short name), and the cell the flow from that source to that target; a missing, zero
+    /// or negative cell is no flow. The flows are written to a new sheet `ChordFlows` of the book (Source, Target,
+    /// Weight), which the diagram plots.
+    pub fn plot_chord_matrix(&mut self, labels: ColumnId, flows: &[ColumnId]) -> Result<WindowId, ProjectError> {
+        let (book, lab) = {
+            let (b, _, c) = self.locate(labels).ok_or(ProjectError::NoSuchColumn(labels))?;
+            let lab: Vec<String> = (0..c.len()).map(|r| c.cell_text(r).trim().to_string()).collect();
+            (b.id, lab)
+        };
+        if flows.len() < 2 {
+            return Err(ProjectError::ChordMatrixColumns);
+        }
+        let (mut sources, mut targets, mut weights) = (Vec::new(), Vec::new(), Vec::new());
+        for f in flows {
+            let c = self.column(*f).ok_or(ProjectError::NoSuchColumn(*f))?;
+            let name = c.display_name().to_string();
+            let v = self.numeric(*f).ok_or(ProjectError::ChordMatrixColumns)?.to_vec();
+            for (r, w) in v.iter().enumerate() {
+                let Some(from) = lab.get(r).filter(|s| !s.is_empty()) else { continue };
+                if w.is_finite() && *w > 0.0 {
+                    sources.push(from.clone());
+                    targets.push(name.clone());
+                    weights.push(*w);
+                }
+            }
+        }
+        if weights.is_empty() {
+            return Err(ProjectError::ChordMatrixColumns);
+        }
+        let b = self.workbook_mut(book).ok_or(ProjectError::NoSuchWindow(book))?;
+        let name = crate::analysis::free_sheet_name(&b.sheets, "ChordFlows");
+        b.sheets.push(crate::worksheet::Worksheet::new(&name));
+        let sheet = b.sheets.len() - 1;
+        let s = self.add_column(book, sheet, Designation::Y, ColumnData::text(sources))?;
+        let t = self.add_column(book, sheet, Designation::Y, ColumnData::text(targets))?;
+        let w = self.add_column(book, sheet, Designation::Y, ColumnData::numeric(weights))?;
+        for (id, long) in [(s, "Source"), (t, "Target"), (w, "Weight")] {
+            if let Some(c) = self.column_mut(id) {
+                c.long_name = long.to_string();
+            }
+        }
+        self.plot_chord(s, t, Some(w))
+    }
+
     /// An UpSet plot (T403) of the set columns `sets` (two or more): a row is in a set when its cell holds a
     /// number other than 0 or text other than empty, 0, false or no. The plot's Y column is the first set.
     pub fn plot_upset(&mut self, sets: &[ColumnId]) -> Result<WindowId, ProjectError> {
@@ -2575,6 +2622,30 @@ pub fn flag_columns(sheet: &Worksheet) -> Vec<ColumnId> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_chord_diagram_from_a_flow_matrix() {
+        // T506: rows are sources (A, B), columns targets (X, Y); empty, zero and negative cells are no flow.
+        use crate::column::{ColumnData, Designation};
+        let mut p = super::Project::new();
+        let b = p.add_workbook("flows");
+        let lab = p.add_column(b, 0, Designation::Label, ColumnData::text(vec!["A".into(), "B".into()])).unwrap();
+        let x = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![3.0, 0.0])).unwrap();
+        let y = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![1.0, 2.0])).unwrap();
+        p.column_mut(x).unwrap().long_name = "X".into();
+        p.column_mut(y).unwrap().long_name = "Y".into();
+        let g = p.plot_chord_matrix(lab, &[x, y]).unwrap();
+        let book = p.workbook(b).unwrap();
+        let flows = book.sheets.last().unwrap();
+        assert!(flows.name.starts_with("ChordFlows"), "{}", flows.name);
+        let text = |k: usize| flows.columns[k].text().unwrap().to_vec();
+        assert_eq!(text(0), ["A", "A", "B"]);
+        assert_eq!(text(1), ["X", "Y", "Y"]);
+        assert_eq!(flows.columns[2].numeric().unwrap(), &[3.0, 1.0, 2.0]);
+        let plot = &p.graph(g).unwrap().layers[0].plots[0];
+        assert_eq!(plot.y, flows.columns[2].id);
+        assert!(p.plot_chord_matrix(lab, &[x]).is_err(), "one target column is no matrix");
+    }
+
     #[test]
     fn the_sheet_of_one_name_becomes_active_in_every_book_that_has_it() {
         // T277: by name, in any case; a book without the sheet keeps its active sheet.

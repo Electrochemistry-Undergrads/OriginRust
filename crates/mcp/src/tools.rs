@@ -1193,6 +1193,7 @@ fn plot(s: &mut Ctx, a_raw: &Value) -> Res {
         overlay_books: Vec::new(),
         group: a.group.clone(),
         effect: None,
+        matrix: false,
         style: style_from(a.style, a.size.as_ref())?,
         templates_dir: None,
     };

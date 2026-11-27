@@ -3451,6 +3451,14 @@ Plot > Categorical > Chord Diagram and `sheaf plot FILE -t chord [--group SOURCE
 `crates/plot/src/chord.rs`): the same columns as a network plot (14.33), kept in `Plot::sankey` (source, target);
 every row is a flow from the source's name to the target's, of the weight column's value or 1.
 
+**From a flow matrix** (T506; `sheaf plot FILE -t chord --matrix [--group SOURCES] [-y T1,T2..]`, or with one text
+column and two or more numeric columns selected; `Project::plot_chord_matrix`): the text column names the sources down
+the rows, each numeric column is a target (named by its long name, else its short name) and each cell the flow from
+the row's source to the column's target; empty names and missing, zero or negative cells are no flow. The flows are
+written to a new sheet `ChordFlows` of the book (Source, Target, Weight, column by column and row by row), which the
+diagram then plots as above. Without `--group` the sources are the sheet's first text column; without `-y` the targets
+are every numeric column. `--matrix` with another template is refused.
+
 - Nodes are the names in order of first appearance. Rows of the same source and target are one flow (summed); A to
   B and B to A are two flows. Empty names and missing or non-positive weights are left out; a row from a name to
   itself is a flow that leaves and returns to its own arc.

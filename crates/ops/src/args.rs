@@ -4016,6 +4016,9 @@ pub enum AnalyzeTool {
         /// Do not make the graph.
         #[arg(long)]
         no_graph: bool,
+        /// Standard errors of the coefficients: robust (kernel sandwich), iid or none.
+        #[arg(long, default_value = "robust", value_parser = ["robust", "iid", "none"])]
+        se: String,
     },
     /// K-means cluster analysis of the --y columns (the variables): cluster centres, sizes and distances, analysis
     /// of variance by variable and the cluster of every row; makes a scatter graph of the first two variables.

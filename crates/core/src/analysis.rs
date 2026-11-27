@@ -83,6 +83,7 @@ pub use sheaf_calc::mixture::{MixtureKind, MixtureOptions as MixtureDesignSpec};
 pub use sheaf_calc::montecarlo::{
     InputDist, McControl, McGoal, parse_controls as parse_monte_carlo_controls, parse_input as parse_monte_carlo_input,
 };
+pub use sheaf_calc::quantreg::SeKind as QuantRegSe;
 pub use sheaf_calc::{AverageMethod, AverageOptions, CommonX, XRange};
 pub use sheaf_calc::{CwtWavelet, Wavelet, WaveletExtension};
 pub use sheaf_fit::simulate::Spacing as SimulateSpacing;

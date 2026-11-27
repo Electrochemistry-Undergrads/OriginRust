@@ -9,7 +9,7 @@ use super::dist::{GraphPlot, Output, XyGraph};
 use super::statistics::num;
 use super::*;
 use crate::graph::{PlotKind, ScaleKind};
-use calc::quantreg::quantile_regression;
+use calc::quantreg::{SeKind, quantile_regression_with};
 
 /// What [`Tool::QuantReg`] does.
 #[derive(Debug, Clone, PartialEq)]
@@ -20,11 +20,18 @@ pub struct QuantRegSpec {
     pub intercept: bool,
     /// With one independent variable, make a graph of the data with one fitted line per quantile.
     pub graph: bool,
+    /// Standard errors and `Prob>|t|` of the coefficients (T494): robust (the default), iid, or `None` for none.
+    pub se: Option<SeKind>,
 }
 
 impl Default for QuantRegSpec {
     fn default() -> Self {
-        QuantRegSpec { quantiles: vec![0.1, 0.25, 0.5, 0.75, 0.9], intercept: true, graph: true }
+        QuantRegSpec {
+            quantiles: vec![0.1, 0.25, 0.5, 0.75, 0.9],
+            intercept: true,
+            graph: true,
+            se: Some(SeKind::Robust),
+        }
     }
 }
 
@@ -70,20 +77,39 @@ pub(super) fn run(
 
     let names: Vec<String> = xcs.iter().map(|c| column_label(c)).collect();
     let mut headers: Vec<String> = vec!["N".into()];
+    let mut terms: Vec<String> = Vec::new();
     if spec.intercept {
-        headers.push("Intercept".into());
+        terms.push("Intercept".into());
     }
-    headers.extend(names.iter().cloned());
+    terms.extend(names.iter().cloned());
+    // T494: each coefficient followed by its standard error and Prob>|t|.
+    for t in &terms {
+        headers.push(t.clone());
+        if spec.se.is_some() {
+            headers.extend([format!("{t} SE"), format!("{t} Prob>|t|")]);
+        }
+    }
     headers.extend(["Sum of check losses".to_string(), "Pseudo R-square".to_string()]);
     let header_refs: Vec<&str> = headers.iter().map(String::as_str).collect();
     let mut table = ResultTable::new(&header_refs);
     let mut notes = Vec::new();
     let mut fits = Vec::new();
     for &tau in &spec.quantiles {
-        let r = quantile_regression(&x_refs, &y, tau, spec.intercept)
+        let r = quantile_regression_with(&x_refs, &y, tau, spec.intercept, spec.se.unwrap_or_default())
             .map_err(|e| AnalysisError::BadOption(format!("quantile {tau}: {e}")))?;
         let mut values = vec![r.n as f64];
-        values.extend(r.coefficients.iter().copied());
+        for (k, b) in r.coefficients.iter().enumerate() {
+            values.push(*b);
+            if spec.se.is_some() {
+                values.extend([r.se[k], r.p_values[k]]);
+            }
+        }
+        if spec.se.is_some() && r.se.iter().all(|s| s.is_nan()) {
+            notes.push(format!(
+                "Quantile {}: no standard errors (too few points this close to 0 or 1, or no spread of the residuals).",
+                num(tau)
+            ));
+        }
         values.extend([r.loss, r.pseudo_r2]);
         table.push_row(num(tau), values, vec![String::new(); headers.len()]);
         let terms: Vec<String> = r
@@ -104,11 +130,21 @@ pub(super) fn run(
         ));
         fits.push(r);
     }
-    notes.push(
-        "Coefficients minimize the sum of the check losses (the exact linear-programme solution); no standard errors \
-         are computed. Pseudo R-square is Koenker and Machado's 1 - loss / loss of the intercept-only model."
-            .into(),
-    );
+    notes.push(format!(
+        "Coefficients minimize the sum of the check losses (the exact linear-programme solution). {}Pseudo R-square is \
+         Koenker and Machado's 1 - loss / loss of the intercept-only model.",
+        match spec.se {
+            Some(SeKind::Robust) => {
+                "Standard errors are robust (kernel sandwich, Epanechnikov kernel, Hall-Sheather bandwidth, as \
+                 statsmodels and Stata); Prob>|t| is two-sided on N - p degrees of freedom. "
+            }
+            Some(SeKind::Iid) => {
+                "Standard errors assume identically distributed errors (kernel density at 0, Epanechnikov kernel, \
+                 Hall-Sheather bandwidth, as Stata); Prob>|t| is two-sided on N - p degrees of freedom. "
+            }
+            None => "",
+        }
+    ));
 
     let mut on_sheet = vec![column_of(
         "Quantile",
@@ -188,15 +224,35 @@ mod tests {
         let spec = QuantRegSpec { quantiles: vec![0.25, 0.5, 0.75], ..Default::default() };
         let out = p.analyze(&request(vec![x, y], spec)).unwrap();
         let t = out.table.as_ref().unwrap();
-        assert_eq!(t.headers, ["N", "Intercept", "A", "Sum of check losses", "Pseudo R-square"]);
+        assert_eq!(
+            t.headers,
+            [
+                "N",
+                "Intercept",
+                "Intercept SE",
+                "Intercept Prob>|t|",
+                "A",
+                "A SE",
+                "A Prob>|t|",
+                "Sum of check losses",
+                "Pseudo R-square"
+            ]
+        );
         assert_eq!(t.rows.iter().map(|(l, _)| l.as_str()).collect::<Vec<_>>(), ["0.25", "0.5", "0.75"]);
         // The lines are ordered: the slope is about 0.5 and the 0.75 line lies above the 0.25 line.
         let (q1, q3) = (&t.rows[0].1, &t.rows[2].1);
         assert_eq!(q1[0], 40.0);
-        assert!(q3[1] > q1[1] && (q1[2] - 0.5).abs() < 0.1 && q1[4] > 0.0 && q1[4] < 1.0, "{q1:?} {q3:?}");
+        assert!(q3[1] > q1[1] && (q1[4] - 0.5).abs() < 0.1 && q1[8] > 0.0 && q1[8] < 1.0, "{q1:?} {q3:?}");
         let check =
             calc::quantreg::quantile_regression(&[p.numeric(x).unwrap()], p.numeric(y).unwrap(), 0.5, true).unwrap();
-        assert_eq!(t.rows[1].1[1..3], check.coefficients[..]);
+        assert_eq!([t.rows[1].1[1], t.rows[1].1[4]], check.coefficients[..]);
+        // T494: the standard errors and Prob>|t| of each coefficient; the slope is clearly not 0.
+        assert_eq!([t.rows[1].1[2], t.rows[1].1[5]], check.se[..]);
+        assert!(t.rows[1].1[5] > 0.0 && t.rows[1].1[6] < 0.001, "{:?}", t.rows[1]);
+        assert!(out.notes.iter().any(|n| n.contains("Standard errors are robust")), "{:?}", out.notes);
+        let plain = QuantRegSpec { quantiles: vec![0.5], se: None, graph: false, ..Default::default() };
+        let bare = p.analyze(&request(vec![x, y], plain)).unwrap();
+        assert_eq!(bare.table.unwrap().headers, ["N", "Intercept", "A", "Sum of check losses", "Pseudo R-square"]);
         assert!(out.new_graph.is_some(), "one X column gets a graph");
     }
 

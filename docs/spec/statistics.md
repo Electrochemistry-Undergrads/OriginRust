@@ -1810,13 +1810,27 @@ vertex has the smaller loss, so the answer is the exact optimum. Checked against
 20 fits (one and two independent variables, no intercept, 500 points) to 1e-9: `crates/calc/tests/scipy_quantreg.rs`,
 made by `tools/quantreg-ref.py`. Rows with a missing X or Y (and masked or filtered rows) are left out. The pseudo
 R-square is Koenker and Machado's `1 - V(tau) / V0(tau)`, `V0` the loss of the intercept-only model (the tau sample
-quantile); it is left blank without an intercept. No standard errors or confidence limits are computed.
+quantile); it is left blank without an intercept.
+
+**Standard errors** (T494; statsmodels' `QuantReg` and Stata 12's `qreg` formulas applied to the exact
+coefficients). With the residuals `e` (a residual within 1e-9 of the largest `|y|` counts as 0), the density of the
+residuals at 0 is `f = sum K(e_i / h) / (n h)` with the Epanechnikov kernel `K(u) = 3/4 (1 - u^2)` on `|u| <= 1` and
+the bandwidth `h = min(sd(y), IQR(e) / 1.34) (Phi^-1(tau + hs) - Phi^-1(tau - hs))`; `sd` divides by n, the quartiles
+interpolate at `(n - 1) p`, and `hs` is Hall and Sheather's `n^(-1/3) z_0.975^(2/3) (1.5 phi(z_tau)^2 /
+(2 z_tau^2 + 1))^(1/3)`. Robust (the default): `V = (X'X)^-1 X'DX (X'X)^-1`, `D` holding `(tau / f)^2` for a
+positive residual and `((1 - tau) / f)^2` otherwise; iid: `V = tau (1 - tau) / f^2 (X'X)^-1`. SE is the root of V's
+diagonal; Prob>|t| is two-sided for `t = b / SE` on `n - p` degrees of freedom. When `tau +- hs` leaves (0, 1) (few
+points at an extreme quantile: 20 points at 0.9) or `f` is 0 the errors are blank, with a note. Checked against those
+formulas evaluated in Python at the same coefficients (`standard_errors_match_statsmodels_formulas`, from
+`re-workspace/scratch/t480/qr_se.py`, local only). A median fit need not be unique; another optimal vertex (scipy's,
+statsmodels' iterated fit) gives other errors. No confidence limits or tests between quantiles.
 
 **The tool** (`Tool::QuantReg`, Statistics > Quantile Regression..., `sheaf analyze quantreg --y X1[,X2..],Y`): the
 chosen columns are the independent variables and, last, the dependent variable. Options: the quantiles (default
 0.1, 0.25, 0.5, 0.75, 0.9; `--quantiles`), Fit an intercept (default on; `--no-intercept`) and the graph (default
-on; `--no-graph`). The result sheet `QuantRegN` has one row per quantile: N, Intercept, one coefficient per
-independent column (named by the column), Sum of check losses and Pseudo R-square. With one independent column it
+on; `--no-graph`) and Standard errors (Robust, iid or None; `--se robust|iid|none`, T494). The result sheet
+`QuantRegN` has one row per quantile: N, Intercept, one coefficient per independent column (named by the column),
+each followed by `<name> SE` and `<name> Prob>|t|` (unless None), Sum of check losses and Pseudo R-square. With one independent column it
 also holds the data used and two points of each fitted line, and a new graph shows the data as symbols with one line
 per quantile. A notes line per quantile writes the fitted equation.
 

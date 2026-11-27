@@ -10,8 +10,19 @@
 //! the coefficients are the exact solution of the linear programme (checked against
 //! `scipy.optimize.linprog` in `crates/calc/tests/scipy_quantreg.rs`). When the solution is not unique
 //! (for example ties in `y`) any optimal vertex may be returned.
+//!
+//! **Standard errors** (T494; as statsmodels' `QuantReg` and Stata 12's `qreg` compute them, applied to the exact
+//! coefficients): the density of the residuals at 0 is a kernel estimate `f = sum K(e_i / h) / (n h)` with the
+//! Epanechnikov kernel `K(u) = 3/4 (1 - u^2)` on `|u| <= 1` and the bandwidth
+//! `h = min(sd(y), IQR(e) / 1.34) (Phi^-1(tau + hs) - Phi^-1(tau - hs))`, where `hs` is Hall and Sheather's
+//! `n^(-1/3) z_0.975^(2/3) (1.5 phi(Phi^-1(tau))^2 / (2 Phi^-1(tau)^2 + 1))^(1/3)`, `sd` divides by `n` and the
+//! quartiles interpolate at `(n - 1) p`. Robust (the default): `V = (X'X)^-1 X'DX (X'X)^-1`, `D` holding
+//! `(tau / f)^2` for a positive residual and `((1 - tau) / f)^2` otherwise (a residual within 1e-9 of the largest
+//! `|y|` counts as 0); iid: `V = tau (1 - tau) / f^2 (X'X)^-1`. `Prob>|t|` is two-sided on `n - p` degrees of
+//! freedom. When `tau +- hs` leaves (0, 1) (few points at an extreme quantile) or `f` is 0 the errors are NaN.
 
 use nalgebra::{DMatrix, DVector};
+use statrs::distribution::{Continuous, ContinuousCDF, Normal, StudentsT};
 
 /// Why a quantile regression could not be computed.
 #[derive(Debug, Clone, PartialEq)]
@@ -52,6 +63,22 @@ pub struct QuantReg {
     pub n: usize,
     /// Interior-point iterations.
     pub iterations: usize,
+    /// The standard error of each coefficient (T494; NaN when it cannot be estimated).
+    pub se: Vec<f64>,
+    /// Two-sided `Prob>|t|` of each coefficient, `t = b / se` on `n - p` degrees of freedom.
+    pub p_values: Vec<f64>,
+    /// The bandwidth `h` of the density estimate behind the errors.
+    pub bandwidth: f64,
+}
+
+/// How the standard errors are estimated (T494).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SeKind {
+    /// Heteroskedasticity robust (the sandwich): statsmodels' default.
+    #[default]
+    Robust,
+    /// For identically distributed errors (Stata's default).
+    Iid,
 }
 
 /// The check loss `rho_tau(u)`.
@@ -78,8 +105,19 @@ fn step_bound(v: &DVector<f64>, dv: &DVector<f64>) -> f64 {
 }
 
 /// Quantile regression of `y` on the columns `xs` (each as long as `y`) at quantile `tau`, with an
-/// intercept when `intercept` is true. Rows where any value is not finite are left out.
+/// intercept when `intercept` is true. Rows where any value is not finite are left out. Robust standard errors.
 pub fn quantile_regression(xs: &[&[f64]], y: &[f64], tau: f64, intercept: bool) -> Result<QuantReg, QuantRegError> {
+    quantile_regression_with(xs, y, tau, intercept, SeKind::Robust)
+}
+
+/// [`quantile_regression`] with the standard errors of `kind` (T494).
+pub fn quantile_regression_with(
+    xs: &[&[f64]],
+    y: &[f64],
+    tau: f64,
+    intercept: bool,
+    kind: SeKind,
+) -> Result<QuantReg, QuantRegError> {
     if !(tau > 0.0 && tau < 1.0) {
         return Err(QuantRegError::BadQuantile(tau));
     }
@@ -108,7 +146,85 @@ pub fn quantile_regression(xs: &[&[f64]], y: &[f64], tau: f64, intercept: bool) 
     } else {
         f64::NAN
     };
-    Ok(QuantReg { tau, coefficients: b.iter().copied().collect(), loss, pseudo_r2, n, iterations })
+    let (se, p_values, bandwidth) = standard_errors(&x, &yv, &b, tau, kind);
+    Ok(QuantReg {
+        tau,
+        coefficients: b.iter().copied().collect(),
+        loss,
+        pseudo_r2,
+        n,
+        iterations,
+        se,
+        p_values,
+        bandwidth,
+    })
+}
+
+/// The `p` sample percentile of ascending `s`, interpolated at `(n - 1) p`.
+fn percentile(s: &[f64], p: f64) -> f64 {
+    let h = (s.len() - 1) as f64 * p;
+    let (i, f) = (h.floor() as usize, h - h.floor());
+    if i + 1 < s.len() { s[i] + f * (s[i + 1] - s[i]) } else { s[i] }
+}
+
+/// The standard errors, `Prob>|t|` values and bandwidth of the fit `b` (T494; see the module notes).
+fn standard_errors(
+    x: &DMatrix<f64>,
+    y: &DVector<f64>,
+    b: &DVector<f64>,
+    tau: f64,
+    kind: SeKind,
+) -> (Vec<f64>, Vec<f64>, f64) {
+    let (n, p) = (x.nrows(), x.ncols());
+    let none = (vec![f64::NAN; p], vec![f64::NAN; p], f64::NAN);
+    let normal = Normal::new(0.0, 1.0).expect("the standard normal");
+    let z = normal.inverse_cdf(tau);
+    let hs = (n as f64).powf(-1.0 / 3.0)
+        * normal.inverse_cdf(0.975).powf(2.0 / 3.0)
+        * (1.5 * normal.pdf(z).powi(2) / (2.0 * z * z + 1.0)).powf(1.0 / 3.0);
+    if !(tau - hs > 0.0 && tau + hs < 1.0) {
+        return none;
+    }
+    let zero = 1e-9 * y.amax();
+    let e: Vec<f64> = (y - x * b).iter().map(|&v| if v.abs() < zero { 0.0 } else { v }).collect();
+    let mut sorted = e.clone();
+    sorted.sort_by(f64::total_cmp);
+    let iqr = percentile(&sorted, 0.75) - percentile(&sorted, 0.25);
+    let mean = y.mean();
+    let sd = (y.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / n as f64).sqrt();
+    let h = sd.min(iqr / 1.34) * (normal.inverse_cdf(tau + hs) - normal.inverse_cdf(tau - hs));
+    if h.is_nan() || h <= 0.0 {
+        return none;
+    }
+    let kernel = |u: f64| if u.abs() <= 1.0 { 0.75 * (1.0 - u * u) } else { 0.0 };
+    let f = e.iter().map(|v| kernel(v / h)).sum::<f64>() / (n as f64 * h);
+    let Some(xtx_inv) = (x.transpose() * x).try_inverse() else { return none };
+    if f.is_nan() || f <= 0.0 {
+        return (vec![f64::NAN; p], vec![f64::NAN; p], h);
+    }
+    let v = match kind {
+        SeKind::Robust => {
+            let d = DVector::from_iterator(
+                n,
+                e.iter().map(|&r| if r > 0.0 { (tau / f).powi(2) } else { ((1.0 - tau) / f).powi(2) }),
+            );
+            let xd = DMatrix::from_fn(n, p, |i, j| x[(i, j)] * d[i]);
+            &xtx_inv * (x.transpose() * xd) * &xtx_inv
+        }
+        SeKind::Iid => &xtx_inv * (tau * (1.0 - tau) / (f * f)),
+    };
+    let se: Vec<f64> = (0..p).map(|j| v[(j, j)].max(0.0).sqrt()).collect();
+    let df = (n - p) as f64;
+    let t = StudentsT::new(0.0, 1.0, df).ok();
+    let p_values = se
+        .iter()
+        .zip(b.iter())
+        .map(|(s, b)| match &t {
+            Some(t) if *s > 0.0 => 2.0 * (1.0 - t.cdf((b / s).abs())),
+            _ => f64::NAN,
+        })
+        .collect();
+    (se, p_values, h)
 }
 
 /// The Frisch-Newton interior-point method on Koenker's dual (`lpfnb`): minimize `c'x` with
@@ -214,6 +330,39 @@ mod tests {
         assert_eq!(r.coefficients, vec![3.0]);
         assert_eq!(r.loss, constant_loss(0.5, &y));
         assert_eq!(r.pseudo_r2, 0.0);
+    }
+
+    #[test]
+    fn standard_errors_match_statsmodels_formulas() {
+        // T494: statsmodels 0.15's QuantReg variance (Epanechnikov kernel, Hall-Sheather bandwidth) evaluated at the
+        // exact fit from scipy's linprog (re-workspace/scratch/t480/qr_se.py).
+        let x: Vec<f64> = (1..=20).map(f64::from).collect();
+        let y: Vec<f64> = (1..=20u32)
+            .map(|i| {
+                let (xi, noise) = (f64::from(i), f64::from((i * 7919) % 13) / 3.0 - 2.0);
+                2.0 + 0.5 * xi + noise * (1.0 + xi / 10.0)
+            })
+            .collect();
+        let close = |a: f64, b: f64| (a - b).abs() <= 1e-9 * b.abs().max(1.0);
+        let r = quantile_regression(&[&x], &y, 0.25, true).unwrap();
+        assert!(close(r.coefficients[0], 1.6) && close(r.coefficients[1], 0.3), "{:?}", r.coefficients);
+        assert!(close(r.se[0], 3.9581452343871217) && close(r.se[1], 0.3261196614730868), "{:?}", r.se);
+        assert!(
+            close(r.p_values[0], 0.6908063434724472) && close(r.p_values[1], 0.3697854143407211),
+            "{:?}",
+            r.p_values
+        );
+        assert!(close(r.bandwidth, 10.072413741709758), "{}", r.bandwidth);
+        let iid = quantile_regression_with(&[&x], &y, 0.25, true, SeKind::Iid).unwrap();
+        assert!(close(iid.se[0], 3.221946701428397) && close(iid.se[1], 0.2689629139991902), "{:?}", iid.se);
+        // The median fit is not unique here (scipy finds another vertex of the same loss): the reference uses this one.
+        let r = quantile_regression(&[&x], &y, 0.5, true).unwrap();
+        assert_eq!(r.coefficients, [2.0, 0.5]);
+        assert!(close(r.se[0], 2.3721518776124673) && close(r.se[1], 0.19802341273008708), "{:?}", r.se);
+        assert!(close(r.p_values[1], 0.02117876921717891), "{:?}", r.p_values);
+        // At 0.9 with 20 points tau + hs passes 1: no errors.
+        let r = quantile_regression(&[&x], &y, 0.9, true).unwrap();
+        assert!(r.se.iter().chain(&r.p_values).all(|v| v.is_nan()), "{:?}", r.se);
     }
 
     #[test]

@@ -1733,9 +1733,18 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
-        AnalyzeTool::Quantreg { target, quantiles, no_intercept, no_graph } => (
+        AnalyzeTool::Quantreg { target, quantiles, no_intercept, no_graph, se } => (
             target,
-            Job::Tool(Tool::QuantReg(analysis::QuantRegSpec { quantiles, intercept: !no_intercept, graph: !no_graph })),
+            Job::Tool(Tool::QuantReg(analysis::QuantRegSpec {
+                quantiles,
+                intercept: !no_intercept,
+                graph: !no_graph,
+                se: match se.as_str() {
+                    "iid" => Some(analysis::QuantRegSe::Iid),
+                    "none" => None,
+                    _ => Some(analysis::QuantRegSe::Robust),
+                },
+            })),
         ),
         AnalyzeTool::Kmeans { target, clusters, max_passes, no_anova, no_membership, no_graph } => (
             target,

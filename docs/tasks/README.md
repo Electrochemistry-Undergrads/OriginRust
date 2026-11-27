@@ -520,6 +520,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T491](T491-cell-references-follow-rows.md) | Cell formula references follow inserted and deleted rows (ranges grow and shrink, #REF!) | S | done 2026-11-26 (workbook-model 13u) |
 | [T492](T492-pasted-formulas.md) | Pasted spreadsheet formulas (`=...` cells) become cell formulas | S | done 2026-11-26 (workbook-model 13u) |
 | [T493](T493-flash-fill-numbers.md) | Flash Fill keeps number and date columns as numbers and dates; dates read as shown | S | done 2026-11-27 (workbook-model 13r) |
+| [T494](T494-quantreg-standard-errors.md) | Quantile Regression standard errors and Prob>|t| (robust or iid kernel estimates) | S | done 2026-11-27 (statistics 29) |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |

@@ -88,6 +88,19 @@ pub struct PowerSpec {
     pub levels: f64,
     /// ANOVA: the corrected sum of squares of the group means.
     pub css: f64,
+    /// Two-proportion and two-variance tests: the second group's size over the first's (T500; 1 for equal groups).
+    #[serde(default = "one")]
+    pub ratio: f64,
+    /// Two-proportion test: the pooled z test (T500) instead of the unpooled one.
+    #[serde(default)]
+    pub pooled: bool,
+    /// One-proportion test: the exact binomial test (T500) instead of the normal approximation.
+    #[serde(default)]
+    pub exact: bool,
+}
+
+fn one() -> f64 {
+    1.0
 }
 
 impl Default for PowerSpec {
@@ -102,6 +115,9 @@ impl Default for PowerSpec {
             sd: 1.0,
             levels: 3.0,
             css: 1.0,
+            ratio: 1.0,
+            pooled: false,
+            exact: false,
         }
     }
 }
@@ -137,6 +153,20 @@ fn rate_analysis(spec: &PowerSpec, test: calc::RateTest) -> Result<PowerOutput, 
     if !proportions && !(a > 0.0 && b > 0.0 && a.is_finite() && b.is_finite()) {
         return Err(AnalysisError::BadOption("the variances must be above 0".into()));
     }
+    // T500: the options belong to some tests only.
+    let two = matches!(test, calc::RateTest::TwoProportions | calc::RateTest::TwoVariances);
+    if spec.exact && test != calc::RateTest::OneProportion {
+        return Err(AnalysisError::BadOption("the exact binomial test is for one proportion".into()));
+    }
+    if spec.pooled && test != calc::RateTest::TwoProportions {
+        return Err(AnalysisError::BadOption("the pooled test is for two proportions".into()));
+    }
+    if !(spec.ratio.is_finite() && spec.ratio > 0.0) || (!two && spec.ratio != 1.0) {
+        return Err(AnalysisError::BadOption(
+            "the group size ratio must be above 0, and it is for the two-sample tests".into(),
+        ));
+    }
+    let options = calc::RateOptions { ratio: spec.ratio, pooled: spec.pooled, exact: spec.exact };
     let mut notes = vec![
         format!(
             "{}: significance level {}, {} test.",
@@ -145,12 +175,18 @@ fn rate_analysis(spec: &PowerSpec, test: calc::RateTest) -> Result<PowerOutput, 
             if spec.two_sided { "two-sided" } else { "one-sided" }
         ),
         match test {
-            calc::RateTest::OneProportion => {
-                format!("Proportion {} against {} (normal approximation).", num(a), num(b))
-            }
-            calc::RateTest::TwoProportions => {
-                format!("Proportions {} and {} (normal approximation, unpooled).", num(a), num(b))
-            }
+            calc::RateTest::OneProportion => format!(
+                "Proportion {} against {} ({}).",
+                num(a),
+                num(b),
+                if spec.exact { "exact binomial test" } else { "normal approximation" }
+            ),
+            calc::RateTest::TwoProportions => format!(
+                "Proportions {} and {} (normal approximation, {}).",
+                num(a),
+                num(b),
+                if spec.pooled { "pooled" } else { "unpooled" }
+            ),
             calc::RateTest::OneVariance => {
                 format!("Variance {} against {} (ratio {}, chi-square test).", num(a), num(b), num(a / b))
             }
@@ -161,11 +197,13 @@ fn rate_analysis(spec: &PowerSpec, test: calc::RateTest) -> Result<PowerOutput, 
     ];
     let (sizes, powers) = match &spec.goal {
         PowerGoal::Power(sizes) => {
-            let powers = calc::rate_powers(test, sizes, a, b, spec.alpha, spec.two_sided).map_err(error)?;
+            let powers =
+                calc::rate_powers_with(test, sizes, a, b, spec.alpha, spec.two_sided, options).map_err(error)?;
             (sizes.clone(), powers)
         }
         PowerGoal::SampleSize(powers) => {
-            let found = calc::rate_sample_sizes(test, powers, a, b, spec.alpha, spec.two_sided).map_err(error)?;
+            let found =
+                calc::rate_sample_sizes_with(test, powers, a, b, spec.alpha, spec.two_sided, options).map_err(error)?;
             if let Some(l) = found.lowest {
                 notes.push(format!("The power of the smallest sample (2 observations) is {}.", num(l)));
             }
@@ -175,7 +213,9 @@ fn rate_analysis(spec: &PowerSpec, test: calc::RateTest) -> Result<PowerOutput, 
             (found.sizes, powers.clone())
         }
     };
-    notes.push(if spec.kind.per_group() {
+    notes.push(if two && spec.ratio != 1.0 {
+        format!("Sample sizes are the first group's; the second group has {} times as many.", num(spec.ratio))
+    } else if spec.kind.per_group() {
         "Sample sizes are per group.".to_string()
     } else {
         "Sample sizes are the number of observations.".to_string()

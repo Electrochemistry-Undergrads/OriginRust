@@ -9,8 +9,8 @@ for the tests of statistics 21. Not measured in Origin.
 
 ## Left
 
-- Measuring Origin's PSS proportion and variance tools (their X-Functions refuse script calls); exact binomial powers,
-  pooled two-proportion tests, unequal group sizes.
+- Measuring Origin's PSS proportion and variance tools (their X-Functions refuse script calls). (Exact binomial
+  powers, pooled two-proportion tests and unequal group sizes: T500.)
 
 ## Tests
 

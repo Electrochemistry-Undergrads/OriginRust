@@ -1309,6 +1309,26 @@ fn power_of_proportion_and_variance_tests_runs_from_the_command_line() {
     assert!(ok && out.contains("Two-sample variance test") && out.contains("per group"), "{err} {out}");
     let (ok, _, err) = run(&["--test", "two-proportions", "--sizes", "10"]);
     assert!(!ok && err.contains("between 0 and 1"), "{err}");
+    // T500: the exact one-proportion test, the pooled two-proportion test with unequal groups, misplaced options.
+    let (ok, out, err) =
+        run(&["--test", "one-proportion", "--mean1", "0.7", "--mean2", "0.5", "--sizes", "20", "--exact"]);
+    assert!(ok && out.contains("exact binomial test") && out.contains("0.416"), "{err} {out}");
+    let (ok, out, err) = run(&[
+        "--test",
+        "two-proportions",
+        "--mean1",
+        "0.6",
+        "--mean2",
+        "0.4",
+        "--sizes",
+        "40",
+        "--pooled",
+        "--ratio",
+        "2",
+    ]);
+    assert!(ok && out.contains("pooled") && out.contains("0.544") && out.contains("2 times as many"), "{err} {out}");
+    let (ok, _, err) = run(&["--test", "one-variance", "--mean1", "2", "--mean2", "1", "--sizes", "20", "--exact"]);
+    assert!(!ok && err.contains("for one proportion"), "{err}");
 }
 
 #[test]

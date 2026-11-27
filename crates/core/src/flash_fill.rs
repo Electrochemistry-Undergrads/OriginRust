@@ -237,6 +237,18 @@ fn merge(pieces: Vec<Piece>) -> Vec<Piece> {
     out
 }
 
+/// A cell as Flash Fill reads it: as the sheet shows it for a date or time (T493), else its text or number.
+fn shown(c: &crate::column::Column, r: usize) -> String {
+    if c.format.is_date_time()
+        && c.data.text_cell(r).is_none()
+        && c.numeric().and_then(|v| v.get(r)).is_some_and(|x| !x.is_nan())
+    {
+        c.cell_text(r)
+    } else {
+        crate::indexed::level_text(c, r).unwrap_or_default()
+    }
+}
+
 /// What Flash Fill found for a column: the rule, its sources, the example rows and the column's new texts.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FlashFill {
@@ -256,7 +268,7 @@ impl Project {
     pub fn flash_fill(&self, target: ColumnId) -> Result<FlashFill, ProjectError> {
         let (_, sheet, col) = self.locate(target).ok_or(ProjectError::NoSuchColumn(target))?;
         let rows = sheet.row_count();
-        let text = |c: &crate::column::Column, r: usize| crate::indexed::level_text(c, r).unwrap_or_default();
+        let text = shown;
         let at = sheet.columns.iter().position(|c| c.id == target).unwrap_or(0);
         let sources: Vec<&crate::column::Column> =
             sheet.columns[..at].iter().filter(|c| (0..c.len()).any(|r| !text(c, r).is_empty())).collect();
@@ -283,16 +295,52 @@ impl Project {
         })
     }
 
-    /// Writes `fill`'s texts into column `target` as values (the examples are kept as typed).
+    /// Writes `fill`'s texts into column `target` as values (the examples are kept as typed). A number or date
+    /// column stays one when every other value reads as a number (a date or time in a date column) as typed into
+    /// it (T493); a Text & Numeric column takes each value as typed; otherwise the column becomes text.
     pub fn apply_flash_fill(&mut self, target: ColumnId, fill: &FlashFill) -> Result<(), ProjectError> {
+        use crate::column::ColumnData;
         let col = self.column_mut(target).ok_or(ProjectError::NoSuchColumn(target))?;
-        let mut values = fill.values.clone();
-        for &r in &fill.examples {
-            if let Some(v) = values.get_mut(r) {
-                *v = crate::indexed::level_text(col, r).unwrap_or_default();
+        let examples = |r: usize| fill.examples.contains(&r);
+        let kept = match &col.data {
+            ColumnData::Numeric(_) | ColumnData::Mixed { .. } => {
+                let mut typed = col.clone();
+                typed.data = if matches!(col.data, ColumnData::Mixed { .. }) {
+                    ColumnData::mixed_numbers(Vec::new())
+                } else {
+                    ColumnData::numeric(Vec::new())
+                };
+                let old = col.numeric().unwrap_or_default();
+                let mut fits = true;
+                for (r, v) in fill.values.iter().enumerate() {
+                    if examples(r) {
+                        // The example as it is: its number, or its text in a Text & Numeric column.
+                        let text = shown(col, r);
+                        match old.get(r).filter(|x| !x.is_nan()) {
+                            Some(x) => typed.set_cell_text(r, &format!("{x:?}")),
+                            None => typed.set_cell_text(r, &text),
+                        };
+                    } else {
+                        fits &= typed.set_cell_text(r, v);
+                    }
+                }
+                (fits || matches!(col.data, ColumnData::Mixed { .. })).then_some(typed.data)
             }
-        }
-        col.data = crate::column::ColumnData::text(values);
+            ColumnData::Text(_) => None,
+        };
+        col.data = match kept {
+            Some(data) => data,
+            None => {
+                let mut values = fill.values.clone();
+                for &r in &fill.examples {
+                    if let Some(v) = values.get_mut(r) {
+                        *v = shown(col, r);
+                    }
+                }
+                ColumnData::text(values)
+            }
+        };
+        col.trim_missing_tail();
         Ok(())
     }
 }
@@ -360,5 +408,43 @@ mod tests {
         assert_eq!(crate::indexed::level_text(p.column(out).unwrap(), 2).as_deref(), Some("Turing, A."));
         let empty = p.add_column(b, 0, Designation::Y, ColumnData::text(Vec::new())).unwrap();
         assert!(p.flash_fill(empty).is_err(), "no example");
+    }
+
+    #[test]
+    fn numbers_and_dates_stay_numbers_and_dates() {
+        use crate::datetime::DatePattern;
+        use crate::format::NumberFormat;
+        let mut p = Project::new();
+        let b = p.add_workbook("");
+        let ids = ["run 2017 a", "run 2020 b", "run 1999 c"].iter().map(|s| s.to_string()).collect();
+        p.add_column(b, 0, Designation::Y, ColumnData::text(ids)).unwrap();
+        // T493: a year typed as a number: the column stays numeric.
+        let year = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![2017.0])).unwrap();
+        let fill = p.flash_fill(year).unwrap();
+        assert_eq!(fill.values, ["2017", "2020", "1999"]);
+        p.apply_flash_fill(year, &fill).unwrap();
+        assert_eq!(p.column(year).unwrap().data, ColumnData::numeric(vec![2017.0, 2020.0, 1999.0]));
+        // Not every value a number: the column turns to text, as before.
+        let word = p.add_column(b, 0, Designation::Y, ColumnData::numeric(vec![f64::NAN; 3])).unwrap();
+        p.column_mut(word).unwrap().data = ColumnData::text(vec!["2017a".into()]);
+        let fill = p.flash_fill(word).unwrap();
+        p.apply_flash_fill(word, &fill).unwrap();
+        assert!(matches!(p.column(word).unwrap().data, ColumnData::Text(_)));
+        // A date column: dates built from text stay dates.
+        let days = ["2024-03-17 x", "1999-12-31 y"].iter().map(|s| s.to_string()).collect();
+        let b2 = p.add_workbook("");
+        p.add_column(b2, 0, Designation::Y, ColumnData::text(days)).unwrap();
+        let date = p.add_column(b2, 0, Designation::Y, ColumnData::numeric(Vec::new())).unwrap();
+        let c = p.column_mut(date).unwrap();
+        c.format = NumberFormat::Date(DatePattern::Iso);
+        assert!(c.set_cell_text(0, "2024-03-17"));
+        let first = c.numeric().unwrap()[0];
+        let fill = p.flash_fill(date).unwrap();
+        assert_eq!(fill.values, ["2024-03-17", "1999-12-31"]);
+        p.apply_flash_fill(date, &fill).unwrap();
+        let c = p.column(date).unwrap();
+        let v = c.numeric().expect("still a date column");
+        assert_eq!(v[0], first, "the example as typed");
+        assert_eq!(c.cell_text(1), "1999-12-31");
     }
 }

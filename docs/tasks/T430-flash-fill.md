@@ -11,7 +11,8 @@ automatically), so the column follows its sources. Either is one undo step. Form
 
 ## Left
 
-- Numbers and dates as typed values (only texts are matched), substrings inside words other than their first or last
+- Numbers and dates as typed values: done (T493: number and date columns stay so, dates read as shown; arithmetic
+  on them remains), substrings inside words other than their first or last
   four characters (T468), conditional
   rules, filling as you type (Origin's suggestion while typing), and choosing the source columns.
 

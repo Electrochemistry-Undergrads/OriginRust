@@ -1356,7 +1356,17 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                 })),
             )
         }
-        AnalyzeTool::Lifereg { target, distribution, censor, frequency, percentiles, at, also_at, confidence } => {
+        AnalyzeTool::Lifereg {
+            target,
+            distribution,
+            censor,
+            frequency,
+            percentiles,
+            at,
+            also_at,
+            graph,
+            confidence,
+        } => {
             let mut more = Vec::new();
             for text in &also_at {
                 let v: Vec<f64> = text
@@ -1384,6 +1394,7 @@ pub fn job_from(tool: AnalyzeTool) -> Result<(TargetArgs, Job)> {
                     percentiles: percentiles.iter().map(|p| p / 100.0).collect(),
                     at,
                     also_at: more,
+                    graph,
                     confidence: confidence / 100.0,
                 })),
             )

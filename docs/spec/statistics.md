@@ -2426,10 +2426,14 @@ the inverse observed information of `(b, ln sigma)` and `g = (1, x, sigma w_p)`;
 life, Lower and Upper columns (10, 50 and 90 % by default) and a note lists them. Several settings (T504): `--at` then
 `--also-at V,V..` for each further setting (the window's "at covariates" takes settings separated by `;`, the first
 replacing the means); each setting gets its own four columns, suffixed " (1)", " (2)" ..., and its own note; a
-setting without one value per covariate is refused. Checked against numpy/scipy (`tools/lifereg-ref.py`,
+setting without one value per covariate is refused. **Graph** (T509; `--graph`, the window's "Graph of the percentile
+lives against the first covariate"; off by default): the percentile lives of every chosen percentile at 41 values of the
+first covariate from its smallest to its largest value in the rows used, the other covariates at their means, as lines
+with their intervals as dotted lines of the same colour, on a log10 Y axis; the sheet gets the covariate grid and, per
+percentile, `p % life` and its lower and upper columns, and a note gives the range. Checked against numpy/scipy (`tools/lifereg-ref.py`,
 `crates/calc/tests/lifereg_reference.rs`: 60 rows, two covariates, three distributions) to 1e-7 (standard errors
-1e-5; percentiles at two covariate settings to 1e-7, their intervals 1e-5). Proportional hazards (Cox) regression is section 52; interval-censored regression, text (factor) covariates and a
-percentile-against-covariate graph are not built.
+1e-5; percentiles at two covariate settings to 1e-7, their intervals 1e-5). Proportional hazards (Cox) regression is section 52; interval-censored regression and text (factor) covariates are
+not built.
 
 ## 49 Frequency columns of the life-data tools (T394, Origin 2026b; not measured)
 

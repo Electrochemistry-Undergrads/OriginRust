@@ -172,6 +172,8 @@ pub struct PlotSpec {
     /// An UpSet plot's order and number of intersections (T507).
     pub upset_sort: sheaf_core::graph::UpSetSort,
     pub upset_limit: usize,
+    /// A network plot's directed arrows (T510).
+    pub directed: bool,
     pub style: Style,
     /// The folder of the user graph templates (T56) that a template name not among the built-in ones
     /// is looked up in. `None` (MCP, and requests that do not ask) uses no user template; the command
@@ -448,7 +450,13 @@ pub fn build_graph(project: &mut Project, a: &PlotSpec, suggested: Template) -> 
             if template == Template::Chord {
                 project.plot_chord(source, target, weight)?
             } else {
-                project.plot_network(source, target, weight)?
+                let g = project.plot_network(source, target, weight)?;
+                // T510: arrows from source to target.
+                let first = project.graph_mut(g).and_then(|gr| gr.layers.first_mut()).and_then(|l| l.plots.first_mut());
+                if let Some(pl) = first {
+                    pl.sankey.directed = a.directed;
+                }
+                g
             }
         }
     } else if template_from(a.template.as_deref(), suggested)? == Template::Alluvial {

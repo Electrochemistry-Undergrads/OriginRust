@@ -16,4 +16,4 @@ degree, edges by weight. `PlotKind::Network`, `sheaf_calc::network`.
 
 ## Left
 
-- Directed edges, colouring by group, other layouts, label collision avoidance.
+- Colouring by group, other layouts, label collision avoidance. (Directed edges: T510.)

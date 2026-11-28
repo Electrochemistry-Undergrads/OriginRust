@@ -8,6 +8,9 @@
 //!   wide; nodes are filled circles in the layer palette's colours by node order, with a white 0.75 pt
 //!   outline, their radius from 3 pt to 10 pt by the square root of the weighted degree.
 //! - A node's name is written right of its circle in the X axis tick font at 0.8 of its size.
+//! - Directed (T510, `SankeyStyle::directed`): every arc is drawn from its source's circle to its target's with a
+//!   filled head at the target (as long as 4 pt plus the line width, as wide as 0.6 of its length on each side); a pair
+//!   joined both ways gets two arcs set 2.5 pt apart on either side of the line between the centres.
 
 use crate::LayerGeometry;
 use crate::data::PlotData;
@@ -30,6 +33,8 @@ pub(crate) struct NetworkData {
     pub network: Network,
     pub colors: Vec<Color>,
     pub font: Font,
+    /// Draw the arcs with arrow heads (T510).
+    pub directed: bool,
 }
 
 impl NetworkData {
@@ -54,7 +59,7 @@ impl NetworkData {
         let colors = (0..k).map(|i| layer.palette.color(i, k)).collect();
         let mut font = layer.x_axis.tick_font.clone();
         font.size_pt *= LABEL_SCALE;
-        Some(NetworkData { network, colors, font })
+        Some(NetworkData { network, colors, font, directed: pd.plot.sankey.directed })
     }
 }
 
@@ -66,15 +71,6 @@ pub(crate) fn draw_network(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeome
     let (ox, oy) = (f.x + (f.w - side) / 2.0, f.y + (f.h - side) / 2.0);
     let at = |p: (f64, f64)| (ox + p.0 * side, oy + p.1 * side);
     let net = &nd.network;
-    let max_w = net.edges.iter().map(|e| e.2).fold(0.0, f64::max);
-    for &(a, b, w) in &net.edges {
-        let (p, q) = (at(net.positions[a]), at(net.positions[b]));
-        let width = if max_w > 0.0 { MIN_EDGE_PT + (MAX_EDGE_PT - MIN_EDGE_PT) * w / max_w } else { MIN_EDGE_PT };
-        let mut d = String::new();
-        move_to(&mut d, p.0, p.1);
-        line_to(&mut d, q.0, q.1);
-        out.push(Item::Path { d, fill: None, stroke: Some(Stroke::solid(Color::rgba(128, 128, 128, 153), width)) });
-    }
     let max_deg = net.degree.iter().copied().fold(0.0, f64::max);
     let radius = |deg: f64| {
         if max_deg > 0.0 {
@@ -83,6 +79,46 @@ pub(crate) fn draw_network(out: &mut Vec<Item>, pd: &PlotData, geom: &LayerGeome
             MIN_RADIUS_PT
         }
     };
+    let grey = Color::rgba(128, 128, 128, 153);
+    let links = if nd.directed { &net.arcs } else { &net.edges };
+    let max_w = links.iter().map(|e| e.2).fold(0.0, f64::max);
+    for &(a, b, w) in links {
+        let (p, q) = (at(net.positions[a]), at(net.positions[b]));
+        let width = if max_w > 0.0 { MIN_EDGE_PT + (MAX_EDGE_PT - MIN_EDGE_PT) * w / max_w } else { MIN_EDGE_PT };
+        if !nd.directed {
+            let mut d = String::new();
+            move_to(&mut d, p.0, p.1);
+            line_to(&mut d, q.0, q.1);
+            out.push(Item::Path { d, fill: None, stroke: Some(Stroke::solid(grey, width)) });
+            continue;
+        }
+        // T510: an arrow from the source's circle to the target's, set aside when the pair is joined both ways.
+        let (dx, dy) = (q.0 - p.0, q.1 - p.1);
+        let len = dx.hypot(dy);
+        if len <= 0.0 {
+            continue;
+        }
+        let (ux, uy) = (dx / len, dy / len);
+        let both = net.arcs.iter().any(|e| (e.0, e.1) == (b, a));
+        let off = if both { 2.5 } else { 0.0 };
+        let (nx, ny) = (-uy * off, ux * off);
+        let (ra, rb) = (radius(net.degree[a]), radius(net.degree[b]) + 1.0);
+        let start = (p.0 + nx + ux * ra, p.1 + ny + uy * ra);
+        let tip = (q.0 + nx - ux * rb, q.1 + ny - uy * rb);
+        let head = (4.0 + width).min((len - ra - rb).max(0.0));
+        let base = (tip.0 - ux * head, tip.1 - uy * head);
+        let mut d = String::new();
+        move_to(&mut d, start.0, start.1);
+        line_to(&mut d, base.0, base.1);
+        out.push(Item::Path { d, fill: None, stroke: Some(Stroke::solid(grey, width)) });
+        let half = 0.6 * head;
+        let mut h = String::new();
+        move_to(&mut h, tip.0, tip.1);
+        line_to(&mut h, base.0 - uy * half, base.1 + ux * half);
+        line_to(&mut h, base.0 + uy * half, base.1 - ux * half);
+        h.push('Z');
+        out.push(Item::Path { d: h, fill: Some(grey), stroke: None });
+    }
     for (i, &p) in net.positions.iter().enumerate() {
         let (cx, cy) = at(p);
         let r = radius(net.degree[i]);
@@ -128,5 +164,13 @@ mod tests {
         assert_eq!(nd.network.edges.len(), 3, "Ann-Bob twice is one edge");
         assert_eq!(nd.network.edges[0].2, 2.0);
         assert!(!svg.contains(">0<"), "no axes");
+        // T510: directed, an arrow per arc: a shaft and a filled head each, Ann-Bob both ways.
+        let plain_paths = svg.matches("<path").count();
+        p.graph_mut(g).unwrap().layers[0].plots[0].sankey.directed = true;
+        let arrows = crate::render_svg(&p, g).unwrap();
+        let graph = p.graph(g).unwrap();
+        let data = crate::data::collect(&p, &graph.layers[0]);
+        assert_eq!(data.plots[0].network.as_deref().unwrap().network.arcs.len(), 4, "Ann-Bob, Bob-Ann, Ann-Cy, Cy-Dee");
+        assert_eq!(arrows.matches("<path").count(), plain_paths - 3 + 2 * 4, "3 lines become 4 shafts and 4 heads");
     }
 }

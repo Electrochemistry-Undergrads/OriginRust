@@ -3427,7 +3427,7 @@ column plot of the flow with a warning.
 
 ### 14.33 Network plot (T383, Origin 2021b feature, Sheaf's look, not measured)
 
-Plot > Categorical > Network Plot and `sheaf plot FILE -t network [--group SOURCE,TARGET] [-y WEIGHT]`
+Plot > Categorical > Network Plot and `sheaf plot FILE -t network [--group SOURCE,TARGET] [-y WEIGHT] [--directed]`
 (`PlotKind::Network`, `Template::Network`, `Project::plot_network`; layout `sheaf_calc::network`, drawing
 `crates/plot/src/network.rs`): every row is an edge between the nodes named in the source and target columns (default:
 the sheet's first two text columns; in the app the selected text columns, else those), weighted by the weight column
@@ -3442,7 +3442,12 @@ the sheet's first two text columns; in the app the selected text columns, else t
   (node order), 3 to 10 pt in radius by the square root of the weighted degree, with a white outline; names right of
   the circles in the X axis tick font at 0.8 of its size. No axes, no legend. The `.opj` writer saves a column plot of
   the weight column with a warning.
-- Not done: directed arrows, node grouping colours, other layouts, label collision avoidance, Origin's Plot Details.
+- **Directed** (T510; `--directed`, `SankeyStyle::directed`, saved with the plot): the arcs keep their direction
+  (rows of the same source and target summed, A to B and B to A apart; the layout is unchanged). Each arc is a grey
+  line from the edge of the source's circle to 1 pt short of the target's, 0.5 to 4 pt wide by its weight among the
+  arcs, with a filled head at the target `4 pt + width` long and 0.6 of that wide on each side; a pair joined both
+  ways gets its two arcs 2.5 pt to either side of the line between the centres.
+- Not done: node grouping colours, other layouts, label collision avoidance, Origin's Plot Details.
 
 ### 14.34 Chord diagram (T402, Origin 2021 feature, Sheaf's look, not measured)
 

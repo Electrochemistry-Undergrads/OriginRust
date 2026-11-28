@@ -1139,6 +1139,9 @@ pub struct PlotArgs {
     /// UpSet plot (T507): show at most this many intersections, the largest (default: up to 40).
     #[arg(long, default_value_t = 0)]
     pub upset_limit: usize,
+    /// Network plot (T510): draw the edges as arrows from source to target.
+    #[arg(long)]
+    pub directed: bool,
     /// -t fishbone (a cause-and-effect diagram): the effect's text at the head of the spine (default
     /// "Effect"). The -y columns (default: every column of the sheet) are the categories, their cells the causes.
     #[arg(long, value_name = "TEXT")]

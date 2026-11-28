@@ -100,6 +100,7 @@ pub fn plot_spec(a: &PlotArgs) -> PlotSpec {
             _ => sheaf_core::graph::UpSetSort::Size,
         },
         upset_limit: a.upset_limit,
+        directed: a.directed,
         effect: a.effect.clone(),
         style: style_spec(&a.style),
         templates_dir: user_templates_dir(a),

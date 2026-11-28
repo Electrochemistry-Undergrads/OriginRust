@@ -536,6 +536,7 @@ that are missing from Sheaf and have no existing brief or handoff entry.
 | [T507](T507-upset-sort-limit.md) | UpSet plot: order (size, degree, sets) and number of intersections | S | done 2026-11-27 (graphing 14.35) |
 | [T508](T508-marginal-shared-bins.md) | Grouped marginal histograms share their bins | S | done 2026-11-27 (graphing 32) |
 | [T509](T509-lifereg-graph.md) | Life Data Regression graph of percentile lives against a covariate | S | done 2026-11-27 (statistics 48) |
+| [T510](T510-network-directed.md) | Network plot with directed edges (arrows from source to target) | S | done 2026-11-27 (graphing 14.33) |
 | [T43](T43-trendlines.md) | On-graph trendlines (linear, polynomial, power, log, exp, moving average) | M | done 2026-11-15 (graphing 18.11); left: Mini Toolbar, dragged label, Origin fit method/R-squared unmeasured |
 | [T44](T44-ridgeline-plot.md) | Ridgeline chart: offset density curves per Y column | M | done 2026-11-15 (graphing 14.23); left: grouped data, jitter, Origin defaults unmeasured |
 | [T45](T45-hexbin-plot.md) | Hexbin plot: hexagonal bins coloured by count | M | done 2026-11-15 (`hexbin`, macOS) |

@@ -10,6 +10,8 @@
 //!   every pair, attraction d^2 / k along each edge, the step limited by a temperature falling from 0.1 to 0.
 //! - The positions are then fitted into 0..1 in both directions with a margin of 0.08, keeping the aspect.
 //! - A node's degree is the sum of the weights of its edges.
+//! - The directed arcs (T510) keep the direction: rows of the same source and target are one arc whose weight is
+//!   their sum; the layout still uses the undirected edges.
 
 use std::collections::HashMap;
 
@@ -27,6 +29,8 @@ pub struct Network {
     pub degree: Vec<f64>,
     /// Edges: the two nodes (lower index first) and the weight.
     pub edges: Vec<(usize, usize, f64)>,
+    /// Directed arcs (T510): source node, target node and the summed weight, in order of first appearance.
+    pub arcs: Vec<(usize, usize, f64)>,
 }
 
 /// Lays out the network of `rows` (source, target, weight).
@@ -40,6 +44,7 @@ pub fn layout(rows: &[(String, String, f64)]) -> Network {
         })
     };
     let mut edges: Vec<(usize, usize, f64)> = Vec::new();
+    let mut arcs: Vec<(usize, usize, f64)> = Vec::new();
     for (s, t, w) in rows {
         let (s, t) = (s.trim(), t.trim());
         if s.is_empty() || t.is_empty() || !(w.is_finite() && *w > 0.0) {
@@ -53,6 +58,10 @@ pub fn layout(rows: &[(String, String, f64)]) -> Network {
         match edges.iter_mut().find(|e| (e.0, e.1) == key) {
             Some(e) => e.2 += w,
             None => edges.push((key.0, key.1, *w)),
+        }
+        match arcs.iter_mut().find(|e| (e.0, e.1) == (a, b)) {
+            Some(e) => e.2 += w,
+            None => arcs.push((a, b, *w)),
         }
     }
     let n = names.len();
@@ -116,7 +125,7 @@ pub fn layout(rows: &[(String, String, f64)]) -> Network {
     } else {
         vec![(0.5, 0.5); n]
     };
-    Network { names, positions, degree, edges }
+    Network { names, positions, degree, edges, arcs }
 }
 
 #[cfg(test)]
@@ -134,6 +143,7 @@ mod tests {
         assert_eq!(n.names, ["a", "b"]);
         assert_eq!(n.edges, [(0, 1, 3.0)]);
         assert_eq!(n.degree, [3.0, 3.0]);
+        assert_eq!(n.arcs, [(0, 1, 1.0), (1, 0, 2.0)], "T510: both directions kept");
     }
 
     #[test]

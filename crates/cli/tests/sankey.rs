@@ -82,6 +82,12 @@ fn a_network_plot_takes_its_ends_and_an_optional_weight() {
     assert_eq!(plot.kind, sheaf_core::graph::PlotKind::Network);
     assert_eq!(project.column(plot.y).unwrap().long_name, "Papers");
     assert_eq!(project.column(plot.sankey.target.unwrap()).unwrap().long_name, "To");
+    assert!(!plot.sankey.directed);
+    // T510: directed arrows, saved with the plot.
+    let (ok, e) = sheaf(&["plot", c, "-t", "network", "-y", "Papers", "--directed", "-o", p, "--save", s]);
+    assert!(ok, "{e}");
+    let project = sheaf_io::project_file::load(&saved).unwrap();
+    assert!(project.graphs().next().unwrap().layers[0].plots[0].sankey.directed);
     let (ok, e) = sheaf(&["plot", c, "-t", "network", "--group", "From", "-o", p]);
     assert!(!ok && e.contains("source and a target"), "{e}");
 }

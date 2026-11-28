@@ -938,6 +938,9 @@ pub struct SankeyStyle {
     pub upset_sort: sheaf_calc::upset::UpSetSort,
     #[serde(default, skip_serializing_if = "is_zero_usize")]
     pub upset_limit: usize,
+    /// A network plot (T510): draw the edges as arrows from source to target.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub directed: bool,
 }
 
 /// The order of an UpSet plot's intersections (T507).
